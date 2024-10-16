@@ -2,10 +2,22 @@
 
 #include "Observer.h"
 #include "mesh-pb-constants.h"
+#include "meshtastic/portnums.pb.h"
+#include <iterator>
 #include <string>
+#include <unordered_map>
+#include <vector>
 
 // Make sure that we never let our packets grow too large for one BLE packet
 #define MAX_TO_FROM_RADIO_SIZE 512
+
+#if meshtastic_FromRadio_size > MAX_TO_FROM_RADIO_SIZE
+#error "meshtastic_FromRadio_size is too large for our BLE packets"
+#endif
+#if meshtastic_ToRadio_size > MAX_TO_FROM_RADIO_SIZE
+#error "meshtastic_ToRadio_size is too large for our BLE packets"
+#endif
+
 #define SPECIAL_NONCE 69420
 
 /**
@@ -29,6 +41,7 @@ class PhoneAPI
         STATE_SEND_CONFIG,          // Replacement for the old Radioconfig
         STATE_SEND_MODULECONFIG,    // Send Module specific config
         STATE_SEND_OTHER_NODEINFOS, // states progress in this order as the device sends to to the client
+        STATE_SEND_FILEMANIFEST,    // Send file manifest
         STATE_SEND_COMPLETE_ID,
         STATE_SEND_PACKETS // send packets or debug strings
     };
@@ -36,6 +49,10 @@ class PhoneAPI
     State state = STATE_SEND_NOTHING;
 
     uint8_t config_state = 0;
+
+    // Hashmap of timestamps for last time we received a packet on the API per portnum
+    std::unordered_map<meshtastic_PortNum, uint32_t> lastPortNumToRadio;
+    uint32_t recentToRadioPacketIds[20]; // Last 20 ToRadio MeshPacket IDs we have seen
 
     /**
      * Each packet sent to the phone has an incrementing count
@@ -55,6 +72,9 @@ class PhoneAPI
     // Keep MqttClientProxyMessage packet just as packetForPhone
     meshtastic_MqttClientProxyMessage *mqttClientProxyMessageForPhone = NULL;
 
+    // Keep ClientNotification packet just as packetForPhone
+    meshtastic_ClientNotification *clientNotification = NULL;
+
     /// We temporarily keep the nodeInfo here between the call to available and getFromRadio
     meshtastic_NodeInfo nodeInfoForPhone = meshtastic_NodeInfo_init_default;
 
@@ -64,6 +84,8 @@ class PhoneAPI
     /// Use to ensure that clients don't get confused about old messages from the radio
     uint32_t config_nonce = 0;
     uint32_t readIndex = 0;
+
+    std::vector<meshtastic_FileInfo> filesManifest = {};
 
     void resetReadIndex() { readIndex = 0; }
 
@@ -84,6 +106,11 @@ class PhoneAPI
     virtual bool handleToRadio(const uint8_t *buf, size_t len);
 
     /**
+     * Send a (client)notification to the phone
+     */
+    virtual void sendNotification(meshtastic_LogRecord_Level level, uint32_t replyId, const char *message);
+
+    /**
      * Get the next packet we want to send to the phone
      *
      * We assume buf is at least FromRadio_size bytes long.
@@ -91,14 +118,14 @@ class PhoneAPI
      */
     size_t getFromRadio(uint8_t *buf);
 
+    void sendConfigComplete();
+
     /**
      * Return true if we have data available to send to the phone
      */
     bool available();
 
     bool isConnected() { return state != STATE_SEND_NOTHING; }
-
-    void setInitialState() { state = STATE_SEND_MY_INFO; }
 
   protected:
     /// Our fromradio packet while it is being assembled
@@ -121,11 +148,6 @@ class PhoneAPI
      */
     virtual void onNowHasData(uint32_t fromRadioNum) {}
 
-    /**
-     * Subclasses can use this to find out when a client drops the link
-     */
-    virtual void handleDisconnect();
-
   private:
     void releasePhonePacket();
 
@@ -133,8 +155,12 @@ class PhoneAPI
 
     void releaseMqttClientProxyPhonePacket();
 
+    void releaseClientNotification();
+
     /// begin a new connection
     void handleStartConfig();
+
+    bool wasSeenRecently(uint32_t packetId);
 
     /**
      * Handle a packet that the phone wants us to send.  We can write to it but can not keep a reference to it

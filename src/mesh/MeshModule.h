@@ -35,10 +35,16 @@ enum class AdminMessageHandleResult {
 /*
  * This struct is used by Screen to figure out whether screen frame should be updated.
  */
-typedef struct _UIFrameEvent {
-    bool frameChanged;
-    bool needRedraw;
-} UIFrameEvent;
+struct UIFrameEvent {
+    // What do we actually want to happen?
+    enum Action {
+        REDRAW_ONLY,                    // Don't change which frames are show, just redraw, asap
+        REGENERATE_FRAMESET,            // Regenerate (change? add? remove?) screen frames, honoring requestFocus()
+        REGENERATE_FRAMESET_BACKGROUND, // Regenerate screen frames, attempting to remain on the same frame throughout
+    } action = REDRAW_ONLY;
+
+    // We might want to pass additional data inside this struct at some point
+};
 
 /** A baseclass for any mesh "module".
  *
@@ -73,6 +79,8 @@ class MeshModule
                                                                     meshtastic_AdminMessage *response);
 #if HAS_SCREEN
     virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) { return; }
+    virtual bool isRequestingFocus();                          // Checked by screen, when regenerating frameset
+    virtual bool interceptingKeyboardInput() { return false; } // Can screen use keyboard for nav, or is module handling input?
 #endif
   protected:
     const char *name;
@@ -175,6 +183,19 @@ class MeshModule
     {
         return AdminMessageHandleResult::NOT_HANDLED;
     };
+
+#if HAS_SCREEN
+    /** Request that our module's screen frame be focused when Screen::setFrames runs
+     * Only considered if Screen::setFrames is triggered via a UIFrameEvent
+     *
+     * Having this as a separate call, instead of part of the UIFrameEvent, allows the module to delay decision
+     * until drawFrame() is called. This required less restructuring.
+     */
+    bool _requestingFocus = false;
+    void requestFocus() { _requestingFocus = true; }
+#else
+    void requestFocus(){}; // No-op
+#endif
 
   private:
     /**

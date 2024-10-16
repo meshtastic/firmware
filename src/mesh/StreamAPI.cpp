@@ -1,5 +1,7 @@
 #include "StreamAPI.h"
 #include "PowerFSM.h"
+#include "RTC.h"
+#include "Throttle.h"
 #include "configuration.h"
 
 #define START1 0x94
@@ -19,10 +21,9 @@ int32_t StreamAPI::runOncePart()
  */
 int32_t StreamAPI::readStream()
 {
-    uint32_t now = millis();
     if (!stream->available()) {
         // Nothing available this time, if the computer has talked to us recently, poll often, otherwise let CPU sleep a long time
-        bool recentRx = (now - lastRxMsec) < 2000;
+        bool recentRx = Throttle::isWithinTimespanMs(lastRxMsec, 2000);
         return recentRx ? 5 : 250;
     } else {
         while (stream->available()) { // Currently we never want to block
@@ -70,7 +71,7 @@ int32_t StreamAPI::readStream()
         }
 
         // we had bytes available this time, so assume we might have them next time also
-        lastRxMsec = now;
+        lastRxMsec = millis();
         return 0;
     }
 }
@@ -96,7 +97,6 @@ void StreamAPI::writeStream()
 void StreamAPI::emitTxBuffer(size_t len)
 {
     if (len != 0) {
-        // LOG_DEBUG("emit tx %d\n", len);
         txBuf[0] = START1;
         txBuf[1] = START2;
         txBuf[2] = (len >> 8) & 0xff;
@@ -115,7 +115,26 @@ void StreamAPI::emitRebooted()
     fromRadioScratch.which_payload_variant = meshtastic_FromRadio_rebooted_tag;
     fromRadioScratch.rebooted = true;
 
-    // LOG_DEBUG("Emitting reboot packet for serial shell\n");
+    // LOG_DEBUG("Emitting reboot packet for serial shell");
+    emitTxBuffer(pb_encode_to_bytes(txBuf + HEADER_LEN, meshtastic_FromRadio_size, &meshtastic_FromRadio_msg, &fromRadioScratch));
+}
+
+void StreamAPI::emitLogRecord(meshtastic_LogRecord_Level level, const char *src, const char *format, va_list arg)
+{
+    // In case we send a FromRadio packet
+    memset(&fromRadioScratch, 0, sizeof(fromRadioScratch));
+    fromRadioScratch.which_payload_variant = meshtastic_FromRadio_log_record_tag;
+    fromRadioScratch.log_record.level = level;
+
+    uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true);
+    fromRadioScratch.log_record.time = rtc_sec;
+    strncpy(fromRadioScratch.log_record.source, src, sizeof(fromRadioScratch.log_record.source) - 1);
+
+    auto num_printed =
+        vsnprintf(fromRadioScratch.log_record.message, sizeof(fromRadioScratch.log_record.message) - 1, format, arg);
+    if (num_printed > 0 && fromRadioScratch.log_record.message[num_printed - 1] ==
+                               '\n') // Strip any ending newline, because we have records for framing instead.
+        fromRadioScratch.log_record.message[num_printed - 1] = '\0';
     emitTxBuffer(pb_encode_to_bytes(txBuf + HEADER_LEN, meshtastic_FromRadio_size, &meshtastic_FromRadio_msg, &fromRadioScratch));
 }
 

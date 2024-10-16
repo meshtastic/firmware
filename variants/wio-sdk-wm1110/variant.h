@@ -31,6 +31,13 @@
 
 #include "WVariant.h"
 
+#ifdef USE_TINYUSB
+#error TinyUSB must be disabled by platformio before using this variant
+#endif
+
+// We use the hardware serial port for the serial console
+#define Serial Serial1
+
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
@@ -88,7 +95,7 @@ extern "C" {
 #define USE_LR1110
 
 #define LR1110_IRQ_PIN LORA_DIO1
-#define LR1110_NRESER_PIN LORA_RESET
+#define LR1110_NRESET_PIN LORA_RESET
 #define LR1110_BUSY_PIN LORA_DIO2
 #define LR1110_SPI_NSS_PIN LORA_CS
 #define LR1110_SPI_SCK_PIN LORA_SCK
@@ -99,6 +106,8 @@ extern "C" {
 #define LR11X0_DIO_AS_RF_SWITCH
 
 #define LR1110_GNSS_ANT_PIN (32 + 5) // P1.05 37
+
+#define NRF_USE_SERIAL_DFU
 
 #ifdef __cplusplus
 }

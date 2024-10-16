@@ -10,10 +10,10 @@ jobs:
   build-native:
     runs-on: ubuntu-latest
     steps:
-      - name: Install libbluetooth
+      - name: Install libs needed for native build
         shell: bash
         run: |
-          sudo apt-get update
+          sudo apt-get update --fix-missing
           sudo apt-get install -y libbluetooth-dev libgpiod-dev libyaml-cpp-dev openssl libssl-dev libulfius-dev liborcania-dev
 
       - name: Checkout code
@@ -67,7 +67,7 @@ jobs:
       - name: Docker build and push tagged versions
         if: ${{ github.event_name == 'workflow_dispatch' }}
         continue-on-error: true # FIXME: Failing docker login auth
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
@@ -77,7 +77,7 @@ jobs:
       - name: Docker build and push
         if: ${{ github.ref == 'refs/heads/master' && github.event_name != 'pull_request_target' && github.event_name != 'pull_request' }}
         continue-on-error: true # FIXME: Failing docker login auth
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile

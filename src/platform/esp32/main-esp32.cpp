@@ -1,4 +1,5 @@
 #include "PowerFSM.h"
+#include "PowerMon.h"
 #include "configuration.h"
 #include "esp_task_wdt.h"
 #include "main.h"
@@ -8,10 +9,11 @@
 #include "nimble/NimbleBluetooth.h"
 #endif
 
-#if !MESHTASTIC_EXCLUDE_WIFI
+#if HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
 
+#include "esp_mac.h"
 #include "meshUtils.h"
 #include "sleep.h"
 #include "soc/rtc.h"
@@ -24,23 +26,23 @@
 #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH
 void setBluetoothEnable(bool enable)
 {
-#ifndef MESHTASTIC_EXCLUDE_WIFI
+#if HAS_WIFI
     if (!isWifiAvailable() && config.bluetooth.enabled == true)
+#else
+    if (config.bluetooth.enabled == true)
 #endif
-#ifdef MESHTASTIC_EXCLUDE_WIFI
-        if (config.bluetooth.enabled == true)
-#endif
-        {
-            if (!nimbleBluetooth) {
-                nimbleBluetooth = new NimbleBluetooth();
-            }
-            if (enable && !nimbleBluetooth->isActive()) {
-                nimbleBluetooth->setup();
-            }
-            // For ESP32, no way to recover from bluetooth shutdown without reboot
-            // BLE advertising automatically stops when MCU enters light-sleep(?)
-            // For deep-sleep, shutdown hardware with nimbleBluetooth->deinit(). Requires reboot to reverse
+    {
+        if (!nimbleBluetooth) {
+            nimbleBluetooth = new NimbleBluetooth();
         }
+        if (enable && !nimbleBluetooth->isActive()) {
+            powerMon->setState(meshtastic_PowerMon_State_BT_On);
+            nimbleBluetooth->setup();
+        }
+        // For ESP32, no way to recover from bluetooth shutdown without reboot
+        // BLE advertising automatically stops when MCU enters light-sleep(?)
+        // For deep-sleep, shutdown hardware with nimbleBluetooth->deinit(). Requires reboot to reverse
+    }
 }
 #else
 void setBluetoothEnable(bool enable) {}
@@ -74,17 +76,17 @@ void enableSlowCLK()
     uint32_t cal_32k = CALIBRATE_ONE(RTC_CAL_32K_XTAL);
 
     if (cal_32k == 0) {
-        LOG_DEBUG("32K XTAL OSC has not started up\n");
+        LOG_DEBUG("32K XTAL OSC has not started up");
     } else {
         rtc_clk_slow_freq_set(RTC_SLOW_FREQ_32K_XTAL);
-        LOG_DEBUG("Switching RTC Source to 32.768Khz succeeded, using 32K XTAL\n");
+        LOG_DEBUG("Switching RTC Source to 32.768Khz succeeded, using 32K XTAL");
         CALIBRATE_ONE(RTC_CAL_RTC_MUX);
         CALIBRATE_ONE(RTC_CAL_32K_XTAL);
     }
     CALIBRATE_ONE(RTC_CAL_RTC_MUX);
     CALIBRATE_ONE(RTC_CAL_32K_XTAL);
     if (rtc_clk_slow_freq_get() != RTC_SLOW_FREQ_32K_XTAL) {
-        LOG_WARN("Failed to switch 32K XTAL RTC source to 32.768Khz !!! \n");
+        LOG_WARN("Failed to switch 32K XTAL RTC source to 32.768Khz !!! ");
         return;
     }
 }
@@ -92,21 +94,25 @@ void enableSlowCLK()
 
 void esp32Setup()
 {
+    /* We explicitly don't want to do call randomSeed,
+    // as that triggers the esp32 core to use a less secure pseudorandom function.
     uint32_t seed = esp_random();
-    LOG_DEBUG("Setting random seed %u\n", seed);
+    LOG_DEBUG("Setting random seed %u", seed);
+    randomSeed(seed);
+    */
 
-    LOG_DEBUG("Total heap: %d\n", ESP.getHeapSize());
-    LOG_DEBUG("Free heap: %d\n", ESP.getFreeHeap());
-    LOG_DEBUG("Total PSRAM: %d\n", ESP.getPsramSize());
-    LOG_DEBUG("Free PSRAM: %d\n", ESP.getFreePsram());
+    LOG_DEBUG("Total heap: %d", ESP.getHeapSize());
+    LOG_DEBUG("Free heap: %d", ESP.getFreeHeap());
+    LOG_DEBUG("Total PSRAM: %d", ESP.getPsramSize());
+    LOG_DEBUG("Free PSRAM: %d", ESP.getFreePsram());
 
     nvs_stats_t nvs_stats;
     auto res = nvs_get_stats(NULL, &nvs_stats);
     assert(res == ESP_OK);
-    LOG_DEBUG("NVS: UsedEntries %d, FreeEntries %d, AllEntries %d, NameSpaces %d\n", nvs_stats.used_entries,
-              nvs_stats.free_entries, nvs_stats.total_entries, nvs_stats.namespace_count);
+    LOG_DEBUG("NVS: UsedEntries %d, FreeEntries %d, AllEntries %d, NameSpaces %d", nvs_stats.used_entries, nvs_stats.free_entries,
+              nvs_stats.total_entries, nvs_stats.namespace_count);
 
-    LOG_DEBUG("Setup Preferences in Flash Storage\n");
+    LOG_DEBUG("Setup Preferences in Flash Storage");
 
     // Create object to store our persistent data
     Preferences preferences;
@@ -115,17 +121,24 @@ void esp32Setup()
     uint32_t rebootCounter = preferences.getUInt("rebootCounter", 0);
     rebootCounter++;
     preferences.putUInt("rebootCounter", rebootCounter);
+    // store firmware version and hwrevision for access from OTA firmware
+    String fwrev = preferences.getString("firmwareVersion", "");
+    if (fwrev.compareTo(optstr(APP_VERSION)) != 0)
+        preferences.putString("firmwareVersion", optstr(APP_VERSION));
+    uint8_t hwven = preferences.getUInt("hwVendor", 0);
+    if (hwven != HW_VENDOR)
+        preferences.putUInt("hwVendor", HW_VENDOR);
     preferences.end();
-    LOG_DEBUG("Number of Device Reboots: %d\n", rebootCounter);
+    LOG_DEBUG("Number of Device Reboots: %d", rebootCounter);
 #if !MESHTASTIC_EXCLUDE_BLUETOOTH
     String BLEOTA = BleOta::getOtaAppVersion();
     if (BLEOTA.isEmpty()) {
-        LOG_DEBUG("No OTA firmware available\n");
+        LOG_INFO("No OTA firmware available");
     } else {
-        LOG_DEBUG("OTA firmware version %s\n", BLEOTA.c_str());
+        LOG_INFO("OTA firmware version %s", BLEOTA.c_str());
     }
 #else
-    LOG_DEBUG("No OTA firmware available\n");
+    LOG_INFO("No OTA firmware available");
 #endif
 
     // enableModemSleep();
@@ -135,9 +148,16 @@ void esp32Setup()
 // #define APP_WATCHDOG_SECS 45
 #define APP_WATCHDOG_SECS 90
 
+#ifdef CONFIG_IDF_TARGET_ESP32C6
+    esp_task_wdt_config_t *wdt_config = (esp_task_wdt_config_t *)malloc(sizeof(esp_task_wdt_config_t));
+    wdt_config->timeout_ms = APP_WATCHDOG_SECS * 1000;
+    wdt_config->trigger_panic = true;
+    res = esp_task_wdt_init(wdt_config);
+    assert(res == ESP_OK);
+#else
     res = esp_task_wdt_init(APP_WATCHDOG_SECS, true);
     assert(res == ESP_OK);
-
+#endif
     res = esp_task_wdt_add(NULL);
     assert(res == ESP_OK);
 
@@ -152,13 +172,13 @@ void esp32Setup()
 uint32_t axpDebugRead()
 {
   axp.debugCharging();
-  LOG_DEBUG("vbus current %f\n", axp.getVbusCurrent());
-  LOG_DEBUG("charge current %f\n", axp.getBattChargeCurrent());
-  LOG_DEBUG("bat voltage %f\n", axp.getBattVoltage());
-  LOG_DEBUG("batt pct %d\n", axp.getBattPercentage());
-  LOG_DEBUG("is battery connected %d\n", axp.isBatteryConnect());
-  LOG_DEBUG("is USB connected %d\n", axp.isVBUSPlug());
-  LOG_DEBUG("is charging %d\n", axp.isChargeing());
+  LOG_DEBUG("vbus current %f", axp.getVbusCurrent());
+  LOG_DEBUG("charge current %f", axp.getBattChargeCurrent());
+  LOG_DEBUG("bat voltage %f", axp.getBattVoltage());
+  LOG_DEBUG("batt pct %d", axp.getBattPercentage());
+  LOG_DEBUG("is battery connected %d", axp.isBatteryConnect());
+  LOG_DEBUG("is USB connected %d", axp.isVBUSPlug());
+  LOG_DEBUG("is charging %d", axp.isChargeing());
 
   return 30 * 1000;
 }
@@ -192,16 +212,16 @@ void cpuDeepSleep(uint32_t msecToWake)
     button(s), maybe we should not include any other GPIOs...
     */
 #if SOC_RTCIO_HOLD_SUPPORTED
-    static const uint8_t rtcGpios[] = {/* 0, */ 2,
-    /* 4, */
-#ifndef USE_JTAG
-                                       13,
-    /* 14, */ /* 15, */
+    static const uint8_t rtcGpios[] = {
+#ifndef HELTEC_VISION_MASTER_E213
+        // For this variant, >20mA leaks through the display if pin 2 held
+        // Todo: check if it's safe to remove this pin for all variants
+        2,
 #endif
-                                       /* 25, */ /* 26, */ /* 27, */
-                                       /* 32, */ /* 33, */ 34, 35,
-                                       /* 36, */ 37
-                                       /* 38, 39 */};
+#ifndef USE_JTAG
+        13,
+#endif
+        34, 35, 37};
 
     for (int i = 0; i < sizeof(rtcGpios); i++)
         rtc_gpio_isolate((gpio_num_t)rtcGpios[i]);
@@ -211,7 +231,7 @@ void cpuDeepSleep(uint32_t msecToWake)
         // to detect wake and in normal operation the external part drives them hard.
 #ifdef BUTTON_PIN
         // Only GPIOs which are have RTC functionality can be used in this bit map: 0,2,4,12-15,25-27,32-39.
-#if SOC_RTCIO_HOLD_SUPPORTED
+#if SOC_RTCIO_HOLD_SUPPORTED && SOC_PM_SUPPORT_EXT_WAKEUP
     uint64_t gpioMask = (1ULL << (config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN));
 #endif
 
@@ -223,6 +243,9 @@ void cpuDeepSleep(uint32_t msecToWake)
     // FIXME change polarity in hw so we can wake on ANY_HIGH instead - that would allow us to use all three buttons (instead
     // of just the first) gpio_pullup_en((gpio_num_t)BUTTON_PIN);
 
+#ifdef ESP32S3_WAKE_TYPE
+    esp_sleep_enable_ext1_wakeup(gpioMask, ESP32S3_WAKE_TYPE);
+#else
 #if SOC_PM_SUPPORT_EXT_WAKEUP
 #ifdef CONFIG_IDF_TARGET_ESP32
     // ESP_EXT1_WAKEUP_ALL_LOW has been deprecated since esp-idf v5.4 for any other target.
@@ -231,6 +254,8 @@ void cpuDeepSleep(uint32_t msecToWake)
     esp_sleep_enable_ext1_wakeup(gpioMask, ESP_EXT1_WAKEUP_ANY_LOW);
 #endif
 #endif
+
+#endif // #end ESP32S3_WAKE_TYPE
 #endif
 
     // We want RTC peripherals to stay on

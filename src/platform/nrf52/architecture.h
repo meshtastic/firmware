@@ -32,6 +32,9 @@
 #ifndef HAS_CPU_SHUTDOWN
 #define HAS_CPU_SHUTDOWN 1
 #endif
+#ifndef HAS_CUSTOM_CRYPTO_ENGINE
+#define HAS_CUSTOM_CRYPTO_ENGINE 1
+#endif
 
 //
 // set HW_VENDOR
@@ -60,8 +63,16 @@
 #define HW_VENDOR meshtastic_HardwareModel_NRF52_PROMICRO_DIY
 #elif defined(WIO_WM1110)
 #define HW_VENDOR meshtastic_HardwareModel_WIO_WM1110
+#elif defined(TRACKER_T1000_E)
+#define HW_VENDOR meshtastic_HardwareModel_TRACKER_T1000_E
+#elif defined(ME25LS01_4Y10TD)
+#define HW_VENDOR meshtastic_HardwareModel_ME25LS01_4Y10TD
+#elif defined(MS24SF1)
+#define HW_VENDOR meshtastic_HardwareModel_MS24SF1
 #elif defined(PRIVATE_HW) || defined(FEATHER_DIY)
 #define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
+#elif defined(HELTEC_T114)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_NODE_T114
 #else
 #define HW_VENDOR meshtastic_HardwareModel_NRF52_UNKNOWN
 #endif
@@ -73,21 +84,17 @@
 #ifdef ARDUINO_NRF52840_PCA10056
 
 // This board uses 0 to be mean LED on
-#undef LED_INVERTED
-#define LED_INVERTED 1
+#undef LED_STATE_ON
+#define LED_STATE_ON 0 // State when LED is lit
 
 #endif
 
 #ifdef _SEEED_XIAO_NRF52840_SENSE_H_
 
 // This board uses 0 to be mean LED on
-#undef LED_INVERTED
-#define LED_INVERTED 1
+#undef LED_STATE_ON
+#define LED_STATE_ON 0 // State when LED is lit
 
-#endif
-
-#ifndef TTGO_T_ECHO
-#define GPS_UBLOX
 #endif
 
 #define LED_PIN PIN_LED1 // LED1 on nrf52840-DK

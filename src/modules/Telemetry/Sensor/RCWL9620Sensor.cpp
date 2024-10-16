@@ -10,7 +10,7 @@ RCWL9620Sensor::RCWL9620Sensor() : TelemetrySensor(meshtastic_TelemetrySensorTyp
 
 int32_t RCWL9620Sensor::runOnce()
 {
-    LOG_INFO("Init sensor: %s\n", sensorName);
+    LOG_INFO("Init sensor: %s", sensorName);
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
@@ -23,7 +23,8 @@ void RCWL9620Sensor::setup() {}
 
 bool RCWL9620Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
-    LOG_DEBUG("RCWL9620Sensor::getMetrics\n");
+    measurement->variant.environment_metrics.has_distance = true;
+    LOG_DEBUG("RCWL9620Sensor::getMetrics");
     measurement->variant.environment_metrics.distance = getDistance();
     return true;
 }

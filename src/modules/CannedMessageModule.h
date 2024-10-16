@@ -56,6 +56,7 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     const char *getMessageByIndex(int index);
     const char *getNodeName(NodeNum node);
     bool shouldDraw();
+    bool hasMessages();
     // void eventUp();
     // void eventDown();
     // void eventSelect();
@@ -81,9 +82,8 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
         }
 
         switch (p->decoded.portnum) {
-        case meshtastic_PortNum_TEXT_MESSAGE_APP:
         case meshtastic_PortNum_ROUTING_APP:
-            return true;
+            return waitingForAck;
         default:
             return false;
         }
@@ -114,6 +114,7 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     virtual bool wantUIFrame() override { return this->shouldDraw(); }
     virtual Observable<const UIFrameEvent *> *getUIFrameObservable() override { return this; }
     virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) override;
+    virtual bool interceptingKeyboardInput() override;
     virtual AdminMessageHandleResult handleAdminMessageForModule(const meshtastic_MeshPacket &mp,
                                                                  meshtastic_AdminMessage *request,
                                                                  meshtastic_AdminMessage *response) override;
@@ -140,7 +141,8 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     uint8_t numChannels = 0;
     ChannelIndex indexChannels[MAX_NUM_CHANNELS] = {0};
     NodeNum incoming = NODENUM_BROADCAST;
-    bool ack = false; // True means ACK, false means NAK (error_reason != NONE)
+    bool ack = false;           // True means ACK, false means NAK (error_reason != NONE)
+    bool waitingForAck = false; // Are currently interested in routing packets?
     float lastRxSnr = 0;
     int32_t lastRxRssi = 0;
 

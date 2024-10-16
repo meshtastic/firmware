@@ -10,12 +10,17 @@
 #include "NodeDB.h"
 #include "PowerFSM.h" // needed for button bypass
 #include "detect/ScanI2C.h"
+#include "input/ScanAndSelect.h"
 #include "mesh/generated/meshtastic/cannedmessages.pb.h"
+#include "modules/AdminModule.h"
 
 #include "main.h"                               // for cardkb_found
 #include "modules/ExternalNotificationModule.h" // for buzzer control
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
+#endif
+#if defined(USE_EINK) && defined(USE_EINK_DYNAMICDISPLAY)
+#include "graphics/EInkDynamicDisplay.h" // To select between full and fast refresh on E-Ink displays
 #endif
 
 #ifndef INPUTBROKER_MATRIX_TYPE
@@ -23,6 +28,7 @@
 #endif
 
 #include "graphics/ScreenFonts.h"
+#include <Throttle.h>
 
 // Remove Canned message screen if no action is taken for some milliseconds
 #define INACTIVATE_AFTER_MS 20000
@@ -42,11 +48,11 @@ CannedMessageModule::CannedMessageModule()
         this->loadProtoForModule();
         if ((this->splitConfiguredMessages() <= 0) && (cardkb_found.address == 0x00) && !INPUTBROKER_MATRIX_TYPE &&
             !CANNED_MESSAGE_MODULE_ENABLE) {
-            LOG_INFO("CannedMessageModule: No messages are configured. Module is disabled\n");
+            LOG_INFO("CannedMessageModule: No messages are configured. Module is disabled");
             this->runState = CANNED_MESSAGE_RUN_STATE_DISABLED;
             disable();
         } else {
-            LOG_INFO("CannedMessageModule is enabled\n");
+            LOG_INFO("CannedMessageModule is enabled");
 
             // T-Watch interface currently has no way to select destination type, so default to 'node'
 #if defined(T_WATCH_S3) || defined(RAK14014)
@@ -73,16 +79,16 @@ int CannedMessageModule::splitConfiguredMessages()
     int messageIndex = 0;
     int i = 0;
 
-    String messages = cannedMessageModuleConfig.messages;
+    String canned_messages = cannedMessageModuleConfig.messages;
 
 #if defined(T_WATCH_S3) || defined(RAK14014)
-    String separator = messages.length() ? "|" : "";
+    String separator = canned_messages.length() ? "|" : "";
 
-    messages = "[---- Free Text ----]" + separator + messages;
+    canned_messages = "[---- Free Text ----]" + separator + canned_messages;
 #endif
 
     // collect all the message parts
-    strncpy(this->messageStore, messages.c_str(), sizeof(this->messageStore));
+    strncpy(this->messageStore, canned_messages.c_str(), sizeof(this->messageStore));
 
     // The first message points to the beginning of the store.
     this->messages[messageIndex++] = this->messageStore;
@@ -106,7 +112,7 @@ int CannedMessageModule::splitConfiguredMessages()
     }
     if (strlen(this->messages[messageIndex - 1]) > 0) {
         // We have a last message.
-        LOG_DEBUG("CannedMessage %d is: '%s'\n", messageIndex - 1, this->messages[messageIndex - 1]);
+        LOG_DEBUG("CannedMessage %d is: '%s'", messageIndex - 1, this->messages[messageIndex - 1]);
         this->messagesCount = messageIndex;
     } else {
         this->messagesCount = messageIndex - 1;
@@ -148,8 +154,9 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         if (this->currentMessageIndex == 0) {
             this->runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
 
-            UIFrameEvent e = {false, true};
-            e.frameChanged = true;
+            requestFocus(); // Tell Screen::setFrames to move to our module's frame, next time it runs
+            UIFrameEvent e;
+            e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
             this->notifyObservers(&e);
 
             return 0;
@@ -166,8 +173,8 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         }
     }
     if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL)) {
-        UIFrameEvent e = {false, true};
-        e.frameChanged = true;
+        UIFrameEvent e;
+        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
         this->currentMessageIndex = -1;
 
 #if !defined(T_WATCH_S3) && !defined(RAK14014)
@@ -185,17 +192,17 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
 
 #if defined(T_WATCH_S3) || defined(RAK14014)
         if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {
-            this->payload = 0xb4;
+            this->payload = INPUT_BROKER_MSG_LEFT;
         } else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT)) {
-            this->payload = 0xb7;
+            this->payload = INPUT_BROKER_MSG_RIGHT;
         }
 #else
         // tweak for left/right events generated via trackball/touch with empty kbchar
         if (!event->kbchar) {
             if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {
-                this->payload = 0xb4;
+                this->payload = INPUT_BROKER_MSG_LEFT;
             } else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT)) {
-                this->payload = 0xb7;
+                this->payload = INPUT_BROKER_MSG_RIGHT;
             }
         } else {
             // pass the pressed key
@@ -217,26 +224,26 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
 
         // Run modifier key code below, (doesnt inturrupt typing or reset to start screen page)
         switch (event->kbchar) {
-        case 0x11: // make screen brighter
+        case INPUT_BROKER_MSG_BRIGHTNESS_UP: // make screen brighter
             if (screen)
                 screen->increaseBrightness();
-            LOG_DEBUG("increasing Screen Brightness\n");
+            LOG_DEBUG("increasing Screen Brightness");
             break;
-        case 0x12: // make screen dimmer
+        case INPUT_BROKER_MSG_BRIGHTNESS_DOWN: // make screen dimmer
             if (screen)
                 screen->decreaseBrightness();
-            LOG_DEBUG("Decreasing Screen Brightness\n");
+            LOG_DEBUG("Decreasing Screen Brightness");
             break;
-        case 0xf1: // draw modifier (function) symbal
+        case INPUT_BROKER_MSG_FN_SYMBOL_ON: // draw modifier (function) symbal
             if (screen)
                 screen->setFunctionSymbal("Fn");
             break;
-        case 0xf2: // remove modifier (function) symbal
+        case INPUT_BROKER_MSG_FN_SYMBOL_OFF: // remove modifier (function) symbal
             if (screen)
                 screen->removeFunctionSymbal("Fn");
             break;
         // mute (switch off/toggle) external notifications on fn+m
-        case 0xac:
+        case INPUT_BROKER_MSG_MUTE_TOGGLE:
             if (moduleConfig.external_notification.enabled == true) {
                 if (externalNotificationModule->getMute()) {
                     externalNotificationModule->setMute(false);
@@ -252,7 +259,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
                 }
             }
             break;
-        case 0x9e: // toggle GPS like triple press does
+        case INPUT_BROKER_MSG_GPS_TOGGLE: // toggle GPS like triple press does
 #if !MESHTASTIC_EXCLUDE_GPS
             if (gps != nullptr) {
                 gps->toggleGpsMode();
@@ -262,23 +269,45 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
             showTemporaryMessage("GPS Toggled");
 #endif
             break;
-        case 0xaf: // fn+space send network ping like double press does
-            service.refreshLocalMeshNode();
-            if (service.trySendPosition(NODENUM_BROADCAST, true)) {
+        case INPUT_BROKER_MSG_BLUETOOTH_TOGGLE: // toggle Bluetooth on/off
+            if (config.bluetooth.enabled == true) {
+                config.bluetooth.enabled = false;
+                LOG_INFO("User toggled Bluetooth");
+                nodeDB->saveToDisk();
+                disableBluetooth();
+                showTemporaryMessage("Bluetooth OFF");
+            } else if (config.bluetooth.enabled == false) {
+                config.bluetooth.enabled = true;
+                LOG_INFO("User toggled Bluetooth");
+                nodeDB->saveToDisk();
+                rebootAtMsec = millis() + 2000;
+                showTemporaryMessage("Bluetooth ON\nReboot");
+            }
+            break;
+        case INPUT_BROKER_MSG_SEND_PING: // fn+space send network ping like double press does
+            service->refreshLocalMeshNode();
+            if (service->trySendPosition(NODENUM_BROADCAST, true)) {
                 showTemporaryMessage("Position \nUpdate Sent");
             } else {
                 showTemporaryMessage("Node Info \nUpdate Sent");
             }
             break;
+        case INPUT_BROKER_MSG_DISMISS_FRAME: // fn+del: dismiss screen frames like text or waypoint
+            // Avoid opening the canned message screen frame
+            // We're only handling the keypress here by convention, this has nothing to do with canned messages
+            this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+            // Attempt to close whatever frame is currently shown on display
+            screen->dismissCurrentFrame();
+            return 0;
         default:
             // pass the pressed key
-            // LOG_DEBUG("Canned message ANYKEY (%x)\n", event->kbchar);
+            // LOG_DEBUG("Canned message ANYKEY (%x)", event->kbchar);
             this->payload = event->kbchar;
             this->lastTouchMillis = millis();
             validEvent = true;
             break;
         }
-        if (screen && (event->kbchar != 0xf1)) {
+        if (screen && (event->kbchar != INPUT_BROKER_MSG_FN_SYMBOL_ON)) {
             screen->removeFunctionSymbal("Fn"); // remove modifier (function) symbal
         }
     }
@@ -353,6 +382,8 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
     }
 
     if (validEvent) {
+        requestFocus(); // Tell Screen::setFrames to move to our module's frame, next time it runs
+
         // Let runOnce to be called immediately.
         if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_SELECT) {
             setIntervalFromNow(0); // on fast keypresses, this isn't fast enough.
@@ -378,9 +409,14 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
         p->decoded.payload.size++;
     }
 
-    LOG_INFO("Sending message id=%d, dest=%x, msg=%.*s\n", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
+    // Only receive routing messages when expecting ACK for a canned message
+    // Prevents the canned message module from regenerating the screen's frameset at unexpected times,
+    // or raising a UIFrameEvent before another module has the chance
+    this->waitingForAck = true;
 
-    service.sendToMesh(
+    LOG_INFO("Sending message id=%d, dest=%x, msg=%.*s", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
+
+    service->sendToMesh(
         p, RX_SRC_LOCAL,
         true); // send to mesh, cc to phone. Even if there's no phone connected, this stores the message to match ACKs
 }
@@ -392,14 +428,14 @@ int32_t CannedMessageModule::runOnce()
         temporaryMessage = "";
         return INT32_MAX;
     }
-    // LOG_DEBUG("Check status\n");
-    UIFrameEvent e = {false, true};
+    // LOG_DEBUG("Check status");
+    UIFrameEvent e;
     if ((this->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) ||
         (this->runState == CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED) || (this->runState == CANNED_MESSAGE_RUN_STATE_MESSAGE)) {
         // TODO: might have some feedback of sending state
         this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         temporaryMessage = "";
-        e.frameChanged = true;
+        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
         this->currentMessageIndex = -1;
         this->freetext = ""; // clear freetext
         this->cursor = 0;
@@ -410,9 +446,9 @@ int32_t CannedMessageModule::runOnce()
 
         this->notifyObservers(&e);
     } else if (((this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT)) &&
-               ((millis() - this->lastTouchMillis) > INACTIVATE_AFTER_MS)) {
+               !Throttle::isWithinTimespanMs(this->lastTouchMillis, INACTIVATE_AFTER_MS)) {
         // Reset module
-        e.frameChanged = true;
+        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
         this->currentMessageIndex = -1;
         this->freetext = ""; // clear freetext
         this->cursor = 0;
@@ -445,11 +481,11 @@ int32_t CannedMessageModule::runOnce()
                 }
                 this->runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
             } else {
-                // LOG_DEBUG("Reset message is empty.\n");
+                // LOG_DEBUG("Reset message is empty.");
                 this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
             }
         }
-        e.frameChanged = true;
+        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
         this->currentMessageIndex = -1;
         this->freetext = ""; // clear freetext
         this->cursor = 0;
@@ -462,8 +498,8 @@ int32_t CannedMessageModule::runOnce()
         return 2000;
     } else if ((this->runState != CANNED_MESSAGE_RUN_STATE_FREETEXT) && (this->currentMessageIndex == -1)) {
         this->currentMessageIndex = 0;
-        LOG_DEBUG("First touch (%d):%s\n", this->currentMessageIndex, this->getCurrentMessage());
-        e.frameChanged = true;
+        LOG_DEBUG("First touch (%d):%s", this->currentMessageIndex, this->getCurrentMessage());
+        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
         this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_UP) {
         if (this->messagesCount > 0) {
@@ -476,7 +512,7 @@ int32_t CannedMessageModule::runOnce()
 #endif
 
             this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
-            LOG_DEBUG("MOVE UP (%d):%s\n", this->currentMessageIndex, this->getCurrentMessage());
+            LOG_DEBUG("MOVE UP (%d):%s", this->currentMessageIndex, this->getCurrentMessage());
         }
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_DOWN) {
         if (this->messagesCount > 0) {
@@ -489,11 +525,11 @@ int32_t CannedMessageModule::runOnce()
 #endif
 
             this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
-            LOG_DEBUG("MOVE DOWN (%d):%s\n", this->currentMessageIndex, this->getCurrentMessage());
+            LOG_DEBUG("MOVE DOWN (%d):%s", this->currentMessageIndex, this->getCurrentMessage());
         }
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT || this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) {
         switch (this->payload) {
-        case 0xb4: // left
+        case INPUT_BROKER_MSG_LEFT:
             if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NODE) {
                 size_t numMeshNodes = nodeDB->getNumMeshNodes();
                 if (this->dest == NODENUM_BROADCAST) {
@@ -528,7 +564,7 @@ int32_t CannedMessageModule::runOnce()
                 }
             }
             break;
-        case 0xb7: // right
+        case INPUT_BROKER_MSG_RIGHT:
             if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NODE) {
                 size_t numMeshNodes = nodeDB->getNumMeshNodes();
                 if (this->dest == NODENUM_BROADCAST) {
@@ -567,7 +603,7 @@ int32_t CannedMessageModule::runOnce()
             break;
         }
         if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
-            e.frameChanged = true;
+            e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
             switch (this->payload) { // code below all trigger the freetext window (where you type to send a message) or reset the
                                      // display back to the default window
             case 0x08:               // backspace
@@ -590,21 +626,21 @@ int32_t CannedMessageModule::runOnce()
                     this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
                 }
                 break;
-            case 0xb4: // left
-            case 0xb7: // right
+            case INPUT_BROKER_MSG_LEFT:
+            case INPUT_BROKER_MSG_RIGHT:
                 // already handled above
                 break;
                 // handle fn+s for shutdown
-            case 0x9b:
+            case INPUT_BROKER_MSG_SHUTDOWN:
                 if (screen)
-                    screen->startShutdownScreen();
+                    screen->startAlert("Shutting down...");
                 shutdownAtMsec = millis() + DEFAULT_SHUTDOWN_SECONDS * 1000;
                 runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
                 break;
             // and fn+r for reboot
-            case 0x90:
+            case INPUT_BROKER_MSG_REBOOT:
                 if (screen)
-                    screen->startRebootScreen();
+                    screen->startAlert("Rebooting...");
                 rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
                 runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
                 break;
@@ -683,7 +719,20 @@ bool CannedMessageModule::shouldDraw()
     if (!moduleConfig.canned_message.enabled && !CANNED_MESSAGE_MODULE_ENABLE) {
         return false;
     }
+
+    // If using "scan and select" input, don't draw the module frame just to say "disabled"
+    // The scanAndSelectInput class will draw its own temporary alert for user, when the input button is pressed
+    else if (scanAndSelectInput != nullptr && !hasMessages())
+        return false;
+
     return (currentMessageIndex != -1) || (this->runState != CANNED_MESSAGE_RUN_STATE_INACTIVE);
+}
+
+// Has the user defined any canned messages?
+// Expose publicly whether canned message module is ready for use
+bool CannedMessageModule::hasMessages()
+{
+    return (this->messagesCount > 0);
 }
 
 int CannedMessageModule::getNextIndex()
@@ -706,8 +755,8 @@ int CannedMessageModule::getPrevIndex()
 void CannedMessageModule::showTemporaryMessage(const String &message)
 {
     temporaryMessage = message;
-    UIFrameEvent e = {false, true};
-    e.frameChanged = true;
+    UIFrameEvent e;
+    e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
     notifyObservers(&e);
     runState = CANNED_MESSAGE_RUN_STATE_MESSAGE;
     // run this loop again in 2 seconds, next iteration will clear the display
@@ -909,19 +958,41 @@ void CannedMessageModule::drawEnterIcon(OLEDDisplay *display, int x, int y, floa
 
 #endif
 
+// Indicate to screen class that module is handling keyboard input specially (at certain times)
+// This prevents the left & right keys being used for nav. between screen frames during text entry.
+bool CannedMessageModule::interceptingKeyboardInput()
+{
+    switch (runState) {
+    case CANNED_MESSAGE_RUN_STATE_DISABLED:
+    case CANNED_MESSAGE_RUN_STATE_INACTIVE:
+        return false;
+    default:
+        return true;
+    }
+}
+
 void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     char buffer[50];
 
     if (temporaryMessage.length() != 0) {
+        requestFocus(); // Tell Screen::setFrames to move to our module's frame
         LOG_DEBUG("Drawing temporary message: %s", temporaryMessage.c_str());
         display->setTextAlignment(TEXT_ALIGN_CENTER);
         display->setFont(FONT_MEDIUM);
         display->drawString(display->getWidth() / 2 + x, 0 + y + 12, temporaryMessage);
     } else if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED) {
-        display->setTextAlignment(TEXT_ALIGN_CENTER);
-        display->setFont(FONT_MEDIUM);
+        requestFocus();                        // Tell Screen::setFrames to move to our module's frame
+        EINK_ADD_FRAMEFLAG(display, COSMETIC); // Clean after this popup. Layout makes ghosting particularly obvious
+
+#ifdef USE_EINK
+        display->setFont(FONT_SMALL); // No chunky text
+#else
+        display->setFont(FONT_MEDIUM); // Chunky text
+#endif
+
         String displayString;
+        display->setTextAlignment(TEXT_ALIGN_CENTER);
         if (this->ack) {
             displayString = "Delivered to\n%s";
         } else {
@@ -935,20 +1006,44 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         String snrString = "Last Rx SNR: %f";
         String rssiString = "Last Rx RSSI: %d";
 
-        if (this->ack) {
-            display->drawStringf(display->getWidth() / 2 + x, y + 100, buffer, snrString, this->lastRxSnr);
-            display->drawStringf(display->getWidth() / 2 + x, y + 130, buffer, rssiString, this->lastRxRssi);
+        // Don't bother drawing snr and rssi for tiny displays
+        if (display->getHeight() > 100) {
+
+            // Original implementation used constants of y = 100 and y = 130. Shrink this if screen is *slightly* small
+            int16_t snrY = 100;
+            int16_t rssiY = 130;
+
+            // If dislay is *slighly* too small for the original consants, squish up a bit
+            if (display->getHeight() < rssiY + FONT_HEIGHT_SMALL) {
+                snrY = display->getHeight() - ((1.5) * FONT_HEIGHT_SMALL);
+                rssiY = display->getHeight() - ((2.5) * FONT_HEIGHT_SMALL);
+            }
+
+            if (this->ack) {
+                display->drawStringf(display->getWidth() / 2 + x, snrY + y, buffer, snrString, this->lastRxSnr);
+                display->drawStringf(display->getWidth() / 2 + x, rssiY + y, buffer, rssiString, this->lastRxRssi);
+            }
         }
     } else if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) {
+        // E-Ink: clean the screen *after* this pop-up
+        EINK_ADD_FRAMEFLAG(display, COSMETIC);
+
+        requestFocus(); // Tell Screen::setFrames to move to our module's frame
+
+#ifdef USE_EINK
+        display->setFont(FONT_SMALL); // No chunky text
+#else
+        display->setFont(FONT_MEDIUM); // Chunky text
+#endif
+
         display->setTextAlignment(TEXT_ALIGN_CENTER);
-        display->setFont(FONT_MEDIUM);
         display->drawString(display->getWidth() / 2 + x, 0 + y + 12, "Sending...");
     } else if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_DISABLED) {
         display->setTextAlignment(TEXT_ALIGN_LEFT);
         display->setFont(FONT_SMALL);
         display->drawString(10 + x, 0 + y + FONT_HEIGHT_SMALL, "Canned Message\nModule disabled.");
     } else if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
-
+        requestFocus(); // Tell Screen::setFrames to move to our module's frame
 #if defined(T_WATCH_S3) || defined(RAK14014)
         drawKeyboard(display, state, 0, 0);
 #else
@@ -1013,11 +1108,18 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
                 int topMsg = (messagesCount > lines && currentMessageIndex >= lines - 1) ? currentMessageIndex - lines + 2 : 0;
                 for (int i = 0; i < std::min(messagesCount, lines); i++) {
                     if (i == currentMessageIndex - topMsg) {
+#ifdef USE_EINK
+                        // Avoid drawing solid black with fillRect: harder to clear for E-Ink
+                        display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * (i + 1), ">");
+                        display->drawString(12 + x, 0 + y + FONT_HEIGHT_SMALL * (i + 1),
+                                            cannedMessageModule->getCurrentMessage());
+#else
                         display->fillRect(0 + x, 0 + y + FONT_HEIGHT_SMALL * (i + 1), x + display->getWidth(),
                                           y + FONT_HEIGHT_SMALL);
                         display->setColor(BLACK);
                         display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * (i + 1), cannedMessageModule->getCurrentMessage());
                         display->setColor(WHITE);
+#endif
                     } else {
                         display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * (i + 1),
                                             cannedMessageModule->getMessageByIndex(topMsg + i));
@@ -1030,16 +1132,18 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
 
 ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
-    if (mp.decoded.portnum == meshtastic_PortNum_ROUTING_APP) {
+    if (mp.decoded.portnum == meshtastic_PortNum_ROUTING_APP && waitingForAck) {
         // look for a request_id
         if (mp.decoded.request_id != 0) {
-            UIFrameEvent e = {false, true};
-            e.frameChanged = true;
+            UIFrameEvent e;
+            e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
+            requestFocus(); // Tell Screen::setFrames that our module's frame should be shown, even if not "first" in the frameset
             this->runState = CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED;
-            this->incoming = service.getNodenumFromRequestId(mp.decoded.request_id);
+            this->incoming = service->getNodenumFromRequestId(mp.decoded.request_id);
             meshtastic_Routing decoded = meshtastic_Routing_init_default;
             pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, meshtastic_Routing_fields, &decoded);
             this->ack = decoded.error_reason == meshtastic_Routing_Error_NONE;
+            waitingForAck = false; // No longer want routing packets
             this->notifyObservers(&e);
             // run the next time 2 seconds later
             setIntervalFromNow(2000);
@@ -1053,11 +1157,10 @@ void CannedMessageModule::loadProtoForModule()
 {
     if (nodeDB->loadProto(cannedMessagesConfigFile, meshtastic_CannedMessageModuleConfig_size,
                           sizeof(meshtastic_CannedMessageModuleConfig), &meshtastic_CannedMessageModuleConfig_msg,
-                          &cannedMessageModuleConfig) != LoadFileResult::SUCCESS) {
+                          &cannedMessageModuleConfig) != LoadFileResult::LOAD_SUCCESS) {
         installDefaultCannedMessageModuleConfig();
     }
 }
-
 /**
  * @brief Save the module config to file.
  *
@@ -1103,13 +1206,13 @@ AdminMessageHandleResult CannedMessageModule::handleAdminMessageForModule(const 
 
     switch (request->which_payload_variant) {
     case meshtastic_AdminMessage_get_canned_message_module_messages_request_tag:
-        LOG_DEBUG("Client is getting radio canned messages\n");
+        LOG_DEBUG("Client is getting radio canned messages");
         this->handleGetCannedMessageModuleMessages(mp, response);
         result = AdminMessageHandleResult::HANDLED_WITH_RESPONSE;
         break;
 
     case meshtastic_AdminMessage_set_canned_message_module_messages_tag:
-        LOG_DEBUG("Client is setting radio canned messages\n");
+        LOG_DEBUG("Client is setting radio canned messages");
         this->handleSetCannedMessageModuleMessages(request->set_canned_message_module_messages);
         result = AdminMessageHandleResult::HANDLED;
         break;
@@ -1124,7 +1227,7 @@ AdminMessageHandleResult CannedMessageModule::handleAdminMessageForModule(const 
 void CannedMessageModule::handleGetCannedMessageModuleMessages(const meshtastic_MeshPacket &req,
                                                                meshtastic_AdminMessage *response)
 {
-    LOG_DEBUG("*** handleGetCannedMessageModuleMessages\n");
+    LOG_DEBUG("*** handleGetCannedMessageModuleMessages");
     if (req.decoded.want_response) {
         response->which_payload_variant = meshtastic_AdminMessage_get_canned_message_module_messages_response_tag;
         strncpy(response->get_canned_message_module_messages_response, cannedMessageModuleConfig.messages,
@@ -1139,7 +1242,7 @@ void CannedMessageModule::handleSetCannedMessageModuleMessages(const char *from_
     if (*from_msg) {
         changed |= strcmp(cannedMessageModuleConfig.messages, from_msg);
         strncpy(cannedMessageModuleConfig.messages, from_msg, sizeof(cannedMessageModuleConfig.messages));
-        LOG_DEBUG("*** from_msg.text:%s\n", from_msg);
+        LOG_DEBUG("*** from_msg.text:%s", from_msg);
     }
 
     if (changed) {

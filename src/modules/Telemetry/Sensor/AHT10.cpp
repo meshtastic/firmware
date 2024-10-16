@@ -13,7 +13,7 @@ AHT10Sensor::AHT10Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_AHT1
 
 int32_t AHT10Sensor::runOnce()
 {
-    LOG_INFO("Init sensor: %s\n", sensorName);
+    LOG_INFO("Init sensor: %s", sensorName);
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
@@ -27,10 +27,13 @@ void AHT10Sensor::setup() {}
 
 bool AHT10Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
-    LOG_DEBUG("AHT10Sensor::getMetrics\n");
+    LOG_DEBUG("AHT10Sensor::getMetrics");
 
     sensors_event_t humidity, temp;
     aht10.getEvent(&humidity, &temp);
+
+    measurement->variant.environment_metrics.has_temperature = true;
+    measurement->variant.environment_metrics.has_relative_humidity = true;
 
     measurement->variant.environment_metrics.temperature = temp.temperature;
     measurement->variant.environment_metrics.relative_humidity = humidity.relative_humidity;

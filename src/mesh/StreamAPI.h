@@ -82,4 +82,7 @@ class StreamAPI : public PhoneAPI
 
     /// Subclasses can use this scratch buffer if they wish
     uint8_t txBuf[MAX_STREAM_BUF_SIZE] = {0};
+
+    /// Low level function to emit a protobuf encapsulated log record
+    void emitLogRecord(meshtastic_LogRecord_Level level, const char *src, const char *format, va_list arg);
 };

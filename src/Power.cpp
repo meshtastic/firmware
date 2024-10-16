@@ -13,6 +13,7 @@
 #include "power.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
+#include "Throttle.h"
 #include "buzz/buzz.h"
 #include "configuration.h"
 #include "main.h"
@@ -27,9 +28,10 @@
 #if defined(DEBUG_HEAP_MQTT) && !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
 #include "target_specific.h"
-#if !MESTASTIC_EXCLUDE_WIFI
+#if HAS_WIFI
 #include <WiFi.h>
 #endif
+
 #endif
 
 #ifndef DELAY_FOREVER
@@ -75,14 +77,20 @@ INA219Sensor ina219Sensor;
 INA3221Sensor ina3221Sensor;
 #endif
 
+#if !MESHTASTIC_EXCLUDE_I2C && !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+#include "modules/Telemetry/Sensor/MAX17048Sensor.h"
+#include <utility>
+extern std::pair<uint8_t, TwoWire *> nodeTelemetrySensorsMap[_meshtastic_TelemetrySensorType_MAX + 1];
+#if HAS_TELEMETRY && (!MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR || !MESHTASTIC_EXCLUDE_POWER_TELEMETRY)
+MAX17048Sensor max17048Sensor;
+#endif
+#endif
+
 #if HAS_RAKPROT && !defined(ARCH_PORTDUINO)
 RAK9154Sensor rak9154Sensor;
 #endif
 
 #ifdef HAS_PMU
-#include "XPowersAXP192.tpp"
-#include "XPowersAXP2101.tpp"
-#include "XPowersLibInterface.hpp"
 XPowersLibInterface *PMU = NULL;
 #else
 
@@ -139,11 +147,40 @@ using namespace meshtastic;
  */
 static HasBatteryLevel *batteryLevel; // Default to NULL for no battery level sensor
 
+#ifdef BATTERY_PIN
+
+static void adcEnable()
+{
+#ifdef ADC_CTRL // enable adc voltage divider when we need to read
+#ifdef ADC_USE_PULLUP
+    pinMode(ADC_CTRL, INPUT_PULLUP);
+#else
+    pinMode(ADC_CTRL, OUTPUT);
+    digitalWrite(ADC_CTRL, ADC_CTRL_ENABLED);
+#endif
+    delay(10);
+#endif
+}
+
+static void adcDisable()
+{
+#ifdef ADC_CTRL // disable adc voltage divider when we need to read
+#ifdef ADC_USE_PULLUP
+    pinMode(ADC_CTRL, INPUT_PULLDOWN);
+#else
+    digitalWrite(ADC_CTRL, !ADC_CTRL_ENABLED);
+#endif
+#endif
+}
+
+#endif
+
 /**
  * A simple battery level sensor that assumes the battery voltage is attached via a voltage-divider to an analog input
  */
 class AnalogBatteryLevel : public HasBatteryLevel
 {
+  public:
     /**
      * Battery state of charge, from 0 to 100 or -1 for unknown
      */
@@ -200,9 +237,10 @@ class AnalogBatteryLevel : public HasBatteryLevel
         }
 #endif
 
-#if HAS_TELEMETRY && !defined(ARCH_PORTDUINO) && !defined(HAS_PMU) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#if HAS_TELEMETRY && !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !defined(HAS_PMU) &&                                  \
+    !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
         if (hasINA()) {
-            LOG_DEBUG("Using INA on I2C addr 0x%x for device battery voltage\n", config.power.device_battery_ina_address);
+            LOG_DEBUG("Using INA on I2C addr 0x%x for device battery voltage", config.power.device_battery_ina_address);
             return getINAVoltage();
         }
 #endif
@@ -222,12 +260,13 @@ class AnalogBatteryLevel : public HasBatteryLevel
             config.power.adc_multiplier_override > 0 ? config.power.adc_multiplier_override : ADC_MULTIPLIER;
         // Do not call analogRead() often.
         const uint32_t min_read_interval = 5000;
-        if (millis() - last_read_time_ms > min_read_interval) {
+        if (!Throttle::isWithinTimespanMs(last_read_time_ms, min_read_interval)) {
             last_read_time_ms = millis();
 
             uint32_t raw = 0;
             float scaled = 0;
 
+            adcEnable();
 #ifdef ARCH_ESP32 // ADC block for espressif platforms
             raw = espAdcRead();
             scaled = esp_adc_cal_raw_to_voltage(raw, adc_characs);
@@ -239,6 +278,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
             raw = raw / BATTERY_SENSE_SAMPLES;
             scaled = operativeAdcMultiplier * ((1000 * AREF_VOLTAGE) / pow(2, BATTERY_SENSE_RESOLUTION_BITS)) * raw;
 #endif
+            adcDisable();
 
             if (!initial_read_done) {
                 // Flush the smoothing filter with an ADC reading, if the reading is plausibly correct
@@ -250,7 +290,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
                 last_read_value += (scaled - last_read_value) * 0.5; // Virtual LPF
             }
 
-            // LOG_DEBUG("battery gpio %d raw val=%u scaled=%u filtered=%u\n", BATTERY_PIN, raw, (uint32_t)(scaled), (uint32_t)
+            // LOG_DEBUG("battery gpio %d raw val=%u scaled=%u filtered=%u", BATTERY_PIN, raw, (uint32_t)(scaled), (uint32_t)
             // (last_read_value));
         }
         return last_read_value;
@@ -269,11 +309,6 @@ class AnalogBatteryLevel : public HasBatteryLevel
         uint8_t raw_c = 0; // raw reading counter
 
 #ifndef BAT_MEASURE_ADC_UNIT // ADC1
-#ifdef ADC_CTRL              // enable adc voltage divider when we need to read
-        pinMode(ADC_CTRL, OUTPUT);
-        digitalWrite(ADC_CTRL, ADC_CTRL_ENABLED);
-        delay(10);
-#endif
         for (int i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
             int val_ = adc1_get_raw(adc_channel);
             if (val_ >= 0) { // save only valid readings
@@ -282,18 +317,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
             }
             // delayMicroseconds(100);
         }
-#ifdef ADC_CTRL // disable adc voltage divider when we need to read
-        digitalWrite(ADC_CTRL, !ADC_CTRL_ENABLED);
-#endif
-#else // ADC2
-#ifdef ADC_CTRL
-#if defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_WIRELESS_PAPER_V1_0)
-        pinMode(ADC_CTRL, OUTPUT);
-        digitalWrite(ADC_CTRL, LOW); // ACTIVE LOW
-        delay(10);
-#endif
-#endif // End ADC_CTRL
-
+#else                            // ADC2
 #ifdef CONFIG_IDF_TARGET_ESP32S3 // ESP32S3
         // ADC2 wifi bug workaround not required, breaks compile
         // On ESP32S3, ADC2 can take turns with Wifi (?)
@@ -311,7 +335,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
                 raw += adc_buf;
                 raw_c++; // Count valid samples
             } else {
-                LOG_DEBUG("An attempt to sample ADC2 failed\n");
+                LOG_DEBUG("An attempt to sample ADC2 failed");
             }
         }
 
@@ -327,12 +351,6 @@ class AnalogBatteryLevel : public HasBatteryLevel
             raw_c++;
         }
 #endif // BAT_MEASURE_ADC_UNIT
-
-#ifdef ADC_CTRL
-#if defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_WIRELESS_PAPER_V1_0)
-        digitalWrite(ADC_CTRL, HIGH);
-#endif
-#endif // End ADC_CTRL
 
 #endif // End BAT_MEASURE_ADC_UNIT
         return (raw / (raw_c < 1 ? 1 : raw_c));
@@ -412,7 +430,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
     }
 #endif
 
-#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(ARCH_PORTDUINO)
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
     uint16_t getINAVoltage()
     {
         if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA219].first == config.power.device_battery_ina_address) {
@@ -441,13 +459,18 @@ class AnalogBatteryLevel : public HasBatteryLevel
             if (!ina260Sensor.isInitialized())
                 return ina260Sensor.runOnce() > 0;
             return ina260Sensor.isRunning();
+        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA3221].first ==
+                   config.power.device_battery_ina_address) {
+            if (!ina3221Sensor.isInitialized())
+                return ina3221Sensor.runOnce() > 0;
+            return ina3221Sensor.isRunning();
         }
         return false;
     }
 #endif
 };
 
-AnalogBatteryLevel analogLevel;
+static AnalogBatteryLevel analogLevel;
 
 Power::Power() : OSThread("Power")
 {
@@ -472,7 +495,7 @@ bool Power::analogInit()
 #endif
 
 #ifdef BATTERY_PIN
-    LOG_DEBUG("Using analog input %d for battery level\n", BATTERY_PIN);
+    LOG_DEBUG("Using analog input %d for battery level", BATTERY_PIN);
 
     // disable any internal pullups
     pinMode(BATTERY_PIN, INPUT);
@@ -503,18 +526,18 @@ bool Power::analogInit()
     esp_adc_cal_value_t val_type = esp_adc_cal_characterize(unit, atten, width, DEFAULT_VREF, adc_characs);
     // show ADC characterization base
     if (val_type == ESP_ADC_CAL_VAL_EFUSE_TP) {
-        LOG_INFO("ADCmod: ADC characterization based on Two Point values stored in eFuse\n");
+        LOG_INFO("ADCmod: ADC characterization based on Two Point values stored in eFuse");
     } else if (val_type == ESP_ADC_CAL_VAL_EFUSE_VREF) {
-        LOG_INFO("ADCmod: ADC characterization based on reference voltage stored in eFuse\n");
+        LOG_INFO("ADCmod: ADC characterization based on reference voltage stored in eFuse");
     }
 #ifdef CONFIG_IDF_TARGET_ESP32S3
     // ESP32S3
     else if (val_type == ESP_ADC_CAL_VAL_EFUSE_TP_FIT) {
-        LOG_INFO("ADCmod: ADC Characterization based on Two Point values and fitting curve coefficients stored in eFuse\n");
+        LOG_INFO("ADCmod: ADC Characterization based on Two Point values and fitting curve coefficients stored in eFuse");
     }
 #endif
     else {
-        LOG_INFO("ADCmod: ADC characterization based on default reference voltage\n");
+        LOG_INFO("ADCmod: ADC characterization based on default reference voltage");
     }
 #endif // ARCH_ESP32
 
@@ -544,7 +567,16 @@ bool Power::analogInit()
  */
 bool Power::setup()
 {
-    bool found = axpChipInit() || analogInit();
+    // initialise one power sensor (only)
+    bool found = axpChipInit();
+    if (!found)
+        found = lipoInit();
+    if (!found)
+        found = analogInit();
+
+#ifdef NRF_APM
+    found = true;
+#endif
 
     enabled = found;
     low_voltage_counter = 0;
@@ -554,9 +586,9 @@ bool Power::setup()
 
 void Power::shutdown()
 {
-    LOG_INFO("Shutting down\n");
+    LOG_INFO("Shutting down");
 
-#if defined(ARCH_NRF52) || defined(ARCH_ESP32)
+#if defined(ARCH_NRF52) || defined(ARCH_ESP32) || defined(ARCH_RP2040)
 #ifdef PIN_LED1
     ledOff(PIN_LED1);
 #endif
@@ -575,10 +607,16 @@ void Power::shutdown()
 // TODO(girts): move this and other axp stuff to power.h/power.cpp.
 void Power::readPowerStatus()
 {
+    int32_t batteryVoltageMv = -1; // Assume unknown
+    int8_t batteryChargePercent = -1;
+    OptionalBool usbPowered = OptUnknown;
+    OptionalBool hasBattery = OptUnknown; // These must be static because NRF_APM code doesn't run every time
+    OptionalBool isCharging = OptUnknown;
+
     if (batteryLevel) {
-        bool hasBattery = batteryLevel->isBatteryConnect();
-        uint32_t batteryVoltageMv = 0;
-        int8_t batteryChargePercent = 0;
+        hasBattery = batteryLevel->isBatteryConnect() ? OptTrue : OptFalse;
+        usbPowered = batteryLevel->isVbusIn() ? OptTrue : OptFalse;
+        isCharging = batteryLevel->isCharging() ? OptTrue : OptFalse;
         if (hasBattery) {
             batteryVoltageMv = batteryLevel->getBattVoltage();
             // If the AXP192 returns a valid battery percentage, use it
@@ -593,102 +631,90 @@ void Power::readPowerStatus()
                                              0, 100);
             }
         }
+    }
 
-        OptionalBool NRF_USB = OptFalse;
-
+// FIXME: IMO we shouldn't be littering our code with all these ifdefs.  Way better instead to make a Nrf52IsUsbPowered subclass
+// (which shares a superclass with the BatteryLevel stuff)
+// that just provides a few methods.  But in the interest of fixing this bug I'm going to follow current
+// practice.
 #ifdef NRF_APM // Section of code detects USB power on the RAK4631 and updates the power states.  Takes 20 seconds or so to detect
                // changes.
 
-        static nrfx_power_usb_state_t prev_nrf_usb_state = (nrfx_power_usb_state_t)-1; // -1 so that state detected at boot
-        nrfx_power_usb_state_t nrf_usb_state = nrfx_power_usbstatus_get();
+    nrfx_power_usb_state_t nrf_usb_state = nrfx_power_usbstatus_get();
+    // LOG_DEBUG("NRF Power %d", nrf_usb_state);
 
-        // If state changed
-        if (nrf_usb_state != prev_nrf_usb_state) {
-            // If changed to DISCONNECTED
-            if (nrf_usb_state == NRFX_POWER_USB_STATE_DISCONNECTED) {
-                powerFSM.trigger(EVENT_POWER_DISCONNECTED);
-                NRF_USB = OptFalse;
-            }
-            // If changed to CONNECTED / READY
-            else {
-                powerFSM.trigger(EVENT_POWER_CONNECTED);
-                NRF_USB = OptTrue;
-            }
+    // If changed to DISCONNECTED
+    if (nrf_usb_state == NRFX_POWER_USB_STATE_DISCONNECTED)
+        isCharging = usbPowered = OptFalse;
+    // If changed to CONNECTED / READY
+    else
+        isCharging = usbPowered = OptTrue;
 
-            // Cache the current state
-            prev_nrf_usb_state = nrf_usb_state;
-        }
 #endif
-        // Notify any status instances that are observing us
-        const PowerStatus powerStatus2 = PowerStatus(
-            hasBattery ? OptTrue : OptFalse, batteryLevel->isVbusIn() || NRF_USB == OptTrue ? OptTrue : OptFalse,
-            batteryLevel->isCharging() || NRF_USB == OptTrue ? OptTrue : OptFalse, batteryVoltageMv, batteryChargePercent);
-        LOG_DEBUG("Battery: usbPower=%d, isCharging=%d, batMv=%d, batPct=%d\n", powerStatus2.getHasUSB(),
-                  powerStatus2.getIsCharging(), powerStatus2.getBatteryVoltageMv(), powerStatus2.getBatteryChargePercent());
-        newStatus.notifyObservers(&powerStatus2);
+
+    // Notify any status instances that are observing us
+    const PowerStatus powerStatus2 = PowerStatus(hasBattery, usbPowered, isCharging, batteryVoltageMv, batteryChargePercent);
+    LOG_DEBUG("Battery: usbPower=%d, isCharging=%d, batMv=%d, batPct=%d", powerStatus2.getHasUSB(), powerStatus2.getIsCharging(),
+              powerStatus2.getBatteryVoltageMv(), powerStatus2.getBatteryChargePercent());
+    newStatus.notifyObservers(&powerStatus2);
 #ifdef DEBUG_HEAP
-        if (lastheap != memGet.getFreeHeap()) {
-            LOG_DEBUG("Threads running:");
-            int running = 0;
-            for (int i = 0; i < MAX_THREADS; i++) {
-                auto thread = concurrency::mainController.get(i);
-                if ((thread != nullptr) && (thread->enabled)) {
-                    LOG_DEBUG(" %s", thread->ThreadName.c_str());
-                    running++;
-                }
+    if (lastheap != memGet.getFreeHeap()) {
+        std::string threadlist = "Threads running:";
+        int running = 0;
+        for (int i = 0; i < MAX_THREADS; i++) {
+            auto thread = concurrency::mainController.get(i);
+            if ((thread != nullptr) && (thread->enabled)) {
+                threadlist += vformat(" %s", thread->ThreadName.c_str());
+                running++;
             }
-            LOG_DEBUG("\n");
-            LOG_DEBUG("Heap status: %d/%d bytes free (%d), running %d/%d threads\n", memGet.getFreeHeap(), memGet.getHeapSize(),
-                      memGet.getFreeHeap() - lastheap, running, concurrency::mainController.size(false));
-            lastheap = memGet.getFreeHeap();
         }
+        LOG_DEBUG(threadlist.c_str());
+        LOG_DEBUG("Heap status: %d/%d bytes free (%d), running %d/%d threads", memGet.getFreeHeap(), memGet.getHeapSize(),
+                  memGet.getFreeHeap() - lastheap, running, concurrency::mainController.size(false));
+        lastheap = memGet.getFreeHeap();
+    }
 #ifdef DEBUG_HEAP_MQTT
-        if (mqtt) {
-            // send MQTT-Packet with Heap-Size
-            uint8_t dmac[6];
-            getMacAddr(dmac); // Get our hardware ID
-            char mac[18];
-            sprintf(mac, "!%02x%02x%02x%02x", dmac[2], dmac[3], dmac[4], dmac[5]);
+    if (mqtt) {
+        // send MQTT-Packet with Heap-Size
+        uint8_t dmac[6];
+        getMacAddr(dmac); // Get our hardware ID
+        char mac[18];
+        sprintf(mac, "!%02x%02x%02x%02x", dmac[2], dmac[3], dmac[4], dmac[5]);
 
-            auto newHeap = memGet.getFreeHeap();
-            std::string heapTopic =
-                (*moduleConfig.mqtt.root ? moduleConfig.mqtt.root : "msh") + std::string("/2/heap/") + std::string(mac);
-            std::string heapString = std::to_string(newHeap);
-            mqtt->pubSub.publish(heapTopic.c_str(), heapString.c_str(), false);
-            auto wifiRSSI = WiFi.RSSI();
-            std::string wifiTopic =
-                (*moduleConfig.mqtt.root ? moduleConfig.mqtt.root : "msh") + std::string("/2/wifi/") + std::string(mac);
-            std::string wifiString = std::to_string(wifiRSSI);
-            mqtt->pubSub.publish(wifiTopic.c_str(), wifiString.c_str(), false);
-        }
+        auto newHeap = memGet.getFreeHeap();
+        std::string heapTopic =
+            (*moduleConfig.mqtt.root ? moduleConfig.mqtt.root : "msh") + std::string("/2/heap/") + std::string(mac);
+        std::string heapString = std::to_string(newHeap);
+        mqtt->pubSub.publish(heapTopic.c_str(), heapString.c_str(), false);
+        auto wifiRSSI = WiFi.RSSI();
+        std::string wifiTopic =
+            (*moduleConfig.mqtt.root ? moduleConfig.mqtt.root : "msh") + std::string("/2/wifi/") + std::string(mac);
+        std::string wifiString = std::to_string(wifiRSSI);
+        mqtt->pubSub.publish(wifiTopic.c_str(), wifiString.c_str(), false);
+    }
 #endif
 
 #endif
 
-        // If we have a battery at all and it is less than 0%, force deep sleep if we have more than 10 low readings in
-        // a row. NOTE: min LiIon/LiPo voltage is 2.0 to 2.5V, current OCV min is set to 3100 that is large enough.
-        //
-        if (powerStatus2.getHasBattery() && !powerStatus2.getHasUSB()) {
-            if (batteryLevel->getBattVoltage() < OCV[NUM_OCV_POINTS - 1]) {
-                low_voltage_counter++;
-                LOG_DEBUG("Low voltage counter: %d/10\n", low_voltage_counter);
-                if (low_voltage_counter > 10) {
+    // If we have a battery at all and it is less than 0%, force deep sleep if we have more than 10 low readings in
+    // a row. NOTE: min LiIon/LiPo voltage is 2.0 to 2.5V, current OCV min is set to 3100 that is large enough.
+    //
+    if (batteryLevel && powerStatus2.getHasBattery() && !powerStatus2.getHasUSB()) {
+        if (batteryLevel->getBattVoltage() < OCV[NUM_OCV_POINTS - 1]) {
+            low_voltage_counter++;
+            LOG_DEBUG("Low voltage counter: %d/10", low_voltage_counter);
+            if (low_voltage_counter > 10) {
 #ifdef ARCH_NRF52
-                    // We can't trigger deep sleep on NRF52, it's freezing the board
-                    LOG_DEBUG("Low voltage detected, but not triggering deep sleep\n");
+                // We can't trigger deep sleep on NRF52, it's freezing the board
+                LOG_DEBUG("Low voltage detected, but not triggering deep sleep");
 #else
-                    LOG_INFO("Low voltage detected, triggering deep sleep\n");
-                    powerFSM.trigger(EVENT_LOW_BATTERY);
+                LOG_INFO("Low voltage detected, triggering deep sleep");
+                powerFSM.trigger(EVENT_LOW_BATTERY);
 #endif
-                }
-            } else {
-                low_voltage_counter = 0;
             }
+        } else {
+            low_voltage_counter = 0;
         }
-    } else {
-        // No power sensing on this board - tell everyone else we have no idea what is happening
-        const PowerStatus powerStatus3 = PowerStatus(OptUnknown, OptUnknown, OptUnknown, -1, -1);
-        newStatus.notifyObservers(&powerStatus3);
     }
 }
 
@@ -704,12 +730,12 @@ int32_t Power::runOnce()
         PMU->getIrqStatus();
 
         if (PMU->isVbusRemoveIrq()) {
-            LOG_INFO("USB unplugged\n");
+            LOG_INFO("USB unplugged");
             powerFSM.trigger(EVENT_POWER_DISCONNECTED);
         }
 
         if (PMU->isVbusInsertIrq()) {
-            LOG_INFO("USB plugged In\n");
+            LOG_INFO("USB plugged In");
             powerFSM.trigger(EVENT_POWER_CONNECTED);
         }
 
@@ -717,21 +743,21 @@ int32_t Power::runOnce()
         Other things we could check if we cared...
 
         if (PMU->isBatChagerStartIrq()) {
-            LOG_DEBUG("Battery start charging\n");
+            LOG_DEBUG("Battery start charging");
         }
         if (PMU->isBatChagerDoneIrq()) {
-            LOG_DEBUG("Battery fully charged\n");
+            LOG_DEBUG("Battery fully charged");
         }
         if (PMU->isBatInsertIrq()) {
-            LOG_DEBUG("Battery inserted\n");
+            LOG_DEBUG("Battery inserted");
         }
         if (PMU->isBatRemoveIrq()) {
-            LOG_DEBUG("Battery removed\n");
+            LOG_DEBUG("Battery removed");
         }
         */
 #ifndef T_WATCH_S3 // FIXME - why is this triggering on the T-Watch S3?
         if (PMU->isPekeyLongPressIrq()) {
-            LOG_DEBUG("PEK long button press\n");
+            LOG_DEBUG("PEK long button press");
             screen->setOn(false);
         }
 #endif
@@ -774,22 +800,22 @@ bool Power::axpChipInit()
     if (!PMU) {
         PMU = new XPowersAXP2101(*w);
         if (!PMU->init()) {
-            LOG_WARN("Failed to find AXP2101 power management\n");
+            LOG_WARN("Failed to find AXP2101 power management");
             delete PMU;
             PMU = NULL;
         } else {
-            LOG_INFO("AXP2101 PMU init succeeded, using AXP2101 PMU\n");
+            LOG_INFO("AXP2101 PMU init succeeded, using AXP2101 PMU");
         }
     }
 
     if (!PMU) {
         PMU = new XPowersAXP192(*w);
         if (!PMU->init()) {
-            LOG_WARN("Failed to find AXP192 power management\n");
+            LOG_WARN("Failed to find AXP192 power management");
             delete PMU;
             PMU = NULL;
         } else {
-            LOG_INFO("AXP192 PMU init succeeded, using AXP192 PMU\n");
+            LOG_INFO("AXP192 PMU init succeeded, using AXP192 PMU");
         }
     }
 
@@ -945,56 +971,54 @@ bool Power::axpChipInit()
     PMU->enableVbusVoltageMeasure();
     PMU->enableBattVoltageMeasure();
 
-    LOG_DEBUG("=======================================================================\n");
     if (PMU->isChannelAvailable(XPOWERS_DCDC1)) {
-        LOG_DEBUG("DC1  : %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_DCDC1) ? "+" : "-",
+        LOG_DEBUG("DC1  : %s   Voltage:%u mV ", PMU->isPowerChannelEnable(XPOWERS_DCDC1) ? "+" : "-",
                   PMU->getPowerChannelVoltage(XPOWERS_DCDC1));
     }
     if (PMU->isChannelAvailable(XPOWERS_DCDC2)) {
-        LOG_DEBUG("DC2  : %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_DCDC2) ? "+" : "-",
+        LOG_DEBUG("DC2  : %s   Voltage:%u mV ", PMU->isPowerChannelEnable(XPOWERS_DCDC2) ? "+" : "-",
                   PMU->getPowerChannelVoltage(XPOWERS_DCDC2));
     }
     if (PMU->isChannelAvailable(XPOWERS_DCDC3)) {
-        LOG_DEBUG("DC3  : %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_DCDC3) ? "+" : "-",
+        LOG_DEBUG("DC3  : %s   Voltage:%u mV ", PMU->isPowerChannelEnable(XPOWERS_DCDC3) ? "+" : "-",
                   PMU->getPowerChannelVoltage(XPOWERS_DCDC3));
     }
     if (PMU->isChannelAvailable(XPOWERS_DCDC4)) {
-        LOG_DEBUG("DC4  : %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_DCDC4) ? "+" : "-",
+        LOG_DEBUG("DC4  : %s   Voltage:%u mV ", PMU->isPowerChannelEnable(XPOWERS_DCDC4) ? "+" : "-",
                   PMU->getPowerChannelVoltage(XPOWERS_DCDC4));
     }
     if (PMU->isChannelAvailable(XPOWERS_LDO2)) {
-        LOG_DEBUG("LDO2 : %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_LDO2) ? "+" : "-",
+        LOG_DEBUG("LDO2 : %s   Voltage:%u mV ", PMU->isPowerChannelEnable(XPOWERS_LDO2) ? "+" : "-",
                   PMU->getPowerChannelVoltage(XPOWERS_LDO2));
     }
     if (PMU->isChannelAvailable(XPOWERS_LDO3)) {
-        LOG_DEBUG("LDO3 : %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_LDO3) ? "+" : "-",
+        LOG_DEBUG("LDO3 : %s   Voltage:%u mV ", PMU->isPowerChannelEnable(XPOWERS_LDO3) ? "+" : "-",
                   PMU->getPowerChannelVoltage(XPOWERS_LDO3));
     }
     if (PMU->isChannelAvailable(XPOWERS_ALDO1)) {
-        LOG_DEBUG("ALDO1: %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_ALDO1) ? "+" : "-",
+        LOG_DEBUG("ALDO1: %s   Voltage:%u mV ", PMU->isPowerChannelEnable(XPOWERS_ALDO1) ? "+" : "-",
                   PMU->getPowerChannelVoltage(XPOWERS_ALDO1));
     }
     if (PMU->isChannelAvailable(XPOWERS_ALDO2)) {
-        LOG_DEBUG("ALDO2: %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_ALDO2) ? "+" : "-",
+        LOG_DEBUG("ALDO2: %s   Voltage:%u mV ", PMU->isPowerChannelEnable(XPOWERS_ALDO2) ? "+" : "-",
                   PMU->getPowerChannelVoltage(XPOWERS_ALDO2));
     }
     if (PMU->isChannelAvailable(XPOWERS_ALDO3)) {
-        LOG_DEBUG("ALDO3: %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_ALDO3) ? "+" : "-",
+        LOG_DEBUG("ALDO3: %s   Voltage:%u mV ", PMU->isPowerChannelEnable(XPOWERS_ALDO3) ? "+" : "-",
                   PMU->getPowerChannelVoltage(XPOWERS_ALDO3));
     }
     if (PMU->isChannelAvailable(XPOWERS_ALDO4)) {
-        LOG_DEBUG("ALDO4: %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_ALDO4) ? "+" : "-",
+        LOG_DEBUG("ALDO4: %s   Voltage:%u mV ", PMU->isPowerChannelEnable(XPOWERS_ALDO4) ? "+" : "-",
                   PMU->getPowerChannelVoltage(XPOWERS_ALDO4));
     }
     if (PMU->isChannelAvailable(XPOWERS_BLDO1)) {
-        LOG_DEBUG("BLDO1: %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_BLDO1) ? "+" : "-",
+        LOG_DEBUG("BLDO1: %s   Voltage:%u mV ", PMU->isPowerChannelEnable(XPOWERS_BLDO1) ? "+" : "-",
                   PMU->getPowerChannelVoltage(XPOWERS_BLDO1));
     }
     if (PMU->isChannelAvailable(XPOWERS_BLDO2)) {
-        LOG_DEBUG("BLDO2: %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_BLDO2) ? "+" : "-",
+        LOG_DEBUG("BLDO2: %s   Voltage:%u mV ", PMU->isPowerChannelEnable(XPOWERS_BLDO2) ? "+" : "-",
                   PMU->getPowerChannelVoltage(XPOWERS_BLDO2));
     }
-    LOG_DEBUG("=======================================================================\n");
 
 // We can safely ignore this approach for most (or all) boards because MCU turned off
 // earlier than battery discharged to 2.6V.
@@ -1038,3 +1062,81 @@ bool Power::axpChipInit()
     return false;
 #endif
 }
+
+#if !MESHTASTIC_EXCLUDE_I2C && !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+
+/**
+ * Wrapper class for an I2C MAX17048 Lipo battery sensor.
+ */
+class LipoBatteryLevel : public HasBatteryLevel
+{
+  private:
+    MAX17048Singleton *max17048 = nullptr;
+
+  public:
+    /**
+     * Init the I2C MAX17048 Lipo battery level sensor
+     */
+    bool runOnce()
+    {
+        if (max17048 == nullptr) {
+            max17048 = MAX17048Singleton::GetInstance();
+        }
+
+        // try to start if the sensor has been detected
+        if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_MAX17048].first != 0) {
+            return max17048->runOnce(nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_MAX17048].second);
+        }
+        return false;
+    }
+
+    /**
+     * Battery state of charge, from 0 to 100 or -1 for unknown
+     */
+    virtual int getBatteryPercent() override { return max17048->getBusBatteryPercent(); }
+
+    /**
+     * The raw voltage of the battery in millivolts, or NAN if unknown
+     */
+    virtual uint16_t getBattVoltage() override { return max17048->getBusVoltageMv(); }
+
+    /**
+     * return true if there is a battery installed in this unit
+     */
+    virtual bool isBatteryConnect() override { return max17048->isBatteryConnected(); }
+
+    /**
+     * return true if there is an external power source detected
+     */
+    virtual bool isVbusIn() override { return max17048->isExternallyPowered(); }
+
+    /**
+     * return true if the battery is currently charging
+     */
+    virtual bool isCharging() override { return max17048->isBatteryCharging(); }
+};
+
+LipoBatteryLevel lipoLevel;
+
+/**
+ * Init the Lipo battery level sensor
+ */
+bool Power::lipoInit()
+{
+    bool result = lipoLevel.runOnce();
+    LOG_DEBUG("Power::lipoInit lipo sensor is %s", result ? "ready" : "not ready yet");
+    if (!result)
+        return false;
+    batteryLevel = &lipoLevel;
+    return true;
+}
+
+#else
+/**
+ * The Lipo battery level sensor is unavailable - default to AnalogBatteryLevel
+ */
+bool Power::lipoInit()
+{
+    return false;
+}
+#endif

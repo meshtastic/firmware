@@ -11,7 +11,7 @@ OPT3001Sensor::OPT3001Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_
 
 int32_t OPT3001Sensor::runOnce()
 {
-    LOG_INFO("Init sensor: %s\n", sensorName);
+    LOG_INFO("Init sensor: %s", sensorName);
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
@@ -25,10 +25,10 @@ void OPT3001Sensor::setup()
 {
     OPT3001_Config newConfig;
 
-    newConfig.RangeNumber = B1100;
-    newConfig.ConvertionTime = B0;
-    newConfig.Latch = B1;
-    newConfig.ModeOfConversionOperation = B11;
+    newConfig.RangeNumber = 0b1100;
+    newConfig.ConvertionTime = 0b0;
+    newConfig.Latch = 0b1;
+    newConfig.ModeOfConversionOperation = 0b11;
 
     OPT3001_ErrorCode errorConfig = opt3001.writeConfig(newConfig);
     if (errorConfig != NO_ERROR) {
@@ -38,10 +38,11 @@ void OPT3001Sensor::setup()
 
 bool OPT3001Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
+    measurement->variant.environment_metrics.has_lux = true;
     OPT3001 result = opt3001.readResult();
 
     measurement->variant.environment_metrics.lux = result.lux;
-    LOG_INFO("Lux: %f\n", measurement->variant.environment_metrics.lux);
+    LOG_INFO("Lux: %f", measurement->variant.environment_metrics.lux);
 
     return true;
 }

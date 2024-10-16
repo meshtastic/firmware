@@ -1,3 +1,4 @@
+#if RADIOLIB_EXCLUDE_SX126X != 1
 #include "SX1262Interface.h"
 #include "configuration.h"
 #include "error.h"
@@ -7,3 +8,4 @@ SX1262Interface::SX1262Interface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, R
     : SX126xInterface(hal, cs, irq, rst, busy)
 {
 }
+#endif

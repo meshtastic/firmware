@@ -1,3 +1,4 @@
+#include "Observer.h"
 #include "configuration.h"
 
 #ifdef HAS_NCP5623
@@ -22,10 +23,18 @@ class AmbientLightingThread : public concurrency::OSThread
   public:
     explicit AmbientLightingThread(ScanI2C::DeviceType type) : OSThread("AmbientLightingThread")
     {
+        notifyDeepSleepObserver.observe(&notifyDeepSleep); // Let us know when shutdown() is issued.
+
+// Enables Ambient Lighting by default if conditions are meet.
+#if defined(HAS_NCP5623) || defined(RGBLED_RED) || defined(HAS_NEOPIXEL) || defined(UNPHONE)
+#ifdef ENABLE_AMBIENTLIGHTING
+        moduleConfig.ambient_lighting.led_state = true;
+#endif
+#endif
         // Uncomment to test module
         // moduleConfig.ambient_lighting.led_state = true;
         // moduleConfig.ambient_lighting.current = 10;
-        // // Default to a color based on our node number
+        // Default to a color based on our node number
         // moduleConfig.ambient_lighting.red = (myNodeInfo.my_node_num & 0xFF0000) >> 16;
         // moduleConfig.ambient_lighting.green = (myNodeInfo.my_node_num & 0x00FF00) >> 8;
         // moduleConfig.ambient_lighting.blue = myNodeInfo.my_node_num & 0x0000FF;
@@ -33,18 +42,18 @@ class AmbientLightingThread : public concurrency::OSThread
 #ifdef HAS_NCP5623
         _type = type;
         if (_type == ScanI2C::DeviceType::NONE) {
-            LOG_DEBUG("AmbientLightingThread disabling due to no RGB leds found on I2C bus\n");
+            LOG_DEBUG("AmbientLightingThread disabling due to no RGB leds found on I2C bus");
             disable();
             return;
         }
 #endif
 #if defined(HAS_NCP5623) || defined(RGBLED_RED) || defined(HAS_NEOPIXEL) || defined(UNPHONE)
         if (!moduleConfig.ambient_lighting.led_state) {
-            LOG_DEBUG("AmbientLightingThread disabling due to moduleConfig.ambient_lighting.led_state OFF\n");
+            LOG_DEBUG("AmbientLightingThread disabling due to moduleConfig.ambient_lighting.led_state OFF");
             disable();
             return;
         }
-        LOG_DEBUG("AmbientLightingThread initializing\n");
+        LOG_DEBUG("AmbientLightingThread initializing");
 #ifdef HAS_NCP5623
         if (_type == ScanI2C::NCP5623) {
             rgb.begin();
@@ -82,8 +91,45 @@ class AmbientLightingThread : public concurrency::OSThread
         return disable();
     }
 
+    // When shutdown() is issued, setLightingOff will be called.
+    CallbackObserver<AmbientLightingThread, void *> notifyDeepSleepObserver =
+        CallbackObserver<AmbientLightingThread, void *>(this, &AmbientLightingThread::setLightingOff);
+
   private:
     ScanI2C::DeviceType _type = ScanI2C::DeviceType::NONE;
+
+    // Turn RGB lighting off, is used in junction to shutdown()
+    int setLightingOff(void *unused)
+    {
+#ifdef HAS_NCP5623
+        rgb.setCurrent(0);
+        rgb.setRed(0);
+        rgb.setGreen(0);
+        rgb.setBlue(0);
+        LOG_INFO("Turn Off NCP5623 Ambient lighting.");
+#endif
+#ifdef HAS_NEOPIXEL
+        pixels.clear();
+        pixels.show();
+        LOG_INFO("Turn Off NeoPixel Ambient lighting.");
+#endif
+#ifdef RGBLED_CA
+        analogWrite(RGBLED_RED, 255 - 0);
+        analogWrite(RGBLED_GREEN, 255 - 0);
+        analogWrite(RGBLED_BLUE, 255 - 0);
+        LOG_INFO("Turn Off Ambient lighting RGB Common Anode.");
+#elif defined(RGBLED_RED)
+        analogWrite(RGBLED_RED, 0);
+        analogWrite(RGBLED_GREEN, 0);
+        analogWrite(RGBLED_BLUE, 0);
+        LOG_INFO("Turn Off Ambient lighting RGB Common Cathode.");
+#endif
+#ifdef UNPHONE
+        unphone.rgb(0, 0, 0);
+        LOG_INFO("Turn Off unPhone Ambient lighting.");
+#endif
+        return 0;
+    }
 
     void setLighting()
     {
@@ -92,7 +138,7 @@ class AmbientLightingThread : public concurrency::OSThread
         rgb.setRed(moduleConfig.ambient_lighting.red);
         rgb.setGreen(moduleConfig.ambient_lighting.green);
         rgb.setBlue(moduleConfig.ambient_lighting.blue);
-        LOG_DEBUG("Initializing NCP5623 Ambient lighting w/ current=%d, red=%d, green=%d, blue=%d\n",
+        LOG_DEBUG("Initializing NCP5623 Ambient lighting w/ current=%d, red=%d, green=%d, blue=%d",
                   moduleConfig.ambient_lighting.current, moduleConfig.ambient_lighting.red, moduleConfig.ambient_lighting.green,
                   moduleConfig.ambient_lighting.blue);
 #endif
@@ -100,8 +146,19 @@ class AmbientLightingThread : public concurrency::OSThread
         pixels.fill(pixels.Color(moduleConfig.ambient_lighting.red, moduleConfig.ambient_lighting.green,
                                  moduleConfig.ambient_lighting.blue),
                     0, NEOPIXEL_COUNT);
+
+// RadioMaster Bandit has addressable LED at the two buttons
+// this allow us to set different lighting for them in variant.h file.
+#ifdef RADIOMASTER_900_BANDIT
+#if defined(BUTTON1_COLOR) && defined(BUTTON1_COLOR_INDEX)
+        pixels.fill(BUTTON1_COLOR, BUTTON1_COLOR_INDEX, 1);
+#endif
+#if defined(BUTTON2_COLOR) && defined(BUTTON2_COLOR_INDEX)
+        pixels.fill(BUTTON2_COLOR, BUTTON1_COLOR_INDEX, 1);
+#endif
+#endif
         pixels.show();
-        LOG_DEBUG("Initializing NeoPixel Ambient lighting w/ brightness(current)=%d, red=%d, green=%d, blue=%d\n",
+        LOG_DEBUG("Initializing NeoPixel Ambient lighting w/ brightness(current)=%d, red=%d, green=%d, blue=%d",
                   moduleConfig.ambient_lighting.current, moduleConfig.ambient_lighting.red, moduleConfig.ambient_lighting.green,
                   moduleConfig.ambient_lighting.blue);
 #endif
@@ -109,18 +166,18 @@ class AmbientLightingThread : public concurrency::OSThread
         analogWrite(RGBLED_RED, 255 - moduleConfig.ambient_lighting.red);
         analogWrite(RGBLED_GREEN, 255 - moduleConfig.ambient_lighting.green);
         analogWrite(RGBLED_BLUE, 255 - moduleConfig.ambient_lighting.blue);
-        LOG_DEBUG("Initializing Ambient lighting RGB Common Anode w/ red=%d, green=%d, blue=%d\n",
+        LOG_DEBUG("Initializing Ambient lighting RGB Common Anode w/ red=%d, green=%d, blue=%d",
                   moduleConfig.ambient_lighting.red, moduleConfig.ambient_lighting.green, moduleConfig.ambient_lighting.blue);
 #elif defined(RGBLED_RED)
         analogWrite(RGBLED_RED, moduleConfig.ambient_lighting.red);
         analogWrite(RGBLED_GREEN, moduleConfig.ambient_lighting.green);
         analogWrite(RGBLED_BLUE, moduleConfig.ambient_lighting.blue);
-        LOG_DEBUG("Initializing Ambient lighting RGB Common Cathode w/ red=%d, green=%d, blue=%d\n",
+        LOG_DEBUG("Initializing Ambient lighting RGB Common Cathode w/ red=%d, green=%d, blue=%d",
                   moduleConfig.ambient_lighting.red, moduleConfig.ambient_lighting.green, moduleConfig.ambient_lighting.blue);
 #endif
 #ifdef UNPHONE
         unphone.rgb(moduleConfig.ambient_lighting.red, moduleConfig.ambient_lighting.green, moduleConfig.ambient_lighting.blue);
-        LOG_DEBUG("Initializing unPhone Ambient lighting w/ red=%d, green=%d, blue=%d\n", moduleConfig.ambient_lighting.red,
+        LOG_DEBUG("Initializing unPhone Ambient lighting w/ red=%d, green=%d, blue=%d", moduleConfig.ambient_lighting.red,
                   moduleConfig.ambient_lighting.green, moduleConfig.ambient_lighting.blue);
 #endif
     }

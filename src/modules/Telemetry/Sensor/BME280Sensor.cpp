@@ -12,7 +12,7 @@ BME280Sensor::BME280Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_BM
 
 int32_t BME280Sensor::runOnce()
 {
-    LOG_INFO("Init sensor: %s\n", sensorName);
+    LOG_INFO("Init sensor: %s", sensorName);
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
@@ -31,7 +31,11 @@ void BME280Sensor::setup() {}
 
 bool BME280Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
-    LOG_DEBUG("BME280Sensor::getMetrics\n");
+    measurement->variant.environment_metrics.has_temperature = true;
+    measurement->variant.environment_metrics.has_relative_humidity = true;
+    measurement->variant.environment_metrics.has_barometric_pressure = true;
+
+    LOG_DEBUG("BME280Sensor::getMetrics");
     bme280.takeForcedMeasurement();
     measurement->variant.environment_metrics.temperature = bme280.readTemperature();
     measurement->variant.environment_metrics.relative_humidity = bme280.readHumidity();

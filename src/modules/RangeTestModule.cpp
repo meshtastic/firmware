@@ -19,6 +19,7 @@
 #include "configuration.h"
 #include "gps/GeoCoord.h"
 #include <Arduino.h>
+#include <Throttle.h>
 
 RangeTestModule *rangeTestModule;
 RangeTestModuleRadio *rangeTestModuleRadio;
@@ -26,10 +27,6 @@ RangeTestModuleRadio *rangeTestModuleRadio;
 RangeTestModule::RangeTestModule() : concurrency::OSThread("RangeTestModule") {}
 
 uint32_t packetSequence = 0;
-
-#define SEC_PER_DAY 86400
-#define SEC_PER_HOUR 3600
-#define SEC_PER_MIN 60
 
 int32_t RangeTestModule::runOnce()
 {
@@ -57,11 +54,11 @@ int32_t RangeTestModule::runOnce()
             firstTime = 0;
 
             if (moduleConfig.range_test.sender) {
-                LOG_INFO("Initializing Range Test Module -- Sender\n");
+                LOG_INFO("Initializing Range Test Module -- Sender");
                 started = millis(); // make a note of when we started
                 return (5000);      // Sending first message 5 seconds after initialization.
             } else {
-                LOG_INFO("Initializing Range Test Module -- Receiver\n");
+                LOG_INFO("Initializing Range Test Module -- Receiver");
                 return disable();
                 // This thread does not need to run as a receiver
             }
@@ -69,13 +66,13 @@ int32_t RangeTestModule::runOnce()
 
             if (moduleConfig.range_test.sender) {
                 // If sender
-                LOG_INFO("Range Test Module - Sending heartbeat every %d ms\n", (senderHeartbeat));
+                LOG_INFO("Range Test Module - Sending heartbeat every %d ms", (senderHeartbeat));
 
-                LOG_INFO("gpsStatus->getLatitude()     %d\n", gpsStatus->getLatitude());
-                LOG_INFO("gpsStatus->getLongitude()    %d\n", gpsStatus->getLongitude());
-                LOG_INFO("gpsStatus->getHasLock()      %d\n", gpsStatus->getHasLock());
-                LOG_INFO("gpsStatus->getDOP()          %d\n", gpsStatus->getDOP());
-                LOG_INFO("fixed_position()             %d\n", config.position.fixed_position);
+                LOG_INFO("gpsStatus->getLatitude()     %d", gpsStatus->getLatitude());
+                LOG_INFO("gpsStatus->getLongitude()    %d", gpsStatus->getLongitude());
+                LOG_INFO("gpsStatus->getHasLock()      %d", gpsStatus->getHasLock());
+                LOG_INFO("gpsStatus->getDOP()          %d", gpsStatus->getDOP());
+                LOG_INFO("fixed_position()             %d", config.position.fixed_position);
 
                 // Only send packets if the channel is less than 25% utilized.
                 if (airTime->isTxAllowedChannelUtil(true)) {
@@ -83,8 +80,8 @@ int32_t RangeTestModule::runOnce()
                 }
 
                 // If we have been running for more than 8 hours, turn module back off
-                if (millis() - started > 28800000) {
-                    LOG_INFO("Range Test Module - Disabling after 8 hours\n");
+                if (!Throttle::isWithinTimespanMs(started, 28800000)) {
+                    LOG_INFO("Range Test Module - Disabling after 8 hours");
                     return disable();
                 } else {
                     return (senderHeartbeat);
@@ -95,7 +92,7 @@ int32_t RangeTestModule::runOnce()
             }
         }
     } else {
-        LOG_INFO("Range Test Module - Disabled\n");
+        LOG_INFO("Range Test Module - Disabled");
     }
 
 #endif
@@ -118,13 +115,13 @@ void RangeTestModuleRadio::sendPayload(NodeNum dest, bool wantReplies)
 
     packetSequence++;
 
-    static char heartbeatString[MAX_RHPACKETLEN];
+    static char heartbeatString[MAX_LORA_PAYLOAD_LEN + 1];
     snprintf(heartbeatString, sizeof(heartbeatString), "seq %u", packetSequence);
 
     p->decoded.payload.size = strlen(heartbeatString); // You must specify how many bytes are in the reply
     memcpy(p->decoded.payload.bytes, heartbeatString, p->decoded.payload.size);
 
-    service.sendToMesh(p);
+    service->sendToMesh(p);
 
     // TODO: Handle this better. We want to keep the phone awake otherwise it stops sending.
     powerFSM.trigger(EVENT_CONTACT_FROM_PHONE);
@@ -138,11 +135,11 @@ ProcessMessage RangeTestModuleRadio::handleReceived(const meshtastic_MeshPacket 
 
         /*
             auto &p = mp.decoded;
-            LOG_DEBUG("Received text msg self=0x%0x, from=0x%0x, to=0x%0x, id=%d, msg=%.*s\n",
+            LOG_DEBUG("Received text msg self=0x%0x, from=0x%0x, to=0x%0x, id=%d, msg=%.*s",
                   LOG_INFO.getNodeNum(), mp.from, mp.to, mp.id, p.payload.size, p.payload.bytes);
         */
 
-        if (getFrom(&mp) != nodeDB->getNodeNum()) {
+        if (!isFromUs(&mp)) {
 
             if (moduleConfig.range_test.save) {
                 appendFile(mp);
@@ -151,31 +148,31 @@ ProcessMessage RangeTestModuleRadio::handleReceived(const meshtastic_MeshPacket 
             /*
             NodeInfoLite *n = nodeDB->getMeshNode(getFrom(&mp));
 
-            LOG_DEBUG("-----------------------------------------\n");
-            LOG_DEBUG("p.payload.bytes  \"%s\"\n", p.payload.bytes);
-            LOG_DEBUG("p.payload.size   %d\n", p.payload.size);
-            LOG_DEBUG("---- Received Packet:\n");
-            LOG_DEBUG("mp.from          %d\n", mp.from);
-            LOG_DEBUG("mp.rx_snr        %f\n", mp.rx_snr);
-            LOG_DEBUG("mp.hop_limit     %d\n", mp.hop_limit);
-            // LOG_DEBUG("mp.decoded.position.latitude_i     %d\n", mp.decoded.position.latitude_i); // Deprecated
-            // LOG_DEBUG("mp.decoded.position.longitude_i    %d\n", mp.decoded.position.longitude_i); // Deprecated
-            LOG_DEBUG("---- Node Information of Received Packet (mp.from):\n");
-            LOG_DEBUG("n->user.long_name         %s\n", n->user.long_name);
-            LOG_DEBUG("n->user.short_name        %s\n", n->user.short_name);
-            LOG_DEBUG("n->has_position           %d\n", n->has_position);
-            LOG_DEBUG("n->position.latitude_i    %d\n", n->position.latitude_i);
-            LOG_DEBUG("n->position.longitude_i   %d\n", n->position.longitude_i);
-            LOG_DEBUG("---- Current device location information:\n");
-            LOG_DEBUG("gpsStatus->getLatitude()     %d\n", gpsStatus->getLatitude());
-            LOG_DEBUG("gpsStatus->getLongitude()    %d\n", gpsStatus->getLongitude());
-            LOG_DEBUG("gpsStatus->getHasLock()      %d\n", gpsStatus->getHasLock());
-            LOG_DEBUG("gpsStatus->getDOP()          %d\n", gpsStatus->getDOP());
-            LOG_DEBUG("-----------------------------------------\n");
+            LOG_DEBUG("-----------------------------------------");
+            LOG_DEBUG("p.payload.bytes  \"%s\"", p.payload.bytes);
+            LOG_DEBUG("p.payload.size   %d", p.payload.size);
+            LOG_DEBUG("---- Received Packet:");
+            LOG_DEBUG("mp.from          %d", mp.from);
+            LOG_DEBUG("mp.rx_snr        %f", mp.rx_snr);
+            LOG_DEBUG("mp.hop_limit     %d", mp.hop_limit);
+            // LOG_DEBUG("mp.decoded.position.latitude_i     %d", mp.decoded.position.latitude_i); // Deprecated
+            // LOG_DEBUG("mp.decoded.position.longitude_i    %d", mp.decoded.position.longitude_i); // Deprecated
+            LOG_DEBUG("---- Node Information of Received Packet (mp.from):");
+            LOG_DEBUG("n->user.long_name         %s", n->user.long_name);
+            LOG_DEBUG("n->user.short_name        %s", n->user.short_name);
+            LOG_DEBUG("n->has_position           %d", n->has_position);
+            LOG_DEBUG("n->position.latitude_i    %d", n->position.latitude_i);
+            LOG_DEBUG("n->position.longitude_i   %d", n->position.longitude_i);
+            LOG_DEBUG("---- Current device location information:");
+            LOG_DEBUG("gpsStatus->getLatitude()     %d", gpsStatus->getLatitude());
+            LOG_DEBUG("gpsStatus->getLongitude()    %d", gpsStatus->getLongitude());
+            LOG_DEBUG("gpsStatus->getHasLock()      %d", gpsStatus->getHasLock());
+            LOG_DEBUG("gpsStatus->getDOP()          %d", gpsStatus->getDOP());
+            LOG_DEBUG("-----------------------------------------");
             */
         }
     } else {
-        LOG_INFO("Range Test Module Disabled\n");
+        LOG_INFO("Range Test Module Disabled");
     }
 
 #endif
@@ -190,35 +187,35 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
 
     meshtastic_NodeInfoLite *n = nodeDB->getMeshNode(getFrom(&mp));
     /*
-        LOG_DEBUG("-----------------------------------------\n");
-        LOG_DEBUG("p.payload.bytes  \"%s\"\n", p.payload.bytes);
-        LOG_DEBUG("p.payload.size   %d\n", p.payload.size);
-        LOG_DEBUG("---- Received Packet:\n");
-        LOG_DEBUG("mp.from          %d\n", mp.from);
-        LOG_DEBUG("mp.rx_snr        %f\n", mp.rx_snr);
-        LOG_DEBUG("mp.hop_limit     %d\n", mp.hop_limit);
-        // LOG_DEBUG("mp.decoded.position.latitude_i     %d\n", mp.decoded.position.latitude_i);  // Deprecated
-        // LOG_DEBUG("mp.decoded.position.longitude_i    %d\n", mp.decoded.position.longitude_i); // Deprecated
-        LOG_DEBUG("---- Node Information of Received Packet (mp.from):\n");
-        LOG_DEBUG("n->user.long_name         %s\n", n->user.long_name);
-        LOG_DEBUG("n->user.short_name        %s\n", n->user.short_name);
-        LOG_DEBUG("n->has_position           %d\n", n->has_position);
-        LOG_DEBUG("n->position.latitude_i    %d\n", n->position.latitude_i);
-        LOG_DEBUG("n->position.longitude_i   %d\n", n->position.longitude_i);
-        LOG_DEBUG("---- Current device location information:\n");
-        LOG_DEBUG("gpsStatus->getLatitude()     %d\n", gpsStatus->getLatitude());
-        LOG_DEBUG("gpsStatus->getLongitude()    %d\n", gpsStatus->getLongitude());
-        LOG_DEBUG("gpsStatus->getHasLock()      %d\n", gpsStatus->getHasLock());
-        LOG_DEBUG("gpsStatus->getDOP()          %d\n", gpsStatus->getDOP());
-        LOG_DEBUG("-----------------------------------------\n");
+        LOG_DEBUG("-----------------------------------------");
+        LOG_DEBUG("p.payload.bytes  \"%s\"", p.payload.bytes);
+        LOG_DEBUG("p.payload.size   %d", p.payload.size);
+        LOG_DEBUG("---- Received Packet:");
+        LOG_DEBUG("mp.from          %d", mp.from);
+        LOG_DEBUG("mp.rx_snr        %f", mp.rx_snr);
+        LOG_DEBUG("mp.hop_limit     %d", mp.hop_limit);
+        // LOG_DEBUG("mp.decoded.position.latitude_i     %d", mp.decoded.position.latitude_i);  // Deprecated
+        // LOG_DEBUG("mp.decoded.position.longitude_i    %d", mp.decoded.position.longitude_i); // Deprecated
+        LOG_DEBUG("---- Node Information of Received Packet (mp.from):");
+        LOG_DEBUG("n->user.long_name         %s", n->user.long_name);
+        LOG_DEBUG("n->user.short_name        %s", n->user.short_name);
+        LOG_DEBUG("n->has_position           %d", n->has_position);
+        LOG_DEBUG("n->position.latitude_i    %d", n->position.latitude_i);
+        LOG_DEBUG("n->position.longitude_i   %d", n->position.longitude_i);
+        LOG_DEBUG("---- Current device location information:");
+        LOG_DEBUG("gpsStatus->getLatitude()     %d", gpsStatus->getLatitude());
+        LOG_DEBUG("gpsStatus->getLongitude()    %d", gpsStatus->getLongitude());
+        LOG_DEBUG("gpsStatus->getHasLock()      %d", gpsStatus->getHasLock());
+        LOG_DEBUG("gpsStatus->getDOP()          %d", gpsStatus->getDOP());
+        LOG_DEBUG("-----------------------------------------");
     */
     if (!FSBegin()) {
-        LOG_DEBUG("An Error has occurred while mounting the filesystem\n");
+        LOG_DEBUG("An Error has occurred while mounting the filesystem");
         return 0;
     }
 
     if (FSCom.totalBytes() - FSCom.usedBytes() < 51200) {
-        LOG_DEBUG("Filesystem doesn't have enough free space. Aborting write.\n");
+        LOG_DEBUG("Filesystem doesn't have enough free space. Aborting write.");
         return 0;
     }
 
@@ -230,16 +227,16 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
         File fileToWrite = FSCom.open("/static/rangetest.csv", FILE_WRITE);
 
         if (!fileToWrite) {
-            LOG_ERROR("There was an error opening the file for writing\n");
+            LOG_ERROR("There was an error opening the file for writing");
             return 0;
         }
 
         // Print the CSV header
         if (fileToWrite.println(
                 "time,from,sender name,sender lat,sender long,rx lat,rx long,rx elevation,rx snr,distance,hop limit,payload")) {
-            LOG_INFO("File was written\n");
+            LOG_INFO("File was written");
         } else {
-            LOG_ERROR("File write failed\n");
+            LOG_ERROR("File write failed");
         }
         fileToWrite.flush();
         fileToWrite.close();
@@ -249,7 +246,7 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
     File fileToAppend = FSCom.open("/static/rangetest.csv", FILE_APPEND);
 
     if (!fileToAppend) {
-        LOG_ERROR("There was an error opening the file for appending\n");
+        LOG_ERROR("There was an error opening the file for appending");
         return 0;
     }
 

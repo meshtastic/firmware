@@ -5,20 +5,20 @@
 #include "concurrency/OSThread.h"
 #include "mesh/Channels.h"
 #include "mesh/generated/meshtastic/mqtt.pb.h"
-#include "mqtt/JSON.h"
+#include "serialization/JSON.h"
 #if HAS_WIFI
 #include <WiFiClient.h>
-#define HAS_NETWORKING 1
 #if !defined(ARCH_PORTDUINO)
+#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR < 3
 #include <WiFiClientSecure.h>
+#endif
 #endif
 #endif
 #if HAS_ETHERNET
 #include <EthernetClient.h>
-#define HAS_NETWORKING 1
 #endif
 
-#ifdef HAS_NETWORKING
+#if HAS_NETWORKING
 #include <PubSubClient.h>
 #endif
 
@@ -35,7 +35,9 @@ class MQTT : private concurrency::OSThread
 #if HAS_WIFI
     WiFiClient mqttClient;
 #if !defined(ARCH_PORTDUINO)
+#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR < 3
     WiFiClientSecure wifiSecureClient;
+#endif
 #endif
 #endif
 #if HAS_ETHERNET
@@ -43,21 +45,21 @@ class MQTT : private concurrency::OSThread
 #endif
 
   public:
-#ifdef HAS_NETWORKING
+#if HAS_NETWORKING
     PubSubClient pubSub;
 #endif
     MQTT();
 
     /**
      * Publish a packet on the global MQTT server.
-     * @param mp the encrypted packet to publish
+     * @param mp_encrypted the encrypted packet to publish
      * @param mp_decoded the decrypted packet to publish
      * @param chIndex the index of the channel for this message
      *
      * Note: for messages we are forwarding on the mesh that we can't find the channel for (because we don't have the keys), we
      * can not forward those messages to the cloud - because no way to find a global channel ID.
      */
-    void onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &mp_decoded, ChannelIndex chIndex);
+    void onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_MeshPacket &mp_decoded, ChannelIndex chIndex);
 
     /** Attempt to connect to server if necessary
      */
@@ -83,10 +85,9 @@ class MQTT : private concurrency::OSThread
     virtual int32_t runOnce() override;
 
   private:
-    std::string statusTopic = "/2/stat/"; // For "online"/"offline" message
-    std::string cryptTopic = "/2/e/";     // msh/2/e/CHANNELID/NODEID
-    std::string jsonTopic = "/2/json/";   // msh/2/json/CHANNELID/NODEID
-    std::string mapTopic = "/2/map/";     // For protobuf-encoded MapReport messages
+    std::string cryptTopic = "/2/e/";   // msh/2/e/CHANNELID/NODEID
+    std::string jsonTopic = "/2/json/"; // msh/2/json/CHANNELID/NODEID
+    std::string mapTopic = "/2/map/";   // For protobuf-encoded MapReport messages
 
     // For map reporting (only applies when enabled)
     const uint32_t default_map_position_precision = 14;         // defaults to max. offset of ~1459m
@@ -109,17 +110,19 @@ class MQTT : private concurrency::OSThread
     /// Called when a new publish arrives from the MQTT server
     void onReceive(char *topic, byte *payload, size_t length);
 
-    /// Called when a new publish arrives from the MQTT server
-    std::string meshPacketToJson(meshtastic_MeshPacket *mp);
-
-    void publishStatus();
     void publishQueuedMessages();
+
+    void publishNodeInfo();
 
     // Check if we should report unencrypted information about our node for consumption by a map
     void perhapsReportToMap();
 
     // returns true if this is a valid JSON envelope which we accept on downlink
     bool isValidJsonEnvelope(JSONObject &json);
+
+    /// Determines if the given address is a private IPv4 address, i.e. not routable on the public internet.
+    /// These are the ranges: 127.0.0.1, 10.0.0.0-10.255.255.255, 172.16.0.0-172.31.255.255, 192.168.0.0-192.168.255.255.
+    bool isPrivateIpAddress(const char address[]);
 
     /// Return 0 if sleep is okay, veto sleep if we are connected to pubsub server
     // int preflightSleepCb(void *unused = NULL) { return pubSub.connected() ? 1 : 0; }
