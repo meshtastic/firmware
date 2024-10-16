@@ -9,9 +9,6 @@ CardKbI2cImpl::CardKbI2cImpl() : KbI2cBase("cardKB") {}
 
 void CardKbI2cImpl::init()
 {
-<<<<<<< HEAD
-    if ((cardkb_found.address == 0x00) || (kb_model == 0x12)) {
-=======
     if (kb_model == 0x12) {
         disable();
         return;
@@ -59,10 +56,9 @@ void CardKbI2cImpl::init()
     }
 #else
     if (cardkb_found.address == 0x00) {
->>>>>>> 96bcc781ee31f68e5eb7b778306525c630435bdd
-    disable();
-    return;
-}
-#endif
-        inputBroker->registerSource(this);
+        disable();
+        return;
     }
+#endif
+    inputBroker->registerSource(this);
+}
