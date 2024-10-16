@@ -706,9 +706,15 @@ bool MQTT::isValidJsonEnvelope(JSONObject &json)
 
 bool MQTT::isPrivateIpAddress(const char address[])
 {
+    // Min. length like 10.0.0.0, max like 192.168.255.255
+    size_t length = strlen(address);
+    if (length < 8 || length > 15) {
+        return false;
+    }
+
     // Ensure the address contains only digits and dots.
     // Even if it's not a valid IP address, we will know it's not a domain.
-    for (int i = 0; i < strlen(address); i++) {
+    for (int i = 0; i < length; i++) {
         if (!isdigit(address[i]) && address[i] != '.') {
             return false;
         }
