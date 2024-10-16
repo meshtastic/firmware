@@ -314,6 +314,7 @@ jobs:
 
       - name: Add raspbian aarch64 .deb
         uses: actions/upload-release-asset@v1
+        continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ github.token }}
         with:
@@ -324,6 +325,7 @@ jobs:
 
       - name: Add raspbian armv7l .deb
         uses: actions/upload-release-asset@v1
+        continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ github.token }}
         with:
@@ -348,7 +350,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./output/meshtasticd_${{ steps.version.outputs.version }}_amd64.deb
+          asset_path: ./output/meshtasticd_${{ steps.version.outputs.version }}_ubuntu_amd64.deb
           asset_name: meshtasticd_${{ steps.version.outputs.version }}_ubuntu_amd64.deb
           asset_content_type: application/vnd.debian.binary-package
 
