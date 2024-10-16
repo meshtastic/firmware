@@ -16,10 +16,10 @@ bool BMX160Sensor::init()
     if (sensor.begin()) {
         // set output data rate
         sensor.ODR_Config(BMX160_ACCEL_ODR_100HZ, BMX160_GYRO_ODR_100HZ);
-        LOG_DEBUG("BMX160Sensor::init ok\n");
+        LOG_DEBUG("BMX160Sensor::init ok");
         return true;
     }
-    LOG_DEBUG("BMX160Sensor::init failed\n");
+    LOG_DEBUG("BMX160Sensor::init failed");
     return false;
 }
 
