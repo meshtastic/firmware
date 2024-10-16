@@ -706,18 +706,43 @@ bool MQTT::isValidJsonEnvelope(JSONObject &json)
 
 bool MQTT::isPrivateIpAddress(const char address[])
 {
-    // Min. length like 10.0.0.0, max like 192.168.255.255
+    // Min. length like 10.0.0.0 (8), max like 192.168.255.255:65535 (21)
     size_t length = strlen(address);
-    if (length < 8 || length > 15) {
+    if (length < 8 || length > 21) {
         return false;
     }
 
-    // Ensure the address contains only digits and dots.
+    // Ensure the address contains only digits and dots and maybe a colon.
+    // Some limited validation is done.
     // Even if it's not a valid IP address, we will know it's not a domain.
+    bool hasColon = false;
+    int numDots = 0;
     for (int i = 0; i < length; i++) {
-        if (!isdigit(address[i]) && address[i] != '.') {
+        if (!isdigit(address[i]) && address[i] != '.' && address[i] != ':') {
             return false;
         }
+
+        // Dots can't be the first character, immediately follow another dot,
+        // occur more than 3 times, or occur after a colon.
+        if (address[i] == '.') {
+            if (++numDots > 3 || i == 0 || address[i - 1] == '.' || hasColon) {
+                return false;
+            }
+        }
+        // There can only be a single colon, and it can only occur after 3 dots
+        else if (address[i] == ':') {
+            if (hasColon || numDots < 3) {
+                return false;
+            }
+
+            hasColon = true;
+        }
+    }
+
+    // Final validation for IPv4 address and port format.
+    // Note that the values of octets haven't been tested, only the address format.
+    if (numDots != 3) {
+        return false;
     }
 
     // Check the easy ones first.
