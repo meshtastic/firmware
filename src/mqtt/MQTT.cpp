@@ -704,26 +704,40 @@ bool MQTT::isValidJsonEnvelope(JSONObject &json)
            (json.find("payload") != json.end());                            // should have a payload
 }
 
-bool MQTT::isPrivateIpAddress(const char ip[])
+bool MQTT::isPrivateIpAddress(const char address[])
 {
+    // Min. length like 10.0.0.0, max like 192.168.255.255
+    size_t length = strlen(address);
+    if (length < 8 || length > 15) {
+        return false;
+    }
+
+    // Ensure the address contains only digits and dots.
+    // Even if it's not a valid IP address, we will know it's not a domain.
+    for (int i = 0; i < length; i++) {
+        if (!isdigit(address[i]) && address[i] != '.') {
+            return false;
+        }
+    }
+
     // Check the easy ones first.
-    if (strcmp(ip, "127.0.0.1") == 0 || strncmp(ip, "10.", 3) == 0 || strncmp(ip, "192.168", 7) == 0) {
+    if (strcmp(address, "127.0.0.1") == 0 || strncmp(address, "10.", 3) == 0 || strncmp(address, "192.168", 7) == 0) {
         return true;
     }
 
     // See if it's definitely not a 172 address.
-    if (strncmp(ip, "172", 3) != 0) {
+    if (strncmp(address, "172", 3) != 0) {
         return false;
     }
 
     // We know it's a 172 address, now see if the second octet is 2 digits.
-    if (ip[6] != '.') {
+    if (address[6] != '.') {
         return false;
     }
 
     // Copy the second octet into a secondary buffer we can null-terminate and parse.
     char octet2[3];
-    strncpy(octet2, ip + 4, 2);
+    strncpy(octet2, address + 4, 2);
     octet2[2] = 0;
 
     int octet2Num = atoi(octet2);
