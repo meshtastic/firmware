@@ -1,0 +1,71 @@
+name: Build Ubuntu
+
+on: workflow_call
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build-ubuntu:
+    runs-on: [self-hosted, linux, ubuntu-latest, ARM64]
+    steps:
+      - name: Install libbluetooth
+        shell: bash
+        run: |
+          apt-get update -y --fix-missing
+          apt-get install -y libbluetooth-dev libgpiod-dev libyaml-cpp-dev openssl libssl-dev libulfius-dev liborcania-dev
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ref: ${{github.event.pull_request.head.ref}}
+          repository: ${{github.event.pull_request.head.repo.full_name}}
+
+      - name: Getting custom userPrefs.h
+        uses: mobiledevops/secret-to-file-action@v1
+        env:
+          USER_PREFS: ${{ secrets.USER_PREFS }}
+        if: env.USER_PREFS != ''
+        with:
+          base64-encoded-secret: ${{ secrets.USER_PREFS }}
+          filename: userPrefs.h
+
+      - name: Create virtualenv
+        run: |
+          python3 -m venv ".venv"
+
+      - name: Activate virtualenv
+        run: |
+          . .venv/bin/activate
+          echo PATH=$PATH >> $GITHUB_ENV
+          echo VIRTUAL_ENV=$VIRTUAL_ENV >> $GITHUB_ENV
+
+      - name: Upgrade python tools
+        shell: bash
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install -U platformio adafruit-nrfutil
+          pip install -U meshtastic --pre
+
+      - name: Upgrade platformio
+        shell: bash
+        run: |
+          pio upgrade
+
+      - name: Build Ubuntu
+        run: bin/build-native.sh
+
+      - name: Get release version string
+        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+        id: version
+
+      - name: Store binaries as an artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-ubuntu-${{ steps.version.outputs.version }}_arm64.zip
+          overwrite: true
+          path: |
+            release/meshtasticd_linux_aarch64
+            bin/config-dist.yaml

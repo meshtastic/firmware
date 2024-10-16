@@ -149,6 +149,10 @@ jobs:
     uses: ./.github/workflows/package_raspbian_armv7l.yml
     secrets: inherit
 
+  package-ubuntu:
+    uses: ./.github/workflows/package_ubuntu.yml
+    secrets: inherit
+
   package-native:
     uses: ./.github/workflows/package_amd64.yml
     secrets: inherit
@@ -184,6 +188,7 @@ jobs:
         #package-raspbian,
         #package-raspbian-armv7l,
         #package-native,
+        package-ubuntu,
       ]
     steps:
       - name: Checkout code
@@ -263,12 +268,12 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' }}
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
-    needs:
-      [
+    needs: [
         gather-artifacts,
-        package-raspbian,
-        package-raspbian-armv7l,
-        package-native,
+        #package-raspbian,
+        #package-raspbia n-armv7l,
+        #package-native,
+        package-ubuntu,
       ]
     steps:
       - name: Checkout
@@ -337,16 +342,27 @@ jobs:
           asset_name: meshtasticd_${{ steps.version.outputs.version }}_amd64.deb
           asset_content_type: application/vnd.debian.binary-package
 
+      - name: Add ubuntu amd64 .deb
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./output/meshtasticd_${{ steps.version.outputs.version }}_amd64.deb
+          asset_name: meshtasticd_${{ steps.version.outputs.version }}_ubuntu_amd64.deb
+          asset_content_type: application/vnd.debian.binary-package
+
       - name: Bump version.properties
         run: >-
           bin/bump_version.py
 
-      - name: Create version.properties pull request
-        uses: peter-evans/create-pull-request@v7
-        with:
-          title: Bump version.properties
-          add-paths: |
-            version.properties
+      # Skip dump versions on MyMesh
+      #- name: Create version.properties pull request
+      #  uses: peter-evans/create-pull-request@v7
+      #  with:
+      #    title: Bump version.properties
+      #    add-paths: |
+      #      version.properties
 
   release-firmware:
     strategy:
