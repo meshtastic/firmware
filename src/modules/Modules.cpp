@@ -47,9 +47,6 @@
 #endif
 #if ARCH_PORTDUINO
 #include "input/LinuxInputImpl.h"
-#if !MESHTASTIC_EXCLUDE_STOREFORWARD
-#include "modules/StoreForwardModule.h"
-#endif
 #endif
 #if HAS_TELEMETRY
 #include "modules/Telemetry/DeviceTelemetry.h"
@@ -63,15 +60,15 @@
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_POWER_TELEMETRY
 #include "modules/Telemetry/PowerTelemetry.h"
 #endif
+#if !MESHTASTIC_EXCLUDE_STOREFORWARD
+#include "modules/StoreForwardModule.h"
+#endif
 #ifdef ARCH_ESP32
 #if defined(USE_SX1280) && !MESHTASTIC_EXCLUDE_AUDIO
 #include "modules/esp32/AudioModule.h"
 #endif
 #if !MESHTASTIC_EXCLUDE_PAXCOUNTER
 #include "modules/esp32/PaxcounterModule.h"
-#endif
-#if !MESHTASTIC_EXCLUDE_STOREFORWARD
-#include "modules/StoreForwardModule.h"
 #endif
 #endif
 #if defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040)
