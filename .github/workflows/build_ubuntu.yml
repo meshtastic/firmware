@@ -8,7 +8,7 @@ permissions:
 
 jobs:
   build-ubuntu:
-    runs-on: [self-hosted, linux, ubuntu-latest, ARM64]
+    runs-on: [self-hosted, linux, self-hosted-ubuntu, ARM64]
     steps:
       - name: Install libbluetooth
         shell: bash
