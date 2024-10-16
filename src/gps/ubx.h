@@ -1,4 +1,4 @@
-const char *failMessage = "Unable to %s\n";
+const char *failMessage = "Unable to %s";
 
 #define SEND_UBX_PACKET(TYPE, ID, DATA, ERRMSG, TIMEOUT)                                                                         \
     msglen = makeUBXPacket(TYPE, ID, sizeof(DATA), DATA);                                                                        \
