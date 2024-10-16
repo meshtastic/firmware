@@ -9,6 +9,10 @@
 #include <functional>
 #include <unordered_map>
 
+#ifdef HAS_SDCARD
+#include <SD.h>
+#endif
+
 struct PacketHistoryStruct {
     uint32_t time;
     uint32_t to;
@@ -17,6 +21,9 @@ struct PacketHistoryStruct {
     uint8_t payload[meshtastic_Constants_DATA_PAYLOAD_LEN];
     pb_size_t payload_size;
 };
+
+// enum for the storage type
+enum StorageType { PSRAM, SDCARD };
 
 class StoreForwardModule : private concurrency::OSThread, public ProtobufModule<meshtastic_StoreAndForward>
 {
@@ -80,6 +87,10 @@ class StoreForwardModule : private concurrency::OSThread, public ProtobufModule<
 
   private:
     void populatePSRAM();
+    void populateSDCard();
+
+    // Storage Type
+    StorageType storageType = PSRAM;
 
     // S&F Defaults
     uint32_t historyReturnMax = 25;     // Return maximum of 25 records by default.
