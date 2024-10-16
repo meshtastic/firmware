@@ -44,7 +44,7 @@ jobs:
             TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}} quick)
           fi
           echo "Name: ${{ github.ref_name }} Base: ${{ github.base_ref }} Head: ${{ github.head_ref }} Ref: ${{ github.ref }} Targets: $TARGETS"
-          echo "${{matrix.arch}}=$(jq -cn --argjson environments "$TARGETS" '{board: $environments}')" >> git THUB_OUTPUT
+          echo "${{matrix.arch}}=$(jq -cn --argjson environments "$TARGETS" '{board: $environments}')" >> $GITHUB_OUTPUT
     outputs:
       esp32: ${{ steps.jsonStep.outputs.esp32 }}
       esp32s3: ${{ steps.jsonStep.outputs.esp32s3 }}
@@ -141,13 +141,13 @@ jobs:
     with:
       board: ${{ matrix.board }}
 
-  package-raspbian:
-    uses: ./.github/workflows/package_raspbian.yml
-    secrets: inherit
+  #package-raspbian:
+  #  uses: ./.github/workflows/package_raspbian.yml
+  #  secrets: inherit
 
-  package-raspbian-armv7l:
-    uses: ./.github/workflows/package_raspbian_armv7l.yml
-    secrets: inherit
+  #package-raspbian-armv7l:
+  #  uses: ./.github/workflows/package_raspbian_armv7l.yml
+  #  secrets: inherit
 
   package-ubuntu:
     uses: ./.github/workflows/package_ubuntu.yml
@@ -271,7 +271,7 @@ jobs:
     needs: [
         gather-artifacts,
         #package-raspbian,
-        #package-raspbia n-armv7l,
+        #package-raspbian-armv7l,
         #package-native,
         package-ubuntu,
       ]
