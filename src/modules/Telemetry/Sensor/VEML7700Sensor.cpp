@@ -13,7 +13,7 @@ VEML7700Sensor::VEML7700Sensor() : TelemetrySensor(meshtastic_TelemetrySensorTyp
 
 int32_t VEML7700Sensor::runOnce()
 {
-    LOG_INFO("Init sensor: %s\n", sensorName);
+    LOG_INFO("Init sensor: %s", sensorName);
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
@@ -60,7 +60,7 @@ bool VEML7700Sensor::getMetrics(meshtastic_Telemetry *measurement)
     measurement->variant.environment_metrics.lux = veml7700.readLux(VEML_LUX_AUTO);
     white = veml7700.readWhite(true);
     measurement->variant.environment_metrics.white_lux = computeLux(white, white > 100);
-    LOG_INFO("white lux %f, als lux %f\n", measurement->variant.environment_metrics.white_lux,
+    LOG_INFO("white lux %f, als lux %f", measurement->variant.environment_metrics.white_lux,
              measurement->variant.environment_metrics.lux);
 
     return true;
