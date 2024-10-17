@@ -37,11 +37,11 @@ static void onewire_evt(const uint8_t pid, const uint8_t sid, const SNHUBAPI_EVT
         break;
 
     case SNHUBAPI_EVT_ADD_SID:
-        // LOG_INFO("+ADD:SID:[%02x]\r\n", msg[0]);
+        // LOG_INFO("+ADD:SID:[%02x]", msg[0]);
         break;
 
     case SNHUBAPI_EVT_ADD_PID:
-        // LOG_INFO("+ADD:PID:[%02x]\r\n", msg[0]);
+        // LOG_INFO("+ADD:PID:[%02x]", msg[0]);
 #ifdef BOOT_DATA_REQ
         provision = msg[0];
 #endif
@@ -55,12 +55,12 @@ static void onewire_evt(const uint8_t pid, const uint8_t sid, const SNHUBAPI_EVT
 
     case SNHUBAPI_EVT_SDATA_REQ:
 
-        // LOG_INFO("+EVT:PID[%02x],IPSO[%02x]\r\n",pid,msg[0]);
+        // LOG_INFO("+EVT:PID[%02x],IPSO[%02x]",pid,msg[0]);
         // for( uint16_t i=1; i<len; i++)
         // {
         //     LOG_INFO("%02x,", msg[i]);
         // }
-        // LOG_INFO("\r\n");
+        // LOG_INFO("");
         switch (msg[0]) {
         case RAK_IPSO_CAPACITY:
             dc_prec = msg[1];
@@ -82,12 +82,12 @@ static void onewire_evt(const uint8_t pid, const uint8_t sid, const SNHUBAPI_EVT
         break;
     case SNHUBAPI_EVT_REPORT:
 
-        // LOG_INFO("+EVT:PID[%02x],IPSO[%02x]\r\n",pid,msg[0]);
+        // LOG_INFO("+EVT:PID[%02x],IPSO[%02x]",pid,msg[0]);
         // for( uint16_t i=1; i<len; i++)
         // {
         //     LOG_INFO("%02x,", msg[i]);
         // }
-        // LOG_INFO("\r\n");
+        // LOG_INFO("");
 
         switch (msg[0]) {
         case RAK_IPSO_CAPACITY:
@@ -110,11 +110,11 @@ static void onewire_evt(const uint8_t pid, const uint8_t sid, const SNHUBAPI_EVT
         break;
 
     case SNHUBAPI_EVT_CHKSUM_ERR:
-        LOG_INFO("+ERR:CHKSUM\r\n");
+        LOG_INFO("+ERR:CHKSUM");
         break;
 
     case SNHUBAPI_EVT_SEQ_ERR:
-        LOG_INFO("+ERR:SEQUCE\r\n");
+        LOG_INFO("+ERR:SEQUCE");
         break;
 
     default:

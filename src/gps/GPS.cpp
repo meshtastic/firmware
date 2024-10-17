@@ -19,6 +19,7 @@
 #ifdef ARCH_PORTDUINO
 #include "PortduinoGlue.h"
 #include "meshUtils.h"
+#include <algorithm>
 #include <ctime>
 #endif
 

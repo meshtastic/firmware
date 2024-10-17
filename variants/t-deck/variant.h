@@ -1,5 +1,5 @@
 // ST7789 TFT LCD
-#define ST7789_CS 12
+// #define ST7789_CS 12
 #define ST7789_RS 11  // DC
 #define ST7789_SDA 41 // MOSI
 #define ST7789_SCK 40
@@ -27,8 +27,10 @@
 
 #define SLEEP_TIME 120
 
+#ifndef HAS_TFT
 #define BUTTON_PIN 0
 // #define BUTTON_NEED_PULLUP
+#endif
 
 #define GPS_RX_PIN 44
 #define GPS_TX_PIN 43
@@ -60,7 +62,7 @@
 #define TB_DOWN 15
 #define TB_LEFT 1
 #define TB_RIGHT 2
-#define TB_PRESS BUTTON_PIN
+#define TB_PRESS 0 // BUTTON_PIN
 
 // microphone
 #define ES7210_SCK 47
