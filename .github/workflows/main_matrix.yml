@@ -187,7 +187,7 @@ jobs:
         build-stm32,
         #package-raspbian,
         #package-raspbian-armv7l,
-        #package-native,
+        package-native,
         package-ubuntu,
       ]
     steps:
@@ -272,7 +272,7 @@ jobs:
         gather-artifacts,
         #package-raspbian,
         #package-raspbian-armv7l,
-        #package-native,
+        package-native,
         package-ubuntu,
       ]
     steps:
@@ -304,7 +304,7 @@ jobs:
       - name: Download deb files
         uses: actions/download-artifact@v4
         with:
-          pattern: meshtasticd_${{ steps.version.outputs.version }}_*.deb
+          pattern: meshtasticd_${{ steps.version.outputs.version }}*.deb
           merge-multiple: true
           path: ./output
 
@@ -344,19 +344,19 @@ jobs:
           asset_name: meshtasticd_${{ steps.version.outputs.version }}_amd64.deb
           asset_content_type: application/vnd.debian.binary-package
 
-      - name: Add ubuntu arm64 .deb
+      - name: Add ubuntu aarch64 .deb
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ github.token }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./output/meshtasticd_${{ steps.version.outputs.version }}_ubuntu_arm64.deb
+          asset_path: ./output/meshtasticd_${{ steps.version.outputs.version }}_ubuntu_rm64.deb
           asset_name: meshtasticd_${{ steps.version.outputs.version }}_ubuntu_arm64.deb
           asset_content_type: application/vnd.debian.binary-package
 
-      - name: Bump version.properties
-        run: >-
-          bin/bump_version.py
+      #- name: Bump version.properties
+      #  run: >-
+      #    bin/bump_version.py
 
       # Skip dump versions on MyMesh
       #- name: Create version.properties pull request

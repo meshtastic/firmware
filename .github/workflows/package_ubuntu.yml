@@ -39,7 +39,7 @@ jobs:
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          name: firmware-ubuntu-${{ steps.version.outputs.version }}_arm64.zip
+          name: firmware-${{ steps.version.outputs.version }}_ubuntu_arm64.zip
           merge-multiple: true
 
       - name: Display structure of downloaded files
