@@ -171,6 +171,22 @@ NodeDB::NodeDB()
     resetRadioConfig(); // If bogus settings got saved, then fix them
     // nodeDB->LOG_DEBUG("region=%d, NODENUM=0x%x, dbsize=%d", config.lora.region, myNodeInfo.my_node_num, numMeshNodes);
 
+    // If we are setup to broadcast on the default channel, ensure that the telemetry intervals are coerced to the minimum value
+    // of 30 minutes or more
+    if (channels.isDefaultChannel(channels.getPrimaryIndex())) {
+        LOG_DEBUG("Coercing telemetry to min of 30 minutes on defaults");
+        moduleConfig.telemetry.device_update_interval = Default::getConfiguredOrMinimumValue(
+            moduleConfig.telemetry.device_update_interval, min_default_telemetry_interval_secs);
+        moduleConfig.telemetry.environment_update_interval = Default::getConfiguredOrMinimumValue(
+            moduleConfig.telemetry.environment_update_interval, min_default_telemetry_interval_secs);
+        moduleConfig.telemetry.air_quality_interval = Default::getConfiguredOrMinimumValue(
+            moduleConfig.telemetry.air_quality_interval, min_default_telemetry_interval_secs);
+        moduleConfig.telemetry.power_update_interval = Default::getConfiguredOrMinimumValue(
+            moduleConfig.telemetry.power_update_interval, min_default_telemetry_interval_secs);
+        moduleConfig.telemetry.health_update_interval = Default::getConfiguredOrMinimumValue(
+            moduleConfig.telemetry.health_update_interval, min_default_telemetry_interval_secs);
+    }
+
     if (devicestateCRC != crc32Buffer(&devicestate, sizeof(devicestate)))
         saveWhat |= SEGMENT_DEVICESTATE;
     if (configCRC != crc32Buffer(&config, sizeof(config)))
