@@ -1,0 +1,45 @@
+{
+  "build": {
+    "cpu": "cortex-m4",
+    "f_cpu": "48000000L",
+    "mcu": "AMA3B1KK",
+    "part": "apollo3",
+    "fabi": "hard",
+    "specs": "nosys.specs",
+    "framework": {
+      "arduino": {
+        "v1": {
+          "variant": "artemis",
+          "extra_flags": "-DSFE_ARTEMIS"
+        },
+        "v2": {
+          "variant": "rak11720",
+          "extra_flags": "-DARDUINO_RAK_11720_MODULE"
+        }
+      },
+      "ambiqsdk-sfe": {
+        "variant": ["boards_sfe", "artemis_module"],
+        "extra_flags": "",
+        "variant_lib_src_filter": ""
+      }
+    }
+  },
+  "debug": {
+    "jlink_device": "AMA3B1KK-KBR",
+    "svd_path": "apollo3.svd",
+    "swo_freq": 12000000,
+    "init": {
+      "break": "tbreak setup"
+    }
+  },
+  "frameworks": ["arduino", "ambiqsdk-sfe"],
+  "name": "WisCore RAK11720 Board",
+  "upload": {
+    "maximum_ram_size": 393216,
+    "maximum_size": 983040,
+    "protocol": "svl",
+    "protocols": ["svl", "asb", "jlink"]
+  },
+  "url": "https://www.rakwireless.com",
+  "vendor": "RAKwireless"
+}

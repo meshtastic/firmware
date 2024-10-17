@@ -1,0 +1,1 @@
+-c -std=gnu11 -DMBED_MINIMAL_PRINTF -DMBED_TRAP_ERRORS_ENABLED=1 -Os -fdata-sections -ffunction-sections -fmessage-length=0 -fno-exceptions -fomit-frame-pointer -funsigned-char -mcpu=cortex-m4 -mfloat-abi=hard -mfpu=fpv4-sp-d16 -mthumb 

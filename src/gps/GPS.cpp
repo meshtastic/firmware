@@ -1085,7 +1085,7 @@ const char *DETECTED_MESSAGE = "%s detected, using %s Module";
 
 GnssModel_t GPS::probe(int serialSpeed)
 {
-#if defined(ARCH_NRF52) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32WL)
+#if defined(ARCH_NRF52) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32WL) || defined(ARCH_APOLLO3)
     _serial_gps->end();
     _serial_gps->begin(serialSpeed);
 #elif defined(ARCH_RP2040)
