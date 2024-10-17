@@ -1,6 +1,12 @@
 name: "Setup Build Base Composite Action"
 description: "Base build actions for Meshtastic Platform IO steps"
 
+inputs:
+  USER_PREFS:
+    description: Custom userPrefs.h
+    required: false
+    default: ""
+
 runs:
   using: "composite"
   steps:
