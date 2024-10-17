@@ -16,7 +16,7 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
 
     bool hasChanged = nodeDB->updateUser(getFrom(&mp), p, mp.channel);
 
-    bool wasBroadcast = mp.to == NODENUM_BROADCAST;
+    bool wasBroadcast = isBroadcast(mp.to);
 
     // Show new nodes on LCD screen
     if (wasBroadcast) {
