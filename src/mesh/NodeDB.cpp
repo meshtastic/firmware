@@ -174,7 +174,7 @@ NodeDB::NodeDB()
     // If we are setup to broadcast on the default channel, ensure that the telemetry intervals are coerced to the minimum value
     // of 30 minutes or more
     if (channels.isDefaultChannel(channels.getPrimaryIndex())) {
-        LOG_DEBUG("Coercing telemetry intervals to min of 30 minutes on default channel");
+        LOG_DEBUG("Coercing telemetry to min of 30 minutes on defaults");
         moduleConfig.telemetry.device_update_interval = Default::getConfiguredOrMinimumValue(
             moduleConfig.telemetry.device_update_interval, min_default_telemetry_interval_secs);
         moduleConfig.telemetry.environment_update_interval = Default::getConfiguredOrMinimumValue(
