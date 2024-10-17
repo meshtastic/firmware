@@ -13,8 +13,7 @@ bool RoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mesh
     printPacket("Routing sniffing", &mp);
     router->sniffReceived(&mp, r);
 
-    bool maybePKI =
-        mp.which_payload_variant == meshtastic_MeshPacket_encrypted_tag && mp.channel == 0 && !isBroadcast(mp.to);
+    bool maybePKI = mp.which_payload_variant == meshtastic_MeshPacket_encrypted_tag && mp.channel == 0 && !isBroadcast(mp.to);
     // Beginning of logic whether to drop the packet based on Rebroadcast mode
     if (mp.which_payload_variant == meshtastic_MeshPacket_encrypted_tag &&
         (config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY ||
