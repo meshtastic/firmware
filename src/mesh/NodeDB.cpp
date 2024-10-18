@@ -118,7 +118,7 @@ NodeDB::NodeDB()
     // FIXME - implement for other platforms
 #endif
     LOG_DEBUG("Device ID: %llu", myNodeInfo.device_id);
-    
+
     // likewise - we always want the app requirements to come from the running appload
     myNodeInfo.min_app_version = 30200; // format is Mmmss (where M is 1+the numeric major number. i.e. 30200 means 2.2.00
     // Note! We do this after loading saved settings, so that if somehow an invalid nodenum was stored in preferences we won't
