@@ -7,8 +7,8 @@
 #include "PowerMon.h"
 #include "RTC.h"
 #include "Throttle.h"
-#include "meshUtils.h"
 #include "buzz.h"
+#include "meshUtils.h"
 
 #include "main.h" // pmu_found
 #include "sleep.h"
