@@ -95,3 +95,17 @@ bool isOneOf(int item, int count, ...)
     va_end(args);
     return found;
 }
+
+const std::string vformat(const char *const zcFormat, ...)
+{
+    va_list vaArgs;
+    va_start(vaArgs, zcFormat);
+    va_list vaArgsCopy;
+    va_copy(vaArgsCopy, vaArgs);
+    const int iLen = std::vsnprintf(NULL, 0, zcFormat, vaArgsCopy);
+    va_end(vaArgsCopy);
+    std::vector<char> zc(iLen + 1);
+    std::vsnprintf(zc.data(), zc.size(), zcFormat, vaArgs);
+    va_end(vaArgs);
+    return std::string(zc.data(), iLen);
+}

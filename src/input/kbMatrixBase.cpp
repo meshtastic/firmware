@@ -70,7 +70,7 @@ int32_t KbMatrixBase::runOnce()
         // debounce
         if (key != prevkey) {
             if (key != 0) {
-                LOG_DEBUG("Key 0x%x pressed\n", key);
+                LOG_DEBUG("Key 0x%x pressed", key);
                 // reset shift now that we have a keypress
                 InputEvent e;
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
@@ -122,7 +122,7 @@ int32_t KbMatrixBase::runOnce()
         }
 
     } else {
-        LOG_WARN("Unknown kb_model 0x%02x\n", INPUTBROKER_MATRIX_TYPE);
+        LOG_WARN("Unknown kb_model 0x%02x", INPUTBROKER_MATRIX_TYPE);
         return disable();
     }
     return 50; // Keyscan every 50msec to avoid key bounce
