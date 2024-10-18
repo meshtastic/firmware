@@ -1709,7 +1709,7 @@ void Screen::setup()
 #endif
     serialSinceMsec = millis();
 
-#if ARCH_PORTDUINO
+#if ARCH_PORTDUINO && !HAS_TFT
     if (settingsMap[touchscreenModule]) {
         touchScreenImpl1 =
             new TouchScreenImpl1(dispdev->getWidth(), dispdev->getHeight(), static_cast<TFTDisplay *>(dispdev)->getTouch);

@@ -74,7 +74,7 @@
 #include "modules/StoreForwardModule.h"
 #endif
 #endif
-#if defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040)
+#if defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040) || defined(ARCH_PORTDUINO)
 #if !MESHTASTIC_EXCLUDE_EXTERNALNOTIFICATION
 #include "modules/ExternalNotificationModule.h"
 #endif
@@ -173,7 +173,7 @@ void setupModules()
         aSerialKeyboardImpl->init();
 #endif // INPUTBROKER_MATRIX_TYPE
 #endif // HAS_BUTTON
-#if ARCH_PORTDUINO
+#if ARCH_PORTDUINO && !HAS_TFT
         aLinuxInputImpl = new LinuxInputImpl();
         aLinuxInputImpl->init();
 #endif
@@ -223,7 +223,7 @@ void setupModules()
         storeForwardModule = new StoreForwardModule();
 #endif
 #endif
-#if defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040)
+#if defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040) || defined(ARCH_PORTDUINO)
 #if !MESHTASTIC_EXCLUDE_EXTERNALNOTIFICATION
         externalNotificationModule = new ExternalNotificationModule();
 #endif
