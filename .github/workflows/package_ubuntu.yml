@@ -71,6 +71,11 @@ jobs:
           depends: libyaml-cpp0.8, openssl, libulfius2.7
           desc: Native Linux Meshtastic binary.
 
+      - name: Rename ubuntu package to meshtasticd_${{ steps.version.outputs.version }}_ubuntu_arm64.deb
+        shell: bash
+        run: |
+          mv meshtasticd_${{ steps.version.outputs.version }}_arm64.deb meshtasticd_${{ steps.version.outputs.version }}_ubuntu_arm64.deb
+
       - uses: actions/upload-artifact@v4
         with:
           name: meshtasticd_${{ steps.version.outputs.version }}_ubuntu_arm64.deb
