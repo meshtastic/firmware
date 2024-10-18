@@ -171,6 +171,7 @@ int32_t ButtonThread::runOnce()
                     gps->toggleGpsMode();
                     if (screen)
                         screen->forceDisplay(true); // Force a new UI frame, then force an EInk update
+                    playBeep();
                 }
                 break;
 #endif
