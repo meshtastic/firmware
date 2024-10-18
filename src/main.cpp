@@ -14,13 +14,13 @@
 
 #include "FSCommon.h"
 #include "Led.h"
-#include "RTC.h"
 #include "SPILock.h"
 #include "Throttle.h"
 #include "concurrency/OSThread.h"
 #include "concurrency/Periodic.h"
 #include "detect/ScanI2C.h"
 #include "error.h"
+#include "gps/RTC.h"
 #include "power.h"
 
 #if !MESHTASTIC_EXCLUDE_I2C
@@ -29,6 +29,7 @@
 #endif
 #include "detect/axpDebug.h"
 #include "detect/einkScan.h"
+#include "gps/RTC.h"
 #include "graphics/RAKled.h"
 #include "graphics/Screen.h"
 #include "main.h"
@@ -104,7 +105,7 @@ NRF52Bluetooth *nrf52Bluetooth = nullptr;
 #include "AmbientLightingThread.h"
 #include "PowerFSMThread.h"
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !defined(ARCH_APOLLO3)
 #include "motion/AccelerometerThread.h"
 AccelerometerThread *accelerometerThread = nullptr;
 #endif
@@ -151,7 +152,7 @@ ScanI2C::DeviceAddress accelerometer_found = ScanI2C::ADDRESS_NONE;
 // The I2C address of the RGB LED (if found)
 ScanI2C::FoundDevice rgb_found = ScanI2C::FoundDevice(ScanI2C::DeviceType::NONE, ScanI2C::ADDRESS_NONE);
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !defined(ARCH_APOLLO3)
 ATECCX08A atecc;
 #endif
 
@@ -679,7 +680,7 @@ void setup()
 #endif
 
 #if !MESHTASTIC_EXCLUDE_I2C
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !defined(ARCH_APOLLO3)
     if (acc_info.type != ScanI2C::DeviceType::NONE) {
         accelerometerThread = new AccelerometerThread(acc_info.type);
     }
@@ -687,7 +688,7 @@ void setup()
 
 #if defined(HAS_NEOPIXEL) || defined(UNPHONE) || defined(RGBLED_RED)
     ambientLightingThread = new AmbientLightingThread(ScanI2C::DeviceType::NONE);
-#elif !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+#elif !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !defined(ARCH_APOLLO3)
     if (rgb_found.type != ScanI2C::DeviceType::NONE) {
         ambientLightingThread = new AmbientLightingThread(rgb_found.type);
     }
