@@ -169,8 +169,9 @@ int32_t ButtonThread::runOnce()
             case 3:
                 if (!config.device.disable_triple_click && (gps != nullptr)) {
                     gps->toggleGpsMode();
-                    if (screen)
+                    if (screen) {
                         screen->forceDisplay(true); // Force a new UI frame, then force an EInk update
+                    }
                     playBeep();
                 }
                 break;
