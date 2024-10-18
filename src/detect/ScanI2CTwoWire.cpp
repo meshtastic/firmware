@@ -244,6 +244,9 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 SCAN_SIMPLE_CASE(TDECK_KB_ADDR, TDECKKB, "T-Deck keyboard found");
                 SCAN_SIMPLE_CASE(BBQ10_KB_ADDR, BBQ10KB, "BB Q10 keyboard found");
                 SCAN_SIMPLE_CASE(ST7567_ADDRESS, SCREEN_ST7567, "st7567 display found");
+#ifndef HAS_TCA9535
+                SCAN_SIMPLE_CASE(PCF8574A_ADDRESS, PCF8574A, "PCF8574A based keyboard found\n");
+#endif
 #ifdef HAS_NCP5623
                 SCAN_SIMPLE_CASE(NCP5623_ADDR, NCP5623, "NCP5623 RGB LED found");
 #endif
@@ -396,7 +399,9 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 SCAN_SIMPLE_CASE(PMSA0031_ADDR, PMSA0031, "PMSA0031 air quality sensor found")
                 SCAN_SIMPLE_CASE(BMA423_ADDR, BMA423, "BMA423 accelerometer found");
                 SCAN_SIMPLE_CASE(LSM6DS3_ADDR, LSM6DS3, "LSM6DS3 accelerometer found at address 0x%x", (uint8_t)addr.address);
+#ifdef HAS_TCA9535
                 SCAN_SIMPLE_CASE(TCA9535_ADDR, TCA9535, "TCA9535 I2C expander found");
+#endif
                 SCAN_SIMPLE_CASE(TCA9555_ADDR, TCA9555, "TCA9555 I2C expander found");
                 SCAN_SIMPLE_CASE(VEML7700_ADDR, VEML7700, "VEML7700 light sensor found");
                 SCAN_SIMPLE_CASE(TSL25911_ADDR, TSL2591, "TSL2591 light sensor found");
