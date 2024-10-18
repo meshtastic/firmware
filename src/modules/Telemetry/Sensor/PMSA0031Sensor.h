@@ -4,18 +4,19 @@
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "TelemetrySensor.h"
-#include <SensirionI2CScd4x.h>
+#include <Adafruit_PM25AQI.h>
 
-class SCD4XSensor : public TelemetrySensor
+class PMSA0031Sensor : public TelemetrySensor
 {
   private:
-    SensirionI2CScd4x scd4x = SensirionI2CScd4x();
+    Adafruit_PM25AQI aqi;
+    PM25_AQI_Data data = {0};
 
   protected:
     virtual void setup() override;
 
   public:
-    SCD4XSensor();
+    PMSA0031Sensor();
     virtual int32_t runOnce() override;
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
 };

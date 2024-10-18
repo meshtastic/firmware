@@ -28,28 +28,23 @@ int32_t SCD4XSensor::runOnce()
     return initI2CSensor();
 }
 
-void SCD4XSensor::setup()
-{
-
-}
+void SCD4XSensor::setup() {}
 
 bool SCD4XSensor::getMetrics(meshtastic_Telemetry *measurement)
 {
     uint16_t co2, error;
     float temperature, humidity;
-    error = scd4x.readMeasurement(
-        co2, temperature, humidity
-    );
+    error = scd4x.readMeasurement(co2, temperature, humidity);
     if (error || co2 == 0) {
         LOG_DEBUG("Skipping invalid SCD4X measurement.\n");
         return false;
     } else {
         measurement->variant.environment_metrics.has_temperature = true;
         measurement->variant.environment_metrics.has_relative_humidity = true;
-        measurement->variant.environment_metrics.has_co2 = true;
+        measurement->variant.air_quality_metrics.has_co2 = true;
         measurement->variant.environment_metrics.temperature = temperature;
         measurement->variant.environment_metrics.relative_humidity = humidity;
-        measurement->variant.environment_metrics.co2 = co2;
+        measurement->variant.air_quality_metrics.co2 = co2;
         return true;
     }
 }
