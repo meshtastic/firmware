@@ -57,13 +57,13 @@ void playBeep()
 
 void playGPSEnableBeep()
 {
-    ToneDuration melody[] = {{NOTE_CS4, DURATION_1_8}, {NOTE_FS3, DURATION_1_4}, {NOTE_C3, DURATION_1_4}};
+    ToneDuration melody[] = {{NOTE_C3, DURATION_1_8}, {NOTE_FS3, DURATION_1_4}, {NOTE_CS4, DURATION_1_4}};
     playTones(melody, sizeof(melody) / sizeof(ToneDuration));
 }
 
 void playGPSDisableBeep()
 {
-    ToneDuration melody[] = {{NOTE_C3, DURATION_1_8}, {NOTE_FS3, DURATION_1_4}, {NOTE_CS4, DURATION_1_4}};
+    ToneDuration melody[] = {{NOTE_CS4, DURATION_1_8}, {NOTE_FS3, DURATION_1_4}, {NOTE_C3, DURATION_1_4}};
     playTones(melody, sizeof(melody) / sizeof(ToneDuration));
 }
 
