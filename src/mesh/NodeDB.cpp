@@ -222,6 +222,11 @@ bool isToUs(const meshtastic_MeshPacket *p)
     return p->to == nodeDB->getNodeNum();
 }
 
+bool isBroadcast(uint32_t dest)
+{
+    return dest == NODENUM_BROADCAST || dest == NODENUM_BROADCAST_NO_LORA;
+}
+
 bool NodeDB::resetRadioConfig(bool factory_reset)
 {
     bool didFactoryReset = false;
