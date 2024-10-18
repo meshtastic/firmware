@@ -13,6 +13,9 @@
 #ifdef ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
 #endif
+#if defined(M5STACK_CORE2)
+#include <M5Unified.h>
+#endif
 
 #define DEBUG_BUTTONS 0
 #if DEBUG_BUTTONS
@@ -333,3 +336,87 @@ void ButtonThread::userButtonPressedLongStop()
         btnEvent = BUTTON_EVENT_LONG_RELEASED;
     }
 }
+
+#if defined(M5STACK_CORE2)
+// Define a constant
+const unsigned long LONG_PRESS_THRESHOLD = 5000;   // Hold the threshold
+const unsigned long DOUBLE_CLICK_THRESHOLD = 1000; // Double-click the threshold
+const int MAX_CLICKS = 2;                          // Maximum hits
+// Global variable
+unsigned long lastClickTime = 0; // The time of the last click
+int clickCount = 0;              // Click count
+unsigned long touch_start_time;  // Touch start time
+bool is_touching = false;        // Mark whether you are currently touching
+void ScreenTouch()
+{
+    M5.update();
+    auto count = M5.Touch.getCount();
+    if (count == 0)
+        return;
+    for (std::size_t i = 0; i < count; ++i) {
+        auto t = M5.Touch.getDetail(i);
+
+        // If touch starts
+        if (t.wasPressed()) {
+            touch_start_time = millis(); // Record the time when the touch began
+            is_touching = true;          // Set to touch
+        }
+
+        // Check the current touch status
+        if (is_touching) {
+            unsigned long duration = millis() - touch_start_time;
+            if (duration >= LONG_PRESS_THRESHOLD) {
+                LOG_INFO("Long Press Detected\n");
+                powerFSM.trigger(EVENT_PRESS);
+                screen->startAlert("Shutting down...");
+                screen->forceDisplay(true);
+                // Executive logic, such as shutdown, display menu, etc
+                // To avoid duplicate detection, set is_touching to false here
+                is_touching = false;
+                M5.Speaker.tone(3000, 300);
+                delay(1000);
+                M5.Power.powerOff();
+            }
+        }
+        // Check if the touch just ended
+        if (t.wasReleased()) {
+            if (is_touching) {
+                unsigned long duration = millis() - touch_start_time;
+                if (duration < LONG_PRESS_THRESHOLD) {
+                    unsigned long currentTime = millis();
+                    // Check whether it is a double click
+                    if (currentTime - lastClickTime <= DOUBLE_CLICK_THRESHOLD) {
+                        clickCount++;
+                        if (clickCount == MAX_CLICKS) {
+                            LOG_INFO("Double Click Detected\n");
+                            M5.Speaker.tone(2000, 100);
+                            service->refreshLocalMeshNode();
+                            auto sentPosition = service->trySendPosition(NODENUM_BROADCAST, true);
+                            if (screen) {
+                                if (sentPosition)
+                                    screen->print("Sent ad-hoc position\n");
+                                else
+                                    screen->print("Sent ad-hoc nodeinfo\n");
+                                screen->forceDisplay(true); // Force a new UI frame, then force an EInk update
+                            }
+                            clickCount = 0;
+                        }
+                    } else {
+                        clickCount = 1;
+                    }
+
+                    lastClickTime = currentTime; // Update last click time
+                }
+            }
+            // Reset the touch status
+            is_touching = false;
+        }
+        // You can add more status checks, such as sliding and dragging
+        if (t.wasFlickStart()) {
+            LOG_INFO("Flick Start Detected\n");
+            M5.Speaker.tone(1000, 100);
+            powerFSM.trigger(EVENT_PRESS);
+        }
+    }
+}
+#endif

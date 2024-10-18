@@ -104,6 +104,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_NANO_G1
 #elif defined(M5STACK)
 #define HW_VENDOR meshtastic_HardwareModel_M5STACK
+#elif defined(M5STACK_CORE2)
+#define HW_VENDOR meshtastic_HardwareModel_M5STACK_CORE2
 #elif defined(M5STACK_CORES3)
 #define HW_VENDOR meshtastic_HardwareModel_M5STACK_CORES3
 #elif defined(STATION_G1)
