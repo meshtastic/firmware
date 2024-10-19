@@ -750,6 +750,11 @@ bool MQTT::isPrivateIpAddress(const char address[])
         return true;
     }
 
+    // Check to see if it is a HamNet address which we also consider private.
+    if (strncmp(address, "44.", 3) == 0) {
+        return true;
+    }
+
     // See if it's definitely not a 172 address.
     if (strncmp(address, "172", 3) != 0) {
         return false;
