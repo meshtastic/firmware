@@ -58,3 +58,5 @@ bool isToUs(const meshtastic_MeshPacket *p);
 
 /* Some clients might not properly set priority, therefore we fix it here. */
 void fixPriority(meshtastic_MeshPacket *p);
+
+bool isBroadcast(uint32_t dest);
