@@ -157,6 +157,72 @@ int32_t KbI2cBase::runOnce()
         }
         break;
     }
+    case 0x37: { // MPR121
+        LOG_DEBUG("KB_POLL\n");
+        MPRkeyboard.trigger();
+        InputEvent e;
+        e.inputEvent = ANYKEY;
+        e.source = this->_originName;
+        e.kbchar = MPRkeyboard.status() & INPUT_BROKER_MSG_FN_SYMBOL_ON | INPUT_BROKER_MSG_FN_SYMBOL_OFF;
+        this->notifyObservers(&e);
+        while (MPRkeyboard.hasEvent()) {
+            char nextEvent = MPRkeyboard.dequeueEvent();
+            e.inputEvent = ANYKEY;
+            e.kbchar = 0x00;
+            e.source = this->_originName;
+            switch (nextEvent) {
+                case 0x00: // MPR121_NONE 
+                    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
+                    e.kbchar = 0x00;
+                    break;
+                case 0x90: // MPR121_REBOOT
+                    e.inputEvent = ANYKEY;
+                    e.kbchar = INPUT_BROKER_MSG_REBOOT;
+                    break;
+                case 0xb4: // MPR121_LEFT
+                    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT;
+                    e.kbchar = 0x00;
+                    break;
+                case 0xb5: // MPR121_UP
+                    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP;
+                    e.kbchar = 0x00;
+                    break;
+                case 0xb6: // MPR121_DOWN
+                    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN;
+                    e.kbchar = 0x00;
+                    break;
+                case 0xb7: // MPR121_RIGHT
+                    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT;
+                    e.kbchar = 0x00;
+                    break;
+                case 0x1b: // MPR121_ESC
+                    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL;
+                    e.kbchar = 0x1b;
+                    break;
+                case 0x08: // MPR121_BSP
+                    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_BACK;
+                    e.kbchar = 0x08;
+                    break;
+                case 0x0d: // MPR121_SELECT
+                    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT;
+                    e.kbchar = 0x0d;
+                    break;
+                default:
+                    if(nextEvent > 127) {
+                        e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
+                        e.kbchar = 0x00;
+                        break;
+                    }
+                    e.inputEvent = ANYKEY;
+                    e.kbchar = nextEvent;
+                    break;
+                }
+            if (e.inputEvent != meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE) {
+                this->notifyObservers(&e);
+            }
+        }
+        break;
+    }
     case 0x02: {
         // RAK14004
         uint8_t rDataBuf[8] = {0};
