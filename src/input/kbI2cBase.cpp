@@ -40,6 +40,9 @@ int32_t KbI2cBase::runOnce()
                 Q10keyboard.begin(BBQ10_KB_ADDR, &Wire1);
                 Q10keyboard.setBacklight(0);
             }
+            if (cardkb_found.address == MPR121_KB_ADDR) {
+                MPRkeyboard.begin(MPR121_KB_ADDR, &Wire1);
+            }
             break;
 #endif
         case ScanI2C::WIRE:
@@ -48,6 +51,9 @@ int32_t KbI2cBase::runOnce()
             if (cardkb_found.address == BBQ10_KB_ADDR) {
                 Q10keyboard.begin(BBQ10_KB_ADDR, &Wire);
                 Q10keyboard.setBacklight(0);
+            }
+            if (cardkb_found.address == MPR121_KB_ADDR) {
+                MPRkeyboard.begin(MPR121_KB_ADDR, &Wire);
             }
             break;
         case ScanI2C::NO_I2C:
@@ -158,7 +164,6 @@ int32_t KbI2cBase::runOnce()
         break;
     }
     case 0x37: { // MPR121
-        LOG_DEBUG("KB_POLL\n");
         MPRkeyboard.trigger();
         InputEvent e;
         e.inputEvent = ANYKEY;
