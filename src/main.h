@@ -33,6 +33,7 @@ extern uint8_t kb_model;
 extern ScanI2C::DeviceAddress rtc_found;
 extern ScanI2C::DeviceAddress accelerometer_found;
 extern ScanI2C::FoundDevice rgb_found;
+extern ScanI2C::DeviceAddress aqi_found;
 
 extern bool eink_found;
 extern bool pmu_found;

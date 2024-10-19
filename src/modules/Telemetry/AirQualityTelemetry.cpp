@@ -40,7 +40,6 @@ int32_t AirQualityTelemetryModule::runOnce()
         Uncomment the preferences below if you want to use the module
         without having to configure it from the PythonAPI or WebUI.
     */
-
     // moduleConfig.telemetry.air_quality_enabled = 1;
 
     if (!(moduleConfig.telemetry.air_quality_enabled)) {
@@ -55,34 +54,54 @@ int32_t AirQualityTelemetryModule::runOnce()
         if (moduleConfig.telemetry.air_quality_enabled) {
             LOG_INFO("Air quality Telemetry: Initializing");
 
+            if (aqi_found.address == 0x00) {
+                LOG_DEBUG("Rescanning for I2C AQI Sensor");
+                uint8_t i2caddr_scan[] = {PMSA0031_ADDR, SCD4X_ADDR};
+                uint8_t i2caddr_asize = 2;
+                auto i2cScanner = std::unique_ptr<ScanI2CTwoWire>(new ScanI2CTwoWire());
+
+#if WIRE_INTERFACES_COUNT == 2
+                i2cScanner->scanPort(ScanI2C::I2CPort::WIRE1, i2caddr_scan, i2caddr_asize);
+#endif
+                i2cScanner->scanPort(ScanI2C::I2CPort::WIRE, i2caddr_scan, i2caddr_asize);
+                auto aqi_info = i2cScanner->firstAQI();
+
+                if (aqi_info.type != ScanI2C::DeviceType::NONE) {
+                    aqi_found = aqi_info.address;
+                }
+                if (aqi_found.address == 0x00) {
+                    return disable();
+                }
+            }
             if (scd4xSensor.hasSensor())
                 result = scd4xSensor.runOnce();
             if (pmsa0031Sensor.hasSensor())
                 result = pmsa0031Sensor.runOnce();
-        }
-        return result;
-    } else {
-        // if we somehow got to a second run of this module with measurement disabled, then just wait forever
-        if (!moduleConfig.telemetry.air_quality_enabled)
-            return disable();
+            return result;
 
-        if (((lastSentToMesh == 0) ||
-             !Throttle::isWithinTimespanMs(lastSentToMesh, Default::getConfiguredOrDefaultMsScaled(
-                                                               moduleConfig.telemetry.air_quality_interval,
-                                                               default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
-            airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
-            airTime->isTxAllowedAirUtil()) {
-            sendTelemetry();
-            lastSentToMesh = millis();
-        } else if (((lastSentToPhone == 0) || !Throttle::isWithinTimespanMs(lastSentToPhone, sendToPhoneIntervalMs)) &&
-                   (service->isToPhoneQueueEmpty())) {
-            // Just send to phone when it's not our time to send to mesh yet
-            // Only send while queue is empty (phone assumed connected)
-            sendTelemetry(NODENUM_BROADCAST, true);
-            lastSentToPhone = millis();
+        } else {
+            // if we somehow got to a second run of this module with measurement disabled, then just wait forever
+            if (!moduleConfig.telemetry.air_quality_enabled)
+                return disable();
+
+            if (((lastSentToMesh == 0) ||
+                 !Throttle::isWithinTimespanMs(lastSentToMesh, Default::getConfiguredOrDefaultMsScaled(
+                                                                   moduleConfig.telemetry.air_quality_interval,
+                                                                   default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
+                airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
+                airTime->isTxAllowedAirUtil()) {
+                sendTelemetry();
+                lastSentToMesh = millis();
+            } else if (((lastSentToPhone == 0) || !Throttle::isWithinTimespanMs(lastSentToPhone, sendToPhoneIntervalMs)) &&
+                       (service->isToPhoneQueueEmpty())) {
+                // Just send to phone when it's not our time to send to mesh yet
+                // Only send while queue is empty (phone assumed connected)
+                sendTelemetry(NODENUM_BROADCAST, true);
+                lastSentToPhone = millis();
+            }
         }
+        return min(sendToPhoneIntervalMs, result);
     }
-    return min(sendToPhoneIntervalMs, result);
 }
 
 bool AirQualityTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *t)
@@ -141,20 +160,26 @@ void AirQualityTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSta
     // Display "Env. From: ..." on its own
     display->drawString(x, y, "AQ. From: " + String(lastSender) + "(" + String(agoSecs) + "s)");
 
-    // Continue with the remaining details
-    /*display->drawString(x, y += _fontHeight(FONT_SMALL),
-                        "Temp/Hum: " + last_temp + " / " +
-                            String(lastMeasurement.variant.environment_metrics.relative_humidity, 0) + "%");*/
-
-    /*if (lastMeasurement.variant.environment_metrics.barometric_pressure != 0) {
+    if (lastMeasurement.variant.air_quality_metrics.has_pm10_standard) {
         display->drawString(x, y += _fontHeight(FONT_SMALL),
-                            "Press: " + String(lastMeasurement.variant.environment_metrics.barometric_pressure, 0) + "hPA");
-    }*/
+                            "PM1.0(Standard): " + String(lastMeasurement.variant.air_quality_metrics.pm10_standard, 0));
+    }
+    if (lastMeasurement.variant.air_quality_metrics.has_pm25_standard) {
+        display->drawString(x, y += _fontHeight(FONT_SMALL),
+                            "PM2.5(Standard): " + String(lastMeasurement.variant.air_quality_metrics.pm25_standard, 0));
+    }
+    if (lastMeasurement.variant.air_quality_metrics.has_pm10_environmental) {
+        display->drawString(x, y += _fontHeight(FONT_SMALL),
+                            "PM10.0(Standard): " + String(lastMeasurement.variant.air_quality_metrics.pm100_standard, 0));
+    }
+    if (lastMeasurement.variant.air_quality_metrics.has_co2) {
+        display->drawString(x, y += _fontHeight(FONT_SMALL),
+                            "CO2: " + String(lastMeasurement.variant.air_quality_metrics.co2, 0) + " ppm");
+    }
 }
 
 bool AirQualityTelemetryModule::getAirQualityTelemetry(meshtastic_Telemetry *m)
 {
-    // XXX
     bool valid = true;
     bool hasSensor = false;
     m->time = getTime();
