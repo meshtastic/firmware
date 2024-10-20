@@ -159,26 +159,22 @@ bool MPR121Keyboard::ready()
 
 void MPR121Keyboard::reset()
 {
-    bool has_reset = false;
-    while(!has_reset) {
-        LOG_DEBUG("MPR121 Resetting...");
-        // Trigger a MPR121 Soft Reset
-        if (m_wire) {
-            m_wire->beginTransmission(m_addr);
-            m_wire->write(_MPR121_REG_SOFT_RESET);
-            m_wire->endTransmission();
-        }
-        if (writeCallback) {
-            uint8_t data = 0;
-            writeCallback(m_addr, _MPR121_REG_SOFT_RESET, &data, 0);
-        }
-        delay(100);
-        // Reset Electrode Configuration to 0x00, Stop Mode
-        writeRegister(_MPR121_REG_ELECTRODE_CONFIG, 0x00);
-        delay(100);
-        has_reset = ready();
-        delay(100);
+    LOG_DEBUG("MPR121 Resetting...");
+    // Trigger a MPR121 Soft Reset
+    if (m_wire) {
+        m_wire->beginTransmission(m_addr);
+        m_wire->write(_MPR121_REG_SOFT_RESET);
+        m_wire->endTransmission();
     }
+    if (writeCallback) {
+        uint8_t data = 0;
+        writeCallback(m_addr, _MPR121_REG_SOFT_RESET, &data, 0);
+    }
+    delay(100);
+    // Reset Electrode Configuration to 0x00, Stop Mode
+    writeRegister(_MPR121_REG_ELECTRODE_CONFIG, 0x00);
+    delay(100);
+    
     LOG_DEBUG("MPR121 Configuring");
     // Set touch release thresholds
     for(uint8_t i = 0; i < 12; i++) {
