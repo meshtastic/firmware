@@ -267,6 +267,9 @@ GPS_RESPONSE GPS::getACK(uint8_t class_id, uint8_t msg_id, uint32_t waitMillis)
     uint32_t startTime = millis();
     const char frame_errors[] = "More than 100 frame errors";
     int sCounter = 0;
+#ifdef GPS_DEBUG
+    std::string debugmsg = "";
+#endif
 
     for (int j = 2; j < 6; j++) {
         buf[8] += buf[j];
@@ -292,20 +295,24 @@ GPS_RESPONSE GPS::getACK(uint8_t class_id, uint8_t msg_id, uint32_t waitMillis)
             if (b == frame_errors[sCounter]) {
                 sCounter++;
                 if (sCounter == 26) {
+#ifdef GPS_DEBUG
+
+                    LOG_DEBUG(debugmsg.c_str());
+#endif
                     return GNSS_RESPONSE_FRAME_ERRORS;
                 }
             } else {
                 sCounter = 0;
             }
 #ifdef GPS_DEBUG
-            LOG_DEBUG("%02X", b);
+            debugmsg += vformat("%02X", b);
 #endif
             if (b == buf[ack]) {
                 ack++;
             } else {
                 if (ack == 3 && b == 0x00) { // UBX-ACK-NAK message
 #ifdef GPS_DEBUG
-                    LOG_DEBUG("");
+                    LOG_DEBUG(debugmsg.c_str());
 #endif
                     LOG_WARN("Got NAK for class %02X message %02X", class_id, msg_id);
                     return GNSS_RESPONSE_NAK; // NAK received
@@ -315,7 +322,7 @@ GPS_RESPONSE GPS::getACK(uint8_t class_id, uint8_t msg_id, uint32_t waitMillis)
         }
     }
 #ifdef GPS_DEBUG
-    LOG_DEBUG("");
+    LOG_DEBUG(debugmsg.c_str());
     LOG_WARN("No response for class %02X message %02X", class_id, msg_id);
 #endif
     return GNSS_RESPONSE_NONE; // No response received within timeout
@@ -1624,6 +1631,9 @@ bool GPS::whileActive()
 {
     unsigned int charsInBuf = 0;
     bool isValid = false;
+#ifdef GPS_DEBUG
+    std::string debugmsg = "";
+#endif
     if (powerState != GPS_ACTIVE) {
         clearBuffer();
         return false;
@@ -1641,7 +1651,7 @@ bool GPS::whileActive()
         int c = _serial_gps->read();
         UBXscratch[charsInBuf] = c;
 #ifdef GPS_DEBUG
-        LOG_DEBUG("%c", c);
+        debugmsg += vformat("%c", (c >= 32 && c <= 126) ? c : '.');
 #endif
         isValid |= reader.encode(c);
         if (charsInBuf > sizeof(UBXscratch) - 10 || c == '\r') {
@@ -1653,6 +1663,9 @@ bool GPS::whileActive()
             charsInBuf++;
         }
     }
+#ifdef GPS_DEBUG
+    LOG_DEBUG(debugmsg.c_str());
+#endif
     return isValid;
 }
 void GPS::enable()
