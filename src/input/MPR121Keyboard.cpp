@@ -153,10 +153,8 @@ void MPR121Keyboard::begin(i2c_com_fptr_t r, i2c_com_fptr_t w, uint8_t addr)
 
 bool MPR121Keyboard::ready()
 {
-    bool ready = false;
-
-
-    return ready;
+    // Read MPR121_Config2 0x5d to check if it has been reset to 0x24
+    return readRegister8(_MPR121_REG_CONFIG2) == 0x24;
 }
 
 void MPR121Keyboard::reset()
@@ -164,14 +162,21 @@ void MPR121Keyboard::reset()
     bool has_reset = false;
     while(!has_reset) {
         LOG_DEBUG("MPR121 Resetting...");
-        // Trigger a MPR121 Soft Reset, sending 0x63 to 0x80
-        writeRegister(_MPR121_REG_SOFT_RESET, 0x63);
-        delay(1000);
+        // Trigger a MPR121 Soft Reset
+        if (m_wire) {
+            m_wire->beginTransmission(m_addr);
+            m_wire->write(_MPR121_REG_SOFT_RESET);
+            m_wire->endTransmission();
+        }
+        if (writeCallback) {
+            uint8_t data = 0;
+            writeCallback(m_addr, _MPR121_REG_SOFT_RESET, &data, 0);
+        }
+        delay(100);
         // Reset Electrode Configuration to 0x00, Stop Mode
         writeRegister(_MPR121_REG_ELECTRODE_CONFIG, 0x00);
         delay(100);
-        // Read MPR121_Config2 0x5d to check if it has been reset to 0x24
-        has_reset = readRegister8(_MPR121_REG_CONFIG2) == 0x24;
+        has_reset = ready();
         delay(100);
     }
     LOG_DEBUG("MPR121 Configuring");
