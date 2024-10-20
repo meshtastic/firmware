@@ -295,7 +295,10 @@ GPS_RESPONSE GPS::getACK(uint8_t class_id, uint8_t msg_id, uint32_t waitMillis)
             if (b == frame_errors[sCounter]) {
                 sCounter++;
                 if (sCounter == 26) {
+#ifdef GPS_DEBUG
+
                     LOG_DEBUG(debugmsg.c_str());
+#endif
                     return GNSS_RESPONSE_FRAME_ERRORS;
                 }
             } else {
