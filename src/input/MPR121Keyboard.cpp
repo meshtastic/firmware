@@ -65,20 +65,20 @@
 uint8_t TapMod[12] = {1, 2, 1, 13, 7, 7, 7, 7, 7, 9, 7, 9}; // Num chars per key, Modulus for rotating through characters
 
 unsigned char MPR121_TapMap[12][13] = {{MPR121_BSP},
-                                {'0', ' '},
-                                {MPR121_SELECT},
-                                {'1', '.', ',', '?', '!', ':', ';', '-', '_', '\\', '/', '(', ')'},
-                                {'2', 'a', 'b', 'c', 'A', 'B', 'C'},
-                                {'3', 'd', 'e', 'f', 'D', 'E', 'F'},
-                                {'4', 'g', 'h', 'i', 'G', 'H', 'I'},
-                                {'5', 'j', 'k', 'l', 'J', 'K', 'L'},
-                                {'6', 'm', 'n', 'o', 'M', 'N', 'O'},
-                                {'7', 'p', 'q', 'r', 's', 'P', 'Q', 'R', 'S'},
-                                {'8', 't', 'u', 'v', 'T', 'U', 'V'},
-                                {'9', 'w', 'x', 'y', 'z', 'W', 'X', 'Y', 'Z'}};
+                                       {'0', ' '},
+                                       {MPR121_SELECT},
+                                       {'1', '.', ',', '?', '!', ':', ';', '-', '_', '\\', '/', '(', ')'},
+                                       {'2', 'a', 'b', 'c', 'A', 'B', 'C'},
+                                       {'3', 'd', 'e', 'f', 'D', 'E', 'F'},
+                                       {'4', 'g', 'h', 'i', 'G', 'H', 'I'},
+                                       {'5', 'j', 'k', 'l', 'J', 'K', 'L'},
+                                       {'6', 'm', 'n', 'o', 'M', 'N', 'O'},
+                                       {'7', 'p', 'q', 'r', 's', 'P', 'Q', 'R', 'S'},
+                                       {'8', 't', 'u', 'v', 'T', 'U', 'V'},
+                                       {'9', 'w', 'x', 'y', 'z', 'W', 'X', 'Y', 'Z'}};
 
 unsigned char MPR121_LongPressMap[12] = {MPR121_ESC,  ' ',         MPR121_NONE,  MPR121_NONE, MPR121_UP,   MPR121_NONE,
-                             MPR121_LEFT, MPR121_NONE, MPR121_RIGHT, MPR121_NONE, MPR121_DOWN, MPR121_NONE};
+                                         MPR121_LEFT, MPR121_NONE, MPR121_RIGHT, MPR121_NONE, MPR121_DOWN, MPR121_NONE};
 
 // Translation map from left to right, top to bottom layout to a more convenient layout to manufacture, matching the
 // https://www.amazon.com.au/Capacitive-Sensitive-Sensitivity-Replacement-Traditional/dp/B0CTJD5KW9/ref=pd_ci_mcx_mh_mcx_views_0_title?th=1
