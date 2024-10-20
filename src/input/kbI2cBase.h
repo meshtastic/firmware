@@ -1,8 +1,8 @@
 #pragma once
 
 #include "BBQ10Keyboard.h"
-#include "MPR121Keyboard.h"
 #include "InputBroker.h"
+#include "MPR121Keyboard.h"
 #include "Wire.h"
 #include "concurrency/OSThread.h"
 

@@ -1,8 +1,8 @@
 // Based on the BBQ10 Keyboard
 
-#include <Arduino.h>
 #include "MPR121Keyboard.h"
 #include "configuration.h"
+#include <Arduino.h>
 
 #ifdef MPR121_USE_5A
 #define _MPR121_REG_KEY 0x5a
@@ -28,8 +28,8 @@
 #define _MPR121_REG_NOISE_COUNT_LIMIT_TOUCHED 0x34
 #define _MPR121_REG_FILTER_DELAY_COUNT_TOUCHED 0x35
 
-#define _MPR121_REG_TOUCH_THRESHOLD 0x41 // First input, +2 for subsequent 
-#define _MPR121_REG_RELEASE_THRESHOLD 0x42 // First input, +2 for subsequent 
+#define _MPR121_REG_TOUCH_THRESHOLD 0x41   // First input, +2 for subsequent
+#define _MPR121_REG_RELEASE_THRESHOLD 0x42 // First input, +2 for subsequent
 #define _MPR121_REG_DEBOUNCE 0x5B
 #define _MPR121_REG_CONFIG1 0x5C
 #define _MPR121_REG_CONFIG2 0x5D
@@ -37,14 +37,14 @@
 #define _MPR121_REG_SOFT_RESET 0x80
 
 #define _KEY_MASK 0x0FFF // Key mask for the first 12 bits
-#define _NUM_KEYS 12 
+#define _NUM_KEYS 12
 
 #define ECR_CALIBRATION_TRACK_FROM_ZERO (0 << 6)
 #define ECR_CALIBRATION_LOCK (1 << 6)
 #define ECR_CALIBRATION_TRACK_FROM_PARTIAL_FILTER (2 << 6) // Recommended Typical Mode
 #define ECR_CALIBRATION_TRACK_FROM_FULL_FILTER (3 << 6)
 #define ECR_PROXIMITY_DETECTION_OFF (0 << 0) // Not using proximity detection
-#define ECR_TOUCH_DETECTION_12CH (12 << 0) // Using all 12 channels
+#define ECR_TOUCH_DETECTION_12CH (12 << 0)   // Using all 12 channels
 
 #define MPR121_NONE 0x00
 #define MPR121_REBOOT 0x90
@@ -64,27 +64,21 @@
 
 uint8_t TapMod[12] = {1, 2, 1, 13, 7, 7, 7, 7, 7, 9, 7, 9}; // Num chars per key, Modulus for rotating through characters
 
-unsigned char TapMap[12][13] = {
-    {MPR121_BSP},
-    {'0', ' '},
-    {MPR121_SELECT},
-    {'1', '.', ',', '?', '!', ':', ';', '-', '_', '\\', '/', '(', ')'},
-    {'2', 'a', 'b', 'c', 'A', 'B', 'C'},
-    {'3', 'd', 'e', 'f', 'D', 'E', 'F'},
-    {'4', 'g', 'h', 'i', 'G', 'H', 'I'},
-    {'5', 'j', 'k', 'l', 'J', 'K', 'L'},
-    {'6', 'm', 'n', 'o', 'M', 'N', 'O'},
-    {'7', 'p', 'q', 'r', 's', 'P', 'Q', 'R', 'S'},
-    {'8', 't', 'u', 'v', 'T', 'U', 'V'},
-    {'9', 'w', 'x', 'y', 'z', 'W', 'X', 'Y', 'Z'}
-};
+unsigned char TapMap[12][13] = {{MPR121_BSP},
+                                {'0', ' '},
+                                {MPR121_SELECT},
+                                {'1', '.', ',', '?', '!', ':', ';', '-', '_', '\\', '/', '(', ')'},
+                                {'2', 'a', 'b', 'c', 'A', 'B', 'C'},
+                                {'3', 'd', 'e', 'f', 'D', 'E', 'F'},
+                                {'4', 'g', 'h', 'i', 'G', 'H', 'I'},
+                                {'5', 'j', 'k', 'l', 'J', 'K', 'L'},
+                                {'6', 'm', 'n', 'o', 'M', 'N', 'O'},
+                                {'7', 'p', 'q', 'r', 's', 'P', 'Q', 'R', 'S'},
+                                {'8', 't', 'u', 'v', 'T', 'U', 'V'},
+                                {'9', 'w', 'x', 'y', 'z', 'W', 'X', 'Y', 'Z'}};
 
-unsigned char LongMap[12] = {
-    MPR121_ESC, ' ', MPR121_NONE, 
-    MPR121_NONE, MPR121_UP, MPR121_NONE, 
-    MPR121_LEFT, MPR121_NONE, MPR121_RIGHT, 
-    MPR121_NONE, MPR121_DOWN, MPR121_NONE
-};
+unsigned char LongMap[12] = {MPR121_ESC,  ' ',         MPR121_NONE,  MPR121_NONE, MPR121_UP,   MPR121_NONE,
+                             MPR121_LEFT, MPR121_NONE, MPR121_RIGHT, MPR121_NONE, MPR121_DOWN, MPR121_NONE};
 
 // Translation map from left to right, top to bottom layout to a more convenient layout to manufacture, matching the
 // https://www.amazon.com.au/Capacitive-Sensitive-Sensitivity-Replacement-Traditional/dp/B0CTJD5KW9/ref=pd_ci_mcx_mh_mcx_views_0_title?th=1
@@ -94,14 +88,10 @@ unsigned char LongMap[12] = {
     11, 8, 5, 2
 };*/
 // Rotated Layout
-uint8_t KeyMap[12] = {
-    2, 5, 8, 11,
-    1, 4, 7, 10,
-    0, 3, 6, 9
-};
+uint8_t KeyMap[12] = {2, 5, 8, 11, 1, 4, 7, 10, 0, 3, 6, 9};
 
-
-MPR121Keyboard::MPR121Keyboard() : m_wire(nullptr), m_addr(0), readCallback(nullptr), writeCallback(nullptr) {
+MPR121Keyboard::MPR121Keyboard() : m_wire(nullptr), m_addr(0), readCallback(nullptr), writeCallback(nullptr)
+{
     LOG_DEBUG("MPR121 @ %02x\n", m_addr);
     state = Init;
     last_key = -1;
@@ -117,19 +107,18 @@ bool MPR121Keyboard::status()
 {
     uint32_t now = millis();
     switch (state) {
-        case Held:
-            status_toggle = true;
-            break;
-        case Idle:
-            status_toggle = false;
-            break;
-        default:
-                if((last_toggle + 1000) < now)
-                {
-                    status_toggle = !status_toggle;
-                    last_toggle = now;
-                }
-            break;
+    case Held:
+        status_toggle = true;
+        break;
+    case Idle:
+        status_toggle = false;
+        break;
+    default:
+        if ((last_toggle + 1000) < now) {
+            status_toggle = !status_toggle;
+            last_toggle = now;
+        }
+        break;
     }
     return status_toggle;
 }
@@ -170,10 +159,10 @@ void MPR121Keyboard::reset()
     // Reset Electrode Configuration to 0x00, Stop Mode
     writeRegister(_MPR121_REG_ELECTRODE_CONFIG, 0x00);
     delay(100);
-    
+
     LOG_DEBUG("MPR121 Configuring");
     // Set touch release thresholds
-    for(uint8_t i = 0; i < 12; i++) {
+    for (uint8_t i = 0; i < 12; i++) {
         // Set touch threshold
         writeRegister(_MPR121_REG_TOUCH_THRESHOLD + (i * 2), 15);
         delay(20);
@@ -214,7 +203,8 @@ void MPR121Keyboard::reset()
     writeRegister(_MPR121_REG_CONFIG2, 0x20);
     delay(20);
     // Enter run mode by Seting partial filter calibration tracking, disable proximity detection, enable 12 channels
-    writeRegister(_MPR121_REG_ELECTRODE_CONFIG, ECR_CALIBRATION_TRACK_FROM_PARTIAL_FILTER | ECR_PROXIMITY_DETECTION_OFF | ECR_TOUCH_DETECTION_12CH);
+    writeRegister(_MPR121_REG_ELECTRODE_CONFIG,
+                  ECR_CALIBRATION_TRACK_FROM_PARTIAL_FILTER | ECR_PROXIMITY_DETECTION_OFF | ECR_TOUCH_DETECTION_12CH);
     delay(100);
     LOG_DEBUG("MPR121 Running");
     state = Idle;
@@ -259,21 +249,26 @@ uint8_t MPR121Keyboard::keyCount(uint16_t value) const
     return numButtonsPressed;
 }
 
-bool MPR121Keyboard::hasEvent() {
+bool MPR121Keyboard::hasEvent()
+{
     return queue.length() > 0;
 }
 
-void MPR121Keyboard::queueEvent(char next) {
-    if(next == MPR121_NONE) { return; }
+void MPR121Keyboard::queueEvent(char next)
+{
+    if (next == MPR121_NONE) {
+        return;
+    }
     queue.concat(next);
 }
 
-char MPR121Keyboard::dequeueEvent() {
-    if(queue.length() < 1) {
+char MPR121Keyboard::dequeueEvent()
+{
+    if (queue.length() < 1) {
         return MPR121_NONE;
     }
     char next = queue.charAt(0);
-    queue.remove(0,1);
+    queue.remove(0, 1);
     return next;
 }
 
@@ -282,8 +277,8 @@ void MPR121Keyboard::trigger()
     // Intended to fire in response to an interrupt from the MPR121 or a longpress callback
     // Only functional if not in Init state
     bool next_status = status();
-    if(last_status != next_status) {
-        if(next_status) {
+    if (last_status != next_status) {
+        if (next_status) {
             queueEvent(MPR121_FN_ON);
         } else {
             queueEvent(MPR121_FN_OFF);
@@ -294,22 +289,22 @@ void MPR121Keyboard::trigger()
         // Read the key register
         uint16_t keyRegister = readRegister16(_MPR121_REG_KEY);
         uint8_t keysPressed = keyCount(keyRegister);
-        if(keysPressed == 0)
-        {
+        if (keysPressed == 0) {
             // No buttons pressed
-            if(state == Held) released();
+            if (state == Held)
+                released();
             state = Idle;
             return;
         }
-        if(keysPressed == 1)
-        {
+        if (keysPressed == 1) {
             // No buttons pressed
-            if(state == Held || state == HeldLong) held(keyRegister);
-            if(state == Idle) pressed(keyRegister);
+            if (state == Held || state == HeldLong)
+                held(keyRegister);
+            if (state == Idle)
+                pressed(keyRegister);
             return;
         }
-        if(keysPressed > 1)
-        {
+        if (keysPressed > 1) {
             // Multipress
             state = Busy;
             return;
@@ -319,11 +314,14 @@ void MPR121Keyboard::trigger()
     }
 }
 
-void MPR121Keyboard::pressed(uint16_t keyRegister) {
-    if(state == Init || state == Busy) { return; }
-    if(keyCount(keyRegister) != 1) { 
+void MPR121Keyboard::pressed(uint16_t keyRegister)
+{
+    if (state == Init || state == Busy) {
+        return;
+    }
+    if (keyCount(keyRegister) != 1) {
         LOG_DEBUG("Multipress");
-        return; 
+        return;
     } else {
         LOG_DEBUG("Pressed");
     }
@@ -355,9 +353,14 @@ void MPR121Keyboard::pressed(uint16_t keyRegister) {
     return;
 }
 
-void MPR121Keyboard::held(uint16_t keyRegister) {
-    if(state == Init || state == Busy) { return; }
-    if(keyCount(keyRegister) != 1) { return; }
+void MPR121Keyboard::held(uint16_t keyRegister)
+{
+    if (state == Init || state == Busy) {
+        return;
+    }
+    if (keyCount(keyRegister) != 1) {
+        return;
+    }
     LOG_DEBUG("Held");
     uint16_t buttonState = keyRegister & _KEY_MASK;
     uint8_t next_key = 0;
@@ -384,21 +387,25 @@ void MPR121Keyboard::held(uint16_t keyRegister) {
     return;
 }
 
-void MPR121Keyboard::released() {
-    if(state != Held) { return; }
+void MPR121Keyboard::released()
+{
+    if (state != Held) {
+        return;
+    }
     // would clear longpress callback... later.
-    if(last_key < 0 || last_key > _NUM_KEYS) { // reset to idle if last_key out of bounds
+    if (last_key < 0 || last_key > _NUM_KEYS) { // reset to idle if last_key out of bounds
         last_key = -1;
         state = Idle;
         return;
     }
     LOG_DEBUG("Released");
-    if(char_idx > 0 && TapMod[last_key] > 1) {
+    if (char_idx > 0 && TapMod[last_key] > 1) {
         queueEvent(MPR121_BSP);
         LOG_DEBUG("Multi Press, Backspace");
     }
     queueEvent(TapMap[last_key][(char_idx % TapMod[last_key])]);
-    LOG_DEBUG("Key Press: %i Index:%i if %i Map: %i", last_key, char_idx, TapMod[last_key], TapMap[last_key][(char_idx % TapMod[last_key])]);
+    LOG_DEBUG("Key Press: %i Index:%i if %i Map: %i", last_key, char_idx, TapMod[last_key],
+              TapMap[last_key][(char_idx % TapMod[last_key])]);
 }
 
 uint8_t MPR121Keyboard::readRegister8(uint8_t reg) const

@@ -39,7 +39,7 @@ void CardKbI2cImpl::init()
                 // assign an arbitrary value to distinguish from other models
                 kb_model = 0x11;
                 break;
-             case ScanI2C::DeviceType::MPR121KB:
+            case ScanI2C::DeviceType::MPR121KB:
                 // assign an arbitrary value to distinguish from other models
                 kb_model = 0x37;
                 break;

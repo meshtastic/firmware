@@ -1,7 +1,7 @@
 // Based on the BBQ10 Keyboard
 
-#include "configuration.h"
 #include "concurrency/NotifiedWorkerThread.h"
+#include "configuration.h"
 #include <Wire.h>
 #include <main.h>
 
@@ -10,7 +10,7 @@ class MPR121Keyboard
   public:
     typedef uint8_t (*i2c_com_fptr_t)(uint8_t dev_addr, uint8_t reg_addr, uint8_t *data, uint8_t len);
 
-    enum MPR121States { Init=0, Idle, Held, HeldLong, Busy };
+    enum MPR121States { Init = 0, Idle, Held, HeldLong, Busy };
 
     MPR121States state;
 
