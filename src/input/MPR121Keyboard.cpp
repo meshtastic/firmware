@@ -64,7 +64,7 @@
 
 uint8_t TapMod[12] = {1, 2, 1, 13, 7, 7, 7, 7, 7, 9, 7, 9}; // Num chars per key, Modulus for rotating through characters
 
-unsigned char TapMap[12][13] = {{MPR121_BSP},
+unsigned char MPR121_TapMap[12][13] = {{MPR121_BSP},
                                 {'0', ' '},
                                 {MPR121_SELECT},
                                 {'1', '.', ',', '?', '!', ':', ';', '-', '_', '\\', '/', '(', ')'},
@@ -77,18 +77,18 @@ unsigned char TapMap[12][13] = {{MPR121_BSP},
                                 {'8', 't', 'u', 'v', 'T', 'U', 'V'},
                                 {'9', 'w', 'x', 'y', 'z', 'W', 'X', 'Y', 'Z'}};
 
-unsigned char LongMap[12] = {MPR121_ESC,  ' ',         MPR121_NONE,  MPR121_NONE, MPR121_UP,   MPR121_NONE,
+unsigned char MPR121_LongPressMap[12] = {MPR121_ESC,  ' ',         MPR121_NONE,  MPR121_NONE, MPR121_UP,   MPR121_NONE,
                              MPR121_LEFT, MPR121_NONE, MPR121_RIGHT, MPR121_NONE, MPR121_DOWN, MPR121_NONE};
 
 // Translation map from left to right, top to bottom layout to a more convenient layout to manufacture, matching the
 // https://www.amazon.com.au/Capacitive-Sensitive-Sensitivity-Replacement-Traditional/dp/B0CTJD5KW9/ref=pd_ci_mcx_mh_mcx_views_0_title?th=1
-/*uint8_t KeyMap[12] = {
+/*uint8_t MPR121_KeyMap[12] = {
     9, 6, 3, 0,
     10, 7, 4, 1,
     11, 8, 5, 2
 };*/
 // Rotated Layout
-uint8_t KeyMap[12] = {2, 5, 8, 11, 1, 4, 7, 10, 0, 3, 6, 9};
+uint8_t MPR121_KeyMap[12] = {2, 5, 8, 11, 1, 4, 7, 10, 0, 3, 6, 9};
 
 MPR121Keyboard::MPR121Keyboard() : m_wire(nullptr), m_addr(0), readCallback(nullptr), writeCallback(nullptr)
 {
@@ -332,7 +332,7 @@ void MPR121Keyboard::pressed(uint16_t keyRegister)
             next_pin = i;
         }
     }
-    uint8_t next_key = KeyMap[next_pin];
+    uint8_t next_key = MPR121_KeyMap[next_pin];
     LOG_DEBUG("MPR121 Pin: %i Key: %i", next_pin, next_key);
     uint32_t now = millis();
     int32_t tap_interval = now - last_tap;
@@ -366,7 +366,7 @@ void MPR121Keyboard::held(uint16_t keyRegister)
     uint8_t next_key = 0;
     for (uint8_t i = 0; i < 12; ++i) {
         if (buttonState & (1 << i)) {
-            next_key = KeyMap[i];
+            next_key = MPR121_KeyMap[i];
         }
     }
     uint32_t now = millis();
@@ -380,9 +380,9 @@ void MPR121Keyboard::held(uint16_t keyRegister)
     if (held_interval > LONG_PRESS_THRESHOLD) {
         // Set state to heldlong, send a longpress, and reset the timer...
         state = HeldLong; // heldlong will allow this function to still fire, but prevent a "release"
-        queueEvent(LongMap[last_key]);
+        queueEvent(MPR121_LongPressMap[last_key]);
         last_tap = now;
-        LOG_DEBUG("Long Press Key: %i Map: %i", last_key, LongMap[last_key]);
+        LOG_DEBUG("Long Press Key: %i Map: %i", last_key, MPR121_LongPressMap[last_key]);
     }
     return;
 }
@@ -403,9 +403,9 @@ void MPR121Keyboard::released()
         queueEvent(MPR121_BSP);
         LOG_DEBUG("Multi Press, Backspace");
     }
-    queueEvent(TapMap[last_key][(char_idx % TapMod[last_key])]);
+    queueEvent(MPR121_TapMap[last_key][(char_idx % TapMod[last_key])]);
     LOG_DEBUG("Key Press: %i Index:%i if %i Map: %i", last_key, char_idx, TapMod[last_key],
-              TapMap[last_key][(char_idx % TapMod[last_key])]);
+              MPR121_TapMap[last_key][(char_idx % TapMod[last_key])]);
 }
 
 uint8_t MPR121Keyboard::readRegister8(uint8_t reg) const
