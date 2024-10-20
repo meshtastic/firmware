@@ -411,14 +411,14 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 #endif
                 
             case MLX90614_ADDR_DEF:
-                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x5c), 1);
-                if (registerValue == 0x10) {
-                    type = MPR121KB;
-                    LOG_INFO("MPR121KB keyboard found");
-                    break;
-                } else {
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x5e), 1);
+                if (registerValue == 0x5a) {
                     type = MLX90614;
                     LOG_INFO("MLX90614 IR temp sensor found");
+                    break;
+                } else {
+                    type = MPR121KB;
+                    LOG_INFO("MPR121KB keyboard found");
                 }
                 break;
 

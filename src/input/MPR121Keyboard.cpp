@@ -4,12 +4,7 @@
 #include "configuration.h"
 #include <Arduino.h>
 
-#ifdef MPR121_USE_5A
 #define _MPR121_REG_KEY 0x5a
-#endif
-#ifndef MPR121_USE_5A
-#define _MPR121_REG_KEY 0x5b
-#endif
 
 #define _MPR121_REG_TOUCH_STATUS 0x00
 #define _MPR121_REG_ELECTRODE_FILTERED_DATA
