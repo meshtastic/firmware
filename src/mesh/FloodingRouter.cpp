@@ -44,7 +44,7 @@ bool FloodingRouter::isRebroadcaster()
 void FloodingRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Routing *c)
 {
     bool isAckorReply = (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) && (p->decoded.request_id != 0);
-    if (isAckorReply && !isToUs(p) && p->to != NODENUM_BROADCAST) {
+    if (isAckorReply && !isToUs(p) && !isBroadcast(p->to)) {
         // do not flood direct message that is ACKed or replied to
         LOG_DEBUG("Rxd an ACK/reply not for me, cancel rebroadcast.");
         Router::cancelSending(p->to, p->decoded.request_id); // cancel rebroadcast for this DM
