@@ -4,12 +4,7 @@
 #include "configuration.h"
 #include <Arduino.h>
 
-#ifdef MPR121_USE_5A
 #define _MPR121_REG_KEY 0x5a
-#endif
-#ifndef MPR121_USE_5A
-#define _MPR121_REG_KEY 0x5b
-#endif
 
 #define _MPR121_REG_TOUCH_STATUS 0x00
 #define _MPR121_REG_ELECTRODE_FILTERED_DATA
@@ -92,35 +87,12 @@ uint8_t MPR121_KeyMap[12] = {2, 5, 8, 11, 1, 4, 7, 10, 0, 3, 6, 9};
 
 MPR121Keyboard::MPR121Keyboard() : m_wire(nullptr), m_addr(0), readCallback(nullptr), writeCallback(nullptr)
 {
-    LOG_DEBUG("MPR121 @ %02x\n", m_addr);
+    // LOG_DEBUG("MPR121 @ %02x\n", m_addr);
     state = Init;
     last_key = -1;
     last_tap = 0L;
     char_idx = 0;
     queue = "";
-    status_toggle = false;
-    last_toggle = 0L;
-    last_status = false;
-}
-
-bool MPR121Keyboard::status()
-{
-    uint32_t now = millis();
-    switch (state) {
-    case Held:
-        status_toggle = true;
-        break;
-    case Idle:
-        status_toggle = false;
-        break;
-    default:
-        if ((last_toggle + 1000) < now) {
-            status_toggle = !status_toggle;
-            last_toggle = now;
-        }
-        break;
-    }
-    return status_toggle;
 }
 
 void MPR121Keyboard::begin(uint8_t addr, TwoWire *wire)
@@ -276,15 +248,6 @@ void MPR121Keyboard::trigger()
 {
     // Intended to fire in response to an interrupt from the MPR121 or a longpress callback
     // Only functional if not in Init state
-    bool next_status = status();
-    if (last_status != next_status) {
-        if (next_status) {
-            queueEvent(MPR121_FN_ON);
-        } else {
-            queueEvent(MPR121_FN_OFF);
-        };
-    }
-    last_status = next_status;
     if (state != Init) {
         // Read the key register
         uint16_t keyRegister = readRegister16(_MPR121_REG_KEY);
