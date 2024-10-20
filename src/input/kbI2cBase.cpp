@@ -166,10 +166,7 @@ int32_t KbI2cBase::runOnce()
     case 0x37: { // MPR121
         MPRkeyboard.trigger();
         InputEvent e;
-        e.inputEvent = ANYKEY;
-        e.source = this->_originName;
-        e.kbchar = MPRkeyboard.status() & INPUT_BROKER_MSG_FN_SYMBOL_ON | INPUT_BROKER_MSG_FN_SYMBOL_OFF;
-        this->notifyObservers(&e);
+        
         while (MPRkeyboard.hasEvent()) {
             char nextEvent = MPRkeyboard.dequeueEvent();
             e.inputEvent = ANYKEY;
@@ -223,6 +220,7 @@ int32_t KbI2cBase::runOnce()
                     break;
                 }
             if (e.inputEvent != meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE) {
+                LOG_DEBUG("MP121 Notifying: %i Char: %i", e.inputEvent, e.kbchar);
                 this->notifyObservers(&e);
             }
         }

@@ -1,13 +1,40 @@
 // Based on the BBQ10 Keyboard
 
 #include <Arduino.h>
-#include <main.h>
-
 #include "MPR121Keyboard.h"
+#include "configuration.h"
 
-#define _REG_CFG 0x5E // Electrode Configuration Register
-#define _REG_RST 0x80 // Soft Reset Register
-#define _REG_KEY 0x00 // First 0x0FFF (12) bits of register 0 and 1 contain the touch status
+#ifdef MPR121_USE_5A
+#define _MPR121_REG_KEY 0x5a
+#endif
+#ifndef MPR121_USE_5A
+#define _MPR121_REG_KEY 0x5b
+#endif
+
+#define _MPR121_REG_TOUCH_STATUS 0x00
+#define _MPR121_REG_ELECTRODE_FILTERED_DATA
+#define _MPR121_REG_BASELINE_VALUE 0x1E
+
+// Baseline filters
+#define _MPR121_REG_MAX_HALF_DELTA_RISING 0x2B
+#define _MPR121_REG_NOISE_HALF_DELTA_RISING 0x2C
+#define _MPR121_REG_NOISE_COUNT_LIMIT_RISING 0x2D
+#define _MPR121_REG_FILTER_DELAY_COUNT_RISING 0x2E
+#define _MPR121_REG_MAX_HALF_DELTA_FALLING 0x2F
+#define _MPR121_REG_NOISE_HALF_DELTA_FALLING 0x30
+#define _MPR121_REG_NOISE_COUNT_LIMIT_FALLING 0x31
+#define _MPR121_REG_FILTER_DELAY_COUNT_FALLING 0x32
+#define _MPR121_REG_NOISE_HALF_DELTA_TOUCHED 0x33
+#define _MPR121_REG_NOISE_COUNT_LIMIT_TOUCHED 0x34
+#define _MPR121_REG_FILTER_DELAY_COUNT_TOUCHED 0x35
+
+#define _MPR121_REG_TOUCH_THRESHOLD 0x41 // First input, +2 for subsequent 
+#define _MPR121_REG_RELEASE_THRESHOLD 0x42 // First input, +2 for subsequent 
+#define _MPR121_REG_DEBOUNCE 0x5B
+#define _MPR121_REG_CONFIG1 0x5C
+#define _MPR121_REG_CONFIG2 0x5D
+#define _MPR121_REG_ELECTRODE_CONFIG 0x5E
+#define _MPR121_REG_SOFT_RESET 0x80
 
 #define _KEY_MASK 0x0FFF // Key mask for the first 12 bits
 #define _NUM_KEYS 12 
@@ -28,6 +55,9 @@
 #define MPR121_ESC 0x1b
 #define MPR121_BSP 0x08
 #define MPR121_SELECT 0x0d
+
+#define MPR121_FN_ON 0xf1
+#define MPR121_FN_OFF 0xf2
 
 #define LONG_PRESS_THRESHOLD 2000
 #define MULTI_TAP_THRESHOLD 2000
@@ -83,6 +113,7 @@ MPR121Keyboard::MPR121Keyboard() : m_wire(nullptr), m_addr(0), readCallback(null
 
 bool MPR121Keyboard::status()
 {
+    uint32_t now = millis();
     switch (state) {
         case Held:
             status_toggle = true;
@@ -91,7 +122,11 @@ bool MPR121Keyboard::status()
             status_toggle = false;
             break;
         default:
-            status_toggle = !status_toggle;
+                if((last_toggle + 1000) < now)
+                {
+                    status_toggle = !status_toggle;
+                    last_toggle = now;
+                }
             break;
     }
     return status_toggle;
@@ -126,19 +161,65 @@ bool MPR121Keyboard::ready()
 
 void MPR121Keyboard::reset()
 {
-    LOG_DEBUG("MPR121 Resetting");
-    if (m_wire) {
-        m_wire->beginTransmission(m_addr);
-        m_wire->write(_REG_RST);
-        m_wire->endTransmission();
+    bool has_reset = false;
+    while(!has_reset) {
+        LOG_DEBUG("MPR121 Resetting...");
+        // Trigger a MPR121 Soft Reset, sending 0x63 to 0x80
+        writeRegister(_MPR121_REG_SOFT_RESET, 0x63);
+        delay(1000);
+        // Reset Electrode Configuration to 0x00, Stop Mode
+        writeRegister(_MPR121_REG_ELECTRODE_CONFIG, 0x00);
+        delay(100);
+        // Read MPR121_Config2 0x5d to check if it has been reset to 0x24
+        has_reset = readRegister8(_MPR121_REG_CONFIG2) == 0x24;
+        delay(100);
     }
-    if (writeCallback) {
-        uint8_t data = 0;
-        writeCallback(m_addr, _REG_RST, &data, 0);
+    LOG_DEBUG("MPR121 Configuring");
+    // Set touch release thresholds
+    for(uint8_t i = 0; i < 12; i++) {
+        // Set touch threshold
+        writeRegister(_MPR121_REG_TOUCH_THRESHOLD + (i * 2), 15);
+        delay(20);
+        // Set release threshold
+        writeRegister(_MPR121_REG_RELEASE_THRESHOLD + (i * 2), 7);
+        delay(20);
     }
+    // Configure filtering and baseline registers
+    writeRegister(_MPR121_REG_MAX_HALF_DELTA_RISING, 0x01);
+    delay(20);
+    writeRegister(_MPR121_REG_MAX_HALF_DELTA_FALLING, 0x01);
+    delay(20);
+    writeRegister(_MPR121_REG_NOISE_HALF_DELTA_RISING, 0x01);
+    delay(20);
+    writeRegister(_MPR121_REG_NOISE_HALF_DELTA_FALLING, 0x05);
+    delay(20);
+    writeRegister(_MPR121_REG_NOISE_HALF_DELTA_TOUCHED, 0x00);
+    delay(20);
+    writeRegister(_MPR121_REG_NOISE_COUNT_LIMIT_RISING, 0x0e);
+    delay(20);
+    writeRegister(_MPR121_REG_NOISE_COUNT_LIMIT_FALLING, 0x01);
+    delay(20);
+    writeRegister(_MPR121_REG_NOISE_COUNT_LIMIT_TOUCHED, 0x00);
+    delay(20);
+    writeRegister(_MPR121_REG_FILTER_DELAY_COUNT_RISING, 0x00);
+    delay(20);
+    writeRegister(_MPR121_REG_FILTER_DELAY_COUNT_FALLING, 0x00);
+    delay(20);
+    writeRegister(_MPR121_REG_FILTER_DELAY_COUNT_TOUCHED, 0x00);
+    delay(20);
+    // Set Debounce to 0x02
+    writeRegister(_MPR121_REG_DEBOUNCE, 0x00);
+    delay(20);
+    // Set Filter1 itterations and discharge current 6x and 16uA respectively (0x10)
+    writeRegister(_MPR121_REG_CONFIG1, 0x10);
+    delay(20);
+    // Set CDT to 0.5us, Filter2 itterations to 4x, and Sample interval = 0 (0x20)
+    writeRegister(_MPR121_REG_CONFIG2, 0x20);
+    delay(20);
+    // Enter run mode by Seting partial filter calibration tracking, disable proximity detection, enable 12 channels
+    writeRegister(_MPR121_REG_ELECTRODE_CONFIG, ECR_CALIBRATION_TRACK_FROM_PARTIAL_FILTER | ECR_PROXIMITY_DETECTION_OFF | ECR_TOUCH_DETECTION_12CH);
     delay(100);
-    writeRegister(_REG_CFG, ECR_CALIBRATION_TRACK_FROM_PARTIAL_FILTER | ECR_PROXIMITY_DETECTION_OFF | ECR_TOUCH_DETECTION_12CH);
-    delay(100);
+    LOG_DEBUG("MPR121 Running");
     state = Idle;
 }
 
@@ -155,13 +236,13 @@ void MPR121Keyboard::detachInterrupt(uint8_t pin) const
 
 uint8_t MPR121Keyboard::status() const
 {
-    return readRegister16(_REG_KEY);
+    return readRegister16(_MPR121_REG_KEY);
 }
 
 uint8_t MPR121Keyboard::keyCount() const
 {
     // Read the key register
-    uint16_t keyRegister = readRegister16(_REG_KEY);
+    uint16_t keyRegister = readRegister16(_MPR121_REG_KEY);
     return keyCount(keyRegister);
 }
 
@@ -203,9 +284,17 @@ void MPR121Keyboard::trigger()
 {
     // Intended to fire in response to an interrupt from the MPR121 or a longpress callback
     // Only functional if not in Init state
+    bool next_status = status();
+    if(last_status != next_status) {
+        if(next_status) {
+            queueEvent(MPR121_FN_ON);
+        } else {
+            queueEvent(MPR121_FN_OFF);
+        };
+    }
     if (state != Init) {
         // Read the key register
-        uint16_t keyRegister = readRegister16(_REG_KEY);
+        uint16_t keyRegister = readRegister16(_MPR121_REG_KEY);
         uint8_t keysPressed = keyCount(keyRegister);
         if(keysPressed == 0)
         {
@@ -236,14 +325,19 @@ void MPR121Keyboard::trigger()
 
 void MPR121Keyboard::pressed(uint16_t keyRegister) {
     if(state == Init || state == Busy) { return; }
-    if(keyCount(keyRegister) != 1) { return; }
+    if(keyCount(keyRegister) != 1) { 
+        LOG_DEBUG("Multipress");
+        return; 
+    }
     uint16_t buttonState = keyRegister & _KEY_MASK;
-    uint8_t next_key = 0;
+    uint8_t next_pin = 0;
     for (uint8_t i = 0; i < 12; ++i) {
         if (buttonState & (1 << i)) {
-            next_key = KeyMap[i];
+            next_pin = i;
         }
     }
+    uint8_t next_key = KeyMap[next_pin];
+    LOG_DEBUG("MPR121 Pin: %i Key: %i", next_pin, next_key);
     uint32_t now = millis();
     int32_t tap_interval = now - last_tap;
     if (tap_interval < 0) {
@@ -285,6 +379,7 @@ void MPR121Keyboard::held(uint16_t keyRegister) {
         state = HeldLong; // heldlong will allow this function to still fire, but prevent a "release"
         queueEvent(LongMap[last_key]);
         last_tap = now;
+        LOG_DEBUG("Long Press Key: %i Map: %i", last_key, LongMap[last_key]);
     }
     return;
 }
@@ -299,8 +394,10 @@ void MPR121Keyboard::released() {
     }
     if(char_idx > 0 && TapMod[last_key] > 1) {
         queueEvent(MPR121_BSP);
+        LOG_DEBUG("Multi Press, Backspace");
     }
     queueEvent(TapMap[last_key][(char_idx % TapMod[last_key])]);
+    LOG_DEBUG("Key Press: %i Index:%i if %i Map: %i", last_key, char_idx, TapMod[last_key], TapMap[last_key][(char_idx % TapMod[last_key])]);
 }
 
 uint8_t MPR121Keyboard::readRegister8(uint8_t reg) const

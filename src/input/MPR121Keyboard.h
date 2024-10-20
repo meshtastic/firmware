@@ -3,6 +3,7 @@
 #include "configuration.h"
 #include "concurrency/NotifiedWorkerThread.h"
 #include <Wire.h>
+#include <main.h>
 
 class MPR121Keyboard
 {
@@ -17,6 +18,8 @@ class MPR121Keyboard
     uint32_t last_tap;
     uint8_t char_idx;
     bool status_toggle;
+    uint32_t last_toggle;
+    bool last_status;
 
     String queue;
 
