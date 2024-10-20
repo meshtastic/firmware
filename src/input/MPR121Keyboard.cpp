@@ -286,6 +286,7 @@ void MPR121Keyboard::trigger()
             queueEvent(MPR121_FN_OFF);
         };
     }
+    last_status = next_status;
     if (state != Init) {
         // Read the key register
         uint16_t keyRegister = readRegister16(_MPR121_REG_KEY);
@@ -320,6 +321,8 @@ void MPR121Keyboard::pressed(uint16_t keyRegister) {
     if(keyCount(keyRegister) != 1) { 
         LOG_DEBUG("Multipress");
         return; 
+    } else {
+        LOG_DEBUG("Pressed");
     }
     uint16_t buttonState = keyRegister & _KEY_MASK;
     uint8_t next_pin = 0;
@@ -345,12 +348,14 @@ void MPR121Keyboard::pressed(uint16_t keyRegister) {
     }
     last_key = next_key;
     last_tap = now;
+    state = Held;
     return;
 }
 
 void MPR121Keyboard::held(uint16_t keyRegister) {
     if(state == Init || state == Busy) { return; }
     if(keyCount(keyRegister) != 1) { return; }
+    LOG_DEBUG("Held");
     uint16_t buttonState = keyRegister & _KEY_MASK;
     uint8_t next_key = 0;
     for (uint8_t i = 0; i < 12; ++i) {
@@ -384,6 +389,7 @@ void MPR121Keyboard::released() {
         state = Idle;
         return;
     }
+    LOG_DEBUG("Released");
     if(char_idx > 0 && TapMod[last_key] > 1) {
         queueEvent(MPR121_BSP);
         LOG_DEBUG("Multi Press, Backspace");
