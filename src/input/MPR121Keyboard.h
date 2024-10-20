@@ -33,8 +33,6 @@ class MPR121Keyboard
 
     void reset(void);
 
-    bool ready();
-
     void attachInterrupt(uint8_t pin, void (*func)(void)) const;
     void detachInterrupt(uint8_t pin) const;
 

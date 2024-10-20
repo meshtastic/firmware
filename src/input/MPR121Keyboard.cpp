@@ -108,7 +108,6 @@ MPR121Keyboard::MPR121Keyboard() : m_wire(nullptr), m_addr(0), readCallback(null
     last_tap = 0L;
     char_idx = 0;
     queue = "";
-
 }
 
 bool MPR121Keyboard::status()
@@ -149,12 +148,6 @@ void MPR121Keyboard::begin(i2c_com_fptr_t r, i2c_com_fptr_t w, uint8_t addr)
     writeCallback = w;
     readCallback = r;
     reset();
-}
-
-bool MPR121Keyboard::ready()
-{
-    // Read MPR121_Config2 0x5d to check if it has been reset to 0x24
-    return readRegister8(_MPR121_REG_CONFIG2) == 0x24;
 }
 
 void MPR121Keyboard::reset()
@@ -318,9 +311,7 @@ void MPR121Keyboard::trigger()
             return;
         }
     } else {
-        if(!ready()) {
-            reset();
-        }
+        reset();
     }
 }
 
