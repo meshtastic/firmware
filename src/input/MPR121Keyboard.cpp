@@ -108,6 +108,9 @@ MPR121Keyboard::MPR121Keyboard() : m_wire(nullptr), m_addr(0), readCallback(null
     last_tap = 0L;
     char_idx = 0;
     queue = "";
+    status_toggle = false;
+    last_toggle = 0L;
+    last_status = false;
 }
 
 bool MPR121Keyboard::status()
