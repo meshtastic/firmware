@@ -10,11 +10,7 @@ RoutingModule *routingModule;
 
 bool RoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Routing *r)
 {
-    printPacket("Routing sniffing", &mp);
-    router->sniffReceived(&mp, r);
-
-    bool maybePKI =
-        mp.which_payload_variant == meshtastic_MeshPacket_encrypted_tag && mp.channel == 0 && mp.to != NODENUM_BROADCAST;
+    bool maybePKI = mp.which_payload_variant == meshtastic_MeshPacket_encrypted_tag && mp.channel == 0 && !isBroadcast(mp.to);
     // Beginning of logic whether to drop the packet based on Rebroadcast mode
     if (mp.which_payload_variant == meshtastic_MeshPacket_encrypted_tag &&
         (config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY ||
@@ -26,9 +22,12 @@ bool RoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mesh
             return false;
     }
 
+    printPacket("Routing sniffing", &mp);
+    router->sniffReceived(&mp, r);
+
     // FIXME - move this to a non promsicious PhoneAPI module?
     // Note: we are careful not to send back packets that started with the phone back to the phone
-    if ((mp.to == NODENUM_BROADCAST || isToUs(&mp)) && (mp.from != 0)) {
+    if ((isBroadcast(mp.to) || isToUs(&mp)) && (mp.from != 0)) {
         printPacket("Delivering rx packet", &mp);
         service->handleFromRadio(&mp);
     }
