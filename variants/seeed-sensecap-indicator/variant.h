@@ -8,6 +8,9 @@
 // #define ADC_CHANNEL ADC1_GPIO27_CHANNEL
 // #define ADC_MULTIPLIER 2
 
+// Portexpander
+#define HAS_TCA9535
+
 // ST7701 TFT LCD
 #define ST7701_CS (4 | IO_EXPANDER)
 #define ST7701_RS -1  // DC
