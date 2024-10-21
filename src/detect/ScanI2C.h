@@ -61,7 +61,8 @@ class ScanI2C
         STK8BAXX,
         ICM20948,
         MAX30102,
-        TPS65233
+        TPS65233,
+        MPR121KB
     } DeviceType;
 
     // typedef uint8_t DeviceAddress;
