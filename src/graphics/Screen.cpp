@@ -904,6 +904,24 @@ bool deltaToTimestamp(uint32_t secondsAgo, uint8_t *hours, uint8_t *minutes, int
     return validCached;
 }
 
+static void drawLoraMessage(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y){
+    display->drawString(x + 0, y + 0, myRegion->name);
+    display->setFont(FONT_MEDIUM);
+    display->drawString(x + 10, y + 30,"channel: "+String(DataRegion.lora_channel_num+1));
+    display->drawString(x + 10, y + 60,"bw: "+ String(DataRegion.lora_bw));
+    display->drawString(x + SCREEN_WIDTH/2+10, y+30,"freq: "+String(DataRegion.lora_freq));
+    display->drawString(x + SCREEN_WIDTH/2+10, y+60,"power: "+ String(DataRegion.lora_power_output));
+    display->drawString(x + 10, y + 90,"sf: "+String(DataRegion.lora_sf));
+     display->drawString(x + SCREEN_WIDTH/2+10, y+90,"cr: 4/:"+ String(DataRegion.lora_cr));
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    const char *title = "LoRa";
+    display->drawString(x + SCREEN_WIDTH/2-20, y +0, title);
+    display->setFont(FONT_SMALL);
+    display->setTextAlignment(TEXT_ALIGN_RIGHT);
+    display->drawString(x + SCREEN_WIDTH, y,String(DataRegion.lora_channel_name));
+    display->setTextAlignment(TEXT_ALIGN_LEFT); // Restore left align, just to be kind to any other unsuspecting code
+}
+
 /// Draw the last text message we received
 static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
