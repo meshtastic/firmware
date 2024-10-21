@@ -1,12 +1,16 @@
 [Unit]
 Description=Meshtastic Native Daemon
 After=network-online.target
+StartLimitInterval=200
+StartLimitBurst=5
 
 [Service]
 User=root
 Group=root
 Type=simple
 ExecStart=/usr/sbin/meshtasticd
+Restart=always
+RestartSec=3
 
 [Install]
 WantedBy=multi-user.target
