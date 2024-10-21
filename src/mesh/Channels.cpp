@@ -117,7 +117,6 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
         static const uint8_t defaultpsk0[] = USERPREFS_CHANNEL_0_PSK;
         memcpy(channelSettings.psk.bytes, defaultpsk0, sizeof(defaultpsk0));
         channelSettings.psk.size = sizeof(defaultpsk0);
-
 #endif
 #ifdef USERPREFS_CHANNEL_0_NAME
         strcpy(channelSettings.name, USERPREFS_CHANNEL_0_NAME);
@@ -125,13 +124,18 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
 #ifdef USERPREFS_CHANNEL_0_PRECISION
         channelSettings.module_settings.position_precision = USERPREFS_CHANNEL_0_PRECISION;
 #endif
+#ifdef USERPREFS_CHANNEL_0_UPLINK_ENABLED
+        channelSettings.uplink_enabled = USERPREFS_CHANNEL_0_UPLINK_ENABLED;
+#endif
+#ifdef USERPREFS_CHANNEL_0_DOWNLINK_ENABLED
+        channelSettings.downlink_enabled = USERPREFS_CHANNEL_0_DOWNLINK_ENABLED;
+#endif
         break;
     case 1:
 #ifdef USERPREFS_CHANNEL_1_PSK
         static const uint8_t defaultpsk1[] = USERPREFS_CHANNEL_1_PSK;
         memcpy(channelSettings.psk.bytes, defaultpsk1, sizeof(defaultpsk1));
         channelSettings.psk.size = sizeof(defaultpsk1);
-
 #endif
 #ifdef USERPREFS_CHANNEL_1_NAME
         strcpy(channelSettings.name, USERPREFS_CHANNEL_1_NAME);
@@ -139,19 +143,30 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
 #ifdef USERPREFS_CHANNEL_1_PRECISION
         channelSettings.module_settings.position_precision = USERPREFS_CHANNEL_1_PRECISION;
 #endif
+#ifdef USERPREFS_CHANNEL_1_UPLINK_ENABLED
+        channelSettings.uplink_enabled = USERPREFS_CHANNEL_1_UPLINK_ENABLED;
+#endif
+#ifdef USERPREFS_CHANNEL_1_DOWNLINK_ENABLED
+        channelSettings.downlink_enabled = USERPREFS_CHANNEL_1_DOWNLINK_ENABLED;
+#endif
         break;
     case 2:
 #ifdef USERPREFS_CHANNEL_2_PSK
         static const uint8_t defaultpsk2[] = USERPREFS_CHANNEL_2_PSK;
         memcpy(channelSettings.psk.bytes, defaultpsk2, sizeof(defaultpsk2));
         channelSettings.psk.size = sizeof(defaultpsk2);
-
 #endif
 #ifdef USERPREFS_CHANNEL_2_NAME
         strcpy(channelSettings.name, USERPREFS_CHANNEL_2_NAME);
 #endif
 #ifdef USERPREFS_CHANNEL_2_PRECISION
         channelSettings.module_settings.position_precision = USERPREFS_CHANNEL_2_PRECISION;
+#endif
+#ifdef USERPREFS_CHANNEL_2_UPLINK_ENABLED
+        channelSettings.uplink_enabled = USERPREFS_CHANNEL_2_UPLINK_ENABLED;
+#endif
+#ifdef USERPREFS_CHANNEL_2_DOWNLINK_ENABLED
+        channelSettings.downlink_enabled = USERPREFS_CHANNEL_2_DOWNLINK_ENABLED;
 #endif
         break;
     default:

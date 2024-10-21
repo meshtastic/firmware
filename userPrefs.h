@@ -26,6 +26,8 @@
 */
 // #define USERPREFS_CHANNEL_0_NAME "DEFCONnect"
 // #define USERPREFS_CHANNEL_0_PRECISION 14
+// #define USERPREFS_CHANNEL_0_UPLINK_ENABLED true
+// #define USERPREFS_CHANNEL_0_DOWNLINK_ENABLED true
 /*
 #define USERPREFS_CHANNEL_1_PSK \
     {                                                                                                                            \
@@ -35,6 +37,8 @@
 */
 // #define USERPREFS_CHANNEL_1_NAME "REPLACEME"
 // #define USERPREFS_CHANNEL_1_PRECISION 14
+// #define USERPREFS_CHANNEL_1_UPLINK_ENABLED true
+// #define USERPREFS_CHANNEL_1_DOWNLINK_ENABLED true
 /*
 #define USERPREFS_CHANNEL_2_PSK \
     {                                                                                                                            \
@@ -44,6 +48,8 @@
 */
 // #define USERPREFS_CHANNEL_2_NAME "REPLACEME"
 // #define USERPREFS_CHANNEL_2_PRECISION 14
+// #define USERPREFS_CHANNEL_2_UPLINK_ENABLED true
+// #define USERPREFS_CHANNEL_2_DOWNLINK_ENABLED true
 
 // #define USERPREFS_CONFIG_OWNER_LONG_NAME "My Long Name"
 // #define USERPREFS_CONFIG_OWNER_SHORT_NAME "MLN"
