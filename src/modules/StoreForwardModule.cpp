@@ -32,7 +32,7 @@ StoreForwardModule *storeForwardModule;
 
 int32_t StoreForwardModule::runOnce()
 {
-#if defined(ARCH_ESP32) || defined(ARCH_PORTDUINO)
+#if defined(ARCH_ESP32) || defined(ARCH_PORTDUINO) || defined(HAS_SDCARD)
     if (moduleConfig.store_forward.enabled && is_server) {
         // Send out the message queue.
         if (this->busy) {
@@ -89,6 +89,27 @@ void StoreForwardModule::populatePSRAM()
     LOG_DEBUG("After PSRAM init: heap %d/%d PSRAM %d/%d", memGet.getFreeHeap(), memGet.getHeapSize(), memGet.getFreePsram(),
               memGet.getPsramSize());
     LOG_DEBUG("numberOfPackets for packetHistory - %u", numberOfPackets);
+    this->storageType = StorageType::PSRAM;
+}
+
+/**
+ * if we have an SDCARD, format it for store&forward use
+ */
+void StoreForwardModule::populateSDCard()
+{
+#if defined(HAS_SDCARD)
+    if (SD.cardType() != CARD_NONE) {
+        if (!SD.exists("/storeforward")) {
+            LOG_INFO("Creating StoreForward directory");
+            SD.mkdir("/storeforward");
+        }
+        this->storageType = StorageType::SDCARD;
+        uint32_t numberOfPackets = (this->records ? this->records : (((SD.totalBytes() / 3) * 2) / sizeof(PacketHistoryStruct)));
+        // only allocate space for one temp copy
+        this->packetHistory = (PacketHistoryStruct *)malloc(sizeof(PacketHistoryStruct));
+        LOG_DEBUG("numberOfPackets for packetHistory - %u", numberOfPackets);
+    }
+#endif
 }
 
 /**
@@ -135,11 +156,26 @@ uint32_t StoreForwardModule::getNumAvailablePackets(NodeNum dest, uint32_t last_
         lastRequest.emplace(dest, 0);
     }
     for (uint32_t i = lastRequest[dest]; i < this->packetHistoryTotalCount; i++) {
-        if (this->packetHistory[i].time && (this->packetHistory[i].time > last_time)) {
-            // Client is only interested in packets not from itself and only in broadcast packets or packets towards it.
-            if (this->packetHistory[i].from != dest &&
-                (this->packetHistory[i].to == NODENUM_BROADCAST || this->packetHistory[i].to == dest)) {
-                count++;
+        if (this->storageType == StorageType::PSRAM) {
+            if (this->packetHistory[i].time && (this->packetHistory[i].time > last_time)) {
+                // Client is only interested in packets not from itself and only in broadcast packets or packets towards it.
+                if (this->packetHistory[i].from != dest &&
+                    (this->packetHistory[i].to == NODENUM_BROADCAST || this->packetHistory[i].to == dest)) {
+                    count++;
+                }
+            }
+        } else {
+            auto handler = SD.open("/storeforward/" + String(i), FILE_READ);
+            if (handler) {
+                handler.read((uint8_t *)&this->packetHistory[0], sizeof(PacketHistoryStruct));
+                handler.close();
+                if (this->packetHistory[0].time && (this->packetHistory[0].time > last_time)) {
+                    // Client is only interested in packets not from itself and only in broadcast packets or packets towards it.
+                    if (this->packetHistory[0].from != dest &&
+                        (this->packetHistory[0].to == NODENUM_BROADCAST || this->packetHistory[0].to == dest)) {
+                        count++;
+                    }
+                }
             }
         }
     }
@@ -187,19 +223,33 @@ void StoreForwardModule::historyAdd(const meshtastic_MeshPacket &mp)
     const auto &p = mp.decoded;
 
     if (this->packetHistoryTotalCount == this->records) {
-        LOG_WARN("S&F - PSRAM Full. Starting overwrite.");
+        LOG_WARN("S&F - Storage Full. Starting overwrite.");
         this->packetHistoryTotalCount = 0;
         for (auto &i : lastRequest) {
             i.second = 0; // Clear the last request index for each client device
         }
     }
 
-    this->packetHistory[this->packetHistoryTotalCount].time = getTime();
-    this->packetHistory[this->packetHistoryTotalCount].to = mp.to;
-    this->packetHistory[this->packetHistoryTotalCount].channel = mp.channel;
-    this->packetHistory[this->packetHistoryTotalCount].from = getFrom(&mp);
-    this->packetHistory[this->packetHistoryTotalCount].payload_size = p.payload.size;
-    memcpy(this->packetHistory[this->packetHistoryTotalCount].payload, p.payload.bytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
+    if (this->storageType == StorageType::PSRAM) {
+        this->packetHistory[this->packetHistoryTotalCount].time = getTime();
+        this->packetHistory[this->packetHistoryTotalCount].to = mp.to;
+        this->packetHistory[this->packetHistoryTotalCount].channel = mp.channel;
+        this->packetHistory[this->packetHistoryTotalCount].from = getFrom(&mp);
+        this->packetHistory[this->packetHistoryTotalCount].payload_size = p.payload.size;
+        memcpy(this->packetHistory[this->packetHistoryTotalCount].payload, p.payload.bytes,
+               meshtastic_Constants_DATA_PAYLOAD_LEN);
+    } else {
+        // Save to SDCARD
+        this->packetHistory[0].time = getTime();
+        this->packetHistory[0].to = mp.to;
+        this->packetHistory[0].channel = mp.channel;
+        this->packetHistory[0].from = getFrom(&mp);
+        this->packetHistory[0].payload_size = p.payload.size;
+        memcpy(this->packetHistory[0].payload, p.payload.bytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
+        auto handler = SD.open("/storeforward/" + String(this->packetHistoryTotalCount), FILE_WRITE);
+        handler.write((uint8_t *)&this->packetHistory, sizeof(PacketHistoryStruct));
+        handler.close();
+    }
 
     this->packetHistoryTotalCount++;
 }
@@ -233,46 +283,93 @@ bool StoreForwardModule::sendPayload(NodeNum dest, uint32_t last_time)
 meshtastic_MeshPacket *StoreForwardModule::preparePayload(NodeNum dest, uint32_t last_time, bool local)
 {
     for (uint32_t i = lastRequest[dest]; i < this->packetHistoryTotalCount; i++) {
-        if (this->packetHistory[i].time && (this->packetHistory[i].time > last_time)) {
-            /*  Copy the messages that were received by the server in the last msAgo
-                to the packetHistoryTXQueue structure.
-                Client not interested in packets from itself and only in broadcast packets or packets towards it. */
-            if (this->packetHistory[i].from != dest &&
-                (this->packetHistory[i].to == NODENUM_BROADCAST || this->packetHistory[i].to == dest)) {
+        if (this->storageType == StorageType::PSRAM) {
 
-                meshtastic_MeshPacket *p = allocDataPacket();
+            if (this->packetHistory[i].time && (this->packetHistory[i].time > last_time)) {
+                /*  Copy the messages that were received by the server in the last msAgo
+                    to the packetHistoryTXQueue structure.
+                    Client not interested in packets from itself and only in broadcast packets or packets towards it. */
+                if (this->packetHistory[i].from != dest &&
+                    (this->packetHistory[i].to == NODENUM_BROADCAST || this->packetHistory[i].to == dest)) {
 
-                p->to = local ? this->packetHistory[i].to : dest; // PhoneAPI can handle original `to`
-                p->from = this->packetHistory[i].from;
-                p->channel = this->packetHistory[i].channel;
-                p->rx_time = this->packetHistory[i].time;
+                    meshtastic_MeshPacket *p = allocDataPacket();
 
-                // Let's assume that if the server received the S&F request that the client is in range.
-                //   TODO: Make this configurable.
-                p->want_ack = false;
+                    p->to = local ? this->packetHistory[i].to : dest; // PhoneAPI can handle original `to`
+                    p->from = this->packetHistory[i].from;
+                    p->channel = this->packetHistory[i].channel;
+                    p->rx_time = this->packetHistory[i].time;
 
-                if (local) { // PhoneAPI gets normal TEXT_MESSAGE_APP
-                    p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
-                    memcpy(p->decoded.payload.bytes, this->packetHistory[i].payload, this->packetHistory[i].payload_size);
-                    p->decoded.payload.size = this->packetHistory[i].payload_size;
-                } else {
-                    meshtastic_StoreAndForward sf = meshtastic_StoreAndForward_init_zero;
-                    sf.which_variant = meshtastic_StoreAndForward_text_tag;
-                    sf.variant.text.size = this->packetHistory[i].payload_size;
-                    memcpy(sf.variant.text.bytes, this->packetHistory[i].payload, this->packetHistory[i].payload_size);
-                    if (this->packetHistory[i].to == NODENUM_BROADCAST) {
-                        sf.rr = meshtastic_StoreAndForward_RequestResponse_ROUTER_TEXT_BROADCAST;
+                    // Let's assume that if the server received the S&F request that the client is in range.
+                    //   TODO: Make this configurable.
+                    p->want_ack = false;
+
+                    if (local) { // PhoneAPI gets normal TEXT_MESSAGE_APP
+                        p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+                        memcpy(p->decoded.payload.bytes, this->packetHistory[i].payload, this->packetHistory[i].payload_size);
+                        p->decoded.payload.size = this->packetHistory[i].payload_size;
                     } else {
-                        sf.rr = meshtastic_StoreAndForward_RequestResponse_ROUTER_TEXT_DIRECT;
+                        meshtastic_StoreAndForward sf = meshtastic_StoreAndForward_init_zero;
+                        sf.which_variant = meshtastic_StoreAndForward_text_tag;
+                        sf.variant.text.size = this->packetHistory[i].payload_size;
+                        memcpy(sf.variant.text.bytes, this->packetHistory[i].payload, this->packetHistory[i].payload_size);
+                        if (this->packetHistory[i].to == NODENUM_BROADCAST) {
+                            sf.rr = meshtastic_StoreAndForward_RequestResponse_ROUTER_TEXT_BROADCAST;
+                        } else {
+                            sf.rr = meshtastic_StoreAndForward_RequestResponse_ROUTER_TEXT_DIRECT;
+                        }
+
+                        p->decoded.payload.size = pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes),
+                                                                     &meshtastic_StoreAndForward_msg, &sf);
                     }
 
-                    p->decoded.payload.size = pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes),
-                                                                 &meshtastic_StoreAndForward_msg, &sf);
+                    lastRequest[dest] = i + 1; // Update the last request index for the client device
+
+                    return p;
                 }
+            }
+        } else {
+            auto handler = SD.open("/storeforward/" + String(i), FILE_READ);
+            if (handler) {
+                handler.read((uint8_t *)&this->packetHistory[0], sizeof(PacketHistoryStruct));
+                handler.close();
+                if (this->packetHistory[0].time && (this->packetHistory[0].time > last_time)) {
+                    if (this->packetHistory[0].from != dest &&
+                        (this->packetHistory[0].to == NODENUM_BROADCAST || this->packetHistory[0].to == dest)) {
 
-                lastRequest[dest] = i + 1; // Update the last request index for the client device
+                        meshtastic_MeshPacket *p = allocDataPacket();
 
-                return p;
+                        p->to = local ? this->packetHistory[0].to : dest; // PhoneAPI can handle original `to`
+                        p->from = this->packetHistory[0].from;
+                        p->channel = this->packetHistory[0].channel;
+                        p->rx_time = this->packetHistory[0].time;
+
+                        // Let's assume that if the server received the S&F request that the client is in range.
+                        p->want_ack = false;
+
+                        if (local) { // PhoneAPI gets normal TEXT_MESSAGE_APP
+                            p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+                            memcpy(p->decoded.payload.bytes, this->packetHistory[0].payload, this->packetHistory[0].payload_size);
+                            p->decoded.payload.size = this->packetHistory[0].payload_size;
+                        } else {
+                            meshtastic_StoreAndForward sf = meshtastic_StoreAndForward_init_zero;
+                            sf.which_variant = meshtastic_StoreAndForward_text_tag;
+                            sf.variant.text.size = this->packetHistory[0].payload_size;
+                            memcpy(sf.variant.text.bytes, this->packetHistory[0].payload, this->packetHistory[0].payload_size);
+                            if (this->packetHistory[0].to == NODENUM_BROADCAST) {
+                                sf.rr = meshtastic_StoreAndForward_RequestResponse_ROUTER_TEXT_BROADCAST;
+                            } else {
+                                sf.rr = meshtastic_StoreAndForward_RequestResponse_ROUTER_TEXT_DIRECT;
+                            }
+
+                            p->decoded.payload.size = pb_encode_to_bytes(
+                                p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_StoreAndForward_msg, &sf);
+                        }
+
+                        lastRequest[dest] = i + 1; // Update the last request index for the client device
+
+                        return p;
+                    }
+                }
             }
         }
     }
@@ -377,7 +474,7 @@ void StoreForwardModule::statsSend(uint32_t to)
  */
 ProcessMessage StoreForwardModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
-#if defined(ARCH_ESP32) || defined(ARCH_PORTDUINO)
+#if defined(ARCH_ESP32) || defined(ARCH_PORTDUINO) || defined(HAS_SDCARD)
     if (moduleConfig.store_forward.enabled) {
 
         if ((mp.decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP) && is_server) {
@@ -556,7 +653,7 @@ StoreForwardModule::StoreForwardModule()
       ProtobufModule("StoreForward", meshtastic_PortNum_STORE_FORWARD_APP, &meshtastic_StoreAndForward_msg)
 {
 
-#if defined(ARCH_ESP32) || defined(ARCH_PORTDUINO)
+#if defined(ARCH_ESP32) || defined(ARCH_PORTDUINO) || defined(HAS_SDCARD)
 
     isPromiscuous = true; // Brown chicken brown cow
 
@@ -601,12 +698,17 @@ StoreForwardModule::StoreForwardModule()
                     this->populatePSRAM();
                     is_server = true;
                 } else {
-                    LOG_INFO(".");
                     LOG_INFO("S&F: not enough PSRAM free, disabling.");
                 }
             } else {
                 LOG_INFO("S&F: device doesn't have PSRAM, disabling.");
             }
+#ifdef HAS_SDCARD
+            // If we have an SDCARD, format it for store&forward use
+            this->populateSDCard();
+            LOG_INFO("S&F: SDCARD initialized");
+            is_server = true;
+#endif
 
             // Client
         } else {
