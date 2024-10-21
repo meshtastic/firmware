@@ -53,6 +53,17 @@ extern Adafruit_DRV2605 drv;
 extern AudioThread *audioThread;
 #endif
 
+// for DataRegion struct
+struct DataInfo {
+    int lora_channel_num;
+    double lora_freq;
+    const char* lora_channel_name;
+    int  lora_power_output;
+    float lora_bw;
+    int  lora_sf;
+    int lora_cr;
+};
+
 // Global Screen singleton.
 extern graphics::Screen *screen;
 
