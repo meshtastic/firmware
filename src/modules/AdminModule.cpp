@@ -175,6 +175,12 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         LOG_INFO("Client is setting ham mode");
         handleSetHamMode(r->set_ham_mode);
         break;
+    case meshtastic_AdminMessage_get_ui_config_request_tag: {
+        LOG_INFO("Client is getting device-ui config");
+        handleGetDeviceUIConfig(mp);
+        handled = true;
+        break;
+    }
 
     /**
      * Other
@@ -232,6 +238,12 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         LOG_INFO("Initiating node-db reset");
         nodeDB->resetNodes();
         reboot(DEFAULT_REBOOT_SECONDS);
+        break;
+    }
+    case meshtastic_AdminMessage_store_ui_config_tag: {
+        LOG_INFO("Storing device-ui config");
+        handleStoreDeviceUIConfig(r->store_ui_config);
+        handled = true;
         break;
     }
     case meshtastic_AdminMessage_begin_edit_settings_tag: {
@@ -900,7 +912,7 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
 #ifdef ARCH_PORTDUINO
     conn.wifi.status.is_connected = true;
 #else
-    conn.wifi.status.is_connected = WiFi.status() != WL_CONNECTED;
+    conn.wifi.status.is_connected = WiFi.status() == WL_CONNECTED;
 #endif
     strncpy(conn.wifi.ssid, config.network.wifi_ssid, 33);
     if (conn.wifi.status.is_connected) {
@@ -932,10 +944,14 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
     conn.has_bluetooth = true;
     conn.bluetooth.pin = config.bluetooth.fixed_pin;
 #ifdef ARCH_ESP32
-    conn.bluetooth.is_connected = nimbleBluetooth->isConnected();
-    conn.bluetooth.rssi = nimbleBluetooth->getRssi();
+    if (config.bluetooth.enabled && nimbleBluetooth) {
+        conn.bluetooth.is_connected = nimbleBluetooth->isConnected();
+        conn.bluetooth.rssi = nimbleBluetooth->getRssi();
+    }
 #elif defined(ARCH_NRF52)
-    conn.bluetooth.is_connected = nrf52Bluetooth->isConnected();
+    if (config.bluetooth.enabled && nrf52Bluetooth) {
+        conn.bluetooth.is_connected = nrf52Bluetooth->isConnected();
+    }
 #endif
 #endif
     conn.has_serial = true; // No serial-less devices
@@ -964,6 +980,14 @@ void AdminModule::handleGetChannel(const meshtastic_MeshPacket &req, uint32_t ch
     }
 }
 
+void AdminModule::handleGetDeviceUIConfig(const meshtastic_MeshPacket &req)
+{
+    meshtastic_AdminMessage r = meshtastic_AdminMessage_init_default;
+    r.which_payload_variant = meshtastic_AdminMessage_get_ui_config_response_tag;
+    r.get_ui_config_response = uiconfig;
+    myReply = allocDataProtobuf(r);
+}
+
 void AdminModule::reboot(int32_t seconds)
 {
     LOG_INFO("Rebooting in %d seconds", seconds);
@@ -982,6 +1006,11 @@ void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
     if (shouldReboot && !hasOpenEditTransaction) {
         reboot(DEFAULT_REBOOT_SECONDS);
     }
+}
+
+void AdminModule::handleStoreDeviceUIConfig(const meshtastic_DeviceUIConfig &uicfg)
+{
+    nodeDB->saveProto("/prefs/uiconfig.proto", meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg, &uicfg);
 }
 
 void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
@@ -1050,7 +1079,8 @@ bool AdminModule::messageIsResponse(const meshtastic_AdminMessage *r)
         r->which_payload_variant == meshtastic_AdminMessage_get_ringtone_response_tag ||
         r->which_payload_variant == meshtastic_AdminMessage_get_device_connection_status_response_tag ||
         r->which_payload_variant == meshtastic_AdminMessage_get_node_remote_hardware_pins_response_tag ||
-        r->which_payload_variant == meshtastic_NodeRemoteHardwarePinsResponse_node_remote_hardware_pins_tag)
+        r->which_payload_variant == meshtastic_NodeRemoteHardwarePinsResponse_node_remote_hardware_pins_tag ||
+        r->which_payload_variant == meshtastic_AdminMessage_get_ui_config_response_tag)
         return true;
     else
         return false;
@@ -1066,7 +1096,8 @@ bool AdminModule::messageIsRequest(const meshtastic_AdminMessage *r)
         r->which_payload_variant == meshtastic_AdminMessage_get_device_metadata_request_tag ||
         r->which_payload_variant == meshtastic_AdminMessage_get_ringtone_request_tag ||
         r->which_payload_variant == meshtastic_AdminMessage_get_device_connection_status_request_tag ||
-        r->which_payload_variant == meshtastic_AdminMessage_get_node_remote_hardware_pins_request_tag)
+        r->which_payload_variant == meshtastic_AdminMessage_get_node_remote_hardware_pins_request_tag ||
+        r->which_payload_variant == meshtastic_AdminMessage_get_ui_config_request_tag)
         return true;
     else
         return false;

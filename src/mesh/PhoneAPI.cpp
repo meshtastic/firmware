@@ -190,16 +190,22 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
     case STATE_SEND_NOTHING:
         LOG_INFO("getFromRadio=STATE_SEND_NOTHING");
         break;
-
     case STATE_SEND_MY_INFO:
         LOG_INFO("getFromRadio=STATE_SEND_MY_INFO");
         // If the user has specified they don't want our node to share its location, make sure to tell the phone
         // app not to send locations on our behalf.
         fromRadioScratch.which_payload_variant = meshtastic_FromRadio_my_info_tag;
         fromRadioScratch.my_info = myNodeInfo;
-        state = STATE_SEND_OWN_NODEINFO;
+        state = STATE_SEND_UIDATA;
 
         service->refreshLocalMeshNode(); // Update my NodeInfo because the client will be asking for it soon.
+        break;
+
+    case STATE_SEND_UIDATA:
+        LOG_INFO("getFromRadio=STATE_SEND_UIDATA");
+        fromRadioScratch.which_payload_variant = meshtastic_FromRadio_deviceuiConfig_tag;
+        fromRadioScratch.deviceuiConfig = uiconfig;
+        state = STATE_SEND_OWN_NODEINFO;
         break;
 
     case STATE_SEND_OWN_NODEINFO: {
@@ -500,6 +506,7 @@ bool PhoneAPI::available()
     case STATE_SEND_NOTHING:
         return false;
     case STATE_SEND_MY_INFO:
+    case STATE_SEND_UIDATA:
     case STATE_SEND_CHANNELS:
     case STATE_SEND_CONFIG:
     case STATE_SEND_MODULECONFIG:
