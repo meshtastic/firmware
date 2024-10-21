@@ -3,7 +3,7 @@
 #include "SinglePortModule.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !defined(CONFIG_IDF_TARGET_ESP32C6)
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !defined(ARCH_APOLLO3) && !defined(CONFIG_IDF_TARGET_ESP32C6)
 #include <NonBlockingRtttl.h>
 #else
 // Noop class for portduino.

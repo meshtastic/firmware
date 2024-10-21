@@ -24,6 +24,25 @@ const OSFS::result noerr = OSFS::result::NO_ERROR;
 const OSFS::result notfound = OSFS::result::FILE_NOT_FOUND;
 #endif
 
+#if defined(ARCH_APOLLO3)
+// Apollo series 2 Kbytes (8 rows of 256 bytes)
+#include <EEPROM.h>
+#include <OSFS.h>
+
+extern uint16_t OSFS::startOfEEPROM;
+extern uint16_t OSFS::endOfEEPROM;
+
+// Useful consts
+extern const OSFS::result noerr;
+extern const OSFS::result notfound;
+
+// 3) How do I read from the medium?
+void OSFS::readNBytes(uint16_t address, unsigned int num, byte *output);
+
+// 4) How to I write to the medium?
+void OSFS::writeNBytes(uint16_t address, unsigned int num, const byte *input);
+#endif
+
 #if defined(ARCH_RP2040)
 // RP2040
 #include "LittleFS.h"
