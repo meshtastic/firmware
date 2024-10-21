@@ -35,6 +35,11 @@
 #include "modules/StoreForwardModule.h"
 #include <Preferences.h>
 #include <nvs_flash.h>
+#include <soc/efuse_reg.h>
+#include <soc/soc.h>
+#include <soc/efuse_reg.h>
+#include <esp_efuse.h>
+#include <esp_efuse_table.h>
 #endif
 
 #ifdef ARCH_PORTDUINO
@@ -111,14 +116,22 @@ NodeDB::NodeDB()
     int saveWhat = 0;
 // Get device serial number or unique id
 #ifdef ARCH_ESP32
-    myNodeInfo.device_id = ESP.getEfuseMac();
+    uint32_t hmac_key[4];
+    esp_err_t err = esp_efuse_read_field_blob(ESP_EFUSE_OPTIONAL_UNIQUE_ID, hmac_key, sizeof(hmac_key) * 8);
+    if (err == ESP_OK) {
+        // We don't use the full 128 bits, so just use the first 64
+        myNodeInfo.device_id = ((uint64_t)hmac_key[1] << 32) | hmac_key[0];
+    } else {
+        LOG_ERROR("Failed to read unique id from efuse");
+    }
+
 #elif defined(ARCH_NRF52)
-    myNodeInfo.device_id = NRF_FICR->DEVICEID[0];
+    // Nordic applies a unique device ID to each chip at the factory
+    myNodeInfo.device_id = ((uint64_t)NRF_FICR->DEVICEID[1] << 32) | NRF_FICR->DEVICEID[0];
 #else
     // FIXME - implement for other platforms
 #endif
-    LOG_DEBUG("Device ID: %llu", myNodeInfo.device_id);
-
+    LOG_DEBUG("Device ID (HEX): %08X%08X", (uint32_t)(myNodeInfo.device_id >> 32), (uint32_t)(myNodeInfo.device_id));
     // likewise - we always want the app requirements to come from the running appload
     myNodeInfo.min_app_version = 30200; // format is Mmmss (where M is 1+the numeric major number. i.e. 30200 means 2.2.00
     // Note! We do this after loading saved settings, so that if somehow an invalid nodenum was stored in preferences we won't
