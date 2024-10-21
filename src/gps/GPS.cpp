@@ -420,7 +420,7 @@ bool GPS::setup()
         if (tx_gpio && gnssModel == GNSS_MODEL_UNKNOWN) {
 
             // if GPS_BAUDRATE is specified in variant (i.e. not 9600), skip to the specified rate.
-            if (probeTries == 0 && GPS_BAUDRATE != 9600) {
+            if (probeTries == 0 && speedSelect == 0 && GPS_BAUDRATE != serialSpeeds[speedSelect]) {
                 speedSelect = std::find(serialSpeeds, std::end(serialSpeeds), GPS_BAUDRATE) - serialSpeeds;
                 if (speedSelect == 0) {
                     speedSelect = std::find(rareSerialSpeeds, std::end(rareSerialSpeeds), GPS_BAUDRATE) - rareSerialSpeeds;
