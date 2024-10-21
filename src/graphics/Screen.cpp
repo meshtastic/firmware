@@ -46,6 +46,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
 #include "meshUtils.h"
 #include "modules/AdminModule.h"
+#include "modules/CannedMessageModule.h"
 #include "modules/ExternalNotificationModule.h"
 #include "modules/TextMessageModule.h"
 #include "modules/WaypointModule.h"
@@ -2296,8 +2297,16 @@ void Screen::handleOnPress()
 {
     // If Canned Messages is using the "Scan and Select" input, dismiss the canned message frame when user button is pressed
     // Minimize impact as a courtesy, as "scan and select" may be used as default config for some boards
-    if (scanAndSelectInput != nullptr && scanAndSelectInput->dismissCannedMessageFrame())
+    // (Fall-through if using auto carousel, to prevent unexpected closing of canned message frame)
+    if (scanAndSelectInput != nullptr && !config.display.auto_screen_carousel_secs &&
+        scanAndSelectInput->dismissCannedMessageFrame())
         return;
+
+    // Don't transition away from canned messages if it is active
+    if (cannedMessageModule->shouldDraw()) {
+        lastScreenTransition = millis();
+        return;
+    }
 
     // If screen was off, just wake it, otherwise advance to next frame
     // If we are in a transition, the press must have bounced, drop it.
