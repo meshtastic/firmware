@@ -34,12 +34,11 @@
 #endif
 #include "modules/StoreForwardModule.h"
 #include <Preferences.h>
+#include <esp_efuse.h>
+#include <esp_efuse_table.h>
 #include <nvs_flash.h>
 #include <soc/efuse_reg.h>
 #include <soc/soc.h>
-#include <soc/efuse_reg.h>
-#include <esp_efuse.h>
-#include <esp_efuse_table.h>
 #endif
 
 #ifdef ARCH_PORTDUINO
@@ -118,22 +117,30 @@ NodeDB::NodeDB()
     // Get device unique id
 #ifdef ARCH_ESP32
     uint32_t unique_id[4];
+    // ESP32 factory burns a unique id in efuse for S2+ series and evidently C3+ series
+    // This is used for HMACs in the esp-rainmaker AIOT platform and seems to be a good choice for us
     esp_err_t err = esp_efuse_read_field_blob(ESP_EFUSE_OPTIONAL_UNIQUE_ID, unique_id, sizeof(unique_id) * 8);
     if (err == ESP_OK) {
-        LOG_DEBUG("Unique ID: %08X%08X%08X%08X", unique_id[0], unique_id[1], unique_id[2], unique_id[3]);
         memcpy(myNodeInfo.device_id.bytes, unique_id, sizeof(unique_id));
         myNodeInfo.device_id.size = 16;
         hasUniqueId = true;
     } else {
-        LOG_ERROR("Failed to read unique id from efuse");
+        LOG_WARN("Failed to read unique id from efuse");
     }
 #elif defined(ARCH_NRF52)
-    // Nordic applies a unique device ID to each chip at the factory
-    myNodeInfo.device_id = ((uint64_t)NRF_FICR->DEVICEID[1] << 32) | NRF_FICR->DEVICEID[0];
+    // Nordic applies a FIPS compliant Random ID to each chip at the factory
+    // We concatenate the device address to the Random ID to create a unique ID for now
+    // This will likely utilize a crypto module in the future
+    uint64_t device_id_start = ((uint64_t)NRF_FICR->DEVICEID[1] << 32) | NRF_FICR->DEVICEID[0];
+    uint64_t device_id_end = ((uint64_t)NRF_FICR->DEVICEADDR[1] << 32) | NRF_FICR->DEVICEADDR[0];
+    memcpy(myNodeInfo.device_id.bytes, &device_id_start, sizeof(device_id_start));
+    memcpy(myNodeInfo.device_id.bytes + sizeof(device_id_start), &device_id_end, sizeof(device_id_end));
+    myNodeInfo.device_id.size = 16;
+    hasUniqueId = true;
 #else
     // FIXME - implement for other platforms
 #endif
-    if (!hasUniqueId) {
+    if (hasUniqueId) {
         std::string deviceIdHex;
         for (size_t i = 0; i < myNodeInfo.device_id.size; ++i) {
             char buf[3];
