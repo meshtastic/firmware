@@ -115,7 +115,7 @@ NodeDB::NodeDB()
     int saveWhat = 0;
     bool hasUniqueId = false;
     // Get device unique id
-#ifdef ARCH_ESP32
+#if defined(ARCH_ESP32) && defined(ESP_EFUSE_OPTIONAL_UNIQUE_ID)
     uint32_t unique_id[4];
     // ESP32 factory burns a unique id in efuse for S2+ series and evidently C3+ series
     // This is used for HMACs in the esp-rainmaker AIOT platform and seems to be a good choice for us
