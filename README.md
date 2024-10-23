@@ -14,4 +14,7 @@ This repository contains the device firmware for the Meshtastic project. Adapted
 - **[Flashing Instructions](https://meshtastic.org/docs/getting-started/flashing-firmware/)**
 
 ## Changes
-- This version modifies the behavior on alert_bell messages: uses bell character as 0x24 ($) this means the notification is taken when a message contains the '$' character. Also modifies the behavior because it makes the gpio pin bistable so notifications act like pin toggle when bell char is received.
+This version modifies the behavior on messages: if the message contains the character:
+- `#` the notification pin is set to LOW
+- `$` the notification pin is set to HIGH
+- `%` the notification pin is is toggled

@@ -66,8 +66,11 @@ bool ascending = true;
 
 #define EXT_NOTIFICATION_DEFAULT_THREAD_MS 25
 
-//#define ASCII_BELL 0x07
-#define ASCII_BELL 0x24
+#define ASCII_BELL 0x07
+//#define ASCII_BELL 0x24
+#define ASCII_OFF 0x23
+#define ASCII_ON 0x24
+#define ASCII_TOGGLE 0x25
 
 meshtastic_RTTTLConfig rtttlConfig;
 
@@ -362,9 +365,9 @@ ExternalNotificationModule::ExternalNotificationModule()
     // moduleConfig.external_notification.alert_message_buzzer = true;
 
     // FrostAway Sprinkler
-    moduleConfig.external_notification.enabled = true;moduleConfig.external_notification.enabled = true;
+    moduleConfig.external_notification.enabled = true;
     moduleConfig.external_notification.active = true;
-    moduleConfig.external_notification.alert_bell = 1;
+    //moduleConfig.external_notification.alert_bell = 1;
     
     if (moduleConfig.external_notification.enabled) {
         if (nodeDB->loadProto(rtttlConfigFile, meshtastic_RTTTLConfig_size, sizeof(meshtastic_RTTTLConfig),
@@ -445,29 +448,54 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
             // Check if the message contains a bell character. Don't do this loop for every pin, just once.
             auto &p = mp.decoded;
             bool containsBell = false;
+            bool containsOff = false;
+            bool containsOn = false;
+            bool containsToggle = false;
             for (int i = 0; i < p.payload.size; i++) {
                 if (p.payload.bytes[i] == ASCII_BELL) {
                     containsBell = true;
                 }
+                if (p.payload.bytes[i] == ASCII_OFF) {
+                    containsOff = true;
+                }
+                if (p.payload.bytes[i] == ASCII_ON) {
+                    containsOn = true;
+                }
+                if (p.payload.bytes[i] == ASCII_TOGGLE) {
+                    containsToggle = true;
+                }
             }
+            
+            // Sprinkler mod
+            if (containsOff || containsOn || containsToggle) {
+                if (containsOff) {
+                    LOG_INFO("externalNotificationModule - Notification Bell (Off)");
+                    setExternalOff(0);
+                }
+                if (containsOn) {
+                    LOG_INFO("externalNotificationModule - Notification Bell (On)");
+                    setExternalOn(0);
+                }
+                if (containsToggle) {
+                    LOG_INFO("externalNotificationModule - Notification Bell (Toggle)");
+                    if (getExternal(0)) {
+                        setExternalOff(0);
+                    } else {
+                        setExternalOn(0);
+                    }
+                }
+            }
+            
 
             if (moduleConfig.external_notification.alert_bell) {
                 if (containsBell) {
                     LOG_INFO("externalNotificationModule - Notification Bell");
-                    // isNagging = true;
-                    // setExternalOn(0);
-                    // if (moduleConfig.external_notification.nag_timeout) {
-                    //     nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
-                    // } else {
-                    //     nagCycleCutoff = millis() + moduleConfig.external_notification.output_ms;
-                    // }
-                    // state saving on bell
-                    if (isNagging) {
-                        isNagging = false;
-                        setExternalOff(0);
+                    isNagging = true;
+                    setExternalOn(0);
+                    if (moduleConfig.external_notification.nag_timeout) {
+                        nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
                     } else {
-                        isNagging = true;
-                        setExternalOn(0);
+                        nagCycleCutoff = millis() + moduleConfig.external_notification.output_ms;
                     }
                 }
             }
