@@ -8,11 +8,10 @@
 
 ## Overview
 
-This repository contains the device firmware for the Meshtastic project.
+This repository contains the device firmware for the Meshtastic project. Adapted for FrostAway products.
 
 - **[Building Instructions](https://meshtastic.org/docs/development/firmware/build)**
 - **[Flashing Instructions](https://meshtastic.org/docs/getting-started/flashing-firmware/)**
 
-## Stats
-
-![Alt](https://repobeats.axiom.co/api/embed/a92f097d9197ae853e780ec53d7d126e545629ab.svg "Repobeats analytics image")
+## Changes
+- This version modifies the behavior on alert_bell messages: uses bell character as 0x24 ($) this means the notification is taken when a message contains the '$' character. Also modifies the behavior because it makes the gpio pin bistable so notifications act like pin toggle when bell char is received.

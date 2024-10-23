@@ -66,7 +66,8 @@ bool ascending = true;
 
 #define EXT_NOTIFICATION_DEFAULT_THREAD_MS 25
 
-#define ASCII_BELL 0x07
+//#define ASCII_BELL 0x07
+#define ASCII_BELL 0x24
 
 meshtastic_RTTTLConfig rtttlConfig;
 
@@ -110,68 +111,68 @@ int32_t ExternalNotificationModule::runOnce()
         }
 
         // If the output is turned on, turn it back off after the given period of time.
-        if (isNagging) {
-            if (externalTurnedOn[0] + (moduleConfig.external_notification.output_ms ? moduleConfig.external_notification.output_ms
-                                                                                    : EXT_NOTIFICATION_MODULE_OUTPUT_MS) <
-                millis()) {
-                getExternal(0) ? setExternalOff(0) : setExternalOn(0);
-            }
-            if (externalTurnedOn[1] + (moduleConfig.external_notification.output_ms ? moduleConfig.external_notification.output_ms
-                                                                                    : EXT_NOTIFICATION_MODULE_OUTPUT_MS) <
-                millis()) {
-                getExternal(1) ? setExternalOff(1) : setExternalOn(1);
-            }
-            if (externalTurnedOn[2] + (moduleConfig.external_notification.output_ms ? moduleConfig.external_notification.output_ms
-                                                                                    : EXT_NOTIFICATION_MODULE_OUTPUT_MS) <
-                millis()) {
-                getExternal(2) ? setExternalOff(2) : setExternalOn(2);
-            }
-#if defined(HAS_NCP5623) || defined(RGBLED_RED) || defined(HAS_NEOPIXEL) || defined(UNPHONE)
-            red = (colorState & 4) ? brightnessValues[brightnessIndex] : 0;          // Red enabled on colorState = 4,5,6,7
-            green = (colorState & 2) ? brightnessValues[brightnessIndex] : 0;        // Green enabled on colorState = 2,3,6,7
-            blue = (colorState & 1) ? (brightnessValues[brightnessIndex] * 1.5) : 0; // Blue enabled on colorState = 1,3,5,7
-#ifdef HAS_NCP5623
-            if (rgb_found.type == ScanI2C::NCP5623) {
-                rgb.setColor(red, green, blue);
-            }
-#endif
-#ifdef RGBLED_CA
-            analogWrite(RGBLED_RED, 255 - red); // CA type needs reverse logic
-            analogWrite(RGBLED_GREEN, 255 - green);
-            analogWrite(RGBLED_BLUE, 255 - blue);
-#elif defined(RGBLED_RED)
-            analogWrite(RGBLED_RED, red);
-            analogWrite(RGBLED_GREEN, green);
-            analogWrite(RGBLED_BLUE, blue);
-#endif
-#ifdef HAS_NEOPIXEL
-            pixels.fill(pixels.Color(red, green, blue), 0, NEOPIXEL_COUNT);
-            pixels.show();
-#endif
-#ifdef UNPHONE
-            unphone.rgb(red, green, blue);
-#endif
-            if (ascending) { // fade in
-                brightnessIndex++;
-                if (brightnessIndex == (sizeof(brightnessValues) - 1)) {
-                    ascending = false;
-                }
-            } else {
-                brightnessIndex--; // fade out
-            }
-            if (brightnessIndex == 0) {
-                ascending = true;
-                colorState++; // next color
-                if (colorState > 7) {
-                    colorState = 1;
-                }
-            }
-#endif
+//         if (isNagging) {
+//             if (externalTurnedOn[0] + (moduleConfig.external_notification.output_ms ? moduleConfig.external_notification.output_ms
+//                                                                                     : EXT_NOTIFICATION_MODULE_OUTPUT_MS) <
+//                 millis()) {
+//                 getExternal(0) ? setExternalOff(0) : setExternalOn(0);
+//             }
+//             if (externalTurnedOn[1] + (moduleConfig.external_notification.output_ms ? moduleConfig.external_notification.output_ms
+//                                                                                     : EXT_NOTIFICATION_MODULE_OUTPUT_MS) <
+//                 millis()) {
+//                 getExternal(1) ? setExternalOff(1) : setExternalOn(1);
+//             }
+//             if (externalTurnedOn[2] + (moduleConfig.external_notification.output_ms ? moduleConfig.external_notification.output_ms
+//                                                                                     : EXT_NOTIFICATION_MODULE_OUTPUT_MS) <
+//                 millis()) {
+//                 getExternal(2) ? setExternalOff(2) : setExternalOn(2);
+//             }
+// #if defined(HAS_NCP5623) || defined(RGBLED_RED) || defined(HAS_NEOPIXEL) || defined(UNPHONE)
+//             red = (colorState & 4) ? brightnessValues[brightnessIndex] : 0;          // Red enabled on colorState = 4,5,6,7
+//             green = (colorState & 2) ? brightnessValues[brightnessIndex] : 0;        // Green enabled on colorState = 2,3,6,7
+//             blue = (colorState & 1) ? (brightnessValues[brightnessIndex] * 1.5) : 0; // Blue enabled on colorState = 1,3,5,7
+// #ifdef HAS_NCP5623
+//             if (rgb_found.type == ScanI2C::NCP5623) {
+//                 rgb.setColor(red, green, blue);
+//             }
+// #endif
+// #ifdef RGBLED_CA
+//             analogWrite(RGBLED_RED, 255 - red); // CA type needs reverse logic
+//             analogWrite(RGBLED_GREEN, 255 - green);
+//             analogWrite(RGBLED_BLUE, 255 - blue);
+// #elif defined(RGBLED_RED)
+//             analogWrite(RGBLED_RED, red);
+//             analogWrite(RGBLED_GREEN, green);
+//             analogWrite(RGBLED_BLUE, blue);
+// #endif
+// #ifdef HAS_NEOPIXEL
+//             pixels.fill(pixels.Color(red, green, blue), 0, NEOPIXEL_COUNT);
+//             pixels.show();
+// #endif
+// #ifdef UNPHONE
+//             unphone.rgb(red, green, blue);
+// #endif
+//             if (ascending) { // fade in
+//                 brightnessIndex++;
+//                 if (brightnessIndex == (sizeof(brightnessValues) - 1)) {
+//                     ascending = false;
+//                 }
+//             } else {
+//                 brightnessIndex--; // fade out
+//             }
+//             if (brightnessIndex == 0) {
+//                 ascending = true;
+//                 colorState++; // next color
+//                 if (colorState > 7) {
+//                     colorState = 1;
+//                 }
+//             }
+// #endif
 
-#ifdef T_WATCH_S3
-            drv.go();
-#endif
-        }
+// #ifdef T_WATCH_S3
+//             drv.go();
+// #endif
+//         }
 
         // Play RTTTL over i2s audio interface if enabled as buzzer
 #ifdef HAS_I2S
@@ -360,6 +361,11 @@ ExternalNotificationModule::ExternalNotificationModule()
     // moduleConfig.external_notification.use_i2s_as_buzzer = true;
     // moduleConfig.external_notification.alert_message_buzzer = true;
 
+    // FrostAway Sprinkler
+    moduleConfig.external_notification.enabled = true;moduleConfig.external_notification.enabled = true;
+    moduleConfig.external_notification.active = true;
+    moduleConfig.external_notification.alert_bell = 1;
+    
     if (moduleConfig.external_notification.enabled) {
         if (nodeDB->loadProto(rtttlConfigFile, meshtastic_RTTTLConfig_size, sizeof(meshtastic_RTTTLConfig),
                               &meshtastic_RTTTLConfig_msg, &rtttlConfig) != LoadFileResult::LOAD_SUCCESS) {
@@ -448,12 +454,20 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
             if (moduleConfig.external_notification.alert_bell) {
                 if (containsBell) {
                     LOG_INFO("externalNotificationModule - Notification Bell");
-                    isNagging = true;
-                    setExternalOn(0);
-                    if (moduleConfig.external_notification.nag_timeout) {
-                        nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
+                    // isNagging = true;
+                    // setExternalOn(0);
+                    // if (moduleConfig.external_notification.nag_timeout) {
+                    //     nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
+                    // } else {
+                    //     nagCycleCutoff = millis() + moduleConfig.external_notification.output_ms;
+                    // }
+                    // state saving on bell
+                    if (isNagging) {
+                        isNagging = false;
+                        setExternalOff(0);
                     } else {
-                        nagCycleCutoff = millis() + moduleConfig.external_notification.output_ms;
+                        isNagging = true;
+                        setExternalOn(0);
                     }
                 }
             }
