@@ -243,6 +243,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 
                 SCAN_SIMPLE_CASE(TDECK_KB_ADDR, TDECKKB, "T-Deck keyboard found");
                 SCAN_SIMPLE_CASE(BBQ10_KB_ADDR, BBQ10KB, "BB Q10 keyboard found");
+
                 SCAN_SIMPLE_CASE(ST7567_ADDRESS, SCREEN_ST7567, "st7567 display found");
 #ifndef HAS_TCA9535
                 SCAN_SIMPLE_CASE(PCF8574A_ADDRESS, PCF8574A, "PCF8574A based keyboard found\n");
@@ -413,7 +414,17 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 #ifdef HAS_TPS65233
                 SCAN_SIMPLE_CASE(TPS65233_ADDR, TPS65233, "TPS65233 BIAS-T found");
 #endif
-                SCAN_SIMPLE_CASE(MLX90614_ADDR_DEF, MLX90614, "MLX90614 IR temp sensor found");
+
+            case MLX90614_ADDR_DEF:
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0e), 1);
+                if (registerValue == 0x5a) {
+                    type = MLX90614;
+                    LOG_INFO("MLX90614 IR temp sensor found");
+                } else {
+                    type = MPR121KB;
+                    LOG_INFO("MPR121KB keyboard found");
+                }
+                break;
 
             case ICM20948_ADDR:     // same as BMX160_ADDR
             case ICM20948_ADDR_ALT: // same as MPU6050_ADDR

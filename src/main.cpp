@@ -526,6 +526,10 @@ void setup()
         case ScanI2C::DeviceType::PCF8574A:
             kb_model = 0x12;
             break;
+        case ScanI2C::DeviceType::MPR121KB:
+            // assign an arbitrary value to distinguish from other models
+            kb_model = 0x37;
+            break;
         default:
             // use this as default since it's also just zero
             LOG_WARN("kb_info.type is unknown(0x%02x), setting kb_model=0x00", kb_info.type);

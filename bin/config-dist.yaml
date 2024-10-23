@@ -20,6 +20,7 @@ Lora:
 #  CS: 0
 #  IRQ: 10
 #  Busy: 11
+#  DIO2_AS_RF_SWITCH: true
 #  spidev: spidev0.1
 
 #  Module: RF95  # Adafruit RFM9x
