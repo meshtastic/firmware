@@ -114,24 +114,34 @@ NodeDB::NodeDB()
     uint32_t channelFileCRC = crc32Buffer(&channelFile, sizeof(channelFile));
 
     int saveWhat = 0;
-// Get device serial number or unique id
+    bool hasUniqueId = false;
+    // Get device unique id
 #ifdef ARCH_ESP32
-    uint32_t hmac_key[4];
-    esp_err_t err = esp_efuse_read_field_blob(ESP_EFUSE_OPTIONAL_UNIQUE_ID, hmac_key, sizeof(hmac_key) * 8);
+    uint32_t unique_id[4];
+    esp_err_t err = esp_efuse_read_field_blob(ESP_EFUSE_OPTIONAL_UNIQUE_ID, unique_id, sizeof(unique_id) * 8);
     if (err == ESP_OK) {
-        // We don't use the full 128 bits, so just use the first 64
-        myNodeInfo.device_id = ((uint64_t)hmac_key[1] << 32) | hmac_key[0];
+        LOG_DEBUG("Unique ID: %08X%08X%08X%08X", unique_id[0], unique_id[1], unique_id[2], unique_id[3]);
+        memcpy(myNodeInfo.device_id.bytes, unique_id, sizeof(unique_id));
+        myNodeInfo.device_id.size = 16;
+        hasUniqueId = true;
     } else {
         LOG_ERROR("Failed to read unique id from efuse");
     }
-
 #elif defined(ARCH_NRF52)
     // Nordic applies a unique device ID to each chip at the factory
     myNodeInfo.device_id = ((uint64_t)NRF_FICR->DEVICEID[1] << 32) | NRF_FICR->DEVICEID[0];
 #else
     // FIXME - implement for other platforms
 #endif
-    LOG_DEBUG("Device ID (HEX): %08X%08X", (uint32_t)(myNodeInfo.device_id >> 32), (uint32_t)(myNodeInfo.device_id));
+    if (!hasUniqueId) {
+        std::string deviceIdHex;
+        for (size_t i = 0; i < myNodeInfo.device_id.size; ++i) {
+            char buf[3];
+            snprintf(buf, sizeof(buf), "%02X", myNodeInfo.device_id.bytes[i]);
+            deviceIdHex += buf;
+        }
+        LOG_DEBUG("Device ID (HEX): %s", deviceIdHex.c_str());
+    }
     // likewise - we always want the app requirements to come from the running appload
     myNodeInfo.min_app_version = 30200; // format is Mmmss (where M is 1+the numeric major number. i.e. 30200 means 2.2.00
     // Note! We do this after loading saved settings, so that if somehow an invalid nodenum was stored in preferences we won't
