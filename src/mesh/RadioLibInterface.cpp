@@ -167,7 +167,7 @@ ErrorCode RadioLibInterface::send(meshtastic_MeshPacket *p)
         }
 
     } else {
-        LOG_WARN("send - lora tx disabled because RegionCode_Unset");
+        LOG_WARN("send - lora tx disabled: Region is not set");
         packetPool.release(p);
         return ERRNO_DISABLED;
     }
@@ -196,7 +196,6 @@ ErrorCode RadioLibInterface::send(meshtastic_MeshPacket *p)
 
     // set (random) transmit delay to let others reconfigure their radio,
     // to avoid collisions and implement timing-based flooding
-    // LOG_DEBUG("Set random delay before transmitting.");
     setTransmitDelay();
 
     return res;
@@ -251,28 +250,23 @@ void RadioLibInterface::onNotify(uint32_t notification)
     case ISR_TX:
         handleTransmitInterrupt();
         startReceive();
-        // LOG_DEBUG("tx complete - starting timer");
         startTransmitTimer();
         break;
     case ISR_RX:
         handleReceiveInterrupt();
         startReceive();
-        // LOG_DEBUG("rx complete - starting timer");
         startTransmitTimer();
         break;
     case TRANSMIT_DELAY_COMPLETED:
-        // LOG_DEBUG("delay done");
 
         // If we are not currently in receive mode, then restart the random delay (this can happen if the main thread
         // has placed the unit into standby)  FIXME, how will this work if the chipset is in sleep mode?
         if (!txQueue.empty()) {
             if (!canSendImmediately()) {
-                // LOG_DEBUG("Currently Rx/Tx-ing: set random delay");
                 setTransmitDelay(); // currently Rx/Tx-ing: reset random delay
             } else {
                 if (isChannelActive()) { // check if there is currently a LoRa packet on the channel
-                    // LOG_DEBUG("Channel is active, try receiving first.");
-                    startReceive(); // try receiving this packet, afterwards we'll be trying to transmit again
+                    startReceive();      // try receiving this packet, afterwards we'll be trying to transmit again
                     setTransmitDelay();
                 } else {
                     // Send any outgoing packets we have ready
@@ -286,7 +280,6 @@ void RadioLibInterface::onNotify(uint32_t notification)
                 }
             }
         } else {
-            // LOG_DEBUG("done with txqueue");
         }
         break;
     default:
@@ -319,7 +312,6 @@ void RadioLibInterface::startTransmitTimer(bool withDelay)
     // If we have work to do and the timer wasn't already scheduled, schedule it now
     if (!txQueue.empty()) {
         uint32_t delay = !withDelay ? 1 : getTxDelayMsec();
-        // LOG_DEBUG("xmit timer %d", delay);
         notifyLater(delay, TRANSMIT_DELAY_COMPLETED, false); // This will implicitly enable
     }
 }
@@ -329,14 +321,12 @@ void RadioLibInterface::startTransmitTimerSNR(float snr)
     // If we have work to do and the timer wasn't already scheduled, schedule it now
     if (!txQueue.empty()) {
         uint32_t delay = getTxDelayMsecWeighted(snr);
-        // LOG_DEBUG("xmit timer %d", delay);
         notifyLater(delay, TRANSMIT_DELAY_COMPLETED, false); // This will implicitly enable
     }
 }
 
 void RadioLibInterface::handleTransmitInterrupt()
 {
-    // LOG_DEBUG("handling lora TX interrupt");
     // This can be null if we forced the device to enter standby mode.  In that case
     // ignore the transmit interrupt
     if (sendingPacket)
@@ -359,7 +349,6 @@ void RadioLibInterface::completeSending()
 
         // We are done sending that packet, release it
         packetPool.release(p);
-        // LOG_DEBUG("Done with send");
     }
 }
 
@@ -383,7 +372,7 @@ void RadioLibInterface::handleReceiveInterrupt()
 
 #ifndef DISABLE_WELCOME_UNSET
     if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
-        LOG_WARN("recv - lora rx disabled because RegionCode_Unset");
+        LOG_WARN("lora rx disabled: Region is not set");
         airTime->logAirtime(RX_ALL_LOG, xmitMsec);
         return;
     }
