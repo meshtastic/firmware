@@ -150,6 +150,8 @@ ScanI2C::DeviceAddress rtc_found = ScanI2C::ADDRESS_NONE;
 ScanI2C::DeviceAddress accelerometer_found = ScanI2C::ADDRESS_NONE;
 // The I2C address of the RGB LED (if found)
 ScanI2C::FoundDevice rgb_found = ScanI2C::FoundDevice(ScanI2C::DeviceType::NONE, ScanI2C::ADDRESS_NONE);
+/// The I2C address of our Air Quality Indicator (if found)
+ScanI2C::DeviceAddress aqi_found = ScanI2C::ADDRESS_NONE;
 
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
 ATECCX08A atecc;
@@ -536,6 +538,9 @@ void setup()
 
     pmu_found = i2cScanner->exists(ScanI2C::DeviceType::PMU_AXP192_AXP2101);
 
+    auto aqiInfo = i2cScanner->firstAQI();
+    aqi_found = aqiInfo.type != ScanI2C::DeviceType::NONE ? screenInfo.address : ScanI2C::ADDRESS_NONE;
+
 /*
  * There are a bunch of sensors that have no further logic than to be found and stuffed into the
  * nodeTelemetrySensorsMap singleton. This wraps that logic in a temporary scope to declare the temporary field
@@ -609,6 +614,7 @@ void setup()
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::AHT10, meshtastic_TelemetrySensorType_AHT10)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::DFROBOT_LARK, meshtastic_TelemetrySensorType_DFROBOT_LARK)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::ICM20948, meshtastic_TelemetrySensorType_ICM20948)
+    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::SCD4X, meshtastic_TelemetrySensorType_SCD4X)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::MAX30102, meshtastic_TelemetrySensorType_MAX30102)
 
     i2cScanner.reset();

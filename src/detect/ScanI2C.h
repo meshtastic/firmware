@@ -60,6 +60,7 @@ class ScanI2C
         FT6336U,
         STK8BAXX,
         ICM20948,
+        SCD4X,
         MAX30102,
         TPS65233,
         MPR121KB
@@ -114,6 +115,8 @@ class ScanI2C
     FoundDevice firstKeyboard() const;
 
     FoundDevice firstAccelerometer() const;
+
+    FoundDevice firstAQI() const;
 
     virtual FoundDevice find(DeviceType) const;
 
