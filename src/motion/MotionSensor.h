@@ -14,6 +14,7 @@
 #include "../graphics/Screen.h"
 #include "../graphics/ScreenFonts.h"
 #include "../power.h"
+#include "Wire.h"
 
 // Base class for motion processing
 class MotionSensor
