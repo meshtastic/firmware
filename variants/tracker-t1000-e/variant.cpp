@@ -40,7 +40,7 @@ void initVariant()
     digitalWrite(PIN_3V3_EN, HIGH);
 
     pinMode(PIN_3V3_ACC_EN, OUTPUT);
-    digitalWrite(PIN_3V3_ACC_EN, LOW);
+    digitalWrite(PIN_3V3_ACC_EN, HIGH);
 
     pinMode(BUZZER_EN_PIN, OUTPUT);
     digitalWrite(BUZZER_EN_PIN, HIGH);

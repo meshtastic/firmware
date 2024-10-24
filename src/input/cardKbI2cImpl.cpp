@@ -9,7 +9,7 @@ CardKbI2cImpl::CardKbI2cImpl() : KbI2cBase("cardKB") {}
 
 void CardKbI2cImpl::init()
 {
-#if !MESHTASTIC_EXCLUDE_I2C && !defined(ARCH_PORTDUINO)
+#if !MESHTASTIC_EXCLUDE_I2C && !defined(ARCH_PORTDUINO) && !defined(I2C_NO_RESCAN)
     if (cardkb_found.address == 0x00) {
         LOG_DEBUG("Rescanning for I2C keyboard");
         uint8_t i2caddr_scan[] = {CARDKB_ADDR, TDECK_KB_ADDR, BBQ10_KB_ADDR, MPR121_KB_ADDR};
@@ -49,7 +49,7 @@ void CardKbI2cImpl::init()
                 kb_model = 0x00;
             }
         }
-        LOG_DEBUG("Keyboard Type: 0x%02x Model: 0x%02x Address: 0x%02x\n", kb_info.type, kb_model, cardkb_found.address);
+        LOG_DEBUG("Keyboard Type: 0x%02x Model: 0x%02x Address: 0x%02x", kb_info.type, kb_model, cardkb_found.address);
         if (cardkb_found.address == 0x00) {
             disable();
             return;
