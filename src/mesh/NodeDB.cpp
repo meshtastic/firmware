@@ -21,6 +21,9 @@
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
 #include "modules/NeighborInfoModule.h"
+// #if !MESHTASTIC_EXCLUDE_STOREFORWARD
+// #include "modules/StoreForwardModule.h"
+// #endif
 #include <ErriezCRC32.h>
 #include <algorithm>
 #include <iostream>
@@ -32,7 +35,7 @@
 #if HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
-#include "modules/StoreForwardModule.h"
+
 #include <Preferences.h>
 #include <esp_efuse.h>
 #include <esp_efuse_table.h>
@@ -42,7 +45,6 @@
 #endif
 
 #ifdef ARCH_PORTDUINO
-#include "modules/StoreForwardModule.h"
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 
