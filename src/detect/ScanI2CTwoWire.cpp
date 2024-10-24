@@ -86,7 +86,7 @@ ScanI2C::DeviceType ScanI2CTwoWire::probeOLED(ScanI2C::DeviceAddress addr) const
 }
 void ScanI2CTwoWire::printATECCInfo() const
 {
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !defined(ARCH_APOLLO3)
     atecc.readConfigZone(false);
 
     std::string atecc_numbers = "ATECC608B Serial Number: ";
@@ -197,7 +197,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 type = probeOLED(addr);
                 break;
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !defined(ARCH_APOLLO3)
             case ATECC608B_ADDR:
 #ifdef RP2040_SLOW_CLOCK
                 if (atecc.begin(addr.address, Wire, Serial2) == true)

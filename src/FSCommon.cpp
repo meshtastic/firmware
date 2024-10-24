@@ -24,10 +24,15 @@ SPIClass SPI1(HSPI);
 
 #endif // HAS_SDCARD
 
-#if defined(ARCH_STM32WL)
+#if defined(ARCH_APOLLO3)
+// Apollo series 2 Kbytes (8 rows of 256 bytes)
 
 uint16_t OSFS::startOfEEPROM = 1;
 uint16_t OSFS::endOfEEPROM = 2048;
+
+// Useful consts
+const OSFS::result noerr = OSFS::result::NO_ERROR;
+const OSFS::result notfound = OSFS::result::FILE_NOT_FOUND;
 
 // 3) How do I read from the medium?
 void OSFS::readNBytes(uint16_t address, unsigned int num, byte *output)
@@ -66,7 +71,7 @@ extern "C" void lfs_assert(const char *reason)
  */
 bool copyFile(const char *from, const char *to)
 {
-#ifdef ARCH_STM32WL
+#if defined(ARCH_STM32WL) || defined(ARCH_APOLLO3)
     unsigned char cbuffer[2048];
 
     // Var to hold the result of actions
@@ -129,7 +134,7 @@ bool copyFile(const char *from, const char *to)
  */
 bool renameFile(const char *pathFrom, const char *pathTo)
 {
-#ifdef ARCH_STM32WL
+#if defined(ARCH_STM32WL) || defined(ARCH_APOLLO3)
     if (copyFile(pathFrom, pathTo) && (OSFS::deleteFile(pathFrom) == OSFS::result::NO_ERROR)) {
         return true;
     } else {
