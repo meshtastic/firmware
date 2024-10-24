@@ -6,7 +6,6 @@
 
 // Debugging
 // #define GPS_DEBUG
-// #define GPS_EXTRAVERBOSE
 
 // Lora
 #define USE_LLCC68 // Original Chatter2 with LLCC68 module

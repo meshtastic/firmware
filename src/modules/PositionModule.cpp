@@ -449,23 +449,6 @@ struct SmartPosition PositionModule::getDistanceTraveledSinceLastSend(meshtastic
     float distanceTraveledSinceLastSend = GeoCoord::latLongToMeter(
         lastGpsLatitude * 1e-7, lastGpsLongitude * 1e-7, currentPosition.latitude_i * 1e-7, currentPosition.longitude_i * 1e-7);
 
-#ifdef GPS_EXTRAVERBOSE
-    LOG_DEBUG("--------LAST POSITION------------------------------------");
-    LOG_DEBUG("lastGpsLatitude=%i, lastGpsLatitude=%i", lastGpsLatitude, lastGpsLongitude);
-
-    LOG_DEBUG("--------CURRENT POSITION---------------------------------");
-    LOG_DEBUG("currentPosition.latitude_i=%i, currentPosition.longitude_i=%i", lastGpsLatitude, lastGpsLongitude);
-
-    LOG_DEBUG("--------SMART POSITION-----------------------------------");
-    LOG_DEBUG("hasTraveledOverThreshold=%i, distanceTraveled=%f, distanceThreshold=%f",
-              abs(distanceTraveledSinceLastSend) >= distanceTravelThreshold, abs(distanceTraveledSinceLastSend),
-              distanceTravelThreshold);
-
-    if (abs(distanceTraveledSinceLastSend) >= distanceTravelThreshold) {
-        LOG_DEBUG("SMART SEEEEEEEEENDING");
-    }
-#endif
-
     return SmartPosition{.distanceTraveled = abs(distanceTraveledSinceLastSend),
                          .distanceThreshold = distanceTravelThreshold,
                          .hasTraveledOverThreshold = abs(distanceTraveledSinceLastSend) >= distanceTravelThreshold};
