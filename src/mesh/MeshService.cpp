@@ -383,9 +383,6 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
         pos = gps->p;
     } else {
         // The GPS has lost lock
-#ifdef GPS_EXTRAVERBOSE
-        LOG_DEBUG("onGPSchanged() - lost validLocation");
-#endif
     }
     // Used fixed position if configured regardless of GPS lock
     if (config.position.fixed_position) {

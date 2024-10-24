@@ -50,9 +50,6 @@ class GPSStatus : public Status
     int32_t getLatitude() const
     {
         if (config.position.fixed_position) {
-#ifdef GPS_EXTRAVERBOSE
-            LOG_WARN("Using fixed latitude");
-#endif
             meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
             return node->position.latitude_i;
         } else {
@@ -63,9 +60,6 @@ class GPSStatus : public Status
     int32_t getLongitude() const
     {
         if (config.position.fixed_position) {
-#ifdef GPS_EXTRAVERBOSE
-            LOG_WARN("Using fixed longitude");
-#endif
             meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
             return node->position.longitude_i;
         } else {
@@ -76,9 +70,6 @@ class GPSStatus : public Status
     int32_t getAltitude() const
     {
         if (config.position.fixed_position) {
-#ifdef GPS_EXTRAVERBOSE
-            LOG_WARN("Using fixed altitude");
-#endif
             meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
             return node->position.altitude;
         } else {
@@ -94,9 +85,6 @@ class GPSStatus : public Status
 
     bool matches(const GPSStatus *newStatus) const
     {
-#ifdef GPS_EXTRAVERBOSE
-        LOG_DEBUG("GPSStatus.match() new pos@%x to old pos@%x", newStatus->p.timestamp, p.timestamp);
-#endif
         return (newStatus->hasLock != hasLock || newStatus->isConnected != isConnected ||
                 newStatus->isPowerSaving != isPowerSaving || newStatus->p.latitude_i != p.latitude_i ||
                 newStatus->p.longitude_i != p.longitude_i || newStatus->p.altitude != p.altitude ||
