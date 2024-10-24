@@ -140,15 +140,17 @@ NodeDB::NodeDB()
 #else
     // FIXME - implement for other platforms
 #endif
-    if (hasUniqueId) {
-        std::string deviceIdHex;
-        for (size_t i = 0; i < myNodeInfo.device_id.size; ++i) {
-            char buf[3];
-            snprintf(buf, sizeof(buf), "%02X", myNodeInfo.device_id.bytes[i]);
-            deviceIdHex += buf;
-        }
-        LOG_DEBUG("Device ID (HEX): %s", deviceIdHex.c_str());
-    }
+    // Uncomment below to print the device id
+    // if (hasUniqueId) {
+    //     std::string deviceIdHex;
+    //     for (size_t i = 0; i < myNodeInfo.device_id.size; ++i) {
+    //         char buf[3];
+    //         snprintf(buf, sizeof(buf), "%02X", myNodeInfo.device_id.bytes[i]);
+    //         deviceIdHex += buf;
+    //     }
+    //     LOG_DEBUG("Device ID (HEX): %s", deviceIdHex.c_str());
+    // }
+    
     // likewise - we always want the app requirements to come from the running appload
     myNodeInfo.min_app_version = 30200; // format is Mmmss (where M is 1+the numeric major number. i.e. 30200 means 2.2.00
     // Note! We do this after loading saved settings, so that if somehow an invalid nodenum was stored in preferences we won't
