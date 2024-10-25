@@ -52,7 +52,6 @@
 #define RX_BUFFER 256
 #define TIMEOUT 250
 #define BAUD 38400
-#define ACK 1
 
 // API: Defaulting to the formerly removed phone_timeout_secs value of 15 minutes
 #define SERIAL_CONNECTION_TIMEOUT (15 * 60) * 1000UL
@@ -289,7 +288,7 @@ void SerialModuleRadio::sendPayload(NodeNum dest, bool wantReplies)
     }
     p->decoded.want_response = wantReplies;
 
-    p->want_ack = ACK;
+    p->want_ack = moduleConfig.serial.ack;
 
     p->decoded.payload.size = serialPayloadSize; // You must specify how many bytes are in the reply
     memcpy(p->decoded.payload.bytes, serialBytes, p->decoded.payload.size);
