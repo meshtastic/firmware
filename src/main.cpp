@@ -642,6 +642,8 @@ void setup()
     rp2040Setup();
 #endif
 
+    initSPI(); // needed here before reading from littleFS
+
     // We do this as early as possible because this loads preferences from flash
     // but we need to do this after main cpu init (esp32setup), because we need the random seed set
     nodeDB = new NodeDB;
@@ -705,7 +707,6 @@ void setup()
 #endif
 
     // Init our SPI controller (must be before screen and lora)
-    initSPI();
 #ifdef ARCH_RP2040
 #ifdef HW_SPI1_DEVICE
     SPI1.setSCK(LORA_SCK);
