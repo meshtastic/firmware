@@ -6,7 +6,7 @@
 extern ScanI2C::DeviceAddress cardkb_found;
 extern uint8_t kb_model;
 
-I2CKeyPad keyPad(cardkb_found.address);
+I2CKeyPad keyPad(cardkb_found.address, cardkb_found.port == ScanI2C::WIRE1 ? &Wire1 : &Wire);
 
 PeMatrixBase::PeMatrixBase(const char *name) : concurrency::OSThread(name)
 {
@@ -24,7 +24,7 @@ int32_t PeMatrixBase::runOnce()
         // This is the first time the OSThread library has called this function, so do port setup
         firstTime = 0;
         if (!keyPad.begin()) {
-            LOG_ERROR("Failed to initialize I2C keypad\n");
+            LOG_ERROR("Failed to initialize I2C keypad");
             return disable();
         }
         keyPad.loadKeyMap(keymap);
