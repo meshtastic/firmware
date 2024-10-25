@@ -1,4 +1,5 @@
 #include "LSM6DS3Sensor.h"
+#include "NodeDB.h"
 
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
 

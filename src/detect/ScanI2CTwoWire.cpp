@@ -7,7 +7,8 @@
 #include "linux/LinuxHardwareI2C.h"
 #endif
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
-#include "main.h" // atecc
+#include "main.h"      // atecc
+#include "meshUtils.h" // vformat
 #endif
 
 // AXP192 and AXP2101 have the same device address, we just need to identify it in Power.cpp
