@@ -1,4 +1,5 @@
 #include "LSM6DS3Sensor.h"
+#include "NodeDB.h"
 
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
 
@@ -14,10 +15,10 @@ bool LSM6DS3Sensor::init()
         // Duration is number of occurances needed to trigger, higher threshold is less sensitive
         sensor.enableWakeup(config.display.wake_on_tap_or_motion, 1, LSM6DS3_WAKE_THRESH);
 
-        LOG_DEBUG("LSM6DS3Sensor::init ok\n");
+        LOG_DEBUG("LSM6DS3Sensor::init ok");
         return true;
     }
-    LOG_DEBUG("LSM6DS3Sensor::init failed\n");
+    LOG_DEBUG("LSM6DS3Sensor::init failed");
     return false;
 }
 

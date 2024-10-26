@@ -75,7 +75,7 @@ class GPS : private concurrency::OSThread
     uint8_t fixType = 0;      // fix type from GPGSA
 #endif
   private:
-    const int serialSpeeds[6] = {9600, 4800, 38400, 57600, 115200, 9600};
+    const int serialSpeeds[6] = {9600, 115200, 38400, 4800, 57600, 9600};
     uint32_t lastWakeStartMsec = 0, lastSleepStartMsec = 0, lastFixStartMsec = 0;
     uint32_t rx_gpio = 0;
     uint32_t tx_gpio = 0;
@@ -156,7 +156,7 @@ class GPS : private concurrency::OSThread
     static const uint8_t _message_CAS_CFG_NAVX_CONF[];
     static const uint8_t _message_CAS_CFG_RATE_1HZ[];
 
-    const char *ACK_SUCCESS_MESSAGE = "Get ack success!\n";
+    const char *ACK_SUCCESS_MESSAGE = "Get ack success!";
 
     meshtastic_Position p = meshtastic_Position_init_default;
 

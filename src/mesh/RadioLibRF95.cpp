@@ -18,8 +18,8 @@ int16_t RadioLibRF95::begin(float freq, float bw, uint8_t sf, uint8_t cr, uint8_
     // current limit was removed from module' ctor
     // override default value (60 mA)
     state = setCurrentLimit(currentLimit);
-    LOG_DEBUG("Current limit set to %f\n", currentLimit);
-    LOG_DEBUG("Current limit set result %d\n", state);
+    LOG_DEBUG("Current limit set to %f", currentLimit);
+    LOG_DEBUG("Current limit set result %d", state);
 
     // configure settings not accessible by API
     // state = config();
@@ -73,7 +73,7 @@ bool RadioLibRF95::isReceiving()
 {
     // 0x0b == Look for header info valid, signal synchronized or signal detected
     uint8_t reg = readReg(RADIOLIB_SX127X_REG_MODEM_STAT);
-    // Serial.printf("reg %x\n", reg);
+    // Serial.printf("reg %x", reg);
     return (reg & (RH_RF95_MODEM_STATUS_SIGNAL_DETECTED | RH_RF95_MODEM_STATUS_SIGNAL_SYNCHRONIZED |
                    RH_RF95_MODEM_STATUS_HEADER_INFO_VALID)) != 0;
 }
