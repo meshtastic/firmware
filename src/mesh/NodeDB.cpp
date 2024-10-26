@@ -37,7 +37,11 @@
 #endif
 
 #include <Preferences.h>
+#include <esp_efuse.h>
+#include <esp_efuse_table.h>
 #include <nvs_flash.h>
+#include <soc/efuse_reg.h>
+#include <soc/soc.h>
 #endif
 
 #ifdef ARCH_PORTDUINO
@@ -111,6 +115,43 @@ NodeDB::NodeDB()
     uint32_t channelFileCRC = crc32Buffer(&channelFile, sizeof(channelFile));
 
     int saveWhat = 0;
+    bool hasUniqueId = false;
+    // Get device unique id
+#if defined(ARCH_ESP32) && defined(ESP_EFUSE_OPTIONAL_UNIQUE_ID)
+    uint32_t unique_id[4];
+    // ESP32 factory burns a unique id in efuse for S2+ series and evidently C3+ series
+    // This is used for HMACs in the esp-rainmaker AIOT platform and seems to be a good choice for us
+    esp_err_t err = esp_efuse_read_field_blob(ESP_EFUSE_OPTIONAL_UNIQUE_ID, unique_id, sizeof(unique_id) * 8);
+    if (err == ESP_OK) {
+        memcpy(myNodeInfo.device_id.bytes, unique_id, sizeof(unique_id));
+        myNodeInfo.device_id.size = 16;
+        hasUniqueId = true;
+    } else {
+        LOG_WARN("Failed to read unique id from efuse");
+    }
+#elif defined(ARCH_NRF52)
+    // Nordic applies a FIPS compliant Random ID to each chip at the factory
+    // We concatenate the device address to the Random ID to create a unique ID for now
+    // This will likely utilize a crypto module in the future
+    uint64_t device_id_start = ((uint64_t)NRF_FICR->DEVICEID[1] << 32) | NRF_FICR->DEVICEID[0];
+    uint64_t device_id_end = ((uint64_t)NRF_FICR->DEVICEADDR[1] << 32) | NRF_FICR->DEVICEADDR[0];
+    memcpy(myNodeInfo.device_id.bytes, &device_id_start, sizeof(device_id_start));
+    memcpy(myNodeInfo.device_id.bytes + sizeof(device_id_start), &device_id_end, sizeof(device_id_end));
+    myNodeInfo.device_id.size = 16;
+    hasUniqueId = true;
+#else
+    // FIXME - implement for other platforms
+#endif
+    // Uncomment below to print the device id
+    // if (hasUniqueId) {
+    //     std::string deviceIdHex;
+    //     for (size_t i = 0; i < myNodeInfo.device_id.size; ++i) {
+    //         char buf[3];
+    //         snprintf(buf, sizeof(buf), "%02X", myNodeInfo.device_id.bytes[i]);
+    //         deviceIdHex += buf;
+    //     }
+    //     LOG_DEBUG("Device ID (HEX): %s", deviceIdHex.c_str());
+    // }
 
     // likewise - we always want the app requirements to come from the running appload
     myNodeInfo.min_app_version = 30200; // format is Mmmss (where M is 1+the numeric major number. i.e. 30200 means 2.2.00
@@ -173,6 +214,22 @@ NodeDB::NodeDB()
     resetRadioConfig(); // If bogus settings got saved, then fix them
     // nodeDB->LOG_DEBUG("region=%d, NODENUM=0x%x, dbsize=%d", config.lora.region, myNodeInfo.my_node_num, numMeshNodes);
 
+    // If we are setup to broadcast on the default channel, ensure that the telemetry intervals are coerced to the minimum value
+    // of 30 minutes or more
+    if (channels.isDefaultChannel(channels.getPrimaryIndex())) {
+        LOG_DEBUG("Coercing telemetry to min of 30 minutes on defaults");
+        moduleConfig.telemetry.device_update_interval = Default::getConfiguredOrMinimumValue(
+            moduleConfig.telemetry.device_update_interval, min_default_telemetry_interval_secs);
+        moduleConfig.telemetry.environment_update_interval = Default::getConfiguredOrMinimumValue(
+            moduleConfig.telemetry.environment_update_interval, min_default_telemetry_interval_secs);
+        moduleConfig.telemetry.air_quality_interval = Default::getConfiguredOrMinimumValue(
+            moduleConfig.telemetry.air_quality_interval, min_default_telemetry_interval_secs);
+        moduleConfig.telemetry.power_update_interval = Default::getConfiguredOrMinimumValue(
+            moduleConfig.telemetry.power_update_interval, min_default_telemetry_interval_secs);
+        moduleConfig.telemetry.health_update_interval = Default::getConfiguredOrMinimumValue(
+            moduleConfig.telemetry.health_update_interval, min_default_telemetry_interval_secs);
+    }
+
     if (devicestateCRC != crc32Buffer(&devicestate, sizeof(devicestate)))
         saveWhat |= SEGMENT_DEVICESTATE;
     if (configCRC != crc32Buffer(&config, sizeof(config)))
@@ -206,6 +263,11 @@ bool isFromUs(const meshtastic_MeshPacket *p)
 bool isToUs(const meshtastic_MeshPacket *p)
 {
     return p->to == nodeDB->getNodeNum();
+}
+
+bool isBroadcast(uint32_t dest)
+{
+    return dest == NODENUM_BROADCAST || dest == NODENUM_BROADCAST_NO_LORA;
 }
 
 bool NodeDB::resetRadioConfig(bool factory_reset)
