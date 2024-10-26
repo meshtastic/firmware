@@ -467,7 +467,10 @@ void RadioLibInterface::setStandby()
 void RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
 {
     printPacket("Starting low level send", txp);
-    if (disabled || !config.lora.tx_enabled) {
+    if (txp->to == NODENUM_BROADCAST_NO_LORA) {
+        LOG_DEBUG("Drop Tx packet because dest is broadcast no-lora");
+        packetPool.release(txp);
+    } else if (disabled || !config.lora.tx_enabled) {
         LOG_WARN("Drop Tx packet because LoRa Tx disabled");
         packetPool.release(txp);
     } else {

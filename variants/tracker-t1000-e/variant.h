@@ -52,7 +52,7 @@ extern "C" {
 #define LED_BLUE -1    // Actually green
 #define LED_STATE_ON 1 // State when LED is lit
 
-#define BUTTON_PIN (0 + 6) // P0.6
+#define BUTTON_PIN (0 + 6) // P0.06
 #define BUTTON_ACTIVE_LOW false
 #define BUTTON_ACTIVE_PULLUP false
 #define BUTTON_SENSE_TYPE 0x6
@@ -61,9 +61,11 @@ extern "C" {
 
 #define WIRE_INTERFACES_COUNT 1
 
-// unused pins
-#define PIN_WIRE_SDA (0 + 9)  // P0.26
-#define PIN_WIRE_SCL (0 + 10) // P0.27
+#define PIN_WIRE_SDA (0 + 26)      // P0.26
+#define PIN_WIRE_SCL (0 + 27)      // P0.27
+#define I2C_NO_RESCAN              // I2C is a bit finicky, don't scan too much
+#define HAS_QMA6100P               // very rare beast, only on this board.
+#define QMA_6100P_INT_PIN (32 + 2) // P1.02
 
 /*
  * Serial interfaces
@@ -116,14 +118,22 @@ extern "C" {
 #define PIN_GPS_RESET (32 + 15) // P1.15
 #define GPS_RESET_MODE HIGH
 
-#define GPS_VRTC_EN (0 + 8)      // P0.8, awlays high
-#define GPS_SLEEP_INT (32 + 12)  // P1.12, awlays high
+#define GPS_VRTC_EN (0 + 8)      // P0.8, always high
+#define GPS_SLEEP_INT (32 + 12)  // P1.12, always high
 #define GPS_RTC_INT (0 + 15)     // P0.15, normal is LOW, wake by HIGH
-#define GPS_RESETB_OUT (32 + 14) // P1.14, awlays input pull_up
+#define GPS_RESETB_OUT (32 + 14) // P1.14, always input pull_up
 
 #define GPS_FIX_HOLD_TIME 15000 // ms
-#define BATTERY_PIN 2
+#define BATTERY_PIN 2           // P0.02/AIN0, BAT_ADC
+#define BATTERY_IMMUTABLE
 #define ADC_MULTIPLIER (2.0F)
+// P0.04/AIN2 is VCC_ADC, P0.05/AIN3 is CHARGER_DET, P1.03 is CHARGE_STA, P1.04 is CHARGE_DONE
+
+#define EXT_CHRG_DETECT (32 + 3) // P1.03
+#define EXT_CHRG_DETECT_VALUE LOW
+// #define EXT_IS_CHRGD (32 + 4)  // P1.04
+// #define EXT_IS_CHRGD_VALUE LOW
+#define EXT_PWR_DETECT (0 + 5) // P0.05
 
 #define ADC_RESOLUTION 14
 #define BATTERY_SENSE_RESOLUTION_BITS 12
@@ -133,13 +143,13 @@ extern "C" {
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
 
 // Buzzer
-#define BUZZER_EN_PIN (32 + 5) // P1.05, awlays high
+#define BUZZER_EN_PIN (32 + 5) // P1.05, always high
 #define PIN_BUZZER (0 + 25)    // P0.25, pwm output
 
 #define T1000X_SENSOR_EN
 #define T1000X_VCC_PIN (0 + 4)  // P0.4
-#define T1000X_NTC_PIN (0 + 31) // P0.31
-#define T1000X_LUX_PIN (0 + 29) // P0.29
+#define T1000X_NTC_PIN (0 + 31) // P0.31/AIN7
+#define T1000X_LUX_PIN (0 + 29) // P0.29/AIN5
 
 #ifdef __cplusplus
 }

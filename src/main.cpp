@@ -27,7 +27,6 @@
 #include "detect/ScanI2CTwoWire.h"
 #include <Wire.h>
 #endif
-#include "detect/axpDebug.h"
 #include "detect/einkScan.h"
 #include "gps/RTC.h"
 #include "graphics/RAKled.h"
@@ -523,6 +522,10 @@ void setup()
         case ScanI2C::DeviceType::BBQ10KB:
             // assign an arbitrary value to distinguish from other models
             kb_model = 0x11;
+            break;
+        case ScanI2C::DeviceType::MPR121KB:
+            // assign an arbitrary value to distinguish from other models
+            kb_model = 0x37;
             break;
         default:
             // use this as default since it's also just zero

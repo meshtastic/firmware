@@ -75,7 +75,10 @@ typedef enum _meshtastic_Config_DeviceConfig_RebroadcastMode {
  but takes it step further by also ignoring messages from nodenums not in the node's known list (NodeDB) */
     meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY = 3,
     /* Only permitted for SENSOR, TRACKER and TAK_TRACKER roles, this will inhibit all rebroadcasts, not unlike CLIENT_MUTE role. */
-    meshtastic_Config_DeviceConfig_RebroadcastMode_NONE = 4
+    meshtastic_Config_DeviceConfig_RebroadcastMode_NONE = 4,
+    /* Ignores packets from non-standard portnums such as: TAK, RangeTest, PaxCounter, etc.
+ Only rebroadcasts packets with standard portnums: NodeInfo, Text, Position, Telemetry, and Routing. */
+    meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY = 5
 } meshtastic_Config_DeviceConfig_RebroadcastMode;
 
 /* Bit field of boolean configuration options, indicating which optional
@@ -587,8 +590,8 @@ extern "C" {
 #define _meshtastic_Config_DeviceConfig_Role_ARRAYSIZE ((meshtastic_Config_DeviceConfig_Role)(meshtastic_Config_DeviceConfig_Role_TAK_TRACKER+1))
 
 #define _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN meshtastic_Config_DeviceConfig_RebroadcastMode_ALL
-#define _meshtastic_Config_DeviceConfig_RebroadcastMode_MAX meshtastic_Config_DeviceConfig_RebroadcastMode_NONE
-#define _meshtastic_Config_DeviceConfig_RebroadcastMode_ARRAYSIZE ((meshtastic_Config_DeviceConfig_RebroadcastMode)(meshtastic_Config_DeviceConfig_RebroadcastMode_NONE+1))
+#define _meshtastic_Config_DeviceConfig_RebroadcastMode_MAX meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY
+#define _meshtastic_Config_DeviceConfig_RebroadcastMode_ARRAYSIZE ((meshtastic_Config_DeviceConfig_RebroadcastMode)(meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY+1))
 
 #define _meshtastic_Config_PositionConfig_PositionFlags_MIN meshtastic_Config_PositionConfig_PositionFlags_UNSET
 #define _meshtastic_Config_PositionConfig_PositionFlags_MAX meshtastic_Config_PositionConfig_PositionFlags_SPEED
