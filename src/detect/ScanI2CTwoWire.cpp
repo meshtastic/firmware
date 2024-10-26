@@ -7,7 +7,8 @@
 #include "linux/LinuxHardwareI2C.h"
 #endif
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
-#include "main.h" // atecc
+#include "main.h"      // atecc
+#include "meshUtils.h" // vformat
 #endif
 
 // AXP192 and AXP2101 have the same device address, we just need to identify it in Power.cpp
@@ -172,7 +173,16 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
     }
 #endif
 
-    for (addr.address = 1; addr.address < 127; addr.address++) {
+    // We only need to scan 112 addresses, the rest is reserved for special purposes
+    // 0x00 General Call
+    // 0x01 CBUS addresses
+    // 0x02 Reserved for different bus formats
+    // 0x03 Reserved for future purposes
+    // 0x04-0x07 High Speed Master Code
+    // 0x78-0x7B 10-bit slave addressing
+    // 0x7C-0x7F Reserved for future purposes
+
+    for (addr.address = 8; addr.address < 120; addr.address++) {
         if (asize != 0) {
             if (!in_array(address, asize, addr.address))
                 continue;
@@ -243,6 +253,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 
                 SCAN_SIMPLE_CASE(TDECK_KB_ADDR, TDECKKB, "T-Deck keyboard found");
                 SCAN_SIMPLE_CASE(BBQ10_KB_ADDR, BBQ10KB, "BB Q10 keyboard found");
+
                 SCAN_SIMPLE_CASE(ST7567_ADDRESS, SCREEN_ST7567, "st7567 display found");
 #ifdef HAS_NCP5623
                 SCAN_SIMPLE_CASE(NCP5623_ADDR, NCP5623, "NCP5623 RGB LED found");
@@ -393,7 +404,11 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 
                 SCAN_SIMPLE_CASE(QMC5883L_ADDR, QMC5883L, "QMC5883L Highrate 3-Axis magnetic sensor found")
                 SCAN_SIMPLE_CASE(HMC5883L_ADDR, HMC5883L, "HMC5883L 3-Axis digital compass found")
+#ifdef HAS_QMA6100P
+                SCAN_SIMPLE_CASE(QMA6100P_ADDR, QMA6100P, "QMA6100P accelerometer found")
+#else
                 SCAN_SIMPLE_CASE(PMSA0031_ADDR, PMSA0031, "PMSA0031 air quality sensor found")
+#endif
                 SCAN_SIMPLE_CASE(BMA423_ADDR, BMA423, "BMA423 accelerometer found");
                 SCAN_SIMPLE_CASE(LSM6DS3_ADDR, LSM6DS3, "LSM6DS3 accelerometer found at address 0x%x", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(TCA9535_ADDR, TCA9535, "TCA9535 I2C expander found");
@@ -408,7 +423,17 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 #ifdef HAS_TPS65233
                 SCAN_SIMPLE_CASE(TPS65233_ADDR, TPS65233, "TPS65233 BIAS-T found");
 #endif
-                SCAN_SIMPLE_CASE(MLX90614_ADDR_DEF, MLX90614, "MLX90614 IR temp sensor found");
+
+            case MLX90614_ADDR_DEF:
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0e), 1);
+                if (registerValue == 0x5a) {
+                    type = MLX90614;
+                    LOG_INFO("MLX90614 IR temp sensor found");
+                } else {
+                    type = MPR121KB;
+                    LOG_INFO("MPR121KB keyboard found");
+                }
+                break;
 
             case ICM20948_ADDR:     // same as BMX160_ADDR
             case ICM20948_ADDR_ALT: // same as MPU6050_ADDR
