@@ -27,7 +27,6 @@
 #include "detect/ScanI2CTwoWire.h"
 #include <Wire.h>
 #endif
-#include "detect/axpDebug.h"
 #include "detect/einkScan.h"
 #include "graphics/RAKled.h"
 #include "graphics/Screen.h"
@@ -1325,3 +1324,4 @@ void tft_task_handler(void *param = nullptr)
 }
 
 #endif
+

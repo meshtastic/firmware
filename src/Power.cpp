@@ -360,7 +360,12 @@ class AnalogBatteryLevel : public HasBatteryLevel
     /**
      * return true if there is a battery installed in this unit
      */
+    // if we have a integrated device with a battery, we can assume that the battery is always connected
+#ifdef BATTERY_IMMUTABLE
+    virtual bool isBatteryConnect() override { return true; }
+#else
     virtual bool isBatteryConnect() override { return getBatteryPercent() != -1; }
+#endif
 
     /// If we see a battery voltage higher than physics allows - assume charger is pumping
     /// in power
