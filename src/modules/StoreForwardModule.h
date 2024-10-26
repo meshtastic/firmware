@@ -23,7 +23,7 @@ struct PacketHistoryStruct {
 };
 
 // enum for the storage type
-enum StorageType { PSRAM, SDCARD };
+enum StorageType { ST_PSRAM, ST_SDCARD };
 
 class StoreForwardModule : private concurrency::OSThread, public ProtobufModule<meshtastic_StoreAndForward>
 {
@@ -90,7 +90,7 @@ class StoreForwardModule : private concurrency::OSThread, public ProtobufModule<
     void populateSDCard();
 
     // Storage Type
-    StorageType storageType = PSRAM;
+    StorageType storageType = ST_PSRAM;
 
     // S&F Defaults
     uint32_t historyReturnMax = 25;     // Return maximum of 25 records by default.

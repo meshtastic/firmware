@@ -89,7 +89,7 @@ void StoreForwardModule::populatePSRAM()
     LOG_DEBUG("After PSRAM init: heap %d/%d PSRAM %d/%d", memGet.getFreeHeap(), memGet.getHeapSize(), memGet.getFreePsram(),
               memGet.getPsramSize());
     LOG_DEBUG("numberOfPackets for packetHistory - %u", numberOfPackets);
-    this->storageType = StorageType::PSRAM;
+    this->storageType = StorageType::ST_PSRAM;
 }
 
 /**
@@ -156,7 +156,7 @@ uint32_t StoreForwardModule::getNumAvailablePackets(NodeNum dest, uint32_t last_
         lastRequest.emplace(dest, 0);
     }
     for (uint32_t i = lastRequest[dest]; i < this->packetHistoryTotalCount; i++) {
-        if (this->storageType == StorageType::PSRAM) {
+        if (this->storageType == StorageType::ST_PSRAM) {
             if (this->packetHistory[i].time && (this->packetHistory[i].time > last_time)) {
                 // Client is only interested in packets not from itself and only in broadcast packets or packets towards it.
                 if (this->packetHistory[i].from != dest &&
@@ -164,7 +164,8 @@ uint32_t StoreForwardModule::getNumAvailablePackets(NodeNum dest, uint32_t last_
                     count++;
                 }
             }
-        } else {
+        } else if (this->storageType == StorageType::ST_SDCARD) {
+#if defined(HAS_SDCARD)
             auto handler = SD.open("/storeforward/" + String(i), FILE_READ);
             if (handler) {
                 handler.read((uint8_t *)&this->packetHistory[0], sizeof(PacketHistoryStruct));
@@ -177,6 +178,9 @@ uint32_t StoreForwardModule::getNumAvailablePackets(NodeNum dest, uint32_t last_
                     }
                 }
             }
+#endif
+        } else {
+            LOG_ERROR("S&F: Unknown storage type");
         }
     }
     return count;
@@ -230,7 +234,7 @@ void StoreForwardModule::historyAdd(const meshtastic_MeshPacket &mp)
         }
     }
 
-    if (this->storageType == StorageType::PSRAM) {
+    if (this->storageType == StorageType::ST_PSRAM) {
         this->packetHistory[this->packetHistoryTotalCount].time = getTime();
         this->packetHistory[this->packetHistoryTotalCount].to = mp.to;
         this->packetHistory[this->packetHistoryTotalCount].channel = mp.channel;
@@ -238,8 +242,9 @@ void StoreForwardModule::historyAdd(const meshtastic_MeshPacket &mp)
         this->packetHistory[this->packetHistoryTotalCount].payload_size = p.payload.size;
         memcpy(this->packetHistory[this->packetHistoryTotalCount].payload, p.payload.bytes,
                meshtastic_Constants_DATA_PAYLOAD_LEN);
-    } else {
-        // Save to SDCARD
+    } else if (this->storageType == StorageType::ST_SDCARD) {
+// Save to SDCARD
+#if defined(HAS_SDCARD)
         this->packetHistory[0].time = getTime();
         this->packetHistory[0].to = mp.to;
         this->packetHistory[0].channel = mp.channel;
@@ -249,6 +254,9 @@ void StoreForwardModule::historyAdd(const meshtastic_MeshPacket &mp)
         auto handler = SD.open("/storeforward/" + String(this->packetHistoryTotalCount), FILE_WRITE);
         handler.write((uint8_t *)&this->packetHistory, sizeof(PacketHistoryStruct));
         handler.close();
+#endif
+    } else {
+        LOG_ERROR("S&F: Unknown storage type");
     }
 
     this->packetHistoryTotalCount++;
@@ -283,7 +291,7 @@ bool StoreForwardModule::sendPayload(NodeNum dest, uint32_t last_time)
 meshtastic_MeshPacket *StoreForwardModule::preparePayload(NodeNum dest, uint32_t last_time, bool local)
 {
     for (uint32_t i = lastRequest[dest]; i < this->packetHistoryTotalCount; i++) {
-        if (this->storageType == StorageType::PSRAM) {
+        if (this->storageType == StorageType::ST_PSRAM) {
 
             if (this->packetHistory[i].time && (this->packetHistory[i].time > last_time)) {
                 /*  Copy the messages that were received by the server in the last msAgo
@@ -327,7 +335,8 @@ meshtastic_MeshPacket *StoreForwardModule::preparePayload(NodeNum dest, uint32_t
                     return p;
                 }
             }
-        } else {
+        } else if (this->storageType == StorageType::ST_SDCARD) {
+#if defined(HAS_SDCARD)
             auto handler = SD.open("/storeforward/" + String(i), FILE_READ);
             if (handler) {
                 handler.read((uint8_t *)&this->packetHistory[0], sizeof(PacketHistoryStruct));
@@ -371,6 +380,9 @@ meshtastic_MeshPacket *StoreForwardModule::preparePayload(NodeNum dest, uint32_t
                     }
                 }
             }
+#endif
+        } else {
+            LOG_ERROR("S&F: Unknown storage type");
         }
     }
     return nullptr;
