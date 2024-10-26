@@ -4,8 +4,8 @@
 #define I2C_SDA 8
 #define I2C_SCL 9
 
-#define I2C_SDA2 18
-#define I2C_SCL2 6
+#define I2C_SDA1 18
+#define I2C_SCL1 6
 
 
 // XIAO S3 LORA module
