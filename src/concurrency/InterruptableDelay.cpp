@@ -18,7 +18,7 @@ bool InterruptableDelay::delay(uint32_t msec)
     // sem take will return false if we timed out (i.e. were not interrupted)
     bool r = semaphore.take(msec);
 
-    // LOG_DEBUG("interrupt=%d\n", r);
+    // LOG_DEBUG("interrupt=%d", r);
     return !r;
 }
 

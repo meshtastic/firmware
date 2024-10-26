@@ -2,22 +2,71 @@
 #include "hardware/xosc.h"
 #include <hardware/clocks.h>
 #include <hardware/pll.h>
+#include <pico/sleep.h>
 #include <pico/stdlib.h>
 #include <pico/unique_id.h>
-#include <stdio.h>
 
 void setBluetoothEnable(bool enable)
 {
     // not needed
 }
 
+static bool awake;
+
+static void sleep_callback(void)
+{
+    awake = true;
+}
+
+void epoch_to_datetime(time_t epoch, datetime_t *dt)
+{
+    struct tm *tm_info;
+
+    tm_info = gmtime(&epoch);
+    dt->year = tm_info->tm_year;
+    dt->month = tm_info->tm_mon + 1;
+    dt->day = tm_info->tm_mday;
+    dt->dotw = tm_info->tm_wday;
+    dt->hour = tm_info->tm_hour;
+    dt->min = tm_info->tm_min;
+    dt->sec = tm_info->tm_sec;
+}
+
+void debug_date(datetime_t t)
+{
+    LOG_DEBUG("%d %d %d %d %d %d %d", t.year, t.month, t.day, t.hour, t.min, t.sec, t.dotw);
+    uart_default_tx_wait_blocking();
+}
+
 void cpuDeepSleep(uint32_t msecs)
 {
-    /* Disable both PLL to avoid power dissipation */
-    pll_deinit(pll_sys);
-    pll_deinit(pll_usb);
+
+    time_t seconds = (time_t)(msecs / 1000);
+    datetime_t t_init, t_alarm;
+
+    awake = false;
+    // Start the RTC
+    rtc_init();
+    epoch_to_datetime(0, &t_init);
+    rtc_set_datetime(&t_init);
+    epoch_to_datetime(seconds, &t_alarm);
+    // debug_date(t_init);
+    // debug_date(t_alarm);
+    uart_default_tx_wait_blocking();
+    sleep_run_from_dormant_source(DORMANT_SOURCE_ROSC);
+    sleep_goto_sleep_until(&t_alarm, &sleep_callback);
+
+    // Make sure we don't wake
+    while (!awake) {
+        delay(1);
+    }
+
+    /* For now, I don't know how to revert this state
+        We just reboot in order to get back operational */
+    rp2040.reboot();
+
     /* Set RP2040 in dormant mode. Will not wake up. */
-    xosc_dormant();
+    //  xosc_dormant();
 }
 
 void updateBatteryLevel(uint8_t level)
@@ -54,15 +103,15 @@ void rp2040Setup()
     uint f_clk_adc = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_CLK_ADC);
     uint f_clk_rtc = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_CLK_RTC);
 
-    LOG_INFO("Clock speed:\n");
-    LOG_INFO("pll_sys  = %dkHz\n", f_pll_sys);
-    LOG_INFO("pll_usb  = %dkHz\n", f_pll_usb);
-    LOG_INFO("rosc     = %dkHz\n", f_rosc);
-    LOG_INFO("clk_sys  = %dkHz\n", f_clk_sys);
-    LOG_INFO("clk_peri = %dkHz\n", f_clk_peri);
-    LOG_INFO("clk_usb  = %dkHz\n", f_clk_usb);
-    LOG_INFO("clk_adc  = %dkHz\n", f_clk_adc);
-    LOG_INFO("clk_rtc  = %dkHz\n", f_clk_rtc);
+    LOG_INFO("Clock speed:");
+    LOG_INFO("pll_sys  = %dkHz", f_pll_sys);
+    LOG_INFO("pll_usb  = %dkHz", f_pll_usb);
+    LOG_INFO("rosc     = %dkHz", f_rosc);
+    LOG_INFO("clk_sys  = %dkHz", f_clk_sys);
+    LOG_INFO("clk_peri = %dkHz", f_clk_peri);
+    LOG_INFO("clk_usb  = %dkHz", f_clk_usb);
+    LOG_INFO("clk_adc  = %dkHz", f_clk_adc);
+    LOG_INFO("clk_rtc  = %dkHz", f_clk_rtc);
 #endif
 }
 

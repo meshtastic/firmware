@@ -39,10 +39,10 @@ class CryptoEngine
 #endif
     void clearKeys();
     void setDHPrivateKey(uint8_t *_private_key);
-    virtual bool encryptCurve25519(uint32_t toNode, uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes,
-                                   uint8_t *bytesOut);
-    virtual bool decryptCurve25519(uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes, uint8_t *bytesOut);
-    bool setDHKey(uint32_t nodeNum);
+    virtual bool encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtastic_UserLite_public_key_t remotePublic,
+                                   uint64_t packetNum, size_t numBytes, uint8_t *bytes, uint8_t *bytesOut);
+    virtual bool decryptCurve25519(uint32_t fromNode, meshtastic_UserLite_public_key_t remotePublic, uint64_t packetNum,
+                                   size_t numBytes, uint8_t *bytes, uint8_t *bytesOut);
     virtual bool setDHPublicKey(uint8_t *publicKey);
     virtual void hash(uint8_t *bytes, size_t numBytes);
 

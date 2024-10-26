@@ -114,6 +114,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define CARDKB_ADDR 0x5F
 #define TDECK_KB_ADDR 0x55
 #define BBQ10_KB_ADDR 0x1F
+#define MPR121_KB_ADDR 0x5A
 
 // -----------------------------------------------------------------------------
 // SENSOR
@@ -135,6 +136,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define LPS22HB_ADDR_ALT 0x5D
 #define SHT31_4x_ADDR 0x44
 #define PMSA0031_ADDR 0x12
+#define QMA6100P_ADDR 0x12
 #define AHT10_ADDR 0x38
 #define RCWL9620_ADDR 0x57
 #define VEML7700_ADDR 0x10
@@ -145,7 +147,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define DFROBOT_LARK_ADDR 0x42
 #define NAU7802_ADDR 0x2A
 #define MAX30102_ADDR 0x57
-#define MLX90614_ADDR 0x5A
+#define MLX90614_ADDR_DEF 0x5A
 
 // -----------------------------------------------------------------------------
 // ACCELEROMETER
@@ -186,6 +188,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Touchscreen
 // -----------------------------------------------------------------------------
 #define FT6336U_ADDR 0x48
+
+// -----------------------------------------------------------------------------
+// BIAS-T Generator
+// -----------------------------------------------------------------------------
+#define TPS65233_ADDR 0x60
 
 // convert 24-bit color to 16-bit (56K)
 #define COLOR565(r, g, b) (((r & 0xF8) << 8) | ((g & 0xFC) << 3) | ((b & 0xF8) >> 3))

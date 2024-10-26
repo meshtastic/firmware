@@ -14,6 +14,9 @@
 #include "LSM6DS3Sensor.h"
 #include "MPU6050Sensor.h"
 #include "MotionSensor.h"
+#ifdef HAS_QMA6100P
+#include "QMA6100PSensor.h"
+#endif
 #include "STK8XXXSensor.h"
 
 extern ScanI2C::DeviceAddress accelerometer_found;
@@ -62,14 +65,14 @@ class AccelerometerThread : public concurrency::OSThread
             return;
 
         if (device.address.port == ScanI2C::I2CPort::NO_I2C || device.address.address == 0 || device.type == ScanI2C::NONE) {
-            LOG_DEBUG("AccelerometerThread disabling due to no sensors found\n");
+            LOG_DEBUG("AccelerometerThread disabling due to no sensors found");
             disable();
             return;
         }
 
 #ifndef RAK_4631
         if (!config.display.wake_on_tap_or_motion && !config.device.double_tap_as_button_press) {
-            LOG_DEBUG("AccelerometerThread disabling due to no interested configurations\n");
+            LOG_DEBUG("AccelerometerThread disabling due to no interested configurations");
             disable();
             return;
         }
@@ -97,6 +100,11 @@ class AccelerometerThread : public concurrency::OSThread
         case ScanI2C::DeviceType::ICM20948:
             sensor = new ICM20948Sensor(device);
             break;
+#ifdef HAS_QMA6100P
+        case ScanI2C::DeviceType::QMA6100P:
+            sensor = new QMA6100PSensor(device);
+            break;
+#endif
         default:
             disable();
             return;
@@ -106,7 +114,7 @@ class AccelerometerThread : public concurrency::OSThread
         if (!isInitialised) {
             clean();
         }
-        LOG_DEBUG("AccelerometerThread::init %s\n", isInitialised ? "ok" : "failed");
+        LOG_DEBUG("AccelerometerThread::init %s", isInitialised ? "ok" : "failed");
     }
 
     // Copy constructor (not implemented / included to avoid cppcheck warnings)
