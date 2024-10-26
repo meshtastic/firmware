@@ -1324,4 +1324,3 @@ void tft_task_handler(void *param = nullptr)
 }
 
 #endif
-
