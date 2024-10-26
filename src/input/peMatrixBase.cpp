@@ -6,7 +6,11 @@
 extern ScanI2C::DeviceAddress cardkb_found;
 extern uint8_t kb_model;
 
+#if WIRE_INTERFACES_COUNT == 2 // defined in architecture.h
 I2CKeyPad keyPad(cardkb_found.address, cardkb_found.port == ScanI2C::WIRE1 ? &Wire1 : &Wire);
+#else
+I2CKeyPad keyPad(cardkb_found.address, &Wire);
+#endif
 
 PeMatrixBase::PeMatrixBase(const char *name) : concurrency::OSThread(name)
 {
