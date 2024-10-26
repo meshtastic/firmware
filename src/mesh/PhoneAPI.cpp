@@ -164,6 +164,7 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
  *
  * Our sending states progress in the following sequence (the client apps ASSUME THIS SEQUENCE, DO NOT CHANGE IT):
     STATE_SEND_MY_INFO, // send our my info record
+    STATE_SEND_UIDATA,
     STATE_SEND_OWN_NODEINFO,
     STATE_SEND_METADATA,
     STATE_SEND_CHANNELS
@@ -289,6 +290,9 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         case meshtastic_Config_sessionkey_tag:
             LOG_DEBUG("Send config: sessionkey");
             fromRadioScratch.config.which_payload_variant = meshtastic_Config_sessionkey_tag;
+            break;
+        case meshtastic_Config_device_ui_tag: // NOOP!
+            fromRadioScratch.config.which_payload_variant = meshtastic_Config_device_ui_tag;
             break;
         default:
             LOG_ERROR("Unknown config type %d", config_state);
