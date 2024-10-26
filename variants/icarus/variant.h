@@ -1,5 +1,5 @@
 // Icarus has a 1.3 inch OLED Screen
-#define USCREEN_SSD106
+#define SCREEN_SSD106
 
 #define I2C_SDA 8
 #define I2C_SCL 9
