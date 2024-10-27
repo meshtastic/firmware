@@ -478,11 +478,11 @@ bool GPS::setup()
             delay(250);
         } else if (gnssModel == GNSS_MODEL_MTK_PA1616S) {
             // PA1616S is used in some GPS breakout boards from Adafruit
-            // PA1616S does not have GLONASS capability. PA1616D does.
+            // PA1616S does not have GLONASS capability. PA1616D does, but is not implemented here.
             _serial_gps->write("$PMTK353,1,0,0,0,0*2A\r\n");
             // Above command will reset the GPS and takes longer before it will accept new commands
             delay(1000);
-            // only ask for RMC and GGA (GNRMC and GNGGA)
+            // Only ask for RMC and GGA (GNRMC and GNGGA)
             _serial_gps->write("$PMTK314,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*28\r\n");
             delay(250);
             // Enable SBAS / WAAS
