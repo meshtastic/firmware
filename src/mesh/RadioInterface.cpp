@@ -65,6 +65,11 @@ const RegionInfo regions[] = {
     RDEF(ANZ, 915.0f, 928.0f, 100, 0, 30, true, false, false),
 
     /*
+        https://www.gov.br/anatel/pt-br/regulado/radiofrequencia/radiacao-restrita
+     */
+    RDEF(BR, 915.0f, 928.0f, 100, 0, 30, true, false, false),
+
+    /*
         https://digital.gov.ru/uploaded/files/prilozhenie-12-k-reshenyu-gkrch-18-46-03-1.pdf
 
         Note:
