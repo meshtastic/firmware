@@ -34,8 +34,7 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
 
     uint32_t nagCycleCutoff = 1;
 
-    void setExternalOn(uint8_t index = 0);
-    void setExternalOff(uint8_t index = 0);
+    void setExternalState(uint8_t index = 0, bool on = false);
     bool getExternal(uint8_t index = 0);
 
     void setMute(bool mute) { isMuted = mute; }
