@@ -7,8 +7,9 @@
 #define I2C_SDA1 18
 #define I2C_SCL1 6
 
+#define BUTTON_PIN 7 // Selection button
 
-// XIAO S3 LORA module
+// RA-01SH/HT-RA62 LORA module
 #define USE_SX1262
 
 #define LORA_MISO 39
