@@ -103,7 +103,7 @@ void StoreForwardModule::populateSDCard()
             LOG_INFO("Creating StoreForward directory");
             SD.mkdir("/storeforward");
         }
-        this->storageType = StorageType::SDCARD;
+        this->storageType = StorageType::ST_SDCARD;
         uint32_t numberOfPackets = (this->records ? this->records : (((SD.totalBytes() / 3) * 2) / sizeof(PacketHistoryStruct)));
         // only allocate space for one temp copy
         this->packetHistory = (PacketHistoryStruct *)malloc(sizeof(PacketHistoryStruct));
