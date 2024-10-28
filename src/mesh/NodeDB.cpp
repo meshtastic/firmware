@@ -35,7 +35,6 @@
 #if HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
-
 #include <Preferences.h>
 #include <esp_efuse.h>
 #include <esp_efuse_table.h>
@@ -43,6 +42,9 @@
 #include <soc/efuse_reg.h>
 #include <soc/soc.h>
 #endif
+
+#include "SPILock.h"
+#include "modules/StoreForwardModule.h"
 
 #ifdef ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
@@ -872,6 +874,9 @@ void NodeDB::loadFromDisk()
 bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_t *fields, const void *dest_struct,
                        bool fullAtomic)
 {
+#ifdef ARCH_ESP32
+    concurrency::LockGuard g(spiLock);
+#endif
     bool okay = false;
 #ifdef FSCom
     auto f = SafeFile(filename, fullAtomic);
