@@ -603,7 +603,7 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
              p->decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP ||
              p->decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP ||
              p->decoded.portnum == meshtastic_PortNum_REMOTE_HARDWARE_APP)) {
-            LOG_DEBUG("Ignoring packet on blacklisted portnum during event");
+            LOG_DEBUG("Ignoring packet on blacklisted portnum for CORE_PORTNUMS_ONLY");
             cancelSending(p->from, p->id);
             skipHandle = true;
         }
