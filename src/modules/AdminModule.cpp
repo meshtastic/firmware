@@ -900,7 +900,7 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
 #ifdef ARCH_PORTDUINO
     conn.wifi.status.is_connected = true;
 #else
-    conn.wifi.status.is_connected = WiFi.status() != WL_CONNECTED;
+    conn.wifi.status.is_connected = WiFi.status() == WL_CONNECTED;
 #endif
     strncpy(conn.wifi.ssid, config.network.wifi_ssid, 33);
     if (conn.wifi.status.is_connected) {
@@ -932,10 +932,14 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
     conn.has_bluetooth = true;
     conn.bluetooth.pin = config.bluetooth.fixed_pin;
 #ifdef ARCH_ESP32
-    conn.bluetooth.is_connected = nimbleBluetooth->isConnected();
-    conn.bluetooth.rssi = nimbleBluetooth->getRssi();
+    if (config.bluetooth.enabled && nimbleBluetooth) {
+        conn.bluetooth.is_connected = nimbleBluetooth->isConnected();
+        conn.bluetooth.rssi = nimbleBluetooth->getRssi();
+    }
 #elif defined(ARCH_NRF52)
-    conn.bluetooth.is_connected = nrf52Bluetooth->isConnected();
+    if (config.bluetooth.enabled && nrf52Bluetooth) {
+        conn.bluetooth.is_connected = nrf52Bluetooth->isConnected();
+    }
 #endif
 #endif
     conn.has_serial = true; // No serial-less devices
