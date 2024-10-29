@@ -174,21 +174,23 @@ NodeDB::NodeDB()
     }
 
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-    bool keygenSuccess = false;
-    if (config.security.private_key.size == 32) {
-        if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
+    if (!owner.is_licensed) {
+        bool keygenSuccess = false;
+        if (config.security.private_key.size == 32) {
+            if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
+                keygenSuccess = true;
+            }
+        } else {
+            LOG_INFO("Generating new PKI keys");
+            crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
             keygenSuccess = true;
         }
-    } else {
-        LOG_INFO("Generating new PKI keys");
-        crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
-        keygenSuccess = true;
-    }
-    if (keygenSuccess) {
-        config.security.public_key.size = 32;
-        config.security.private_key.size = 32;
-        owner.public_key.size = 32;
-        memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
+        if (keygenSuccess) {
+            config.security.public_key.size = 32;
+            config.security.private_key.size = 32;
+            owner.public_key.size = 32;
+            memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
+        }
     }
 #elif !(MESHTASTIC_EXCLUDE_PKI)
     // Calculate Curve25519 public and private keys
