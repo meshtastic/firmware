@@ -107,14 +107,16 @@ void portduinoSetup()
     YAML::Node yamlConfig;
 
     if (configPath != nullptr) {
-        std::cout << "Using " << configPath << " as config file" << std::endl;
-        loadConfig(configPath);
-    } else if (access("config.yaml", R_OK) == 0) {
+        if (loadConfig(configPath)) {
+            std::cout << "Using " << configPath << " as config file" << std::endl;
+        } else {
+            std::cout << "Unable to use " << configPath << " as config file" << std::endl;
+            exit(EXIT_FAILURE);
+        }
+    } else if (access("config.yaml", R_OK) == 0 && loadConfig("config.yaml")) {
         std::cout << "Using local config.yaml as config file" << std::endl;
-        loadConfig("config.yaml");
-    } else if (access("/etc/meshtasticd/config.yaml", R_OK) == 0) {
+    } else if (access("/etc/meshtasticd/config.yaml", R_OK) == 0 && loadConfig("/etc/meshtasticd/config.yaml")) {
         std::cout << "Using /etc/meshtasticd/config.yaml as config file" << std::endl;
-        loadConfig("/etc/meshtasticd/config.yaml");
     } else {
         std::cout << "No 'config.yaml' found, running simulated." << std::endl;
         settingsMap[maxnodes] = 200;               // Default to 200 nodes
@@ -406,7 +408,7 @@ bool loadConfig(const char *configPath)
 
     } catch (YAML::Exception &e) {
         std::cout << "*** Exception " << e.what() << std::endl;
-        exit(EXIT_FAILURE);
+        return false;
     }
     return true;
 }
