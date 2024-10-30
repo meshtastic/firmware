@@ -591,19 +591,20 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
             skipHandle = true;
         }
 
+        bool shouldIgnoreNonstandardPorts =
+            config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY;
 #if USERPREFS_EVENT_MODE
-        if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
-            (p->decoded.portnum == meshtastic_PortNum_ATAK_FORWARDER || p->decoded.portnum == meshtastic_PortNum_ATAK_PLUGIN ||
-             p->decoded.portnum == meshtastic_PortNum_PAXCOUNTER_APP || p->decoded.portnum == meshtastic_PortNum_IP_TUNNEL_APP ||
-             p->decoded.portnum == meshtastic_PortNum_AUDIO_APP || p->decoded.portnum == meshtastic_PortNum_PRIVATE_APP ||
-             p->decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP ||
-             p->decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP ||
-             p->decoded.portnum == meshtastic_PortNum_REMOTE_HARDWARE_APP)) {
-            LOG_DEBUG("Ignoring packet on blacklisted portnum during event");
+        shouldIgnoreNonstandardPorts = true;
+#endif
+        if (shouldIgnoreNonstandardPorts && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+            IS_ONE_OF(p->decoded.portnum, meshtastic_PortNum_ATAK_FORWARDER, meshtastic_PortNum_ATAK_PLUGIN,
+                      meshtastic_PortNum_PAXCOUNTER_APP, meshtastic_PortNum_IP_TUNNEL_APP, meshtastic_PortNum_AUDIO_APP,
+                      meshtastic_PortNum_PRIVATE_APP, meshtastic_PortNum_DETECTION_SENSOR_APP, meshtastic_PortNum_RANGE_TEST_APP,
+                      meshtastic_PortNum_REMOTE_HARDWARE_APP)) {
+            LOG_DEBUG("Ignoring packet on blacklisted portnum for CORE_PORTNUMS_ONLY");
             cancelSending(p->from, p->id);
             skipHandle = true;
         }
-#endif
     } else {
         printPacket("packet decoding failed or skipped (no PSK?)", p);
     }
