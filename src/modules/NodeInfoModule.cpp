@@ -81,6 +81,12 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
         ignoreRequest = false; // Don't ignore requests anymore
         meshtastic_User &u = owner;
 
+        // Strip the public key if the user is licensed
+        if (u.is_licensed && u.public_key.size > 0) {
+            u.public_key.bytes[0] = 0;
+            u.public_key.size = 0;
+        }
+
         LOG_INFO("sending owner %s/%s/%s", u.id, u.long_name, u.short_name);
         lastSentToMesh = millis();
         return allocDataProtobuf(u);
