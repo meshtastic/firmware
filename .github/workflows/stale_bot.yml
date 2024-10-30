@@ -1,4 +1,4 @@
-name: Nightly
+name: process stale Issues and PR's
 on:
   schedule:
     - cron: 0 6 * * *
