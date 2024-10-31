@@ -431,7 +431,7 @@ bool GPS::setup()
                 if (++speedSelect == sizeof(serialSpeeds) / sizeof(int)) {
                     speedSelect = 0;
                     if (--probeTries == 0) {
-                        LOG_WARN("Giving up on GPS probe and setting to 9600.");
+                        LOG_WARN("Giving up on GPS probe and setting to GPS_BAUDRATE.");
                         return true;
                     }
                 }
