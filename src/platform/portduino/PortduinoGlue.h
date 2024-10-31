@@ -55,7 +55,8 @@ enum configNames {
     webserverrootpath,
     maxtophone,
     maxnodes,
-    ascii_logs
+    ascii_logs,
+    config_directory
 };
 enum { no_screen, x11, st7789, st7735, st7735s, st7796, ili9341, ili9342, ili9488, hx8357d };
 enum { no_touchscreen, xpt2046, stmpe610, gt911, ft5x06 };
@@ -65,3 +66,5 @@ extern std::map<configNames, int> settingsMap;
 extern std::map<configNames, std::string> settingsStrings;
 extern std::ofstream traceFile;
 int initGPIOPin(int pinNum, std::string gpioChipname);
+bool loadConfig(const char *configPath);
+static bool ends_with(std::string_view str, std::string_view suffix);
