@@ -468,16 +468,16 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
             
             // Sprinkler mod
             if (containsOff || containsOn || containsToggle) {
-                if (containsOff) {
-                    LOG_INFO("externalNotificationModule - Notification Bell (Off)");
+                if (containsOff && getExternal(0)) {
+                    LOG_INFO("externalNotificationModule - Notification Actuator (Off)");
                     setExternalOff(0);
                 }
-                if (containsOn) {
-                    LOG_INFO("externalNotificationModule - Notification Bell (On)");
+                if (containsOn && !getExternal(0)) {
+                    LOG_INFO("externalNotificationModule - Notification Actuator (On)");
                     setExternalOn(0);
                 }
                 if (containsToggle) {
-                    LOG_INFO("externalNotificationModule - Notification Bell (Toggle)");
+                    LOG_INFO("externalNotificationModule - Notification Actuator (Toggle)");
                     if (getExternal(0)) {
                         setExternalOff(0);
                     } else {
