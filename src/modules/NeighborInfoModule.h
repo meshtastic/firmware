@@ -63,14 +63,6 @@ class NeighborInfoModule : public ProtobufModule<meshtastic_NeighborInfo>, priva
       Exception is when the packet came via MQTT */
     virtual bool wantPacket(const meshtastic_MeshPacket *p) override { return enabled && !p->via_mqtt; }
 
-    /* Update the next hop for nodes in the database.
-     * Based on our own neighbors, and the neighbors of our neighbors.
-     */
-    void updateNextHops(meshtastic_NeighborInfo *np);
-
-    /* Return true if the given node is a neighbor of us */
-    bool isANeighbor(NodeNum node_id);
-
     /* These are for debugging only */
     void printNeighborInfo(const char *header, const meshtastic_NeighborInfo *np);
     void printNodeDBNeighbors();

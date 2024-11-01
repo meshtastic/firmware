@@ -156,54 +156,6 @@ void NeighborInfoModule::alterReceivedProtobuf(meshtastic_MeshPacket &p, meshtas
         pb_encode_to_bytes(p.decoded.payload.bytes, sizeof(p.decoded.payload.bytes), &meshtastic_NeighborInfo_msg, n);
 }
 
-/* Update the next hop for nodes in the database.
- * Based on our own neighbors, and the neighbors of our neighbors.
- */
-void NeighborInfoModule::updateNextHops(meshtastic_NeighborInfo *np)
-{
-    LOG_DEBUG("Updating next hops based on received NeighborInfo packet\n");
-    meshtastic_NodeInfoLite *currentNode = nodeDB->getMeshNode(np->node_id);
-    // Check if the sender of this neighborInfo packet is a neighbor of ourselves
-    if (currentNode && isANeighbor(np->node_id)) {
-        currentNode->next_hop = nodeDB->getLastByteOfNodeNum(np->node_id); // Set the next hop to the sender of this packet
-        for (uint8_t i = 0; i < np->neighbors_count; i++) {
-            if (isANeighbor(np->neighbors[i].node_id))
-                continue; // This node is a neighbor of ourselves
-
-            meshtastic_NodeInfoLite *neighborOfCurrentNode = nodeDB->getMeshNode(np->neighbors[i].node_id);
-            // Update next hop of this node to the sender of this packet, because it is the most recent neighbor
-            if (neighborOfCurrentNode)
-                neighborOfCurrentNode->next_hop = nodeDB->getLastByteOfNodeNum(currentNode->num);
-        }
-    } else if (currentNode) { // Sender is not a neighbor
-        // Find common neighbors and use the most recent as next hop to this node
-        meshtastic_NodeInfoLite *currentNextHop = nodeDB->getMeshNode(currentNode->next_hop);
-        uint32_t maxLastHeard = currentNextHop ? currentNextHop->last_heard : 0;
-        for (uint8_t i = 0; i < np->neighbors_count; i++) {
-            meshtastic_NodeInfoLite *neighborOfCurrentNode = nodeDB->getMeshNode(np->neighbors[i].node_id);
-            if (neighborOfCurrentNode && isANeighbor(neighborOfCurrentNode->num)) {
-                // This neighbor was heard more recently than the current next hop
-                if (neighborOfCurrentNode->last_heard > maxLastHeard) {
-                    currentNode->next_hop = nodeDB->getLastByteOfNodeNum(neighborOfCurrentNode->num);
-                    maxLastHeard = neighborOfCurrentNode->last_heard;
-                    LOG_DEBUG("More recent node found, so update next_hop of %x to %x\n", currentNode->num,
-                              neighborOfCurrentNode->num);
-                }
-            }
-        }
-    }
-}
-
-bool NeighborInfoModule::isANeighbor(NodeNum node_id)
-{
-    for (size_t i = 0; i < neighbors.size(); i++) {
-        if (neighbors[i].node_id == node_id) {
-            return true;
-        }
-    }
-    return false;
-}
-
 void NeighborInfoModule::resetNeighbors()
 {
     neighbors.clear();
