@@ -13,10 +13,6 @@
 #include "mqtt/MQTT.h"
 #endif
 
-/// 16 bytes of random PSK for our _public_ default channel that all devices power up on (AES128)
-static const uint8_t defaultpsk[] = {0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x07, 0x59,
-                                     0xf0, 0xbc, 0xff, 0xab, 0xcf, 0x4e, 0x69, 0x01};
-
 Channels channels;
 
 const char *Channels::adminChannel = "admin";
@@ -80,6 +76,23 @@ meshtastic_Channel &Channels::fixupChannel(ChannelIndex chIndex)
     return ch;
 }
 
+void Channels::initDefaultLoraConfig()
+{
+    meshtastic_Config_LoRaConfig &loraConfig = config.lora;
+
+    loraConfig.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST; // Default to Long Range & Fast
+    loraConfig.use_preset = true;
+    loraConfig.tx_power = 0; // default
+    loraConfig.channel_num = 0;
+
+#ifdef USERPREFS_LORACONFIG_MODEM_PRESET
+    loraConfig.modem_preset = USERPREFS_LORACONFIG_MODEM_PRESET;
+#endif
+#ifdef USERPREFS_LORACONFIG_CHANNEL_NUM
+    loraConfig.channel_num = USERPREFS_LORACONFIG_CHANNEL_NUM;
+#endif
+}
+
 /**
  * Write a default channel to the specified channel index
  */
@@ -87,12 +100,7 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
 {
     meshtastic_Channel &ch = getByIndex(chIndex);
     meshtastic_ChannelSettings &channelSettings = ch.settings;
-    meshtastic_Config_LoRaConfig &loraConfig = config.lora;
 
-    loraConfig.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST; // Default to Long Range & Fast
-    loraConfig.use_preset = true;
-    loraConfig.tx_power = 0; // default
-    loraConfig.channel_num = 0;
     uint8_t defaultpskIndex = 1;
     channelSettings.psk.bytes[0] = defaultpskIndex;
     channelSettings.psk.size = 1;
@@ -101,29 +109,68 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
     channelSettings.has_module_settings = true;
 
     ch.has_settings = true;
-    ch.role = meshtastic_Channel_Role_PRIMARY;
+    ch.role = chIndex == 0 ? meshtastic_Channel_Role_PRIMARY : meshtastic_Channel_Role_SECONDARY;
 
-#ifdef LORACONFIG_MODEM_PRESET_USERPREFS
-    loraConfig.modem_preset = LORACONFIG_MODEM_PRESET_USERPREFS;
+    switch (chIndex) {
+    case 0:
+#ifdef USERPREFS_CHANNEL_0_PSK
+        static const uint8_t defaultpsk0[] = USERPREFS_CHANNEL_0_PSK;
+        memcpy(channelSettings.psk.bytes, defaultpsk0, sizeof(defaultpsk0));
+        channelSettings.psk.size = sizeof(defaultpsk0);
 #endif
-#ifdef LORACONFIG_CHANNEL_NUM_USERPREFS
-    loraConfig.channel_num = LORACONFIG_CHANNEL_NUM_USERPREFS;
+#ifdef USERPREFS_CHANNEL_0_NAME
+        strcpy(channelSettings.name, USERPREFS_CHANNEL_0_NAME);
 #endif
-
-    // Install custom defaults. Will eventually support setting multiple default channels
-    if (chIndex == 0) {
-#ifdef CHANNEL_0_PSK_USERPREFS
-        static const uint8_t defaultpsk[] = CHANNEL_0_PSK_USERPREFS;
-        memcpy(channelSettings.psk.bytes, defaultpsk, sizeof(defaultpsk));
-        channelSettings.psk.size = sizeof(defaultpsk);
-
+#ifdef USERPREFS_CHANNEL_0_PRECISION
+        channelSettings.module_settings.position_precision = USERPREFS_CHANNEL_0_PRECISION;
 #endif
-#ifdef CHANNEL_0_NAME_USERPREFS
-        strcpy(channelSettings.name, CHANNEL_0_NAME_USERPREFS);
+#ifdef USERPREFS_CHANNEL_0_UPLINK_ENABLED
+        channelSettings.uplink_enabled = USERPREFS_CHANNEL_0_UPLINK_ENABLED;
 #endif
-#ifdef CHANNEL_0_PRECISION_USERPREFS
-        channelSettings.module_settings.position_precision = CHANNEL_0_PRECISION_USERPREFS;
+#ifdef USERPREFS_CHANNEL_0_DOWNLINK_ENABLED
+        channelSettings.downlink_enabled = USERPREFS_CHANNEL_0_DOWNLINK_ENABLED;
 #endif
+        break;
+    case 1:
+#ifdef USERPREFS_CHANNEL_1_PSK
+        static const uint8_t defaultpsk1[] = USERPREFS_CHANNEL_1_PSK;
+        memcpy(channelSettings.psk.bytes, defaultpsk1, sizeof(defaultpsk1));
+        channelSettings.psk.size = sizeof(defaultpsk1);
+#endif
+#ifdef USERPREFS_CHANNEL_1_NAME
+        strcpy(channelSettings.name, USERPREFS_CHANNEL_1_NAME);
+#endif
+#ifdef USERPREFS_CHANNEL_1_PRECISION
+        channelSettings.module_settings.position_precision = USERPREFS_CHANNEL_1_PRECISION;
+#endif
+#ifdef USERPREFS_CHANNEL_1_UPLINK_ENABLED
+        channelSettings.uplink_enabled = USERPREFS_CHANNEL_1_UPLINK_ENABLED;
+#endif
+#ifdef USERPREFS_CHANNEL_1_DOWNLINK_ENABLED
+        channelSettings.downlink_enabled = USERPREFS_CHANNEL_1_DOWNLINK_ENABLED;
+#endif
+        break;
+    case 2:
+#ifdef USERPREFS_CHANNEL_2_PSK
+        static const uint8_t defaultpsk2[] = USERPREFS_CHANNEL_2_PSK;
+        memcpy(channelSettings.psk.bytes, defaultpsk2, sizeof(defaultpsk2));
+        channelSettings.psk.size = sizeof(defaultpsk2);
+#endif
+#ifdef USERPREFS_CHANNEL_2_NAME
+        strcpy(channelSettings.name, USERPREFS_CHANNEL_2_NAME);
+#endif
+#ifdef USERPREFS_CHANNEL_2_PRECISION
+        channelSettings.module_settings.position_precision = USERPREFS_CHANNEL_2_PRECISION;
+#endif
+#ifdef USERPREFS_CHANNEL_2_UPLINK_ENABLED
+        channelSettings.uplink_enabled = USERPREFS_CHANNEL_2_UPLINK_ENABLED;
+#endif
+#ifdef USERPREFS_CHANNEL_2_DOWNLINK_ENABLED
+        channelSettings.downlink_enabled = USERPREFS_CHANNEL_2_DOWNLINK_ENABLED;
+#endif
+        break;
+    default:
+        break;
     }
 }
 
@@ -143,34 +190,19 @@ CryptoKey Channels::getKey(ChannelIndex chIndex)
         k.length = channelSettings.psk.size;
         if (k.length == 0) {
             if (ch.role == meshtastic_Channel_Role_SECONDARY) {
-                LOG_DEBUG("Unset PSK for secondary channel %s. using primary key\n", ch.settings.name);
+                LOG_DEBUG("Unset PSK for secondary channel %s. using primary key", ch.settings.name);
                 k = getKey(primaryIndex);
             } else {
-                LOG_WARN("User disabled encryption\n");
+                LOG_WARN("User disabled encryption");
             }
         } else if (k.length == 1) {
             // Convert the short single byte variants of psk into variant that can be used more generally
 
             uint8_t pskIndex = k.bytes[0];
-            LOG_DEBUG("Expanding short PSK #%d\n", pskIndex);
+            LOG_DEBUG("Expanding short PSK #%d", pskIndex);
             if (pskIndex == 0)
                 k.length = 0; // Turn off encryption
-            else if (oemStore.oem_aes_key.size > 1) {
-                // Use the OEM key
-                LOG_DEBUG("Using OEM Key with %d bytes\n", oemStore.oem_aes_key.size);
-                memcpy(k.bytes, oemStore.oem_aes_key.bytes, oemStore.oem_aes_key.size);
-                k.length = oemStore.oem_aes_key.size;
-                // Bump up the last byte of PSK as needed
-                uint8_t *last = k.bytes + oemStore.oem_aes_key.size - 1;
-                *last = *last + pskIndex - 1; // index of 1 means no change vs defaultPSK
-                if (k.length < 16) {
-                    LOG_WARN("OEM provided a too short AES128 key - padding\n");
-                    k.length = 16;
-                } else if (k.length < 32 && k.length != 16) {
-                    LOG_WARN("OEM provided a too short AES256 key - padding\n");
-                    k.length = 32;
-                }
-            } else {
+            else {
                 memcpy(k.bytes, defaultpsk, sizeof(defaultpsk));
                 k.length = sizeof(defaultpsk);
                 // Bump up the last byte of PSK as needed
@@ -180,12 +212,12 @@ CryptoKey Channels::getKey(ChannelIndex chIndex)
         } else if (k.length < 16) {
             // Error! The user specified only the first few bits of an AES128 key.  So by convention we just pad the rest of the
             // key with zeros
-            LOG_WARN("User provided a too short AES128 key - padding\n");
+            LOG_WARN("User provided a too short AES128 key - padding");
             k.length = 16;
         } else if (k.length < 32 && k.length != 16) {
             // Error! The user specified only the first few bits of an AES256 key.  So by convention we just pad the rest of the
             // key with zeros
-            LOG_WARN("User provided a too short AES256 key - padding\n");
+            LOG_WARN("User provided a too short AES256 key - padding");
             k.length = 32;
         }
     }
@@ -213,7 +245,15 @@ void Channels::initDefaults()
     channelFile.channels_count = MAX_NUM_CHANNELS;
     for (int i = 0; i < channelFile.channels_count; i++)
         fixupChannel(i);
+    initDefaultLoraConfig();
+
+#ifdef USERPREFS_CHANNELS_TO_WRITE
+    for (int i = 0; i < USERPREFS_CHANNELS_TO_WRITE; i++) {
+        initDefaultChannel(i);
+    }
+#else
     initDefaultChannel(0);
+#endif
 }
 
 void Channels::onConfigChanged()
@@ -227,7 +267,7 @@ void Channels::onConfigChanged()
     }
 #if !MESHTASTIC_EXCLUDE_MQTT
     if (channels.anyMqttEnabled() && mqtt && !mqtt->isEnabled()) {
-        LOG_DEBUG("MQTT is enabled on at least one channel, so set MQTT thread to run immediately\n");
+        LOG_DEBUG("MQTT is enabled on at least one channel, so set MQTT thread to run immediately");
         mqtt->start();
     }
 #endif
@@ -240,7 +280,7 @@ meshtastic_Channel &Channels::getByIndex(ChannelIndex chIndex)
         meshtastic_Channel *ch = channelFile.channels + chIndex;
         return *ch;
     } else {
-        LOG_ERROR("Invalid channel index %d > %d, malformed packet received?\n", chIndex, channelFile.channels_count);
+        LOG_ERROR("Invalid channel index %d > %d, malformed packet received?", chIndex, channelFile.channels_count);
 
         static meshtastic_Channel *ch = (meshtastic_Channel *)malloc(sizeof(meshtastic_Channel));
         memset(ch, 0, sizeof(meshtastic_Channel));
@@ -277,7 +317,7 @@ void Channels::setChannel(const meshtastic_Channel &c)
 
 bool Channels::anyMqttEnabled()
 {
-#if EVENT_MODE
+#if USERPREFS_EVENT_MODE
     // Don't publish messages on the public MQTT broker if we are in event mode
     if (strcmp(moduleConfig.mqtt.address, default_mqtt_address) == 0) {
         return false;
@@ -344,11 +384,11 @@ bool Channels::hasDefaultChannel()
 bool Channels::decryptForHash(ChannelIndex chIndex, ChannelHash channelHash)
 {
     if (chIndex > getNumChannels() || getHash(chIndex) != channelHash) {
-        // LOG_DEBUG("Skipping channel %d (hash %x) due to invalid hash/index, want=%x\n", chIndex, getHash(chIndex),
+        // LOG_DEBUG("Skipping channel %d (hash %x) due to invalid hash/index, want=%x", chIndex, getHash(chIndex),
         // channelHash);
         return false;
     } else {
-        LOG_DEBUG("Using channel %d (hash 0x%x)\n", chIndex, channelHash);
+        LOG_DEBUG("Using channel %d (hash 0x%x)", chIndex, channelHash);
         setCrypto(chIndex);
         return true;
     }

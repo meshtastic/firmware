@@ -1,5 +1,6 @@
 #include "TraceRouteModule.h"
 #include "MeshService.h"
+#include "meshUtils.h"
 
 TraceRouteModule *traceRouteModule;
 
@@ -11,13 +12,13 @@ bool TraceRouteModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, m
 
 void TraceRouteModule::alterReceivedProtobuf(meshtastic_MeshPacket &p, meshtastic_RouteDiscovery *r)
 {
-    auto &incoming = p.decoded;
+    const meshtastic_Data &incoming = p.decoded;
 
     // Insert unknown hops if necessary
     insertUnknownHops(p, r, !incoming.request_id);
 
-    // Append ID and SNR. For the last hop (p.to == nodeDB->getNodeNum()), we only need to append the SNR
-    appendMyIDandSNR(r, p.rx_snr, !incoming.request_id, p.to == nodeDB->getNodeNum());
+    // Append ID and SNR. If the last hop is to us, we only need to append the SNR
+    appendMyIDandSNR(r, p.rx_snr, !incoming.request_id, isToUs(&p));
     if (!incoming.request_id)
         printRoute(r, p.from, p.to, true);
     else
@@ -53,7 +54,7 @@ void TraceRouteModule::insertUnknownHops(meshtastic_MeshPacket &p, meshtastic_Ro
         uint8_t hopsTaken = p.hop_start - p.hop_limit;
         int8_t diff = hopsTaken - *route_count;
         for (uint8_t i = 0; i < diff; i++) {
-            if (*route_count < sizeof(*route) / sizeof(route[0])) {
+            if (*route_count < ROUTE_SIZE) {
                 route[*route_count] = NODENUM_BROADCAST; // This will represent an unknown hop
                 *route_count += 1;
             }
@@ -61,7 +62,7 @@ void TraceRouteModule::insertUnknownHops(meshtastic_MeshPacket &p, meshtastic_Ro
         // Add unknown SNR values if necessary
         diff = *route_count - *snr_count;
         for (uint8_t i = 0; i < diff; i++) {
-            if (*snr_count < sizeof(*snr_list) / sizeof(snr_list[0])) {
+            if (*snr_count < ROUTE_SIZE) {
                 snr_list[*snr_count] = INT8_MIN; // This will represent an unknown SNR
                 *snr_count += 1;
             }
@@ -89,7 +90,7 @@ void TraceRouteModule::appendMyIDandSNR(meshtastic_RouteDiscovery *updated, floa
         snr_list = updated->snr_back;
     }
 
-    if (*snr_count < sizeof(*snr_list) / sizeof(snr_list[0])) {
+    if (*snr_count < ROUTE_SIZE) {
         snr_list[*snr_count] = (int8_t)(snr * 4); // Convert SNR to 1 byte
         *snr_count += 1;
     }
@@ -97,49 +98,51 @@ void TraceRouteModule::appendMyIDandSNR(meshtastic_RouteDiscovery *updated, floa
         return;
 
     // Length of route array can normally not be exceeded due to the max. hop_limit of 7
-    if (*route_count < sizeof(*route) / sizeof(route[0])) {
+    if (*route_count < ROUTE_SIZE) {
         route[*route_count] = myNodeInfo.my_node_num;
         *route_count += 1;
     } else {
-        LOG_WARN("Route exceeded maximum hop limit, are you bridging networks?\n");
+        LOG_WARN("Route exceeded maximum hop limit!"); // Are you bridging networks?
     }
 }
 
 void TraceRouteModule::printRoute(meshtastic_RouteDiscovery *r, uint32_t origin, uint32_t dest, bool isTowardsDestination)
 {
 #ifdef DEBUG_PORT
-    LOG_INFO("Route traced:\n");
-    LOG_INFO("0x%x --> ", origin);
+    std::string route = "Route traced:";
+    route += vformat("0x%x --> ", origin);
     for (uint8_t i = 0; i < r->route_count; i++) {
         if (i < r->snr_towards_count && r->snr_towards[i] != INT8_MIN)
-            LOG_INFO("0x%x (%.2fdB) --> ", r->route[i], (float)r->snr_towards[i] / 4);
+            route += vformat("0x%x (%.2fdB) --> ", r->route[i], (float)r->snr_towards[i] / 4);
         else
-            LOG_INFO("0x%x (?dB) --> ", r->route[i]);
+            route += vformat("0x%x (?dB) --> ", r->route[i]);
     }
     // If we are the destination, or it has already reached the destination, print it
     if (dest == nodeDB->getNodeNum() || !isTowardsDestination) {
         if (r->snr_towards_count > 0 && r->snr_towards[r->snr_towards_count - 1] != INT8_MIN)
-            LOG_INFO("0x%x (%.2fdB)\n", dest, (float)r->snr_towards[r->snr_towards_count - 1] / 4);
+            route += vformat("0x%x (%.2fdB)", dest, (float)r->snr_towards[r->snr_towards_count - 1] / 4);
+
         else
-            LOG_INFO("0x%x (?dB)\n", dest);
+            route += vformat("0x%x (?dB)", dest);
     } else
-        LOG_INFO("...\n");
+        route += "...";
 
     // If there's a route back (or we are the destination as then the route is complete), print it
     if (r->route_back_count > 0 || origin == nodeDB->getNodeNum()) {
         if (r->snr_towards_count > 0 && origin == nodeDB->getNodeNum())
-            LOG_INFO("(%.2fdB) 0x%x <-- ", (float)r->snr_back[r->snr_back_count - 1] / 4, origin);
+            route += vformat("(%.2fdB) 0x%x <-- ", (float)r->snr_back[r->snr_back_count - 1] / 4, origin);
         else
-            LOG_INFO("...");
+            route += "...";
 
         for (int8_t i = r->route_back_count - 1; i >= 0; i--) {
             if (i < r->snr_back_count && r->snr_back[i] != INT8_MIN)
-                LOG_INFO("(%.2fdB) 0x%x <-- ", (float)r->snr_back[i] / 4, r->route_back[i]);
+                route += vformat("(%.2fdB) 0x%x <-- ", (float)r->snr_back[i] / 4, r->route_back[i]);
             else
-                LOG_INFO("(?dB) 0x%x <-- ", r->route_back[i]);
+                route += vformat("(?dB) 0x%x <-- ", r->route_back[i]);
         }
-        LOG_INFO("0x%x\n", dest);
+        route += vformat("0x%x", dest);
     }
+    LOG_INFO(route.c_str());
 #endif
 }
 

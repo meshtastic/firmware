@@ -37,14 +37,14 @@
 #define FREE_ARRAY(x)                                                                                                            \
     {                                                                                                                            \
         JSONArray::iterator iter;                                                                                                \
-        for (iter = x.begin(); iter != x.end(); iter++) {                                                                        \
+        for (iter = x.begin(); iter != x.end(); ++iter) {                                                                        \
             delete *iter;                                                                                                        \
         }                                                                                                                        \
     }
 #define FREE_OBJECT(x)                                                                                                           \
     {                                                                                                                            \
         JSONObject::iterator iter;                                                                                               \
-        for (iter = x.begin(); iter != x.end(); iter++) {                                                                        \
+        for (iter = x.begin(); iter != x.end(); ++iter) {                                                                        \
             delete (*iter).second;                                                                                               \
         }                                                                                                                        \
     }
@@ -430,7 +430,7 @@ JSONValue::JSONValue(const JSONValue &m_source)
         JSONArray source_array = *m_source.array_value;
         JSONArray::iterator iter;
         array_value = new JSONArray();
-        for (iter = source_array.begin(); iter != source_array.end(); iter++)
+        for (iter = source_array.begin(); iter != source_array.end(); ++iter)
             array_value->push_back(new JSONValue(**iter));
         break;
     }
@@ -439,7 +439,7 @@ JSONValue::JSONValue(const JSONValue &m_source)
         JSONObject source_object = *m_source.object_value;
         object_value = new JSONObject();
         JSONObject::iterator iter;
-        for (iter = source_object.begin(); iter != source_object.end(); iter++) {
+        for (iter = source_object.begin(); iter != source_object.end(); ++iter) {
             std::string name = (*iter).first;
             (*object_value)[name] = new JSONValue(*((*iter).second));
         }
@@ -462,12 +462,12 @@ JSONValue::~JSONValue()
 {
     if (type == JSONType_Array) {
         JSONArray::iterator iter;
-        for (iter = array_value->begin(); iter != array_value->end(); iter++)
+        for (iter = array_value->begin(); iter != array_value->end(); ++iter)
             delete *iter;
         delete array_value;
     } else if (type == JSONType_Object) {
         JSONObject::iterator iter;
-        for (iter = object_value->begin(); iter != object_value->end(); iter++) {
+        for (iter = object_value->begin(); iter != object_value->end(); ++iter) {
             delete (*iter).second;
         }
         delete object_value;
@@ -722,7 +722,7 @@ std::vector<std::string> JSONValue::ObjectKeys() const
         while (iter != object_value->end()) {
             keys.push_back(iter->first);
 
-            iter++;
+            ++iter;
         }
     }
 
@@ -865,7 +865,7 @@ std::string JSONValue::StringifyString(const std::string &str)
             str_out += chr;
         }
 
-        iter++;
+        ++iter;
     }
 
     str_out += "\"";

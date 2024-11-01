@@ -454,6 +454,9 @@ class Screen : public concurrency::OSThread
 
     void setWelcomeFrames();
 
+    // Dismiss the currently focussed frame, if possible (e.g. text message, waypoint)
+    void dismissCurrentFrame();
+
 #ifdef USE_EINK
     /// Draw an image to remain on E-Ink display after screen off
     void setScreensaverFrames(FrameCallback einkScreensaver = NULL);
@@ -503,11 +506,14 @@ class Screen : public concurrency::OSThread
     void handleStartFirmwareUpdateScreen();
 
     // Info collected by setFrames method.
-    // Index location of specific frames. Used to apply the FrameFocus parameter of setFrames
+    // Index location of specific frames.
+    // - Used to apply the FrameFocus parameter of setFrames
+    // - Used to dismiss the currently shown frame (txt; waypoint) by CardKB combo
     struct FramesetInfo {
         struct FramePositions {
             uint8_t fault = 0;
             uint8_t textMessage = 0;
+            uint8_t waypoint = 0;
             uint8_t focusedModule = 0;
             uint8_t log = 0;
             uint8_t settings = 0;

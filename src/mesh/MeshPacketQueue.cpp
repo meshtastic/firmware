@@ -1,4 +1,5 @@
 #include "MeshPacketQueue.h"
+#include "NodeDB.h"
 #include "configuration.h"
 #include <assert.h>
 
@@ -16,13 +17,9 @@ bool CompareMeshPacketFunc(const meshtastic_MeshPacket *p1, const meshtastic_Mes
 {
     assert(p1 && p2);
     auto p1p = getPriority(p1), p2p = getPriority(p2);
-
     // If priorities differ, use that
-    // for equal priorities, order by id (older packets have higher priority - this will briefly be wrong when IDs roll over but
-    // no big deal)
-    return (p1p != p2p)
-               ? (p1p < p2p)                                                 // prefer bigger priorities
-               : ((p1->id & ID_COUNTER_MASK) >= (p2->id & ID_COUNTER_MASK)); // Mask to counter portion, prefer smaller packet ids
+    // for equal priorities, prefer packets already on mesh.
+    return (p1p != p2p) ? (p1p > p2p) : (!isFromUs(p1) && isFromUs(p2));
 }
 
 MeshPacketQueue::MeshPacketQueue(size_t _maxLen) : maxLen(_maxLen) {}
@@ -69,8 +66,9 @@ bool MeshPacketQueue::enqueue(meshtastic_MeshPacket *p)
         return replaceLowerPriorityPacket(p);
     }
 
-    queue.push_back(p);
-    std::push_heap(queue.begin(), queue.end(), &CompareMeshPacketFunc);
+    // Find the correct position using upper_bound to maintain a stable order
+    auto it = std::upper_bound(queue.begin(), queue.end(), p, CompareMeshPacketFunc);
+    queue.insert(it, p); // Insert packet at the found position
     return true;
 }
 
@@ -81,9 +79,7 @@ meshtastic_MeshPacket *MeshPacketQueue::dequeue()
     }
 
     auto *p = queue.front();
-    std::pop_heap(queue.begin(), queue.end(), &CompareMeshPacketFunc);
-    queue.pop_back();
-
+    queue.erase(queue.begin()); // Remove the highest-priority packet
     return p;
 }
 
@@ -104,7 +100,6 @@ meshtastic_MeshPacket *MeshPacketQueue::remove(NodeNum from, PacketId id)
         auto p = (*it);
         if (getFrom(p) == from && p->id == id) {
             queue.erase(it);
-            std::make_heap(queue.begin(), queue.end(), &CompareMeshPacketFunc);
             return p;
         }
     }
@@ -115,28 +110,21 @@ meshtastic_MeshPacket *MeshPacketQueue::remove(NodeNum from, PacketId id)
 /** Attempt to find and remove a packet from this queue.  Returns the packet which was removed from the queue */
 bool MeshPacketQueue::replaceLowerPriorityPacket(meshtastic_MeshPacket *p)
 {
-    std::sort_heap(queue.begin(), queue.end(), &CompareMeshPacketFunc); // sort ascending based on priority (0 -> 127)
 
-    // find first packet which does not compare less (in priority) than parameter packet
-    auto low = std::lower_bound(queue.begin(), queue.end(), p, &CompareMeshPacketFunc);
-
-    if (low == queue.begin()) { // if already at start, there are no packets with lower priority
-        return false;
+    if (queue.empty()) {
+        return false; // No packets to replace
+    }
+    // Check if the packet at the back has a lower priority than the new packet
+    auto &backPacket = queue.back();
+    if (backPacket->priority < p->priority) {
+        // Remove the back packet
+        packetPool.release(backPacket);
+        queue.pop_back();
+        // Insert the new packet in the correct order
+        enqueue(p);
+        return true;
     }
 
-    if (low == queue.end()) {
-        // all priorities in the vector are smaller than the incoming packet. Replace the lowest priority (first) element
-        low = queue.begin();
-    } else {
-        // 'low' iterator points to first packet which does not compare less than parameter
-        --low; // iterate to lower priority packet
-    }
-
-    if (getPriority(p) > getPriority(*low)) {
-        packetPool.release(*low); // deallocate and drop the packet we're replacing
-        *low = p;                 // replace low-pri packet at this position with incoming packet with higher priority
-    }
-
-    std::make_heap(queue.begin(), queue.end(), &CompareMeshPacketFunc);
-    return true;
+    // If the back packet's priority is not lower, no replacement occurs
+    return false;
 }

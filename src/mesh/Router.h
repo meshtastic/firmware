@@ -82,6 +82,10 @@ class Router : protected concurrency::OSThread
      */
     virtual ErrorCode send(meshtastic_MeshPacket *p);
 
+    /* Statistics for the amount of duplicate received packets and the amount of times we cancel a relay because someone did it
+        before us */
+    uint32_t rxDupe = 0, txRelayCanceled = 0;
+
   protected:
     friend class RoutingModule;
 
@@ -148,3 +152,8 @@ extern Router *router;
 /// Generate a unique packet id
 // FIXME, move this someplace better
 PacketId generatePacketId();
+
+#define BITFIELD_WANT_RESPONSE_SHIFT 1
+#define BITFIELD_OK_TO_MQTT_SHIFT 0
+#define BITFIELD_WANT_RESPONSE_MASK (1 << BITFIELD_WANT_RESPONSE_SHIFT)
+#define BITFIELD_OK_TO_MQTT_MASK (1 << BITFIELD_OK_TO_MQTT_SHIFT)

@@ -1,6 +1,4 @@
 .pio
-main/configuration.h
-main/credentials.h
 
 # ignore vscode IDE settings files
 .vscode/*

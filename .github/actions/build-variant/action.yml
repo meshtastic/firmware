@@ -1,0 +1,94 @@
+name: Setup Build Variant Composite Action
+description: Variant build actions for Meshtastic Platform IO steps
+
+inputs:
+  board:
+    description: The board to build for
+    required: true
+  github_token:
+    description: GitHub token
+    required: true
+  build-script-path:
+    description: Path to the build script
+    required: true
+  remove-debug-flags:
+    description: A space separated list of files to remove debug flags from
+    required: false
+    default: ""
+  ota-firmware-source:
+    description: The OTA firmware file to pull
+    required: false
+    default: ""
+  ota-firmware-target:
+    description: The target path to store the OTA firmware file
+    required: false
+    default: ""
+  artifact-paths:
+    description: A newline separated list of paths to store as artifacts
+    required: false
+    default: ""
+  include-web-ui:
+    description: Include the web UI in the build
+    required: false
+    default: "false"
+  arch:
+    description: Processor arch name
+    required: true
+    default: "esp32"
+
+runs:
+  using: composite
+  steps:
+    - name: Build base
+      id: base
+      uses: ./.github/actions/setup-base
+
+    - name: Pull web ui
+      if: inputs.include-web-ui == 'true'
+      uses: dsaltares/fetch-gh-release-asset@master
+      with:
+        repo: meshtastic/web
+        file: build.tar
+        target: build.tar
+        token: ${{ inputs.github_token }}
+
+    - name: Unpack web ui
+      if: inputs.include-web-ui == 'true'
+      shell: bash
+      run: |
+        tar -xf build.tar -C data/static
+        rm build.tar
+
+    - name: Remove debug flags for release
+      shell: bash
+      if: inputs.remove-debug-flags != ''
+      run: |
+        for INI_FILE in ${{ inputs.remove-debug-flags }}; do
+          sed -i '/DDEBUG_HEAP/d' ${INI_FILE}
+        done
+
+    - name: Build ${{ inputs.board }}
+      shell: bash
+      run: ${{ inputs.build-script-path }} ${{ inputs.board }}
+
+    - name: Pull OTA Firmware
+      if: inputs.ota-firmware-source != '' &&  inputs.ota-firmware-target != ''
+      uses: dsaltares/fetch-gh-release-asset@master
+      with:
+        repo: meshtastic/firmware-ota
+        file: ${{ inputs.ota-firmware-source }}
+        target: ${{ inputs.ota-firmware-target }}
+        token: ${{ inputs.github_token }}
+
+    - name: Get release version string
+      shell: bash
+      run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+      id: version
+
+    - name: Store binaries as an artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: firmware-${{ inputs.arch }}-${{ inputs.board }}-${{ steps.version.outputs.version }}.zip
+        overwrite: true
+        path: |
+          ${{ inputs.artifact-paths }}

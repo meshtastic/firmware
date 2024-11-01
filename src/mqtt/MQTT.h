@@ -9,7 +9,9 @@
 #if HAS_WIFI
 #include <WiFiClient.h>
 #if !defined(ARCH_PORTDUINO)
+#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR < 3
 #include <WiFiClientSecure.h>
+#endif
 #endif
 #endif
 #if HAS_ETHERNET
@@ -33,7 +35,9 @@ class MQTT : private concurrency::OSThread
 #if HAS_WIFI
     WiFiClient mqttClient;
 #if !defined(ARCH_PORTDUINO)
+#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR < 3
     WiFiClientSecure wifiSecureClient;
+#endif
 #endif
 #endif
 #if HAS_ETHERNET
@@ -48,14 +52,14 @@ class MQTT : private concurrency::OSThread
 
     /**
      * Publish a packet on the global MQTT server.
-     * @param mp the encrypted packet to publish
+     * @param mp_encrypted the encrypted packet to publish
      * @param mp_decoded the decrypted packet to publish
      * @param chIndex the index of the channel for this message
      *
      * Note: for messages we are forwarding on the mesh that we can't find the channel for (because we don't have the keys), we
      * can not forward those messages to the cloud - because no way to find a global channel ID.
      */
-    void onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &mp_decoded, ChannelIndex chIndex);
+    void onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_MeshPacket &mp_decoded, ChannelIndex chIndex);
 
     /** Attempt to connect to server if necessary
      */
@@ -115,6 +119,10 @@ class MQTT : private concurrency::OSThread
 
     // returns true if this is a valid JSON envelope which we accept on downlink
     bool isValidJsonEnvelope(JSONObject &json);
+
+    /// Determines if the given address is a private IPv4 address, i.e. not routable on the public internet.
+    /// These are the ranges: 127.0.0.1, 10.0.0.0-10.255.255.255, 172.16.0.0-172.31.255.255, 192.168.0.0-192.168.255.255.
+    bool isPrivateIpAddress(const char address[]);
 
     /// Return 0 if sleep is okay, veto sleep if we are connected to pubsub server
     // int preflightSleepCb(void *unused = NULL) { return pubSub.connected() ? 1 : 0; }

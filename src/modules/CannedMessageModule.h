@@ -114,6 +114,7 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     virtual bool wantUIFrame() override { return this->shouldDraw(); }
     virtual Observable<const UIFrameEvent *> *getUIFrameObservable() override { return this; }
     virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) override;
+    virtual bool interceptingKeyboardInput() override;
     virtual AdminMessageHandleResult handleAdminMessageForModule(const meshtastic_MeshPacket &mp,
                                                                  meshtastic_AdminMessage *request,
                                                                  meshtastic_AdminMessage *response) override;

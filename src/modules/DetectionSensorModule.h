@@ -15,8 +15,9 @@ class DetectionSensorModule : public SinglePortModule, private concurrency::OSTh
   private:
     bool firstTime = true;
     uint32_t lastSentToMesh = 0;
+    bool wasDetected = false;
     void sendDetectionMessage();
-    void sendCurrentStateMessage();
+    void sendCurrentStateMessage(bool state);
     bool hasDetectionEvent();
 };
 

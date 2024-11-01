@@ -1,3 +1,5 @@
+#if RADIOLIB_EXCLUDE_LR11X0 != 1
+
 #include "LR1110Interface.h"
 #include "configuration.h"
 #include "error.h"
@@ -7,3 +9,4 @@ LR1110Interface::LR1110Interface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, R
     : LR11x0Interface(hal, cs, irq, rst, busy)
 {
 }
+#endif

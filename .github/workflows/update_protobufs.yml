@@ -1,4 +1,4 @@
-name: "Update protobufs and regenerate classes"
+name: Update protobufs and regenerate classes
 on: workflow_dispatch
 
 jobs:
@@ -17,17 +17,18 @@ jobs:
 
       - name: Download nanopb
         run: |
-          wget https://jpa.kapsi.fi/nanopb/download/nanopb-0.4.8-linux-x86.tar.gz
-          tar xvzf nanopb-0.4.8-linux-x86.tar.gz
-          mv nanopb-0.4.8-linux-x86 nanopb-0.4.8
+          wget https://jpa.kapsi.fi/nanopb/download/nanopb-0.4.9-linux-x86.tar.gz
+          tar xvzf nanopb-0.4.9-linux-x86.tar.gz
+          mv nanopb-0.4.9-linux-x86 nanopb-0.4.9
 
       - name: Re-generate protocol buffers
         run: |
           ./bin/regen-protos.sh
 
       - name: Create pull request
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@v7
         with:
+          title: Update protobufs and classes
           add-paths: |
             protobufs
             src/mesh

@@ -1,5 +1,5 @@
 #pragma once
-
+#if RADIOLIB_EXCLUDE_SX126X != 1
 #include "SX126xInterface.h"
 
 /**
@@ -16,3 +16,4 @@ class LLCC68Interface : public SX126xInterface<LLCC68>
     LLCC68Interface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                     RADIOLIB_PIN_TYPE busy);
 };
+#endif

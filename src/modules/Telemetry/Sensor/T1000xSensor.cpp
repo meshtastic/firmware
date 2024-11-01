@@ -40,7 +40,7 @@ T1000xSensor::T1000xSensor() : TelemetrySensor(meshtastic_TelemetrySensorType_SE
 
 int32_t T1000xSensor::runOnce()
 {
-    LOG_INFO("Init sensor: %s\n", sensorName);
+    LOG_INFO("Init sensor: %s", sensorName);
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
@@ -95,7 +95,7 @@ float T1000xSensor::getTemp()
 
     Vout = ntc_vot;
     Rt = (HEATER_NTC_RP * vcc_vot) / Vout - HEATER_NTC_RP;
-    for (u8i = 0; u8i < 136; u8i++) {
+    for (u8i = 0; u8i < 135; u8i++) {
         if (Rt >= ntc_res2[u8i]) {
             break;
         }

@@ -5,6 +5,7 @@
 #ifdef ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
 #endif
+#include "Throttle.h"
 
 PacketHistory::PacketHistory()
 {
@@ -18,24 +19,23 @@ PacketHistory::PacketHistory()
 bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpdate)
 {
     if (p->id == 0) {
-        LOG_DEBUG("Ignoring message with zero id\n");
+        LOG_DEBUG("Ignoring message with zero id");
         return false; // Not a floodable message ID, so we don't care
     }
-
-    uint32_t now = millis();
 
     PacketRecord r;
     r.id = p->id;
     r.sender = getFrom(p);
-    r.rxTimeMsec = now;
+    r.rxTimeMsec = millis();
     r.next_hop = p->next_hop;
     r.relayed_by = p->relay_node;
 
     auto found = recentPackets.find(r);
     bool seenRecently = (found != recentPackets.end()); // found not equal to .end() means packet was seen recently
 
-    if (seenRecently && (now - found->rxTimeMsec) >= FLOOD_EXPIRE_TIME) { // Check whether found packet has already expired
-        recentPackets.erase(found);                                       // Erase and pretend packet has not been seen recently
+    if (seenRecently &&
+        !Throttle::isWithinTimespanMs(found->rxTimeMsec, FLOOD_EXPIRE_TIME)) { // Check whether found packet has already expired
+        recentPackets.erase(found); // Erase and pretend packet has not been seen recently
         found = recentPackets.end();
         seenRecently = false;
     }
@@ -50,7 +50,7 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
     }
 
     if (seenRecently) {
-        LOG_DEBUG("Found existing packet record for fr=0x%x,to=0x%x,id=0x%x\n", p->from, p->to, p->id);
+        LOG_DEBUG("Found existing packet record for fr=0x%x,to=0x%x,id=0x%x", p->from, p->to, p->id);
     }
 
     if (withUpdate) {
@@ -75,19 +75,17 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
  */
 void PacketHistory::clearExpiredRecentPackets()
 {
-    uint32_t now = millis();
-
-    LOG_DEBUG("recentPackets size=%ld\n", recentPackets.size());
+    LOG_DEBUG("recentPackets size=%ld", recentPackets.size());
 
     for (auto it = recentPackets.begin(); it != recentPackets.end();) {
-        if ((now - it->rxTimeMsec) >= FLOOD_EXPIRE_TIME) {
+        if (!Throttle::isWithinTimespanMs(it->rxTimeMsec, FLOOD_EXPIRE_TIME)) {
             it = recentPackets.erase(it); // erase returns iterator pointing to element immediately following the one erased
         } else {
             ++it;
         }
     }
 
-    LOG_DEBUG("recentPackets size=%ld (after clearing expired packets)\n", recentPackets.size());
+    LOG_DEBUG("recentPackets size=%ld (after clearing expired packets)", recentPackets.size());
 }
 
 /* Find the relayer of a packet in the history given an ID and sender

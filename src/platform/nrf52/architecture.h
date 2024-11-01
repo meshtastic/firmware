@@ -71,6 +71,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_MS24SF1
 #elif defined(PRIVATE_HW) || defined(FEATHER_DIY)
 #define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
+#elif defined(HELTEC_T114)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_NODE_T114
 #else
 #define HW_VENDOR meshtastic_HardwareModel_NRF52_UNKNOWN
 #endif

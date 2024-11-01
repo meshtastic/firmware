@@ -11,11 +11,16 @@
 
 /*
   I2C SDA and SCL.
-  0x18 - STK8XXX Accelerometer, Not supported yet.
+  0x18 - STK8XXX Accelerometer
   0x3C - SH1115 Display Driver
 */
 #define I2C_SDA 14
 #define I2C_SCL 12
+
+/*
+  I2C STK8XXX Accelerometer Interrupt PIN to ESP32 Pin 6 - SENSOR_CAPP (GPIO37)
+*/
+#define STK8XXX_INT 37
 
 /*
   No GPS - but free pins are available.

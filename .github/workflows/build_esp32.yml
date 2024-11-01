@@ -12,52 +12,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build base
-        id: base
-        uses: ./.github/actions/setup-base
-
-      - name: Pull web ui
-        uses: dsaltares/fetch-gh-release-asset@master
-        with:
-          repo: meshtastic/web
-          file: build.tar
-          target: build.tar
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Unpack web ui
-        run: |
-          tar -xf build.tar -C data/static
-          rm build.tar
-
-      - name: Remove debug flags for release
-        if: ${{ github.event_name == 'workflow_dispatch' }}
-        run: |
-          sed -i '/DDEBUG_HEAP/d' ./arch/esp32/esp32.ini
-          sed -i '/DDEBUG_HEAP/d' ./arch/esp32/esp32s2.ini
-          sed -i '/DDEBUG_HEAP/d' ./arch/esp32/esp32s3.ini
-          sed -i '/DDEBUG_HEAP/d' ./arch/esp32/esp32c3.ini
 
       - name: Build ESP32
-        run: bin/build-esp32.sh ${{ inputs.board }}
-
-      - name: Pull OTA Firmware
-        uses: dsaltares/fetch-gh-release-asset@master
+        id: build
+        uses: ./.github/actions/build-variant
         with:
-          repo: meshtastic/firmware-ota
-          file: firmware.bin
-          target: release/bleota.bin
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Get release version string
-        shell: bash
-        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
-        id: version
-
-      - name: Store binaries as an artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: firmware-${{ inputs.board }}-${{ steps.version.outputs.version }}.zip
-          overwrite: true
-          path: |
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          board: ${{ inputs.board }}
+          remove-debug-flags: >-
+            ./arch/esp32/esp32.ini
+            ./arch/esp32/esp32s2.ini
+            ./arch/esp32/esp32s3.ini
+            ./arch/esp32/esp32c3.ini
+          build-script-path: bin/build-esp32.sh
+          ota-firmware-source: firmware.bin
+          ota-firmware-target: release/bleota.bin
+          artifact-paths: |
             release/*.bin
             release/*.elf
+          include-web-ui: true
+          arch: esp32

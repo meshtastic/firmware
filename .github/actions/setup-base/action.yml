@@ -11,6 +11,11 @@ runs:
         ref: ${{github.event.pull_request.head.ref}}
         repository: ${{github.event.pull_request.head.repo.full_name}}
 
+    - name: Uncomment build epoch
+      shell: bash
+      run: |
+        sed -i 's/#-DBUILD_EPOCH=$UNIX_TIME/-DBUILD_EPOCH=$UNIX_TIME/' platformio.ini
+
     - name: Install dependencies
       shell: bash
       run: |

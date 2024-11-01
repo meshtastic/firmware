@@ -52,7 +52,6 @@ class EnvironmentTelemetryModule : private concurrency::OSThread, public Protobu
                                                                  meshtastic_AdminMessage *response) override;
 
   private:
-    float CelsiusToFahrenheit(float c);
     bool firstTime = 1;
     meshtastic_MeshPacket *lastMeasurementPacket;
     uint32_t sendToPhoneIntervalMs = SECONDS_IN_MINUTE * 1000; // Send to phone every minute

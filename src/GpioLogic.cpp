@@ -12,7 +12,7 @@ void GpioVirtPin::set(bool value)
 
 void GpioHwPin::set(bool value)
 {
-    // if (num == 3) LOG_DEBUG("Setting pin %d to %d\n", num, value);
+    // if (num == 3) LOG_DEBUG("Setting pin %d to %d", num, value);
     pinMode(num, OUTPUT);
     digitalWrite(num, value);
 }
@@ -88,7 +88,7 @@ void GpioBinaryTransformer::update()
             newValue = (GpioVirtPin::PinState)(p1 && p2);
             break;
         case Or:
-            // LOG_DEBUG("Doing GPIO OR\n");
+            // LOG_DEBUG("Doing GPIO OR");
             newValue = (GpioVirtPin::PinState)(p1 || p2);
             break;
         case Xor:

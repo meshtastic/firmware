@@ -57,35 +57,50 @@ jobs:
           reporter: java-junit
 
   hardware-tests:
-    runs-on: ubuntu-latest
+    runs-on: test-runner
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # - uses: actions/setup-python@v5
+      #   with:
+      #     python-version: '3.10'
+
+      # pipx install "setuptools<72"
       - name: Upgrade python tools
         shell: bash
         run: |
-          python -m pip install --upgrade pip
-          pip install -U --no-build-isolation --no-cache-dir "setuptools<72"
-          pip install -U platformio adafruit-nrfutil --no-build-isolation
-          pip install -U poetry --no-build-isolation
-          pip install -U meshtastic --pre --no-build-isolation
+          pipx install adafruit-nrfutil
+          pipx install poetry
+          pipx install meshtastic --pip-args=--pre
+
+      - name: Install PlatformIO from script
+        shell: bash
+        run: |
+          curl -fsSL -o get-platformio.py https://raw.githubusercontent.com/platformio/platformio-core-installer/master/get-platformio.py
+          python3 get-platformio.py
 
       - name: Upgrade platformio
         shell: bash
         run: |
+          export PATH=$PATH:$HOME/.local/bin
           pio upgrade
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
       - name: Setup pnpm
-        uses: pnpm/action-setup@v2
+        uses: pnpm/action-setup@v4
         with:
           version: latest
 
-      - name: Install Dependencies
-        run: pnpm install
-
-      - name: Setup devices
-        run: pnpm run setup
-
-      - name: Execute end to end tests on connected hardware
-        run: pnpm run test
+      - name: Install dependencies, setup devices and run
+        shell: bash
+        run: |
+          git submodule update --init --recursive
+          cd meshtestic/
+          pnpm install
+          pnpm run setup
+          pnpm run test

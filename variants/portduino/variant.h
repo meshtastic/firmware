@@ -3,4 +3,3 @@
 #define HAS_GPS 1
 #define MAX_RX_TOPHONE settingsMap[maxtophone]
 #define MAX_NUM_NODES settingsMap[maxnodes]
-#define RADIOLIB_GODMODE 1

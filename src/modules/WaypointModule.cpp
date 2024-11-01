@@ -14,7 +14,7 @@ ProcessMessage WaypointModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
 #ifdef DEBUG_PORT
     auto &p = mp.decoded;
-    LOG_INFO("Received waypoint msg from=0x%0x, id=0x%x, msg=%.*s\n", mp.from, mp.id, p.payload.size, p.payload.bytes);
+    LOG_INFO("Received waypoint msg from=0x%0x, id=0x%x, msg=%.*s", mp.from, mp.id, p.payload.size, p.payload.bytes);
 #endif
     // We only store/display messages destined for us.
     // Keep a copy of the most recent text message.
@@ -68,7 +68,7 @@ bool WaypointModule::shouldDraw()
     }
 
     // If decoding failed
-    LOG_ERROR("Failed to decode waypoint\n");
+    LOG_ERROR("Failed to decode waypoint");
     devicestate.has_rx_waypoint = false;
     return false;
 #else
@@ -89,7 +89,7 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
         display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
 
     // Decode the waypoint
-    meshtastic_MeshPacket &mp = devicestate.rx_waypoint;
+    const meshtastic_MeshPacket &mp = devicestate.rx_waypoint;
     meshtastic_Waypoint wp;
     memset(&wp, 0, sizeof(wp));
     if (!pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_Waypoint_msg, &wp)) {
@@ -171,14 +171,14 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
             strncpy(distStr, "? km", sizeof(distStr));
     }
 
+    // Draw compass circle
+    display->drawCircle(compassX, compassY, compassDiam / 2);
+
     // Undo color-inversion, if set prior to drawing header
     // Unsure of expected behavior? For now: copy drawNodeInfo
     if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
         display->setColor(BLACK);
     }
-
-    // Draw compass circle
-    display->drawCircle(compassX, compassY, compassDiam / 2);
 
     // Must be after distStr is populated
     screen->drawColumns(display, x, y, fields);

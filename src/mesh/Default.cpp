@@ -43,9 +43,18 @@ uint32_t Default::getConfiguredOrDefaultMsScaled(uint32_t configured, uint32_t d
     return getConfiguredOrDefaultMs(configured, defaultValue) * congestionScalingCoefficient(numOnlineNodes);
 }
 
+uint32_t Default::getConfiguredOrMinimumValue(uint32_t configured, uint32_t minValue)
+{
+    // If zero, intervals should be coalesced later by getConfiguredOrDefault... methods
+    if (configured == 0)
+        return configured;
+
+    return configured < minValue ? minValue : configured;
+}
+
 uint8_t Default::getConfiguredOrDefaultHopLimit(uint8_t configured)
 {
-#if EVENT_MODE
+#if USERPREFS_EVENT_MODE
     return (configured > HOP_RELIABLE) ? HOP_RELIABLE : config.lora.hop_limit;
 #else
     return (configured >= HOP_MAX) ? HOP_MAX : config.lora.hop_limit;

@@ -25,8 +25,6 @@ extern "C" {
 #define NUM_ANALOG_INPUTS (6)
 #define NUM_ANALOG_OUTPUTS (0)
 
-#define RADIOLIB_GODMODE
-
 // LEDs
 #define PIN_LED1 (32 + 10) // LED        P1.15
 #define PIN_LED2 (-1)      //

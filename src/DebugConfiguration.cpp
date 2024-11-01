@@ -97,12 +97,14 @@ Syslog &Syslog::logMask(uint8_t priMask)
 
 void Syslog::enable()
 {
+    this->_client->begin(this->_port);
     this->_enabled = true;
 }
 
 void Syslog::disable()
 {
     this->_enabled = false;
+    this->_client->stop();
 }
 
 bool Syslog::isEnabled()

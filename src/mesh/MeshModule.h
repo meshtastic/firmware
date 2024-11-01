@@ -79,7 +79,8 @@ class MeshModule
                                                                     meshtastic_AdminMessage *response);
 #if HAS_SCREEN
     virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) { return; }
-    virtual bool isRequestingFocus(); // Checked by screen, when regenerating frameset
+    virtual bool isRequestingFocus();                          // Checked by screen, when regenerating frameset
+    virtual bool interceptingKeyboardInput() { return false; } // Can screen use keyboard for nav, or is module handling input?
 #endif
   protected:
     const char *name;
