@@ -16,10 +16,8 @@ jobs:
           ref: ${{ github.event.pull_request.head.ref }}
           token: ${{ secrets.ARTIFACTS_TOKEN }}
 
-      - name: Set up Trunk
-        run: |
-          curl -fsSL https://get.trunk.io -o get-trunk.sh
-          sh get-trunk.sh -y
+      - name: Install trunk
+        run: curl https://get.trunk.io -fsSL | bash
 
       - name: Run Trunk Fmt
         run: trunk fmt
