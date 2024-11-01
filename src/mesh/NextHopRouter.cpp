@@ -18,7 +18,7 @@ ErrorCode NextHopRouter::send(meshtastic_MeshPacket *p)
     wasSeenRecently(p);                                         // FIXME, move this to a sniffSent method
 
     p->next_hop = getNextHop(p->to, p->relay_node); // set the next hop
-    LOG_DEBUG("Setting next hop for packet with dest %x to %x", p->to, p->next_hop);
+    // LOG_DEBUG("Setting next hop for packet with dest %x to %x", p->to, p->next_hop);
 
     // If it's from us, ReliableRouter already handles retransmissions. If a next hop is set and hop limit is not 0, start
     // retransmissions
@@ -102,7 +102,7 @@ uint8_t NextHopRouter::getNextHop(NodeNum to, uint8_t relay_node)
     if (node) {
         // We are careful not to return the relay node as the next hop
         if (node->next_hop && node->next_hop != relay_node) {
-            LOG_DEBUG("Next hop for 0x%x is 0x%x", to, node->next_hop);
+            // LOG_DEBUG("Next hop for 0x%x is 0x%x", to, node->next_hop);
             return node->next_hop;
         } else {
             if (node->next_hop)
@@ -152,10 +152,10 @@ bool NextHopRouter::stopRetransmission(GlobalPacketId key)
 /**
  * Add p to the list of packets to retransmit occasionally.  We will free it once we stop retransmitting.
  */
-PendingPacket *NextHopRouter::startRetransmission(meshtastic_MeshPacket *p)
+PendingPacket *NextHopRouter::startRetransmission(meshtastic_MeshPacket *p, uint8_t numReTx)
 {
     auto id = GlobalPacketId(p);
-    auto rec = PendingPacket(p, this->NUM_RETRANSMISSIONS);
+    auto rec = PendingPacket(p, numReTx);
 
     stopRetransmission(getFrom(p), p->id);
 
@@ -203,7 +203,7 @@ int32_t NextHopRouter::doRetransmissions()
                         // Also reset it in the nodeDB
                         meshtastic_NodeInfoLite *sentTo = nodeDB->getMeshNode(p.packet->to);
                         if (sentTo) {
-                            LOG_WARN("Resetting next hop for packet with dest 0x%x\n", p.packet->to);
+                            LOG_INFO("Resetting next hop for packet with dest 0x%x\n", p.packet->to);
                             sentTo->next_hop = NO_NEXT_HOP_PREFERENCE;
                         }
                         FloodingRouter::send(packetPool.allocCopy(*p.packet));

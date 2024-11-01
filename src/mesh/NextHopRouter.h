@@ -76,10 +76,12 @@ class NextHopRouter : public FloodingRouter
     virtual int32_t runOnce() override
     {
         // Note: We must doRetransmissions FIRST, because it might queue up work for the base class runOnce implementation
-        auto d = doRetransmissions();
+        doRetransmissions();
 
         int32_t r = FloodingRouter::runOnce();
 
+        // Also after calling runOnce there might be new packets to retransmit
+        auto d = doRetransmissions();
         return min(d, r);
     }
 
@@ -113,7 +115,7 @@ class NextHopRouter : public FloodingRouter
     /**
      * Add p to the list of packets to retransmit occasionally.  We will free it once we stop retransmitting.
      */
-    PendingPacket *startRetransmission(meshtastic_MeshPacket *p);
+    PendingPacket *startRetransmission(meshtastic_MeshPacket *p, uint8_t numReTx = NUM_RETRANSMISSIONS);
 
     /**
      * Stop any retransmissions we are doing of the specified node/packet ID pair
