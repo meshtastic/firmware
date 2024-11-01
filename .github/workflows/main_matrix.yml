@@ -245,7 +245,8 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' }}
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
-    needs: [
+    needs:
+      [
         gather-artifacts,
         package-raspbian,
         package-raspbian-armv7l,
