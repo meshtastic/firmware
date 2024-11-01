@@ -396,8 +396,9 @@ void RadioLibInterface::handleReceiveInterrupt()
             mp->hop_start = (h->flags & PACKET_FLAGS_HOP_START_MASK) >> PACKET_FLAGS_HOP_START_SHIFT;
             mp->want_ack = !!(h->flags & PACKET_FLAGS_WANT_ACK_MASK);
             mp->via_mqtt = !!(h->flags & PACKET_FLAGS_VIA_MQTT_MASK);
-            mp->next_hop = h->next_hop;
-            mp->relay_node = h->relay_node;
+            // If hop_start is not set, next_hop and relay_node are invalid (firmware <2.3)
+            mp->next_hop = mp->hop_start == 0 ? NO_NEXT_HOP_PREFERENCE : h->next_hop;
+            mp->relay_node = mp->hop_start == 0 ? NO_NEXT_HOP_PREFERENCE : h->relay_node;
 
             addReceiveMetadata(mp);
 

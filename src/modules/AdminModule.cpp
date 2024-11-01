@@ -186,7 +186,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         break;
     }
     case meshtastic_AdminMessage_factory_reset_config_tag: {
-        LOG_INFO("Initiating factory config reset\n");
+        LOG_INFO("Initiating factory reset\n");
         nodeDB->factoryReset();
         reboot(DEFAULT_REBOOT_SECONDS);
         break;

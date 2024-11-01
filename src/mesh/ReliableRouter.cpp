@@ -35,7 +35,7 @@ ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
         }
     }
 
-    return (config.lora.next_hop_routing && p->to != NODENUM_BROADCAST) ? NextHopRouter::send(p) : FloodingRouter::send(p);
+    return p->to == NODENUM_BROADCAST ? FloodingRouter::send(p) : NextHopRouter::send(p);
 }
 
 bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)

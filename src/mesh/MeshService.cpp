@@ -85,12 +85,8 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
             "request for its NodeInfo.\n");
     } else if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !nodeDB->getMeshNode(mp->from)->has_user &&
                nodeInfoModule) {
-        LOG_INFO("Heard a node on channel %d we don't know, sending NodeInfo and asking for a response.\n", mp->channel);
-        if (airTime->isTxAllowedChannelUtil(true)) {
-            nodeInfoModule->sendOurNodeInfo(mp->from, true, mp->channel);
-        } else {
-            LOG_DEBUG("Skip sending NodeInfo due to > 25 percent channel util.\n");
-        }
+        // LOG_INFO("Heard a node on channel %d we don't know, sending NodeInfo and asking for a response.\n", mp->channel);
+        // nodeInfoModule->sendOurNodeInfo(mp->from, true, mp->channel);
     }
 
     printPacket("Forwarding to phone", mp);

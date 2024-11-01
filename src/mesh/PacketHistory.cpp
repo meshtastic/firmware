@@ -28,6 +28,8 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
     r.id = p->id;
     r.sender = getFrom(p);
     r.rxTimeMsec = now;
+    r.next_hop = p->next_hop;
+    r.relayed_by = p->relay_node;
 
     auto found = recentPackets.find(r);
     bool seenRecently = (found != recentPackets.end()); // found not equal to .end() means packet was seen recently
@@ -39,12 +41,21 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
     }
 
     if (seenRecently) {
+        // If it was seen with a next-hop not set to us, and now it's NO_NEXT_HOP_PREFERENCE, it's a fallback to flooding, so we
+        // consider it unseen because we might need to handle it now
+        if (found->next_hop != NO_NEXT_HOP_PREFERENCE && found->next_hop != nodeDB->getLastByteOfNodeNum(nodeDB->getNodeNum()) &&
+            p->next_hop == NO_NEXT_HOP_PREFERENCE) {
+            seenRecently = false;
+        }
+    }
+
+    if (seenRecently) {
         LOG_DEBUG("Found existing packet record for fr=0x%x,to=0x%x,id=0x%x\n", p->from, p->to, p->id);
     }
 
     if (withUpdate) {
-        if (found != recentPackets.end()) { // delete existing to updated timestamp (re-insert)
-            recentPackets.erase(found);     // as unsorted_set::iterator is const (can't update timestamp - so re-insert..)
+        if (found != recentPackets.end()) { // delete existing to updated timestamp and next-hop/relayed_by (re-insert)
+            recentPackets.erase(found);     // as unsorted_set::iterator is const (can't update - so re-insert..)
         }
         recentPackets.insert(r);
         printPacket("Add packet record", p);
@@ -77,4 +88,20 @@ void PacketHistory::clearExpiredRecentPackets()
     }
 
     LOG_DEBUG("recentPackets size=%ld (after clearing expired packets)\n", recentPackets.size());
+}
+
+/* Find the relayer of a packet in the history given an ID and sender
+ * @return the 1-byte relay identifier, or NULL if not found */
+uint8_t PacketHistory::getRelayerFromHistory(const uint32_t id, const NodeNum sender)
+{
+    PacketRecord r;
+    r.id = id;
+    r.sender = sender;
+    auto found = recentPackets.find(r);
+
+    if (found == recentPackets.end()) {
+        return NULL;
+    }
+
+    return found->relayed_by;
 }

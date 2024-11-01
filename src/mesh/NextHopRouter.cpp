@@ -14,7 +14,8 @@ PendingPacket::PendingPacket(meshtastic_MeshPacket *p, uint8_t numRetransmission
 ErrorCode NextHopRouter::send(meshtastic_MeshPacket *p)
 {
     // Add any messages _we_ send to the seen message list (so we will ignore all retransmissions we see)
-    wasSeenRecently(p); // FIXME, move this to a sniffSent method
+    p->relay_node = nodeDB->getLastByteOfNodeNum(getNodeNum()); // First set the relayer to us
+    wasSeenRecently(p);                                         // FIXME, move this to a sniffSent method
 
     p->next_hop = getNextHop(p->to, p->relay_node); // set the next hop
     LOG_DEBUG("Setting next hop for packet with dest %x to %x\n", p->to, p->next_hop);
@@ -44,14 +45,21 @@ bool NextHopRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Routing *c)
 {
     NodeNum ourNodeNum = getNodeNum();
+    // TODO DMs are now usually not decoded!
     bool isAckorReply = (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) && (p->decoded.request_id != 0);
     if (isAckorReply) {
         // Update next-hop for the original transmitter of this successful transmission to the relay node, but ONLY if "from" is
-        // not 0 (means implicit ACK)
+        // not 0 (means implicit ACK) and original packet was also relayed by this node, or we sent it directly to the destination
         if (p->to == ourNodeNum && p->from != 0) {
-            if (p->hop_start && p->relay_node) { // Only if hopStart is set, relay_node is valid (both introduced in v2.3)
+            if (p->relay_node) {
+                // Check who was the original relayer of this packet
+                uint8_t original_relayer = PacketHistory::getRelayerFromHistory(p->decoded.request_id, p->to);
+                uint8_t ourRelayID = nodeDB->getLastByteOfNodeNum(ourNodeNum);
                 meshtastic_NodeInfoLite *origTx = nodeDB->getMeshNode(p->from);
-                if (origTx) {
+                // Either original relayer and relayer of ACK are the same, or we were the relayer and the ACK came directly from
+                // the destination
+                if (origTx && original_relayer == p->relay_node ||
+                    original_relayer == ourRelayID && p->relay_node == nodeDB->getLastByteOfNodeNum(p->from)) {
                     LOG_DEBUG("Update next hop of 0x%x to 0x%x based on received ACK or reply.\n", p->from, p->relay_node);
                     origTx->next_hop = p->relay_node;
                 }
@@ -65,8 +73,7 @@ void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtast
 
     if (config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE) {
         if ((p->to != ourNodeNum) && (getFrom(p) != ourNodeNum)) {
-            if (p->hop_start == 0 || p->next_hop == NO_NEXT_HOP_PREFERENCE ||
-                p->next_hop == nodeDB->getLastByteOfNodeNum(ourNodeNum)) {
+            if (p->next_hop == NO_NEXT_HOP_PREFERENCE || p->next_hop == nodeDB->getLastByteOfNodeNum(ourNodeNum)) {
                 meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
                 LOG_INFO("Relaying received message coming from %x\n", p->relay_node);
 
@@ -185,14 +192,14 @@ int32_t NextHopRouter::doRetransmissions()
                 LOG_DEBUG("Sending retransmission fr=0x%x,to=0x%x,id=0x%x, tries left=%d\n", p.packet->from, p.packet->to,
                           p.packet->id, p.numRetransmissions);
 
-                if (config.lora.next_hop_routing && p.packet->to != NODENUM_BROADCAST) {
+                if (p.packet->to != NODENUM_BROADCAST) {
                     if (p.numRetransmissions == 1) {
                         // Last retransmission, reset next_hop (fallback to FloodingRouter)
                         p.packet->next_hop = NO_NEXT_HOP_PREFERENCE;
                         // Also reset it in the nodeDB
                         meshtastic_NodeInfoLite *sentTo = nodeDB->getMeshNode(p.packet->to);
                         if (sentTo) {
-                            LOG_DEBUG("Resetting next hop for packet with dest 0x%x\n", p.packet->to);
+                            LOG_WARN("Resetting next hop for packet with dest 0x%x\n", p.packet->to);
                             sentTo->next_hop = NO_NEXT_HOP_PREFERENCE;
                         }
                         FloodingRouter::send(packetPool.allocCopy(*p.packet));

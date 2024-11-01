@@ -13,6 +13,8 @@ struct PacketRecord {
     NodeNum sender;
     PacketId id;
     uint32_t rxTimeMsec; // Unix time in msecs - the time we received it
+    uint8_t next_hop;    // The next hop asked for this packet
+    uint8_t relayed_by;  // The node that relayed this packet
 
     bool operator==(const PacketRecord &p) const { return sender == p.sender && id == p.id; }
 };
@@ -42,4 +44,8 @@ class PacketHistory
      * @param withUpdate if true and not found we add an entry to recentPackets
      */
     bool wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpdate = true);
+
+    /* Find the relayer of a packet in the history given an ID and sender
+     * @return the 1-byte relay identifier, or NULL if not found */
+    uint8_t getRelayerFromHistory(const uint32_t id, const NodeNum sender);
 };

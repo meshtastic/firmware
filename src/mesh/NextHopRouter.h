@@ -104,8 +104,6 @@ class NextHopRouter : public FloodingRouter
      */
     virtual void sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Routing *c) override;
 
-    constexpr static uint8_t NO_NEXT_HOP_PREFERENCE = 0;
-
     /**
      * Try to find the pending packet record for this ID (or NULL if not found)
      */
