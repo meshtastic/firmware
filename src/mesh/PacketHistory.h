@@ -6,15 +6,18 @@
 /// We clear our old flood record 10 minutes after we see the last of it
 #define FLOOD_EXPIRE_TIME (10 * 60 * 1000L)
 
+#define NUM_RELAYERS                                                                                                             \
+    3 // Number of relayer we keep track of. Use 3 to be efficient with memory alignment of PacketRecord to 16 bytes
+
 /**
  * A record of a recent message broadcast
  */
 struct PacketRecord {
     NodeNum sender;
     PacketId id;
-    uint32_t rxTimeMsec; // Unix time in msecs - the time we received it
-    uint8_t next_hop;    // The next hop asked for this packet
-    uint8_t relayed_by;  // The node that relayed this packet
+    uint32_t rxTimeMsec;              // Unix time in msecs - the time we received it
+    uint8_t next_hop;                 // The next hop asked for this packet
+    uint8_t relayed_by[NUM_RELAYERS]; // Array of nodes that relayed this packet
 
     bool operator==(const PacketRecord &p) const { return sender == p.sender && id == p.id; }
 };
@@ -45,7 +48,7 @@ class PacketHistory
      */
     bool wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpdate = true);
 
-    /* Find the relayer of a packet in the history given an ID and sender
-     * @return the 1-byte relay identifier, or NULL if not found */
-    uint8_t getRelayerFromHistory(const uint32_t id, const NodeNum sender);
+    /* Check if a certain node was a relayer of a packet in the history given an ID and sender
+     * @return true if node was indeed a relayer, false if not */
+    bool wasRelayer(const uint8_t relayer, const uint32_t id, const NodeNum sender);
 };

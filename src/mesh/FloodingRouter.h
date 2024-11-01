@@ -29,8 +29,6 @@
 class FloodingRouter : public Router, protected PacketHistory
 {
   private:
-    bool isRebroadcaster();
-
   public:
     /**
      * Constructor
@@ -58,4 +56,7 @@ class FloodingRouter : public Router, protected PacketHistory
      * Look for broadcasts we need to rebroadcast
      */
     virtual void sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Routing *c) override;
+
+    // Return true if we are a rebroadcaster
+    bool isRebroadcaster();
 };

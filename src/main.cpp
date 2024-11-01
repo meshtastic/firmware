@@ -786,8 +786,8 @@ void setup()
     LOG_DEBUG("Starting audio thread");
     audioThread = new AudioThread();
 #endif
-
-    service.init();
+    service = new MeshService();
+    service->init();
 
     // Now that the mesh service is created, create any modules
     setupModules();

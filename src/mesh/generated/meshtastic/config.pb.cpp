@@ -33,9 +33,6 @@ PB_BIND(meshtastic_Config_LoRaConfig, meshtastic_Config_LoRaConfig, 2)
 PB_BIND(meshtastic_Config_BluetoothConfig, meshtastic_Config_BluetoothConfig, AUTO)
 
 
-<<<<<<< HEAD
-PB_BIND(meshtastic_Config_SecurityConfig, meshtastic_Config_SecurityConfig, AUTO)
-=======
 PB_BIND(meshtastic_Config_SecurityConfig, meshtastic_Config_SecurityConfig, AUTO)
 
 
@@ -69,4 +66,3 @@ PB_BIND(meshtastic_Config_SessionkeyConfig, meshtastic_Config_SessionkeyConfig, 
 
 
 
->>>>>>> origin/master

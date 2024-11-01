@@ -33,15 +33,11 @@ typedef enum _meshtastic_AdminMessage_ConfigType {
     /* TODO: REPLACE */
     meshtastic_AdminMessage_ConfigType_BLUETOOTH_CONFIG = 6,
     /* TODO: REPLACE */
-<<<<<<< HEAD
-    meshtastic_AdminMessage_ConfigType_SECURITY_CONFIG = 7
-=======
     meshtastic_AdminMessage_ConfigType_SECURITY_CONFIG = 7,
     /*  */
     meshtastic_AdminMessage_ConfigType_SESSIONKEY_CONFIG = 8,
     /* device-ui config */
     meshtastic_AdminMessage_ConfigType_DEVICEUI_CONFIG = 9
->>>>>>> origin/master
 } meshtastic_AdminMessage_ConfigType;
 
 /* TODO: REPLACE */
@@ -219,13 +215,8 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _meshtastic_AdminMessage_ConfigType_MIN meshtastic_AdminMessage_ConfigType_DEVICE_CONFIG
-<<<<<<< HEAD
-#define _meshtastic_AdminMessage_ConfigType_MAX meshtastic_AdminMessage_ConfigType_SECURITY_CONFIG
-#define _meshtastic_AdminMessage_ConfigType_ARRAYSIZE ((meshtastic_AdminMessage_ConfigType)(meshtastic_AdminMessage_ConfigType_SECURITY_CONFIG+1))
-=======
 #define _meshtastic_AdminMessage_ConfigType_MAX meshtastic_AdminMessage_ConfigType_DEVICEUI_CONFIG
 #define _meshtastic_AdminMessage_ConfigType_ARRAYSIZE ((meshtastic_AdminMessage_ConfigType)(meshtastic_AdminMessage_ConfigType_DEVICEUI_CONFIG+1))
->>>>>>> origin/master
 
 #define _meshtastic_AdminMessage_ModuleConfigType_MIN meshtastic_AdminMessage_ModuleConfigType_MQTT_CONFIG
 #define _meshtastic_AdminMessage_ModuleConfigType_MAX meshtastic_AdminMessage_ModuleConfigType_PAXCOUNTER_CONFIG
@@ -346,7 +337,8 @@ X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,exit_simulator,exit_simulato
 X(a, STATIC,   ONEOF,    INT32,    (payload_variant,reboot_seconds,reboot_seconds),  97) \
 X(a, STATIC,   ONEOF,    INT32,    (payload_variant,shutdown_seconds,shutdown_seconds),  98) \
 X(a, STATIC,   ONEOF,    INT32,    (payload_variant,factory_reset_config,factory_reset_config),  99) \
-X(a, STATIC,   ONEOF,    INT32,    (payload_variant,nodedb_reset,nodedb_reset), 100)
+X(a, STATIC,   ONEOF,    INT32,    (payload_variant,nodedb_reset,nodedb_reset), 100) \
+X(a, STATIC,   SINGULAR, BYTES,    session_passkey, 101)
 #define meshtastic_AdminMessage_CALLBACK NULL
 #define meshtastic_AdminMessage_DEFAULT NULL
 #define meshtastic_AdminMessage_payload_variant_get_channel_response_MSGTYPE meshtastic_Channel

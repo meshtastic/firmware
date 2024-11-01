@@ -28,7 +28,7 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
     r.sender = getFrom(p);
     r.rxTimeMsec = millis();
     r.next_hop = p->next_hop;
-    r.relayed_by = p->relay_node;
+    r.relayed_by[0] = p->relay_node;
 
     auto found = recentPackets.find(r);
     bool seenRecently = (found != recentPackets.end()); // found not equal to .end() means packet was seen recently
@@ -41,10 +41,10 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
     }
 
     if (seenRecently) {
-        // If it was seen with a next-hop not set to us, and now it's NO_NEXT_HOP_PREFERENCE, it's a fallback to flooding, so we
-        // consider it unseen because we might need to handle it now
+        // If it was seen with a next-hop not set to us, relayer is still the same and now it's NO_NEXT_HOP_PREFERENCE, it's a
+        // fallback to flooding, so we consider it unseen because we might need to handle it now
         if (found->next_hop != NO_NEXT_HOP_PREFERENCE && found->next_hop != nodeDB->getLastByteOfNodeNum(nodeDB->getNodeNum()) &&
-            p->next_hop == NO_NEXT_HOP_PREFERENCE) {
+            found->relayed_by[0] == p->relay_node && p->next_hop == NO_NEXT_HOP_PREFERENCE) {
             seenRecently = false;
         }
     }
@@ -55,7 +55,12 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
 
     if (withUpdate) {
         if (found != recentPackets.end()) { // delete existing to updated timestamp and next-hop/relayed_by (re-insert)
-            recentPackets.erase(found);     // as unsorted_set::iterator is const (can't update - so re-insert..)
+            // Add the existing relayed_by to the new record
+            for (uint8_t i = 0; i < NUM_RELAYERS - 1; i++) {
+                if (found->relayed_by[i])
+                    r.relayed_by[i + 1] = found->relayed_by[i];
+            }
+            recentPackets.erase(found); // as unsorted_set::iterator is const (can't update - so re-insert..)
         }
         recentPackets.insert(r);
         printPacket("Add packet record", p);
@@ -88,9 +93,9 @@ void PacketHistory::clearExpiredRecentPackets()
     LOG_DEBUG("recentPackets size=%ld (after clearing expired packets)", recentPackets.size());
 }
 
-/* Find the relayer of a packet in the history given an ID and sender
- * @return the 1-byte relay identifier, or NULL if not found */
-uint8_t PacketHistory::getRelayerFromHistory(const uint32_t id, const NodeNum sender)
+/* Check if a certain node was a relayer of a packet in the history given an ID and sender
+ * @return true if node was indeed a relayer, false if not */
+bool PacketHistory::wasRelayer(const uint8_t relayer, const uint32_t id, const NodeNum sender)
 {
     PacketRecord r;
     r.id = id;
@@ -98,8 +103,12 @@ uint8_t PacketHistory::getRelayerFromHistory(const uint32_t id, const NodeNum se
     auto found = recentPackets.find(r);
 
     if (found == recentPackets.end()) {
-        return NULL;
+        return false;
     }
 
-    return found->relayed_by;
+    for (uint8_t i = 0; i < NUM_RELAYERS; i++) {
+        if (found->relayed_by[i] == relayer) {
+            return true;
+        }
+    }
 }

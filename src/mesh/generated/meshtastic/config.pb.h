@@ -296,10 +296,6 @@ typedef struct _meshtastic_Config_DeviceConfig {
     /* Disabling this will disable the SerialConsole by not initilizing the StreamAPI
  Moved to SecurityConfig */
     bool serial_enabled;
-    /* By default we turn off logging as soon as an API client connects (to keep shared serial link quiet).
- Set this to true to leave the debug log outputting even when API is active.
- Moved to SecurityConfig */
-    bool debug_log_enabled;
     /* For boards without a hard wired button, this is the pin number that will be used
  Boards that have more than one button can swap the function with this one. defaults to BUTTON_PIN if defined. */
     uint32_t button_gpio;
@@ -537,9 +533,6 @@ typedef struct _meshtastic_Config_BluetoothConfig {
     meshtastic_Config_BluetoothConfig_PairingMode mode;
     /* Specified PIN for PairingMode.FixedPin */
     uint32_t fixed_pin;
-    /* Enables device (serial style logs) over Bluetooth
- Moved to SecurityConfig */
-    bool device_logging_enabled;
 } meshtastic_Config_BluetoothConfig;
 
 typedef PB_BYTES_ARRAY_T(32) meshtastic_Config_SecurityConfig_public_key_t;
@@ -553,25 +546,24 @@ typedef struct _meshtastic_Config_SecurityConfig {
  Used to create a shared key with a remote device. */
     meshtastic_Config_SecurityConfig_private_key_t private_key;
     /* The public key authorized to send admin messages to this node. */
-<<<<<<< HEAD
-    meshtastic_Config_SecurityConfig_admin_key_t admin_key;
-=======
     pb_size_t admin_key_count;
     meshtastic_Config_SecurityConfig_admin_key_t admin_key[3];
->>>>>>> origin/master
     /* If true, device is considered to be "managed" by a mesh administrator via admin messages
  Device is managed by a mesh administrator. */
     bool is_managed;
     /* Serial Console over the Stream API." */
     bool serial_enabled;
     /* By default we turn off logging as soon as an API client connects (to keep shared serial link quiet).
- Output live debug logging over serial. */
+ Output live debug logging over serial or bluetooth is set to true. */
     bool debug_log_api_enabled;
-    /* Enables device (serial style logs) over Bluetooth */
-    bool bluetooth_logging_enabled;
     /* Allow incoming device control over the insecure legacy admin channel. */
     bool admin_channel_enabled;
 } meshtastic_Config_SecurityConfig;
+
+/* Blank config request, strictly for getting the session key */
+typedef struct _meshtastic_Config_SessionkeyConfig {
+    char dummy_field;
+} meshtastic_Config_SessionkeyConfig;
 
 typedef struct _meshtastic_Config {
     pb_size_t which_payload_variant;
@@ -584,11 +576,8 @@ typedef struct _meshtastic_Config {
         meshtastic_Config_LoRaConfig lora;
         meshtastic_Config_BluetoothConfig bluetooth;
         meshtastic_Config_SecurityConfig security;
-<<<<<<< HEAD
-=======
         meshtastic_Config_SessionkeyConfig sessionkey;
         meshtastic_DeviceUIConfig device_ui;
->>>>>>> origin/master
     } payload_variant;
 } meshtastic_Config;
 
@@ -673,6 +662,7 @@ extern "C" {
 
 
 
+
 /* Initializer values for message structs */
 #define meshtastic_Config_init_default           {0, {meshtastic_Config_DeviceConfig_init_default}}
 #define meshtastic_Config_DeviceConfig_init_default {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0, 0, 0, "", 0}
@@ -681,16 +671,10 @@ extern "C" {
 #define meshtastic_Config_NetworkConfig_init_default {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_default, ""}
 #define meshtastic_Config_NetworkConfig_IpV4Config_init_default {0, 0, 0, 0}
 #define meshtastic_Config_DisplayConfig_init_default {0, _meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _meshtastic_Config_DisplayConfig_DisplayUnits_MIN, _meshtastic_Config_DisplayConfig_OledType_MIN, _meshtastic_Config_DisplayConfig_DisplayMode_MIN, 0, 0, _meshtastic_Config_DisplayConfig_CompassOrientation_MIN}
-<<<<<<< HEAD
-#define meshtastic_Config_LoRaConfig_init_default {0, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _meshtastic_Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0}
-#define meshtastic_Config_BluetoothConfig_init_default {0, _meshtastic_Config_BluetoothConfig_PairingMode_MIN, 0, 0}
-#define meshtastic_Config_SecurityConfig_init_default {{0, {0}}, {0, {0}}, {0, {0}}, 0, 0, 0, 0, 0}
-=======
 #define meshtastic_Config_LoRaConfig_init_default {0, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _meshtastic_Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0}
 #define meshtastic_Config_BluetoothConfig_init_default {0, _meshtastic_Config_BluetoothConfig_PairingMode_MIN, 0}
 #define meshtastic_Config_SecurityConfig_init_default {{0, {0}}, {0, {0}}, 0, {{0, {0}}, {0, {0}}, {0, {0}}}, 0, 0, 0, 0}
 #define meshtastic_Config_SessionkeyConfig_init_default {0}
->>>>>>> origin/master
 #define meshtastic_Config_init_zero              {0, {meshtastic_Config_DeviceConfig_init_zero}}
 #define meshtastic_Config_DeviceConfig_init_zero {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0, 0, 0, "", 0}
 #define meshtastic_Config_PositionConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _meshtastic_Config_PositionConfig_GpsMode_MIN}
@@ -698,16 +682,10 @@ extern "C" {
 #define meshtastic_Config_NetworkConfig_init_zero {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_zero, ""}
 #define meshtastic_Config_NetworkConfig_IpV4Config_init_zero {0, 0, 0, 0}
 #define meshtastic_Config_DisplayConfig_init_zero {0, _meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _meshtastic_Config_DisplayConfig_DisplayUnits_MIN, _meshtastic_Config_DisplayConfig_OledType_MIN, _meshtastic_Config_DisplayConfig_DisplayMode_MIN, 0, 0, _meshtastic_Config_DisplayConfig_CompassOrientation_MIN}
-<<<<<<< HEAD
-#define meshtastic_Config_LoRaConfig_init_zero   {0, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _meshtastic_Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0}
-#define meshtastic_Config_BluetoothConfig_init_zero {0, _meshtastic_Config_BluetoothConfig_PairingMode_MIN, 0, 0}
-#define meshtastic_Config_SecurityConfig_init_zero {{0, {0}}, {0, {0}}, {0, {0}}, 0, 0, 0, 0, 0}
-=======
 #define meshtastic_Config_LoRaConfig_init_zero   {0, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _meshtastic_Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0, 0}
 #define meshtastic_Config_BluetoothConfig_init_zero {0, _meshtastic_Config_BluetoothConfig_PairingMode_MIN, 0}
 #define meshtastic_Config_SecurityConfig_init_zero {{0, {0}}, {0, {0}}, 0, {{0, {0}}, {0, {0}}, {0, {0}}}, 0, 0, 0, 0}
 #define meshtastic_Config_SessionkeyConfig_init_zero {0}
->>>>>>> origin/master
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_Config_DeviceConfig_role_tag  1
@@ -787,14 +765,12 @@ extern "C" {
 #define meshtastic_Config_BluetoothConfig_enabled_tag 1
 #define meshtastic_Config_BluetoothConfig_mode_tag 2
 #define meshtastic_Config_BluetoothConfig_fixed_pin_tag 3
-#define meshtastic_Config_BluetoothConfig_device_logging_enabled_tag 4
 #define meshtastic_Config_SecurityConfig_public_key_tag 1
 #define meshtastic_Config_SecurityConfig_private_key_tag 2
 #define meshtastic_Config_SecurityConfig_admin_key_tag 3
 #define meshtastic_Config_SecurityConfig_is_managed_tag 4
 #define meshtastic_Config_SecurityConfig_serial_enabled_tag 5
 #define meshtastic_Config_SecurityConfig_debug_log_api_enabled_tag 6
-#define meshtastic_Config_SecurityConfig_bluetooth_logging_enabled_tag 7
 #define meshtastic_Config_SecurityConfig_admin_channel_enabled_tag 8
 #define meshtastic_Config_device_tag             1
 #define meshtastic_Config_position_tag           2
@@ -804,11 +780,8 @@ extern "C" {
 #define meshtastic_Config_lora_tag               6
 #define meshtastic_Config_bluetooth_tag          7
 #define meshtastic_Config_security_tag           8
-<<<<<<< HEAD
-=======
 #define meshtastic_Config_sessionkey_tag         9
 #define meshtastic_Config_device_ui_tag          10
->>>>>>> origin/master
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_Config_FIELDLIST(X, a) \
@@ -819,13 +792,9 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,network,payload_variant.netw
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,display,payload_variant.display),   5) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,lora,payload_variant.lora),   6) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,bluetooth,payload_variant.bluetooth),   7) \
-<<<<<<< HEAD
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,security,payload_variant.security),   8)
-=======
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,security,payload_variant.security),   8) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,sessionkey,payload_variant.sessionkey),   9) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,device_ui,payload_variant.device_ui),  10)
->>>>>>> origin/master
 #define meshtastic_Config_CALLBACK NULL
 #define meshtastic_Config_DEFAULT NULL
 #define meshtastic_Config_payload_variant_device_MSGTYPE meshtastic_Config_DeviceConfig
@@ -836,11 +805,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,device_ui,payload_variant.de
 #define meshtastic_Config_payload_variant_lora_MSGTYPE meshtastic_Config_LoRaConfig
 #define meshtastic_Config_payload_variant_bluetooth_MSGTYPE meshtastic_Config_BluetoothConfig
 #define meshtastic_Config_payload_variant_security_MSGTYPE meshtastic_Config_SecurityConfig
-<<<<<<< HEAD
-=======
 #define meshtastic_Config_payload_variant_sessionkey_MSGTYPE meshtastic_Config_SessionkeyConfig
 #define meshtastic_Config_payload_variant_device_ui_MSGTYPE meshtastic_DeviceUIConfig
->>>>>>> origin/master
 
 #define meshtastic_Config_DeviceConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UENUM,    role,              1) \
@@ -948,22 +914,25 @@ X(a, STATIC,   SINGULAR, BOOL,     config_ok_to_mqtt, 105)
 #define meshtastic_Config_BluetoothConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, BOOL,     enabled,           1) \
 X(a, STATIC,   SINGULAR, UENUM,    mode,              2) \
-X(a, STATIC,   SINGULAR, UINT32,   fixed_pin,         3) \
-X(a, STATIC,   SINGULAR, BOOL,     device_logging_enabled,   4)
+X(a, STATIC,   SINGULAR, UINT32,   fixed_pin,         3)
 #define meshtastic_Config_BluetoothConfig_CALLBACK NULL
 #define meshtastic_Config_BluetoothConfig_DEFAULT NULL
 
 #define meshtastic_Config_SecurityConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, BYTES,    public_key,        1) \
 X(a, STATIC,   SINGULAR, BYTES,    private_key,       2) \
-X(a, STATIC,   SINGULAR, BYTES,    admin_key,         3) \
+X(a, STATIC,   REPEATED, BYTES,    admin_key,         3) \
 X(a, STATIC,   SINGULAR, BOOL,     is_managed,        4) \
 X(a, STATIC,   SINGULAR, BOOL,     serial_enabled,    5) \
 X(a, STATIC,   SINGULAR, BOOL,     debug_log_api_enabled,   6) \
-X(a, STATIC,   SINGULAR, BOOL,     bluetooth_logging_enabled,   7) \
 X(a, STATIC,   SINGULAR, BOOL,     admin_channel_enabled,   8)
 #define meshtastic_Config_SecurityConfig_CALLBACK NULL
 #define meshtastic_Config_SecurityConfig_DEFAULT NULL
+
+#define meshtastic_Config_SessionkeyConfig_FIELDLIST(X, a) \
+
+#define meshtastic_Config_SessionkeyConfig_CALLBACK NULL
+#define meshtastic_Config_SessionkeyConfig_DEFAULT NULL
 
 extern const pb_msgdesc_t meshtastic_Config_msg;
 extern const pb_msgdesc_t meshtastic_Config_DeviceConfig_msg;
@@ -975,6 +944,7 @@ extern const pb_msgdesc_t meshtastic_Config_DisplayConfig_msg;
 extern const pb_msgdesc_t meshtastic_Config_LoRaConfig_msg;
 extern const pb_msgdesc_t meshtastic_Config_BluetoothConfig_msg;
 extern const pb_msgdesc_t meshtastic_Config_SecurityConfig_msg;
+extern const pb_msgdesc_t meshtastic_Config_SessionkeyConfig_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define meshtastic_Config_fields &meshtastic_Config_msg
@@ -987,23 +957,20 @@ extern const pb_msgdesc_t meshtastic_Config_SecurityConfig_msg;
 #define meshtastic_Config_LoRaConfig_fields &meshtastic_Config_LoRaConfig_msg
 #define meshtastic_Config_BluetoothConfig_fields &meshtastic_Config_BluetoothConfig_msg
 #define meshtastic_Config_SecurityConfig_fields &meshtastic_Config_SecurityConfig_msg
+#define meshtastic_Config_SessionkeyConfig_fields &meshtastic_Config_SessionkeyConfig_msg
 
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_CONFIG_PB_H_MAX_SIZE meshtastic_Config_size
-#define meshtastic_Config_BluetoothConfig_size   12
-#define meshtastic_Config_DeviceConfig_size      100
+#define meshtastic_Config_BluetoothConfig_size   10
+#define meshtastic_Config_DeviceConfig_size      98
 #define meshtastic_Config_DisplayConfig_size     30
 #define meshtastic_Config_LoRaConfig_size        85
 #define meshtastic_Config_NetworkConfig_IpV4Config_size 20
 #define meshtastic_Config_NetworkConfig_size     196
 #define meshtastic_Config_PositionConfig_size    62
 #define meshtastic_Config_PowerConfig_size       52
-<<<<<<< HEAD
-#define meshtastic_Config_SecurityConfig_size    112
-=======
 #define meshtastic_Config_SecurityConfig_size    178
 #define meshtastic_Config_SessionkeyConfig_size  0
->>>>>>> origin/master
 #define meshtastic_Config_size                   199
 
 #ifdef __cplusplus
