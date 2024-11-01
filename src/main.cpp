@@ -192,7 +192,7 @@ const char *getDeviceName()
     } else {
         snprintf(name, sizeof(name), "Meshtastic_%02x%02x", dmac[4], dmac[5]);
     }
-    return name;
+        return name;   
 }
 
 static int32_t ledBlinker()
