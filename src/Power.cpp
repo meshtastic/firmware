@@ -156,8 +156,8 @@ static void adcEnable()
     pinMode(ADC_CTRL, INPUT_PULLUP);
 #else
 #ifdef HELTEC_V3
-    pinMode(ADC_CTRL,INPUT);
-    uint8_t adc_ctl_enable_value=!(digitalRead(ADC_CTRL));
+    pinMode(ADC_CTRL, INPUT);
+    uint8_t adc_ctl_enable_value = !(digitalRead(ADC_CTRL));
     pinMode(ADC_CTRL, OUTPUT);
     digitalWrite(ADC_CTRL, adc_ctl_enable_value);
 #else
@@ -176,7 +176,7 @@ static void adcDisable()
     pinMode(ADC_CTRL, INPUT_PULLDOWN);
 #else
 #ifdef HELTEC_V3
-    pinMode(ADC_CTRL,ANALOG);
+    pinMode(ADC_CTRL, ANALOG);
 #else
     digitalWrite(ADC_CTRL, !ADC_CTRL_ENABLED);
 #endif
