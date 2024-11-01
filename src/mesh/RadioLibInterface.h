@@ -4,6 +4,7 @@
 #include "RadioInterface.h"
 #include "concurrency/NotifiedWorkerThread.h"
 
+#include <sys/types.h>
 #include <RadioLib.h>
 
 // ESP32 has special rules about ISR code
