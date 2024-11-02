@@ -11,6 +11,10 @@
 #include <pb_decode.h>
 #include <pb_encode.h>
 
+#if ARCH_PORTDUINO
+#include "PortduinoGlue.h"
+#include "meshUtils.h"
+#endif
 void LockingArduinoHal::spiBeginTransaction()
 {
     spiLock->lock();
@@ -393,6 +397,11 @@ void RadioLibInterface::handleReceiveInterrupt()
 #endif
 
     int state = iface->readData((uint8_t *)&radioBuffer, length);
+#if ARCH_PORTDUINO
+    if (settingsMap[logoutputlevel] == level_trace) {
+        printBytes("Raw incoming packet: ", (uint8_t *)&radioBuffer, length);
+    }
+#endif
     if (state != RADIOLIB_ERR_NONE) {
         LOG_ERROR("ignoring received packet due to error=%d", state);
         rxBad++;

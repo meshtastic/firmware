@@ -408,7 +408,7 @@ typedef enum _meshtastic_LogRecord_Level {
 } meshtastic_LogRecord_Level;
 
 /* Struct definitions */
-/* a gps position */
+/* A GPS Position */
 typedef struct _meshtastic_Position {
     /* The new preferred location encoding, multiply by 1e-7 to get degrees
  in floating point */
