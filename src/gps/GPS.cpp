@@ -426,41 +426,29 @@ bool GPS::setup()
     if (!didSerialInit) {
         int msglen = 0;
         if (tx_gpio && gnssModel == GNSS_MODEL_UNKNOWN) {
-
-            // if GPS_BAUDRATE is specified in variant, skip to the specified rate.
-            if (GPS_BAUDRATE_FIXED) {
-                gnssModel = probe(GPS_BAUDRATE);
-                if (gnssModel == GNSS_MODEL_UNKNOWN && probeTries == 1) {
-                    LOG_WARN("GPS probe failed, setting to %d", GPS_BAUDRATE);
-                    return true;
-                } else {
-                    ++probeTries;
-                    return false;
-                }
-            } else {
-                if (probeTries == 0) {
-                    LOG_DEBUG("Probing for GPS at %d", serialSpeeds[speedSelect]);
-                    gnssModel = probe(serialSpeeds[speedSelect]);
-                    if (gnssModel == GNSS_MODEL_UNKNOWN) {
-                        if (++speedSelect == sizeof(serialSpeeds) / sizeof(int)) {
-                            speedSelect = 0;
-                            ++probeTries;
-                        }
+            if (probeTries < 2) {
+                LOG_DEBUG("Probing for GPS at %d", serialSpeeds[speedSelect]);
+                gnssModel = probe(serialSpeeds[speedSelect]);
+                if (gnssModel == GNSS_MODEL_UNKNOWN) {
+                    if (++speedSelect == sizeof(serialSpeeds) / sizeof(int)) {
+                        speedSelect = 0;
+                        ++probeTries;
                     }
                 }
-                // Rare Serial Speeds
-                if (probeTries == 1) {
-                    LOG_DEBUG("Probing for GPS at %d", rareSerialSpeeds[speedSelect]);
-                    gnssModel = probe(rareSerialSpeeds[speedSelect]);
-                    if (gnssModel == GNSS_MODEL_UNKNOWN) {
-                        if (++speedSelect == sizeof(rareSerialSpeeds) / sizeof(int)) {
-                            LOG_WARN("Giving up on GPS probe and setting to %d", GPS_BAUDRATE);
-                            return true;
-                        }
-                    }
-                }
-                return false;
             }
+            // Rare Serial Speeds
+            if (probeTries == 2) {
+                LOG_DEBUG("Probing for GPS at %d", rareSerialSpeeds[speedSelect]);
+                gnssModel = probe(rareSerialSpeeds[speedSelect]);
+                if (gnssModel == GNSS_MODEL_UNKNOWN) {
+                    if (++speedSelect == sizeof(rareSerialSpeeds) / sizeof(int)) {
+                        LOG_WARN("Giving up on GPS probe and setting to %d", GPS_BAUDRATE);
+                        return true;
+                    }
+                }
+            }
+            return false;
+
         } else {
             gnssModel = GNSS_MODEL_UNKNOWN;
         }
