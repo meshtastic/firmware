@@ -413,30 +413,42 @@ int GPS::getACK(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t 
     return 0;
 }
 
+/**
+ * @brief  Setup the GPS based on the model detected.
+ *  We detect the GPS by cycling through a set of baud rates, first common then rare.
+ *  For each baud rate, we run GPS::Probe to send commands and match the responses
+ *  to known GPS responses.
+ * @retval Whether setup reached the end of its potential to configure the GPS.
+ */
 bool GPS::setup()
 {
 
     if (!didSerialInit) {
         int msglen = 0;
         if (tx_gpio && gnssModel == GNSS_MODEL_UNKNOWN) {
-
-            // if GPS_BAUDRATE is specified in variant (i.e. not 9600), skip to the specified rate.
-            if (speedSelect == 0 && probeTries == 2 && GPS_BAUDRATE != serialSpeeds[speedSelect]) {
-                speedSelect = std::find(serialSpeeds, std::end(serialSpeeds), GPS_BAUDRATE) - serialSpeeds;
+            if (probeTries < 2) {
+                LOG_DEBUG("Probing for GPS at %d", serialSpeeds[speedSelect]);
+                gnssModel = probe(serialSpeeds[speedSelect]);
+                if (gnssModel == GNSS_MODEL_UNKNOWN) {
+                    if (++speedSelect == sizeof(serialSpeeds) / sizeof(int)) {
+                        speedSelect = 0;
+                        ++probeTries;
+                    }
+                }
             }
-
-            LOG_DEBUG("Probing for GPS at %d", serialSpeeds[speedSelect]);
-            gnssModel = probe(serialSpeeds[speedSelect]);
-            if (gnssModel == GNSS_MODEL_UNKNOWN) {
-                if (++speedSelect == sizeof(serialSpeeds) / sizeof(int)) {
-                    speedSelect = 0;
-                    if (--probeTries == 0) {
+            // Rare Serial Speeds
+            if (probeTries == 2) {
+                LOG_DEBUG("Probing for GPS at %d", rareSerialSpeeds[speedSelect]);
+                gnssModel = probe(rareSerialSpeeds[speedSelect]);
+                if (gnssModel == GNSS_MODEL_UNKNOWN) {
+                    if (++speedSelect == sizeof(rareSerialSpeeds) / sizeof(int)) {
                         LOG_WARN("Giving up on GPS probe and setting to %d", GPS_BAUDRATE);
                         return true;
                     }
                 }
-                return false;
             }
+            return false;
+
         } else {
             gnssModel = GNSS_MODEL_UNKNOWN;
         }
@@ -675,7 +687,8 @@ bool GPS::setup()
             SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_DISABLE_SBAS_BBR, "disable SBAS M10 GPS BBR", 300);
             delay(750); // will cause a receiver restart so wait a bit
 
-            // Done with initialization, Now enable wanted NMEA messages in BBR layer so they will survive a periodic sleep.
+            // Done with initialization, Now enable wanted NMEA messages in BBR layer so they will survive a periodic
+            // sleep.
             SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_ENABLE_NMEA_BBR, "enable messages for M10 GPS BBR", 300);
             delay(750);
             // Next enable wanted NMEA messages in RAM layer
@@ -937,10 +950,10 @@ void GPS::down()
 #endif
 
         if (softsleepSupported) {
-            // How long does gps_update_interval need to be, for GPS_HARDSLEEP to become more efficient than GPS_SOFTSLEEP?
-            // Heuristic equation. A compromise manually fitted to power observations from U-blox NEO-6M and M10050
-            // https://www.desmos.com/calculator/6gvjghoumr
-            // This is not particularly accurate, but probably an impromevement over a single, fixed threshold
+            // How long does gps_update_interval need to be, for GPS_HARDSLEEP to become more efficient than
+            // GPS_SOFTSLEEP? Heuristic equation. A compromise manually fitted to power observations from U-blox NEO-6M
+            // and M10050 https://www.desmos.com/calculator/6gvjghoumr This is not particularly accurate, but probably an
+            // improvement over a single, fixed threshold
             uint32_t hardsleepThreshold = (2750 * pow(predictedSearchDuration / 1000, 1.22));
             LOG_DEBUG("gps_update_interval >= %us needed to justify hardsleep", hardsleepThreshold / 1000);
 
@@ -1293,10 +1306,12 @@ GPS *GPS::createGps()
 
         if (!GPS_EN_ACTIVE) { // Need to invert the pin before hardware
             new GpioNotTransformer(
-                virtPin, p); // We just leave this created object on the heap so it can stay watching virtPin and driving en_gpio
+                virtPin,
+                p); // We just leave this created object on the heap so it can stay watching virtPin and driving en_gpio
         } else {
             new GpioUnaryTransformer(
-                virtPin, p); // We just leave this created object on the heap so it can stay watching virtPin and driving en_gpio
+                virtPin,
+                p); // We just leave this created object on the heap so it can stay watching virtPin and driving en_gpio
         }
     }
 
@@ -1404,8 +1419,8 @@ bool GPS::factoryReset()
         _serial_gps->write("$PMTK104*37\r\n");
         // No PMTK_ACK for this command.
         delay(100);
-        // send the UBLOX Factory Reset Command regardless of detect state, something is very wrong, just assume it's UBLOX.
-        // Factory Reset
+        // send the UBLOX Factory Reset Command regardless of detect state, something is very wrong, just assume it's
+        // UBLOX. Factory Reset
         byte _message_reset[] = {0xB5, 0x62, 0x06, 0x09, 0x0D, 0x00, 0xFF, 0xFB, 0x00, 0x00, 0x00,
                                  0x00, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x17, 0x2B, 0x7E};
         _serial_gps->write(_message_reset, sizeof(_message_reset));
@@ -1444,8 +1459,8 @@ bool GPS::lookForTime()
     auto d = reader.date;
     if (ti.isValid() && d.isValid()) { // Note: we don't check for updated, because we'll only be called if needed
         /* Convert to unix time
-The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of seconds that have elapsed since January 1, 1970
-(midnight UTC/GMT), not counting leap seconds (in ISO 8601: 1970-01-01T00:00:00Z).
+The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of seconds that have elapsed since January 1,
+1970 (midnight UTC/GMT), not counting leap seconds (in ISO 8601: 1970-01-01T00:00:00Z).
 */
         struct tm t;
         t.tm_sec = ti.second() + round(ti.age() / 1000);
@@ -1678,7 +1693,9 @@ bool GPS::whileActive()
         }
     }
 #ifdef GPS_DEBUG
-    LOG_DEBUG(debugmsg.c_str());
+    if (debugmsg != "") {
+        LOG_DEBUG(debugmsg.c_str());
+    }
 #endif
     return isValid;
 }
