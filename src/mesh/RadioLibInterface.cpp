@@ -278,11 +278,14 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     // Send any outgoing packets we have ready
                     meshtastic_MeshPacket *txp = txQueue.dequeue();
                     assert(txp);
+                    bool isLoraTx = txp->to != NODENUM_BROADCAST_NO_LORA;
                     startSend(txp);
 
-                    // Packet has been sent, count it toward our TX airtime utilization.
-                    uint32_t xmitMsec = getPacketTime(txp);
-                    airTime->logAirtime(TX_LOG, xmitMsec);
+                    if (isLoraTx) {
+                        // Packet has been sent, count it toward our TX airtime utilization.
+                        uint32_t xmitMsec = getPacketTime(txp);
+                        airTime->logAirtime(TX_LOG, xmitMsec);
+                    }
                 }
             }
         } else {

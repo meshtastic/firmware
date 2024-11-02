@@ -81,14 +81,17 @@ int32_t Router::runOnce()
  */
 void Router::enqueueReceivedMessage(meshtastic_MeshPacket *p)
 {
-    if (fromRadioQueue.enqueue(p, 0)) { // NOWAIT - fixme, if queue is full, delete older messages
-
-        // Nasty hack because our threading is primitive.  interfaces shouldn't need to know about routers FIXME
-        setReceivedMessage();
-    } else {
-        printPacket("BUG! fromRadioQueue is full! Discarding!", p);
-        packetPool.release(p);
+    // Try enqueue until successful
+    while (!fromRadioQueue.enqueue(p, 0)) {
+        meshtastic_MeshPacket *old_p;
+        old_p = fromRadioQueue.dequeuePtr(0); // Dequeue and discard the oldest packet
+        if (old_p) {
+            printPacket("fromRadioQ full, drop oldest!", old_p);
+            packetPool.release(old_p);
+        }
     }
+    // Nasty hack because our threading is primitive.  interfaces shouldn't need to know about routers FIXME
+    setReceivedMessage();
 }
 
 /// Generate a unique packet id

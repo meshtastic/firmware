@@ -421,7 +421,7 @@ bool GPS::setup()
         if (tx_gpio && gnssModel == GNSS_MODEL_UNKNOWN) {
 
             // if GPS_BAUDRATE is specified in variant (i.e. not 9600), skip to the specified rate.
-            if (speedSelect == 0 && GPS_BAUDRATE != serialSpeeds[speedSelect]) {
+            if (speedSelect == 0 && probeTries == 2 && GPS_BAUDRATE != serialSpeeds[speedSelect]) {
                 speedSelect = std::find(serialSpeeds, std::end(serialSpeeds), GPS_BAUDRATE) - serialSpeeds;
             }
 
@@ -431,7 +431,7 @@ bool GPS::setup()
                 if (++speedSelect == sizeof(serialSpeeds) / sizeof(int)) {
                     speedSelect = 0;
                     if (--probeTries == 0) {
-                        LOG_WARN("Giving up on GPS probe and setting to 9600.");
+                        LOG_WARN("Giving up on GPS probe and setting to %d", GPS_BAUDRATE);
                         return true;
                     }
                 }
