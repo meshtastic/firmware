@@ -415,7 +415,7 @@ int GPS::getACK(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t 
 
 /**
  * @brief  Setup the GPS based on the model detected.
- *  We detect the GPS by cyling through a set of baud rates, first common then rare.
+ *  We detect the GPS by cycling through a set of baud rates, first common then rare.
  *  For each baud rate, we run GPS::Probe to send commands and match the responses
  *  to known GPS responses.
  * @retval Whether setup reached the end of its potential to configure the GPS.
@@ -953,7 +953,7 @@ void GPS::down()
             // How long does gps_update_interval need to be, for GPS_HARDSLEEP to become more efficient than
             // GPS_SOFTSLEEP? Heuristic equation. A compromise manually fitted to power observations from U-blox NEO-6M
             // and M10050 https://www.desmos.com/calculator/6gvjghoumr This is not particularly accurate, but probably an
-            // impromevement over a single, fixed threshold
+            // improvement over a single, fixed threshold
             uint32_t hardsleepThreshold = (2750 * pow(predictedSearchDuration / 1000, 1.22));
             LOG_DEBUG("gps_update_interval >= %us needed to justify hardsleep", hardsleepThreshold / 1000);
 
