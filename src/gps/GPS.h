@@ -79,10 +79,11 @@ class GPS : private concurrency::OSThread
 #if GPS_BAUDRATE_FIXED
     // if GPS_BAUDRATE is specified in variant, only try that.
     const int serialSpeeds[1] = {GPS_BAUDRATE};
+    const int rareSerialSpeeds[1] = {GPS_BAUDRATE};
 #else
     const int serialSpeeds[3] = {9600, 115200, 38400};
-#endif
     const int rareSerialSpeeds[3] = {4800, 57600, GPS_BAUDRATE};
+#endif
 
     uint32_t lastWakeStartMsec = 0, lastSleepStartMsec = 0, lastFixStartMsec = 0;
     uint32_t rx_gpio = 0;
