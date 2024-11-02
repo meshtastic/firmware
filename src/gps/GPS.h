@@ -77,8 +77,8 @@ class GPS : private concurrency::OSThread
 #endif
   private:
 #if GPS_BAUDRATE_FIXED
-    // if GPS_BAUDRATE is specified in variant, try that first.
-    const int serialSpeeds[4] = {GPS_BAUDRATE, 9600, 115200, 38400};
+    // if GPS_BAUDRATE is specified in variant, only try that.
+    const int serialSpeeds[1] = {GPS_BAUDRATE};
 #else
     const int serialSpeeds[3] = {9600, 115200, 38400};
 #endif
