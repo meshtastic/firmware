@@ -1705,7 +1705,9 @@ bool GPS::whileActive()
         }
     }
 #ifdef GPS_DEBUG
-    LOG_DEBUG(debugmsg.c_str());
+    if (debugmsg != "") {
+        LOG_DEBUG(debugmsg.c_str());
+    }
 #endif
     return isValid;
 }
