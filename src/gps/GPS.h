@@ -76,13 +76,21 @@ class GPS : private concurrency::OSThread
     uint8_t fixType = 0;      // fix type from GPGSA
 #endif
   private:
-    const int serialSpeeds[6] = {9600, 115200, 38400, 4800, 57600, GPS_BAUDRATE};
+#if GPS_BAUDRATE_FIXED
+    // if GPS_BAUDRATE is specified in variant, only try that.
+    const int serialSpeeds[1] = {GPS_BAUDRATE};
+    const int rareSerialSpeeds[1] = {GPS_BAUDRATE};
+#else
+    const int serialSpeeds[3] = {9600, 115200, 38400};
+    const int rareSerialSpeeds[3] = {4800, 57600, GPS_BAUDRATE};
+#endif
+
     uint32_t lastWakeStartMsec = 0, lastSleepStartMsec = 0, lastFixStartMsec = 0;
     uint32_t rx_gpio = 0;
     uint32_t tx_gpio = 0;
 
     int speedSelect = 0;
-    int probeTries = 2;
+    int probeTries = 0;
 
     /**
      * hasValidLocation - indicates that the position variables contain a complete
