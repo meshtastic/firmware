@@ -1,15 +1,11 @@
+### Many device configs have been moved to /etc/meshtasticd/available.d
+### To activate, simply copy or link the appropriate file into /etc/meshtasticd/config.d
+
 ### Define your devices here using Broadcom pin numbering
 ### Uncomment the block that corresponds to your hardware
 ### Including the "Module:" line!
 ---
 Lora:
-#  Module: sx1262  # Waveshare SX126X XXXM
-#  DIO2_AS_RF_SWITCH: true
-#  CS: 21
-#  IRQ: 16
-#  Busy: 20
-#  Reset: 18
-#  SX126X_ANT_SW: 6
 
 #  Module: sx1262  # Waveshare SX1302 LISTEN ONLY AT THIS TIME!
 #  CS: 7
@@ -115,6 +111,29 @@ Display:
 #  Height: 320
 #  Rotate: true
 
+### SHCHV 3.5 RPi TFT+Touchscreen
+#  Panel: ILI9486
+#  spidev: spidev0.0
+#  BusFrequency: 30000000
+#  DC: 24
+#  Reset: 25
+#  Width: 320
+#  Height: 480
+#  OffsetRotate: 2
+
+### TZT 2.0 Inch TFT Display ST7789V 240RGBx320
+#  Panel: ST7789
+#  spidev: spidev0.0
+#  # CS: 8     # can be freely chosen
+#  BusFrequency: 80000000
+#  DC: 24      # can be freely chosen
+#  Width: 320
+#  Height: 240
+#  Reset: 25   # can be freely chosen
+#  Rotate: true
+#  OffsetRotate: 1
+#  Invert: true
+
 ### You can also specify the spi device for the display to use
 # spidev: spidev0.0
 
@@ -156,3 +175,4 @@ Webserver:
 General:
   MaxNodes: 200
   MaxMessageQueue: 100
+  ConfigDirectory: /etc/meshtasticd/config.d/
