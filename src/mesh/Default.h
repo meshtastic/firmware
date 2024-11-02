@@ -6,8 +6,9 @@
 #define THIRTY_SECONDS_MS 30 * 1000
 #define FIVE_SECONDS_MS 5 * 1000
 
+#define min_default_telemetry_interval_secs 30 * 60
 #define default_gps_update_interval IF_ROUTER(ONE_DAY, 2 * 60)
-#define default_telemetry_broadcast_interval_secs IF_ROUTER(ONE_DAY / 2, 30 * 60)
+#define default_telemetry_broadcast_interval_secs IF_ROUTER(ONE_DAY / 2, 60 * 60)
 #define default_broadcast_interval_secs IF_ROUTER(ONE_DAY / 2, 15 * 60)
 #define default_wait_bluetooth_secs IF_ROUTER(1, 60)
 #define default_sds_secs IF_ROUTER(ONE_DAY, UINT32_MAX) // Default to forever super deep sleep
@@ -35,6 +36,7 @@ class Default
     static uint32_t getConfiguredOrDefault(uint32_t configured, uint32_t defaultValue);
     static uint32_t getConfiguredOrDefaultMsScaled(uint32_t configured, uint32_t defaultValue, uint32_t numOnlineNodes);
     static uint8_t getConfiguredOrDefaultHopLimit(uint8_t configured);
+    static uint32_t getConfiguredOrMinimumValue(uint32_t configured, uint32_t minValue);
 
   private:
     static float congestionScalingCoefficient(int numOnlineNodes)

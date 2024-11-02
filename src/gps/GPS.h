@@ -34,6 +34,7 @@ typedef enum {
     GNSS_MODEL_UC6580,
     GNSS_MODEL_UNKNOWN,
     GNSS_MODEL_MTK_L76B,
+    GNSS_MODEL_MTK_PA1616S,
     GNSS_MODEL_AG3335,
     GNSS_MODEL_AG3352
 } GnssModel_t;
@@ -75,13 +76,21 @@ class GPS : private concurrency::OSThread
     uint8_t fixType = 0;      // fix type from GPGSA
 #endif
   private:
-    const int serialSpeeds[6] = {9600, 4800, 38400, 57600, 115200, 9600};
+#if GPS_BAUDRATE_FIXED
+    // if GPS_BAUDRATE is specified in variant, only try that.
+    const int serialSpeeds[1] = {GPS_BAUDRATE};
+    const int rareSerialSpeeds[1] = {GPS_BAUDRATE};
+#else
+    const int serialSpeeds[3] = {9600, 115200, 38400};
+    const int rareSerialSpeeds[3] = {4800, 57600, GPS_BAUDRATE};
+#endif
+
     uint32_t lastWakeStartMsec = 0, lastSleepStartMsec = 0, lastFixStartMsec = 0;
     uint32_t rx_gpio = 0;
     uint32_t tx_gpio = 0;
 
     int speedSelect = 0;
-    int probeTries = 2;
+    int probeTries = 0;
 
     /**
      * hasValidLocation - indicates that the position variables contain a complete
@@ -156,7 +165,7 @@ class GPS : private concurrency::OSThread
     static const uint8_t _message_CAS_CFG_NAVX_CONF[];
     static const uint8_t _message_CAS_CFG_RATE_1HZ[];
 
-    const char *ACK_SUCCESS_MESSAGE = "Get ack success!\n";
+    const char *ACK_SUCCESS_MESSAGE = "Get ack success!";
 
     meshtastic_Position p = meshtastic_Position_init_default;
 

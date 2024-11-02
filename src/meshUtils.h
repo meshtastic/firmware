@@ -24,4 +24,6 @@ bool memfll(const uint8_t *mem, uint8_t find, size_t numbytes);
 
 bool isOneOf(int item, int count, ...);
 
+const std::string vformat(const char *const zcFormat, ...);
+
 #define IS_ONE_OF(item, ...) isOneOf(item, sizeof((int[]){__VA_ARGS__}) / sizeof(int), __VA_ARGS__)

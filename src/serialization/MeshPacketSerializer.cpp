@@ -1,3 +1,4 @@
+#ifndef NRF52_USE_JSON
 #include "MeshPacketSerializer.h"
 #include "JSON.h"
 #include "NodeDB.h"
@@ -25,7 +26,7 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
             msgType = "text";
             // convert bytes to string
             if (shouldLog)
-                LOG_DEBUG("got text message of size %u\n", mp->decoded.payload.size);
+                LOG_DEBUG("got text message of size %u", mp->decoded.payload.size);
 
             char payloadStr[(mp->decoded.payload.size) + 1];
             memcpy(payloadStr, mp->decoded.payload.bytes, mp->decoded.payload.size);
@@ -34,7 +35,7 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
             JSONValue *json_value = JSON::Parse(payloadStr);
             if (json_value != NULL) {
                 if (shouldLog)
-                    LOG_INFO("text message payload is of type json\n");
+                    LOG_INFO("text message payload is of type json");
 
                 // if it is, then we can just use the json object
                 jsonObj["payload"] = json_value;
@@ -42,7 +43,7 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
                 // if it isn't, then we need to create a json object
                 // with the string as the value
                 if (shouldLog)
-                    LOG_INFO("text message payload is of type plaintext\n");
+                    LOG_INFO("text message payload is of type plaintext");
 
                 msgPayload["text"] = new JSONValue(payloadStr);
                 jsonObj["payload"] = new JSONValue(msgPayload);
@@ -293,7 +294,7 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
             break;
         }
     } else if (shouldLog) {
-        LOG_WARN("Couldn't convert encrypted payload of MeshPacket to JSON\n");
+        LOG_WARN("Couldn't convert encrypted payload of MeshPacket to JSON");
     }
 
     jsonObj["id"] = new JSONValue((unsigned int)mp->id);
@@ -317,7 +318,7 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
     std::string jsonStr = value->Stringify();
 
     if (shouldLog)
-        LOG_INFO("serialized json message: %s\n", jsonStr.c_str());
+        LOG_INFO("serialized json message: %s", jsonStr.c_str());
 
     delete value;
     return jsonStr;
@@ -354,3 +355,4 @@ std::string MeshPacketSerializer::JsonSerializeEncrypted(const meshtastic_MeshPa
     delete value;
     return jsonStr;
 }
+#endif

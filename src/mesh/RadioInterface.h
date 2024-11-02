@@ -55,7 +55,7 @@ typedef struct {
     PacketHeader header;
 
     /** The payload, of maximum length minus the header, aligned just to be sure */
-    uint8_t payload[MAX_LORA_PAYLOAD_LEN + 1 - sizeof(PacketHeader)] __attribute__ ((__aligned__));
+    uint8_t payload[MAX_LORA_PAYLOAD_LEN + 1 - sizeof(PacketHeader)] __attribute__((__aligned__));
 
 } RadioBuffer;
 
@@ -105,7 +105,7 @@ class RadioInterface
     /**
      * A temporary buffer used for sending/receiving packets, sized to hold the biggest buffer we might need
      * */
-    RadioBuffer radioBuffer __attribute__ ((__aligned__));
+    RadioBuffer radioBuffer __attribute__((__aligned__));
     /**
      * Enqueue a received packet for the registered receiver
      */

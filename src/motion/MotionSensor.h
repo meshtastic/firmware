@@ -14,6 +14,7 @@
 #include "../graphics/Screen.h"
 #include "../graphics/ScreenFonts.h"
 #include "../power.h"
+#include "Wire.h"
 
 // Base class for motion processing
 class MotionSensor
@@ -46,7 +47,7 @@ class MotionSensor
     // Register a button press when a double-tap is detected
     virtual void buttonPress();
 
-#ifdef RAK_4631
+#if defined(RAK_4631) & !MESHTASTIC_EXCLUDE_SCREEN
     // draw an OLED frame (currently only used by the RAK4631 BMX160 sensor)
     static void drawFrameCalibration(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 #endif

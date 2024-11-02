@@ -29,6 +29,8 @@
 class FloodingRouter : public Router, protected PacketHistory
 {
   private:
+    bool isRebroadcaster();
+
   public:
     /**
      * Constructor

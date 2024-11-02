@@ -36,9 +36,9 @@ jobs:
       - name: Download nanopb
         if: github.event_name == 'pull_request_target'
         run: |
-          wget https://jpa.kapsi.fi/nanopb/download/nanopb-0.4.8-linux-x86.tar.gz
-          tar xvzf nanopb-0.4.8-linux-x86.tar.gz
-          mv nanopb-0.4.8-linux-x86 nanopb-0.4.8
+          wget https://jpa.kapsi.fi/nanopb/download/nanopb-0.4.9-linux-x86.tar.gz
+          tar xvzf nanopb-0.4.9-linux-x86.tar.gz
+          mv nanopb-0.4.9-linux-x86 nanopb-0.4.9
 
       - name: Re-generate protocol buffers
         if: github.event_name == 'pull_request_target'

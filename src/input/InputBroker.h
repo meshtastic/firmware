@@ -18,6 +18,7 @@
 #define INPUT_BROKER_MSG_RIGHT 0xb7
 #define INPUT_BROKER_MSG_FN_SYMBOL_ON 0xf1
 #define INPUT_BROKER_MSG_FN_SYMBOL_OFF 0xf2
+#define INPUT_BROKER_MSG_BLUETOOTH_TOGGLE 0xAA
 
 typedef struct _InputEvent {
     const char *source;

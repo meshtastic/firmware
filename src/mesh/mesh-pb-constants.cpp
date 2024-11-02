@@ -3,7 +3,6 @@
 #include "FSCommon.h"
 #include "mesh-pb-constants.h"
 #include <Arduino.h>
-#include <assert.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
 
@@ -13,9 +12,7 @@ size_t pb_encode_to_bytes(uint8_t *destbuf, size_t destbufsize, const pb_msgdesc
 {
     pb_ostream_t stream = pb_ostream_from_buffer(destbuf, destbufsize);
     if (!pb_encode(&stream, fields, src_struct)) {
-        LOG_ERROR("Panic: can't encode protobuf reason='%s'\n", PB_GET_ERROR(&stream));
-        assert(
-            0); // If this assert fails it probably means you made a field too large for the max limits specified in mesh.options
+        LOG_ERROR("Panic: can't encode protobuf reason='%s'", PB_GET_ERROR(&stream));
         return 0;
     } else {
         return stream.bytes_written;
@@ -27,7 +24,7 @@ bool pb_decode_from_bytes(const uint8_t *srcbuf, size_t srcbufsize, const pb_msg
 {
     pb_istream_t stream = pb_istream_from_buffer(srcbuf, srcbufsize);
     if (!pb_decode(&stream, fields, dest_struct)) {
-        LOG_ERROR("Can't decode protobuf reason='%s', pb_msgdesc %p\n", PB_GET_ERROR(&stream), fields);
+        LOG_ERROR("Can't decode protobuf reason='%s', pb_msgdesc %p", PB_GET_ERROR(&stream), fields);
         return false;
     } else {
         return true;
@@ -59,7 +56,7 @@ bool readcb(pb_istream_t *stream, uint8_t *buf, size_t count)
 bool writecb(pb_ostream_t *stream, const uint8_t *buf, size_t count)
 {
     auto file = (Print *)stream->state;
-    // LOG_DEBUG("writing %d bytes to protobuf file\n", count);
+    // LOG_DEBUG("writing %d bytes to protobuf file", count);
     return file->write(buf, count) == count;
 }
 #endif

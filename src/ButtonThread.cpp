@@ -36,7 +36,7 @@ ButtonThread::ButtonThread() : OSThread("Button")
 #if defined(ARCH_PORTDUINO)
     if (settingsMap.count(user) != 0 && settingsMap[user] != RADIOLIB_NC) {
         this->userButton = OneButton(settingsMap[user], true, true);
-        LOG_DEBUG("Using GPIO%02d for button\n", settingsMap[user]);
+        LOG_DEBUG("Using GPIO%02d for button", settingsMap[user]);
     }
 #elif defined(BUTTON_PIN)
     int pin = config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN; // Resolved button pin
@@ -47,7 +47,7 @@ ButtonThread::ButtonThread() : OSThread("Button")
 #else
     this->userButton = OneButton(pin, true, true);
 #endif
-    LOG_DEBUG("Using GPIO%02d for button\n", pin);
+    LOG_DEBUG("Using GPIO%02d for button", pin);
 #endif
 
 #ifdef INPUT_PULLUP_SENSE
@@ -123,7 +123,7 @@ int32_t ButtonThread::runOnce()
     if (btnEvent != BUTTON_EVENT_NONE) {
         switch (btnEvent) {
         case BUTTON_EVENT_PRESSED: {
-            LOG_BUTTON("press!\n");
+            LOG_BUTTON("press!");
             // If a nag notification is running, stop it and prevent other actions
             if (moduleConfig.external_notification.enabled && (externalNotificationModule->nagCycleCutoff != UINT32_MAX)) {
                 externalNotificationModule->stopNow();
@@ -148,7 +148,7 @@ int32_t ButtonThread::runOnce()
         }
 
         case BUTTON_EVENT_DOUBLE_PRESSED: {
-            LOG_BUTTON("Double press!\n");
+            LOG_BUTTON("Double press!");
             service->refreshLocalMeshNode();
             auto sentPosition = service->trySendPosition(NODENUM_BROADCAST, true);
             if (screen) {
@@ -162,7 +162,7 @@ int32_t ButtonThread::runOnce()
         }
 
         case BUTTON_EVENT_MULTI_PRESSED: {
-            LOG_BUTTON("Mulitipress! %hux\n", multipressClickCount);
+            LOG_BUTTON("Mulitipress! %hux", multipressClickCount);
             switch (multipressClickCount) {
 #if HAS_GPS
             // 3 clicks: toggle GPS
@@ -189,7 +189,7 @@ int32_t ButtonThread::runOnce()
         } // end multipress event
 
         case BUTTON_EVENT_LONG_PRESSED: {
-            LOG_BUTTON("Long press!\n");
+            LOG_BUTTON("Long press!");
             powerFSM.trigger(EVENT_PRESS);
             if (screen) {
                 screen->startAlert("Shutting down...");
@@ -201,7 +201,7 @@ int32_t ButtonThread::runOnce()
         // Do actual shutdown when button released, otherwise the button release
         // may wake the board immediatedly.
         case BUTTON_EVENT_LONG_RELEASED: {
-            LOG_INFO("Shutdown from long press\n");
+            LOG_INFO("Shutdown from long press");
             playShutdownMelody();
             delay(3000);
             power->shutdown();
@@ -210,7 +210,7 @@ int32_t ButtonThread::runOnce()
 
 #ifdef BUTTON_PIN_TOUCH
         case BUTTON_EVENT_TOUCH_LONG_PRESSED: {
-            LOG_BUTTON("Touch press!\n");
+            LOG_BUTTON("Touch press!");
             if (screen) {
                 // Wake if asleep
                 if (powerFSM.getState() == &stateDARK)

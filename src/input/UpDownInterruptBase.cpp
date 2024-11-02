@@ -23,7 +23,7 @@ void UpDownInterruptBase::init(uint8_t pinDown, uint8_t pinUp, uint8_t pinPress,
     attachInterrupt(this->_pinDown, onIntDown, RISING);
     attachInterrupt(this->_pinUp, onIntUp, RISING);
 
-    LOG_DEBUG("Up/down/press GPIO initialized (%d, %d, %d)\n", this->_pinUp, this->_pinDown, pinPress);
+    LOG_DEBUG("Up/down/press GPIO initialized (%d, %d, %d)", this->_pinUp, this->_pinDown, pinPress);
 
     this->setInterval(100);
 }
@@ -34,13 +34,13 @@ int32_t UpDownInterruptBase::runOnce()
     e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
 
     if (this->action == UPDOWN_ACTION_PRESSED) {
-        LOG_DEBUG("GPIO event Press\n");
+        LOG_DEBUG("GPIO event Press");
         e.inputEvent = this->_eventPressed;
     } else if (this->action == UPDOWN_ACTION_UP) {
-        LOG_DEBUG("GPIO event Up\n");
+        LOG_DEBUG("GPIO event Up");
         e.inputEvent = this->_eventUp;
     } else if (this->action == UPDOWN_ACTION_DOWN) {
-        LOG_DEBUG("GPIO event Down\n");
+        LOG_DEBUG("GPIO event Down");
         e.inputEvent = this->_eventDown;
     }
 

@@ -35,17 +35,23 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
     return Router::shouldFilterReceived(p);
 }
 
+bool FloodingRouter::isRebroadcaster()
+{
+    return config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE &&
+           config.device.rebroadcast_mode != meshtastic_Config_DeviceConfig_RebroadcastMode_NONE;
+}
+
 void FloodingRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Routing *c)
 {
     bool isAckorReply = (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) && (p->decoded.request_id != 0);
-    if (isAckorReply && !isToUs(p) && p->to != NODENUM_BROADCAST) {
+    if (isAckorReply && !isToUs(p) && !isBroadcast(p->to)) {
         // do not flood direct message that is ACKed or replied to
-        LOG_DEBUG("Rxd an ACK/reply not for me, cancel rebroadcast.\n");
+        LOG_DEBUG("Rxd an ACK/reply not for me, cancel rebroadcast.");
         Router::cancelSending(p->to, p->decoded.request_id); // cancel rebroadcast for this DM
     }
     if (!isToUs(p) && (p->hop_limit > 0) && !isFromUs(p)) {
         if (p->id != 0) {
-            if (config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE) {
+            if (isRebroadcaster()) {
                 meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
 
                 tosend->hop_limit--; // bump down the hop count
@@ -57,15 +63,15 @@ void FloodingRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
                 }
 #endif
 
-                LOG_INFO("Rebroadcasting received floodmsg\n");
+                LOG_INFO("Rebroadcasting received floodmsg");
                 // Note: we are careful to resend using the original senders node id
                 // We are careful not to call our hooked version of send() - because we don't want to check this again
                 Router::send(tosend);
             } else {
-                LOG_DEBUG("Not rebroadcasting. Role = Role_ClientMute\n");
+                LOG_DEBUG("Not rebroadcasting: Role = CLIENT_MUTE or Rebroadcast Mode = NONE");
             }
         } else {
-            LOG_DEBUG("Ignoring 0 id broadcast\n");
+            LOG_DEBUG("Ignoring 0 id broadcast");
         }
     }
     // handle the packet as normal
