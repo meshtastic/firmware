@@ -293,7 +293,7 @@ typedef enum _meshtastic_Config_BluetoothConfig_PairingMode {
 typedef struct _meshtastic_Config_DeviceConfig {
     /* Sets the role of node */
     meshtastic_Config_DeviceConfig_Role role;
-    /* Disabling this will disable the SerialConsole by not initilizing the StreamAPI
+    /* Disabling this will disable the SerialConsole by not initializing the StreamAPI
  Moved to SecurityConfig */
     bool serial_enabled;
     /* For boards without a hard wired button, this is the pin number that will be used
@@ -326,7 +326,7 @@ typedef struct _meshtastic_Config_PositionConfig {
     /* We should send our position this often (but only if it has changed significantly)
  Defaults to 15 minutes */
     uint32_t position_broadcast_secs;
-    /* Adaptive position braoadcast, which is now the default. */
+    /* Adaptive position broadcast, which is now the default. */
     bool position_broadcast_smart_enabled;
     /* If set, this node is at a fixed position.
  We will generate GPS position updates at the regular interval, but use whatever the last lat/lon/alt we have for the node.
@@ -412,7 +412,7 @@ typedef struct _meshtastic_Config_NetworkConfig {
     char wifi_ssid[33];
     /* If set, will be use to authenticate to the named wifi */
     char wifi_psk[65];
-    /* NTP server to use if WiFi is conneced, defaults to `0.pool.ntp.org` */
+    /* NTP server to use if WiFi is connected, defaults to `0.pool.ntp.org` */
     char ntp_server[33];
     /* Enable Ethernet */
     bool eth_enabled;
@@ -440,7 +440,7 @@ typedef struct _meshtastic_Config_DisplayConfig {
     bool compass_north_top;
     /* Flip screen vertically, for cases that mount the screen upside down */
     bool flip_screen;
-    /* Perferred display units */
+    /* Preferred display units */
     meshtastic_Config_DisplayConfig_DisplayUnits units;
     /* Override auto-detect in screen */
     meshtastic_Config_DisplayConfig_OledType oled;

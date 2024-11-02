@@ -220,7 +220,7 @@ static OSThread *ambientLightingThread;
 RadioInterface *rIf = NULL;
 
 /**
- * Some platforms (nrf52) might provide an alterate version that suppresses calling delay from sleep.
+ * Some platforms (nrf52) might provide an alternate version that suppresses calling delay from sleep.
  */
 __attribute__((weak, noinline)) bool loopCanSleep()
 {
@@ -365,7 +365,7 @@ void setup()
     digitalWrite(HICHG, LOW); // 100 mA charging current if set to LOW and 50mA (actually about 20mA) if set to HIGH
 
     pinMode(BAT_READ, OUTPUT);
-    digitalWrite(BAT_READ, LOW); // This is pin P0_14 = 14 and by pullling low to GND it provices path to read on pin 32 (P0,31)
+    digitalWrite(BAT_READ, LOW); // This is pin P0_14 = 14 and by pulling low to GND it provides path to read on pin 32 (P0,31)
                                  // PIN_VBAT the voltage from divider on XIAO board
 
 #endif

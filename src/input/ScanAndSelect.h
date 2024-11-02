@@ -39,7 +39,7 @@ class ScanAndSelectInput : public Observable<const InputEvent *>, public concurr
     bool held = false;           // Have we handled a change in button state?
     bool longPressFired = false; // Long press fires while button still held. This bool ensures the release is no-op
     uint32_t downSinceMs = 0;    // Debouncing for short press, timing for long press
-    uint8_t pin = -1;            // Read from cannned message config during init
+    uint8_t pin = -1;            // Read from canned message config during init
 
     bool alertingNoMessage = false; // Is the "no canned messages" alert shown on screen?
     uint32_t alertingSinceMs = 0;   // Used to dismiss the "no canned message" alert several seconds

@@ -95,7 +95,7 @@ void EInkDynamicDisplay::adjustRefreshCounters()
 // Trigger the display update by calling base class
 bool EInkDynamicDisplay::update()
 {
-    // Detemine the refresh mode to use, and start the update
+    // Determine the refresh mode to use, and start the update
     bool refreshApproved = determineMode();
     if (refreshApproved) {
         EInkDisplay::forceDisplay(0); // Bypass base class' own rate-limiting system
@@ -317,7 +317,7 @@ void EInkDynamicDisplay::checkFrameMatchesPrevious()
     LOG_DEBUG("refresh=SKIPPED, reason=FRAME_MATCHED_PREVIOUS, frameFlags=0x%x", frameFlags);
 }
 
-// Have too many fast-refreshes occured consecutively, since last full refresh?
+// Have too many fast-refreshes occurred consecutively, since last full refresh?
 void EInkDynamicDisplay::checkConsecutiveFastRefreshes()
 {
     // If a decision was already reached, don't run the check
@@ -450,7 +450,7 @@ void EInkDynamicDisplay::resetGhostPixelTracking()
 }
 #endif // EINK_LIMIT_GHOSTING_PX
 
-// Handle any asyc tasks
+// Handle any async tasks
 void EInkDynamicDisplay::onNotify(uint32_t notification)
 {
     // Which task

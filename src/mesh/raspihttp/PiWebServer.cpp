@@ -1,12 +1,12 @@
 /*
 Adds a WebServer and WebService callbacks to meshtastic as Linux Version. The WebServer & Webservices
 runs in a real linux thread beside the portdunio threading emulation. It replaces the complete ESP32
-Webserver libs including generation of SSL certifcicates,  because the use ESP specific details in
+Webserver libs including generation of SSL certificates,  because the use ESP specific details in
 the lib that can't be emulated.
 
 The WebServices adapt to the two major phoneapi functions "handleAPIv1FromRadio,handleAPIv1ToRadio"
-The WebServer just adds basaic support to deliver WebContent, so it can be used to
-deliver the WebGui definded by the WebClient Project.
+The WebServer just adds basic support to deliver WebContent, so it can be used to
+deliver the WebGui defined by the WebClient Project.
 
 Steps to get it running:
 1.) Add these Linux Libs to the compile and target machine:
@@ -16,7 +16,7 @@ Steps to get it running:
                      libulfius-dev liborcania-dev
 
 2.) Configure the root directory of the web Content in the config.yaml file.
-    The followinng tags should be included and set at your needs
+    The following tags should be included and set at your needs
 
     Example entry in the config.yaml
     Webserver:
@@ -335,7 +335,7 @@ int generate_self_signed_x509(EVP_PKEY *pkey, X509 **x509)
     // Selfsigned,  Issuer = Subject
     X509_set_issuer_name(*x509, name);
 
-    // Certificate signed with our privte key
+    // Certificate signed with our private key
     if (X509_sign(*x509, pkey, EVP_sha256()) <= 0)
         return -1;
 
@@ -408,7 +408,7 @@ int PiWebServerThread::CreateSSLCertificate()
     }
 
     if (generate_self_signed_x509(pkey, &x509) != 0) {
-        LOG_ERROR("Error generating of X509-Certificat.");
+        LOG_ERROR("Error generating of X509-Certificate.");
         return 2;
     }
 
@@ -428,13 +428,13 @@ int PiWebServerThread::CreateSSLCertificate()
         LOG_ERROR("Error opening certificate.");
         return 4;
     }
-    // write cirtificate
+    // write certificate
     PEM_write_X509(x509_file, x509);
     fclose(x509_file);
 
     EVP_PKEY_free(pkey);
     X509_free(x509);
-    LOG_INFO("Create SSL Certifictate -certificate.pem- succesfull ");
+    LOG_INFO("Create SSL Certificate -certificate.pem- successful ");
     return 0;
 }
 

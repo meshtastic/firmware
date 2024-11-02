@@ -17,7 +17,7 @@
  PortNums should be assigned in the following range:
  0-63   Core Meshtastic use, do not use for third party apps
  64-127 Registered 3rd party apps, send in a pull request that adds a new entry to portnums.proto to  register your application
- 256-511 Use one of these portnums for your private applications that you don't want to register publically
+ 256-511 Use one of these portnums for your private applications that you don't want to register publicly
  All other values are reserved.
  Note: This was formerly a Type enum named 'typ' with the same id #
  We have change to this 'portnum' based scheme for specifying app handlers for particular payloads.
@@ -77,7 +77,7 @@ typedef enum _meshtastic_PortNum {
  ENCODING: ASCII Plaintext */
     meshtastic_PortNum_REPLY_APP = 32,
     /* Used for the python IP tunnel feature
- ENCODING: IP Packet. Handled by the python API, firmware ignores this one and pases on. */
+ ENCODING: IP Packet. Handled by the python API, firmware ignores this one and passes on. */
     meshtastic_PortNum_IP_TUNNEL_APP = 33,
     /* Paxcounter lib included in the firmware
  ENCODING: protobuf */

@@ -687,7 +687,7 @@ void TFTDisplay::display(bool fromBlank)
         for (x = 0; x < displayWidth; x++) {
             auto isset = buffer[x + (y / 8) * displayWidth] & (1 << (y & 7));
             if (!fromBlank) {
-                // get src pixel in the page based ordering the OLED lib uses FIXME, super inefficent
+                // get src pixel in the page based ordering the OLED lib uses FIXME, super inefficient
                 auto dblbuf_isset = buffer_back[x + (y / 8) * displayWidth] & (1 << (y & 7));
                 if (isset != dblbuf_isset) {
                     tft->drawPixel(x, y, isset ? TFT_MESH : TFT_BLACK);

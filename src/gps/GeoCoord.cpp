@@ -12,7 +12,7 @@ GeoCoord::GeoCoord(int32_t lat, int32_t lon, int32_t alt) : _latitude(lat), _lon
 
 GeoCoord::GeoCoord(float lat, float lon, int32_t alt) : _altitude(alt)
 {
-    // Change decimial representation to int32_t. I.e., 12.345 becomes 123450000
+    // Change decimal representation to int32_t. I.e., 12.345 becomes 123450000
     _latitude = int32_t(lat * 1e+7);
     _longitude = int32_t(lon * 1e+7);
     GeoCoord::setCoords();
@@ -20,7 +20,7 @@ GeoCoord::GeoCoord(float lat, float lon, int32_t alt) : _altitude(alt)
 
 GeoCoord::GeoCoord(double lat, double lon, int32_t alt) : _altitude(alt)
 {
-    // Change decimial representation to int32_t. I.e., 12.345 becomes 123450000
+    // Change decimal representation to int32_t. I.e., 12.345 becomes 123450000
     _latitude = int32_t(lat * 1e+7);
     _longitude = int32_t(lon * 1e+7);
     GeoCoord::setCoords();
@@ -467,7 +467,7 @@ int32_t GeoCoord::bearingTo(const GeoCoord &pointB)
 }
 
 /**
- * Create a new point bassed on the passed in poin
+ * Create a new point based on the passed in point
  * Ported from http://www.edwilliams.org/avform147.htm#LL
  * @param bearing
  * The bearing in raidans

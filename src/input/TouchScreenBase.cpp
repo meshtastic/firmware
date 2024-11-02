@@ -102,7 +102,7 @@ int32_t TouchScreenBase::runOnce()
     }
     _touchedOld = touched;
 
-    // fire TAP event when no 2nd tap occured within time
+    // fire TAP event when no 2nd tap occurred within time
     if (_tapped && (time_t(millis()) - _start) > TIME_LONG_PRESS - 50) {
         _tapped = false;
         e.touchEvent = static_cast<char>(TOUCH_ACTION_TAP);

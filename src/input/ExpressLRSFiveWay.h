@@ -38,7 +38,7 @@ class ExpressLRSFiveWay : public Observable<const InputEvent *>, public concurre
     static constexpr uint32_t KEY_LONG_PRESS_MS = 3000; // How many milliseconds to hold key for a long press
 
     // This merged an enum used by the ExpressLRS code, with meshtastic canned message values
-    // Key names are kept simple, to allow user customizaton
+    // Key names are kept simple, to allow user customization
     typedef enum {
         UP = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP,
         DOWN = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN,

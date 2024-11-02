@@ -353,7 +353,7 @@ int32_t KbI2cBase::runOnce()
                 e.kbchar = INPUT_BROKER_MSG_RIGHT;
                 break;
             case 0xc: // Modifier key: 0xc is alt+c (Other options could be: 0xea = shift+mic button or 0x4 shift+$(speaker))
-                // toggle moddifiers button.
+                // toggle modifiers button.
                 is_sym = !is_sym;
                 e.inputEvent = ANYKEY;
                 e.kbchar = is_sym ? INPUT_BROKER_MSG_FN_SYMBOL_ON   // send 0xf1 to tell CannedMessages to display that the

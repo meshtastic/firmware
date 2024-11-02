@@ -71,7 +71,7 @@ typedef enum _meshtastic_AdminMessage_ModuleConfigType {
 } meshtastic_AdminMessage_ModuleConfigType;
 
 /* Struct definitions */
-/* Parameters for setting up Meshtastic for ameteur radio usage */
+/* Parameters for setting up Meshtastic for amateur radio usage */
 typedef struct _meshtastic_HamParameters {
     /* Amateur radio call sign, eg. KD2ABC */
     char call_sign[8];
