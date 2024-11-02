@@ -76,9 +76,8 @@ class GPS : private concurrency::OSThread
     uint8_t fixType = 0;      // fix type from GPGSA
 #endif
   private:
-
-    const int serialSpeeds[6] = {9600, 115200, 38400};
-    const int rareSerialSpeeds[6] = {4800, 57600, GPS_BAUDRATE};
+    const int serialSpeeds[3] = {9600, 115200, 38400};
+    const int rareSerialSpeeds[3] = {4800, 57600, GPS_BAUDRATE};
 
     uint32_t lastWakeStartMsec = 0, lastSleepStartMsec = 0, lastFixStartMsec = 0;
     uint32_t rx_gpio = 0;
