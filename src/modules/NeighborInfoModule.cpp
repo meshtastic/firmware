@@ -121,9 +121,7 @@ Will be used for broadcast.
 */
 int32_t NeighborInfoModule::runOnce()
 {
-    if (airTime->isTxAllowedChannelUtil(true) && airTime->isTxAllowedAirUtil()) {
-        sendNeighborInfo(NODENUM_BROADCAST_NO_LORA, false);
-    }
+    sendNeighborInfo(NODENUM_BROADCAST_NO_LORA, false);
     return Default::getConfiguredOrDefaultMs(moduleConfig.neighbor_info.update_interval, default_neighbor_info_broadcast_secs);
 }
 

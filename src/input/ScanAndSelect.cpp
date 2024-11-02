@@ -59,7 +59,7 @@ int32_t ScanAndSelectInput::runOnce()
     // If: "no messages added" alert screen currently shown
     if (alertingNoMessage) {
         // Dismiss the alert screen several seconds after it appears
-        if (now > alertingSinceMs + durationAlertMs) {
+        if (!Throttle::isWithinTimespanMs(alertingSinceMs, durationAlertMs)) {
             alertingNoMessage = false;
             screen->endAlert();
         }
@@ -74,9 +74,9 @@ int32_t ScanAndSelectInput::runOnce()
 
         // Existing press
         else {
-            // Duration enough for long press
+            // Longer than shortpress window
             // Long press not yet fired (prevent repeat firing while held)
-            if (!longPressFired && Throttle::isWithinTimespanMs(downSinceMs, durationLongMs)) {
+            if (!longPressFired && !Throttle::isWithinTimespanMs(downSinceMs, durationLongMs)) {
                 longPressFired = true;
                 longPress();
             }
@@ -91,7 +91,9 @@ int32_t ScanAndSelectInput::runOnce()
         // Button newly released
         // Long press event didn't already fire
         if (held && !longPressFired) {
-            // Duration enough for short press
+            // Duration within shortpress window
+            // - longer than durationShortPress (debounce)
+            // - shorter than durationLongPress
             if (!Throttle::isWithinTimespanMs(downSinceMs, durationShortMs)) {
                 shortPress();
             }

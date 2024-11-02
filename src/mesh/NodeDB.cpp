@@ -32,6 +32,7 @@
 #if HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
+#include "SPILock.h"
 #include "modules/StoreForwardModule.h"
 #include <Preferences.h>
 #include <esp_efuse.h>
@@ -136,11 +137,12 @@ NodeDB::NodeDB()
     memcpy(myNodeInfo.device_id.bytes, &device_id_start, sizeof(device_id_start));
     memcpy(myNodeInfo.device_id.bytes + sizeof(device_id_start), &device_id_end, sizeof(device_id_end));
     myNodeInfo.device_id.size = 16;
-    hasUniqueId = true;
+    // Uncomment below to print the device id
+    // hasUniqueId = true;
 #else
     // FIXME - implement for other platforms
 #endif
-    // Uncomment below to print the device id
+
     // if (hasUniqueId) {
     //     std::string deviceIdHex;
     //     for (size_t i = 0; i < myNodeInfo.device_id.size; ++i) {
@@ -173,21 +175,23 @@ NodeDB::NodeDB()
     }
 
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-    bool keygenSuccess = false;
-    if (config.security.private_key.size == 32) {
-        if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
+    if (!owner.is_licensed) {
+        bool keygenSuccess = false;
+        if (config.security.private_key.size == 32) {
+            if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
+                keygenSuccess = true;
+            }
+        } else {
+            LOG_INFO("Generating new PKI keys");
+            crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
             keygenSuccess = true;
         }
-    } else {
-        LOG_INFO("Generating new PKI keys");
-        crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
-        keygenSuccess = true;
-    }
-    if (keygenSuccess) {
-        config.security.public_key.size = 32;
-        config.security.private_key.size = 32;
-        owner.public_key.size = 32;
-        memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
+        if (keygenSuccess) {
+            config.security.public_key.size = 32;
+            config.security.private_key.size = 32;
+            owner.public_key.size = 32;
+            memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
+        }
     }
 #elif !(MESHTASTIC_EXCLUDE_PKI)
     // Calculate Curve25519 public and private keys
@@ -556,8 +560,10 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
     if (role == meshtastic_Config_DeviceConfig_Role_ROUTER) {
         initConfigIntervals();
         initModuleConfigIntervals();
+        config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY;
     } else if (role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
         config.display.screen_on_secs = 1;
+        config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY;
     } else if (role == meshtastic_Config_DeviceConfig_Role_SENSOR) {
         moduleConfig.telemetry.environment_measurement_enabled = true;
         moduleConfig.telemetry.environment_update_interval = 300;
@@ -870,6 +876,9 @@ void NodeDB::loadFromDisk()
 bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_t *fields, const void *dest_struct,
                        bool fullAtomic)
 {
+#ifdef ARCH_ESP32
+    concurrency::LockGuard g(spiLock);
+#endif
     bool okay = false;
 #ifdef FSCom
     auto f = SafeFile(filename, fullAtomic);
