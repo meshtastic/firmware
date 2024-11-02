@@ -78,7 +78,7 @@ RoutingModule::RoutingModule() : ProtobufModule("routing", meshtastic_PortNum_RO
 {
     isPromiscuous = true;
 
-    // moved the ReboradcastMode logic into handleReceivedProtobuf
+    // moved the RebroadcastMode logic into handleReceivedProtobuf
     // LocalOnly requires either the from or to to be a known node
     // knownOnly specifically requires the from to be a known node.
     encryptedOk = true;

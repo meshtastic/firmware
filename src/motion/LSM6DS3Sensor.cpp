@@ -12,7 +12,7 @@ bool LSM6DS3Sensor::init()
         // Default threshold of 2G, less sensitive options are 4, 8 or 16G
         sensor.setAccelRange(LSM6DS_ACCEL_RANGE_2_G);
 
-        // Duration is number of occurances needed to trigger, higher threshold is less sensitive
+        // Duration is number of occurrences needed to trigger, higher threshold is less sensitive
         sensor.enableWakeup(config.display.wake_on_tap_or_motion, 1, LSM6DS3_WAKE_THRESH);
 
         LOG_DEBUG("LSM6DS3Sensor::init ok");
