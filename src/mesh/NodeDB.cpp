@@ -32,9 +32,14 @@
 #if HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
+#include "SPILock.h"
 #include "modules/StoreForwardModule.h"
 #include <Preferences.h>
+#include <esp_efuse.h>
+#include <esp_efuse_table.h>
 #include <nvs_flash.h>
+#include <soc/efuse_reg.h>
+#include <soc/soc.h>
 #endif
 
 #ifdef ARCH_PORTDUINO
@@ -109,6 +114,44 @@ NodeDB::NodeDB()
     uint32_t channelFileCRC = crc32Buffer(&channelFile, sizeof(channelFile));
 
     int saveWhat = 0;
+    bool hasUniqueId = false;
+    // Get device unique id
+#if defined(ARCH_ESP32) && defined(ESP_EFUSE_OPTIONAL_UNIQUE_ID)
+    uint32_t unique_id[4];
+    // ESP32 factory burns a unique id in efuse for S2+ series and evidently C3+ series
+    // This is used for HMACs in the esp-rainmaker AIOT platform and seems to be a good choice for us
+    esp_err_t err = esp_efuse_read_field_blob(ESP_EFUSE_OPTIONAL_UNIQUE_ID, unique_id, sizeof(unique_id) * 8);
+    if (err == ESP_OK) {
+        memcpy(myNodeInfo.device_id.bytes, unique_id, sizeof(unique_id));
+        myNodeInfo.device_id.size = 16;
+        hasUniqueId = true;
+    } else {
+        LOG_WARN("Failed to read unique id from efuse");
+    }
+#elif defined(ARCH_NRF52)
+    // Nordic applies a FIPS compliant Random ID to each chip at the factory
+    // We concatenate the device address to the Random ID to create a unique ID for now
+    // This will likely utilize a crypto module in the future
+    uint64_t device_id_start = ((uint64_t)NRF_FICR->DEVICEID[1] << 32) | NRF_FICR->DEVICEID[0];
+    uint64_t device_id_end = ((uint64_t)NRF_FICR->DEVICEADDR[1] << 32) | NRF_FICR->DEVICEADDR[0];
+    memcpy(myNodeInfo.device_id.bytes, &device_id_start, sizeof(device_id_start));
+    memcpy(myNodeInfo.device_id.bytes + sizeof(device_id_start), &device_id_end, sizeof(device_id_end));
+    myNodeInfo.device_id.size = 16;
+    // Uncomment below to print the device id
+    // hasUniqueId = true;
+#else
+    // FIXME - implement for other platforms
+#endif
+
+    // if (hasUniqueId) {
+    //     std::string deviceIdHex;
+    //     for (size_t i = 0; i < myNodeInfo.device_id.size; ++i) {
+    //         char buf[3];
+    //         snprintf(buf, sizeof(buf), "%02X", myNodeInfo.device_id.bytes[i]);
+    //         deviceIdHex += buf;
+    //     }
+    //     LOG_DEBUG("Device ID (HEX): %s", deviceIdHex.c_str());
+    // }
 
     // likewise - we always want the app requirements to come from the running appload
     myNodeInfo.min_app_version = 30200; // format is Mmmss (where M is 1+the numeric major number. i.e. 30200 means 2.2.00
@@ -132,21 +175,23 @@ NodeDB::NodeDB()
     }
 
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
-    bool keygenSuccess = false;
-    if (config.security.private_key.size == 32) {
-        if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
+    if (!owner.is_licensed) {
+        bool keygenSuccess = false;
+        if (config.security.private_key.size == 32) {
+            if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
+                keygenSuccess = true;
+            }
+        } else {
+            LOG_INFO("Generating new PKI keys");
+            crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
             keygenSuccess = true;
         }
-    } else {
-        LOG_INFO("Generating new PKI keys");
-        crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
-        keygenSuccess = true;
-    }
-    if (keygenSuccess) {
-        config.security.public_key.size = 32;
-        config.security.private_key.size = 32;
-        owner.public_key.size = 32;
-        memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
+        if (keygenSuccess) {
+            config.security.public_key.size = 32;
+            config.security.private_key.size = 32;
+            owner.public_key.size = 32;
+            memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
+        }
     }
 #elif !(MESHTASTIC_EXCLUDE_PKI)
     // Calculate Curve25519 public and private keys
@@ -515,8 +560,10 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
     if (role == meshtastic_Config_DeviceConfig_Role_ROUTER) {
         initConfigIntervals();
         initModuleConfigIntervals();
+        config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY;
     } else if (role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
         config.display.screen_on_secs = 1;
+        config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY;
     } else if (role == meshtastic_Config_DeviceConfig_Role_SENSOR) {
         moduleConfig.telemetry.environment_measurement_enabled = true;
         moduleConfig.telemetry.environment_update_interval = 300;
@@ -829,6 +876,9 @@ void NodeDB::loadFromDisk()
 bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_t *fields, const void *dest_struct,
                        bool fullAtomic)
 {
+#ifdef ARCH_ESP32
+    concurrency::LockGuard g(spiLock);
+#endif
     bool okay = false;
 #ifdef FSCom
     auto f = SafeFile(filename, fullAtomic);

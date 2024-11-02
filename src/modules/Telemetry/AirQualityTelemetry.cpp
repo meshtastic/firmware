@@ -35,6 +35,7 @@ int32_t AirQualityTelemetryModule::runOnce()
         if (moduleConfig.telemetry.air_quality_enabled) {
             LOG_INFO("Air quality Telemetry: Initializing");
             if (!aqi.begin_I2C()) {
+#ifndef I2C_NO_RESCAN
                 LOG_WARN("Could not establish i2c connection to AQI sensor. Rescanning...");
                 // rescan for late arriving sensors. AQI Module starts about 10 seconds into the boot so this is plenty.
                 uint8_t i2caddr_scan[] = {PMSA0031_ADDR};
@@ -51,6 +52,7 @@ int32_t AirQualityTelemetryModule::runOnce()
                         i2cScanner->fetchI2CBus(found.address);
                     return 1000;
                 }
+#endif
                 return disable();
             }
             return 1000;

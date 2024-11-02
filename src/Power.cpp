@@ -155,8 +155,15 @@ static void adcEnable()
 #ifdef ADC_USE_PULLUP
     pinMode(ADC_CTRL, INPUT_PULLUP);
 #else
+#ifdef HELTEC_V3
+    pinMode(ADC_CTRL, INPUT);
+    uint8_t adc_ctl_enable_value = !(digitalRead(ADC_CTRL));
+    pinMode(ADC_CTRL, OUTPUT);
+    digitalWrite(ADC_CTRL, adc_ctl_enable_value);
+#else
     pinMode(ADC_CTRL, OUTPUT);
     digitalWrite(ADC_CTRL, ADC_CTRL_ENABLED);
+#endif
 #endif
     delay(10);
 #endif
@@ -168,7 +175,11 @@ static void adcDisable()
 #ifdef ADC_USE_PULLUP
     pinMode(ADC_CTRL, INPUT_PULLDOWN);
 #else
+#ifdef HELTEC_V3
+    pinMode(ADC_CTRL, ANALOG);
+#else
     digitalWrite(ADC_CTRL, !ADC_CTRL_ENABLED);
+#endif
 #endif
 #endif
 }
@@ -360,7 +371,12 @@ class AnalogBatteryLevel : public HasBatteryLevel
     /**
      * return true if there is a battery installed in this unit
      */
+    // if we have a integrated device with a battery, we can assume that the battery is always connected
+#ifdef BATTERY_IMMUTABLE
+    virtual bool isBatteryConnect() override { return true; }
+#else
     virtual bool isBatteryConnect() override { return getBatteryPercent() != -1; }
+#endif
 
     /// If we see a battery voltage higher than physics allows - assume charger is pumping
     /// in power

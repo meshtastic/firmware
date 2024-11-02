@@ -40,7 +40,19 @@ typedef enum _meshtastic_Language {
     /* Polish */
     meshtastic_Language_POLISH = 8,
     /* Turkish */
-    meshtastic_Language_TURKISH = 9
+    meshtastic_Language_TURKISH = 9,
+    /* Serbian */
+    meshtastic_Language_SERBIAN = 10,
+    /* Russian */
+    meshtastic_Language_RUSSIAN = 11,
+    /* Dutch */
+    meshtastic_Language_DUTCH = 12,
+    /* Greek */
+    meshtastic_Language_GREEK = 13,
+    /* Simplified Chinese (experimental) */
+    meshtastic_Language_SIMPLIFIED_CHINESE = 30,
+    /* Traditional Chinese (experimental) */
+    meshtastic_Language_TRADITIONAL_CHINESE = 31
 } meshtastic_Language;
 
 /* Struct definitions */
@@ -73,16 +85,22 @@ typedef struct _meshtastic_NodeHighlight {
 } meshtastic_NodeHighlight;
 
 typedef struct _meshtastic_DeviceUIConfig {
+    /* A version integer used to invalidate saved files when we make incompatible changes. */
+    uint32_t version;
     /* TFT display brightness 1..255 */
     uint8_t screen_brightness;
     /* Screen timeout 0..900 */
     uint16_t screen_timeout;
-    /* Screen lock enabled */
+    /* Screen/Settings lock enabled */
     bool screen_lock;
+    bool settings_lock;
+    uint32_t pin_code;
     /* Color theme */
     meshtastic_Theme theme;
-    /* Audible message alert enabled */
+    /* Audible message, banner and ring tone */
     bool alert_enabled;
+    bool banner_enabled;
+    uint8_t ring_tone_id;
     /* Localization */
     meshtastic_Language language;
     /* Node list filter */
@@ -104,8 +122,8 @@ extern "C" {
 #define _meshtastic_Theme_ARRAYSIZE ((meshtastic_Theme)(meshtastic_Theme_RED+1))
 
 #define _meshtastic_Language_MIN meshtastic_Language_ENGLISH
-#define _meshtastic_Language_MAX meshtastic_Language_TURKISH
-#define _meshtastic_Language_ARRAYSIZE ((meshtastic_Language)(meshtastic_Language_TURKISH+1))
+#define _meshtastic_Language_MAX meshtastic_Language_TRADITIONAL_CHINESE
+#define _meshtastic_Language_ARRAYSIZE ((meshtastic_Language)(meshtastic_Language_TRADITIONAL_CHINESE+1))
 
 #define meshtastic_DeviceUIConfig_theme_ENUMTYPE meshtastic_Theme
 #define meshtastic_DeviceUIConfig_language_ENUMTYPE meshtastic_Language
@@ -114,10 +132,10 @@ extern "C" {
 
 
 /* Initializer values for message structs */
-#define meshtastic_DeviceUIConfig_init_default   {0, 0, 0, _meshtastic_Theme_MIN, 0, _meshtastic_Language_MIN, false, meshtastic_NodeFilter_init_default, false, meshtastic_NodeHighlight_init_default}
+#define meshtastic_DeviceUIConfig_init_default   {0, 0, 0, 0, 0, 0, _meshtastic_Theme_MIN, 0, 0, 0, _meshtastic_Language_MIN, false, meshtastic_NodeFilter_init_default, false, meshtastic_NodeHighlight_init_default}
 #define meshtastic_NodeFilter_init_default       {0, 0, 0, 0, 0, ""}
 #define meshtastic_NodeHighlight_init_default    {0, 0, 0, 0, ""}
-#define meshtastic_DeviceUIConfig_init_zero      {0, 0, 0, _meshtastic_Theme_MIN, 0, _meshtastic_Language_MIN, false, meshtastic_NodeFilter_init_zero, false, meshtastic_NodeHighlight_init_zero}
+#define meshtastic_DeviceUIConfig_init_zero      {0, 0, 0, 0, 0, 0, _meshtastic_Theme_MIN, 0, 0, 0, _meshtastic_Language_MIN, false, meshtastic_NodeFilter_init_zero, false, meshtastic_NodeHighlight_init_zero}
 #define meshtastic_NodeFilter_init_zero          {0, 0, 0, 0, 0, ""}
 #define meshtastic_NodeHighlight_init_zero       {0, 0, 0, 0, ""}
 
@@ -133,25 +151,35 @@ extern "C" {
 #define meshtastic_NodeHighlight_telemetry_switch_tag 3
 #define meshtastic_NodeHighlight_iaq_switch_tag  4
 #define meshtastic_NodeHighlight_node_name_tag   5
-#define meshtastic_DeviceUIConfig_screen_brightness_tag 1
-#define meshtastic_DeviceUIConfig_screen_timeout_tag 2
-#define meshtastic_DeviceUIConfig_screen_lock_tag 3
-#define meshtastic_DeviceUIConfig_theme_tag      4
-#define meshtastic_DeviceUIConfig_alert_enabled_tag 5
-#define meshtastic_DeviceUIConfig_language_tag   6
-#define meshtastic_DeviceUIConfig_node_filter_tag 7
-#define meshtastic_DeviceUIConfig_node_highlight_tag 8
+#define meshtastic_DeviceUIConfig_version_tag    1
+#define meshtastic_DeviceUIConfig_screen_brightness_tag 2
+#define meshtastic_DeviceUIConfig_screen_timeout_tag 3
+#define meshtastic_DeviceUIConfig_screen_lock_tag 4
+#define meshtastic_DeviceUIConfig_settings_lock_tag 5
+#define meshtastic_DeviceUIConfig_pin_code_tag   6
+#define meshtastic_DeviceUIConfig_theme_tag      7
+#define meshtastic_DeviceUIConfig_alert_enabled_tag 8
+#define meshtastic_DeviceUIConfig_banner_enabled_tag 9
+#define meshtastic_DeviceUIConfig_ring_tone_id_tag 10
+#define meshtastic_DeviceUIConfig_language_tag   11
+#define meshtastic_DeviceUIConfig_node_filter_tag 12
+#define meshtastic_DeviceUIConfig_node_highlight_tag 13
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_DeviceUIConfig_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, UINT32,   screen_brightness,   1) \
-X(a, STATIC,   SINGULAR, UINT32,   screen_timeout,    2) \
-X(a, STATIC,   SINGULAR, BOOL,     screen_lock,       3) \
-X(a, STATIC,   SINGULAR, UENUM,    theme,             4) \
-X(a, STATIC,   SINGULAR, BOOL,     alert_enabled,     5) \
-X(a, STATIC,   SINGULAR, UENUM,    language,          6) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  node_filter,       7) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  node_highlight,    8)
+X(a, STATIC,   SINGULAR, UINT32,   version,           1) \
+X(a, STATIC,   SINGULAR, UINT32,   screen_brightness,   2) \
+X(a, STATIC,   SINGULAR, UINT32,   screen_timeout,    3) \
+X(a, STATIC,   SINGULAR, BOOL,     screen_lock,       4) \
+X(a, STATIC,   SINGULAR, BOOL,     settings_lock,     5) \
+X(a, STATIC,   SINGULAR, UINT32,   pin_code,          6) \
+X(a, STATIC,   SINGULAR, UENUM,    theme,             7) \
+X(a, STATIC,   SINGULAR, BOOL,     alert_enabled,     8) \
+X(a, STATIC,   SINGULAR, BOOL,     banner_enabled,    9) \
+X(a, STATIC,   SINGULAR, UINT32,   ring_tone_id,     10) \
+X(a, STATIC,   SINGULAR, UENUM,    language,         11) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  node_filter,      12) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  node_highlight,   13)
 #define meshtastic_DeviceUIConfig_CALLBACK NULL
 #define meshtastic_DeviceUIConfig_DEFAULT NULL
 #define meshtastic_DeviceUIConfig_node_filter_MSGTYPE meshtastic_NodeFilter
@@ -187,7 +215,7 @@ extern const pb_msgdesc_t meshtastic_NodeHighlight_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_DEVICE_UI_PB_H_MAX_SIZE meshtastic_DeviceUIConfig_size
-#define meshtastic_DeviceUIConfig_size           80
+#define meshtastic_DeviceUIConfig_size           99
 #define meshtastic_NodeFilter_size               36
 #define meshtastic_NodeHighlight_size            25
 

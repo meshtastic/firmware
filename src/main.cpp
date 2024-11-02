@@ -27,7 +27,6 @@
 #include "detect/ScanI2CTwoWire.h"
 #include <Wire.h>
 #endif
-#include "detect/axpDebug.h"
 #include "detect/einkScan.h"
 #include "graphics/RAKled.h"
 #include "graphics/Screen.h"
@@ -267,14 +266,19 @@ void setup()
 #ifdef DEBUG_PORT
     consoleInit(); // Set serial baud rate and init our mesh console
 #endif
+
+#ifdef UNPHONE
+    unphone.printStore();
+#endif
+
 #if ARCH_PORTDUINO
     struct timeval tv;
     tv.tv_sec = time(NULL);
     tv.tv_usec = 0;
     perhapsSetRTC(RTCQualityNTP, &tv);
 #endif
-    powerMonInit();
 
+    powerMonInit();
     serialSinceMsec = millis();
 
     LOG_INFO("\n\n//\\ E S H T /\\ S T / C\n");
@@ -643,6 +647,8 @@ void setup()
     rp2040Setup();
 #endif
 
+    initSPI(); // needed here before reading from littleFS
+
     // We do this as early as possible because this loads preferences from flash
     // but we need to do this after main cpu init (esp32setup), because we need the random seed set
     nodeDB = new NodeDB;
@@ -706,7 +712,6 @@ void setup()
 #endif
 
     // Init our SPI controller (must be before screen and lora)
-    initSPI();
 #ifdef ARCH_RP2040
 #ifdef HW_SPI1_DEVICE
     SPI1.setSCK(LORA_SCK);
