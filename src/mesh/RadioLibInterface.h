@@ -5,6 +5,7 @@
 #include "concurrency/NotifiedWorkerThread.h"
 
 #include <RadioLib.h>
+#include <sys/types.h>
 
 // ESP32 has special rules about ISR code
 #ifdef ARDUINO_ARCH_ESP32
