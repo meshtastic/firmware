@@ -398,7 +398,7 @@ bool Channels::decryptForHash(ChannelIndex chIndex, ChannelHash channelHash)
  *
  * This method is called before encoding outbound packets
  *
- * @eturn the (0 to 255) hash for that channel - if no suitable channel could be found, return -1
+ * @return the (0 to 255) hash for that channel - if no suitable channel could be found, return -1
  */
 int16_t Channels::setActiveByIndex(ChannelIndex channelIndex)
 {
