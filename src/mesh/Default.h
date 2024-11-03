@@ -44,7 +44,7 @@ class Default
         if (numOnlineNodes <= 40) {
             return 1.0; // No scaling for 40 or fewer nodes
         } else {
-            // Scaling based on number of nodes over 40
+            // Sscaling based on number of nodes over 40
             int nodesOverForty = (numOnlineNodes - 40);
             return 1.0 + (nodesOverForty * 0.075); // Each number of online node scales by 0.075
         }

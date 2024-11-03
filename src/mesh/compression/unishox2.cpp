@@ -15,7 +15,7 @@
  *
  * @author Arundale Ramanathan
  *
- * Port for Particle (particle.io) / Arduino - Jonathan Greenblatt
+ * Port for Particle (particle.io) / Aruino - Jonathan Greenblatt
  */
 /**
  * @file unishox2.c
@@ -197,7 +197,7 @@ int append_switch_code(char *out, int olen, int ol, uint8_t state)
     return ol;
 }
 
-/// Appends given horizontal and vertical code bits to out
+/// Appends given horizontal and veritical code bits to out
 int append_code(char *out, int olen, int ol, uint8_t code, uint8_t *state, const uint8_t usx_hcodes[],
                 const uint8_t usx_hcode_lens[])
 {
@@ -897,7 +897,7 @@ int read8bitCode(const char *in, int len, int bit_no)
     return code;
 }
 
-/// The list of vertical codes is split into 5 sections. Used by readVCodeIdx()
+/// The list of veritical codes is split into 5 sections. Used by readVCodeIdx()
 #define SECTION_COUNT 5
 /// Used by readVCodeIdx() for finding the section under which the code read using read8bitCode() falls
 uint8_t usx_vsections[] = {0x7F, 0xBF, 0xDF, 0xEF, 0xFF};
@@ -924,7 +924,7 @@ uint8_t usx_vcode_lookup[36] = {(1 << 5) + 0,  (1 << 5) + 0,  (2 << 5) + 1,  (2 
 /// compared to using a 256 uint8_t buffer to decode the next 8 bits read by read8bitCode() \n
 /// by splitting the list of vertical codes. \n
 /// Decoder is designed for using less memory, not speed. \n
-/// Returns the vertical code index or 99 if match could not be found. \n
+/// Returns the veritical code index or 99 if match could not be found. \n
 /// Also updates bit_no_p with how many ever bits used by the vertical code.
 int readVCodeIdx(const char *in, int len, int *bit_no_p)
 {

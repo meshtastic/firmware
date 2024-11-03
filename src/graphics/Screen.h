@@ -424,7 +424,7 @@ class Screen : public concurrency::OSThread
 
 #endif
 
-        // If we already returned an unconvertible-character symbol for this unconvertible-character sequence, return NULs for the
+        // If we already returned an unconvertable-character symbol for this unconvertable-character sequence, return NULs for the
         // rest of it
         if (SKIPREST)
             return (uint8_t)0;

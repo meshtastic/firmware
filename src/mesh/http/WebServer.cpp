@@ -22,7 +22,7 @@ Preferences prefs;
 
 /*
   Including the esp32_https_server library will trigger a compile time error. I've
-  tracked it down to a reoccurrence of this bug:
+  tracked it down to a reoccurrance of this bug:
     https://gcc.gnu.org/bugzilla/show_bug.cgi?id=57824
   The work around is described here:
     https://forums.xilinx.com/t5/Embedded-Development-Tools/Error-with-Standard-Libaries-in-Zynq/td-p/450032

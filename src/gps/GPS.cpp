@@ -640,7 +640,7 @@ bool GPS::setup()
                 SEND_UBX_PACKET(0x06, 0x86, _message_PMS, "enable powersaving for GPS", 500);
                 SEND_UBX_PACKET(0x06, 0x3B, _message_CFG_PM2, "enable powersaving details for GPS", 500);
 
-                // For M8 we want to enable NMEA version 4.10 so we can see the additional sats.
+                // For M8 we want to enable NMEA vserion 4.10 so we can see the additional sats.
                 if (gnssModel == GNSS_MODEL_UBLOX8) {
                     clearBuffer();
                     SEND_UBX_PACKET(0x06, 0x17, _message_NMEA, "enable NMEA 4.10", 500);

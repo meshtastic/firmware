@@ -168,13 +168,13 @@ void MPR121Keyboard::reset()
     // Set Debounce to 0x02
     writeRegister(_MPR121_REG_DEBOUNCE, 0x00);
     delay(20);
-    // Set Filter1 iterations and discharge current 6x and 16uA respectively (0x10)
+    // Set Filter1 itterations and discharge current 6x and 16uA respectively (0x10)
     writeRegister(_MPR121_REG_CONFIG1, 0x10);
     delay(20);
-    // Set CDT to 0.5us, Filter2 iterations to 4x, and Sample interval = 0 (0x20)
+    // Set CDT to 0.5us, Filter2 itterations to 4x, and Sample interval = 0 (0x20)
     writeRegister(_MPR121_REG_CONFIG2, 0x20);
     delay(20);
-    // Enter run mode by Setting partial filter calibration tracking, disable proximity detection, enable 12 channels
+    // Enter run mode by Seting partial filter calibration tracking, disable proximity detection, enable 12 channels
     writeRegister(_MPR121_REG_ELECTRODE_CONFIG,
                   ECR_CALIBRATION_TRACK_FROM_PARTIAL_FILTER | ECR_PROXIMITY_DETECTION_OFF | ECR_TOUCH_DETECTION_12CH);
     delay(100);

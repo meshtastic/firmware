@@ -90,7 +90,7 @@ typedef struct _meshtastic_ChannelSettings {
  a table of well known IDs.
  (see Well Known Channels FIXME) */
     uint32_t id;
-    /* If true, messages on the mesh will be sent to the *public* internet by any gateway node */
+    /* If true, messages on the mesh will be sent to the *public* internet by any gateway ndoe */
     bool uplink_enabled;
     /* If true, messages seen on the internet will be forwarded to the local mesh. */
     bool downlink_enabled;

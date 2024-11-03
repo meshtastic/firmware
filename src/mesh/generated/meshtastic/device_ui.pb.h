@@ -72,7 +72,7 @@ typedef struct _meshtastic_NodeFilter {
 } meshtastic_NodeFilter;
 
 typedef struct _meshtastic_NodeHighlight {
-    /* Highlight nodes w/ active chat */
+    /* Hightlight nodes w/ active chat */
     bool chat_switch;
     /* Highlight nodes w/ position */
     bool position_switch;
@@ -106,7 +106,7 @@ typedef struct _meshtastic_DeviceUIConfig {
     /* Node list filter */
     bool has_node_filter;
     meshtastic_NodeFilter node_filter;
-    /* Node list highlighting */
+    /* Node list highlightening */
     bool has_node_highlight;
     meshtastic_NodeHighlight node_highlight;
 } meshtastic_DeviceUIConfig;

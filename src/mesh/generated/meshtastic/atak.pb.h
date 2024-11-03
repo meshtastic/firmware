@@ -11,7 +11,7 @@
 
 /* Enum definitions */
 typedef enum _meshtastic_Team {
-    /* Unspecified */
+    /* Unspecifed */
     meshtastic_Team_Unspecifed_Color = 0,
     /* White */
     meshtastic_Team_White = 1,
@@ -45,7 +45,7 @@ typedef enum _meshtastic_Team {
 
 /* Role of the group member */
 typedef enum _meshtastic_MemberRole {
-    /* Unspecified */
+    /* Unspecifed */
     meshtastic_MemberRole_Unspecifed = 0,
     /* Team Member */
     meshtastic_MemberRole_TeamMember = 1,
