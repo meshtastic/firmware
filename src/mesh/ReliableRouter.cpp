@@ -1,6 +1,5 @@
 #include "ReliableRouter.h"
 #include "Default.h"
-#include "MeshModule.h"
 #include "MeshTypes.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
@@ -72,18 +71,6 @@ bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
     */
     for (auto i = pending.begin(); i != pending.end(); i++) {
         i->second.nextTxMsec += iface->getPacketTime(p);
-    }
-
-    /* Resend implicit ACKs for repeated packets (hopStart equals hopLimit);
-     * this way if an implicit ACK is dropped and a packet is resent we'll rebroadcast again.
-     * Resending real ACKs is omitted, as you might receive a packet multiple times due to flooding and
-     * flooding this ACK back to the original sender already adds redundancy. */
-    bool isRepeated = p->hop_start == 0 ? (p->hop_limit == HOP_RELIABLE) : (p->hop_start == p->hop_limit);
-    if (wasSeenRecently(p, false) && isRepeated && !MeshModule::currentReply && !isToUs(p)) {
-        LOG_DEBUG("Resending implicit ack for a repeated floodmsg");
-        meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p);
-        tosend->hop_limit--; // bump down the hop count
-        Router::send(tosend);
     }
 
     return FloodingRouter::shouldFilterReceived(p);
