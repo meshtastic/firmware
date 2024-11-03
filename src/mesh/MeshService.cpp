@@ -84,8 +84,9 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
                                                                               //  ignore our request for its NodeInfo
     } else if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !nodeDB->getMeshNode(mp->from)->has_user &&
                nodeInfoModule) {
-        LOG_INFO("Heard new node on channel %d, sending NodeInfo and asking for a response.", mp->channel);
-        if (airTime->isTxAllowedChannelUtil(true)) {
+        if (airTime->isTxAllowedChannelUtil(true) && !IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_ROUTER,
+                                                                meshtastic_Config_DeviceConfig_Role_REPEATER)) {
+            LOG_INFO("Heard new node on channel %d, sending NodeInfo and asking for a response.", mp->channel);
             nodeInfoModule->sendOurNodeInfo(mp->from, true, mp->channel);
         } else {
             LOG_DEBUG("Skip sending NodeInfo due to > 25 percent channel util.");
