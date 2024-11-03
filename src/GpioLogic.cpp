@@ -66,7 +66,7 @@ GpioBinaryTransformer::GpioBinaryTransformer(GpioVirtPin *inPin1, GpioVirtPin *i
     assert(!inPin2->dependentPin); // We only allow one dependent pin
     inPin2->dependentPin = this;
 
-    // Don't update at construction time, because various GpioPins might be global constructor based not yet initied because
+    // Don't update at construction time, because various GpioPins might be global constructor based not yet initiated because
     // order of operations for global constructors is not defined.
     // update();
 }

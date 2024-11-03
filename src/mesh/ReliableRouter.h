@@ -4,7 +4,7 @@
 #include <unordered_map>
 
 /**
- * An identifier for a globalally unique message - a pair of the sending nodenum and the packet id assigned
+ * An identifier for a globally unique message - a pair of the sending nodenum and the packet id assigned
  * to that message
  */
 struct GlobalPacketId {

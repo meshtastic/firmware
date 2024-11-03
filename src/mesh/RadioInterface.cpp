@@ -140,7 +140,7 @@ const RegionInfo regions[] = {
         Philippines
                 433 - 434.7 MHz <10 mW erp, NTC approved device required
                 868 - 869.4 MHz <25 mW erp, NTC approved device required
-                915 - 918 MHz <250 mW EIRP, no external antennna allowed
+                915 - 918 MHz <250 mW EIRP, no external antenna allowed
                 https://github.com/meshtastic/firmware/issues/4948#issuecomment-2394926135
     */
 

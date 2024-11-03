@@ -126,7 +126,7 @@ int32_t NeighborInfoModule::runOnce()
 }
 
 /*
-Collect a recieved neighbor info packet from another node
+Collect a received neighbor info packet from another node
 Pass it to an upper client; do not persist this data on the mesh
 */
 bool NeighborInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_NeighborInfo *np)
