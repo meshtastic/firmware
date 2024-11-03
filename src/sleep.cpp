@@ -287,7 +287,7 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
         // No need to turn this off if the power draw in sleep mode really is just 0.2uA and turning it off would
         // leave floating input for the IRQ line
         // If we want to leave the radio receiving in would be 11.5mA current draw, but most of the time it is just waiting
-        // in its sequencer (true?) so the average power draw should be much lower even if we were listinging for packets
+        // in its sequencer (true?) so the average power draw should be much lower even if we were listening for packets
         // all the time.
         PMU->setChargingLedMode(XPOWERS_CHG_LED_OFF);
 
@@ -359,7 +359,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     // never tries to go to sleep if the user is using the API
     // gpio_wakeup_enable((gpio_num_t)SERIAL0_RX_GPIO, GPIO_INTR_LOW_LEVEL);
 
-    // doesn't help - I think the USB-UART chip losing power is pulling the signal llow
+    // doesn't help - I think the USB-UART chip losing power is pulling the signal low
     // gpio_pullup_en((gpio_num_t)SERIAL0_RX_GPIO);
 
     // alas - can only work if using the refclock, which is limited to about 9600 bps

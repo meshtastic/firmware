@@ -532,7 +532,7 @@ void SerialModule::processWXSerial()
                  batVoltageF, capVoltageF, temperatureF);
     }
     if (gotwind && !Throttle::isWithinTimespanMs(lastAveraged, averageIntervalMillis)) {
-        // calulate averages and send to the mesh
+        // calculate averages and send to the mesh
         float velAvg = 1.0 * velSum / velCount;
 
         double avgSin = dir_sum_sin / dirCount;
