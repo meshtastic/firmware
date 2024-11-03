@@ -426,7 +426,7 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
     }
 }
 
-/** Return 0 for success or a Routing_Errror code for failure
+/** Return 0 for success or a Routing_Error code for failure
  */
 meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
 {

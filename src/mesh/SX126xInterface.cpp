@@ -94,7 +94,7 @@ template <typename T> bool SX126xInterface<T>::init()
 
     // Overriding current limit
     // (https://github.com/jgromes/RadioLib/blob/690a050ebb46e6097c5d00c371e961c1caa3b52e/src/modules/SX126x/SX126x.cpp#L85) using
-    // value in SX126xInterface.h (currently 140 mA) It may or may not be neccessary, depending on how RadioLib functions, from
+    // value in SX126xInterface.h (currently 140 mA) It may or may not be necessary, depending on how RadioLib functions, from
     // SX1261/2 datasheet: OCP after setting DeviceSel with SetPaConfig(): SX1261 - 60 mA, SX1262 - 140 mA For the SX1268 the IC
     // defaults to 140mA no matter the set power level, but RadioLib set it lower, this would need further checking Default values
     // are: SX1262, SX1268: 0x38 (140 mA), SX1261: 0x18 (60 mA)
