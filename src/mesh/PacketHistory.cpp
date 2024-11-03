@@ -38,6 +38,13 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
         seenRecently = false;
     }
 
+    /* If the original transmitter is doing retransmissions (hopStart equals hopLimit) for a reliable transmission, e.g., when the
+       ACK got lost, we will handle the packet again to make sure it gets an ACK/response to its packet. */
+    if (seenRecently && p->hop_start > 0 && p->hop_start == p->hop_limit) {
+        LOG_DEBUG("Repeated reliable tx");
+        seenRecently = false;
+    }
+
     if (seenRecently) {
         LOG_DEBUG("Found existing packet record for fr=0x%x,to=0x%x,id=0x%x", p->from, p->to, p->id);
     }

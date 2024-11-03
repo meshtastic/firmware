@@ -33,7 +33,7 @@ MeshModule::~MeshModule()
 }
 
 meshtastic_MeshPacket *MeshModule::allocAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex,
-                                               uint8_t hopStart, uint8_t hopLimit)
+                                               uint8_t hopLimit)
 {
     meshtastic_Routing c = meshtastic_Routing_init_default;
 
@@ -50,7 +50,7 @@ meshtastic_MeshPacket *MeshModule::allocAckNak(meshtastic_Routing_Error err, Nod
 
     p->priority = meshtastic_MeshPacket_Priority_ACK;
 
-    p->hop_limit = routingModule->getHopLimitForResponse(hopStart, hopLimit); // Flood ACK back to original sender
+    p->hop_limit = hopLimit; // Flood ACK back to original sender
     p->to = to;
     p->decoded.request_id = idFrom;
     p->channel = chIndex;
@@ -181,8 +181,8 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
             // SECURITY NOTE! I considered sending back a different error code if we didn't find the psk (i.e. !isDecoded)
             // but opted NOT TO.  Because it is not a good idea to let remote nodes 'probe' to find out which PSKs were "good" vs
             // bad.
-            routingModule->sendAckNak(meshtastic_Routing_Error_NO_RESPONSE, getFrom(&mp), mp.id, mp.channel, mp.hop_start,
-                                      mp.hop_limit);
+            routingModule->sendAckNak(meshtastic_Routing_Error_NO_RESPONSE, getFrom(&mp), mp.id, mp.channel,
+                                      routingModule->getHopLimitForResponse(mp.hop_start, mp.hop_limit));
         }
     }
 

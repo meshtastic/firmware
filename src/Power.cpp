@@ -155,8 +155,15 @@ static void adcEnable()
 #ifdef ADC_USE_PULLUP
     pinMode(ADC_CTRL, INPUT_PULLUP);
 #else
+#ifdef HELTEC_V3
+    pinMode(ADC_CTRL, INPUT);
+    uint8_t adc_ctl_enable_value = !(digitalRead(ADC_CTRL));
+    pinMode(ADC_CTRL, OUTPUT);
+    digitalWrite(ADC_CTRL, adc_ctl_enable_value);
+#else
     pinMode(ADC_CTRL, OUTPUT);
     digitalWrite(ADC_CTRL, ADC_CTRL_ENABLED);
+#endif
 #endif
     delay(10);
 #endif
@@ -168,7 +175,11 @@ static void adcDisable()
 #ifdef ADC_USE_PULLUP
     pinMode(ADC_CTRL, INPUT_PULLDOWN);
 #else
+#ifdef HELTEC_V3
+    pinMode(ADC_CTRL, ANALOG);
+#else
     digitalWrite(ADC_CTRL, !ADC_CTRL_ENABLED);
+#endif
 #endif
 #endif
 }
@@ -629,7 +640,7 @@ void Power::readPowerStatus()
                 batteryChargePercent = batteryLevel->getBatteryPercent();
             } else {
                 // If the AXP192 returns a percentage less than 0, the feature is either not supported or there is an error
-                // In that case, we compute an estimate of the charge percent based on open circuite voltage table defined
+                // In that case, we compute an estimate of the charge percent based on open circuit voltage table defined
                 // in power.h
                 batteryChargePercent = clamp((int)(((batteryVoltageMv - (OCV[NUM_OCV_POINTS - 1] * NUM_CELLS)) * 1e2) /
                                                    ((OCV[0] * NUM_CELLS) - (OCV[NUM_OCV_POINTS - 1] * NUM_CELLS))),

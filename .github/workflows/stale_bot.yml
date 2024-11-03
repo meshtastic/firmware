@@ -17,6 +17,5 @@ jobs:
       - name: Stale PR+Issues
         uses: actions/stale@v9.0.0
         with:
-          debug-only: true
           exempt-issue-labels: pinned,3.0
           exempt-pr-labels: pinned,3.0

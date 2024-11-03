@@ -315,7 +315,7 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
         // LOG_DEBUG("Received text msg self=0x%0x, from=0x%0x, to=0x%0x, id=%d, msg=%.*s",
         //          nodeDB->getNodeNum(), mp.from, mp.to, mp.id, p.payload.size, p.payload.bytes);
 
-        if (!isFromUs(&mp)) {
+        if (isFromUs(&mp)) {
 
             /*
              * If moduleConfig.serial.echo is true, then echo the packets that are sent out
@@ -532,7 +532,7 @@ void SerialModule::processWXSerial()
                  batVoltageF, capVoltageF, temperatureF);
     }
     if (gotwind && !Throttle::isWithinTimespanMs(lastAveraged, averageIntervalMillis)) {
-        // calulate averages and send to the mesh
+        // calculate averages and send to the mesh
         float velAvg = 1.0 * velSum / velCount;
 
         double avgSin = dir_sum_sin / dirCount;
