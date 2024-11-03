@@ -1,10 +1,10 @@
 #include "ReliableRouter.h"
 #include "Default.h"
-#include "MeshModule.h"
 #include "MeshTypes.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 #include "modules/NodeInfoModule.h"
+#include "modules/RoutingModule.h"
 
 // ReliableRouter::ReliableRouter() {}
 
@@ -73,18 +73,6 @@ bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
         i->second.nextTxMsec += iface->getPacketTime(p);
     }
 
-    /* Resend implicit ACKs for repeated packets (hopStart equals hopLimit);
-     * this way if an implicit ACK is dropped and a packet is resent we'll rebroadcast again.
-     * Resending real ACKs is omitted, as you might receive a packet multiple times due to flooding and
-     * flooding this ACK back to the original sender already adds redundancy. */
-    bool isRepeated = p->hop_start == 0 ? (p->hop_limit == HOP_RELIABLE) : (p->hop_start == p->hop_limit);
-    if (wasSeenRecently(p, false) && isRepeated && !MeshModule::currentReply && !isToUs(p)) {
-        LOG_DEBUG("Resending implicit ack for a repeated floodmsg");
-        meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p);
-        tosend->hop_limit--; // bump down the hop count
-        Router::send(tosend);
-    }
-
     return FloodingRouter::shouldFilterReceived(p);
 }
 
@@ -107,16 +95,22 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
             if (MeshModule::currentReply) {
                 LOG_DEBUG("Another module replied to this message, no need for 2nd ack");
             } else if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
-                sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, p->channel, p->hop_start, p->hop_limit);
+                // A response may be set to want_ack for retransmissions, but we don't need to ACK a response if it received an
+                // implicit ACK already. If we received it directly, only ACK with a hop limit of 0
+                if (!p->decoded.request_id)
+                    sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, p->channel,
+                               routingModule->getHopLimitForResponse(p->hop_start, p->hop_limit));
+                else if (p->hop_start > 0 && p->hop_start == p->hop_limit)
+                    sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, p->channel, 0);
             } else if (p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag && p->channel == 0 &&
                        (nodeDB->getMeshNode(p->from) == nullptr || nodeDB->getMeshNode(p->from)->user.public_key.size == 0)) {
                 LOG_INFO("PKI packet from unknown node, send PKI_UNKNOWN_PUBKEY");
                 sendAckNak(meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY, getFrom(p), p->id, channels.getPrimaryIndex(),
-                           p->hop_start, p->hop_limit);
+                           routingModule->getHopLimitForResponse(p->hop_start, p->hop_limit));
             } else {
                 // Send a 'NO_CHANNEL' error on the primary channel if want_ack packet destined for us cannot be decoded
-                sendAckNak(meshtastic_Routing_Error_NO_CHANNEL, getFrom(p), p->id, channels.getPrimaryIndex(), p->hop_start,
-                           p->hop_limit);
+                sendAckNak(meshtastic_Routing_Error_NO_CHANNEL, getFrom(p), p->id, channels.getPrimaryIndex(),
+                           routingModule->getHopLimitForResponse(p->hop_start, p->hop_limit));
             }
         }
         if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag && c &&
