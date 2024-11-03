@@ -447,10 +447,12 @@ bool GPS::setup()
                     }
                 }
             }
-            return false;
+        }
 
+        if (gnssModel != GNSS_MODEL_UNKNOWN) {
+            setConnected();
         } else {
-            gnssModel = GNSS_MODEL_UNKNOWN;
+            return false;
         }
 
         if (gnssModel == GNSS_MODEL_MTK) {
@@ -1009,6 +1011,7 @@ int32_t GPS::runOnce()
             }
         }
         GPSInitFinished = true;
+        publishUpdate();
     }
 
     // Repeaters have no need for GPS
