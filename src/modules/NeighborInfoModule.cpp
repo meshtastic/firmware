@@ -121,14 +121,12 @@ Will be used for broadcast.
 */
 int32_t NeighborInfoModule::runOnce()
 {
-    if (airTime->isTxAllowedChannelUtil(true) && airTime->isTxAllowedAirUtil()) {
-        sendNeighborInfo(NODENUM_BROADCAST_NO_LORA, false);
-    }
+    sendNeighborInfo(NODENUM_BROADCAST_NO_LORA, false);
     return Default::getConfiguredOrDefaultMs(moduleConfig.neighbor_info.update_interval, default_neighbor_info_broadcast_secs);
 }
 
 /*
-Collect a recieved neighbor info packet from another node
+Collect a received neighbor info packet from another node
 Pass it to an upper client; do not persist this data on the mesh
 */
 bool NeighborInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_NeighborInfo *np)

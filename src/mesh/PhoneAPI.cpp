@@ -596,10 +596,13 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
 {
     printPacket("PACKET FROM PHONE", &p);
 
+// For use with the simulator, we should not ignore duplicate packets
+#if !(defined(ARCH_PORTDUINO) && !HAS_RADIO)
     if (p.id > 0 && wasSeenRecently(p.id)) {
         LOG_DEBUG("Ignoring packet from phone, already seen recently");
         return false;
     }
+#endif
 
     if (p.decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP && lastPortNumToRadio[p.decoded.portnum] &&
         Throttle::isWithinTimespanMs(lastPortNumToRadio[p.decoded.portnum], THIRTY_SECONDS_MS)) {

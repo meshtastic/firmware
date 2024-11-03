@@ -1,3 +1,5 @@
+#include <sys/types.h>
+
 #pragma once
 #include "ProtobufModule.h"
 #if HAS_WIFI

@@ -137,11 +137,12 @@ NodeDB::NodeDB()
     memcpy(myNodeInfo.device_id.bytes, &device_id_start, sizeof(device_id_start));
     memcpy(myNodeInfo.device_id.bytes + sizeof(device_id_start), &device_id_end, sizeof(device_id_end));
     myNodeInfo.device_id.size = 16;
-    hasUniqueId = true;
+    // Uncomment below to print the device id
+    // hasUniqueId = true;
 #else
     // FIXME - implement for other platforms
 #endif
-    // Uncomment below to print the device id
+
     // if (hasUniqueId) {
     //     std::string deviceIdHex;
     //     for (size_t i = 0; i < myNodeInfo.device_id.size; ++i) {

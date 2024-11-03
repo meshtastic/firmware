@@ -81,14 +81,17 @@ int32_t Router::runOnce()
  */
 void Router::enqueueReceivedMessage(meshtastic_MeshPacket *p)
 {
-    if (fromRadioQueue.enqueue(p, 0)) { // NOWAIT - fixme, if queue is full, delete older messages
-
-        // Nasty hack because our threading is primitive.  interfaces shouldn't need to know about routers FIXME
-        setReceivedMessage();
-    } else {
-        printPacket("BUG! fromRadioQueue is full! Discarding!", p);
-        packetPool.release(p);
+    // Try enqueue until successful
+    while (!fromRadioQueue.enqueue(p, 0)) {
+        meshtastic_MeshPacket *old_p;
+        old_p = fromRadioQueue.dequeuePtr(0); // Dequeue and discard the oldest packet
+        if (old_p) {
+            printPacket("fromRadioQ full, drop oldest!", old_p);
+            packetPool.release(old_p);
+        }
     }
+    // Nasty hack because our threading is primitive.  interfaces shouldn't need to know about routers FIXME
+    setReceivedMessage();
 }
 
 /// Generate a unique packet id
@@ -133,10 +136,9 @@ meshtastic_MeshPacket *Router::allocForSending()
 /**
  * Send an ack or a nak packet back towards whoever sent idFrom
  */
-void Router::sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopStart,
-                        uint8_t hopLimit)
+void Router::sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopLimit)
 {
-    routingModule->sendAckNak(err, to, idFrom, chIndex, hopStart, hopLimit);
+    routingModule->sendAckNak(err, to, idFrom, chIndex, hopLimit);
 }
 
 void Router::abortSendAndNak(meshtastic_Routing_Error err, meshtastic_MeshPacket *p)
@@ -423,7 +425,7 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
     }
 }
 
-/** Return 0 for success or a Routing_Errror code for failure
+/** Return 0 for success or a Routing_Error code for failure
  */
 meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
 {

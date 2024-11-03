@@ -61,15 +61,13 @@ char *strnstr(const char *s, const char *find, size_t slen)
 void printBytes(const char *label, const uint8_t *p, size_t numbytes)
 {
     int labelSize = strlen(label);
-    if (labelSize < 100 && numbytes < 64) {
-        char *messageBuffer = new char[labelSize + (numbytes * 3) + 2];
-        strncpy(messageBuffer, label, labelSize);
-        for (size_t i = 0; i < numbytes; i++)
-            snprintf(messageBuffer + labelSize + i * 3, 4, " %02x", p[i]);
-        strcpy(messageBuffer + labelSize + numbytes * 3, "\n");
-        LOG_DEBUG(messageBuffer);
-        delete[] messageBuffer;
-    }
+    char *messageBuffer = new char[labelSize + (numbytes * 3) + 2];
+    strncpy(messageBuffer, label, labelSize);
+    for (size_t i = 0; i < numbytes; i++)
+        snprintf(messageBuffer + labelSize + i * 3, 4, " %02x", p[i]);
+    strcpy(messageBuffer + labelSize + numbytes * 3, "\n");
+    LOG_DEBUG(messageBuffer);
+    delete[] messageBuffer;
 }
 
 bool memfll(const uint8_t *mem, uint8_t find, size_t numbytes)
