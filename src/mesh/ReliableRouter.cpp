@@ -224,7 +224,7 @@ int32_t ReliableRouter::doRetransmissions()
 
         bool stillValid = true; // assume we'll keep this record around
 
-        // FIXME, handle 51 day rolloever here!!!
+        // FIXME, handle 51 day rollover here!!!
         if (p.nextTxMsec <= now) {
             if (p.numRetransmissions == 0) {
                 LOG_DEBUG("Reliable send failed, returning a nak for fr=0x%x,to=0x%x,id=0x%x", p.packet->from, p.packet->to,

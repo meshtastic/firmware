@@ -49,7 +49,7 @@ uint32_t GPSUpdateScheduling::msUntilNextSearch()
 }
 
 // How long have we already been searching?
-// Used to abort a search in progress, if it runs unnaceptably long
+// Used to abort a search in progress, if it runs unacceptably long
 uint32_t GPSUpdateScheduling::elapsedSearchMs()
 {
     // If searching
@@ -98,7 +98,7 @@ void GPSUpdateScheduling::updateLockTimePrediction()
 
     // Ignore the first lock-time: likely to be long, will skew data
 
-    // Second locktime: likely stable. Use to intialize the smoothing filter
+    // Second locktime: likely stable. Use to initialize the smoothing filter
     if (searchCount == 1)
         predictedMsToGetLock = lockTime;
 
@@ -106,7 +106,7 @@ void GPSUpdateScheduling::updateLockTimePrediction()
     else if (searchCount > 1)
         predictedMsToGetLock = (lockTime * weighting) + (predictedMsToGetLock * (1 - weighting));
 
-    searchCount++; // Only tracked so we can diregard initial lock-times
+    searchCount++; // Only tracked so we can disregard initial lock-times
 
     LOG_DEBUG("Predicting %us to get next lock", predictedMsToGetLock / 1000);
 }

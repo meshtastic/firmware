@@ -185,7 +185,7 @@ static void powerEnter()
 {
     // LOG_DEBUG("Enter state: POWER");
     if (!isPowered()) {
-        // If we got here, we are in the wrong state - we should be in powered, let that state ahndle things
+        // If we got here, we are in the wrong state - we should be in powered, let that state handle things
         LOG_INFO("Loss of power in Powered");
         powerFSM.trigger(EVENT_POWER_DISCONNECTED);
     } else {
@@ -230,7 +230,7 @@ static void onEnter()
 static void onIdle()
 {
     if (isPowered()) {
-        // If we got here, we are in the wrong state - we should be in powered, let that state ahndle things
+        // If we got here, we are in the wrong state - we should be in powered, let that state handle things
         powerFSM.trigger(EVENT_POWER_CONNECTED);
     }
 }
@@ -371,7 +371,7 @@ void PowerFSM_setup()
 // We never enter light-sleep or NB states on NRF52 (because the CPU uses so little power normally)
 #ifdef ARCH_ESP32
     // See: https://github.com/meshtastic/firmware/issues/1071
-    // Don't add power saving transitions if we are a power saving tracker or sensor. Sleep will be initiatiated through the
+    // Don't add power saving transitions if we are a power saving tracker or sensor. Sleep will be initiated through the
     // modules
     if ((isRouter || config.power.is_power_saving) && !isTrackerOrSensor) {
         powerFSM.add_timed_transition(&stateNB, &stateLS,
