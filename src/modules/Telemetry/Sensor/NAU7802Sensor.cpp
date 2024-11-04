@@ -103,7 +103,7 @@ bool NAU7802Sensor::saveCalibrationData()
     nau7802config.calibrationFactor = nau7802.getCalibrationFactor();
     bool okay = false;
 
-    LOG_INFO("%s state write to %s.", sensorName, nau7802ConfigFileName);
+    LOG_INFO("%s state write to %s", sensorName, nau7802ConfigFileName);
     pb_ostream_t stream = {&writecb, static_cast<Print *>(&file), meshtastic_Nau7802Config_size};
 
     if (!pb_encode(&stream, &meshtastic_Nau7802Config_msg, &nau7802config)) {
@@ -121,7 +121,7 @@ bool NAU7802Sensor::loadCalibrationData()
     auto file = FSCom.open(nau7802ConfigFileName, FILE_O_READ);
     bool okay = false;
     if (file) {
-        LOG_INFO("%s state read from %s.", sensorName, nau7802ConfigFileName);
+        LOG_INFO("%s state read from %s", sensorName, nau7802ConfigFileName);
         pb_istream_t stream = {&readcb, &file, meshtastic_Nau7802Config_size};
         if (!pb_decode(&stream, &meshtastic_Nau7802Config_msg, &nau7802config)) {
             LOG_ERROR("Error: can't decode protobuf %s", PB_GET_ERROR(&stream));
@@ -132,7 +132,7 @@ bool NAU7802Sensor::loadCalibrationData()
         }
         file.close();
     } else {
-        LOG_INFO("No %s state found (File: %s).", sensorName, nau7802ConfigFileName);
+        LOG_INFO("No %s state found (File: %s)", sensorName, nau7802ConfigFileName);
     }
     return okay;
 }

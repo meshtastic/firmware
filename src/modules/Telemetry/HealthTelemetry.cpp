@@ -39,7 +39,7 @@ int32_t HealthTelemetryModule::runOnce()
         sleepOnNextExecution = false;
         uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.health_update_interval,
                                                                    default_telemetry_broadcast_interval_secs);
-        LOG_DEBUG("Sleeping for %ims, then awaking to send metrics again.", nightyNightMs);
+        LOG_DEBUG("Sleeping for %ims, then waking to send metrics again", nightyNightMs);
         doDeepSleep(nightyNightMs, true);
     }
 
@@ -236,7 +236,7 @@ bool HealthTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
             service->sendToMesh(p, RX_SRC_LOCAL, true);
 
             if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving) {
-                LOG_DEBUG("Starting next execution in 5 seconds and then going to sleep.");
+                LOG_DEBUG("Starting next execution in 5s, then going to sleep");
                 sleepOnNextExecution = true;
                 setIntervalFromNow(5000);
             }

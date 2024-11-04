@@ -481,7 +481,7 @@ int32_t CannedMessageModule::runOnce()
                 }
                 this->runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
             } else {
-                // LOG_DEBUG("Reset message is empty.");
+                // LOG_DEBUG("Reset message is empty");
                 this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
             }
         }

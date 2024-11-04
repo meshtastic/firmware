@@ -65,16 +65,16 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
 {
     if (!airTime->isTxAllowedChannelUtil(false)) {
         ignoreRequest = true; // Mark it as ignored for MeshModule
-        LOG_DEBUG("Skip sending NodeInfo due to > 40 percent channel util.");
+        LOG_DEBUG("Skip sending NodeInfo due to > 40 percent chan util");
         return NULL;
     }
     // If we sent our NodeInfo less than 5 min. ago, don't send it again as it may be still underway.
     if (!shorterTimeout && lastSentToMesh && Throttle::isWithinTimespanMs(lastSentToMesh, 5 * 60 * 1000)) {
-        LOG_DEBUG("Skip sending NodeInfo since we just sent it less than 5 minutes ago.");
+        LOG_DEBUG("Skip sending NodeInfo since we sent it <5 mins ago.");
         ignoreRequest = true; // Mark it as ignored for MeshModule
         return NULL;
     } else if (shorterTimeout && lastSentToMesh && Throttle::isWithinTimespanMs(lastSentToMesh, 60 * 1000)) {
-        LOG_DEBUG("Skip sending actively requested NodeInfo since we just sent it less than 60 seconds ago.");
+        LOG_DEBUG("Skip sending requested NodeInfo since we  sent it <60s ago.");
         ignoreRequest = true; // Mark it as ignored for MeshModule
         return NULL;
     } else {

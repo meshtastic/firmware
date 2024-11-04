@@ -106,27 +106,27 @@ class AmbientLightingThread : public concurrency::OSThread
         rgb.setRed(0);
         rgb.setGreen(0);
         rgb.setBlue(0);
-        LOG_INFO("Turn Off NCP5623 Ambient lighting.");
+        LOG_INFO("Turn Off NCP5623 Ambient lighting");
 #endif
 #ifdef HAS_NEOPIXEL
         pixels.clear();
         pixels.show();
-        LOG_INFO("Turn Off NeoPixel Ambient lighting.");
+        LOG_INFO("Turn Off NeoPixel Ambient lighting");
 #endif
 #ifdef RGBLED_CA
         analogWrite(RGBLED_RED, 255 - 0);
         analogWrite(RGBLED_GREEN, 255 - 0);
         analogWrite(RGBLED_BLUE, 255 - 0);
-        LOG_INFO("Turn Off Ambient lighting RGB Common Anode.");
+        LOG_INFO("Turn Off Ambient lighting RGB Common Anode");
 #elif defined(RGBLED_RED)
         analogWrite(RGBLED_RED, 0);
         analogWrite(RGBLED_GREEN, 0);
         analogWrite(RGBLED_BLUE, 0);
-        LOG_INFO("Turn Off Ambient lighting RGB Common Cathode.");
+        LOG_INFO("Turn Off Ambient lighting RGB Common Cathode");
 #endif
 #ifdef UNPHONE
         unphone.rgb(0, 0, 0);
-        LOG_INFO("Turn Off unPhone Ambient lighting.");
+        LOG_INFO("Turn Off unPhone Ambient lighting");
 #endif
         return 0;
     }
