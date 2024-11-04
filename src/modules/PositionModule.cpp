@@ -351,7 +351,7 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
     if (IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_TRACKER,
                   meshtastic_Config_DeviceConfig_Role_TAK_TRACKER) &&
         config.power.is_power_saving) {
-        LOG_DEBUG("Starting next execution in 5 seconds and then going to sleep.");
+        LOG_DEBUG("Starting next execution in 5s, then going to sleep");
         sleepOnNextExecution = true;
         setIntervalFromNow(5000);
     }
@@ -364,7 +364,7 @@ int32_t PositionModule::runOnce()
     if (sleepOnNextExecution == true) {
         sleepOnNextExecution = false;
         uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(config.position.position_broadcast_secs);
-        LOG_DEBUG("Sleeping for %ims, then awaking to send position again.", nightyNightMs);
+        LOG_DEBUG("Sleeping for %ims, then awaking to send position again", nightyNightMs);
         doDeepSleep(nightyNightMs, false);
     }
 
@@ -448,23 +448,6 @@ struct SmartPosition PositionModule::getDistanceTraveledSinceLastSend(meshtastic
     // Determine the distance in meters between two points on the globe
     float distanceTraveledSinceLastSend = GeoCoord::latLongToMeter(
         lastGpsLatitude * 1e-7, lastGpsLongitude * 1e-7, currentPosition.latitude_i * 1e-7, currentPosition.longitude_i * 1e-7);
-
-#ifdef GPS_EXTRAVERBOSE
-    LOG_DEBUG("--------LAST POSITION------------------------------------");
-    LOG_DEBUG("lastGpsLatitude=%i, lastGpsLatitude=%i", lastGpsLatitude, lastGpsLongitude);
-
-    LOG_DEBUG("--------CURRENT POSITION---------------------------------");
-    LOG_DEBUG("currentPosition.latitude_i=%i, currentPosition.longitude_i=%i", lastGpsLatitude, lastGpsLongitude);
-
-    LOG_DEBUG("--------SMART POSITION-----------------------------------");
-    LOG_DEBUG("hasTraveledOverThreshold=%i, distanceTraveled=%f, distanceThreshold=%f",
-              abs(distanceTraveledSinceLastSend) >= distanceTravelThreshold, abs(distanceTraveledSinceLastSend),
-              distanceTravelThreshold);
-
-    if (abs(distanceTraveledSinceLastSend) >= distanceTravelThreshold) {
-        LOG_DEBUG("SMART SEEEEEEEEENDING");
-    }
-#endif
 
     return SmartPosition{.distanceTraveled = abs(distanceTraveledSinceLastSend),
                          .distanceThreshold = distanceTravelThreshold,

@@ -187,7 +187,7 @@ void StoreForwardModule::historyAdd(const meshtastic_MeshPacket &mp)
     const auto &p = mp.decoded;
 
     if (this->packetHistoryTotalCount == this->records) {
-        LOG_WARN("S&F - PSRAM Full. Starting overwrite.");
+        LOG_WARN("S&F - PSRAM Full. Starting overwrite");
         this->packetHistoryTotalCount = 0;
         for (auto &i : lastRequest) {
             i.second = 0; // Clear the last request index for each client device
@@ -393,7 +393,7 @@ ProcessMessage StoreForwardModule::handleReceived(const meshtastic_MeshPacket &m
                 }
             } else {
                 storeForwardModule->historyAdd(mp);
-                LOG_INFO("S&F stored. Message history contains %u records now.", this->packetHistoryTotalCount);
+                LOG_INFO("S&F stored. Message history contains %u records now", this->packetHistoryTotalCount);
             }
         } else if (!isFromUs(&mp) && mp.decoded.portnum == meshtastic_PortNum_STORE_FORWARD_APP) {
             auto &p = mp.decoded;
@@ -482,7 +482,7 @@ bool StoreForwardModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
             LOG_INFO("Client Request to send STATS");
             if (this->busy) {
                 storeForwardModule->sendMessage(getFrom(&mp), meshtastic_StoreAndForward_RequestResponse_ROUTER_BUSY);
-                LOG_INFO("S&F - Busy. Try again shortly.");
+                LOG_INFO("S&F - Busy. Try again shortly");
             } else {
                 storeForwardModule->statsSend(getFrom(&mp));
             }
@@ -602,10 +602,10 @@ StoreForwardModule::StoreForwardModule()
                     is_server = true;
                 } else {
                     LOG_INFO(".");
-                    LOG_INFO("S&F: not enough PSRAM free, disabling.");
+                    LOG_INFO("S&F: not enough PSRAM free, disabling");
                 }
             } else {
-                LOG_INFO("S&F: device doesn't have PSRAM, disabling.");
+                LOG_INFO("S&F: device doesn't have PSRAM, disabling");
             }
 
             // Client

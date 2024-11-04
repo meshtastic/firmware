@@ -215,7 +215,7 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
     }
 
     if (FSCom.totalBytes() - FSCom.usedBytes() < 51200) {
-        LOG_DEBUG("Filesystem doesn't have enough free space. Aborting write.");
+        LOG_DEBUG("Filesystem doesn't have enough free space. Aborting write");
         return 0;
     }
 

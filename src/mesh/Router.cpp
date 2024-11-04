@@ -143,7 +143,7 @@ void Router::sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFro
 
 void Router::abortSendAndNak(meshtastic_Routing_Error err, meshtastic_MeshPacket *p)
 {
-    LOG_ERROR("Error=%d, returning NAK and dropping packet.", err);
+    LOG_ERROR("Error=%d, returning NAK and dropping packet", err);
     sendAckNak(err, getFrom(p), p->id, p->channel);
     packetPool.release(p);
 }
@@ -218,13 +218,13 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
         if (hourlyTxPercent > myRegion->dutyCycle) {
 #ifdef DEBUG_PORT
             uint8_t silentMinutes = airTime->getSilentMinutes(hourlyTxPercent, myRegion->dutyCycle);
-            LOG_WARN("Duty cycle limit exceeded. Aborting send for now, you can send again in %d minutes.", silentMinutes);
+            LOG_WARN("Duty cycle limit exceeded. Aborting send for now, you can send again in %d mins", silentMinutes);
             meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
             cn->has_reply_id = true;
             cn->reply_id = p->id;
             cn->level = meshtastic_LogRecord_Level_WARNING;
             cn->time = getValidTime(RTCQualityFromNet);
-            sprintf(cn->message, "Duty cycle limit exceeded. You can send again in %d minutes.", silentMinutes);
+            sprintf(cn->message, "Duty cycle limit exceeded. You can send again in %d mins", silentMinutes);
             service->sendClientNotification(cn);
 #endif
             meshtastic_Routing_Error err = meshtastic_Routing_Error_DUTY_CYCLE_LIMIT;
@@ -462,13 +462,13 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             // If the compressed length is greater than or equal to the original size, don't use the compressed form
             if (compressed_len >= p->decoded.payload.size) {
 
-                LOG_DEBUG("Not using compressing message.");
+                LOG_DEBUG("Not using compressing message");
                 // Set the uncompressed payload variant anyway. Shouldn't hurt?
                 // p->decoded.which_payloadVariant = Data_payload_tag;
 
                 // Otherwise we use the compressor
             } else {
-                LOG_DEBUG("Using compressed message.");
+                LOG_DEBUG("Using compressed message");
                 // Copy the compressed data into the meshpacket
 
                 p->decoded.payload.size = compressed_len;

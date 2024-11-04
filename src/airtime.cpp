@@ -105,7 +105,6 @@ float AirTime::channelUtilizationPercent()
     uint32_t sum = 0;
     for (uint32_t i = 0; i < CHANNEL_UTILIZATION_PERIODS; i++) {
         sum += this->channelUtilization[i];
-        // LOG_DEBUG("ChanUtilArray %u %u", i, this->channelUtilization[i]);
     }
 
     return (float(sum) / float(CHANNEL_UTILIZATION_PERIODS * 10 * 1000)) * 100;
@@ -208,14 +207,5 @@ int32_t AirTime::runOnce()
             this->utilizationTX[utilPeriodTX] = 0;
         }
     }
-    /*
-        LOG_DEBUG("utilPeriodTX %d TX Airtime %3.2f%", utilPeriodTX, airTime->utilizationTXPercent());
-        for (uint32_t i = 0; i < MINUTES_IN_HOUR; i++) {
-            LOG_DEBUG(
-                "%d,", this->utilizationTX[i]
-                );
-        }
-        LOG_DEBUG("");
-    */
     return (1000 * 1);
 }

@@ -71,7 +71,7 @@ void setCPUFast(bool on)
          * (Added: Dec 23, 2021 by Jm Casler)
          */
 #ifndef CONFIG_IDF_TARGET_ESP32C3
-        LOG_DEBUG("Setting CPU to 240MHz because WiFi is in use.");
+        LOG_DEBUG("Setting CPU to 240MHz because WiFi is in use");
         setCpuFrequencyMhz(240);
 #endif
         return;
@@ -305,7 +305,7 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
             PMU->disablePowerOutput(XPOWERS_LDO2); // lora radio power channel
         }
         if (msecToWake == portMAX_DELAY) {
-            LOG_INFO("PMU shutdown.");
+            LOG_INFO("PMU shutdown");
             console->flush();
             PMU->shutdown();
         }
