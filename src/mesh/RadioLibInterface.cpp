@@ -229,7 +229,7 @@ bool RadioLibInterface::canSleep()
 {
     bool res = txQueue.empty();
     if (!res) { // only print debug messages if we are vetoing sleep
-        LOG_DEBUG("radio wait to sleep, txEmpty=%d", res);
+        LOG_DEBUG("Radio wait to sleep, txEmpty=%d", res);
     }
     return res;
 }
@@ -395,7 +395,7 @@ void RadioLibInterface::handleReceiveInterrupt()
     }
 #endif
     if (state != RADIOLIB_ERR_NONE) {
-        LOG_ERROR("ignoring received packet due to error=%d", state);
+        LOG_ERROR("Ignore received packet due to error=%d", state);
         rxBad++;
 
         airTime->logAirtime(RX_ALL_LOG, xmitMsec);
@@ -406,14 +406,14 @@ void RadioLibInterface::handleReceiveInterrupt()
 
         // check for short packets
         if (payloadLen < 0) {
-            LOG_WARN("ignoring received packet too short");
+            LOG_WARN("Ignore received packet too short");
             rxBad++;
             airTime->logAirtime(RX_ALL_LOG, xmitMsec);
         } else {
             rxGood++;
             // altered packet with "from == 0" can do Remote Node Administration without permission
             if (radioBuffer.header.from == 0) {
-                LOG_WARN("ignoring received packet without sender");
+                LOG_WARN("Ignore received packet without sender");
                 return;
             }
 
@@ -470,7 +470,7 @@ void RadioLibInterface::setStandby()
 /** start an immediate transmit */
 bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
 {
-    printPacket("Starting low level send", txp);
+    printPacket("Start low level send", txp);
     if (disabled || !config.lora.tx_enabled) {
         LOG_WARN("Drop Tx packet because LoRa Tx disabled");
         packetPool.release(txp);

@@ -88,10 +88,10 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
     } else if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !nodeDB->getMeshNode(mp->from)->has_user &&
                nodeInfoModule && !isPreferredRebroadcaster) {
         if (airTime->isTxAllowedChannelUtil(true)) {
-            LOG_INFO("Heard new node on chan %d, sending NodeInfo and asking for a response", mp->channel);
+            LOG_INFO("Heard new node on ch. %d, sending NodeInfo and asking for a response", mp->channel);
             nodeInfoModule->sendOurNodeInfo(mp->from, true, mp->channel);
         } else {
-            LOG_DEBUG("Skip sending NodeInfo due to > 25 percent chan util");
+            LOG_DEBUG("Skip sending NodeInfo > 25%% ch. util");
         }
     }
 
@@ -274,14 +274,14 @@ bool MeshService::trySendPosition(NodeNum dest, bool wantReplies)
     if (hasValidPosition(node)) {
 #if HAS_GPS && !MESHTASTIC_EXCLUDE_GPS
         if (positionModule) {
-            LOG_INFO("Sending position ping to 0x%x, wantReplies=%d, channel=%d", dest, wantReplies, node->channel);
+            LOG_INFO("Send position ping to 0x%x, wantReplies=%d, channel=%d", dest, wantReplies, node->channel);
             positionModule->sendOurPosition(dest, wantReplies, node->channel);
             return true;
         }
     } else {
 #endif
         if (nodeInfoModule) {
-            LOG_INFO("Sending nodeinfo ping to 0x%x, wantReplies=%d, channel=%d", dest, wantReplies, node->channel);
+            LOG_INFO("Send nodeinfo ping to 0x%x, wantReplies=%d, channel=%d", dest, wantReplies, node->channel);
             nodeInfoModule->sendOurNodeInfo(dest, wantReplies, node->channel);
         }
     }
@@ -324,7 +324,7 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
 
 void MeshService::sendMqttMessageToClientProxy(meshtastic_MqttClientProxyMessage *m)
 {
-    LOG_DEBUG("Sending mqtt message on topic '%s' to client for proxy", m->topic);
+    LOG_DEBUG("Send mqtt message on topic '%s' to client for proxy", m->topic);
     if (toPhoneMqttProxyQueue.numFree() == 0) {
         LOG_WARN("MqttClientProxyMessagePool queue is full, discarding oldest");
         meshtastic_MqttClientProxyMessage *d = toPhoneMqttProxyQueue.dequeuePtr(0);
@@ -338,7 +338,7 @@ void MeshService::sendMqttMessageToClientProxy(meshtastic_MqttClientProxyMessage
 
 void MeshService::sendClientNotification(meshtastic_ClientNotification *n)
 {
-    LOG_DEBUG("Sending client notification to phone");
+    LOG_DEBUG("Send client notification to phone");
     if (toPhoneClientNotificationQueue.numFree() == 0) {
         LOG_WARN("ClientNotification queue is full, discarding oldest");
         meshtastic_ClientNotification *d = toPhoneClientNotificationQueue.dequeuePtr(0);
@@ -394,7 +394,7 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
     }
     // Used fixed position if configured regardless of GPS lock
     if (config.position.fixed_position) {
-        LOG_WARN("Using fixed position");
+        LOG_WARN("Use fixed position");
         pos = TypeConversions::ConvertToPosition(node->position);
     }
 

@@ -11,7 +11,7 @@
 AtakPluginModule *atakPluginModule;
 
 AtakPluginModule::AtakPluginModule()
-    : ProtobufModule("atak", meshtastic_PortNum_ATAK_PLUGIN, &meshtastic_TAKPacket_msg), concurrency::OSThread("AtakPluginModule")
+    : ProtobufModule("atak", meshtastic_PortNum_ATAK_PLUGIN, &meshtastic_TAKPacket_msg), concurrency::OSThread("AtakPlugin")
 {
     ourPortNum = meshtastic_PortNum_ATAK_PLUGIN;
 }
@@ -73,7 +73,7 @@ void AtakPluginModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtast
             auto length = unishox2_compress_lines(t->contact.callsign, strlen(t->contact.callsign), compressed.contact.callsign,
                                                   sizeof(compressed.contact.callsign) - 1, USX_PSET_DFLT, NULL);
             if (length < 0) {
-                LOG_WARN("Compression overflowed contact.callsign. Reverting to uncompressed packet");
+                LOG_WARN("Compress overflow contact.callsign. Revert to uncompressed packet");
                 return;
             }
             LOG_DEBUG("Compressed callsign: %d bytes", length);
@@ -81,7 +81,7 @@ void AtakPluginModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtast
                                              compressed.contact.device_callsign, sizeof(compressed.contact.device_callsign) - 1,
                                              USX_PSET_DFLT, NULL);
             if (length < 0) {
-                LOG_WARN("Compression overflowed contact.device_callsign. Reverting to uncompressed packet");
+                LOG_WARN("Compress overflow contact.device_callsign. Revert to uncompressed packet");
                 return;
             }
             LOG_DEBUG("Compressed device_callsign: %d bytes", length);
@@ -91,7 +91,7 @@ void AtakPluginModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtast
                                                   compressed.payload_variant.chat.message,
                                                   sizeof(compressed.payload_variant.chat.message) - 1, USX_PSET_DFLT, NULL);
             if (length < 0) {
-                LOG_WARN("Compression overflowed chat.message. Reverting to uncompressed packet");
+                LOG_WARN("Compress overflow chat.message. Revert to uncompressed packet");
                 return;
             }
             LOG_DEBUG("Compressed chat message: %d bytes", length);
@@ -102,7 +102,7 @@ void AtakPluginModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtast
                                                  compressed.payload_variant.chat.to,
                                                  sizeof(compressed.payload_variant.chat.to) - 1, USX_PSET_DFLT, NULL);
                 if (length < 0) {
-                    LOG_WARN("Compression overflowed chat.to. Reverting to uncompressed packet");
+                    LOG_WARN("Compress overflow chat.to. Revert to uncompressed packet");
                     return;
                 }
                 LOG_DEBUG("Compressed chat to: %d bytes", length);
@@ -114,7 +114,7 @@ void AtakPluginModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtast
                                                  compressed.payload_variant.chat.to_callsign,
                                                  sizeof(compressed.payload_variant.chat.to_callsign) - 1, USX_PSET_DFLT, NULL);
                 if (length < 0) {
-                    LOG_WARN("Compression overflowed chat.to_callsign. Reverting to uncompressed packet");
+                    LOG_WARN("Compress overflow chat.to_callsign. Revert to uncompressed packet");
                     return;
                 }
                 LOG_DEBUG("Compressed chat to_callsign: %d bytes", length);
@@ -139,7 +139,7 @@ void AtakPluginModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtast
                 unishox2_decompress_lines(t->contact.callsign, strlen(t->contact.callsign), uncompressed.contact.callsign,
                                           sizeof(uncompressed.contact.callsign) - 1, USX_PSET_DFLT, NULL);
             if (length < 0) {
-                LOG_WARN("Decompression overflowed contact.callsign. Bailing out");
+                LOG_WARN("Decompress overflow contact.callsign. Bailing out");
                 return;
             }
             LOG_DEBUG("Decompressed callsign: %d bytes", length);
@@ -148,7 +148,7 @@ void AtakPluginModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtast
                                                uncompressed.contact.device_callsign,
                                                sizeof(uncompressed.contact.device_callsign) - 1, USX_PSET_DFLT, NULL);
             if (length < 0) {
-                LOG_WARN("Decompression overflowed contact.device_callsign. Bailing out");
+                LOG_WARN("Decompress overflow contact.device_callsign. Bailing out");
                 return;
             }
             LOG_DEBUG("Decompressed device_callsign: %d bytes", length);
@@ -158,7 +158,7 @@ void AtakPluginModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtast
                                                     uncompressed.payload_variant.chat.message,
                                                     sizeof(uncompressed.payload_variant.chat.message) - 1, USX_PSET_DFLT, NULL);
             if (length < 0) {
-                LOG_WARN("Decompression overflowed chat.message. Bailing out");
+                LOG_WARN("Decompress overflow chat.message. Bailing out");
                 return;
             }
             LOG_DEBUG("Decompressed chat message: %d bytes", length);
@@ -169,7 +169,7 @@ void AtakPluginModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtast
                                                    uncompressed.payload_variant.chat.to,
                                                    sizeof(uncompressed.payload_variant.chat.to) - 1, USX_PSET_DFLT, NULL);
                 if (length < 0) {
-                    LOG_WARN("Decompression overflowed chat.to. Bailing out");
+                    LOG_WARN("Decompress overflow chat.to. Bailing out");
                     return;
                 }
                 LOG_DEBUG("Decompressed chat to: %d bytes", length);
@@ -182,7 +182,7 @@ void AtakPluginModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtast
                                               uncompressed.payload_variant.chat.to_callsign,
                                               sizeof(uncompressed.payload_variant.chat.to_callsign) - 1, USX_PSET_DFLT, NULL);
                 if (length < 0) {
-                    LOG_WARN("Decompression overflowed chat.to_callsign. Bailing out");
+                    LOG_WARN("Decompress overflow chat.to_callsign. Bailing out");
                     return;
                 }
                 LOG_DEBUG("Decompressed chat to_callsign: %d bytes", length);

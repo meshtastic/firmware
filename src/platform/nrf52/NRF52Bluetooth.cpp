@@ -137,7 +137,7 @@ void onFromRadioAuthorize(uint16_t conn_hdl, BLECharacteristic *chr, ble_gatts_e
         // or make empty if the queue is empty
         fromRadio.write(fromRadioBytes, numBytes);
     } else {
-        // LOG_INFO("Ignoring successor read");
+        // LOG_INFO("Ignore successor read");
     }
     authorizeRead(conn_hdl);
 }
@@ -275,20 +275,20 @@ void NRF52Bluetooth::setup()
     bledfusecure.begin();                                                     // Install the DFU helper
 #endif
     // Configure and Start the Device Information Service
-    LOG_INFO("Configuring the Device Information Service");
+    LOG_INFO("Init the Device Information Service");
     bledis.setModel(optstr(HW_VERSION));
     bledis.setFirmwareRev(optstr(APP_VERSION));
     bledis.begin();
     // Start the BLE Battery Service and set it to 100%
-    LOG_INFO("Configuring the Battery Service");
+    LOG_INFO("Init the Battery Service");
     blebas.begin();
     blebas.write(0); // Unknown battery level for now
     // Setup the Heart Rate Monitor service using
     // BLEService and BLECharacteristic classes
-    LOG_INFO("Configuring the Mesh bluetooth service");
+    LOG_INFO("Init the Mesh bluetooth service");
     setupMeshService();
     // Setup the advertising packet(s)
-    LOG_INFO("Setting up the advertising payload(s)");
+    LOG_INFO("Set up the advertising payload(s)");
     startAdv();
     LOG_INFO("Advertising");
 }

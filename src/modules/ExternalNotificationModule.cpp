@@ -291,7 +291,7 @@ void ExternalNotificationModule::stopNow()
 
 ExternalNotificationModule::ExternalNotificationModule()
     : SinglePortModule("ExternalNotificationModule", meshtastic_PortNum_TEXT_MESSAGE_APP),
-      concurrency::OSThread("ExternalNotificationModule")
+      concurrency::OSThread("ExternalNotification")
 {
     /*
         Uncomment the preferences below if you want to use the module
@@ -327,34 +327,34 @@ ExternalNotificationModule::ExternalNotificationModule()
                     sizeof(rtttlConfig.ringtone));
         }
 
-        LOG_INFO("Initializing External Notification Module");
+        LOG_INFO("Init External Notification Module");
 
         output = moduleConfig.external_notification.output ? moduleConfig.external_notification.output
                                                            : EXT_NOTIFICATION_MODULE_OUTPUT;
 
         // Set the direction of a pin
         if (output > 0) {
-            LOG_INFO("Using Pin %i in digital mode", output);
+            LOG_INFO("Use Pin %i in digital mode", output);
             pinMode(output, OUTPUT);
         }
         setExternalState(0, false);
         externalTurnedOn[0] = 0;
         if (moduleConfig.external_notification.output_vibra) {
-            LOG_INFO("Using Pin %i for vibra motor", moduleConfig.external_notification.output_vibra);
+            LOG_INFO("Use Pin %i for vibra motor", moduleConfig.external_notification.output_vibra);
             pinMode(moduleConfig.external_notification.output_vibra, OUTPUT);
             setExternalState(1, false);
             externalTurnedOn[1] = 0;
         }
         if (moduleConfig.external_notification.output_buzzer) {
             if (!moduleConfig.external_notification.use_pwm) {
-                LOG_INFO("Using Pin %i for buzzer", moduleConfig.external_notification.output_buzzer);
+                LOG_INFO("Use Pin %i for buzzer", moduleConfig.external_notification.output_buzzer);
                 pinMode(moduleConfig.external_notification.output_buzzer, OUTPUT);
                 setExternalState(2, false);
                 externalTurnedOn[2] = 0;
             } else {
                 config.device.buzzer_gpio = config.device.buzzer_gpio ? config.device.buzzer_gpio : PIN_BUZZER;
                 // in PWM Mode we force the buzzer pin if it is set
-                LOG_INFO("Using Pin %i in PWM mode", config.device.buzzer_gpio);
+                LOG_INFO("Use Pin %i in PWM mode", config.device.buzzer_gpio);
             }
         }
 #ifdef HAS_NCP5623

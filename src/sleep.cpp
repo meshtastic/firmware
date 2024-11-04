@@ -71,7 +71,7 @@ void setCPUFast(bool on)
          * (Added: Dec 23, 2021 by Jm Casler)
          */
 #ifndef CONFIG_IDF_TARGET_ESP32C3
-        LOG_DEBUG("Setting CPU to 240MHz because WiFi is in use");
+        LOG_DEBUG("Set CPU to 240MHz because WiFi is in use");
         setCpuFrequencyMhz(240);
 #endif
         return;
@@ -190,9 +190,9 @@ static void waitEnterSleep(bool skipPreflight = false)
 void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
 {
     if (INCLUDE_vTaskSuspend && (msecToWake == portMAX_DELAY)) {
-        LOG_INFO("Entering deep sleep forever");
+        LOG_INFO("Enter deep sleep forever");
     } else {
-        LOG_INFO("Entering deep sleep for %u seconds", msecToWake / 1000);
+        LOG_INFO("Enter deep sleep for %u seconds", msecToWake / 1000);
     }
 
     // not using wifi yet, but once we are this is needed to shutoff the radio hw

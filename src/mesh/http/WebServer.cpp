@@ -164,7 +164,7 @@ void createSSLCert()
 
 WebServerThread *webServerThread;
 
-WebServerThread::WebServerThread() : concurrency::OSThread("WebServerThread")
+WebServerThread::WebServerThread() : concurrency::OSThread("WebServer")
 {
     if (!config.network.wifi_enabled) {
         disable();
@@ -189,7 +189,7 @@ int32_t WebServerThread::runOnce()
 
 void initWebServer()
 {
-    LOG_DEBUG("Initializing Web Server...");
+    LOG_DEBUG("Init Web Server...");
 
     // We can now use the new certificate to setup our server as usual.
     secureServer = new HTTPSServer(cert);
@@ -198,10 +198,10 @@ void initWebServer()
     registerHandlers(insecureServer, secureServer);
 
     if (secureServer) {
-        LOG_INFO("Starting Secure Web Server...");
+        LOG_INFO("Start Secure Web Server...");
         secureServer->start();
     }
-    LOG_INFO("Starting Insecure Web Server...");
+    LOG_INFO("Start Insecure Web Server...");
     insecureServer->start();
     if (insecureServer->isRunning()) {
         LOG_INFO("Web Servers Ready! :-) ");

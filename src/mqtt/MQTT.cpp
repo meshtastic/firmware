@@ -155,7 +155,7 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
                 if (e.packet && isFromUs(e.packet))
                     routingModule->sendAckNak(meshtastic_Routing_Error_NONE, getFrom(e.packet), e.packet->id, ch.index);
                 else
-                    LOG_INFO("Ignoring downlink message we originally sent");
+                    LOG_INFO("Ignore downlink message we originally sent");
             } else {
                 // Find channel by channel_id and check downlink_enabled
                 if ((strcmp(e.channel_id, "PKI") == 0 && e.packet) ||
@@ -165,18 +165,18 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
                     p->via_mqtt = true; // Mark that the packet was received via MQTT
 
                     if (isFromUs(p)) {
-                        LOG_INFO("Ignoring downlink message we originally sent");
+                        LOG_INFO("Ignore downlink message we originally sent");
                         packetPool.release(p);
                         return;
                     }
                     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
                         if (moduleConfig.mqtt.encryption_enabled) {
-                            LOG_INFO("Ignoring decoded message on MQTT, encryption is enabled");
+                            LOG_INFO("Ignore decoded message on MQTT, encryption is enabled");
                             packetPool.release(p);
                             return;
                         }
                         if (p->decoded.portnum == meshtastic_PortNum_ADMIN_APP) {
-                            LOG_INFO("Ignoring decoded admin packet");
+                            LOG_INFO("Ignore decoded admin packet");
                             packetPool.release(p);
                             return;
                         }
@@ -218,7 +218,7 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
 #endif
 {
     if (moduleConfig.mqtt.enabled) {
-        LOG_DEBUG("Initializing MQTT");
+        LOG_DEBUG("Init MQTT");
 
         assert(!mqtt);
         mqtt = this;
@@ -344,12 +344,12 @@ void MQTT::reconnect()
                 wifiSecureClient.setInsecure();
 
                 pubSub.setClient(wifiSecureClient);
-                LOG_INFO("Using TLS-encrypted session");
+                LOG_INFO("Use TLS-encrypted session");
             } catch (const std::exception &e) {
                 LOG_ERROR("MQTT ERROR: %s", e.what());
             }
         } else {
-            LOG_INFO("Using non-TLS-encrypted session");
+            LOG_INFO("Use non-TLS-encrypted session");
             pubSub.setClient(mqttClient);
         }
 #else
@@ -370,8 +370,8 @@ void MQTT::reconnect()
         pubSub.setServer(serverAddr, serverPort);
         pubSub.setBufferSize(512);
 
-        LOG_INFO("Attempting to connect directly to MQTT server %s, port: %d, username: %s, password: %s", serverAddr, serverPort,
-                 mqttUsername, mqttPassword);
+        LOG_INFO("Connect directly to MQTT server %s, port: %d, username: %s, password: %s", serverAddr, serverPort, mqttUsername,
+                 mqttPassword);
 
         bool connected = pubSub.connect(owner.id, mqttUsername, mqttPassword);
         if (connected) {
@@ -407,13 +407,13 @@ void MQTT::sendSubscriptions()
         if (ch.settings.downlink_enabled) {
             hasDownlink = true;
             std::string topic = cryptTopic + channels.getGlobalId(i) + "/+";
-            LOG_INFO("Subscribing to %s", topic.c_str());
+            LOG_INFO("Subscribe to %s", topic.c_str());
             pubSub.subscribe(topic.c_str(), 1); // FIXME, is QOS 1 right?
 #if !defined(ARCH_NRF52) ||                                                                                                      \
     defined(NRF52_USE_JSON) // JSON is not supported on nRF52, see issue #2804 ### Fixed by using ArduinoJSON ###
             if (moduleConfig.mqtt.json_enabled == true) {
                 std::string topicDecoded = jsonTopic + channels.getGlobalId(i) + "/+";
-                LOG_INFO("Subscribing to %s", topicDecoded.c_str());
+                LOG_INFO("Subscribe to %s", topicDecoded.c_str());
                 pubSub.subscribe(topicDecoded.c_str(), 1); // FIXME, is QOS 1 right?
             }
 #endif // ARCH_NRF52 NRF52_USE_JSON
@@ -422,7 +422,7 @@ void MQTT::sendSubscriptions()
 #if !MESHTASTIC_EXCLUDE_PKI
     if (hasDownlink) {
         std::string topic = cryptTopic + "PKI/+";
-        LOG_INFO("Subscribing to %s", topic.c_str());
+        LOG_INFO("Subscribe to %s", topic.c_str());
         pubSub.subscribe(topic.c_str(), 1);
     }
 #endif
@@ -496,7 +496,7 @@ void MQTT::publishNodeInfo()
 void MQTT::publishQueuedMessages()
 {
     if (!mqttQueue.isEmpty()) {
-        LOG_DEBUG("Publishing enqueued MQTT message");
+        LOG_DEBUG("Publish enqueued MQTT message");
         meshtastic_ServiceEnvelope *env = mqttQueue.dequeuePtr(0);
         size_t numBytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_ServiceEnvelope_msg, env);
         std::string topic;
@@ -606,7 +606,7 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
         } else {
             LOG_INFO("MQTT not connected, queueing packet");
             if (mqttQueue.numFree() == 0) {
-                LOG_WARN("NOTE: MQTT queue is full, discarding oldest");
+                LOG_WARN("MQTT queue is full, discarding oldest");
                 meshtastic_ServiceEnvelope *d = mqttQueue.dequeuePtr(0);
                 if (d)
                     mqttPool.release(d);

@@ -21,7 +21,7 @@ ErrorCode FloodingRouter::send(meshtastic_MeshPacket *p)
 bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 {
     if (wasSeenRecently(p)) { // Note: this will also add a recent packet record
-        printPacket("Ignoring dupe incoming msg", p);
+        printPacket("Ignore dupe incoming msg", p);
         rxDupe++;
         if (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER &&
             config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER) {
@@ -71,7 +71,7 @@ void FloodingRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
                 LOG_DEBUG("Not rebroadcasting: Role = CLIENT_MUTE or Rebroadcast Mode = NONE");
             }
         } else {
-            LOG_DEBUG("Ignoring 0 id broadcast");
+            LOG_DEBUG("Ignore 0 id broadcast");
         }
     }
     // handle the packet as normal
