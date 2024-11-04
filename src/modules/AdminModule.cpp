@@ -74,7 +74,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     // Could tighten this up further by tracking the last public_key we went an AdminMessage request to
     // and only allowing responses from that remote.
     if (messageIsResponse(r)) {
-        LOG_DEBUG("Allowing admin response message");
+        LOG_DEBUG("Allow admin response message");
     } else if (mp.from == 0) {
         if (config.security.is_managed) {
             LOG_INFO("Ignore local admin payload because is_managed");
@@ -105,7 +105,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         return handled;
     }
 
-    LOG_INFO("Handling admin payload %i", r->which_payload_variant);
+    LOG_INFO("Handle admin payload %i", r->which_payload_variant);
 
     // all of the get and set messages, including those for other modules, flow through here first.
     // any message that changes state, we want to check the passkey for
