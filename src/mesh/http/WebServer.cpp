@@ -69,13 +69,13 @@ static void taskCreateCert(void *parameter)
 
 #if 0
     // Delete the saved certs (used in debugging)
-    LOG_DEBUG("Deleting any saved SSL keys ...");
+    LOG_DEBUG("Deleting any saved SSL keys");
     // prefs.clear();
     prefs.remove("PK");
     prefs.remove("cert");
 #endif
 
-    LOG_INFO("Checking if we have a previously saved SSL Certificate.");
+    LOG_INFO("Checking if we have a saved SSL Certificate");
 
     size_t pkLen = prefs.getBytesLength("PK");
     size_t certLen = prefs.getBytesLength("cert");
@@ -139,7 +139,7 @@ void createSSLCert()
                     16,    /* Priority of the task. */
                     NULL); /* Task handle. */
 
-        LOG_DEBUG("Waiting for SSL Cert to be generated.");
+        LOG_DEBUG("Waiting for SSL Cert to be generated");
         while (!isCertReady) {
             if ((millis() / 500) % 2) {
                 if (runLoop) {
@@ -189,7 +189,7 @@ int32_t WebServerThread::runOnce()
 
 void initWebServer()
 {
-    LOG_DEBUG("Initializing Web Server ...");
+    LOG_DEBUG("Initializing Web Server...");
 
     // We can now use the new certificate to setup our server as usual.
     secureServer = new HTTPSServer(cert);

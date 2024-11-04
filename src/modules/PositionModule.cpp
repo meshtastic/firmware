@@ -351,7 +351,7 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
     if (IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_TRACKER,
                   meshtastic_Config_DeviceConfig_Role_TAK_TRACKER) &&
         config.power.is_power_saving) {
-        LOG_DEBUG("Starting next execution in 5 seconds and then going to sleep.");
+        LOG_DEBUG("Starting next execution in 5s, then going to sleep");
         sleepOnNextExecution = true;
         setIntervalFromNow(5000);
     }
@@ -364,7 +364,7 @@ int32_t PositionModule::runOnce()
     if (sleepOnNextExecution == true) {
         sleepOnNextExecution = false;
         uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(config.position.position_broadcast_secs);
-        LOG_DEBUG("Sleeping for %ims, then awaking to send position again.", nightyNightMs);
+        LOG_DEBUG("Sleeping for %ims, then awaking to send position again", nightyNightMs);
         doDeepSleep(nightyNightMs, false);
     }
 

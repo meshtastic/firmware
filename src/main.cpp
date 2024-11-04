@@ -389,10 +389,10 @@ void setup()
     Wire.begin(I2C_SDA, I2C_SCL);
 #elif defined(ARCH_PORTDUINO)
     if (settingsStrings[i2cdev] != "") {
-        LOG_INFO("Using %s as I2C device.", settingsStrings[i2cdev].c_str());
+        LOG_INFO("Using %s as I2C device", settingsStrings[i2cdev].c_str());
         Wire.begin(settingsStrings[i2cdev].c_str());
     } else {
-        LOG_INFO("No I2C device configured, skipping.");
+        LOG_INFO("No I2C device configured, skipping");
     }
 #elif HAS_WIRE
     Wire.begin();
@@ -770,7 +770,7 @@ void setup()
                 if (gps) {
                     gpsStatus->observe(&gps->newStatus);
                 } else {
-                    LOG_DEBUG("Running without GPS.");
+                    LOG_DEBUG("Running without GPS");
                 }
             }
         }
@@ -1070,7 +1070,7 @@ void setup()
 
     // check if the radio chip matches the selected region
     if ((config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24) && (!rIf->wideLora())) {
-        LOG_WARN("Radio chip does not support 2.4GHz LoRa. Reverting to unset.");
+        LOG_WARN("LoRa chip does not support 2.4GHz. Reverting to unset");
         config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
         nodeDB->saveToDisk(SEGMENT_CONFIG);
         if (!rIf->reconfigure()) {

@@ -22,7 +22,7 @@ ErrorCode SimRadio::send(meshtastic_MeshPacket *p)
 
     // set (random) transmit delay to let others reconfigure their radio,
     // to avoid collisions and implement timing-based flooding
-    LOG_DEBUG("Set random delay before transmitting.");
+    LOG_DEBUG("Set random delay before tx");
     setTransmitDelay();
     return res;
 }
@@ -193,7 +193,7 @@ void SimRadio::startSend(meshtastic_MeshPacket *txp)
         memcpy(&c.data.bytes, p->decoded.payload.bytes, p->decoded.payload.size);
         c.data.size = p->decoded.payload.size;
     } else {
-        LOG_WARN("Payload size is larger than compressed message allows! Sending empty payload.");
+        LOG_WARN("Payload size larger than compressed message allows! Sending empty payload");
     }
     p->decoded.payload.size =
         pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_Compressed_msg, &c);

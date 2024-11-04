@@ -143,12 +143,12 @@ bool RadioLibInterface::receiveDetected(uint16_t irq, ulong syncWordHeaderValidF
         } else if (!Throttle::isWithinTimespanMs(activeReceiveStart, 2 * preambleTimeMsec) && !(irq & syncWordHeaderValidFlag)) {
             // The HEADER_VALID flag should be set by now if it was really a packet, so ignore PREAMBLE_DETECTED flag
             activeReceiveStart = 0;
-            LOG_DEBUG("Ignore false preamble detection.");
+            LOG_DEBUG("Ignore false preamble detection");
             return false;
         } else if (!Throttle::isWithinTimespanMs(activeReceiveStart, maxPacketTimeMsec)) {
             // We should have gotten an RX_DONE IRQ by now if it was really a packet, so ignore HEADER_VALID flag
             activeReceiveStart = 0;
-            LOG_DEBUG("Ignore false header detection.");
+            LOG_DEBUG("Ignore false header detection");
             return false;
         }
     }
@@ -366,7 +366,7 @@ void RadioLibInterface::handleReceiveInterrupt()
     // when this is called, we should be in receive mode - if we are not, just jump out instead of bombing. Possible Race
     // Condition?
     if (!isReceiving) {
-        LOG_ERROR("handleReceiveInterrupt called when not in receive mode, which shouldn't happen.");
+        LOG_ERROR("handleReceiveInterrupt called when not in rx mode, which shouldn't happen");
         return;
     }
 

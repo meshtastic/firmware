@@ -122,13 +122,13 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
                                                &meshtastic_Position_msg, &pos); // make the Data protobuf from position
                         service->sendToMesh(p, RX_SRC_LOCAL);
                     } else {
-                        LOG_DEBUG("JSON Ignoring downlink message with unsupported type.");
+                        LOG_DEBUG("JSON Ignoring downlink message with unsupported type");
                     }
                 } else {
-                    LOG_ERROR("JSON Received payload on MQTT but not a valid envelope.");
+                    LOG_ERROR("JSON Received payload on MQTT but not a valid envelope");
                 }
             } else {
-                LOG_WARN("JSON downlink received on channel not called 'mqtt' or without downlink enabled.");
+                LOG_WARN("JSON downlink received on channel not called 'mqtt' or without downlink enabled");
             }
         } else {
             // no json, this is an invalid payload
@@ -155,7 +155,7 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
                 if (e.packet && isFromUs(e.packet))
                     routingModule->sendAckNak(meshtastic_Routing_Error_NONE, getFrom(e.packet), e.packet->id, ch.index);
                 else
-                    LOG_INFO("Ignoring downlink message we originally sent.");
+                    LOG_INFO("Ignoring downlink message we originally sent");
             } else {
                 // Find channel by channel_id and check downlink_enabled
                 if ((strcmp(e.channel_id, "PKI") == 0 && e.packet) ||
@@ -165,18 +165,18 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
                     p->via_mqtt = true; // Mark that the packet was received via MQTT
 
                     if (isFromUs(p)) {
-                        LOG_INFO("Ignoring downlink message we originally sent.");
+                        LOG_INFO("Ignoring downlink message we originally sent");
                         packetPool.release(p);
                         return;
                     }
                     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
                         if (moduleConfig.mqtt.encryption_enabled) {
-                            LOG_INFO("Ignoring decoded message on MQTT, encryption is enabled.");
+                            LOG_INFO("Ignoring decoded message on MQTT, encryption is enabled");
                             packetPool.release(p);
                             return;
                         }
                         if (p->decoded.portnum == meshtastic_PortNum_ADMIN_APP) {
-                            LOG_INFO("Ignoring decoded admin packet.");
+                            LOG_INFO("Ignoring decoded admin packet");
                             packetPool.release(p);
                             return;
                         }
@@ -242,7 +242,7 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
 
         isMqttServerAddressPrivate = isPrivateIpAddress(moduleConfig.mqtt.address);
         if (isMqttServerAddressPrivate) {
-            LOG_INFO("MQTT server is a private IP address.");
+            LOG_INFO("MQTT server on a private IP");
         }
 
 #if HAS_NETWORKING
@@ -251,7 +251,7 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
 #endif
 
         if (moduleConfig.mqtt.proxy_to_client_enabled) {
-            LOG_INFO("MQTT configured to use client proxy...");
+            LOG_INFO("MQTT configured to use client proxy");
             enabled = true;
             runASAP = true;
             reconnectCount = 0;
@@ -315,7 +315,7 @@ void MQTT::reconnect()
 {
     if (wantsLink()) {
         if (moduleConfig.mqtt.proxy_to_client_enabled) {
-            LOG_INFO("MQTT connecting via client proxy instead...");
+            LOG_INFO("MQTT connecting via client proxy instead");
             enabled = true;
             runASAP = true;
             reconnectCount = 0;
@@ -385,7 +385,7 @@ void MQTT::reconnect()
         } else {
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
             reconnectCount++;
-            LOG_ERROR("Failed to contact MQTT server directly (%d/%d)...", reconnectCount, reconnectMax);
+            LOG_ERROR("Failed to contact MQTT server directly (%d/%d)", reconnectCount, reconnectMax);
             if (reconnectCount >= reconnectMax) {
                 needReconnect = true;
                 wifiReconnect->setIntervalFromNow(0);
@@ -630,9 +630,9 @@ void MQTT::perhapsReportToMap()
         if (map_position_precision == 0 || (localPosition.latitude_i == 0 && localPosition.longitude_i == 0)) {
             last_report_to_map = millis();
             if (map_position_precision == 0)
-                LOG_WARN("MQTT Map reporting is enabled, but precision is 0");
+                LOG_WARN("MQTT Map reporting enabled, but precision is 0");
             if (localPosition.latitude_i == 0 && localPosition.longitude_i == 0)
-                LOG_WARN("MQTT Map reporting is enabled, but no position available.");
+                LOG_WARN("MQTT Map reporting enabled, but no position available");
             return;
         }
 

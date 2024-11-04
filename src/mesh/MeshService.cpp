@@ -83,15 +83,15 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
         IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_REPEATER);
     if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
         mp->decoded.portnum == meshtastic_PortNum_TELEMETRY_APP && mp->decoded.request_id > 0) {
-        LOG_DEBUG("Received telemetry response. Skip sending our NodeInfo."); //  because this potentially a Repeater which will
-                                                                              //  ignore our request for its NodeInfo
+        LOG_DEBUG("Received telemetry response. Skip sending our NodeInfo"); //  because this potentially a Repeater which will
+                                                                             //  ignore our request for its NodeInfo
     } else if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !nodeDB->getMeshNode(mp->from)->has_user &&
                nodeInfoModule && !isPreferredRebroadcaster) {
         if (airTime->isTxAllowedChannelUtil(true)) {
-            LOG_INFO("Heard new node on channel %d, sending NodeInfo and asking for a response.", mp->channel);
+            LOG_INFO("Heard new node on chan %d, sending NodeInfo and asking for a response", mp->channel);
             nodeInfoModule->sendOurNodeInfo(mp->from, true, mp->channel);
         } else {
-            LOG_DEBUG("Skip sending NodeInfo due to > 25 percent channel util.");
+            LOG_DEBUG("Skip sending NodeInfo due to > 25 percent chan util");
         }
     }
 
@@ -306,7 +306,7 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
             if (d)
                 releaseToPool(d);
         } else {
-            LOG_WARN("ToPhone queue is full, dropping packet.");
+            LOG_WARN("ToPhone queue is full, dropping packet");
             releaseToPool(p);
             fromNum++; // Make sure to notify observers in case they are reconnected so they can get the packets
             return;

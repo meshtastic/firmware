@@ -237,7 +237,7 @@ GPS_RESPONSE GPS::getACKCas(uint8_t class_id, uint8_t msg_id, uint32_t waitMilli
             // Check for an ACK-ACK for the specified class and message id
             if ((msg_cls == 0x05) && (msg_msg_id == 0x01) && payload_cls == class_id && payload_msg == msg_id) {
 #ifdef GPS_DEBUG
-                LOG_INFO("Got ACK for class %02X message %02X in %d millis.", class_id, msg_id, millis() - startTime);
+                LOG_INFO("Got ACK for class %02X message %02X in %dms", class_id, msg_id, millis() - startTime);
 #endif
                 return GNSS_RESPONSE_OK;
             }
@@ -245,7 +245,7 @@ GPS_RESPONSE GPS::getACKCas(uint8_t class_id, uint8_t msg_id, uint32_t waitMilli
             // Check for an ACK-NACK for the specified class and message id
             if ((msg_cls == 0x05) && (msg_msg_id == 0x00) && payload_cls == class_id && payload_msg == msg_id) {
 #ifdef GPS_DEBUG
-                LOG_WARN("Got NACK for class %02X message %02X in %d millis.", class_id, msg_id, millis() - startTime);
+                LOG_WARN("Got NACK for class %02X message %02X in %dms", class_id, msg_id, millis() - startTime);
 #endif
                 return GNSS_RESPONSE_NAK;
             }
@@ -286,7 +286,7 @@ GPS_RESPONSE GPS::getACK(uint8_t class_id, uint8_t msg_id, uint32_t waitMillis)
     while (Throttle::isWithinTimespanMs(startTime, waitMillis)) {
         if (ack > 9) {
 #ifdef GPS_DEBUG
-            LOG_INFO("Got ACK for class %02X message %02X in %d millis.", class_id, msg_id, millis() - startTime);
+            LOG_INFO("Got ACK for class %02X message %02X in %dms", class_id, msg_id, millis() - startTime);
 #endif
             return GNSS_RESPONSE_OK; // ACK received
         }
@@ -396,8 +396,7 @@ int GPS::getACK(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t 
                 } else {
                     // return payload length
 #ifdef GPS_DEBUG
-                    LOG_INFO("Got ACK for class %02X message %02X in %d millis.", requestedClass, requestedID,
-                             millis() - startTime);
+                    LOG_INFO("Got ACK for class %02X message %02X in %dms", requestedClass, requestedID, millis() - startTime);
 #endif
                     return needRead;
                 }
@@ -584,7 +583,7 @@ bool GPS::setup()
             msglen = makeUBXPacket(0x06, 0x09, sizeof(_message_SAVE), _message_SAVE);
             _serial_gps->write(UBXscratch, msglen);
             if (getACK(0x06, 0x09, 2000) != GNSS_RESPONSE_OK) {
-                LOG_WARN("Unable to save GNSS module config.");
+                LOG_WARN("Unable to save GNSS module config");
             } else {
                 LOG_INFO("GNSS module config saved!");
             }
@@ -603,9 +602,9 @@ bool GPS::setup()
                 LOG_DEBUG("reconfigure GNSS - defaults maintained. Is this module GPS-only?");
             } else {
                 if (gnssModel == GNSS_MODEL_UBLOX7) {
-                    LOG_INFO("GPS+SBAS configured.");
+                    LOG_INFO("GPS+SBAS configured");
                 } else { // 8,9
-                    LOG_INFO("GPS+SBAS+GLONASS+Galileo configured.");
+                    LOG_INFO("GPS+SBAS+GLONASS+Galileo configured");
                 }
                 // Documentation say, we need wait atleast 0.5s after reconfiguration of GNSS module, before sending next
                 // commands for the M8 it tends to be more... 1 sec should be enough ;>)
@@ -653,7 +652,7 @@ bool GPS::setup()
             msglen = makeUBXPacket(0x06, 0x09, sizeof(_message_SAVE), _message_SAVE);
             _serial_gps->write(UBXscratch, msglen);
             if (getACK(0x06, 0x09, 2000) != GNSS_RESPONSE_OK) {
-                LOG_WARN("Unable to save GNSS module configuration.");
+                LOG_WARN("Unable to save GNSS module config");
             } else {
                 LOG_INFO("GNSS module configuration saved!");
             }
@@ -701,7 +700,7 @@ bool GPS::setup()
             msglen = makeUBXPacket(0x06, 0x09, sizeof(_message_SAVE_10), _message_SAVE_10);
             _serial_gps->write(UBXscratch, msglen);
             if (getACK(0x06, 0x09, 2000) != GNSS_RESPONSE_OK) {
-                LOG_WARN("Unable to save GNSS module configuration.");
+                LOG_WARN("Unable to save GNSS module config");
             } else {
                 LOG_INFO("GNSS module configuration saved!");
             }
@@ -795,7 +794,7 @@ void GPS::writePinEN(bool on)
     // Write and log
     enablePin->set(on);
 #ifdef GPS_DEBUG
-    LOG_DEBUG("Pin EN %s", val == HIGH ? "HIGH" : "LOW");
+    LOG_DEBUG("Pin EN %s", val == HIGH ? "HI" : "LOW");
 #endif
 }
 
@@ -817,7 +816,7 @@ void GPS::writePinStandby(bool standby)
     pinMode(PIN_GPS_STANDBY, OUTPUT);
     digitalWrite(PIN_GPS_STANDBY, val);
 #ifdef GPS_DEBUG
-    LOG_DEBUG("Pin STANDBY %s", val == HIGH ? "HIGH" : "LOW");
+    LOG_DEBUG("Pin STANDBY %s", val == HIGH ? "HI" : "LOW");
 #endif
 #endif
 }
@@ -985,7 +984,7 @@ int32_t GPS::runOnce()
 {
     if (!GPSInitFinished) {
         if (!_serial_gps || config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
-            LOG_INFO("GPS set to not-present. Skipping probe.");
+            LOG_INFO("GPS set to not-present. Skipping probe");
             return disable();
         }
         if (!setup())
@@ -1055,7 +1054,7 @@ int32_t GPS::runOnce()
 
     bool tooLong = scheduling.searchedTooLong();
     if (tooLong)
-        LOG_WARN("Couldn't publish a valid location: didn't get a GPS lock in time.");
+        LOG_WARN("Couldn't publish a valid location: didn't get a GPS lock in time");
 
     // Once we get a location we no longer desperately want an update
     if ((gotLoc && gotTime) || tooLong) {
@@ -1505,7 +1504,7 @@ bool GPS::lookForLocation()
 
 #ifndef TINYGPS_OPTION_NO_STATISTICS
     if (reader.failedChecksum() > lastChecksumFailCount) {
-        LOG_WARN("%u new GPS checksum failures, for a total of %u.", reader.failedChecksum() - lastChecksumFailCount,
+        LOG_WARN("%u new GPS checksum failures, for a total of %u", reader.failedChecksum() - lastChecksumFailCount,
                  reader.failedChecksum());
         lastChecksumFailCount = reader.failedChecksum();
     }
@@ -1657,7 +1656,7 @@ bool GPS::whileActive()
     }
 #ifdef SERIAL_BUFFER_SIZE
     if (_serial_gps->available() >= SERIAL_BUFFER_SIZE - 1) {
-        LOG_WARN("GPS Buffer full with %u bytes waiting. Flushing to avoid corruption.", _serial_gps->available());
+        LOG_WARN("GPS Buffer full with %u bytes waiting. Flushing to avoid corruption", _serial_gps->available());
         clearBuffer();
     }
 #endif
@@ -1710,7 +1709,7 @@ void GPS::toggleGpsMode()
 {
     if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
         config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_DISABLED;
-        LOG_INFO("User toggled GpsMode. Now DISABLED.");
+        LOG_INFO("User toggled GpsMode. Now DISABLED");
         playGPSDisableBeep();
 #ifdef GNSS_AIROHA
         if (powerState == GPS_ACTIVE) {
