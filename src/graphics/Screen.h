@@ -327,10 +327,15 @@ class Screen : public concurrency::OSThread
             SKIPREST = false;
             return (uint8_t)ch;
         }
+
+        case 0xC3: {
+            SKIPREST = false;
+            return (uint8_t)(ch | 0xC0);
+        }
         }
 
         // We want to strip out prefix chars for two-byte char formats
-        if (ch == 0xC2)
+        if (ch == 0xC2 || ch == 0xC3)
             return (uint8_t)0;
 
 #if defined(OLED_PL)
