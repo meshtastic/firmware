@@ -270,6 +270,40 @@ typedef enum _meshtastic_CriticalErrorCode {
     meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE = 13
 } meshtastic_CriticalErrorCode;
 
+/* Enum for modules excluded from a device's configuration.
+ Each value represents a ModuleConfigType that can be toggled as excluded
+ by setting its corresponding bit in the `excluded_modules` bitmask field. */
+typedef enum _meshtastic_ExcludedModules {
+    /* Default value of 0 indicates no modules are excluded. */
+    meshtastic_ExcludedModules_EXCLUDED_NONE = 0,
+    /* MQTT module */
+    meshtastic_ExcludedModules_MQTT_CONFIG = 1,
+    /* Serial module */
+    meshtastic_ExcludedModules_SERIAL_CONFIG = 2,
+    /* External Notification module */
+    meshtastic_ExcludedModules_EXTNOTIF_CONFIG = 4,
+    /* Store and Forward module */
+    meshtastic_ExcludedModules_STOREFORWARD_CONFIG = 8,
+    /* Range Test module */
+    meshtastic_ExcludedModules_RANGETEST_CONFIG = 16,
+    /* Telemetry module */
+    meshtastic_ExcludedModules_TELEMETRY_CONFIG = 32,
+    /* Canned Message module */
+    meshtastic_ExcludedModules_CANNEDMSG_CONFIG = 64,
+    /* Audio module */
+    meshtastic_ExcludedModules_AUDIO_CONFIG = 128,
+    /* Remote Hardware module */
+    meshtastic_ExcludedModules_REMOTEHARDWARE_CONFIG = 256,
+    /* Neighbor Info module */
+    meshtastic_ExcludedModules_NEIGHBORINFO_CONFIG = 512,
+    /* Ambient Lighting module */
+    meshtastic_ExcludedModules_AMBIENTLIGHTING_CONFIG = 1024,
+    /* Detection Sensor module */
+    meshtastic_ExcludedModules_DETECTIONSENSOR_CONFIG = 2048,
+    /* Paxcounter module */
+    meshtastic_ExcludedModules_PAXCOUNTER_CONFIG = 4096
+} meshtastic_ExcludedModules;
+
 /* How the location was acquired: manual, onboard GPS, external (EUD) GPS */
 typedef enum _meshtastic_Position_LocSource {
     /* TODO: REPLACE */
@@ -896,6 +930,9 @@ typedef struct _meshtastic_DeviceMetadata {
     bool hasRemoteHardware;
     /* Has PKC capabilities */
     bool hasPKC;
+    /* Bit field of boolean for excluded modules
+ (bitwise OR of ExcludedModules) */
+    uint32_t excluded_modules;
 } meshtastic_DeviceMetadata;
 
 /* Packets from the radio to the phone will appear on the fromRadio characteristic.
@@ -1044,6 +1081,10 @@ extern "C" {
 #define _meshtastic_CriticalErrorCode_MAX meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE
 #define _meshtastic_CriticalErrorCode_ARRAYSIZE ((meshtastic_CriticalErrorCode)(meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE+1))
 
+#define _meshtastic_ExcludedModules_MIN meshtastic_ExcludedModules_EXCLUDED_NONE
+#define _meshtastic_ExcludedModules_MAX meshtastic_ExcludedModules_PAXCOUNTER_CONFIG
+#define _meshtastic_ExcludedModules_ARRAYSIZE ((meshtastic_ExcludedModules)(meshtastic_ExcludedModules_PAXCOUNTER_CONFIG+1))
+
 #define _meshtastic_Position_LocSource_MIN meshtastic_Position_LocSource_LOC_UNSET
 #define _meshtastic_Position_LocSource_MAX meshtastic_Position_LocSource_LOC_EXTERNAL
 #define _meshtastic_Position_LocSource_ARRAYSIZE ((meshtastic_Position_LocSource)(meshtastic_Position_LocSource_LOC_EXTERNAL+1))
@@ -1127,7 +1168,7 @@ extern "C" {
 #define meshtastic_Compressed_init_default       {_meshtastic_PortNum_MIN, {0, {0}}}
 #define meshtastic_NeighborInfo_init_default     {0, 0, 0, 0, {meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default}}
 #define meshtastic_Neighbor_init_default         {0, 0, 0, 0}
-#define meshtastic_DeviceMetadata_init_default   {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0, 0}
+#define meshtastic_DeviceMetadata_init_default   {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0, 0, 0}
 #define meshtastic_Heartbeat_init_default        {0}
 #define meshtastic_NodeRemoteHardwarePin_init_default {0, false, meshtastic_RemoteHardwarePin_init_default}
 #define meshtastic_ChunkedPayload_init_default   {0, 0, 0, {0, {0}}}
@@ -1152,7 +1193,7 @@ extern "C" {
 #define meshtastic_Compressed_init_zero          {_meshtastic_PortNum_MIN, {0, {0}}}
 #define meshtastic_NeighborInfo_init_zero        {0, 0, 0, 0, {meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero}}
 #define meshtastic_Neighbor_init_zero            {0, 0, 0, 0}
-#define meshtastic_DeviceMetadata_init_zero      {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0, 0}
+#define meshtastic_DeviceMetadata_init_zero      {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0, 0, 0}
 #define meshtastic_Heartbeat_init_zero           {0}
 #define meshtastic_NodeRemoteHardwarePin_init_zero {0, false, meshtastic_RemoteHardwarePin_init_zero}
 #define meshtastic_ChunkedPayload_init_zero      {0, 0, 0, {0, {0}}}
@@ -1286,6 +1327,7 @@ extern "C" {
 #define meshtastic_DeviceMetadata_hw_model_tag   9
 #define meshtastic_DeviceMetadata_hasRemoteHardware_tag 10
 #define meshtastic_DeviceMetadata_hasPKC_tag     11
+#define meshtastic_DeviceMetadata_excluded_modules_tag 12
 #define meshtastic_FromRadio_id_tag              1
 #define meshtastic_FromRadio_packet_tag          2
 #define meshtastic_FromRadio_my_info_tag         3
@@ -1572,7 +1614,8 @@ X(a, STATIC,   SINGULAR, UENUM,    role,              7) \
 X(a, STATIC,   SINGULAR, UINT32,   position_flags,    8) \
 X(a, STATIC,   SINGULAR, UENUM,    hw_model,          9) \
 X(a, STATIC,   SINGULAR, BOOL,     hasRemoteHardware,  10) \
-X(a, STATIC,   SINGULAR, BOOL,     hasPKC,           11)
+X(a, STATIC,   SINGULAR, BOOL,     hasPKC,           11) \
+X(a, STATIC,   SINGULAR, UINT32,   excluded_modules,  12)
 #define meshtastic_DeviceMetadata_CALLBACK NULL
 #define meshtastic_DeviceMetadata_DEFAULT NULL
 
@@ -1671,7 +1714,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_ClientNotification_size       415
 #define meshtastic_Compressed_size               243
 #define meshtastic_Data_size                     273
-#define meshtastic_DeviceMetadata_size           48
+#define meshtastic_DeviceMetadata_size           54
 #define meshtastic_FileInfo_size                 236
 #define meshtastic_FromRadio_size                510
 #define meshtastic_Heartbeat_size                0
