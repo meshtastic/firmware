@@ -1163,7 +1163,6 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 #if !(MESHTASTIC_EXCLUDE_PKI)
     deviceMetadata.hasPKC = true;
 #endif
-    strncpy(deviceMetadata.pio_env, optstr(APP_ENV), sizeof(deviceMetadata.pio_env));
     return deviceMetadata;
 }
 #ifndef PIO_UNIT_TESTING
