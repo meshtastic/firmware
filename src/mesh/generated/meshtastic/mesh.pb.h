@@ -781,6 +781,8 @@ typedef struct _meshtastic_MyNodeInfo {
     uint32_t min_app_version;
     /* Unique hardware identifier for this device */
     meshtastic_MyNodeInfo_device_id_t device_id;
+    /* The PlatformIO environment used to build this firmware */
+    char pio_env[40];
 } meshtastic_MyNodeInfo;
 
 /* Debug output from the device.
@@ -1115,7 +1117,7 @@ extern "C" {
 #define meshtastic_MqttClientProxyMessage_init_default {"", 0, {{0, {0}}}, 0}
 #define meshtastic_MeshPacket_init_default       {0, 0, 0, 0, {meshtastic_Data_init_default}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0}
 #define meshtastic_NodeInfo_init_default         {0, false, meshtastic_User_init_default, false, meshtastic_Position_init_default, 0, 0, false, meshtastic_DeviceMetrics_init_default, 0, 0, false, 0, 0}
-#define meshtastic_MyNodeInfo_init_default       {0, 0, 0, {0, {0}}}
+#define meshtastic_MyNodeInfo_init_default       {0, 0, 0, {0, {0}}, ""}
 #define meshtastic_LogRecord_init_default        {"", 0, "", _meshtastic_LogRecord_Level_MIN}
 #define meshtastic_QueueStatus_init_default      {0, 0, 0, 0}
 #define meshtastic_FromRadio_init_default        {0, 0, {meshtastic_MeshPacket_init_default}}
@@ -1140,7 +1142,7 @@ extern "C" {
 #define meshtastic_MqttClientProxyMessage_init_zero {"", 0, {{0, {0}}}, 0}
 #define meshtastic_MeshPacket_init_zero          {0, 0, 0, 0, {meshtastic_Data_init_zero}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0}
 #define meshtastic_NodeInfo_init_zero            {0, false, meshtastic_User_init_zero, false, meshtastic_Position_init_zero, 0, 0, false, meshtastic_DeviceMetrics_init_zero, 0, 0, false, 0, 0}
-#define meshtastic_MyNodeInfo_init_zero          {0, 0, 0, {0, {0}}}
+#define meshtastic_MyNodeInfo_init_zero          {0, 0, 0, {0, {0}}, ""}
 #define meshtastic_LogRecord_init_zero           {"", 0, "", _meshtastic_LogRecord_Level_MIN}
 #define meshtastic_QueueStatus_init_zero         {0, 0, 0, 0}
 #define meshtastic_FromRadio_init_zero           {0, 0, {meshtastic_MeshPacket_init_zero}}
@@ -1248,6 +1250,7 @@ extern "C" {
 #define meshtastic_MyNodeInfo_reboot_count_tag   8
 #define meshtastic_MyNodeInfo_min_app_version_tag 11
 #define meshtastic_MyNodeInfo_device_id_tag      12
+#define meshtastic_MyNodeInfo_pio_env_tag        13
 #define meshtastic_LogRecord_message_tag         1
 #define meshtastic_LogRecord_time_tag            2
 #define meshtastic_LogRecord_source_tag          3
@@ -1451,7 +1454,8 @@ X(a, STATIC,   SINGULAR, BOOL,     is_favorite,      10)
 X(a, STATIC,   SINGULAR, UINT32,   my_node_num,       1) \
 X(a, STATIC,   SINGULAR, UINT32,   reboot_count,      8) \
 X(a, STATIC,   SINGULAR, UINT32,   min_app_version,  11) \
-X(a, STATIC,   SINGULAR, BYTES,    device_id,        12)
+X(a, STATIC,   SINGULAR, BYTES,    device_id,        12) \
+X(a, STATIC,   SINGULAR, STRING,   pio_env,          13)
 #define meshtastic_MyNodeInfo_CALLBACK NULL
 #define meshtastic_MyNodeInfo_DEFAULT NULL
 
@@ -1674,7 +1678,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_LogRecord_size                426
 #define meshtastic_MeshPacket_size               367
 #define meshtastic_MqttClientProxyMessage_size   501
-#define meshtastic_MyNodeInfo_size               36
+#define meshtastic_MyNodeInfo_size               77
 #define meshtastic_NeighborInfo_size             258
 #define meshtastic_Neighbor_size                 22
 #define meshtastic_NodeInfo_size                 317
