@@ -42,7 +42,7 @@ meshtastic_CannedMessageModuleConfig cannedMessageModuleConfig;
 CannedMessageModule *cannedMessageModule;
 
 CannedMessageModule::CannedMessageModule()
-    : SinglePortModule("canned", meshtastic_PortNum_TEXT_MESSAGE_APP), concurrency::OSThread("CannedMessageModule")
+    : SinglePortModule("canned", meshtastic_PortNum_TEXT_MESSAGE_APP), concurrency::OSThread("CannedMessage")
 {
     if (moduleConfig.canned_message.enabled || CANNED_MESSAGE_MODULE_ENABLE) {
         this->loadProtoForModule();
@@ -414,7 +414,7 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
     // or raising a UIFrameEvent before another module has the chance
     this->waitingForAck = true;
 
-    LOG_INFO("Sending message id=%d, dest=%x, msg=%.*s", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
+    LOG_INFO("Send message id=%d, dest=%x, msg=%.*s", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
 
     service->sendToMesh(
         p, RX_SRC_LOCAL,

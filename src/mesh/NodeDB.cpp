@@ -105,7 +105,7 @@ static uint8_t ourMacAddr[6];
 
 NodeDB::NodeDB()
 {
-    LOG_INFO("Initializing NodeDB");
+    LOG_INFO("Init NodeDB");
     loadFromDisk();
     cleanupMeshDB();
 
@@ -182,7 +182,7 @@ NodeDB::NodeDB()
                 keygenSuccess = true;
             }
         } else {
-            LOG_INFO("Generating new PKI keys");
+            LOG_INFO("Generate new PKI keys");
             crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
             keygenSuccess = true;
         }
@@ -283,7 +283,7 @@ bool NodeDB::resetRadioConfig(bool factory_reset)
     }
 
     if (channelFile.channels_count != MAX_NUM_CHANNELS) {
-        LOG_INFO("Setting default channel and radio preferences!");
+        LOG_INFO("Set default channel and radio preferences!");
 
         channels.initDefaults();
     }
@@ -294,7 +294,7 @@ bool NodeDB::resetRadioConfig(bool factory_reset)
     initRegion();
 
     if (didFactoryReset) {
-        LOG_INFO("Rebooting due to factory reset");
+        LOG_INFO("Reboot due to factory reset");
         screen->startAlert("Rebooting...");
         rebootAtMsec = millis() + (5 * 1000);
     }
@@ -344,7 +344,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     if (shouldPreserveKey) {
         memcpy(private_key_temp, config.security.private_key.bytes, config.security.private_key.size);
     }
-    LOG_INFO("Installing default LocalConfig");
+    LOG_INFO("Install default LocalConfig");
     memset(&config, 0, sizeof(meshtastic_LocalConfig));
     config.version = DEVICESTATE_CUR_VER;
     config.has_device = true;
@@ -482,7 +482,7 @@ void NodeDB::initConfigIntervals()
 
 void NodeDB::installDefaultModuleConfig()
 {
-    LOG_INFO("Installing default ModuleConfig");
+    LOG_INFO("Install default ModuleConfig");
     memset(&moduleConfig, 0, sizeof(meshtastic_ModuleConfig));
 
     moduleConfig.version = DEVICESTATE_CUR_VER;
@@ -617,7 +617,7 @@ void NodeDB::initModuleConfigIntervals()
 
 void NodeDB::installDefaultChannels()
 {
-    LOG_INFO("Installing default ChannelFile");
+    LOG_INFO("Install default ChannelFile");
     memset(&channelFile, 0, sizeof(meshtastic_ChannelFile));
     channelFile.version = DEVICESTATE_CUR_VER;
 }
@@ -684,7 +684,7 @@ void NodeDB::cleanupMeshDB()
 
 void NodeDB::installDefaultDeviceState()
 {
-    LOG_INFO("Installing default DeviceState");
+    LOG_INFO("Install default DeviceState");
     // memset(&devicestate, 0, sizeof(meshtastic_DeviceState));
 
     numMeshNodes = 0;
@@ -742,7 +742,7 @@ void NodeDB::pickNewNodeNum()
                      nodeNum, found->user.macaddr[4], found->user.macaddr[5], ourMacAddr[4], ourMacAddr[5], candidate);
         nodeNum = candidate;
     }
-    LOG_DEBUG("Using nodenum 0x%x ", nodeNum);
+    LOG_DEBUG("Use nodenum 0x%x ", nodeNum);
 
     myNodeInfo.my_node_num = nodeNum;
 }
@@ -762,7 +762,7 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
     auto f = FSCom.open(filename, FILE_O_READ);
 
     if (f) {
-        LOG_INFO("Loading %s", filename);
+        LOG_INFO("Load %s", filename);
         pb_istream_t stream = {&readcb, &f, protoSize};
 
         memset(dest_struct, 0, objSize);

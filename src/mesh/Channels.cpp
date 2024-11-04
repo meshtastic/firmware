@@ -388,7 +388,7 @@ bool Channels::decryptForHash(ChannelIndex chIndex, ChannelHash channelHash)
         // channelHash);
         return false;
     } else {
-        LOG_DEBUG("Using channel %d (hash 0x%x)", chIndex, channelHash);
+        LOG_DEBUG("Use channel %d (hash 0x%x)", chIndex, channelHash);
         setCrypto(chIndex);
         return true;
     }

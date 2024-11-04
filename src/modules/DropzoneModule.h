@@ -15,7 +15,7 @@ class DropzoneModule : public SinglePortModule, private concurrency::OSThread
     /** Constructor
      * name is for debugging output
      */
-    DropzoneModule() : SinglePortModule("dropzone", meshtastic_PortNum_TEXT_MESSAGE_APP), concurrency::OSThread("DropzoneModule")
+    DropzoneModule() : SinglePortModule("dropzone", meshtastic_PortNum_TEXT_MESSAGE_APP), concurrency::OSThread("Dropzone")
     {
         // Set up the analog pin for reading the dropzone status
         pinMode(PIN_A1, INPUT);

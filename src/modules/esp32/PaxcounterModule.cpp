@@ -22,7 +22,7 @@ void PaxcounterModule::handlePaxCounterReportRequest()
 }
 
 PaxcounterModule::PaxcounterModule()
-    : concurrency::OSThread("PaxcounterModule"),
+    : concurrency::OSThread("Paxcounter"),
       ProtobufModule("paxcounter", meshtastic_PortNum_PAXCOUNTER_APP, &meshtastic_Paxcount_msg)
 {
 }

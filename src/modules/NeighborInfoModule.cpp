@@ -37,7 +37,7 @@ void NeighborInfoModule::printNodeDBNeighbors()
 /* Send our initial owner announcement 35 seconds after we start (to give network time to setup) */
 NeighborInfoModule::NeighborInfoModule()
     : ProtobufModule("neighborinfo", meshtastic_PortNum_NEIGHBORINFO_APP, &meshtastic_NeighborInfo_msg),
-      concurrency::OSThread("NeighborInfoModule")
+      concurrency::OSThread("NeighborInfo")
 {
     ourPortNum = meshtastic_PortNum_NEIGHBORINFO_APP;
     nodeStatusObserver.observe(&nodeStatus->onNewStatus);

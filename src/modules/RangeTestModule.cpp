@@ -24,7 +24,7 @@
 RangeTestModule *rangeTestModule;
 RangeTestModuleRadio *rangeTestModuleRadio;
 
-RangeTestModule::RangeTestModule() : concurrency::OSThread("RangeTestModule") {}
+RangeTestModule::RangeTestModule() : concurrency::OSThread("RangeTest") {}
 
 uint32_t packetSequence = 0;
 
@@ -54,11 +54,11 @@ int32_t RangeTestModule::runOnce()
             firstTime = 0;
 
             if (moduleConfig.range_test.sender) {
-                LOG_INFO("Initializing Range Test Module -- Sender");
+                LOG_INFO("Init Range Test Module -- Sender");
                 started = millis(); // make a note of when we started
                 return (5000);      // Sending first message 5 seconds after initialization.
             } else {
-                LOG_INFO("Initializing Range Test Module -- Receiver");
+                LOG_INFO("Init Range Test Module -- Receiver");
                 return disable();
                 // This thread does not need to run as a receiver
             }

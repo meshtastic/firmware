@@ -24,8 +24,7 @@ extern "C" {
 PositionModule *positionModule;
 
 PositionModule::PositionModule()
-    : ProtobufModule("position", meshtastic_PortNum_POSITION_APP, &meshtastic_Position_msg),
-      concurrency::OSThread("PositionModule")
+    : ProtobufModule("position", meshtastic_PortNum_POSITION_APP, &meshtastic_Position_msg), concurrency::OSThread("Position")
 {
     precision = 0;        // safe starting value
     isPromiscuous = true; // We always want to update our nodedb, even if we are sniffing on others
@@ -127,11 +126,11 @@ void PositionModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtastic
 void PositionModule::trySetRtc(meshtastic_Position p, bool isLocal, bool forceUpdate)
 {
     if (hasQualityTimesource() && !isLocal) {
-        LOG_DEBUG("Ignoring time from mesh because we have a GPS, RTC, or Phone/NTP time source in the past day");
+        LOG_DEBUG("Ignore time from mesh because we have a GPS, RTC, or Phone/NTP time source in the past day");
         return;
     }
     if (!isLocal && p.location_source < meshtastic_Position_LocSource_LOC_INTERNAL) {
-        LOG_DEBUG("Ignoring time from mesh because it has a unknown or manual source");
+        LOG_DEBUG("Ignore time from mesh because it has a unknown or manual source");
         return;
     }
     struct timeval tv;
@@ -183,7 +182,7 @@ meshtastic_MeshPacket *PositionModule::allocReply()
     }
 
     // lat/lon are unconditionally included - IF AVAILABLE!
-    LOG_DEBUG("Sending location with precision %i", precision);
+    LOG_DEBUG("Send location with precision %i", precision);
     if (precision < 32 && precision > 0) {
         p.latitude_i = localPosition.latitude_i & (UINT32_MAX << (32 - precision));
         p.longitude_i = localPosition.longitude_i & (UINT32_MAX << (32 - precision));
@@ -268,7 +267,7 @@ meshtastic_MeshPacket *PositionModule::allocReply()
 
 meshtastic_MeshPacket *PositionModule::allocAtakPli()
 {
-    LOG_INFO("Sending TAK PLI packet");
+    LOG_INFO("Send TAK PLI packet");
     meshtastic_MeshPacket *mp = allocDataPacket();
     mp->decoded.portnum = meshtastic_PortNum_ATAK_PLUGIN;
 
@@ -308,7 +307,7 @@ void PositionModule::sendOurPosition()
     currentGeneration = radioGeneration;
 
     // If we changed channels, ask everyone else for their latest info
-    LOG_INFO("Sending pos@%x:6 to mesh (wantReplies=%d)", localPosition.timestamp, requestReplies);
+    LOG_INFO("Send pos@%x:6 to mesh (wantReplies=%d)", localPosition.timestamp, requestReplies);
     sendOurPosition(NODENUM_BROADCAST, requestReplies);
 }
 
@@ -351,7 +350,7 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
     if (IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_TRACKER,
                   meshtastic_Config_DeviceConfig_Role_TAK_TRACKER) &&
         config.power.is_power_saving) {
-        LOG_DEBUG("Starting next execution in 5s, then going to sleep");
+        LOG_DEBUG("Start next execution in 5s, then going to sleep");
         sleepOnNextExecution = true;
         setIntervalFromNow(5000);
     }

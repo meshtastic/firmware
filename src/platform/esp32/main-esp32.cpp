@@ -101,7 +101,7 @@ void esp32Setup()
     /* We explicitly don't want to do call randomSeed,
     // as that triggers the esp32 core to use a less secure pseudorandom function.
     uint32_t seed = esp_random();
-    LOG_DEBUG("Setting random seed %u", seed);
+    LOG_DEBUG("Set random seed %u", seed);
     randomSeed(seed);
     */
 

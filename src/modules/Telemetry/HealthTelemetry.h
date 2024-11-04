@@ -16,7 +16,7 @@ class HealthTelemetryModule : private concurrency::OSThread, public ProtobufModu
 
   public:
     HealthTelemetryModule()
-        : concurrency::OSThread("HealthTelemetryModule"),
+        : concurrency::OSThread("HealthTelemetry"),
           ProtobufModule("HealthTelemetry", meshtastic_PortNum_TELEMETRY_APP, &meshtastic_Telemetry_msg)
     {
         lastMeasurementPacket = nullptr;

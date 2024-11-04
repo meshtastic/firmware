@@ -589,7 +589,7 @@ bool GPS::setup()
             }
         } else if (IS_ONE_OF(gnssModel, GNSS_MODEL_UBLOX7, GNSS_MODEL_UBLOX8, GNSS_MODEL_UBLOX9)) {
             if (gnssModel == GNSS_MODEL_UBLOX7) {
-                LOG_DEBUG("Setting GPS+SBAS");
+                LOG_DEBUG("Set GPS+SBAS");
                 msglen = makeUBXPacket(0x06, 0x3e, sizeof(_message_GNSS_7), _message_GNSS_7);
                 _serial_gps->write(UBXscratch, msglen);
             } else { // 8,9
@@ -1122,7 +1122,7 @@ GnssModel_t GPS::probe(int serialSpeed)
     _serial_gps->begin(serialSpeed);
 #else
     if (_serial_gps->baudRate() != serialSpeed) {
-        LOG_DEBUG("Setting Baud to %i", serialSpeed);
+        LOG_DEBUG("Set Baud to %i", serialSpeed);
         _serial_gps->updateBaudRate(serialSpeed);
     }
 #endif
@@ -1172,7 +1172,7 @@ GnssModel_t GPS::probe(int serialSpeed)
     // Check that the returned response class and message ID are correct
     GPS_RESPONSE response = getACK(0x06, 0x08, 750);
     if (response == GNSS_RESPONSE_NONE) {
-        LOG_WARN("Failed to find GNSS Module (baudrate %d)", serialSpeed);
+        LOG_WARN("No GNSS Module (baudrate %d)", serialSpeed);
         return GNSS_MODEL_UNKNOWN;
     } else if (response == GNSS_RESPONSE_FRAME_ERRORS) {
         LOG_INFO("UBlox Frame Errors (baudrate %d)", serialSpeed);
@@ -1256,7 +1256,7 @@ GnssModel_t GPS::probe(int serialSpeed)
             return GNSS_MODEL_UBLOX10;
         }
     }
-    LOG_WARN("Failed to find GNSS Module (baudrate %d)", serialSpeed);
+    LOG_WARN("No GNSS Module (baudrate %d)", serialSpeed);
     return GNSS_MODEL_UNKNOWN;
 }
 
@@ -1319,7 +1319,7 @@ GPS *GPS::createGps()
     // see NMEAGPS.h
     gsafixtype.begin(reader, NMEA_MSG_GXGSA, 2);
     gsapdop.begin(reader, NMEA_MSG_GXGSA, 15);
-    LOG_DEBUG("Using " NMEA_MSG_GXGSA " for 3DFIX and PDOP");
+    LOG_DEBUG("Use " NMEA_MSG_GXGSA " for 3DFIX and PDOP");
 #endif
 
     // Make sure the GPS is awake before performing any init.
@@ -1340,8 +1340,8 @@ GPS *GPS::createGps()
 
 //  ESP32 has a special set of parameters vs other arduino ports
 #if defined(ARCH_ESP32)
-        LOG_DEBUG("Using GPIO%d for GPS RX", new_gps->rx_gpio);
-        LOG_DEBUG("Using GPIO%d for GPS TX", new_gps->tx_gpio);
+        LOG_DEBUG("Use GPIO%d for GPS RX", new_gps->rx_gpio);
+        LOG_DEBUG("Use GPIO%d for GPS TX", new_gps->tx_gpio);
         _serial_gps->begin(GPS_BAUDRATE, SERIAL_8N1, new_gps->rx_gpio, new_gps->tx_gpio);
 #elif defined(ARCH_RP2040)
         _serial_gps->setFIFOSize(256);

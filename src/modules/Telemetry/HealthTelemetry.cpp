@@ -55,7 +55,7 @@ int32_t HealthTelemetryModule::runOnce()
         firstTime = false;
 
         if (moduleConfig.telemetry.health_measurement_enabled) {
-            LOG_INFO("Health Telemetry: Initializing");
+            LOG_INFO("Health Telemetry: init");
             // Initialize sensors
             if (mlx90614Sensor.hasSensor())
                 result = mlx90614Sensor.runOnce();
@@ -229,14 +229,14 @@ bool HealthTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 
         lastMeasurementPacket = packetPool.allocCopy(*p);
         if (phoneOnly) {
-            LOG_INFO("Sending packet to phone");
+            LOG_INFO("Send packet to phone");
             service->sendToPhone(p);
         } else {
-            LOG_INFO("Sending packet to mesh");
+            LOG_INFO("Send packet to mesh");
             service->sendToMesh(p, RX_SRC_LOCAL, true);
 
             if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving) {
-                LOG_DEBUG("Starting next execution in 5s, then going to sleep");
+                LOG_DEBUG("Start next execution in 5s, then going to sleep");
                 sleepOnNextExecution = true;
                 setIntervalFromNow(5000);
             }
