@@ -28,7 +28,7 @@ class AccelerometerThread : public concurrency::OSThread
     bool isInitialised = false;
 
   public:
-    explicit AccelerometerThread(ScanI2C::FoundDevice foundDevice) : OSThread("AccelerometerThread")
+    explicit AccelerometerThread(ScanI2C::FoundDevice foundDevice) : OSThread("Accelerometer")
     {
         device = foundDevice;
         init();
@@ -118,7 +118,7 @@ class AccelerometerThread : public concurrency::OSThread
     }
 
     // Copy constructor (not implemented / included to avoid cppcheck warnings)
-    AccelerometerThread(const AccelerometerThread &other) : OSThread::OSThread("AccelerometerThread") { this->copy(other); }
+    AccelerometerThread(const AccelerometerThread &other) : OSThread::OSThread("Accelerometer") { this->copy(other); }
 
     // Destructor (included to avoid cppcheck warnings)
     virtual ~AccelerometerThread() { clean(); }

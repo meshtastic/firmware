@@ -38,16 +38,16 @@ static int32_t reconnectETH()
         Ethernet.maintain();
         if (!ethStartupComplete) {
             // Start web server
-            LOG_INFO("Starting Ethernet network services");
+            LOG_INFO("Start Ethernet network services");
 
 #ifndef DISABLE_NTP
-            LOG_INFO("Starting NTP time client");
+            LOG_INFO("Start NTP time client");
             timeClient.begin();
             timeClient.setUpdateInterval(60 * 60); // Update once an hour
 #endif
 
             if (config.network.rsyslog_server[0]) {
-                LOG_INFO("Starting Syslog client");
+                LOG_INFO("Start Syslog client");
                 // Defaults
                 int serverPort = 514;
                 const char *serverAddr = config.network.rsyslog_server;
@@ -127,10 +127,10 @@ bool initEthernet()
         mac[0] &= 0xfe;  // Make sure this is not a multicast MAC
 
         if (config.network.address_mode == meshtastic_Config_NetworkConfig_AddressMode_DHCP) {
-            LOG_INFO("starting Ethernet DHCP");
+            LOG_INFO("Start Ethernet DHCP");
             status = Ethernet.begin(mac);
         } else if (config.network.address_mode == meshtastic_Config_NetworkConfig_AddressMode_STATIC) {
-            LOG_INFO("starting Ethernet Static");
+            LOG_INFO("Start Ethernet Static");
             Ethernet.begin(mac, config.network.ipv4_config.ip, config.network.ipv4_config.dns, config.network.ipv4_config.gateway,
                            config.network.ipv4_config.subnet);
             status = 1;

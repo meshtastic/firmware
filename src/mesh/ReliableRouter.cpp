@@ -53,14 +53,14 @@ bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
         auto key = GlobalPacketId(getFrom(p), p->id);
         auto old = findPendingPacket(key);
         if (old) {
-            LOG_DEBUG("generating implicit ack");
+            LOG_DEBUG("Generating implicit ack");
             // NOTE: we do NOT check p->wantAck here because p is the INCOMING rebroadcast and that packet is not expected to be
             // marked as wantAck
             sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, old->packet->channel);
 
             stopRetransmission(key);
         } else {
-            LOG_DEBUG("didn't find pending packet");
+            LOG_DEBUG("Didn't find pending packet");
         }
     }
 
@@ -228,7 +228,7 @@ int32_t ReliableRouter::doRetransmissions()
                 stopRetransmission(it->first);
                 stillValid = false; // just deleted it
             } else {
-                LOG_DEBUG("Sending reliable retransmission fr=0x%x,to=0x%x,id=0x%x, tries left=%d", p.packet->from, p.packet->to,
+                LOG_DEBUG("Send reliable retransmission fr=0x%x,to=0x%x,id=0x%x, tries left=%d", p.packet->from, p.packet->to,
                           p.packet->id, p.numRetransmissions);
 
                 // Note: we call the superclass version because we don't want to have our version of send() add a new
@@ -257,7 +257,7 @@ void ReliableRouter::setNextTx(PendingPacket *pending)
     assert(iface);
     auto d = iface->getRetransmissionMsec(pending->packet);
     pending->nextTxMsec = millis() + d;
-    LOG_DEBUG("Setting next retransmission in %u msecs: ", d);
+    LOG_DEBUG("Set next retransmission in %u msecs: ", d);
     printPacket("", pending->packet);
     setReceivedMessage(); // Run ASAP, so we can figure out our correct sleep time
 }

@@ -46,7 +46,7 @@ int32_t StoreForwardModule::runOnce()
         } else if (this->heartbeat && (!Throttle::isWithinTimespanMs(lastHeartbeat, heartbeatInterval * 1000)) &&
                    airTime->isTxAllowedChannelUtil(true)) {
             lastHeartbeat = millis();
-            LOG_INFO("Sending heartbeat");
+            LOG_INFO("Send heartbeat");
             meshtastic_StoreAndForward sf = meshtastic_StoreAndForward_init_zero;
             sf.rr = meshtastic_StoreAndForward_RequestResponse_ROUTER_HEARTBEAT;
             sf.which_variant = meshtastic_StoreAndForward_heartbeat_tag;
@@ -215,7 +215,7 @@ bool StoreForwardModule::sendPayload(NodeNum dest, uint32_t last_time)
 {
     meshtastic_MeshPacket *p = preparePayload(dest, last_time);
     if (p) {
-        LOG_INFO("Sending S&F Payload");
+        LOG_INFO("Send S&F Payload");
         service->sendToMesh(p);
         this->requestCount++;
         return true;
@@ -365,7 +365,7 @@ void StoreForwardModule::statsSend(uint32_t to)
     sf.variant.stats.return_max = this->historyReturnMax;
     sf.variant.stats.return_window = this->historyReturnWindow;
 
-    LOG_DEBUG("Sending S&F Stats");
+    LOG_DEBUG("Send S&F Stats");
     storeForwardModule->sendMessage(to, sf);
 }
 
@@ -552,7 +552,7 @@ bool StoreForwardModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
 }
 
 StoreForwardModule::StoreForwardModule()
-    : concurrency::OSThread("StoreForwardModule"),
+    : concurrency::OSThread("StoreForward"),
       ProtobufModule("StoreForward", meshtastic_PortNum_STORE_FORWARD_APP, &meshtastic_StoreAndForward_msg)
 {
 
@@ -573,7 +573,7 @@ StoreForwardModule::StoreForwardModule()
 
         // Router
         if ((config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER || moduleConfig.store_forward.is_server)) {
-            LOG_INFO("Initializing Store & Forward Module in Server mode");
+            LOG_INFO("Init Store & Forward Module in Server mode");
             if (memGet.getPsramSize() > 0) {
                 if (memGet.getFreePsram() >= 1024 * 1024) {
 
@@ -611,7 +611,7 @@ StoreForwardModule::StoreForwardModule()
             // Client
         } else {
             is_client = true;
-            LOG_INFO("Initializing Store & Forward Module in Client mode");
+            LOG_INFO("Init Store & Forward Module in Client mode");
         }
     } else {
         disable();

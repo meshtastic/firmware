@@ -33,7 +33,7 @@ int32_t AirQualityTelemetryModule::runOnce()
         firstTime = false;
 
         if (moduleConfig.telemetry.air_quality_enabled) {
-            LOG_INFO("Air quality Telemetry: Initializing");
+            LOG_INFO("Air quality Telemetry: init");
             if (!aqi.begin_I2C()) {
 #ifndef I2C_NO_RESCAN
                 LOG_WARN("Could not establish i2c connection to AQI sensor. Rescanning...");
@@ -178,10 +178,10 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 
         lastMeasurementPacket = packetPool.allocCopy(*p);
         if (phoneOnly) {
-            LOG_INFO("Sending packet to phone");
+            LOG_INFO("Send packet to phone");
             service->sendToPhone(p);
         } else {
-            LOG_INFO("Sending packet to mesh");
+            LOG_INFO("Send packet to mesh");
             service->sendToMesh(p, RX_SRC_LOCAL, true);
         }
         return true;
