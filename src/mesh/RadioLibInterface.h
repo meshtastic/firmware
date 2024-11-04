@@ -162,8 +162,9 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     /** start an immediate transmit
      *  This method is virtual so subclasses can hook as needed, subclasses should not call directly
+     *  @return true if packet was sent
      */
-    virtual void startSend(meshtastic_MeshPacket *txp);
+    virtual bool startSend(meshtastic_MeshPacket *txp);
 
     meshtastic_QueueStatus getQueueStatus();
 
