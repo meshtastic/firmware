@@ -83,7 +83,7 @@ void enableSlowCLK()
         LOG_DEBUG("32K XTAL OSC has not started up");
     } else {
         rtc_clk_slow_freq_set(RTC_SLOW_FREQ_32K_XTAL);
-        LOG_DEBUG("Switching RTC Source to 32.768Khz succeeded, using 32K XTAL");
+        LOG_DEBUG("Switch RTC Source to 32.768Khz succeeded, using 32K XTAL");
         CALIBRATE_ONE(RTC_CAL_RTC_MUX);
         CALIBRATE_ONE(RTC_CAL_32K_XTAL);
     }

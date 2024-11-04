@@ -39,7 +39,7 @@ bool PaxcounterModule::sendInfo(NodeNum dest)
     if (paxcounterModule->reportedDataSent)
         return false;
 
-    LOG_INFO("PaxcounterModule: sending pax info wifi=%d; ble=%d; uptime=%lu", count_from_libpax.wifi_count,
+    LOG_INFO("PaxcounterModule: send pax info wifi=%d; ble=%d; uptime=%lu", count_from_libpax.wifi_count,
              count_from_libpax.ble_count, millis() / 1000);
 
     meshtastic_Paxcount pl = meshtastic_Paxcount_init_default;

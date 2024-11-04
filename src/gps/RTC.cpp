@@ -134,7 +134,7 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpdate)
         LOG_DEBUG("Reapply external time to correct clock drift %ld secs", printableEpoch);
     } else {
         shouldSet = false;
-        LOG_DEBUG("Current RTC quality: %s. Ignoring time of RTC quality of %s", RtcName(currentQuality), RtcName(q));
+        LOG_DEBUG("Current RTC quality: %s. Ignore time of RTC quality of %s", RtcName(currentQuality), RtcName(q));
     }
 
     if (shouldSet) {

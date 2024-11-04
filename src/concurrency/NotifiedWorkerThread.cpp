@@ -37,7 +37,7 @@ IRAM_ATTR bool NotifiedWorkerThread::notifyCommon(uint32_t v, bool overwrite)
         return true;
     } else {
         if (debugNotification) {
-            LOG_DEBUG("dropping notification %d", v);
+            LOG_DEBUG("Drop notification %d", v);
         }
         return false;
     }
@@ -67,7 +67,7 @@ bool NotifiedWorkerThread::notifyLater(uint32_t delay, uint32_t v, bool overwrit
     if (didIt) {                   // If we didn't already have something queued, override the delay to be larger
         setIntervalFromNow(delay); // a new version of setInterval relative to the current time
         if (debugNotification) {
-            LOG_DEBUG("delaying notification %u", delay);
+            LOG_DEBUG("Delay notification %u", delay);
         }
     }
 

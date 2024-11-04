@@ -105,7 +105,7 @@ static void lsIdle()
                 wakeCause2 = doLightSleep(100); // leave led on for 1ms
 
                 secsSlept += sleepTime;
-                // LOG_INFO("sleeping, flash led!");
+                // LOG_INFO("Sleep, flash led!");
                 break;
 
             case ESP_SLEEP_WAKEUP_UART:
@@ -137,7 +137,7 @@ static void lsIdle()
     } else {
         // Time to stop sleeping!
         ledBlink.set(false);
-        LOG_INFO("Reached ls_secs, servicing loop()");
+        LOG_INFO("Reached ls_secs, service loop()");
         powerFSM.trigger(EVENT_WAKE_TIMER);
     }
 #endif

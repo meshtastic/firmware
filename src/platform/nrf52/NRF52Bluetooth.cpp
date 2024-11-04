@@ -152,7 +152,7 @@ void onToRadioWrite(uint16_t conn_hdl, BLECharacteristic *chr, uint8_t *data, ui
         memcpy(lastToRadio, data, len);
         bluetoothPhoneAPI->handleToRadio(data, len);
     } else {
-        LOG_DEBUG("Dropping duplicate ToRadio packet we just saw");
+        LOG_DEBUG("Drop dup ToRadio packet we just saw");
     }
 }
 
@@ -225,7 +225,7 @@ void NRF52Bluetooth::startDisabled()
     // Shutdown bluetooth for minimum power draw
     Bluefruit.Advertising.stop();
     Bluefruit.setTxPower(-40); // Minimum power
-    LOG_INFO("Disabling NRF52 Bluetooth. (Workaround: tx power min, advertising stopped)");
+    LOG_INFO("Disable NRF52 Bluetooth. (Workaround: tx power min, advertise stopped)");
 }
 bool NRF52Bluetooth::isConnected()
 {
@@ -238,7 +238,7 @@ int NRF52Bluetooth::getRssi()
 void NRF52Bluetooth::setup()
 {
     // Initialise the Bluefruit module
-    LOG_INFO("Initialize the Bluefruit nRF52 module");
+    LOG_INFO("Init the Bluefruit nRF52 module");
     Bluefruit.autoConnLed(false);
     Bluefruit.configPrphBandwidth(BANDWIDTH_MAX);
     Bluefruit.begin();
@@ -290,7 +290,7 @@ void NRF52Bluetooth::setup()
     // Setup the advertising packet(s)
     LOG_INFO("Set up the advertising payload(s)");
     startAdv();
-    LOG_INFO("Advertising");
+    LOG_INFO("Advertise");
 }
 void NRF52Bluetooth::resumeAdvertising()
 {
@@ -306,7 +306,7 @@ void updateBatteryLevel(uint8_t level)
 }
 void NRF52Bluetooth::clearBonds()
 {
-    LOG_INFO("Clearing bluetooth bonds!");
+    LOG_INFO("Clear bluetooth bonds!");
     bond_print_list(BLE_GAP_ROLE_PERIPH);
     bond_print_list(BLE_GAP_ROLE_CENTRAL);
     Bluefruit.Periph.clearBonds();
@@ -318,7 +318,7 @@ void NRF52Bluetooth::onConnectionSecured(uint16_t conn_handle)
 }
 bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passkey[6], bool match_request)
 {
-    LOG_INFO("BLE pairing process started with passkey %.3s %.3s", passkey, passkey + 3);
+    LOG_INFO("BLE pair process started with passkey %.3s %.3s", passkey, passkey + 3);
     powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN)
     screen->startAlert([](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
@@ -354,15 +354,15 @@ bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passke
                 break;
         }
     }
-    LOG_INFO("BLE passkey pairing: match_request=%i", match_request);
+    LOG_INFO("BLE passkey pair: match_request=%i", match_request);
     return true;
 }
 void NRF52Bluetooth::onPairingCompleted(uint16_t conn_handle, uint8_t auth_status)
 {
     if (auth_status == BLE_GAP_SEC_STATUS_SUCCESS)
-        LOG_INFO("BLE pairing success");
+        LOG_INFO("BLE pair success");
     else
-        LOG_INFO("BLE pairing failed");
+        LOG_INFO("BLE pair failed");
     screen->endAlert();
 }
 

@@ -149,7 +149,7 @@ int32_t RemoteHardwareModule::runOnce()
 
             if (curVal != previousWatch) {
                 previousWatch = curVal;
-                LOG_INFO("Broadcasting GPIOS 0x%llx changed!", curVal);
+                LOG_INFO("Broadcast GPIOS 0x%llx changed!", curVal);
 
                 // Something changed!  Tell the world with a broadcast message
                 meshtastic_HardwareMessage r = meshtastic_HardwareMessage_init_default;

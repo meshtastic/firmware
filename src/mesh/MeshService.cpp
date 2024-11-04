@@ -167,7 +167,7 @@ NodeNum MeshService::getNodenumFromRequestId(uint32_t request_id)
 void MeshService::handleToRadio(meshtastic_MeshPacket &p)
 {
 #if defined(ARCH_PORTDUINO) && !HAS_RADIO
-    // Simulates device is receiving a packet via the LoRa chip
+    // Simulates device received a packet via the LoRa chip
     if (p.decoded.portnum == meshtastic_PortNum_SIMULATOR_APP) {
         // Simulator packet (=Compressed packet) is encapsulated in a MeshPacket, so need to unwrap first
         meshtastic_Compressed scratch;
@@ -183,7 +183,7 @@ void MeshService::handleToRadio(meshtastic_MeshPacket &p)
                 // Switch the port from PortNum_SIMULATOR_APP back to the original PortNum
                 p.decoded.portnum = decoded->portnum;
             } else
-                LOG_ERROR("Error decoding protobuf for simulator message!");
+                LOG_ERROR("Error decoding proto for simulator message!");
         }
         // Let SimRadio receive as if it did via its LoRa chip
         SimRadio::instance->startReceive(&p);
@@ -225,7 +225,7 @@ ErrorCode MeshService::sendQueueStatusToPhone(const meshtastic_QueueStatus &qs, 
     copied->mesh_packet_id = mesh_packet_id;
 
     if (toPhoneQueueStatusQueue.numFree() == 0) {
-        LOG_INFO("tophone queue status queue is full, discarding oldest");
+        LOG_INFO("tophone queue status queue is full, discard oldest");
         meshtastic_QueueStatus *d = toPhoneQueueStatusQueue.dequeuePtr(0);
         if (d)
             releaseQueueStatusToPool(d);
@@ -306,12 +306,12 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
     if (toPhoneQueue.numFree() == 0) {
         if (p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP ||
             p->decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP) {
-            LOG_WARN("ToPhone queue is full, discarding oldest");
+            LOG_WARN("ToPhone queue is full, discard oldest");
             meshtastic_MeshPacket *d = toPhoneQueue.dequeuePtr(0);
             if (d)
                 releaseToPool(d);
         } else {
-            LOG_WARN("ToPhone queue is full, dropping packet");
+            LOG_WARN("ToPhone queue is full, drop packet");
             releaseToPool(p);
             fromNum++; // Make sure to notify observers in case they are reconnected so they can get the packets
             return;
@@ -326,7 +326,7 @@ void MeshService::sendMqttMessageToClientProxy(meshtastic_MqttClientProxyMessage
 {
     LOG_DEBUG("Send mqtt message on topic '%s' to client for proxy", m->topic);
     if (toPhoneMqttProxyQueue.numFree() == 0) {
-        LOG_WARN("MqttClientProxyMessagePool queue is full, discarding oldest");
+        LOG_WARN("MqttClientProxyMessagePool queue is full, discard oldest");
         meshtastic_MqttClientProxyMessage *d = toPhoneMqttProxyQueue.dequeuePtr(0);
         if (d)
             releaseMqttClientProxyMessageToPool(d);
@@ -340,7 +340,7 @@ void MeshService::sendClientNotification(meshtastic_ClientNotification *n)
 {
     LOG_DEBUG("Send client notification to phone");
     if (toPhoneClientNotificationQueue.numFree() == 0) {
-        LOG_WARN("ClientNotification queue is full, discarding oldest");
+        LOG_WARN("ClientNotification queue is full, discard oldest");
         meshtastic_ClientNotification *d = toPhoneClientNotificationQueue.dequeuePtr(0);
         if (d)
             releaseClientNotificationToPool(d);

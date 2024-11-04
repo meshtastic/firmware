@@ -108,7 +108,7 @@ void GPSUpdateScheduling::updateLockTimePrediction()
 
     searchCount++; // Only tracked so we can disregard initial lock-times
 
-    LOG_DEBUG("Predicting %us to get next lock", predictedMsToGetLock / 1000);
+    LOG_DEBUG("Predict %us to get next lock", predictedMsToGetLock / 1000);
 }
 
 // How long do we expect to spend searching for a lock?

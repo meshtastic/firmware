@@ -59,7 +59,7 @@ class NimbleBluetoothToRadioCallback : public NimBLECharacteristicCallbacks
             memcpy(lastToRadio, val.data(), val.length());
             bluetoothPhoneAPI->handleToRadio(val.data(), val.length());
         } else {
-            LOG_DEBUG("Dropping duplicate ToRadio packet we just saw");
+            LOG_DEBUG("Drop dup ToRadio packet we just saw");
         }
     }
 };

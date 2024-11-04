@@ -392,7 +392,7 @@ void setup()
         LOG_INFO("Use %s as I2C device", settingsStrings[i2cdev].c_str());
         Wire.begin(settingsStrings[i2cdev].c_str());
     } else {
-        LOG_INFO("No I2C device configured, skipping");
+        LOG_INFO("No I2C device configured, Skip");
     }
 #elif HAS_WIRE
     Wire.begin();
@@ -671,7 +671,7 @@ void setup()
     if (config.power.is_power_saving == true &&
         IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_TRACKER,
                   meshtastic_Config_DeviceConfig_Role_TAK_TRACKER, meshtastic_Config_DeviceConfig_Role_SENSOR))
-        LOG_DEBUG("Tracker/Sensor: Skipping start melody");
+        LOG_DEBUG("Tracker/Sensor: Skip start melody");
     else
         playStartMelody();
 
@@ -770,7 +770,7 @@ void setup()
                 if (gps) {
                     gpsStatus->observe(&gps->newStatus);
                 } else {
-                    LOG_DEBUG("Running without GPS");
+                    LOG_DEBUG("Run without GPS");
                 }
             }
         }
@@ -840,7 +840,7 @@ void setup()
                 delete rIf;
                 exit(EXIT_FAILURE);
             } else {
-                LOG_INFO("SX1262 init success, using SX1262 radio");
+                LOG_INFO("SX1262 init success");
             }
         }
     } else if (settingsMap[use_rf95]) {
@@ -856,7 +856,7 @@ void setup()
                 rIf = NULL;
                 exit(EXIT_FAILURE);
             } else {
-                LOG_INFO("RF95 init success, using RF95 radio");
+                LOG_INFO("RF95 init success");
             }
         }
     } else if (settingsMap[use_sx1280]) {
@@ -871,7 +871,7 @@ void setup()
                 rIf = NULL;
                 exit(EXIT_FAILURE);
             } else {
-                LOG_INFO("SX1280 init success, using SX1280 radio");
+                LOG_INFO("SX1280 init success");
             }
         }
     } else if (settingsMap[use_sx1268]) {
@@ -886,7 +886,7 @@ void setup()
                 rIf = NULL;
                 exit(EXIT_FAILURE);
             } else {
-                LOG_INFO("SX1268 init success, using SX1268 radio");
+                LOG_INFO("SX1268 init success");
             }
         }
     }
@@ -906,7 +906,7 @@ void setup()
             delete rIf;
             rIf = NULL;
         } else {
-            LOG_INFO("STM32WL init success, using STM32WL radio");
+            LOG_INFO("STM32WL init success");
             radioType = STM32WLx_RADIO;
         }
     }
@@ -934,7 +934,7 @@ void setup()
             delete rIf;
             rIf = NULL;
         } else {
-            LOG_INFO("RF95 init success, using RF95 radio");
+            LOG_INFO("RF95 init success");
             radioType = RF95_RADIO;
         }
     }
@@ -948,7 +948,7 @@ void setup()
             delete rIf;
             rIf = NULL;
         } else {
-            LOG_INFO("SX1262 init success, using SX1262 radio");
+            LOG_INFO("SX1262 init success");
             radioType = SX1262_RADIO;
         }
     }
@@ -992,7 +992,7 @@ void setup()
             delete rIf;
             rIf = NULL;
         } else {
-            LOG_INFO("SX1268 init success, using SX1268 radio");
+            LOG_INFO("SX1268 init success");
             radioType = SX1268_RADIO;
         }
     }
@@ -1006,7 +1006,7 @@ void setup()
             delete rIf;
             rIf = NULL;
         } else {
-            LOG_INFO("LLCC68 init success, using LLCC68 radio");
+            LOG_INFO("LLCC68 init success");
             radioType = LLCC68_RADIO;
         }
     }
@@ -1020,7 +1020,7 @@ void setup()
             delete rIf;
             rIf = NULL;
         } else {
-            LOG_INFO("LR1110 init success, using LR1110 radio");
+            LOG_INFO("LR1110 init success");
             radioType = LR1110_RADIO;
         }
     }
@@ -1034,7 +1034,7 @@ void setup()
             delete rIf;
             rIf = NULL;
         } else {
-            LOG_INFO("LR1120 init success, using LR1120 radio");
+            LOG_INFO("LR1120 init success");
             radioType = LR1120_RADIO;
         }
     }
@@ -1048,7 +1048,7 @@ void setup()
             delete rIf;
             rIf = NULL;
         } else {
-            LOG_INFO("LR1121 init success, using LR1121 radio");
+            LOG_INFO("LR1121 init success");
             radioType = LR1121_RADIO;
         }
     }
@@ -1062,7 +1062,7 @@ void setup()
             delete rIf;
             rIf = NULL;
         } else {
-            LOG_INFO("SX1280 init success, using SX1280 radio");
+            LOG_INFO("SX1280 init success");
             radioType = SX1280_RADIO;
         }
     }

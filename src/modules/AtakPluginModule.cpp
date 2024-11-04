@@ -126,7 +126,7 @@ void AtakPluginModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtast
     } else {
         if (!t->is_compressed) {
             // Not compressed. Something is wrong
-            LOG_WARN("Received uncompressed TAKPacket over radio! Skipping");
+            LOG_WARN("Received uncompressed TAKPacket over radio! Skip");
             return;
         }
 

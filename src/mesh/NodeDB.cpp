@@ -219,7 +219,7 @@ NodeDB::NodeDB()
     // If we are setup to broadcast on the default channel, ensure that the telemetry intervals are coerced to the minimum value
     // of 30 minutes or more
     if (channels.isDefaultChannel(channels.getPrimaryIndex())) {
-        LOG_DEBUG("Coercing telemetry to min of 30 minutes on defaults");
+        LOG_DEBUG("Coerce telemetry to min of 30 minutes on defaults");
         moduleConfig.telemetry.device_update_interval = Default::getConfiguredOrMinimumValue(
             moduleConfig.telemetry.device_update_interval, min_default_telemetry_interval_secs);
         moduleConfig.telemetry.environment_update_interval = Default::getConfiguredOrMinimumValue(
@@ -304,7 +304,7 @@ bool NodeDB::resetRadioConfig(bool factory_reset)
 
 bool NodeDB::factoryReset(bool eraseBleBonds)
 {
-    LOG_INFO("Performing factory reset!");
+    LOG_INFO("Perform factory reset!");
     // first, remove the "/prefs" (this removes most prefs)
     rmDir("/prefs");
 #ifdef FSCom
@@ -320,14 +320,14 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
     // third, write everything to disk
     saveToDisk();
     if (eraseBleBonds) {
-        LOG_INFO("Erasing BLE bonds");
+        LOG_INFO("Erase BLE bonds");
 #ifdef ARCH_ESP32
         // This will erase what's in NVS including ssl keys, persistent variables and ble pairing
         nvs_flash_erase();
 #endif
 #ifdef ARCH_NRF52
         Bluefruit.begin();
-        LOG_INFO("Clearing bluetooth bonds!");
+        LOG_INFO("Clear bluetooth bonds!");
         bond_print_list(BLE_GAP_ROLE_PERIPH);
         bond_print_list(BLE_GAP_ROLE_CENTRAL);
         Bluefruit.Periph.clearBonds();
@@ -647,7 +647,7 @@ void NodeDB::removeNodeByNum(NodeNum nodeNum)
     numMeshNodes -= removed;
     std::fill(devicestate.node_db_lite.begin() + numMeshNodes, devicestate.node_db_lite.begin() + numMeshNodes + 1,
               meshtastic_NodeInfoLite());
-    LOG_DEBUG("NodeDB::removeNodeByNum purged %d entries. Saving changes...", removed);
+    LOG_DEBUG("NodeDB::removeNodeByNum purged %d entries. Save changes...", removed);
     saveDeviceStateToDisk();
 }
 
@@ -803,7 +803,7 @@ void NodeDB::loadFromDisk()
     //    installDefaultDeviceState(); // Our in RAM copy might now be corrupt
     //} else {
     if (devicestate.version < DEVICESTATE_MIN_VER) {
-        LOG_WARN("Devicestate %d is old, discarding", devicestate.version);
+        LOG_WARN("Devicestate %d is old, discard", devicestate.version);
         installDefaultDeviceState();
     } else {
         LOG_INFO("Loaded saved devicestate version %d, with nodecount: %d", devicestate.version, devicestate.node_db_lite.size());
@@ -818,7 +818,7 @@ void NodeDB::loadFromDisk()
         installDefaultConfig(); // Our in RAM copy might now be corrupt
     } else {
         if (config.version < DEVICESTATE_MIN_VER) {
-            LOG_WARN("config %d is old, discarding", config.version);
+            LOG_WARN("config %d is old, discard", config.version);
             installDefaultConfig(true);
         } else {
             LOG_INFO("Loaded saved config version %d", config.version);
@@ -831,7 +831,7 @@ void NodeDB::loadFromDisk()
         installDefaultModuleConfig(); // Our in RAM copy might now be corrupt
     } else {
         if (moduleConfig.version < DEVICESTATE_MIN_VER) {
-            LOG_WARN("moduleConfig %d is old, discarding", moduleConfig.version);
+            LOG_WARN("moduleConfig %d is old, discard", moduleConfig.version);
             installDefaultModuleConfig();
         } else {
             LOG_INFO("Loaded saved moduleConfig version %d", moduleConfig.version);
@@ -844,7 +844,7 @@ void NodeDB::loadFromDisk()
         installDefaultChannels(); // Our in RAM copy might now be corrupt
     } else {
         if (channelFile.version < DEVICESTATE_MIN_VER) {
-            LOG_WARN("channelFile %d is old, discarding", channelFile.version);
+            LOG_WARN("channelFile %d is old, discard", channelFile.version);
             installDefaultChannels();
         } else {
             LOG_INFO("Loaded saved channelFile version %d", channelFile.version);
@@ -883,7 +883,7 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
 #ifdef FSCom
     auto f = SafeFile(filename, fullAtomic);
 
-    LOG_INFO("Saving %s", filename);
+    LOG_INFO("Save %s", filename);
     pb_ostream_t stream = {&writecb, static_cast<Print *>(&f), protoSize};
 
     if (!pb_encode(&stream, fields, dest_struct)) {
@@ -1126,7 +1126,7 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
             // we copy the key into the incoming packet, to prevent overwrite
             memcpy(p.public_key.bytes, info->user.public_key.bytes, 32);
         } else {
-            LOG_INFO("Updating Node Pubkey!");
+            LOG_INFO("Update Node Pubkey!");
         }
     }
 #endif
@@ -1141,7 +1141,7 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
     }
     if (nodeId != getNodeNum())
         info->channel = channelIndex; // Set channel we need to use to reach this node (but don't set our own channel)
-    LOG_DEBUG("updating changed=%d user %s/%s, channel=%d", changed, info->user.long_name, info->user.short_name, info->channel);
+    LOG_DEBUG("Update changed=%d user %s/%s, channel=%d", changed, info->user.long_name, info->user.short_name, info->channel);
     info->has_user = true;
 
     if (changed) {
@@ -1271,9 +1271,9 @@ void recordCriticalError(meshtastic_CriticalErrorCode code, uint32_t address, co
     if (screen)
         screen->print(lcd.c_str());
     if (filename) {
-        LOG_ERROR("NOTE! Recording critical error %d at %s:%lu", code, filename, address);
+        LOG_ERROR("NOTE! Record critical error %d at %s:%lu", code, filename, address);
     } else {
-        LOG_ERROR("NOTE! Recording critical error %d, address=0x%lx", code, address);
+        LOG_ERROR("NOTE! Record critical error %d, address=0x%lx", code, address);
     }
 
     // Record error to DB
