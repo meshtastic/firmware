@@ -164,7 +164,7 @@ void createSSLCert()
 
 WebServerThread *webServerThread;
 
-WebServerThread::WebServerThread() : concurrency::OSThread("WebServerThread")
+WebServerThread::WebServerThread() : concurrency::OSThread("WebServer")
 {
     if (!config.network.wifi_enabled) {
         disable();

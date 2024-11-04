@@ -21,7 +21,7 @@ namespace concurrency
 class AmbientLightingThread : public concurrency::OSThread
 {
   public:
-    explicit AmbientLightingThread(ScanI2C::DeviceType type) : OSThread("AmbientLightingThread")
+    explicit AmbientLightingThread(ScanI2C::DeviceType type) : OSThread("AmbientLighting")
     {
         notifyDeepSleepObserver.observe(&notifyDeepSleep); // Let us know when shutdown() is issued.
 
@@ -42,18 +42,18 @@ class AmbientLightingThread : public concurrency::OSThread
 #ifdef HAS_NCP5623
         _type = type;
         if (_type == ScanI2C::DeviceType::NONE) {
-            LOG_DEBUG("AmbientLightingThread disabling due to no RGB leds found on I2C bus");
+            LOG_DEBUG("AmbientLighting disabling due to no RGB leds found on I2C bus");
             disable();
             return;
         }
 #endif
 #if defined(HAS_NCP5623) || defined(RGBLED_RED) || defined(HAS_NEOPIXEL) || defined(UNPHONE)
         if (!moduleConfig.ambient_lighting.led_state) {
-            LOG_DEBUG("AmbientLightingThread disabling due to moduleConfig.ambient_lighting.led_state OFF");
+            LOG_DEBUG("AmbientLighting disabling due to moduleConfig.ambient_lighting.led_state OFF");
             disable();
             return;
         }
-        LOG_DEBUG("AmbientLightingThread init");
+        LOG_DEBUG("AmbientLighting init");
 #ifdef HAS_NCP5623
         if (_type == ScanI2C::NCP5623) {
             rgb.begin();
