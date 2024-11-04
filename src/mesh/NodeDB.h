@@ -147,6 +147,9 @@ class NodeDB
     meshtastic_NodeInfoLite *getMeshNode(NodeNum n);
     size_t getNumMeshNodes() { return numMeshNodes; }
 
+    // returns true if the maximum number of nodes is reached or we are running low on memory
+    bool isFull();
+
     void clearLocalPosition();
 
     void setLocalPosition(meshtastic_Position position, bool timeOnly = false)
