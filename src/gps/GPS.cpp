@@ -1555,7 +1555,7 @@ bool GPS::lookForLocation()
         return false;
     }
     if (toDegInt(loc.lng) > 1800000000) {
-#ifdef GPS_EDEBUG
+#ifdef GPS_DEBUG
         LOG_DEBUG("Bail out EARLY on LNG %i", toDegInt(loc.lng));
 #endif
         return false;
