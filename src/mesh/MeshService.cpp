@@ -12,6 +12,7 @@
 #include "RTC.h"
 #include "TypeConversions.h"
 #include "main.h"
+#include "meshUtils.h"
 #include "mesh-pb-constants.h"
 #include "modules/NodeInfoModule.h"
 #include "modules/PositionModule.h"
