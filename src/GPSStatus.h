@@ -85,6 +85,9 @@ class GPSStatus : public Status
 
     bool matches(const GPSStatus *newStatus) const
     {
+#ifdef GPS_DEBUG
+        LOG_DEBUG("GPSStatus.match() new pos@%x to old pos@%x", newStatus->p.timestamp, p.timestamp);
+#endif
         return (newStatus->hasLock != hasLock || newStatus->isConnected != isConnected ||
                 newStatus->isPowerSaving != isPowerSaving || newStatus->p.latitude_i != p.latitude_i ||
                 newStatus->p.longitude_i != p.longitude_i || newStatus->p.altitude != p.altitude ||

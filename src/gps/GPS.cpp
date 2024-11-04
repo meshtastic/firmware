@@ -794,6 +794,9 @@ void GPS::writePinEN(bool on)
 
     // Write and log
     enablePin->set(on);
+#ifdef GPS_DEBUG
+    LOG_DEBUG("Pin EN %s", val == HIGH ? "HIGH" : "LOW");
+#endif
 }
 
 // Set the value of the STANDBY pin, if relevant
@@ -813,6 +816,9 @@ void GPS::writePinStandby(bool standby)
     // Write and log
     pinMode(PIN_GPS_STANDBY, OUTPUT);
     digitalWrite(PIN_GPS_STANDBY, val);
+#ifdef GPS_DEBUG
+    LOG_DEBUG("Pin STANDBY %s", val == HIGH ? "HIGH" : "LOW");
+#endif
 #endif
 }
 
@@ -843,7 +849,9 @@ void GPS::setPowerPMU(bool on)
         // t-beam v1.1 GNSS  power channel
         on ? PMU->enablePowerOutput(XPOWERS_LDO3) : PMU->disablePowerOutput(XPOWERS_LDO3);
     }
-
+#ifdef GPS_DEBUG
+    LOG_DEBUG("PMU %s", on ? "on" : "off");
+#endif
 #endif
 }
 
@@ -889,6 +897,9 @@ void GPS::setPowerUBLOX(bool on, uint32_t sleepMs)
 
         // Send the UBX packet
         gps->_serial_gps->write(gps->UBXscratch, msglen);
+#ifdef GPS_DEBUG
+        LOG_DEBUG("UBLOX: sleep for %dmS", sleepMs);
+#endif
     }
 }
 
@@ -1010,7 +1021,7 @@ int32_t GPS::runOnce()
                       GNSS_MODEL_UBLOX10)) {
             // reset the GPS on next bootup
             if (devicestate.did_gps_reset && scheduling.elapsedSearchMs() > 60 * 1000UL && !hasFlow()) {
-                LOG_DEBUG("GPS is not communicating, trying factory reset on next boot.");
+                LOG_DEBUG("GPS is not communicating, trying factory reset on next boot");
                 devicestate.did_gps_reset = false;
                 nodeDB->saveToDisk(SEGMENT_DEVICESTATE);
                 return disable(); // Stop the GPS thread as it can do nothing useful until next reboot.
@@ -1508,6 +1519,16 @@ bool GPS::lookForLocation()
     if (!hasLock())
         return false;
 
+#ifdef GPS_DEBUG
+    LOG_DEBUG("AGE: LOC=%d FIX=%d DATE=%d TIME=%d", reader.location.age(),
+#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
+              gsafixtype.age(),
+#else
+              0,
+#endif
+              reader.date.age(), reader.time.age());
+#endif // GPS_DEBUG
+
     // Is this a new point or are we re-reading the previous one?
     if (!reader.location.isUpdated() && !reader.altitude.isUpdated())
         return false;
@@ -1529,9 +1550,15 @@ bool GPS::lookForLocation()
 
     // Bail out EARLY to avoid overwriting previous good data (like #857)
     if (toDegInt(loc.lat) > 900000000) {
+#ifdef GPS_DEBUG
+        LOG_DEBUG("Bail out EARLY on LAT %i", toDegInt(loc.lat));
+#endif
         return false;
     }
     if (toDegInt(loc.lng) > 1800000000) {
+#ifdef GPS_EDEBUG
+        LOG_DEBUG("Bail out EARLY on LNG %i", toDegInt(loc.lng));
+#endif
         return false;
     }
 

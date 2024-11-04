@@ -64,7 +64,7 @@ void PhoneAPI::handleStartConfig()
 
 void PhoneAPI::close()
 {
-    LOG_INFO("PhoneAPI::close()");
+    LOG_DEBUG("PhoneAPI::close()");
 
     if (state != STATE_SEND_NOTHING) {
         state = STATE_SEND_NOTHING;
@@ -133,7 +133,7 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
             break;
 #if !MESHTASTIC_EXCLUDE_MQTT
         case meshtastic_ToRadio_mqttClientProxyMessage_tag:
-            LOG_INFO("Got MqttClientProxy message");
+            LOG_DEBUG("Got MqttClientProxy message");
             if (mqtt && moduleConfig.mqtt.proxy_to_client_enabled && moduleConfig.mqtt.enabled &&
                 (channels.anyMqttEnabled() || moduleConfig.mqtt.map_reporting_enabled)) {
                 mqtt->onClientProxyReceive(toRadioScratch.mqttClientProxyMessage);
@@ -202,7 +202,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         break;
 
     case STATE_SEND_OWN_NODEINFO: {
-        LOG_INFO("Sending My NodeInfo");
+        LOG_DEBUG("Sending My NodeInfo");
         auto us = nodeDB->readNextMeshNode(readIndex);
         if (us) {
             nodeInfoForPhone = TypeConversions::ConvertToNodeInfo(us);
@@ -225,7 +225,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         break;
 
     case STATE_SEND_CHANNELS:
-        LOG_INFO("Sending Channels");
+        LOG_DEBUG("Sending Channels");
         fromRadioScratch.which_payload_variant = meshtastic_FromRadio_channel_tag;
         fromRadioScratch.channel = channels.getByIndex(config_state);
         config_state++;
@@ -237,7 +237,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         break;
 
     case STATE_SEND_CONFIG:
-        LOG_INFO("Sending Radio config");
+        LOG_DEBUG("Sending Radio config");
         fromRadioScratch.which_payload_variant = meshtastic_FromRadio_config_tag;
         switch (config_state) {
         case meshtastic_Config_device_tag:
@@ -292,7 +292,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         break;
 
     case STATE_SEND_MODULECONFIG:
-        LOG_INFO("Sending Module Config");
+        LOG_DEBUG("Sending Module Config");
         fromRadioScratch.which_payload_variant = meshtastic_FromRadio_moduleConfig_tag;
         switch (config_state) {
         case meshtastic_ModuleConfig_mqtt_tag:
@@ -361,7 +361,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         break;
 
     case STATE_SEND_OTHER_NODEINFOS: {
-        LOG_INFO("Sending known nodes");
+        LOG_DEBUG("Sending known nodes");
         if (nodeInfoForPhone.num != 0) {
             LOG_INFO("nodeinfo: num=0x%x, lastseen=%u, id=%s, name=%s", nodeInfoForPhone.num, nodeInfoForPhone.last_heard,
                      nodeInfoForPhone.user.id, nodeInfoForPhone.user.long_name);
@@ -370,7 +370,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             // Stay in current state until done sending nodeinfos
             nodeInfoForPhone.num = 0; // We just consumed a nodeinfo, will need a new one next time
         } else {
-            LOG_INFO("Done sending nodeinfo");
+            LOG_DEBUG("Done sending nodeinfo");
             state = STATE_SEND_FILEMANIFEST;
             // Go ahead and send that ID right now
             return getFromRadio(buf);

@@ -171,7 +171,7 @@ ErrorCode RadioLibInterface::send(meshtastic_MeshPacket *p)
         }
 
     } else {
-        LOG_WARN("send - lora tx disabled: Region is not set");
+        LOG_WARN("send - lora tx disabled: Region unset");
         packetPool.release(p);
         return ERRNO_DISABLED;
     }
@@ -379,7 +379,7 @@ void RadioLibInterface::handleReceiveInterrupt()
 
 #ifndef DISABLE_WELCOME_UNSET
     if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
-        LOG_WARN("lora rx disabled: Region is not set");
+        LOG_WARN("lora rx disabled: Region unset");
         airTime->logAirtime(RX_ALL_LOG, xmitMsec);
         return;
     }
