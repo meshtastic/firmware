@@ -88,12 +88,13 @@ Import("projenv")
 
 prefsLoc = projenv["PROJECT_DIR"] + "/version.properties"
 verObj = readProps(prefsLoc)
-print("Using meshtastic platformio-custom.py, firmware version " + verObj["long"])
+print("Using meshtastic platformio-custom.py, firmware version " + verObj["long"] + " on " + env.get("PIOENV"))
 
 # General options that are passed to the C and C++ compilers
 projenv.Append(
     CCFLAGS=[
         "-DAPP_VERSION=" + verObj["long"],
         "-DAPP_VERSION_SHORT=" + verObj["short"],
+        "-DAPP_ENV=" + env.get("PIOENV"),
     ]
 )
