@@ -40,6 +40,9 @@ GPS *gps = nullptr;
 
 GPSUpdateScheduling scheduling;
 
+static const char *lastcmd = nullptr;
+static GPS_RESPONSE cachedResponseStatus = GNSS_RESPONSE_NONE;
+
 /// Multiple GPS instances might use the same serial port (in sequence), but we can
 /// only init that port once.
 static bool didSerialInit;
@@ -185,6 +188,7 @@ GPS_RESPONSE GPS::getACK(const char *message, uint32_t waitMillis)
 #ifdef GPS_DEBUG
                     LOG_DEBUG("Found: %s", message); // Log the found message
 #endif
+                    cachedResponseStatus = GNSS_RESPONSE_OK;
                     return GNSS_RESPONSE_OK;
                 } else {
                     bytesRead = 0;
@@ -195,6 +199,7 @@ GPS_RESPONSE GPS::getACK(const char *message, uint32_t waitMillis)
             }
         }
     }
+    cachedResponseStatus = GNSS_RESPONSE_NONE;
     return GNSS_RESPONSE_NONE;
 }
 
@@ -1099,15 +1104,28 @@ int GPS::prepareDeepSleep(void *unused)
 }
 
 const char *PROBE_MESSAGE = "Trying %s (%s)...";
+const char *PROBE_MESSAGE_PREVIOUS = "Using previous buffer for command: %s";
 const char *DETECTED_MESSAGE = "%s detected, using %s Module";
 
-#define PROBE_SIMPLE(CHIP, TOWRITE, RESPONSE, DRIVER, TIMEOUT, ...)                                                              \
-    LOG_DEBUG(PROBE_MESSAGE, TOWRITE, CHIP);                                                                                     \
-    clearBuffer();                                                                                                               \
-    _serial_gps->write(TOWRITE "\r\n");                                                                                          \
-    if (getACK(RESPONSE, TIMEOUT) == GNSS_RESPONSE_OK) {                                                                         \
-        LOG_INFO(DETECTED_MESSAGE, CHIP, #DRIVER);                                                                               \
-        return DRIVER;                                                                                                           \
+#define PROBE_SIMPLE(CHIP, TOWRITE, RESPONSE, DRIVER, TIMEOUT, ...) \
+    if (lastcmd && strcmp(TOWRITE, lastcmd) == 0)                   \
+    {                                                               \
+        LOG_DEBUG(PROBE_MESSAGE_PREVIOUS, TOWRITE);                 \
+        if (cachedResponseStatus)                                   \
+        {                                                           \
+            LOG_INFO(DETECTED_MESSAGE, CHIP, #DRIVER);              \
+            return DRIVER;                                          \
+        }                                                           \
+    } else {                                                        \
+        LOG_DEBUG(PROBE_MESSAGE, TOWRITE, CHIP);                    \
+        clearBuffer();                                              \
+        _serial_gps->write(TOWRITE "\r\n");                         \
+        lastcmd = TOWRITE;                                          \
+    }                                                               \
+    if (getACK(RESPONSE, TIMEOUT) == GNSS_RESPONSE_OK)              \
+    {                                                               \
+        LOG_INFO(DETECTED_MESSAGE, CHIP, #DRIVER);                  \
+        return DRIVER;                                              \
     }
 
 GnssModel_t GPS::probe(int serialSpeed)
