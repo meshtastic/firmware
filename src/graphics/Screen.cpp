@@ -2175,13 +2175,13 @@ void Screen::dismissCurrentFrame()
     bool dismissed = false;
 
     if (currentFrame == framesetInfo.positions.textMessage && devicestate.has_rx_text_message) {
-        LOG_INFO("Dismissing Text Message");
+        LOG_INFO("Dismiss Text Message");
         devicestate.has_rx_text_message = false;
         dismissed = true;
     }
 
     else if (currentFrame == framesetInfo.positions.waypoint && devicestate.has_rx_waypoint) {
-        LOG_DEBUG("Dismissing Waypoint");
+        LOG_DEBUG("Dismiss Waypoint");
         devicestate.has_rx_waypoint = false;
         dismissed = true;
     }
@@ -2674,7 +2674,7 @@ int Screen::handleUIFrameEvent(const UIFrameEvent *event)
         if (event->action == UIFrameEvent::Action::REGENERATE_FRAMESET)
             setFrames(FOCUS_MODULE);
 
-        // Regenerate the frameset, while attempting to maintain focus on the current frame
+        // Regenerate the frameset, while Attempt to maintain focus on the current frame
         else if (event->action == UIFrameEvent::Action::REGENERATE_FRAMESET_BACKGROUND)
             setFrames(FOCUS_PRESERVE);
 

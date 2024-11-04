@@ -168,7 +168,7 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
 
     if (isDecoded && mp.decoded.want_response && toUs) {
         if (currentReply) {
-            printPacket("Sending response", currentReply);
+            printPacket("Send response", currentReply);
             service->sendToMesh(currentReply);
             currentReply = NULL;
         } else if (mp.from != ourNodeNum && !ignoreRequest) {

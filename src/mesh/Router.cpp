@@ -333,7 +333,7 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
     if (p->channel == 0 && isToUs(p) && p->to > 0 && !isBroadcast(p->to) && nodeDB->getMeshNode(p->from) != nullptr &&
         nodeDB->getMeshNode(p->from)->user.public_key.size > 0 && nodeDB->getMeshNode(p->to)->user.public_key.size > 0 &&
         rawSize > MESHTASTIC_PKC_OVERHEAD) {
-        LOG_DEBUG("Attempting PKI decryption");
+        LOG_DEBUG("Attempt PKI decryption");
 
         if (crypto->decryptCurve25519(p->from, nodeDB->getMeshNode(p->from)->user.public_key, p->id, rawSize, ScratchEncrypted,
                                       bytes)) {
@@ -468,7 +468,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
 
                 // Otherwise we use the compressor
             } else {
-                LOG_DEBUG("Using compressed message");
+                LOG_DEBUG("Use compressed message");
                 // Copy the compressed data into the meshpacket
 
                 p->decoded.payload.size = compressed_len;
@@ -501,7 +501,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             // Some portnums either make no sense to send with PKC
             p->decoded.portnum != meshtastic_PortNum_TRACEROUTE_APP && p->decoded.portnum != meshtastic_PortNum_NODEINFO_APP &&
             p->decoded.portnum != meshtastic_PortNum_ROUTING_APP && p->decoded.portnum != meshtastic_PortNum_POSITION_APP) {
-            LOG_DEBUG("Using PKI!");
+            LOG_DEBUG("Use PKI!");
             if (numbytes + MESHTASTIC_HEADER_LENGTH + MESHTASTIC_PKC_OVERHEAD > MAX_LORA_PAYLOAD_LEN)
                 return meshtastic_Routing_Error_TOO_LARGE;
             if (p->pki_encrypted && !memfll(p->public_key.bytes, 0, 32) &&
@@ -603,7 +603,7 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
                       meshtastic_PortNum_PAXCOUNTER_APP, meshtastic_PortNum_IP_TUNNEL_APP, meshtastic_PortNum_AUDIO_APP,
                       meshtastic_PortNum_PRIVATE_APP, meshtastic_PortNum_DETECTION_SENSOR_APP, meshtastic_PortNum_RANGE_TEST_APP,
                       meshtastic_PortNum_REMOTE_HARDWARE_APP)) {
-            LOG_DEBUG("Ignoring packet on blacklisted portnum for CORE_PORTNUMS_ONLY");
+            LOG_DEBUG("Ignore packet on blacklisted portnum for CORE_PORTNUMS_ONLY");
             cancelSending(p->from, p->id);
             skipHandle = true;
         }
@@ -644,13 +644,13 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
 #endif
     // assert(radioConfig.has_preferences);
     if (is_in_repeated(config.lora.ignore_incoming, p->from)) {
-        LOG_DEBUG("Ignoring msg, 0x%x is in our ignore list", p->from);
+        LOG_DEBUG("Ignore msg, 0x%x is in our ignore list", p->from);
         packetPool.release(p);
         return;
     }
 
     if (p->from == NODENUM_BROADCAST) {
-        LOG_DEBUG("Ignoring msg from broadcast address");
+        LOG_DEBUG("Ignore msg from broadcast address");
         packetPool.release(p);
         return;
     }

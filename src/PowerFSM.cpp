@@ -53,7 +53,7 @@ static bool isPowered()
 
 static void sdsEnter()
 {
-    LOG_DEBUG("Enter state: SDS");
+    LOG_DEBUG("State: SDS");
     // FIXME - make sure GPS and LORA radio are off first - because we want close to zero current draw
     doDeepSleep(Default::getConfiguredOrDefaultMs(config.power.sds_secs), false);
 }
@@ -62,7 +62,7 @@ extern Power *power;
 
 static void shutdownEnter()
 {
-    LOG_DEBUG("Enter state: SHUTDOWN");
+    LOG_DEBUG("State: SHUTDOWN");
     power->shutdown();
 }
 
@@ -150,7 +150,7 @@ static void lsExit()
 
 static void nbEnter()
 {
-    LOG_DEBUG("Enter state: NB");
+    LOG_DEBUG("State: NB");
     screen->setOn(false);
 #ifdef ARCH_ESP32
     // Only ESP32 should turn off bluetooth
@@ -168,7 +168,7 @@ static void darkEnter()
 
 static void serialEnter()
 {
-    LOG_DEBUG("Enter state: SERIAL");
+    LOG_DEBUG("State: SERIAL");
     setBluetoothEnable(false);
     screen->setOn(true);
     screen->print("Serial connected\n");
@@ -183,7 +183,7 @@ static void serialExit()
 
 static void powerEnter()
 {
-    // LOG_DEBUG("Enter state: POWER");
+    // LOG_DEBUG("State: POWER");
     if (!isPowered()) {
         // If we got here, we are in the wrong state - we should be in powered, let that state handle things
         LOG_INFO("Loss of power in Powered");
@@ -222,7 +222,7 @@ static void powerExit()
 
 static void onEnter()
 {
-    LOG_DEBUG("Enter state: ON");
+    LOG_DEBUG("State: ON");
     screen->setOn(true);
     setBluetoothEnable(true);
 }
@@ -242,7 +242,7 @@ static void screenPress()
 
 static void bootEnter()
 {
-    LOG_DEBUG("Enter state: BOOT");
+    LOG_DEBUG("State: BOOT");
 }
 
 State stateSHUTDOWN(shutdownEnter, NULL, NULL, "SHUTDOWN");

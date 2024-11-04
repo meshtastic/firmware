@@ -79,7 +79,7 @@ int32_t DetectionSensorModule::runOnce()
             LOG_WARN("Detection Sensor Module: Set to enabled but no monitor pin is set. Disabling module...");
             return disable();
         }
-        LOG_INFO("Detection Sensor Module: Initializing");
+        LOG_INFO("Detection Sensor Module: init");
 
         return DELAYED_INTERVAL;
     }
@@ -130,7 +130,7 @@ void DetectionSensorModule::sendDetectionMessage()
         p->decoded.payload.bytes[p->decoded.payload.size + 1] = '\0'; // Bell character
         p->decoded.payload.size++;
     }
-    LOG_INFO("Sending message id=%d, dest=%x, msg=%.*s", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
+    LOG_INFO("Send message id=%d, dest=%x, msg=%.*s", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
     lastSentToMesh = millis();
     service->sendToMesh(p);
     delete[] message;
@@ -145,7 +145,7 @@ void DetectionSensorModule::sendCurrentStateMessage(bool state)
     p->want_ack = false;
     p->decoded.payload.size = strlen(message);
     memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
-    LOG_INFO("Sending message id=%d, dest=%x, msg=%.*s", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
+    LOG_INFO("Send message id=%d, dest=%x, msg=%.*s", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
     lastSentToMesh = millis();
     service->sendToMesh(p);
     delete[] message;

@@ -51,7 +51,7 @@ int32_t PowerTelemetryModule::runOnce()
         firstTime = 0;
 #if HAS_TELEMETRY && !defined(ARCH_PORTDUINO)
         if (moduleConfig.telemetry.power_measurement_enabled) {
-            LOG_INFO("Power Telemetry: Initializing");
+            LOG_INFO("Power Telemetry: init");
             // it's possible to have this module enabled, only for displaying values on the screen.
             // therefore, we should only enable the sensor loop if measurement is also enabled
             if (ina219Sensor.hasSensor() && !ina219Sensor.isInitialized())
@@ -236,14 +236,14 @@ bool PowerTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 
         lastMeasurementPacket = packetPool.allocCopy(*p);
         if (phoneOnly) {
-            LOG_INFO("Sending packet to phone");
+            LOG_INFO("Send packet to phone");
             service->sendToPhone(p);
         } else {
-            LOG_INFO("Sending packet to mesh");
+            LOG_INFO("Send packet to mesh");
             service->sendToMesh(p, RX_SRC_LOCAL, true);
 
             if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving) {
-                LOG_DEBUG("Starting next execution in 5s then going to sleep");
+                LOG_DEBUG("Start next execution in 5s then going to sleep");
                 sleepOnNextExecution = true;
                 setIntervalFromNow(5000);
             }

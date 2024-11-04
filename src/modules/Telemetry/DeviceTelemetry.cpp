@@ -165,10 +165,10 @@ bool DeviceTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 
     nodeDB->updateTelemetry(nodeDB->getNodeNum(), telemetry, RX_SRC_LOCAL);
     if (phoneOnly) {
-        LOG_INFO("Sending packet to phone");
+        LOG_INFO("Send packet to phone");
         service->sendToPhone(p);
     } else {
-        LOG_INFO("Sending packet to mesh");
+        LOG_INFO("Send packet to mesh");
         service->sendToMesh(p, RX_SRC_LOCAL, true);
     }
     return true;

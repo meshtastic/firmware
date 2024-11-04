@@ -32,7 +32,7 @@ IRAM_ATTR bool NotifiedWorkerThread::notifyCommon(uint32_t v, bool overwrite)
 
         notification = v;
         if (debugNotification) {
-            LOG_DEBUG("setting notification %d", v);
+            LOG_DEBUG("Set notification %d", v);
         }
         return true;
     } else {

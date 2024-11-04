@@ -57,7 +57,7 @@ static void onNetworkConnected()
 {
     if (!APStartupComplete) {
         // Start web server
-        LOG_INFO("Starting WiFi network services");
+        LOG_INFO("Start WiFi network services");
 
 #ifdef ARCH_ESP32
         // start mdns
@@ -74,13 +74,13 @@ static void onNetworkConnected()
 #endif
 
 #ifndef DISABLE_NTP
-        LOG_INFO("Starting NTP time client");
+        LOG_INFO("Start NTP time client");
         timeClient.begin();
         timeClient.setUpdateInterval(60 * 60); // Update once an hour
 #endif
 
         if (config.network.rsyslog_server[0]) {
-            LOG_INFO("Starting Syslog client");
+            LOG_INFO("Start Syslog client");
             // Defaults
             int serverPort = 514;
             const char *serverAddr = config.network.rsyslog_server;

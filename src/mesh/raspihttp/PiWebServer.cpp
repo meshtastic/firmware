@@ -453,7 +453,7 @@ PiWebServerThread::PiWebServerThread()
 
     if (settingsMap[webserverport] != 0) {
         webservport = settingsMap[webserverport];
-        LOG_INFO("Using webserver port from yaml config %i ", webservport);
+        LOG_INFO("Use webserver port from yaml config %i ", webservport);
     } else {
         LOG_INFO("Webserver port in yaml config set to 0, defaulting to port 443");
         webservport = 443;

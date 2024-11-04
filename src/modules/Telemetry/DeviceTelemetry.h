@@ -12,7 +12,7 @@ class DeviceTelemetryModule : private concurrency::OSThread, public ProtobufModu
 
   public:
     DeviceTelemetryModule()
-        : concurrency::OSThread("DeviceTelemetryModule"),
+        : concurrency::OSThread("DeviceTelemetry"),
           ProtobufModule("DeviceTelemetry", meshtastic_PortNum_TELEMETRY_APP, &meshtastic_Telemetry_msg)
     {
         uptimeWrapCount = 0;

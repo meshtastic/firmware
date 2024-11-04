@@ -328,7 +328,7 @@ void setup()
 #ifdef PERIPHERAL_WARMUP_MS
     // Some peripherals may require additional time to stabilize after power is connected
     // e.g. I2C on Heltec Vision Master
-    LOG_INFO("Waiting for peripherals to stabilize");
+    LOG_INFO("Wait for peripherals to stabilize");
     delay(PERIPHERAL_WARMUP_MS);
 #endif
 
@@ -389,7 +389,7 @@ void setup()
     Wire.begin(I2C_SDA, I2C_SCL);
 #elif defined(ARCH_PORTDUINO)
     if (settingsStrings[i2cdev] != "") {
-        LOG_INFO("Using %s as I2C device", settingsStrings[i2cdev].c_str());
+        LOG_INFO("Use %s as I2C device", settingsStrings[i2cdev].c_str());
         Wire.begin(settingsStrings[i2cdev].c_str());
     } else {
         LOG_INFO("No I2C device configured, skipping");
@@ -435,7 +435,7 @@ void setup()
     // accessories
     auto i2cScanner = std::unique_ptr<ScanI2CTwoWire>(new ScanI2CTwoWire());
 #if HAS_WIRE
-    LOG_INFO("Scanning for i2c devices...");
+    LOG_INFO("Scan for i2c devices...");
 #endif
 
 #if defined(I2C_SDA1) && defined(ARCH_RP2040)
@@ -460,7 +460,7 @@ void setup()
     i2cScanner->scanPort(ScanI2C::I2CPort::WIRE);
 #elif defined(ARCH_PORTDUINO)
     if (settingsStrings[i2cdev] != "") {
-        LOG_INFO("Scanning for i2c devices...");
+        LOG_INFO("Scan for i2c devices...");
         i2cScanner->scanPort(ScanI2C::I2CPort::WIRE);
     }
 #elif HAS_WIRE
@@ -740,7 +740,7 @@ void setup()
 
     // setup TZ prior to time actions.
 #if !MESHTASTIC_EXCLUDE_TZ
-    LOG_DEBUG("Using compiled/slipstreamed %s", slipstreamTZString); // important, removing this clobbers our magic string
+    LOG_DEBUG("Use compiled/slipstreamed %s", slipstreamTZString); // important, removing this clobbers our magic string
     if (*config.device.tzdef && config.device.tzdef[0] != 0) {
         LOG_DEBUG("Saved TZ: %s ", config.device.tzdef);
         setenv("TZ", config.device.tzdef, 1);
@@ -783,7 +783,7 @@ void setup()
     nodeStatus->observe(&nodeDB->newStatus);
 
 #ifdef HAS_I2S
-    LOG_DEBUG("Starting audio thread");
+    LOG_DEBUG("Start audio thread");
     audioThread = new AudioThread();
 #endif
     service = new MeshService();
@@ -830,63 +830,63 @@ void setup()
 #ifdef ARCH_PORTDUINO
     if (settingsMap[use_sx1262]) {
         if (!rIf) {
-            LOG_DEBUG("Attempting to activate sx1262 radio on SPI port %s", settingsStrings[spidev].c_str());
+            LOG_DEBUG("Activate sx1262 radio on SPI port %s", settingsStrings[spidev].c_str());
             LockingArduinoHal *RadioLibHAL =
                 new LockingArduinoHal(SPI, spiSettings, (settingsMap[ch341Quirk] ? settingsMap[busy] : RADIOLIB_NC));
             rIf = new SX1262Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
                                       settingsMap[busy]);
             if (!rIf->init()) {
-                LOG_ERROR("Failed to find SX1262 radio");
+                LOG_WARN("No SX1262 radio");
                 delete rIf;
                 exit(EXIT_FAILURE);
             } else {
-                LOG_INFO("SX1262 Radio init succeeded, using SX1262 radio");
+                LOG_INFO("SX1262 init success, using SX1262 radio");
             }
         }
     } else if (settingsMap[use_rf95]) {
         if (!rIf) {
-            LOG_DEBUG("Attempting to activate rf95 radio on SPI port %s", settingsStrings[spidev].c_str());
+            LOG_DEBUG("Activate rf95 radio on SPI port %s", settingsStrings[spidev].c_str());
             LockingArduinoHal *RadioLibHAL =
                 new LockingArduinoHal(SPI, spiSettings, (settingsMap[ch341Quirk] ? settingsMap[busy] : RADIOLIB_NC));
             rIf = new RF95Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
                                     settingsMap[busy]);
             if (!rIf->init()) {
-                LOG_ERROR("Failed to find RF95 radio");
+                LOG_WARN("No RF95 radio");
                 delete rIf;
                 rIf = NULL;
                 exit(EXIT_FAILURE);
             } else {
-                LOG_INFO("RF95 Radio init succeeded, using RF95 radio");
+                LOG_INFO("RF95 init success, using RF95 radio");
             }
         }
     } else if (settingsMap[use_sx1280]) {
         if (!rIf) {
-            LOG_DEBUG("Attempting to activate sx1280 radio on SPI port %s", settingsStrings[spidev].c_str());
+            LOG_DEBUG("Activate sx1280 radio on SPI port %s", settingsStrings[spidev].c_str());
             LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
             rIf = new SX1280Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
                                       settingsMap[busy]);
             if (!rIf->init()) {
-                LOG_ERROR("Failed to find SX1280 radio");
+                LOG_ERROR("No SX1280 radio");
                 delete rIf;
                 rIf = NULL;
                 exit(EXIT_FAILURE);
             } else {
-                LOG_INFO("SX1280 Radio init succeeded, using SX1280 radio");
+                LOG_INFO("SX1280 init success, using SX1280 radio");
             }
         }
     } else if (settingsMap[use_sx1268]) {
         if (!rIf) {
-            LOG_DEBUG("Attempting to activate sx1268 radio on SPI port %s", settingsStrings[spidev].c_str());
+            LOG_DEBUG("Activate sx1268 radio on SPI port %s", settingsStrings[spidev].c_str());
             LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
             rIf = new SX1268Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
                                       settingsMap[busy]);
             if (!rIf->init()) {
-                LOG_ERROR("Failed to find SX1268 radio");
+                LOG_ERROR("No SX1268 radio");
                 delete rIf;
                 rIf = NULL;
                 exit(EXIT_FAILURE);
             } else {
-                LOG_INFO("SX1268 Radio init succeeded, using SX1268 radio");
+                LOG_INFO("SX1268 init success, using SX1268 radio");
             }
         }
     }
@@ -902,11 +902,11 @@ void setup()
     if (!rIf) {
         rIf = new STM32WLE5JCInterface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
         if (!rIf->init()) {
-            LOG_WARN("Failed to find STM32WL radio");
+            LOG_WARN("No STM32WL radio");
             delete rIf;
             rIf = NULL;
         } else {
-            LOG_INFO("STM32WL Radio init succeeded, using STM32WL radio");
+            LOG_INFO("STM32WL init success, using STM32WL radio");
             radioType = STM32WLx_RADIO;
         }
     }
@@ -916,11 +916,11 @@ void setup()
     if (!rIf) {
         rIf = new SimRadio;
         if (!rIf->init()) {
-            LOG_WARN("Failed to find simulated radio");
+            LOG_WARN("No simulated radio");
             delete rIf;
             rIf = NULL;
         } else {
-            LOG_INFO("Using SIMULATED radio!");
+            LOG_INFO("Use SIMULATED radio!");
             radioType = SIM_RADIO;
         }
     }
@@ -930,11 +930,11 @@ void setup()
     if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
         rIf = new RF95Interface(RadioLibHAL, LORA_CS, RF95_IRQ, RF95_RESET, RF95_DIO1);
         if (!rIf->init()) {
-            LOG_WARN("Failed to find RF95 radio");
+            LOG_WARN("No RF95 radio");
             delete rIf;
             rIf = NULL;
         } else {
-            LOG_INFO("RF95 Radio init succeeded, using RF95 radio");
+            LOG_INFO("RF95 init success, using RF95 radio");
             radioType = RF95_RADIO;
         }
     }
@@ -944,11 +944,11 @@ void setup()
     if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
         rIf = new SX1262Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
         if (!rIf->init()) {
-            LOG_WARN("Failed to find SX1262 radio");
+            LOG_WARN("No SX1262 radio");
             delete rIf;
             rIf = NULL;
         } else {
-            LOG_INFO("SX1262 Radio init succeeded, using SX1262 radio");
+            LOG_INFO("SX1262 init success, using SX1262 radio");
             radioType = SX1262_RADIO;
         }
     }
@@ -959,12 +959,12 @@ void setup()
         // Try using the specified TCXO voltage
         rIf = new SX1262Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
         if (!rIf->init()) {
-            LOG_WARN("Failed to find SX1262 radio with TCXO, Vref %f V", tcxoVoltage);
+            LOG_WARN("No SX1262 radio with TCXO, Vref %f V", tcxoVoltage);
             delete rIf;
             rIf = NULL;
             tcxoVoltage = 0; // if it fails, set the TCXO voltage to zero for the next attempt
         } else {
-            LOG_WARN("SX1262 Radio init succeeded, TCXO, Vref %f V", tcxoVoltage);
+            LOG_WARN("SX1262 init success, TCXO, Vref %f V", tcxoVoltage);
             radioType = SX1262_RADIO;
         }
     }
@@ -973,12 +973,12 @@ void setup()
         // If specified TCXO voltage fails, attempt to use DIO3 as a reference instea
         rIf = new SX1262Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
         if (!rIf->init()) {
-            LOG_WARN("Failed to find SX1262 radio with XTAL, Vref %f V", tcxoVoltage);
+            LOG_WARN("No SX1262 radio with XTAL, Vref %f V", tcxoVoltage);
             delete rIf;
             rIf = NULL;
             tcxoVoltage = SX126X_DIO3_TCXO_VOLTAGE; // if it fails, set the TCXO voltage back for the next radio search
         } else {
-            LOG_INFO("SX1262 Radio init succeeded, XTAL, Vref %f V", tcxoVoltage);
+            LOG_INFO("SX1262 init success, XTAL, Vref %f V", tcxoVoltage);
             radioType = SX1262_RADIO;
         }
     }
@@ -988,11 +988,11 @@ void setup()
     if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
         rIf = new SX1268Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
         if (!rIf->init()) {
-            LOG_WARN("Failed to find SX1268 radio");
+            LOG_WARN("No SX1268 radio");
             delete rIf;
             rIf = NULL;
         } else {
-            LOG_INFO("SX1268 Radio init succeeded, using SX1268 radio");
+            LOG_INFO("SX1268 init success, using SX1268 radio");
             radioType = SX1268_RADIO;
         }
     }
@@ -1002,11 +1002,11 @@ void setup()
     if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
         rIf = new LLCC68Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
         if (!rIf->init()) {
-            LOG_WARN("Failed to find LLCC68 radio");
+            LOG_WARN("No LLCC68 radio");
             delete rIf;
             rIf = NULL;
         } else {
-            LOG_INFO("LLCC68 Radio init succeeded, using LLCC68 radio");
+            LOG_INFO("LLCC68 init success, using LLCC68 radio");
             radioType = LLCC68_RADIO;
         }
     }
@@ -1016,11 +1016,11 @@ void setup()
     if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
         rIf = new LR1110Interface(RadioLibHAL, LR1110_SPI_NSS_PIN, LR1110_IRQ_PIN, LR1110_NRESET_PIN, LR1110_BUSY_PIN);
         if (!rIf->init()) {
-            LOG_WARN("Failed to find LR1110 radio");
+            LOG_WARN("No LR1110 radio");
             delete rIf;
             rIf = NULL;
         } else {
-            LOG_INFO("LR1110 Radio init succeeded, using LR1110 radio");
+            LOG_INFO("LR1110 init success, using LR1110 radio");
             radioType = LR1110_RADIO;
         }
     }
@@ -1030,11 +1030,11 @@ void setup()
     if (!rIf) {
         rIf = new LR1120Interface(RadioLibHAL, LR1120_SPI_NSS_PIN, LR1120_IRQ_PIN, LR1120_NRESET_PIN, LR1120_BUSY_PIN);
         if (!rIf->init()) {
-            LOG_WARN("Failed to find LR1120 radio");
+            LOG_WARN("No LR1120 radio");
             delete rIf;
             rIf = NULL;
         } else {
-            LOG_INFO("LR1120 Radio init succeeded, using LR1120 radio");
+            LOG_INFO("LR1120 init success, using LR1120 radio");
             radioType = LR1120_RADIO;
         }
     }
@@ -1044,11 +1044,11 @@ void setup()
     if (!rIf) {
         rIf = new LR1121Interface(RadioLibHAL, LR1121_SPI_NSS_PIN, LR1121_IRQ_PIN, LR1121_NRESET_PIN, LR1121_BUSY_PIN);
         if (!rIf->init()) {
-            LOG_WARN("Failed to find LR1121 radio");
+            LOG_WARN("No LR1121 radio");
             delete rIf;
             rIf = NULL;
         } else {
-            LOG_INFO("LR1121 Radio init succeeded, using LR1121 radio");
+            LOG_INFO("LR1121 init success, using LR1121 radio");
             radioType = LR1121_RADIO;
         }
     }
@@ -1058,11 +1058,11 @@ void setup()
     if (!rIf) {
         rIf = new SX1280Interface(RadioLibHAL, SX128X_CS, SX128X_DIO1, SX128X_RESET, SX128X_BUSY);
         if (!rIf->init()) {
-            LOG_WARN("Failed to find SX1280 radio");
+            LOG_WARN("No SX1280 radio");
             delete rIf;
             rIf = NULL;
         } else {
-            LOG_INFO("SX1280 Radio init succeeded, using SX1280 radio");
+            LOG_INFO("SX1280 init success, using SX1280 radio");
             radioType = SX1280_RADIO;
         }
     }
@@ -1070,7 +1070,7 @@ void setup()
 
     // check if the radio chip matches the selected region
     if ((config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24) && (!rIf->wideLora())) {
-        LOG_WARN("LoRa chip does not support 2.4GHz. Reverting to unset");
+        LOG_WARN("LoRa chip does not support 2.4GHz. Revert to unset");
         config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
         nodeDB->saveToDisk(SEGMENT_CONFIG);
         if (!rIf->reconfigure()) {
