@@ -186,6 +186,11 @@ ErrorCode RadioLibInterface::send(meshtastic_MeshPacket *p)
 
 #endif
 
+    if (p->to == NODENUM_BROADCAST_NO_LORA) {
+        LOG_DEBUG("Drop no-LoRa pkt");
+        return ERRNO_SHOULD_RELEASE;
+    }
+
     // Sometimes when testing it is useful to be able to never turn on the xmitter
 #ifndef LORA_DISABLE_SENDING
     printPacket("enqueuing for send", p);
@@ -276,10 +281,8 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     // Send any outgoing packets we have ready
                     meshtastic_MeshPacket *txp = txQueue.dequeue();
                     assert(txp);
-                    bool isLoraTx = txp->to != NODENUM_BROADCAST_NO_LORA;
-                    startSend(txp);
-
-                    if (isLoraTx) {
+                    bool sent = startSend(txp);
+                    if (sent) {
                         // Packet has been sent, count it toward our TX airtime utilization.
                         uint32_t xmitMsec = getPacketTime(txp);
                         airTime->logAirtime(TX_LOG, xmitMsec);
@@ -465,15 +468,13 @@ void RadioLibInterface::setStandby()
 }
 
 /** start an immediate transmit */
-void RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
+bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
 {
     printPacket("Start low level send", txp);
-    if (txp->to == NODENUM_BROADCAST_NO_LORA) {
-        LOG_DEBUG("Drop Tx packet because dest is broadcast no-lora");
-        packetPool.release(txp);
-    } else if (disabled || !config.lora.tx_enabled) {
+    if (disabled || !config.lora.tx_enabled) {
         LOG_WARN("Drop Tx packet because LoRa Tx disabled");
         packetPool.release(txp);
+        return false;
     } else {
         configHardwareForSend(); // must be after setStandby
 
@@ -493,5 +494,7 @@ void RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
         // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register
         // bits
         enableInterrupt(isrTxLevel0);
+
+        return res == RADIOLIB_ERR_NONE;
     }
 }
