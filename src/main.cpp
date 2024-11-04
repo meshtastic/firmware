@@ -866,7 +866,7 @@ void setup()
             rIf = new SX1280Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
                                       settingsMap[busy]);
             if (!rIf->init()) {
-                LOG_ERROR("No SX1280 radio");
+                LOG_WARN("No SX1280 radio");
                 delete rIf;
                 rIf = NULL;
                 exit(EXIT_FAILURE);
@@ -881,7 +881,7 @@ void setup()
             rIf = new SX1268Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
                                       settingsMap[busy]);
             if (!rIf->init()) {
-                LOG_ERROR("No SX1268 radio");
+                LOG_WARN("No SX1268 radio");
                 delete rIf;
                 rIf = NULL;
                 exit(EXIT_FAILURE);
