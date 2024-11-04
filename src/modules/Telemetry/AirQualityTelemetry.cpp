@@ -121,9 +121,8 @@ bool AirQualityTelemetryModule::getAirQualityTelemetry(meshtastic_Telemetry *m)
     m->variant.air_quality_metrics.pm25_environmental = data.pm25_env;
     m->variant.air_quality_metrics.pm100_environmental = data.pm100_env;
 
-    LOG_INFO("Send: PM1.0(Standard)=%i, PM2.5(Standard)=%i, PM10.0(Standard)=%i",
-             m->variant.air_quality_metrics.pm10_standard, m->variant.air_quality_metrics.pm25_standard,
-             m->variant.air_quality_metrics.pm100_standard);
+    LOG_INFO("Send: PM1.0(Standard)=%i, PM2.5(Standard)=%i, PM10.0(Standard)=%i", m->variant.air_quality_metrics.pm10_standard,
+             m->variant.air_quality_metrics.pm25_standard, m->variant.air_quality_metrics.pm100_standard);
 
     LOG_INFO("         | PM1.0(Environmental)=%i, PM2.5(Environmental)=%i, PM10.0(Environmental)=%i",
              m->variant.air_quality_metrics.pm10_environmental, m->variant.air_quality_metrics.pm25_environmental,
