@@ -1206,13 +1206,19 @@ meshtastic_NodeInfoLite *NodeDB::getMeshNode(NodeNum n)
     return NULL;
 }
 
+// returns true if the maximum number of nodes is reached or we are running low on memory
+bool NodeDB::isFull()
+{
+    return (numMeshNodes >= MAX_NUM_NODES) || (memGet.getFreeHeap() < MINIMUM_SAFE_FREE_HEAP);
+}
+
 /// Find a node in our DB, create an empty NodeInfo if missing
 meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
 {
     meshtastic_NodeInfoLite *lite = getMeshNode(n);
 
     if (!lite) {
-        if ((numMeshNodes >= MAX_NUM_NODES) || (memGet.getFreeHeap() < MINIMUM_SAFE_FREE_HEAP)) {
+        if (isFull()) {
             if (screen)
                 screen->print("Warn: node database full!\nErasing oldest entry\n");
             LOG_WARN("Node database full with %i nodes and %i bytes free! Erasing oldest entry", numMeshNodes,
