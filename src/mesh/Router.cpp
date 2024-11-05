@@ -290,7 +290,12 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
 /** Attempt to cancel a previously sent packet.  Returns true if a packet was found we could cancel */
 bool Router::cancelSending(NodeNum from, PacketId id)
 {
-    return iface ? iface->cancelSending(from, id) : false;
+    if (iface && iface->cancelSending(from, id)) {
+        // We are not a relayer of this packet anymore
+        removeRelayer(nodeDB->getLastByteOfNodeNum(nodeDB->getNodeNum()), id, from);
+        return true;
+    }
+    return false;
 }
 
 /**

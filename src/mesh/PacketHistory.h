@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Router.h"
+#include "NodeDB.h"
 #include <unordered_set>
 
 /// We clear our old flood record 10 minutes after we see the last of it
@@ -51,4 +51,7 @@ class PacketHistory
     /* Check if a certain node was a relayer of a packet in the history given an ID and sender
      * @return true if node was indeed a relayer, false if not */
     bool wasRelayer(const uint8_t relayer, const uint32_t id, const NodeNum sender);
+
+    // Remove a relayer from the list of relayers of a packet in the history given an ID and sender
+    void removeRelayer(const uint8_t relayer, const uint32_t id, const NodeNum sender);
 };

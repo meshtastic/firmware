@@ -70,7 +70,7 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
             recentPackets.erase(found); // as unsorted_set::iterator is const (can't update - so re-insert..)
         }
         recentPackets.insert(r);
-        printPacket("Add packet record", p);
+        LOG_DEBUG("Add packet record fr=0x%x, id=0x%x", p->from, p->id);
     }
 
     // Capacity is reerved, so only purge expired packets if recentPackets fills past 90% capacity
@@ -118,4 +118,32 @@ bool PacketHistory::wasRelayer(const uint8_t relayer, const uint32_t id, const N
             return true;
         }
     }
+}
+
+// Remove a relayer from the list of relayers of a packet in the history given an ID and sender
+void PacketHistory::removeRelayer(const uint8_t relayer, const uint32_t id, const NodeNum sender)
+{
+    PacketRecord r;
+    r.id = id;
+    r.sender = sender;
+    auto found = recentPackets.find(r);
+
+    if (found == recentPackets.end()) {
+        return;
+    }
+    // Make a copy of the found record
+    r.next_hop = found->next_hop;
+    r.rxTimeMsec = found->rxTimeMsec;
+
+    // Only add the relayers that are not the one we want to remove
+    uint8_t j = 0;
+    for (uint8_t i = 0; i < NUM_RELAYERS; i++) {
+        if (found->relayed_by[i] != relayer) {
+            r.relayed_by[j] = found->relayed_by[i];
+            j++;
+        }
+    }
+
+    recentPackets.erase(found);
+    recentPackets.insert(r);
 }
