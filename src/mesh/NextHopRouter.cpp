@@ -18,7 +18,7 @@ ErrorCode NextHopRouter::send(meshtastic_MeshPacket *p)
     wasSeenRecently(p);                                         // FIXME, move this to a sniffSent method
 
     p->next_hop = getNextHop(p->to, p->relay_node); // set the next hop
-    // LOG_DEBUG("Setting next hop for packet with dest %x to %x", p->to, p->next_hop);
+    LOG_DEBUG("Setting next hop for packet with dest %x to %x", p->to, p->next_hop);
 
     // If it's from us, ReliableRouter already handles retransmissions. If a next hop is set and hop limit is not 0, start
     // retransmissions
@@ -62,8 +62,8 @@ void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtast
                 if (wasRelayer(p->relay_node, p->decoded.request_id, p->to) ||
                     (wasRelayer(ourRelayID, p->decoded.request_id, p->to) &&
                      p->relay_node == nodeDB->getLastByteOfNodeNum(p->from))) {
-                    if (origTx->next_hop != p->relay_node) {
-                        LOG_DEBUG("Update next hop of 0x%x to 0x%x based on ACK/reply", p->from, p->relay_node);
+                    if (origTx->next_hop != p->relay_node) { // Not already set
+                        LOG_INFO("Update next hop of 0x%x to 0x%x based on ACK/reply", p->from, p->relay_node);
                         origTx->next_hop = p->relay_node;
                     }
                 }

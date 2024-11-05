@@ -29,6 +29,7 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
     r.rxTimeMsec = millis();
     r.next_hop = p->next_hop;
     r.relayed_by[0] = p->relay_node;
+    LOG_INFO("Add relayed_by 0x%x for id=0x%x", p->relay_node, r.id);
 
     auto found = recentPackets.find(r);
     bool seenRecently = (found != recentPackets.end()); // found not equal to .end() means packet was seen recently
@@ -48,10 +49,15 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
     }
 
     if (seenRecently) {
-        // If it was seen with a next-hop not set to us, relayer is still the same and now it's NO_NEXT_HOP_PREFERENCE, it's a
-        // fallback to flooding, so we consider it unseen because we might need to handle it now
-        if (found->next_hop != NO_NEXT_HOP_PREFERENCE && found->next_hop != nodeDB->getLastByteOfNodeNum(nodeDB->getNodeNum()) &&
-            found->relayed_by[0] == p->relay_node && p->next_hop == NO_NEXT_HOP_PREFERENCE) {
+        // If it was seen with a next-hop not set to us and now it's NO_NEXT_HOP_PREFERENCE, relayer relayed already before, it's
+        // a fallback to flooding. If we didn't already relay and the next-hop neither, consider it unseen because we might need
+        // to handle it now
+        uint8_t ourRelayID = nodeDB->getLastByteOfNodeNum(nodeDB->getNodeNum());
+        if (found->sender != nodeDB->getNodeNum() && found->next_hop != NO_NEXT_HOP_PREFERENCE &&
+            p->next_hop == NO_NEXT_HOP_PREFERENCE && found->next_hop != nodeDB->getLastByteOfNodeNum(nodeDB->getNodeNum()) &&
+            p->relay_node != 0 && wasRelayer(p->relay_node, found) && !wasRelayer(ourRelayID, found) &&
+            !wasRelayer(found->next_hop, found)) {
+            LOG_WARN("Fallback to flooding, consider unseen relay_node=0x%x", p->relay_node);
             seenRecently = false;
         }
     }
@@ -113,11 +119,19 @@ bool PacketHistory::wasRelayer(const uint8_t relayer, const uint32_t id, const N
         return false;
     }
 
+    return wasRelayer(relayer, found);
+}
+
+/* Check if a certain node was a relayer of a packet in the history given iterator
+ * @return true if node was indeed a relayer, false if not */
+bool PacketHistory::wasRelayer(const uint8_t relayer, std::unordered_set<PacketRecord, PacketRecordHashFunction>::iterator r)
+{
     for (uint8_t i = 0; i < NUM_RELAYERS; i++) {
-        if (found->relayed_by[i] == relayer) {
+        if (r->relayed_by[i] == relayer) {
             return true;
         }
     }
+    return false;
 }
 
 // Remove a relayer from the list of relayers of a packet in the history given an ID and sender

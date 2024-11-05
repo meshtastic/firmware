@@ -52,6 +52,10 @@ class PacketHistory
      * @return true if node was indeed a relayer, false if not */
     bool wasRelayer(const uint8_t relayer, const uint32_t id, const NodeNum sender);
 
+    /* Check if a certain node was a relayer of a packet in the history given iterator
+     * @return true if node was indeed a relayer, false if not */
+    bool wasRelayer(const uint8_t relayer, std::unordered_set<PacketRecord, PacketRecordHashFunction>::iterator r);
+
     // Remove a relayer from the list of relayers of a packet in the history given an ID and sender
     void removeRelayer(const uint8_t relayer, const uint32_t id, const NodeNum sender);
 };
