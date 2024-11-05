@@ -116,7 +116,7 @@ void MPR121Keyboard::begin(i2c_com_fptr_t r, i2c_com_fptr_t w, uint8_t addr)
 
 void MPR121Keyboard::reset()
 {
-    LOG_DEBUG("MPR121 Resetting...");
+    LOG_DEBUG("MPR121 Reset...");
     // Trigger a MPR121 Soft Reset
     if (m_wire) {
         m_wire->beginTransmission(m_addr);
@@ -132,7 +132,7 @@ void MPR121Keyboard::reset()
     writeRegister(_MPR121_REG_ELECTRODE_CONFIG, 0x00);
     delay(100);
 
-    LOG_DEBUG("MPR121 Configuring");
+    LOG_DEBUG("MPR121 Configure");
     // Set touch release thresholds
     for (uint8_t i = 0; i < 12; i++) {
         // Set touch threshold
@@ -178,7 +178,7 @@ void MPR121Keyboard::reset()
     writeRegister(_MPR121_REG_ELECTRODE_CONFIG,
                   ECR_CALIBRATION_TRACK_FROM_PARTIAL_FILTER | ECR_PROXIMITY_DETECTION_OFF | ECR_TOUCH_DETECTION_12CH);
     delay(100);
-    LOG_DEBUG("MPR121 Running");
+    LOG_DEBUG("MPR121 Run");
     state = Idle;
 }
 

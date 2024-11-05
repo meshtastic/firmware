@@ -19,7 +19,7 @@ PacketHistory::PacketHistory()
 bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpdate)
 {
     if (p->id == 0) {
-        LOG_DEBUG("Ignoring message with zero id");
+        LOG_DEBUG("Ignore message with zero id");
         return false; // Not a floodable message ID, so we don't care
     }
 
@@ -37,6 +37,13 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
         !Throttle::isWithinTimespanMs(found->rxTimeMsec, FLOOD_EXPIRE_TIME)) { // Check whether found packet has already expired
         recentPackets.erase(found); // Erase and pretend packet has not been seen recently
         found = recentPackets.end();
+        seenRecently = false;
+    }
+
+    /* If the original transmitter is doing retransmissions (hopStart equals hopLimit) for a reliable transmission, e.g., when the
+       ACK got lost, we will handle the packet again to make sure it gets an ACK/response to its packet. */
+    if (seenRecently && p->hop_start > 0 && p->hop_start == p->hop_limit) {
+        LOG_DEBUG("Repeated reliable tx");
         seenRecently = false;
     }
 

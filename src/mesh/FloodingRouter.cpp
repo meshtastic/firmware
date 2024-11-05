@@ -33,7 +33,7 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
     }
 
     if (wasSeenRecently(p)) { // Note: this will also add a recent packet record
-        printPacket("Ignoring dupe incoming msg", p);
+        printPacket("Ignore dupe incoming msg", p);
         rxDupe++;
         if (!didRebroadcast) { // We shouldn't cancel a rebroadcast that we just did
             if (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER &&
@@ -85,17 +85,17 @@ bool FloodingRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
                 }
 #endif
 
-                LOG_INFO("Rebroadcasting received floodmsg");
+                LOG_INFO("Rebroadcast received floodmsg");
                 // Note: we are careful to resend using the original senders node id
                 // We are careful not to call our hooked version of send() - because we don't want to check this again
                 Router::send(tosend);
 
                 return true;
             } else {
-                LOG_DEBUG("Not rebroadcasting: Role = CLIENT_MUTE or Rebroadcast Mode = NONE");
+                LOG_DEBUG("No rebroadcast: Role = CLIENT_MUTE or Rebroadcast Mode = NONE");
             }
         } else {
-            LOG_DEBUG("Ignoring 0 id broadcast");
+            LOG_DEBUG("Ignore 0 id broadcast");
         }
     }
 

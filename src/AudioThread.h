@@ -16,7 +16,7 @@
 class AudioThread : public concurrency::OSThread
 {
   public:
-    AudioThread() : OSThread("AudioThread") { initOutput(); }
+    AudioThread() : OSThread("Audio") { initOutput(); }
 
     void beginRttl(const void *data, uint32_t len)
     {

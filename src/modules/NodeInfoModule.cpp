@@ -50,7 +50,7 @@ void NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t cha
         else
             p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
         if (channel > 0) {
-            LOG_DEBUG("sending ourNodeInfo to channel %d", channel);
+            LOG_DEBUG("Send ourNodeInfo to channel %d", channel);
             p->channel = channel;
         }
 
@@ -65,16 +65,16 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
 {
     if (!airTime->isTxAllowedChannelUtil(false)) {
         ignoreRequest = true; // Mark it as ignored for MeshModule
-        LOG_DEBUG("Skip sending NodeInfo due to > 40 percent channel util.");
+        LOG_DEBUG("Skip send NodeInfo > 40%% ch. util");
         return NULL;
     }
     // If we sent our NodeInfo less than 5 min. ago, don't send it again as it may be still underway.
     if (!shorterTimeout && lastSentToMesh && Throttle::isWithinTimespanMs(lastSentToMesh, 5 * 60 * 1000)) {
-        LOG_DEBUG("Skip sending NodeInfo since we just sent it less than 5 minutes ago.");
+        LOG_DEBUG("Skip send NodeInfo since we sent it <5 mins ago.");
         ignoreRequest = true; // Mark it as ignored for MeshModule
         return NULL;
     } else if (shorterTimeout && lastSentToMesh && Throttle::isWithinTimespanMs(lastSentToMesh, 60 * 1000)) {
-        LOG_DEBUG("Skip sending actively requested NodeInfo since we just sent it less than 60 seconds ago.");
+        LOG_DEBUG("Skip send requested NodeInfo since we sent it <60s ago.");
         ignoreRequest = true; // Mark it as ignored for MeshModule
         return NULL;
     } else {
@@ -87,14 +87,14 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
             u.public_key.size = 0;
         }
 
-        LOG_INFO("sending owner %s/%s/%s", u.id, u.long_name, u.short_name);
+        LOG_INFO("Send owner %s/%s/%s", u.id, u.long_name, u.short_name);
         lastSentToMesh = millis();
         return allocDataProtobuf(u);
     }
 }
 
 NodeInfoModule::NodeInfoModule()
-    : ProtobufModule("nodeinfo", meshtastic_PortNum_NODEINFO_APP, &meshtastic_User_msg), concurrency::OSThread("NodeInfoModule")
+    : ProtobufModule("nodeinfo", meshtastic_PortNum_NODEINFO_APP, &meshtastic_User_msg), concurrency::OSThread("NodeInfo")
 {
     isPromiscuous = true; // We always want to update our nodedb, even if we are sniffing on others
     setIntervalFromNow(30 *
@@ -108,7 +108,7 @@ int32_t NodeInfoModule::runOnce()
     currentGeneration = radioGeneration;
 
     if (airTime->isTxAllowedAirUtil() && config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN) {
-        LOG_INFO("Sending our nodeinfo to mesh (wantReplies=%d)", requestReplies);
+        LOG_INFO("Send our nodeinfo to mesh (wantReplies=%d)", requestReplies);
         sendOurNodeInfo(NODENUM_BROADCAST, requestReplies); // Send our info (don't request replies)
     }
     return Default::getConfiguredOrDefaultMs(config.device.node_info_broadcast_secs, default_node_info_broadcast_secs);

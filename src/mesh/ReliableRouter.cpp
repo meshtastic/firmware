@@ -53,14 +53,14 @@ bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
         auto key = GlobalPacketId(getFrom(p), p->id);
         auto old = findPendingPacket(key);
         if (old) {
-            LOG_DEBUG("generating implicit ack");
+            LOG_DEBUG("Generate implicit ack");
             // NOTE: we do NOT check p->wantAck here because p is the INCOMING rebroadcast and that packet is not expected to be
             // marked as wantAck
             sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, old->packet->channel);
 
             stopRetransmission(key);
         } else {
-            LOG_DEBUG("didn't find pending packet");
+            LOG_DEBUG("Didn't find pending packet");
         }
     }
 

@@ -50,7 +50,7 @@ void AirTime::airtimeRotatePeriod()
 {
 
     if (this->airtimes.lastPeriodIndex != this->currentPeriodIndex()) {
-        LOG_DEBUG("Rotating airtimes to a new period = %u", this->currentPeriodIndex());
+        LOG_DEBUG("Rotate airtimes to a new period = %u", this->currentPeriodIndex());
 
         for (int i = PERIODS_TO_LOG - 2; i >= 0; --i) {
             this->airtimes.periodTX[i + 1] = this->airtimes.periodTX[i];
@@ -105,7 +105,6 @@ float AirTime::channelUtilizationPercent()
     uint32_t sum = 0;
     for (uint32_t i = 0; i < CHANNEL_UTILIZATION_PERIODS; i++) {
         sum += this->channelUtilization[i];
-        // LOG_DEBUG("ChanUtilArray %u %u", i, this->channelUtilization[i]);
     }
 
     return (float(sum) / float(CHANNEL_UTILIZATION_PERIODS * 10 * 1000)) * 100;
@@ -127,7 +126,7 @@ bool AirTime::isTxAllowedChannelUtil(bool polite)
     if (channelUtilizationPercent() < percentage) {
         return true;
     } else {
-        LOG_WARN("Channel utilization is >%d percent. Skipping this opportunity to send.", percentage);
+        LOG_WARN("Channel utilization is >%d percent. Skip opportunity to send.", percentage);
         return false;
     }
 }
@@ -138,7 +137,7 @@ bool AirTime::isTxAllowedAirUtil()
         if (utilizationTXPercent() < myRegion->dutyCycle * polite_duty_cycle_percent / 100) {
             return true;
         } else {
-            LOG_WARN("Tx air utilization is >%f percent. Skipping this opportunity to send.",
+            LOG_WARN("Tx air utilization is >%f percent. Skip opportunity to send.",
                      myRegion->dutyCycle * polite_duty_cycle_percent / 100);
             return false;
         }
@@ -208,14 +207,5 @@ int32_t AirTime::runOnce()
             this->utilizationTX[utilPeriodTX] = 0;
         }
     }
-    /*
-        LOG_DEBUG("utilPeriodTX %d TX Airtime %3.2f%", utilPeriodTX, airTime->utilizationTXPercent());
-        for (uint32_t i = 0; i < MINUTES_IN_HOUR; i++) {
-            LOG_DEBUG(
-                "%d,", this->utilizationTX[i]
-                );
-        }
-        LOG_DEBUG("");
-    */
     return (1000 * 1);
 }

@@ -18,7 +18,7 @@
  */
 void CryptoEngine::generateKeyPair(uint8_t *pubKey, uint8_t *privKey)
 {
-    LOG_DEBUG("Generating Curve25519 key pair...");
+    LOG_DEBUG("Generate Curve25519 keypair");
     Curve25519::dh1(public_key, private_key);
     memcpy(pubKey, public_key, sizeof(public_key));
     memcpy(privKey, private_key, sizeof(private_key));
@@ -80,8 +80,8 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtas
     initNonce(fromNode, packetNum, extraNonceTmp);
 
     // Calculate the shared secret with the destination node and encrypt
-    printBytes("Attempting encrypt using nonce: ", nonce, 13);
-    printBytes("Attempting encrypt using shared_key starting with: ", shared_key, 8);
+    printBytes("Attempt encrypt with nonce: ", nonce, 13);
+    printBytes("Attempt encrypt with shared_key starting with: ", shared_key, 8);
     aes_ccm_ae(shared_key, 32, nonce, 8, bytes, numBytes, nullptr, 0, bytesOut,
                auth); // this can write up to 15 bytes longer than numbytes past bytesOut
     memcpy((uint8_t *)(auth + 8), &extraNonceTmp,
@@ -117,8 +117,8 @@ bool CryptoEngine::decryptCurve25519(uint32_t fromNode, meshtastic_UserLite_publ
     crypto->hash(shared_key, 32);
 
     initNonce(fromNode, packetNum, extraNonce);
-    printBytes("Attempting decrypt using nonce: ", nonce, 13);
-    printBytes("Attempting decrypt using shared_key starting with: ", shared_key, 8);
+    printBytes("Attempt decrypt with nonce: ", nonce, 13);
+    printBytes("Attempt decrypt with shared_key starting with: ", shared_key, 8);
     return aes_ccm_ad(shared_key, 32, nonce, 8, bytes, numBytes - 12, nullptr, 0, auth, bytesOut);
 }
 
@@ -185,7 +185,7 @@ concurrency::Lock *cryptLock;
 
 void CryptoEngine::setKey(const CryptoKey &k)
 {
-    LOG_DEBUG("Using AES%d key!", k.length * 8);
+    LOG_DEBUG("Use AES%d key!", k.length * 8);
     key = k;
 }
 

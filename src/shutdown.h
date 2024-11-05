@@ -43,7 +43,7 @@ void powerCommandsCheck()
 #endif
 
     if (shutdownAtMsec && millis() > shutdownAtMsec) {
-        LOG_INFO("Shutting down from admin command");
+        LOG_INFO("Shut down from admin command");
 #if defined(ARCH_NRF52) || defined(ARCH_ESP32) || defined(ARCH_RP2040)
         playShutdownMelody();
         power->shutdown();
