@@ -13,7 +13,7 @@ void QMA6100PSetInterrupt()
 
 QMA6100PSensor::QMA6100PSensor(ScanI2C::FoundDevice foundDevice) : MotionSensor::MotionSensor(foundDevice) {}
 
-bool QMA6100P init()
+bool QMA6100PSensor::init()
 {
     // Initialise the sensor
     sensor = QMA6100PSingleton::GetInstance();
