@@ -74,7 +74,7 @@ void setBluetoothEnable(bool enable)
     // For debugging use: don't use bluetooth
     if (!useSoftDevice) {
         if (enable)
-            LOG_INFO("DISABLING NRF52 BLUETOOTH WHILE DEBUGGING");
+            LOG_INFO("Disable NRF52 BLUETOOTH WHILE DEBUGGING");
         return;
     }
 

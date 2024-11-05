@@ -449,7 +449,7 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
 void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
 {
 
-    LOG_DEBUG("Form Upload - Disabling keep-alive");
+    LOG_DEBUG("Form Upload - Disable keep-alive");
     res->setHeader("Connection", "close");
 
     // First, we need to check the encoding of the form that we have received.
@@ -508,14 +508,14 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
 
         // Double check that it is what we expect
         if (name != "file") {
-            LOG_DEBUG("Skipping unexpected field");
+            LOG_DEBUG("Skip unexpected field");
             res->println("<p>No file found.</p>");
             return;
         }
 
         // Double check that it is what we expect
         if (filename == "") {
-            LOG_DEBUG("Skipping unexpected field");
+            LOG_DEBUG("Skip unexpected field");
             res->println("<p>No file found.</p>");
             return;
         }
@@ -700,9 +700,9 @@ void handleDeleteFsContent(HTTPRequest *req, HTTPResponse *res)
     res->setHeader("Access-Control-Allow-Methods", "GET");
 
     res->println("<h1>Meshtastic</h1>");
-    res->println("Deleting Content in /static/*");
+    res->println("Delete Content in /static/*");
 
-    LOG_INFO("Deleting files from /static/* : ");
+    LOG_INFO("Delete files from /static/* : ");
 
     htmlDeleteDir("/static");
 

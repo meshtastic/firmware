@@ -91,7 +91,7 @@ void NeighborInfoModule::cleanUpNeighbors()
         // We will remove a neighbor if we haven't heard from them in twice the broadcast interval
         // cannot use isWithinTimespanMs() as it->last_rx_time is seconds since 1970
         if ((now - it->last_rx_time > it->node_broadcast_interval_secs * 2) && (it->node_id != my_node_id)) {
-            LOG_DEBUG("Removing neighbor with node ID 0x%x", it->node_id);
+            LOG_DEBUG("Remove neighbor with node ID 0x%x", it->node_id);
             it = std::vector<meshtastic_Neighbor>::reverse_iterator(
                 neighbors.erase(std::next(it).base())); // Erase the element and update the iterator
         } else {
@@ -203,7 +203,7 @@ meshtastic_Neighbor *NeighborInfoModule::getOrCreateNeighbor(NodeNum originalSen
         neighbors.push_back(new_nbr);
     } else {
         // If we have too many neighbors, replace the oldest one
-        LOG_WARN("Neighbor DB is full, replacing oldest neighbor");
+        LOG_WARN("Neighbor DB is full, replace oldest neighbor");
         neighbors.erase(neighbors.begin());
         neighbors.push_back(new_nbr);
     }

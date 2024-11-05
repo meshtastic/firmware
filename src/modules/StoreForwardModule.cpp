@@ -105,7 +105,7 @@ void StoreForwardModule::historySend(uint32_t secAgo, uint32_t to)
         queueSize = this->historyReturnMax;
 
     if (queueSize) {
-        LOG_INFO("S&F - Sending %u message(s)", queueSize);
+        LOG_INFO("S&F - Send %u message(s)", queueSize);
         this->busy = true; // runOnce() will pickup the next steps once busy = true.
         this->busyTo = to;
     } else {
@@ -403,7 +403,7 @@ ProcessMessage StoreForwardModule::handleReceived(const meshtastic_MeshPacket &m
                 if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_StoreAndForward_msg, &scratch)) {
                     decoded = &scratch;
                 } else {
-                    LOG_ERROR("Error decoding protobuf module!");
+                    LOG_ERROR("Error decoding proto module!");
                     // if we can't decode it, nobody can process it!
                     return ProcessMessage::STOP;
                 }
@@ -602,10 +602,10 @@ StoreForwardModule::StoreForwardModule()
                     is_server = true;
                 } else {
                     LOG_INFO(".");
-                    LOG_INFO("S&F: not enough PSRAM free, disabling");
+                    LOG_INFO("S&F: not enough PSRAM free, Disable");
                 }
             } else {
-                LOG_INFO("S&F: device doesn't have PSRAM, disabling");
+                LOG_INFO("S&F: device doesn't have PSRAM, Disable");
             }
 
             // Client

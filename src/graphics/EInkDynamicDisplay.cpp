@@ -119,7 +119,7 @@ void EInkDynamicDisplay::endOrDetach()
             awaitRefresh();
         else {
             // Async begins
-            LOG_DEBUG("Async full-refresh begins (dropping frames)");
+            LOG_DEBUG("Async full-refresh begins (drop frames)");
             notifyLater(intervalPollAsyncRefresh, DUE_POLL_ASYNCREFRESH, true); // Hand-off to NotifiedWorkerThread
         }
     }
@@ -469,7 +469,7 @@ void EInkDynamicDisplay::joinAsyncRefresh()
     if (!asyncRefreshRunning)
         return;
 
-    LOG_DEBUG("Joining an async refresh in progress");
+    LOG_DEBUG("Join an async refresh in progress");
 
     // Continually poll the BUSY pin
     while (adafruitDisplay->epd2.isBusy())

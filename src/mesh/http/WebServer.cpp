@@ -69,7 +69,7 @@ static void taskCreateCert(void *parameter)
 
 #if 0
     // Delete the saved certs (used in debugging)
-    LOG_DEBUG("Deleting any saved SSL keys");
+    LOG_DEBUG("Delete any saved SSL keys");
     // prefs.clear();
     prefs.remove("PK");
     prefs.remove("cert");

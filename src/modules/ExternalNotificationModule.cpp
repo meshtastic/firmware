@@ -518,13 +518,13 @@ AdminMessageHandleResult ExternalNotificationModule::handleAdminMessageForModule
 
     switch (request->which_payload_variant) {
     case meshtastic_AdminMessage_get_ringtone_request_tag:
-        LOG_INFO("Client is getting ringtone");
+        LOG_INFO("Client getting ringtone");
         this->handleGetRingtone(mp, response);
         result = AdminMessageHandleResult::HANDLED_WITH_RESPONSE;
         break;
 
     case meshtastic_AdminMessage_set_ringtone_message_tag:
-        LOG_INFO("Client is setting ringtone");
+        LOG_INFO("Client setting ringtone");
         this->handleSetRingtone(request->set_canned_message_module_messages);
         result = AdminMessageHandleResult::HANDLED;
         break;

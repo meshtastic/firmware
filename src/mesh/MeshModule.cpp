@@ -151,7 +151,7 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
 
                 // If the requester didn't ask for a response we might need to discard unused replies to prevent memory leaks
                 if (pi.myReply) {
-                    LOG_DEBUG("Discarding an unneeded response");
+                    LOG_DEBUG("Discard an unneeded response");
                     packetPool.release(pi.myReply);
                     pi.myReply = NULL;
                 }

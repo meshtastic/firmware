@@ -82,9 +82,9 @@ static int32_t reconnectETH()
 #ifndef DISABLE_NTP
     if (isEthernetAvailable() && (ntp_renew < millis())) {
 
-        LOG_INFO("Updating NTP time from %s", config.network.ntp_server);
+        LOG_INFO("Update NTP time from %s", config.network.ntp_server);
         if (timeClient.update()) {
-            LOG_DEBUG("NTP Request Success - Setting RTCQualityNTP if needed");
+            LOG_DEBUG("NTP Request Success - Set RTCQualityNTP if needed");
 
             struct timeval tv;
             tv.tv_sec = timeClient.getEpochTime();

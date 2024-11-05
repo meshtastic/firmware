@@ -11,10 +11,10 @@ bool LIS3DHSensor::init()
         sensor.setRange(LIS3DH_RANGE_2_G);
         // Adjust threshold, higher numbers are less sensitive
         sensor.setClick(config.device.double_tap_as_button_press ? 2 : 1, MOTION_SENSOR_CHECK_INTERVAL_MS);
-        LOG_DEBUG("LIS3DHSensor::init ok");
+        LOG_DEBUG("LIS3DH init ok");
         return true;
     }
-    LOG_DEBUG("LIS3DHSensor::init failed");
+    LOG_DEBUG("LIS3DH init failed");
     return false;
 }
 

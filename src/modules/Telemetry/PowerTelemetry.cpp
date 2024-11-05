@@ -27,7 +27,7 @@ int32_t PowerTelemetryModule::runOnce()
         sleepOnNextExecution = false;
         uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.power_update_interval,
                                                                    default_telemetry_broadcast_interval_secs);
-        LOG_DEBUG("Sleeping for %ims, then waking to send metrics again", nightyNightMs);
+        LOG_DEBUG("Sleep for %ims, then awake to send metrics again", nightyNightMs);
         doDeepSleep(nightyNightMs, true);
     }
 
@@ -199,7 +199,7 @@ meshtastic_MeshPacket *PowerTelemetryModule::allocReply()
         if (decoded->which_variant == meshtastic_Telemetry_power_metrics_tag) {
             meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
             if (getPowerTelemetry(&m)) {
-                LOG_INFO("Power telemetry replying to request");
+                LOG_INFO("Power telemetry reply to request");
                 return allocDataProtobuf(m);
             } else {
                 return NULL;
@@ -216,7 +216,7 @@ bool PowerTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     m.which_variant = meshtastic_Telemetry_power_metrics_tag;
     m.time = getTime();
     if (getPowerTelemetry(&m)) {
-        LOG_INFO("(Sending): ch1_voltage=%f, ch1_current=%f, ch2_voltage=%f, ch2_current=%f, "
+        LOG_INFO("Send: ch1_voltage=%f, ch1_current=%f, ch2_voltage=%f, ch2_current=%f, "
                  "ch3_voltage=%f, ch3_current=%f",
                  m.variant.power_metrics.ch1_voltage, m.variant.power_metrics.ch1_current, m.variant.power_metrics.ch2_voltage,
                  m.variant.power_metrics.ch2_current, m.variant.power_metrics.ch3_voltage, m.variant.power_metrics.ch3_current);
@@ -243,7 +243,7 @@ bool PowerTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
             service->sendToMesh(p, RX_SRC_LOCAL, true);
 
             if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving) {
-                LOG_DEBUG("Start next execution in 5s then going to sleep");
+                LOG_DEBUG("Start next execution in 5s then sleep");
                 sleepOnNextExecution = true;
                 setIntervalFromNow(5000);
             }

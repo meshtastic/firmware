@@ -91,7 +91,7 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
                             p->decoded.payload.size = jsonPayloadStr.length();
                             service->sendToMesh(p, RX_SRC_LOCAL);
                         } else {
-                            LOG_WARN("Received MQTT json payload too long, dropping");
+                            LOG_WARN("Received MQTT json payload too long, drop");
                         }
                     } else if (json["type"]->AsString().compare("sendposition") == 0 && json["payload"]->IsObject()) {
                         // invent the "sendposition" type for a valid envelope
@@ -122,17 +122,17 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
                                                &meshtastic_Position_msg, &pos); // make the Data protobuf from position
                         service->sendToMesh(p, RX_SRC_LOCAL);
                     } else {
-                        LOG_DEBUG("JSON Ignoring downlink message with unsupported type");
+                        LOG_DEBUG("JSON ignore downlink message with unsupported type");
                     }
                 } else {
-                    LOG_ERROR("JSON Received payload on MQTT but not a valid envelope");
+                    LOG_ERROR("JSON received payload on MQTT but not a valid envelope");
                 }
             } else {
                 LOG_WARN("JSON downlink received on channel not called 'mqtt' or without downlink enabled");
             }
         } else {
             // no json, this is an invalid payload
-            LOG_ERROR("JSON Received payload on MQTT but not a valid JSON");
+            LOG_ERROR("JSON received payload on MQTT but not a valid JSON");
         }
         delete json_value;
     } else {
@@ -315,7 +315,7 @@ void MQTT::reconnect()
 {
     if (wantsLink()) {
         if (moduleConfig.mqtt.proxy_to_client_enabled) {
-            LOG_INFO("MQTT connecting via client proxy instead");
+            LOG_INFO("MQTT connect via client proxy instead");
             enabled = true;
             runASAP = true;
             reconnectCount = 0;
@@ -478,7 +478,7 @@ int32_t MQTT::runOnce()
     } else {
         // we are connected to server, check often for new requests on the TCP port
         if (!wantConnection) {
-            LOG_INFO("MQTT link not needed, dropping");
+            LOG_INFO("MQTT link not needed, drop");
             pubSub.disconnect();
         }
 
@@ -571,7 +571,7 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
         env->channel_id = (char *)channelId;
         env->gateway_id = owner.id;
 
-        LOG_DEBUG("MQTT onSend - Publishing ");
+        LOG_DEBUG("MQTT onSend - Publish ");
         if (moduleConfig.mqtt.encryption_enabled) {
             env->packet = (meshtastic_MeshPacket *)&mp_encrypted;
             LOG_DEBUG("encrypted message");
@@ -604,9 +604,9 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
             }
 #endif // ARCH_NRF52 NRF52_USE_JSON
         } else {
-            LOG_INFO("MQTT not connected, queueing packet");
+            LOG_INFO("MQTT not connected, queue packet");
             if (mqttQueue.numFree() == 0) {
-                LOG_WARN("MQTT queue is full, discarding oldest");
+                LOG_WARN("MQTT queue is full, discard oldest");
                 meshtastic_ServiceEnvelope *d = mqttQueue.dequeuePtr(0);
                 if (d)
                     mqttPool.release(d);
@@ -630,9 +630,9 @@ void MQTT::perhapsReportToMap()
         if (map_position_precision == 0 || (localPosition.latitude_i == 0 && localPosition.longitude_i == 0)) {
             last_report_to_map = millis();
             if (map_position_precision == 0)
-                LOG_WARN("MQTT Map reporting enabled, but precision is 0");
+                LOG_WARN("MQTT Map report enabled, but precision is 0");
             if (localPosition.latitude_i == 0 && localPosition.longitude_i == 0)
-                LOG_WARN("MQTT Map reporting enabled, but no position available");
+                LOG_WARN("MQTT Map report enabled, but no position available");
             return;
         }
 
