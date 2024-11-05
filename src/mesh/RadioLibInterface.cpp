@@ -193,7 +193,7 @@ ErrorCode RadioLibInterface::send(meshtastic_MeshPacket *p)
 
     // Sometimes when testing it is useful to be able to never turn on the xmitter
 #ifndef LORA_DISABLE_SENDING
-    printPacket("enqueuing for send", p);
+    printPacket("enqueue for send", p);
 
     LOG_DEBUG("txGood=%d,txRelay=%d,rxGood=%d,rxBad=%d", txGood, txRelay, rxGood, rxBad);
     ErrorCode res = txQueue.enqueue(p) ? ERRNO_OK : ERRNO_UNKNOWN;

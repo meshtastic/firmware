@@ -80,7 +80,7 @@ template <typename T> bool SX128xInterface<T>::init()
 #elif defined(ARCH_NRF52)
         NVIC_SystemReset();
 #else
-        LOG_ERROR("FIXME implement reboot for this platform. Skipping for now.");
+        LOG_ERROR("FIXME implement reboot for this platform. Skip for now.");
 #endif
     }
 

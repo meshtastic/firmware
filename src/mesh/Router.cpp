@@ -71,7 +71,7 @@ int32_t Router::runOnce()
         perhapsHandleReceived(mp);
     }
 
-    // LOG_DEBUG("sleeping forever!");
+    // LOG_DEBUG("Sleep forever!");
     return INT32_MAX; // Wait a long time - until we get woken for the message queue
 }
 
@@ -143,7 +143,7 @@ void Router::sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFro
 
 void Router::abortSendAndNak(meshtastic_Routing_Error err, meshtastic_MeshPacket *p)
 {
-    LOG_ERROR("Error=%d, returning NAK and dropping packet", err);
+    LOG_ERROR("Error=%d, return NAK and drop packet", err);
     sendAckNak(err, getFrom(p), p->id, p->channel);
     packetPool.release(p);
 }
@@ -588,7 +588,7 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
         if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
             p->decoded.portnum == meshtastic_PortNum_NEIGHBORINFO_APP &&
             (!moduleConfig.has_neighbor_info || !moduleConfig.neighbor_info.enabled)) {
-            LOG_DEBUG("Neighbor info module is disabled, ignoring neighbor packet");
+            LOG_DEBUG("Neighbor info module is disabled, ignore neighbor packet");
             cancelSending(p->from, p->id);
             skipHandle = true;
         }

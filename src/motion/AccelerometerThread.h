@@ -65,14 +65,14 @@ class AccelerometerThread : public concurrency::OSThread
             return;
 
         if (device.address.port == ScanI2C::I2CPort::NO_I2C || device.address.address == 0 || device.type == ScanI2C::NONE) {
-            LOG_DEBUG("AccelerometerThread disabling due to no sensors found");
+            LOG_DEBUG("AccelerometerThread Disable due to no sensors found");
             disable();
             return;
         }
 
 #ifndef RAK_4631
         if (!config.display.wake_on_tap_or_motion && !config.device.double_tap_as_button_press) {
-            LOG_DEBUG("AccelerometerThread disabling due to no interested configurations");
+            LOG_DEBUG("AccelerometerThread Disable due to no interested configurations");
             disable();
             return;
         }

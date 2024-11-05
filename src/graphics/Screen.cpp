@@ -242,7 +242,7 @@ static void drawWelcomeScreen(OLEDDisplay *display, OLEDDisplayUiState *state, i
 // draw overlay in bottom right corner of screen to show when notifications are muted or modifier key is active
 static void drawFunctionOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
-    // LOG_DEBUG("Drawing function overlay");
+    // LOG_DEBUG("Draw function overlay");
     if (functionSymbals.begin() != functionSymbals.end()) {
         char buf[64];
         display->setFont(FONT_SMALL);
@@ -260,7 +260,7 @@ static void drawDeepSleepScreen(OLEDDisplay *display, OLEDDisplayUiState *state,
     EINK_ADD_FRAMEFLAG(display, COSMETIC);
     EINK_ADD_FRAMEFLAG(display, BLOCKING);
 
-    LOG_DEBUG("Drawing deep sleep screen");
+    LOG_DEBUG("Draw deep sleep screen");
 
     // Display displayStr on the screen
     drawIconScreen("Sleeping", display, state, x, y);
@@ -269,7 +269,7 @@ static void drawDeepSleepScreen(OLEDDisplay *display, OLEDDisplayUiState *state,
 /// Used on eink displays when screen updates are paused
 static void drawScreensaverOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
-    LOG_DEBUG("Drawing screensaver overlay");
+    LOG_DEBUG("Draw screensaver overlay");
 
     EINK_ADD_FRAMEFLAG(display, COSMETIC); // Take the opportunity for a full-refresh
 
@@ -337,7 +337,7 @@ static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
         module_frame = state->currentFrame;
         // LOG_DEBUG("Screen is not in transition.  Frame: %d", module_frame);
     }
-    // LOG_DEBUG("Drawing Module Frame %d", module_frame);
+    // LOG_DEBUG("Draw Module Frame %d", module_frame);
     MeshModule &pi = *moduleFrames.at(module_frame);
     pi.drawFrame(display, state, x, y);
 }
@@ -912,7 +912,7 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
 
     const meshtastic_MeshPacket &mp = devicestate.rx_text_message;
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(getFrom(&mp));
-    // LOG_DEBUG("drawing text message from 0x%x: %s", mp.from,
+    // LOG_DEBUG("Draw text message from 0x%x: %s", mp.from,
     // mp.decoded.variant.data.decoded.bytes);
 
     // Demo for drawStringMaxWidth:
@@ -1499,7 +1499,7 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
 #elif ARCH_PORTDUINO
     if (settingsMap[displayPanel] != no_screen) {
-        LOG_DEBUG("Making TFTDisplay!");
+        LOG_DEBUG("Make TFTDisplay!");
         dispdev = new TFTDisplay(address.address, -1, -1, geometry,
                                  (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
     } else {
@@ -1546,7 +1546,7 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 
     if (on != screenOn) {
         if (on) {
-            LOG_INFO("Turning on screen");
+            LOG_INFO("Turn on screen");
             powerMon->setState(meshtastic_PowerMon_State_Screen_On);
 #ifdef T_WATCH_S3
             PMU->enablePowerOutput(XPOWERS_ALDO2);
@@ -1581,7 +1581,7 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             // eInkScreensaver parameter is usually NULL (default argument), default frame used instead
             setScreensaverFrames(einkScreensaver);
 #endif
-            LOG_INFO("Turning off screen");
+            LOG_INFO("Turn off screen");
             dispdev->displayOff();
 #ifdef USE_ST7789
             SPI1.end();
@@ -1885,7 +1885,7 @@ int32_t Screen::runOnce()
             EINK_ADD_FRAMEFLAG(dispdev, COSMETIC);
 #endif
 
-            LOG_DEBUG("LastScreenTransition exceeded %ums transitioning to next frame", (millis() - lastScreenTransition));
+            LOG_DEBUG("LastScreenTransition exceeded %ums transition to next frame", (millis() - lastScreenTransition));
             handleOnPress();
         }
     }
@@ -1921,7 +1921,7 @@ void Screen::drawDebugInfoWiFiTrampoline(OLEDDisplay *display, OLEDDisplayUiStat
 void Screen::setSSLFrames()
 {
     if (address_found.address) {
-        // LOG_DEBUG("showing SSL frames");
+        // LOG_DEBUG("Show SSL frames");
         static FrameCallback sslFrames[] = {drawSSLScreen};
         ui->setFrames(sslFrames, 1);
         ui->update();
@@ -1933,7 +1933,7 @@ void Screen::setSSLFrames()
 void Screen::setWelcomeFrames()
 {
     if (address_found.address) {
-        // LOG_DEBUG("showing Welcome frames");
+        // LOG_DEBUG("Show Welcome frames");
         static FrameCallback frames[] = {drawWelcomeScreen};
         setFrameImmediateDraw(frames);
     }
@@ -1999,7 +1999,7 @@ void Screen::setFrames(FrameFocus focus)
     uint8_t originalPosition = ui->getUiState()->currentFrame;
     FramesetInfo fsi; // Location of specific frames, for applying focus parameter
 
-    LOG_DEBUG("showing standard frames");
+    LOG_DEBUG("Show standard frames");
     showingNormalScreen = true;
 
 #ifdef USE_EINK
@@ -2012,7 +2012,7 @@ void Screen::setFrames(FrameFocus focus)
 #endif
 
     moduleFrames = MeshModule::GetMeshModulesWithUIFrames();
-    LOG_DEBUG("Showing %d module frames", moduleFrames.size());
+    LOG_DEBUG("Show %d module frames", moduleFrames.size());
 #ifdef DEBUG_PORT
     int totalFrameCount = MAX_NUM_NODES + NUM_EXTRA_FRAMES + moduleFrames.size();
     LOG_DEBUG("Total frame count: %d", totalFrameCount);
@@ -2094,7 +2094,7 @@ void Screen::setFrames(FrameFocus focus)
 #endif
 
     fsi.frameCount = numframes; // Total framecount is used to apply FOCUS_PRESERVE
-    LOG_DEBUG("Finished building frames. numframes: %d", numframes);
+    LOG_DEBUG("Finished build frames. numframes: %d", numframes);
 
     ui->setFrames(normalFrames, numframes);
     ui->enableAllIndicators();
@@ -2193,7 +2193,7 @@ void Screen::dismissCurrentFrame()
 
 void Screen::handleStartFirmwareUpdateScreen()
 {
-    LOG_DEBUG("showing firmware screen");
+    LOG_DEBUG("Show firmware screen");
     showingNormalScreen = false;
     EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // E-Ink: Explicitly use fast-refresh for next frame
 

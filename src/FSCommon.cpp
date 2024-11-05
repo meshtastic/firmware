@@ -231,7 +231,7 @@ void listDir(const char *dirname, uint8_t levels, bool del)
 #ifdef ARCH_ESP32
                 listDir(file.path(), levels - 1, del);
                 if (del) {
-                    LOG_DEBUG("Removing %s", file.path());
+                    LOG_DEBUG("Remove %s", file.path());
                     strncpy(buffer, file.path(), sizeof(buffer));
                     file.close();
                     FSCom.rmdir(buffer);
@@ -241,7 +241,7 @@ void listDir(const char *dirname, uint8_t levels, bool del)
 #elif (defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
                 listDir(file.name(), levels - 1, del);
                 if (del) {
-                    LOG_DEBUG("Removing %s", file.name());
+                    LOG_DEBUG("Remove %s", file.name());
                     strncpy(buffer, file.name(), sizeof(buffer));
                     file.close();
                     FSCom.rmdir(buffer);
@@ -257,7 +257,7 @@ void listDir(const char *dirname, uint8_t levels, bool del)
         } else {
 #ifdef ARCH_ESP32
             if (del) {
-                LOG_DEBUG("Deleting %s", file.path());
+                LOG_DEBUG("Delete %s", file.path());
                 strncpy(buffer, file.path(), sizeof(buffer));
                 file.close();
                 FSCom.remove(buffer);
@@ -267,7 +267,7 @@ void listDir(const char *dirname, uint8_t levels, bool del)
             }
 #elif (defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
             if (del) {
-                LOG_DEBUG("Deleting %s", file.name());
+                LOG_DEBUG("Delete %s", file.name());
                 strncpy(buffer, file.name(), sizeof(buffer));
                 file.close();
                 FSCom.remove(buffer);
@@ -284,7 +284,7 @@ void listDir(const char *dirname, uint8_t levels, bool del)
     }
 #ifdef ARCH_ESP32
     if (del) {
-        LOG_DEBUG("Removing %s", root.path());
+        LOG_DEBUG("Remove %s", root.path());
         strncpy(buffer, root.path(), sizeof(buffer));
         root.close();
         FSCom.rmdir(buffer);
@@ -293,7 +293,7 @@ void listDir(const char *dirname, uint8_t levels, bool del)
     }
 #elif (defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
     if (del) {
-        LOG_DEBUG("Removing %s", root.name());
+        LOG_DEBUG("Remove %s", root.name());
         strncpy(buffer, root.name(), sizeof(buffer));
         root.close();
         FSCom.rmdir(buffer);

@@ -227,12 +227,12 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         case INPUT_BROKER_MSG_BRIGHTNESS_UP: // make screen brighter
             if (screen)
                 screen->increaseBrightness();
-            LOG_DEBUG("increasing Screen Brightness");
+            LOG_DEBUG("Increase Screen Brightness");
             break;
         case INPUT_BROKER_MSG_BRIGHTNESS_DOWN: // make screen dimmer
             if (screen)
                 screen->decreaseBrightness();
-            LOG_DEBUG("Decreasing Screen Brightness");
+            LOG_DEBUG("Decrease Screen Brightness");
             break;
         case INPUT_BROKER_MSG_FN_SYMBOL_ON: // draw modifier (function) symbal
             if (screen)
@@ -977,7 +977,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
 
     if (temporaryMessage.length() != 0) {
         requestFocus(); // Tell Screen::setFrames to move to our module's frame
-        LOG_DEBUG("Drawing temporary message: %s", temporaryMessage.c_str());
+        LOG_DEBUG("Draw temporary message: %s", temporaryMessage.c_str());
         display->setTextAlignment(TEXT_ALIGN_CENTER);
         display->setFont(FONT_MEDIUM);
         display->drawString(display->getWidth() / 2 + x, 0 + y + 12, temporaryMessage);
@@ -1206,13 +1206,13 @@ AdminMessageHandleResult CannedMessageModule::handleAdminMessageForModule(const 
 
     switch (request->which_payload_variant) {
     case meshtastic_AdminMessage_get_canned_message_module_messages_request_tag:
-        LOG_DEBUG("Client is getting radio canned messages");
+        LOG_DEBUG("Client getting radio canned messages");
         this->handleGetCannedMessageModuleMessages(mp, response);
         result = AdminMessageHandleResult::HANDLED_WITH_RESPONSE;
         break;
 
     case meshtastic_AdminMessage_set_canned_message_module_messages_tag:
-        LOG_DEBUG("Client is setting radio canned messages");
+        LOG_DEBUG("Client getting radio canned messages");
         this->handleSetCannedMessageModuleMessages(request->set_canned_message_module_messages);
         result = AdminMessageHandleResult::HANDLED;
         break;

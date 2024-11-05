@@ -15,10 +15,10 @@ bool LSM6DS3Sensor::init()
         // Duration is number of occurrences needed to trigger, higher threshold is less sensitive
         sensor.enableWakeup(config.display.wake_on_tap_or_motion, 1, LSM6DS3_WAKE_THRESH);
 
-        LOG_DEBUG("LSM6DS3Sensor::init ok");
+        LOG_DEBUG("LSM6DS3 init ok");
         return true;
     }
-    LOG_DEBUG("LSM6DS3Sensor::init failed");
+    LOG_DEBUG("LSM6DS3 init failed");
     return false;
 }
 

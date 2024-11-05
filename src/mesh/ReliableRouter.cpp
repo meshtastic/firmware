@@ -53,7 +53,7 @@ bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
         auto key = GlobalPacketId(getFrom(p), p->id);
         auto old = findPendingPacket(key);
         if (old) {
-            LOG_DEBUG("Generating implicit ack");
+            LOG_DEBUG("Generate implicit ack");
             // NOTE: we do NOT check p->wantAck here because p is the INCOMING rebroadcast and that packet is not expected to be
             // marked as wantAck
             sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, old->packet->channel);
@@ -221,7 +221,7 @@ int32_t ReliableRouter::doRetransmissions()
         // FIXME, handle 51 day rollover here!!!
         if (p.nextTxMsec <= now) {
             if (p.numRetransmissions == 0) {
-                LOG_DEBUG("Reliable send failed, returning a nak for fr=0x%x,to=0x%x,id=0x%x", p.packet->from, p.packet->to,
+                LOG_DEBUG("Reliable send failed, return a nak for fr=0x%x,to=0x%x,id=0x%x", p.packet->from, p.packet->to,
                           p.packet->id);
                 sendAckNak(meshtastic_Routing_Error_MAX_RETRANSMIT, getFrom(p.packet), p.packet->id, p.packet->channel);
                 // Note: we don't stop retransmission here, instead the Nak packet gets processed in sniffReceived

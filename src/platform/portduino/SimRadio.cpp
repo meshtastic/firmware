@@ -193,7 +193,7 @@ void SimRadio::startSend(meshtastic_MeshPacket *txp)
         memcpy(&c.data.bytes, p->decoded.payload.bytes, p->decoded.payload.size);
         c.data.size = p->decoded.payload.size;
     } else {
-        LOG_WARN("Payload size larger than compressed message allows! Sending empty payload");
+        LOG_WARN("Payload size larger than compressed message allows! Send empty payload");
     }
     p->decoded.payload.size =
         pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_Compressed_msg, &c);

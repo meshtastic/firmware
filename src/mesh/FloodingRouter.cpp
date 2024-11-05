@@ -63,12 +63,12 @@ void FloodingRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
                 }
 #endif
 
-                LOG_INFO("Rebroadcasting received floodmsg");
+                LOG_INFO("Rebroadcast received floodmsg");
                 // Note: we are careful to resend using the original senders node id
                 // We are careful not to call our hooked version of send() - because we don't want to check this again
                 Router::send(tosend);
             } else {
-                LOG_DEBUG("Not rebroadcasting: Role = CLIENT_MUTE or Rebroadcast Mode = NONE");
+                LOG_DEBUG("No rebroadcast: Role = CLIENT_MUTE or Rebroadcast Mode = NONE");
             }
         } else {
             LOG_DEBUG("Ignore 0 id broadcast");

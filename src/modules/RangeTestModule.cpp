@@ -81,7 +81,7 @@ int32_t RangeTestModule::runOnce()
 
                 // If we have been running for more than 8 hours, turn module back off
                 if (!Throttle::isWithinTimespanMs(started, 28800000)) {
-                    LOG_INFO("Range Test Module - Disabling after 8 hours");
+                    LOG_INFO("Range Test Module - Disable after 8 hours");
                     return disable();
                 } else {
                     return (senderHeartbeat);
