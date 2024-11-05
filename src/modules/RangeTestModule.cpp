@@ -24,7 +24,7 @@
 RangeTestModule *rangeTestModule;
 RangeTestModuleRadio *rangeTestModuleRadio;
 
-RangeTestModule::RangeTestModule() : concurrency::OSThread("RangeTestModule") {}
+RangeTestModule::RangeTestModule() : concurrency::OSThread("RangeTest") {}
 
 uint32_t packetSequence = 0;
 
@@ -54,11 +54,11 @@ int32_t RangeTestModule::runOnce()
             firstTime = 0;
 
             if (moduleConfig.range_test.sender) {
-                LOG_INFO("Initializing Range Test Module -- Sender");
+                LOG_INFO("Init Range Test Module -- Sender");
                 started = millis(); // make a note of when we started
                 return (5000);      // Sending first message 5 seconds after initialization.
             } else {
-                LOG_INFO("Initializing Range Test Module -- Receiver");
+                LOG_INFO("Init Range Test Module -- Receiver");
                 return disable();
                 // This thread does not need to run as a receiver
             }
@@ -81,7 +81,7 @@ int32_t RangeTestModule::runOnce()
 
                 // If we have been running for more than 8 hours, turn module back off
                 if (!Throttle::isWithinTimespanMs(started, 28800000)) {
-                    LOG_INFO("Range Test Module - Disabling after 8 hours");
+                    LOG_INFO("Range Test Module - Disable after 8 hours");
                     return disable();
                 } else {
                     return (senderHeartbeat);
@@ -215,7 +215,7 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
     }
 
     if (FSCom.totalBytes() - FSCom.usedBytes() < 51200) {
-        LOG_DEBUG("Filesystem doesn't have enough free space. Aborting write.");
+        LOG_DEBUG("Filesystem doesn't have enough free space. Aborting write");
         return 0;
     }
 

@@ -61,13 +61,13 @@ SerialModule *serialModule;
 SerialModuleRadio *serialModuleRadio;
 
 #if defined(TTGO_T_ECHO) || defined(CANARYONE)
-SerialModule::SerialModule() : StreamAPI(&Serial), concurrency::OSThread("SerialModule") {}
+SerialModule::SerialModule() : StreamAPI(&Serial), concurrency::OSThread("Serial") {}
 static Print *serialPrint = &Serial;
 #elif defined(CONFIG_IDF_TARGET_ESP32C6)
-SerialModule::SerialModule() : StreamAPI(&Serial1), concurrency::OSThread("SerialModule") {}
+SerialModule::SerialModule() : StreamAPI(&Serial1), concurrency::OSThread("Serial") {}
 static Print *serialPrint = &Serial1;
 #else
-SerialModule::SerialModule() : StreamAPI(&Serial2), concurrency::OSThread("SerialModule") {}
+SerialModule::SerialModule() : StreamAPI(&Serial2), concurrency::OSThread("Serial") {}
 static Print *serialPrint = &Serial2;
 #endif
 
@@ -125,7 +125,7 @@ int32_t SerialModule::runOnce()
     if (moduleConfig.serial.override_console_serial_port || (moduleConfig.serial.rxd && moduleConfig.serial.txd)) {
         if (firstTime) {
             // Interface with the serial peripheral from in here.
-            LOG_INFO("Initializing serial peripheral interface");
+            LOG_INFO("Init serial peripheral interface");
 
             uint32_t baud = getBaudRate();
 

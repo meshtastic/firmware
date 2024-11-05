@@ -150,7 +150,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 {
     concurrency::LockGuard guard((concurrency::Lock *)&lock);
 
-    LOG_DEBUG("Scanning for I2C devices on port %d", port);
+    LOG_DEBUG("Scan for I2C devices on port %d", port);
 
     uint8_t err;
 
@@ -186,7 +186,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
         if (asize != 0) {
             if (!in_array(address, asize, addr.address))
                 continue;
-            LOG_DEBUG("Scanning address 0x%x", addr.address);
+            LOG_DEBUG("Scan address 0x%x", addr.address);
         }
         i2cBus->beginTransmission(addr.address);
 #ifdef ARCH_PORTDUINO

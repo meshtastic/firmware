@@ -27,7 +27,7 @@ bool MAX17048Singleton::isBatteryCharging()
 {
     float volts = cellVoltage();
     if (isnan(volts)) {
-        LOG_DEBUG("%s::isBatteryCharging is not connected", sensorStr);
+        LOG_DEBUG("%s::isBatteryCharging not connected", sensorStr);
         return 0;
     }
 
@@ -140,11 +140,11 @@ void MAX17048Sensor::setup() {}
 
 bool MAX17048Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
-    LOG_DEBUG("MAX17048Sensor::getMetrics id: %i", measurement->which_variant);
+    LOG_DEBUG("MAX17048 getMetrics id: %i", measurement->which_variant);
 
     float volts = max17048->cellVoltage();
     if (isnan(volts)) {
-        LOG_DEBUG("MAX17048Sensor::getMetrics battery is not connected");
+        LOG_DEBUG("MAX17048 getMetrics battery is not connected");
         return false;
     }
 
@@ -153,7 +153,7 @@ bool MAX17048Sensor::getMetrics(meshtastic_Telemetry *measurement)
     soc = clamp(soc, 0.0f, 100.0f);      // clamp soc between 0 and 100%
     float ttg = (100.0f - soc) / rate;   // calculate hours to charge/discharge
 
-    LOG_DEBUG("MAX17048Sensor::getMetrics volts: %.3fV soc: %.1f%% ttg: %.1f hours", volts, soc, ttg);
+    LOG_DEBUG("MAX17048 getMetrics volts: %.3fV soc: %.1f%% ttg: %.1f hours", volts, soc, ttg);
     if ((int)measurement->which_variant == meshtastic_Telemetry_power_metrics_tag) {
         measurement->variant.power_metrics.has_ch1_voltage = true;
         measurement->variant.power_metrics.ch1_voltage = volts;

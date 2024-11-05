@@ -15,7 +15,7 @@ extern void printInfo();
 
 PowerStressModule::PowerStressModule()
     : ProtobufModule("powerstress", meshtastic_PortNum_POWERSTRESS_APP, &meshtastic_PowerStressMessage_msg),
-      concurrency::OSThread("PowerStressModule")
+      concurrency::OSThread("PowerStress")
 {
 }
 

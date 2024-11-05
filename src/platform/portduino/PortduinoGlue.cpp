@@ -75,7 +75,7 @@ void portduinoCustomInit()
  */
 void portduinoSetup()
 {
-    printf("Setting up Meshtastic on Portduino...\n");
+    printf("Set up Meshtastic on Portduino...\n");
     int max_GPIO = 0;
     const configNames GPIO_lines[] = {cs,
                                       irq,
