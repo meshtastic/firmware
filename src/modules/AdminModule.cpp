@@ -122,23 +122,23 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
      * Getters
      */
     case meshtastic_AdminMessage_get_owner_request_tag:
-        LOG_INFO("Client get owner");
+        LOG_INFO("Client got owner");
         handleGetOwner(mp);
         break;
 
     case meshtastic_AdminMessage_get_config_request_tag:
-        LOG_INFO("Client get config");
+        LOG_INFO("Client got config");
         handleGetConfig(mp, r->get_config_request);
         break;
 
     case meshtastic_AdminMessage_get_module_config_request_tag:
-        LOG_INFO("Client get module config");
+        LOG_INFO("Client got module config");
         handleGetModuleConfig(mp, r->get_module_config_request);
         break;
 
     case meshtastic_AdminMessage_get_channel_request_tag: {
         uint32_t i = r->get_channel_request - 1;
-        LOG_INFO("Client get channel %u", i);
+        LOG_INFO("Client got channel %u", i);
         if (i >= MAX_NUM_CHANNELS)
             myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
         else
@@ -155,12 +155,12 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         break;
 
     case meshtastic_AdminMessage_set_config_tag:
-        LOG_INFO("Client set the config");
+        LOG_INFO("Client set config");
         handleSetConfig(r->set_config);
         break;
 
     case meshtastic_AdminMessage_set_module_config_tag:
-        LOG_INFO("Client set the module config");
+        LOG_INFO("Client set module config");
         handleSetModuleConfig(r->set_module_config);
         break;
 
@@ -208,13 +208,13 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         break;
     }
     case meshtastic_AdminMessage_get_device_metadata_request_tag: {
-        LOG_INFO("Client get device metadata");
+        LOG_INFO("Client got device metadata");
         handleGetDeviceMetadata(mp);
         break;
     }
     case meshtastic_AdminMessage_factory_reset_config_tag: {
         disableBluetooth();
-        LOG_INFO("Initiating factory config reset");
+        LOG_INFO("Initiate factory config reset");
         nodeDB->factoryReset();
         LOG_INFO("Factory config reset finished, rebooting soon");
         reboot(DEFAULT_REBOOT_SECONDS);
@@ -222,32 +222,32 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
     case meshtastic_AdminMessage_factory_reset_device_tag: {
         disableBluetooth();
-        LOG_INFO("Initiating full factory reset");
+        LOG_INFO("Initiate full factory reset");
         nodeDB->factoryReset(true);
         reboot(DEFAULT_REBOOT_SECONDS);
         break;
     }
     case meshtastic_AdminMessage_nodedb_reset_tag: {
         disableBluetooth();
-        LOG_INFO("Initiating node-db reset");
+        LOG_INFO("Initiate node-db reset");
         nodeDB->resetNodes();
         reboot(DEFAULT_REBOOT_SECONDS);
         break;
     }
     case meshtastic_AdminMessage_begin_edit_settings_tag: {
-        LOG_INFO("Beginning transaction for editing settings");
+        LOG_INFO("Begin transaction for editing settings");
         hasOpenEditTransaction = true;
         break;
     }
     case meshtastic_AdminMessage_commit_edit_settings_tag: {
         disableBluetooth();
-        LOG_INFO("Committing transaction for edited settings");
+        LOG_INFO("Commit transaction for edited settings");
         hasOpenEditTransaction = false;
         saveChanges(SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
         break;
     }
     case meshtastic_AdminMessage_get_device_connection_status_request_tag: {
-        LOG_INFO("Client get device connection status");
+        LOG_INFO("Client got device connection status");
         handleGetDeviceConnectionStatus(mp);
         break;
     }
@@ -260,13 +260,13 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         break;
     }
     case meshtastic_AdminMessage_remove_by_nodenum_tag: {
-        LOG_INFO("Client received a remove_nodenum command");
+        LOG_INFO("Client received remove_nodenum command");
         nodeDB->removeNodeByNum(r->remove_by_nodenum);
         this->notifyObservers(r); // Observed by screen
         break;
     }
     case meshtastic_AdminMessage_set_favorite_node_tag: {
-        LOG_INFO("Client received a set_favorite_node command");
+        LOG_INFO("Client received set_favorite_node command");
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->set_favorite_node);
         if (node != NULL) {
             node->is_favorite = true;
@@ -275,7 +275,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         break;
     }
     case meshtastic_AdminMessage_remove_favorite_node_tag: {
-        LOG_INFO("Client received a remove_favorite_node command");
+        LOG_INFO("Client received remove_favorite_node command");
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->remove_favorite_node);
         if (node != NULL) {
             node->is_favorite = false;
@@ -284,7 +284,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         break;
     }
     case meshtastic_AdminMessage_set_fixed_position_tag: {
-        LOG_INFO("Client received a set_fixed_position command");
+        LOG_INFO("Client received set_fixed_position command");
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
         node->has_position = true;
         node->position = TypeConversions::ConvertToPositionLite(r->set_fixed_position);
@@ -300,14 +300,14 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         break;
     }
     case meshtastic_AdminMessage_remove_fixed_position_tag: {
-        LOG_INFO("Client received a remove_fixed_position command");
+        LOG_INFO("Client received remove_fixed_position command");
         nodeDB->clearLocalPosition();
         config.position.fixed_position = false;
         saveChanges(SEGMENT_DEVICESTATE | SEGMENT_CONFIG, false);
         break;
     }
     case meshtastic_AdminMessage_set_time_only_tag: {
-        LOG_INFO("Client received a set_time_only command");
+        LOG_INFO("Client received set_time_only command");
         struct timeval tv;
         tv.tv_sec = r->set_time_only;
         tv.tv_usec = 0;
@@ -316,14 +316,14 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         break;
     }
     case meshtastic_AdminMessage_enter_dfu_mode_request_tag: {
-        LOG_INFO("Client is requesting to enter DFU mode");
+        LOG_INFO("Client requesting to enter DFU mode");
 #if defined(ARCH_NRF52) || defined(ARCH_RP2040)
         enterDfuMode();
 #endif
         break;
     }
     case meshtastic_AdminMessage_delete_file_request_tag: {
-        LOG_DEBUG("Client is requesting to delete file: %s", r->delete_file_request);
+        LOG_DEBUG("Client requesting to delete file: %s", r->delete_file_request);
 #ifdef FSCom
         if (FSCom.remove(r->delete_file_request)) {
             LOG_DEBUG("Successfully deleted file");
@@ -348,10 +348,10 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             setPassKey(&res);
             myReply = allocDataProtobuf(res);
         } else if (mp.decoded.want_response) {
-            LOG_DEBUG("We did not responded to a request that wanted a respond. req.variant=%d", r->which_payload_variant);
+            LOG_DEBUG("Did not responded to a request that wanted a respond. req.variant=%d", r->which_payload_variant);
         } else if (handleResult != AdminMessageHandleResult::HANDLED) {
             // Probably a message sent by us or sent to our local node.  FIXME, we should avoid scanning these messages
-            LOG_INFO("Ignore nonrelevant admin %d", r->which_payload_variant);
+            LOG_INFO("Ignore irrelevant admin %d", r->which_payload_variant);
         }
         break;
     }
