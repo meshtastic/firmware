@@ -11,6 +11,7 @@
 #include "../mesh/generated/meshtastic/paxcount.pb.h"
 #endif
 #include "mesh/generated/meshtastic/remote_hardware.pb.h"
+#include <sys/types.h>
 
 std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp, bool shouldLog)
 {

@@ -21,7 +21,7 @@ ErrorCode FloodingRouter::send(meshtastic_MeshPacket *p)
 bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 {
     if (wasSeenRecently(p)) { // Note: this will also add a recent packet record
-        printPacket("Ignoring dupe incoming msg", p);
+        printPacket("Ignore dupe incoming msg", p);
         rxDupe++;
         if (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER &&
             config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER) {
@@ -46,7 +46,7 @@ void FloodingRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
     bool isAckorReply = (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) && (p->decoded.request_id != 0);
     if (isAckorReply && !isToUs(p) && !isBroadcast(p->to)) {
         // do not flood direct message that is ACKed or replied to
-        LOG_DEBUG("Rxd an ACK/reply not for me, cancel rebroadcast.");
+        LOG_DEBUG("Rxd an ACK/reply not for me, cancel rebroadcast");
         Router::cancelSending(p->to, p->decoded.request_id); // cancel rebroadcast for this DM
     }
     if (!isToUs(p) && (p->hop_limit > 0) && !isFromUs(p)) {
@@ -63,15 +63,15 @@ void FloodingRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
                 }
 #endif
 
-                LOG_INFO("Rebroadcasting received floodmsg");
+                LOG_INFO("Rebroadcast received floodmsg");
                 // Note: we are careful to resend using the original senders node id
                 // We are careful not to call our hooked version of send() - because we don't want to check this again
                 Router::send(tosend);
             } else {
-                LOG_DEBUG("Not rebroadcasting: Role = CLIENT_MUTE or Rebroadcast Mode = NONE");
+                LOG_DEBUG("No rebroadcast: Role = CLIENT_MUTE or Rebroadcast Mode = NONE");
             }
         } else {
-            LOG_DEBUG("Ignoring 0 id broadcast");
+            LOG_DEBUG("Ignore 0 id broadcast");
         }
     }
     // handle the packet as normal

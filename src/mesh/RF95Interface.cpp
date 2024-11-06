@@ -230,7 +230,7 @@ bool RF95Interface::reconfigure()
 
     err = lora->setPreambleLength(preambleLength);
     if (err != RADIOLIB_ERR_NONE)
-        LOG_ERROR(" RF95 setPreambleLength %s%d", radioLibErr, err);
+        LOG_ERROR("RF95 setPreambleLength %s%d", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
 
     err = lora->setFrequency(getFreq());
