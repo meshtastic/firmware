@@ -2,13 +2,32 @@
 
 set PYTHON=python
 
+:: Determine the correct esptool command to use
+%PYTHON% -m esptool version >nul 2>&1
+if %ERRORLEVEL% EQU 0 (
+    set "ESPTOOL_CMD=%PYTHON% -m esptool"
+) else (
+    where esptool >nul 2>&1
+    if %ERRORLEVEL% EQU 0 (
+        set "ESPTOOL_CMD=esptool"
+    ) else (
+        where esptool.py >nul 2>&1
+        if %ERRORLEVEL% EQU 0 (
+            set "ESPTOOL_CMD=esptool.py"
+        ) else (
+            echo Error: esptool not found
+            exit /b 1
+        )
+    )
+)
+
 goto GETOPTS
 :HELP
 echo Usage: %~nx0 [-h] [-p ESPTOOL_PORT] [-P PYTHON] [-f FILENAME^|FILENAME]
 echo Flash image file to device, leave existing system intact.
 echo.
 echo     -h               Display this help and exit
-echo     -p ESPTOOL_PORT  Set the environment variable for ESPTOOL_PORT.  If not set, ESPTOOL iterates all ports (Dangerrous).
+echo     -p ESPTOOL_PORT  Set the environment variable for ESPTOOL_PORT.  If not set, ESPTOOL iterates all ports (Dangerous).
 echo     -P PYTHON        Specify alternate python interpreter to use to invoke esptool. (Default: %PYTHON%)
 echo     -f FILENAME      The *update.bin file to flash.  Custom to your device type.
 goto EOF
@@ -24,17 +43,17 @@ IF NOT "__%1__"=="____" goto GETOPTS
 
 IF "__%FILENAME%__" == "____" (
     echo "Missing FILENAME"
-	goto HELP
+    goto HELP
 )
 IF EXIST %FILENAME% IF NOT x%FILENAME:update=%==x%FILENAME% (
     echo Trying to flash update %FILENAME%
-    %PYTHON% -m esptool --baud 115200 write_flash 0x10000 %FILENAME%
+    %ESPTOOL_CMD% --baud 115200 write_flash 0x10000 %FILENAME%
 ) else (
     echo "Invalid file: %FILENAME%"
-	goto HELP
+    goto HELP
 ) else (
     echo "Invalid file: %FILENAME%"
-	goto HELP
+    goto HELP
 )
 
 :EOF
