@@ -13,17 +13,17 @@ void AirTime::logAirtime(reportTypes reportType, uint32_t airtime_ms)
 {
 
     if (reportType == TX_LOG) {
-        LOG_DEBUG("Packet transmitted : %ums", airtime_ms);
+        LOG_DEBUG("Packet TX: %ums", airtime_ms);
         this->airtimes.periodTX[0] = this->airtimes.periodTX[0] + airtime_ms;
         air_period_tx[0] = air_period_tx[0] + airtime_ms;
 
         this->utilizationTX[this->getPeriodUtilHour()] = this->utilizationTX[this->getPeriodUtilHour()] + airtime_ms;
     } else if (reportType == RX_LOG) {
-        LOG_DEBUG("Packet received : %ums", airtime_ms);
+        LOG_DEBUG("Packet RX: %ums", airtime_ms);
         this->airtimes.periodRX[0] = this->airtimes.periodRX[0] + airtime_ms;
         air_period_rx[0] = air_period_rx[0] + airtime_ms;
     } else if (reportType == RX_ALL_LOG) {
-        LOG_DEBUG("Packet received (noise?) : %ums", airtime_ms);
+        LOG_DEBUG("Packet RX (noise?) : %ums", airtime_ms);
         this->airtimes.periodRX_ALL[0] = this->airtimes.periodRX_ALL[0] + airtime_ms;
     }
 
@@ -126,7 +126,7 @@ bool AirTime::isTxAllowedChannelUtil(bool polite)
     if (channelUtilizationPercent() < percentage) {
         return true;
     } else {
-        LOG_WARN("Channel utilization is >%d percent. Skip opportunity to send.", percentage);
+        LOG_WARN("Ch. util >%d%%. Skip send", percentage);
         return false;
     }
 }
@@ -137,8 +137,7 @@ bool AirTime::isTxAllowedAirUtil()
         if (utilizationTXPercent() < myRegion->dutyCycle * polite_duty_cycle_percent / 100) {
             return true;
         } else {
-            LOG_WARN("Tx air utilization is >%f percent. Skip opportunity to send.",
-                     myRegion->dutyCycle * polite_duty_cycle_percent / 100);
+            LOG_WARN("TX air util. >%f%%. Skip send", myRegion->dutyCycle * polite_duty_cycle_percent / 100);
             return false;
         }
     }

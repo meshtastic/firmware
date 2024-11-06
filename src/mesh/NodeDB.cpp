@@ -647,7 +647,7 @@ void NodeDB::removeNodeByNum(NodeNum nodeNum)
     numMeshNodes -= removed;
     std::fill(devicestate.node_db_lite.begin() + numMeshNodes, devicestate.node_db_lite.begin() + numMeshNodes + 1,
               meshtastic_NodeInfoLite());
-    LOG_DEBUG("NodeDB::removeNodeByNum purged %d entries. Save changes...", removed);
+    LOG_DEBUG("NodeDB::removeNodeByNum purged %d entries. Save changes", removed);
     saveDeviceStateToDisk();
 }
 
@@ -976,7 +976,7 @@ bool NodeDB::saveToDisk(int saveWhat)
     bool success = saveToDiskNoRetry(saveWhat);
 
     if (!success) {
-        LOG_ERROR("Failed to save to disk, retrying...");
+        LOG_ERROR("Failed to save to disk, retrying");
 #ifdef ARCH_NRF52 // @geeksville is not ready yet to say we should do this on other platforms.  See bug #4184 discussion
         FSCom.format();
 
@@ -1152,7 +1152,7 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
         // We just changed something about the user, store our DB
         Throttle::execute(
             &lastNodeDbSave, ONE_MINUTE_MS, []() { nodeDB->saveToDisk(SEGMENT_DEVICESTATE); },
-            []() { LOG_DEBUG("Deferring NodeDB saveToDisk for now"); }); // since we saved less than a minute ago
+            []() { LOG_DEBUG("Defer NodeDB saveToDisk for now"); }); // since we saved less than a minute ago
     }
 
     return changed;
@@ -1282,7 +1282,7 @@ void recordCriticalError(meshtastic_CriticalErrorCode code, uint32_t address, co
 
     // Currently portuino is mostly used for simulation.  Make sure the user notices something really bad happened
 #ifdef ARCH_PORTDUINO
-    LOG_ERROR("A critical failure occurred, portduino is exiting...");
+    LOG_ERROR("A critical failure occurred, portduino is exiting");
     exit(2);
 #endif
 }

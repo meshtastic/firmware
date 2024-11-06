@@ -441,8 +441,8 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
 
         return;
     } else {
-        LOG_ERROR("This should not have happened...");
-        res->println("ERROR: This should not have happened...");
+        LOG_ERROR("This should not have happened");
+        res->println("ERROR: This should not have happened");
     }
 }
 
