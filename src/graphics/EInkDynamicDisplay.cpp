@@ -170,7 +170,7 @@ bool EInkDynamicDisplay::determineMode()
     checkFastRequested();
 
     if (refresh == UNSPECIFIED)
-        LOG_WARN("There was a flaw in the determineMode() logic.");
+        LOG_WARN("There was a flaw in the determineMode() logic");
 
     // -- Decision has been reached --
     applyRefreshMode();

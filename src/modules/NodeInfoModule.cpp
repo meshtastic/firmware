@@ -70,11 +70,11 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
     }
     // If we sent our NodeInfo less than 5 min. ago, don't send it again as it may be still underway.
     if (!shorterTimeout && lastSentToMesh && Throttle::isWithinTimespanMs(lastSentToMesh, 5 * 60 * 1000)) {
-        LOG_DEBUG("Skip send NodeInfo since we sent it <5 mins ago.");
+        LOG_DEBUG("Skip send NodeInfo since we sent it <5min ago");
         ignoreRequest = true; // Mark it as ignored for MeshModule
         return NULL;
     } else if (shorterTimeout && lastSentToMesh && Throttle::isWithinTimespanMs(lastSentToMesh, 60 * 1000)) {
-        LOG_DEBUG("Skip send requested NodeInfo since we sent it <60s ago.");
+        LOG_DEBUG("Skip send NodeInfo since we sent it <60s ago");
         ignoreRequest = true; // Mark it as ignored for MeshModule
         return NULL;
     } else {
