@@ -95,7 +95,7 @@ static void taskCreateCert(void *parameter)
         LOG_DEBUG("Retrieved Certificate: %d Bytes", cert->getCertLength());
     } else {
 
-        LOG_INFO("Creating the certificate. This may take a while. Please wait...");
+        LOG_INFO("Creating the certificate. This may take a while. Please wait");
         yield();
         cert = new SSLCert();
         yield();
@@ -189,7 +189,7 @@ int32_t WebServerThread::runOnce()
 
 void initWebServer()
 {
-    LOG_DEBUG("Init Web Server...");
+    LOG_DEBUG("Init Web Server");
 
     // We can now use the new certificate to setup our server as usual.
     secureServer = new HTTPSServer(cert);
@@ -198,10 +198,10 @@ void initWebServer()
     registerHandlers(insecureServer, secureServer);
 
     if (secureServer) {
-        LOG_INFO("Start Secure Web Server...");
+        LOG_INFO("Start Secure Web Server");
         secureServer->start();
     }
-    LOG_INFO("Start Insecure Web Server...");
+    LOG_INFO("Start Insecure Web Server");
     insecureServer->start();
     if (insecureServer->isRunning()) {
         LOG_INFO("Web Servers Ready! :-) ");

@@ -141,13 +141,13 @@ bool initEthernet()
 
         if (status == 0) {
             if (Ethernet.hardwareStatus() == EthernetNoHardware) {
-                LOG_ERROR("Ethernet shield was not found.");
+                LOG_ERROR("Ethernet shield was not found");
                 return false;
             } else if (Ethernet.linkStatus() == LinkOFF) {
-                LOG_ERROR("Ethernet cable is not connected.");
+                LOG_ERROR("Ethernet cable is not connected");
                 return false;
             } else {
-                LOG_ERROR("Unknown Ethernet error.");
+                LOG_ERROR("Unknown Ethernet error");
                 return false;
             }
         } else {
