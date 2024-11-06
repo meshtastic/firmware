@@ -251,7 +251,11 @@ meshtastic_MeshPacket *PositionModule::allocReply()
     if (getRTCQuality() < RTCQualityNTP) {
         LOG_INFO("Strip time %u from position send", p.time);
         p.time = 0;
-    } else {
+    } else if (rtc_found.address != ScanI2C::ADDRESS_NONE.address) {
+        LOG_INFO("Using RTC time %u for position send", p.time);
+        p.time = getValidTime(RTCQualityDevice);
+    }
+    else {
         p.time = getValidTime(RTCQualityNTP);
         LOG_INFO("Provide time to mesh %u", p.time);
     }
