@@ -17,9 +17,7 @@
 #include "sleep.h"
 #include "target_specific.h"
 
-extern "C" {
 #include <Throttle.h>
-}
 
 PositionModule *positionModule;
 
