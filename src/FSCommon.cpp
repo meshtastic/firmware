@@ -329,7 +329,7 @@ void fsInit()
 {
 #ifdef FSCom
     if (!FSBegin()) {
-        LOG_ERROR("Filesystem mount Failed.");
+        LOG_ERROR("Filesystem mount failed");
         // assert(0); This auto-formats the partition, so no need to fail here.
     }
 #if defined(ARCH_ESP32)

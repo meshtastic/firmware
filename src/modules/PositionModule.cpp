@@ -249,8 +249,11 @@ meshtastic_MeshPacket *PositionModule::allocReply()
     // nodes shouldn't trust it anyways) Note: we allow a device with a local GPS or NTP to include the time, so that devices
     // without can get time.
     if (getRTCQuality() < RTCQualityNTP) {
-        LOG_INFO("Strip time %u from position send", p.time);
+        LOG_INFO("Strip time %u from position", p.time);
         p.time = 0;
+    } else if (rtc_found.address != ScanI2C::ADDRESS_NONE.address) {
+        LOG_INFO("Use RTC time %u for position", p.time);
+        p.time = getValidTime(RTCQualityDevice);
     } else {
         p.time = getValidTime(RTCQualityNTP);
         LOG_INFO("Provide time to mesh %u", p.time);
