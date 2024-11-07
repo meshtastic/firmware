@@ -476,6 +476,9 @@ class AnalogBatteryLevel : public HasBatteryLevel
     int16_t getINACurrent() {
         if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA219].first == config.power.device_battery_ina_address) {
             return ina219Sensor.getCurrentMa();
+        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA3221].first ==
+                   config.power.device_battery_ina_address) {
+            return ina3221Sensor.getCurrentMa();
         }
         return 0;
     }
