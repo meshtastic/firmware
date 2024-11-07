@@ -2,6 +2,14 @@
 
 set PYTHON=python
 
+:: Determine the correct esptool command to use
+where esptool >nul 2>&1
+if %ERRORLEVEL% EQU 0 (
+    set "ESPTOOL_CMD=esptool"
+) else (
+    set "ESPTOOL_CMD=%PYTHON% -m esptool"
+)
+
 goto GETOPTS
 :HELP
 echo Usage: %~nx0 [-h] [-p ESPTOOL_PORT] [-P PYTHON] [-f FILENAME^|FILENAME]
@@ -24,32 +32,32 @@ IF NOT "__%1__"=="____" goto GETOPTS
 
 IF "__%FILENAME%__" == "____" (
     echo "Missing FILENAME"
-	goto HELP
+    goto HELP
 )
 IF EXIST %FILENAME% IF x%FILENAME:update=%==x%FILENAME% (
     echo Trying to flash update %FILENAME%, but first erasing and writing system information"
-	%PYTHON% -m esptool --baud 115200 erase_flash
-	%PYTHON% -m esptool --baud 115200 write_flash 0x00 %FILENAME%
+    %ESPTOOL_CMD% --baud 115200 erase_flash
+    %ESPTOOL_CMD% --baud 115200 write_flash 0x00 %FILENAME%
     
     @REM Account for S3 and C3 board's different OTA partition
     IF x%FILENAME:s3=%==x%FILENAME% IF x%FILENAME:v3=%==x%FILENAME% IF x%FILENAME:t-deck=%==x%FILENAME% IF x%FILENAME:wireless-paper=%==x%FILENAME% IF x%FILENAME:wireless-tracker=%==x%FILENAME% IF x%FILENAME:station-g2=%==x%FILENAME% IF x%FILENAME:unphone=%==x%FILENAME% (
         IF x%FILENAME:esp32c3=%==x%FILENAME% (
-            %PYTHON% -m esptool --baud 115200 write_flash 0x260000 bleota.bin
+            %ESPTOOL_CMD% --baud 115200 write_flash 0x260000 bleota.bin
         ) else (
-            %PYTHON% -m esptool --baud 115200 write_flash 0x260000 bleota-c3.bin
+            %ESPTOOL_CMD% --baud 115200 write_flash 0x260000 bleota-c3.bin
         )
-	) else (
-        %PYTHON% -m esptool --baud 115200 write_flash 0x260000 bleota-s3.bin
+    ) else (
+        %ESPTOOL_CMD% --baud 115200 write_flash 0x260000 bleota-s3.bin
     )
     for %%f in (littlefs-*.bin) do (
-        %PYTHON% -m esptool --baud 115200 write_flash 0x300000 %%f
+        %ESPTOOL_CMD% --baud 115200 write_flash 0x300000 %%f
     )
 ) else (
     echo "Invalid file: %FILENAME%"
-	goto HELP
+    goto HELP
 ) else (
     echo "Invalid file: %FILENAME%"
-	goto HELP
+    goto HELP
 )
 
 :EOF
