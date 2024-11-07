@@ -3,22 +3,11 @@
 set PYTHON=python
 
 :: Determine the correct esptool command to use
-%PYTHON% -m esptool version >nul 2>&1
+where esptool >nul 2>&1
 if %ERRORLEVEL% EQU 0 (
-    set "ESPTOOL_CMD=%PYTHON% -m esptool"
+    set "ESPTOOL_CMD=esptool"
 ) else (
-    where esptool >nul 2>&1
-    if %ERRORLEVEL% EQU 0 (
-        set "ESPTOOL_CMD=esptool"
-    ) else (
-        where esptool.py >nul 2>&1
-        if %ERRORLEVEL% EQU 0 (
-            set "ESPTOOL_CMD=esptool.py"
-        ) else (
-            echo Error: esptool not found
-            exit /b 1
-        )
-    )
+    set "ESPTOOL_CMD=%PYTHON% -m esptool"
 )
 
 goto GETOPTS
@@ -27,7 +16,7 @@ echo Usage: %~nx0 [-h] [-p ESPTOOL_PORT] [-P PYTHON] [-f FILENAME^|FILENAME]
 echo Flash image file to device, but first erasing and writing system information
 echo.
 echo     -h               Display this help and exit
-echo     -p ESPTOOL_PORT  Set the environment variable for ESPTOOL_PORT.  If not set, ESPTOOL iterates all ports (Dangerous).
+echo     -p ESPTOOL_PORT  Set the environment variable for ESPTOOL_PORT.  If not set, ESPTOOL iterates all ports (Dangerrous).
 echo     -P PYTHON        Specify alternate python interpreter to use to invoke esptool. (Default: %PYTHON%)
 echo     -f FILENAME      The .bin file to flash.  Custom to your device type and region.
 goto EOF
