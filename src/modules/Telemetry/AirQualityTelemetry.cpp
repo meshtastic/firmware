@@ -52,10 +52,11 @@ int32_t AirQualityTelemetryModule::runOnce()
         firstTime = false;
 
         if (moduleConfig.telemetry.air_quality_enabled) {
-            LOG_INFO("Air quality Telemetry: Initializing");
-
+            LOG_INFO("Air quality Telemetry: init");
             if (aqi_found.address == 0x00) {
-                LOG_DEBUG("Rescanning for I2C AQI Sensor");
+#ifndef I2C_NO_RESCAN
+                LOG_WARN("Rescan for I2C AQI Sensor");
+                // rescan for late arriving sensors. AQI Module starts about 10 seconds into the boot so this is plenty.
                 uint8_t i2caddr_scan[] = {PMSA0031_ADDR, SCD4X_ADDR};
                 uint8_t i2caddr_asize = 2;
                 auto i2cScanner = std::unique_ptr<ScanI2CTwoWire>(new ScanI2CTwoWire());
@@ -72,6 +73,7 @@ int32_t AirQualityTelemetryModule::runOnce()
                 if (aqi_found.address == 0x00) {
                     return disable();
                 }
+ #endif
             }
             if (scd4xSensor.hasSensor())
                 result = scd4xSensor.runOnce();
@@ -160,6 +162,9 @@ void AirQualityTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSta
     // Display "Env. From: ..." on its own
     display->drawString(x, y, "AQ. From: " + String(lastSender) + "(" + String(agoSecs) + "s)");
 
+    LOG_INFO("Send: PM1.0(Standard)=%i, PM2.5(Standard)=%i, PM10.0(Standard)=%i", m->variant.air_quality_metrics.pm10_standard,
+             m->variant.air_quality_metrics.pm25_standard, m->variant.air_quality_metrics.pm100_standard);
+
     if (lastMeasurement.variant.air_quality_metrics.has_pm10_standard) {
         display->drawString(x, y += _fontHeight(FONT_SMALL),
                             "PM1.0(Standard): " + String(lastMeasurement.variant.air_quality_metrics.pm10_standard, 0));
@@ -216,7 +221,7 @@ meshtastic_MeshPacket *AirQualityTelemetryModule::allocReply()
         if (decoded->which_variant == meshtastic_Telemetry_air_quality_metrics_tag) {
             meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
             if (getAirQualityTelemetry(&m)) {
-                LOG_INFO("Air quality telemetry replying to request");
+                LOG_INFO("Air quality telemetry reply to request");
                 return allocDataProtobuf(m);
             } else {
                 return NULL;
@@ -252,10 +257,10 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 
         lastMeasurementPacket = packetPool.allocCopy(*p);
         if (phoneOnly) {
-            LOG_INFO("Sending packet to phone");
+            LOG_INFO("Send packet to phone");
             service->sendToPhone(p);
         } else {
-            LOG_INFO("Sending packet to mesh");
+            LOG_INFO("Send packet to mesh");
             service->sendToMesh(p, RX_SRC_LOCAL, true);
         }
         return true;

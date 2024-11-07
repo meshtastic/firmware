@@ -114,6 +114,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define CARDKB_ADDR 0x5F
 #define TDECK_KB_ADDR 0x55
 #define BBQ10_KB_ADDR 0x1F
+#define MPR121_KB_ADDR 0x5A
 
 // -----------------------------------------------------------------------------
 // SENSOR
@@ -135,6 +136,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define LPS22HB_ADDR_ALT 0x5D
 #define SHT31_4x_ADDR 0x44
 #define PMSA0031_ADDR 0x12
+#define QMA6100P_ADDR 0x12
 #define AHT10_ADDR 0x38
 #define RCWL9620_ADDR 0x57
 #define VEML7700_ADDR 0x10
@@ -206,6 +208,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #ifndef GPS_BAUDRATE
 #define GPS_BAUDRATE 9600
+#define GPS_BAUDRATE_FIXED 0
+#else
+#define GPS_BAUDRATE_FIXED 1
 #endif
 
 /* Step #2: follow with defines common to the architecture;

@@ -823,7 +823,7 @@ void TFTDisplay::setDetected(uint8_t detected)
 bool TFTDisplay::connect()
 {
     concurrency::LockGuard g(spiLock);
-    LOG_INFO("Doing TFT init");
+    LOG_INFO("Do TFT init");
 #ifdef RAK14014
     tft = new TFT_eSPI;
 #else

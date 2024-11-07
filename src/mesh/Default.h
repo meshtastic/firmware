@@ -1,6 +1,7 @@
 #pragma once
 #include <NodeDB.h>
 #include <cstdint>
+#include <meshUtils.h>
 #define ONE_DAY 24 * 60 * 60
 #define ONE_MINUTE_MS 60 * 1000
 #define THIRTY_SECONDS_MS 30 * 1000
@@ -41,12 +42,30 @@ class Default
   private:
     static float congestionScalingCoefficient(int numOnlineNodes)
     {
-        if (numOnlineNodes <= 40) {
-            return 1.0; // No scaling for 40 or fewer nodes
+        // Increase frequency of broadcasts for small networks regardless of preset
+        if (numOnlineNodes <= 10) {
+            return 0.6;
+        } else if (numOnlineNodes <= 20) {
+            return 0.7;
+        } else if (numOnlineNodes <= 30) {
+            return 0.8;
+        } else if (numOnlineNodes <= 40) {
+            return 1.0;
         } else {
-            // Sscaling based on number of nodes over 40
+            float throttlingFactor = 0.075;
+            if (config.lora.use_preset && config.lora.modem_preset == meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW)
+                throttlingFactor = 0.04;
+            else if (config.lora.use_preset && config.lora.modem_preset == meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST)
+                throttlingFactor = 0.02;
+            else if (config.lora.use_preset && config.lora.modem_preset == meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW)
+                throttlingFactor = 0.01;
+            else if (config.lora.use_preset &&
+                     IS_ONE_OF(config.lora.modem_preset, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST,
+                               meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO))
+                return 1.0; // Don't bother throttling for highest bandwidth presets
+            // Scaling up traffic based on number of nodes over 40
             int nodesOverForty = (numOnlineNodes - 40);
-            return 1.0 + (nodesOverForty * 0.075); // Each number of online node scales by 0.075
+            return 1.0 + (nodesOverForty * throttlingFactor); // Each number of online node scales by 0.075 (default)
         }
     }
 };
