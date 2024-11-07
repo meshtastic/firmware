@@ -11,12 +11,12 @@ lint:
     - trufflehog@3.83.2
     - yamllint@1.35.1
     - bandit@1.7.10
-    - checkov@3.2.276
+    - checkov@3.2.277
     - terrascan@1.19.9
     - trivy@0.56.2
     #- trufflehog@3.63.2-rc0
     - taplo@0.9.3
-    - ruff@0.7.1
+    - ruff@0.7.2
     - isort@5.13.2
     - markdownlint@0.42.0
     - oxipng@9.1.2

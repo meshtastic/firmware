@@ -40,7 +40,7 @@ struct UIFrameEvent {
     enum Action {
         REDRAW_ONLY,                    // Don't change which frames are show, just redraw, asap
         REGENERATE_FRAMESET,            // Regenerate (change? add? remove?) screen frames, honoring requestFocus()
-        REGENERATE_FRAMESET_BACKGROUND, // Regenerate screen frames, attempting to remain on the same frame throughout
+        REGENERATE_FRAMESET_BACKGROUND, // Regenerate screen frames, Attempt to remain on the same frame throughout
     } action = REDRAW_ONLY;
 
     // We might want to pass additional data inside this struct at some point
@@ -162,7 +162,7 @@ class MeshModule
     virtual Observable<const UIFrameEvent *> *getUIFrameObservable() { return NULL; }
 
     meshtastic_MeshPacket *allocAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex,
-                                       uint8_t hopStart = 0, uint8_t hopLimit = 0);
+                                       uint8_t hopLimit = 0);
 
     /// Send an error response for the specified packet.
     meshtastic_MeshPacket *allocErrorResponse(meshtastic_Routing_Error err, const meshtastic_MeshPacket *p);

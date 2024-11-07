@@ -28,7 +28,7 @@ class AccelerometerThread : public concurrency::OSThread
     bool isInitialised = false;
 
   public:
-    explicit AccelerometerThread(ScanI2C::FoundDevice foundDevice) : OSThread("AccelerometerThread")
+    explicit AccelerometerThread(ScanI2C::FoundDevice foundDevice) : OSThread("Accelerometer")
     {
         device = foundDevice;
         init();
@@ -65,14 +65,14 @@ class AccelerometerThread : public concurrency::OSThread
             return;
 
         if (device.address.port == ScanI2C::I2CPort::NO_I2C || device.address.address == 0 || device.type == ScanI2C::NONE) {
-            LOG_DEBUG("AccelerometerThread disabling due to no sensors found");
+            LOG_DEBUG("AccelerometerThread Disable due to no sensors found");
             disable();
             return;
         }
 
 #ifndef RAK_4631
         if (!config.display.wake_on_tap_or_motion && !config.device.double_tap_as_button_press) {
-            LOG_DEBUG("AccelerometerThread disabling due to no interested configurations");
+            LOG_DEBUG("AccelerometerThread Disable due to no interested configurations");
             disable();
             return;
         }
@@ -118,7 +118,7 @@ class AccelerometerThread : public concurrency::OSThread
     }
 
     // Copy constructor (not implemented / included to avoid cppcheck warnings)
-    AccelerometerThread(const AccelerometerThread &other) : OSThread::OSThread("AccelerometerThread") { this->copy(other); }
+    AccelerometerThread(const AccelerometerThread &other) : OSThread::OSThread("Accelerometer") { this->copy(other); }
 
     // Destructor (included to avoid cppcheck warnings)
     virtual ~AccelerometerThread() { clean(); }

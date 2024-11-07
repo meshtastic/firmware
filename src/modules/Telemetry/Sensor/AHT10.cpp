@@ -27,7 +27,7 @@ void AHT10Sensor::setup() {}
 
 bool AHT10Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
-    LOG_DEBUG("AHT10Sensor::getMetrics");
+    LOG_DEBUG("AHT10 getMetrics");
 
     sensors_event_t humidity, temp;
     aht10.getEvent(&humidity, &temp);

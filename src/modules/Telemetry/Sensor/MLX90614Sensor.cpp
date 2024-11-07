@@ -19,7 +19,7 @@ int32_t MLX90614Sensor::runOnce()
         LOG_DEBUG("MLX90614 emissivity: %f", mlx.readEmissivity());
         if (fabs(MLX90614_EMISSIVITY - mlx.readEmissivity()) > 0.001) {
             mlx.writeEmissivity(MLX90614_EMISSIVITY);
-            LOG_INFO("MLX90614 emissivity updated. In case of weird data, power cycle.");
+            LOG_INFO("MLX90614 emissivity updated. In case of weird data, power cycle");
         }
         LOG_DEBUG("MLX90614 Init Succeed");
         status = true;

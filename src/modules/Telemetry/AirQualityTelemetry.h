@@ -16,7 +16,7 @@ class AirQualityTelemetryModule : private concurrency::OSThread, public Protobuf
 
   public:
     AirQualityTelemetryModule()
-        : concurrency::OSThread("AirQualityTelemetryModule"),
+        : concurrency::OSThread("AirQualityTelemetry"),
           ProtobufModule("AirQualityTelemetry", meshtastic_PortNum_TELEMETRY_APP, &meshtastic_Telemetry_msg)
     {
         lastMeasurementPacket = nullptr;
