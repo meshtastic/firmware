@@ -10,7 +10,10 @@
 #include "mesh-pb-constants.h"
 #include <pb_decode.h>
 #include <pb_encode.h>
-
+#ifdef HELTEC_V3
+#include <soc/soc.h>
+#include <soc/rtc_cntl_reg.h>
+#endif
 #if ARCH_PORTDUINO
 #include "PortduinoGlue.h"
 #include "meshUtils.h"
@@ -278,6 +281,9 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     startReceive();      // try receiving this packet, afterwards we'll be trying to transmit again
                     setTransmitDelay();
                 } else {
+#ifdef HELTEC_V3
+                    WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); // disable brownout detector
+#endif
                     // Send any outgoing packets we have ready
                     meshtastic_MeshPacket *txp = txQueue.dequeue();
                     assert(txp);
@@ -287,6 +293,9 @@ void RadioLibInterface::onNotify(uint32_t notification)
                         uint32_t xmitMsec = getPacketTime(txp);
                         airTime->logAirtime(TX_LOG, xmitMsec);
                     }
+#ifdef HELTEC_V3
+                    WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 1); // re-enable brownout detector
+#endif
                 }
             }
         } else {
