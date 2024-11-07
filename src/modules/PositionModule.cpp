@@ -16,7 +16,6 @@
 #include "meshtastic/atak.pb.h"
 #include "sleep.h"
 #include "target_specific.h"
-
 #include <Throttle.h>
 
 PositionModule *positionModule;
