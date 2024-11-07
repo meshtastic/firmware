@@ -81,7 +81,7 @@ typedef struct _meshtastic_NodeInfoLite {
     uint8_t channel;
     /* True if we witnessed the node over MQTT instead of LoRA transport */
     bool via_mqtt;
-    /* Number of hops away from us this node is (0 if adjacent) */
+    /* Number of hops away from us this node is (0 if direct neighbor) */
     bool has_hops_away;
     uint8_t hops_away;
     /* True if node is in our favorites list
