@@ -11,8 +11,8 @@
 #include <pb_decode.h>
 #include <pb_encode.h>
 #ifdef HELTEC_V3
-#include <soc/soc.h>
 #include <soc/rtc_cntl_reg.h>
+#include <soc/soc.h>
 #endif
 #if ARCH_PORTDUINO
 #include "PortduinoGlue.h"
