@@ -7,6 +7,8 @@ on:
         required: true
         type: string
 
+permissions: read-all
+
 jobs:
   build-esp32-s3:
     runs-on: ubuntu-latest
@@ -24,6 +26,7 @@ jobs:
             ./arch/esp32/esp32s2.ini
             ./arch/esp32/esp32s3.ini
             ./arch/esp32/esp32c3.ini
+            ./arch/esp32/esp32c6.ini
           build-script-path: bin/build-esp32.sh
           ota-firmware-source: firmware-s3.bin
           ota-firmware-target: release/bleota-s3.bin

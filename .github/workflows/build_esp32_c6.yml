@@ -33,5 +33,6 @@ jobs:
           artifact-paths: |
             release/*.bin
             release/*.elf
+          include-web-ui: true
           arch: esp32c6
           USER_PREFS: ${{ secrets.USER_PREFS }}
