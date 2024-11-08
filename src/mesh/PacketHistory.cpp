@@ -29,7 +29,7 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
     r.rxTimeMsec = millis();
     r.next_hop = p->next_hop;
     r.relayed_by[0] = p->relay_node;
-    LOG_INFO("Add relayed_by 0x%x for id=0x%x", p->relay_node, r.id);
+    // LOG_INFO("Add relayed_by 0x%x for id=0x%x", p->relay_node, r.id);
 
     auto found = recentPackets.find(r);
     bool seenRecently = (found != recentPackets.end()); // found not equal to .end() means packet was seen recently
@@ -56,7 +56,7 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
         if (found->sender != nodeDB->getNodeNum() && found->next_hop != NO_NEXT_HOP_PREFERENCE &&
             p->next_hop == NO_NEXT_HOP_PREFERENCE && found->next_hop != ourRelayID && p->relay_node != 0 &&
             wasRelayer(p->relay_node, found) && !wasRelayer(ourRelayID, found) && !wasRelayer(found->next_hop, found)) {
-            LOG_WARN("Fallback to flooding, consider unseen relay_node=0x%x", p->relay_node);
+            LOG_INFO("Fallback to flooding, consider unseen relay_node=0x%x", p->relay_node);
             seenRecently = false;
         }
     }
