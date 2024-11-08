@@ -112,6 +112,8 @@ bool PacketHistory::wasRelayer(const uint8_t relayer, const uint32_t id, const N
     PacketRecord r;
     r.id = id;
     r.sender = sender;
+    r.rxTimeMsec = 0;
+    r.next_hop = 0;
     auto found = recentPackets.find(r);
 
     if (found == recentPackets.end()) {
