@@ -49,12 +49,12 @@ bool NextHopRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Routing *c)
 {
     NodeNum ourNodeNum = getNodeNum();
+    uint8_t ourRelayID = nodeDB->getLastByteOfNodeNum(ourNodeNum);
     bool isAckorReply = (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) && (p->decoded.request_id != 0);
     if (isAckorReply) {
         // Update next-hop for the original transmitter of this successful transmission to the relay node, but ONLY if "from" is
         // not 0 (means implicit ACK) and original packet was also relayed by this node, or we sent it directly to the destination
         if (p->from != 0 && p->relay_node) {
-            uint8_t ourRelayID = nodeDB->getLastByteOfNodeNum(ourNodeNum);
             meshtastic_NodeInfoLite *origTx = nodeDB->getMeshNode(p->from);
             if (origTx) {
                 // Either relayer of ACK was also a relayer of the packet, or we were the relayer and the ACK came directly from
@@ -78,7 +78,7 @@ void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtast
 
     if (isRebroadcaster()) {
         if (!isToUs(p) && !isFromUs(p)) {
-            if (p->next_hop == NO_NEXT_HOP_PREFERENCE || p->next_hop == nodeDB->getLastByteOfNodeNum(ourNodeNum)) {
+            if (p->next_hop == NO_NEXT_HOP_PREFERENCE || p->next_hop == ourRelayID) {
                 meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
                 LOG_INFO("Relaying received message coming from %x", p->relay_node);
 
@@ -100,15 +100,13 @@ void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtast
 uint8_t NextHopRouter::getNextHop(NodeNum to, uint8_t relay_node)
 {
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(to);
-    if (node) {
+    if (node && node->next_hop) {
         // We are careful not to return the relay node as the next hop
-        if (node->next_hop && node->next_hop != relay_node) {
+        if (node->next_hop != relay_node) {
             // LOG_DEBUG("Next hop for 0x%x is 0x%x", to, node->next_hop);
             return node->next_hop;
-        } else {
-            if (node->next_hop)
-                LOG_WARN("Next hop for 0x%x is 0x%x, same as relayer; set no pref", to, node->next_hop);
-        }
+        } else
+            LOG_WARN("Next hop for 0x%x is 0x%x, same as relayer; set no pref", to, node->next_hop);
     }
     return NO_NEXT_HOP_PREFERENCE;
 }
