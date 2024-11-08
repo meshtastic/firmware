@@ -62,8 +62,8 @@ int32_t DetectionSensorModule::runOnce()
     // moduleConfig.detection_sensor.detection_trigger_type =
     // meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_LOGIC_HIGH;
     // strcpy(moduleConfig.detection_sensor.name, "Motion");
-    // moduleConfig.detection_sensor.sendTochannel = true; // Set false, msg will be send to UserID else sending to Channel Index.
-    // moduleConfig.detection_sensor.sendTo =  1; // Send to UserID or Channel Index
+    // moduleConfig.detection_sensor.send_tochannel = true; // Set false, msg will be send to NodeNum else sending to Channel Index.
+    // moduleConfig.detection_sensor.send_to =  1; // Send to NodeNum or Channel Index
 
     if (moduleConfig.detection_sensor.enabled == false)
         return disable();
@@ -80,10 +80,10 @@ int32_t DetectionSensorModule::runOnce()
         if (moduleConfig.detection_sensor.monitor_pin > 0) {
             pinMode(moduleConfig.detection_sensor.monitor_pin, moduleConfig.detection_sensor.use_pullup ? INPUT_PULLUP : INPUT);
         } else {
-            LOG_WARN("DetectionSensor: no monitor pin set. Disabling module...");
+            LOG_WARN("Detection Sensor Module: Set to enabled but no monitor pin is set. Disable module");
             return disable();
         }
-        LOG_INFO("DetectionSensor: Init");
+        LOG_INFO("Detection Sensor Module: init");
 
         return DELAYED_INTERVAL;
     }
@@ -121,81 +121,77 @@ int32_t DetectionSensorModule::runOnce()
 
 void DetectionSensorModule::sendDetectionMessage()
 {
-    if (moduleConfig.detection_sensor.sendTo != 0x00) {
-        uint32_t msgDestination = moduleConfig.detection_sensor.sendTo;
-        LOG_DEBUG("Detected event. Sending message");
-        char *message = new char[40];
-        bool isValidrecipient = false;
-        sprintf(message, "%s detected", moduleConfig.detection_sensor.name);
-        meshtastic_MeshPacket *p = allocDataPacket();
-        p->want_ack = false;
-        if (moduleConfig.detection_sensor.sendTochannel) {
-            if (!channels.isDefaultChannel(msgDestination)) {
-                p->channel = msgDestination;
-                isValidrecipient = true;
-            } else
-                LOG_INFO("%d is public/not found", moduleConfig.detection_sensor.sendTo);
-        } else {
-            p->to = msgDestination;
+    uint32_t msgDestination = moduleConfig.detection_sensor.send_to;
+    LOG_DEBUG("Detected event. Sending message");
+    char *message = new char[40];
+    bool isValidrecipient = false;
+    sprintf(message, "%s detected", moduleConfig.detection_sensor.name);
+    meshtastic_MeshPacket *p = allocDataPacket();
+    p->want_ack = false;
+    if (!moduleConfig.detection_sensor.send_as_dm) {
+        if (!channels.isDefaultChannel(msgDestination)) {
+            p->channel = msgDestination;
             isValidrecipient = true;
-        }
-        p->decoded.payload.size = strlen(message);
-        memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
-        if (moduleConfig.detection_sensor.send_bell && p->decoded.payload.size < meshtastic_Constants_DATA_PAYLOAD_LEN) {
-            p->decoded.payload.bytes[p->decoded.payload.size] = 7;        // Bell character
-            p->decoded.payload.bytes[p->decoded.payload.size + 1] = '\0'; // Bell character
-            p->decoded.payload.size++;
-        }
-        lastSentToMesh = millis();
-        if (isValidrecipient) {
-            LOG_INFO("Send message id=%d, dest=%x, msg=%.*s", p->id,
-                    (moduleConfig.detection_sensor.sendTochannel ? p->channel : p->to),
-                    p->decoded.payload.size,
-                    p->decoded.payload.bytes);
-            service->sendToMesh(p);
-        }
-        delete[] message;
         } else
-            LOG_INFO("DetectionSensor: no recipient");
+            LOG_INFO("%d is public/not found", moduleConfig.detection_sensor.send_to);
+    } else {
+        p->to = msgDestination;
+        isValidrecipient = true;
+    }
+    p->decoded.payload.size = strlen(message);
+    memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
+    if (moduleConfig.detection_sensor.send_bell && p->decoded.payload.size < meshtastic_Constants_DATA_PAYLOAD_LEN) {
+        p->decoded.payload.bytes[p->decoded.payload.size] = 7;        // Bell character
+        p->decoded.payload.bytes[p->decoded.payload.size + 1] = '\0'; // Bell character
+        p->decoded.payload.size++;
+    }
+    lastSentToMesh = millis();
+    if (isValidrecipient) {
+        LOG_INFO("Send message id=%d, dest=%x, msg=%.*s", p->id,
+                (moduleConfig.detection_sensor.send_as_dm ? p->channel : p->to),
+                p->decoded.payload.size,
+                p->decoded.payload.bytes);
+        service->sendToMesh(p);
+    } else
+        LOG_INFO("Detection Sensor Module: no recipient");
+    delete[] message;
 }
 
 void DetectionSensorModule::sendCurrentStateMessage(bool state)
 {
-    if (moduleConfig.detection_sensor.sendTo != 0x00) {
-        uint32_t msgDestination = moduleConfig.detection_sensor.sendTo;
-        char *message = new char[40];
-        bool isValidrecipient = false;
-        sprintf(message, "%s state: %i", moduleConfig.detection_sensor.name, state);
-        meshtastic_MeshPacket *p = allocDataPacket();
-        p->want_ack = false;
-        if (moduleConfig.detection_sensor.sendTochannel) {
-            if (!channels.isDefaultChannel(msgDestination)) {
-                p->channel = msgDestination;
-                isValidrecipient = true;
-            } else
-                LOG_INFO("%s is public/not found", moduleConfig.detection_sensor.sendTo);
-        } else {
-            p->to = msgDestination;
+    uint32_t msgDestination = moduleConfig.detection_sensor.send_to;
+    char *message = new char[40];
+    bool isValidrecipient = false;
+    sprintf(message, "%s state: %i", moduleConfig.detection_sensor.name, state);
+    meshtastic_MeshPacket *p = allocDataPacket();
+    p->want_ack = false;
+    if (!moduleConfig.detection_sensor.send_as_dm) {
+        if (!channels.isDefaultChannel(msgDestination)) {
+            p->channel = msgDestination;
             isValidrecipient = true;
-        }
-        p->decoded.payload.size = strlen(message);
-        memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
-        lastSentToMesh = millis();
-        if (isValidrecipient) {
-            LOG_INFO("Send message id=%d, dest=%x, msg=%.*s", p->id,
-                (moduleConfig.detection_sensor.sendTochannel ? p->channel : p->to),
-                p->decoded.payload.size,
-                p->decoded.payload.bytes);
-            service->sendToMesh(p);
-        }
-        delete[] message;
         } else
-            LOG_INFO("Detection Sensor: no recipient");
+            LOG_INFO("%s is public/not found", moduleConfig.detection_sensor.send_to);
+    } else {
+        p->to = msgDestination;
+        isValidrecipient = true;
+    }
+    p->decoded.payload.size = strlen(message);
+    memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
+    lastSentToMesh = millis();
+    if (isValidrecipient) {
+        LOG_INFO("Send message id=%d, dest=%x, msg=%.*s", p->id,
+            (moduleConfig.detection_sensor.send_as_dm ? p->channel : p->to),
+            p->decoded.payload.size,
+            p->decoded.payload.bytes);
+        service->sendToMesh(p);
+    } else
+        LOG_INFO("Detection Sensor Module: no recipient");
+    delete[] message;
 }
 
 bool DetectionSensorModule::hasDetectionEvent()
 {
     bool currentState = digitalRead(moduleConfig.detection_sensor.monitor_pin);
-    // LOG_DEBUG("Detection Sensor: state: %i", currentState);
+    // LOG_DEBUG("Detection Sensor Module: state: %i", currentState);
     return (moduleConfig.detection_sensor.detection_trigger_type & 1) ? currentState : !currentState;
 }
