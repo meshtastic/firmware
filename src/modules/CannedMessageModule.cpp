@@ -325,9 +325,9 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
 
             this->shift = !this->shift;
         } else if (keyTapped == "⌫") {
-            #ifndef  RAK14014
+#ifndef RAK14014
             this->highlight = keyTapped[0];
-            #endif
+#endif
 
             this->payload = 0x08;
 
@@ -343,10 +343,10 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
 
             validEvent = true;
         } else if (keyTapped == " ") {
-            #ifndef  RAK14014
+#ifndef RAK14014
             this->highlight = keyTapped[0];
-            #endif
-            
+#endif
+
             this->payload = keyTapped[0];
 
             validEvent = true;
@@ -365,9 +365,9 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
 
             this->shift = false;
         } else if (keyTapped != "") {
-            #ifndef  RAK14014
+#ifndef RAK14014
             this->highlight = keyTapped[0];
-            #endif
+#endif
 
             this->payload = this->shift ? keyTapped[0] : std::tolower(keyTapped[0]);
 
@@ -836,9 +836,8 @@ void CannedMessageModule::drawKeyboard(OLEDDisplay *display, OLEDDisplayUiState 
 
             Letter updatedLetter = {letter.character, letter.width, xOffset, yOffset, cellWidth, cellHeight};
 
-#ifdef RAK14014  //Optimize the touch range of the virtual keyboard in the bottom row
-            if(outerIndex == outerSize - 1)
-            {
+#ifdef RAK14014 // Optimize the touch range of the virtual keyboard in the bottom row
+            if (outerIndex == outerSize - 1) {
                 updatedLetter.rectHeight = 240 - yOffset;
             }
 #endif
