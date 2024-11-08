@@ -127,7 +127,7 @@ typedef enum _meshtastic_PortNum {
     /* PowerStress based monitoring support (for automated power consumption testing) */
     meshtastic_PortNum_POWERSTRESS_APP = 74,
     /* Airborne tracking: allow existing systemw with compact position formats put those on Meshtantic */
-    meshtastic_PortNum_POWERSTRESS_APP = 75,
+    meshtastic_PortNum_AIRBORNE_APP = 75,
     /* Private applications should use portnums >= 256.
  To simplify initial development and testing you can use "PRIVATE_APP"
  in your code without needing to rebuild protobuf files (via [regen-protos.sh](https://github.com/meshtastic/firmware/blob/master/bin/regen-protos.sh)) */
