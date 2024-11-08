@@ -26,10 +26,12 @@ jobs:
             ./arch/esp32/esp32s2.ini
             ./arch/esp32/esp32s3.ini
             ./arch/esp32/esp32c3.ini
+            ./arch/esp32/esp32c6.ini
           build-script-path: bin/build-esp32.sh
           ota-firmware-source: firmware-c3.bin
           ota-firmware-target: release/bleota-c3.bin
           artifact-paths: |
             release/*.bin
             release/*.elf
+          include-web-ui: true
           arch: esp32c3
