@@ -116,7 +116,7 @@ void MPR121Keyboard::begin(i2c_com_fptr_t r, i2c_com_fptr_t w, uint8_t addr)
 
 void MPR121Keyboard::reset()
 {
-    LOG_DEBUG("MPR121 Reset...");
+    LOG_DEBUG("MPR121 Reset");
     // Trigger a MPR121 Soft Reset
     if (m_wire) {
         m_wire->beginTransmission(m_addr);

@@ -451,7 +451,7 @@ void setup()
     // accessories
     auto i2cScanner = std::unique_ptr<ScanI2CTwoWire>(new ScanI2CTwoWire());
 #if HAS_WIRE
-    LOG_INFO("Scan for i2c devices...");
+    LOG_INFO("Scan for i2c devices");
 #endif
 
 #if defined(I2C_SDA1) && defined(ARCH_RP2040)
@@ -476,7 +476,7 @@ void setup()
     i2cScanner->scanPort(ScanI2C::I2CPort::WIRE);
 #elif defined(ARCH_PORTDUINO)
     if (settingsStrings[i2cdev] != "") {
-        LOG_INFO("Scan for i2c devices...");
+        LOG_INFO("Scan for i2c devices");
         i2cScanner->scanPort(ScanI2C::I2CPort::WIRE);
     }
 #elif HAS_WIRE

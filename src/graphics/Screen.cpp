@@ -1789,7 +1789,7 @@ int32_t Screen::runOnce()
     // serialSinceMsec adjusts for additional serial wait time during nRF52 bootup
     static bool showingBootScreen = true;
     if (showingBootScreen && (millis() > (logo_timeout + serialSinceMsec))) {
-        LOG_INFO("Done with boot screen...");
+        LOG_INFO("Done with boot screen");
         stopBootScreen();
         showingBootScreen = false;
     }

@@ -409,7 +409,17 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 #else
                 SCAN_SIMPLE_CASE(PMSA0031_ADDR, PMSA0031, "PMSA0031 air quality sensor found")
 #endif
-                SCAN_SIMPLE_CASE(BMA423_ADDR, BMA423, "BMA423 accelerometer found");
+            case BMA423_ADDR: // this can also be LIS3DH_ADDR_ALT
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0F), 2);
+                if (registerValue == 0x3300 || registerValue == 0x3333) { // RAK4631 WisBlock has LIS3DH register at 0x3333
+                    type = LIS3DH;
+                    LOG_INFO("LIS3DH accelerometer found");
+                } else {
+                    type = BMA423;
+                    LOG_INFO("BMA423 accelerometer found");
+                }
+                break;
+
                 SCAN_SIMPLE_CASE(LSM6DS3_ADDR, LSM6DS3, "LSM6DS3 accelerometer found at address 0x%x", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(TCA9535_ADDR, TCA9535, "TCA9535 I2C expander found");
                 SCAN_SIMPLE_CASE(TCA9555_ADDR, TCA9555, "TCA9555 I2C expander found");

@@ -1,5 +1,6 @@
 #include "Default.h"
 #include "../userPrefs.h"
+#include "meshUtils.h"
 
 uint32_t Default::getConfiguredOrDefaultMs(uint32_t configuredInterval, uint32_t defaultInterval)
 {
@@ -38,6 +39,10 @@ uint32_t Default::getConfiguredOrDefaultMsScaled(uint32_t configured, uint32_t d
 {
     // If we are a router, we don't scale the value. It's already significantly higher.
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER)
+        return getConfiguredOrDefaultMs(configured, defaultValue);
+
+    // Additionally if we're a tracker or sensor, we want priority to send position and telemetry
+    if (IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_SENSOR, meshtastic_Config_DeviceConfig_Role_TRACKER))
         return getConfiguredOrDefaultMs(configured, defaultValue);
 
     return getConfiguredOrDefaultMs(configured, defaultValue) * congestionScalingCoefficient(numOnlineNodes);

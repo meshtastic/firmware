@@ -71,7 +71,7 @@ template <typename T> bool SX128xInterface<T>::init()
     LOG_INFO("SX128x init result %d", res);
 
     if ((config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24) && (res == RADIOLIB_ERR_INVALID_FREQUENCY)) {
-        LOG_WARN("Radio chip only supports 2.4GHz LoRa. Adjusting Region and rebooting.");
+        LOG_WARN("Radio only supports 2.4GHz LoRa. Adjusting Region and rebooting");
         config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_LORA_24;
         nodeDB->saveToDisk(SEGMENT_CONFIG);
         delay(2000);
@@ -80,7 +80,7 @@ template <typename T> bool SX128xInterface<T>::init()
 #elif defined(ARCH_NRF52)
         NVIC_SystemReset();
 #else
-        LOG_ERROR("FIXME implement reboot for this platform. Skip for now.");
+        LOG_ERROR("FIXME implement reboot for this platform. Skip for now");
 #endif
     }
 
