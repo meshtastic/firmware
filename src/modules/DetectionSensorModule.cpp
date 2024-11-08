@@ -76,7 +76,7 @@ int32_t DetectionSensorModule::runOnce()
         if (moduleConfig.detection_sensor.monitor_pin > 0) {
             pinMode(moduleConfig.detection_sensor.monitor_pin, moduleConfig.detection_sensor.use_pullup ? INPUT_PULLUP : INPUT);
         } else {
-            LOG_WARN("Detection Sensor Module: Set to enabled but no monitor pin is set. Disable module...");
+            LOG_WARN("Detection Sensor Module: Set to enabled but no monitor pin is set. Disable module");
             return disable();
         }
         LOG_INFO("Detection Sensor Module: init");

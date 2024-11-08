@@ -31,7 +31,7 @@ class TelemetrySensor
     int32_t initI2CSensor()
     {
         if (!status) {
-            LOG_WARN("Could not connect to detected %s sensor. Remove from nodeTelemetrySensorsMap.", sensorName);
+            LOG_WARN("Can't connect to detected %s sensor. Remove from nodeTelemetrySensorsMap", sensorName);
             nodeTelemetrySensorsMap[sensorType].first = 0;
         } else {
             LOG_INFO("Opened %s sensor on i2c bus", sensorName);
