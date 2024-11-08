@@ -5,7 +5,9 @@
 #include "PowerFSM.h"
 #include "configuration.h"
 #include "main.h"
+#include <Channels.h>
 #include <Throttle.h>
+
 DetectionSensorModule *detectionSensorModule;
 
 #define GPIO_POLLING_INTERVAL 100
@@ -60,8 +62,8 @@ int32_t DetectionSensorModule::runOnce()
     // moduleConfig.detection_sensor.detection_trigger_type =
     // meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_LOGIC_HIGH;
     // strcpy(moduleConfig.detection_sensor.name, "Motion");
-    // moduleConfig.detection_sensor.sendTochannel = true;
-    // strcpy(moduleConfig.detection_sensor.sendTo, "NIU"); // Send to NodeID or Channel Name
+    // moduleConfig.detection_sensor.sendTochannel = true; // Set false, msg will be send to UserID else sending to Channel Index.
+    // moduleConfig.detection_sensor.sendTo =  1; // Send to UserID or Channel Index
 
     if (moduleConfig.detection_sensor.enabled == false)
         return disable();
@@ -78,18 +80,17 @@ int32_t DetectionSensorModule::runOnce()
         if (moduleConfig.detection_sensor.monitor_pin > 0) {
             pinMode(moduleConfig.detection_sensor.monitor_pin, moduleConfig.detection_sensor.use_pullup ? INPUT_PULLUP : INPUT);
         } else {
-            LOG_WARN("Detection Sensor Module: Set to enabled but no monitor pin is set. Disable module");
+            LOG_WARN("DetectionSensor: no monitor pin set. Disabling module...");
             return disable();
         }
-        LOG_INFO("Detection Sensor Module: init");
+        LOG_INFO("DetectionSensor: Init");
 
         return DELAYED_INTERVAL;
     }
 
-    // LOG_DEBUG("Detection Sensor Module: Current pin state: %i", digitalRead(moduleConfig.detection_sensor.monitor_pin));
-
+    // LOG_DEBUG("Detection Sensor: Pin state: %i", digitalRead(moduleConfig.detection_sensor.monitor_pin));
     if (!Throttle::isWithinTimespanMs(lastSentToMesh,
-                                      Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.minimum_broadcast_secs))) {
+                                    Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.minimum_broadcast_secs))) {
         bool isDetected = hasDetectionEvent();
         DetectionSensorTriggerVerdict verdict =
             handlers[moduleConfig.detection_sensor.detection_trigger_type](wasDetected, isDetected);
@@ -110,7 +111,7 @@ int32_t DetectionSensorModule::runOnce()
     // change detections.
     if (moduleConfig.detection_sensor.state_broadcast_secs > 0 &&
         !Throttle::isWithinTimespanMs(lastSentToMesh,
-                                      Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.state_broadcast_secs,
+                                    Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.state_broadcast_secs,
                                                                         default_telemetry_broadcast_interval_secs))) {
         sendCurrentStateMessage(hasDetectionEvent());
         return DELAYED_INTERVAL;
@@ -120,22 +121,22 @@ int32_t DetectionSensorModule::runOnce()
 
 void DetectionSensorModule::sendDetectionMessage()
 {
-    if (moduleConfig.detection_sensor.sendTo[0] != 0x00) {
-        LOG_DEBUG("Detected event observed. Send message");
+    if (moduleConfig.detection_sensor.sendTo != 0x00) {
+        uint32_t msgDestination = moduleConfig.detection_sensor.sendTo;
+        LOG_DEBUG("Detected event. Sending message");
         char *message = new char[40];
         bool isValidrecipient = false;
         sprintf(message, "%s detected", moduleConfig.detection_sensor.name);
         meshtastic_MeshPacket *p = allocDataPacket();
         p->want_ack = false;
         if (moduleConfig.detection_sensor.sendTochannel) {
-            const auto &ch = channels.getByName(moduleConfig.detection_sensor.sendTo);
-            if (!channels.isDefaultChannel(ch.index)) {
-                p->channel = ch.index;
+            if (!channels.isDefaultChannel(msgDestination)) {
+                p->channel = msgDestination;
                 isValidrecipient = true;
             } else
-                LOG_INFO("%s is public/not found", moduleConfig.detection_sensor.sendTo);
+                LOG_INFO("%d is public/not found", moduleConfig.detection_sensor.sendTo);
         } else {
-            p->to = (uint32_t)strtoul(moduleConfig.detection_sensor.sendTo, NULL, sizeof(moduleConfig.detection_sensor.sendTo));
+            p->to = msgDestination;
             isValidrecipient = true;
         }
         p->decoded.payload.size = strlen(message);
@@ -160,21 +161,21 @@ void DetectionSensorModule::sendDetectionMessage()
 
 void DetectionSensorModule::sendCurrentStateMessage(bool state)
 {
-    if (moduleConfig.detection_sensor.sendTo[0] != 0x00) {
+    if (moduleConfig.detection_sensor.sendTo != 0x00) {
+        uint32_t msgDestination = moduleConfig.detection_sensor.sendTo;
         char *message = new char[40];
         bool isValidrecipient = false;
         sprintf(message, "%s state: %i", moduleConfig.detection_sensor.name, state);
         meshtastic_MeshPacket *p = allocDataPacket();
         p->want_ack = false;
         if (moduleConfig.detection_sensor.sendTochannel) {
-            const auto &ch = channels.getByName(moduleConfig.detection_sensor.sendTo);
-            if (!channels.isDefaultChannel(ch.index)) {
-                p->channel = ch.index;
+            if (!channels.isDefaultChannel(msgDestination)) {
+                p->channel = msgDestination;
                 isValidrecipient = true;
             } else
                 LOG_INFO("%s is public/not found", moduleConfig.detection_sensor.sendTo);
         } else {
-            p->to = (uint32_t)strtoul(moduleConfig.detection_sensor.sendTo, NULL, sizeof(moduleConfig.detection_sensor.sendTo));
+            p->to = msgDestination;
             isValidrecipient = true;
         }
         p->decoded.payload.size = strlen(message);
@@ -195,6 +196,6 @@ void DetectionSensorModule::sendCurrentStateMessage(bool state)
 bool DetectionSensorModule::hasDetectionEvent()
 {
     bool currentState = digitalRead(moduleConfig.detection_sensor.monitor_pin);
-    // LOG_DEBUG("Detection Sensor Module: Current state: %i", currentState);
+    // LOG_DEBUG("Detection Sensor: state: %i", currentState);
     return (moduleConfig.detection_sensor.detection_trigger_type & 1) ? currentState : !currentState;
 }
