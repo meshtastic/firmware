@@ -71,7 +71,8 @@ void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtast
         }
         if (!isToUs(p)) {
             Router::cancelSending(p->to, p->decoded.request_id); // cancel rebroadcast for this DM
-            stopRetransmission(p->from, p->decoded.request_id);  // stop retransmission for this packet
+            // stop retransmission for the original packet
+            stopRetransmission(p->to, p->decoded.request_id); // for original packet, from = to and id = request_id
         }
     }
 
