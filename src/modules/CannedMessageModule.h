@@ -69,9 +69,7 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     String drawWithCursor(String text, int cursor);
 
 #ifdef RAK14014
-    cannedMessageModuleRunState getRunState() const {
-        return runState;
-    }
+    cannedMessageModuleRunState getRunState() const { return runState; }
 #endif
 
     /*

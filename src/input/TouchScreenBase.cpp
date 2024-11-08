@@ -109,20 +109,18 @@ int32_t TouchScreenBase::runOnce()
 #if defined RAK14014
     // Speed up the processing speed of the keyboard in virtual keyboard mode
     auto state = cannedMessageModule->getRunState();
-    if ( state == CANNED_MESSAGE_RUN_STATE_FREETEXT ) { 
-      if(_tapped)
-      {
+    if (state == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
+        if (_tapped) {
             _tapped = false;
             e.touchEvent = static_cast<char>(TOUCH_ACTION_TAP);
             LOG_DEBUG("action TAP(%d/%d)\n", _last_x, _last_y);
-      }
-    } else
-    {
-       if (_tapped && (time_t(millis()) - _start) > TIME_LONG_PRESS - 50) {
+        }
+    } else {
+        if (_tapped && (time_t(millis()) - _start) > TIME_LONG_PRESS - 50) {
             _tapped = false;
             e.touchEvent = static_cast<char>(TOUCH_ACTION_TAP);
             LOG_DEBUG("action TAP(%d/%d)\n", _last_x, _last_y);
-       }
+        }
     }
 #else
     // fire TAP event when no 2nd tap occured within time
@@ -131,7 +129,7 @@ int32_t TouchScreenBase::runOnce()
         e.touchEvent = static_cast<char>(TOUCH_ACTION_TAP);
         LOG_DEBUG("action TAP(%d/%d)", _last_x, _last_y);
     }
-#endif    
+#endif
 
     // fire LONG_PRESS event without the need for release
     if (touched && (time_t(millis()) - _start) > TIME_LONG_PRESS) {
