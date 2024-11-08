@@ -5,9 +5,7 @@
 #include "PowerFSM.h"
 #include "configuration.h"
 #include "main.h"
-#include <Channels.h>
 #include <Throttle.h>
-
 DetectionSensorModule *detectionSensorModule;
 
 #define GPIO_POLLING_INTERVAL 100
@@ -80,17 +78,18 @@ int32_t DetectionSensorModule::runOnce()
         if (moduleConfig.detection_sensor.monitor_pin > 0) {
             pinMode(moduleConfig.detection_sensor.monitor_pin, moduleConfig.detection_sensor.use_pullup ? INPUT_PULLUP : INPUT);
         } else {
-            LOG_WARN("DetectionSensor: no monitor pin set. Disabling module...");
+            LOG_WARN("Detection Sensor Module: Set to enabled but no monitor pin is set. Disable module");
             return disable();
         }
-        LOG_INFO("DetectionSensor: Init");
+        LOG_INFO("Detection Sensor Module: init");
 
         return DELAYED_INTERVAL;
     }
 
-    // LOG_DEBUG("Detection Sensor: Pin state: %i", digitalRead(moduleConfig.detection_sensor.monitor_pin));
+    // LOG_DEBUG("Detection Sensor Module: Current pin state: %i", digitalRead(moduleConfig.detection_sensor.monitor_pin));
+
     if (!Throttle::isWithinTimespanMs(lastSentToMesh,
-                                    Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.minimum_broadcast_secs))) {
+                                      Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.minimum_broadcast_secs))) {
         bool isDetected = hasDetectionEvent();
         DetectionSensorTriggerVerdict verdict =
             handlers[moduleConfig.detection_sensor.detection_trigger_type](wasDetected, isDetected);
@@ -111,7 +110,7 @@ int32_t DetectionSensorModule::runOnce()
     // change detections.
     if (moduleConfig.detection_sensor.state_broadcast_secs > 0 &&
         !Throttle::isWithinTimespanMs(lastSentToMesh,
-                                    Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.state_broadcast_secs,
+                                      Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.state_broadcast_secs,
                                                                         default_telemetry_broadcast_interval_secs))) {
         sendCurrentStateMessage(hasDetectionEvent());
         return DELAYED_INTERVAL;
@@ -122,7 +121,7 @@ int32_t DetectionSensorModule::runOnce()
 void DetectionSensorModule::sendDetectionMessage()
 {
     if (moduleConfig.detection_sensor.sendTo[0] != 0x00) {
-        LOG_DEBUG("Detected event. Sending message");
+        LOG_DEBUG("Detected event observed. Send message");
         char *message = new char[40];
         bool isValidrecipient = false;
         sprintf(message, "%s detected", moduleConfig.detection_sensor.name);
@@ -196,6 +195,6 @@ void DetectionSensorModule::sendCurrentStateMessage(bool state)
 bool DetectionSensorModule::hasDetectionEvent()
 {
     bool currentState = digitalRead(moduleConfig.detection_sensor.monitor_pin);
-    // LOG_DEBUG("Detection Sensor: state: %i", currentState);
+    // LOG_DEBUG("Detection Sensor Module: Current state: %i", currentState);
     return (moduleConfig.detection_sensor.detection_trigger_type & 1) ? currentState : !currentState;
 }
