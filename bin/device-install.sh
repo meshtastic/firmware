@@ -2,6 +2,18 @@
 
 PYTHON=${PYTHON:-$(which python3 python | head -n 1)}
 
+# Determine the correct esptool command to use
+if "$PYTHON" -m esptool version >/dev/null 2>&1; then
+    ESPTOOL_CMD="$PYTHON -m esptool"
+elif command -v esptool >/dev/null 2>&1; then
+    ESPTOOL_CMD="esptool"
+elif command -v esptool.py >/dev/null 2>&1; then
+    ESPTOOL_CMD="esptool.py"
+else
+    echo "Error: esptool not found"
+    exit 1
+fi
+
 set -e
 
 # Usage info
@@ -49,19 +61,19 @@ shift "$((OPTIND - 1))"
 
 if [ -f "${FILENAME}" ] && [ -n "${FILENAME##*"update"*}" ]; then
 	echo "Trying to flash ${FILENAME}, but first erasing and writing system information"
-	"$PYTHON" -m esptool erase_flash
-	"$PYTHON" -m esptool write_flash 0x00 ${FILENAME}
+	$ESPTOOL_CMD erase_flash
+	$ESPTOOL_CMD write_flash 0x00 ${FILENAME}
 	# Account for S3 board's different OTA partition
 	if [ -n "${FILENAME##*"s3"*}" ] && [ -n "${FILENAME##*"-v3"*}" ] && [ -n "${FILENAME##*"t-deck"*}" ] && [ -n "${FILENAME##*"wireless-paper"*}" ] && [ -n "${FILENAME##*"wireless-tracker"*}" ] && [ -n "${FILENAME##*"station-g2"*}" ] && [ -n "${FILENAME##*"unphone"*}" ]; then
 		if [ -n "${FILENAME##*"esp32c3"*}" ]; then
-			"$PYTHON" -m esptool write_flash 0x260000 bleota.bin
+			$ESPTOOL_CMD write_flash 0x260000 bleota.bin
 		else
-			"$PYTHON" -m esptool write_flash 0x260000 bleota-c3.bin
+			$ESPTOOL_CMD write_flash 0x260000 bleota-c3.bin
 		fi
 	else
-		"$PYTHON" -m esptool write_flash 0x260000 bleota-s3.bin
+		$ESPTOOL_CMD write_flash 0x260000 bleota-s3.bin
 	fi
-	"$PYTHON" -m esptool write_flash 0x300000 littlefs-*.bin
+	$ESPTOOL_CMD write_flash 0x300000 littlefs-*.bin
 
 else
 	show_help
