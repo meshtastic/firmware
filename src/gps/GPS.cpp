@@ -794,7 +794,7 @@ void GPS::writePinEN(bool on)
     // Write and log
     enablePin->set(on);
 #ifdef GPS_DEBUG
-    LOG_DEBUG("Pin EN %s", val == HIGH ? "HI" : "LOW");
+    LOG_DEBUG("Pin EN %s", on == HIGH ? "HI" : "LOW");
 #endif
 }
 
