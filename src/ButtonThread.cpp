@@ -39,7 +39,7 @@ ButtonThread::ButtonThread() : OSThread("Button")
 #if defined(ARCH_PORTDUINO)
     if (settingsMap.count(user) != 0 && settingsMap[user] != RADIOLIB_NC) {
         this->userButton = OneButton(settingsMap[user], true, true);
-        LOG_DEBUG("Using GPIO%02d for button", settingsMap[user]);
+        LOG_DEBUG("Use GPIO%02d for button", settingsMap[user]);
     }
 #elif defined(BUTTON_PIN)
     int pin = config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN; // Resolved button pin
@@ -50,7 +50,7 @@ ButtonThread::ButtonThread() : OSThread("Button")
 #else
     this->userButton = OneButton(pin, true, true);
 #endif
-    LOG_DEBUG("Using GPIO%02d for button", pin);
+    LOG_DEBUG("Use GPIO%02d for button", pin);
 #endif
 
 #ifdef INPUT_PULLUP_SENSE

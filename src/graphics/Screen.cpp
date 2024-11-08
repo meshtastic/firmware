@@ -195,56 +195,6 @@ static void drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDispl
     display->setTextAlignment(TEXT_ALIGN_LEFT); // Restore left align, just to be kind to any other unsuspecting code
 }
 
-static void drawOEMIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    // draw an xbm image.
-    // Please note that everything that should be transitioned
-    // needs to be drawn relative to x and y
-
-    // draw centered icon left to right and centered above the one line of app text
-    display->drawXbm(x + (SCREEN_WIDTH - oemStore.oem_icon_width) / 2,
-                     y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - oemStore.oem_icon_height) / 2 + 2, oemStore.oem_icon_width,
-                     oemStore.oem_icon_height, (const uint8_t *)oemStore.oem_icon_bits.bytes);
-
-    switch (oemStore.oem_font) {
-    case 0:
-        display->setFont(FONT_SMALL);
-        break;
-    case 2:
-        display->setFont(FONT_LARGE);
-        break;
-    default:
-        display->setFont(FONT_MEDIUM);
-        break;
-    }
-
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-    const char *title = oemStore.oem_text;
-    display->drawString(x + getStringCenteredX(title), y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM, title);
-    display->setFont(FONT_SMALL);
-
-    // Draw region in upper left
-    if (upperMsg)
-        display->drawString(x + 0, y + 0, upperMsg);
-
-    // Draw version and shortname in upper right
-    char buf[25];
-    snprintf(buf, sizeof(buf), "%s\n%s", xstr(APP_VERSION_SHORT), haveGlyphs(owner.short_name) ? owner.short_name : "");
-
-    display->setTextAlignment(TEXT_ALIGN_RIGHT);
-    display->drawString(x + SCREEN_WIDTH, y + 0, buf);
-    screen->forceDisplay();
-
-    display->setTextAlignment(TEXT_ALIGN_LEFT); // Restore left align, just to be kind to any other unsuspecting code
-}
-
-static void drawOEMBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    // Draw region in upper left
-    const char *region = myRegion ? myRegion->name : NULL;
-    drawOEMIconScreen(region, display, state, x, y);
-}
-
 void Screen::drawFrameText(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *message)
 {
     uint16_t x_offset = display->width() / 2;
@@ -301,7 +251,7 @@ static void drawWelcomeScreen(OLEDDisplay *display, OLEDDisplayUiState *state, i
 // draw overlay in bottom right corner of screen to show when notifications are muted or modifier key is active
 static void drawFunctionOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
-    // LOG_DEBUG("Drawing function overlay");
+    // LOG_DEBUG("Draw function overlay");
     if (functionSymbals.begin() != functionSymbals.end()) {
         char buf[64];
         display->setFont(FONT_SMALL);
@@ -319,7 +269,7 @@ static void drawDeepSleepScreen(OLEDDisplay *display, OLEDDisplayUiState *state,
     EINK_ADD_FRAMEFLAG(display, COSMETIC);
     EINK_ADD_FRAMEFLAG(display, BLOCKING);
 
-    LOG_DEBUG("Drawing deep sleep screen");
+    LOG_DEBUG("Draw deep sleep screen");
 
     // Display displayStr on the screen
     drawIconScreen("Sleeping", display, state, x, y);
@@ -328,7 +278,7 @@ static void drawDeepSleepScreen(OLEDDisplay *display, OLEDDisplayUiState *state,
 /// Used on eink displays when screen updates are paused
 static void drawScreensaverOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
-    LOG_DEBUG("Drawing screensaver overlay");
+    LOG_DEBUG("Draw screensaver overlay");
 
     EINK_ADD_FRAMEFLAG(display, COSMETIC); // Take the opportunity for a full-refresh
 
@@ -396,7 +346,7 @@ static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
         module_frame = state->currentFrame;
         // LOG_DEBUG("Screen is not in transition.  Frame: %d", module_frame);
     }
-    // LOG_DEBUG("Drawing Module Frame %d", module_frame);
+    // LOG_DEBUG("Draw Module Frame %d", module_frame);
     MeshModule &pi = *moduleFrames.at(module_frame);
     pi.drawFrame(display, state, x, y);
 }
@@ -971,7 +921,7 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
 
     const meshtastic_MeshPacket &mp = devicestate.rx_text_message;
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(getFrom(&mp));
-    // LOG_DEBUG("drawing text message from 0x%x: %s", mp.from,
+    // LOG_DEBUG("Draw text message from 0x%x: %s", mp.from,
     // mp.decoded.variant.data.decoded.bytes);
 
     // Demo for drawStringMaxWidth:
@@ -1558,7 +1508,7 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
 #elif ARCH_PORTDUINO
     if (settingsMap[displayPanel] != no_screen) {
-        LOG_DEBUG("Making TFTDisplay!");
+        LOG_DEBUG("Make TFTDisplay!");
         dispdev = new TFTDisplay(address.address, -1, -1, geometry,
                                  (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
     } else {
@@ -1605,7 +1555,7 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 
     if (on != screenOn) {
         if (on) {
-            LOG_INFO("Turning on screen");
+            LOG_INFO("Turn on screen");
             powerMon->setState(meshtastic_PowerMon_State_Screen_On);
 #ifdef T_WATCH_S3
             PMU->enablePowerOutput(XPOWERS_ALDO2);
@@ -1648,7 +1598,7 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             // eInkScreensaver parameter is usually NULL (default argument), default frame used instead
             setScreensaverFrames(einkScreensaver);
 #endif
-            LOG_INFO("Turning off screen");
+            LOG_INFO("Turn off screen");
             dispdev->displayOff();
 #ifdef TFT_BL
             pinMode(TFT_BL, OUTPUT);
@@ -1722,9 +1672,6 @@ void Screen::setup()
 
     // Set the utf8 conversion function
     dispdev->setFontTableLookupFunction(customFontTableLookup);
-
-    if (strlen(oemStore.oem_text) > 0)
-        logo_timeout *= 2;
 
     // Add frames.
     EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST);
@@ -1866,26 +1813,9 @@ int32_t Screen::runOnce()
     // serialSinceMsec adjusts for additional serial wait time during nRF52 bootup
     static bool showingBootScreen = true;
     if (showingBootScreen && (millis() > (logo_timeout + serialSinceMsec))) {
-        LOG_INFO("Done with boot screen...");
+        LOG_INFO("Done with boot screen");
         stopBootScreen();
         showingBootScreen = false;
-    }
-
-    // If we have an OEM Boot screen, toggle after logo_timeout seconds
-    if (strlen(oemStore.oem_text) > 0) {
-        static bool showingOEMBootScreen = true;
-        if (showingOEMBootScreen && (millis() > ((logo_timeout / 2) + serialSinceMsec))) {
-            LOG_INFO("Switch to OEM screen...");
-            // Change frames.
-            static FrameCallback bootOEMFrames[] = {drawOEMBootScreen};
-            static const int bootOEMFrameCount = sizeof(bootOEMFrames) / sizeof(bootOEMFrames[0]);
-            ui->setFrames(bootOEMFrames, bootOEMFrameCount);
-            ui->update();
-#ifndef USE_EINK
-            ui->update();
-#endif
-            showingOEMBootScreen = false;
-        }
     }
 
 #ifndef DISABLE_WELCOME_UNSET
@@ -1979,7 +1909,7 @@ int32_t Screen::runOnce()
             EINK_ADD_FRAMEFLAG(dispdev, COSMETIC);
 #endif
 
-            LOG_DEBUG("LastScreenTransition exceeded %ums transitioning to next frame", (millis() - lastScreenTransition));
+            LOG_DEBUG("LastScreenTransition exceeded %ums transition to next frame", (millis() - lastScreenTransition));
             handleOnPress();
         }
     }
@@ -2015,7 +1945,7 @@ void Screen::drawDebugInfoWiFiTrampoline(OLEDDisplay *display, OLEDDisplayUiStat
 void Screen::setSSLFrames()
 {
     if (address_found.address) {
-        // LOG_DEBUG("showing SSL frames");
+        // LOG_DEBUG("Show SSL frames");
         static FrameCallback sslFrames[] = {drawSSLScreen};
         ui->setFrames(sslFrames, 1);
         ui->update();
@@ -2027,7 +1957,7 @@ void Screen::setSSLFrames()
 void Screen::setWelcomeFrames()
 {
     if (address_found.address) {
-        // LOG_DEBUG("showing Welcome frames");
+        // LOG_DEBUG("Show Welcome frames");
         static FrameCallback frames[] = {drawWelcomeScreen};
         setFrameImmediateDraw(frames);
     }
@@ -2093,7 +2023,7 @@ void Screen::setFrames(FrameFocus focus)
     uint8_t originalPosition = ui->getUiState()->currentFrame;
     FramesetInfo fsi; // Location of specific frames, for applying focus parameter
 
-    LOG_DEBUG("showing standard frames");
+    LOG_DEBUG("Show standard frames");
     showingNormalScreen = true;
 
 #ifdef USE_EINK
@@ -2106,7 +2036,7 @@ void Screen::setFrames(FrameFocus focus)
 #endif
 
     moduleFrames = MeshModule::GetMeshModulesWithUIFrames();
-    LOG_DEBUG("Showing %d module frames", moduleFrames.size());
+    LOG_DEBUG("Show %d module frames", moduleFrames.size());
 #ifdef DEBUG_PORT
     int totalFrameCount = MAX_NUM_NODES + NUM_EXTRA_FRAMES + moduleFrames.size();
     LOG_DEBUG("Total frame count: %d", totalFrameCount);
@@ -2188,7 +2118,7 @@ void Screen::setFrames(FrameFocus focus)
 #endif
 
     fsi.frameCount = numframes; // Total framecount is used to apply FOCUS_PRESERVE
-    LOG_DEBUG("Finished building frames. numframes: %d", numframes);
+    LOG_DEBUG("Finished build frames. numframes: %d", numframes);
 
     ui->setFrames(normalFrames, numframes);
     ui->enableAllIndicators();
@@ -2269,13 +2199,13 @@ void Screen::dismissCurrentFrame()
     bool dismissed = false;
 
     if (currentFrame == framesetInfo.positions.textMessage && devicestate.has_rx_text_message) {
-        LOG_INFO("Dismissing Text Message");
+        LOG_INFO("Dismiss Text Message");
         devicestate.has_rx_text_message = false;
         dismissed = true;
     }
 
     else if (currentFrame == framesetInfo.positions.waypoint && devicestate.has_rx_waypoint) {
-        LOG_DEBUG("Dismissing Waypoint");
+        LOG_DEBUG("Dismiss Waypoint");
         devicestate.has_rx_waypoint = false;
         dismissed = true;
     }
@@ -2287,7 +2217,7 @@ void Screen::dismissCurrentFrame()
 
 void Screen::handleStartFirmwareUpdateScreen()
 {
-    LOG_DEBUG("showing firmware screen");
+    LOG_DEBUG("Show firmware screen");
     showingNormalScreen = false;
     EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // E-Ink: Explicitly use fast-refresh for next frame
 
@@ -2768,7 +2698,7 @@ int Screen::handleUIFrameEvent(const UIFrameEvent *event)
         if (event->action == UIFrameEvent::Action::REGENERATE_FRAMESET)
             setFrames(FOCUS_MODULE);
 
-        // Regenerate the frameset, while attempting to maintain focus on the current frame
+        // Regenerate the frameset, while Attempt to maintain focus on the current frame
         else if (event->action == UIFrameEvent::Action::REGENERATE_FRAMESET_BACKGROUND)
             setFrames(FOCUS_PRESERVE);
 

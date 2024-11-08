@@ -3,7 +3,6 @@
 #include "FSCommon.h"
 #include "mesh-pb-constants.h"
 #include <Arduino.h>
-#include <assert.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
 
@@ -14,8 +13,6 @@ size_t pb_encode_to_bytes(uint8_t *destbuf, size_t destbufsize, const pb_msgdesc
     pb_ostream_t stream = pb_ostream_from_buffer(destbuf, destbufsize);
     if (!pb_encode(&stream, fields, src_struct)) {
         LOG_ERROR("Panic: can't encode protobuf reason='%s'", PB_GET_ERROR(&stream));
-        assert(
-            0); // If this assert fails it probably means you made a field too large for the max limits specified in mesh.options
         return 0;
     } else {
         return stream.bytes_written;

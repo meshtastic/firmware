@@ -462,7 +462,7 @@ the PM config. Lets try without it.
 PMREQ sort of works with SBAS, but the awake time is too short to re-acquire any SBAS sats.
 The defination of "Got Fix" doesn't seem to include SBAS. Much more too this...
 Even if it was, it can take minutes (up to 12.5),
-even under good sat visability conditions to re-acquire the SBAS data.
+even under good sat visibility conditions to re-acquire the SBAS data.
 
 Another effect fo the quick transition to sleep is that no other sats will be acquired so the
 sat count will tend to remain at what the initial fix was.

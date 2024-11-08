@@ -35,6 +35,8 @@ Allocator<meshtastic_ServiceEnvelope> &mqttPool = staticMqttPool;
 // FIXME - this size calculation is super sloppy, but it will go away once we dynamically alloc meshpackets
 static uint8_t bytes[meshtastic_MqttClientProxyMessage_size + 30]; // 12 for channel name and 16 for nodeid
 
+static bool isMqttServerAddressPrivate = false;
+
 void MQTT::mqttCallback(char *topic, byte *payload, unsigned int length)
 {
     mqtt->onReceive(topic, payload, length);
@@ -89,7 +91,7 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
                             p->decoded.payload.size = jsonPayloadStr.length();
                             service->sendToMesh(p, RX_SRC_LOCAL);
                         } else {
-                            LOG_WARN("Received MQTT json payload too long, dropping");
+                            LOG_WARN("Received MQTT json payload too long, drop");
                         }
                     } else if (json["type"]->AsString().compare("sendposition") == 0 && json["payload"]->IsObject()) {
                         // invent the "sendposition" type for a valid envelope
@@ -120,17 +122,17 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
                                                &meshtastic_Position_msg, &pos); // make the Data protobuf from position
                         service->sendToMesh(p, RX_SRC_LOCAL);
                     } else {
-                        LOG_DEBUG("JSON Ignoring downlink message with unsupported type.");
+                        LOG_DEBUG("JSON ignore downlink message with unsupported type");
                     }
                 } else {
-                    LOG_ERROR("JSON Received payload on MQTT but not a valid envelope.");
+                    LOG_ERROR("JSON received payload on MQTT but not a valid envelope");
                 }
             } else {
-                LOG_WARN("JSON downlink received on channel not called 'mqtt' or without downlink enabled.");
+                LOG_WARN("JSON downlink received on channel not called 'mqtt' or without downlink enabled");
             }
         } else {
             // no json, this is an invalid payload
-            LOG_ERROR("JSON Received payload on MQTT but not a valid JSON");
+            LOG_ERROR("JSON received payload on MQTT but not a valid JSON");
         }
         delete json_value;
     } else {
@@ -153,7 +155,7 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
                 if (e.packet && isFromUs(e.packet))
                     routingModule->sendAckNak(meshtastic_Routing_Error_NONE, getFrom(e.packet), e.packet->id, ch.index);
                 else
-                    LOG_INFO("Ignoring downlink message we originally sent.");
+                    LOG_INFO("Ignore downlink message we originally sent");
             } else {
                 // Find channel by channel_id and check downlink_enabled
                 if ((strcmp(e.channel_id, "PKI") == 0 && e.packet) ||
@@ -163,18 +165,18 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
                     p->via_mqtt = true; // Mark that the packet was received via MQTT
 
                     if (isFromUs(p)) {
-                        LOG_INFO("Ignoring downlink message we originally sent.");
+                        LOG_INFO("Ignore downlink message we originally sent");
                         packetPool.release(p);
                         return;
                     }
                     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
                         if (moduleConfig.mqtt.encryption_enabled) {
-                            LOG_INFO("Ignoring decoded message on MQTT, encryption is enabled.");
+                            LOG_INFO("Ignore decoded message on MQTT, encryption is enabled");
                             packetPool.release(p);
                             return;
                         }
                         if (p->decoded.portnum == meshtastic_PortNum_ADMIN_APP) {
-                            LOG_INFO("Ignoring decoded admin packet.");
+                            LOG_INFO("Ignore decoded admin packet");
                             packetPool.release(p);
                             return;
                         }
@@ -216,7 +218,7 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
 #endif
 {
     if (moduleConfig.mqtt.enabled) {
-        LOG_DEBUG("Initializing MQTT");
+        LOG_DEBUG("Init MQTT");
 
         assert(!mqtt);
         mqtt = this;
@@ -238,13 +240,18 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
                 moduleConfig.mqtt.map_report_settings.publish_interval_secs, default_map_publish_interval_secs);
         }
 
+        isMqttServerAddressPrivate = isPrivateIpAddress(moduleConfig.mqtt.address);
+        if (isMqttServerAddressPrivate) {
+            LOG_INFO("MQTT server on a private IP");
+        }
+
 #if HAS_NETWORKING
         if (!moduleConfig.mqtt.proxy_to_client_enabled)
             pubSub.setCallback(mqttCallback);
 #endif
 
         if (moduleConfig.mqtt.proxy_to_client_enabled) {
-            LOG_INFO("MQTT configured to use client proxy...");
+            LOG_INFO("MQTT configured to use client proxy");
             enabled = true;
             runASAP = true;
             reconnectCount = 0;
@@ -308,7 +315,7 @@ void MQTT::reconnect()
 {
     if (wantsLink()) {
         if (moduleConfig.mqtt.proxy_to_client_enabled) {
-            LOG_INFO("MQTT connecting via client proxy instead...");
+            LOG_INFO("MQTT connect via client proxy instead");
             enabled = true;
             runASAP = true;
             reconnectCount = 0;
@@ -337,12 +344,12 @@ void MQTT::reconnect()
                 wifiSecureClient.setInsecure();
 
                 pubSub.setClient(wifiSecureClient);
-                LOG_INFO("Using TLS-encrypted session");
+                LOG_INFO("Use TLS-encrypted session");
             } catch (const std::exception &e) {
                 LOG_ERROR("MQTT ERROR: %s", e.what());
             }
         } else {
-            LOG_INFO("Using non-TLS-encrypted session");
+            LOG_INFO("Use non-TLS-encrypted session");
             pubSub.setClient(mqttClient);
         }
 #else
@@ -363,8 +370,8 @@ void MQTT::reconnect()
         pubSub.setServer(serverAddr, serverPort);
         pubSub.setBufferSize(512);
 
-        LOG_INFO("Attempting to connect directly to MQTT server %s, port: %d, username: %s, password: %s", serverAddr, serverPort,
-                 mqttUsername, mqttPassword);
+        LOG_INFO("Connect directly to MQTT server %s, port: %d, username: %s, password: %s", serverAddr, serverPort, mqttUsername,
+                 mqttPassword);
 
         bool connected = pubSub.connect(owner.id, mqttUsername, mqttPassword);
         if (connected) {
@@ -378,7 +385,7 @@ void MQTT::reconnect()
         } else {
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
             reconnectCount++;
-            LOG_ERROR("Failed to contact MQTT server directly (%d/%d)...", reconnectCount, reconnectMax);
+            LOG_ERROR("Failed to contact MQTT server directly (%d/%d)", reconnectCount, reconnectMax);
             if (reconnectCount >= reconnectMax) {
                 needReconnect = true;
                 wifiReconnect->setIntervalFromNow(0);
@@ -400,13 +407,13 @@ void MQTT::sendSubscriptions()
         if (ch.settings.downlink_enabled) {
             hasDownlink = true;
             std::string topic = cryptTopic + channels.getGlobalId(i) + "/+";
-            LOG_INFO("Subscribing to %s", topic.c_str());
+            LOG_INFO("Subscribe to %s", topic.c_str());
             pubSub.subscribe(topic.c_str(), 1); // FIXME, is QOS 1 right?
 #if !defined(ARCH_NRF52) ||                                                                                                      \
     defined(NRF52_USE_JSON) // JSON is not supported on nRF52, see issue #2804 ### Fixed by using ArduinoJSON ###
             if (moduleConfig.mqtt.json_enabled == true) {
                 std::string topicDecoded = jsonTopic + channels.getGlobalId(i) + "/+";
-                LOG_INFO("Subscribing to %s", topicDecoded.c_str());
+                LOG_INFO("Subscribe to %s", topicDecoded.c_str());
                 pubSub.subscribe(topicDecoded.c_str(), 1); // FIXME, is QOS 1 right?
             }
 #endif // ARCH_NRF52 NRF52_USE_JSON
@@ -415,7 +422,7 @@ void MQTT::sendSubscriptions()
 #if !MESHTASTIC_EXCLUDE_PKI
     if (hasDownlink) {
         std::string topic = cryptTopic + "PKI/+";
-        LOG_INFO("Subscribing to %s", topic.c_str());
+        LOG_INFO("Subscribe to %s", topic.c_str());
         pubSub.subscribe(topic.c_str(), 1);
     }
 #endif
@@ -471,7 +478,7 @@ int32_t MQTT::runOnce()
     } else {
         // we are connected to server, check often for new requests on the TCP port
         if (!wantConnection) {
-            LOG_INFO("MQTT link not needed, dropping");
+            LOG_INFO("MQTT link not needed, drop");
             pubSub.disconnect();
         }
 
@@ -489,7 +496,7 @@ void MQTT::publishNodeInfo()
 void MQTT::publishQueuedMessages()
 {
     if (!mqttQueue.isEmpty()) {
-        LOG_DEBUG("Publishing enqueued MQTT message");
+        LOG_DEBUG("Publish enqueued MQTT message");
         meshtastic_ServiceEnvelope *env = mqttQueue.dequeuePtr(0);
         size_t numBytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_ServiceEnvelope_msg, env);
         std::string topic;
@@ -538,9 +545,8 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
 
     // mp_decoded will not be decoded when it's PKI encrypted and not directed to us
     if (mp_decoded.which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
-
         // check for the lowest bit of the data bitfield set false, and the use of one of the default keys.
-        if (!isFromUs(&mp_decoded) && strcmp(moduleConfig.mqtt.address, "127.0.0.1") != 0 && mp_decoded.decoded.has_bitfield &&
+        if (!isFromUs(&mp_decoded) && !isMqttServerAddressPrivate && mp_decoded.decoded.has_bitfield &&
             !(mp_decoded.decoded.bitfield & BITFIELD_OK_TO_MQTT_MASK) &&
             (ch.settings.psk.size < 2 || (ch.settings.psk.size == 16 && memcmp(ch.settings.psk.bytes, defaultpsk, 16)) ||
              (ch.settings.psk.size == 32 && memcmp(ch.settings.psk.bytes, eventpsk, 32)))) {
@@ -565,7 +571,7 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
         env->channel_id = (char *)channelId;
         env->gateway_id = owner.id;
 
-        LOG_DEBUG("MQTT onSend - Publishing ");
+        LOG_DEBUG("MQTT onSend - Publish ");
         if (moduleConfig.mqtt.encryption_enabled) {
             env->packet = (meshtastic_MeshPacket *)&mp_encrypted;
             LOG_DEBUG("encrypted message");
@@ -598,9 +604,9 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
             }
 #endif // ARCH_NRF52 NRF52_USE_JSON
         } else {
-            LOG_INFO("MQTT not connected, queueing packet");
+            LOG_INFO("MQTT not connected, queue packet");
             if (mqttQueue.numFree() == 0) {
-                LOG_WARN("NOTE: MQTT queue is full, discarding oldest");
+                LOG_WARN("MQTT queue is full, discard oldest");
                 meshtastic_ServiceEnvelope *d = mqttQueue.dequeuePtr(0);
                 if (d)
                     mqttPool.release(d);
@@ -624,9 +630,9 @@ void MQTT::perhapsReportToMap()
         if (map_position_precision == 0 || (localPosition.latitude_i == 0 && localPosition.longitude_i == 0)) {
             last_report_to_map = millis();
             if (map_position_precision == 0)
-                LOG_WARN("MQTT Map reporting is enabled, but precision is 0");
+                LOG_WARN("MQTT Map report enabled, but precision is 0");
             if (localPosition.latitude_i == 0 && localPosition.longitude_i == 0)
-                LOG_WARN("MQTT Map reporting is enabled, but no position available.");
+                LOG_WARN("MQTT Map report enabled, but no position available");
             return;
         }
 
@@ -696,4 +702,70 @@ bool MQTT::isValidJsonEnvelope(JSONObject &json)
            (json["from"]->AsNumber() == nodeDB->getNodeNum()) &&            // only accept message if the "from" is us
            (json.find("type") != json.end()) && json["type"]->IsString() && // should specify a type
            (json.find("payload") != json.end());                            // should have a payload
+}
+
+bool MQTT::isPrivateIpAddress(const char address[])
+{
+    // Min. length like 10.0.0.0 (8), max like 192.168.255.255:65535 (21)
+    size_t length = strlen(address);
+    if (length < 8 || length > 21) {
+        return false;
+    }
+
+    // Ensure the address contains only digits and dots and maybe a colon.
+    // Some limited validation is done.
+    // Even if it's not a valid IP address, we will know it's not a domain.
+    bool hasColon = false;
+    int numDots = 0;
+    for (size_t i = 0; i < length; i++) {
+        if (!isdigit(address[i]) && address[i] != '.' && address[i] != ':') {
+            return false;
+        }
+
+        // Dots can't be the first character, immediately follow another dot,
+        // occur more than 3 times, or occur after a colon.
+        if (address[i] == '.') {
+            if (++numDots > 3 || i == 0 || address[i - 1] == '.' || hasColon) {
+                return false;
+            }
+        }
+        // There can only be a single colon, and it can only occur after 3 dots
+        else if (address[i] == ':') {
+            if (hasColon || numDots < 3) {
+                return false;
+            }
+
+            hasColon = true;
+        }
+    }
+
+    // Final validation for IPv4 address and port format.
+    // Note that the values of octets haven't been tested, only the address format.
+    if (numDots != 3) {
+        return false;
+    }
+
+    // Check the easy ones first.
+    if (strcmp(address, "127.0.0.1") == 0 || strncmp(address, "10.", 3) == 0 || strncmp(address, "192.168", 7) == 0 ||
+        strncmp(address, "169.254", 7) == 0) {
+        return true;
+    }
+
+    // See if it's definitely not a 172 address.
+    if (strncmp(address, "172", 3) != 0) {
+        return false;
+    }
+
+    // We know it's a 172 address, now see if the second octet is 2 digits.
+    if (address[6] != '.') {
+        return false;
+    }
+
+    // Copy the second octet into a secondary buffer we can null-terminate and parse.
+    char octet2[3];
+    strncpy(octet2, address + 4, 2);
+    octet2[2] = 0;
+
+    int octet2Num = atoi(octet2);
+    return octet2Num >= 16 && octet2Num <= 31;
 }

@@ -290,7 +290,7 @@ void RedirectablePrint::log(const char *logLevel, const char *format, ...)
     if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_TRACE) == 0) {
         if (settingsStrings[traceFilename] != "") {
             va_list arg;
-            va_start(arg, newFormat);
+            va_start(arg, format);
             try {
                 traceFile << va_arg(arg, char *) << std::endl;
             } catch (const std::ios_base::failure &e) {
@@ -326,7 +326,7 @@ void RedirectablePrint::log(const char *logLevel, const char *format, ...)
 #endif
 
         va_list arg;
-        va_start(arg, newFormat);
+        va_start(arg, format);
 
         log_to_serial(logLevel, newFormat, arg);
         log_to_syslog(logLevel, newFormat, arg);

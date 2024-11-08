@@ -21,7 +21,6 @@ DeviceState versions used to be defined in the .proto file but really only this 
 #define SEGMENT_MODULECONFIG 2
 #define SEGMENT_DEVICESTATE 4
 #define SEGMENT_CHANNELS 8
-#define SEGMENT_OEM 16
 
 #define DEVICESTATE_CUR_VER 23
 #define DEVICESTATE_MIN_VER 22
@@ -31,7 +30,6 @@ extern meshtastic_ChannelFile channelFile;
 extern meshtastic_MyNodeInfo &myNodeInfo;
 extern meshtastic_LocalConfig config;
 extern meshtastic_LocalModuleConfig moduleConfig;
-extern meshtastic_OEMStore oemStore;
 extern meshtastic_User &owner;
 extern meshtastic_Position localPosition;
 
@@ -149,17 +147,20 @@ class NodeDB
     meshtastic_NodeInfoLite *getMeshNode(NodeNum n);
     size_t getNumMeshNodes() { return numMeshNodes; }
 
+    // returns true if the maximum number of nodes is reached or we are running low on memory
+    bool isFull();
+
     void clearLocalPosition();
 
     void setLocalPosition(meshtastic_Position position, bool timeOnly = false)
     {
         if (timeOnly) {
-            LOG_DEBUG("Setting local position time only: time=%u timestamp=%u", position.time, position.timestamp);
+            LOG_DEBUG("Set local position time only: time=%u timestamp=%u", position.time, position.timestamp);
             localPosition.time = position.time;
             localPosition.timestamp = position.timestamp > 0 ? position.timestamp : position.time;
             return;
         }
-        LOG_DEBUG("Setting local position: lat=%i lon=%i time=%u timestamp=%u", position.latitude_i, position.longitude_i,
+        LOG_DEBUG("Set local position: lat=%i lon=%i time=%u timestamp=%u", position.latitude_i, position.longitude_i,
                   position.time, position.timestamp);
         localPosition = position;
     }
