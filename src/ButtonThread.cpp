@@ -165,8 +165,6 @@ int32_t ButtonThread::runOnce()
             LOG_BUTTON("Mulitipress! %hux", multipressClickCount);
             switch (multipressClickCount) {
 #if HAS_GPS
-#ifndef RAK14014 // The power supply of the GPS of RAK14014 cannot be turned off. Once turned off, the screen will not be
-                 // used，They are the same power source
             // 3 clicks: toggle GPS
             case 3:
                 if (!config.device.disable_triple_click && (gps != nullptr)) {
@@ -175,7 +173,6 @@ int32_t ButtonThread::runOnce()
                         screen->forceDisplay(true); // Force a new UI frame, then force an EInk update
                 }
                 break;
-#endif
 #endif
 #if defined(USE_EINK) && defined(PIN_EINK_EN) // i.e. T-Echo
             // 4 clicks: toggle backlight
