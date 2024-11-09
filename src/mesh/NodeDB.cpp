@@ -1219,9 +1219,7 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
 
     if (!lite) {
         if (isFull()) {
-            if (screen)
-                screen->print("Warn: node database full!\nErasing oldest entry\n");
-            LOG_WARN("Node database full with %i nodes and %i bytes free! Erasing oldest entry", numMeshNodes,
+            LOG_INFO("Node database full with %i nodes and %i bytes free. Erasing oldest entry", numMeshNodes,
                      memGet.getFreeHeap());
             // look for oldest node and erase it
             uint32_t oldest = UINT32_MAX;
