@@ -108,8 +108,7 @@ class Router : protected concurrency::OSThread
     /**
      * Send an ack or a nak packet back towards whoever sent idFrom
      */
-    void sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopStart = 0,
-                    uint8_t hopLimit = 0);
+    void sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopLimit = 0);
 
   private:
     /**
@@ -132,7 +131,7 @@ class Router : protected concurrency::OSThread
      */
     void handleReceived(meshtastic_MeshPacket *p, RxSource src = RX_SRC_RADIO);
 
-    /** Frees the provided packet, and generates a NAK indicating the speicifed error while sending */
+    /** Frees the provided packet, and generates a NAK indicating the specifed error while sending */
     void abortSendAndNak(meshtastic_Routing_Error err, meshtastic_MeshPacket *p);
 };
 
@@ -143,7 +142,7 @@ class Router : protected concurrency::OSThread
  */
 bool perhapsDecode(meshtastic_MeshPacket *p);
 
-/** Return 0 for success or a Routing_Errror code for failure
+/** Return 0 for success or a Routing_Error code for failure
  */
 meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p);
 

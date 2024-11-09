@@ -39,7 +39,7 @@ int32_t HealthTelemetryModule::runOnce()
         sleepOnNextExecution = false;
         uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.health_update_interval,
                                                                    default_telemetry_broadcast_interval_secs);
-        LOG_DEBUG("Sleeping for %ims, then awaking to send metrics again.", nightyNightMs);
+        LOG_DEBUG("Sleep for %ims, then awake to send metrics again", nightyNightMs);
         doDeepSleep(nightyNightMs, true);
     }
 
@@ -55,7 +55,7 @@ int32_t HealthTelemetryModule::runOnce()
         firstTime = false;
 
         if (moduleConfig.telemetry.health_measurement_enabled) {
-            LOG_INFO("Health Telemetry: Initializing");
+            LOG_INFO("Health Telemetry: init");
             // Initialize sensors
             if (mlx90614Sensor.hasSensor())
                 result = mlx90614Sensor.runOnce();
@@ -195,7 +195,7 @@ meshtastic_MeshPacket *HealthTelemetryModule::allocReply()
         if (decoded->which_variant == meshtastic_Telemetry_health_metrics_tag) {
             meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
             if (getHealthTelemetry(&m)) {
-                LOG_INFO("Health telemetry replying to request");
+                LOG_INFO("Health telemetry reply to request");
                 return allocDataProtobuf(m);
             } else {
                 return NULL;
@@ -211,7 +211,7 @@ bool HealthTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     m.which_variant = meshtastic_Telemetry_health_metrics_tag;
     m.time = getTime();
     if (getHealthTelemetry(&m)) {
-        LOG_INFO("(Sending): temperature=%f, heart_bpm=%d, spO2=%d", m.variant.health_metrics.temperature,
+        LOG_INFO("Send: temperature=%f, heart_bpm=%d, spO2=%d", m.variant.health_metrics.temperature,
                  m.variant.health_metrics.heart_bpm, m.variant.health_metrics.spO2);
 
         sensor_read_error_count = 0;
@@ -229,14 +229,14 @@ bool HealthTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 
         lastMeasurementPacket = packetPool.allocCopy(*p);
         if (phoneOnly) {
-            LOG_INFO("Sending packet to phone");
+            LOG_INFO("Send packet to phone");
             service->sendToPhone(p);
         } else {
-            LOG_INFO("Sending packet to mesh");
+            LOG_INFO("Send packet to mesh");
             service->sendToMesh(p, RX_SRC_LOCAL, true);
 
             if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving) {
-                LOG_DEBUG("Starting next execution in 5 seconds and then going to sleep.");
+                LOG_DEBUG("Start next execution in 5s, then sleep");
                 sleepOnNextExecution = true;
                 setIntervalFromNow(5000);
             }

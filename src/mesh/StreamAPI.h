@@ -3,6 +3,7 @@
 #include "PhoneAPI.h"
 #include "Stream.h"
 #include "concurrency/OSThread.h"
+#include <cstdarg>
 
 // A To/FromRadio packet + our 32 bit header
 #define MAX_STREAM_BUF_SIZE (MAX_TO_FROM_RADIO_SIZE + sizeof(uint32_t))

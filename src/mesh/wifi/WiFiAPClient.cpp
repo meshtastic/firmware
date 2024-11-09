@@ -57,7 +57,7 @@ static void onNetworkConnected()
 {
     if (!APStartupComplete) {
         // Start web server
-        LOG_INFO("Starting WiFi network services");
+        LOG_INFO("Start WiFi network services");
 
 #ifdef ARCH_ESP32
         // start mdns
@@ -74,13 +74,13 @@ static void onNetworkConnected()
 #endif
 
 #ifndef DISABLE_NTP
-        LOG_INFO("Starting NTP time client");
+        LOG_INFO("Start NTP time client");
         timeClient.begin();
         timeClient.setUpdateInterval(60 * 60); // Update once an hour
 #endif
 
         if (config.network.rsyslog_server[0]) {
-            LOG_INFO("Starting Syslog client");
+            LOG_INFO("Start Syslog client");
             // Defaults
             int serverPort = 514;
             const char *serverAddr = config.network.rsyslog_server;
@@ -144,7 +144,7 @@ static int32_t reconnectWiFi()
 
 #ifndef DISABLE_NTP
     if (WiFi.isConnected() && (!Throttle::isWithinTimespanMs(lastrun_ntp, 43200000) || (lastrun_ntp == 0))) { // every 12 hours
-        LOG_DEBUG("Updating NTP time from %s", config.network.ntp_server);
+        LOG_DEBUG("Update NTP time from %s", config.network.ntp_server);
         if (timeClient.update()) {
             LOG_DEBUG("NTP Request Success - Setting RTCQualityNTP if needed");
 
@@ -396,25 +396,25 @@ static void WiFiEvent(WiFiEvent_t event)
         LOG_INFO("SmartConfig: Send ACK done");
         break;
     case ARDUINO_EVENT_PROV_INIT:
-        LOG_INFO("Provisioning: Init");
+        LOG_INFO("Provision Init");
         break;
     case ARDUINO_EVENT_PROV_DEINIT:
-        LOG_INFO("Provisioning: Stopped");
+        LOG_INFO("Provision Stopped");
         break;
     case ARDUINO_EVENT_PROV_START:
-        LOG_INFO("Provisioning: Started");
+        LOG_INFO("Provision Started");
         break;
     case ARDUINO_EVENT_PROV_END:
-        LOG_INFO("Provisioning: End");
+        LOG_INFO("Provision End");
         break;
     case ARDUINO_EVENT_PROV_CRED_RECV:
-        LOG_INFO("Provisioning: Credentials received");
+        LOG_INFO("Provision Credentials received");
         break;
     case ARDUINO_EVENT_PROV_CRED_FAIL:
-        LOG_INFO("Provisioning: Credentials failed");
+        LOG_INFO("Provision Credentials failed");
         break;
     case ARDUINO_EVENT_PROV_CRED_SUCCESS:
-        LOG_INFO("Provisioning: Credentials success");
+        LOG_INFO("Provision Credentials success");
         break;
     default:
         break;
