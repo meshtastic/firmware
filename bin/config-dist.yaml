@@ -11,6 +11,7 @@ Lora:
 #  CS: 7
 #  IRQ: 17
 #  Reset: 22
+#
 
 #  Module: sx1262  # pinedio
 #  CS: 0
