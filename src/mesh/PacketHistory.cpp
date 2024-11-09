@@ -109,11 +109,7 @@ void PacketHistory::clearExpiredRecentPackets()
  * @return true if node was indeed a relayer, false if not */
 bool PacketHistory::wasRelayer(const uint8_t relayer, const uint32_t id, const NodeNum sender)
 {
-    PacketRecord r;
-    r.id = id;
-    r.sender = sender;
-    r.rxTimeMsec = 0;
-    r.next_hop = 0;
+    PacketRecord r = {.sender = sender, .id = id, .rxTimeMsec = 0, .next_hop = 0};
     auto found = recentPackets.find(r);
 
     if (found == recentPackets.end()) {
@@ -138,9 +134,7 @@ bool PacketHistory::wasRelayer(const uint8_t relayer, std::unordered_set<PacketR
 // Remove a relayer from the list of relayers of a packet in the history given an ID and sender
 void PacketHistory::removeRelayer(const uint8_t relayer, const uint32_t id, const NodeNum sender)
 {
-    PacketRecord r;
-    r.id = id;
-    r.sender = sender;
+    PacketRecord r = {.sender = sender, .id = id, .rxTimeMsec = 0, .next_hop = 0};
     auto found = recentPackets.find(r);
 
     if (found == recentPackets.end()) {
