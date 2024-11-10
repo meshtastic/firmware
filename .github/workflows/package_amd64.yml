@@ -54,6 +54,8 @@ jobs:
           mkdir -p .debpkg/etc/meshtasticd/available.d
           mkdir -p .debpkg/usr/lib/systemd/system/
           tar -xf build.tar -C .debpkg/usr/share/doc/meshtasticd/web
+          mv  .debpkg/usr/share/doc/meshtasticd/web/build/* .debpkg/usr/share/doc/meshtasticd/web/
+          rmdir .debpkg/usr/share/doc/meshtasticd/web/build
           gunzip .debpkg/usr/share/doc/meshtasticd/web/*.gz
           cp release/meshtasticd_linux_x86_64 .debpkg/usr/sbin/meshtasticd
           cp bin/config-dist.yaml .debpkg/etc/meshtasticd/config.yaml
