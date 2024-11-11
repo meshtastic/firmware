@@ -31,6 +31,4 @@ class ReliableRouter : public NextHopRouter
      * We hook this method so we can see packets before FloodingRouter says they should be discarded
      */
     virtual bool shouldFilterReceived(const meshtastic_MeshPacket *p) override;
-
-    constexpr static uint8_t NUM_RETRANSMISSIONS = 3;
 };

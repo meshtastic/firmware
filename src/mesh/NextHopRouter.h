@@ -49,13 +49,14 @@ class GlobalPacketIdHashFunction
 };
 
 /*
-  Router which only relays if it is the next hop for a packet.
-  The next hop is set by the relay node of a packet, which bases this on information from either the NeighborInfoModule, or a
-  previous successful delivery via flooding. It is only used for DMs and not used for broadcasts. Using the NeighborInfoModule, it
-  can derive the next hop of neighbors and that of neighbors of neighbors. For others, it has no information in the beginning,
-  which results into falling back to the FloodingRouter. Upon successful delivery via flooding, it updates the next hop of the
-  recipient to the node that last relayed the ACK to us. When the ReliableRouter is doing retransmissions, at the last retry, it
-  will reset the next hop, in order to fall back to the FloodingRouter.
+  Router for direct messages, which only relays if it is the next hop for a packet. The next hop is set by the current
+  relayer of a packet, which bases this on information from a previous successful delivery to the destination via flooding.
+  Namely, in the PacketHistory, we keep track of (up to 3) relayers of a packet. When the ACK is delivered back to us via a node
+  that also relayed the original packet, we use that node as next hop for the destination from then on. This makes sure that only
+  when there’s a two-way connection, we assign a next hop. Both the ReliableRouter and NextHopRouter will do retransmissions (the
+  NextHopRouter only 1 time). For the final retry, if no one actually relayed the packet, it will reset the next hop in order to
+  fall back to the FloodingRouter again. Note that thus also intermediate hops will do a single retransmission if the intended
+  next-hop didn’t relay, in order to fix changes in the middle of the route.
 */
 class NextHopRouter : public FloodingRouter
 {
@@ -85,7 +86,10 @@ class NextHopRouter : public FloodingRouter
         return min(d, r);
     }
 
-    constexpr static uint8_t NUM_RETRANSMISSIONS = 2;
+    // The number of retransmissions intermediate nodes will do (actually 1 less than this)
+    constexpr static uint8_t NUM_INTERMEDIATE_RETX = 2;
+    // The number of retransmissions the original sender will do
+    constexpr static uint8_t NUM_RELIABLE_RETX = 3;
 
   protected:
     /**
@@ -115,7 +119,7 @@ class NextHopRouter : public FloodingRouter
     /**
      * Add p to the list of packets to retransmit occasionally.  We will free it once we stop retransmitting.
      */
-    PendingPacket *startRetransmission(meshtastic_MeshPacket *p, uint8_t numReTx = NUM_RETRANSMISSIONS);
+    PendingPacket *startRetransmission(meshtastic_MeshPacket *p, uint8_t numReTx = NUM_INTERMEDIATE_RETX);
 
     /**
      * Stop any retransmissions we are doing of the specified node/packet ID pair

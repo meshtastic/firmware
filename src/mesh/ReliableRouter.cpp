@@ -23,7 +23,7 @@ ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
         }
 
         auto copy = packetPool.allocCopy(*p);
-        startRetransmission(copy, this->NUM_RETRANSMISSIONS);
+        startRetransmission(copy, NUM_RELIABLE_RETX);
     }
 
     /* If we have pending retransmissions, add the airtime of this packet to it, because during that time we cannot receive an
