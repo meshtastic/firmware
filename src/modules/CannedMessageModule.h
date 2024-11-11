@@ -68,6 +68,10 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
 
     String drawWithCursor(String text, int cursor);
 
+#ifdef RAK14014
+    cannedMessageModuleRunState getRunState() const { return runState; }
+#endif
+
     /*
       -Override the wantPacket method. We need the Routing Messages to look for ACKs.
     */
