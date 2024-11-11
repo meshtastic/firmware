@@ -622,9 +622,17 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
         // us (because we would be able to decrypt it)
         if (!decoded && moduleConfig.mqtt.encryption_enabled && p->channel == 0x00 && !isBroadcast(p->to) && !isToUs(p))
             p_encrypted->pki_encrypted = true;
+
         // After potentially altering it, publish received message to MQTT if we're not the original transmitter of the packet
-        if ((decoded || p_encrypted->pki_encrypted) && moduleConfig.mqtt.enabled && !isFromUs(p) && mqtt)
-            mqtt->onSend(*p_encrypted, *p, p->channel);
+        if ((decoded || p_encrypted->pki_encrypted) && moduleConfig.mqtt.enabled && !isFromUs(p) && mqtt) {
+            // Check if it wasn't already seen, then we don't need to handle it again
+            bool isRepeated = false;
+            bool *rptr = &isRepeated;
+            wasSeenRecently(p, false, rptr);
+            if (!isRepeated) {
+                mqtt->onSend(*p_encrypted, *p, p->channel);
+            }
+        }
 #endif
     }
 
