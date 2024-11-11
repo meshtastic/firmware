@@ -44,7 +44,7 @@ int32_t QMA6100PSensor::runOnce()
 
     uint8_t tempVal;
     if (!sensor->readRegisterRegion(SFE_QMA6100P_INT_ST0, &tempVal, 1)) {
-        LOG_DEBUG("QMA6100PSensor::isWakeOnMotion failed to read interrupts");
+        LOG_DEBUG("QMA6100PS isWakeOnMotion failed to read interrupts");
         return MOTION_SENSOR_CHECK_INTERVAL_MS;
     }
 
@@ -88,55 +88,55 @@ bool QMA6100PSingleton::init(ScanI2C::FoundDevice device)
     bool status = begin(device.address.address, &Wire);
 #endif
     if (status != true) {
-        LOG_WARN("QMA6100PSensor::init begin failed\n");
+        LOG_WARN("QMA6100P init begin failed\n");
         return false;
     }
     delay(20);
     // SW reset to make sure the device starts in a known state
     if (softwareReset() != true) {
-        LOG_WARN("QMA6100PSensor::init reset failed\n");
+        LOG_WARN("QMA6100P init reset failed\n");
         return false;
     }
     delay(20);
     // Set range
     if (!setRange(QMA_6100P_MPU_ACCEL_SCALE)) {
-        LOG_WARN("QMA6100PSensor::init range failed");
+        LOG_WARN("QMA6100P init range failed");
         return false;
     }
     // set active mode
     if (!enableAccel()) {
-        LOG_WARN("ERROR :QMA6100PSensor::active mode set failed");
+        LOG_WARN("ERROR QMA6100P active mode set failed");
     }
     // set calibrateoffsets
     if (!calibrateOffsets()) {
-        LOG_WARN("ERROR :QMA6100PSensor:: calibration failed");
+        LOG_WARN("ERROR QMA6100P calibration failed");
     }
 #ifdef QMA_6100P_INT_PIN
 
     // Active low & Open Drain
     uint8_t tempVal;
     if (!readRegisterRegion(SFE_QMA6100P_INTPINT_CONF, &tempVal, 1)) {
-        LOG_WARN("QMA6100PSensor::init failed to read interrupt pin config");
+        LOG_WARN("QMA6100P init failed to read interrupt pin config");
         return false;
     }
 
     tempVal |= 0b00000010; // Active low & Open Drain
 
     if (!writeRegisterByte(SFE_QMA6100P_INTPINT_CONF, tempVal)) {
-        LOG_WARN("QMA6100PSensor::init failed to write interrupt pin config");
+        LOG_WARN("QMA6100P init failed to write interrupt pin config");
         return false;
     }
 
     // Latch until cleared, all reads clear the latch
     if (!readRegisterRegion(SFE_QMA6100P_INT_CFG, &tempVal, 1)) {
-        LOG_WARN("QMA6100PSensor::init failed to read interrupt config");
+        LOG_WARN("QMA6100P init failed to read interrupt config");
         return false;
     }
 
     tempVal |= 0b10000001; // Latch until cleared, INT_RD_CLR1
 
     if (!writeRegisterByte(SFE_QMA6100P_INT_CFG, tempVal)) {
-        LOG_WARN("QMA6100PSensor::init failed to write interrupt config");
+        LOG_WARN("QMA6100P init failed to write interrupt config");
         return false;
     }
     // Set up an interrupt pin with an internal pullup for active low
@@ -153,7 +153,7 @@ bool QMA6100PSingleton::setWakeOnMotion()
 {
     // Enable 'Any Motion' interrupt
     if (!writeRegisterByte(SFE_QMA6100P_INT_EN2, 0b00000111)) {
-        LOG_WARN("QMA6100PSingleton::setWakeOnMotion failed to write interrupt enable");
+        LOG_WARN("QMA6100P :setWakeOnMotion failed to write interrupt enable");
         return false;
     }
 
@@ -161,7 +161,7 @@ bool QMA6100PSingleton::setWakeOnMotion()
     uint8_t tempVal;
 
     if (!readRegisterRegion(SFE_QMA6100P_INT_MAP1, &tempVal, 1)) {
-        LOG_WARN("QMA6100PSingleton::setWakeOnMotion failed to read interrupt map");
+        LOG_WARN("QMA6100P setWakeOnMotion failed to read interrupt map");
         return false;
     }
 
@@ -171,7 +171,7 @@ bool QMA6100PSingleton::setWakeOnMotion()
     tempVal = int_map1.all;
 
     if (!writeRegisterByte(SFE_QMA6100P_INT_MAP1, tempVal)) {
-        LOG_WARN("QMA6100PSingleton::setWakeOnMotion failed to write interrupt map");
+        LOG_WARN("QMA6100P setWakeOnMotion failed to write interrupt map");
         return false;
     }
 

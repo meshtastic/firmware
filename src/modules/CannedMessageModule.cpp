@@ -42,7 +42,7 @@ meshtastic_CannedMessageModuleConfig cannedMessageModuleConfig;
 CannedMessageModule *cannedMessageModule;
 
 CannedMessageModule::CannedMessageModule()
-    : SinglePortModule("canned", meshtastic_PortNum_TEXT_MESSAGE_APP), concurrency::OSThread("CannedMessageModule")
+    : SinglePortModule("canned", meshtastic_PortNum_TEXT_MESSAGE_APP), concurrency::OSThread("CannedMessage")
 {
     if (moduleConfig.canned_message.enabled || CANNED_MESSAGE_MODULE_ENABLE) {
         this->loadProtoForModule();
@@ -227,12 +227,12 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         case INPUT_BROKER_MSG_BRIGHTNESS_UP: // make screen brighter
             if (screen)
                 screen->increaseBrightness();
-            LOG_DEBUG("increasing Screen Brightness");
+            LOG_DEBUG("Increase Screen Brightness");
             break;
         case INPUT_BROKER_MSG_BRIGHTNESS_DOWN: // make screen dimmer
             if (screen)
                 screen->decreaseBrightness();
-            LOG_DEBUG("Decreasing Screen Brightness");
+            LOG_DEBUG("Decrease Screen Brightness");
             break;
         case INPUT_BROKER_MSG_FN_SYMBOL_ON: // draw modifier (function) symbal
             if (screen)
@@ -325,7 +325,9 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
 
             this->shift = !this->shift;
         } else if (keyTapped == "⌫") {
+#ifndef RAK14014
             this->highlight = keyTapped[0];
+#endif
 
             this->payload = 0x08;
 
@@ -341,7 +343,9 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
 
             validEvent = true;
         } else if (keyTapped == " ") {
+#ifndef RAK14014
             this->highlight = keyTapped[0];
+#endif
 
             this->payload = keyTapped[0];
 
@@ -361,7 +365,9 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
 
             this->shift = false;
         } else if (keyTapped != "") {
+#ifndef RAK14014
             this->highlight = keyTapped[0];
+#endif
 
             this->payload = this->shift ? keyTapped[0] : std::tolower(keyTapped[0]);
 
@@ -414,7 +420,7 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
     // or raising a UIFrameEvent before another module has the chance
     this->waitingForAck = true;
 
-    LOG_INFO("Sending message id=%d, dest=%x, msg=%.*s", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
+    LOG_INFO("Send message id=%d, dest=%x, msg=%.*s", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
 
     service->sendToMesh(
         p, RX_SRC_LOCAL,
@@ -481,7 +487,7 @@ int32_t CannedMessageModule::runOnce()
                 }
                 this->runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
             } else {
-                // LOG_DEBUG("Reset message is empty.");
+                // LOG_DEBUG("Reset message is empty");
                 this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
             }
         }
@@ -830,6 +836,11 @@ void CannedMessageModule::drawKeyboard(OLEDDisplay *display, OLEDDisplayUiState 
 
             Letter updatedLetter = {letter.character, letter.width, xOffset, yOffset, cellWidth, cellHeight};
 
+#ifdef RAK14014 // Optimize the touch range of the virtual keyboard in the bottom row
+            if (outerIndex == outerSize - 1) {
+                updatedLetter.rectHeight = 240 - yOffset;
+            }
+#endif
             this->keyboard[this->charSet][outerIndex][innerIndex] = updatedLetter;
 
             float characterOffset = ((cellWidth / 2) - (letter.width / 2));
@@ -977,7 +988,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
 
     if (temporaryMessage.length() != 0) {
         requestFocus(); // Tell Screen::setFrames to move to our module's frame
-        LOG_DEBUG("Drawing temporary message: %s", temporaryMessage.c_str());
+        LOG_DEBUG("Draw temporary message: %s", temporaryMessage.c_str());
         display->setTextAlignment(TEXT_ALIGN_CENTER);
         display->setFont(FONT_MEDIUM);
         display->drawString(display->getWidth() / 2 + x, 0 + y + 12, temporaryMessage);
@@ -1206,13 +1217,13 @@ AdminMessageHandleResult CannedMessageModule::handleAdminMessageForModule(const 
 
     switch (request->which_payload_variant) {
     case meshtastic_AdminMessage_get_canned_message_module_messages_request_tag:
-        LOG_DEBUG("Client is getting radio canned messages");
+        LOG_DEBUG("Client getting radio canned messages");
         this->handleGetCannedMessageModuleMessages(mp, response);
         result = AdminMessageHandleResult::HANDLED_WITH_RESPONSE;
         break;
 
     case meshtastic_AdminMessage_set_canned_message_module_messages_tag:
-        LOG_DEBUG("Client is setting radio canned messages");
+        LOG_DEBUG("Client getting radio canned messages");
         this->handleSetCannedMessageModuleMessages(request->set_canned_message_module_messages);
         result = AdminMessageHandleResult::HANDLED;
         break;

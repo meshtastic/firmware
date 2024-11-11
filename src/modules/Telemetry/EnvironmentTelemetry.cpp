@@ -73,7 +73,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
         sleepOnNextExecution = false;
         uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval,
                                                                    default_telemetry_broadcast_interval_secs);
-        LOG_DEBUG("Sleeping for %ims, then awaking to send metrics again.", nightyNightMs);
+        LOG_DEBUG("Sleep for %ims, then awake to send metrics again", nightyNightMs);
         doDeepSleep(nightyNightMs, true);
     }
 
@@ -97,7 +97,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
         firstTime = 0;
 
         if (moduleConfig.telemetry.environment_measurement_enabled) {
-            LOG_INFO("Environment Telemetry: Initializing");
+            LOG_INFO("Environment Telemetry: init");
             // it's possible to have this module enabled, only for displaying values on the screen.
             // therefore, we should only enable the sensor loop if measurement is also enabled
 #ifdef T1000X_SENSOR_EN
@@ -376,12 +376,14 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
             LOG_INFO("AHTX0+BMP280 module detected: using temp from BMP280 and humy from AHTX0");
             aht10Sensor.getMetrics(&m_ahtx);
             m->variant.environment_metrics.relative_humidity = m_ahtx.variant.environment_metrics.relative_humidity;
+            m->variant.environment_metrics.has_relative_humidity = m_ahtx.variant.environment_metrics.has_relative_humidity;
         } else {
             // prefer bmp3xx temp if both sensors are present, fetch only humidity
             meshtastic_Telemetry m_ahtx = meshtastic_Telemetry_init_zero;
             LOG_INFO("AHTX0+BMP3XX module detected: using temp from BMP3XX and humy from AHTX0");
             aht10Sensor.getMetrics(&m_ahtx);
             m->variant.environment_metrics.relative_humidity = m_ahtx.variant.environment_metrics.relative_humidity;
+            m->variant.environment_metrics.has_relative_humidity = m_ahtx.variant.environment_metrics.has_relative_humidity;
         }
     }
     if (max17048Sensor.hasSensor()) {
@@ -411,7 +413,7 @@ meshtastic_MeshPacket *EnvironmentTelemetryModule::allocReply()
         if (decoded->which_variant == meshtastic_Telemetry_environment_metrics_tag) {
             meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
             if (getEnvironmentTelemetry(&m)) {
-                LOG_INFO("Environment telemetry replying to request");
+                LOG_INFO("Environment telemetry reply to request");
                 return allocDataProtobuf(m);
             } else {
                 return NULL;
@@ -431,14 +433,14 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 #else
     if (getEnvironmentTelemetry(&m)) {
 #endif
-        LOG_INFO("(Sending): barometric_pressure=%f, current=%f, gas_resistance=%f, relative_humidity=%f, temperature=%f",
+        LOG_INFO("Send: barometric_pressure=%f, current=%f, gas_resistance=%f, relative_humidity=%f, temperature=%f",
                  m.variant.environment_metrics.barometric_pressure, m.variant.environment_metrics.current,
                  m.variant.environment_metrics.gas_resistance, m.variant.environment_metrics.relative_humidity,
                  m.variant.environment_metrics.temperature);
-        LOG_INFO("(Sending): voltage=%f, IAQ=%d, distance=%f, lux=%f", m.variant.environment_metrics.voltage,
+        LOG_INFO("Send: voltage=%f, IAQ=%d, distance=%f, lux=%f", m.variant.environment_metrics.voltage,
                  m.variant.environment_metrics.iaq, m.variant.environment_metrics.distance, m.variant.environment_metrics.lux);
 
-        LOG_INFO("(Sending): wind speed=%fm/s, direction=%d degrees, weight=%fkg", m.variant.environment_metrics.wind_speed,
+        LOG_INFO("Send: wind speed=%fm/s, direction=%d degrees, weight=%fkg", m.variant.environment_metrics.wind_speed,
                  m.variant.environment_metrics.wind_direction, m.variant.environment_metrics.weight);
 
         sensor_read_error_count = 0;
@@ -456,14 +458,14 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 
         lastMeasurementPacket = packetPool.allocCopy(*p);
         if (phoneOnly) {
-            LOG_INFO("Sending packet to phone");
+            LOG_INFO("Send packet to phone");
             service->sendToPhone(p);
         } else {
-            LOG_INFO("Sending packet to mesh");
+            LOG_INFO("Send packet to mesh");
             service->sendToMesh(p, RX_SRC_LOCAL, true);
 
             if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving) {
-                LOG_DEBUG("Starting next execution in 5 seconds and then going to sleep.");
+                LOG_DEBUG("Start next execution in 5s, then sleep");
                 sleepOnNextExecution = true;
                 setIntervalFromNow(5000);
             }

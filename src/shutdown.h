@@ -32,7 +32,7 @@ void powerCommandsCheck()
         reboot();
 #else
         rebootAtMsec = -1;
-        LOG_WARN("FIXME implement reboot for this platform. Note that some settings require a restart to be applied.");
+        LOG_WARN("FIXME implement reboot for this platform. Note that some settings require a restart to be applied");
 #endif
     }
 
@@ -43,7 +43,7 @@ void powerCommandsCheck()
 #endif
 
     if (shutdownAtMsec && millis() > shutdownAtMsec) {
-        LOG_INFO("Shutting down from admin command");
+        LOG_INFO("Shut down from admin command");
 #if defined(ARCH_NRF52) || defined(ARCH_ESP32) || defined(ARCH_RP2040)
         playShutdownMelody();
         power->shutdown();
