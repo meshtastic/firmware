@@ -1161,6 +1161,31 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
     deviceMetadata.hw_model = HW_VENDOR;
     deviceMetadata.hasRemoteHardware = moduleConfig.remote_hardware.enabled;
     deviceMetadata.excluded_modules = meshtastic_ExcludedModules_EXCLUDED_NONE;
+#if MESHTASTIC_EXCLUDE_REMOTEHARDWARE
+    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_REMOTEHARDWARE_CONFIG;
+#endif
+#if MESHTASTIC_EXCLUDE_AUDIO
+    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_AUDIO_CONFIG;
+#endif
+#if !HAS_SCREEN || NO_EXT_GPIO
+    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_CANNEDMSG_CONFIG | meshtastic_ExcludedModules_EXTNOTIF_CONFIG;
+#endif
+// Only edge case here is if we apply this a device with built in Accelerometer and want to detect interrupts
+// We'll have to macro guard against those targets potentially
+#if NO_EXT_GPIO
+    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_DETECTIONSENSOR_CONFIG;
+#endif
+// If we don't have any GPIO and we don't have GPS, no purpose in having serial config
+#if NO_EXT_GPIO && NO_GPS
+    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_SERIAL_CONFIG;
+#endif
+#ifndef ARCH_ESP32
+    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_PAXCOUNTER_CONFIG;
+#endif
+#if !defined(HAS_NCP5623) && !defined(RGBLED_RED) && !defined(HAS_NEOPIXEL) && !defined(UNPHONE) && !RAK_4631
+    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_AMBIENTLIGHTING_CONFIG;
+#endif
+
 #if !(MESHTASTIC_EXCLUDE_PKI)
     deviceMetadata.hasPKC = true;
 #endif

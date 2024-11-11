@@ -13,8 +13,8 @@ jobs:
       - name: Install libbluetooth
         shell: bash
         run: |
-          apt-get update -y --fix-missing
-          apt-get install -y libbluetooth-dev libgpiod-dev libyaml-cpp-dev openssl libssl-dev libulfius-dev liborcania-dev
+          sudo apt-get update -y --fix-missing
+          sudo apt-get install -y libbluetooth-dev libgpiod-dev libyaml-cpp-dev openssl libssl-dev libulfius-dev liborcania-dev
 
       - name: Checkout code
         uses: actions/checkout@v4
