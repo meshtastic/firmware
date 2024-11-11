@@ -29,9 +29,10 @@ bool RoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mesh
     // Note: we are careful not to send back packets that started with the phone back to the phone
     if ((isBroadcast(mp.to) || isToUs(&mp)) && (mp.from != 0)) {
         // Check if it wasn't already seen, then we don't need to handle it again
-        bool *isRepeated;
-        router->wasSeenRecently(&mp, false, isRepeated);
-        if (!*isRepeated) {
+        bool isRepeated = false;
+        bool *rptr = &isRepeated;
+        router->wasSeenRecently(&mp, false, rptr);
+        if (!isRepeated) {
             printPacket("Delivering rx packet", &mp);
             service->handleFromRadio(&mp);
         }
