@@ -122,7 +122,6 @@ void DetectionSensorModule::sendDetectionMessage()
     char *message = new char[40];
     sprintf(message, "%s detected", moduleConfig.detection_sensor.name);
     meshtastic_MeshPacket *p = allocDataPacket();
-    p->to = nodeDB->getNodeNum();    // set destination to self or it would go to 0xffffffff
     p->want_ack = false;
     p->decoded.payload.size = strlen(message);
     memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
@@ -145,7 +144,6 @@ void DetectionSensorModule::sendCurrentStateMessage(bool state)
     char *message = new char[40];
     sprintf(message, "%s state: %i", moduleConfig.detection_sensor.name, state);
     meshtastic_MeshPacket *p = allocDataPacket();
-    p->to = nodeDB->getNodeNum();    // set destination to self or it would go to 0xffffffff
     p->want_ack = false;
     p->decoded.payload.size = strlen(message);
     memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
