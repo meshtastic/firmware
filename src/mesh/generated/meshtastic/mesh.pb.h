@@ -720,7 +720,7 @@ typedef struct _meshtastic_MeshPacket {
  Set during reception to indicate the SNR of this packet.
  Used to collect statistics on current link quality. */
     float rx_snr;
-    /* If unset treated as zero (no forwarding, send to adjacent nodes only)
+    /* If unset treated as zero (no forwarding, send to direct neighbor nodes only)
  if 1, allow hopping through one node, etc...
  For our usecase real world topologies probably have a max of about 3.
  This field is normally placed into a few of bits in the header. */
@@ -791,7 +791,7 @@ typedef struct _meshtastic_NodeInfo {
     uint8_t channel;
     /* True if we witnessed the node over MQTT instead of LoRA transport */
     bool via_mqtt;
-    /* Number of hops away from us this node is (0 if adjacent) */
+    /* Number of hops away from us this node is (0 if direct neighbor) */
     bool has_hops_away;
     uint8_t hops_away;
     /* True if node is in our favorites list

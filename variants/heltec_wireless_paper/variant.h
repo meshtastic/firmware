@@ -32,6 +32,9 @@
 #define HAS_32768HZ
 #define ADC_CTRL_ENABLED LOW
 
+#define NO_EXT_GPIO 1
+#define NO_GPS 1
+
 // LoRa
 #define USE_SX1262
 
