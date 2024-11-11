@@ -93,7 +93,7 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
                     jsonObj["payload"]["current_ch3"] = decoded->variant.power_metrics.ch3_current;
                 }
             } else if (shouldLog) {
-                LOG_ERROR("Error decoding protobuf for telemetry message!");
+                LOG_ERROR("Error decoding proto for telemetry message!");
                 return "";
             }
             break;
@@ -111,7 +111,7 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
                 jsonObj["payload"]["hardware"] = decoded->hw_model;
                 jsonObj["payload"]["role"] = (int)decoded->role;
             } else if (shouldLog) {
-                LOG_ERROR("Error decoding protobuf for nodeinfo message!");
+                LOG_ERROR("Error decoding proto for nodeinfo message!");
                 return "";
             }
             break;
@@ -156,7 +156,7 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
                     jsonObj["payload"]["precision_bits"] = (int)decoded->precision_bits;
                 }
             } else if (shouldLog) {
-                LOG_ERROR("Error decoding protobuf for position message!");
+                LOG_ERROR("Error decoding proto for position message!");
                 return "";
             }
             break;
@@ -176,7 +176,7 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
                 jsonObj["payload"]["latitude_i"] = (int)decoded->latitude_i;
                 jsonObj["payload"]["longitude_i"] = (int)decoded->longitude_i;
             } else if (shouldLog) {
-                LOG_ERROR("Error decoding protobuf for position message!");
+                LOG_ERROR("Error decoding proto for position message!");
                 return "";
             }
             break;
@@ -207,7 +207,7 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
                 neighbors.remove(0);
                 jsonObj["payload"]["neighbors"] = neighbors;
             } else if (shouldLog) {
-                LOG_ERROR("Error decoding protobuf for neighborinfo message!");
+                LOG_ERROR("Error decoding proto for neighborinfo message!");
                 return "";
             }
             break;
@@ -241,7 +241,7 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
 
                     jsonObj["payload"]["route"] = route;
                 } else if (shouldLog) {
-                    LOG_ERROR("Error decoding protobuf for traceroute message!");
+                    LOG_ERROR("Error decoding proto for traceroute message!");
                     return "";
                 }
             } else {
@@ -274,7 +274,7 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
                     jsonObj["payload"]["gpio_mask"] = (unsigned int)decoded->gpio_mask;
                 }
             } else if (shouldLog) {
-                LOG_ERROR("Error decoding protobuf for RemoteHardware message!");
+                LOG_ERROR("Error decoding proto for RemoteHardware message!");
                 return "";
             }
             break;

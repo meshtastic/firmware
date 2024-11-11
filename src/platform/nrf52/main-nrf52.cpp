@@ -74,7 +74,7 @@ void setBluetoothEnable(bool enable)
     // For debugging use: don't use bluetooth
     if (!useSoftDevice) {
         if (enable)
-            LOG_INFO("DISABLING NRF52 BLUETOOTH WHILE DEBUGGING");
+            LOG_INFO("Disable NRF52 BLUETOOTH WHILE DEBUGGING");
         return;
     }
 
@@ -97,7 +97,7 @@ void setBluetoothEnable(bool enable)
 
         // If not yet set-up
         if (!nrf52Bluetooth) {
-            LOG_DEBUG("Initializing NRF52 Bluetooth");
+            LOG_DEBUG("Init NRF52 Bluetooth");
             nrf52Bluetooth = new NRF52Bluetooth();
             nrf52Bluetooth->setup();
 
@@ -212,7 +212,7 @@ void nrf52Setup()
     } seed;
     nRFCrypto.begin();
     nRFCrypto.Random.generate(seed.seed8, sizeof(seed.seed8));
-    LOG_DEBUG("Setting random seed %u", seed.seed32);
+    LOG_DEBUG("Set random seed %u", seed.seed32);
     randomSeed(seed.seed32);
     nRFCrypto.end();
 }

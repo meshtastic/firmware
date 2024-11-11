@@ -17,7 +17,7 @@ class PowerTelemetryModule : private concurrency::OSThread, public ProtobufModul
 
   public:
     PowerTelemetryModule()
-        : concurrency::OSThread("PowerTelemetryModule"),
+        : concurrency::OSThread("PowerTelemetry"),
           ProtobufModule("PowerTelemetry", meshtastic_PortNum_TELEMETRY_APP, &meshtastic_Telemetry_msg)
     {
         lastMeasurementPacket = nullptr;
