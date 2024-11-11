@@ -20,6 +20,8 @@
 #include <ESPmDNS.h>
 #include <esp_wifi.h>
 static void WiFiEvent(WiFiEvent_t event);
+#else // ARCH_RP2040
+#include <SimpleMDNS.h>
 #endif
 
 #ifndef DISABLE_NTP
@@ -59,17 +61,19 @@ static void onNetworkConnected()
         // Start web server
         LOG_INFO("Start WiFi network services");
 
+// start mdns
 #ifdef ARCH_ESP32
-        // start mdns
         if (!MDNS.begin("Meshtastic")) {
             LOG_ERROR("Error setting up MDNS responder!");
         } else {
-            LOG_INFO("mDNS responder started");
             LOG_INFO("mDNS Host: Meshtastic.local");
             MDNS.addService("http", "tcp", 80);
             MDNS.addService("https", "tcp", 443);
         }
-#else // ESP32 handles this in WiFiEvent
+#else
+        MDNS.begin("Meshtastic");
+        // ARCH_RP2040 does not support HTTPS
+        MDNS.addService("meshtastic", "tcp", 4403);
         LOG_INFO("Obtained IP address: %s", WiFi.localIP().toString().c_str());
 #endif
 
@@ -106,7 +110,7 @@ static void onNetworkConnected()
         APStartupComplete = true;
     }
 
-    // FIXME this is kinda yucky, instead we should just have an observable for 'wifireconnected'
+// FIXME this is kinda yucky, instead we should just have an observable for 'wifireconnected'
 #ifndef MESHTASTIC_EXCLUDE_MQTT
     if (mqtt)
         mqtt->reconnect();
