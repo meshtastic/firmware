@@ -54,8 +54,8 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
         // to handle it now
         uint8_t ourRelayID = nodeDB->getLastByteOfNodeNum(nodeDB->getNodeNum());
         if (found->sender != nodeDB->getNodeNum() && found->next_hop != NO_NEXT_HOP_PREFERENCE &&
-            p->next_hop == NO_NEXT_HOP_PREFERENCE && found->next_hop != ourRelayID && p->relay_node != 0 &&
-            wasRelayer(p->relay_node, found) && !wasRelayer(ourRelayID, found) && !wasRelayer(found->next_hop, found)) {
+            p->next_hop == NO_NEXT_HOP_PREFERENCE && found->next_hop != ourRelayID && wasRelayer(p->relay_node, found) &&
+            !wasRelayer(ourRelayID, found) && !wasRelayer(found->next_hop, found)) {
             LOG_INFO("Fallback to flooding, consider unseen relay_node=0x%x", p->relay_node);
             seenRecently = false;
         }
@@ -109,6 +109,9 @@ void PacketHistory::clearExpiredRecentPackets()
  * @return true if node was indeed a relayer, false if not */
 bool PacketHistory::wasRelayer(const uint8_t relayer, const uint32_t id, const NodeNum sender)
 {
+    if (relayer == 0)
+        return false;
+
     PacketRecord r = {.sender = sender, .id = id, .rxTimeMsec = 0, .next_hop = 0};
     auto found = recentPackets.find(r);
 

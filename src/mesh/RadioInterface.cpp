@@ -315,10 +315,6 @@ void printPacket(const char *prefix, const meshtastic_MeshPacket *p)
         out += " encrypted";
     }
 
-    if (p->next_hop != 0)
-        out += DEBUG_PORT.mt_sprintf(" nextHop=0x%x", p->next_hop);
-    if (p->relay_node != 0)
-        out += DEBUG_PORT.mt_sprintf(" relay=0x%x", p->relay_node);
     if (p->rx_time != 0)
         out += DEBUG_PORT.mt_sprintf(" rxtime=%u", p->rx_time);
     if (p->rx_snr != 0.0)
@@ -329,6 +325,10 @@ void printPacket(const char *prefix, const meshtastic_MeshPacket *p)
         out += DEBUG_PORT.mt_sprintf(" via MQTT");
     if (p->hop_start != 0)
         out += DEBUG_PORT.mt_sprintf(" hopStart=%d", p->hop_start);
+    if (p->next_hop != 0)
+        out += DEBUG_PORT.mt_sprintf(" nextHop=0x%x", p->next_hop);
+    if (p->relay_node != 0)
+        out += DEBUG_PORT.mt_sprintf(" relay=0x%x", p->relay_node);
     if (p->priority != 0)
         out += DEBUG_PORT.mt_sprintf(" priority=%d", p->priority);
 

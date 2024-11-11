@@ -54,14 +54,13 @@ void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtast
     if (isAckorReply) {
         // Update next-hop for the original transmitter of this successful transmission to the relay node, but ONLY if "from" is
         // not 0 (means implicit ACK) and original packet was also relayed by this node, or we sent it directly to the destination
-        if (p->from != 0 && p->relay_node) {
+        if (p->from != 0) {
             meshtastic_NodeInfoLite *origTx = nodeDB->getMeshNode(p->from);
             if (origTx) {
                 // Either relayer of ACK was also a relayer of the packet, or we were the relayer and the ACK came directly from
                 // the destination
                 if (wasRelayer(p->relay_node, p->decoded.request_id, p->to) ||
-                    (wasRelayer(ourRelayID, p->decoded.request_id, p->to) &&
-                     p->relay_node == nodeDB->getLastByteOfNodeNum(p->from))) {
+                    (wasRelayer(ourRelayID, p->decoded.request_id, p->to) && p->hop_start != 0 && p->hop_start == p->hop_limit)) {
                     if (origTx->next_hop != p->relay_node) { // Not already set
                         LOG_INFO("Update next hop of 0x%x to 0x%x based on ACK/reply", p->from, p->relay_node);
                         origTx->next_hop = p->relay_node;
@@ -76,18 +75,18 @@ void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtast
         }
     }
 
-    if (isRebroadcaster()) {
-        if (!isToUs(p) && !isFromUs(p)) {
-            if (p->next_hop == NO_NEXT_HOP_PREFERENCE || p->next_hop == ourRelayID) {
+    if (!isToUs(p) && !isFromUs(p) && p->hop_limit > 0) {
+        if (p->next_hop == NO_NEXT_HOP_PREFERENCE || p->next_hop == ourRelayID) {
+            if (isRebroadcaster()) {
                 meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
                 LOG_INFO("Relaying received message coming from %x", p->relay_node);
 
                 tosend->hop_limit--; // bump down the hop count
                 NextHopRouter::send(tosend);
-            } // else don't relay
+            } else {
+                LOG_DEBUG("Not rebroadcasting: Role = CLIENT_MUTE or Rebroadcast Mode = NONE");
+            }
         }
-    } else {
-        LOG_DEBUG("Not rebroadcasting: Role = CLIENT_MUTE or Rebroadcast Mode = NONE");
     }
     // handle the packet as normal
     Router::sniffReceived(p, c);
@@ -99,6 +98,10 @@ void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtast
  */
 uint8_t NextHopRouter::getNextHop(NodeNum to, uint8_t relay_node)
 {
+    // When we're a repeater router->sniffReceived will call NextHopRouter directly without checking for broadcast
+    if (isBroadcast(to))
+        return NO_NEXT_HOP_PREFERENCE;
+
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(to);
     if (node && node->next_hop) {
         // We are careful not to return the relay node as the next hop
