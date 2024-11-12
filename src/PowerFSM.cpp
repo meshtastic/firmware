@@ -55,9 +55,14 @@ static void sdsEnter()
 {
     LOG_DEBUG("State: SDS");
     // FIXME - make sure GPS and LORA radio are off first - because we want close to zero current draw
-    doDeepSleep(Default::getConfiguredOrDefaultMs(config.power.sds_secs), false);
+    doDeepSleep(Default::getConfiguredOrDefaultMs(config.power.sds_secs), false, false);
 }
 
+static void lowBattSDSEnter()
+{
+    LOG_DEBUG("State: Lower batt SDS");
+    doDeepSleep(Default::getConfiguredOrDefaultMs(config.power.sds_secs), false, true);
+}
 extern Power *power;
 
 static void shutdownEnter()
@@ -247,6 +252,7 @@ static void bootEnter()
 
 State stateSHUTDOWN(shutdownEnter, NULL, NULL, "SHUTDOWN");
 State stateSDS(sdsEnter, NULL, NULL, "SDS");
+State stateLowBattSDS(lowBattSDSEnter, NULL, NULL, "SDS");
 State stateLS(lsEnter, lsIdle, lsExit, "LS");
 State stateNB(nbEnter, NULL, NULL, "NB");
 State stateDARK(darkEnter, NULL, NULL, "DARK");
@@ -291,12 +297,12 @@ void PowerFSM_setup()
                             "Press"); // Allow button to work while in serial API
 
     // Handle critically low power battery by forcing deep sleep
-    powerFSM.add_transition(&stateBOOT, &stateSDS, EVENT_LOW_BATTERY, NULL, "LowBat");
-    powerFSM.add_transition(&stateLS, &stateSDS, EVENT_LOW_BATTERY, NULL, "LowBat");
-    powerFSM.add_transition(&stateNB, &stateSDS, EVENT_LOW_BATTERY, NULL, "LowBat");
-    powerFSM.add_transition(&stateDARK, &stateSDS, EVENT_LOW_BATTERY, NULL, "LowBat");
-    powerFSM.add_transition(&stateON, &stateSDS, EVENT_LOW_BATTERY, NULL, "LowBat");
-    powerFSM.add_transition(&stateSERIAL, &stateSDS, EVENT_LOW_BATTERY, NULL, "LowBat");
+    powerFSM.add_transition(&stateBOOT, &stateLowBattSDS, EVENT_LOW_BATTERY, NULL, "LowBat");
+    powerFSM.add_transition(&stateLS, &stateLowBattSDS, EVENT_LOW_BATTERY, NULL, "LowBat");
+    powerFSM.add_transition(&stateNB, &stateLowBattSDS, EVENT_LOW_BATTERY, NULL, "LowBat");
+    powerFSM.add_transition(&stateDARK, &stateLowBattSDS, EVENT_LOW_BATTERY, NULL, "LowBat");
+    powerFSM.add_transition(&stateON, &stateLowBattSDS, EVENT_LOW_BATTERY, NULL, "LowBat");
+    powerFSM.add_transition(&stateSERIAL, &stateLowBattSDS, EVENT_LOW_BATTERY, NULL, "LowBat");
 
     // Handle being told to power off
     powerFSM.add_transition(&stateBOOT, &stateSHUTDOWN, EVENT_SHUTDOWN, NULL, "Shutdown");

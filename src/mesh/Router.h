@@ -4,6 +4,7 @@
 #include "MemoryPool.h"
 #include "MeshTypes.h"
 #include "Observer.h"
+#include "PacketHistory.h"
 #include "PointerQueue.h"
 #include "RadioInterface.h"
 #include "concurrency/OSThread.h"
@@ -11,7 +12,7 @@
 /**
  * A mesh aware router that supports multiple interfaces.
  */
-class Router : protected concurrency::OSThread
+class Router : protected concurrency::OSThread, protected PacketHistory
 {
   private:
     /// Packets which have just arrived from the radio, ready to be processed by this service and possibly
