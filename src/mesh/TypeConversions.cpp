@@ -12,6 +12,7 @@ meshtastic_NodeInfo TypeConversions::ConvertToNodeInfo(const meshtastic_NodeInfo
     info.channel = lite->channel;
     info.via_mqtt = lite->via_mqtt;
     info.is_favorite = lite->is_favorite;
+    info.is_ignored = lite->is_ignored;
 
     if (lite->has_hops_away) {
         info.has_hops_away = true;
