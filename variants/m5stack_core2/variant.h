@@ -1,4 +1,7 @@
 #define BUTTON_NEED_PULLUP
+#define HAS_AXP192
+#define I2C_SDA 21 // For AXP192
+#define I2C_SCL 22 // For AXP192
 
 #undef LORA_SCK
 #undef LORA_MISO
