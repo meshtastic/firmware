@@ -288,6 +288,8 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->set_ignored_node);
         if (node != NULL) {
             node->is_ignored = true;
+            node->has_device_metrics = false;
+            node->has_position = false;
             saveChanges(SEGMENT_DEVICESTATE, false);
         }
         break;
