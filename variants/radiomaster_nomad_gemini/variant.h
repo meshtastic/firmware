@@ -28,6 +28,13 @@
 #define LR1121_SPI_MOSI_PIN LORA_MOSI
 #define LR1121_SPI_MISO_PIN LORA_MISO
 
+// not yet implemented
+#define JANUS_RADIO
+#define LR1121_IRQ2_PIN 34
+#define LR1121_NRESET2_PIN 21
+#define LR1121_BUSY2_PIN 39
+#define LR1121_SPI_NSS2_PIN 13
+
 // #define LR11X0_DIO3_TCXO_VOLTAGE 1.6
 #define LR11X0_DIO_AS_RF_SWITCH
 
@@ -42,10 +49,11 @@
 
 #undef EXT_NOTIFY_OUT
 
-#define BAT_MEASURE_ADC_UNIT
-#define BATTERY_PIN 26
-#define ADC_CHANNEL ADC2_GPIO26_CHANNEL
-#define BATTERY_SENSE_SAMPLES 30
+// #define BAT_MEASURE_ADC_UNIT
+// #define BATTERY_PIN 26
+// #define ADC_CHANNEL ADC2_GPIO26_CHANNEL
+// #define BATTERY_SENSE_SAMPLES 30
 
-// ratio of voltage divider = 2.0 (R42=100k, R43=100k)
-#define ADC_MULTIPLIER 2
+#define RADIO_FAN_EN 2
+// this board does need PWM on the FAN PIN
+#define RADIO_FAN_PWM

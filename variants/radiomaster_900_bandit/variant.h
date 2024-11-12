@@ -46,7 +46,8 @@
   FAN is active at 250mW on it's ExpressLRS Firmware.
   This FAN has TACHO signal on Pin 27 for use with PWM.
 */
-#define RF95_FAN_EN 2
+#define RADIO_FAN_EN 2
+#define RADIO_FAN_PWM
 
 /*
   LED PIN setup and it has a NeoPixel LED.
