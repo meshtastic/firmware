@@ -155,7 +155,7 @@ Logging:
 
 Webserver:
 #  Port: 443 # Port for Webserver & Webservices
-#  RootPath: /usr/share/doc/meshtasticd/web # Root Dir of WebServer
+#  RootPath: /usr/share/meshtasticd/web # Root Dir of WebServer
 
 General:
   MaxNodes: 200
