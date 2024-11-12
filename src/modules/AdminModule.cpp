@@ -290,6 +290,8 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             node->is_ignored = true;
             node->has_device_metrics = false;
             node->has_position = false;
+            node->user.public_key.size = 0;
+            node->user.public_key.bytes[0] = 0;
             saveChanges(SEGMENT_DEVICESTATE, false);
         }
         break;
