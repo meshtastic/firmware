@@ -659,6 +659,13 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
         return;
     }
 
+    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->from);
+    if (node != NULL && node->is_ignored) {
+        LOG_DEBUG("Ignore msg, 0x%x is ignored", p->from);
+        packetPool.release(p);
+        return;
+    }
+
     if (p->from == NODENUM_BROADCAST) {
         LOG_DEBUG("Ignore msg from broadcast address");
         packetPool.release(p);
