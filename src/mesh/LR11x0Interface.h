@@ -65,5 +65,7 @@ template <class T> class LR11x0Interface : public RadioLibInterface
     virtual void addReceiveMetadata(meshtastic_MeshPacket *mp) override;
 
     virtual void setStandby() override;
+
+    void regulateFan();
 };
 #endif

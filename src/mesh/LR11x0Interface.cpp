@@ -3,6 +3,7 @@
 #include "Throttle.h"
 #include "configuration.h"
 #include "error.h"
+#include "main.h"
 #include "mesh/NodeDB.h"
 #ifdef LR11X0_DIO_AS_RF_SWITCH
 #include "rfswitch.h"
@@ -47,6 +48,8 @@ template <typename T> bool LR11x0Interface<T>::init()
     pinMode(LR11X0_POWER_EN, OUTPUT);
     digitalWrite(LR11X0_POWER_EN, HIGH);
 #endif
+
+    enableFan();
 
 // FIXME: correct logic to default to not using TCXO if no voltage is specified for LR11x0_DIO3_TCXO_VOLTAGE
 #if !defined(LR11X0_DIO3_TCXO_VOLTAGE)
@@ -273,6 +276,19 @@ template <typename T> bool LR11x0Interface<T>::isActivelyReceiving()
     // received and handled the interrupt for reading the packet/handling errors.
     return receiveDetected(lora.getIrqStatus(), RADIOLIB_LR11X0_IRQ_SYNC_WORD_HEADER_VALID,
                            RADIOLIB_LR11X0_IRQ_PREAMBLE_DETECTED);
+}
+
+template <typename T> void LR11x0Interface<T>::regulateFan()
+{
+    float *pa_temp = 0;
+    lora.getTemp(pa_temp);
+    if (*pa_temp > 40) {
+        pa_fan_percentage = max(pa_fan_percentage + 1, 100);
+        enableFan();
+    } else {
+        pa_fan_percentage = max(pa_fan_percentage - 1, 100);
+        enableFan();
+    }
 }
 
 template <typename T> bool LR11x0Interface<T>::sleep()
