@@ -7,8 +7,8 @@
 
 // Analog pins
 #define BATTERY_PIN 4 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
-// ratio of voltage divider = 2.0
-#define ADC_MULTIPLIER 2.11 // 2.0 + 10% for correction of display undervoltage.
+// ratio of voltage divider (100k, 220k)
+#define ADC_MULTIPLIER 1.6 // 1.45 + 10% for correction of display undervoltage.
 #define ADC_CHANNEL ADC1_GPIO4_CHANNEL
 
 // LED
