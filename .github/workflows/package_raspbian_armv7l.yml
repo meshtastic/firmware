@@ -66,6 +66,7 @@ jobs:
           cp bin/meshtasticd.service .debpkg/usr/lib/systemd/system/meshtasticd.service
           echo "/etc/meshtasticd/config.yaml" > .debpkg/DEBIAN/conffiles
           chmod +x .debpkg/DEBIAN/conffiles
+          echo "rm -rf /usr/share/doc/meshtasticd" > .debpkg/DEBIAN/preinst
           echo "/usr/share/meshtasticd /usr/share/doc/meshtasticd" > .debpkg/DEBIAN/meshtasticd.links
 
       - uses: jiro4989/build-deb-action@v3
