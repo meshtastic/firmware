@@ -8,19 +8,19 @@
 #define LORA_SCK 18
 #define LORA_MISO 38
 #define LORA_MOSI 23
-#define LORA_CS 33 // NSS
+#define LORA_CS 27 // NSS
 
 #define USE_RF95
 #define LORA_DIO0 35 // IRQ
-#define LORA_RESET 19
+#define LORA_RESET 25
 #define LORA_DIO1 RADIOLIB_NC // Not really used
 #define LORA_DIO2 RADIOLIB_NC // Not really used
 
 // This board has different GPS pins than all other boards
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
-#define GPS_RX_PIN 13
-#define GPS_TX_PIN 14
+//#define GPS_RX_PIN 13
+//#define GPS_TX_PIN 14
 
 #define TFT_HEIGHT 240
 #define TFT_WIDTH 320
