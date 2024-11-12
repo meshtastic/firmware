@@ -16,7 +16,7 @@ PacketHistory::PacketHistory()
 /**
  * Update recentBroadcasts and return true if we have already seen this packet
  */
-bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpdate, bool *isRepeated)
+bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpdate)
 {
     if (p->id == 0) {
         LOG_DEBUG("Ignore message with zero id");
@@ -38,18 +38,6 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
         seenRecently = false;
     }
 
-    /* If the original transmitter is doing retransmissions (hopStart equals hopLimit) for a reliable transmission, e.g., when the
-       ACK got lost, we will handle the packet again to make sure it gets an ACK/response to its packet. */
-    if (seenRecently && p->hop_start > 0 && p->hop_start == p->hop_limit) {
-        if (withUpdate)
-            LOG_DEBUG("Repeated reliable tx");
-
-        if (isRepeated)
-            *isRepeated = true;
-
-        seenRecently = false;
-    }
-
     if (seenRecently) {
         LOG_DEBUG("Found existing packet record for fr=0x%x,to=0x%x,id=0x%x", p->from, p->to, p->id);
     }
@@ -59,7 +47,7 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
             recentPackets.erase(found);     // as unsorted_set::iterator is const (can't update timestamp - so re-insert..)
         }
         recentPackets.insert(r);
-        LOG_DEBUG("Add packet record fr=0x%x, id=0x%x", p->from, p->id);
+        printPacket("Add packet record", p);
     }
 
     // Capacity is reerved, so only purge expired packets if recentPackets fills past 90% capacity

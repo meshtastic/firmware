@@ -28,14 +28,8 @@ bool RoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mesh
     // FIXME - move this to a non promsicious PhoneAPI module?
     // Note: we are careful not to send back packets that started with the phone back to the phone
     if ((isBroadcast(mp.to) || isToUs(&mp)) && (mp.from != 0)) {
-        // Check if it wasn't already seen, then we don't need to handle it again
-        bool isRepeated = false;
-        bool *rptr = &isRepeated;
-        router->wasSeenRecently(&mp, false, rptr);
-        if (!isRepeated) {
-            printPacket("Delivering rx packet", &mp);
-            service->handleFromRadio(&mp);
-        }
+        printPacket("Delivering rx packet", &mp);
+        service->handleFromRadio(&mp);
     }
 
     return false; // Let others look at this message also if they want

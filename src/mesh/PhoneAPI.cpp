@@ -12,7 +12,6 @@
 #include "PhoneAPI.h"
 #include "PowerFSM.h"
 #include "RadioInterface.h"
-#include "Router.h"
 #include "TypeConversions.h"
 #include "main.h"
 #include "xmodem.h"
