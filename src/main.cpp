@@ -1105,12 +1105,12 @@ void setup()
         LOG_WARN("PWM init fail P%d\n", RADIO_FAN_EN);
     }
 #elif defined(ARCH_NRF52)
-    pinMode(RF95_FAN_PWM, OUTPUT);
-    analogWrite(RF95_FAN_PWM, config.lora.pa_fan_disabled ? 0 : (pa_fan_percentage * 2.55));
+    pinMode(RADIO_FAN_EN, OUTPUT);
+    analogWrite(RADIO_FAN_EN, config.lora.pa_fan_disabled ? 0 : (pa_fan_percentage * 2.55));
 #endif
 #else
     // Set up as ON/OFF switch of fan
-    pinMode(RF95_FAN_EN, OUTPUT);
+    pinMode(RADIO_FAN_EN, OUTPUT);
     digitalWrite(RADIO_FAN_EN, LOW ^ 0);
 #endif
 #endif
