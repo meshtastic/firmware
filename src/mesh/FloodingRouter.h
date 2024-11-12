@@ -1,5 +1,6 @@
 #pragma once
 
+#include "PacketHistory.h"
 #include "Router.h"
 
 /**
@@ -25,7 +26,7 @@
   Any entries in recentBroadcasts that are older than X seconds (longer than the
   max time a flood can take) will be discarded.
  */
-class FloodingRouter : public Router
+class FloodingRouter : public Router, protected PacketHistory
 {
   private:
     bool isRebroadcaster();
