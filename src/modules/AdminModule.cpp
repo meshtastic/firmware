@@ -283,6 +283,28 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         }
         break;
     }
+    case meshtastic_AdminMessage_set_ignored_node_tag: {
+        LOG_INFO("Client received set_ignored_node command");
+        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->set_ignored_node);
+        if (node != NULL) {
+            node->is_ignored = true;
+            node->has_device_metrics = false;
+            node->has_position = false;
+            node->user.public_key.size = 0;
+            node->user.public_key.bytes[0] = 0;
+            saveChanges(SEGMENT_DEVICESTATE, false);
+        }
+        break;
+    }
+    case meshtastic_AdminMessage_remove_ignored_node_tag: {
+        LOG_INFO("Client received remove_ignored_node command");
+        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->remove_ignored_node);
+        if (node != NULL) {
+            node->is_ignored = false;
+            saveChanges(SEGMENT_DEVICESTATE, false);
+        }
+        break;
+    }
     case meshtastic_AdminMessage_set_fixed_position_tag: {
         LOG_INFO("Client received set_fixed_position command");
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
