@@ -1581,10 +1581,6 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             digitalWrite(VTFT_LEDA, TFT_BACKLIGHT_ON);
 #endif
 #endif
-#ifdef TFT_BL
-            pinMode(TFT_BL, OUTPUT);
-            digitalWrite(TFT_BL, HIGH);
-#endif
 #if defined(M5STACK_CORE2)
             M5.Power.Axp192.setDCDC3(1000);
             M5.Display.setBrightness(130);
@@ -1600,10 +1596,6 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 #endif
             LOG_INFO("Turn off screen");
             dispdev->displayOff();
-#ifdef TFT_BL
-            pinMode(TFT_BL, OUTPUT);
-            digitalWrite(TFT_BL, LOW);
-#endif
 #if defined(M5STACK_CORE2)
             M5.Power.Axp192.setDCDC3(0);
 #endif
