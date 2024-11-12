@@ -280,9 +280,9 @@ template <typename T> bool LR11x0Interface<T>::isActivelyReceiving()
 
 template <typename T> void LR11x0Interface<T>::regulateFan()
 {
-    float *pa_temp = 0;
-    lora.getTemp(pa_temp);
-    if (*pa_temp > 40) {
+    float pa_temp = 0;
+    lora.getTemp(&pa_temp);
+    if (pa_temp > 40) {
         pa_fan_percentage = max(pa_fan_percentage + 1, 100);
         enableFan();
     } else {
