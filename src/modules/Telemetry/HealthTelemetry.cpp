@@ -40,7 +40,7 @@ int32_t HealthTelemetryModule::runOnce()
         uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.health_update_interval,
                                                                    default_telemetry_broadcast_interval_secs);
         LOG_DEBUG("Sleep for %ims, then awake to send metrics again", nightyNightMs);
-        doDeepSleep(nightyNightMs, true);
+        doDeepSleep(nightyNightMs, true, false);
     }
 
     uint32_t result = UINT32_MAX;

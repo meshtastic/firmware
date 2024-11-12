@@ -47,18 +47,18 @@ jobs:
       - name: build .debpkg
         run: |
           mkdir -p .debpkg/DEBIAN
-          mkdir -p .debpkg/usr/share/meshtasticd/web
+          mkdir -p .debpkg/usr/share/doc/meshtasticd/web
           mkdir -p .debpkg/usr/sbin
           mkdir -p .debpkg/etc/meshtasticd
           mkdir -p .debpkg/etc/meshtasticd/config.d
           mkdir -p .debpkg/etc/meshtasticd/available.d
           mkdir -p .debpkg/usr/lib/systemd/system/
-          tar -xf build.tar -C .debpkg/usr/share/meshtasticd/web
+          tar -xf build.tar -C .debpkg/usr/share/doc/meshtasticd/web
           shopt -s dotglob nullglob
-          if [ -d .debpkg/usr/share/meshtasticd/web/build ]; then mv  .debpkg/usr/share/meshtasticd/web/build/* .debpkg/usr/share/meshtasticd/web/; fi
-          if [ -d .debpkg/usr/share/meshtasticd/web/build ]; then rmdir .debpkg/usr/share/meshtasticd/web/build; fi
-          if [ -d .debpkg/usr/share/meshtasticd/web/.DS_Store]; then rm -f .debpkg/usr/share/meshtasticd/web/.DS_Store; fi
-          gunzip .debpkg/usr/share/meshtasticd/web/*.gz
+          if [ -d .debpkg/usr/share/doc/meshtasticd/web/build ]; then mv  .debpkg/usr/share/doc/meshtasticd/web/build/* .debpkg/usr/share/doc/meshtasticd/web/; fi
+          if [ -d .debpkg/usr/share/doc/meshtasticd/web/build ]; then rmdir .debpkg/usr/share/doc/meshtasticd/web/build; fi
+          if [ -d .debpkg/usr/share/doc/meshtasticd/web/.DS_Store]; then rm -f .debpkg/usr/share/doc/meshtasticd/web/.DS_Store; fi
+          gunzip .debpkg/usr/share/doc/meshtasticd/web/*.gz
           cp release/meshtasticd_linux_armv7l .debpkg/usr/sbin/meshtasticd
           cp bin/config-dist.yaml .debpkg/etc/meshtasticd/config.yaml
           cp bin/config.d/* .debpkg/etc/meshtasticd/available.d/
@@ -66,8 +66,6 @@ jobs:
           cp bin/meshtasticd.service .debpkg/usr/lib/systemd/system/meshtasticd.service
           echo "/etc/meshtasticd/config.yaml" > .debpkg/DEBIAN/conffiles
           chmod +x .debpkg/DEBIAN/conffiles
-          echo "rm -rf /usr/share/doc/meshtasticd" > .debpkg/DEBIAN/preinst
-          echo "/usr/share/meshtasticd /usr/share/doc/meshtasticd" > .debpkg/DEBIAN/meshtasticd.links
 
       - uses: jiro4989/build-deb-action@v3
         with:
