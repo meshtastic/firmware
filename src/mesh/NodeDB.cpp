@@ -248,7 +248,6 @@ NodeDB::NodeDB()
     }
 #ifdef USERPREFS_FIXED_GPS
     if (myNodeInfo.reboot_count == 1) { // Check if First boot ever or after Factory Reset.
-        //LOG_INFO("Setting FIXED GPS");
         meshtastic_Position FixedGPS = meshtastic_Position_init_default;
 #ifdef USERPREFS_FIXED_GPS_LAT
         FixedGPS.latitude_i = (int32_t)(USERPREFS_FIXED_GPS_LAT * 1e7);
@@ -467,7 +466,6 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #ifdef USERPREFS_FIXED_BLUETOOTH
     config.bluetooth.fixed_pin = USERPREFS_FIXED_BLUETOOTH;
     config.bluetooth.mode = meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN;
-    //LOG_INFO("Setting FEXED PIN");
 #else
     config.bluetooth.mode = hasScreen ? meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN
                                       : meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN;
