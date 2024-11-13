@@ -1,6 +1,6 @@
 #pragma once
 
-#include "NodeDB.h"
+#include "Router.h"
 #include <unordered_set>
 
 /// We clear our old flood record 10 minutes after we see the last of it
@@ -41,5 +41,5 @@ class PacketHistory
      *
      * @param withUpdate if true and not found we add an entry to recentPackets
      */
-    bool wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpdate = true, bool *isRepeated = nullptr);
+    bool wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpdate = true);
 };
