@@ -148,6 +148,18 @@ const RegionInfo regions[] = {
     RDEF(PH_915, 915.0f, 918.0f, 100, 0, 24, true, false, false),
 
     /*
+        Indonesia
+        920 - 923 Mhz at 500mW, no restrictions.
+        2015:
+       https://jdih.kominfo.go.id/produk_hukum/view/id/510/t/peraturan+menteri+komunikasi+dan+informatika+nomor+35+tahun+2015+tanggal+31+desember+2015
+        2019:
+       https://jdih.kominfo.go.id/produk_hukum/view/id/676/t/peraturan+menteri+komunikasi+dan+informatika+nomor+1+tahun+2019+tanggal+24+april+2019
+        2023:
+       https://jdih.kominfo.go.id/produk_hukum/view/id/862/t/peraturan+menteri+komunikasi+dan+informatika+nomor+2+tahun+2023
+    */
+    RDEF(ID, 920.0f, 923.0f, 100, 0, 27, true, false, false),
+
+    /*
        2.4 GHZ WLAN Band equivalent. Only for SX128x chips.
     */
     RDEF(LORA_24, 2400.0f, 2483.5f, 100, 0, 10, true, false, true),
