@@ -27,8 +27,6 @@
 #endif
 #endif
 
-
-
 /// Max number of channels allowed
 #define MAX_NUM_CHANNELS (member_size(meshtastic_ChannelFile, channels) / member_size(meshtastic_ChannelFile, channels[0]))
 
