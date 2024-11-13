@@ -20,12 +20,14 @@
 
 /// max number of nodes allowed in the mesh
 #ifndef MAX_NUM_NODES
-#define MAX_NUM_NODES 100
-#endif
-
 #ifdef ARCH_NRF52
 #define MAX_NUM_NODES 80
+#else
+#define MAX_NUM_NODES 100
 #endif
+#endif
+
+
 
 /// Max number of channels allowed
 #define MAX_NUM_CHANNELS (member_size(meshtastic_ChannelFile, channels) / member_size(meshtastic_ChannelFile, channels[0]))
