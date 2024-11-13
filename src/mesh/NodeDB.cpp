@@ -231,6 +231,9 @@ NodeDB::NodeDB()
         moduleConfig.telemetry.health_update_interval = Default::getConfiguredOrMinimumValue(
             moduleConfig.telemetry.health_update_interval, min_default_telemetry_interval_secs);
     }
+    // Ensure that the neighbor info update interval is coerced to the minimum
+    moduleConfig.neighbor_info.update_interval =
+        Default::getConfiguredOrMinimumValue(moduleConfig.neighbor_info.update_interval, min_neighbor_info_broadcast_secs);
 
     if (devicestateCRC != crc32Buffer(&devicestate, sizeof(devicestate)))
         saveWhat |= SEGMENT_DEVICESTATE;
@@ -473,7 +476,7 @@ void NodeDB::initConfigIntervals()
 
     config.display.screen_on_secs = default_screen_on_secs;
 
-#if defined(T_WATCH_S3) || defined(T_DECK)
+#if defined(T_WATCH_S3) || defined(T_DECK) || defined(RAK14014)
     config.power.is_power_saving = true;
     config.display.screen_on_secs = 30;
     config.power.wait_bluetooth_secs = 30;
@@ -1228,12 +1231,12 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
             int oldestBoringIndex = -1;
             for (int i = 1; i < numMeshNodes; i++) {
                 // Simply the oldest non-favorite node
-                if (!meshNodes->at(i).is_favorite && meshNodes->at(i).last_heard < oldest) {
+                if (!meshNodes->at(i).is_favorite && !meshNodes->at(i).is_ignored && meshNodes->at(i).last_heard < oldest) {
                     oldest = meshNodes->at(i).last_heard;
                     oldestIndex = i;
                 }
                 // The oldest "boring" node
-                if (!meshNodes->at(i).is_favorite && meshNodes->at(i).user.public_key.size == 0 &&
+                if (!meshNodes->at(i).is_favorite && !meshNodes->at(i).is_ignored && meshNodes->at(i).user.public_key.size == 0 &&
                     meshNodes->at(i).last_heard < oldestBoring) {
                     oldestBoring = meshNodes->at(i).last_heard;
                     oldestBoringIndex = i;
