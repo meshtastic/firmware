@@ -76,23 +76,23 @@ static unsigned char USERPREFS_ADMIN_KEY[] = {0xcd, 0xc0, 0xb4, 0x3c, 0x53, 0x24
 */
 
 /*
- * USERPREF_FIXED_GPS_LAT and USERPREF_FIXED_GPS_LON must be set, USERPREF_FIXED_GPS_ALT is optional 
- * 
+ * USERPREF_FIXED_GPS_LAT and USERPREF_FIXED_GPS_LON must be set, USERPREF_FIXED_GPS_ALT is optional
+ *
  * Fixed GPS is Eiffel Tower, Paris, France
  */
-//#define USERPREFS_FIXED_GPS
-//#define USERPREFS_FIXED_GPS_LAT 48.85873920
-//#define USERPREFS_FIXED_GPS_LON 2.294508368
-//#define USERPREFS_FIXED_GPS_ALT 0
+// #define USERPREFS_FIXED_GPS
+// #define USERPREFS_FIXED_GPS_LAT 48.85873920
+// #define USERPREFS_FIXED_GPS_LON 2.294508368
+// #define USERPREFS_FIXED_GPS_ALT 0
 
 /*
  * Set Fixed Bluetooth paring code
  */
-//#define USERPREFS_FIXED_BLUETOOTH 121212
+// #define USERPREFS_FIXED_BLUETOOTH 121212
 
 /*
  * Will overwrite BUTTON_PIN if set
  */
-//#define USERPREFS_BUTTON_PIN 36
+// #define USERPREFS_BUTTON_PIN 36
 
 #endif

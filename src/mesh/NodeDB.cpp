@@ -270,7 +270,7 @@ NodeDB::NodeDB()
         config.position.fixed_position = true;
 #endif
     }
-#endif    
+#endif
     saveToDisk(saveWhat);
 }
 

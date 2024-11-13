@@ -1,5 +1,5 @@
-#include "../userPrefs.h"
 #include "ButtonThread.h"
+#include "../userPrefs.h"
 #include "configuration.h"
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
@@ -41,7 +41,7 @@ ButtonThread::ButtonThread() : OSThread("Button")
     }
 #elif defined(BUTTON_PIN)
 #if !defined(USERPREFS_BUTTON_PIN)
-    int pin = config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN; // Resolved button pin
+    int pin = config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN;           // Resolved button pin
 #endif
 #ifdef USERPREFS_BUTTON_PIN
     int pin = config.device.button_gpio ? config.device.button_gpio : USERPREFS_BUTTON_PIN; // Resolved button pin
