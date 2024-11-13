@@ -246,6 +246,32 @@ NodeDB::NodeDB()
         config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
         config.position.gps_enabled = 0;
     }
+#ifdef USERPREFS_FIXED_GPS
+    if (myNodeInfo.reboot_count == 1) { // Check if First boot ever or after Factory Reset.
+        //LOG_INFO("Setting FIXED GPS");
+        meshtastic_Position FixedGPS = meshtastic_Position_init_default;
+#ifdef USERPREFS_FIXED_GPS_LAT
+        FixedGPS.latitude_i = (int32_t)(USERPREFS_FIXED_GPS_LAT * 1e7);
+        FixedGPS.has_latitude_i = true;
+#endif
+#ifdef USERPREFS_FIXED_GPS_LON
+        FixedGPS.longitude_i = (int32_t)(USERPREFS_FIXED_GPS_LON * 1e7);
+        FixedGPS.has_longitude_i = true;
+#endif
+#ifdef USERPREFS_FIXED_GPS_ALT
+        FixedGPS.altitude = USERPREFS_FIXED_GPS_ALT;
+        FixedGPS.has_altitude = true;
+#endif
+#if defined(USERPREFS_FIXED_GPS_LAT) && defined(USERPREFS_FIXED_GPS_LON)
+        FixedGPS.location_source = meshtastic_Position_LocSource_LOC_MANUAL;
+        config.has_position = true;
+        info->has_position = true;
+        info->position = TypeConversions::ConvertToPositionLite(FixedGPS);
+        nodeDB->setLocalPosition(FixedGPS);
+        config.position.fixed_position = true;
+#endif
+    }
+#endif    
     saveToDisk(saveWhat);
 }
 
@@ -438,8 +464,14 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #else
     bool hasScreen = screen_found.port != ScanI2C::I2CPort::NO_I2C;
 #endif
+#ifdef USERPREFS_FIXED_BLUETOOTH
+    config.bluetooth.fixed_pin = USERPREFS_FIXED_BLUETOOTH;
+    config.bluetooth.mode = meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN;
+    //LOG_INFO("Setting FEXED PIN");
+#else
     config.bluetooth.mode = hasScreen ? meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN
                                       : meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN;
+#endif
     // for backward compat, default position flags are ALT+MSL
     config.position.position_flags =
         (meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE | meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL |
