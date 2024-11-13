@@ -29,6 +29,17 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
             if (Router::cancelSending(p->from, p->id))
                 txRelayCanceled++;
         }
+
+        /* If the original transmitter is doing retransmissions (hopStart equals hopLimit) for a reliable transmission, e.g., when
+        the ACK got lost, we will handle the packet again to make sure it gets an ACK to its packet. */
+        bool isRepeated = p->hop_start > 0 && p->hop_start == p->hop_limit;
+        if (isRepeated) {
+            LOG_DEBUG("Repeated reliable tx");
+            if (!perhapsRebroadcast(p) && isToUs(p) && p->want_ack) {
+                sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, p->channel, 0);
+            }
+        }
+
         return true;
     }
 
@@ -41,14 +52,8 @@ bool FloodingRouter::isRebroadcaster()
            config.device.rebroadcast_mode != meshtastic_Config_DeviceConfig_RebroadcastMode_NONE;
 }
 
-void FloodingRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Routing *c)
+bool FloodingRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
 {
-    bool isAckorReply = (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) && (p->decoded.request_id != 0);
-    if (isAckorReply && !isToUs(p) && !isBroadcast(p->to)) {
-        // do not flood direct message that is ACKed or replied to
-        LOG_DEBUG("Rxd an ACK/reply not for me, cancel rebroadcast");
-        Router::cancelSending(p->to, p->decoded.request_id); // cancel rebroadcast for this DM
-    }
     if (!isToUs(p) && (p->hop_limit > 0) && !isFromUs(p)) {
         if (p->id != 0) {
             if (isRebroadcaster()) {
@@ -67,6 +72,8 @@ void FloodingRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
                 // Note: we are careful to resend using the original senders node id
                 // We are careful not to call our hooked version of send() - because we don't want to check this again
                 Router::send(tosend);
+
+                return true;
             } else {
                 LOG_DEBUG("No rebroadcast: Role = CLIENT_MUTE or Rebroadcast Mode = NONE");
             }
@@ -74,6 +81,21 @@ void FloodingRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
             LOG_DEBUG("Ignore 0 id broadcast");
         }
     }
+
+    return false;
+}
+
+void FloodingRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Routing *c)
+{
+    bool isAckorReply = (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) && (p->decoded.request_id != 0);
+    if (isAckorReply && !isToUs(p) && !isBroadcast(p->to)) {
+        // do not flood direct message that is ACKed or replied to
+        LOG_DEBUG("Rxd an ACK/reply not for me, cancel rebroadcast");
+        Router::cancelSending(p->to, p->decoded.request_id); // cancel rebroadcast for this DM
+    }
+
+    perhapsRebroadcast(p);
+
     // handle the packet as normal
     Router::sniffReceived(p, c);
 }

@@ -111,7 +111,7 @@ int32_t PowerStressModule::runOnce()
                 setBluetoothEnable(true);
                 break;
             case meshtastic_PowerStressMessage_Opcode_CPU_DEEPSLEEP:
-                doDeepSleep(sleep_msec, true);
+                doDeepSleep(sleep_msec, true, true);
                 break;
             case meshtastic_PowerStressMessage_Opcode_CPU_FULLON: {
                 uint32_t start_msec = millis();
