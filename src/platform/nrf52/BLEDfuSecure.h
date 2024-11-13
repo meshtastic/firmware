@@ -36,6 +36,8 @@
 #ifndef BLEDFUSECURE_H_
 #define BLEDFUSECURE_H_
 
+#ifdef ARCH_NRF52
+
 #include "bluefruit_common.h"
 
 #include "BLECharacteristic.h"
@@ -52,4 +54,5 @@ class BLEDfuSecure : public BLEService
     virtual err_t begin(void);
 };
 
+#endif // ARCH_NRF52
 #endif /* BLEDFUSECURE_H_ */

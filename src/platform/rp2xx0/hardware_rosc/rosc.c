@@ -3,6 +3,7 @@
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
+#ifdef ARCH_RP2040
 
 #include "pico.h"
 
@@ -68,3 +69,4 @@ void rosc_set_dormant(void)
     while (!(rosc_hw->status & ROSC_STATUS_STABLE_BITS))
         ;
 }
+#endif // ARCH_RP2040

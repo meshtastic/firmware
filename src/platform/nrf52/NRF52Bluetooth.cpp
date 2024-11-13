@@ -1,3 +1,5 @@
+#ifdef ARCH_NRF52
+
 #include "NRF52Bluetooth.h"
 #include "BLEDfuSecure.h"
 #include "BluetoothCommon.h"
@@ -374,3 +376,4 @@ void NRF52Bluetooth::sendLog(const uint8_t *logMessage, size_t length)
     else
         logRadio.notify(logMessage, (uint16_t)length);
 }
+#endif // ARCH_NRF52

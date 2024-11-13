@@ -1220,3 +1220,12 @@ void loop()
     }
 }
 #endif
+// Define app_main to bridge Arduino and ESP-IDF
+extern "C" void app_main(void)
+{
+    setup();
+    while (1) {
+        loop();
+        vTaskDelay(1); // Allows FreeRTOS to manage tasks
+    }
+}
