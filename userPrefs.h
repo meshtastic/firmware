@@ -90,4 +90,9 @@ static unsigned char USERPREFS_ADMIN_KEY[] = {0xcd, 0xc0, 0xb4, 0x3c, 0x53, 0x24
  */
 //#define USERPREFS_FIXED_BLUETOOTH 121212
 
+/*
+ * Will overwrite BUTTON_PIN if set
+ */
+//#define USERPREFS_BUTTON_PIN 36
+
 #endif
