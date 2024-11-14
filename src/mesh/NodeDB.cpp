@@ -248,25 +248,25 @@ NodeDB::NodeDB()
     }
 #ifdef USERPREFS_FIXED_GPS
     if (myNodeInfo.reboot_count == 1) { // Check if First boot ever or after Factory Reset.
-        meshtastic_Position FixedGPS = meshtastic_Position_init_default;
+        meshtastic_Position fixedGPS = meshtastic_Position_init_default;
 #ifdef USERPREFS_FIXED_GPS_LAT
-        FixedGPS.latitude_i = (int32_t)(USERPREFS_FIXED_GPS_LAT * 1e7);
-        FixedGPS.has_latitude_i = true;
+        fixedGPS.latitude_i = (int32_t)(USERPREFS_FIXED_GPS_LAT * 1e7);
+        fixedGPS.has_latitude_i = true;
 #endif
 #ifdef USERPREFS_FIXED_GPS_LON
-        FixedGPS.longitude_i = (int32_t)(USERPREFS_FIXED_GPS_LON * 1e7);
-        FixedGPS.has_longitude_i = true;
+        fixedGPS.longitude_i = (int32_t)(USERPREFS_FIXED_GPS_LON * 1e7);
+        fixedGPS.has_longitude_i = true;
 #endif
 #ifdef USERPREFS_FIXED_GPS_ALT
-        FixedGPS.altitude = USERPREFS_FIXED_GPS_ALT;
-        FixedGPS.has_altitude = true;
+        fixedGPS.altitude = USERPREFS_FIXED_GPS_ALT;
+        fixedGPS.has_altitude = true;
 #endif
 #if defined(USERPREFS_FIXED_GPS_LAT) && defined(USERPREFS_FIXED_GPS_LON)
-        FixedGPS.location_source = meshtastic_Position_LocSource_LOC_MANUAL;
+        fixedGPS.location_source = meshtastic_Position_LocSource_LOC_MANUAL;
         config.has_position = true;
         info->has_position = true;
-        info->position = TypeConversions::ConvertToPositionLite(FixedGPS);
-        nodeDB->setLocalPosition(FixedGPS);
+        info->position = TypeConversions::ConvertToPositionLite(fixedGPS);
+        nodeDB->setLocalPosition(fixedGPS);
         config.position.fixed_position = true;
 #endif
     }
