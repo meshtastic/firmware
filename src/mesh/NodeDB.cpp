@@ -407,9 +407,30 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.lora.ignore_mqtt = false;
 #endif
 #ifdef USERPREFS_USE_ADMIN_KEY
-    memcpy(config.security.admin_key[0].bytes, USERPREFS_ADMIN_KEY, 32);
-    config.security.admin_key[0].size = 32;
-    config.security.admin_key_count = 1;
+    // Initialize admin_key_count to zero
+    byte numAdminKeys = 0;
+
+// Check if USERPREFS_ADMIN_KEY_0 is non-empty
+if (sizeof(USERPREFS_ADMIN_KEY_0) > 0) {
+    memcpy(config.security.admin_key[numAdminKeys].bytes, USERPREFS_ADMIN_KEY_0, 32);
+    config.security.admin_key[numAdminKeys].size = 32;
+    numAdminKeys++;
+}
+
+// Check if USERPREFS_ADMIN_KEY_1 is non-empty
+if (sizeof(USERPREFS_ADMIN_KEY_1) > 0) {
+    memcpy(config.security.admin_key[numAdminKeys].bytes, USERPREFS_ADMIN_KEY_1, 32);
+    config.security.admin_key[numAdminKeys].size = 32;
+    numAdminKeys++;
+}
+
+// Check if USERPREFS_ADMIN_KEY_2 is non-empty
+if (sizeof(USERPREFS_ADMIN_KEY_2) > 0) {
+    memcpy(config.security.admin_key[config.security.admin_key_count].bytes, USERPREFS_ADMIN_KEY_2, 32);
+    config.security.admin_key[config.security.admin_key_count].size = 32;
+    numAdminKeys++;
+}
+    config.security.admin_key_count = numAdminKeys;
 #endif
     if (shouldPreserveKey) {
         config.security.private_key.size = 32;
