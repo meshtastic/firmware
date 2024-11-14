@@ -41,13 +41,6 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
         seenRecently = false;
     }
 
-    /* If the original transmitter is doing retransmissions (hopStart equals hopLimit) for a reliable transmission, e.g., when the
-       ACK got lost, we will handle the packet again to make sure it gets an ACK/response to its packet. */
-    if (seenRecently && p->hop_start > 0 && p->hop_start == p->hop_limit) {
-        LOG_DEBUG("Repeated reliable tx");
-        seenRecently = false;
-    }
-
     if (seenRecently) {
         // If it was seen with a next-hop not set to us and now it's NO_NEXT_HOP_PREFERENCE, and the relayer relayed already
         // before, it's a fallback to flooding. If we didn't already relay and the next-hop neither, consider it unseen because we
