@@ -824,7 +824,7 @@ void NodeDB::loadFromDisk()
     // disk we will still factoryReset to restore things.
 
     // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
-    auto state = loadProto(prefFileName, sizeof(meshtastic_DeviceState) + MAX_NUM_NODES * sizeof(meshtastic_NodeInfo),
+    auto state = loadProto(prefFileName, sizeof(meshtastic_DeviceState) + MAX_NUM_NODES_FS * sizeof(meshtastic_NodeInfo),
                            sizeof(meshtastic_DeviceState), &meshtastic_DeviceState_msg, &devicestate);
 
     // See https://github.com/meshtastic/firmware/issues/4184#issuecomment-2269390786
@@ -842,6 +842,10 @@ void NodeDB::loadFromDisk()
         LOG_INFO("Loaded saved devicestate version %d, with nodecount: %d", devicestate.version, devicestate.node_db_lite.size());
         meshNodes = &devicestate.node_db_lite;
         numMeshNodes = devicestate.node_db_lite.size();
+    }
+    if (numMeshNodes > MAX_NUM_NODES) {
+        LOG_WARN("Node count %d exceeds MAX_NUM_NODES %d, truncating", numMeshNodes, MAX_NUM_NODES);
+        numMeshNodes = MAX_NUM_NODES;
     }
     meshNodes->resize(MAX_NUM_NODES);
 
