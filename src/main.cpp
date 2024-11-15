@@ -1228,5 +1228,8 @@ void loop()
     if (!runASAP && loopCanSleep()) {
         mainDelay.delay(delayMsec);
     }
+#if defined(M5STACK_CORE2)
+    ScreenTouch();
+#endif // M5STACK_CORE2
 }
 #endif
