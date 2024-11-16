@@ -35,6 +35,10 @@ cp $SRCBIN $OUTDIR/$basename-update.bin
 
 echo "Building Filesystem for ESP32 targets"
 pio run --environment $1 -t buildfs
+cp .pio/build/$1/littlefs.bin $OUTDIR/littlefswebui-$VERSION.bin
+# Remove webserver files from the filesystem and rebuild
+rm -rf data/static
+pio run --environment $1 -t buildfs
 cp .pio/build/$1/littlefs.bin $OUTDIR/littlefs-$VERSION.bin
 cp bin/device-install.* $OUTDIR
 cp bin/device-update.* $OUTDIR
