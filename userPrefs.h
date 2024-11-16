@@ -71,8 +71,8 @@ static unsigned char icon_bits[] = {
 
 /*
  * PKI Admin keys.
- * If a Admin key is set with 'static unsigned char USERPREFS_ADMIN_KEY_1[] = {};' then it will be ignored
- * a PKI key must have a size of 32.
+ * If a Admin key is set with '{};'
+ * then it will be ignored, a PKI key must have a size of 32.
  */
 /*
 #define USERPREFS_USE_ADMIN_KEY 1
