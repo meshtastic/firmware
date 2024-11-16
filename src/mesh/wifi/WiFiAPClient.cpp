@@ -20,6 +20,8 @@
 #include <ESPmDNS.h>
 #include <esp_wifi.h>
 static void WiFiEvent(WiFiEvent_t event);
+#elif defined(ARCH_RP2040)
+#include <SimpleMDNS.h>
 #endif
 
 #ifndef DISABLE_NTP
@@ -59,19 +61,21 @@ static void onNetworkConnected()
         // Start web server
         LOG_INFO("Start WiFi network services");
 
-#ifdef ARCH_ESP32
         // start mdns
         if (!MDNS.begin("Meshtastic")) {
             LOG_ERROR("Error setting up MDNS responder!");
         } else {
-            LOG_INFO("mDNS responder started");
             LOG_INFO("mDNS Host: Meshtastic.local");
+#ifdef ARCH_ESP32
             MDNS.addService("http", "tcp", 80);
             MDNS.addService("https", "tcp", 443);
-        }
-#else // ESP32 handles this in WiFiEvent
-        LOG_INFO("Obtained IP address: %s", WiFi.localIP().toString().c_str());
+#elif defined(ARCH_RP2040)
+            // ARCH_RP2040 does not support HTTPS, create a "meshtastic" service
+            MDNS.addService("meshtastic", "tcp", 4403);
+            // ESP32 handles this in WiFiEvent
+            LOG_INFO("Obtained IP address: %s", WiFi.localIP().toString().c_str());
 #endif
+        }
 
 #ifndef DISABLE_NTP
         LOG_INFO("Start NTP time client");
@@ -129,7 +133,7 @@ static int32_t reconnectWiFi()
         // Make sure we clear old connection credentials
 #ifdef ARCH_ESP32
         WiFi.disconnect(false, true);
-#else
+#elif defined(ARCH_RP2040)
         WiFi.disconnect(false);
 #endif
         LOG_INFO("Reconnecting to WiFi access point %s", wifiName);
@@ -193,7 +197,7 @@ void deinitWifi()
     if (isWifiAvailable()) {
 #ifdef ARCH_ESP32
         WiFi.disconnect(true, false);
-#else
+#elif defined(ARCH_RP2040)
         WiFi.disconnect(true);
 #endif
         WiFi.mode(WIFI_OFF);
@@ -229,15 +233,15 @@ bool initWifi()
 
             if (config.network.address_mode == meshtastic_Config_NetworkConfig_AddressMode_STATIC &&
                 config.network.ipv4_config.ip != 0) {
-#ifndef ARCH_RP2040
+#ifdef ARCH_ESP32
                 WiFi.config(config.network.ipv4_config.ip, config.network.ipv4_config.gateway, config.network.ipv4_config.subnet,
                             config.network.ipv4_config.dns);
-#else
+#elif defined(ARCH_RP2040)
                 WiFi.config(config.network.ipv4_config.ip, config.network.ipv4_config.dns, config.network.ipv4_config.gateway,
                             config.network.ipv4_config.subnet);
 #endif
             }
-#ifndef ARCH_RP2040
+#ifdef ARCH_ESP32
             WiFi.onEvent(WiFiEvent);
             WiFi.setAutoReconnect(true);
             WiFi.setSleep(false);
