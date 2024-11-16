@@ -37,6 +37,7 @@ echo "Building Filesystem for ESP32 targets"
 pio run --environment $1 -t buildfs
 cp .pio/build/$1/littlefs.bin $OUTDIR/littlefswebui-$VERSION.bin
 # Remove webserver files from the filesystem and rebuild
+ls -l data/static # Diagnostic list of files
 rm -rf data/static
 pio run --environment $1 -t buildfs
 cp .pio/build/$1/littlefs.bin $OUTDIR/littlefs-$VERSION.bin
