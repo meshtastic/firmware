@@ -1,7 +1,6 @@
 #pragma once
 #include <vector>
 
-
 #include "mesh/generated/meshtastic/admin.pb.h"
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
 #include "mesh/generated/meshtastic/localonly.pb.h"
