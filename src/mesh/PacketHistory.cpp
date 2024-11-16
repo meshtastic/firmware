@@ -16,7 +16,7 @@ PacketHistory::PacketHistory()
 /**
  * Update recentBroadcasts and return true if we have already seen this packet
  */
-bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpdate)
+bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpdate, bool *wasFallback)
 {
     if (p->id == 0) {
         LOG_DEBUG("Ignore message with zero id");
@@ -42,20 +42,18 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
     }
 
     if (seenRecently) {
-        // If it was seen with a next-hop not set to us and now it's NO_NEXT_HOP_PREFERENCE, and the relayer relayed already
-        // before, it's a fallback to flooding. If we didn't already relay and the next-hop neither, consider it unseen because we
-        // might need to handle it now
-        uint8_t ourRelayID = nodeDB->getLastByteOfNodeNum(nodeDB->getNodeNum());
-        if (found->sender != nodeDB->getNodeNum() && found->next_hop != NO_NEXT_HOP_PREFERENCE && found->next_hop != ourRelayID &&
-            p->next_hop == NO_NEXT_HOP_PREFERENCE && wasRelayer(p->relay_node, found) && !wasRelayer(ourRelayID, found) &&
-            !wasRelayer(found->next_hop, found)) {
-            LOG_INFO("Fallback to flooding, consider unseen relay_node=0x%x", p->relay_node);
-            seenRecently = false;
-        }
-    }
-
-    if (seenRecently) {
         LOG_DEBUG("Found existing packet record for fr=0x%x,to=0x%x,id=0x%x", p->from, p->to, p->id);
+        if (wasFallback) {
+            // If it was seen with a next-hop not set to us and now it's NO_NEXT_HOP_PREFERENCE, and the relayer relayed already
+            // before, it's a fallback to flooding. If we didn't already relay and the next-hop neither, we might need to handle
+            // it now.
+            uint8_t ourRelayID = nodeDB->getLastByteOfNodeNum(nodeDB->getNodeNum());
+            if (found->sender != nodeDB->getNodeNum() && found->next_hop != NO_NEXT_HOP_PREFERENCE &&
+                found->next_hop != ourRelayID && p->next_hop == NO_NEXT_HOP_PREFERENCE && wasRelayer(p->relay_node, found) &&
+                !wasRelayer(ourRelayID, found) && !wasRelayer(found->next_hop, found)) {
+                *wasFallback = true;
+            }
+        }
     }
 
     if (withUpdate) {

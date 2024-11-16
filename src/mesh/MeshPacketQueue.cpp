@@ -107,6 +107,19 @@ meshtastic_MeshPacket *MeshPacketQueue::remove(NodeNum from, PacketId id)
     return NULL;
 }
 
+/* Attempt to find a packet from this queue. Return true if it was found. */
+bool MeshPacketQueue::find(NodeNum from, PacketId id)
+{
+    for (auto it = queue.begin(); it != queue.end(); it++) {
+        auto p = (*it);
+        if (getFrom(p) == from && p->id == id) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 /** Attempt to find and remove a packet from this queue.  Returns the packet which was removed from the queue */
 bool MeshPacketQueue::replaceLowerPriorityPacket(meshtastic_MeshPacket *p)
 {

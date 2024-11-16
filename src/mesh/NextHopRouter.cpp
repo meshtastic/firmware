@@ -30,15 +30,25 @@ ErrorCode NextHopRouter::send(meshtastic_MeshPacket *p)
 
 bool NextHopRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 {
-    if (wasSeenRecently(p)) { // Note: this will return false for a fallback to flooding
-        printPacket("Already seen, try stop re-Tx and cancel sending", p);
-        rxDupe++;
+    bool wasFallback = false;
+    if (wasSeenRecently(p, true, &wasFallback)) { // Note: this will also add a recent packet record
         stopRetransmission(p->from, p->id);
-        if (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER &&
-            config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER) {
-            // cancel rebroadcast of this message *if* there was already one, unless we're a router/repeater!
-            if (Router::cancelSending(p->from, p->id))
-                txRelayCanceled++;
+
+        // If it was a fallback to flooding, try to relay again
+        if (wasFallback) {
+            LOG_INFO("Fallback to flooding from relay_node=0x%x", p->relay_node);
+            // Check if it's still in the Tx queue, if not, we have to relay it again
+            if (!findInTxQueue(p->from, p->id))
+                perhapsRelay(p);
+        } else {
+            bool isRepeated = p->hop_start > 0 && p->hop_start == p->hop_limit;
+            // If repeated and not in Tx queue anymore, try relaying again, or if we are the destination, send the ACK again
+            if (isRepeated) {
+                if (!findInTxQueue(p->from, p->id) && !perhapsRelay(p) && isToUs(p) && p->want_ack)
+                    sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, p->channel, 0);
+            } else {
+                perhapsCancelDupe(p); // If it's a dupe, cancel relay
+            }
         }
         return true;
     }
@@ -75,21 +85,32 @@ void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtast
         }
     }
 
+    perhapsRelay(p);
+
+    // handle the packet as normal
+    Router::sniffReceived(p, c);
+}
+
+/* Check if we should be relaying this packet if so, do so. */
+bool NextHopRouter::perhapsRelay(const meshtastic_MeshPacket *p)
+{
     if (!isToUs(p) && !isFromUs(p) && p->hop_limit > 0) {
-        if (p->next_hop == NO_NEXT_HOP_PREFERENCE || p->next_hop == ourRelayID) {
+        if (p->next_hop == NO_NEXT_HOP_PREFERENCE || p->next_hop == nodeDB->getLastByteOfNodeNum(getNodeNum())) {
             if (isRebroadcaster()) {
                 meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
                 LOG_INFO("Relaying received message coming from %x", p->relay_node);
 
                 tosend->hop_limit--; // bump down the hop count
                 NextHopRouter::send(tosend);
+
+                return true;
             } else {
                 LOG_DEBUG("Not rebroadcasting: Role = CLIENT_MUTE or Rebroadcast Mode = NONE");
             }
         }
     }
-    // handle the packet as normal
-    Router::sniffReceived(p, c);
+
+    return false;
 }
 
 /**

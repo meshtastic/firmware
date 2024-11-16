@@ -299,6 +299,12 @@ bool Router::cancelSending(NodeNum from, PacketId id)
     return false;
 }
 
+/** Attempt to find a packet in the TxQueue. Returns true if the packet was found. */
+bool Router::findInTxQueue(NodeNum from, PacketId id)
+{
+    return iface->findInTxQueue(from, id);
+}
+
 /**
  * Every (non duplicate) packet this node receives will be passed through this method.  This allows subclasses to
  * update routing tables etc... based on what we overhear (even for messages not destined to our node)

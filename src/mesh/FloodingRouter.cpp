@@ -22,23 +22,16 @@ ErrorCode FloodingRouter::send(meshtastic_MeshPacket *p)
 bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 {
     if (wasSeenRecently(p)) { // Note: this will also add a recent packet record
-        printPacket("Ignore dupe incoming msg", p);
-        rxDupe++;
-        if (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER &&
-            config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER) {
-            // cancel rebroadcast of this message *if* there was already one, unless we're a router/repeater!
-            if (Router::cancelSending(p->from, p->id))
-                txRelayCanceled++;
-        }
-
         /* If the original transmitter is doing retransmissions (hopStart equals hopLimit) for a reliable transmission, e.g., when
-        the ACK got lost, we will handle the packet again to make sure it gets an ACK to its packet. */
+        the ACK got lost, we will handle the packet again to make sure it gets an implicit ACK. */
         bool isRepeated = p->hop_start > 0 && p->hop_start == p->hop_limit;
         if (isRepeated) {
             LOG_DEBUG("Repeated reliable tx");
-            if (!perhapsRebroadcast(p) && isToUs(p) && p->want_ack) {
-                sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, p->channel, 0);
-            }
+            // Check if it's still in the Tx queue, if not, we have to relay it again
+            if (!findInTxQueue(p->from, p->id))
+                perhapsRebroadcast(p);
+        } else {
+            perhapsCancelDupe(p);
         }
 
         return true;
@@ -47,13 +40,25 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
     return Router::shouldFilterReceived(p);
 }
 
+void FloodingRouter::perhapsCancelDupe(const meshtastic_MeshPacket *p)
+{
+    printPacket("Ignore dupe incoming msg", p);
+    rxDupe++;
+    if (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER &&
+        config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER) {
+        // cancel rebroadcast of this message *if* there was already one, unless we're a router/repeater!
+        if (Router::cancelSending(p->from, p->id))
+            txRelayCanceled++;
+    }
+}
+
 bool FloodingRouter::isRebroadcaster()
 {
     return config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE &&
            config.device.rebroadcast_mode != meshtastic_Config_DeviceConfig_RebroadcastMode_NONE;
 }
 
-bool FloodingRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
+void FloodingRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
 {
     if (!isToUs(p) && (p->hop_limit > 0) && !isFromUs(p)) {
         if (p->id != 0) {
@@ -73,8 +78,6 @@ bool FloodingRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
                 // Note: we are careful to resend using the original senders node id
                 // We are careful not to call our hooked version of send() - because we don't want to check this again
                 Router::send(tosend);
-
-                return true;
             } else {
                 LOG_DEBUG("No rebroadcast: Role = CLIENT_MUTE or Rebroadcast Mode = NONE");
             }
@@ -82,8 +85,6 @@ bool FloodingRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
             LOG_DEBUG("Ignore 0 id broadcast");
         }
     }
-
-    return false;
 }
 
 void FloodingRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Routing *c)

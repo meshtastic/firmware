@@ -246,6 +246,12 @@ bool RadioLibInterface::cancelSending(NodeNum from, PacketId id)
     return result;
 }
 
+/** Attempt to find a packet in the TxQueue. Returns true if the packet was found. */
+bool RadioLibInterface::findInTxQueue(NodeNum from, PacketId id)
+{
+    return txQueue.find(from, id);
+}
+
 /** radio helper thread callback.
 We never immediately transmit after any operation (either Rx or Tx). Instead we should wait a random multiple of
 'slotTimes' (see definition in RadioInterface.h) taken from a contention window (CW) to lower the chance of collision.

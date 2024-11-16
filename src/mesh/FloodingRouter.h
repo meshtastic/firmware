@@ -28,9 +28,8 @@
 class FloodingRouter : public Router
 {
   private:
-    /** Check if we should rebroadcast this packet, and do so if needed
-     * @return true if rebroadcasted */
-    bool perhapsRebroadcast(const meshtastic_MeshPacket *p);
+    /* Check if we should rebroadcast this packet, and do so if needed */
+    void perhapsRebroadcast(const meshtastic_MeshPacket *p);
 
   public:
     /**
@@ -59,6 +58,9 @@ class FloodingRouter : public Router
      * Look for broadcasts we need to rebroadcast
      */
     virtual void sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Routing *c) override;
+
+    /* Call when receiving a duplicate packet to check whether we should cancel a packet in the Tx queue */
+    void perhapsCancelDupe(const meshtastic_MeshPacket *p);
 
     // Return true if we are a rebroadcaster
     bool isRebroadcaster();
