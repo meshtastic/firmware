@@ -823,6 +823,7 @@ void NodeDB::loadFromDisk()
         0; // Mark the current device state as completely unusable, so that if we fail reading the entire file from
     // disk we will still factoryReset to restore things.
 
+    rmDir("/static/static"); // Remove bad static web files bundle from initial 2.5.13 release
     // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
     auto state = loadProto(prefFileName, sizeof(meshtastic_DeviceState) + MAX_NUM_NODES_FS * sizeof(meshtastic_NodeInfo),
                            sizeof(meshtastic_DeviceState), &meshtastic_DeviceState_msg, &devicestate);
