@@ -256,7 +256,8 @@ void ExternalNotificationModule::stopNow()
 
 void ExternalNotificationModule::setLEDs(const RGB& rgb)
 {
-#ifdef HAS_LEDS
+
+#ifdef HAS_LED
     // LOG_DEBUG("setLEDs red=%d, green=%d, blue=%d", rgb.red, rgb.green, rgb.blue);
 
 #ifdef HAS_NCP5623
