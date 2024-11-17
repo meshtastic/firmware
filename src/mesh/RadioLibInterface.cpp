@@ -278,7 +278,8 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     startReceive();      // try receiving this packet, afterwards we'll be trying to transmit again
                     setTransmitDelay();
                 } else {
-                    // Send any outgoing packets we have ready
+                    // Send any outgoing packets we have ready as fast as possible to keep the time between channel scan and
+                    // actual transmission as short as possible
                     meshtastic_MeshPacket *txp = txQueue.dequeue();
                     assert(txp);
                     bool sent = startSend(txp);
@@ -470,7 +471,8 @@ void RadioLibInterface::setStandby()
 /** start an immediate transmit */
 bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
 {
-    printPacket("Start low level send", txp);
+    /* NOTE: Minimize the actions before startTransmit() to keep the time between
+             channel scan and actual transmit as low as possible to avoid collisions. */
     if (disabled || !config.lora.tx_enabled) {
         LOG_WARN("Drop Tx packet because LoRa Tx disabled");
         packetPool.release(txp);
@@ -489,6 +491,9 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
             completeSending();
             powerMon->clearState(meshtastic_PowerMon_State_Lora_TXOn); // Transmitter off now
             startReceive(); // Restart receive mode (because startTransmit failed to put us in xmit mode)
+        } else {
+            lastTxStart = millis();
+            printPacket("Started Tx", txp);
         }
 
         // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register
