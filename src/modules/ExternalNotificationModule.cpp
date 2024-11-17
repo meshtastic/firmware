@@ -38,12 +38,16 @@ extern unPhone unphone;
 #endif
 
 #if defined(HAS_NCP5623) || defined(RGBLED_RED) || defined(HAS_NEOPIXEL) || defined(UNPHONE)
+#define HAS_LED
+#endif
+
+#ifdef HAS_LED
 uint8_t red = 0;
 uint8_t green = 0;
 uint8_t blue = 0;
 uint8_t colorState = 1;
-uint8_t brightnessIndex = 0;
-uint8_t brightnessValues[] = {0, 10, 20, 30, 50, 90, 160, 170}; // blue gets multiplied by 1.5
+uint8_t alphaIndex = 0;
+uint8_t alphaValues[] = {0, 15, 30, 45, 75, 135, 240, 255};
 bool ascending = true;
 #endif
 
@@ -67,6 +71,22 @@ bool ascending = true;
 #define EXT_NOTIFICATION_DEFAULT_THREAD_MS 25
 
 #define ASCII_BELL 0x07
+
+struct ExternalNotificationModule::RGB {
+    constexpr RGB(uint8_t red, uint8_t green,uint8_t blue)
+    : red{red}, green{green}, blue{blue}
+    {}
+    
+    #define SCALE_ALPHA(COLOR, ALPHA) (uint8_t)((((uint16_t)COLOR) * ALPHA) / (uint16_t)255)
+    constexpr RGB(uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha)
+    : red{SCALE_ALPHA(red, alpha)}, green{SCALE_ALPHA(green, alpha)}, blue{SCALE_ALPHA(blue, alpha)}
+    {}
+    #undef SCALE_ALPHA
+
+    uint8_t red = 0;
+    uint8_t green = 0;
+    uint8_t blue = 0;
+};
 
 meshtastic_RTTTLConfig rtttlConfig;
 
@@ -127,46 +147,11 @@ int32_t ExternalNotificationModule::runOnce()
             LOG_DEBUG("EXTERNAL 2 %d compared to %d", externalTurnedOn[2]+moduleConfig.external_notification.output_ms, millis());
             setExternalState(2, !getExternal(2));
         }
-#if defined(HAS_NCP5623) || defined(RGBLED_RED) || defined(HAS_NEOPIXEL) || defined(UNPHONE)
-        red = (colorState & 4) ? brightnessValues[brightnessIndex] : 0;          // Red enabled on colorState = 4,5,6,7
-        green = (colorState & 2) ? brightnessValues[brightnessIndex] : 0;        // Green enabled on colorState = 2,3,6,7
-        blue = (colorState & 1) ? (brightnessValues[brightnessIndex] * 1.5) : 0; // Blue enabled on colorState = 1,3,5,7
-#ifdef HAS_NCP5623
-        if (rgb_found.type == ScanI2C::NCP5623) {
-            rgb.setColor(red, green, blue);
-        }
-#endif
-#ifdef RGBLED_CA
-        analogWrite(RGBLED_RED, 255 - red); // CA type needs reverse logic
-        analogWrite(RGBLED_GREEN, 255 - green);
-        analogWrite(RGBLED_BLUE, 255 - blue);
-#elif defined(RGBLED_RED)
-        analogWrite(RGBLED_RED, red);
-        analogWrite(RGBLED_GREEN, green);
-        analogWrite(RGBLED_BLUE, blue);
-#endif
-#ifdef HAS_NEOPIXEL
-        pixels.fill(pixels.Color(red, green, blue), 0, NEOPIXEL_COUNT);
-        pixels.show();
-#endif
-#ifdef UNPHONE
-        unphone.rgb(red, green, blue);
-#endif
-        if (ascending) { // fade in
-            brightnessIndex++;
-            if (brightnessIndex == (sizeof(brightnessValues) - 1)) {
-                ascending = false;
-            }
-        } else {
-            brightnessIndex--; // fade out
-        }
-        if (brightnessIndex == 0) {
-            ascending = true;
-            colorState++; // next color
-            if (colorState > 7) {
-                colorState = 1;
-            }
-        }
+#ifdef HAS_LED
+        red = (colorState & 4) ? 170 : 0;          // Red enabled on colorState = 4,5,6,7
+        green = (colorState & 2) ? 170 : 0;        // Green enabled on colorState = 2,3,6,7
+        blue = (colorState & 1) ? 255 : 0;         // Blue enabled on colorState = 1,3,5,7
+        setLEDs({red, green, blue, alphaValues[alphaIndex]});
 #endif
 
 #ifdef T_WATCH_S3
@@ -231,35 +216,15 @@ void ExternalNotificationModule::setExternalState(uint8_t index, bool on)
         break;
     }
 
-#if defined(HAS_NCP5623) || defined(RGBLED_RED) || defined(HAS_NEOPIXEL) || defined(UNPHONE)
+#ifdef HAS_LED
     if (!on) {
         red = 0;
         green = 0;
         blue = 0;
     }
+    setLEDs({red, green, blue, 255});
 #endif
 
-#ifdef HAS_NCP5623
-    if (rgb_found.type == ScanI2C::NCP5623) {
-        rgb.setColor(red, green, blue);
-    }
-#endif
-#ifdef RGBLED_CA
-    analogWrite(RGBLED_RED, 255 - red); // CA type needs reverse logic
-    analogWrite(RGBLED_GREEN, 255 - green);
-    analogWrite(RGBLED_BLUE, 255 - blue);
-#elif defined(RGBLED_RED)
-    analogWrite(RGBLED_RED, red);
-    analogWrite(RGBLED_GREEN, green);
-    analogWrite(RGBLED_BLUE, blue);
-#endif
-#ifdef HAS_NEOPIXEL
-    pixels.fill(pixels.Color(red, green, blue), 0, NEOPIXEL_COUNT);
-    pixels.show();
-#endif
-#ifdef UNPHONE
-    unphone.rgb(red, green, blue);
-#endif
 #ifdef T_WATCH_S3
     if (on) {
         drv.go();
@@ -286,6 +251,35 @@ void ExternalNotificationModule::stopNow()
     setIntervalFromNow(0);
 #ifdef T_WATCH_S3
     drv.stop();
+#endif
+}
+
+void ExternalNotificationModule::setLEDs(const RGB& rgb)
+{
+#ifdef HAS_LEDS
+    // LOG_DEBUG("setLEDs red=%d, green=%d, blue=%d", rgb.red, rgb.green, rgb.blue);
+
+#ifdef HAS_NCP5623
+    if (rgb_found.type == ScanI2C::NCP5623) {
+        rgb.setColor(rgb.red, rgb.green, rgb.blue);
+    }
+#endif
+#ifdef RGBLED_CA
+    analogWrite(RGBLED_RED, 255 - rgb.red); // CA type needs reverse logic
+    analogWrite(RGBLED_GREEN, 255 - rgb.green);
+    analogWrite(RGBLED_BLUE, 255 - rgb.blue);
+#elif defined(RGBLED_RED)
+    analogWrite(RGBLED_RED, rgb.red);
+    analogWrite(RGBLED_GREEN, rgb.green);
+    analogWrite(RGBLED_BLUE, rgb.blue);
+#endif
+#ifdef HAS_NEOPIXEL
+    pixels.fill(pixels.Color(rgb.red, rgb.green, rgb.blue), 0, NEOPIXEL_COUNT);
+    pixels.show();
+#endif
+#ifdef UNPHONE
+    unphone.rgb(rgb.red, rgb.green, rgb.blue);
+#endif
 #endif
 }
 

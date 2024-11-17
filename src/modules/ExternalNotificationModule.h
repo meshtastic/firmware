@@ -33,8 +33,6 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
     ExternalNotificationModule();
 
     uint32_t nagCycleCutoff = 1;
-
-    void setExternalState(uint8_t index = 0, bool on = false);
     bool getExternal(uint8_t index = 0);
 
     void setMute(bool mute) { isMuted = mute; }
@@ -46,6 +44,11 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
     void handleSetRingtone(const char *from_msg);
 
   protected:
+    void setExternalState(uint8_t index = 0, bool on = false);
+
+    struct RGB;
+    void setLEDs(const RGB& rgba);
+
     /** Called to handle a particular incoming message
     @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be considered for
     it
