@@ -407,9 +407,30 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.lora.ignore_mqtt = false;
 #endif
 #ifdef USERPREFS_USE_ADMIN_KEY
-    memcpy(config.security.admin_key[0].bytes, USERPREFS_ADMIN_KEY, 32);
-    config.security.admin_key[0].size = 32;
-    config.security.admin_key_count = 1;
+    // Initialize admin_key_count to zero
+    byte numAdminKeys = 0;
+
+    // Check if USERPREFS_ADMIN_KEY_0 is non-empty
+    if (sizeof(USERPREFS_ADMIN_KEY_0) > 0) {
+        memcpy(config.security.admin_key[numAdminKeys].bytes, USERPREFS_ADMIN_KEY_0, 32);
+        config.security.admin_key[numAdminKeys].size = 32;
+        numAdminKeys++;
+    }
+
+    // Check if USERPREFS_ADMIN_KEY_1 is non-empty
+    if (sizeof(USERPREFS_ADMIN_KEY_1) > 0) {
+        memcpy(config.security.admin_key[numAdminKeys].bytes, USERPREFS_ADMIN_KEY_1, 32);
+        config.security.admin_key[numAdminKeys].size = 32;
+        numAdminKeys++;
+    }
+
+    // Check if USERPREFS_ADMIN_KEY_2 is non-empty
+    if (sizeof(USERPREFS_ADMIN_KEY_2) > 0) {
+        memcpy(config.security.admin_key[config.security.admin_key_count].bytes, USERPREFS_ADMIN_KEY_2, 32);
+        config.security.admin_key[config.security.admin_key_count].size = 32;
+        numAdminKeys++;
+    }
+    config.security.admin_key_count = numAdminKeys;
 #endif
     if (shouldPreserveKey) {
         config.security.private_key.size = 32;
@@ -822,6 +843,11 @@ void NodeDB::loadFromDisk()
     devicestate.version =
         0; // Mark the current device state as completely unusable, so that if we fail reading the entire file from
     // disk we will still factoryReset to restore things.
+
+#ifdef ARCH_ESP32
+    if (FSCom.exists("/static/static"))
+        rmDir("/static/static"); // Remove bad static web files bundle from initial 2.5.13 release
+#endif
 
     // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
     auto state = loadProto(prefFileName, sizeof(meshtastic_DeviceState) + MAX_NUM_NODES_FS * sizeof(meshtastic_NodeInfo),
