@@ -1,7 +1,6 @@
 #pragma once
 #include <vector>
 
-#include "architecture.h"
 #include "mesh/generated/meshtastic/admin.pb.h"
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
 #include "mesh/generated/meshtastic/localonly.pb.h"
@@ -21,11 +20,7 @@
 
 /// max number of nodes allowed in the mesh
 #ifndef MAX_NUM_NODES
-#ifdef ARCH_NRF52
-#define MAX_NUM_NODES 80
-#else
 #define MAX_NUM_NODES 100
-#endif
 #endif
 
 #define MAX_NUM_NODES_FS 100
