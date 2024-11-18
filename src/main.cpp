@@ -294,7 +294,6 @@ void setup()
 #endif
 
     powerMonInit();
-
     serialSinceMsec = millis();
 
     LOG_INFO("\n\n//\\ E S H T /\\ S T / C\n");
