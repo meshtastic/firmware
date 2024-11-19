@@ -154,9 +154,9 @@ bool PositionModule::hasQualityTimesource()
 bool PositionModule::hasGPS()
 {
 #if MESHTASTIC_EXCLUDE_GPS
-    return gps && gps->isConnected();
-#else
     return false;
+#else
+    return gps && gps->isConnected();
 #endif
 }
 
