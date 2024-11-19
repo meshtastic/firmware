@@ -13,7 +13,11 @@
   },
   "customizations": {
     "vscode": {
-      "extensions": ["ms-vscode.cpptools", "platformio.platformio-ide"]
+      "extensions": [
+        "ms-vscode.cpptools",
+        "platformio.platformio-ide",
+        "Trunk.io"
+      ]
     }
   },
 
