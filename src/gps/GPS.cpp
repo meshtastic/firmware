@@ -788,7 +788,8 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
 void GPS::writePinEN(bool on)
 {
     // Abort: if conflict with Canned Messages when using Wisblock(?)
-    if ((HW_VENDOR == meshtastic_HardwareModel_RAK4631 || HW_VENDOR == meshtastic_HardwareModel_WISMESH_TAP) && (rotaryEncoderInterruptImpl1 || upDownInterruptImpl1))
+    if ((HW_VENDOR == meshtastic_HardwareModel_RAK4631 || HW_VENDOR == meshtastic_HardwareModel_WISMESH_TAP) &&
+        (rotaryEncoderInterruptImpl1 || upDownInterruptImpl1))
         return;
 
     // Write and log
