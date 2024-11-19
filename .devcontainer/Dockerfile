@@ -20,6 +20,7 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     python3-wheel \
     wget \
     zip \
+    gpg gnupg2 \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 RUN pipx install platformio==6.1.15
