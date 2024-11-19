@@ -246,6 +246,31 @@ NodeDB::NodeDB()
         config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
         config.position.gps_enabled = 0;
     }
+#ifdef USERPREFS_FIXED_GPS
+    if (myNodeInfo.reboot_count == 1) { // Check if First boot ever or after Factory Reset.
+        meshtastic_Position fixedGPS = meshtastic_Position_init_default;
+#ifdef USERPREFS_FIXED_GPS_LAT
+        fixedGPS.latitude_i = (int32_t)(USERPREFS_FIXED_GPS_LAT * 1e7);
+        fixedGPS.has_latitude_i = true;
+#endif
+#ifdef USERPREFS_FIXED_GPS_LON
+        fixedGPS.longitude_i = (int32_t)(USERPREFS_FIXED_GPS_LON * 1e7);
+        fixedGPS.has_longitude_i = true;
+#endif
+#ifdef USERPREFS_FIXED_GPS_ALT
+        fixedGPS.altitude = USERPREFS_FIXED_GPS_ALT;
+        fixedGPS.has_altitude = true;
+#endif
+#if defined(USERPREFS_FIXED_GPS_LAT) && defined(USERPREFS_FIXED_GPS_LON)
+        fixedGPS.location_source = meshtastic_Position_LocSource_LOC_MANUAL;
+        config.has_position = true;
+        info->has_position = true;
+        info->position = TypeConversions::ConvertToPositionLite(fixedGPS);
+        nodeDB->setLocalPosition(fixedGPS);
+        config.position.fixed_position = true;
+#endif
+    }
+#endif
     saveToDisk(saveWhat);
 }
 
@@ -382,9 +407,30 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.lora.ignore_mqtt = false;
 #endif
 #ifdef USERPREFS_USE_ADMIN_KEY
-    memcpy(config.security.admin_key[0].bytes, USERPREFS_ADMIN_KEY, 32);
-    config.security.admin_key[0].size = 32;
-    config.security.admin_key_count = 1;
+    // Initialize admin_key_count to zero
+    byte numAdminKeys = 0;
+
+    // Check if USERPREFS_ADMIN_KEY_0 is non-empty
+    if (sizeof(USERPREFS_ADMIN_KEY_0) > 0) {
+        memcpy(config.security.admin_key[numAdminKeys].bytes, USERPREFS_ADMIN_KEY_0, 32);
+        config.security.admin_key[numAdminKeys].size = 32;
+        numAdminKeys++;
+    }
+
+    // Check if USERPREFS_ADMIN_KEY_1 is non-empty
+    if (sizeof(USERPREFS_ADMIN_KEY_1) > 0) {
+        memcpy(config.security.admin_key[numAdminKeys].bytes, USERPREFS_ADMIN_KEY_1, 32);
+        config.security.admin_key[numAdminKeys].size = 32;
+        numAdminKeys++;
+    }
+
+    // Check if USERPREFS_ADMIN_KEY_2 is non-empty
+    if (sizeof(USERPREFS_ADMIN_KEY_2) > 0) {
+        memcpy(config.security.admin_key[config.security.admin_key_count].bytes, USERPREFS_ADMIN_KEY_2, 32);
+        config.security.admin_key[config.security.admin_key_count].size = 32;
+        numAdminKeys++;
+    }
+    config.security.admin_key_count = numAdminKeys;
 #endif
     if (shouldPreserveKey) {
         config.security.private_key.size = 32;
@@ -438,8 +484,13 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #else
     bool hasScreen = screen_found.port != ScanI2C::I2CPort::NO_I2C;
 #endif
+#ifdef USERPREFS_FIXED_BLUETOOTH
+    config.bluetooth.fixed_pin = USERPREFS_FIXED_BLUETOOTH;
+    config.bluetooth.mode = meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN;
+#else
     config.bluetooth.mode = hasScreen ? meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN
                                       : meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN;
+#endif
     // for backward compat, default position flags are ALT+MSL
     config.position.position_flags =
         (meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE | meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL |
@@ -793,8 +844,13 @@ void NodeDB::loadFromDisk()
         0; // Mark the current device state as completely unusable, so that if we fail reading the entire file from
     // disk we will still factoryReset to restore things.
 
+#ifdef ARCH_ESP32
+    if (FSCom.exists("/static/static"))
+        rmDir("/static/static"); // Remove bad static web files bundle from initial 2.5.13 release
+#endif
+
     // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
-    auto state = loadProto(prefFileName, sizeof(meshtastic_DeviceState) + MAX_NUM_NODES * sizeof(meshtastic_NodeInfo),
+    auto state = loadProto(prefFileName, sizeof(meshtastic_DeviceState) + MAX_NUM_NODES_FS * sizeof(meshtastic_NodeInfo),
                            sizeof(meshtastic_DeviceState), &meshtastic_DeviceState_msg, &devicestate);
 
     // See https://github.com/meshtastic/firmware/issues/4184#issuecomment-2269390786
@@ -812,6 +868,10 @@ void NodeDB::loadFromDisk()
         LOG_INFO("Loaded saved devicestate version %d, with nodecount: %d", devicestate.version, devicestate.node_db_lite.size());
         meshNodes = &devicestate.node_db_lite;
         numMeshNodes = devicestate.node_db_lite.size();
+    }
+    if (numMeshNodes > MAX_NUM_NODES) {
+        LOG_WARN("Node count %d exceeds MAX_NUM_NODES %d, truncating", numMeshNodes, MAX_NUM_NODES);
+        numMeshNodes = MAX_NUM_NODES;
     }
     meshNodes->resize(MAX_NUM_NODES);
 

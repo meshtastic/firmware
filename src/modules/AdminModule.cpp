@@ -526,6 +526,11 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             requiresReboot = false;
         }
         config.power = c.payload_variant.power;
+        if (c.payload_variant.power.on_battery_shutdown_after_secs > 0 &&
+            c.payload_variant.power.on_battery_shutdown_after_secs < 30) {
+            LOG_WARN("Tried to set on_battery_shutdown_after_secs too low, set to min 30 seconds");
+            config.power.on_battery_shutdown_after_secs = 30;
+        }
         break;
     case meshtastic_Config_network_tag:
         LOG_INFO("Set config: WiFi");
