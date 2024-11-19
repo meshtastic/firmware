@@ -20,7 +20,9 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     python3-wheel \
     wget \
     zip \
-    gpg gnupg2 \
+    usbutils hwdata gpg gnupg2 \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 RUN pipx install platformio==6.1.15
+
+ADD 99-platformio-udev.rules /etc/udev/rules.d/99-platformio-udev.rules
