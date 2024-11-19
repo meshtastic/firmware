@@ -187,9 +187,10 @@ ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
             handleReceived(p, src);
         }
 
-        if (!p->channel && !p->pki_encrypted) { // don't override if a channel was requested
+        // don't override if a channel was requested and no need to set it when PKI is enforced
+        if (!p->channel && !p->pki_encrypted) {
             meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->to);
-            if (node && node->user.public_key.size == 0) {
+            if (node) {
                 p->channel = node->channel;
                 LOG_DEBUG("localSend to channel %d", p->channel);
             }
@@ -646,6 +647,13 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
     // assert(radioConfig.has_preferences);
     if (is_in_repeated(config.lora.ignore_incoming, p->from)) {
         LOG_DEBUG("Ignore msg, 0x%x is in our ignore list", p->from);
+        packetPool.release(p);
+        return;
+    }
+
+    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->from);
+    if (node != NULL && node->is_ignored) {
+        LOG_DEBUG("Ignore msg, 0x%x is ignored", p->from);
         packetPool.release(p);
         return;
     }

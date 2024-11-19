@@ -180,6 +180,10 @@ typedef struct _meshtastic_AdminMessage {
         meshtastic_DeviceUIConfig get_ui_config_response;
         /* Tell the node to store UI data persistently. */
         meshtastic_DeviceUIConfig store_ui_config;
+        /* Set specified node-num to be ignored on the NodeDB on the device */
+        uint32_t set_ignored_node;
+        /* Set specified node-num to be un-ignored on the NodeDB on the device */
+        uint32_t remove_ignored_node;
         /* Begins an edit transaction for config, module config, owner, and channel settings changes
      This will delay the standard *implicit* save to the file system and subsequent reboot behavior until committed (commit_edit_settings) */
         bool begin_edit_settings;
@@ -279,6 +283,8 @@ extern "C" {
 #define meshtastic_AdminMessage_get_ui_config_request_tag 44
 #define meshtastic_AdminMessage_get_ui_config_response_tag 45
 #define meshtastic_AdminMessage_store_ui_config_tag 46
+#define meshtastic_AdminMessage_set_ignored_node_tag 47
+#define meshtastic_AdminMessage_remove_ignored_node_tag 48
 #define meshtastic_AdminMessage_begin_edit_settings_tag 64
 #define meshtastic_AdminMessage_commit_edit_settings_tag 65
 #define meshtastic_AdminMessage_factory_reset_device_tag 94
@@ -329,6 +335,8 @@ X(a, STATIC,   ONEOF,    FIXED32,  (payload_variant,set_time_only,set_time_only)
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,get_ui_config_request,get_ui_config_request),  44) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,get_ui_config_response,get_ui_config_response),  45) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,store_ui_config,store_ui_config),  46) \
+X(a, STATIC,   ONEOF,    UINT32,   (payload_variant,set_ignored_node,set_ignored_node),  47) \
+X(a, STATIC,   ONEOF,    UINT32,   (payload_variant,remove_ignored_node,remove_ignored_node),  48) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,begin_edit_settings,begin_edit_settings),  64) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,commit_edit_settings,commit_edit_settings),  65) \
 X(a, STATIC,   ONEOF,    INT32,    (payload_variant,factory_reset_device,factory_reset_device),  94) \
