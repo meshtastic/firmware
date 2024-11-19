@@ -101,9 +101,9 @@ std::vector<MeshModule *> moduleFrames;
 static char ourId[5];
 
 // vector where symbols (string) are displayed in bottom corner of display.
-std::vector<std::string> functionSymbals;
-// string displayed in bottom right corner of display. Created from elements in functionSymbals vector
-std::string functionSymbalString = "";
+std::vector<std::string> functionSymbol;
+// string displayed in bottom right corner of display. Created from elements in functionSymbol vector
+std::string functionSymbolString = "";
 
 #if HAS_GPS
 // GeoCoord object for the screen
@@ -243,10 +243,10 @@ static void drawWelcomeScreen(OLEDDisplay *display, OLEDDisplayUiState *state, i
 static void drawFunctionOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
     // LOG_DEBUG("Draw function overlay");
-    if (functionSymbals.begin() != functionSymbals.end()) {
+    if (functionSymbol.begin() != functionSymbol.end()) {
         char buf[64];
         display->setFont(FONT_SMALL);
-        snprintf(buf, sizeof(buf), "%s", functionSymbalString.c_str());
+        snprintf(buf, sizeof(buf), "%s", functionSymbolString.c_str());
         display->drawString(SCREEN_WIDTH - display->getStringWidth(buf), SCREEN_HEIGHT - FONT_HEIGHT_SMALL, buf);
     }
 }
@@ -966,6 +966,16 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
         display->drawXbm(x + (SCREEN_WIDTH - thumbs_width) / 2,
                          y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - thumbs_height) / 2 + 2 + 5, thumbs_width, thumbs_height,
                          thumbdown);
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "\U0001F60A") == 0 ||
+               strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "\U0001F600") == 0 ||
+               strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "\U0001F642") == 0 ||
+               strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "\U0001F609") == 0 ||
+               strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "\U0001F601") ==
+                   0) { // matches 5 different common smileys, so that the phone user doesn't have to remember which one is
+                        // compatible
+        display->drawXbm(x + (SCREEN_WIDTH - smiley_width) / 2,
+                         y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - smiley_height) / 2 + 2 + 5, smiley_width, smiley_height,
+                         smiley);
     } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "❓") == 0) {
         display->drawXbm(x + (SCREEN_WIDTH - question_width) / 2,
                          y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - question_height) / 2 + 2 + 5, question_width, question_height,
@@ -2242,24 +2252,24 @@ void Screen::decreaseBrightness()
     /* TO DO: add little popup in center of screen saying what brightness level it is set to*/
 }
 
-void Screen::setFunctionSymbal(std::string sym)
+void Screen::setFunctionSymbol(std::string sym)
 {
-    if (std::find(functionSymbals.begin(), functionSymbals.end(), sym) == functionSymbals.end()) {
-        functionSymbals.push_back(sym);
-        functionSymbalString = "";
-        for (auto symbol : functionSymbals) {
-            functionSymbalString = symbol + " " + functionSymbalString;
+    if (std::find(functionSymbol.begin(), functionSymbol.end(), sym) == functionSymbol.end()) {
+        functionSymbol.push_back(sym);
+        functionSymbolString = "";
+        for (auto symbol : functionSymbol) {
+            functionSymbolString = symbol + " " + functionSymbolString;
         }
         setFastFramerate();
     }
 }
 
-void Screen::removeFunctionSymbal(std::string sym)
+void Screen::removeFunctionSymbol(std::string sym)
 {
-    functionSymbals.erase(std::remove(functionSymbals.begin(), functionSymbals.end(), sym), functionSymbals.end());
-    functionSymbalString = "";
-    for (auto symbol : functionSymbals) {
-        functionSymbalString = symbol + " " + functionSymbalString;
+    functionSymbol.erase(std::remove(functionSymbol.begin(), functionSymbol.end(), sym), functionSymbol.end());
+    functionSymbolString = "";
+    for (auto symbol : functionSymbol) {
+        functionSymbolString = symbol + " " + functionSymbolString;
     }
     setFastFramerate();
 }

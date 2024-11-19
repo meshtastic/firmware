@@ -212,6 +212,9 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_MS24SF1 = 82,
     /* Lilygo TLora-C6 with the new ESP32-C6 MCU */
     meshtastic_HardwareModel_TLORA_C6 = 83,
+    /* WisMesh Tap
+ RAK-4631 w/ TFT in injection modled case */
+    meshtastic_HardwareModel_WISMESH_TAP = 84,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
@@ -751,9 +754,11 @@ typedef struct _meshtastic_MeshPacket {
     meshtastic_MeshPacket_public_key_t public_key;
     /* Indicates whether the packet was en/decrypted using PKI */
     bool pki_encrypted;
-    /* Last byte of the node number of the node that should be used as the next hop in routing. */
+    /* Last byte of the node number of the node that should be used as the next hop in routing. 
+ Set by the firmware internally, clients are not supposed to set this. */
     uint8_t next_hop;
-    /* Last byte of the node number of the node that will relay/relayed this packet. */
+    /* Last byte of the node number of the node that will relay/relayed this packet.
+ Set by the firmware internally, clients are not supposed to set this. */
     uint8_t relay_node;
 } meshtastic_MeshPacket;
 
