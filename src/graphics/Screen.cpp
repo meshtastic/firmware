@@ -966,7 +966,13 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
         display->drawXbm(x + (SCREEN_WIDTH - thumbs_width) / 2,
                          y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - thumbs_height) / 2 + 2 + 5, thumbs_width, thumbs_height,
                          thumbdown);
-    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "\U0001F60A") == 0 || strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "\U0001F600") == 0 || strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "\U0001F642") == 0 || strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "\U0001F609") == 0 || strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "\U0001F601") == 0) { // matches 5 different common smileys, so that the phone user doesn't have to remember which one is compatible
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "\U0001F60A") == 0 ||
+               strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "\U0001F600") == 0 ||
+               strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "\U0001F642") == 0 ||
+               strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "\U0001F609") == 0 ||
+               strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "\U0001F601") ==
+                   0) { // matches 5 different common smileys, so that the phone user doesn't have to remember which one is
+                        // compatible
         display->drawXbm(x + (SCREEN_WIDTH - smiley_width) / 2,
                          y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - smiley_height) / 2 + 2 + 5, smiley_width, smiley_height,
                          smiley);
