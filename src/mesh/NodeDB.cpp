@@ -114,7 +114,7 @@ NodeDB::NodeDB()
     uint32_t channelFileCRC = crc32Buffer(&channelFile, sizeof(channelFile));
 
     int saveWhat = 0;
-    bool hasUniqueId = false;
+    // bool hasUniqueId = false;
     // Get device unique id
 #if defined(ARCH_ESP32) && defined(ESP_EFUSE_OPTIONAL_UNIQUE_ID)
     uint32_t unique_id[4];
