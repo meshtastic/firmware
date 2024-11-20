@@ -13,14 +13,14 @@ if %ERRORLEVEL% EQU 0 (
 
 goto GETOPTS
 :HELP
-echo Usage: %~nx0 [-h] [-p ESPTOOL_PORT] [-P PYTHON] [-f FILENAME^|FILENAME] [-web]
+echo Usage: %~nx0 [-h] [-p ESPTOOL_PORT] [-P PYTHON] [-f FILENAME^|FILENAME] [--web]
 echo Flash image file to device, but first erasing and writing system information
 echo.
 echo     -h               Display this help and exit
 echo     -p ESPTOOL_PORT  Set the environment variable for ESPTOOL_PORT.  If not set, ESPTOOL iterates all ports (Dangerrous).
 echo     -P PYTHON        Specify alternate python interpreter to use to invoke esptool. (Default: %PYTHON%)
 echo     -f FILENAME      The .bin file to flash.  Custom to your device type and region.
-echo     -web             Flash WEB APP.
+echo     --web            Flash WEB APP.
 goto EOF
 
 :GETOPTS
@@ -29,7 +29,7 @@ if /I "%1"=="--help" goto HELP
 if /I "%1"=="-F" set "FILENAME=%2" & SHIFT
 if /I "%1"=="-p" set ESPTOOL_PORT=%2 & SHIFT
 if /I "%1"=="-P" set PYTHON=%2 & SHIFT
-if /I "%1"=="-web" set WEB_APP=1 & SHIFT
+if /I "%1"=="--web" set WEB_APP=1 & SHIFT
 SHIFT
 IF NOT "__%1__"=="____" goto GETOPTS
 
