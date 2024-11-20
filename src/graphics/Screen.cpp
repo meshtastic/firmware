@@ -958,65 +958,65 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
 
     display->setColor(WHITE);
 #ifndef EXCLUDE_EMOJI
-    if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "\U0001F44D") == 0) {
+    const char *msg = reinterpret_cast<const char *>(mp.decoded.payload.bytes);
+    if (strcmp(msg, "\U0001F44D") == 0) {
         display->drawXbm(x + (SCREEN_WIDTH - thumbs_width) / 2,
                          y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - thumbs_height) / 2 + 2 + 5, thumbs_width, thumbs_height,
                          thumbup);
-    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "\U0001F44E") == 0) {
+    } else if (strcmp(msg, "\U0001F44E") == 0) {
         display->drawXbm(x + (SCREEN_WIDTH - thumbs_width) / 2,
                          y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - thumbs_height) / 2 + 2 + 5, thumbs_width, thumbs_height,
                          thumbdown);
-    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "\U0001F60A") == 0 ||
-               strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "\U0001F600") == 0 ||
-               strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "\U0001F642") == 0 ||
-               strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "\U0001F609") == 0 ||
-               strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "\U0001F601") ==
-                   0) { // matches 5 different common smileys, so that the phone user doesn't have to remember which one is
-                        // compatible
+    } else if (strcmp(msg, "\U0001F60A") == 0 || strcmp(msg, "\U0001F600") == 0 || strcmp(msg, "\U0001F642") == 0 ||
+               strcmp(msg, "\U0001F609") == 0 ||
+               strcmp(msg, "\U0001F601") == 0) { // matches 5 different common smileys, so that the phone user doesn't have to
+                                                 // remember which one is compatible
         display->drawXbm(x + (SCREEN_WIDTH - smiley_width) / 2,
                          y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - smiley_height) / 2 + 2 + 5, smiley_width, smiley_height,
                          smiley);
-    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "❓") == 0) {
+    } else if (strcmp(msg, "❓") == 0) {
         display->drawXbm(x + (SCREEN_WIDTH - question_width) / 2,
                          y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - question_height) / 2 + 2 + 5, question_width, question_height,
                          question);
-    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "‼️") == 0) {
+    } else if (strcmp(msg, "‼️") == 0) {
         display->drawXbm(x + (SCREEN_WIDTH - bang_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - bang_height) / 2 + 2 + 5,
                          bang_width, bang_height, bang);
-    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "\U0001F4A9") == 0) {
+    } else if (strcmp(msg, "\U0001F4A9") == 0) {
         display->drawXbm(x + (SCREEN_WIDTH - poo_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - poo_height) / 2 + 2 + 5,
                          poo_width, poo_height, poo);
-    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "\xf0\x9f\xa4\xa3") == 0) {
+    } else if (strcmp(msg, "\U0001F923") == 0) {
         display->drawXbm(x + (SCREEN_WIDTH - haha_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - haha_height) / 2 + 2 + 5,
                          haha_width, haha_height, haha);
-    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "\U0001F44B") == 0) {
+    } else if (strcmp(msg, "\U0001F44B") == 0) {
         display->drawXbm(x + (SCREEN_WIDTH - wave_icon_width) / 2,
                          y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - wave_icon_height) / 2 + 2 + 5, wave_icon_width,
                          wave_icon_height, wave_icon);
-    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "\U0001F920") == 0) {
+    } else if (strcmp(msg, "\U0001F920") == 0) {
         display->drawXbm(x + (SCREEN_WIDTH - cowboy_width) / 2,
                          y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - cowboy_height) / 2 + 2 + 5, cowboy_width, cowboy_height,
                          cowboy);
-    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "\U0001F42D") == 0) {
+    } else if (strcmp(msg, "\U0001F42D") == 0) {
         display->drawXbm(x + (SCREEN_WIDTH - deadmau5_width) / 2,
                          y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - deadmau5_height) / 2 + 2 + 5, deadmau5_width, deadmau5_height,
                          deadmau5);
-    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "\xE2\x98\x80\xEF\xB8\x8F") == 0) {
+    } else if (strcmp(msg, "\xE2\x98\x80\xEF\xB8\x8F") == 0) {
         display->drawXbm(x + (SCREEN_WIDTH - sun_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - sun_height) / 2 + 2 + 5,
                          sun_width, sun_height, sun);
-    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "\u2614") == 0) {
+    } else if (strcmp(msg, "\u2614") == 0) {
         display->drawXbm(x + (SCREEN_WIDTH - rain_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - rain_height) / 2 + 2 + 10,
                          rain_width, rain_height, rain);
-    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "☁️") == 0) {
+    } else if (strcmp(msg, "☁️") == 0) {
         display->drawXbm(x + (SCREEN_WIDTH - cloud_width) / 2,
                          y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - cloud_height) / 2 + 2 + 5, cloud_width, cloud_height, cloud);
-    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "🌫️") == 0) {
+    } else if (strcmp(msg, "🌫️") == 0) {
         display->drawXbm(x + (SCREEN_WIDTH - fog_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - fog_height) / 2 + 2 + 5,
                          fog_width, fog_height, fog);
-    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "\xf0\x9f\x98\x88") == 0) {
+    } else if (strcmp(msg, "\U0001F608") == 0) {
         display->drawXbm(x + (SCREEN_WIDTH - devil_width) / 2,
                          y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - devil_height) / 2 + 2 + 5, devil_width, devil_height, devil);
-    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "♥️") == 0) {
+    } else if (strcmp(msg, "♥️") == 0 || strcmp(msg, "\U0001F9E1") == 0 || strcmp(msg, "\U00002763") == 0 ||
+               strcmp(msg, "\U00002764") == 0 || strcmp(msg, "\U0001F495") == 0 || strcmp(msg, "\U0001F496") == 0 ||
+               strcmp(msg, "\U0001F497") == 0 || strcmp(msg, "\U0001F496") == 0) {
         display->drawXbm(x + (SCREEN_WIDTH - heart_width) / 2,
                          y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - heart_height) / 2 + 2 + 5, heart_width, heart_height, heart);
     } else {
