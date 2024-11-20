@@ -234,13 +234,13 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
                 screen->decreaseBrightness();
             LOG_DEBUG("Decrease Screen Brightness");
             break;
-        case INPUT_BROKER_MSG_FN_SYMBOL_ON: // draw modifier (function) symbal
+        case INPUT_BROKER_MSG_FN_SYMBOL_ON: // draw modifier (function) symbol
             if (screen)
-                screen->setFunctionSymbal("Fn");
+                screen->setFunctionSymbol("Fn");
             break;
-        case INPUT_BROKER_MSG_FN_SYMBOL_OFF: // remove modifier (function) symbal
+        case INPUT_BROKER_MSG_FN_SYMBOL_OFF: // remove modifier (function) symbol
             if (screen)
-                screen->removeFunctionSymbal("Fn");
+                screen->removeFunctionSymbol("Fn");
             break;
         // mute (switch off/toggle) external notifications on fn+m
         case INPUT_BROKER_MSG_MUTE_TOGGLE:
@@ -249,13 +249,13 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
                     externalNotificationModule->setMute(false);
                     showTemporaryMessage("Notifications \nEnabled");
                     if (screen)
-                        screen->removeFunctionSymbal("M"); // remove the mute symbol from the bottom right corner
+                        screen->removeFunctionSymbol("M"); // remove the mute symbol from the bottom right corner
                 } else {
                     externalNotificationModule->stopNow(); // this will turn off all GPIO and sounds and idle the loop
                     externalNotificationModule->setMute(true);
                     showTemporaryMessage("Notifications \nDisabled");
                     if (screen)
-                        screen->setFunctionSymbal("M"); // add the mute symbol to the bottom right corner
+                        screen->setFunctionSymbol("M"); // add the mute symbol to the bottom right corner
                 }
             }
             break;
@@ -308,7 +308,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
             break;
         }
         if (screen && (event->kbchar != INPUT_BROKER_MSG_FN_SYMBOL_ON)) {
-            screen->removeFunctionSymbal("Fn"); // remove modifier (function) symbal
+            screen->removeFunctionSymbol("Fn"); // remove modifier (function) symbol
         }
     }
 
@@ -672,7 +672,7 @@ int32_t CannedMessageModule::runOnce()
                 break;
             }
             if (screen)
-                screen->removeFunctionSymbal("Fn");
+                screen->removeFunctionSymbol("Fn");
         }
 
         this->lastTouchMillis = millis();
