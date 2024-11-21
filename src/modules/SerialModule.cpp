@@ -204,9 +204,11 @@ int32_t SerialModule::runOnce()
                     lastNmeaTime = millis();
                     uint32_t readIndex = 0;
                     const meshtastic_NodeInfoLite *tempNodeInfo = nodeDB->readNextMeshNode(readIndex);
-                    while (tempNodeInfo != NULL && tempNodeInfo->has_user && hasValidPosition(tempNodeInfo)) {
-                        printWPL(outbuf, sizeof(outbuf), tempNodeInfo->position, tempNodeInfo->user.long_name, true);
-                        serialPrint->printf("%s", outbuf);
+                    while (tempNodeInfo != NULL) {
+                        if (tempNodeInfo->has_user && hasValidPosition(tempNodeInfo)) {
+                            printWPL(outbuf, sizeof(outbuf), tempNodeInfo->position, tempNodeInfo->user.long_name, true);
+                            serialPrint->printf("%s", outbuf);
+                        }
                         tempNodeInfo = nodeDB->readNextMeshNode(readIndex);
                     }
                 }
