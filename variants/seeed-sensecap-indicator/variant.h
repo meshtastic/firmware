@@ -36,12 +36,13 @@
 #define TOUCH_I2C_PORT 0
 #define TOUCH_SLAVE_ADDRESS 0x48
 
-// Buzzer
-#define PIN_BUZZER 19
+// in future, we may want to add a buzzer and add all sensors to the indicator via a data protocol for now only GPS is supported
+// // Buzzer
+// #define PIN_BUZZER 19
 
-#define HAS_GPS 0
-#undef GPS_RX_PIN
-#undef GPS_TX_PIN
+#define GPS_RX_PIN 20
+#define GPS_TX_PIN 19
+#define HAS_GPS 1
 
 #define USE_SX1262
 #define USE_SX1268
