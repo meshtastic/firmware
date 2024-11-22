@@ -214,16 +214,18 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
     // Display "Env. From: ..." on its own
     display->drawString(x, y, "Env. From: " + String(lastSender) + "(" + String(agoSecs) + "s)");
 
-    String last_temp = String(lastMeasurement.variant.environment_metrics.temperature, 0) + "°C";
-    if (moduleConfig.telemetry.environment_display_fahrenheit) {
-        last_temp =
-            String(UnitConversions::CelsiusToFahrenheit(lastMeasurement.variant.environment_metrics.temperature), 0) + "°F";
-    }
+    if (lastMeasurement.variant.environment_metrics.has_temperature || lastMeasurement.variant.environment_metrics.has_relative_humidity) {
+        String last_temp = String(lastMeasurement.variant.environment_metrics.temperature, 0) + "°C";
+        if (moduleConfig.telemetry.environment_display_fahrenheit) {
+            last_temp =
+                String(UnitConversions::CelsiusToFahrenheit(lastMeasurement.variant.environment_metrics.temperature), 0) + "°F";
+        }
 
-    // Continue with the remaining details
-    display->drawString(x, y += _fontHeight(FONT_SMALL),
-                        "Temp/Hum: " + last_temp + " / " +
-                            String(lastMeasurement.variant.environment_metrics.relative_humidity, 0) + "%");
+        // Continue with the remaining details
+        display->drawString(x, y += _fontHeight(FONT_SMALL),
+                            "Temp/Hum: " + last_temp + " / " +
+                                String(lastMeasurement.variant.environment_metrics.relative_humidity, 0) + "%");
+    }
 
     if (lastMeasurement.variant.environment_metrics.barometric_pressure != 0) {
         display->drawString(x, y += _fontHeight(FONT_SMALL),

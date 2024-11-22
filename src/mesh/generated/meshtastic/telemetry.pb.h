@@ -78,7 +78,7 @@ typedef enum _meshtastic_TelemetrySensorType {
     meshtastic_TelemetrySensorType_MLX90614 = 31,
     /* SCD40/SCD41 CO2, humidity, temperature sensor */
     meshtastic_TelemetrySensorType_SCD4X = 32,
-    /* RADSENS, radiation, geiger-muller tube */
+    /* ClimateGuard RadSens, radiation, Geiger-Muller Tube */
     meshtastic_TelemetrySensorType_RADSENS = 33
 } meshtastic_TelemetrySensorType;
 
@@ -157,7 +157,7 @@ typedef struct _meshtastic_EnvironmentMetrics {
     /* Wind lull in m/s */
     bool has_wind_lull;
     float wind_lull;
-    /* Radiation in micro roentgen/hr */
+    /* Radiation in µR/h */
     bool has_radiation;
     float radiation;
 } meshtastic_EnvironmentMetrics;
