@@ -85,7 +85,7 @@ if [ -f "${FILENAME}" ] && [ -n "${FILENAME##*"update"*}" ]; then
 		$ESPTOOL_CMD write_flash 0x260000 bleota-s3.bin
 	fi
 	if [ "$WEB_APP" = true ]; then
-		$ESPTOOL_CMD write_flash 0x300000 littlefsweb-*.bin
+		$ESPTOOL_CMD write_flash 0x300000 littlefswebui-*.bin
 	else
 		$ESPTOOL_CMD write_flash 0x300000 littlefs-*.bin
 	fi
