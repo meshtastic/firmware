@@ -55,7 +55,7 @@ CannedMessageModule::CannedMessageModule()
             LOG_INFO("CannedMessageModule is enabled");
 
             // T-Watch interface currently has no way to select destination type, so default to 'node'
-#if defined(T_WATCH_S3) || defined(RAK14014) || defined(SENSECAP_INDICATOR)
+#if defined(T_WATCH_S3) || defined(RAK14014) || defined(USE_VIRTUAL_KEYBOARD)
             this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
 #endif
 
@@ -81,7 +81,7 @@ int CannedMessageModule::splitConfiguredMessages()
 
     String canned_messages = cannedMessageModuleConfig.messages;
 
-#if defined(T_WATCH_S3) || defined(RAK14014) || defined(SENSECAP_INDICATOR)
+#if defined(T_WATCH_S3) || defined(RAK14014) || defined(USE_VIRTUAL_KEYBOARD)
     String separator = canned_messages.length() ? "|" : "";
 
     canned_messages = "[---- Free Text ----]" + separator + canned_messages;
@@ -150,7 +150,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
     }
     if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT)) {
 
-#if defined(T_WATCH_S3) || defined(RAK14014) || defined(SENSECAP_INDICATOR)
+#if defined(T_WATCH_S3) || defined(RAK14014) || defined(USE_VIRTUAL_KEYBOARD)
         if (this->currentMessageIndex == 0) {
             this->runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
 
@@ -177,7 +177,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
         this->currentMessageIndex = -1;
 
-#if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(SENSECAP_INDICATOR)
+#if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(USE_VIRTUAL_KEYBOARD)
         this->freetext = ""; // clear freetext
         this->cursor = 0;
         this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
@@ -190,7 +190,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) ||
         (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT))) {
 
-#if defined(T_WATCH_S3) || defined(RAK14014) || defined(SENSECAP_INDICATOR) 
+#if defined(T_WATCH_S3) || defined(RAK14014) || defined(USE_VIRTUAL_KEYBOARD) 
         if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {
             this->payload = INPUT_BROKER_MSG_LEFT;
         } else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT)) {
@@ -312,7 +312,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         }
     }
 
-#if defined(T_WATCH_S3) || defined(RAK14014) || defined(SENSECAP_INDICATOR) 
+#if defined(T_WATCH_S3) || defined(RAK14014) || defined(USE_VIRTUAL_KEYBOARD) 
     if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
         String keyTapped = keyForCoordinates(event->touchX, event->touchY);
 
@@ -459,7 +459,7 @@ int32_t CannedMessageModule::runOnce()
         this->freetext = ""; // clear freetext
         this->cursor = 0;
 
-#if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(SENSECAP_INDICATOR)
+#if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(USE_VIRTUAL_KEYBOARD)
         this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
 #endif
 
@@ -479,7 +479,7 @@ int32_t CannedMessageModule::runOnce()
                     powerFSM.trigger(EVENT_PRESS);
                     return INT32_MAX;
                 } else {
-#if defined(T_WATCH_S3) || defined(RAK14014) || defined(SENSECAP_INDICATOR) 
+#if defined(T_WATCH_S3) || defined(RAK14014) || defined(USE_VIRTUAL_KEYBOARD) 
                     sendText(this->dest, indexChannels[this->channel], this->messages[this->currentMessageIndex], true);
 #else
                     sendText(NODENUM_BROADCAST, channels.getPrimaryIndex(), this->messages[this->currentMessageIndex], true);
@@ -496,7 +496,7 @@ int32_t CannedMessageModule::runOnce()
         this->freetext = ""; // clear freetext
         this->cursor = 0;
 
-#if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(SENSECAP_INDICATOR)
+#if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(USE_VIRTUAL_KEYBOARD)
         this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
 #endif
 
@@ -513,7 +513,7 @@ int32_t CannedMessageModule::runOnce()
             this->freetext = ""; // clear freetext
             this->cursor = 0;
 
-#if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(SENSECAP_INDICATOR)
+#if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(USE_VIRTUAL_KEYBOARD)
             this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
 #endif
 
@@ -526,7 +526,7 @@ int32_t CannedMessageModule::runOnce()
             this->freetext = ""; // clear freetext
             this->cursor = 0;
 
-#if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(SENSECAP_INDICATOR)  
+#if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(USE_VIRTUAL_KEYBOARD)  
             this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
 #endif
 
@@ -769,7 +769,7 @@ void CannedMessageModule::showTemporaryMessage(const String &message)
     setIntervalFromNow(2000);
 }
 
-#if defined(T_WATCH_S3) || defined(RAK14014) || defined(SENSECAP_INDICATOR) 
+#if defined(T_WATCH_S3) || defined(RAK14014) || defined(USE_VIRTUAL_KEYBOARD) 
 
 String CannedMessageModule::keyForCoordinates(uint x, uint y)
 {
@@ -1055,7 +1055,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         display->drawString(10 + x, 0 + y + FONT_HEIGHT_SMALL, "Canned Message\nModule disabled.");
     } else if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
         requestFocus(); // Tell Screen::setFrames to move to our module's frame
-#if defined(T_WATCH_S3) || defined(RAK14014) || defined(SENSECAP_INDICATOR) 
+#if defined(T_WATCH_S3) || defined(RAK14014) || defined(USE_VIRTUAL_KEYBOARD) 
         drawKeyboard(display, state, 0, 0);
 #else
 

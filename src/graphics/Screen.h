@@ -554,7 +554,7 @@ class Screen : public concurrency::OSThread
 
     static void drawDebugInfoWiFiTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 
-#ifdef T_WATCH_S3 || defined(SENSECAP_INDICATOR)
+#ifdef T_WATCH_S3 || defined(USE_VIRTUAL_KEYBOARD)
     static void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 
     static void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
