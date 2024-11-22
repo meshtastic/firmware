@@ -1,6 +1,6 @@
 /*
  *  Support for the ClimateGuard RadSens Dosimeter
- *  A fun and educational sensor for Meshtastic; not for saftey critical applications.
+ *  A fun and educational sensor for Meshtastic; not for safety critical applications.
  */
 #include "configuration.h"
 
