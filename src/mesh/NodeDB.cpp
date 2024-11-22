@@ -913,7 +913,7 @@ void NodeDB::loadFromDisk()
     }
     if (sum == 0) {
         numAdminKeys += 1;
-        LOG_INFO("Admin 0 key zero. Loading hard coded key from user preferences.\n");
+        LOG_INFO("Admin 0 key zero. Loading hard coded key from user preferences.");
         memcpy(config.security.admin_key[0].bytes, userprefs_admin_key_0, 32);
         config.security.admin_key[0].size = 32;
         config.security.admin_key_count = numAdminKeys;
@@ -928,7 +928,7 @@ void NodeDB::loadFromDisk()
     }
     if (sum == 0) {
         numAdminKeys += 1;
-        LOG_INFO("Admin 1 key zero. Loading hard coded key from user preferences.\n");
+        LOG_INFO("Admin 1 key zero. Loading hard coded key from user preferences.");
         memcpy(config.security.admin_key[1].bytes, userprefs_admin_key_1, 32);
         config.security.admin_key[1].size = 32;
         config.security.admin_key_count = numAdminKeys;
@@ -943,7 +943,7 @@ void NodeDB::loadFromDisk()
     }
     if (sum == 0) {
         numAdminKeys += 1;
-        LOG_INFO("Admin 2 key zero. Loading hard coded key from user preferences.\n");
+        LOG_INFO("Admin 2 key zero. Loading hard coded key from user preferences.");
         memcpy(config.security.admin_key[2].bytes, userprefs_admin_key_2, 32);
         config.security.admin_key[2].size = 32;
         config.security.admin_key_count = numAdminKeys;
