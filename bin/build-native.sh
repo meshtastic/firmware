@@ -28,4 +28,3 @@ platformio pkg update --environment native || platformioFailed
 pio run --environment native || platformioFailed
 cp .pio/build/native/program "$OUTDIR/meshtasticd_linux_$(uname -m)"
 cp bin/native-install.* $OUTDIR
-cp bin/native-run.* $OUTDIR
