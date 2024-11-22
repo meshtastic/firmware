@@ -34,6 +34,7 @@
 #define DAC_I2S_BCK 48
 #define DAC_I2S_WS 15
 #define DAC_I2S_DOUT 46
+#define DAC_I2S_MCLK 0
 
 #define HAS_AXP2101
 
