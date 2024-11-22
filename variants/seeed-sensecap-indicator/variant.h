@@ -64,5 +64,5 @@
 #define SX126X_RESET LORA_RESET
 #define SX126X_DIO2_AS_RF_SWITCH
 
-
-#define USE_VIRTUAL_KEYBOARD 1 // USE VIRTUAL KEYBOARD (unfortunately cant test this yet on T_Watch_S3 or RAK so still remains their code) 
+#define USE_VIRTUAL_KEYBOARD 1
+#define DISPLAY_CLOCK_FRAME 1
