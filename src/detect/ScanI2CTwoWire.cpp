@@ -479,6 +479,16 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 }
                 break;
 
+            case CGRADSENS_ADDR:
+                LOG_INFO("Looking for ClimateGuard RadSense Geiger-Muller Sensor");
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 1);
+                if (registerValue == 0x7D) {
+                    type = CGRADSENS;
+                    LOG_INFO("ClimateGuard RadSense Geiger-Muller Sensor found");
+                    break;
+                }
+                break;
+
             default:
                 LOG_INFO("Device found at address 0x%x was not able to be enumerated", addr.address);
             }
