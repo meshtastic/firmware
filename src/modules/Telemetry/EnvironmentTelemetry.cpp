@@ -252,7 +252,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
 
     if (lastMeasurement.variant.environment_metrics.radiation != 0)
         display->drawString(x, y += _fontHeight(FONT_SMALL),
-                            "Radiation: " + String(lastMeasurement.variant.environment_metrics.radiation, 0) + "µR/h");
+                            "Radiation: " + String(lastMeasurement.variant.environment_metrics.radiation, 2) + "µR/h");
 
 }
 
