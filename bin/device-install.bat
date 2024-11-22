@@ -1,6 +1,7 @@
 @ECHO OFF
 
 set PYTHON=python
+set WEB_APP=0
 
 :: Determine the correct esptool command to use
 where esptool >nul 2>&1
@@ -12,13 +13,14 @@ if %ERRORLEVEL% EQU 0 (
 
 goto GETOPTS
 :HELP
-echo Usage: %~nx0 [-h] [-p ESPTOOL_PORT] [-P PYTHON] [-f FILENAME^|FILENAME]
+echo Usage: %~nx0 [-h] [-p ESPTOOL_PORT] [-P PYTHON] [-f FILENAME^|FILENAME] [--web]
 echo Flash image file to device, but first erasing and writing system information
 echo.
 echo     -h               Display this help and exit
 echo     -p ESPTOOL_PORT  Set the environment variable for ESPTOOL_PORT.  If not set, ESPTOOL iterates all ports (Dangerrous).
 echo     -P PYTHON        Specify alternate python interpreter to use to invoke esptool. (Default: %PYTHON%)
 echo     -f FILENAME      The .bin file to flash.  Custom to your device type and region.
+echo     --web            Flash WEB APP.
 goto EOF
 
 :GETOPTS
@@ -27,6 +29,7 @@ if /I "%1"=="--help" goto HELP
 if /I "%1"=="-F" set "FILENAME=%2" & SHIFT
 if /I "%1"=="-p" set ESPTOOL_PORT=%2 & SHIFT
 if /I "%1"=="-P" set PYTHON=%2 & SHIFT
+if /I "%1"=="--web" set WEB_APP=1 & SHIFT
 SHIFT
 IF NOT "__%1__"=="____" goto GETOPTS
 
@@ -49,8 +52,14 @@ IF EXIST %FILENAME% IF x%FILENAME:update=%==x%FILENAME% (
     ) else (
         %ESPTOOL_CMD% --baud 115200 write_flash 0x260000 bleota-s3.bin
     )
-    for %%f in (littlefs-*.bin) do (
-        %ESPTOOL_CMD% --baud 115200 write_flash 0x300000 %%f
+    IF %WEB_APP%==1 (
+        for %%f in (littlefswebui-*.bin) do (
+            %ESPTOOL_CMD% --baud 115200 write_flash 0x300000 %%f
+        )
+    ) else (
+        for %%f in (littlefs-*.bin) do (
+            %ESPTOOL_CMD% --baud 115200 write_flash 0x300000 %%f
+        )
     )
 ) else (
     echo "Invalid file: %FILENAME%"

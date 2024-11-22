@@ -234,13 +234,13 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
                 screen->decreaseBrightness();
             LOG_DEBUG("Decrease Screen Brightness");
             break;
-        case INPUT_BROKER_MSG_FN_SYMBOL_ON: // draw modifier (function) symbal
+        case INPUT_BROKER_MSG_FN_SYMBOL_ON: // draw modifier (function) symbol
             if (screen)
-                screen->setFunctionSymbal("Fn");
+                screen->setFunctionSymbol("Fn");
             break;
-        case INPUT_BROKER_MSG_FN_SYMBOL_OFF: // remove modifier (function) symbal
+        case INPUT_BROKER_MSG_FN_SYMBOL_OFF: // remove modifier (function) symbol
             if (screen)
-                screen->removeFunctionSymbal("Fn");
+                screen->removeFunctionSymbol("Fn");
             break;
         // mute (switch off/toggle) external notifications on fn+m
         case INPUT_BROKER_MSG_MUTE_TOGGLE:
@@ -249,13 +249,13 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
                     externalNotificationModule->setMute(false);
                     showTemporaryMessage("Notifications \nEnabled");
                     if (screen)
-                        screen->removeFunctionSymbal("M"); // remove the mute symbol from the bottom right corner
+                        screen->removeFunctionSymbol("M"); // remove the mute symbol from the bottom right corner
                 } else {
                     externalNotificationModule->stopNow(); // this will turn off all GPIO and sounds and idle the loop
                     externalNotificationModule->setMute(true);
                     showTemporaryMessage("Notifications \nDisabled");
                     if (screen)
-                        screen->setFunctionSymbal("M"); // add the mute symbol to the bottom right corner
+                        screen->setFunctionSymbol("M"); // add the mute symbol to the bottom right corner
                 }
             }
             break;
@@ -308,7 +308,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
             break;
         }
         if (screen && (event->kbchar != INPUT_BROKER_MSG_FN_SYMBOL_ON)) {
-            screen->removeFunctionSymbal("Fn"); // remove modifier (function) symbal
+            screen->removeFunctionSymbol("Fn"); // remove modifier (function) symbol
         }
     }
 
@@ -325,7 +325,9 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
 
             this->shift = !this->shift;
         } else if (keyTapped == "⌫") {
+#ifndef RAK14014
             this->highlight = keyTapped[0];
+#endif
 
             this->payload = 0x08;
 
@@ -341,7 +343,9 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
 
             validEvent = true;
         } else if (keyTapped == " ") {
+#ifndef RAK14014
             this->highlight = keyTapped[0];
+#endif
 
             this->payload = keyTapped[0];
 
@@ -361,7 +365,9 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
 
             this->shift = false;
         } else if (keyTapped != "") {
+#ifndef RAK14014
             this->highlight = keyTapped[0];
+#endif
 
             this->payload = this->shift ? keyTapped[0] : std::tolower(keyTapped[0]);
 
@@ -666,7 +672,7 @@ int32_t CannedMessageModule::runOnce()
                 break;
             }
             if (screen)
-                screen->removeFunctionSymbal("Fn");
+                screen->removeFunctionSymbol("Fn");
         }
 
         this->lastTouchMillis = millis();
@@ -830,6 +836,11 @@ void CannedMessageModule::drawKeyboard(OLEDDisplay *display, OLEDDisplayUiState 
 
             Letter updatedLetter = {letter.character, letter.width, xOffset, yOffset, cellWidth, cellHeight};
 
+#ifdef RAK14014 // Optimize the touch range of the virtual keyboard in the bottom row
+            if (outerIndex == outerSize - 1) {
+                updatedLetter.rectHeight = 240 - yOffset;
+            }
+#endif
             this->keyboard[this->charSet][outerIndex][innerIndex] = updatedLetter;
 
             float characterOffset = ((cellWidth / 2) - (letter.width / 2));

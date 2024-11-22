@@ -187,7 +187,7 @@ static void waitEnterSleep(bool skipPreflight = false)
     notifySleep.notifyObservers(NULL);
 }
 
-void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
+void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveNodeDb = false)
 {
     if (INCLUDE_vTaskSuspend && (msecToWake == portMAX_DELAY)) {
         LOG_INFO("Enter deep sleep forever");
@@ -219,7 +219,9 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
 
     screen->doDeepSleep(); // datasheet says this will draw only 10ua
 
-    nodeDB->saveToDisk();
+    if (!skipSaveNodeDb) {
+        nodeDB->saveToDisk();
+    }
 
 #ifdef PIN_POWER_EN
     pinMode(PIN_POWER_EN, INPUT); // power off peripherals

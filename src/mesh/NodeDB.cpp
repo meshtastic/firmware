@@ -114,7 +114,7 @@ NodeDB::NodeDB()
     uint32_t channelFileCRC = crc32Buffer(&channelFile, sizeof(channelFile));
 
     int saveWhat = 0;
-    bool hasUniqueId = false;
+    // bool hasUniqueId = false;
     // Get device unique id
 #if defined(ARCH_ESP32) && defined(ESP_EFUSE_OPTIONAL_UNIQUE_ID)
     uint32_t unique_id[4];
@@ -231,6 +231,9 @@ NodeDB::NodeDB()
         moduleConfig.telemetry.health_update_interval = Default::getConfiguredOrMinimumValue(
             moduleConfig.telemetry.health_update_interval, min_default_telemetry_interval_secs);
     }
+    // Ensure that the neighbor info update interval is coerced to the minimum
+    moduleConfig.neighbor_info.update_interval =
+        Default::getConfiguredOrMinimumValue(moduleConfig.neighbor_info.update_interval, min_neighbor_info_broadcast_secs);
 
     if (devicestateCRC != crc32Buffer(&devicestate, sizeof(devicestate)))
         saveWhat |= SEGMENT_DEVICESTATE;
@@ -243,6 +246,31 @@ NodeDB::NodeDB()
         config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
         config.position.gps_enabled = 0;
     }
+#ifdef USERPREFS_FIXED_GPS
+    if (myNodeInfo.reboot_count == 1) { // Check if First boot ever or after Factory Reset.
+        meshtastic_Position fixedGPS = meshtastic_Position_init_default;
+#ifdef USERPREFS_FIXED_GPS_LAT
+        fixedGPS.latitude_i = (int32_t)(USERPREFS_FIXED_GPS_LAT * 1e7);
+        fixedGPS.has_latitude_i = true;
+#endif
+#ifdef USERPREFS_FIXED_GPS_LON
+        fixedGPS.longitude_i = (int32_t)(USERPREFS_FIXED_GPS_LON * 1e7);
+        fixedGPS.has_longitude_i = true;
+#endif
+#ifdef USERPREFS_FIXED_GPS_ALT
+        fixedGPS.altitude = USERPREFS_FIXED_GPS_ALT;
+        fixedGPS.has_altitude = true;
+#endif
+#if defined(USERPREFS_FIXED_GPS_LAT) && defined(USERPREFS_FIXED_GPS_LON)
+        fixedGPS.location_source = meshtastic_Position_LocSource_LOC_MANUAL;
+        config.has_position = true;
+        info->has_position = true;
+        info->position = TypeConversions::ConvertToPositionLite(fixedGPS);
+        nodeDB->setLocalPosition(fixedGPS);
+        config.position.fixed_position = true;
+#endif
+    }
+#endif
     saveToDisk(saveWhat);
 }
 
@@ -379,9 +407,30 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.lora.ignore_mqtt = false;
 #endif
 #ifdef USERPREFS_USE_ADMIN_KEY
-    memcpy(config.security.admin_key[0].bytes, USERPREFS_ADMIN_KEY, 32);
-    config.security.admin_key[0].size = 32;
-    config.security.admin_key_count = 1;
+    // Initialize admin_key_count to zero
+    byte numAdminKeys = 0;
+
+    // Check if USERPREFS_ADMIN_KEY_0 is non-empty
+    if (sizeof(USERPREFS_ADMIN_KEY_0) > 0) {
+        memcpy(config.security.admin_key[numAdminKeys].bytes, USERPREFS_ADMIN_KEY_0, 32);
+        config.security.admin_key[numAdminKeys].size = 32;
+        numAdminKeys++;
+    }
+
+    // Check if USERPREFS_ADMIN_KEY_1 is non-empty
+    if (sizeof(USERPREFS_ADMIN_KEY_1) > 0) {
+        memcpy(config.security.admin_key[numAdminKeys].bytes, USERPREFS_ADMIN_KEY_1, 32);
+        config.security.admin_key[numAdminKeys].size = 32;
+        numAdminKeys++;
+    }
+
+    // Check if USERPREFS_ADMIN_KEY_2 is non-empty
+    if (sizeof(USERPREFS_ADMIN_KEY_2) > 0) {
+        memcpy(config.security.admin_key[config.security.admin_key_count].bytes, USERPREFS_ADMIN_KEY_2, 32);
+        config.security.admin_key[config.security.admin_key_count].size = 32;
+        numAdminKeys++;
+    }
+    config.security.admin_key_count = numAdminKeys;
 #endif
     if (shouldPreserveKey) {
         config.security.private_key.size = 32;
@@ -435,8 +484,13 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #else
     bool hasScreen = screen_found.port != ScanI2C::I2CPort::NO_I2C;
 #endif
+#ifdef USERPREFS_FIXED_BLUETOOTH
+    config.bluetooth.fixed_pin = USERPREFS_FIXED_BLUETOOTH;
+    config.bluetooth.mode = meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN;
+#else
     config.bluetooth.mode = hasScreen ? meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN
                                       : meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN;
+#endif
     // for backward compat, default position flags are ALT+MSL
     config.position.position_flags =
         (meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE | meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL |
@@ -473,7 +527,7 @@ void NodeDB::initConfigIntervals()
 
     config.display.screen_on_secs = default_screen_on_secs;
 
-#if defined(T_WATCH_S3) || defined(T_DECK)
+#if defined(T_WATCH_S3) || defined(T_DECK) || defined(RAK14014)
     config.power.is_power_saving = true;
     config.display.screen_on_secs = 30;
     config.power.wait_bluetooth_secs = 30;
@@ -790,8 +844,13 @@ void NodeDB::loadFromDisk()
         0; // Mark the current device state as completely unusable, so that if we fail reading the entire file from
     // disk we will still factoryReset to restore things.
 
+#ifdef ARCH_ESP32
+    if (FSCom.exists("/static/static"))
+        rmDir("/static/static"); // Remove bad static web files bundle from initial 2.5.13 release
+#endif
+
     // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
-    auto state = loadProto(prefFileName, sizeof(meshtastic_DeviceState) + MAX_NUM_NODES * sizeof(meshtastic_NodeInfo),
+    auto state = loadProto(prefFileName, sizeof(meshtastic_DeviceState) + MAX_NUM_NODES_FS * sizeof(meshtastic_NodeInfo),
                            sizeof(meshtastic_DeviceState), &meshtastic_DeviceState_msg, &devicestate);
 
     // See https://github.com/meshtastic/firmware/issues/4184#issuecomment-2269390786
@@ -809,6 +868,10 @@ void NodeDB::loadFromDisk()
         LOG_INFO("Loaded saved devicestate version %d, with nodecount: %d", devicestate.version, devicestate.node_db_lite.size());
         meshNodes = &devicestate.node_db_lite;
         numMeshNodes = devicestate.node_db_lite.size();
+    }
+    if (numMeshNodes > MAX_NUM_NODES) {
+        LOG_WARN("Node count %d exceeds MAX_NUM_NODES %d, truncating", numMeshNodes, MAX_NUM_NODES);
+        numMeshNodes = MAX_NUM_NODES;
     }
     meshNodes->resize(MAX_NUM_NODES);
 
@@ -1228,12 +1291,12 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
             int oldestBoringIndex = -1;
             for (int i = 1; i < numMeshNodes; i++) {
                 // Simply the oldest non-favorite node
-                if (!meshNodes->at(i).is_favorite && meshNodes->at(i).last_heard < oldest) {
+                if (!meshNodes->at(i).is_favorite && !meshNodes->at(i).is_ignored && meshNodes->at(i).last_heard < oldest) {
                     oldest = meshNodes->at(i).last_heard;
                     oldestIndex = i;
                 }
                 // The oldest "boring" node
-                if (!meshNodes->at(i).is_favorite && meshNodes->at(i).user.public_key.size == 0 &&
+                if (!meshNodes->at(i).is_favorite && !meshNodes->at(i).is_ignored && meshNodes->at(i).user.public_key.size == 0 &&
                     meshNodes->at(i).last_heard < oldestBoring) {
                     oldestBoring = meshNodes->at(i).last_heard;
                     oldestBoringIndex = i;
