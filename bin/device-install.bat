@@ -53,7 +53,7 @@ IF EXIST %FILENAME% IF x%FILENAME:update=%==x%FILENAME% (
         %ESPTOOL_CMD% --baud 115200 write_flash 0x260000 bleota-s3.bin
     )
     IF %WEB_APP%==1 (
-        for %%f in (littlefsweb-*.bin) do (
+        for %%f in (littlefswebui-*.bin) do (
             %ESPTOOL_CMD% --baud 115200 write_flash 0x300000 %%f
         )
     ) else (
