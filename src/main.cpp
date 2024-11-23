@@ -1220,7 +1220,7 @@ void loop()
     }
 }
 #endif
-#ifdef CONFIG_IDF_TARGET_ESP32C6
+#if !defined(CONFIG_AUTOSTART_ARDUINO) && (ESP_IDF_VERSION_MAJOR * 100 + ESP_IDF_VERSION_MINOR * 10 + ESP_IDF_VERSION_PATCH) > 514
 // Define app_main to bridge Arduino and ESP-IDF
 extern "C" void app_main(void)
 {
