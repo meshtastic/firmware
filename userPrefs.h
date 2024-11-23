@@ -72,16 +72,17 @@ static unsigned char icon_bits[] = {
 /*
  * PKI Admin keys.
  * If a Admin key is set with '{};'
- * then it will be ignored, a PKI key must have a size of 32.
+ * then it will be ignored, a PKI key must have a size of 32 byte.
  */
 /*
-#define USERPREFS_USE_ADMIN_KEY 1
-static unsigned char USERPREFS_ADMIN_KEY_0[] = {0xcd, 0xc0, 0xb4, 0x3c, 0x53, 0x24, 0xdf, 0x13, 0xca, 0x5a, 0xa6,
-                                                0x0c, 0x0d, 0xec, 0x85, 0x5a, 0x4c, 0xf6, 0x1a, 0x96, 0x04, 0x1a,
-                                                0x3e, 0xfc, 0xbb, 0x8e, 0x33, 0x71, 0xe5, 0xfc, 0xff, 0x3c};
-static unsigned char USERPREFS_ADMIN_KEY_1[] = {};
-static unsigned char USERPREFS_ADMIN_KEY_2[] = {};
+#define USERPREFS_USE_ADMIN_KEY_0 \
+    {                                                                                                                           \
+        0xcd, 0xc0, 0xb4, 0x3c, 0x53, 0x24, 0xdf, 0x13, 0xca, 0x5a, 0xa6, 0x0c, 0x0d, 0xec, 0x85, 0x5a, 0x4c, 0xf6, 0x1a, 0x96, \
+        0x04, 0x1a, 0x3e, 0xfc, 0xbb, 0x8e, 0x33, 0x71, 0xe5, 0xfc, 0xff, 0x3c                                                  \
+    };
 */
+// #define USERPREFS_USE_ADMIN_KEY_1 {};
+// #define USERPREFS_USE_ADMIN_KEY_2 {};
 
 /*
  * USERPREF_FIXED_GPS_LAT and USERPREF_FIXED_GPS_LON must be set, USERPREF_FIXED_GPS_ALT is optional
