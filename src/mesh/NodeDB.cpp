@@ -518,7 +518,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #ifdef RAK4630
     config.display.wake_on_tap_or_motion = true;
 #endif
-#ifdef T_WATCH_S3
+#if defined(T_WATCH_S3) || defined(SENSECAP_INDICATOR)
     config.display.screen_on_secs = 30;
     config.display.wake_on_tap_or_motion = true;
 #endif
@@ -542,7 +542,7 @@ void NodeDB::initConfigIntervals()
 
     config.display.screen_on_secs = default_screen_on_secs;
 
-#if defined(T_WATCH_S3) || defined(T_DECK) || defined(RAK14014)
+#if defined(T_WATCH_S3) || defined(T_DECK) || defined(RAK14014) || defined(SENSECAP_INDICATOR)
     config.power.is_power_saving = true;
     config.display.screen_on_secs = 30;
     config.power.wait_bluetooth_secs = 30;
