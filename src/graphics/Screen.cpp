@@ -396,7 +396,7 @@ static void drawBattery(OLEDDisplay *display, int16_t x, int16_t y, uint8_t *img
     display->drawFastImage(x, y, 16, 8, imgBuffer);
 }
 
-#ifdef T_WATCH_S3
+#if defined(DISPLAY_CLOCK_FRAME)
 
 void Screen::drawWatchFaceToggleButton(OLEDDisplay *display, int16_t x, int16_t y, bool digitalMode, float scale)
 {
@@ -2068,7 +2068,7 @@ void Screen::setFrames(FrameFocus focus)
         focus = FOCUS_FAULT; // Change our "focus" parameter, to ensure we show the fault frame
     }
 
-#ifdef T_WATCH_S3
+#if defined(DISPLAY_CLOCK_FRAME)
     normalFrames[numframes++] = screen->digitalWatchFace ? &Screen::drawDigitalClockFrame : &Screen::drawAnalogClockFrame;
 #endif
 
@@ -2699,7 +2699,7 @@ int Screen::handleUIFrameEvent(const UIFrameEvent *event)
 int Screen::handleInputEvent(const InputEvent *event)
 {
 
-#ifdef T_WATCH_S3
+#if defined(DISPLAY_CLOCK_FRAME)
     // For the T-Watch, intercept touches to the 'toggle digital/analog watch face' button
     uint8_t watchFaceFrame = error_code ? 1 : 0;
 
