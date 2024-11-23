@@ -25,6 +25,7 @@
 #include "Sensor/BMP085Sensor.h"
 #include "Sensor/BMP280Sensor.h"
 #include "Sensor/BMP3XXSensor.h"
+#include "Sensor/CGRadSensSensor.h"
 #include "Sensor/DFRobotLarkSensor.h"
 #include "Sensor/LPS22HBSensor.h"
 #include "Sensor/MCP9808Sensor.h"
@@ -38,7 +39,6 @@
 #include "Sensor/T1000xSensor.h"
 #include "Sensor/TSL2591Sensor.h"
 #include "Sensor/VEML7700Sensor.h"
-#include "Sensor/CGRadSensSensor.h"
 
 BMP085Sensor bmp085Sensor;
 BMP280Sensor bmp280Sensor;
@@ -214,7 +214,8 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
     // Display "Env. From: ..." on its own
     display->drawString(x, y, "Env. From: " + String(lastSender) + "(" + String(agoSecs) + "s)");
 
-    if (lastMeasurement.variant.environment_metrics.has_temperature || lastMeasurement.variant.environment_metrics.has_relative_humidity) {
+    if (lastMeasurement.variant.environment_metrics.has_temperature ||
+        lastMeasurement.variant.environment_metrics.has_relative_humidity) {
         String last_temp = String(lastMeasurement.variant.environment_metrics.temperature, 0) + "°C";
         if (moduleConfig.telemetry.environment_display_fahrenheit) {
             last_temp =
@@ -253,7 +254,6 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
     if (lastMeasurement.variant.environment_metrics.radiation != 0)
         display->drawString(x, y += _fontHeight(FONT_SMALL),
                             "Radiation: " + String(lastMeasurement.variant.environment_metrics.radiation, 2) + "µR/h");
-
 }
 
 bool EnvironmentTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *t)

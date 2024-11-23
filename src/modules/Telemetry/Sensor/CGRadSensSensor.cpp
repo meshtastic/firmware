@@ -9,8 +9,8 @@
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "CGRadSensSensor.h"
 #include "TelemetrySensor.h"
-#include <typeinfo>
 #include <Wire.h>
+#include <typeinfo>
 
 CGRadSensSensor::CGRadSensSensor() : TelemetrySensor(meshtastic_TelemetrySensorType_RADSENS, "RadSens") {}
 
@@ -45,7 +45,8 @@ float CGRadSensSensor::getStaticRadiation()
     _wire->beginTransmission(_addr); // Transfer data to addr.
     _wire->write(0x06);              // Radiation intensity (static period T = 500 sec)
     if (_wire->endTransmission() == 0) {
-       if (_wire->requestFrom(_addr, (uint8_t)3)) { ; // Request 3 bytes
+        if (_wire->requestFrom(_addr, (uint8_t)3)) {
+            ; // Request 3 bytes
             data = _wire->read();
             data <<= 8;
             data |= _wire->read();
@@ -56,7 +57,7 @@ float CGRadSensSensor::getStaticRadiation()
             // Register 0x06 contains the reading in 0.1 * μR / h
             float microRadPerHr = float(data) / 10.0;
             return microRadPerHr;
-        } 
+        }
     }
     return -1.0;
 }
