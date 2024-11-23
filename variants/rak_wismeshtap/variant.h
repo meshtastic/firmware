@@ -306,7 +306,7 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 #define SCREEN_TOUCH_INT WB_IO6
 
 #define CANNED_MESSAGE_MODULE_ENABLE 1
-
+#define USE_VIRTUAL_KEYBOARD 1
 /*----------------------------------------------------------------------------
  *        Arduino objects - C++ only
  *----------------------------------------------------------------------------*/
