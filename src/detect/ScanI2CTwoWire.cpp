@@ -314,13 +314,27 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 break;
             case INA3221_ADDR:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFE), 2);
-                LOG_DEBUG("Register MFG_UID: 0x%x", registerValue);
+                LOG_DEBUG("Register MFG_UID FE: 0x%x", registerValue);
                 if (registerValue == 0x5449) {
                     LOG_INFO("INA3221 sensor found at address 0x%x", (uint8_t)addr.address);
                     type = INA3221;
                 } else {
-                    LOG_INFO("DFRobot Lark weather station found at address 0x%x", (uint8_t)addr.address);
-                    type = DFROBOT_LARK;
+                    /* check the first 2 bytes of the 6 byte response register
+                    LARK FW 1.0 should return:
+                    RESPONSE_STATUS STATUS_SUCCESS (0x53)
+                    RESPONSE_CMD CMD_GET_VERSION (0x05)
+                    RESPONSE_LEN_L 0x02
+                    RESPONSE_LEN_H 0x00
+                    RESPONSE_PAYLOAD 0x01
+                    RESPONSE_PAYLOAD+1 0x00
+                    */
+                    registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x05), 2);
+                    LOG_DEBUG("Register MFG_UID 05: 0x%x", registerValue);
+                    if (registerValue == 0x5305) {
+                        LOG_INFO("DFRobot Lark weather station found at address 0x%x", (uint8_t)addr.address);
+                        type = DFROBOT_LARK;
+                    }
+                    // else: probably a RAK12500/UBLOX GPS on I2C
                 }
                 break;
             case MCP9808_ADDR:
