@@ -7,7 +7,9 @@
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
 
 #include "../concurrency/OSThread.h"
+#ifdef HAS_BMA423
 #include "BMA423Sensor.h"
+#endif
 #include "BMX160Sensor.h"
 #include "ICM20948Sensor.h"
 #include "LIS3DHSensor.h"
@@ -79,9 +81,11 @@ class AccelerometerThread : public concurrency::OSThread
 #endif
 
         switch (device.type) {
+#ifdef HAS_BMA423
         case ScanI2C::DeviceType::BMA423:
             sensor = new BMA423Sensor(device);
             break;
+#endif
         case ScanI2C::DeviceType::MPU6050:
             sensor = new MPU6050Sensor(device);
             break;
