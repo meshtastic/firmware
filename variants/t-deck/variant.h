@@ -1,3 +1,6 @@
+#ifndef HAS_TFT // for TFT-UI the definitions are in device-ui
+#define BUTTON_PIN 0
+
 // ST7789 TFT LCD
 #define ST7789_CS 12
 #define ST7789_RS 11  // DC
@@ -19,6 +22,7 @@
 #define SCREEN_ROTATE
 #define SCREEN_TRANSITION_FRAMERATE 5
 #define BRIGHTNESS_DEFAULT 130 // Medium Low Brightness
+#endif
 
 #define HAS_TOUCHSCREEN 1
 #define SCREEN_TOUCH_INT 16
@@ -26,11 +30,6 @@
 #define TOUCH_SLAVE_ADDRESS 0x5D // GT911
 
 #define SLEEP_TIME 120
-
-#ifndef HAS_TFT
-#define BUTTON_PIN 0
-// #define BUTTON_NEED_PULLUP
-#endif
 
 #define GPS_RX_PIN 44
 #define GPS_TX_PIN 43
