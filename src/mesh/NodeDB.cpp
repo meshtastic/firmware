@@ -62,6 +62,16 @@ meshtastic_DeviceUIConfig uiconfig{.screen_brightness = 153, .screen_timeout = 3
 meshtastic_LocalModuleConfig moduleConfig;
 meshtastic_ChannelFile channelFile;
 
+#ifdef USERPREFS_USE_ADMIN_KEY_0
+static unsigned char userprefs_admin_key_0[] = USERPREFS_USE_ADMIN_KEY_0;
+#endif
+#ifdef USERPREFS_USE_ADMIN_KEY_1
+static unsigned char userprefs_admin_key_1[] = USERPREFS_USE_ADMIN_KEY_1;
+#endif
+#ifdef USERPREFS_USE_ADMIN_KEY_2
+static unsigned char userprefs_admin_key_2[] = USERPREFS_USE_ADMIN_KEY_2;
+#endif
+
 bool meshtastic_DeviceState_callback(pb_istream_t *istream, pb_ostream_t *ostream, const pb_field_iter_t *field)
 {
     if (ostream) {
@@ -115,7 +125,7 @@ NodeDB::NodeDB()
     uint32_t channelFileCRC = crc32Buffer(&channelFile, sizeof(channelFile));
 
     int saveWhat = 0;
-    bool hasUniqueId = false;
+    // bool hasUniqueId = false;
     // Get device unique id
 #if defined(ARCH_ESP32) && defined(ESP_EFUSE_OPTIONAL_UNIQUE_ID)
     uint32_t unique_id[4];
@@ -414,32 +424,37 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #else
     config.lora.ignore_mqtt = false;
 #endif
-#ifdef USERPREFS_USE_ADMIN_KEY
     // Initialize admin_key_count to zero
     byte numAdminKeys = 0;
 
+#ifdef USERPREFS_USE_ADMIN_KEY_0
     // Check if USERPREFS_ADMIN_KEY_0 is non-empty
-    if (sizeof(USERPREFS_ADMIN_KEY_0) > 0) {
-        memcpy(config.security.admin_key[numAdminKeys].bytes, USERPREFS_ADMIN_KEY_0, 32);
-        config.security.admin_key[numAdminKeys].size = 32;
+    if (sizeof(userprefs_admin_key_0) > 0) {
+        memcpy(config.security.admin_key[0].bytes, userprefs_admin_key_0, 32);
+        config.security.admin_key[0].size = 32;
         numAdminKeys++;
     }
-
-    // Check if USERPREFS_ADMIN_KEY_1 is non-empty
-    if (sizeof(USERPREFS_ADMIN_KEY_1) > 0) {
-        memcpy(config.security.admin_key[numAdminKeys].bytes, USERPREFS_ADMIN_KEY_1, 32);
-        config.security.admin_key[numAdminKeys].size = 32;
-        numAdminKeys++;
-    }
-
-    // Check if USERPREFS_ADMIN_KEY_2 is non-empty
-    if (sizeof(USERPREFS_ADMIN_KEY_2) > 0) {
-        memcpy(config.security.admin_key[config.security.admin_key_count].bytes, USERPREFS_ADMIN_KEY_2, 32);
-        config.security.admin_key[config.security.admin_key_count].size = 32;
-        numAdminKeys++;
-    }
-    config.security.admin_key_count = numAdminKeys;
 #endif
+
+#ifdef USERPREFS_USE_ADMIN_KEY_1
+    // Check if USERPREFS_ADMIN_KEY_1 is non-empty
+    if (sizeof(userprefs_admin_key_1) > 0) {
+        memcpy(config.security.admin_key[1].bytes, userprefs_admin_key_1, 32);
+        config.security.admin_key[1].size = 32;
+        numAdminKeys++;
+    }
+#endif
+
+#ifdef USERPREFS_USE_ADMIN_KEY_2
+    // Check if USERPREFS_ADMIN_KEY_2 is non-empty
+    if (sizeof(userprefs_admin_key_2) > 0) {
+        memcpy(config.security.admin_key[2].bytes, userprefs_admin_key_2, 32);
+        config.security.admin_key[2].size = 32;
+        numAdminKeys++;
+    }
+#endif
+    config.security.admin_key_count = numAdminKeys;
+
     if (shouldPreserveKey) {
         config.security.private_key.size = 32;
         memcpy(config.security.private_key.bytes, private_key_temp, config.security.private_key.size);
@@ -511,7 +526,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #ifdef RAK4630
     config.display.wake_on_tap_or_motion = true;
 #endif
-#ifdef T_WATCH_S3
+#if defined(T_WATCH_S3) || defined(SENSECAP_INDICATOR)
     config.display.screen_on_secs = 30;
     config.display.wake_on_tap_or_motion = true;
 #endif
@@ -535,7 +550,7 @@ void NodeDB::initConfigIntervals()
 
     config.display.screen_on_secs = default_screen_on_secs;
 
-#if defined(T_WATCH_S3) || defined(T_DECK) || defined(MESH_TAB) || defined(RAK14014)
+#if defined(T_WATCH_S3) || defined(T_DECK) || defined(MESH_TAB) || defined(SENSECAP_INDICATOR) || defined(RAK14014)
     config.power.is_power_saving = true;
     config.display.screen_on_secs = 30;
     config.power.wait_bluetooth_secs = 30;
@@ -896,6 +911,54 @@ void NodeDB::loadFromDisk()
             LOG_INFO("Loaded saved config version %d", config.version);
         }
     }
+
+    // Make sure we load hard coded admin keys even when the configuration file has none.
+    // Initialize admin_key_count to zero
+    byte numAdminKeys = 0;
+    uint16_t sum = 0;
+#ifdef USERPREFS_USE_ADMIN_KEY_0
+    for (uint8_t b = 0; b < 32; b++) {
+        sum += config.security.admin_key[0].bytes[b];
+    }
+    if (sum == 0) {
+        numAdminKeys += 1;
+        LOG_INFO("Admin 0 key zero. Loading hard coded key from user preferences.");
+        memcpy(config.security.admin_key[0].bytes, userprefs_admin_key_0, 32);
+        config.security.admin_key[0].size = 32;
+        config.security.admin_key_count = numAdminKeys;
+        saveToDisk(SEGMENT_CONFIG);
+    }
+#endif
+
+#ifdef USERPREFS_USE_ADMIN_KEY_1
+    sum = 0;
+    for (uint8_t b = 0; b < 32; b++) {
+        sum += config.security.admin_key[1].bytes[b];
+    }
+    if (sum == 0) {
+        numAdminKeys += 1;
+        LOG_INFO("Admin 1 key zero. Loading hard coded key from user preferences.");
+        memcpy(config.security.admin_key[1].bytes, userprefs_admin_key_1, 32);
+        config.security.admin_key[1].size = 32;
+        config.security.admin_key_count = numAdminKeys;
+        saveToDisk(SEGMENT_CONFIG);
+    }
+#endif
+
+#ifdef USERPREFS_USE_ADMIN_KEY_2
+    sum = 0;
+    for (uint8_t b = 0; b < 32; b++) {
+        sum += config.security.admin_key[2].bytes[b];
+    }
+    if (sum == 0) {
+        numAdminKeys += 1;
+        LOG_INFO("Admin 2 key zero. Loading hard coded key from user preferences.");
+        memcpy(config.security.admin_key[2].bytes, userprefs_admin_key_2, 32);
+        config.security.admin_key[2].size = 32;
+        config.security.admin_key_count = numAdminKeys;
+        saveToDisk(SEGMENT_CONFIG);
+    }
+#endif
 
     state = loadProto(moduleConfigFileName, meshtastic_LocalModuleConfig_size, sizeof(meshtastic_LocalModuleConfig),
                       &meshtastic_LocalModuleConfig_msg, &moduleConfig);
