@@ -314,19 +314,34 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 break;
             case INA3221_ADDR:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFE), 2);
-                LOG_DEBUG("Register MFG_UID: 0x%x", registerValue);
+                LOG_DEBUG("Register MFG_UID FE: 0x%x", registerValue);
                 if (registerValue == 0x5449) {
                     LOG_INFO("INA3221 sensor found at address 0x%x", (uint8_t)addr.address);
                     type = INA3221;
                 } else {
-                    LOG_INFO("DFRobot Lark weather station found at address 0x%x", (uint8_t)addr.address);
-                    type = DFROBOT_LARK;
+                    /* check the first 2 bytes of the 6 byte response register
+                    LARK FW 1.0 should return:
+                    RESPONSE_STATUS STATUS_SUCCESS (0x53)
+                    RESPONSE_CMD CMD_GET_VERSION (0x05)
+                    RESPONSE_LEN_L 0x02
+                    RESPONSE_LEN_H 0x00
+                    RESPONSE_PAYLOAD 0x01
+                    RESPONSE_PAYLOAD+1 0x00
+                    */
+                    registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x05), 2);
+                    LOG_DEBUG("Register MFG_UID 05: 0x%x", registerValue);
+                    if (registerValue == 0x5305) {
+                        LOG_INFO("DFRobot Lark weather station found at address 0x%x", (uint8_t)addr.address);
+                        type = DFROBOT_LARK;
+                    }
+                    // else: probably a RAK12500/UBLOX GPS on I2C
                 }
                 break;
             case MCP9808_ADDR:
                 // We need to check for STK8BAXX first, since register 0x07 is new data flag for the z-axis and can produce some
                 // weird result. and register 0x00 doesn't seems to be colliding with MCP9808 and LIS3DH chips.
                 {
+#ifdef HAS_STK8XXX
                     // Check register 0x00 for 0x8700 response to ID STK8BA53 chip.
                     registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 2);
                     if (registerValue == 0x8700) {
@@ -334,6 +349,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                         LOG_INFO("STK8BAXX accelerometer found");
                         break;
                     }
+#endif
 
                     // Check register 0x07 for 0x0400 response to ID MCP9808 chip.
                     registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x07), 2);
@@ -459,6 +475,16 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 } else {
                     type = MPU6050;
                     LOG_INFO("MPU6050 accelerometer found");
+                    break;
+                }
+                break;
+
+            case CGRADSENS_ADDR:
+                // Register 0x00 of the RadSens sensor contains is product identifier 0x7D
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 1);
+                if (registerValue == 0x7D) {
+                    type = CGRADSENS;
+                    LOG_INFO("ClimateGuard RadSens Geiger-Muller Sensor found");
                     break;
                 }
                 break;
