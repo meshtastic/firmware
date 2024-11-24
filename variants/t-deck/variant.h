@@ -73,6 +73,7 @@
 #define DAC_I2S_BCK 7
 #define DAC_I2S_WS 5
 #define DAC_I2S_DOUT 6
+#define DAC_I2S_MCLK 21 // GPIO lrck mic
 
 // LoRa
 #define USE_SX1262

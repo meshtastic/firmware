@@ -271,13 +271,8 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 
 #define HAS_RTC 1
 
-#define HAS_ETHERNET 1
-
 #define RAK_4631 1
 
-#define PIN_ETHERNET_RESET 21
-#define PIN_ETHERNET_SS PIN_EINK_CS
-#define ETH_SPI_PORT SPI1
 #define AQ_SET_PIN 10
 
 #ifdef __cplusplus
@@ -311,7 +306,7 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 #define SCREEN_TOUCH_INT WB_IO6
 
 #define CANNED_MESSAGE_MODULE_ENABLE 1
-
+#define USE_VIRTUAL_KEYBOARD 1
 /*----------------------------------------------------------------------------
  *        Arduino objects - C++ only
  *----------------------------------------------------------------------------*/

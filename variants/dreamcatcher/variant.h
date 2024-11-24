@@ -60,6 +60,7 @@
 #define DAC_I2S_BCK 21
 #define DAC_I2S_WS 9
 #define DAC_I2S_DOUT 48
+#define DAC_I2S_MCLK 44
 
 #define BIAS_T_ENABLE 7 // needs to be low
 #define BIAS_T_VALUE 0
