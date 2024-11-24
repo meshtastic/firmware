@@ -19,7 +19,7 @@ PacketHistory::PacketHistory()
 bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpdate)
 {
     if (p->id == 0) {
-        LOG_DEBUG("Ignoring message with zero id");
+        LOG_DEBUG("Ignore message with zero id");
         return false; // Not a floodable message ID, so we don't care
     }
 

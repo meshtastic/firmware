@@ -243,7 +243,7 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 // Therefore must be 1 to keep peripherals powered
 // Power is on the controllable 3V3_S rail
 // #define PIN_GPS_RESET (34)
-#define PIN_GPS_EN PIN_3V3_EN
+// #define PIN_GPS_EN PIN_3V3_EN
 #define PIN_GPS_PPS (17) // Pulse per second input from the GPS
 
 #define GPS_RX_PIN PIN_SERIAL1_RX
@@ -271,13 +271,8 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 
 #define HAS_RTC 1
 
-#define HAS_ETHERNET 1
-
 #define RAK_4631 1
 
-#define PIN_ETHERNET_RESET 21
-#define PIN_ETHERNET_SS PIN_EINK_CS
-#define ETH_SPI_PORT SPI1
 #define AQ_SET_PIN 10
 
 #ifdef __cplusplus
@@ -311,7 +306,7 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 #define SCREEN_TOUCH_INT WB_IO6
 
 #define CANNED_MESSAGE_MODULE_ENABLE 1
-
+#define USE_VIRTUAL_KEYBOARD 1
 /*----------------------------------------------------------------------------
  *        Arduino objects - C++ only
  *----------------------------------------------------------------------------*/

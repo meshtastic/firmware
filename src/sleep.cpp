@@ -71,7 +71,7 @@ void setCPUFast(bool on)
          * (Added: Dec 23, 2021 by Jm Casler)
          */
 #ifndef CONFIG_IDF_TARGET_ESP32C3
-        LOG_DEBUG("Setting CPU to 240MHz because WiFi is in use.");
+        LOG_DEBUG("Set CPU to 240MHz because WiFi is in use");
         setCpuFrequencyMhz(240);
 #endif
         return;
@@ -140,7 +140,7 @@ void initDeepSleep()
 #if SOC_RTCIO_HOLD_SUPPORTED
     // If waking from sleep, release any and all RTC GPIOs
     if (wakeCause != ESP_SLEEP_WAKEUP_UNDEFINED) {
-        LOG_DEBUG("Disabling any holds on RTC IO pads");
+        LOG_DEBUG("Disable any holds on RTC IO pads");
         for (uint8_t i = 0; i <= GPIO_NUM_MAX; i++) {
             if (rtc_gpio_is_valid_gpio((gpio_num_t)i))
                 rtc_gpio_hold_dis((gpio_num_t)i);
@@ -187,12 +187,12 @@ static void waitEnterSleep(bool skipPreflight = false)
     notifySleep.notifyObservers(NULL);
 }
 
-void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
+void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveNodeDb = false)
 {
     if (INCLUDE_vTaskSuspend && (msecToWake == portMAX_DELAY)) {
-        LOG_INFO("Entering deep sleep forever");
+        LOG_INFO("Enter deep sleep forever");
     } else {
-        LOG_INFO("Entering deep sleep for %u seconds", msecToWake / 1000);
+        LOG_INFO("Enter deep sleep for %u seconds", msecToWake / 1000);
     }
 
     // not using wifi yet, but once we are this is needed to shutoff the radio hw
@@ -219,7 +219,9 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
 
     screen->doDeepSleep(); // datasheet says this will draw only 10ua
 
-    nodeDB->saveToDisk();
+    if (!skipSaveNodeDb) {
+        nodeDB->saveToDisk();
+    }
 
 #ifdef PIN_POWER_EN
     pinMode(PIN_POWER_EN, INPUT); // power off peripherals
@@ -287,7 +289,7 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
         // No need to turn this off if the power draw in sleep mode really is just 0.2uA and turning it off would
         // leave floating input for the IRQ line
         // If we want to leave the radio receiving in would be 11.5mA current draw, but most of the time it is just waiting
-        // in its sequencer (true?) so the average power draw should be much lower even if we were listinging for packets
+        // in its sequencer (true?) so the average power draw should be much lower even if we were listening for packets
         // all the time.
         PMU->setChargingLedMode(XPOWERS_CHG_LED_OFF);
 
@@ -305,7 +307,7 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
             PMU->disablePowerOutput(XPOWERS_LDO2); // lora radio power channel
         }
         if (msecToWake == portMAX_DELAY) {
-            LOG_INFO("PMU shutdown.");
+            LOG_INFO("PMU shutdown");
             console->flush();
             PMU->shutdown();
         }
@@ -359,7 +361,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     // never tries to go to sleep if the user is using the API
     // gpio_wakeup_enable((gpio_num_t)SERIAL0_RX_GPIO, GPIO_INTR_LOW_LEVEL);
 
-    // doesn't help - I think the USB-UART chip losing power is pulling the signal llow
+    // doesn't help - I think the USB-UART chip losing power is pulling the signal low
     // gpio_pullup_en((gpio_num_t)SERIAL0_RX_GPIO);
 
     // alas - can only work if using the refclock, which is limited to about 9600 bps

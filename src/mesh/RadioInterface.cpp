@@ -140,7 +140,7 @@ const RegionInfo regions[] = {
         Philippines
                 433 - 434.7 MHz <10 mW erp, NTC approved device required
                 868 - 869.4 MHz <25 mW erp, NTC approved device required
-                915 - 918 MHz <250 mW EIRP, no external antennna allowed
+                915 - 918 MHz <250 mW EIRP, no external antenna allowed
                 https://github.com/meshtastic/firmware/issues/4948#issuecomment-2394926135
     */
 
@@ -346,7 +346,7 @@ bool RadioInterface::reconfigure()
 
 bool RadioInterface::init()
 {
-    LOG_INFO("Starting meshradio init...");
+    LOG_INFO("Start meshradio init");
 
     configChangedObserver.observe(&service->configChanged);
     preflightSleepObserver.observe(&preflightSleep);
@@ -494,7 +494,7 @@ void RadioInterface::applyModemConfig()
         }
 
         if ((myRegion->freqEnd - myRegion->freqStart) < bw / 1000) {
-            static const char *err_string = "Regional frequency range is smaller than bandwidth. Falling back to default preset.";
+            static const char *err_string = "Regional frequency range is smaller than bandwidth. Fall back to default preset";
             LOG_ERROR(err_string);
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
@@ -578,7 +578,7 @@ void RadioInterface::limitPower()
         maxPower = myRegion->powerLimit;
 
     if ((power > maxPower) && !devicestate.owner.is_licensed) {
-        LOG_INFO("Lowering transmit power because of regulatory limits");
+        LOG_INFO("Lower transmit power because of regulatory limits");
         power = maxPower;
     }
 
@@ -598,10 +598,8 @@ size_t RadioInterface::beginSending(meshtastic_MeshPacket *p)
 {
     assert(!sendingPacket);
 
-    // LOG_DEBUG("sending queued packet on mesh (txGood=%d,rxGood=%d,rxBad=%d)", rf95.txGood(), rf95.rxGood(), rf95.rxBad());
+    // LOG_DEBUG("Send queued packet on mesh (txGood=%d,rxGood=%d,rxBad=%d)", rf95.txGood(), rf95.rxGood(), rf95.rxBad());
     assert(p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag); // It should have already been encoded by now
-
-    lastTxStart = millis();
 
     radioBuffer.header.from = p->from;
     radioBuffer.header.to = p->to;

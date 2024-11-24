@@ -20,6 +20,8 @@
 #include <ESPmDNS.h>
 #include <esp_wifi.h>
 static void WiFiEvent(WiFiEvent_t event);
+#elif defined(ARCH_RP2040)
+#include <SimpleMDNS.h>
 #endif
 
 #ifndef DISABLE_NTP
@@ -57,30 +59,36 @@ static void onNetworkConnected()
 {
     if (!APStartupComplete) {
         // Start web server
-        LOG_INFO("Starting WiFi network services");
+        LOG_INFO("Start WiFi network services");
 
-#ifdef ARCH_ESP32
         // start mdns
-        if (!MDNS.begin("Meshtastic")) {
+        if (
+#ifdef ARCH_RP2040
+            !moduleConfig.mqtt.enabled && // MDNS is not supported when MQTT is enabled on ARCH_RP2040
+#endif
+            !MDNS.begin("Meshtastic")) {
             LOG_ERROR("Error setting up MDNS responder!");
         } else {
-            LOG_INFO("mDNS responder started");
             LOG_INFO("mDNS Host: Meshtastic.local");
+#ifdef ARCH_ESP32
             MDNS.addService("http", "tcp", 80);
             MDNS.addService("https", "tcp", 443);
-        }
-#else // ESP32 handles this in WiFiEvent
-        LOG_INFO("Obtained IP address: %s", WiFi.localIP().toString().c_str());
+#elif defined(ARCH_RP2040)
+            // ARCH_RP2040 does not support HTTPS, create a "meshtastic" service
+            MDNS.addService("meshtastic", "tcp", 4403);
+            // ESP32 handles this in WiFiEvent
+            LOG_INFO("Obtained IP address: %s", WiFi.localIP().toString().c_str());
 #endif
+        }
 
 #ifndef DISABLE_NTP
-        LOG_INFO("Starting NTP time client");
+        LOG_INFO("Start NTP time client");
         timeClient.begin();
         timeClient.setUpdateInterval(60 * 60); // Update once an hour
 #endif
 
         if (config.network.rsyslog_server[0]) {
-            LOG_INFO("Starting Syslog client");
+            LOG_INFO("Start Syslog client");
             // Defaults
             int serverPort = 514;
             const char *serverAddr = config.network.rsyslog_server;
@@ -129,7 +137,7 @@ static int32_t reconnectWiFi()
         // Make sure we clear old connection credentials
 #ifdef ARCH_ESP32
         WiFi.disconnect(false, true);
-#else
+#elif defined(ARCH_RP2040)
         WiFi.disconnect(false);
 #endif
         LOG_INFO("Reconnecting to WiFi access point %s", wifiName);
@@ -144,7 +152,7 @@ static int32_t reconnectWiFi()
 
 #ifndef DISABLE_NTP
     if (WiFi.isConnected() && (!Throttle::isWithinTimespanMs(lastrun_ntp, 43200000) || (lastrun_ntp == 0))) { // every 12 hours
-        LOG_DEBUG("Updating NTP time from %s", config.network.ntp_server);
+        LOG_DEBUG("Update NTP time from %s", config.network.ntp_server);
         if (timeClient.update()) {
             LOG_DEBUG("NTP Request Success - Setting RTCQualityNTP if needed");
 
@@ -193,7 +201,7 @@ void deinitWifi()
     if (isWifiAvailable()) {
 #ifdef ARCH_ESP32
         WiFi.disconnect(true, false);
-#else
+#elif defined(ARCH_RP2040)
         WiFi.disconnect(true);
 #endif
         WiFi.mode(WIFI_OFF);
@@ -229,15 +237,15 @@ bool initWifi()
 
             if (config.network.address_mode == meshtastic_Config_NetworkConfig_AddressMode_STATIC &&
                 config.network.ipv4_config.ip != 0) {
-#ifndef ARCH_RP2040
+#ifdef ARCH_ESP32
                 WiFi.config(config.network.ipv4_config.ip, config.network.ipv4_config.gateway, config.network.ipv4_config.subnet,
                             config.network.ipv4_config.dns);
-#else
+#elif defined(ARCH_RP2040)
                 WiFi.config(config.network.ipv4_config.ip, config.network.ipv4_config.dns, config.network.ipv4_config.gateway,
                             config.network.ipv4_config.subnet);
 #endif
             }
-#ifndef ARCH_RP2040
+#ifdef ARCH_ESP32
             WiFi.onEvent(WiFiEvent);
             WiFi.setAutoReconnect(true);
             WiFi.setSleep(false);
@@ -396,25 +404,25 @@ static void WiFiEvent(WiFiEvent_t event)
         LOG_INFO("SmartConfig: Send ACK done");
         break;
     case ARDUINO_EVENT_PROV_INIT:
-        LOG_INFO("Provisioning: Init");
+        LOG_INFO("Provision Init");
         break;
     case ARDUINO_EVENT_PROV_DEINIT:
-        LOG_INFO("Provisioning: Stopped");
+        LOG_INFO("Provision Stopped");
         break;
     case ARDUINO_EVENT_PROV_START:
-        LOG_INFO("Provisioning: Started");
+        LOG_INFO("Provision Started");
         break;
     case ARDUINO_EVENT_PROV_END:
-        LOG_INFO("Provisioning: End");
+        LOG_INFO("Provision End");
         break;
     case ARDUINO_EVENT_PROV_CRED_RECV:
-        LOG_INFO("Provisioning: Credentials received");
+        LOG_INFO("Provision Credentials received");
         break;
     case ARDUINO_EVENT_PROV_CRED_FAIL:
-        LOG_INFO("Provisioning: Credentials failed");
+        LOG_INFO("Provision Credentials failed");
         break;
     case ARDUINO_EVENT_PROV_CRED_SUCCESS:
-        LOG_INFO("Provisioning: Credentials success");
+        LOG_INFO("Provision Credentials success");
         break;
     default:
         break;

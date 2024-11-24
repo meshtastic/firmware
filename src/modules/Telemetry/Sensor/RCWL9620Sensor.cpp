@@ -24,7 +24,7 @@ void RCWL9620Sensor::setup() {}
 bool RCWL9620Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
     measurement->variant.environment_metrics.has_distance = true;
-    LOG_DEBUG("RCWL9620Sensor::getMetrics");
+    LOG_DEBUG("RCWL9620 getMetrics");
     measurement->variant.environment_metrics.distance = getDistance();
     return true;
 }
