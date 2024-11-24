@@ -53,16 +53,21 @@ static bool isPowered()
 
 static void sdsEnter()
 {
-    LOG_DEBUG("Enter state: SDS");
+    LOG_DEBUG("State: SDS");
     // FIXME - make sure GPS and LORA radio are off first - because we want close to zero current draw
-    doDeepSleep(Default::getConfiguredOrDefaultMs(config.power.sds_secs), false);
+    doDeepSleep(Default::getConfiguredOrDefaultMs(config.power.sds_secs), false, false);
 }
 
+static void lowBattSDSEnter()
+{
+    LOG_DEBUG("State: Lower batt SDS");
+    doDeepSleep(Default::getConfiguredOrDefaultMs(config.power.sds_secs), false, true);
+}
 extern Power *power;
 
 static void shutdownEnter()
 {
-    LOG_DEBUG("Enter state: SHUTDOWN");
+    LOG_DEBUG("State: SHUTDOWN");
     power->shutdown();
 }
 
@@ -105,7 +110,7 @@ static void lsIdle()
                 wakeCause2 = doLightSleep(100); // leave led on for 1ms
 
                 secsSlept += sleepTime;
-                // LOG_INFO("sleeping, flash led!");
+                // LOG_INFO("Sleep, flash led!");
                 break;
 
             case ESP_SLEEP_WAKEUP_UART:
@@ -137,7 +142,7 @@ static void lsIdle()
     } else {
         // Time to stop sleeping!
         ledBlink.set(false);
-        LOG_INFO("Reached ls_secs, servicing loop()");
+        LOG_INFO("Reached ls_secs, service loop()");
         powerFSM.trigger(EVENT_WAKE_TIMER);
     }
 #endif
@@ -150,7 +155,7 @@ static void lsExit()
 
 static void nbEnter()
 {
-    LOG_DEBUG("Enter state: NB");
+    LOG_DEBUG("State: NB");
     screen->setOn(false);
 #ifdef ARCH_ESP32
     // Only ESP32 should turn off bluetooth
@@ -168,7 +173,7 @@ static void darkEnter()
 
 static void serialEnter()
 {
-    LOG_DEBUG("Enter state: SERIAL");
+    LOG_DEBUG("State: SERIAL");
     setBluetoothEnable(false);
     screen->setOn(true);
     screen->print("Serial connected\n");
@@ -183,7 +188,7 @@ static void serialExit()
 
 static void powerEnter()
 {
-    // LOG_DEBUG("Enter state: POWER");
+    // LOG_DEBUG("State: POWER");
     if (!isPowered()) {
         // If we got here, we are in the wrong state - we should be in powered, let that state handle things
         LOG_INFO("Loss of power in Powered");
@@ -222,7 +227,7 @@ static void powerExit()
 
 static void onEnter()
 {
-    LOG_DEBUG("Enter state: ON");
+    LOG_DEBUG("State: ON");
     screen->setOn(true);
     setBluetoothEnable(true);
 }
@@ -242,11 +247,12 @@ static void screenPress()
 
 static void bootEnter()
 {
-    LOG_DEBUG("Enter state: BOOT");
+    LOG_DEBUG("State: BOOT");
 }
 
 State stateSHUTDOWN(shutdownEnter, NULL, NULL, "SHUTDOWN");
 State stateSDS(sdsEnter, NULL, NULL, "SDS");
+State stateLowBattSDS(lowBattSDSEnter, NULL, NULL, "SDS");
 State stateLS(lsEnter, lsIdle, lsExit, "LS");
 State stateNB(nbEnter, NULL, NULL, "NB");
 State stateDARK(darkEnter, NULL, NULL, "DARK");
@@ -291,12 +297,12 @@ void PowerFSM_setup()
                             "Press"); // Allow button to work while in serial API
 
     // Handle critically low power battery by forcing deep sleep
-    powerFSM.add_transition(&stateBOOT, &stateSDS, EVENT_LOW_BATTERY, NULL, "LowBat");
-    powerFSM.add_transition(&stateLS, &stateSDS, EVENT_LOW_BATTERY, NULL, "LowBat");
-    powerFSM.add_transition(&stateNB, &stateSDS, EVENT_LOW_BATTERY, NULL, "LowBat");
-    powerFSM.add_transition(&stateDARK, &stateSDS, EVENT_LOW_BATTERY, NULL, "LowBat");
-    powerFSM.add_transition(&stateON, &stateSDS, EVENT_LOW_BATTERY, NULL, "LowBat");
-    powerFSM.add_transition(&stateSERIAL, &stateSDS, EVENT_LOW_BATTERY, NULL, "LowBat");
+    powerFSM.add_transition(&stateBOOT, &stateLowBattSDS, EVENT_LOW_BATTERY, NULL, "LowBat");
+    powerFSM.add_transition(&stateLS, &stateLowBattSDS, EVENT_LOW_BATTERY, NULL, "LowBat");
+    powerFSM.add_transition(&stateNB, &stateLowBattSDS, EVENT_LOW_BATTERY, NULL, "LowBat");
+    powerFSM.add_transition(&stateDARK, &stateLowBattSDS, EVENT_LOW_BATTERY, NULL, "LowBat");
+    powerFSM.add_transition(&stateON, &stateLowBattSDS, EVENT_LOW_BATTERY, NULL, "LowBat");
+    powerFSM.add_transition(&stateSERIAL, &stateLowBattSDS, EVENT_LOW_BATTERY, NULL, "LowBat");
 
     // Handle being told to power off
     powerFSM.add_transition(&stateBOOT, &stateSHUTDOWN, EVENT_SHUTDOWN, NULL, "Shutdown");

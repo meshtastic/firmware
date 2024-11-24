@@ -148,13 +148,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define NAU7802_ADDR 0x2A
 #define MAX30102_ADDR 0x57
 #define MLX90614_ADDR_DEF 0x5A
+#define CGRADSENS_ADDR 0x66
 
 // -----------------------------------------------------------------------------
 // ACCELEROMETER
 // -----------------------------------------------------------------------------
 #define MPU6050_ADDR 0x68
-#define STK8BXX_ADR 0x18
-#define LIS3DH_ADR 0x18
+#define STK8BXX_ADDR 0x18
+#define LIS3DH_ADDR 0x18
+#define LIS3DH_ADDR_ALT 0x19
 #define BMA423_ADDR 0x19
 #define LSM6DS3_ADDR 0x6A
 #define BMX160_ADDR 0x69

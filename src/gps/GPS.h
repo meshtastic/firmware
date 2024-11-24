@@ -64,6 +64,95 @@ const char *getDOPString(uint32_t dop);
  */
 class GPS : private concurrency::OSThread
 {
+  public:
+    meshtastic_Position p = meshtastic_Position_init_default;
+
+    /** This is normally bound to config.position.gps_en_gpio but some rare boards (like heltec tracker) need more advanced
+     * implementations. Those boards will set this public variable to a custom implementation.
+     *
+     * Normally set by GPS::createGPS()
+     */
+    GpioVirtPin *enablePin = NULL;
+
+    virtual ~GPS();
+
+    /** We will notify this observable anytime GPS state has changed meaningfully */
+    Observable<const meshtastic::GPSStatus *> newStatus;
+
+    /**
+     * Returns true if we succeeded
+     */
+    virtual bool setup();
+
+    // re-enable the thread
+    void enable();
+
+    // Disable the thread
+    int32_t disable() override;
+
+    // toggle between enabled/disabled
+    void toggleGpsMode();
+
+    // Change the power state of the GPS - for power saving / shutdown
+    void setPowerState(GPSPowerState newState, uint32_t sleepMs = 0);
+
+    /// Returns true if we have acquired GPS lock.
+    virtual bool hasLock();
+
+    /// Returns true if there's valid data flow with the chip.
+    virtual bool hasFlow();
+
+    /// Return true if we are connected to a GPS
+    bool isConnected() const { return hasGPS; }
+
+    bool isPowerSaving() const { return config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED; }
+
+    // Empty the input buffer as quickly as possible
+    void clearBuffer();
+
+    virtual bool factoryReset();
+
+    // Creates an instance of the GPS class.
+    // Returns the new instance or null if the GPS is not present.
+    static GPS *createGps();
+
+    // Wake the GPS hardware - ready for an update
+    void up();
+
+    // Let the GPS hardware save power between updates
+    void down();
+
+  protected:
+    /// Record that we have a GPS
+    void setConnected();
+
+    /** Subclasses should look for serial rx characters here and feed it to their GPS parser
+     *
+     * Return true if we received a valid message from the GPS
+     */
+    virtual bool whileActive();
+
+    /**
+     * Perform any processing that should be done only while the GPS is awake and looking for a fix.
+     * Override this method to check for new locations
+     *
+     * @return true if we've acquired a time
+     */
+    virtual bool lookForTime();
+
+    /**
+     * Perform any processing that should be done only while the GPS is awake and looking for a fix.
+     * Override this method to check for new locations
+     *
+     * @return true if we've acquired a new location
+     */
+    virtual bool lookForLocation();
+
+    GnssModel_t gnssModel = GNSS_MODEL_UNKNOWN;
+
+  private:
+    GPS() : concurrency::OSThread("GPS") {}
+
     TinyGPSPlus reader;
     uint8_t fixQual = 0; // fix quality from GPGGA
     uint32_t lastChecksumFailCount = 0;
@@ -75,7 +164,6 @@ class GPS : private concurrency::OSThread
     TinyGPSCustom gsapdop;    // custom extract PDOP from GPGSA
     uint8_t fixType = 0;      // fix type from GPGSA
 #endif
-  private:
 #if GPS_BAUDRATE_FIXED
     // if GPS_BAUDRATE is specified in variant, only try that.
     const int serialSpeeds[1] = {GPS_BAUDRATE};
@@ -113,7 +201,6 @@ class GPS : private concurrency::OSThread
 
     CallbackObserver<GPS, void *> notifyDeepSleepObserver = CallbackObserver<GPS, void *>(this, &GPS::prepareDeepSleep);
 
-  public:
     /** If !NULL we will use this serial port to construct our GPS */
 #if defined(ARCH_RP2040)
     static SerialUART *_serial_gps;
@@ -167,53 +254,6 @@ class GPS : private concurrency::OSThread
 
     const char *ACK_SUCCESS_MESSAGE = "Get ack success!";
 
-    meshtastic_Position p = meshtastic_Position_init_default;
-
-    /** This is normally bound to config.position.gps_en_gpio but some rare boards (like heltec tracker) need more advanced
-     * implementations. Those boards will set this public variable to a custom implementation.
-     *
-     * Normally set by GPS::createGPS()
-     */
-    GpioVirtPin *enablePin = NULL;
-
-    GPS() : concurrency::OSThread("GPS") {}
-
-    virtual ~GPS();
-
-    /** We will notify this observable anytime GPS state has changed meaningfully */
-    Observable<const meshtastic::GPSStatus *> newStatus;
-
-    /**
-     * Returns true if we succeeded
-     */
-    virtual bool setup();
-
-    // re-enable the thread
-    void enable();
-
-    // Disable the thread
-    int32_t disable() override;
-
-    // toggle between enabled/disabled
-    void toggleGpsMode();
-
-    // Change the power state of the GPS - for power saving / shutdown
-    void setPowerState(GPSPowerState newState, uint32_t sleepMs = 0);
-
-    /// Returns true if we have acquired GPS lock.
-    virtual bool hasLock();
-
-    /// Returns true if there's valid data flow with the chip.
-    virtual bool hasFlow();
-
-    /// Return true if we are connected to a GPS
-    bool isConnected() const { return hasGPS; }
-
-    bool isPowerSaving() const { return config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED; }
-
-    // Empty the input buffer as quickly as possible
-    void clearBuffer();
-
     // Create a ublox packet for editing in memory
     uint8_t makeUBXPacket(uint8_t class_id, uint8_t msg_id, uint8_t payload_size, const uint8_t *msg);
     uint8_t makeCASPacket(uint8_t class_id, uint8_t msg_id, uint8_t payload_size, const uint8_t *msg);
@@ -229,59 +269,6 @@ class GPS : private concurrency::OSThread
 
     GPS_RESPONSE getACKCas(uint8_t class_id, uint8_t msg_id, uint32_t waitMillis);
 
-    virtual bool factoryReset();
-
-    // Creates an instance of the GPS class.
-    // Returns the new instance or null if the GPS is not present.
-    static GPS *createGps();
-
-    // Wake the GPS hardware - ready for an update
-    void up();
-
-    // Let the GPS hardware save power between updates
-    void down();
-
-  protected:
-    /**
-     * Perform any processing that should be done only while the GPS is awake and looking for a fix.
-     * Override this method to check for new locations
-     *
-     * @return true if we've acquired a time
-     */
-
-    /**
-     * Perform any processing that should be done only while the GPS is awake and looking for a fix.
-     * Override this method to check for new locations
-     *
-     * @return true if we've acquired a new location
-     */
-
-    /// Record that we have a GPS
-    void setConnected();
-
-    /** Subclasses should look for serial rx characters here and feed it to their GPS parser
-     *
-     * Return true if we received a valid message from the GPS
-     */
-    virtual bool whileActive();
-
-    /**
-     * Perform any processing that should be done only while the GPS is awake and looking for a fix.
-     * Override this method to check for new locations
-     *
-     * @return true if we've acquired a time
-     */
-    virtual bool lookForTime();
-
-    /**
-     * Perform any processing that should be done only while the GPS is awake and looking for a fix.
-     * Override this method to check for new locations
-     *
-     * @return true if we've acquired a new location
-     */
-    virtual bool lookForLocation();
-
-  private:
     /// Prepare the GPS for the cpu entering deep sleep, expect to be gone for at least 100s of msecs
     /// always returns 0 to indicate okay to sleep
     int prepareDeepSleep(void *unused);
@@ -320,9 +307,6 @@ class GPS : private concurrency::OSThread
     uint8_t fixeddelayCtr = 0;
 
     const char *powerStateToString();
-
-  protected:
-    GnssModel_t gnssModel = GNSS_MODEL_UNKNOWN;
 };
 
 extern GPS *gps;

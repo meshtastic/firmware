@@ -403,19 +403,19 @@ int PiWebServerThread::CreateSSLCertificate()
     X509 *x509 = NULL;
 
     if (generate_rsa_key(&pkey) != 0) {
-        LOG_ERROR("Error generating RSA-Key.");
+        LOG_ERROR("Error generating RSA-Key");
         return 1;
     }
 
     if (generate_self_signed_x509(pkey, &x509) != 0) {
-        LOG_ERROR("Error generating of X509-Certificat.");
+        LOG_ERROR("Error generating X509-Cert");
         return 2;
     }
 
     // Ope file to write private key file
     FILE *pkey_file = fopen("private_key.pem", "wb");
     if (!pkey_file) {
-        LOG_ERROR("Error opening private key file.");
+        LOG_ERROR("Error opening private key file");
         return 3;
     }
     // write private key file
@@ -425,7 +425,7 @@ int PiWebServerThread::CreateSSLCertificate()
     // open Certificate file
     FILE *x509_file = fopen("certificate.pem", "wb");
     if (!x509_file) {
-        LOG_ERROR("Error opening certificate.");
+        LOG_ERROR("Error opening cert");
         return 4;
     }
     // write cirtificate
@@ -434,7 +434,7 @@ int PiWebServerThread::CreateSSLCertificate()
 
     EVP_PKEY_free(pkey);
     X509_free(x509);
-    LOG_INFO("Create SSL Certifictate -certificate.pem- succesfull ");
+    LOG_INFO("Create SSL Cert -certificate.pem- succesfull ");
     return 0;
 }
 
@@ -453,9 +453,9 @@ PiWebServerThread::PiWebServerThread()
 
     if (settingsMap[webserverport] != 0) {
         webservport = settingsMap[webserverport];
-        LOG_INFO("Using webserver port from yaml config. %i ", webservport);
+        LOG_INFO("Use webserver port from yaml config %i ", webservport);
     } else {
-        LOG_INFO("Webserver port in yaml config set to 0, so defaulting to port 443.");
+        LOG_INFO("Webserver port in yaml config set to 0, defaulting to port 443");
         webservport = 443;
     }
 
@@ -464,7 +464,7 @@ PiWebServerThread::PiWebServerThread()
         LOG_ERROR("Webserver couldn't be started, abort execution");
     } else {
 
-        LOG_INFO("Webserver started ....");
+        LOG_INFO("Webserver started");
         u_map_init(&configWeb.mime_types);
         u_map_put(&configWeb.mime_types, "*", "application/octet-stream");
         u_map_put(&configWeb.mime_types, ".html", "text/html");
