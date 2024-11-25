@@ -479,7 +479,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             }
         } */
 
-        if (numbytes + MESHTASTIC_HEADER_LENGTH > MAX_LORA_PAYLOAD_LEN)
+        if (numbytes > meshtastic_Constants_DATA_PAYLOAD_LEN)
             return meshtastic_Routing_Error_TOO_LARGE;
 
         // printBytes("plaintext", bytes, numbytes);
@@ -504,7 +504,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             p->decoded.portnum != meshtastic_PortNum_TRACEROUTE_APP && p->decoded.portnum != meshtastic_PortNum_NODEINFO_APP &&
             p->decoded.portnum != meshtastic_PortNum_ROUTING_APP && p->decoded.portnum != meshtastic_PortNum_POSITION_APP) {
             LOG_DEBUG("Use PKI!");
-            if (numbytes + MESHTASTIC_HEADER_LENGTH + MESHTASTIC_PKC_OVERHEAD > MAX_LORA_PAYLOAD_LEN)
+            if (numbytes + MESHTASTIC_PKC_OVERHEAD > meshtastic_Constants_DATA_PAYLOAD_LEN)
                 return meshtastic_Routing_Error_TOO_LARGE;
             if (p->pki_encrypted && !memfll(p->public_key.bytes, 0, 32) &&
                 memcmp(p->public_key.bytes, node->user.public_key.bytes, 32) != 0) {
