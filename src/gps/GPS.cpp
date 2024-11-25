@@ -33,24 +33,26 @@ HardwareSerial *GPS::_serial_gps = &Serial1;
 #elif defined(ARCH_RP2040)
 SerialUART *GPS::_serial_gps = &Serial1;
 #else
-HardwareSerial *GPS::_serial_gps = NULL;
+HardwareSerial *GPS::_serial_gps = nullptr;
 #endif
 
 GPS *gps = nullptr;
 
-GPSUpdateScheduling scheduling;
+static const char *ACK_SUCCESS_MESSAGE = "Get ack success!";
+
+static GPSUpdateScheduling scheduling;
 
 /// Multiple GPS instances might use the same serial port (in sequence), but we can
 /// only init that port once.
 static bool didSerialInit;
 
-struct uBloxGnssModelInfo info;
-uint8_t uBloxProtocolVersion;
+static struct uBloxGnssModelInfo info;
+static uint8_t uBloxProtocolVersion;
 #define GPS_SOL_EXPIRY_MS 5000 // in millis. give 1 second time to combine different sentences. NMEA Frequency isn't higher anyway
 #define NMEA_MSG_GXGSA "GNGSA" // GSA message (GPGSA, GNGSA etc)
 
 // For logging
-const char *getGPSPowerStateString(GPSPowerState state)
+static const char *getGPSPowerStateString(GPSPowerState state)
 {
     switch (state) {
     case GPS_ACTIVE:
@@ -69,7 +71,7 @@ const char *getGPSPowerStateString(GPSPowerState state)
     }
 }
 
-void GPS::UBXChecksum(uint8_t *message, size_t length)
+static void UBXChecksum(uint8_t *message, size_t length)
 {
     uint8_t CK_A = 0, CK_B = 0;
 
@@ -85,7 +87,7 @@ void GPS::UBXChecksum(uint8_t *message, size_t length)
 }
 
 // Calculate the checksum for a CAS packet
-void GPS::CASChecksum(uint8_t *message, size_t length)
+static void CASChecksum(uint8_t *message, size_t length)
 {
     uint32_t cksum = ((uint32_t)message[5] << 24); // Message ID
     cksum += ((uint32_t)message[4]) << 16;         // Class
@@ -419,7 +421,6 @@ int GPS::getACK(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t 
  */
 bool GPS::setup()
 {
-
     if (!didSerialInit) {
         int msglen = 0;
         if (tx_gpio && gnssModel == GNSS_MODEL_UNKNOWN) {
@@ -718,6 +719,7 @@ GPS::~GPS()
     // we really should unregister our sleep observer
     notifyDeepSleepObserver.unobserve(&notifyDeepSleep);
 }
+
 // Put the GPS hardware into a specified state
 void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
 {
@@ -882,17 +884,17 @@ void GPS::setPowerUBLOX(bool on, uint32_t sleepMs)
         if (gnssModel != GNSS_MODEL_UBLOX10) {
             // Encode the sleep time in millis into the packet
             for (int i = 0; i < 4; i++)
-                gps->_message_PMREQ[0 + i] = sleepMs >> (i * 8);
+                _message_PMREQ[0 + i] = sleepMs >> (i * 8);
 
             // Record the message length
-            msglen = gps->makeUBXPacket(0x02, 0x41, sizeof(_message_PMREQ), gps->_message_PMREQ);
+            msglen = gps->makeUBXPacket(0x02, 0x41, sizeof(_message_PMREQ), _message_PMREQ);
         } else {
             // Encode the sleep time in millis into the packet
             for (int i = 0; i < 4; i++)
-                gps->_message_PMREQ_10[4 + i] = sleepMs >> (i * 8);
+                _message_PMREQ_10[4 + i] = sleepMs >> (i * 8);
 
             // Record the message length
-            msglen = gps->makeUBXPacket(0x02, 0x41, sizeof(_message_PMREQ_10), gps->_message_PMREQ_10);
+            msglen = gps->makeUBXPacket(0x02, 0x41, sizeof(_message_PMREQ_10), _message_PMREQ_10);
         }
 
         // Send the UBX packet
@@ -1099,17 +1101,19 @@ int GPS::prepareDeepSleep(void *unused)
     return 0;
 }
 
-const char *PROBE_MESSAGE = "Trying %s (%s)...";
-const char *DETECTED_MESSAGE = "%s detected, using %s Module";
+static const char *PROBE_MESSAGE = "Trying %s (%s)...";
+static const char *DETECTED_MESSAGE = "%s detected, using %s Module";
 
 #define PROBE_SIMPLE(CHIP, TOWRITE, RESPONSE, DRIVER, TIMEOUT, ...)                                                              \
-    LOG_DEBUG(PROBE_MESSAGE, TOWRITE, CHIP);                                                                                     \
-    clearBuffer();                                                                                                               \
-    _serial_gps->write(TOWRITE "\r\n");                                                                                          \
-    if (getACK(RESPONSE, TIMEOUT) == GNSS_RESPONSE_OK) {                                                                         \
-        LOG_INFO(DETECTED_MESSAGE, CHIP, #DRIVER);                                                                               \
-        return DRIVER;                                                                                                           \
-    }
+    do {                                                                                                                         \
+        LOG_DEBUG(PROBE_MESSAGE, TOWRITE, CHIP);                                                                                 \
+        clearBuffer();                                                                                                           \
+        _serial_gps->write(TOWRITE "\r\n");                                                                                      \
+        if (getACK(RESPONSE, TIMEOUT) == GNSS_RESPONSE_OK) {                                                                     \
+            LOG_INFO(DETECTED_MESSAGE, CHIP, #DRIVER);                                                                           \
+            return DRIVER;                                                                                                       \
+        }                                                                                                                        \
+    } while (0)
 
 GnssModel_t GPS::probe(int serialSpeed)
 {
