@@ -1,0 +1,44 @@
+A non-exhaustive task list
+
+Features
+====================
+[]      battery icon
+[]      activity period
+[]      adhoc ping
+[]      canned message
+[]      backlight toggle
+[]      map scale 
+[]      boot screen
+[]      shutdown screen
+[]      secondary buttons
+[]      eink drivers for other devices
+[]      gps menu
+[]      jump to applet
+[]      mini-compass on nodelist
+[]      notifications / vetos
+[tbc]   timeout for menu applet
+[]      additional user applets
+[]      honour "max tiles" setting in nicheGraphics.h
+[wip]   add extended ascii / foreign language chars
+
+
+Critical Tasks
+====================
+[tbc]   fix attach/detach interrupts for ButtonThread.cpp
+[]      imperial units
+
+Known Bugs
+=====================
+[tbc]   detect userinfo (lastheard)
+[]      stuck if long-ish button press
+[]      T-Echo frontlight: remains on if shutdown while active
+[]      Rare mystery crash on T-Echo while unattended? Todo: setup logging and wait
+[]      Timestamps don't update. Needs to happen once a day. "6PM -> Yesterday". Make the WindowManager do it.
+[]      Nodelist applet should fill new space from NodeDB when layout changes and applet size increases
+[]      Lightsleep shouldn't be possible while update in progress. Set canSleep=false? 
+
+Chores
+==========
+[]      Refactor WindowManager::render
+[]      Make runOnce methods private
+[]      Helper method in InkHUD::Drivers::EInk to simplify framebuffer arithmetic, for anyone else using NicheGraphics

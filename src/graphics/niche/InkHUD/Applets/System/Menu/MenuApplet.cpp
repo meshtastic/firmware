@@ -1,0 +1,443 @@
+#ifdef MESHTASTIC_INCLUDE_INKHUD
+
+#include "./MenuApplet.h"
+
+#include "PowerStatus.h"
+#include "rtc.h"
+
+using namespace NicheGraphics;
+
+static constexpr uint8_t MENU_TIMEOUT_SEC = 30; // How many seconds before menu auto-closes
+
+InkHUD::MenuApplet::MenuApplet() : concurrency::OSThread("MenuApplet")
+{
+    // No timer tasks at boot
+    OSThread::disable();
+}
+
+void InkHUD::MenuApplet::onActivate()
+{
+    // For convenience only
+    this->windowManager = WindowManager::getInstance();
+}
+
+void InkHUD::MenuApplet::onForeground()
+{
+    // We do need this before we render, but we can optimize by just calculating it once now
+    systemInfoPanelHeight = getSystemInfoPanelHeight();
+
+    // Display initial menu page
+    showPage(MenuPage::ROOT);
+
+    // Begin the auto-close timeout
+    OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
+    OSThread::enabled = true;
+}
+
+void InkHUD::MenuApplet::onBackground()
+{
+    // Stop the auto-timeout
+    OSThread::disable();
+}
+
+// Auto-exit the menu applet after a period of inactivity
+// The values shown on the root menu are only a snapshot: they are not re-rendered while the menu remains open.
+// By exiting the menu, we prevent users mistakenly believing that the data will update.
+int32_t InkHUD::MenuApplet::runOnce()
+{
+    // runOnce's interval is pushed back when a button is pressed
+    // If we do actually run, it means no button input occurred within MENU_TIMEOUT_SEC,
+    // so we close the menu.
+    showPage(EXIT);
+
+    // Timer should disable after firing
+    // This is redundant, as onBackground() will also disable
+    return OSThread::disable();
+}
+
+// Perform action for a menu item, then change page
+// Behaviors for MenuActions are defined here
+void InkHUD::MenuApplet::execute(MenuItem item)
+{
+    // Perform an action
+    // ------------------
+    switch (item.action) {
+
+    // Open a submenu without performing any action
+    // Also handles exit
+    case NO_ACTION:
+        break;
+
+    case NEXT_TILE:
+        windowManager->nextTile();
+        cursor = 0; // No menu item selected, for quick exit after tile swap
+        cursorShown = false;
+        break;
+
+    case ROTATE:
+        settings.rotation = (settings.rotation + 1) % 4;
+        windowManager->changeLayout();
+        // requestUpdate(Drivers::EInk::UpdateTypes::FULL); // Would update regardless; just selecting FULL
+        break;
+
+    case LAYOUT:
+        // Testing only
+        // Todo: configure max tiles in nicheGraphics
+        // Todo: smarter incrementing of tile count
+        settings.userTiles.count++;
+
+        if (settings.userTiles.count == 3) // Skip 3 tiles: not done yet
+            settings.userTiles.count++;
+
+        if (settings.userTiles.count > 4) // Loop around if tile count now too high
+            settings.userTiles.count = 1;
+
+        windowManager->changeLayout();
+        // requestUpdate(Drivers::EInk::UpdateTypes::FULL); // Would update regardless; just selecting FULL
+        break;
+
+    case TOGGLE_APPLET:
+        settings.userApplets.active[cursor] = !settings.userApplets.active[cursor];
+        windowManager->changeActivatedApplets();
+        // requestUpdate(Drivers::EInk::UpdateTypes::FULL); // Select FULL, seeing how this action doesn't auto exit
+        break;
+
+    case ACTIVATE_APPLETS:
+        // Todo: remove this action? Already handled by TOGGLE_APPLET?
+        windowManager->changeActivatedApplets();
+        break;
+
+    case SHUTDOWN:
+        LOG_INFO("Shutting down from menu");
+        power->shutdown();
+        break;
+
+    default:
+        LOG_WARN("Action not implemented");
+    }
+
+    // Move to next page, as defined for the MenuItem
+    showPage(item.nextPage);
+}
+
+// Display a new page of MenuItems
+// May reload same page, or exit menu applet entirely
+// Fills the MenuApplet::items vector
+void InkHUD::MenuApplet::showPage(MenuPage page)
+{
+    items.clear();
+
+    switch (page) {
+    case ROOT:
+        if (settings.userTiles.count > 1)
+            items.push_back(MenuItem("Next Tile", MenuAction::NEXT_TILE, MenuPage::ROOT)); // Only if multiple applets shown
+        items.push_back(MenuItem("Send", MenuPage::SEND));
+        items.push_back(MenuItem("Options", MenuPage::OPTIONS));
+        items.push_back(MenuItem("Display Off", MenuPage::EXIT)); // TODO
+        items.push_back(MenuItem("Shutdown", MenuAction::SHUTDOWN));
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
+
+    case SEND:
+        items.push_back(MenuItem("Send Message", MenuPage::EXIT));
+        items.push_back(MenuItem("Send NodeInfo", MenuAction::SEND_NODEINFO));
+        items.push_back(MenuItem("Send Position", MenuAction::SEND_POSITION));
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
+
+    case OPTIONS:
+        items.push_back(MenuItem("Applets", MenuPage::APPLETS));
+        items.push_back(MenuItem("Layout", MenuAction::LAYOUT, MenuPage::OPTIONS));
+        items.push_back(MenuItem("Rotate", MenuAction::ROTATE, MenuPage::OPTIONS));
+        if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_DISABLED)
+            items.push_back(MenuItem("Enable GPS", MenuPage::EXIT)); // TODO
+        if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED)
+            items.push_back(MenuItem("Disable GPS", MenuPage::EXIT)); // TODO
+        if (!config.bluetooth.enabled)
+            items.push_back(MenuItem("Enable Bluetooth", MenuPage::EXIT)); // TODO: escape hatch if wifi configured wrong
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
+
+    case APPLETS:
+        populateAppletPage();
+        items.push_back(MenuItem("Exit", MenuAction::ACTIVATE_APPLETS));
+        break;
+
+    case EXIT:
+        sendToBackground();                              // Menu applet dismissed, allow normal behavior to resume
+        getTile()->displayedApplet->bringToForeground(); // Restore the previous user applet
+        requestUpdate(Drivers::EInk::UpdateTypes::FULL);
+        break;
+
+    default:
+        LOG_WARN("Page not implemented");
+    }
+
+    // Reset the cursor, unless reloading same page
+    // (or now out-of-bounds)
+    if (page != currentPage || cursor >= items.size()) {
+        cursor = 0;
+
+        // ROOT menu has special handling: unselected at first, to emphasise the system info panel
+        if (page == ROOT)
+            cursorShown = false;
+    }
+
+    // Remember which page we are on now
+    currentPage = page;
+}
+
+void InkHUD::MenuApplet::render()
+{
+    if (items.size() == 0)
+        LOG_ERROR("Empty Menu");
+
+    // Testing only
+    setFont(fontSmall);
+
+    // Dimensions for the slots where we will draw menuItems
+    const float padding = 0.05;
+    const uint16_t itemH = fontSmall.lineHeight() * 2;
+    const int16_t itemW = width() - X(padding) - X(padding);
+    const int16_t itemL = X(padding);
+    const int16_t itemR = X(1 - padding);
+    int16_t itemT = 0; // Top (y px of current slot). Incremented as we draw. Adjusted to fit system info panel on ROOT menu.
+
+    // How many full menuItems will fit on screen
+    uint8_t slotCount = (height() - itemT) / itemH;
+
+    // System info panel at the top of the menu
+    // =========================================
+
+    uint16_t &siH = systemInfoPanelHeight;                   // System info - height. Calculated at onForeground
+    const uint8_t slotsObscured = ceilf(siH / (float)itemH); // How many slots are obscured by system info panel
+
+    // System info - top
+    // Remain at 0px, until cursor reaches bottom of screen, then begin to scroll off screen.
+    // This is the same behavior we expect from the non-root menus.
+    // Implementing this with the systemp panel is slightly annoying though,
+    // and required adding the MenuApplet::getSystemInfoPanelHeight method
+    int16_t siT;
+    if (cursor < slotCount - slotsObscured - 1) // (Minus 1: comparing zero based index with a count)
+        siT = 0;
+    else
+        siT = 0 - ((cursor - (slotCount - slotsObscured - 1)) * itemH);
+
+    // If showing ROOT menu,
+    // and the panel isn't yet scrolled off screen top
+    if (currentPage == ROOT) {
+        drawSystemInfoPanel(0, siT, width()); // Draw the panel.
+        itemT = max(siT + siH, 0);            // Offset the first menu entry, so menu starts below the system info panel
+    }
+
+    // Draw menu items
+    // ===================
+
+    // Which item will be drawn to the top-most slot?
+    // Initially, this is the item 0, but may increase once we begin scrolling
+    uint8_t firstItem;
+    if (cursor < slotCount)
+        firstItem = 0;
+    else
+        firstItem = cursor - (slotCount - 1);
+
+    // Which item will be drawn to the bottom-most slot?
+    // This may be beyond the slot-count, to draw a partially off-screen item below the bottom-most slow
+    // This may be less than the slot-count, if we are reaching the end of the menuItems
+    uint8_t lastItem = min((uint8_t)firstItem + slotCount, (uint8_t)items.size() - 1);
+
+    // -- Loop: draw each (visible) menu item --
+    for (uint8_t i = firstItem; i <= lastItem; i++) {
+        // Grab the menuItem
+        MenuItem item = items.at(i);
+
+        // Center-line for the text
+        int16_t center = itemT + (itemH / 2);
+
+        if (cursorShown && i == cursor)
+            drawRect(itemL, itemT, itemW, itemH, BLACK);
+        printAt(itemL + X(padding), center, item.label, LEFT, MIDDLE);
+
+        // Testing only: circle instead of check box
+        if (item.checkState) {
+            const uint16_t cbWH = fontSmall.lineHeight();  // Checbox: width / height
+            const int16_t cbL = itemR - X(padding) - cbWH; // Checkbox: left
+            const int16_t cbT = center - (cbWH / 2);       // Checkbox : top
+            // Checkbox ticked
+            if (*(item.checkState)) {
+                drawRect(cbL, cbT, cbWH, cbWH, BLACK);
+                // First point of tick: pen down
+                const int16_t t1Y = center;
+                const int16_t t1X = cbL + 3;
+                // Second point of tick: base
+                const int16_t t2Y = center + (cbWH / 2) - 2;
+                const int16_t t2X = cbL + (cbWH / 2);
+                // Third point of tick: end of tail
+                const int16_t t3Y = center - (cbWH / 2) - 2;
+                const int16_t t3X = cbL + cbWH + 2;
+                // Draw twice: faux bold
+                drawLine(t1X, t1Y, t2X, t2Y, BLACK);
+                drawLine(t2X, t2Y, t3X, t3Y, BLACK);
+                drawLine(t1X + 1, t1Y, t2X + 1, t2Y, BLACK);
+                drawLine(t2X + 1, t2Y, t3X + 1, t3Y, BLACK);
+            }
+            // Checkbox ticked
+            else
+                drawRect(cbL, cbT, cbWH, cbWH, BLACK);
+        }
+
+        // Increment the y value (top) as we go
+        itemT += itemH;
+    }
+}
+
+void InkHUD::MenuApplet::onButtonShortPress()
+{
+    // Push the auto-close timer back
+    OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
+
+    // Move menu cursor to next entry, then update
+    if (cursorShown)
+        cursor = (cursor + 1) % items.size();
+    else
+        cursorShown = true;
+    requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+}
+
+void InkHUD::MenuApplet::onButtonLongPress()
+{
+    // Push the auto-close timer back
+    OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
+
+    if (cursorShown)
+        execute(items.at(cursor));
+    else
+        showPage(MenuPage::EXIT); // Special case: Peek at root-menu; longpress again to close
+
+    // If we didn't already request a specialized update, when handling a menu action,
+    // then perform the usual fast update.
+    // FAST keeps things responsive: important because we're dealing with user input
+    if (!wantsToRender())
+        requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+}
+
+// Dynamically create MenuItem entries for activating / deactivating Applets, for the "Applet Selection" submenu
+void InkHUD::MenuApplet::populateAppletPage()
+{
+    assert(items.size() == 0);
+
+    for (uint8_t i = 0; i < windowManager->getAppletCount(); i++) {
+        const char *name = windowManager->getAppletName(i);
+        bool *isActive = &(settings.userApplets.active[i]);
+        items.push_back(MenuItem(name, MenuAction::TOGGLE_APPLET, MenuPage::APPLETS, isActive));
+    }
+}
+
+// Renders the panel shown at the top of the root menu.
+// Displays the clock, and several other pieces of instantaneous system info,
+// which we'd prefer not to have displayed in a normal applet, as they update too frequently.
+void InkHUD::MenuApplet::drawSystemInfoPanel(int16_t left, int16_t top, uint16_t width, uint16_t *renderedHeight)
+{
+    // Reset the height
+    // We'll add to this as we add elements
+    uint16_t height = 0;
+
+    // Clock (potentially)
+    // ====================
+    std::string clockString = getTimeString();
+    if (clockString.length() > 0) {
+        setFont(fontLarge);
+        printAt(width / 2, top, clockString, CENTER, TOP);
+
+        height += fontLarge.lineHeight();
+        height += fontLarge.lineHeight() * 0.1; // Padding below clock
+    }
+
+    // Stats
+    // ===================
+
+    setFont(fontSmall);
+
+    // Position of the label row for the system info
+    const int16_t labelT = top + height;
+    height += fontSmall.lineHeight() * 1.1; // Slightly increased spacing
+
+    // Position of the data row for the system info
+    const int16_t valT = top + height;
+    height += fontSmall.lineHeight() * 1.1; // Slightly increased spacing (between bottom line and divider)
+
+    // Position of divider between the info panel and the menu entries
+    const int16_t divY = top + height;
+    height += fontSmall.lineHeight() * 0.2; // Padding *below* the divider. (Above first menu item)
+
+    // Create a variable number of columns
+    // Either 3 or 4, depending on whether we have GPS
+    // Todo
+    constexpr uint8_t N_COL = 4;
+    int16_t colL[N_COL];
+    int16_t colC[N_COL];
+    int16_t colR[N_COL];
+    for (uint8_t i = 0; i < N_COL; i++) {
+        colL[i] = left + ((width / N_COL) * i);
+        colC[i] = colL[i] + ((width / N_COL) / 2);
+        colR[i] = colL[i] + (width / N_COL);
+    }
+
+    // Info blocks, left to right
+
+    // Voltage
+    float voltage = powerStatus->getBatteryVoltageMv() / 1000.0;
+    char voltageStr[6]; // "XX.XV"
+    sprintf(voltageStr, "%.1fV", voltage);
+    printAt(colC[0], labelT, "Bat", CENTER, TOP);
+    printAt(colC[0], valT, voltageStr, CENTER, TOP);
+
+    // Divider
+    for (int16_t y = valT; y <= divY; y += 3)
+        drawPixel(colR[0], y, BLACK);
+
+    // Channel Util
+    char chUtilStr[4]; // "XX%"
+    sprintf(chUtilStr, "%2.f%%", airTime->channelUtilizationPercent());
+    printAt(colC[1], labelT, "Ch", CENTER, TOP);
+    printAt(colC[1], valT, chUtilStr, CENTER, TOP);
+
+    // Divider
+    for (int16_t y = valT; y <= divY; y += 3)
+        drawPixel(colR[1], y, BLACK);
+
+    // Duty Cycle (AirTimeTx)
+    char dutyUtilStr[4]; // "XX%"
+    sprintf(dutyUtilStr, "%2.f%%", airTime->utilizationTXPercent());
+    printAt(colC[2], labelT, "Duty", CENTER, TOP);
+    printAt(colC[2], valT, dutyUtilStr, CENTER, TOP);
+
+    // Divider
+    for (int16_t y = valT; y <= divY; y += 3)
+        drawPixel(colR[2], y, BLACK);
+
+    // GPS satellites - todo
+    printAt(colC[3], labelT, "Sats", CENTER, TOP);
+    printAt(colC[3], valT, "ToDo", CENTER, TOP);
+
+    // Horizontal divider, at bottom of system info panel
+    for (int16_t x = 0; x < width; x += 2) // Divider, centered in the padding between first system panel and first item
+        drawPixel(x, divY, BLACK);
+
+    if (renderedHeight != nullptr)
+        *renderedHeight = height;
+}
+
+// Get the height of the the panel drawn at the top of the menu
+// This is inefficient, as we do actually have to render the panel to determine the height
+// It solves a catch-22 situtation, where slotCount needs to know panel height, and panel height needs to know slotCount
+uint16_t InkHUD::MenuApplet::getSystemInfoPanelHeight()
+{
+    // Render *waay* off screen
+    uint16_t height = 0;
+    drawSystemInfoPanel(INT16_MIN, INT16_MIN, 1, &height);
+
+    return height;
+}
+
+#endif
