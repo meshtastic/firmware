@@ -167,17 +167,26 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
                     if (isFromUs(p)) {
                         LOG_INFO("Ignore downlink message we originally sent");
                         packetPool.release(p);
+                        free(e.channel_id);
+                        free(e.gateway_id);
+                        free(e.packet);
                         return;
                     }
                     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
                         if (moduleConfig.mqtt.encryption_enabled) {
                             LOG_INFO("Ignore decoded message on MQTT, encryption is enabled");
                             packetPool.release(p);
+                            free(e.channel_id);
+                            free(e.gateway_id);
+                            free(e.packet);
                             return;
                         }
                         if (p->decoded.portnum == meshtastic_PortNum_ADMIN_APP) {
                             LOG_INFO("Ignore decoded admin packet");
                             packetPool.release(p);
+                            free(e.channel_id);
+                            free(e.gateway_id);
+                            free(e.packet);
                             return;
                         }
                         p->channel = ch.index;
