@@ -47,7 +47,7 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
     void setExternalState(uint8_t index = 0, bool on = false);
 
     struct RGB;
-    void setLEDs(const RGB& rgba);
+    void setLEDs(const RGB &rgba);
 
     /** Called to handle a particular incoming message
     @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be considered for

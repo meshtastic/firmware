@@ -73,15 +73,14 @@ bool ascending = true;
 #define ASCII_BELL 0x07
 
 struct ExternalNotificationModule::RGB {
-    constexpr RGB(uint8_t red, uint8_t green,uint8_t blue)
-    : red{red}, green{green}, blue{blue}
-    {}
-    
-    #define SCALE_ALPHA(COLOR, ALPHA) (uint8_t)((((uint16_t)COLOR) * ALPHA) / (uint16_t)255)
+    constexpr RGB(uint8_t red, uint8_t green, uint8_t blue) : red{red}, green{green}, blue{blue} {}
+
+#define SCALE_ALPHA(COLOR, ALPHA) (uint8_t)((((uint16_t)COLOR) * ALPHA) / (uint16_t)255)
     constexpr RGB(uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha)
-    : red{SCALE_ALPHA(red, alpha)}, green{SCALE_ALPHA(green, alpha)}, blue{SCALE_ALPHA(blue, alpha)}
-    {}
-    #undef SCALE_ALPHA
+        : red{SCALE_ALPHA(red, alpha)}, green{SCALE_ALPHA(green, alpha)}, blue{SCALE_ALPHA(blue, alpha)}
+    {
+    }
+#undef SCALE_ALPHA
 
     uint8_t red = 0;
     uint8_t green = 0;
@@ -144,13 +143,14 @@ int32_t ExternalNotificationModule::runOnce()
         if (externalTurnedOn[2] + (moduleConfig.external_notification.output_ms ? moduleConfig.external_notification.output_ms
                                                                                 : EXT_NOTIFICATION_MODULE_OUTPUT_MS) <
             millis()) {
-            LOG_DEBUG("EXTERNAL 2 %d compared to %d", externalTurnedOn[2]+moduleConfig.external_notification.output_ms, millis());
+            LOG_DEBUG("EXTERNAL 2 %d compared to %d", externalTurnedOn[2] + moduleConfig.external_notification.output_ms,
+                      millis());
             setExternalState(2, !getExternal(2));
         }
 #ifdef HAS_LED
-        red = (colorState & 4) ? 170 : 0;          // Red enabled on colorState = 4,5,6,7
-        green = (colorState & 2) ? 170 : 0;        // Green enabled on colorState = 2,3,6,7
-        blue = (colorState & 1) ? 255 : 0;         // Blue enabled on colorState = 1,3,5,7
+        red = (colorState & 4) ? 170 : 0;   // Red enabled on colorState = 4,5,6,7
+        green = (colorState & 2) ? 170 : 0; // Green enabled on colorState = 2,3,6,7
+        blue = (colorState & 1) ? 255 : 0;  // Blue enabled on colorState = 1,3,5,7
         setLEDs({red, green, blue, alphaValues[alphaIndex]});
 #endif
 
@@ -254,7 +254,7 @@ void ExternalNotificationModule::stopNow()
 #endif
 }
 
-void ExternalNotificationModule::setLEDs(const RGB& rgb)
+void ExternalNotificationModule::setLEDs(const RGB &rgb)
 {
 
 #ifdef HAS_LED
