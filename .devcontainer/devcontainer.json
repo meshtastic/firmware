@@ -17,7 +17,11 @@
         "ms-vscode.cpptools",
         "platformio.platformio-ide",
         "Trunk.io"
-      ]
+      ],
+      "unwantedRecommendations": ["ms-azuretools.vscode-docker"],
+      "settings": {
+        "extensions.ignoreRecommendations": true
+      }
     }
   },
 
