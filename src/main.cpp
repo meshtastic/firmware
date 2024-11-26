@@ -1181,6 +1181,7 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
     return deviceMetadata;
 }
 
+#if !MESHTASTIC_EXCLUDE_I2C
 void scannerToSensorsMap(const std::unique_ptr<ScanI2CTwoWire> &i2cScanner, ScanI2C::DeviceType deviceType,
                          meshtastic_TelemetrySensorType sensorType)
 {
@@ -1190,6 +1191,7 @@ void scannerToSensorsMap(const std::unique_ptr<ScanI2CTwoWire> &i2cScanner, Scan
         nodeTelemetrySensorsMap[sensorType].second = i2cScanner->fetchI2CBus(found.address);
     }
 }
+#endif
 
 #ifndef PIO_UNIT_TESTING
 void loop()
