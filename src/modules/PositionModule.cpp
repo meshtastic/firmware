@@ -389,7 +389,7 @@ int32_t PositionModule::runOnce()
     }
 
     if (lastGpsSend == 0 || msSinceLastSend >= intervalMs) {
-        if (hasValidPosition(node)) {
+        if (nodeDB->hasValidPosition(node)) {
             lastGpsSend = now;
 
             lastGpsLatitude = node->position.latitude_i;
@@ -403,7 +403,7 @@ int32_t PositionModule::runOnce()
     } else if (config.position.position_broadcast_smart_enabled) {
         const meshtastic_NodeInfoLite *node2 = service->refreshLocalMeshNode(); // should guarantee there is now a position
 
-        if (hasValidPosition(node2)) {
+        if (nodeDB->hasValidPosition(node2)) {
             // The minimum time (in seconds) that would pass before we are able to send a new position packet.
 
             auto smartPosition = getDistanceTraveledSinceLastSend(node->position);
@@ -464,7 +464,7 @@ void PositionModule::handleNewPosition()
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
     const meshtastic_NodeInfoLite *node2 = service->refreshLocalMeshNode(); // should guarantee there is now a position
     // We limit our GPS broadcasts to a max rate
-    if (hasValidPosition(node2)) {
+    if (nodeDB->hasValidPosition(node2)) {
         auto smartPosition = getDistanceTraveledSinceLastSend(node->position);
         uint32_t msSinceLastSend = millis() - lastGpsSend;
         if (smartPosition.hasTraveledOverThreshold &&
