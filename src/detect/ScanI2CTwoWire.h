@@ -58,5 +58,7 @@ class ScanI2CTwoWire : public ScanI2C
     uint16_t getRegisterValue(const RegisterLocation &, ResponseWidth) const;
 
     DeviceType probeOLED(ScanI2C::DeviceAddress) const;
+
+    static void logFoundDevice(const char *device, uint8_t address);
 };
 #endif
