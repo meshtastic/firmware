@@ -6,6 +6,7 @@
 class ScanI2C
 {
   public:
+  //todo: add scd30 here?
     typedef enum DeviceType {
         NONE,
         SCREEN_SSD1306,
@@ -63,7 +64,8 @@ class ScanI2C
         ICM20948,
         MAX30102,
         TPS65233,
-        MPR121KB
+        MPR121KB,
+        SCD30
     } DeviceType;
 
     // typedef uint8_t DeviceAddress;

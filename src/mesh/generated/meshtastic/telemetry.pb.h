@@ -77,7 +77,9 @@ typedef enum _meshtastic_TelemetrySensorType {
     /* MLX90614 non-contact IR temperature sensor */
     meshtastic_TelemetrySensorType_MLX90614 = 31,
     /* SCD40/SCD41 CO2, humidity, temperature sensor */
-    meshtastic_TelemetrySensorType_SCD4X = 32
+    meshtastic_TelemetrySensorType_SCD4X = 32,
+    /* SCD30 CO2, humidity, temperature sensor */
+    meshtastic_TelemetrySensorType_SCD30 = 33
 } meshtastic_TelemetrySensorType;
 
 /* Struct definitions */
@@ -299,8 +301,8 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _meshtastic_TelemetrySensorType_MIN meshtastic_TelemetrySensorType_SENSOR_UNSET
-#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_SCD4X
-#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_SCD4X+1))
+#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_SCD30
+#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_SCD30+1))
 
 
 

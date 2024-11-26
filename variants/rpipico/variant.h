@@ -23,6 +23,7 @@
 #define BATTERY_SENSE_RESOLUTION_BITS ADC_RESOLUTION
 
 #define USE_SX1262
+#define USE_SCD30
 
 #undef LORA_SCK
 #undef LORA_MISO
@@ -47,4 +48,9 @@
 #define SX126X_RESET LORA_RESET
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
+#endif
+
+#ifdef USE_SCD30
+#define I2C_SDA 4
+#define I2C_SCL 5
 #endif
