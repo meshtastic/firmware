@@ -1275,10 +1275,14 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
         powerFSM.trigger(EVENT_NODEDB_UPDATED);
         notifyObservers(true); // Force an update whether or not our node counts have changed
 
-        // We just changed something about the user, store our DB
-        Throttle::execute(
-            &lastNodeDbSave, ONE_MINUTE_MS, []() { nodeDB->saveToDisk(SEGMENT_DEVICESTATE); },
-            []() { LOG_DEBUG("Defer NodeDB saveToDisk for now"); }); // since we saved less than a minute ago
+        // We just changed something about a User,
+        // store our DB unless we just did so less than a minute ago
+        if (!Throttle::isWithinTimespanMs(lastNodeDbSave, ONE_MINUTE_MS)) {
+            saveToDisk(SEGMENT_DEVICESTATE);
+            lastNodeDbSave = millis();
+        } else {
+            LOG_DEBUG("Defer NodeDB saveToDisk for now");
+        }
     }
 
     return changed;
