@@ -129,7 +129,6 @@ uint16_t ScanI2CTwoWire::getRegisterValue(const ScanI2CTwoWire::RegisterLocation
     i2cBus->endTransmission();
     delay(20);
     i2cBus->requestFrom(registerLocation.i2cAddress.address, responseWidth);
-    LOG_DEBUG("Wire.available() = %d", i2cBus->available());
     if (i2cBus->available() == 2) {
         // Read MSB, then LSB
         value = (uint16_t)i2cBus->read() << 8;
