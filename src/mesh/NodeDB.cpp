@@ -1387,6 +1387,13 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
     return lite;
 }
 
+/// Sometimes we will have Position objects that only have a time, so check for
+/// valid lat/lon
+bool NodeDB::hasValidPosition(const meshtastic_NodeInfoLite *n)
+{
+    return n->has_position && (n->position.latitude_i != 0 || n->position.longitude_i != 0);
+}
+
 /// Record an error that should be reported via analytics
 void recordCriticalError(meshtastic_CriticalErrorCode code, uint32_t address, const char *filename)
 {
