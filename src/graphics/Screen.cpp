@@ -1420,7 +1420,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     }
     bool hasNodeHeading = false;
 
-    if (ourNode && (hasValidPosition(ourNode) || screen->hasHeading())) {
+    if (ourNode && (nodeDB->hasValidPosition(ourNode) || screen->hasHeading())) {
         const meshtastic_PositionLite &op = ourNode->position;
         float myHeading;
         if (screen->hasHeading())
@@ -1429,7 +1429,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
             myHeading = screen->estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
         screen->drawCompassNorth(display, compassX, compassY, myHeading);
 
-        if (hasValidPosition(node)) {
+        if (nodeDB->hasValidPosition(node)) {
             // display direction toward node
             hasNodeHeading = true;
             const meshtastic_PositionLite &p = node->position;
