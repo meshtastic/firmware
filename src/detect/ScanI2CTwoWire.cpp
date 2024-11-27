@@ -350,7 +350,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 // registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x20), 1); // get ID
                 // if (registerValue == 0xC0) {
                 //     type = RAK12035VB;
-                //     LOG_INFO("RAK12035VB Soil Sensor found\n");
+                //     LOG_INFO("RAK12035VB Soil Sensor found");
                 // } else {
                 //     type = TCA9535;
                 //     LOG_INFO("TCA9535 I2C expander found\n");
@@ -359,7 +359,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 
                 // ^^^^^^^^^^^ not working... so we will just assume it is a RAK12035VB Soil Sensor so I can keep testing.
                     type = RAK12035VB;
-                    LOG_INFO("RAK12035VB Soil Sensor found\n");
+                    LOG_INFO("RAK12035VB Soil Sensor found");
                 break;
 
 
