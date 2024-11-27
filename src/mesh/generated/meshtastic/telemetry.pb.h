@@ -111,7 +111,7 @@ typedef struct _meshtastic_EnvironmentMetrics {
     uint16_t soil_moisture;
     /* Soil temperature measured */
     bool has_soil_temperature;
-    double soil_temperature;
+    float soil_temperature;
     /* Temperature measured */
     bool has_temperature;
     float temperature;
