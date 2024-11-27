@@ -168,6 +168,8 @@ class NodeDB
         localPosition = position;
     }
 
+    bool hasValidPosition(const meshtastic_NodeInfoLite *n);
+
   private:
     uint32_t lastNodeDbSave = 0; // when we last saved our db to flash
     /// Find a node in our DB, create an empty NodeInfoLite if missing
@@ -219,13 +221,6 @@ extern NodeDB *nodeDB;
 
         prefs.is_power_saving = True
 */
-
-/// Sometimes we will have Position objects that only have a time, so check for
-/// valid lat/lon
-static inline bool hasValidPosition(const meshtastic_NodeInfoLite *n)
-{
-    return n->has_position && (n->position.latitude_i != 0 || n->position.longitude_i != 0);
-}
 
 /** The current change # for radio settings.  Starts at 0 on boot and any time the radio settings
  * might have changed is incremented.  Allows others to detect they might now be on a new channel.

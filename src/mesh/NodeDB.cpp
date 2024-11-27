@@ -61,6 +61,16 @@ meshtastic_LocalConfig config;
 meshtastic_LocalModuleConfig moduleConfig;
 meshtastic_ChannelFile channelFile;
 
+#ifdef USERPREFS_USE_ADMIN_KEY_0
+static unsigned char userprefs_admin_key_0[] = USERPREFS_USE_ADMIN_KEY_0;
+#endif
+#ifdef USERPREFS_USE_ADMIN_KEY_1
+static unsigned char userprefs_admin_key_1[] = USERPREFS_USE_ADMIN_KEY_1;
+#endif
+#ifdef USERPREFS_USE_ADMIN_KEY_2
+static unsigned char userprefs_admin_key_2[] = USERPREFS_USE_ADMIN_KEY_2;
+#endif
+
 bool meshtastic_DeviceState_callback(pb_istream_t *istream, pb_ostream_t *ostream, const pb_field_iter_t *field)
 {
     if (ostream) {
@@ -406,32 +416,37 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #else
     config.lora.ignore_mqtt = false;
 #endif
-#ifdef USERPREFS_USE_ADMIN_KEY
     // Initialize admin_key_count to zero
     byte numAdminKeys = 0;
 
+#ifdef USERPREFS_USE_ADMIN_KEY_0
     // Check if USERPREFS_ADMIN_KEY_0 is non-empty
-    if (sizeof(USERPREFS_ADMIN_KEY_0) > 0) {
-        memcpy(config.security.admin_key[numAdminKeys].bytes, USERPREFS_ADMIN_KEY_0, 32);
-        config.security.admin_key[numAdminKeys].size = 32;
+    if (sizeof(userprefs_admin_key_0) > 0) {
+        memcpy(config.security.admin_key[0].bytes, userprefs_admin_key_0, 32);
+        config.security.admin_key[0].size = 32;
         numAdminKeys++;
     }
-
-    // Check if USERPREFS_ADMIN_KEY_1 is non-empty
-    if (sizeof(USERPREFS_ADMIN_KEY_1) > 0) {
-        memcpy(config.security.admin_key[numAdminKeys].bytes, USERPREFS_ADMIN_KEY_1, 32);
-        config.security.admin_key[numAdminKeys].size = 32;
-        numAdminKeys++;
-    }
-
-    // Check if USERPREFS_ADMIN_KEY_2 is non-empty
-    if (sizeof(USERPREFS_ADMIN_KEY_2) > 0) {
-        memcpy(config.security.admin_key[config.security.admin_key_count].bytes, USERPREFS_ADMIN_KEY_2, 32);
-        config.security.admin_key[config.security.admin_key_count].size = 32;
-        numAdminKeys++;
-    }
-    config.security.admin_key_count = numAdminKeys;
 #endif
+
+#ifdef USERPREFS_USE_ADMIN_KEY_1
+    // Check if USERPREFS_ADMIN_KEY_1 is non-empty
+    if (sizeof(userprefs_admin_key_1) > 0) {
+        memcpy(config.security.admin_key[1].bytes, userprefs_admin_key_1, 32);
+        config.security.admin_key[1].size = 32;
+        numAdminKeys++;
+    }
+#endif
+
+#ifdef USERPREFS_USE_ADMIN_KEY_2
+    // Check if USERPREFS_ADMIN_KEY_2 is non-empty
+    if (sizeof(userprefs_admin_key_2) > 0) {
+        memcpy(config.security.admin_key[2].bytes, userprefs_admin_key_2, 32);
+        config.security.admin_key[2].size = 32;
+        numAdminKeys++;
+    }
+#endif
+    config.security.admin_key_count = numAdminKeys;
+
     if (shouldPreserveKey) {
         config.security.private_key.size = 32;
         memcpy(config.security.private_key.bytes, private_key_temp, config.security.private_key.size);
@@ -888,6 +903,54 @@ void NodeDB::loadFromDisk()
         }
     }
 
+    // Make sure we load hard coded admin keys even when the configuration file has none.
+    // Initialize admin_key_count to zero
+    byte numAdminKeys = 0;
+    uint16_t sum = 0;
+#ifdef USERPREFS_USE_ADMIN_KEY_0
+    for (uint8_t b = 0; b < 32; b++) {
+        sum += config.security.admin_key[0].bytes[b];
+    }
+    if (sum == 0) {
+        numAdminKeys += 1;
+        LOG_INFO("Admin 0 key zero. Loading hard coded key from user preferences.");
+        memcpy(config.security.admin_key[0].bytes, userprefs_admin_key_0, 32);
+        config.security.admin_key[0].size = 32;
+        config.security.admin_key_count = numAdminKeys;
+        saveToDisk(SEGMENT_CONFIG);
+    }
+#endif
+
+#ifdef USERPREFS_USE_ADMIN_KEY_1
+    sum = 0;
+    for (uint8_t b = 0; b < 32; b++) {
+        sum += config.security.admin_key[1].bytes[b];
+    }
+    if (sum == 0) {
+        numAdminKeys += 1;
+        LOG_INFO("Admin 1 key zero. Loading hard coded key from user preferences.");
+        memcpy(config.security.admin_key[1].bytes, userprefs_admin_key_1, 32);
+        config.security.admin_key[1].size = 32;
+        config.security.admin_key_count = numAdminKeys;
+        saveToDisk(SEGMENT_CONFIG);
+    }
+#endif
+
+#ifdef USERPREFS_USE_ADMIN_KEY_2
+    sum = 0;
+    for (uint8_t b = 0; b < 32; b++) {
+        sum += config.security.admin_key[2].bytes[b];
+    }
+    if (sum == 0) {
+        numAdminKeys += 1;
+        LOG_INFO("Admin 2 key zero. Loading hard coded key from user preferences.");
+        memcpy(config.security.admin_key[2].bytes, userprefs_admin_key_2, 32);
+        config.security.admin_key[2].size = 32;
+        config.security.admin_key_count = numAdminKeys;
+        saveToDisk(SEGMENT_CONFIG);
+    }
+#endif
+
     state = loadProto(moduleConfigFileName, meshtastic_LocalModuleConfig_size, sizeof(meshtastic_LocalModuleConfig),
                       &meshtastic_LocalModuleConfig_msg, &moduleConfig);
     if (state != LoadFileResult::LOAD_SUCCESS) {
@@ -1212,10 +1275,14 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
         powerFSM.trigger(EVENT_NODEDB_UPDATED);
         notifyObservers(true); // Force an update whether or not our node counts have changed
 
-        // We just changed something about the user, store our DB
-        Throttle::execute(
-            &lastNodeDbSave, ONE_MINUTE_MS, []() { nodeDB->saveToDisk(SEGMENT_DEVICESTATE); },
-            []() { LOG_DEBUG("Defer NodeDB saveToDisk for now"); }); // since we saved less than a minute ago
+        // We just changed something about a User,
+        // store our DB unless we just did so less than a minute ago
+        if (!Throttle::isWithinTimespanMs(lastNodeDbSave, ONE_MINUTE_MS)) {
+            saveToDisk(SEGMENT_DEVICESTATE);
+            lastNodeDbSave = millis();
+        } else {
+            LOG_DEBUG("Defer NodeDB saveToDisk for now");
+        }
     }
 
     return changed;
@@ -1322,6 +1389,13 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
     }
 
     return lite;
+}
+
+/// Sometimes we will have Position objects that only have a time, so check for
+/// valid lat/lon
+bool NodeDB::hasValidPosition(const meshtastic_NodeInfoLite *n)
+{
+    return n->has_position && (n->position.latitude_i != 0 || n->position.longitude_i != 0);
 }
 
 /// Record an error that should be reported via analytics

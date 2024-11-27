@@ -78,6 +78,7 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
                     msgPayload["wind_direction"] = new JSONValue((uint)decoded->variant.environment_metrics.wind_direction);
                     msgPayload["wind_gust"] = new JSONValue(decoded->variant.environment_metrics.wind_gust);
                     msgPayload["wind_lull"] = new JSONValue(decoded->variant.environment_metrics.wind_lull);
+                    msgPayload["radiation"] = new JSONValue(decoded->variant.environment_metrics.radiation);
                 } else if (decoded->which_variant == meshtastic_Telemetry_air_quality_metrics_tag) {
                     msgPayload["pm10"] = new JSONValue((unsigned int)decoded->variant.air_quality_metrics.pm10_standard);
                     msgPayload["pm25"] = new JSONValue((unsigned int)decoded->variant.air_quality_metrics.pm25_standard);
