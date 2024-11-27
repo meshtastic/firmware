@@ -312,7 +312,13 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     type = INA219;
                 }
                 break;
-            case INA3221_ADDR:
+
+
+
+
+
+
+            case INA3221_ADDR: // (0x40) can be INA3221, RAK12500 or DFROBOT Lark weather station
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFE), 2);
                 LOG_DEBUG("Register MFG_UID FE: 0x%x", registerValue);
                 if (registerValue == 0x5449) {
@@ -337,6 +343,28 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     // else: probably a RAK12500/UBLOX GPS on I2C
                 }
                 break;
+
+            case RAK12035VB_ADDR: // (0x20) can be RAK12023VB Soil Sensor or TCA9535 I2C expander
+
+                // check if it is a RAK12035, if not can assume it is a TCA9535 I2C expander
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x20), 1); // get ID
+                if (registerValue == 0xC0) {
+                    type = RAK12035VB;
+                    LOG_INFO("RAK12023VB Soil Sensor found\n");
+                } else {
+                    type = TCA9535;
+                    LOG_INFO("TCA9535 I2C expander found\n");
+                }
+                break;
+
+
+
+
+
+
+
+
+
             case MCP9808_ADDR:
                 // We need to check for STK8BAXX first, since register 0x07 is new data flag for the z-axis and can produce some
                 // weird result. and register 0x00 doesn't seems to be colliding with MCP9808 and LIS3DH chips.
@@ -437,7 +465,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 break;
 
                 SCAN_SIMPLE_CASE(LSM6DS3_ADDR, LSM6DS3, "LSM6DS3 accelerometer found at address 0x%x", (uint8_t)addr.address);
-                SCAN_SIMPLE_CASE(TCA9535_ADDR, TCA9535, "TCA9535 I2C expander found");
+                //SCAN_SIMPLE_CASE(TCA9535_ADDR, TCA9535, "TCA9535 I2C expander found");
                 SCAN_SIMPLE_CASE(TCA9555_ADDR, TCA9555, "TCA9555 I2C expander found");
                 SCAN_SIMPLE_CASE(VEML7700_ADDR, VEML7700, "VEML7700 light sensor found");
                 SCAN_SIMPLE_CASE(TSL25911_ADDR, TSL2591, "TSL2591 light sensor found");

@@ -79,7 +79,9 @@ typedef enum _meshtastic_TelemetrySensorType {
     /* SCD40/SCD41 CO2, humidity, temperature sensor */
     meshtastic_TelemetrySensorType_SCD4X = 32,
     /* ClimateGuard RadSens, radiation, Geiger-Muller Tube */
-    meshtastic_TelemetrySensorType_RADSENS = 33
+    meshtastic_TelemetrySensorType_RADSENS = 33,
+    /* RAK12023VB IO Extender and RAK12035VB Soil MoistureMonitor */
+    meshtastic_TelemetrySensorType_RAK12035VB = 34
 } meshtastic_TelemetrySensorType;
 
 /* Struct definitions */
@@ -104,6 +106,12 @@ typedef struct _meshtastic_DeviceMetrics {
 
 /* Weather station or other environmental metrics */
 typedef struct _meshtastic_EnvironmentMetrics {
+    /* Soil moisture measured */
+    bool has_soil_moisture;
+    uint16_t soil_moisture;
+    /* Soil temperature measured */
+    bool has_soil_temperature;
+    double soil_temperature;
     /* Temperature measured */
     bool has_temperature;
     float temperature;
