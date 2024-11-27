@@ -29,9 +29,10 @@
 #endif
 
 // Not all platforms have std::size().
-template <typename T, std::size_t N>
-std::size_t array_count(const T(&) [N]) { return N; }
-
+template <typename T, std::size_t N> std::size_t array_count(const T (&)[N])
+{
+    return N;
+}
 
 #if defined(NRF52840_XXAA) || defined(NRF52833_XXAA) || defined(ARCH_ESP32) || defined(ARCH_PORTDUINO)
 HardwareSerial *GPS::_serial_gps = &Serial1;
