@@ -10,9 +10,6 @@
 #include "mesh/generated/meshtastic/telemetry.pb.h"
 #include <SPI.h>
 #include <map>
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
-#include <SparkFun_ATECCX08a_Arduino_Library.h>
-#endif
 #if defined(ARCH_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32S2)
 #include "nimble/NimbleBluetooth.h"
 extern NimbleBluetooth *nimbleBluetooth;
@@ -41,10 +38,6 @@ extern bool eink_found;
 extern bool pmu_found;
 extern bool isCharging;
 extern bool isUSBPowered;
-
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
-extern ATECCX08A atecc;
-#endif
 
 #ifdef T_WATCH_S3
 #include <Adafruit_DRV2605.h>
