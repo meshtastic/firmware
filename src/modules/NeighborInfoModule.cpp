@@ -121,6 +121,9 @@ Will be used for broadcast.
 */
 int32_t NeighborInfoModule::runOnce()
 {
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN) {
+        return UINT_MAX;
+    }
     if (moduleConfig.neighbor_info.transmit_over_lora && !channels.isDefaultChannel(channels.getPrimaryIndex()) &&
         airTime->isTxAllowedChannelUtil(true) && airTime->isTxAllowedAirUtil()) {
         sendNeighborInfo(NODENUM_BROADCAST, false);
