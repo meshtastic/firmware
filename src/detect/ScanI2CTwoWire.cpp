@@ -7,7 +7,6 @@
 #include "linux/LinuxHardwareI2C.h"
 #endif
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
-#include "main.h"      // atecc
 #include "meshUtils.h" // vformat
 #endif
 
@@ -84,40 +83,6 @@ ScanI2C::DeviceType ScanI2CTwoWire::probeOLED(ScanI2C::DeviceAddress addr) const
 
     return o_probe;
 }
-void ScanI2CTwoWire::printATECCInfo() const
-{
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
-    atecc.readConfigZone(false);
-
-    std::string atecc_numbers = "ATECC608B Serial Number: ";
-    for (int i = 0; i < 9; i++) {
-        atecc_numbers += vformat("%02x", atecc.serialNumber[i]);
-    }
-
-    atecc_numbers += ", Rev Number: ";
-    for (int i = 0; i < 4; i++) {
-        atecc_numbers += vformat("%02x", atecc.revisionNumber[i]);
-    }
-    LOG_DEBUG(atecc_numbers.c_str());
-
-    LOG_DEBUG("ATECC608B Config %s, Data %s, Slot 0 %s", atecc.configLockStatus ? "Locked" : "Unlocked",
-              atecc.dataOTPLockStatus ? "Locked" : "Unlocked", atecc.slot0LockStatus ? "Locked" : "Unlocked");
-
-    std::string atecc_publickey = "";
-    if (atecc.configLockStatus && atecc.dataOTPLockStatus && atecc.slot0LockStatus) {
-        if (atecc.generatePublicKey() == false) {
-            atecc_publickey += "ATECC608B Error generating public key";
-        } else {
-            atecc_publickey += "ATECC608B Public Key: ";
-            for (int i = 0; i < 64; i++) {
-                atecc_publickey += vformat("%02x", atecc.publicKey64Bytes[i]);
-            }
-        }
-        LOG_DEBUG(atecc_publickey.c_str());
-    }
-#endif
-}
-
 uint16_t ScanI2CTwoWire::getRegisterValue(const ScanI2CTwoWire::RegisterLocation &registerLocation,
                                           ScanI2CTwoWire::ResponseWidth responseWidth) const
 {
@@ -202,23 +167,6 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
             case SSD1306_ADDRESS:
                 type = probeOLED(addr);
                 break;
-
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
-            case ATECC608B_ADDR:
-#ifdef RP2040_SLOW_CLOCK
-                if (atecc.begin(addr.address, Wire, Serial2) == true)
-#else
-                if (atecc.begin(addr.address) == true)
-#endif
-
-                {
-                    LOG_INFO("ATECC608B initialized");
-                } else {
-                    LOG_WARN("ATECC608B initialization failed");
-                }
-                printATECCInfo();
-                break;
-#endif
 
 #ifdef RV3028_RTC
             case RV3028_RTC:
