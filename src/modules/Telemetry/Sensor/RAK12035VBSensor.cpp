@@ -63,12 +63,13 @@ bool RAK12035VBSensor::getMetrics(meshtastic_Telemetry *measurement)
 
 	uint8_t moisture = 0;
     uint16_t temp = 0;
-	sensor.get_sensor_moisture(&moisture);
-    sensor.get_sensor_temperature(&temp);
-    delay(100);
-    measurement->variant.environment_metrics.soil_temperature = temp/10.0;
-    measurement->variant.environment_metrics.soil_moisture = moisture;
-    return true;
+	if(sensor.get_sensor_moisture(&moisture) && sensor.get_sensor_temperature(&temp)){
+        delay(100);
+        measurement->variant.environment_metrics.soil_temperature = temp/10.0;
+        measurement->variant.environment_metrics.soil_moisture = moisture;
+        return true;
+    }
+    return false;
 }
 
 #endif
