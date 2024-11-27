@@ -22,6 +22,8 @@ ErrorCode FloodingRouter::send(meshtastic_MeshPacket *p)
 bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 {
     if (wasSeenRecently(p)) { // Note: this will also add a recent packet record
+        printPacket("Ignore dupe incoming msg", p);
+        rxDupe++;
         /* If the original transmitter is doing retransmissions (hopStart equals hopLimit) for a reliable transmission, e.g., when
         the ACK got lost, we will handle the packet again to make sure it gets an implicit ACK. */
         bool isRepeated = p->hop_start > 0 && p->hop_start == p->hop_limit;
@@ -42,8 +44,6 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 
 void FloodingRouter::perhapsCancelDupe(const meshtastic_MeshPacket *p)
 {
-    printPacket("Ignore dupe incoming msg", p);
-    rxDupe++;
     if (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER &&
         config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER) {
         // cancel rebroadcast of this message *if* there was already one, unless we're a router/repeater!
@@ -73,6 +73,7 @@ void FloodingRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
                     tosend->hop_limit = 2;
                 }
 #endif
+                tosend->next_hop = NO_NEXT_HOP_PREFERENCE; // this should already be the case, but just in case
 
                 LOG_INFO("Rebroadcast received floodmsg");
                 // Note: we are careful to resend using the original senders node id

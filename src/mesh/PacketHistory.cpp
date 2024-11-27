@@ -16,7 +16,7 @@ PacketHistory::PacketHistory()
 /**
  * Update recentBroadcasts and return true if we have already seen this packet
  */
-bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpdate, bool *wasFallback)
+bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpdate, bool *wasFallback, bool *weWereNextHop)
 {
     if (p->id == 0) {
         LOG_DEBUG("Ignore message with zero id");
@@ -43,27 +43,33 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
 
     if (seenRecently) {
         LOG_DEBUG("Found existing packet record for fr=0x%x,to=0x%x,id=0x%x", p->from, p->to, p->id);
+        uint8_t ourRelayID = nodeDB->getLastByteOfNodeNum(nodeDB->getNodeNum());
         if (wasFallback) {
             // If it was seen with a next-hop not set to us and now it's NO_NEXT_HOP_PREFERENCE, and the relayer relayed already
             // before, it's a fallback to flooding. If we didn't already relay and the next-hop neither, we might need to handle
             // it now.
-            uint8_t ourRelayID = nodeDB->getLastByteOfNodeNum(nodeDB->getNodeNum());
             if (found->sender != nodeDB->getNodeNum() && found->next_hop != NO_NEXT_HOP_PREFERENCE &&
                 found->next_hop != ourRelayID && p->next_hop == NO_NEXT_HOP_PREFERENCE && wasRelayer(p->relay_node, found) &&
                 !wasRelayer(ourRelayID, found) && !wasRelayer(found->next_hop, found)) {
                 *wasFallback = true;
             }
         }
+
+        // Check if we were the next hop for this packet
+        if (weWereNextHop) {
+            *weWereNextHop = found->next_hop == ourRelayID;
+        }
     }
 
     if (withUpdate) {
-        if (found != recentPackets.end()) { // delete existing to updated timestamp and next-hop/relayed_by (re-insert)
+        if (found != recentPackets.end()) { // delete existing to updated timestamp and relayed_by (re-insert)
             // Add the existing relayed_by to the new record
             for (uint8_t i = 0; i < NUM_RELAYERS - 1; i++) {
                 if (found->relayed_by[i])
                     r.relayed_by[i + 1] = found->relayed_by[i];
             }
-            recentPackets.erase(found); // as unsorted_set::iterator is const (can't update - so re-insert..)
+            r.next_hop = found->next_hop; // keep the original next_hop (such that we check whether we were originally asked)
+            recentPackets.erase(found);   // as unsorted_set::iterator is const (can't update - so re-insert..)
         }
         recentPackets.insert(r);
         LOG_DEBUG("Add packet record fr=0x%x, id=0x%x", p->from, p->id);

@@ -46,8 +46,10 @@ class PacketHistory
      *
      * @param withUpdate if true and not found we add an entry to recentPackets
      * @param wasFallback if not nullptr, packet will be checked for fallback to flooding and value will be set to true if so
+     * @param weWereNextHop if not nullptr, packet will be checked for us being the next hop and value will be set to true if so
      */
-    bool wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpdate = true, bool *wasFallback = nullptr);
+    bool wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpdate = true, bool *wasFallback = nullptr,
+                         bool *weWereNextHop = nullptr);
 
     /* Check if a certain node was a relayer of a packet in the history given an ID and sender
      * @return true if node was indeed a relayer, false if not */

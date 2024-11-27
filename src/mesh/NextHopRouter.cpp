@@ -31,7 +31,10 @@ ErrorCode NextHopRouter::send(meshtastic_MeshPacket *p)
 bool NextHopRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 {
     bool wasFallback = false;
-    if (wasSeenRecently(p, true, &wasFallback)) { // Note: this will also add a recent packet record
+    bool weWereNextHop = false;
+    if (wasSeenRecently(p, true, &wasFallback, &weWereNextHop)) { // Note: this will also add a recent packet record
+        printPacket("Ignore dupe incoming msg", p);
+        rxDupe++;
         stopRetransmission(p->from, p->id);
 
         // If it was a fallback to flooding, try to relay again
@@ -46,8 +49,8 @@ bool NextHopRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
             if (isRepeated) {
                 if (!findInTxQueue(p->from, p->id) && !perhapsRelay(p) && isToUs(p) && p->want_ack)
                     sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, p->channel, 0);
-            } else {
-                perhapsCancelDupe(p); // If it's a dupe, cancel relay
+            } else if (!weWereNextHop) {
+                perhapsCancelDupe(p); // If it's a dupe, cancel relay if we were not explicitly asked to relay
             }
         }
         return true;
