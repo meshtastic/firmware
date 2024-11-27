@@ -43,10 +43,14 @@ void RAK12035VBSensor::setup() {
 	sensor.get_dry_cal(&zero_val);
 	sensor.get_wet_cal(&hundred_val);
     delay(100);
-    if(zero_val == 0 || zero_val >= hundred_val)
+    if(zero_val == 0 || zero_val >= hundred_val){
         sensor.set_dry_cal(default_zero_val);
-    if(hundred_val == 0 || hundred_val <= zero_val)
+        sensor.get_dry_cal(&zero_val);
+    }    
+    if(hundred_val == 0 || hundred_val <= zero_val){
         sensor.set_wet_cal(default_hundred_val);
+        sensor.get_wet_cal(&hundred_val);
+    }  
     delay(100);
 	LOG_INFO("Dry calibration value is %d\n", zero_val);
 	LOG_INFO("Wet calibration value is %d\n", hundred_val);
