@@ -16,13 +16,6 @@
 #define GPS_EN_ACTIVE 1
 #endif
 
-struct uBloxGnssModelInfo {
-    char swVersion[30];
-    char hwVersion[10];
-    uint8_t extensionNo;
-    char extension[10][30];
-};
-
 typedef enum {
     GNSS_MODEL_ATGM336H,
     GNSS_MODEL_MTK,
@@ -119,7 +112,9 @@ class GPS : private concurrency::OSThread
     // Let the GPS hardware save power between updates
     void down();
 
-  protected:
+  private:
+    GPS() : concurrency::OSThread("GPS") {}
+
     /// Record that we have a GPS
     void setConnected();
 
@@ -147,9 +142,6 @@ class GPS : private concurrency::OSThread
 
     GnssModel_t gnssModel = GNSS_MODEL_UNKNOWN;
 
-  private:
-    GPS() : concurrency::OSThread("GPS") {}
-
     TinyGPSPlus reader;
     uint8_t fixQual = 0; // fix quality from GPGGA
     uint32_t lastChecksumFailCount = 0;
@@ -160,14 +152,6 @@ class GPS : private concurrency::OSThread
     TinyGPSCustom gsafixtype; // custom extract fix type from GPGSA
     TinyGPSCustom gsapdop;    // custom extract PDOP from GPGSA
     uint8_t fixType = 0;      // fix type from GPGSA
-#endif
-#if GPS_BAUDRATE_FIXED
-    // if GPS_BAUDRATE is specified in variant, only try that.
-    const int serialSpeeds[1] = {GPS_BAUDRATE};
-    const int rareSerialSpeeds[1] = {GPS_BAUDRATE};
-#else
-    const int serialSpeeds[3] = {9600, 115200, 38400};
-    const int rareSerialSpeeds[3] = {4800, 57600, GPS_BAUDRATE};
 #endif
 
     uint32_t lastWakeStartMsec = 0, lastSleepStartMsec = 0, lastFixStartMsec = 0;
@@ -252,8 +236,6 @@ class GPS : private concurrency::OSThread
 
     // delay counter to allow more sats before fixed position stops GPS thread
     uint8_t fixeddelayCtr = 0;
-
-    const char *powerStateToString();
 };
 
 extern GPS *gps;
