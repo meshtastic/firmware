@@ -25,6 +25,7 @@
 #include "Sensor/BMP085Sensor.h"
 #include "Sensor/BMP280Sensor.h"
 #include "Sensor/BMP3XXSensor.h"
+#include "Sensor/CGRadSensSensor.h"
 #include "Sensor/DFRobotLarkSensor.h"
 #include "Sensor/LPS22HBSensor.h"
 #include "Sensor/MCP9808Sensor.h"
@@ -60,6 +61,7 @@ BMP3XXSensor bmp3xxSensor;
 #ifdef T1000X_SENSOR_EN
 T1000xSensor t1000xSensor;
 #endif
+CGRadSensSensor cgRadSens;
 
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
@@ -147,6 +149,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = nau7802Sensor.runOnce();
             if (max17048Sensor.hasSensor())
                 result = max17048Sensor.runOnce();
+            if (cgRadSens.hasSensor())
+                result = cgRadSens.runOnce();
 #endif
         }
         return result;
@@ -210,16 +214,19 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
     // Display "Env. From: ..." on its own
     display->drawString(x, y, "Env. From: " + String(lastSender) + "(" + String(agoSecs) + "s)");
 
-    String last_temp = String(lastMeasurement.variant.environment_metrics.temperature, 0) + "°C";
-    if (moduleConfig.telemetry.environment_display_fahrenheit) {
-        last_temp =
-            String(UnitConversions::CelsiusToFahrenheit(lastMeasurement.variant.environment_metrics.temperature), 0) + "°F";
-    }
+    if (lastMeasurement.variant.environment_metrics.has_temperature ||
+        lastMeasurement.variant.environment_metrics.has_relative_humidity) {
+        String last_temp = String(lastMeasurement.variant.environment_metrics.temperature, 0) + "°C";
+        if (moduleConfig.telemetry.environment_display_fahrenheit) {
+            last_temp =
+                String(UnitConversions::CelsiusToFahrenheit(lastMeasurement.variant.environment_metrics.temperature), 0) + "°F";
+        }
 
-    // Continue with the remaining details
-    display->drawString(x, y += _fontHeight(FONT_SMALL),
-                        "Temp/Hum: " + last_temp + " / " +
-                            String(lastMeasurement.variant.environment_metrics.relative_humidity, 0) + "%");
+        // Continue with the remaining details
+        display->drawString(x, y += _fontHeight(FONT_SMALL),
+                            "Temp/Hum: " + last_temp + " / " +
+                                String(lastMeasurement.variant.environment_metrics.relative_humidity, 0) + "%");
+    }
 
     if (lastMeasurement.variant.environment_metrics.barometric_pressure != 0) {
         display->drawString(x, y += _fontHeight(FONT_SMALL),
@@ -243,6 +250,10 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
     if (lastMeasurement.variant.environment_metrics.weight != 0)
         display->drawString(x, y += _fontHeight(FONT_SMALL),
                             "Weight: " + String(lastMeasurement.variant.environment_metrics.weight, 0) + "kg");
+
+    if (lastMeasurement.variant.environment_metrics.radiation != 0)
+        display->drawString(x, y += _fontHeight(FONT_SMALL),
+                            "Rad: " + String(lastMeasurement.variant.environment_metrics.radiation, 2) + "µR/h");
 }
 
 bool EnvironmentTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *t)
@@ -262,6 +273,8 @@ bool EnvironmentTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPac
         LOG_INFO("(Received from %s): wind speed=%fm/s, direction=%d degrees, weight=%fkg", sender,
                  t->variant.environment_metrics.wind_speed, t->variant.environment_metrics.wind_direction,
                  t->variant.environment_metrics.weight);
+
+        LOG_INFO("(Received from %s): radiation=%fµR/h", sender, t->variant.environment_metrics.radiation);
 
 #endif
         // release previous packet before occupying a new spot
@@ -390,6 +403,10 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
         valid = valid && max17048Sensor.getMetrics(m);
         hasSensor = true;
     }
+    if (cgRadSens.hasSensor()) {
+        valid = valid && cgRadSens.getMetrics(m);
+        hasSensor = true;
+    }
 
 #endif
     return valid && hasSensor;
@@ -442,6 +459,8 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 
         LOG_INFO("Send: wind speed=%fm/s, direction=%d degrees, weight=%fkg", m.variant.environment_metrics.wind_speed,
                  m.variant.environment_metrics.wind_direction, m.variant.environment_metrics.weight);
+
+        LOG_INFO("Send: radiation=%fµR/h", m.variant.environment_metrics.radiation);
 
         sensor_read_error_count = 0;
 
@@ -582,6 +601,11 @@ AdminMessageHandleResult EnvironmentTelemetryModule::handleAdminMessageForModule
     }
     if (max17048Sensor.hasSensor()) {
         result = max17048Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (cgRadSens.hasSensor()) {
+        result = cgRadSens.handleAdminMessage(mp, request, response);
         if (result != AdminMessageHandleResult::NOT_HANDLED)
             return result;
     }

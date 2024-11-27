@@ -396,7 +396,7 @@ static void drawBattery(OLEDDisplay *display, int16_t x, int16_t y, uint8_t *img
     display->drawFastImage(x, y, 16, 8, imgBuffer);
 }
 
-#ifdef T_WATCH_S3
+#if defined(DISPLAY_CLOCK_FRAME)
 
 void Screen::drawWatchFaceToggleButton(OLEDDisplay *display, int16_t x, int16_t y, bool digitalMode, float scale)
 {
@@ -1420,7 +1420,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     }
     bool hasNodeHeading = false;
 
-    if (ourNode && (hasValidPosition(ourNode) || screen->hasHeading())) {
+    if (ourNode && (nodeDB->hasValidPosition(ourNode) || screen->hasHeading())) {
         const meshtastic_PositionLite &op = ourNode->position;
         float myHeading;
         if (screen->hasHeading())
@@ -1429,7 +1429,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
             myHeading = screen->estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
         screen->drawCompassNorth(display, compassX, compassY, myHeading);
 
-        if (hasValidPosition(node)) {
+        if (nodeDB->hasValidPosition(node)) {
             // display direction toward node
             hasNodeHeading = true;
             const meshtastic_PositionLite &p = node->position;
@@ -2068,7 +2068,7 @@ void Screen::setFrames(FrameFocus focus)
         focus = FOCUS_FAULT; // Change our "focus" parameter, to ensure we show the fault frame
     }
 
-#ifdef T_WATCH_S3
+#if defined(DISPLAY_CLOCK_FRAME)
     normalFrames[numframes++] = screen->digitalWatchFace ? &Screen::drawDigitalClockFrame : &Screen::drawAnalogClockFrame;
 #endif
 
@@ -2699,7 +2699,7 @@ int Screen::handleUIFrameEvent(const UIFrameEvent *event)
 int Screen::handleInputEvent(const InputEvent *event)
 {
 
-#ifdef T_WATCH_S3
+#if defined(DISPLAY_CLOCK_FRAME)
     // For the T-Watch, intercept touches to the 'toggle digital/analog watch face' button
     uint8_t watchFaceFrame = error_code ? 1 : 0;
 
