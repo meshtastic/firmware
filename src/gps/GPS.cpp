@@ -28,6 +28,12 @@
 #define GPS_RESET_MODE HIGH
 #endif
 
+// Not all platforms have std::size().
+template <typename T, std::size_t N> std::size_t array_count(const T (&)[N])
+{
+    return N;
+}
+
 #if defined(NRF52840_XXAA) || defined(NRF52833_XXAA) || defined(ARCH_ESP32) || defined(ARCH_PORTDUINO)
 HardwareSerial *GPS::_serial_gps = &Serial1;
 #elif defined(ARCH_RP2040)
@@ -46,8 +52,14 @@ static GPSUpdateScheduling scheduling;
 /// only init that port once.
 static bool didSerialInit;
 
-static struct uBloxGnssModelInfo info;
-static uint8_t uBloxProtocolVersion;
+static struct uBloxGnssModelInfo {
+    char swVersion[30];
+    char hwVersion[10];
+    uint8_t extensionNo;
+    char extension[10][30];
+    uint8_t protocol_version;
+} ublox_info;
+
 #define GPS_SOL_EXPIRY_MS 5000 // in millis. give 1 second time to combine different sentences. NMEA Frequency isn't higher anyway
 #define NMEA_MSG_GXGSA "GNGSA" // GSA message (GPGSA, GNGSA etc)
 
@@ -412,6 +424,15 @@ int GPS::getACK(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t 
     return 0;
 }
 
+#if GPS_BAUDRATE_FIXED
+// if GPS_BAUDRATE is specified in variant, only try that.
+static const int serialSpeeds[1] = {GPS_BAUDRATE};
+static const int rareSerialSpeeds[1] = {GPS_BAUDRATE};
+#else
+static const int serialSpeeds[3] = {9600, 115200, 38400};
+static const int rareSerialSpeeds[3] = {4800, 57600, GPS_BAUDRATE};
+#endif
+
 /**
  * @brief  Setup the GPS based on the model detected.
  *  We detect the GPS by cycling through a set of baud rates, first common then rare.
@@ -428,7 +449,7 @@ bool GPS::setup()
                 LOG_DEBUG("Probe for GPS at %d", serialSpeeds[speedSelect]);
                 gnssModel = probe(serialSpeeds[speedSelect]);
                 if (gnssModel == GNSS_MODEL_UNKNOWN) {
-                    if (++speedSelect == sizeof(serialSpeeds) / sizeof(int)) {
+                    if (++speedSelect == array_count(serialSpeeds)) {
                         speedSelect = 0;
                         ++probeTries;
                     }
@@ -439,7 +460,7 @@ bool GPS::setup()
                 LOG_DEBUG("Probe for GPS at %d", rareSerialSpeeds[speedSelect]);
                 gnssModel = probe(rareSerialSpeeds[speedSelect]);
                 if (gnssModel == GNSS_MODEL_UNKNOWN) {
-                    if (++speedSelect == sizeof(rareSerialSpeeds) / sizeof(int)) {
+                    if (++speedSelect == array_count(rareSerialSpeeds)) {
                         LOG_WARN("Give up on GPS probe and set to %d", GPS_BAUDRATE);
                         return true;
                     }
@@ -635,7 +656,7 @@ bool GPS::setup()
             SEND_UBX_PACKET(0x06, 0x01, _message_RMC, "enable NMEA RMC", 500);
             SEND_UBX_PACKET(0x06, 0x01, _message_GGA, "enable NMEA GGA", 500);
 
-            if (uBloxProtocolVersion >= 18) {
+            if (ublox_info.protocol_version >= 18) {
                 clearBuffer();
                 SEND_UBX_PACKET(0x06, 0x86, _message_PMS, "enable powersave for GPS", 500);
                 SEND_UBX_PACKET(0x06, 0x3B, _message_CFG_PM2, "enable powersave details for GPS", 500);
@@ -1131,7 +1152,7 @@ GnssModel_t GPS::probe(int serialSpeed)
     }
 #endif
 
-    memset(&info, 0, sizeof(struct uBloxGnssModelInfo));
+    memset(&ublox_info, 0, sizeof(ublox_info));
     uint8_t buffer[768] = {0};
     delay(100);
 
@@ -1198,64 +1219,64 @@ GnssModel_t GPS::probe(int serialSpeed)
     if (len) {
         uint16_t position = 0;
         for (int i = 0; i < 30; i++) {
-            info.swVersion[i] = buffer[position];
+            ublox_info.swVersion[i] = buffer[position];
             position++;
         }
         for (int i = 0; i < 10; i++) {
-            info.hwVersion[i] = buffer[position];
+            ublox_info.hwVersion[i] = buffer[position];
             position++;
         }
 
         while (len >= position + 30) {
             for (int i = 0; i < 30; i++) {
-                info.extension[info.extensionNo][i] = buffer[position];
+                ublox_info.extension[ublox_info.extensionNo][i] = buffer[position];
                 position++;
             }
-            info.extensionNo++;
-            if (info.extensionNo > 9)
+            ublox_info.extensionNo++;
+            if (ublox_info.extensionNo > 9)
                 break;
         }
 
         LOG_DEBUG("Module Info : ");
-        LOG_DEBUG("Soft version: %s", info.swVersion);
-        LOG_DEBUG("Hard version: %s", info.hwVersion);
-        LOG_DEBUG("Extensions:%d", info.extensionNo);
-        for (int i = 0; i < info.extensionNo; i++) {
-            LOG_DEBUG("  %s", info.extension[i]);
+        LOG_DEBUG("Soft version: %s", ublox_info.swVersion);
+        LOG_DEBUG("Hard version: %s", ublox_info.hwVersion);
+        LOG_DEBUG("Extensions:%d", ublox_info.extensionNo);
+        for (int i = 0; i < ublox_info.extensionNo; i++) {
+            LOG_DEBUG("  %s", ublox_info.extension[i]);
         }
 
         memset(buffer, 0, sizeof(buffer));
 
         // tips: extensionNo field is 0 on some 6M GNSS modules
-        for (int i = 0; i < info.extensionNo; ++i) {
-            if (!strncmp(info.extension[i], "MOD=", 4)) {
-                strncpy((char *)buffer, &(info.extension[i][4]), sizeof(buffer));
-            } else if (!strncmp(info.extension[i], "PROTVER", 7)) {
+        for (int i = 0; i < ublox_info.extensionNo; ++i) {
+            if (!strncmp(ublox_info.extension[i], "MOD=", 4)) {
+                strncpy((char *)buffer, &(ublox_info.extension[i][4]), sizeof(buffer));
+            } else if (!strncmp(ublox_info.extension[i], "PROTVER", 7)) {
                 char *ptr = nullptr;
                 memset(buffer, 0, sizeof(buffer));
-                strncpy((char *)buffer, &(info.extension[i][8]), sizeof(buffer));
+                strncpy((char *)buffer, &(ublox_info.extension[i][8]), sizeof(buffer));
                 LOG_DEBUG("Protocol Version:%s", (char *)buffer);
                 if (strlen((char *)buffer)) {
-                    uBloxProtocolVersion = strtoul((char *)buffer, &ptr, 10);
-                    LOG_DEBUG("ProtVer=%d", uBloxProtocolVersion);
+                    ublox_info.protocol_version = strtoul((char *)buffer, &ptr, 10);
+                    LOG_DEBUG("ProtVer=%d", ublox_info.protocol_version);
                 } else {
-                    uBloxProtocolVersion = 0;
+                    ublox_info.protocol_version = 0;
                 }
             }
         }
-        if (strncmp(info.hwVersion, "00040007", 8) == 0) {
+        if (strncmp(ublox_info.hwVersion, "00040007", 8) == 0) {
             LOG_INFO(DETECTED_MESSAGE, "U-blox 6", "6");
             return GNSS_MODEL_UBLOX6;
-        } else if (strncmp(info.hwVersion, "00070000", 8) == 0) {
+        } else if (strncmp(ublox_info.hwVersion, "00070000", 8) == 0) {
             LOG_INFO(DETECTED_MESSAGE, "U-blox 7", "7");
             return GNSS_MODEL_UBLOX7;
-        } else if (strncmp(info.hwVersion, "00080000", 8) == 0) {
+        } else if (strncmp(ublox_info.hwVersion, "00080000", 8) == 0) {
             LOG_INFO(DETECTED_MESSAGE, "U-blox 8", "8");
             return GNSS_MODEL_UBLOX8;
-        } else if (strncmp(info.hwVersion, "00190000", 8) == 0) {
+        } else if (strncmp(ublox_info.hwVersion, "00190000", 8) == 0) {
             LOG_INFO(DETECTED_MESSAGE, "U-blox 9", "9");
             return GNSS_MODEL_UBLOX9;
-        } else if (strncmp(info.hwVersion, "000A0000", 8) == 0) {
+        } else if (strncmp(ublox_info.hwVersion, "000A0000", 8) == 0) {
             LOG_INFO(DETECTED_MESSAGE, "U-blox 10", "10");
             return GNSS_MODEL_UBLOX10;
         }
