@@ -3,6 +3,7 @@
 # trunk-ignore-all(flake8/F821): For SConstruct imports
 import sys
 from os.path import join
+import json
 
 from readprops import readProps
 
@@ -90,11 +91,20 @@ prefsLoc = projenv["PROJECT_DIR"] + "/version.properties"
 verObj = readProps(prefsLoc)
 print("Using meshtastic platformio-custom.py, firmware version " + verObj["long"] + " on " + env.get("PIOENV"))
 
+jsonLoc = projenv["PROJECT_DIR"] + "/userPrefs.json"
+with open(jsonLoc) as f:
+    userPrefs = json.load(f)
 # General options that are passed to the C and C++ compilers
-projenv.Append(
-    CCFLAGS=[
+flags = [
         "-DAPP_VERSION=" + verObj["long"],
         "-DAPP_VERSION_SHORT=" + verObj["short"],
         "-DAPP_ENV=" + env.get("PIOENV"),
-    ]
+    ] + ["-D" + key + "=" + userPrefs[key] for key in userPrefs]
+
+print ("Using flags:")
+for flag in flags:
+    print(flag.replace("-D", ""))
+    
+projenv.Append(
+    CCFLAGS=flags,
 )

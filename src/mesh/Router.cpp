@@ -20,7 +20,6 @@
 #if ENABLE_JSON_LOGGING || ARCH_PORTDUINO
 #include "serialization/MeshPacketSerializer.h"
 #endif
-#include "../userPrefs.h"
 
 #define MAX_RX_FROMRADIO                                                                                                         \
     4 // max number of packets destined to our queue, we dispatch packets quickly so it doesn't need to be big
