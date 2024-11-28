@@ -158,8 +158,8 @@ class GPS : private concurrency::OSThread
     uint32_t rx_gpio = 0;
     uint32_t tx_gpio = 0;
 
-    int speedSelect = 0;
-    int probeTries = 0;
+    uint8_t speedSelect = 0;
+    uint8_t probeTries = 0;
 
     /**
      * hasValidLocation - indicates that the position variables contain a complete
