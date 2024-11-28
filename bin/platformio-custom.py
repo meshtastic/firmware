@@ -4,6 +4,7 @@
 import sys
 from os.path import join
 import json
+import re
 
 from readprops import readProps
 
@@ -91,19 +92,36 @@ prefsLoc = projenv["PROJECT_DIR"] + "/version.properties"
 verObj = readProps(prefsLoc)
 print("Using meshtastic platformio-custom.py, firmware version " + verObj["long"] + " on " + env.get("PIOENV"))
 
-jsonLoc = projenv["PROJECT_DIR"] + "/userPrefs.json"
+jsonLoc = env["PROJECT_DIR"] + "/userPrefs.json"
 with open(jsonLoc) as f:
-    userPrefs = json.load(f)
+    jsonStr = re.sub("//.*","", f.read(), flags=re.MULTILINE)
+    userPrefs = json.loads(jsonStr)
+
+pref_flags = []
+# Pre-process the userPrefs
+for pref in userPrefs:
+    if userPrefs[pref].startswith("{"):
+        pref_flags.append("-D" + pref + "=" + userPrefs[pref])
+    elif userPrefs[pref].replace(".", "").isdigit():
+        pref_flags.append("-D" + pref + "=" + userPrefs[pref])
+    elif userPrefs[pref] == "true" or userPrefs[pref] == "false":
+        pref_flags.append("-D" + pref + "=" + userPrefs[pref])
+    elif userPrefs[pref].startswith("meshtastic_"):
+        pref_flags.append("-D" + pref + "=" + userPrefs[pref])
+    # If the value is a string, we need to wrap it in quotes
+    else:
+        pref_flags.append("-D" + pref + "=" + env.StringifyMacro(userPrefs[pref]) + "")
+
 # General options that are passed to the C and C++ compilers
 flags = [
         "-DAPP_VERSION=" + verObj["long"],
         "-DAPP_VERSION_SHORT=" + verObj["short"],
         "-DAPP_ENV=" + env.get("PIOENV"),
-    ] + ["-D" + key + "=" + userPrefs[key] for key in userPrefs]
+    ] + pref_flags
 
 print ("Using flags:")
 for flag in flags:
-    print(flag.replace("-D", ""))
+    print(flag)
     
 projenv.Append(
     CCFLAGS=flags,
