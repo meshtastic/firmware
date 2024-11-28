@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../userPrefs.h"
 #include "configuration.h"
 
 #include "detect/ScanI2C.h"
