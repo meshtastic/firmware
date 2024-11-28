@@ -44,22 +44,22 @@ void RAK12035VBSensor::setup() {
 	sensor.get_wet_cal(&hundred_val);
     delay(100);
     if(zero_val == 0 || zero_val >= hundred_val){
-        LOG_COLOR_W("Dry calibration value is %d", zero_val);
-        LOG_COLOR_W("Wet calibration value is %d", hundred_val);
-        LOG_COLOR_W("This does not make sense. Youc can recalibrate this sensor using the calibration sketch included here: https://github.com/RAKWireless/RAK12035_SoilMoisture.");
-        LOG_COLOR_W("For now, setting default calibration value for Dry Calibration: %d", default_zero_val);
+        LOG_ERROR("Dry calibration value is %d", zero_val);
+        LOG_ERROR("Wet calibration value is %d", hundred_val);
+        LOG_ERROR("This does not make sense. Youc can recalibrate this sensor using the calibration sketch included here: https://github.com/RAKWireless/RAK12035_SoilMoisture.");
+        LOG_ERROR("For now, setting default calibration value for Dry Calibration: %d", default_zero_val);
         sensor.set_dry_cal(default_zero_val);
         sensor.get_dry_cal(&zero_val);
-        LOG_COLOR_W("Dry calibration reset complete. New value is %d", zero_val);
+        LOG_ERROR("Dry calibration reset complete. New value is %d", zero_val);
     }    
     if(hundred_val == 0 || hundred_val <= zero_val){
-        LOG_COLOR_W("Dry calibration value is %d", zero_val);
-        LOG_COLOR_W("Wet calibration value is %d", hundred_val);
-        LOG_COLOR_W("This does not make sense. Youc can recalibrate this sensor using the calibration sketch included here: https://github.com/RAKWireless/RAK12035_SoilMoisture.");
-        LOG_COLOR_W("For now, setting default calibration value for Wet Calibration: %d", default_hundred_val);
+        LOG_ERROR("Dry calibration value is %d", zero_val);
+        LOG_ERROR("Wet calibration value is %d", hundred_val);
+        LOG_ERROR("This does not make sense. Youc can recalibrate this sensor using the calibration sketch included here: https://github.com/RAKWireless/RAK12035_SoilMoisture.");
+        LOG_ERROR("For now, setting default calibration value for Wet Calibration: %d", default_hundred_val);
         sensor.set_wet_cal(default_hundred_val);
         sensor.get_wet_cal(&hundred_val);
-        LOG_COLOR_W("Wet calibration reset complete. New value is %d", hundred_val);
+        LOG_ERROR("Wet calibration reset complete. New value is %d", hundred_val);
     }  
     delay(100);
 	LOG_INFO("Dry calibration value is %d", zero_val);
