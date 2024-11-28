@@ -106,12 +106,6 @@ typedef struct _meshtastic_DeviceMetrics {
 
 /* Weather station or other environmental metrics */
 typedef struct _meshtastic_EnvironmentMetrics {
-    /* Soil moisture measured */
-    bool has_soil_moisture;
-    uint16_t soil_moisture;
-    /* Soil temperature measured */
-    bool has_soil_temperature;
-    float soil_temperature;
     /* Temperature measured */
     bool has_temperature;
     float temperature;
@@ -168,6 +162,12 @@ typedef struct _meshtastic_EnvironmentMetrics {
     /* Radiation in µR/h */
     bool has_radiation;
     float radiation;
+    /* Soil moisture measured */
+    bool has_soil_moisture;
+    int soil_moisture;
+    /* Soil temperature measured */
+    bool has_soil_temperature;
+    float soil_temperature;
 } meshtastic_EnvironmentMetrics;
 
 /* Power Metrics (voltage / current / etc) */
@@ -326,7 +326,7 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define meshtastic_DeviceMetrics_init_default    {false, 0, false, 0, false, 0, false, 0, false, 0}
-#define meshtastic_EnvironmentMetrics_init_default {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
+#define meshtastic_EnvironmentMetrics_init_default {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_PowerMetrics_init_default     {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_AirQualityMetrics_init_default {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_LocalStats_init_default       {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
@@ -334,7 +334,7 @@ extern "C" {
 #define meshtastic_Telemetry_init_default        {0, 0, {meshtastic_DeviceMetrics_init_default}}
 #define meshtastic_Nau7802Config_init_default    {0, 0}
 #define meshtastic_DeviceMetrics_init_zero       {false, 0, false, 0, false, 0, false, 0, false, 0}
-#define meshtastic_EnvironmentMetrics_init_zero  {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
+#define meshtastic_EnvironmentMetrics_init_zero  {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_PowerMetrics_init_zero        {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_AirQualityMetrics_init_zero   {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_LocalStats_init_zero          {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
@@ -366,6 +366,8 @@ extern "C" {
 #define meshtastic_EnvironmentMetrics_wind_gust_tag 16
 #define meshtastic_EnvironmentMetrics_wind_lull_tag 17
 #define meshtastic_EnvironmentMetrics_radiation_tag 18
+#define meshtastic_EnvironmentMetrics_soil_moisture_tag 19
+#define meshtastic_EnvironmentMetrics_soil_temperature_tag 20
 #define meshtastic_PowerMetrics_ch1_voltage_tag  1
 #define meshtastic_PowerMetrics_ch1_current_tag  2
 #define meshtastic_PowerMetrics_ch2_voltage_tag  3
