@@ -92,7 +92,7 @@ prefsLoc = projenv["PROJECT_DIR"] + "/version.properties"
 verObj = readProps(prefsLoc)
 print("Using meshtastic platformio-custom.py, firmware version " + verObj["long"] + " on " + env.get("PIOENV"))
 
-jsonLoc = env["PROJECT_DIR"] + "/userPrefs.json"
+jsonLoc = env["PROJECT_DIR"] + "/userPrefs.jsonc"
 with open(jsonLoc) as f:
     jsonStr = re.sub("//.*","", f.read(), flags=re.MULTILINE)
     userPrefs = json.loads(jsonStr)
