@@ -7,14 +7,21 @@
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
 
 #include "../concurrency/OSThread.h"
+#ifdef HAS_BMA423
 #include "BMA423Sensor.h"
+#endif
 #include "BMX160Sensor.h"
 #include "ICM20948Sensor.h"
 #include "LIS3DHSensor.h"
 #include "LSM6DS3Sensor.h"
 #include "MPU6050Sensor.h"
 #include "MotionSensor.h"
+#ifdef HAS_QMA6100P
+#include "QMA6100PSensor.h"
+#endif
+#ifdef HAS_STK8XXX
 #include "STK8XXXSensor.h"
+#endif
 
 extern ScanI2C::DeviceAddress accelerometer_found;
 
@@ -25,7 +32,7 @@ class AccelerometerThread : public concurrency::OSThread
     bool isInitialised = false;
 
   public:
-    explicit AccelerometerThread(ScanI2C::FoundDevice foundDevice) : OSThread("AccelerometerThread")
+    explicit AccelerometerThread(ScanI2C::FoundDevice foundDevice) : OSThread("Accelerometer")
     {
         device = foundDevice;
         init();
@@ -62,23 +69,25 @@ class AccelerometerThread : public concurrency::OSThread
             return;
 
         if (device.address.port == ScanI2C::I2CPort::NO_I2C || device.address.address == 0 || device.type == ScanI2C::NONE) {
-            LOG_DEBUG("AccelerometerThread disabling due to no sensors found\n");
+            LOG_DEBUG("AccelerometerThread Disable due to no sensors found");
             disable();
             return;
         }
 
 #ifndef RAK_4631
         if (!config.display.wake_on_tap_or_motion && !config.device.double_tap_as_button_press) {
-            LOG_DEBUG("AccelerometerThread disabling due to no interested configurations\n");
+            LOG_DEBUG("AccelerometerThread Disable due to no interested configurations");
             disable();
             return;
         }
 #endif
 
         switch (device.type) {
+#ifdef HAS_BMA423
         case ScanI2C::DeviceType::BMA423:
             sensor = new BMA423Sensor(device);
             break;
+#endif
         case ScanI2C::DeviceType::MPU6050:
             sensor = new MPU6050Sensor(device);
             break;
@@ -91,12 +100,19 @@ class AccelerometerThread : public concurrency::OSThread
         case ScanI2C::DeviceType::LSM6DS3:
             sensor = new LSM6DS3Sensor(device);
             break;
+#ifdef HAS_STK8XXX
         case ScanI2C::DeviceType::STK8BAXX:
             sensor = new STK8XXXSensor(device);
             break;
+#endif
         case ScanI2C::DeviceType::ICM20948:
             sensor = new ICM20948Sensor(device);
             break;
+#ifdef HAS_QMA6100P
+        case ScanI2C::DeviceType::QMA6100P:
+            sensor = new QMA6100PSensor(device);
+            break;
+#endif
         default:
             disable();
             return;
@@ -106,11 +122,11 @@ class AccelerometerThread : public concurrency::OSThread
         if (!isInitialised) {
             clean();
         }
-        LOG_DEBUG("AccelerometerThread::init %s\n", isInitialised ? "ok" : "failed");
+        LOG_DEBUG("AccelerometerThread::init %s", isInitialised ? "ok" : "failed");
     }
 
     // Copy constructor (not implemented / included to avoid cppcheck warnings)
-    AccelerometerThread(const AccelerometerThread &other) : OSThread::OSThread("AccelerometerThread") { this->copy(other); }
+    AccelerometerThread(const AccelerometerThread &other) : OSThread::OSThread("Accelerometer") { this->copy(other); }
 
     // Destructor (included to avoid cppcheck warnings)
     virtual ~AccelerometerThread() { clean(); }

@@ -1,6 +1,6 @@
 #include "BMA423Sensor.h"
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && defined(HAS_BMA423)
 
 using namespace MotionSensorI2C;
 
@@ -41,10 +41,10 @@ bool BMA423Sensor::init()
 
         // It corresponds to isDoubleClick interrupt
         sensor.enableWakeupIRQ();
-        LOG_DEBUG("BMA423Sensor::init ok\n");
+        LOG_DEBUG("BMA423 init ok");
         return true;
     }
-    LOG_DEBUG("BMA423Sensor::init failed\n");
+    LOG_DEBUG("BMA423 init failed");
     return false;
 }
 

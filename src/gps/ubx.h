@@ -1,20 +1,22 @@
-const char *failMessage = "Unable to %s\n";
+static const char *failMessage = "Unable to %s";
 
 #define SEND_UBX_PACKET(TYPE, ID, DATA, ERRMSG, TIMEOUT)                                                                         \
-    msglen = makeUBXPacket(TYPE, ID, sizeof(DATA), DATA);                                                                        \
-    _serial_gps->write(UBXscratch, msglen);                                                                                      \
-    if (getACK(TYPE, ID, TIMEOUT) != GNSS_RESPONSE_OK) {                                                                         \
-        LOG_WARN(failMessage, #ERRMSG);                                                                                          \
-    }
+    do {                                                                                                                         \
+        msglen = makeUBXPacket(TYPE, ID, sizeof(DATA), DATA);                                                                    \
+        _serial_gps->write(UBXscratch, msglen);                                                                                  \
+        if (getACK(TYPE, ID, TIMEOUT) != GNSS_RESPONSE_OK) {                                                                     \
+            LOG_WARN(failMessage, #ERRMSG);                                                                                      \
+        }                                                                                                                        \
+    } while (0)
 
 // Power Management
 
-uint8_t GPS::_message_PMREQ[] PROGMEM = {
+static uint8_t _message_PMREQ[] PROGMEM = {
     0x00, 0x00, 0x00, 0x00, // 4 bytes duration of request task (milliseconds)
     0x02, 0x00, 0x00, 0x00  // Bitfield, set backup = 1
 };
 
-uint8_t GPS::_message_PMREQ_10[] PROGMEM = {
+static uint8_t _message_PMREQ_10[] PROGMEM = {
     0x00,                   // version (0 for this version)
     0x00, 0x00, 0x00,       // Reserved 1
     0x00, 0x00, 0x00, 0x00, // 4 bytes duration of request task (milliseconds)
@@ -22,18 +24,18 @@ uint8_t GPS::_message_PMREQ_10[] PROGMEM = {
     0x08, 0x00, 0x00, 0x00  // wakeupSources Wake on uartrx
 };
 
-const uint8_t GPS::_message_CFG_RXM_PSM[] PROGMEM = {
+static const uint8_t _message_CFG_RXM_PSM[] PROGMEM = {
     0x08, // Reserved
     0x01  // Power save mode
 };
 
 // only for Neo-6
-const uint8_t GPS::_message_CFG_RXM_ECO[] PROGMEM = {
+static const uint8_t _message_CFG_RXM_ECO[] PROGMEM = {
     0x08, // Reserved
     0x04  // eco mode
 };
 
-const uint8_t GPS::_message_CFG_PM2[] PROGMEM = {
+static const uint8_t _message_CFG_PM2[] PROGMEM = {
     0x01,                   // version
     0x00,                   // Reserved 1, set to 0x06 by u-Center
     0x00,                   // Reserved 2
@@ -58,7 +60,7 @@ const uint8_t GPS::_message_CFG_PM2[] PROGMEM = {
 // Constallation setup, none required for Neo-6
 
 // For Neo-7 GPS & SBAS
-const uint8_t GPS::_message_GNSS_7[] = {
+static const uint8_t _message_GNSS_7[] = {
     0x00, // msgVer (0 for this version)
     0x00, // numTrkChHw (max number of hardware channels, read only, so it's always 0)
     0xff, // numTrkChUse (max number of channels to use, 0xff = max available)
@@ -76,7 +78,7 @@ const uint8_t GPS::_message_GNSS_7[] = {
 // There is also a possibility that the module may be GPS-only.
 
 // For M8 GPS, GLONASS, Galileo, SBAS, QZSS
-const uint8_t GPS::_message_GNSS_8[] = {
+static const uint8_t _message_GNSS_8[] = {
     0x00,                                           // msgVer (0 for this version)
     0x00,                                           // numTrkChHw (max number of hardware channels, read only, so it's always 0)
     0xff,                                           // numTrkChUse (max number of channels to use, 0xff = max available)
@@ -90,7 +92,7 @@ const uint8_t GPS::_message_GNSS_8[] = {
 };
 /*
 // For M8 GPS, GLONASS, BeiDou, SBAS, QZSS
-const uint8_t GPS::_message_GNSS_8_B[] = {
+static const uint8_t _message_GNSS_8_B[] = {
  0x00, // msgVer (0 for this version)
  0x00, // numTrkChHw (max number of hardware channels, read only, so it's always 0)
  0xff, // numTrkChUse (max number of channels to use, 0xff = max available) read only for protocol >23
@@ -105,7 +107,7 @@ const uint8_t GPS::_message_GNSS_8_B[] = {
 */
 
 // For M8 we want to enable NMEA version 4.10 messages to allow for Galileo and or BeiDou
-const uint8_t GPS::_message_NMEA[]{
+static const uint8_t _message_NMEA[]{
     0x00,                              // filter flags
     0x41,                              // NMEA Version
     0x00,                              // Max number of SVs to report per TaklerId
@@ -121,13 +123,13 @@ const uint8_t GPS::_message_NMEA[]{
 // Enable jamming/interference monitor
 
 // For Neo-6, Max-7 and Neo-7
-const uint8_t GPS::_message_JAM_6_7[] = {
+static const uint8_t _message_JAM_6_7[] = {
     0xf3, 0xac, 0x62, 0xad, // config1 bbThreshold = 3, cwThreshold = 15, enable = 1, reserved bits 0x16B156
     0x1e, 0x03, 0x00, 0x00  // config2 antennaSetting Unknown = 0, reserved 3, = 0x00,0x00, reserved 2 = 0x31E
 };
 
 // For M8
-const uint8_t GPS::_message_JAM_8[] = {
+static const uint8_t _message_JAM_8[] = {
     0xf3, 0xac, 0x62, 0xad, // config1 bbThreshold = 3, cwThreshold = 15, enable1 = 1, reserved bits 0x16B156
     0x1e, 0x43, 0x00, 0x00  // config2 antennaSetting Unknown = 0, enable2 = 1, generalBits = 0x31E
 };
@@ -137,7 +139,7 @@ const uint8_t GPS::_message_JAM_8[] = {
 // ToDo: check UBX-MON-VER for module type and protocol version
 
 // For the Neo-6
-const uint8_t GPS::_message_NAVX5[] = {
+static const uint8_t _message_NAVX5[] = {
     0x00, 0x00,             // msgVer (0 for this version)
     0x4c, 0x66,             // mask1
     0x00, 0x00, 0x00, 0x00, // Reserved 0
@@ -166,7 +168,7 @@ const uint8_t GPS::_message_NAVX5[] = {
     0x00, 0x00, 0x00, 0x00  // Reserved 4
 };
 // For the M8
-const uint8_t GPS::_message_NAVX5_8[] = {
+static const uint8_t _message_NAVX5_8[] = {
     0x02, 0x00,             // msgVer (2 for this version)
     0x4c, 0x66,             // mask1
     0x00, 0x00, 0x00, 0x00, // mask2
@@ -197,7 +199,7 @@ const uint8_t GPS::_message_NAVX5_8[] = {
 // Additionally, for some new modules like the M9/M10, an update rate lower than 5Hz
 // is recommended to avoid a known issue with satellites disappearing.
 // The module defaults for M8, M9, M10 are the same as we use here so no update is necessary
-const uint8_t GPS::_message_1HZ[] = {
+static const uint8_t _message_1HZ[] = {
     0xE8, 0x03, // Measurement Rate (1000ms for 1Hz)
     0x01, 0x00, // Navigation rate, always 1 in GPS mode
     0x01, 0x00  // Time reference
@@ -205,7 +207,7 @@ const uint8_t GPS::_message_1HZ[] = {
 
 // Disable GLL. GLL - Geographic position (latitude and longitude), which provides the current geographical
 // coordinates.
-const uint8_t GPS::_message_GLL[] = {
+static const uint8_t _message_GLL[] = {
     0xF0, 0x01, // NMEA ID for GLL
     0x00,       // Rate for DDC
     0x00,       // Rate for UART1
@@ -217,7 +219,7 @@ const uint8_t GPS::_message_GLL[] = {
 
 // Disable GSA. GSA - GPS DOP and active satellites, used for detailing the satellites used in the positioning and
 // the DOP (Dilution of Precision)
-const uint8_t GPS::_message_GSA[] = {
+static const uint8_t _message_GSA[] = {
     0xF0, 0x02, // NMEA ID for GSA
     0x00,       // Rate for DDC
     0x00,       // Rate for UART1
@@ -228,7 +230,7 @@ const uint8_t GPS::_message_GSA[] = {
 };
 
 // Disable GSV. GSV - Satellites in view, details the number and location of satellites in view.
-const uint8_t GPS::_message_GSV[] = {
+static const uint8_t _message_GSV[] = {
     0xF0, 0x03, // NMEA ID for GSV
     0x00,       // Rate for DDC
     0x00,       // Rate for UART1
@@ -240,7 +242,7 @@ const uint8_t GPS::_message_GSV[] = {
 
 // Disable VTG. VTG - Track made good and ground speed, which provides course and speed information relative to
 // the ground.
-const uint8_t GPS::_message_VTG[] = {
+static const uint8_t _message_VTG[] = {
     0xF0, 0x05, // NMEA ID for VTG
     0x00,       // Rate for DDC
     0x00,       // Rate for UART1
@@ -251,7 +253,7 @@ const uint8_t GPS::_message_VTG[] = {
 };
 
 // Enable RMC. RMC - Recommended Minimum data, the essential gps pvt (position, velocity, time) data.
-const uint8_t GPS::_message_RMC[] = {
+static const uint8_t _message_RMC[] = {
     0xF0, 0x04, // NMEA ID for RMC
     0x00,       // Rate for DDC
     0x01,       // Rate for UART1
@@ -262,7 +264,7 @@ const uint8_t GPS::_message_RMC[] = {
 };
 
 // Enable GGA. GGA - Global Positioning System Fix Data, which provides 3D location and accuracy data.
-const uint8_t GPS::_message_GGA[] = {
+static const uint8_t _message_GGA[] = {
     0xF0, 0x00, // NMEA ID for GGA
     0x00,       // Rate for DDC
     0x01,       // Rate for UART1
@@ -274,7 +276,7 @@ const uint8_t GPS::_message_GGA[] = {
 
 // Disable UBX-AID-ALPSRV as it may confuse TinyGPS. The Neo-6 seems to send this message
 // whether the AID Autonomous is enabled or not
-const uint8_t GPS::_message_AID[] = {
+static const uint8_t _message_AID[] = {
     0x0B, 0x32, // NMEA ID for UBX-AID-ALPSRV
     0x00,       // Rate for DDC
     0x00,       // Rate for UART1
@@ -287,7 +289,7 @@ const uint8_t GPS::_message_AID[] = {
 // Turn off TEXT INFO Messages for all but M10 series
 
 // B5 62 06 02 0A 00 01 00 00 00 03 03 00 03 03 00 1F 20
-const uint8_t GPS::_message_DISABLE_TXT_INFO[] = {
+static const uint8_t _message_DISABLE_TXT_INFO[] = {
     0x01,             // Protocol ID for NMEA
     0x00, 0x00, 0x00, // Reserved
     0x03,             // I2C
@@ -310,7 +312,7 @@ const uint8_t GPS::_message_DISABLE_TXT_INFO[] = {
 // and must be smaller than the period. It is only valid when the powerSetupValue is set to Interval; otherwise,
 // it must be set to '0'.
 // This command applies to M8 products
-const uint8_t GPS::_message_PMS[] = {
+static const uint8_t _message_PMS[] = {
     0x00,       // Version (0)
     0x03,       // Power setup value 3 = Agresssive 1Hz
     0x00, 0x00, // period: not applicable, set to 0
@@ -318,14 +320,14 @@ const uint8_t GPS::_message_PMS[] = {
     0x00, 0x00  // reserved, generated by u-center
 };
 
-const uint8_t GPS::_message_SAVE[] = {
+static const uint8_t _message_SAVE[] = {
     0x00, 0x00, 0x00, 0x00, // clearMask: no sections cleared
     0xFF, 0xFF, 0x00, 0x00, // saveMask: save all sections
     0x00, 0x00, 0x00, 0x00, // loadMask: no sections loaded
     0x17                    // deviceMask: BBR, Flash, EEPROM, and SPI Flash
 };
 
-const uint8_t GPS::_message_SAVE_10[] = {
+static const uint8_t _message_SAVE_10[] = {
     0x00, 0x00, 0x00, 0x00, // clearMask: no sections cleared
     0xFF, 0xFF, 0x00, 0x00, // saveMask: save all sections
     0x00, 0x00, 0x00, 0x00, // loadMask: no sections loaded
@@ -375,12 +377,12 @@ LIMITPEAKCURRENT L 1
 // b5 62 06 8a 26 00 00 02 00 00 01 00 d0 20 02 02 00 d0 40 05 00 00 00 05 00 d0 30 01 00 08 00 d0 10 01 09 00 d0 10 01 10 00 d0
 // 10 01 8c 03
 */
-const uint8_t GPS::_message_VALSET_PM_RAM[] = {0x00, 0x01, 0x00, 0x00, 0x01, 0x00, 0xd0, 0x20, 0x02, 0x02, 0x00, 0xd0, 0x40,
-                                               0x05, 0x00, 0x00, 0x00, 0x05, 0x00, 0xd0, 0x30, 0x01, 0x00, 0x08, 0x00, 0xd0,
-                                               0x10, 0x01, 0x09, 0x00, 0xd0, 0x10, 0x01, 0x10, 0x00, 0xd0, 0x10, 0x01};
-const uint8_t GPS::_message_VALSET_PM_BBR[] = {0x00, 0x02, 0x00, 0x00, 0x01, 0x00, 0xd0, 0x20, 0x02, 0x02, 0x00, 0xd0, 0x40,
-                                               0x05, 0x00, 0x00, 0x00, 0x05, 0x00, 0xd0, 0x30, 0x01, 0x00, 0x08, 0x00, 0xd0,
-                                               0x10, 0x01, 0x09, 0x00, 0xd0, 0x10, 0x01, 0x10, 0x00, 0xd0, 0x10, 0x01};
+static const uint8_t _message_VALSET_PM_RAM[] = {0x00, 0x01, 0x00, 0x00, 0x01, 0x00, 0xd0, 0x20, 0x02, 0x02, 0x00, 0xd0, 0x40,
+                                                 0x05, 0x00, 0x00, 0x00, 0x05, 0x00, 0xd0, 0x30, 0x01, 0x00, 0x08, 0x00, 0xd0,
+                                                 0x10, 0x01, 0x09, 0x00, 0xd0, 0x10, 0x01, 0x10, 0x00, 0xd0, 0x10, 0x01};
+static const uint8_t _message_VALSET_PM_BBR[] = {0x00, 0x02, 0x00, 0x00, 0x01, 0x00, 0xd0, 0x20, 0x02, 0x02, 0x00, 0xd0, 0x40,
+                                                 0x05, 0x00, 0x00, 0x00, 0x05, 0x00, 0xd0, 0x30, 0x01, 0x00, 0x08, 0x00, 0xd0,
+                                                 0x10, 0x01, 0x09, 0x00, 0xd0, 0x10, 0x01, 0x10, 0x00, 0xd0, 0x10, 0x01};
 
 /*
 CFG-ITFM replaced by 5 valset messages which can be combined into one for RAM and one for BBR
@@ -394,10 +396,10 @@ CFG-ITFM replaced by 5 valset messages which can be combined into one for RAM an
 
 b5 62 06 8a 0e 00 00 01 00 00 0d 00 41 10 01 13 00 41 10 01 63 c6
 */
-const uint8_t GPS::_message_VALSET_ITFM_RAM[] = {0x00, 0x01, 0x00, 0x00, 0x0d, 0x00, 0x41,
-                                                 0x10, 0x01, 0x13, 0x00, 0x41, 0x10, 0x01};
-const uint8_t GPS::_message_VALSET_ITFM_BBR[] = {0x00, 0x02, 0x00, 0x00, 0x0d, 0x00, 0x41,
-                                                 0x10, 0x01, 0x13, 0x00, 0x41, 0x10, 0x01};
+static const uint8_t _message_VALSET_ITFM_RAM[] = {0x00, 0x01, 0x00, 0x00, 0x0d, 0x00, 0x41,
+                                                   0x10, 0x01, 0x13, 0x00, 0x41, 0x10, 0x01};
+static const uint8_t _message_VALSET_ITFM_BBR[] = {0x00, 0x02, 0x00, 0x00, 0x0d, 0x00, 0x41,
+                                                   0x10, 0x01, 0x13, 0x00, 0x41, 0x10, 0x01};
 
 // Turn off all NMEA messages:
 // Ram layer config message:
@@ -407,13 +409,13 @@ const uint8_t GPS::_message_VALSET_ITFM_BBR[] = {0x00, 0x02, 0x00, 0x00, 0x0d, 0
 // BBR layer config message:
 // b5 62 06 8a 13 00 00 02 00 00 ca 00 91 20 00 c5 00 91 20 00 b1 00 91 20 00 f8 4e
 
-const uint8_t GPS::_message_VALSET_DISABLE_NMEA_RAM[] = {
+static const uint8_t _message_VALSET_DISABLE_NMEA_RAM[] = {
     /*0x00, 0x01, 0x00, 0x00, 0xca, 0x00, 0x91, 0x20, 0x00, 0xc5, 0x00, 0x91, 0x20, 0x00, 0xb1, 0x00, 0x91, 0x20, 0x00 */
     0x00, 0x01, 0x00, 0x00, 0xc0, 0x00, 0x91, 0x20, 0x00, 0xca, 0x00, 0x91, 0x20, 0x00, 0xc5, 0x00, 0x91,
     0x20, 0x00, 0xac, 0x00, 0x91, 0x20, 0x00, 0xb1, 0x00, 0x91, 0x20, 0x00, 0xbb, 0x00, 0x91, 0x20, 0x00};
 
-const uint8_t GPS::_message_VALSET_DISABLE_NMEA_BBR[] = {0x00, 0x02, 0x00, 0x00, 0xca, 0x00, 0x91, 0x20, 0x00, 0xc5,
-                                                         0x00, 0x91, 0x20, 0x00, 0xb1, 0x00, 0x91, 0x20, 0x00};
+static const uint8_t _message_VALSET_DISABLE_NMEA_BBR[] = {0x00, 0x02, 0x00, 0x00, 0xca, 0x00, 0x91, 0x20, 0x00, 0xc5,
+                                                           0x00, 0x91, 0x20, 0x00, 0xb1, 0x00, 0x91, 0x20, 0x00};
 
 // Turn off text info messages:
 // Ram layer config message:
@@ -432,17 +434,17 @@ const uint8_t GPS::_message_VALSET_DISABLE_NMEA_BBR[] = {0x00, 0x02, 0x00, 0x00,
 // b5 62 06 8a 0e 00 00 04 00 00 bb 00 91 20 01 ac 00 91 20 01 6d b6
 // Doing this for the FLASH layer isn't really required since we save the config to flash later
 
-const uint8_t GPS::_message_VALSET_DISABLE_TXT_INFO_RAM[] = {0x00, 0x01, 0x00, 0x00, 0x07, 0x00, 0x92, 0x20, 0x03};
-const uint8_t GPS::_message_VALSET_DISABLE_TXT_INFO_BBR[] = {0x00, 0x02, 0x00, 0x00, 0x07, 0x00, 0x92, 0x20, 0x03};
+static const uint8_t _message_VALSET_DISABLE_TXT_INFO_RAM[] = {0x00, 0x01, 0x00, 0x00, 0x07, 0x00, 0x92, 0x20, 0x03};
+static const uint8_t _message_VALSET_DISABLE_TXT_INFO_BBR[] = {0x00, 0x02, 0x00, 0x00, 0x07, 0x00, 0x92, 0x20, 0x03};
 
-const uint8_t GPS::_message_VALSET_ENABLE_NMEA_RAM[] = {0x00, 0x01, 0x00, 0x00, 0xbb, 0x00, 0x91,
-                                                        0x20, 0x01, 0xac, 0x00, 0x91, 0x20, 0x01};
-const uint8_t GPS::_message_VALSET_ENABLE_NMEA_BBR[] = {0x00, 0x02, 0x00, 0x00, 0xbb, 0x00, 0x91,
-                                                        0x20, 0x01, 0xac, 0x00, 0x91, 0x20, 0x01};
-const uint8_t GPS::_message_VALSET_DISABLE_SBAS_RAM[] = {0x00, 0x01, 0x00, 0x00, 0x20, 0x00, 0x31,
-                                                         0x10, 0x00, 0x05, 0x00, 0x31, 0x10, 0x00};
-const uint8_t GPS::_message_VALSET_DISABLE_SBAS_BBR[] = {0x00, 0x02, 0x00, 0x00, 0x20, 0x00, 0x31,
-                                                         0x10, 0x00, 0x05, 0x00, 0x31, 0x10, 0x00};
+static const uint8_t _message_VALSET_ENABLE_NMEA_RAM[] = {0x00, 0x01, 0x00, 0x00, 0xbb, 0x00, 0x91,
+                                                          0x20, 0x01, 0xac, 0x00, 0x91, 0x20, 0x01};
+static const uint8_t _message_VALSET_ENABLE_NMEA_BBR[] = {0x00, 0x02, 0x00, 0x00, 0xbb, 0x00, 0x91,
+                                                          0x20, 0x01, 0xac, 0x00, 0x91, 0x20, 0x01};
+static const uint8_t _message_VALSET_DISABLE_SBAS_RAM[] = {0x00, 0x01, 0x00, 0x00, 0x20, 0x00, 0x31,
+                                                           0x10, 0x00, 0x05, 0x00, 0x31, 0x10, 0x00};
+static const uint8_t _message_VALSET_DISABLE_SBAS_BBR[] = {0x00, 0x02, 0x00, 0x00, 0x20, 0x00, 0x31,
+                                                           0x10, 0x00, 0x05, 0x00, 0x31, 0x10, 0x00};
 
 /*
 Operational issues with the M10:
@@ -462,7 +464,7 @@ the PM config. Lets try without it.
 PMREQ sort of works with SBAS, but the awake time is too short to re-acquire any SBAS sats.
 The defination of "Got Fix" doesn't seem to include SBAS. Much more too this...
 Even if it was, it can take minutes (up to 12.5),
-even under good sat visability conditions to re-acquire the SBAS data.
+even under good sat visibility conditions to re-acquire the SBAS data.
 
 Another effect fo the quick transition to sleep is that no other sats will be acquired so the
 sat count will tend to remain at what the initial fix was.

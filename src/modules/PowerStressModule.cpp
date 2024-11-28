@@ -15,7 +15,7 @@ extern void printInfo();
 
 PowerStressModule::PowerStressModule()
     : ProtobufModule("powerstress", meshtastic_PortNum_POWERSTRESS_APP, &meshtastic_PowerStressMessage_msg),
-      concurrency::OSThread("PowerStressModule")
+      concurrency::OSThread("PowerStress")
 {
 }
 
@@ -24,12 +24,12 @@ bool PowerStressModule::handleReceivedProtobuf(const meshtastic_MeshPacket &req,
     // We only respond to messages if powermon debugging is already on
     if (config.power.powermon_enables) {
         auto p = *pptr;
-        LOG_INFO("Received PowerStress cmd=%d\n", p.cmd);
+        LOG_INFO("Received PowerStress cmd=%d", p.cmd);
 
         // Some commands we can handle immediately, anything else gets deferred to be handled by our thread
         switch (p.cmd) {
         case meshtastic_PowerStressMessage_Opcode_UNSET:
-            LOG_ERROR("PowerStress operation unset\n");
+            LOG_ERROR("PowerStress operation unset");
             break;
 
         case meshtastic_PowerStressMessage_Opcode_PRINT_INFO:
@@ -42,7 +42,7 @@ bool PowerStressModule::handleReceivedProtobuf(const meshtastic_MeshPacket &req,
 
         default:
             if (currentMessage.cmd != meshtastic_PowerStressMessage_Opcode_UNSET)
-                LOG_ERROR("PowerStress operation %d already in progress! Can't start new command\n", currentMessage.cmd);
+                LOG_ERROR("PowerStress operation %d already in progress! Can't start new command", currentMessage.cmd);
             else
                 currentMessage = p; // copy for use by thread (the message provided to us will be getting freed)
             break;
@@ -67,13 +67,13 @@ int32_t PowerStressModule::runOnce()
         p.cmd = meshtastic_PowerStressMessage_Opcode_UNSET;
         p.num_seconds = 0;
         isRunningCommand = false;
-        LOG_INFO("S:PS:%u\n", p.cmd);
+        LOG_INFO("S:PS:%u", p.cmd);
     } else {
         if (p.cmd != meshtastic_PowerStressMessage_Opcode_UNSET) {
             sleep_msec = (int32_t)(p.num_seconds * 1000);
             isRunningCommand = !!sleep_msec; // if the command wants us to sleep, make sure to mark that we have something running
             LOG_INFO(
-                "S:PS:%u\n",
+                "S:PS:%u",
                 p.cmd); // Emit a structured log saying we are starting a powerstress state (to make it easier to parse later)
 
             switch (p.cmd) {
@@ -111,7 +111,7 @@ int32_t PowerStressModule::runOnce()
                 setBluetoothEnable(true);
                 break;
             case meshtastic_PowerStressMessage_Opcode_CPU_DEEPSLEEP:
-                doDeepSleep(sleep_msec, true);
+                doDeepSleep(sleep_msec, true, true);
                 break;
             case meshtastic_PowerStressMessage_Opcode_CPU_FULLON: {
                 uint32_t start_msec = millis();
@@ -124,7 +124,7 @@ int32_t PowerStressModule::runOnce()
                 // FIXME - implement
                 break;
             default:
-                LOG_ERROR("PowerStress operation %d not yet implemented!\n", p.cmd);
+                LOG_ERROR("PowerStress operation %d not yet implemented!", p.cmd);
                 sleep_msec = 0; // Don't do whatever sleep was requested...
                 break;
             }

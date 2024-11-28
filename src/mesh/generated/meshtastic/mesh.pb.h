@@ -212,6 +212,9 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_MS24SF1 = 82,
     /* Lilygo TLora-C6 with the new ESP32-C6 MCU */
     meshtastic_HardwareModel_TLORA_C6 = 83,
+    /* WisMesh Tap
+ RAK-4631 w/ TFT in injection modled case */
+    meshtastic_HardwareModel_WISMESH_TAP = 84,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
@@ -226,7 +229,7 @@ typedef enum _meshtastic_Constants {
     /* From mesh.options
  note: this payload length is ONLY the bytes that are sent inside of the Data protobuf (excluding protobuf overhead). The 16 byte header is
  outside of this envelope */
-    meshtastic_Constants_DATA_PAYLOAD_LEN = 237
+    meshtastic_Constants_DATA_PAYLOAD_LEN = 233
 } meshtastic_Constants;
 
 /* Error codes for critical errors
@@ -269,6 +272,40 @@ typedef enum _meshtastic_CriticalErrorCode {
  If you see this failure in the field please post in the forum because we are interested in seeing if this is occurring in the field. */
     meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE = 13
 } meshtastic_CriticalErrorCode;
+
+/* Enum for modules excluded from a device's configuration.
+ Each value represents a ModuleConfigType that can be toggled as excluded
+ by setting its corresponding bit in the `excluded_modules` bitmask field. */
+typedef enum _meshtastic_ExcludedModules {
+    /* Default value of 0 indicates no modules are excluded. */
+    meshtastic_ExcludedModules_EXCLUDED_NONE = 0,
+    /* MQTT module */
+    meshtastic_ExcludedModules_MQTT_CONFIG = 1,
+    /* Serial module */
+    meshtastic_ExcludedModules_SERIAL_CONFIG = 2,
+    /* External Notification module */
+    meshtastic_ExcludedModules_EXTNOTIF_CONFIG = 4,
+    /* Store and Forward module */
+    meshtastic_ExcludedModules_STOREFORWARD_CONFIG = 8,
+    /* Range Test module */
+    meshtastic_ExcludedModules_RANGETEST_CONFIG = 16,
+    /* Telemetry module */
+    meshtastic_ExcludedModules_TELEMETRY_CONFIG = 32,
+    /* Canned Message module */
+    meshtastic_ExcludedModules_CANNEDMSG_CONFIG = 64,
+    /* Audio module */
+    meshtastic_ExcludedModules_AUDIO_CONFIG = 128,
+    /* Remote Hardware module */
+    meshtastic_ExcludedModules_REMOTEHARDWARE_CONFIG = 256,
+    /* Neighbor Info module */
+    meshtastic_ExcludedModules_NEIGHBORINFO_CONFIG = 512,
+    /* Ambient Lighting module */
+    meshtastic_ExcludedModules_AMBIENTLIGHTING_CONFIG = 1024,
+    /* Detection Sensor module */
+    meshtastic_ExcludedModules_DETECTIONSENSOR_CONFIG = 2048,
+    /* Paxcounter module */
+    meshtastic_ExcludedModules_PAXCOUNTER_CONFIG = 4096
+} meshtastic_ExcludedModules;
 
 /* How the location was acquired: manual, onboard GPS, external (EUD) GPS */
 typedef enum _meshtastic_Position_LocSource {
@@ -408,7 +445,7 @@ typedef enum _meshtastic_LogRecord_Level {
 } meshtastic_LogRecord_Level;
 
 /* Struct definitions */
-/* a gps position */
+/* A GPS Position */
 typedef struct _meshtastic_Position {
     /* The new preferred location encoding, multiply by 1e-7 to get degrees
  in floating point */
@@ -566,7 +603,7 @@ typedef struct _meshtastic_Routing {
     };
 } meshtastic_Routing;
 
-typedef PB_BYTES_ARRAY_T(237) meshtastic_Data_payload_t;
+typedef PB_BYTES_ARRAY_T(233) meshtastic_Data_payload_t;
 /* (Formerly called SubPacket)
  The payload portion fo a packet, this is the actual bytes that are sent
  inside a radio packet (because from/to are broken out by the comms library) */
@@ -686,7 +723,7 @@ typedef struct _meshtastic_MeshPacket {
  Set during reception to indicate the SNR of this packet.
  Used to collect statistics on current link quality. */
     float rx_snr;
-    /* If unset treated as zero (no forwarding, send to adjacent nodes only)
+    /* If unset treated as zero (no forwarding, send to direct neighbor nodes only)
  if 1, allow hopping through one node, etc...
  For our usecase real world topologies probably have a max of about 3.
  This field is normally placed into a few of bits in the header. */
@@ -717,6 +754,12 @@ typedef struct _meshtastic_MeshPacket {
     meshtastic_MeshPacket_public_key_t public_key;
     /* Indicates whether the packet was en/decrypted using PKI */
     bool pki_encrypted;
+    /* Last byte of the node number of the node that should be used as the next hop in routing. 
+ Set by the firmware internally, clients are not supposed to set this. */
+    uint8_t next_hop;
+    /* Last byte of the node number of the node that will relay/relayed this packet.
+ Set by the firmware internally, clients are not supposed to set this. */
+    uint8_t relay_node;
 } meshtastic_MeshPacket;
 
 /* The bluetooth to device link:
@@ -757,14 +800,18 @@ typedef struct _meshtastic_NodeInfo {
     uint8_t channel;
     /* True if we witnessed the node over MQTT instead of LoRA transport */
     bool via_mqtt;
-    /* Number of hops away from us this node is (0 if adjacent) */
+    /* Number of hops away from us this node is (0 if direct neighbor) */
     bool has_hops_away;
     uint8_t hops_away;
     /* True if node is in our favorites list
  Persists between NodeDB internal clean ups */
     bool is_favorite;
+    /* True if node is in our ignored list
+ Persists between NodeDB internal clean ups */
+    bool is_ignored;
 } meshtastic_NodeInfo;
 
+typedef PB_BYTES_ARRAY_T(16) meshtastic_MyNodeInfo_device_id_t;
 /* Unique local debugging info for this node
  Note: we don't include position or the user info, because that will come in the
  Sent to the phone in response to WantNodes. */
@@ -778,6 +825,10 @@ typedef struct _meshtastic_MyNodeInfo {
     /* The minimum app version that can talk to this device.
  Phone/PC apps should compare this to their build number and if too low tell the user they must update their app */
     uint32_t min_app_version;
+    /* Unique hardware identifier for this device */
+    meshtastic_MyNodeInfo_device_id_t device_id;
+    /* The PlatformIO environment used to build this firmware */
+    char pio_env[40];
 } meshtastic_MyNodeInfo;
 
 /* Debug output from the device.
@@ -831,7 +882,7 @@ typedef struct _meshtastic_FileInfo {
     uint32_t size_bytes;
 } meshtastic_FileInfo;
 
-typedef PB_BYTES_ARRAY_T(237) meshtastic_Compressed_data_t;
+typedef PB_BYTES_ARRAY_T(233) meshtastic_Compressed_data_t;
 /* Compressed message payload */
 typedef struct _meshtastic_Compressed {
     /* PortNum to determine the how to handle the compressed payload. */
@@ -891,6 +942,9 @@ typedef struct _meshtastic_DeviceMetadata {
     bool hasRemoteHardware;
     /* Has PKC capabilities */
     bool hasPKC;
+    /* Bit field of boolean for excluded modules
+ (bitwise OR of ExcludedModules) */
+    uint32_t excluded_modules;
 } meshtastic_DeviceMetadata;
 
 /* Packets from the radio to the phone will appear on the fromRadio characteristic.
@@ -1039,6 +1093,10 @@ extern "C" {
 #define _meshtastic_CriticalErrorCode_MAX meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE
 #define _meshtastic_CriticalErrorCode_ARRAYSIZE ((meshtastic_CriticalErrorCode)(meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE+1))
 
+#define _meshtastic_ExcludedModules_MIN meshtastic_ExcludedModules_EXCLUDED_NONE
+#define _meshtastic_ExcludedModules_MAX meshtastic_ExcludedModules_PAXCOUNTER_CONFIG
+#define _meshtastic_ExcludedModules_ARRAYSIZE ((meshtastic_ExcludedModules)(meshtastic_ExcludedModules_PAXCOUNTER_CONFIG+1))
+
 #define _meshtastic_Position_LocSource_MIN meshtastic_Position_LocSource_LOC_UNSET
 #define _meshtastic_Position_LocSource_MAX meshtastic_Position_LocSource_LOC_EXTERNAL
 #define _meshtastic_Position_LocSource_ARRAYSIZE ((meshtastic_Position_LocSource)(meshtastic_Position_LocSource_LOC_EXTERNAL+1))
@@ -1110,9 +1168,9 @@ extern "C" {
 #define meshtastic_Data_init_default             {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0, false, 0}
 #define meshtastic_Waypoint_init_default         {0, false, 0, false, 0, 0, 0, "", "", 0}
 #define meshtastic_MqttClientProxyMessage_init_default {"", 0, {{0, {0}}}, 0}
-#define meshtastic_MeshPacket_init_default       {0, 0, 0, 0, {meshtastic_Data_init_default}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0}
-#define meshtastic_NodeInfo_init_default         {0, false, meshtastic_User_init_default, false, meshtastic_Position_init_default, 0, 0, false, meshtastic_DeviceMetrics_init_default, 0, 0, false, 0, 0}
-#define meshtastic_MyNodeInfo_init_default       {0, 0, 0}
+#define meshtastic_MeshPacket_init_default       {0, 0, 0, 0, {meshtastic_Data_init_default}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0}
+#define meshtastic_NodeInfo_init_default         {0, false, meshtastic_User_init_default, false, meshtastic_Position_init_default, 0, 0, false, meshtastic_DeviceMetrics_init_default, 0, 0, false, 0, 0, 0}
+#define meshtastic_MyNodeInfo_init_default       {0, 0, 0, {0, {0}}, ""}
 #define meshtastic_LogRecord_init_default        {"", 0, "", _meshtastic_LogRecord_Level_MIN}
 #define meshtastic_QueueStatus_init_default      {0, 0, 0, 0}
 #define meshtastic_FromRadio_init_default        {0, 0, {meshtastic_MeshPacket_init_default}}
@@ -1122,7 +1180,7 @@ extern "C" {
 #define meshtastic_Compressed_init_default       {_meshtastic_PortNum_MIN, {0, {0}}}
 #define meshtastic_NeighborInfo_init_default     {0, 0, 0, 0, {meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default}}
 #define meshtastic_Neighbor_init_default         {0, 0, 0, 0}
-#define meshtastic_DeviceMetadata_init_default   {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0, 0}
+#define meshtastic_DeviceMetadata_init_default   {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0, 0, 0}
 #define meshtastic_Heartbeat_init_default        {0}
 #define meshtastic_NodeRemoteHardwarePin_init_default {0, false, meshtastic_RemoteHardwarePin_init_default}
 #define meshtastic_ChunkedPayload_init_default   {0, 0, 0, {0, {0}}}
@@ -1135,9 +1193,9 @@ extern "C" {
 #define meshtastic_Data_init_zero                {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0, false, 0}
 #define meshtastic_Waypoint_init_zero            {0, false, 0, false, 0, 0, 0, "", "", 0}
 #define meshtastic_MqttClientProxyMessage_init_zero {"", 0, {{0, {0}}}, 0}
-#define meshtastic_MeshPacket_init_zero          {0, 0, 0, 0, {meshtastic_Data_init_zero}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0}
-#define meshtastic_NodeInfo_init_zero            {0, false, meshtastic_User_init_zero, false, meshtastic_Position_init_zero, 0, 0, false, meshtastic_DeviceMetrics_init_zero, 0, 0, false, 0, 0}
-#define meshtastic_MyNodeInfo_init_zero          {0, 0, 0}
+#define meshtastic_MeshPacket_init_zero          {0, 0, 0, 0, {meshtastic_Data_init_zero}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0}
+#define meshtastic_NodeInfo_init_zero            {0, false, meshtastic_User_init_zero, false, meshtastic_Position_init_zero, 0, 0, false, meshtastic_DeviceMetrics_init_zero, 0, 0, false, 0, 0, 0}
+#define meshtastic_MyNodeInfo_init_zero          {0, 0, 0, {0, {0}}, ""}
 #define meshtastic_LogRecord_init_zero           {"", 0, "", _meshtastic_LogRecord_Level_MIN}
 #define meshtastic_QueueStatus_init_zero         {0, 0, 0, 0}
 #define meshtastic_FromRadio_init_zero           {0, 0, {meshtastic_MeshPacket_init_zero}}
@@ -1147,7 +1205,7 @@ extern "C" {
 #define meshtastic_Compressed_init_zero          {_meshtastic_PortNum_MIN, {0, {0}}}
 #define meshtastic_NeighborInfo_init_zero        {0, 0, 0, 0, {meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero}}
 #define meshtastic_Neighbor_init_zero            {0, 0, 0, 0}
-#define meshtastic_DeviceMetadata_init_zero      {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0, 0}
+#define meshtastic_DeviceMetadata_init_zero      {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0, 0, 0}
 #define meshtastic_Heartbeat_init_zero           {0}
 #define meshtastic_NodeRemoteHardwarePin_init_zero {0, false, meshtastic_RemoteHardwarePin_init_zero}
 #define meshtastic_ChunkedPayload_init_zero      {0, 0, 0, {0, {0}}}
@@ -1231,6 +1289,8 @@ extern "C" {
 #define meshtastic_MeshPacket_hop_start_tag      15
 #define meshtastic_MeshPacket_public_key_tag     16
 #define meshtastic_MeshPacket_pki_encrypted_tag  17
+#define meshtastic_MeshPacket_next_hop_tag       18
+#define meshtastic_MeshPacket_relay_node_tag     19
 #define meshtastic_NodeInfo_num_tag              1
 #define meshtastic_NodeInfo_user_tag             2
 #define meshtastic_NodeInfo_position_tag         3
@@ -1241,9 +1301,12 @@ extern "C" {
 #define meshtastic_NodeInfo_via_mqtt_tag         8
 #define meshtastic_NodeInfo_hops_away_tag        9
 #define meshtastic_NodeInfo_is_favorite_tag      10
+#define meshtastic_NodeInfo_is_ignored_tag       11
 #define meshtastic_MyNodeInfo_my_node_num_tag    1
 #define meshtastic_MyNodeInfo_reboot_count_tag   8
 #define meshtastic_MyNodeInfo_min_app_version_tag 11
+#define meshtastic_MyNodeInfo_device_id_tag      12
+#define meshtastic_MyNodeInfo_pio_env_tag        13
 #define meshtastic_LogRecord_message_tag         1
 #define meshtastic_LogRecord_time_tag            2
 #define meshtastic_LogRecord_source_tag          3
@@ -1279,6 +1342,7 @@ extern "C" {
 #define meshtastic_DeviceMetadata_hw_model_tag   9
 #define meshtastic_DeviceMetadata_hasRemoteHardware_tag 10
 #define meshtastic_DeviceMetadata_hasPKC_tag     11
+#define meshtastic_DeviceMetadata_excluded_modules_tag 12
 #define meshtastic_FromRadio_id_tag              1
 #define meshtastic_FromRadio_packet_tag          2
 #define meshtastic_FromRadio_my_info_tag         3
@@ -1421,7 +1485,9 @@ X(a, STATIC,   SINGULAR, UENUM,    delayed,          13) \
 X(a, STATIC,   SINGULAR, BOOL,     via_mqtt,         14) \
 X(a, STATIC,   SINGULAR, UINT32,   hop_start,        15) \
 X(a, STATIC,   SINGULAR, BYTES,    public_key,       16) \
-X(a, STATIC,   SINGULAR, BOOL,     pki_encrypted,    17)
+X(a, STATIC,   SINGULAR, BOOL,     pki_encrypted,    17) \
+X(a, STATIC,   SINGULAR, UINT32,   next_hop,         18) \
+X(a, STATIC,   SINGULAR, UINT32,   relay_node,       19)
 #define meshtastic_MeshPacket_CALLBACK NULL
 #define meshtastic_MeshPacket_DEFAULT NULL
 #define meshtastic_MeshPacket_payload_variant_decoded_MSGTYPE meshtastic_Data
@@ -1436,7 +1502,8 @@ X(a, STATIC,   OPTIONAL, MESSAGE,  device_metrics,    6) \
 X(a, STATIC,   SINGULAR, UINT32,   channel,           7) \
 X(a, STATIC,   SINGULAR, BOOL,     via_mqtt,          8) \
 X(a, STATIC,   OPTIONAL, UINT32,   hops_away,         9) \
-X(a, STATIC,   SINGULAR, BOOL,     is_favorite,      10)
+X(a, STATIC,   SINGULAR, BOOL,     is_favorite,      10) \
+X(a, STATIC,   SINGULAR, BOOL,     is_ignored,       11)
 #define meshtastic_NodeInfo_CALLBACK NULL
 #define meshtastic_NodeInfo_DEFAULT NULL
 #define meshtastic_NodeInfo_user_MSGTYPE meshtastic_User
@@ -1446,7 +1513,9 @@ X(a, STATIC,   SINGULAR, BOOL,     is_favorite,      10)
 #define meshtastic_MyNodeInfo_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   my_node_num,       1) \
 X(a, STATIC,   SINGULAR, UINT32,   reboot_count,      8) \
-X(a, STATIC,   SINGULAR, UINT32,   min_app_version,  11)
+X(a, STATIC,   SINGULAR, UINT32,   min_app_version,  11) \
+X(a, STATIC,   SINGULAR, BYTES,    device_id,        12) \
+X(a, STATIC,   SINGULAR, STRING,   pio_env,          13)
 #define meshtastic_MyNodeInfo_CALLBACK NULL
 #define meshtastic_MyNodeInfo_DEFAULT NULL
 
@@ -1563,7 +1632,8 @@ X(a, STATIC,   SINGULAR, UENUM,    role,              7) \
 X(a, STATIC,   SINGULAR, UINT32,   position_flags,    8) \
 X(a, STATIC,   SINGULAR, UENUM,    hw_model,          9) \
 X(a, STATIC,   SINGULAR, BOOL,     hasRemoteHardware,  10) \
-X(a, STATIC,   SINGULAR, BOOL,     hasPKC,           11)
+X(a, STATIC,   SINGULAR, BOOL,     hasPKC,           11) \
+X(a, STATIC,   SINGULAR, UINT32,   excluded_modules,  12)
 #define meshtastic_DeviceMetadata_CALLBACK NULL
 #define meshtastic_DeviceMetadata_DEFAULT NULL
 
@@ -1660,19 +1730,19 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define MESHTASTIC_MESHTASTIC_MESH_PB_H_MAX_SIZE meshtastic_FromRadio_size
 #define meshtastic_ChunkedPayload_size           245
 #define meshtastic_ClientNotification_size       415
-#define meshtastic_Compressed_size               243
-#define meshtastic_Data_size                     273
-#define meshtastic_DeviceMetadata_size           48
+#define meshtastic_Compressed_size               239
+#define meshtastic_Data_size                     269
+#define meshtastic_DeviceMetadata_size           54
 #define meshtastic_FileInfo_size                 236
 #define meshtastic_FromRadio_size                510
 #define meshtastic_Heartbeat_size                0
 #define meshtastic_LogRecord_size                426
-#define meshtastic_MeshPacket_size               367
+#define meshtastic_MeshPacket_size               371
 #define meshtastic_MqttClientProxyMessage_size   501
-#define meshtastic_MyNodeInfo_size               18
+#define meshtastic_MyNodeInfo_size               77
 #define meshtastic_NeighborInfo_size             258
 #define meshtastic_Neighbor_size                 22
-#define meshtastic_NodeInfo_size                 317
+#define meshtastic_NodeInfo_size                 319
 #define meshtastic_NodeRemoteHardwarePin_size    29
 #define meshtastic_Position_size                 144
 #define meshtastic_QueueStatus_size              23

@@ -47,7 +47,7 @@ template <class T> class ProtobufModule : protected SinglePortModule
 
         p->decoded.payload.size =
             pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), fields, &payload);
-        // LOG_DEBUG("did encode\n");
+        // LOG_DEBUG("did encode");
         return p;
     }
 
@@ -82,7 +82,7 @@ template <class T> class ProtobufModule : protected SinglePortModule
         // it would be better to update even if the message was destined to others.
 
         auto &p = mp.decoded;
-        LOG_INFO("Received %s from=0x%0x, id=0x%x, portnum=%d, payloadlen=%d\n", name, mp.from, mp.id, p.portnum, p.payload.size);
+        LOG_INFO("Received %s from=0x%0x, id=0x%x, portnum=%d, payloadlen=%d", name, mp.from, mp.id, p.portnum, p.payload.size);
 
         T scratch;
         T *decoded = NULL;
@@ -91,7 +91,7 @@ template <class T> class ProtobufModule : protected SinglePortModule
             if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, fields, &scratch)) {
                 decoded = &scratch;
             } else {
-                LOG_ERROR("Error decoding protobuf module!\n");
+                LOG_ERROR("Error decoding proto module!");
                 // if we can't decode it, nobody can process it!
                 return ProcessMessage::STOP;
             }
@@ -112,7 +112,7 @@ template <class T> class ProtobufModule : protected SinglePortModule
             if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, fields, &scratch)) {
                 decoded = &scratch;
             } else {
-                LOG_ERROR("Error decoding protobuf module!\n");
+                LOG_ERROR("Error decoding proto module!");
                 // if we can't decode it, nobody can process it!
                 return;
             }

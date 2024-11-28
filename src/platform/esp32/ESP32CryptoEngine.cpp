@@ -32,7 +32,7 @@ class ESP32CryptoEngine : public CryptoEngine
                        sizeof(scratch) - numBytes); // Fill rest of buffer with zero (in case cypher looks at it)
                 mbedtls_aes_crypt_ctr(&aes, numBytes, &nc_off, _nonce, stream_block, scratch, bytes);
             } else {
-                LOG_ERROR("Packet too large for crypto engine: %d. noop encryption!\n", numBytes);
+                LOG_ERROR("Packet too large for crypto engine: %d. noop encryption!", numBytes);
             }
         }
     }

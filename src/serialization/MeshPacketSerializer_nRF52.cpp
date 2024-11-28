@@ -28,7 +28,7 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
             msgType = "text";
             // convert bytes to string
             if (shouldLog)
-                LOG_DEBUG("got text message of size %u\n", mp->decoded.payload.size);
+                LOG_DEBUG("got text message of size %u", mp->decoded.payload.size);
 
             char payloadStr[(mp->decoded.payload.size) + 1];
             memcpy(payloadStr, mp->decoded.payload.bytes, mp->decoded.payload.size);
@@ -40,12 +40,12 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
                 // if it isn't, then we need to create a json object
                 // with the string as the value
                 if (shouldLog)
-                    LOG_INFO("text message payload is of type plaintext\n");
+                    LOG_INFO("text message payload is of type plaintext");
                 jsonObj["payload"]["text"] = payloadStr;
             } else {
                 // if it is, then we can just use the json object
                 if (shouldLog)
-                    LOG_INFO("text message payload is of type json\n");
+                    LOG_INFO("text message payload is of type json");
                 jsonObj["payload"] = text_doc;
             }
             break;
@@ -77,6 +77,7 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
                     jsonObj["payload"]["wind_direction"] = (uint)decoded->variant.environment_metrics.wind_direction;
                     jsonObj["payload"]["wind_gust"] = decoded->variant.environment_metrics.wind_gust;
                     jsonObj["payload"]["wind_lull"] = decoded->variant.environment_metrics.wind_lull;
+                    jsonObj["payload"]["radiation"] = decoded->variant.environment_metrics.radiation;
                 } else if (decoded->which_variant == meshtastic_Telemetry_air_quality_metrics_tag) {
                     jsonObj["payload"]["pm10"] = (unsigned int)decoded->variant.air_quality_metrics.pm10_standard;
                     jsonObj["payload"]["pm25"] = (unsigned int)decoded->variant.air_quality_metrics.pm25_standard;
@@ -93,7 +94,7 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
                     jsonObj["payload"]["current_ch3"] = decoded->variant.power_metrics.ch3_current;
                 }
             } else if (shouldLog) {
-                LOG_ERROR("Error decoding protobuf for telemetry message!\n");
+                LOG_ERROR("Error decoding proto for telemetry message!");
                 return "";
             }
             break;
@@ -111,7 +112,7 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
                 jsonObj["payload"]["hardware"] = decoded->hw_model;
                 jsonObj["payload"]["role"] = (int)decoded->role;
             } else if (shouldLog) {
-                LOG_ERROR("Error decoding protobuf for nodeinfo message!\n");
+                LOG_ERROR("Error decoding proto for nodeinfo message!");
                 return "";
             }
             break;
@@ -156,7 +157,7 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
                     jsonObj["payload"]["precision_bits"] = (int)decoded->precision_bits;
                 }
             } else if (shouldLog) {
-                LOG_ERROR("Error decoding protobuf for position message!\n");
+                LOG_ERROR("Error decoding proto for position message!");
                 return "";
             }
             break;
@@ -176,7 +177,7 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
                 jsonObj["payload"]["latitude_i"] = (int)decoded->latitude_i;
                 jsonObj["payload"]["longitude_i"] = (int)decoded->longitude_i;
             } else if (shouldLog) {
-                LOG_ERROR("Error decoding protobuf for position message!\n");
+                LOG_ERROR("Error decoding proto for position message!");
                 return "";
             }
             break;
@@ -207,7 +208,7 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
                 neighbors.remove(0);
                 jsonObj["payload"]["neighbors"] = neighbors;
             } else if (shouldLog) {
-                LOG_ERROR("Error decoding protobuf for neighborinfo message!\n");
+                LOG_ERROR("Error decoding proto for neighborinfo message!");
                 return "";
             }
             break;
@@ -241,7 +242,7 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
 
                     jsonObj["payload"]["route"] = route;
                 } else if (shouldLog) {
-                    LOG_ERROR("Error decoding protobuf for traceroute message!\n");
+                    LOG_ERROR("Error decoding proto for traceroute message!");
                     return "";
                 }
             } else {
@@ -274,19 +275,19 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
                     jsonObj["payload"]["gpio_mask"] = (unsigned int)decoded->gpio_mask;
                 }
             } else if (shouldLog) {
-                LOG_ERROR("Error decoding protobuf for RemoteHardware message!\n");
+                LOG_ERROR("Error decoding proto for RemoteHardware message!");
                 return "";
             }
             break;
         }
         // add more packet types here if needed
         default:
-            LOG_WARN("Unsupported packet type %d\n", mp->decoded.portnum);
+            LOG_WARN("Unsupported packet type %d", mp->decoded.portnum);
             return "";
             break;
         }
     } else if (shouldLog) {
-        LOG_WARN("Couldn't convert encrypted payload of MeshPacket to JSON\n");
+        LOG_WARN("Couldn't convert encrypted payload of MeshPacket to JSON");
         return "";
     }
 
@@ -308,7 +309,7 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
 
     // serialize and write it to the stream
 
-    // Serial.printf("serialized json message: \r\n");
+    // Serial.printf("serialized json message: \r");
     // serializeJson(jsonObj, Serial);
     // Serial.println("");
 
@@ -316,7 +317,7 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
     serializeJson(jsonObj, jsonStr);
 
     if (shouldLog)
-        LOG_INFO("serialized json message: %s\n", jsonStr.c_str());
+        LOG_INFO("serialized json message: %s", jsonStr.c_str());
 
     return jsonStr;
 }

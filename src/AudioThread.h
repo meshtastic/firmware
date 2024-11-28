@@ -16,7 +16,7 @@
 class AudioThread : public concurrency::OSThread
 {
   public:
-    AudioThread() : OSThread("AudioThread") { initOutput(); }
+    AudioThread() : OSThread("Audio") { initOutput(); }
 
     void beginRttl(const void *data, uint32_t len)
     {
@@ -64,7 +64,7 @@ class AudioThread : public concurrency::OSThread
     void initOutput()
     {
         audioOut = new AudioOutputI2S(1, AudioOutputI2S::EXTERNAL_I2S);
-        audioOut->SetPinout(DAC_I2S_BCK, DAC_I2S_WS, DAC_I2S_DOUT);
+        audioOut->SetPinout(DAC_I2S_BCK, DAC_I2S_WS, DAC_I2S_DOUT, DAC_I2S_MCLK);
         audioOut->SetGain(0.2);
     };
 

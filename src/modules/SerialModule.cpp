@@ -61,13 +61,13 @@ SerialModule *serialModule;
 SerialModuleRadio *serialModuleRadio;
 
 #if defined(TTGO_T_ECHO) || defined(CANARYONE)
-SerialModule::SerialModule() : StreamAPI(&Serial), concurrency::OSThread("SerialModule") {}
+SerialModule::SerialModule() : StreamAPI(&Serial), concurrency::OSThread("Serial") {}
 static Print *serialPrint = &Serial;
 #elif defined(CONFIG_IDF_TARGET_ESP32C6)
-SerialModule::SerialModule() : StreamAPI(&Serial1), concurrency::OSThread("SerialModule") {}
+SerialModule::SerialModule() : StreamAPI(&Serial1), concurrency::OSThread("Serial") {}
 static Print *serialPrint = &Serial1;
 #else
-SerialModule::SerialModule() : StreamAPI(&Serial2), concurrency::OSThread("SerialModule") {}
+SerialModule::SerialModule() : StreamAPI(&Serial2), concurrency::OSThread("Serial") {}
 static Print *serialPrint = &Serial2;
 #endif
 
@@ -125,7 +125,7 @@ int32_t SerialModule::runOnce()
     if (moduleConfig.serial.override_console_serial_port || (moduleConfig.serial.rxd && moduleConfig.serial.txd)) {
         if (firstTime) {
             // Interface with the serial peripheral from in here.
-            LOG_INFO("Initializing serial peripheral interface\n");
+            LOG_INFO("Init serial peripheral interface");
 
             uint32_t baud = getBaudRate();
 
@@ -204,9 +204,11 @@ int32_t SerialModule::runOnce()
                     lastNmeaTime = millis();
                     uint32_t readIndex = 0;
                     const meshtastic_NodeInfoLite *tempNodeInfo = nodeDB->readNextMeshNode(readIndex);
-                    while (tempNodeInfo != NULL && tempNodeInfo->has_user && hasValidPosition(tempNodeInfo)) {
-                        printWPL(outbuf, sizeof(outbuf), tempNodeInfo->position, tempNodeInfo->user.long_name, true);
-                        serialPrint->printf("%s", outbuf);
+                    while (tempNodeInfo != NULL) {
+                        if (tempNodeInfo->has_user && nodeDB->hasValidPosition(tempNodeInfo)) {
+                            printWPL(outbuf, sizeof(outbuf), tempNodeInfo->position, tempNodeInfo->user.long_name, true);
+                            serialPrint->printf("%s", outbuf);
+                        }
                         tempNodeInfo = nodeDB->readNextMeshNode(readIndex);
                     }
                 }
@@ -252,7 +254,12 @@ void SerialModule::sendTelemetry(meshtastic_Telemetry m)
         pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_Telemetry_msg, &m);
     p->to = NODENUM_BROADCAST;
     p->decoded.want_response = false;
-    p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR) {
+        p->want_ack = true;
+        p->priority = meshtastic_MeshPacket_Priority_HIGH;
+    } else {
+        p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
+    }
     service->sendToMesh(p, RX_SRC_LOCAL, true);
 }
 
@@ -307,10 +314,10 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
         }
 
         auto &p = mp.decoded;
-        // LOG_DEBUG("Received text msg self=0x%0x, from=0x%0x, to=0x%0x, id=%d, msg=%.*s\n",
+        // LOG_DEBUG("Received text msg self=0x%0x, from=0x%0x, to=0x%0x, id=%d, msg=%.*s",
         //          nodeDB->getNodeNum(), mp.from, mp.to, mp.id, p.payload.size, p.payload.bytes);
 
-        if (!isFromUs(&mp)) {
+        if (isFromUs(&mp)) {
 
             /*
              * If moduleConfig.serial.echo is true, then echo the packets that are sent out
@@ -322,7 +329,7 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
                 //   TODO: need to find out why.
                 if (lastRxID != mp.id) {
                     lastRxID = mp.id;
-                    // LOG_DEBUG("* * Message came this device\n");
+                    // LOG_DEBUG("* * Message came this device");
                     // serialPrint->println("* * Message came this device");
                     serialPrint->printf("%s", p.payload.bytes);
                 }
@@ -424,8 +431,10 @@ void SerialModule::processWXSerial()
     static char windGust[5] = "xx.x"; // Assuming windGust is 4 characters long + null terminator
     static char batVoltage[5] = "0.0V";
     static char capVoltage[5] = "0.0V";
+    static char temperature[5] = "00.0";
     static float batVoltageF = 0;
     static float capVoltageF = 0;
+    static float temperatureF = 0;
     bool gotwind = false;
 
     while (Serial2.available()) {
@@ -465,7 +474,7 @@ void SerialModule::processWXSerial()
                         if (windDirPos != NULL) {
                             // Extract data after "=" for WindDir
                             strcpy(windDir, windDirPos + 15); // Add 15 to skip "WindDir = "
-                            double radians = toRadians(strtof(windDir, nullptr));
+                            double radians = GeoCoord::toRadians(strtof(windDir, nullptr));
                             dir_sum_sin += sin(radians);
                             dir_sum_cos += cos(radians);
                             dirCount++;
@@ -499,6 +508,13 @@ void SerialModule::processWXSerial()
                             strcpy(capVoltage, capVoltagePos + 17); // 18 for ws 80, 17 for ws85
                             capVoltageF = strtof(capVoltage, nullptr);
                         }
+                        // GXTS04Temp   = 24.4
+                    } else if (strstr(line, "GXTS04Temp") != NULL) { // we have a temperature line
+                        char *tempPos = strstr(line, "GXTS04Temp   = ");
+                        if (tempPos != NULL) {
+                            strcpy(temperature, tempPos + 15); // 15 spaces for ws85
+                            temperatureF = strtof(temperature, nullptr);
+                        }
                     }
 
                     // Update lineStart for the next line
@@ -514,18 +530,18 @@ void SerialModule::processWXSerial()
     }
     if (gotwind) {
 
-        LOG_INFO("WS85 : %i %.1fg%.1f %.1fv %.1fv\n", atoi(windDir), strtof(windVel, nullptr), strtof(windGust, nullptr),
-                 batVoltageF, capVoltageF);
+        LOG_INFO("WS85 : %i %.1fg%.1f %.1fv %.1fv %.1fC", atoi(windDir), strtof(windVel, nullptr), strtof(windGust, nullptr),
+                 batVoltageF, capVoltageF, temperatureF);
     }
     if (gotwind && !Throttle::isWithinTimespanMs(lastAveraged, averageIntervalMillis)) {
-        // calulate averages and send to the mesh
+        // calculate averages and send to the mesh
         float velAvg = 1.0 * velSum / velCount;
 
         double avgSin = dir_sum_sin / dirCount;
         double avgCos = dir_sum_cos / dirCount;
 
         double avgRadians = atan2(avgSin, avgCos);
-        float dirAvg = toDegrees(avgRadians);
+        float dirAvg = GeoCoord::toDegrees(avgRadians);
 
         if (dirAvg < 0) {
             dirAvg += 360.0;
@@ -535,17 +551,32 @@ void SerialModule::processWXSerial()
         // make a telemetry packet with the data
         meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
         m.which_variant = meshtastic_Telemetry_environment_metrics_tag;
+
         m.variant.environment_metrics.wind_speed = velAvg;
+        m.variant.environment_metrics.has_wind_speed = true;
+
         m.variant.environment_metrics.wind_direction = dirAvg;
-        m.variant.environment_metrics.wind_gust = gust;
-        m.variant.environment_metrics.wind_lull = lull;
+        m.variant.environment_metrics.has_wind_direction = true;
+
+        m.variant.environment_metrics.temperature = temperatureF;
+        m.variant.environment_metrics.has_temperature = true;
+
         m.variant.environment_metrics.voltage =
             capVoltageF > batVoltageF ? capVoltageF : batVoltageF; // send the larger of the two voltage values.
+        m.variant.environment_metrics.has_voltage = true;
 
-        LOG_INFO("WS85 Transmit speed=%fm/s, direction=%d , lull=%f, gust=%f, voltage=%f\n",
+        m.variant.environment_metrics.wind_gust = gust;
+        m.variant.environment_metrics.has_wind_gust = true;
+
+        if (lull == -1)
+            lull = 0;
+        m.variant.environment_metrics.wind_lull = lull;
+        m.variant.environment_metrics.has_wind_lull = true;
+
+        LOG_INFO("WS85 Transmit speed=%fm/s, direction=%d , lull=%f, gust=%f, voltage=%f temperature=%f",
                  m.variant.environment_metrics.wind_speed, m.variant.environment_metrics.wind_direction,
                  m.variant.environment_metrics.wind_lull, m.variant.environment_metrics.wind_gust,
-                 m.variant.environment_metrics.voltage);
+                 m.variant.environment_metrics.voltage, m.variant.environment_metrics.temperature);
 
         sendTelemetry(m);
 

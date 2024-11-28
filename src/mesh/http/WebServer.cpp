@@ -69,19 +69,19 @@ static void taskCreateCert(void *parameter)
 
 #if 0
     // Delete the saved certs (used in debugging)
-    LOG_DEBUG("Deleting any saved SSL keys ...\n");
+    LOG_DEBUG("Delete any saved SSL keys");
     // prefs.clear();
     prefs.remove("PK");
     prefs.remove("cert");
 #endif
 
-    LOG_INFO("Checking if we have a previously saved SSL Certificate.\n");
+    LOG_INFO("Checking if we have a saved SSL Certificate");
 
     size_t pkLen = prefs.getBytesLength("PK");
     size_t certLen = prefs.getBytesLength("cert");
 
     if (pkLen && certLen) {
-        LOG_INFO("Existing SSL Certificate found!\n");
+        LOG_INFO("Existing SSL Certificate found!");
 
         uint8_t *pkBuffer = new uint8_t[pkLen];
         prefs.getBytes("PK", pkBuffer, pkLen);
@@ -91,11 +91,11 @@ static void taskCreateCert(void *parameter)
 
         cert = new SSLCert(certBuffer, certLen, pkBuffer, pkLen);
 
-        LOG_DEBUG("Retrieved Private Key: %d Bytes\n", cert->getPKLength());
-        LOG_DEBUG("Retrieved Certificate: %d Bytes\n", cert->getCertLength());
+        LOG_DEBUG("Retrieved Private Key: %d Bytes", cert->getPKLength());
+        LOG_DEBUG("Retrieved Certificate: %d Bytes", cert->getCertLength());
     } else {
 
-        LOG_INFO("Creating the certificate. This may take a while. Please wait...\n");
+        LOG_INFO("Creating the certificate. This may take a while. Please wait");
         yield();
         cert = new SSLCert();
         yield();
@@ -104,13 +104,13 @@ static void taskCreateCert(void *parameter)
         yield();
 
         if (createCertResult != 0) {
-            LOG_ERROR("Creating the certificate failed\n");
+            LOG_ERROR("Creating the certificate failed");
         } else {
-            LOG_INFO("Creating the certificate was successful\n");
+            LOG_INFO("Creating the certificate was successful");
 
-            LOG_DEBUG("Created Private Key: %d Bytes\n", cert->getPKLength());
+            LOG_DEBUG("Created Private Key: %d Bytes", cert->getPKLength());
 
-            LOG_DEBUG("Created Certificate: %d Bytes\n", cert->getCertLength());
+            LOG_DEBUG("Created Certificate: %d Bytes", cert->getCertLength());
 
             prefs.putBytes("PK", (uint8_t *)cert->getPKData(), cert->getPKLength());
             prefs.putBytes("cert", (uint8_t *)cert->getCertData(), cert->getCertLength());
@@ -139,7 +139,7 @@ void createSSLCert()
                     16,    /* Priority of the task. */
                     NULL); /* Task handle. */
 
-        LOG_DEBUG("Waiting for SSL Cert to be generated.\n");
+        LOG_DEBUG("Waiting for SSL Cert to be generated");
         while (!isCertReady) {
             if ((millis() / 500) % 2) {
                 if (runLoop) {
@@ -158,13 +158,13 @@ void createSSLCert()
                 runLoop = true;
             }
         }
-        LOG_INFO("SSL Cert Ready!\n");
+        LOG_INFO("SSL Cert Ready!");
     }
 }
 
 WebServerThread *webServerThread;
 
-WebServerThread::WebServerThread() : concurrency::OSThread("WebServerThread")
+WebServerThread::WebServerThread() : concurrency::OSThread("WebServer")
 {
     if (!config.network.wifi_enabled) {
         disable();
@@ -189,7 +189,7 @@ int32_t WebServerThread::runOnce()
 
 void initWebServer()
 {
-    LOG_DEBUG("Initializing Web Server ...\n");
+    LOG_DEBUG("Init Web Server");
 
     // We can now use the new certificate to setup our server as usual.
     secureServer = new HTTPSServer(cert);
@@ -198,16 +198,16 @@ void initWebServer()
     registerHandlers(insecureServer, secureServer);
 
     if (secureServer) {
-        LOG_INFO("Starting Secure Web Server...\n");
+        LOG_INFO("Start Secure Web Server");
         secureServer->start();
     }
-    LOG_INFO("Starting Insecure Web Server...\n");
+    LOG_INFO("Start Insecure Web Server");
     insecureServer->start();
     if (insecureServer->isRunning()) {
-        LOG_INFO("Web Servers Ready! :-) \n");
+        LOG_INFO("Web Servers Ready! :-) ");
         isWebServerReady = true;
     } else {
-        LOG_ERROR("Web Servers Failed! ;-( \n");
+        LOG_ERROR("Web Servers Failed! ;-( ");
     }
 }
 #endif

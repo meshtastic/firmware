@@ -51,7 +51,11 @@ void updateBatteryLevel(uint8_t level) {}
 
 void getMacAddr(uint8_t *dmac)
 {
+#if defined(CONFIG_IDF_TARGET_ESP32C6) && defined(CONFIG_SOC_IEEE802154_SUPPORTED)
+    assert(esp_base_mac_addr_get(dmac) == ESP_OK);
+#else
     assert(esp_efuse_mac_get_default(dmac) == ESP_OK);
+#endif
 }
 
 #ifdef HAS_32768HZ
@@ -76,17 +80,17 @@ void enableSlowCLK()
     uint32_t cal_32k = CALIBRATE_ONE(RTC_CAL_32K_XTAL);
 
     if (cal_32k == 0) {
-        LOG_DEBUG("32K XTAL OSC has not started up\n");
+        LOG_DEBUG("32K XTAL OSC has not started up");
     } else {
         rtc_clk_slow_freq_set(RTC_SLOW_FREQ_32K_XTAL);
-        LOG_DEBUG("Switching RTC Source to 32.768Khz succeeded, using 32K XTAL\n");
+        LOG_DEBUG("Switch RTC Source to 32.768Khz succeeded, using 32K XTAL");
         CALIBRATE_ONE(RTC_CAL_RTC_MUX);
         CALIBRATE_ONE(RTC_CAL_32K_XTAL);
     }
     CALIBRATE_ONE(RTC_CAL_RTC_MUX);
     CALIBRATE_ONE(RTC_CAL_32K_XTAL);
     if (rtc_clk_slow_freq_get() != RTC_SLOW_FREQ_32K_XTAL) {
-        LOG_WARN("Failed to switch 32K XTAL RTC source to 32.768Khz !!! \n");
+        LOG_WARN("Failed to switch 32K XTAL RTC source to 32.768Khz !!! ");
         return;
     }
 }
@@ -97,22 +101,22 @@ void esp32Setup()
     /* We explicitly don't want to do call randomSeed,
     // as that triggers the esp32 core to use a less secure pseudorandom function.
     uint32_t seed = esp_random();
-    LOG_DEBUG("Setting random seed %u\n", seed);
+    LOG_DEBUG("Set random seed %u", seed);
     randomSeed(seed);
     */
 
-    LOG_DEBUG("Total heap: %d\n", ESP.getHeapSize());
-    LOG_DEBUG("Free heap: %d\n", ESP.getFreeHeap());
-    LOG_DEBUG("Total PSRAM: %d\n", ESP.getPsramSize());
-    LOG_DEBUG("Free PSRAM: %d\n", ESP.getFreePsram());
+    LOG_DEBUG("Total heap: %d", ESP.getHeapSize());
+    LOG_DEBUG("Free heap: %d", ESP.getFreeHeap());
+    LOG_DEBUG("Total PSRAM: %d", ESP.getPsramSize());
+    LOG_DEBUG("Free PSRAM: %d", ESP.getFreePsram());
 
     nvs_stats_t nvs_stats;
     auto res = nvs_get_stats(NULL, &nvs_stats);
     assert(res == ESP_OK);
-    LOG_DEBUG("NVS: UsedEntries %d, FreeEntries %d, AllEntries %d, NameSpaces %d\n", nvs_stats.used_entries,
-              nvs_stats.free_entries, nvs_stats.total_entries, nvs_stats.namespace_count);
+    LOG_DEBUG("NVS: UsedEntries %d, FreeEntries %d, AllEntries %d, NameSpaces %d", nvs_stats.used_entries, nvs_stats.free_entries,
+              nvs_stats.total_entries, nvs_stats.namespace_count);
 
-    LOG_DEBUG("Setup Preferences in Flash Storage\n");
+    LOG_DEBUG("Setup Preferences in Flash Storage");
 
     // Create object to store our persistent data
     Preferences preferences;
@@ -129,16 +133,16 @@ void esp32Setup()
     if (hwven != HW_VENDOR)
         preferences.putUInt("hwVendor", HW_VENDOR);
     preferences.end();
-    LOG_DEBUG("Number of Device Reboots: %d\n", rebootCounter);
+    LOG_DEBUG("Number of Device Reboots: %d", rebootCounter);
 #if !MESHTASTIC_EXCLUDE_BLUETOOTH
     String BLEOTA = BleOta::getOtaAppVersion();
     if (BLEOTA.isEmpty()) {
-        LOG_INFO("No OTA firmware available\n");
+        LOG_INFO("No OTA firmware available");
     } else {
-        LOG_INFO("OTA firmware version %s\n", BLEOTA.c_str());
+        LOG_INFO("OTA firmware version %s", BLEOTA.c_str());
     }
 #else
-    LOG_INFO("No OTA firmware available\n");
+    LOG_INFO("No OTA firmware available");
 #endif
 
     // enableModemSleep();
@@ -165,26 +169,6 @@ void esp32Setup()
     enableSlowCLK();
 #endif
 }
-
-#if 0
-// Turn off for now
-
-uint32_t axpDebugRead()
-{
-  axp.debugCharging();
-  LOG_DEBUG("vbus current %f\n", axp.getVbusCurrent());
-  LOG_DEBUG("charge current %f\n", axp.getBattChargeCurrent());
-  LOG_DEBUG("bat voltage %f\n", axp.getBattVoltage());
-  LOG_DEBUG("batt pct %d\n", axp.getBattPercentage());
-  LOG_DEBUG("is battery connected %d\n", axp.isBatteryConnect());
-  LOG_DEBUG("is USB connected %d\n", axp.isVBUSPlug());
-  LOG_DEBUG("is charging %d\n", axp.isChargeing());
-
-  return 30 * 1000;
-}
-
-Periodic axpDebugOutput(axpDebugRead);
-#endif
 
 /// loop code specific to ESP32 targets
 void esp32Loop()

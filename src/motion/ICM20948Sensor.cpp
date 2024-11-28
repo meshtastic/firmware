@@ -44,14 +44,14 @@ int32_t ICM20948Sensor::runOnce()
     // Wake on motion using polling  - this is not as efficient as using hardware interrupt pin (see above)
     auto status = sensor->setBank(0);
     if (sensor->status != ICM_20948_Stat_Ok) {
-        LOG_DEBUG("ICM20948Sensor::isWakeOnMotion failed to set bank - %s\n", sensor->statusString());
+        LOG_DEBUG("ICM20948 isWakeOnMotion failed to set bank - %s", sensor->statusString());
         return MOTION_SENSOR_CHECK_INTERVAL_MS;
     }
 
     ICM_20948_INT_STATUS_t int_stat;
     status = sensor->read(AGB0_REG_INT_STATUS, (uint8_t *)&int_stat, sizeof(ICM_20948_INT_STATUS_t));
     if (status != ICM_20948_Stat_Ok) {
-        LOG_DEBUG("ICM20948Sensor::isWakeOnMotion failed to read interrupts - %s\n", sensor->statusString());
+        LOG_DEBUG("ICM20948 isWakeOnMotion failed to read interrupts - %s", sensor->statusString());
         return MOTION_SENSOR_CHECK_INTERVAL_MS;
     }
 
@@ -99,25 +99,25 @@ bool ICM20948Singleton::init(ScanI2C::FoundDevice device)
     ICM_20948_Status_e status = begin(Wire, device.address.address == ICM20948_ADDR ? 1 : 0);
 #endif
     if (status != ICM_20948_Stat_Ok) {
-        LOG_DEBUG("ICM20948Sensor::init begin - %s\n", statusString());
+        LOG_DEBUG("ICM20948 init begin - %s", statusString());
         return false;
     }
 
     // SW reset to make sure the device starts in a known state
     if (swReset() != ICM_20948_Stat_Ok) {
-        LOG_DEBUG("ICM20948Sensor::init reset - %s\n", statusString());
+        LOG_DEBUG("ICM20948 init reset - %s", statusString());
         return false;
     }
     delay(200);
 
     // Now wake the sensor up
     if (sleep(false) != ICM_20948_Stat_Ok) {
-        LOG_DEBUG("ICM20948Sensor::init wake - %s\n", statusString());
+        LOG_DEBUG("ICM20948 init wake - %s", statusString());
         return false;
     }
 
     if (lowPower(false) != ICM_20948_Stat_Ok) {
-        LOG_DEBUG("ICM20948Sensor::init high power - %s\n", statusString());
+        LOG_DEBUG("ICM20948 init high power - %s", statusString());
         return false;
     }
 
@@ -125,19 +125,19 @@ bool ICM20948Singleton::init(ScanI2C::FoundDevice device)
 
     // Active low
     cfgIntActiveLow(true);
-    LOG_DEBUG("ICM20948Sensor::init set cfgIntActiveLow - %s\n", statusString());
+    LOG_DEBUG("ICM20948 init set cfgIntActiveLow - %s", statusString());
 
     // Push-pull
     cfgIntOpenDrain(false);
-    LOG_DEBUG("ICM20948Sensor::init set cfgIntOpenDrain - %s\n", statusString());
+    LOG_DEBUG("ICM20948 init set cfgIntOpenDrain - %s", statusString());
 
     // If enabled, *ANY* read will clear the INT_STATUS register.
     cfgIntAnyReadToClear(true);
-    LOG_DEBUG("ICM20948Sensor::init set cfgIntAnyReadToClear - %s\n", statusString());
+    LOG_DEBUG("ICM20948 init set cfgIntAnyReadToClear - %s", statusString());
 
     // Latch the interrupt until cleared
     cfgIntLatch(true);
-    LOG_DEBUG("ICM20948Sensor::init set cfgIntLatch - %s\n", statusString());
+    LOG_DEBUG("ICM20948 init set cfgIntLatch - %s", statusString());
 
     // Set up an interrupt pin with an internal pullup for active low
     pinMode(ICM_20948_INT_PIN, INPUT_PULLUP);
@@ -168,13 +168,13 @@ bool ICM20948Singleton::setWakeOnMotion()
 
     // Enable WoM Logic mode 1 = Compare the current sample with the previous sample
     status = WOMLogic(true, 1);
-    LOG_DEBUG("ICM20948Sensor::init set WOMLogic - %s\n", statusString());
+    LOG_DEBUG("ICM20948 init set WOMLogic - %s", statusString());
     if (status != ICM_20948_Stat_Ok)
         return false;
 
     // Enable interrupts on WakeOnMotion
     status = intEnableWOM(true);
-    LOG_DEBUG("ICM20948Sensor::init set intEnableWOM - %s\n", statusString());
+    LOG_DEBUG("ICM20948 init set intEnableWOM - %s", statusString());
     return status == ICM_20948_Stat_Ok;
 
     // Clear any current interrupts

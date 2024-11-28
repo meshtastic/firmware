@@ -14,7 +14,7 @@ ProcessMessage WaypointModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
 #ifdef DEBUG_PORT
     auto &p = mp.decoded;
-    LOG_INFO("Received waypoint msg from=0x%0x, id=0x%x, msg=%.*s\n", mp.from, mp.id, p.payload.size, p.payload.bytes);
+    LOG_INFO("Received waypoint msg from=0x%0x, id=0x%x, msg=%.*s", mp.from, mp.id, p.payload.size, p.payload.bytes);
 #endif
     // We only store/display messages destined for us.
     // Keep a copy of the most recent text message.
@@ -68,7 +68,7 @@ bool WaypointModule::shouldDraw()
     }
 
     // If decoding failed
-    LOG_ERROR("Failed to decode waypoint\n");
+    LOG_ERROR("Failed to decode waypoint");
     devicestate.has_rx_waypoint = false;
     return false;
 #else
@@ -126,7 +126,7 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
     }
 
     // If our node has a position:
-    if (ourNode && (hasValidPosition(ourNode) || screen->hasHeading())) {
+    if (ourNode && (nodeDB->hasValidPosition(ourNode) || screen->hasHeading())) {
         const meshtastic_PositionLite &op = ourNode->position;
         float myHeading;
         if (screen->hasHeading())

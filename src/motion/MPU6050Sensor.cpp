@@ -13,10 +13,10 @@ bool MPU6050Sensor::init()
         sensor.setMotionDetectionDuration(20);
         sensor.setInterruptPinLatch(true); // Keep it latched.  Will turn off when reinitialized.
         sensor.setInterruptPinPolarity(true);
-        LOG_DEBUG("MPU6050Sensor::init ok\n");
+        LOG_DEBUG("MPU6050 init ok");
         return true;
     }
-    LOG_DEBUG("MPU6050Sensor::init failed\n");
+    LOG_DEBUG("MPU6050 init failed");
     return false;
 }
 

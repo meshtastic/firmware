@@ -1,6 +1,6 @@
 #include "STK8XXXSensor.h"
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && defined(HAS_STK8XXX)
 
 STK8XXXSensor::STK8XXXSensor(ScanI2C::FoundDevice foundDevice) : MotionSensor::MotionSensor(foundDevice) {}
 
@@ -17,10 +17,10 @@ bool STK8XXXSensor::init()
         attachInterrupt(
             digitalPinToInterrupt(STK8XXX_INT), [] { STK_IRQ = true; }, RISING);
 
-        LOG_DEBUG("STK8XXXSensor::init ok\n");
+        LOG_DEBUG("STK8XXX init ok");
         return true;
     }
-    LOG_DEBUG("STK8XXXSensor::init failed\n");
+    LOG_DEBUG("STK8XXX init failed");
     return false;
 }
 

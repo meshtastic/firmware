@@ -12,7 +12,6 @@ class ScanI2C
         SCREEN_SH1106,
         SCREEN_UNKNOWN, // has the same address as the two above but does not respond to the same commands
         SCREEN_ST7567,
-        ATECC608B,
         RTC_RV3028,
         RTC_PCF8563,
         CARDKB,
@@ -39,6 +38,7 @@ class ScanI2C
         QMC5883L,
         HMC5883L,
         PMSA0031,
+        QMA6100P,
         MPU6050,
         LIS3DH,
         BMA423,
@@ -61,7 +61,9 @@ class ScanI2C
         STK8BAXX,
         ICM20948,
         MAX30102,
-        TPS65233
+        TPS65233,
+        MPR121KB,
+        CGRADSENS
     } DeviceType;
 
     // typedef uint8_t DeviceAddress;

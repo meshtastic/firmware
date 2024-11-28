@@ -1,15 +1,11 @@
+### Many device configs have been moved to /etc/meshtasticd/available.d
+### To activate, simply copy or link the appropriate file into /etc/meshtasticd/config.d
+
 ### Define your devices here using Broadcom pin numbering
 ### Uncomment the block that corresponds to your hardware
 ### Including the "Module:" line!
 ---
 Lora:
-#  Module: sx1262  # Waveshare SX126X XXXM
-#  DIO2_AS_RF_SWITCH: true
-#  CS: 21
-#  IRQ: 16
-#  Busy: 20
-#  Reset: 18
-#  SX126X_ANT_SW: 6
 
 #  Module: sx1262  # Waveshare SX1302 LISTEN ONLY AT THIS TIME!
 #  CS: 7
@@ -20,6 +16,7 @@ Lora:
 #  CS: 0
 #  IRQ: 10
 #  Busy: 11
+#  DIO2_AS_RF_SWITCH: true
 #  spidev: spidev0.1
 
 #  Module: RF95  # Adafruit RFM9x
@@ -84,17 +81,6 @@ I2C:
 
 Display:
 
-### Waveshare 2.8inch RPi LCD
-#  Panel: ST7789
-#  CS: 8
-#  DC: 22        # Data/Command pin
-#  Backlight: 18
-#  Width: 240
-#  Height: 320
-#  Reset: 27
-#  Rotate: true
-#  Invert: true
-
 ### Waveshare 1.44inch LCD HAT
 #  Panel: ST7735S
 #  CS: 8         #Chip Select
@@ -114,6 +100,29 @@ Display:
 #  Height: 320
 #  Rotate: true
 
+### SHCHV 3.5 RPi TFT+Touchscreen
+#  Panel: ILI9486
+#  spidev: spidev0.0
+#  BusFrequency: 30000000
+#  DC: 24
+#  Reset: 25
+#  Width: 320
+#  Height: 480
+#  OffsetRotate: 2
+
+### TZT 2.0 Inch TFT Display ST7789V 240RGBx320
+#  Panel: ST7789
+#  spidev: spidev0.0
+#  # CS: 8     # can be freely chosen
+#  BusFrequency: 80000000
+#  DC: 24      # can be freely chosen
+#  Width: 320
+#  Height: 240
+#  Reset: 25   # can be freely chosen
+#  Rotate: true
+#  OffsetRotate: 1
+#  Invert: true
+
 ### You can also specify the spi device for the display to use
 # spidev: spidev0.0
 
@@ -127,10 +136,6 @@ Touchscreen:
 #  Module: FT5x06 # Option 2 for Adafruit PiTFT 2.8
 #  IRQ: 24
 #  I2CAddr: 0x38
-
-#  Module: XPT2046 # Waveshare 2.8inch
-#  CS: 7
-#  IRQ: 17
 
 ### You can also specify the spi device for the touchscreen to use
 # spidev: spidev0.0
@@ -155,3 +160,4 @@ Webserver:
 General:
   MaxNodes: 200
   MaxMessageQueue: 100
+  ConfigDirectory: /etc/meshtasticd/config.d/

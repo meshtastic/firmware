@@ -5,7 +5,7 @@
 template <typename T>
 ServerAPI<T>::ServerAPI(T &_client) : StreamAPI(&client), concurrency::OSThread("ServerAPI"), client(_client)
 {
-    LOG_INFO("Incoming API connection\n");
+    LOG_INFO("Incoming API connection");
 }
 
 template <typename T> ServerAPI<T>::~ServerAPI()
@@ -30,7 +30,7 @@ template <class T> int32_t ServerAPI<T>::runOnce()
     if (client.connected()) {
         return StreamAPI::runOncePart();
     } else {
-        LOG_INFO("Client dropped connection, suspending API service\n");
+        LOG_INFO("Client dropped connection, suspend API service");
         enabled = false; // we no longer need to run
         return 0;
     }
@@ -63,11 +63,11 @@ template <class T, class U> int32_t APIServerPort<T, U>::runOnce()
             // Reconnections are delayed by full wait time
             if (waitTime < 400) {
                 waitTime *= 2;
-                LOG_INFO("Previous TCP connection still open, trying again in %dms\n", waitTime);
+                LOG_INFO("Previous TCP connection still open, try again in %dms", waitTime);
                 return waitTime;
             }
 #endif
-            LOG_INFO("Force closing previous TCP connection\n");
+            LOG_INFO("Force close previous TCP connection");
             delete openAPI;
         }
 

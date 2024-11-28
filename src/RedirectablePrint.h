@@ -15,9 +15,6 @@ class RedirectablePrint : public Print
 {
     Print *dest;
 
-    /// Used to allow multiple logDebug messages to appear on a single log line
-    bool isContinuationMessage = false;
-
 #ifdef HAS_FREE_RTOS
     SemaphoreHandle_t inDebugPrint = nullptr;
     StaticSemaphore_t _MutexStorageSpace;
@@ -54,9 +51,9 @@ class RedirectablePrint : public Print
   protected:
     /// Subclasses can override if they need to change how we format over the serial port
     virtual void log_to_serial(const char *logLevel, const char *format, va_list arg);
+    meshtastic_LogRecord_Level getLogLevel(const char *logLevel);
 
   private:
     void log_to_syslog(const char *logLevel, const char *format, va_list arg);
     void log_to_ble(const char *logLevel, const char *format, va_list arg);
-    meshtastic_LogRecord_Level getLogLevel(const char *logLevel);
 };

@@ -61,15 +61,13 @@ char *strnstr(const char *s, const char *find, size_t slen)
 void printBytes(const char *label, const uint8_t *p, size_t numbytes)
 {
     int labelSize = strlen(label);
-    if (labelSize < 100 && numbytes < 64) {
-        char *messageBuffer = new char[labelSize + (numbytes * 3) + 2];
-        strncpy(messageBuffer, label, labelSize);
-        for (size_t i = 0; i < numbytes; i++)
-            snprintf(messageBuffer + labelSize + i * 3, 4, " %02x", p[i]);
-        strcpy(messageBuffer + labelSize + numbytes * 3, "\n");
-        LOG_DEBUG(messageBuffer);
-        delete[] messageBuffer;
-    }
+    char *messageBuffer = new char[labelSize + (numbytes * 3) + 2];
+    strncpy(messageBuffer, label, labelSize);
+    for (size_t i = 0; i < numbytes; i++)
+        snprintf(messageBuffer + labelSize + i * 3, 4, " %02x", p[i]);
+    strcpy(messageBuffer + labelSize + numbytes * 3, "\n");
+    LOG_DEBUG(messageBuffer);
+    delete[] messageBuffer;
 }
 
 bool memfll(const uint8_t *mem, uint8_t find, size_t numbytes)
@@ -94,4 +92,18 @@ bool isOneOf(int item, int count, ...)
     }
     va_end(args);
     return found;
+}
+
+const std::string vformat(const char *const zcFormat, ...)
+{
+    va_list vaArgs;
+    va_start(vaArgs, zcFormat);
+    va_list vaArgsCopy;
+    va_copy(vaArgsCopy, vaArgs);
+    const int iLen = std::vsnprintf(NULL, 0, zcFormat, vaArgsCopy);
+    va_end(vaArgsCopy);
+    std::vector<char> zc(iLen + 1);
+    std::vsnprintf(zc.data(), zc.size(), zcFormat, vaArgs);
+    va_end(vaArgs);
+    return std::string(zc.data(), iLen);
 }

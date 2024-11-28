@@ -50,11 +50,18 @@ jobs:
           mkdir -p .debpkg/usr/share/doc/meshtasticd/web
           mkdir -p .debpkg/usr/sbin
           mkdir -p .debpkg/etc/meshtasticd
+          mkdir -p .debpkg/etc/meshtasticd/config.d
+          mkdir -p .debpkg/etc/meshtasticd/available.d
           mkdir -p .debpkg/usr/lib/systemd/system/
           tar -xf build.tar -C .debpkg/usr/share/doc/meshtasticd/web
-          gunzip .debpkg/usr/share/doc/meshtasticd/web/*.gz
+          shopt -s dotglob nullglob
+          if [ -d .debpkg/usr/share/doc/meshtasticd/web/build ]; then mv  .debpkg/usr/share/doc/meshtasticd/web/build/* .debpkg/usr/share/doc/meshtasticd/web/; fi
+          if [ -d .debpkg/usr/share/doc/meshtasticd/web/build ]; then rmdir .debpkg/usr/share/doc/meshtasticd/web/build; fi
+          if [ -d .debpkg/usr/share/doc/meshtasticd/web/.DS_Store]; then rm -f .debpkg/usr/share/doc/meshtasticd/web/.DS_Store; fi
+          gunzip .debpkg/usr/share/doc/meshtasticd/web/ -r
           cp release/meshtasticd_linux_x86_64 .debpkg/usr/sbin/meshtasticd
           cp bin/config-dist.yaml .debpkg/etc/meshtasticd/config.yaml
+          cp bin/config.d/* .debpkg/etc/meshtasticd/available.d/
           chmod +x .debpkg/usr/sbin/meshtasticd
           cp bin/meshtasticd.service .debpkg/usr/lib/systemd/system/meshtasticd.service
           echo "/etc/meshtasticd/config.yaml" > .debpkg/DEBIAN/conffiles

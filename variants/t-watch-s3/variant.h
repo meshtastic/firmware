@@ -34,6 +34,7 @@
 #define DAC_I2S_BCK 48
 #define DAC_I2S_WS 15
 #define DAC_I2S_DOUT 46
+#define DAC_I2S_MCLK 0
 
 #define HAS_AXP2101
 
@@ -71,3 +72,6 @@
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 // Internally the TTGO module hooks the SX1262-DIO2 in to control the TX/RX switch (which is the default for
 // the sx1262interface code)
+
+#define USE_VIRTUAL_KEYBOARD 1
+#define DISPLAY_CLOCK_FRAME 1

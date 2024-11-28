@@ -11,7 +11,7 @@ MCP9808Sensor::MCP9808Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_
 
 int32_t MCP9808Sensor::runOnce()
 {
-    LOG_INFO("Init sensor: %s\n", sensorName);
+    LOG_INFO("Init sensor: %s", sensorName);
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
@@ -28,7 +28,7 @@ bool MCP9808Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
     measurement->variant.environment_metrics.has_temperature = true;
 
-    LOG_DEBUG("MCP9808Sensor::getMetrics\n");
+    LOG_DEBUG("MCP9808 getMetrics");
     measurement->variant.environment_metrics.temperature = mcp9808.readTempC();
     return true;
 }

@@ -33,4 +33,5 @@ jobs:
           artifact-paths: |
             release/*.bin
             release/*.elf
+          include-web-ui: true
           arch: esp32c6

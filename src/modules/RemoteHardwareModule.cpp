@@ -64,7 +64,7 @@ static uint64_t digitalReads(uint64_t mask, uint64_t maskAvailable)
 
 RemoteHardwareModule::RemoteHardwareModule()
     : ProtobufModule("remotehardware", meshtastic_PortNum_REMOTE_HARDWARE_APP, &meshtastic_HardwareMessage_msg),
-      concurrency::OSThread("RemoteHardwareModule")
+      concurrency::OSThread("RemoteHardware")
 {
     // restrict to the gpio channel for rx
     boundChannel = Channels::gpioChannel;
@@ -79,7 +79,7 @@ bool RemoteHardwareModule::handleReceivedProtobuf(const meshtastic_MeshPacket &r
 {
     if (moduleConfig.remote_hardware.enabled) {
         auto p = *pptr;
-        LOG_INFO("Received RemoteHardware type=%d\n", p.type);
+        LOG_INFO("Received RemoteHardware type=%d", p.type);
 
         switch (p.type) {
         case meshtastic_HardwareMessage_Type_WRITE_GPIOS: {
@@ -122,7 +122,7 @@ bool RemoteHardwareModule::handleReceivedProtobuf(const meshtastic_MeshPacket &r
                 ~watchGpios;   // generate a 'previous' value which is guaranteed to not match (to force an initial publish)
             enabled = true;    // Let our thread run at least once
             setInterval(2000); // Set a new interval so we'll run soon
-            LOG_INFO("Now watching GPIOs 0x%llx\n", watchGpios);
+            LOG_INFO("Now watching GPIOs 0x%llx", watchGpios);
             break;
         }
 
@@ -131,7 +131,7 @@ bool RemoteHardwareModule::handleReceivedProtobuf(const meshtastic_MeshPacket &r
             break; // Ignore - we might see our own replies
 
         default:
-            LOG_ERROR("Hardware operation %d not yet implemented! FIXME\n", p.type);
+            LOG_ERROR("Hardware operation %d not yet implemented! FIXME", p.type);
             break;
         }
     }
@@ -149,7 +149,7 @@ int32_t RemoteHardwareModule::runOnce()
 
             if (curVal != previousWatch) {
                 previousWatch = curVal;
-                LOG_INFO("Broadcasting GPIOS 0x%llx changed!\n", curVal);
+                LOG_INFO("Broadcast GPIOS 0x%llx changed!", curVal);
 
                 // Something changed!  Tell the world with a broadcast message
                 meshtastic_HardwareMessage r = meshtastic_HardwareMessage_init_default;

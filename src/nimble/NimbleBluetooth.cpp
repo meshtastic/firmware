@@ -26,7 +26,7 @@ class BluetoothPhoneAPI : public PhoneAPI
     {
         PhoneAPI::onNowHasData(fromRadioNum);
 
-        LOG_INFO("BLE notify fromNum\n");
+        LOG_INFO("BLE notify fromNum");
 
         uint8_t val[4];
         put_le32(val, fromRadioNum);
@@ -51,15 +51,15 @@ class NimbleBluetoothToRadioCallback : public NimBLECharacteristicCallbacks
 {
     virtual void onWrite(NimBLECharacteristic *pCharacteristic)
     {
-        LOG_INFO("To Radio onwrite\n");
+        LOG_INFO("To Radio onwrite");
         auto val = pCharacteristic->getValue();
 
         if (memcmp(lastToRadio, val.data(), val.length()) != 0) {
-            LOG_DEBUG("New ToRadio packet\n");
+            LOG_DEBUG("New ToRadio packet");
             memcpy(lastToRadio, val.data(), val.length());
             bluetoothPhoneAPI->handleToRadio(val.data(), val.length());
         } else {
-            LOG_DEBUG("Dropping duplicate ToRadio packet we just saw\n");
+            LOG_DEBUG("Drop dup ToRadio packet we just saw");
         }
     }
 };
@@ -84,11 +84,11 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
         uint32_t passkey = config.bluetooth.fixed_pin;
 
         if (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN) {
-            LOG_INFO("Using random passkey\n");
+            LOG_INFO("Use random passkey");
             // This is the passkey to be entered on peer - we pick a number >100,000 to ensure 6 digits
             passkey = random(100000, 999999);
         }
-        LOG_INFO("*** Enter passkey %d on the peer side ***\n", passkey);
+        LOG_INFO("*** Enter passkey %d on the peer side ***", passkey);
 
         powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
 #if HAS_SCREEN
@@ -125,7 +125,7 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
 
     virtual void onAuthenticationComplete(ble_gap_conn_desc *desc)
     {
-        LOG_INFO("BLE authentication complete\n");
+        LOG_INFO("BLE authentication complete");
 
         if (passkeyShowing) {
             passkeyShowing = false;
@@ -135,7 +135,7 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
 
     virtual void onDisconnect(NimBLEServer *pServer, ble_gap_conn_desc *desc)
     {
-        LOG_INFO("BLE disconnect\n");
+        LOG_INFO("BLE disconnect");
 
         if (bluetoothPhoneAPI) {
             bluetoothPhoneAPI->close();
@@ -151,7 +151,7 @@ void NimbleBluetooth::shutdown()
     // No measurable power saving for ESP32 during light-sleep(?)
 #ifndef ARCH_ESP32
     // Shutdown bluetooth for minimum power draw
-    LOG_INFO("Disable bluetooth\n");
+    LOG_INFO("Disable bluetooth");
     NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
     pAdvertising->reset();
     pAdvertising->stop();
@@ -162,7 +162,7 @@ void NimbleBluetooth::shutdown()
 void NimbleBluetooth::deinit()
 {
 #ifdef ARCH_ESP32
-    LOG_INFO("Disable bluetooth until reboot\n");
+    LOG_INFO("Disable bluetooth until reboot");
     NimBLEDevice::deinit();
 #endif
 }
@@ -193,7 +193,7 @@ void NimbleBluetooth::setup()
     // Uncomment for testing
     // NimbleBluetooth::clearBonds();
 
-    LOG_INFO("Initialise the NimBLE bluetooth module\n");
+    LOG_INFO("Init the NimBLE bluetooth module");
 
     NimBLEDevice::init(getDeviceName());
     NimBLEDevice::setPower(ESP_PWR_LVL_P9);
@@ -279,7 +279,7 @@ void updateBatteryLevel(uint8_t level)
 
 void NimbleBluetooth::clearBonds()
 {
-    LOG_INFO("Clearing bluetooth bonds!\n");
+    LOG_INFO("Clearing bluetooth bonds!");
     NimBLEDevice::deleteAllBonds();
 }
 

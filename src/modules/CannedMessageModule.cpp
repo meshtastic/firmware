@@ -42,20 +42,20 @@ meshtastic_CannedMessageModuleConfig cannedMessageModuleConfig;
 CannedMessageModule *cannedMessageModule;
 
 CannedMessageModule::CannedMessageModule()
-    : SinglePortModule("canned", meshtastic_PortNum_TEXT_MESSAGE_APP), concurrency::OSThread("CannedMessageModule")
+    : SinglePortModule("canned", meshtastic_PortNum_TEXT_MESSAGE_APP), concurrency::OSThread("CannedMessage")
 {
     if (moduleConfig.canned_message.enabled || CANNED_MESSAGE_MODULE_ENABLE) {
         this->loadProtoForModule();
         if ((this->splitConfiguredMessages() <= 0) && (cardkb_found.address == 0x00) && !INPUTBROKER_MATRIX_TYPE &&
             !CANNED_MESSAGE_MODULE_ENABLE) {
-            LOG_INFO("CannedMessageModule: No messages are configured. Module is disabled\n");
+            LOG_INFO("CannedMessageModule: No messages are configured. Module is disabled");
             this->runState = CANNED_MESSAGE_RUN_STATE_DISABLED;
             disable();
         } else {
-            LOG_INFO("CannedMessageModule is enabled\n");
+            LOG_INFO("CannedMessageModule is enabled");
 
             // T-Watch interface currently has no way to select destination type, so default to 'node'
-#if defined(T_WATCH_S3) || defined(RAK14014)
+#if defined(USE_VIRTUAL_KEYBOARD)
             this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
 #endif
 
@@ -81,7 +81,7 @@ int CannedMessageModule::splitConfiguredMessages()
 
     String canned_messages = cannedMessageModuleConfig.messages;
 
-#if defined(T_WATCH_S3) || defined(RAK14014)
+#if defined(USE_VIRTUAL_KEYBOARD)
     String separator = canned_messages.length() ? "|" : "";
 
     canned_messages = "[---- Free Text ----]" + separator + canned_messages;
@@ -112,7 +112,7 @@ int CannedMessageModule::splitConfiguredMessages()
     }
     if (strlen(this->messages[messageIndex - 1]) > 0) {
         // We have a last message.
-        LOG_DEBUG("CannedMessage %d is: '%s'\n", messageIndex - 1, this->messages[messageIndex - 1]);
+        LOG_DEBUG("CannedMessage %d is: '%s'", messageIndex - 1, this->messages[messageIndex - 1]);
         this->messagesCount = messageIndex;
     } else {
         this->messagesCount = messageIndex - 1;
@@ -150,7 +150,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
     }
     if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT)) {
 
-#if defined(T_WATCH_S3) || defined(RAK14014)
+#if defined(USE_VIRTUAL_KEYBOARD)
         if (this->currentMessageIndex == 0) {
             this->runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
 
@@ -177,7 +177,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
         this->currentMessageIndex = -1;
 
-#if !defined(T_WATCH_S3) && !defined(RAK14014)
+#if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(USE_VIRTUAL_KEYBOARD)
         this->freetext = ""; // clear freetext
         this->cursor = 0;
         this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
@@ -190,7 +190,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) ||
         (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT))) {
 
-#if defined(T_WATCH_S3) || defined(RAK14014)
+#if defined(USE_VIRTUAL_KEYBOARD)
         if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {
             this->payload = INPUT_BROKER_MSG_LEFT;
         } else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT)) {
@@ -227,20 +227,20 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         case INPUT_BROKER_MSG_BRIGHTNESS_UP: // make screen brighter
             if (screen)
                 screen->increaseBrightness();
-            LOG_DEBUG("increasing Screen Brightness\n");
+            LOG_DEBUG("Increase Screen Brightness");
             break;
         case INPUT_BROKER_MSG_BRIGHTNESS_DOWN: // make screen dimmer
             if (screen)
                 screen->decreaseBrightness();
-            LOG_DEBUG("Decreasing Screen Brightness\n");
+            LOG_DEBUG("Decrease Screen Brightness");
             break;
-        case INPUT_BROKER_MSG_FN_SYMBOL_ON: // draw modifier (function) symbal
+        case INPUT_BROKER_MSG_FN_SYMBOL_ON: // draw modifier (function) symbol
             if (screen)
-                screen->setFunctionSymbal("Fn");
+                screen->setFunctionSymbol("Fn");
             break;
-        case INPUT_BROKER_MSG_FN_SYMBOL_OFF: // remove modifier (function) symbal
+        case INPUT_BROKER_MSG_FN_SYMBOL_OFF: // remove modifier (function) symbol
             if (screen)
-                screen->removeFunctionSymbal("Fn");
+                screen->removeFunctionSymbol("Fn");
             break;
         // mute (switch off/toggle) external notifications on fn+m
         case INPUT_BROKER_MSG_MUTE_TOGGLE:
@@ -249,13 +249,13 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
                     externalNotificationModule->setMute(false);
                     showTemporaryMessage("Notifications \nEnabled");
                     if (screen)
-                        screen->removeFunctionSymbal("M"); // remove the mute symbol from the bottom right corner
+                        screen->removeFunctionSymbol("M"); // remove the mute symbol from the bottom right corner
                 } else {
                     externalNotificationModule->stopNow(); // this will turn off all GPIO and sounds and idle the loop
                     externalNotificationModule->setMute(true);
                     showTemporaryMessage("Notifications \nDisabled");
                     if (screen)
-                        screen->setFunctionSymbal("M"); // add the mute symbol to the bottom right corner
+                        screen->setFunctionSymbol("M"); // add the mute symbol to the bottom right corner
                 }
             }
             break;
@@ -301,18 +301,18 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
             return 0;
         default:
             // pass the pressed key
-            // LOG_DEBUG("Canned message ANYKEY (%x)\n", event->kbchar);
+            // LOG_DEBUG("Canned message ANYKEY (%x)", event->kbchar);
             this->payload = event->kbchar;
             this->lastTouchMillis = millis();
             validEvent = true;
             break;
         }
         if (screen && (event->kbchar != INPUT_BROKER_MSG_FN_SYMBOL_ON)) {
-            screen->removeFunctionSymbal("Fn"); // remove modifier (function) symbal
+            screen->removeFunctionSymbol("Fn"); // remove modifier (function) symbol
         }
     }
 
-#if defined(T_WATCH_S3) || defined(RAK14014)
+#if defined(USE_VIRTUAL_KEYBOARD)
     if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
         String keyTapped = keyForCoordinates(event->touchX, event->touchY);
 
@@ -325,7 +325,9 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
 
             this->shift = !this->shift;
         } else if (keyTapped == "⌫") {
+#ifndef RAK14014
             this->highlight = keyTapped[0];
+#endif
 
             this->payload = 0x08;
 
@@ -341,7 +343,9 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
 
             validEvent = true;
         } else if (keyTapped == " ") {
+#ifndef RAK14014
             this->highlight = keyTapped[0];
+#endif
 
             this->payload = keyTapped[0];
 
@@ -361,7 +365,9 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
 
             this->shift = false;
         } else if (keyTapped != "") {
+#ifndef RAK14014
             this->highlight = keyTapped[0];
+#endif
 
             this->payload = this->shift ? keyTapped[0] : std::tolower(keyTapped[0]);
 
@@ -414,7 +420,7 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
     // or raising a UIFrameEvent before another module has the chance
     this->waitingForAck = true;
 
-    LOG_INFO("Sending message id=%d, dest=%x, msg=%.*s\n", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
+    LOG_INFO("Send message id=%d, dest=%x, msg=%.*s", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
 
     service->sendToMesh(
         p, RX_SRC_LOCAL,
@@ -428,7 +434,7 @@ int32_t CannedMessageModule::runOnce()
         temporaryMessage = "";
         return INT32_MAX;
     }
-    // LOG_DEBUG("Check status\n");
+    // LOG_DEBUG("Check status");
     UIFrameEvent e;
     if ((this->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) ||
         (this->runState == CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED) || (this->runState == CANNED_MESSAGE_RUN_STATE_MESSAGE)) {
@@ -440,7 +446,7 @@ int32_t CannedMessageModule::runOnce()
         this->freetext = ""; // clear freetext
         this->cursor = 0;
 
-#if !defined(T_WATCH_S3) && !defined(RAK14014)
+#if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(SENSECAP_INDICATOR)
         this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
 #endif
 
@@ -453,7 +459,7 @@ int32_t CannedMessageModule::runOnce()
         this->freetext = ""; // clear freetext
         this->cursor = 0;
 
-#if !defined(T_WATCH_S3) && !defined(RAK14014)
+#if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(USE_VIRTUAL_KEYBOARD)
         this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
 #endif
 
@@ -473,7 +479,7 @@ int32_t CannedMessageModule::runOnce()
                     powerFSM.trigger(EVENT_PRESS);
                     return INT32_MAX;
                 } else {
-#if defined(T_WATCH_S3) || defined(RAK14014)
+#if defined(USE_VIRTUAL_KEYBOARD)
                     sendText(this->dest, indexChannels[this->channel], this->messages[this->currentMessageIndex], true);
 #else
                     sendText(NODENUM_BROADCAST, channels.getPrimaryIndex(), this->messages[this->currentMessageIndex], true);
@@ -481,7 +487,7 @@ int32_t CannedMessageModule::runOnce()
                 }
                 this->runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
             } else {
-                // LOG_DEBUG("Reset message is empty.\n");
+                // LOG_DEBUG("Reset message is empty");
                 this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
             }
         }
@@ -490,7 +496,7 @@ int32_t CannedMessageModule::runOnce()
         this->freetext = ""; // clear freetext
         this->cursor = 0;
 
-#if !defined(T_WATCH_S3) && !defined(RAK14014)
+#if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(USE_VIRTUAL_KEYBOARD)
         this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
 #endif
 
@@ -498,7 +504,7 @@ int32_t CannedMessageModule::runOnce()
         return 2000;
     } else if ((this->runState != CANNED_MESSAGE_RUN_STATE_FREETEXT) && (this->currentMessageIndex == -1)) {
         this->currentMessageIndex = 0;
-        LOG_DEBUG("First touch (%d):%s\n", this->currentMessageIndex, this->getCurrentMessage());
+        LOG_DEBUG("First touch (%d):%s", this->currentMessageIndex, this->getCurrentMessage());
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
         this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_UP) {
@@ -507,12 +513,12 @@ int32_t CannedMessageModule::runOnce()
             this->freetext = ""; // clear freetext
             this->cursor = 0;
 
-#if !defined(T_WATCH_S3) && !defined(RAK14014)
+#if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(USE_VIRTUAL_KEYBOARD)
             this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
 #endif
 
             this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
-            LOG_DEBUG("MOVE UP (%d):%s\n", this->currentMessageIndex, this->getCurrentMessage());
+            LOG_DEBUG("MOVE UP (%d):%s", this->currentMessageIndex, this->getCurrentMessage());
         }
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_DOWN) {
         if (this->messagesCount > 0) {
@@ -520,12 +526,12 @@ int32_t CannedMessageModule::runOnce()
             this->freetext = ""; // clear freetext
             this->cursor = 0;
 
-#if !defined(T_WATCH_S3) && !defined(RAK14014)
+#if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(USE_VIRTUAL_KEYBOARD)
             this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
 #endif
 
             this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
-            LOG_DEBUG("MOVE DOWN (%d):%s\n", this->currentMessageIndex, this->getCurrentMessage());
+            LOG_DEBUG("MOVE DOWN (%d):%s", this->currentMessageIndex, this->getCurrentMessage());
         }
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT || this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) {
         switch (this->payload) {
@@ -666,7 +672,7 @@ int32_t CannedMessageModule::runOnce()
                 break;
             }
             if (screen)
-                screen->removeFunctionSymbal("Fn");
+                screen->removeFunctionSymbol("Fn");
         }
 
         this->lastTouchMillis = millis();
@@ -763,7 +769,7 @@ void CannedMessageModule::showTemporaryMessage(const String &message)
     setIntervalFromNow(2000);
 }
 
-#if defined(T_WATCH_S3) || defined(RAK14014)
+#if defined(USE_VIRTUAL_KEYBOARD)
 
 String CannedMessageModule::keyForCoordinates(uint x, uint y)
 {
@@ -830,6 +836,11 @@ void CannedMessageModule::drawKeyboard(OLEDDisplay *display, OLEDDisplayUiState 
 
             Letter updatedLetter = {letter.character, letter.width, xOffset, yOffset, cellWidth, cellHeight};
 
+#ifdef RAK14014 // Optimize the touch range of the virtual keyboard in the bottom row
+            if (outerIndex == outerSize - 1) {
+                updatedLetter.rectHeight = 240 - yOffset;
+            }
+#endif
             this->keyboard[this->charSet][outerIndex][innerIndex] = updatedLetter;
 
             float characterOffset = ((cellWidth / 2) - (letter.width / 2));
@@ -977,7 +988,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
 
     if (temporaryMessage.length() != 0) {
         requestFocus(); // Tell Screen::setFrames to move to our module's frame
-        LOG_DEBUG("Drawing temporary message: %s", temporaryMessage.c_str());
+        LOG_DEBUG("Draw temporary message: %s", temporaryMessage.c_str());
         display->setTextAlignment(TEXT_ALIGN_CENTER);
         display->setFont(FONT_MEDIUM);
         display->drawString(display->getWidth() / 2 + x, 0 + y + 12, temporaryMessage);
@@ -1044,7 +1055,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         display->drawString(10 + x, 0 + y + FONT_HEIGHT_SMALL, "Canned Message\nModule disabled.");
     } else if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
         requestFocus(); // Tell Screen::setFrames to move to our module's frame
-#if defined(T_WATCH_S3) || defined(RAK14014)
+#if defined(USE_VIRTUAL_KEYBOARD)
         drawKeyboard(display, state, 0, 0);
 #else
 
@@ -1206,13 +1217,13 @@ AdminMessageHandleResult CannedMessageModule::handleAdminMessageForModule(const 
 
     switch (request->which_payload_variant) {
     case meshtastic_AdminMessage_get_canned_message_module_messages_request_tag:
-        LOG_DEBUG("Client is getting radio canned messages\n");
+        LOG_DEBUG("Client getting radio canned messages");
         this->handleGetCannedMessageModuleMessages(mp, response);
         result = AdminMessageHandleResult::HANDLED_WITH_RESPONSE;
         break;
 
     case meshtastic_AdminMessage_set_canned_message_module_messages_tag:
-        LOG_DEBUG("Client is setting radio canned messages\n");
+        LOG_DEBUG("Client getting radio canned messages");
         this->handleSetCannedMessageModuleMessages(request->set_canned_message_module_messages);
         result = AdminMessageHandleResult::HANDLED;
         break;
@@ -1227,7 +1238,7 @@ AdminMessageHandleResult CannedMessageModule::handleAdminMessageForModule(const 
 void CannedMessageModule::handleGetCannedMessageModuleMessages(const meshtastic_MeshPacket &req,
                                                                meshtastic_AdminMessage *response)
 {
-    LOG_DEBUG("*** handleGetCannedMessageModuleMessages\n");
+    LOG_DEBUG("*** handleGetCannedMessageModuleMessages");
     if (req.decoded.want_response) {
         response->which_payload_variant = meshtastic_AdminMessage_get_canned_message_module_messages_response_tag;
         strncpy(response->get_canned_message_module_messages_response, cannedMessageModuleConfig.messages,
@@ -1242,7 +1253,7 @@ void CannedMessageModule::handleSetCannedMessageModuleMessages(const char *from_
     if (*from_msg) {
         changed |= strcmp(cannedMessageModuleConfig.messages, from_msg);
         strncpy(cannedMessageModuleConfig.messages, from_msg, sizeof(cannedMessageModuleConfig.messages));
-        LOG_DEBUG("*** from_msg.text:%s\n", from_msg);
+        LOG_DEBUG("*** from_msg.text:%s", from_msg);
     }
 
     if (changed) {

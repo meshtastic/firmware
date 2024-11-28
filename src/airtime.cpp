@@ -13,17 +13,17 @@ void AirTime::logAirtime(reportTypes reportType, uint32_t airtime_ms)
 {
 
     if (reportType == TX_LOG) {
-        LOG_DEBUG("Packet transmitted : %ums\n", airtime_ms);
+        LOG_DEBUG("Packet TX: %ums", airtime_ms);
         this->airtimes.periodTX[0] = this->airtimes.periodTX[0] + airtime_ms;
         air_period_tx[0] = air_period_tx[0] + airtime_ms;
 
         this->utilizationTX[this->getPeriodUtilHour()] = this->utilizationTX[this->getPeriodUtilHour()] + airtime_ms;
     } else if (reportType == RX_LOG) {
-        LOG_DEBUG("Packet received : %ums\n", airtime_ms);
+        LOG_DEBUG("Packet RX: %ums", airtime_ms);
         this->airtimes.periodRX[0] = this->airtimes.periodRX[0] + airtime_ms;
         air_period_rx[0] = air_period_rx[0] + airtime_ms;
     } else if (reportType == RX_ALL_LOG) {
-        LOG_DEBUG("Packet received (noise?) : %ums\n", airtime_ms);
+        LOG_DEBUG("Packet RX (noise?) : %ums", airtime_ms);
         this->airtimes.periodRX_ALL[0] = this->airtimes.periodRX_ALL[0] + airtime_ms;
     }
 
@@ -50,7 +50,7 @@ void AirTime::airtimeRotatePeriod()
 {
 
     if (this->airtimes.lastPeriodIndex != this->currentPeriodIndex()) {
-        LOG_DEBUG("Rotating airtimes to a new period = %u\n", this->currentPeriodIndex());
+        LOG_DEBUG("Rotate airtimes to a new period = %u", this->currentPeriodIndex());
 
         for (int i = PERIODS_TO_LOG - 2; i >= 0; --i) {
             this->airtimes.periodTX[i + 1] = this->airtimes.periodTX[i];
@@ -105,7 +105,6 @@ float AirTime::channelUtilizationPercent()
     uint32_t sum = 0;
     for (uint32_t i = 0; i < CHANNEL_UTILIZATION_PERIODS; i++) {
         sum += this->channelUtilization[i];
-        // LOG_DEBUG("ChanUtilArray %u %u\n", i, this->channelUtilization[i]);
     }
 
     return (float(sum) / float(CHANNEL_UTILIZATION_PERIODS * 10 * 1000)) * 100;
@@ -127,7 +126,7 @@ bool AirTime::isTxAllowedChannelUtil(bool polite)
     if (channelUtilizationPercent() < percentage) {
         return true;
     } else {
-        LOG_WARN("Channel utilization is >%d percent. Skipping this opportunity to send.\n", percentage);
+        LOG_WARN("Ch. util >%d%%. Skip send", percentage);
         return false;
     }
 }
@@ -138,8 +137,7 @@ bool AirTime::isTxAllowedAirUtil()
         if (utilizationTXPercent() < myRegion->dutyCycle * polite_duty_cycle_percent / 100) {
             return true;
         } else {
-            LOG_WARN("Tx air utilization is >%f percent. Skipping this opportunity to send.\n",
-                     myRegion->dutyCycle * polite_duty_cycle_percent / 100);
+            LOG_WARN("TX air util. >%f%%. Skip send", myRegion->dutyCycle * polite_duty_cycle_percent / 100);
             return false;
         }
     }
@@ -208,14 +206,5 @@ int32_t AirTime::runOnce()
             this->utilizationTX[utilPeriodTX] = 0;
         }
     }
-    /*
-        LOG_DEBUG("utilPeriodTX %d TX Airtime %3.2f%\n", utilPeriodTX, airTime->utilizationTXPercent());
-        for (uint32_t i = 0; i < MINUTES_IN_HOUR; i++) {
-            LOG_DEBUG(
-                "%d,", this->utilizationTX[i]
-                );
-        }
-        LOG_DEBUG("\n");
-    */
     return (1000 * 1);
 }

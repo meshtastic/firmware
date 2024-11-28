@@ -104,6 +104,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_NANO_G1
 #elif defined(M5STACK)
 #define HW_VENDOR meshtastic_HardwareModel_M5STACK
+#elif defined(M5STACK_CORES3)
+#define HW_VENDOR meshtastic_HardwareModel_M5STACK_CORES3
 #elif defined(STATION_G1)
 #define HW_VENDOR meshtastic_HardwareModel_STATION_G1
 #elif defined(DR_DEV)
@@ -168,8 +170,6 @@
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_VISION_MASTER_E213
 #elif defined(HELTEC_VISION_MASTER_E290)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_VISION_MASTER_E290
-#elif defined(HELTEC_MESH_NODE_T114)
-#define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_NODE_T114
 #elif defined(SENSECAP_INDICATOR)
 #define HW_VENDOR meshtastic_HardwareModel_SENSECAP_INDICATOR
 #elif defined(SEEED_XIAO_S3)
