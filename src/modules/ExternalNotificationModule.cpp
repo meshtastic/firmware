@@ -124,7 +124,8 @@ int32_t ExternalNotificationModule::runOnce()
             if (externalTurnedOn[2] + (moduleConfig.external_notification.output_ms ? moduleConfig.external_notification.output_ms
                                                                                     : EXT_NOTIFICATION_MODULE_OUTPUT_MS) <
                 millis()) {
-            LOG_DEBUG("EXTERNAL 2 %d compared to %d", externalTurnedOn[2]+moduleConfig.external_notification.output_ms, millis());
+                LOG_DEBUG("EXTERNAL 2 %d compared to %d", externalTurnedOn[2] + moduleConfig.external_notification.output_ms,
+                          millis());
                 setExternalState(2, !getExternal(2));
             }
 #if defined(HAS_NCP5623) || defined(RGBLED_RED) || defined(HAS_NEOPIXEL) || defined(UNPHONE)
