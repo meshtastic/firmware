@@ -463,7 +463,7 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
                  m.variant.environment_metrics.gas_resistance, m.variant.environment_metrics.relative_humidity,
                  m.variant.environment_metrics.temperature);
                  
-        LOG_INFO("Send: soil_temperature=%u, soil_moisture=%u",
+        LOG_INFO("Send: soil_temperature=%f, soil_moisture=%u",
                  m.variant.environment_metrics.soil_temperature, m.variant.environment_metrics.soil_moisture);
 
         LOG_INFO("Send: voltage=%f, IAQ=%d, distance=%f, lux=%f", m.variant.environment_metrics.voltage,

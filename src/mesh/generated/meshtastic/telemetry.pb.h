@@ -162,10 +162,10 @@ typedef struct _meshtastic_EnvironmentMetrics {
     /* Radiation in µR/h */
     bool has_radiation;
     float radiation;
-    /* Soil moisture measured */
+    /* Soil moisture measured (% 1-100) */
     bool has_soil_moisture;
-    int soil_moisture;
-    /* Soil temperature measured */
+    uint8_t soil_moisture;
+    /* Soil temperature measured (*C) */
     bool has_soil_temperature;
     float soil_temperature;
 } meshtastic_EnvironmentMetrics;

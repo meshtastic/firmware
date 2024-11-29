@@ -38,12 +38,12 @@ void RAK12035VBSensor::setup() {
 	// Reading the saved calibration values from the sensor.
     uint16_t zero_val = 0;
     uint16_t hundred_val = 0;
-    uint16_t default_zero_val = 400;
-    uint16_t default_hundred_val = 560;
+    uint16_t default_zero_val = 550;
+    uint16_t default_hundred_val = 420;
 	sensor.get_dry_cal(&zero_val);
 	sensor.get_wet_cal(&hundred_val);
     delay(100);
-    if(zero_val == 0 || zero_val >= hundred_val){
+    if(zero_val == 0 || zero_val <= hundred_val){
         LOG_ERROR("Dry calibration value is %d", zero_val);
         LOG_ERROR("Wet calibration value is %d", hundred_val);
         LOG_ERROR("This does not make sense. Youc can recalibrate this sensor using the calibration sketch included here: https://github.com/RAKWireless/RAK12035_SoilMoisture.");
@@ -52,7 +52,7 @@ void RAK12035VBSensor::setup() {
         sensor.get_dry_cal(&zero_val);
         LOG_ERROR("Dry calibration reset complete. New value is %d", zero_val);
     }    
-    if(hundred_val == 0 || hundred_val <= zero_val){
+    if(hundred_val == 0 || hundred_val >= zero_val){
         LOG_ERROR("Dry calibration value is %d", zero_val);
         LOG_ERROR("Wet calibration value is %d", hundred_val);
         LOG_ERROR("This does not make sense. Youc can recalibrate this sensor using the calibration sketch included here: https://github.com/RAKWireless/RAK12035_SoilMoisture.");
@@ -73,13 +73,20 @@ bool RAK12035VBSensor::getMetrics(meshtastic_Telemetry *measurement)
 
 	uint8_t moisture = 0;
     uint16_t temp = 0;
-	if(sensor.get_sensor_moisture(&moisture) && sensor.get_sensor_temperature(&temp)){
-        delay(100);
-        measurement->variant.environment_metrics.soil_temperature = temp/10.0;
-        measurement->variant.environment_metrics.soil_moisture = moisture;
-        return true;
-    }
-    return false;
-}
+    bool success = false;
 
+    success = sensor.get_sensor_moisture(&moisture);
+    delay(500);
+    success = sensor.get_sensor_temperature(&temp);
+    delay(500);
+
+    if(success = false){
+        LOG_ERROR("Failed to read sensor data");
+        return false;
+    }
+    LOG_INFO("Successful read from sensor Temperature: %.2f, Moisture: %ld%", (double)(temp/10), moisture);
+    measurement->variant.environment_metrics.soil_temperature = (float)(temp/10);
+    measurement->variant.environment_metrics.soil_moisture = moisture;
+    return true;
+}
 #endif

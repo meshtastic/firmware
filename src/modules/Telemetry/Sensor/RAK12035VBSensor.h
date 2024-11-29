@@ -8,7 +8,8 @@
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "TelemetrySensor.h"
-#include <RAK12035_SoilMoisture.h>
+#include <Arduino.h>
+#include "RAK12035_SoilMoisture.h"
 
 class RAK12035VBSensor : public TelemetrySensor
 {
