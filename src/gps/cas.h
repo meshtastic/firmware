@@ -21,7 +21,7 @@
 
 // CFG-RST (0x06, 0x02)
 // Factory reset
-const uint8_t GPS::_message_CAS_CFG_RST_FACTORY[] = {
+static const uint8_t _message_CAS_CFG_RST_FACTORY[] = {
     0xFF, 0x03, // Fields to clear
     0x01,       // Reset Mode: Controlled Software reset
     0x03        // Startup Mode: Factory
@@ -30,7 +30,7 @@ const uint8_t GPS::_message_CAS_CFG_RST_FACTORY[] = {
 // CFG_RATE (0x06, 0x01)
 // 1HZ update rate, this should always be the case after
 // factory reset but update it regardless
-const uint8_t GPS::_message_CAS_CFG_RATE_1HZ[] = {
+static const uint8_t _message_CAS_CFG_RATE_1HZ[] = {
     0xE8, 0x03, // Update Rate: 0x03E8 = 1000ms
     0x00, 0x00  // Reserved
 };
@@ -39,7 +39,7 @@ const uint8_t GPS::_message_CAS_CFG_RATE_1HZ[] = {
 // Initial ATGM33H-5N configuration, Updates for Dynamic Mode, Fix Mode, and SV system
 // Qwirk: The ATGM33H-5N-31 should only support GPS+BDS, however it will happily enable
 //  and use GPS+BDS+GLONASS iff the correct CFG_NAVX command is used.
-const uint8_t GPS::_message_CAS_CFG_NAVX_CONF[] = {
+static const uint8_t _message_CAS_CFG_NAVX_CONF[] = {
     0x03, 0x01, 0x00, 0x00, // Update Mask: Dynamic Mode, Fix Mode, Nav Settings
     0x03,                   // Dynamic Mode: Automotive
     0x03,                   // Fix Mode: Auto 2D/3D

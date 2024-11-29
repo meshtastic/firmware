@@ -229,7 +229,7 @@ typedef enum _meshtastic_Constants {
     /* From mesh.options
  note: this payload length is ONLY the bytes that are sent inside of the Data protobuf (excluding protobuf overhead). The 16 byte header is
  outside of this envelope */
-    meshtastic_Constants_DATA_PAYLOAD_LEN = 237
+    meshtastic_Constants_DATA_PAYLOAD_LEN = 233
 } meshtastic_Constants;
 
 /* Error codes for critical errors
@@ -603,7 +603,7 @@ typedef struct _meshtastic_Routing {
     };
 } meshtastic_Routing;
 
-typedef PB_BYTES_ARRAY_T(237) meshtastic_Data_payload_t;
+typedef PB_BYTES_ARRAY_T(233) meshtastic_Data_payload_t;
 /* (Formerly called SubPacket)
  The payload portion fo a packet, this is the actual bytes that are sent
  inside a radio packet (because from/to are broken out by the comms library) */
@@ -882,7 +882,7 @@ typedef struct _meshtastic_FileInfo {
     uint32_t size_bytes;
 } meshtastic_FileInfo;
 
-typedef PB_BYTES_ARRAY_T(237) meshtastic_Compressed_data_t;
+typedef PB_BYTES_ARRAY_T(233) meshtastic_Compressed_data_t;
 /* Compressed message payload */
 typedef struct _meshtastic_Compressed {
     /* PortNum to determine the how to handle the compressed payload. */
@@ -1730,14 +1730,14 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define MESHTASTIC_MESHTASTIC_MESH_PB_H_MAX_SIZE meshtastic_FromRadio_size
 #define meshtastic_ChunkedPayload_size           245
 #define meshtastic_ClientNotification_size       415
-#define meshtastic_Compressed_size               243
-#define meshtastic_Data_size                     273
+#define meshtastic_Compressed_size               239
+#define meshtastic_Data_size                     269
 #define meshtastic_DeviceMetadata_size           54
 #define meshtastic_FileInfo_size                 236
 #define meshtastic_FromRadio_size                510
 #define meshtastic_Heartbeat_size                0
 #define meshtastic_LogRecord_size                426
-#define meshtastic_MeshPacket_size               375
+#define meshtastic_MeshPacket_size               371
 #define meshtastic_MqttClientProxyMessage_size   501
 #define meshtastic_MyNodeInfo_size               77
 #define meshtastic_NeighborInfo_size             258
