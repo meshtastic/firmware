@@ -400,11 +400,9 @@ bool loadConfig(const char *configPath)
             settingsStrings[webserverrootpath] = (yamlConfig["Webserver"]["RootPath"]).as<std::string>("");
         }
 
-        if (yamlConfig["General"]) {
-            settingsMap[maxnodes] = (yamlConfig["General"]["MaxNodes"]).as<int>(200);
-            settingsMap[maxtophone] = (yamlConfig["General"]["MaxMessageQueue"]).as<int>(100);
-            settingsStrings[config_directory] = (yamlConfig["General"]["ConfigDirectory"]).as<std::string>("");
-        }
+        settingsMap[maxnodes] = (yamlConfig["General"]["MaxNodes"]).as<int>(200);
+        settingsMap[maxtophone] = (yamlConfig["General"]["MaxMessageQueue"]).as<int>(100);
+        settingsStrings[config_directory] = (yamlConfig["General"]["ConfigDirectory"]).as<std::string>("");
 
     } catch (YAML::Exception &e) {
         std::cout << "*** Exception " << e.what() << std::endl;
