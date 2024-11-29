@@ -49,10 +49,11 @@ void CardKbI2cImpl::init()
                 kb_model = 0x00;
             }
         }
-        LOG_DEBUG("Keyboard Type: 0x%02x Model: 0x%02x Address: 0x%02x", kb_info.type, kb_model, cardkb_found.address);
         if (cardkb_found.address == 0x00) {
             disable();
             return;
+        } else {
+            LOG_DEBUG("Keyboard Type: 0x%02x Model: 0x%02x Address: 0x%02x", kb_info.type, kb_model, cardkb_found.address);
         }
     }
 #else

@@ -1290,10 +1290,14 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
         powerFSM.trigger(EVENT_NODEDB_UPDATED);
         notifyObservers(true); // Force an update whether or not our node counts have changed
 
-        // We just changed something about the user, store our DB
-        Throttle::execute(
-            &lastNodeDbSave, ONE_MINUTE_MS, []() { nodeDB->saveToDisk(SEGMENT_DEVICESTATE); },
-            []() { LOG_DEBUG("Defer NodeDB saveToDisk for now"); }); // since we saved less than a minute ago
+        // We just changed something about a User,
+        // store our DB unless we just did so less than a minute ago
+        if (!Throttle::isWithinTimespanMs(lastNodeDbSave, ONE_MINUTE_MS)) {
+            saveToDisk(SEGMENT_DEVICESTATE);
+            lastNodeDbSave = millis();
+        } else {
+            LOG_DEBUG("Defer NodeDB saveToDisk for now");
+        }
     }
 
     return changed;
@@ -1403,6 +1407,13 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
     }
 
     return lite;
+}
+
+/// Sometimes we will have Position objects that only have a time, so check for
+/// valid lat/lon
+bool NodeDB::hasValidPosition(const meshtastic_NodeInfoLite *n)
+{
+    return n->has_position && (n->position.latitude_i != 0 || n->position.longitude_i != 0);
 }
 
 /// Record an error that should be reported via analytics
