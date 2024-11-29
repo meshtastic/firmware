@@ -112,6 +112,10 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         power->shutdown();
         break;
 
+    case TOGGLE_BATTERY_ICON:
+        windowManager->toggleBatteryIcon();
+        break;
+
     default:
         LOG_WARN("Action not implemented");
     }
@@ -149,6 +153,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         items.push_back(MenuItem("Applets", MenuPage::APPLETS));
         items.push_back(MenuItem("Layout", MenuAction::LAYOUT, MenuPage::OPTIONS));
         items.push_back(MenuItem("Rotate", MenuAction::ROTATE, MenuPage::OPTIONS));
+        items.push_back(
+            MenuItem("Battery Icon", MenuAction::TOGGLE_BATTERY_ICON, MenuPage::OPTIONS, &settings.optionalFeatures.batteryIcon));
         if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_DISABLED)
             items.push_back(MenuItem("Enable GPS", MenuPage::EXIT)); // TODO
         if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED)

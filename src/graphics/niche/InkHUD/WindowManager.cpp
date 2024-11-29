@@ -122,7 +122,7 @@ void InkHUD::WindowManager::createSystemApplets()
     // System applets are always active
     bootscreenApplet->activate();
     // notificationApplet->activate();
-    // batteryIconApplet->activate();
+    batteryIconApplet->activate();
     menuApplet->activate();
     placeholderApplet->activate();
 
@@ -479,6 +479,9 @@ void InkHUD::WindowManager::changeLayout()
     if (menuApplet->isForeground())
         menuApplet->setTile(userTiles.at(settings.userTiles.focused));
 
+    // Note: this "adhoc redraw" action which several methods use will be abstracted,
+    // when WindowManager::render() gets refactored
+
     // Draw user applets (no refresh)
     // - recreates the "frozen" user applets, shown on tiles not showing the menu applet
     // - menu will draw over-top before next render()
@@ -486,6 +489,13 @@ void InkHUD::WindowManager::changeLayout()
         t->displayedApplet->setTile(t);          // Set dimensions; provide a reference to this tile, so it can receive pixels
         t->displayedApplet->resetDrawingSpace(); // Reset the drawing environment
         t->displayedApplet->render();            // Run the drawing operation, feeding pixels via Tile, into WindowManager
+    }
+
+    // If the battery icon is shown, ad-hoc redraw this too
+    if (batteryIconApplet->isForeground()) {
+        batteryIconApplet->setTile(batteryIconApplet->getTile());
+        batteryIconApplet->resetDrawingSpace();
+        batteryIconApplet->render();
     }
 }
 
@@ -519,6 +529,9 @@ void InkHUD::WindowManager::changeActivatedApplets()
     if (menuApplet->isForeground())
         menuApplet->setTile(userTiles.at(settings.userTiles.focused));
 
+    // Note: this "adhoc redraw" action which several methods use will be abstracted,
+    // when WindowManager::render() gets refactored
+
     // Draw user applets (no refresh)
     // - recreates the "frozen" user applets, shown on tiles not showing the menu applet
     // - menu will draw over-top before next render()
@@ -526,6 +539,46 @@ void InkHUD::WindowManager::changeActivatedApplets()
         t->displayedApplet->setTile(t);          // Set dimensions; provide a reference to this tile, so it can receive pixels
         t->displayedApplet->resetDrawingSpace(); // Reset the drawing environment
         t->displayedApplet->render();            // Run the drawing operation, feeding pixels via Tile, into WindowManager
+    }
+
+    // If the battery icon is shown, ad-hoc redraw this too
+    if (batteryIconApplet->isForeground()) {
+        batteryIconApplet->setTile(batteryIconApplet->getTile());
+        batteryIconApplet->resetDrawingSpace();
+        batteryIconApplet->render();
+    }
+}
+
+// Change whether the battery icon is displayed (top left corner)
+// Don't toggle the OptionalFeatures value before calling this, our method handles it internally
+void InkHUD::WindowManager::toggleBatteryIcon()
+{
+    assert(batteryIconApplet->isActive());
+    settings.optionalFeatures.batteryIcon = !settings.optionalFeatures.batteryIcon; // Preserve the change between boots
+
+    // Show or hide the applet
+    if (settings.optionalFeatures.batteryIcon)
+        batteryIconApplet->bringToForeground();
+    else
+        batteryIconApplet->sendToBackground();
+
+    // Note: this "adhoc redraw" action which several methods use will be abstracted,
+    // when WindowManager::render() gets refactored
+
+    // Draw user applets (no refresh)
+    // - recreates the "frozen" user applets, shown on tiles not showing the menu applet
+    // - menu will draw over-top before next render()
+    for (Tile *t : userTiles) {
+        t->displayedApplet->setTile(t);          // Set dimensions; provide a reference to this tile, so it can receive pixels
+        t->displayedApplet->resetDrawingSpace(); // Reset the drawing environment
+        t->displayedApplet->render();            // Run the drawing operation, feeding pixels via Tile, into WindowManager
+    }
+
+    // If the battery icon is shown, ad-hoc redraw this too
+    if (batteryIconApplet->isForeground()) {
+        batteryIconApplet->setTile(batteryIconApplet->getTile());
+        batteryIconApplet->resetDrawingSpace();
+        batteryIconApplet->render();
     }
 }
 
@@ -659,15 +712,6 @@ void InkHUD::WindowManager::render(bool force)
 
     bool imageChanged = false; // If nobody requested an update, we might skip it?
 
-    // Potentially render the menu applet
-    // -----------------------------------
-    if (menuApplet->isForeground() && menuApplet->wantsToRender()) {
-        assert(menuApplet->getTile()); // Confirm that menu is assigned to a tile
-        menuApplet->resetDrawingSpace();
-        menuApplet->render();
-        imageChanged = true; // Todo: handle refresh specially for the menu
-    }
-
     // User applets
     // -------------
     // Processed only if neither menu nor fullscreen applets shown
@@ -720,7 +764,8 @@ void InkHUD::WindowManager::render(bool force)
     // Todo: handle with other system applets
     // --------------------------------------
     if (batteryIconApplet->isForeground()) {
-        imageChanged = true;
+        if (batteryIconApplet->wantsToRender()) // Check before resetDrawingSpace() - resets flag
+            imageChanged = true;
         batteryIconApplet->resetDrawingSpace();
         batteryIconApplet->render();
     }
@@ -734,6 +779,15 @@ void InkHUD::WindowManager::render(bool force)
         notificationApplet->setTile(notificationTile);
         notificationApplet->resetDrawingSpace();
         notificationApplet->render();
+    }
+
+    // Potentially render the menu applet
+    // -----------------------------------
+    if (menuApplet->isForeground() && menuApplet->wantsToRender()) {
+        assert(menuApplet->getTile()); // Confirm that menu is assigned to a tile
+        menuApplet->resetDrawingSpace();
+        menuApplet->render();
+        imageChanged = true; // Todo: handle refresh specially for the menu
     }
 
     // Check if any system applets want to render

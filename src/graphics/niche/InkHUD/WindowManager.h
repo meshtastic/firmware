@@ -74,6 +74,7 @@ class WindowManager : protected concurrency::OSThread
 
     void changeLayout();                       // Change tile layout or count
     void changeActivatedApplets();             // Change which applets are activated
+    void toggleBatteryIcon();                  // Change whether the battery icon is shown
     bool approveNotification(Notification &n); // Ask applets if a notification is worth showing
 
     void requestUpdate(Drivers::EInk::UpdateTypes type, bool async, bool allTiles); // Update the display image

@@ -6,18 +6,46 @@ using namespace NicheGraphics;
 
 void InkHUD::BatteryIconApplet::onActivate()
 {
-    bringToForeground(); // Testing only
+    // Show at boot, if user has previously enabled the feature
+    if (settings.optionalFeatures.batteryIcon)
+        bringToForeground();
+
+    // Register to our have BatteryIconApplet::onPowerStatusUpdate method called when new power info is available
+    powerStatusObserver.observe(&powerStatus->onNewStatus);
 }
 
-void InkHUD::BatteryIconApplet::onDeactivate() {}
+void InkHUD::BatteryIconApplet::onDeactivate()
+{
+    // Stop having onPowerStatusUpdate called
+    powerStatusObserver.unobserve(&powerStatus->onNewStatus);
+}
+
+int InkHUD::BatteryIconApplet::onPowerStatusUpdate(const meshtastic::Status *status)
+{
+    // This method should only receive power statuses
+    // If we get a different type of status, something has gone weird elsewhere
+    assert(status->getStatusType() == STATUS_TYPE_POWER);
+
+    meshtastic::PowerStatus *powerStatus = (meshtastic::PowerStatus *)status;
+
+    // Get the new state of charge %, and round to the nearest 10%
+    uint8_t newSocRounded = ((powerStatus->getBatteryChargePercent() + 5) / 10) * 10;
+
+    // If rounded value has changed, trigger a display update
+    // It's okay to requestUpdate before we store the new value, as the update won't run until next loop()
+    if (this->socRounded != newSocRounded)
+        requestUpdate();
+
+    // Store the new value
+    this->socRounded = newSocRounded;
+
+    return 0; // Tell Observable to continue informing other observers
+}
 
 void InkHUD::BatteryIconApplet::render()
 {
-    // Todo: use real data. Currently drawing with dummy value of 100%
-
     // Fill entire tile
     // - size of icon controlled by size of tile
-    uint8_t percent = 100;
     int16_t l = 0;
     int16_t t = 0;
     uint16_t w = width();
@@ -57,13 +85,10 @@ void InkHUD::BatteryIconApplet::render()
     const uint16_t sliceH = bodyH - (slicePad * 2);
     uint16_t sliceW = bodyW - (slicePad * 2);
 
-    sliceW = (sliceW * percent) / 100; // Apply percentage
+    sliceW = (sliceW * socRounded) / 100; // Apply percentage
 
-    if (percent > 10) {
-        // Testing only
-        hatchRegion(sliceL, sliceT, sliceW, sliceH, 2, BLACK);
-        drawRect(sliceL, sliceT, sliceW, sliceH, BLACK);
-    }
+    hatchRegion(sliceL, sliceT, sliceW, sliceH, 2, BLACK);
+    drawRect(sliceL, sliceT, sliceW, sliceH, BLACK);
 }
 
 #endif

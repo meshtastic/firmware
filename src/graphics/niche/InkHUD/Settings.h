@@ -50,6 +50,11 @@ struct Settings {
         bool active[MAX_USERAPPLETS_GLOBAL];
     } userApplets;
 
+    struct OptionalFeatures {
+        bool notifications = true;
+        bool batteryIcon = false;
+    } optionalFeatures;
+
     // Most recently received text message
     // Value is updated by InkHUD::WindowManager, as a courtesty to applets
     // Note: different from devicestate.rx_text_message,
@@ -66,8 +71,6 @@ struct Settings {
     // How long do we consider another node to be "active"?
     // Used when applets want to filter for "active nodes" only
     uint32_t recentlyActiveSeconds = 2 * 60;
-
-    bool shownotificationApplet = true;
 };
 
 extern Settings settings;

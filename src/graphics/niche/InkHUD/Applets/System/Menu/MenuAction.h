@@ -26,6 +26,7 @@ enum MenuAction {
     ACTIVATE_APPLETS, // Todo: remove? Possible redundant, handled by TOGGLE_APPLET?
     ROTATE,
     LAYOUT,
+    TOGGLE_BATTERY_ICON,
 };
 
 } // namespace NicheGraphics::InkHUD
