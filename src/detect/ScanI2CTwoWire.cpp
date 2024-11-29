@@ -297,14 +297,20 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 //     type = RAK12035VB;
                 //     LOG_INFO("RAK12035VB Soil Sensor found");
                 // } else {
+                //#ifdef RAK4631
+                //    type = NCP5623;
+                //    logFoundDevice("NCP5623", (uint8_t)addr.address);
+                //#endif
                 //     type = TCA9535;
                 //     LOG_INFO("TCA9535 I2C expander found\n");
                 // }
                 // break;
 
                 // ^^^^^^^^^^^ not working... so we will just assume it is a RAK12035VB Soil Sensor so I can keep testing.
+                #ifdef RAK4631
                     type = RAK12035VB;
                     LOG_INFO("RAK12035VB Soil Sensor found");
+                #endif
                 break;
 
 
@@ -411,14 +417,14 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 break;
 
                 SCAN_SIMPLE_CASE(LSM6DS3_ADDR, LSM6DS3, "LSM6DS3 accelerometer found at address 0x%x", (uint8_t)addr.address);
-                SCAN_SIMPLE_CASE(TCA9555_ADDR, TCA9555, "TCA9555 I2C expander found");
-                SCAN_SIMPLE_CASE(VEML7700_ADDR, VEML7700, "VEML7700 light sensor found");
-                SCAN_SIMPLE_CASE(TSL25911_ADDR, TSL2591, "TSL2591 light sensor found");
-                SCAN_SIMPLE_CASE(OPT3001_ADDR, OPT3001, "OPT3001 light sensor found");
-                SCAN_SIMPLE_CASE(MLX90632_ADDR, MLX90632, "MLX90632 IR temp sensor found");
-                SCAN_SIMPLE_CASE(NAU7802_ADDR, NAU7802, "NAU7802 based scale found");
-                SCAN_SIMPLE_CASE(FT6336U_ADDR, FT6336U, "FT6336U touchscreen found");
-                SCAN_SIMPLE_CASE(MAX1704X_ADDR, MAX17048, "MAX17048 lipo fuel gauge found");
+                SCAN_SIMPLE_CASE(TCA9555_ADDR, TCA9555, "TCA9555 I2C expander found", (uint8_t)addr.address);
+                SCAN_SIMPLE_CASE(VEML7700_ADDR, VEML7700, "VEML7700 light sensor found", (uint8_t)addr.address);
+                SCAN_SIMPLE_CASE(TSL25911_ADDR, TSL2591, "TSL2591 light sensor found", (uint8_t)addr.address);
+                SCAN_SIMPLE_CASE(OPT3001_ADDR, OPT3001, "OPT3001 light sensor found", (uint8_t)addr.address);
+                SCAN_SIMPLE_CASE(MLX90632_ADDR, MLX90632, "MLX90632 IR temp sensor found", (uint8_t)addr.address);
+                SCAN_SIMPLE_CASE(NAU7802_ADDR, NAU7802, "NAU7802 based scale found", (uint8_t)addr.address);
+                SCAN_SIMPLE_CASE(FT6336U_ADDR, FT6336U, "FT6336U touchscreen found", (uint8_t)addr.address);
+                SCAN_SIMPLE_CASE(MAX1704X_ADDR, MAX17048, "MAX17048 lipo fuel gauge found", (uint8_t)addr.address);
 
 #ifdef HAS_TPS65233
                 SCAN_SIMPLE_CASE(TPS65233_ADDR, TPS65233, "TPS65233", (uint8_t)addr.address);
