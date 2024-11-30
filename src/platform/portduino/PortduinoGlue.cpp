@@ -152,47 +152,11 @@ void portduinoSetup()
     // Need to bind all the configured GPIO pins so they're not simulated
     // TODO: Can we do this in the for loop above?
     // TODO: If one of these fails, we should log and terminate
-    /*if (settingsMap.count(cs) > 0 && settingsMap[cs] != RADIOLIB_NC) {
-        if (initGPIOPin(settingsMap[cs], gpioChipName) != ERRNO_OK) {
-            settingsMap[cs] = RADIOLIB_NC;
-        }
-    }
-    if (settingsMap.count(irq) > 0 && settingsMap[irq] != RADIOLIB_NC) {
-        if (initGPIOPin(settingsMap[irq], gpioChipName) != ERRNO_OK) {
-            settingsMap[irq] = RADIOLIB_NC;
-        }
-    }
-    if (settingsMap.count(busy) > 0 && settingsMap[busy] != RADIOLIB_NC) {
-        if (initGPIOPin(settingsMap[busy], gpioChipName) != ERRNO_OK) {
-            settingsMap[busy] = RADIOLIB_NC;
-        }
-    }
-    if (settingsMap.count(reset) > 0 && settingsMap[reset] != RADIOLIB_NC) {
-        if (initGPIOPin(settingsMap[reset], gpioChipName) != ERRNO_OK) {
-            settingsMap[reset] = RADIOLIB_NC;
-        }
-    }
-    if (settingsMap.count(sx126x_ant_sw) > 0 && settingsMap[sx126x_ant_sw] != RADIOLIB_NC) {
-        if (initGPIOPin(settingsMap[sx126x_ant_sw], gpioChipName) != ERRNO_OK) {
-            settingsMap[sx126x_ant_sw] = RADIOLIB_NC;
-        }
-    }
     if (settingsMap.count(user) > 0 && settingsMap[user] != RADIOLIB_NC) {
         if (initGPIOPin(settingsMap[user], gpioChipName) != ERRNO_OK) {
             settingsMap[user] = RADIOLIB_NC;
         }
     }
-    if (settingsMap.count(rxen) > 0 && settingsMap[rxen] != RADIOLIB_NC) {
-        if (initGPIOPin(settingsMap[rxen], gpioChipName) != ERRNO_OK) {
-            settingsMap[rxen] = RADIOLIB_NC;
-        }
-    }
-    if (settingsMap.count(txen) > 0 && settingsMap[txen] != RADIOLIB_NC) {
-        if (initGPIOPin(settingsMap[txen], gpioChipName) != ERRNO_OK) {
-            settingsMap[txen] = RADIOLIB_NC;
-        }
-    } */
-
     if (settingsMap[displayPanel] != no_screen) {
         if (settingsMap[displayCS] > 0)
             initGPIOPin(settingsMap[displayCS], gpioChipName);
@@ -210,7 +174,43 @@ void portduinoSetup()
             initGPIOPin(settingsMap[touchscreenIRQ], gpioChipName);
     }
 
-    if (settingsStrings[spidev] != "") {
+    // Only initialize the radio pins when dealing with real, kernel controlled SPI hardware
+    if (settingsStrings[spidev] != "" && settingsStrings[spidev] != "ch341") {
+        if (settingsMap.count(cs) > 0 && settingsMap[cs] != RADIOLIB_NC) {
+            if (initGPIOPin(settingsMap[cs], gpioChipName) != ERRNO_OK) {
+                settingsMap[cs] = RADIOLIB_NC;
+            }
+        }
+        if (settingsMap.count(irq) > 0 && settingsMap[irq] != RADIOLIB_NC) {
+            if (initGPIOPin(settingsMap[irq], gpioChipName) != ERRNO_OK) {
+                settingsMap[irq] = RADIOLIB_NC;
+            }
+        }
+        if (settingsMap.count(busy) > 0 && settingsMap[busy] != RADIOLIB_NC) {
+            if (initGPIOPin(settingsMap[busy], gpioChipName) != ERRNO_OK) {
+                settingsMap[busy] = RADIOLIB_NC;
+            }
+        }
+        if (settingsMap.count(reset) > 0 && settingsMap[reset] != RADIOLIB_NC) {
+            if (initGPIOPin(settingsMap[reset], gpioChipName) != ERRNO_OK) {
+                settingsMap[reset] = RADIOLIB_NC;
+            }
+        }
+        if (settingsMap.count(sx126x_ant_sw) > 0 && settingsMap[sx126x_ant_sw] != RADIOLIB_NC) {
+            if (initGPIOPin(settingsMap[sx126x_ant_sw], gpioChipName) != ERRNO_OK) {
+                settingsMap[sx126x_ant_sw] = RADIOLIB_NC;
+            }
+        }
+        if (settingsMap.count(rxen) > 0 && settingsMap[rxen] != RADIOLIB_NC) {
+            if (initGPIOPin(settingsMap[rxen], gpioChipName) != ERRNO_OK) {
+                settingsMap[rxen] = RADIOLIB_NC;
+            }
+        }
+        if (settingsMap.count(txen) > 0 && settingsMap[txen] != RADIOLIB_NC) {
+            if (initGPIOPin(settingsMap[txen], gpioChipName) != ERRNO_OK) {
+                settingsMap[txen] = RADIOLIB_NC;
+            }
+        }
         SPI.begin(settingsStrings[spidev].c_str());
     }
     if (settingsStrings[traceFilename] != "") {
@@ -296,14 +296,19 @@ bool loadConfig(const char *configPath)
             settingsMap[ch341Quirk] = yamlConfig["Lora"]["ch341_quirk"].as<bool>(false);
             settingsMap[spiSpeed] = yamlConfig["Lora"]["spiSpeed"].as<int>(2000000);
 
-            settingsStrings[spidev] = "/dev/" + yamlConfig["Lora"]["spidev"].as<std::string>("spidev0.0");
-            if (settingsStrings[spidev].length() == 14) {
-                int x = settingsStrings[spidev].at(11) - '0';
-                int y = settingsStrings[spidev].at(13) - '0';
-                if (x >= 0 && x < 10 && y >= 0 && y < 10) {
-                    settingsMap[spidev] = x + y << 4;
-                    settingsMap[displayspidev] = settingsMap[spidev];
-                    settingsMap[touchscreenspidev] = settingsMap[spidev];
+            settingsStrings[spidev] = yamlConfig["Lora"]["spidev"].as<std::string>("spidev0.0");
+            if (settingsStrings[spidev] != "ch341") {
+                settingsStrings[spidev] = "/dev/" + settingsStrings[spidev];
+                if (settingsStrings[spidev].length() == 14) {
+                    int x = settingsStrings[spidev].at(11) - '0';
+                    int y = settingsStrings[spidev].at(13) - '0';
+                    // Pretty sure this is always true
+                    if (x >= 0 && x < 10 && y >= 0 && y < 10) {
+                        // I believe this bit of weirdness is specifically for the new GUI
+                        settingsMap[spidev] = x + y << 4;
+                        settingsMap[displayspidev] = settingsMap[spidev];
+                        settingsMap[touchscreenspidev] = settingsMap[spidev];
+                    }
                 }
             }
         }
