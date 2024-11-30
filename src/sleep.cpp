@@ -337,6 +337,12 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 {
     // LOG_DEBUG("Enter light sleep");
 
+    // LORA_DIO1 is an extended IO pin. Setting it as a wake-up pin will cause problems, such as the indicator device not entering
+    // LightSleep.
+#if defined(SENSECAP_INDICATOR)
+    return ESP_SLEEP_WAKEUP_TIMER;
+#endif
+
     waitEnterSleep(false);
     notifyLightSleep.notifyObservers(NULL); // Button interrupts are detached here
 

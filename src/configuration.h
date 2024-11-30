@@ -148,6 +148,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define NAU7802_ADDR 0x2A
 #define MAX30102_ADDR 0x57
 #define MLX90614_ADDR_DEF 0x5A
+#define CGRADSENS_ADDR 0x66
 
 // -----------------------------------------------------------------------------
 // ACCELEROMETER
@@ -170,7 +171,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 // Security
 // -----------------------------------------------------------------------------
-#define ATECC608B_ADDR 0x35
 
 // -----------------------------------------------------------------------------
 // IO Expander
