@@ -709,16 +709,18 @@ void setup()
     pinMode(LORA_CS, OUTPUT);
     digitalWrite(LORA_CS, HIGH);
     SPI1.begin(false);
-#else                      // HW_SPI1_DEVICE
+#else  // HW_SPI1_DEVICE
     SPI.setSCK(LORA_SCK);
     SPI.setTX(LORA_MOSI);
     SPI.setRX(LORA_MISO);
     SPI.begin(false);
-#endif                     // HW_SPI1_DEVICE
-#elif !defined(ARCH_ESP32) // ARCH_RP2040
+#endif // HW_SPI1_DEVICE
+#elif ARCH_PORTDUINO
     if (settingsStrings[spidev] != "ch341") {
         SPI.begin();
     }
+#elif !defined(ARCH_ESP32) // ARCH_RP2040
+    SPI.begin();
 #else
     // ESP32
     SPI.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
