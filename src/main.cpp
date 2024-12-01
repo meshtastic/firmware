@@ -150,10 +150,6 @@ ScanI2C::DeviceAddress accelerometer_found = ScanI2C::ADDRESS_NONE;
 // The I2C address of the RGB LED (if found)
 ScanI2C::FoundDevice rgb_found = ScanI2C::FoundDevice(ScanI2C::DeviceType::NONE, ScanI2C::ADDRESS_NONE);
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
-ATECCX08A atecc;
-#endif
-
 #ifdef T_WATCH_S3
 Adafruit_DRV2605 drv;
 #endif
@@ -572,48 +568,37 @@ void setup()
     LOG_DEBUG("acc_info = %i", acc_info.type);
 #endif
 
-#define STRING(S) #S
-
-#define SCANNER_TO_SENSORS_MAP(SCANNER_T, PB_T)                                                                                  \
-    {                                                                                                                            \
-        auto found = i2cScanner->find(SCANNER_T);                                                                                \
-        if (found.type != ScanI2C::DeviceType::NONE) {                                                                           \
-            nodeTelemetrySensorsMap[PB_T].first = found.address.address;                                                         \
-            nodeTelemetrySensorsMap[PB_T].second = i2cScanner->fetchI2CBus(found.address);                                       \
-            LOG_DEBUG("found i2c sensor %s", STRING(PB_T));                                                                      \
-        }                                                                                                                        \
-    }
-
-    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::BME_680, meshtastic_TelemetrySensorType_BME680)
-    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::BME_280, meshtastic_TelemetrySensorType_BME280)
-    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::BMP_280, meshtastic_TelemetrySensorType_BMP280)
-    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::BMP_3XX, meshtastic_TelemetrySensorType_BMP3XX)
-    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::BMP_085, meshtastic_TelemetrySensorType_BMP085)
-    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::INA260, meshtastic_TelemetrySensorType_INA260)
-    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::INA219, meshtastic_TelemetrySensorType_INA219)
-    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::INA3221, meshtastic_TelemetrySensorType_INA3221)
-    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::MAX17048, meshtastic_TelemetrySensorType_MAX17048)
-    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::MCP9808, meshtastic_TelemetrySensorType_MCP9808)
-    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::MCP9808, meshtastic_TelemetrySensorType_MCP9808)
-    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::SHT31, meshtastic_TelemetrySensorType_SHT31)
-    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::SHTC3, meshtastic_TelemetrySensorType_SHTC3)
-    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::LPS22HB, meshtastic_TelemetrySensorType_LPS22)
-    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::QMC6310, meshtastic_TelemetrySensorType_QMC6310)
-    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::QMI8658, meshtastic_TelemetrySensorType_QMI8658)
-    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::QMC5883L, meshtastic_TelemetrySensorType_QMC5883L)
-    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::HMC5883L, meshtastic_TelemetrySensorType_QMC5883L)
-    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::PMSA0031, meshtastic_TelemetrySensorType_PMSA003I)
-    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::RCWL9620, meshtastic_TelemetrySensorType_RCWL9620)
-    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::VEML7700, meshtastic_TelemetrySensorType_VEML7700)
-    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::TSL2591, meshtastic_TelemetrySensorType_TSL25911FN)
-    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::OPT3001, meshtastic_TelemetrySensorType_OPT3001)
-    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::MLX90632, meshtastic_TelemetrySensorType_MLX90632)
-    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::MLX90614, meshtastic_TelemetrySensorType_MLX90614)
-    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::SHT4X, meshtastic_TelemetrySensorType_SHT4X)
-    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::AHT10, meshtastic_TelemetrySensorType_AHT10)
-    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::DFROBOT_LARK, meshtastic_TelemetrySensorType_DFROBOT_LARK)
-    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::ICM20948, meshtastic_TelemetrySensorType_ICM20948)
-    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::MAX30102, meshtastic_TelemetrySensorType_MAX30102)
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::BME_680, meshtastic_TelemetrySensorType_BME680);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::BME_280, meshtastic_TelemetrySensorType_BME280);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::BMP_280, meshtastic_TelemetrySensorType_BMP280);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::BMP_3XX, meshtastic_TelemetrySensorType_BMP3XX);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::BMP_085, meshtastic_TelemetrySensorType_BMP085);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::INA260, meshtastic_TelemetrySensorType_INA260);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::INA219, meshtastic_TelemetrySensorType_INA219);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::INA3221, meshtastic_TelemetrySensorType_INA3221);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MAX17048, meshtastic_TelemetrySensorType_MAX17048);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MCP9808, meshtastic_TelemetrySensorType_MCP9808);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MCP9808, meshtastic_TelemetrySensorType_MCP9808);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::SHT31, meshtastic_TelemetrySensorType_SHT31);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::SHTC3, meshtastic_TelemetrySensorType_SHTC3);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::LPS22HB, meshtastic_TelemetrySensorType_LPS22);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::QMC6310, meshtastic_TelemetrySensorType_QMC6310);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::QMI8658, meshtastic_TelemetrySensorType_QMI8658);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::QMC5883L, meshtastic_TelemetrySensorType_QMC5883L);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::HMC5883L, meshtastic_TelemetrySensorType_QMC5883L);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::PMSA0031, meshtastic_TelemetrySensorType_PMSA003I);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::RCWL9620, meshtastic_TelemetrySensorType_RCWL9620);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::VEML7700, meshtastic_TelemetrySensorType_VEML7700);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::TSL2591, meshtastic_TelemetrySensorType_TSL25911FN);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::OPT3001, meshtastic_TelemetrySensorType_OPT3001);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MLX90632, meshtastic_TelemetrySensorType_MLX90632);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MLX90614, meshtastic_TelemetrySensorType_MLX90614);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::SHT4X, meshtastic_TelemetrySensorType_SHT4X);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::AHT10, meshtastic_TelemetrySensorType_AHT10);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::DFROBOT_LARK, meshtastic_TelemetrySensorType_DFROBOT_LARK);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::ICM20948, meshtastic_TelemetrySensorType_ICM20948);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MAX30102, meshtastic_TelemetrySensorType_MAX30102);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::CGRADSENS, meshtastic_TelemetrySensorType_RADSENS);
 
     i2cScanner.reset();
 #endif
@@ -1191,6 +1176,19 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 #endif
     return deviceMetadata;
 }
+
+#if !MESHTASTIC_EXCLUDE_I2C
+void scannerToSensorsMap(const std::unique_ptr<ScanI2CTwoWire> &i2cScanner, ScanI2C::DeviceType deviceType,
+                         meshtastic_TelemetrySensorType sensorType)
+{
+    auto found = i2cScanner->find(deviceType);
+    if (found.type != ScanI2C::DeviceType::NONE) {
+        nodeTelemetrySensorsMap[sensorType].first = found.address.address;
+        nodeTelemetrySensorsMap[sensorType].second = i2cScanner->fetchI2CBus(found.address);
+    }
+}
+#endif
+
 #ifndef PIO_UNIT_TESTING
 void loop()
 {
