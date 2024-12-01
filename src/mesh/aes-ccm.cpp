@@ -10,7 +10,7 @@
 #include "aes-ccm.h"
 #if !MESHTASTIC_EXCLUDE_PKI
 
-static inline void WPA_PUT_BE16(uint8_t *a, uint16_t val)
+static void WPA_PUT_BE16(uint8_t *a, uint16_t val)
 {
     a[0] = val >> 8;
     a[1] = val & 0xff;
