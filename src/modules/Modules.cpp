@@ -63,7 +63,7 @@
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_POWER_TELEMETRY
 #include "modules/Telemetry/PowerTelemetry.h"
 #endif
-#if INCLUDE_GENERIC_THREAD_MODULE
+#if MESHTASTIC_INCLUDE_GENERIC_THREAD
 #warning INCLUDING GENERICTHREADMODULE
 #include "modules/GenericThreadModule.h"
 #endif
@@ -134,6 +134,9 @@ void setupModules()
 
 #if !MESHTASTIC_EXCLUDE_DROPZONE
         dropzoneModule = new DropzoneModule();
+#endif
+#if MESHTASTIC_INCLUDE_GENERIC_THREAD
+        new GenericThreadModule();
 #endif
         // Note: if the rest of meshtastic doesn't need to explicitly use your module, you do not need to assign the instance
         // to a global variable.

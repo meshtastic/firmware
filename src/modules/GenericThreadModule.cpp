@@ -20,9 +20,9 @@ int32_t GenericThreadModule::runOnce()
     if (firstTime) {
         // do something the first time we run
         firstTime = 0;
-        LOG_INFO("first time GenericThread runOnce");
+        LOG_INFO("first time GenericThread running");
     }
 
-    LOG_INFO("GenericThread runOnce");
+    LOG_INFO("GenericThread executing");
     return (my_interval);
 }
