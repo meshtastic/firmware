@@ -47,6 +47,9 @@ class SimRadio : public RadioInterface, protected concurrency::NotifiedWorkerThr
 
     meshtastic_QueueStatus getQueueStatus() override;
 
+    // Convert Compressed_msg to normal msg and receive it
+    void unPackAndReceive(meshtastic_MeshPacket &p);
+
   protected:
     /// are _trying_ to receive a packet currently (note - we might just be waiting for one)
     bool isReceiving = false;
