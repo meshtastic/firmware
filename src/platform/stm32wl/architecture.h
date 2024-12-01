@@ -9,12 +9,18 @@
 #ifndef HAS_RADIO
 #define HAS_RADIO 1
 #endif
+#ifndef HAS_TELEMETRY
+#define HAS_TELEMETRY 1
+#endif
 
 //
 // set HW_VENDOR
 //
-
-#ifndef HW_VENDOR
+#ifdef _VARIANT_WIOE5_
+#define HW_VENDOR meshtastic_HardwareModel_WIO_E5
+#elif defined(_VARIANT_RAK3172_)
+#define HW_VENDOR meshtastic_HardwareModel_RAK3172
+#else
 #define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 #endif
 

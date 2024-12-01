@@ -1,4 +1,5 @@
 #pragma once
+#if RADIOLIB_EXCLUDE_SX126X != 1
 
 #include "RadioLibInterface.h"
 
@@ -25,7 +26,7 @@ template <class T> class SX126xInterface : public RadioLibInterface
     /// Prepare hardware for sleep.  Call this _only_ for deep sleep, not needed for light sleep.
     virtual bool sleep() override;
 
-    bool isIRQPending() override { return lora.getIrqStatus() != 0; }
+    bool isIRQPending() override { return lora.getIrqFlags() != 0; }
 
   protected:
     float currentLimit = 140; // Higher OCP limit for SX126x PA
@@ -67,7 +68,5 @@ template <class T> class SX126xInterface : public RadioLibInterface
     virtual void addReceiveMetadata(meshtastic_MeshPacket *mp) override;
 
     virtual void setStandby() override;
-
-  private:
-    uint32_t activeReceiveStart = 0;
 };
+#endif

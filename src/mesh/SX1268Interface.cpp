@@ -1,3 +1,4 @@
+#if RADIOLIB_EXCLUDE_SX126X != 1
 #include "SX1268Interface.h"
 #include "configuration.h"
 #include "error.h"
@@ -16,3 +17,4 @@ float SX1268Interface::getFreq()
     else
         return savedFreq;
 }
+#endif

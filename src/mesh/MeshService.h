@@ -13,9 +13,15 @@
 #if defined(ARCH_PORTDUINO) && !HAS_RADIO
 #include "../platform/portduino/SimRadio.h"
 #endif
+#if defined(ARCH_ESP32) || defined(ARCH_PORTDUINO)
+#if !MESHTASTIC_EXCLUDE_STOREFORWARD
+#include "modules/StoreForwardModule.h"
+#endif
+#endif
 
 extern Allocator<meshtastic_QueueStatus> &queueStatusPool;
 extern Allocator<meshtastic_MqttClientProxyMessage> &mqttClientProxyMessagePool;
+extern Allocator<meshtastic_ClientNotification> &clientNotificationPool;
 
 /**
  * Top level app for this service.  keeps the mesh, the radio config and the queue of received packets.
@@ -38,6 +44,9 @@ class MeshService
 
     // keep list of MqttClientProxyMessages to be send to the client for delivery
     PointerQueue<meshtastic_MqttClientProxyMessage> toPhoneMqttProxyQueue;
+
+    // keep list of ClientNotifications to be send to the client (phone)
+    PointerQueue<meshtastic_ClientNotification> toPhoneClientNotificationQueue;
 
     // This holds the last QueueStatus send
     meshtastic_QueueStatus lastQueueStatus;
@@ -83,6 +92,9 @@ class MeshService
     /// Return the next MqttClientProxyMessage packet destined to the phone.
     meshtastic_MqttClientProxyMessage *getMqttClientProxyMessageForPhone() { return toPhoneMqttProxyQueue.dequeuePtr(0); }
 
+    /// Return the next ClientNotification packet destined to the phone.
+    meshtastic_ClientNotification *getClientNotificationForPhone() { return toPhoneClientNotificationQueue.dequeuePtr(0); }
+
     // search the queue for a request id and return the matching nodenum
     NodeNum getNodenumFromRequestId(uint32_t request_id);
 
@@ -91,6 +103,9 @@ class MeshService
 
     // Release MqttClientProxyMessage packet to pool
     void releaseMqttClientProxyMessageToPool(meshtastic_MqttClientProxyMessage *p) { mqttClientProxyMessagePool.release(p); }
+
+    /// Release the next ClientNotification packet to pool.
+    void releaseClientNotificationToPool(meshtastic_ClientNotification *p) { clientNotificationPool.release(p); }
 
     /**
      *  Given a ToRadio buffer parse it and properly handle it (setup radio, owner or send packet into the mesh)
@@ -129,9 +144,14 @@ class MeshService
     /// Send an MQTT message to the phone for client proxying
     void sendMqttMessageToClientProxy(meshtastic_MqttClientProxyMessage *m);
 
+    /// Send a ClientNotification to the phone
+    void sendClientNotification(meshtastic_ClientNotification *cn);
+
     bool isToPhoneQueueEmpty();
 
     ErrorCode sendQueueStatusToPhone(const meshtastic_QueueStatus &qs, ErrorCode res, uint32_t mesh_packet_id);
+
+    uint32_t GetTimeSinceMeshPacket(const meshtastic_MeshPacket *mp);
 
   private:
 #if HAS_GPS
@@ -139,10 +159,10 @@ class MeshService
     /// returns 0 to allow further processing
     int onGPSChanged(const meshtastic::GPSStatus *arg);
 #endif
-    /// Handle a packet that just arrived from the radio.  This method does _ReliableRouternot_ free the provided packet.  If it
+    /// Handle a packet that just arrived from the radio.  This method does _not_ free the provided packet.  If it
     /// needs to keep the packet around it makes a copy
     int handleFromRadio(const meshtastic_MeshPacket *p);
     friend class RoutingModule;
 };
 
-extern MeshService service;
+extern MeshService *service;

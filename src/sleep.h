@@ -4,7 +4,7 @@
 #include "Observer.h"
 #include "configuration.h"
 
-void doDeepSleep(uint32_t msecToWake, bool skipPreflight), cpuDeepSleep(uint32_t msecToWake);
+void doDeepSleep(uint32_t msecToWake, bool skipPreflight, bool skipSaveNodeDb), cpuDeepSleep(uint32_t msecToWake);
 
 #ifdef ARCH_ESP32
 #include "esp_sleep.h"
@@ -22,7 +22,6 @@ extern XPowersLibInterface *PMU;
 void initDeepSleep();
 
 void setCPUFast(bool on);
-void setLed(bool ledOn);
 
 /** return true if sleep is allowed right now */
 bool doPreflightSleep();
@@ -41,8 +40,6 @@ extern Observable<void *> notifySleep;
 /// Called to tell observers we are now entering (deep) sleep and you should prepare.  Must return 0
 extern Observable<void *> notifyDeepSleep;
 
-/// Called to tell GPS thread to enter deep sleep independently of LoRa/MCU sleep, prior to full poweroff. Must return 0
-extern Observable<void *> notifyGPSSleep;
 void enableModemSleep();
 #ifdef ARCH_ESP32
 void enableLoraInterrupt();

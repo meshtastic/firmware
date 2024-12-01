@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Fsm.h>
+#include "configuration.h"
 
 // See sw-design.md for documentation
 
@@ -22,7 +22,30 @@
 #define EVENT_SHUTDOWN 16        // force a full shutdown now (not just sleep)
 #define EVENT_INPUT 17           // input broker wants something, we need to wake up and enable screen
 
+#if EXCLUDE_POWER_FSM
+class FakeFsm
+{
+  public:
+    void trigger(int event)
+    {
+        if (event == EVENT_SERIAL_CONNECTED) {
+            serialConnected = true;
+        } else if (event == EVENT_SERIAL_DISCONNECTED) {
+            serialConnected = false;
+        }
+    };
+    bool getState() { return serialConnected; };
+
+  private:
+    bool serialConnected = false;
+};
+extern FakeFsm powerFSM;
+void PowerFSM_setup();
+
+#else
+#include <Fsm.h>
 extern Fsm powerFSM;
 extern State stateON, statePOWER, stateSERIAL, stateDARK;
 
 void PowerFSM_setup();
+#endif

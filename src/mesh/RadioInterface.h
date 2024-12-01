@@ -5,10 +5,13 @@
 #include "Observer.h"
 #include "PointerQueue.h"
 #include "airtime.h"
+#include "error.h"
 
 #define MAX_TX_QUEUE 16 // max number of packets which can be waiting for transmission
 
-#define MAX_RHPACKETLEN 256
+#define MAX_LORA_PAYLOAD_LEN 255 // max length of 255 per Semtech's datasheets on SX12xx
+#define MESHTASTIC_HEADER_LENGTH 16
+#define MESHTASTIC_PKC_OVERHEAD 12
 
 #define PACKET_FLAGS_HOP_LIMIT_MASK 0x07
 #define PACKET_FLAGS_WANT_ACK_MASK 0x08
@@ -43,6 +46,20 @@ typedef struct {
 } PacketHeader;
 
 /**
+ * This structure represent the structured buffer : a PacketHeader then the payload. The whole is
+ * MAX_LORA_PAYLOAD_LEN + 1 length
+ * It makes the use of its data easier, and avoids manipulating pointers (and potential non aligned accesses)
+ */
+typedef struct {
+    /** The header, as defined just before */
+    PacketHeader header;
+
+    /** The payload, of maximum length minus the header, aligned just to be sure */
+    uint8_t payload[MAX_LORA_PAYLOAD_LEN + 1 - sizeof(PacketHeader)] __attribute__((__aligned__));
+
+} RadioBuffer;
+
+/**
  * Basic operations all radio chipsets must implement.
  *
  * This defines the SOLE API for talking to radios (because soon we will have alternate radio implementations)
@@ -71,23 +88,24 @@ class RadioInterface
       - roundtrip air propagation time (assuming max. 30km between nodes);
       - Tx/Rx turnaround time (maximum of SX126x and SX127x);
       - MAC processing time (measured on T-beam) */
-    uint32_t slotTimeMsec = 8.5 * pow(2, sf) / bw + 0.2 + 0.4 + 7;
+    uint32_t slotTimeMsec = computeSlotTimeMsec(bw, sf);
     uint16_t preambleLength = 16;      // 8 is default, but we use longer to increase the amount of sleep time when receiving
     uint32_t preambleTimeMsec = 165;   // calculated on startup, this is the default for LongFast
     uint32_t maxPacketTimeMsec = 3246; // calculated on startup, this is the default for LongFast
     const uint32_t PROCESSING_TIME_MSEC =
         4500;                // time to construct, process and construct a packet again (empirically determined)
     const uint8_t CWmin = 2; // minimum CWsize
-    const uint8_t CWmax = 8; // maximum CWsize
+    const uint8_t CWmax = 7; // maximum CWsize
 
     meshtastic_MeshPacket *sendingPacket = NULL; // The packet we are currently sending
     uint32_t lastTxStart = 0L;
 
+    uint32_t computeSlotTimeMsec(float bw, float sf) { return 8.5 * pow(2, sf) / bw + 0.2 + 0.4 + 7; }
+
     /**
      * A temporary buffer used for sending/receiving packets, sized to hold the biggest buffer we might need
      * */
-    uint8_t radiobuf[MAX_RHPACKETLEN];
-
+    RadioBuffer radioBuffer __attribute__((__aligned__));
     /**
      * Enqueue a received packet for the registered receiver
      */

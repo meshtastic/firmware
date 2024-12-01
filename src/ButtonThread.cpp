@@ -1,4 +1,5 @@
 #include "ButtonThread.h"
+#include "../userPrefs.h"
 #include "configuration.h"
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
@@ -26,31 +27,45 @@ using namespace concurrency;
 ButtonThread *buttonThread; // Declared extern in header
 volatile ButtonThread::ButtonEventType ButtonThread::btnEvent = ButtonThread::BUTTON_EVENT_NONE;
 
-#if defined(BUTTON_PIN) || defined(ARCH_PORTDUINO)
+#if defined(BUTTON_PIN) || defined(ARCH_PORTDUINO) || defined(USERPREFS_BUTTON_PIN)
 OneButton ButtonThread::userButton; // Get reference to static member
 #endif
-
 ButtonThread::ButtonThread() : OSThread("Button")
 {
-#if defined(BUTTON_PIN) || defined(ARCH_PORTDUINO)
+#if defined(BUTTON_PIN) || defined(ARCH_PORTDUINO) || defined(USERPREFS_BUTTON_PIN)
 
 #if defined(ARCH_PORTDUINO)
     if (settingsMap.count(user) != 0 && settingsMap[user] != RADIOLIB_NC) {
         this->userButton = OneButton(settingsMap[user], true, true);
-        LOG_DEBUG("Using GPIO%02d for button\n", settingsMap[user]);
+        LOG_DEBUG("Use GPIO%02d for button", settingsMap[user]);
     }
 #elif defined(BUTTON_PIN)
-    int pin = config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN; // Resolved button pin
+#if !defined(USERPREFS_BUTTON_PIN)
+    int pin = config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN;           // Resolved button pin
+#endif
+#ifdef USERPREFS_BUTTON_PIN
+    int pin = config.device.button_gpio ? config.device.button_gpio : USERPREFS_BUTTON_PIN; // Resolved button pin
+#endif
+#if defined(HELTEC_CAPSULE_SENSOR_V3)
+    this->userButton = OneButton(pin, false, false);
+#elif defined(BUTTON_ACTIVE_LOW)
+    this->userButton = OneButton(pin, BUTTON_ACTIVE_LOW, BUTTON_ACTIVE_PULLUP);
+#else
     this->userButton = OneButton(pin, true, true);
-    LOG_DEBUG("Using GPIO%02d for button\n", pin);
+#endif
+    LOG_DEBUG("Use GPIO%02d for button", pin);
 #endif
 
 #ifdef INPUT_PULLUP_SENSE
     // Some platforms (nrf52) have a SENSE variant which allows wake from sleep - override what OneButton did
+#ifdef BUTTON_SENSE_TYPE
+    pinMode(pin, BUTTON_SENSE_TYPE);
+#else
     pinMode(pin, INPUT_PULLUP_SENSE);
 #endif
+#endif
 
-#if defined(BUTTON_PIN) || defined(ARCH_PORTDUINO)
+#if defined(BUTTON_PIN) || defined(ARCH_PORTDUINO) || defined(USERPREFS_BUTTON_PIN)
     userButton.attachClick(userButtonPressed);
     userButton.setClickMs(BUTTON_CLICK_MS);
     userButton.setPressMs(BUTTON_LONGPRESS_MS);
@@ -93,7 +108,7 @@ int32_t ButtonThread::runOnce()
     // If the button is pressed we suppress CPU sleep until release
     canSleep = true; // Assume we should not keep the board awake
 
-#if defined(BUTTON_PIN)
+#if defined(BUTTON_PIN) || defined(USERPREFS_BUTTON_PIN)
     userButton.tick();
     canSleep &= userButton.isIdle();
 #elif defined(ARCH_PORTDUINO)
@@ -114,9 +129,19 @@ int32_t ButtonThread::runOnce()
     if (btnEvent != BUTTON_EVENT_NONE) {
         switch (btnEvent) {
         case BUTTON_EVENT_PRESSED: {
-            LOG_BUTTON("press!\n");
+            LOG_BUTTON("press!");
+            // If a nag notification is running, stop it and prevent other actions
+            if (moduleConfig.external_notification.enabled && (externalNotificationModule->nagCycleCutoff != UINT32_MAX)) {
+                externalNotificationModule->stopNow();
+                return 50;
+            }
 #ifdef BUTTON_PIN
+#if !defined(USERPREFS_BUTTON_PIN)
             if (((config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN) !=
+#endif
+#if defined(USERPREFS_BUTTON_PIN)
+            if (((config.device.button_gpio ? config.device.button_gpio : USERPREFS_BUTTON_PIN) !=
+#endif
                  moduleConfig.canned_message.inputbroker_pin_press) ||
                 !(moduleConfig.canned_message.updown1_enabled || moduleConfig.canned_message.rotary1_enabled) ||
                 !moduleConfig.canned_message.enabled) {
@@ -134,9 +159,9 @@ int32_t ButtonThread::runOnce()
         }
 
         case BUTTON_EVENT_DOUBLE_PRESSED: {
-            LOG_BUTTON("Double press!\n");
-            service.refreshLocalMeshNode();
-            auto sentPosition = service.trySendPosition(NODENUM_BROADCAST, true);
+            LOG_BUTTON("Double press!");
+            service->refreshLocalMeshNode();
+            auto sentPosition = service->trySendPosition(NODENUM_BROADCAST, true);
             if (screen) {
                 if (sentPosition)
                     screen->print("Sent ad-hoc position\n");
@@ -148,7 +173,7 @@ int32_t ButtonThread::runOnce()
         }
 
         case BUTTON_EVENT_MULTI_PRESSED: {
-            LOG_BUTTON("Mulitipress! %hux\n", multipressClickCount);
+            LOG_BUTTON("Mulitipress! %hux", multipressClickCount);
             switch (multipressClickCount) {
 #if HAS_GPS
             // 3 clicks: toggle GPS
@@ -175,10 +200,11 @@ int32_t ButtonThread::runOnce()
         } // end multipress event
 
         case BUTTON_EVENT_LONG_PRESSED: {
-            LOG_BUTTON("Long press!\n");
+            LOG_BUTTON("Long press!");
             powerFSM.trigger(EVENT_PRESS);
-            if (screen)
-                screen->startShutdownScreen();
+            if (screen) {
+                screen->startAlert("Shutting down...");
+            }
             playBeep();
             break;
         }
@@ -186,7 +212,7 @@ int32_t ButtonThread::runOnce()
         // Do actual shutdown when button released, otherwise the button release
         // may wake the board immediatedly.
         case BUTTON_EVENT_LONG_RELEASED: {
-            LOG_INFO("Shutdown from long press\n");
+            LOG_INFO("Shutdown from long press");
             playShutdownMelody();
             delay(3000);
             power->shutdown();
@@ -195,7 +221,7 @@ int32_t ButtonThread::runOnce()
 
 #ifdef BUTTON_PIN_TOUCH
         case BUTTON_EVENT_TOUCH_LONG_PRESSED: {
-            LOG_BUTTON("Touch press!\n");
+            LOG_BUTTON("Touch press!");
             if (screen) {
                 // Wake if asleep
                 if (powerFSM.getState() == &stateDARK)
@@ -214,7 +240,6 @@ int32_t ButtonThread::runOnce()
         btnEvent = BUTTON_EVENT_NONE;
     }
 
-    runASAP = false;
     return 50;
 }
 
@@ -230,12 +255,17 @@ void ButtonThread::attachButtonInterrupts()
 #elif defined(BUTTON_PIN)
     // Interrupt for user button, during normal use. Improves responsiveness.
     attachInterrupt(
+#if !defined(USERPREFS_BUTTON_PIN)
         config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN,
+#endif
+#if defined(USERPREFS_BUTTON_PIN)
+        config.device.button_gpio ? config.device.button_gpio : USERPREFS_BUTTON_PIN,
+#endif
         []() {
-            BaseType_t higherWake = 0;
-            mainDelay.interruptFromISR(&higherWake);
             ButtonThread::userButton.tick();
             runASAP = true;
+            BaseType_t higherWake = 0;
+            mainDelay.interruptFromISR(&higherWake);
         },
         CHANGE);
 #endif
@@ -259,7 +289,12 @@ void ButtonThread::detachButtonInterrupts()
     if (settingsMap.count(user) != 0 && settingsMap[user] != RADIOLIB_NC)
         detachInterrupt(settingsMap[user]);
 #elif defined(BUTTON_PIN)
+#if !defined(USERPREFS_BUTTON_PIN)
     detachInterrupt(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN);
+#endif
+#if defined(USERPREFS_BUTTON_PIN)
+    detachInterrupt(config.device.button_gpio ? config.device.button_gpio : USERPREFS_BUTTON_PIN);
+#endif
 #endif
 
 #ifdef BUTTON_PIN_ALT
@@ -301,7 +336,7 @@ void ButtonThread::userButtonMultiPressed(void *callerThread)
 // Non-static method, runs during callback. Grabs info while still valid
 void ButtonThread::storeClickCount()
 {
-#ifdef BUTTON_PIN
+#if defined(BUTTON_PIN) || defined(USERPREFS_BUTTON_PIN)
     multipressClickCount = userButton.getNumberClicks();
 #endif
 }

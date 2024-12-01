@@ -1,0 +1,9 @@
+Lora:
+  Module: sx1262
+  CS: 21
+  IRQ: 16
+  Busy: 20
+  Reset: 18
+  TXen: 13
+  RXen: 12
+  DIO3_TCXO_VOLTAGE: true

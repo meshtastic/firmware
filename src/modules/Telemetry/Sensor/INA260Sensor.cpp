@@ -11,7 +11,7 @@ INA260Sensor::INA260Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_IN
 
 int32_t INA260Sensor::runOnce()
 {
-    LOG_INFO("Init sensor: %s\n", sensorName);
+    LOG_INFO("Init sensor: %s", sensorName);
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
@@ -26,6 +26,9 @@ void INA260Sensor::setup() {}
 
 bool INA260Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
+    measurement->variant.environment_metrics.has_voltage = true;
+    measurement->variant.environment_metrics.has_current = true;
+
     // mV conversion to V
     measurement->variant.environment_metrics.voltage = ina260.readBusVoltage() / 1000;
     measurement->variant.environment_metrics.current = ina260.readCurrent();

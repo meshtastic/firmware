@@ -8,7 +8,7 @@
 #define ST7789_BUSY -1
 #define ST7789_BL 45
 #define ST7789_SPI_HOST SPI3_HOST
-#define ST7789_BACKLIGHT_EN 45
+#define TFT_BL 45
 #define SPI_FREQUENCY 40000000
 #define SPI_READ_FREQUENCY 16000000
 #define TFT_HEIGHT 240
@@ -30,12 +30,11 @@
 #define I2C_SDA1 39 // Used for capacitive touch
 #define I2C_SCL1 40 // Used for capacitive touch
 
-#define TFT_BL ST7789_BACKLIGHT_EN
-
 #define HAS_I2S
 #define DAC_I2S_BCK 48
 #define DAC_I2S_WS 15
 #define DAC_I2S_DOUT 46
+#define DAC_I2S_MCLK 0
 
 #define HAS_AXP2101
 
@@ -73,3 +72,6 @@
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 // Internally the TTGO module hooks the SX1262-DIO2 in to control the TX/RX switch (which is the default for
 // the sx1262interface code)
+
+#define USE_VIRTUAL_KEYBOARD 1
+#define DISPLAY_CLOCK_FRAME 1

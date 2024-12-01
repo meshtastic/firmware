@@ -7,6 +7,9 @@
  */
 class NeighborInfoModule : public ProtobufModule<meshtastic_NeighborInfo>, private concurrency::OSThread
 {
+    CallbackObserver<NeighborInfoModule, const meshtastic::Status *> nodeStatusObserver =
+        CallbackObserver<NeighborInfoModule, const meshtastic::Status *>(this, &NeighborInfoModule::handleStatusUpdate);
+
     std::vector<meshtastic_Neighbor> neighbors;
 
   public:

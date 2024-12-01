@@ -10,10 +10,14 @@ typedef uint32_t NodeNum;
 typedef uint32_t PacketId; // A packet sequence number
 
 #define NODENUM_BROADCAST UINT32_MAX
+#define NODENUM_BROADCAST_NO_LORA                                                                                                \
+    1 // Reserved to only deliver packets over high speed (non-lora) transports, such as MQTT or BLE mesh (not yet implemented)
 #define ERRNO_OK 0
 #define ERRNO_NO_INTERFACES 33
-#define ERRNO_UNKNOWN 32  // pick something that doesn't conflict with RH_ROUTER_ERROR_UNABLE_TO_DELIVER
-#define ERRNO_DISABLED 34 // the interface is disabled
+#define ERRNO_UNKNOWN 32                   // pick something that doesn't conflict with RH_ROUTER_ERROR_UNABLE_TO_DELIVER
+#define ERRNO_DISABLED 34                  // the interface is disabled
+#define ERRNO_SHOULD_RELEASE 35            // no error, but the packet should still be released
+#define ID_COUNTER_MASK (UINT32_MAX >> 22) // mask to select the counter portion of the ID
 
 /*
  * Source of a received message
@@ -46,3 +50,14 @@ extern Allocator<meshtastic_MeshPacket> &packetPool;
  * the local node. If from is zero this function returns our node number instead
  */
 NodeNum getFrom(const meshtastic_MeshPacket *p);
+
+// Returns true if the packet originated from the local node
+bool isFromUs(const meshtastic_MeshPacket *p);
+
+// Returns true if the packet is destined to us
+bool isToUs(const meshtastic_MeshPacket *p);
+
+/* Some clients might not properly set priority, therefore we fix it here. */
+void fixPriority(meshtastic_MeshPacket *p);
+
+bool isBroadcast(uint32_t dest);

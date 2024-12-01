@@ -26,7 +26,7 @@ class SinglePortModule : public MeshModule
     /**
      * Return a mesh packet which has been preinited as a data packet with a particular port number.
      * You can then send this packet (after customizing any of the payload fields you might need) with
-     * service.sendToMesh()
+     * service->sendToMesh()
      */
     meshtastic_MeshPacket *allocDataPacket()
     {

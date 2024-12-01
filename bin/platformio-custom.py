@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# trunk-ignore-all(ruff/F821)
+# trunk-ignore-all(flake8/F821): For SConstruct imports
 import sys
 from os.path import join
 
@@ -61,16 +64,37 @@ if platform.name == "espressif32":
 
     env.AddPostAction("$BUILD_DIR/${PROGNAME}.bin", esp32_create_combined_bin)
 
+    esp32_kind = env.GetProjectOption("custom_esp32_kind")
+    if esp32_kind == "esp32":
+        # Free up some IRAM by removing auxiliary SPI flash chip drivers.
+        # Wrapped stub symbols are defined in src/platform/esp32/iram-quirk.c.
+        env.Append(
+            LINKFLAGS=[
+                "-Wl,--wrap=esp_flash_chip_gd",
+                "-Wl,--wrap=esp_flash_chip_issi",
+                "-Wl,--wrap=esp_flash_chip_winbond",
+            ]
+        )
+    else:
+        # For newer ESP32 targets, using newlib nano works better.
+        env.Append(LINKFLAGS=["--specs=nano.specs", "-u", "_printf_float"])
+
+if platform.name == "nordicnrf52":
+    env.AddPostAction("$BUILD_DIR/${PROGNAME}.hex",
+                      env.VerboseAction(f"{sys.executable} ./bin/uf2conv.py $BUILD_DIR/firmware.hex -c -f 0xADA52840 -o $BUILD_DIR/firmware.uf2",
+                                        "Generating UF2 file"))
+
 Import("projenv")
 
 prefsLoc = projenv["PROJECT_DIR"] + "/version.properties"
 verObj = readProps(prefsLoc)
-print("Using meshtastic platformio-custom.py, firmware version " + verObj["long"])
+print("Using meshtastic platformio-custom.py, firmware version " + verObj["long"] + " on " + env.get("PIOENV"))
 
 # General options that are passed to the C and C++ compilers
 projenv.Append(
     CCFLAGS=[
         "-DAPP_VERSION=" + verObj["long"],
         "-DAPP_VERSION_SHORT=" + verObj["short"],
+        "-DAPP_ENV=" + env.get("PIOENV"),
     ]
 )

@@ -14,7 +14,7 @@
  */
 template <class T> class TypedQueue
 {
-    static_assert(std::is_pod<T>::value, "T must be pod");
+    static_assert(std::is_standard_layout<T>::value, "T must be standard layout");
     QueueHandle_t h;
     concurrency::OSThread *reader = NULL;
 

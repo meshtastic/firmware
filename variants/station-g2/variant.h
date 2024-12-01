@@ -40,6 +40,7 @@ Board Information: https://wiki.uniteng.com/en/meshtastic/station-g2
 #define SX126X_MAX_POWER 19
 #endif
 
+/*
 #define BATTERY_PIN 4 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 #define ADC_CHANNEL ADC1_GPIO4_CHANNEL
 #define ADC_MULTIPLIER 4
@@ -50,3 +51,4 @@ Board Information: https://wiki.uniteng.com/en/meshtastic/station-g2
 #define BAT_NOBATVOLT 4460
 #define CELL_TYPE_LION // same curve for liion/lipo
 #define NUM_CELLS 2
+*/

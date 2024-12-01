@@ -8,6 +8,9 @@
  */
 class PositionModule : public ProtobufModule<meshtastic_Position>, private concurrency::OSThread
 {
+    CallbackObserver<PositionModule, const meshtastic::Status *> nodeStatusObserver =
+        CallbackObserver<PositionModule, const meshtastic::Status *>(this, &PositionModule::handleStatusUpdate);
+
     /// The id of the last packet we sent, to allow us to cancel it if we make something fresher
     PacketId prevPacketId = 0;
 
@@ -54,9 +57,11 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
   private:
     struct SmartPosition getDistanceTraveledSinceLastSend(meshtastic_PositionLite currentPosition);
     meshtastic_MeshPacket *allocAtakPli();
-    void trySetRtc(meshtastic_Position p, bool isLocal);
+    void trySetRtc(meshtastic_Position p, bool isLocal, bool forceUpdate = false);
     uint32_t precision;
     void sendLostAndFoundText();
+    bool hasQualityTimesource();
+    bool hasGPS();
 
     const uint32_t minimumTimeThreshold =
         Default::getConfiguredOrDefaultMs(config.position.broadcast_smart_minimum_interval_secs, 30);

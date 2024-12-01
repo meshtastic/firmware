@@ -14,12 +14,16 @@
 /// max number of packets which can be waiting for delivery to android - note, this value comes from mesh.options protobuf
 // FIXME - max_count is actually 32 but we save/load this as one long string of preencoded MeshPacket bytes - not a big array in
 // RAM #define MAX_RX_TOPHONE (member_size(DeviceState, receive_queue) / member_size(DeviceState, receive_queue[0]))
+#ifndef MAX_RX_TOPHONE
 #define MAX_RX_TOPHONE 32
+#endif
 
 /// max number of nodes allowed in the mesh
 #ifndef MAX_NUM_NODES
 #define MAX_NUM_NODES 100
 #endif
+
+#define MAX_NUM_NODES_FS 100
 
 /// Max number of channels allowed
 #define MAX_NUM_CHANNELS (member_size(meshtastic_ChannelFile, channels) / member_size(meshtastic_ChannelFile, channels[0]))

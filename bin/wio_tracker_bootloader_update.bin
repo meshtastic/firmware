@@ -1,0 +1,30 @@
+# tips from mark on how to replace the (broken) bootloader on the red wio_tracker_1110 boards.
+
+~/.platformio/penv/bin/adafruit-nrfutil --verbose dfu serial --package wio_tracker_1110_bootloader-0.9.1_s140_7.3.0.zip -p /dev/ttyACM1 -b 115200 --singlebank --touch 1200
+
+exit
+
+# Output should look like
+
+Upgrading target on /dev/ttyACM1 with DFU package /home/kevinh/development/meshtastic/WioWM1110/wio_tracker_1110_bootloader-0.9.1_s140_7.3.0.zip. Flow control is disabled, Single bank, Touch 1200
+Touched serial port /dev/ttyACM1
+Opened serial port /dev/ttyACM1
+Starting DFU upgrade of type 3, SoftDevice size: 152728, bootloader size: 39000, application size: 0
+Sending DFU start packet
+Sending DFU init packet
+Sending firmware file
+########################################
+########################################
+########################################
+########################################
+########################################
+########################################
+########################################
+########################################
+########################################
+###############
+Activating new firmware
+
+DFU upgrade took 20.242434978485107s
+Device programmed.
+

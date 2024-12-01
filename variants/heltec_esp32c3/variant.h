@@ -3,8 +3,8 @@
 // LED pin on HT-DEV-ESP_V2 and HT-DEV-ESP_V3
 // https://resource.heltec.cn/download/HT-CT62/HT-CT62_Reference_Design.pdf
 // https://resource.heltec.cn/download/HT-DEV-ESP/HT-DEV-ESP_V3_Sch.pdf
-#define LED_PIN 2 // LED
-#define LED_INVERTED 0
+#define LED_PIN 2      // LED
+#define LED_STATE_ON 1 // State when LED is lit
 
 #define HAS_SCREEN 0
 #define HAS_GPS 0

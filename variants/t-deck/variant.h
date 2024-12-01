@@ -8,7 +8,7 @@
 #define ST7789_BUSY -1
 #define ST7789_BL 42
 #define ST7789_SPI_HOST SPI2_HOST
-#define ST7789_BACKLIGHT_EN 42
+#define TFT_BL 42
 #define SPI_FREQUENCY 40000000
 #define SPI_READ_FREQUENCY 16000000
 #define TFT_HEIGHT 320
@@ -73,6 +73,7 @@
 #define DAC_I2S_BCK 7
 #define DAC_I2S_WS 5
 #define DAC_I2S_DOUT 6
+#define DAC_I2S_MCLK 21 // GPIO lrck mic
 
 // LoRa
 #define USE_SX1262

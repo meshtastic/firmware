@@ -18,6 +18,7 @@ body:
         - ESP32
         - RP2040
         - Linux Native
+        - Cross-Platform
         - other
     validations:
       required: true

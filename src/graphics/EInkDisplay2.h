@@ -5,11 +5,6 @@
 #include "GxEPD2_BW.h"
 #include <OLEDDisplay.h>
 
-#if defined(HELTEC_WIRELESS_PAPER_V1_0) || defined(HELTEC_WIRELESS_PAPER)
-// Re-enable SPI after deep sleep: rtc_gpio_hold_dis()
-#include "driver/rtc_io.h"
-#endif
-
 /**
  * An adapter class that allows using the GxEPD2 library as if it was an OLEDDisplay implementation.
  *
@@ -72,7 +67,8 @@ class EInkDisplay : public OLEDDisplay
     GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT> *adafruitDisplay = NULL;
 
     // If display uses HSPI
-#if defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_WIRELESS_PAPER_V1_0)
+#if defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_WIRELESS_PAPER_V1_0) || defined(HELTEC_VISION_MASTER_E213) ||               \
+    defined(HELTEC_VISION_MASTER_E290) || defined(TLORA_T3S3_EPAPER)
     SPIClass *hspi = NULL;
 #endif
 

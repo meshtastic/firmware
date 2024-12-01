@@ -19,7 +19,7 @@
     "mcu": "esp32s3",
     "variant": "ESP32-S3-WROOM-1-N4"
   },
-  "connectivity": ["wifi"],
+  "connectivity": ["wifi", "bluetooth"],
   "debug": {
     "default_tool": "esp-builtin",
     "onboard_tools": ["esp-builtin"],

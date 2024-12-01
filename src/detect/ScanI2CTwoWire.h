@@ -1,5 +1,8 @@
 #pragma once
 
+#include "configuration.h"
+#if !MESHTASTIC_EXCLUDE_I2C
+
 #include <map>
 #include <memory>
 #include <stddef.h>
@@ -15,6 +18,8 @@ class ScanI2CTwoWire : public ScanI2C
 {
   public:
     void scanPort(ScanI2C::I2CPort) override;
+
+    void scanPort(ScanI2C::I2CPort, uint8_t *, uint8_t) override;
 
     ScanI2C::FoundDevice find(ScanI2C::DeviceType) const override;
 
@@ -48,9 +53,10 @@ class ScanI2CTwoWire : public ScanI2C
 
     concurrency::Lock lock;
 
-    void printATECCInfo() const;
-
     uint16_t getRegisterValue(const RegisterLocation &, ResponseWidth) const;
 
     DeviceType probeOLED(ScanI2C::DeviceAddress) const;
+
+    static void logFoundDevice(const char *device, uint8_t address);
 };
+#endif
