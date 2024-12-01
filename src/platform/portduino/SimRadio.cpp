@@ -73,6 +73,10 @@ void SimRadio::handleTransmitInterrupt()
     // ignore the transmit interrupt
     if (sendingPacket)
         completeSending();
+
+    isReceiving = true;
+    if (receivingPacket) // This happens when we don't consider something a collision if we weren't sending long enough
+        handleReceiveInterrupt();
 }
 
 void SimRadio::completeSending()
@@ -84,6 +88,8 @@ void SimRadio::completeSending()
 
     if (p) {
         txGood++;
+        if (!isFromUs(p))
+            txRelay++;
         printPacket("Completed sending", p);
 
         // We are done sending that packet, release it
@@ -113,12 +119,12 @@ bool SimRadio::canSendImmediately()
 
 bool SimRadio::isActivelyReceiving()
 {
-    return false; // TODO check how this should be simulated
+    return receivingPacket != nullptr;
 }
 
 bool SimRadio::isChannelActive()
 {
-    return false; // TODO ask simulator
+    return receivingPacket != nullptr;
 }
 
 /** Attempt to cancel a previously sent packet.  Returns true if a packet was found we could cancel */
@@ -142,10 +148,16 @@ void SimRadio::onNotify(uint32_t notification)
         startTransmitTimer();
         break;
     case ISR_RX:
+        handleReceiveInterrupt();
         //  LOG_DEBUG("rx complete - starting timer");
         startTransmitTimer();
         break;
     case TRANSMIT_DELAY_COMPLETED:
+        if (receivingPacket) { // This happens when we had a timer pending and we started receiving
+            handleReceiveInterrupt();
+            startTransmitTimer();
+            break;
+        }
         LOG_DEBUG("delay done");
 
         // If we are not currently in receive mode, then restart the random delay (this can happen if the main thread
@@ -183,6 +195,7 @@ void SimRadio::onNotify(uint32_t notification)
 void SimRadio::startSend(meshtastic_MeshPacket *txp)
 {
     printPacket("Start low level send", txp);
+    isReceiving = false;
     size_t numbytes = beginSending(txp);
     meshtastic_MeshPacket *p = packetPool.allocCopy(*txp);
     perhapsDecode(p);
@@ -201,6 +214,7 @@ void SimRadio::startSend(meshtastic_MeshPacket *txp)
 
     service->sendQueueStatusToPhone(router->getQueueStatus(), 0, p->id);
     service->sendToPhone(p); // Sending back to simulator
+    service->loop();         // Process the send immediately
 }
 
 // Simulates device received a packet via the LoRa chip
@@ -228,11 +242,24 @@ void SimRadio::unPackAndReceive(meshtastic_MeshPacket &p)
 
 void SimRadio::startReceive(meshtastic_MeshPacket *p)
 {
+    if (isActivelyReceiving()) {
+        LOG_WARN("Collision detected, dropping current and previous packet!");
+        rxBad++;
+        airTime->logAirtime(RX_ALL_LOG, getPacketTime(receivingPacket));
+        packetPool.release(receivingPacket);
+        receivingPacket = nullptr;
+        return;
+    } else if (sendingPacket && (interval - tillRun(millis()) > preambleTimeMsec)) {
+        // If not yet transmitting for longer than preamble, do as if not collided (channel should actually be detected as
+        // active)
+        LOG_WARN("Collision detected during transmission!");
+        return;
+    }
+
     isReceiving = true;
-    size_t length = getPacketLength(p);
-    uint32_t xmitMsec = getPacketTime(length);
-    delay(xmitMsec); // Model the time it is busy receiving
-    handleReceiveInterrupt(p);
+    receivingPacket = packetPool.allocCopy(*p);
+    uint32_t airtimeMsec = getPacketTime(p);
+    notifyLater(airtimeMsec, ISR_RX, false); // Model the time it is busy receiving
 }
 
 meshtastic_QueueStatus SimRadio::getQueueStatus()
@@ -246,28 +273,27 @@ meshtastic_QueueStatus SimRadio::getQueueStatus()
     return qs;
 }
 
-void SimRadio::handleReceiveInterrupt(meshtastic_MeshPacket *p)
+void SimRadio::handleReceiveInterrupt()
 {
-    LOG_DEBUG("HANDLE RECEIVE INTERRUPT");
-    uint32_t xmitMsec;
+    if (receivingPacket == nullptr) {
+        return;
+    }
 
     if (!isReceiving) {
         LOG_DEBUG("*** WAS_ASSERT *** handleReceiveInterrupt called when not in receive mode");
         return;
     }
 
-    isReceiving = false;
+    LOG_DEBUG("HANDLE RECEIVE INTERRUPT");
+    rxGood++;
 
-    // read the number of actually received bytes
-    size_t length = getPacketLength(p);
-    xmitMsec = getPacketTime(length);
-    // LOG_DEBUG("Payload size %d vs length (includes header) %d", p->decoded.payload.size, length);
-
-    meshtastic_MeshPacket *mp = packetPool.allocCopy(*p); // keep a copy in packetPool
+    meshtastic_MeshPacket *mp = packetPool.allocCopy(*receivingPacket); // keep a copy in packetPool
+    packetPool.release(receivingPacket);                                // release the original
+    receivingPacket = nullptr;
 
     printPacket("Lora RX", mp);
 
-    airTime->logAirtime(RX_LOG, xmitMsec);
+    airTime->logAirtime(RX_LOG, getPacketTime(mp));
 
     deliverToReceiver(mp);
 }
