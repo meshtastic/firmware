@@ -169,7 +169,7 @@ void MeshService::handleToRadio(meshtastic_MeshPacket &p)
 #if defined(ARCH_PORTDUINO)
     if (SimRadio::instance && p.decoded.portnum == meshtastic_PortNum_SIMULATOR_APP) {
         // Simulates device received a packet via the LoRa chip
-        SimRadio::instance->unPackAndReceive(p);
+        SimRadio::instance->unpackAndReceive(p);
         return;
     }
 #endif

@@ -218,7 +218,7 @@ void SimRadio::startSend(meshtastic_MeshPacket *txp)
 }
 
 // Simulates device received a packet via the LoRa chip
-void SimRadio::unPackAndReceive(meshtastic_MeshPacket &p)
+void SimRadio::unpackAndReceive(meshtastic_MeshPacket &p)
 {
     // Simulator packet (=Compressed packet) is encapsulated in a MeshPacket, so need to unwrap first
     meshtastic_Compressed scratch;
@@ -242,6 +242,7 @@ void SimRadio::unPackAndReceive(meshtastic_MeshPacket &p)
 
 void SimRadio::startReceive(meshtastic_MeshPacket *p)
 {
+#ifdef USERPREFS_SIMRADIO_EMULATE_COLLISIONS
     if (isActivelyReceiving()) {
         LOG_WARN("Collision detected, dropping current and previous packet!");
         rxBad++;
@@ -249,17 +250,28 @@ void SimRadio::startReceive(meshtastic_MeshPacket *p)
         packetPool.release(receivingPacket);
         receivingPacket = nullptr;
         return;
-    } else if (sendingPacket && (interval - tillRun(millis()) > preambleTimeMsec)) {
-        // If not yet transmitting for longer than preamble, do as if not collided (channel should actually be detected as
-        // active)
-        LOG_WARN("Collision detected during transmission!");
-        return;
+    } else if (sendingPacket) {
+        uint32_t airtimeLeft = tillRun(millis());
+        if (airtimeLeft <= 0) {
+            LOG_WARN("Transmitting packet was already done");
+            handleTransmitInterrupt(); // Finish sending first
+        } else if ((interval - airtimeLeft) > preambleTimeMsec) {
+            // Only if transmitting for longer than preamble there is a collision
+            // (channel should actually be detected as active otherwise)
+            LOG_WARN("Collision detected during transmission!");
+            return;
+        }
     }
-
     isReceiving = true;
     receivingPacket = packetPool.allocCopy(*p);
     uint32_t airtimeMsec = getPacketTime(p);
     notifyLater(airtimeMsec, ISR_RX, false); // Model the time it is busy receiving
+#else
+    isReceiving = true;
+    receivingPacket = packetPool.allocCopy(*p);
+    handleReceiveInterrupt(); // Simulate receiving the packet immediately
+    startTransmitTimer();
+#endif
 }
 
 meshtastic_QueueStatus SimRadio::getQueueStatus()
