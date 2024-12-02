@@ -258,11 +258,6 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 }
                 break;
 
-
-
-
-
-
             case INA3221_ADDR: // (0x40) can be INA3221, RAK12500 or DFROBOT Lark weather station
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFE), 2);
                 LOG_DEBUG("Register MFG_UID FE: 0x%x", registerValue);
@@ -290,7 +285,6 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 break;
 
             case RAK12035VB_ADDR: // (0x20) can be RAK12023VB Soil Sensor or TCA9535 I2C expander
-
                 // Check if it is a RAK12035, if not can assume it is a TCA9535 I2C expander
                 //  additional info about registry values can be found here [https://github.com/RAKWireless/RAK12035_SoilMoisture/blob/main/RAK12035_SoilMoisture.h]
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x02), 1); // get the default address for the device (stored in registry here [0x02]).. should come back as 0x20
