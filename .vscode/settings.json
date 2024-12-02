@@ -7,5 +7,16 @@
   "cmake.configureOnOpen": false,
   "[cpp]": {
     "editor.defaultFormatter": "trunk.io"
+  },
+  "files.associations": {
+    "array": "cpp",
+    "chrono": "cpp",
+    "functional": "cpp",
+    "istream": "cpp",
+    "ostream": "cpp",
+    "ratio": "cpp",
+    "tuple": "cpp",
+    "type_traits": "cpp",
+    "utility": "cpp"
   }
 }
