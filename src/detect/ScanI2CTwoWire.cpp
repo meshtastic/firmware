@@ -286,7 +286,10 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 
             case RAK12035VB_ADDR: // (0x20) can be RAK12023VB Soil Sensor or TCA9535 I2C expander
                 // Check if it is a RAK12035, if not can assume it is a TCA9535 I2C expander
-                //  additional info about registry values can be found here [https://github.com/RAKWireless/RAK12035_SoilMoisture/blob/main/RAK12035_SoilMoisture.h]
+                // the check.. 
+                //  - registry address to interrogate is 0x02,
+                //  - expected value is 0x20
+                // Additional info about registry values for the RAK12035 can be found here [https://github.com/RAKWireless/RAK12035_SoilMoisture/blob/main/RAK12035_SoilMoisture.h]
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x02), 1); // get the default address for the device (stored in registry here [0x02]).. should come back as 0x20
                 LOG_INFO("Checking for RAK12035VB Soil Sensor with registry address 0x02...");
                 if (registerValue == 0x20) {
