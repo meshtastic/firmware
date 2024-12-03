@@ -144,15 +144,6 @@ bool InkHUD::Applet::isForeground()
     return foreground;
 }
 
-// Is the applet ready to render()?
-// This allows applets to veto rendering, if they expect to be ready to render *shortly*
-// An applet might want to gradually pre-calculate resources used for rendering, if the calculation process is intensive
-// Avoid using this technique as much as possible.. it's a hassle
-bool InkHUD::Applet::isPreparedToRender()
-{
-    return preparedToRender;
-}
-
 // Limit drawing to a certain region of the applet
 // Pixels outside this region will be discarded
 void InkHUD::Applet::setCrop(int16_t left, int16_t top, uint16_t width, uint16_t height)

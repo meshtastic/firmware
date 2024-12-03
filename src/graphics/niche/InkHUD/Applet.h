@@ -134,7 +134,6 @@ class Applet : public GFX
 
     bool isActive();
     bool isForeground();
-    bool isPreparedToRender();
 
     // Allow derived applets to handle changes in state
 
@@ -142,7 +141,6 @@ class Applet : public GFX
     virtual void onDeactivate() {}
     virtual void onForeground() {}
     virtual void onBackground() {}
-    virtual void beforeRender() {}
     virtual void onShutdown() {}
     virtual void onButtonShortPress() {} // For use by System Applets only
     virtual void onButtonLongPress() {}  // For use by System Applets only
@@ -191,7 +189,6 @@ class Applet : public GFX
     uint16_t getActiveNodeCount(); // Duration determined by user, in onscreen menu
 
     static AppletFont fontSmall, fontLarge; // General purpose fonts, used cross-applet
-    bool preparedToRender = true;           // Set by derived applet to temporarily suppress updates
 
   private:
     Tile *assignedTile;      // Rendered pixels are fed into a Tile object, which translates them, then passes to WM

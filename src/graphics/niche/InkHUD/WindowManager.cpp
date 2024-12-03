@@ -671,7 +671,6 @@ const char *InkHUD::WindowManager::getAppletName(uint8_t index)
 // Runs at regular intervals
 // WindowManager's uses of this include:
 // - postponing render: until next loop(), allowing all applets to be notified of some Mesh event before render
-// - postponing render: while an applet prepares data
 // - queuing another render: while one is already is progress
 int32_t InkHUD::WindowManager::runOnce()
 {
@@ -689,9 +688,7 @@ int32_t InkHUD::WindowManager::runOnce()
 }
 
 // Make an attempt to gather image data from some / all applets, and update the display
-// Might not be possible right now:
-// - update already is progress?
-// - an applet is gradually precalculating some data it needs, to avoid blocking
+// Might not be possible right now, if update already is progress.
 // The "force" parameter determines whether all applets will re-render, or only those which called Applet::requestUpdate()
 void InkHUD::WindowManager::render(bool force)
 {
@@ -716,26 +713,6 @@ void InkHUD::WindowManager::render(bool force)
     // -------------
     // Processed only if neither menu nor fullscreen applets shown
     if (!fullscreenTile->displayedApplet && !menuApplet->isForeground()) {
-
-        // Check if an applet is performing preflight calculations
-        // --------------------------------------------------------
-        // An applet's render() method runs all at once.
-        // Some applets might want to spread this load by precalculating resources gradually.
-        // It is a promise that the applet will be ready to render *shortly*
-
-        for (Tile *t : userTiles) {
-            // Preparations may already have been triggered internally by an applet's own event handling
-            // If not (this is a forced render?), offer to start those preparations
-            // An applet implementing this method must know internally if its preparations are already complete,
-            // or else they will be called repeatedly
-            Applet *a = t->displayedApplet;
-            if (a->isForeground() && !a->isPreparedToRender()) {
-                LOG_DEBUG("Applet not yet prepared to render");
-                a->beforeRender();
-                return;
-                // render() will be called again shortly by WinowManager::runOnce()
-            }
-        }
 
         // For each tile, offer (or force) to render the currently shown applet
         // --------------------------------------------------------------------
