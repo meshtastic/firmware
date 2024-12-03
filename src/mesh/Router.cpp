@@ -6,6 +6,7 @@
 #include "NodeDB.h"
 #include "RTC.h"
 #include "configuration.h"
+#include "detect/LoRaRadioType.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
@@ -20,7 +21,6 @@
 #if ENABLE_JSON_LOGGING || ARCH_PORTDUINO
 #include "serialization/MeshPacketSerializer.h"
 #endif
-#include "../userPrefs.h"
 
 #define MAX_RX_FROMRADIO                                                                                                         \
     4 // max number of packets destined to our queue, we dispatch packets quickly so it doesn't need to be big
@@ -492,6 +492,8 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
         // is not in the local nodedb
         // First, only PKC encrypt packets we are originating
         if (isFromUs(p) &&
+            // Don't use PKC with simulator
+            radioType != SIM_RADIO &&
             // Don't use PKC with Ham mode
             !owner.is_licensed &&
             // Don't use PKC if it's not explicitly requested and a non-primary channel is requested

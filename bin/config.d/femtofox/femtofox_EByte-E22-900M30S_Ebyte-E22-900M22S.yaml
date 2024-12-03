@@ -1,0 +1,16 @@
+---
+Lora:
+## Ebyte E22-900M30S, E22-900M22S with no external RF switching setup
+## Will work with any module without RF switching, and with TCXO
+  Module: sx1262
+  gpiochip: 1 # subtract 32 from the gpio numbers
+  DIO2_AS_RF_SWITCH: true
+  DIO3_TCXO_VOLTAGE: true
+  CS: 16 #pin6 / GPIO48 1C0
+  IRQ: 23  #pin17 / GPIO55 1C7
+  Busy: 22 #pin16 / GPIO54 1C6
+  Reset: 25 #pin13 / GPIO57 1D1
+  RXen: 24 #pin12 / GPIO56 1D0
+  #TXen: bridge to DIO2 on E22 module
+  spidev: spidev0.0
+  spiSpeed: 2000000
