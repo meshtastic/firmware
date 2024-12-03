@@ -80,7 +80,7 @@ bool RAK12035VBSensor::getMetrics(meshtastic_Telemetry *measurement)
     success = sensor.get_sensor_temperature(&temp);
     delay(500);
 
-    if(success = false){
+    if(success == false){
         LOG_ERROR("Failed to read sensor data");
         return false;
     }
