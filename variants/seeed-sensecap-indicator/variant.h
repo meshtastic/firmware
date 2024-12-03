@@ -40,6 +40,7 @@
 // // Buzzer
 // #define PIN_BUZZER 19
 
+#define GPS_DEFAULT_NOT_PRESENT 1
 #define GPS_RX_PIN 20
 #define GPS_TX_PIN 19
 #define HAS_GPS 1
