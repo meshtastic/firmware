@@ -24,7 +24,7 @@ def write_macros_to_json(macros, output_file):
 
 def main():
     header_file = 'userPrefs.h'
-    output_file = 'userPrefs.json'
+    output_file = 'userPrefs.jsonc'
     # Uncomment all macros in the header file
     with open(header_file, 'r') as file:
         lines = file.readlines()
