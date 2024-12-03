@@ -1,5 +1,5 @@
 #include "Channels.h"
-#include "../userPrefs.h"
+
 #include "CryptoEngine.h"
 #include "Default.h"
 #include "DisplayFormatters.h"
