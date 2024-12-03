@@ -184,7 +184,7 @@ void InkHUD::MapApplet::render()
         // Draw a special marker for the most recently heard node
         // This node might not yet have a nodeDB entry
         meshtastic_NodeInfoLite *lastHeardNode = nodeDB->getMeshNode(lastHeardNodeNum);
-        if (lastHeardNode && hasValidPosition(lastHeardNode))
+        if (lastHeardNode && nodeDB->hasValidPosition(lastHeardNode))
             renderMarker(lastHeardMarker, scaleX, scaleY, padding, lastHeardNode);
 
         // Tidy up
@@ -280,7 +280,7 @@ bool InkHUD::MapApplet::serviceCalculationThread()
         uint32_t nodeCount = nodeDB->getNumMeshNodes();
         for (uint32_t i = 0; i < nodeCount; i++) {
             meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
-            if (node && hasValidPosition(node)) {
+            if (node && nodeDB->hasValidPosition(node)) {
                 anyNodes = true;
                 break;
             }
@@ -308,7 +308,7 @@ bool InkHUD::MapApplet::serviceCalculationThread()
 
         // Fail if we don't have a position
         // Todo: handle in render()
-        if (!ourNode || !hasValidPosition(ourNode)) {
+        if (!ourNode || !nodeDB->hasValidPosition(ourNode)) {
             calcState = CALC_FAILED_NO_POSITION;
             calcStep = STEP_RENDER;
             return true; // run again, moving directly to the final step
@@ -336,7 +336,7 @@ bool InkHUD::MapApplet::serviceCalculationThread()
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(nodeIndex);
 
         // Analyze only if has a valid position (not 0,0 "null island")
-        if (node && hasValidPosition(node)) {
+        if (node && nodeDB->hasValidPosition(node)) {
 
             // Convert from Meshtastic's internal "integer" format for position info
             float latitude = node->position.latitude_i * 1e-7;
@@ -414,7 +414,7 @@ bool InkHUD::MapApplet::serviceCalculationThread()
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(nodeIndex);
 
         // Process only if node has valid position
-        if (node && hasValidPosition(node)) {
+        if (node && nodeDB->hasValidPosition(node)) {
             // Convert from Meshtastic's internal "integer" format for position info
             float latitude = node->position.latitude_i * 1e-7;
             float longitude = node->position.longitude_i * 1e-7;

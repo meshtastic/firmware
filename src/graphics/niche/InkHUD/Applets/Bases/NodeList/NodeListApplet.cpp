@@ -103,7 +103,7 @@ void InkHUD::NodeListApplet::render()
         // use "? km" if unknown
         // Todo: miles
         meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
-        if (node && hasValidPosition(node) && hasValidPosition(ourNode)) {
+        if (node && nodeDB->hasValidPosition(node) && nodeDB->hasValidPosition(ourNode)) {
             // Get lat and long as float
             // Meshtastic stores these as integers internally
             float ourLat = ourNode->position.latitude_i * 1e-7;
