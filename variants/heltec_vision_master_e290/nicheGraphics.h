@@ -87,7 +87,7 @@ void setupNicheGraphics()
     windowManager->addApplet("Channel 1", new InkHUD::ThreadedMessageApplet(1));
     windowManager->addApplet("Last Heard", new InkHUD::LastHeardNodesApplet, true);
     windowManager->addApplet("Active Nodes", new InkHUD::ActiveNodesApplet);
-    windowManager->addApplet("Map", new InkHUD::MapApplet, true);
+    // windowManager->addApplet("Map", new InkHUD::MapApplet, true);
     // windowManager->addApplet("Basic", new InkHUD::BasicExampleApplet);
     // windowManager->addApplet("NewMsg", new InkHUD::NewMsgExampleApplet);
 
