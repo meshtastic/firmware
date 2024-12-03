@@ -1243,7 +1243,6 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
         return false;
     }
 
-    LOG_DEBUG("old user %s/%s, channel=%d", info->user.long_name, info->user.short_name, info->channel);
 #if !(MESHTASTIC_EXCLUDE_PKI)
     if (p.public_key.size > 0) {
         printBytes("Incoming Pubkey: ", p.public_key.bytes, 32);
@@ -1267,7 +1266,8 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
     }
     if (nodeId != getNodeNum())
         info->channel = channelIndex; // Set channel we need to use to reach this node (but don't set our own channel)
-    LOG_DEBUG("Update changed=%d user %s/%s, channel=%d", changed, info->user.long_name, info->user.short_name, info->channel);
+    LOG_DEBUG("Update changed=%d user %s/%s, id=0x%08x, channel=%d", changed, info->user.long_name, info->user.short_name, nodeId,
+              info->channel);
     info->has_user = true;
 
     if (changed) {
