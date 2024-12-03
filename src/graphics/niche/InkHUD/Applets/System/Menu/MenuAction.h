@@ -24,6 +24,7 @@ enum MenuAction {
     NEXT_TILE,
     TOGGLE_APPLET,
     ACTIVATE_APPLETS, // Todo: remove? Possible redundant, handled by TOGGLE_APPLET?
+    TOGGLE_AUTOSHOW,
     ROTATE,
     LAYOUT,
     TOGGLE_BATTERY_ICON,

@@ -20,6 +20,7 @@ enum MenuPage : uint8_t {
     SEND,
     OPTIONS,
     APPLETS,
+    AUTOSHOW,
     EXIT, // Dismiss the menu applet
 };
 

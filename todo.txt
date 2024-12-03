@@ -12,19 +12,26 @@ Features
 []      secondary buttons
 []      eink drivers for other devices
 []      gps menu
-[]      jump to applet
+[wip]   jump to applet
 []      mini-compass on nodelist
 []      notifications / vetos
 [tbc]   timeout for menu applet
 []      additional user applets
-[]      honour "max tiles" setting in nicheGraphics.h
 [wip]   add extended ascii / foreign language chars
 
 
 Critical Tasks
 ====================
 [tbc]   fix attach/detach interrupts for ButtonThread.cpp
+            - check with older ESP32 variants
 []      imperial units
+[]      optimize fast / full referesh: less blinking
+
+Improvements
+====================
+[]      use map applet without requiring own position - big rewrite required?
+[]      Nodelist applet should fill new space from NodeDB when layout changes and applet size increases
+
 
 Known Bugs
 =====================
@@ -33,8 +40,9 @@ Known Bugs
 []      T-Echo frontlight: remains on if shutdown while active
 []      Rare phantom user button short-press on T-Echo when unattended for extended period
 []      Timestamps don't update. Needs to happen once a day. "6PM -> Yesterday". Make the WindowManager do it.
-[]      Nodelist applet should fill new space from NodeDB when layout changes and applet size increases
 []      Lightsleep shouldn't be possible while update in progress. Set canSleep=false? 
+[]      Root menu: header breaks spacing if rtc set while menu open
+[]      Applets don't re-render when node is removed via admin command
 
 Chores
 ==========
@@ -42,3 +50,5 @@ Chores
 []      Make runOnce methods private
 []      Helper method in InkHUD::Drivers::EInk to simplify framebuffer arithmetic, for anyone else using NicheGraphics
 []      Don't repeat logs from Applet::getTimeString
+[]      Investigate: clearing wantRender flag in getter method bool wantsToRender(), instead of resetDrawingSpace()
+[]      honour "max tiles" setting in nicheGraphics.h

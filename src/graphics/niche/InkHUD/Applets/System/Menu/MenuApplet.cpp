@@ -107,6 +107,11 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         windowManager->changeActivatedApplets();
         break;
 
+    case TOGGLE_AUTOSHOW:
+        // Toggle settings.userApplets.autoshow[] value, via MenuItem::checkState pointer set in populateAutoshowPage()
+        *items.at(cursor).checkState = !(*items.at(cursor).checkState);
+        break;
+
     case SHUTDOWN:
         LOG_INFO("Shutting down from menu");
         power->shutdown();
@@ -151,6 +156,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
 
     case OPTIONS:
         items.push_back(MenuItem("Applets", MenuPage::APPLETS));
+        items.push_back(MenuItem("Auto-show", MenuPage::AUTOSHOW));
         items.push_back(MenuItem("Layout", MenuAction::LAYOUT, MenuPage::OPTIONS));
         items.push_back(MenuItem("Rotate", MenuAction::ROTATE, MenuPage::OPTIONS));
         items.push_back(
@@ -167,6 +173,11 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     case APPLETS:
         populateAppletPage();
         items.push_back(MenuItem("Exit", MenuAction::ACTIVATE_APPLETS));
+        break;
+
+    case AUTOSHOW:
+        populateAutoshowPage();
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
 
     case EXIT:
@@ -336,6 +347,23 @@ void InkHUD::MenuApplet::populateAppletPage()
         const char *name = windowManager->getAppletName(i);
         bool *isActive = &(settings.userApplets.active[i]);
         items.push_back(MenuItem(name, MenuAction::TOGGLE_APPLET, MenuPage::APPLETS, isActive));
+    }
+}
+
+// Dynamically create MenuItem entries for selecting which applets will automatically come to foreground when they have new data
+// We only populate this menu page with applets which are actually active
+// We use the MenuItem::checkState pointer to toggle the setting in MenuApplet::execute. Bit of a hack, but convenient.
+void InkHUD::MenuApplet::populateAutoshowPage()
+{
+    assert(items.size() == 0);
+
+    for (uint8_t i = 0; i < windowManager->getAppletCount(); i++) {
+        // Only add a menu item if applet is active
+        if (settings.userApplets.active[i]) {
+            const char *name = windowManager->getAppletName(i);
+            bool *isActive = &(settings.userApplets.autoshow[i]);
+            items.push_back(MenuItem(name, MenuAction::TOGGLE_AUTOSHOW, MenuPage::AUTOSHOW, isActive));
+        }
     }
 }
 

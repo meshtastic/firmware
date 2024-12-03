@@ -47,7 +47,14 @@ struct Settings {
     struct UserApplets {
         // Which applets are running (either displayed, or in the background)
         // Index of array: which applet, as indexed in WindowManager::applets
+        // Initial value is set by the "activeByDefault" parameter of WindowManager::addApplet, in setupNicheGraphics()
         bool active[MAX_USERAPPLETS_GLOBAL];
+
+        // Which user applets should be automatically shown when they have important data to show
+        // If none set, foreground applets should remain foreground without manual user input
+        // If multiple applets request this at once,
+        // priority is the order which they were passed to WindowManager::addApplets, in setupNicheGraphics()
+        bool autoshow[MAX_USERAPPLETS_GLOBAL]{false};
     } userApplets;
 
     struct OptionalFeatures {
