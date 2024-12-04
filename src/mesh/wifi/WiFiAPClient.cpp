@@ -71,7 +71,7 @@ static void onNetworkConnected()
             MDNS.addService("https", "tcp", 443);
 #elif defined(ARCH_RP2040)
             // ARCH_RP2040 does not support HTTPS, create a "meshtastic" service
-            MDNS.addService("meshtastic", "tcp", 4403);
+            MDNS.addService("meshtastic", "tcp", SERVER_API_DEFAULT_PORT);
             // ESP32 handles this in WiFiEvent
             LOG_INFO("Obtained IP address: %s", WiFi.localIP().toString().c_str());
 #endif
