@@ -271,10 +271,10 @@ bool loadConfig(const char *configPath)
         if (yamlConfig["Lora"]) {
             settingsMap[use_sx1262] = false;
             settingsMap[use_rf95] = false;
-            settingsMap[use_sx1280] = false;            
+            settingsMap[use_sx1280] = false;
             settingsMap[use_lr1110] = false;
-            settingsMap[use_lr1120] = false;            
-            settingsMap[use_lr1121] = false;          
+            settingsMap[use_lr1120] = false;
+            settingsMap[use_lr1121] = false;
             settingsMap[use_sx1268] = false;
 
             if (yamlConfig["Lora"]["Module"] && yamlConfig["Lora"]["Module"].as<std::string>("") == "sx1262") {
@@ -288,7 +288,7 @@ bool loadConfig(const char *configPath)
             } else if (yamlConfig["Lora"]["Module"] && yamlConfig["Lora"]["Module"].as<std::string>("") == "lr1120") {
                 settingsMap[use_lr1120] = true;
             } else if (yamlConfig["Lora"]["Module"] && yamlConfig["Lora"]["Module"].as<std::string>("") == "lr1121") {
-                settingsMap[use_lr1121] = true;                
+                settingsMap[use_lr1121] = true;
             } else if (yamlConfig["Lora"]["Module"] && yamlConfig["Lora"]["Module"].as<std::string>("") == "sx1268") {
                 settingsMap[use_sx1268] = true;
             }
