@@ -51,10 +51,7 @@ class Ch341Hal : public RadioLibHal
         if (pin == RADIOLIB_NC) {
             return;
         }
-        if (pin == CH341_PIN_CS || pin == CH341_PIN_IRQ) {
-            return;
-        }
-        fprintf(stderr, "pinMode for pin %d and mode %d is not supported!\n", pin, mode);
+        pinedio_set_pin_mode(&pinedio, pin, mode);
     }
 
     void digitalWrite(uint32_t pin, uint32_t value) override
@@ -62,11 +59,7 @@ class Ch341Hal : public RadioLibHal
         if (pin == RADIOLIB_NC) {
             return;
         }
-        if (pin == CH341_PIN_CS) {
-            pinedio_set_cs(&pinedio, value == 0);
-            return;
-        }
-        fprintf(stderr, "digitalWrite for pin %d is not supported!\n", pin);
+        pinedio_digital_write(&pinedio, pin, value);
     }
 
     uint32_t digitalRead(uint32_t pin) override
@@ -74,12 +67,7 @@ class Ch341Hal : public RadioLibHal
         if (pin == RADIOLIB_NC) {
             return 0;
         }
-        if (pin == CH341_PIN_IRQ) {
-
-            return pinedio_get_irq_state(&pinedio);
-        }
-        fprintf(stderr, "digitalRead for pin %d is not supported!\n", pin);
-        return 0;
+        return pinedio_digital_read(&pinedio, pin);
     }
 
     void attachInterrupt(uint32_t interruptNum, void (*interruptCb)(void), uint32_t mode) override
@@ -180,6 +168,8 @@ class Ch341Hal : public RadioLibHal
             } else {
                 pinedio_is_init = true;
                 pinedio_set_option(&pinedio, PINEDIO_OPTION_AUTO_CS, 0);
+                pinedio_set_pin_mode(&pinedio, 3, true);
+                pinedio_set_pin_mode(&pinedio, 5, true);
             }
         }
     }
