@@ -4,6 +4,7 @@
 #include "MemoryPool.h"
 #include "MeshTypes.h"
 #include "Observer.h"
+#include "PacketHistory.h"
 #include "PointerQueue.h"
 #include "RadioInterface.h"
 #include "concurrency/OSThread.h"
@@ -11,7 +12,7 @@
 /**
  * A mesh aware router that supports multiple interfaces.
  */
-class Router : protected concurrency::OSThread
+class Router : protected concurrency::OSThread, protected PacketHistory
 {
   private:
     /// Packets which have just arrived from the radio, ready to be processed by this service and possibly
@@ -49,6 +50,9 @@ class Router : protected concurrency::OSThread
 
     /** Attempt to cancel a previously sent packet.  Returns true if a packet was found we could cancel */
     bool cancelSending(NodeNum from, PacketId id);
+
+    /** Attempt to find a packet in the TxQueue. Returns true if the packet was found. */
+    bool findInTxQueue(NodeNum from, PacketId id);
 
     /** Allocate and return a meshpacket which defaults as send to broadcast from the current node.
      * The returned packet is guaranteed to have a unique packet ID already assigned
