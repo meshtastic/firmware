@@ -129,10 +129,20 @@ void portduinoSetup()
             std::cout << "Unable to use " << configPath << " as config file" << std::endl;
             exit(EXIT_FAILURE);
         }
-    } else if (access("config.yaml", R_OK) == 0 && loadConfig("config.yaml")) {
-        std::cout << "Using local config.yaml as config file" << std::endl;
-    } else if (access("/etc/meshtasticd/config.yaml", R_OK) == 0 && loadConfig("/etc/meshtasticd/config.yaml")) {
-        std::cout << "Using /etc/meshtasticd/config.yaml as config file" << std::endl;
+    } else if (access("config.yaml", R_OK) == 0) {
+        if (loadConfig("config.yaml")) {
+            std::cout << "Using local config.yaml as config file" << std::endl;
+        } else {
+            std::cout << "Unable to use local config.yaml as config file" << std::endl;
+            exit(EXIT_FAILURE);
+        }
+    } else if (access("/etc/meshtasticd/config.yaml", R_OK) == 0) {
+        if (loadConfig("/etc/meshtasticd/config.yaml")) {
+            std::cout << "Using /etc/meshtasticd/config.yaml as config file" << std::endl;
+        } else {
+            std::cout << "Unable to use /etc/meshtasticd/config.yaml as config file" << std::endl;
+            exit(EXIT_FAILURE);
+        }
     } else {
         std::cout << "No 'config.yaml' found, running simulated." << std::endl;
         settingsMap[maxnodes] = 200;               // Default to 200 nodes
@@ -151,6 +161,13 @@ void portduinoSetup()
                 loadConfig(entry.path().c_str());
             }
         }
+    }
+
+    uint8_t dmac[6];
+    getMacAddr(dmac);
+    if (dmac[0] == 128 && dmac[1] == 0 && dmac[2] == 0 && dmac[3] == 0 && dmac[4] == 0 && dmac[5] == 1) {
+        std::cout << "*** Blank MAC Address not allowed! " << std::endl;
+        exit(EXIT_FAILURE);
     }
 
     // Rather important to set this, if not running simulated.
