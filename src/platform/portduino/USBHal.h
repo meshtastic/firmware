@@ -18,9 +18,6 @@
 #define CH341_PIN_CS (101)
 #define CH341_PIN_IRQ (0)
 
-// forward declaration of alert handler that will be used to emulate interrupts
-// static void lgpioAlertHandler(int num_alerts, lgGpioAlert_p alerts, void *userdata);
-
 // the HAL must inherit from the base RadioLibHal class
 // and implement all of its virtual methods
 class Ch341Hal : public RadioLibHal
@@ -75,22 +72,8 @@ class Ch341Hal : public RadioLibHal
         if ((interruptNum == RADIOLIB_NC)) {
             return;
         }
-        fprintf(stderr, "Attach interrupt to pin %d \n", interruptNum);
+        LOG_DEBUG("Attach interrupt to pin %d", interruptNum);
         pinedio_attach_interrupt(&this->pinedio, (pinedio_int_pin)interruptNum, (pinedio_int_mode)mode, interruptCb);
-
-        // set lgpio alert callback
-        //      int result = lgGpioClaimAlert(_gpioHandle, 0, mode, interruptNum, -1);
-        //      if(result < 0) {
-        //        fprintf(stderr, "Could not claim pin %" PRIu32 " for alert: %s\n", interruptNum, lguErrorText(result));
-        //        return;
-        //      }
-
-        //      // enable emulated interrupt
-        //      interruptEnabled[interruptNum] = true;
-        //      interruptModes[interruptNum] = mode;
-        //      interruptCallbacks[interruptNum] = interruptCb;
-
-        //      lgGpioSetAlertsFunc(_gpioHandle, interruptNum, lgpioAlertHandler, (void *)this);
     }
 
     void detachInterrupt(uint32_t interruptNum) override
@@ -98,18 +81,9 @@ class Ch341Hal : public RadioLibHal
         if ((interruptNum == RADIOLIB_NC)) {
             return;
         }
-        fprintf(stderr, "Detach interrupt from pin %d \n", interruptNum);
+        LOG_DEBUG("Detach interrupt from pin %d", interruptNum);
 
         pinedio_deattach_interrupt(&this->pinedio, (pinedio_int_pin)interruptNum);
-
-        //      // clear emulated interrupt
-        //      interruptEnabled[interruptNum] = false;
-        //      interruptModes[interruptNum] = 0;
-        //      interruptCallbacks[interruptNum] = NULL;
-
-        // disable lgpio alert callback
-        //      lgGpioFree(_gpioHandle, interruptNum);
-        //      lgGpioSetAlertsFunc(_gpioHandle, interruptNum, NULL, NULL);
     }
 
     void delay(unsigned long ms) override
@@ -120,7 +94,6 @@ class Ch341Hal : public RadioLibHal
         }
 
         usleep(ms * 1000);
-        //      lguSleep(ms / 1000.0);
     }
 
     void delayMicroseconds(unsigned long us) override
@@ -130,16 +103,12 @@ class Ch341Hal : public RadioLibHal
             return;
         }
         usleep(us);
-
-        //      lguSleep(us / 1000000.0);
     }
 
     void yield() override { sched_yield(); }
 
     unsigned long millis() override
     {
-        //      uint32_t time = lguTimestamp() / 1000000UL;
-        //      return time;
         struct timeval tv;
         gettimeofday(&tv, NULL);
         return (tv.tv_sec * 1000ULL) + (tv.tv_usec / 1000ULL);
@@ -147,8 +116,6 @@ class Ch341Hal : public RadioLibHal
 
     unsigned long micros() override
     {
-        //      uint32_t time = lguTimestamp() / 1000UL;
-        //      return time;
         struct timeval tv;
         gettimeofday(&tv, NULL);
         return (tv.tv_sec * 1000000ULL) + tv.tv_usec;
@@ -179,7 +146,6 @@ class Ch341Hal : public RadioLibHal
     void spiTransfer(uint8_t *out, size_t len, uint8_t *in)
     {
         int32_t result = pinedio_transceive(&this->pinedio, out, in, len);
-        //      int result = lgSpiXfer(_spiHandle, (char *)out, (char*)in, len);
         if (result < 0) {
             fprintf(stderr, "Could not perform SPI transfer: %d\n", result);
         }
@@ -195,40 +161,10 @@ class Ch341Hal : public RadioLibHal
         }
     }
 
-#if 0
-    void tone(uint32_t pin, unsigned int frequency, unsigned long duration = 0) {
-      lgTxPwm(_gpioHandle, pin, frequency, 50, 0, duration);
-    }
-
-    void noTone(uint32_t pin) {
-      lgTxPwm(_gpioHandle, pin, 0, 0, 0, 0);
-    }
-#endif
-
   private:
     // the HAL can contain any additional private members
     pinedio_inst pinedio;
     bool pinedio_is_init = false;
 };
-
-#if 0
-// this handler emulates interrupts
-static void lgpioAlertHandler(int num_alerts, lgGpioAlert_p alerts, void *userdata) {
-  if(!userdata)
-    return;
-
-  // Ch341Hal instance is passed via the user data
-  Ch341Hal* hal = (Ch341Hal*)userdata;
-
-  // check the interrupt is enabled, the level matches and a callback exists
-  for(lgGpioAlert_t *alert = alerts; alert < (alerts + num_alerts); alert++) {
-    if((hal->interruptEnabled[alert->report.gpio]) &&
-       (hal->interruptModes[alert->report.gpio] == alert->report.level) &&
-       (hal->interruptCallbacks[alert->report.gpio])) {
-      hal->interruptCallbacks[alert->report.gpio]();
-    }
-  }
-}
-#endif
 
 #endif
