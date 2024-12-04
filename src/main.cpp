@@ -858,6 +858,51 @@ void setup()
                 LOG_INFO("SX1280 init success");
             }
         }
+    } else if (settingsMap[use_lr1110]) {
+        if (!rIf) {
+            LOG_DEBUG("Activate lr1110 radio on SPI port %s", settingsStrings[spidev].c_str());
+            LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
+            rIf = new LR1110Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
+                                      settingsMap[busy]);
+            if (!rIf->init()) {
+                LOG_WARN("No LR1110 radio");
+                delete rIf;
+                rIf = NULL;
+                exit(EXIT_FAILURE);
+            } else {
+                LOG_INFO("LR1110 init success");
+            }
+        }
+    } else if (settingsMap[use_lr1120]) {
+        if (!rIf) {
+            LOG_DEBUG("Activate lr1120 radio on SPI port %s", settingsStrings[spidev].c_str());
+            LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
+            rIf = new LR1120Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
+                                      settingsMap[busy]);
+            if (!rIf->init()) {
+                LOG_WARN("No LR1120 radio");
+                delete rIf;
+                rIf = NULL;
+                exit(EXIT_FAILURE);
+            } else {
+                LOG_INFO("LR1120 init success");
+            }
+        }
+    } else if (settingsMap[use_lr1121]) {
+        if (!rIf) {
+            LOG_DEBUG("Activate lr1121 radio on SPI port %s", settingsStrings[spidev].c_str());
+            LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
+            rIf = new LR1121Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
+                                      settingsMap[busy]);
+            if (!rIf->init()) {
+                LOG_WARN("No LR1121 radio");
+                delete rIf;
+                rIf = NULL;
+                exit(EXIT_FAILURE);
+            } else {
+                LOG_INFO("LR1121 init success");
+            }
+        }
     } else if (settingsMap[use_sx1268]) {
         if (!rIf) {
             LOG_DEBUG("Activate sx1268 radio on SPI port %s", settingsStrings[spidev].c_str());
