@@ -902,7 +902,7 @@ void setup()
             } else {
                 LOG_INFO("LR1121 init success");
             }
-        }        
+        }
     } else if (settingsMap[use_sx1268]) {
         if (!rIf) {
             LOG_DEBUG("Activate sx1268 radio on SPI port %s", settingsStrings[spidev].c_str());
