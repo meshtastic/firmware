@@ -69,6 +69,22 @@ void portduinoCustomInit()
     portduinoAddArguments(child, childArguments);
 }
 
+void getMacAddr(uint8_t *dmac)
+{
+    if (settingsStrings[mac_address].length() > 11) {
+        dmac[0] = std::stoi(settingsStrings[mac_address].substr(0, 2), nullptr, 16);
+        dmac[1] = std::stoi(settingsStrings[mac_address].substr(2, 2), nullptr, 16);
+        dmac[2] = std::stoi(settingsStrings[mac_address].substr(4, 2), nullptr, 16);
+        dmac[3] = std::stoi(settingsStrings[mac_address].substr(6, 2), nullptr, 16);
+        dmac[4] = std::stoi(settingsStrings[mac_address].substr(8, 2), nullptr, 16);
+        dmac[5] = std::stoi(settingsStrings[mac_address].substr(10, 2), nullptr, 16);
+        std::cout << settingsStrings[mac_address] << std::endl;
+        exit;
+    } else {
+        _getMacAddr(dmac);
+    }
+}
+
 /** apps run under portduino can optionally define a portduinoSetup() to
  * use portduino specific init code (such as gpioBind) to setup portduino on their host machine,
  * before running 'arduino' code.
@@ -412,7 +428,12 @@ bool loadConfig(const char *configPath)
         settingsMap[maxnodes] = (yamlConfig["General"]["MaxNodes"]).as<int>(200);
         settingsMap[maxtophone] = (yamlConfig["General"]["MaxMessageQueue"]).as<int>(100);
         settingsStrings[config_directory] = (yamlConfig["General"]["ConfigDirectory"]).as<std::string>("");
+        settingsStrings[mac_address] = (yamlConfig["General"]["MACAddress"]).as<std::string>("");
 
+        // https://stackoverflow.com/a/20326454
+        settingsStrings[mac_address].erase(
+            std::remove(settingsStrings[mac_address].begin(), settingsStrings[mac_address].end(), ':'),
+            settingsStrings[mac_address].end());
     } catch (YAML::Exception &e) {
         std::cout << "*** Exception " << e.what() << std::endl;
         return false;
