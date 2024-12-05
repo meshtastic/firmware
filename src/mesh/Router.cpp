@@ -271,6 +271,7 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
         auto encodeResult = perhapsEncode(p);
         if (encodeResult != meshtastic_Routing_Error_NONE) {
             packetPool.release(p_decoded);
+            p->channel = 0; // Reset the channel to 0, so we don't use the failing hash again
             abortSendAndNak(encodeResult, p);
             return encodeResult; // FIXME - this isn't a valid ErrorCode
         }
