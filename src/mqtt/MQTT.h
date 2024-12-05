@@ -5,7 +5,9 @@
 #include "concurrency/OSThread.h"
 #include "mesh/Channels.h"
 #include "mesh/generated/meshtastic/mqtt.pb.h"
+#if NRF52_USE_JSON
 #include "serialization/JSON.h"
+#endif
 #if HAS_WIFI
 #include <WiFiClient.h>
 #if !defined(ARCH_PORTDUINO)
@@ -117,9 +119,10 @@ class MQTT : private concurrency::OSThread
     // Check if we should report unencrypted information about our node for consumption by a map
     void perhapsReportToMap();
 
+#if NRF52_USE_JSON
     // returns true if this is a valid JSON envelope which we accept on downlink
     bool isValidJsonEnvelope(JSONObject &json);
-
+#endif
     /// Determines if the given address is a private IPv4 address, i.e. not routable on the public internet.
     /// These are the ranges: 127.0.0.1, 10.0.0.0-10.255.255.255, 172.16.0.0-172.31.255.255, 192.168.0.0-192.168.255.255.
     bool isPrivateIpAddress(const char address[]);

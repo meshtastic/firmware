@@ -19,8 +19,11 @@
 #include <WiFi.h>
 #endif
 #include "Default.h"
+
+#if NRF52_USE_JSON
 #include "serialization/JSON.h"
 #include "serialization/MeshPacketSerializer.h"
+#endif
 #include <Throttle.h>
 #include <assert.h>
 
@@ -52,6 +55,7 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
     meshtastic_ServiceEnvelope e = meshtastic_ServiceEnvelope_init_default;
 
     if (moduleConfig.mqtt.json_enabled && (strncmp(topic, jsonTopic.c_str(), jsonTopic.length()) == 0)) {
+#if NRF52_USE_JSON
         // check if this is a json payload message by comparing the topic start
         char payloadStr[length + 1];
         memcpy(payloadStr, payload, length);
@@ -135,6 +139,7 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
             LOG_ERROR("JSON received payload on MQTT but not a valid JSON");
         }
         delete json_value;
+#endif
     } else {
         if (length == 0) {
             LOG_WARN("Empty MQTT payload received, topic %s!", topic);
@@ -234,11 +239,15 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
 
         if (*moduleConfig.mqtt.root) {
             cryptTopic = moduleConfig.mqtt.root + cryptTopic;
+#if NRF52_USE_JSON
             jsonTopic = moduleConfig.mqtt.root + jsonTopic;
+#endif
             mapTopic = moduleConfig.mqtt.root + mapTopic;
         } else {
             cryptTopic = "msh" + cryptTopic;
+#if NRF52_USE_JSON
             jsonTopic = "msh" + jsonTopic;
+#endif
             mapTopic = "msh" + mapTopic;
         }
 
@@ -705,6 +714,7 @@ void MQTT::perhapsReportToMap()
     }
 }
 
+#if NRF52_USE_JSON
 bool MQTT::isValidJsonEnvelope(JSONObject &json)
 {
     // if "sender" is provided, avoid processing packets we uplinked
@@ -715,6 +725,7 @@ bool MQTT::isValidJsonEnvelope(JSONObject &json)
            (json.find("type") != json.end()) && json["type"]->IsString() && // should specify a type
            (json.find("payload") != json.end());                            // should have a payload
 }
+#endif
 
 bool MQTT::isPrivateIpAddress(const char address[])
 {
