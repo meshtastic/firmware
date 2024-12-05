@@ -41,7 +41,7 @@ L76K GPS Module Information : https://www.seeedstudio.com/L76K-GNSS-Module-for-S
     L76K Expansion Board can not directly used, L76K Reset Pin needs to override or physically remove it,
     otherwise it will conflict with the SPI pins
 */
-// #define GPS_L76K
+#define GPS_L76K
 #ifdef GPS_L76K
 #define GPS_RX_PIN 44
 #define GPS_TX_PIN 43

@@ -9,6 +9,7 @@
 #include <assert.h>
 
 #include "PortduinoGlue.h"
+#include "api/ServerAPI.h"
 #include "linux/gpio/LinuxGPIOPin.h"
 #include "yaml-cpp/yaml.h"
 #include <filesystem>
@@ -34,7 +35,7 @@ void cpuDeepSleep(uint32_t msecs)
 
 void updateBatteryLevel(uint8_t level) NOT_IMPLEMENTED("updateBatteryLevel");
 
-int TCPPort = 4403;
+int TCPPort = SERVER_API_DEFAULT_PORT;
 
 static error_t parse_opt(int key, char *arg, struct argp_state *state)
 {
@@ -272,6 +273,9 @@ bool loadConfig(const char *configPath)
             settingsMap[use_sx1262] = false;
             settingsMap[use_rf95] = false;
             settingsMap[use_sx1280] = false;
+            settingsMap[use_lr1110] = false;
+            settingsMap[use_lr1120] = false;
+            settingsMap[use_lr1121] = false;
             settingsMap[use_sx1268] = false;
 
             if (yamlConfig["Lora"]["Module"] && yamlConfig["Lora"]["Module"].as<std::string>("") == "sx1262") {
@@ -280,6 +284,12 @@ bool loadConfig(const char *configPath)
                 settingsMap[use_rf95] = true;
             } else if (yamlConfig["Lora"]["Module"] && yamlConfig["Lora"]["Module"].as<std::string>("") == "sx1280") {
                 settingsMap[use_sx1280] = true;
+            } else if (yamlConfig["Lora"]["Module"] && yamlConfig["Lora"]["Module"].as<std::string>("") == "lr1110") {
+                settingsMap[use_lr1110] = true;
+            } else if (yamlConfig["Lora"]["Module"] && yamlConfig["Lora"]["Module"].as<std::string>("") == "lr1120") {
+                settingsMap[use_lr1120] = true;
+            } else if (yamlConfig["Lora"]["Module"] && yamlConfig["Lora"]["Module"].as<std::string>("") == "lr1121") {
+                settingsMap[use_lr1121] = true;
             } else if (yamlConfig["Lora"]["Module"] && yamlConfig["Lora"]["Module"].as<std::string>("") == "sx1268") {
                 settingsMap[use_sx1268] = true;
             }
