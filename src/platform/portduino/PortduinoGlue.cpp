@@ -273,6 +273,9 @@ bool loadConfig(const char *configPath)
             settingsMap[use_sx1262] = false;
             settingsMap[use_rf95] = false;
             settingsMap[use_sx1280] = false;
+            settingsMap[use_lr1110] = false;
+            settingsMap[use_lr1120] = false;
+            settingsMap[use_lr1121] = false;
             settingsMap[use_sx1268] = false;
 
             if (yamlConfig["Lora"]["Module"] && yamlConfig["Lora"]["Module"].as<std::string>("") == "sx1262") {
@@ -281,6 +284,12 @@ bool loadConfig(const char *configPath)
                 settingsMap[use_rf95] = true;
             } else if (yamlConfig["Lora"]["Module"] && yamlConfig["Lora"]["Module"].as<std::string>("") == "sx1280") {
                 settingsMap[use_sx1280] = true;
+            } else if (yamlConfig["Lora"]["Module"] && yamlConfig["Lora"]["Module"].as<std::string>("") == "lr1110") {
+                settingsMap[use_lr1110] = true;
+            } else if (yamlConfig["Lora"]["Module"] && yamlConfig["Lora"]["Module"].as<std::string>("") == "lr1120") {
+                settingsMap[use_lr1120] = true;
+            } else if (yamlConfig["Lora"]["Module"] && yamlConfig["Lora"]["Module"].as<std::string>("") == "lr1121") {
+                settingsMap[use_lr1121] = true;
             } else if (yamlConfig["Lora"]["Module"] && yamlConfig["Lora"]["Module"].as<std::string>("") == "sx1268") {
                 settingsMap[use_sx1268] = true;
             }
@@ -404,11 +413,9 @@ bool loadConfig(const char *configPath)
             settingsStrings[webserverrootpath] = (yamlConfig["Webserver"]["RootPath"]).as<std::string>("");
         }
 
-        if (yamlConfig["General"]) {
-            settingsMap[maxnodes] = (yamlConfig["General"]["MaxNodes"]).as<int>(200);
-            settingsMap[maxtophone] = (yamlConfig["General"]["MaxMessageQueue"]).as<int>(100);
-            settingsStrings[config_directory] = (yamlConfig["General"]["ConfigDirectory"]).as<std::string>("");
-        }
+        settingsMap[maxnodes] = (yamlConfig["General"]["MaxNodes"]).as<int>(200);
+        settingsMap[maxtophone] = (yamlConfig["General"]["MaxMessageQueue"]).as<int>(100);
+        settingsStrings[config_directory] = (yamlConfig["General"]["ConfigDirectory"]).as<std::string>("");
 
     } catch (YAML::Exception &e) {
         std::cout << "*** Exception " << e.what() << std::endl;

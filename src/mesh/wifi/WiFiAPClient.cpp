@@ -62,11 +62,7 @@ static void onNetworkConnected()
         LOG_INFO("Start WiFi network services");
 
         // start mdns
-        if (
-#ifdef ARCH_RP2040
-            !moduleConfig.mqtt.enabled && // MDNS is not supported when MQTT is enabled on ARCH_RP2040
-#endif
-            !MDNS.begin("Meshtastic")) {
+        if (!MDNS.begin("Meshtastic")) {
             LOG_ERROR("Error setting up MDNS responder!");
         } else {
             LOG_INFO("mDNS Host: Meshtastic.local");

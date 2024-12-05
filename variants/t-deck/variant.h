@@ -31,6 +31,9 @@
 
 #define SLEEP_TIME 120
 
+#define BUTTON_PIN 0
+// #define BUTTON_NEED_PULLUP
+#define GPS_DEFAULT_NOT_PRESENT 1
 #define GPS_RX_PIN 44
 #define GPS_TX_PIN 43
 
