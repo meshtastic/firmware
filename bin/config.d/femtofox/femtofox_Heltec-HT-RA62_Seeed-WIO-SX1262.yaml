@@ -1,0 +1,14 @@
+---
+Lora:
+## Heltec HT-RA62, Seeed WIO SX1262
+## Will work with any module with automatic RF switching, and with TCXO
+  Module: sx1262
+  gpiochip: 1 # subtract 32 from the gpio numbers
+  DIO2_AS_RF_SWITCH: true
+  DIO3_TCXO_VOLTAGE: true
+  CS: 16 #pin6 (GPIO pin 48 1C0)
+  IRQ: 23  #pin17 (GPIO pin 55 1C7)
+  Reset: 25 #pin13 (GPIO pin 57 1D1)
+  Busy: 22 #pin16 (GPIO pin 54 1C6)
+  spidev: spidev0.0 #pins are (CS=6, CLK=7, MOSI=8, MISO=9)
+  spiSpeed: 2000000
