@@ -654,6 +654,14 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
         return;
     }
 
+    for (int i = 0; i < config.lora.ignore_direct.size; i++) {
+        if (p->from & 0xff == config.lora.ignore_direct.bytes[i]) {
+            LOG_DEBUG("Ignore direct msg, 0x%x matches our direct ignore list", p->from);
+            packetPool.release(p);
+            return;
+        }
+    }
+
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->from);
     if (node != NULL && node->is_ignored) {
         LOG_DEBUG("Ignore msg, 0x%x is ignored", p->from);
