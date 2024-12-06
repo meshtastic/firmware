@@ -16,7 +16,7 @@ int32_t RAK12035VBSensor::runOnce()
 
     sensor.set_sensor_addr(RAK12035VB_ADDR);
 
-    sensor.begin();
+    sensor.begin(nodeTelemetrySensorsMap[sensorType].first);
     // Get sensor firmware version
 	uint8_t data = 0;
 	sensor.get_sensor_version(&data);
