@@ -6,7 +6,7 @@ Features
 []      adhoc ping
 []      canned message
 []      backlight toggle
-[]      map scale 
+[]      map scale indicator 
 []      boot screen
 []      shutdown screen
 []      secondary buttons
@@ -14,7 +14,7 @@ Features
 []      gps menu
 [wip]   jump to applet
 []      mini-compass on nodelist
-[]      notifications / vetos
+[wip]   notifications / vetos
 [tbc]   timeout for menu applet
 []      additional user applets
 [wip]   add extended ascii / foreign language chars
@@ -26,12 +26,13 @@ Critical Tasks
             - check with older ESP32 variants
 []      imperial units
 []      optimize fast / full referesh: less blinking
+[]      handle emoji in shortname
 
 Improvements
 ====================
-[]      use map applet without requiring own position - big rewrite required?
 []      Nodelist applet should fill new space from NodeDB when layout changes and applet size increases
-
+[]      Better detection of position changes in PositionsApplet
+[]      Don't show hops in nodelist applets if unknown
 
 Known Bugs
 =====================
@@ -47,6 +48,7 @@ Known Bugs
 Chores
 ==========
 []      Refactor WindowManager::render
+[]      Refactor NodeList applets
 []      Make runOnce methods private
 []      Helper method in InkHUD::Drivers::EInk to simplify framebuffer arithmetic, for anyone else using NicheGraphics
 []      Don't repeat logs from Applet::getTimeString

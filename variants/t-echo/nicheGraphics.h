@@ -11,7 +11,7 @@
 // Applets
 #include "graphics/niche/InkHUD/Applets/User/ActiveNodes/ActiveNodesApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/LastHeardNodes/LastHeardNodesApplet.h"
-#include "graphics/niche/InkHUD/Applets/User/Map/MapApplet.h"
+#include "graphics/niche/InkHUD/Applets/User/Positions/PositionsApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/SingleMessage/SingleMessageApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/ThreadedMessage/ThreadedMessageApplet.h"
 
@@ -74,8 +74,7 @@ void setupNicheGraphics()
     windowManager->addApplet("Channel 1", new InkHUD::ThreadedMessageApplet(1));
     windowManager->addApplet("Last Heard", new InkHUD::LastHeardNodesApplet, true);
     windowManager->addApplet("Active Nodes", new InkHUD::ActiveNodesApplet);
-    // windowManager->addApplet("Map", new InkHUD::MapApplet, true);
-
+    windowManager->addApplet("Positions", new InkHUD::PositionsApplet, true);
     // windowManager->addApplet("Basic", new InkHUD::BasicExampleApplet);
     // windowManager->addApplet("NewMsg", new InkHUD::NewMsgExampleApplet);
 
@@ -95,7 +94,7 @@ void setupNicheGraphics()
     buttons->setHandlerLongPress(MAIN_BUTTON, []() { InkHUD::WindowManager::getInstance()->handleButtonLong(); });
 
     // Setup the capacitive touch button
-    buttons->setWiring(TOUCH_BUTTON, PIN_EINK_EN, LOW);
+    buttons->setWiring(TOUCH_BUTTON, PIN_BUTTON_TOUCH, LOW);
     buttons->setHandlerDown(TOUCH_BUTTON, []() { InkHUD::WindowManager::getInstance()->handleAuxButtonDown(); });
     buttons->setHandlerUp(TOUCH_BUTTON, []() { InkHUD::WindowManager::getInstance()->handleAuxButtonUp(); });
 

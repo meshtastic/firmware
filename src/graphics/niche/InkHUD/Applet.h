@@ -50,7 +50,6 @@
     The WindowManager will shortly call the onRender() method for all affected applets
 
     An Applet may be unexpected asked to render at any point in time.
-    Applets *can* choose to defer the update for a short time, but this is not encouraged.
 
     Applets should cache their data, but not their pixel output: they should re-render when onRender runs.
     An Applet's dimensions are not know until onRender is called, so pre-rendering of UI elements is prohibited.

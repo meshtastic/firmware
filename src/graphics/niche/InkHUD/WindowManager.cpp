@@ -721,6 +721,9 @@ void InkHUD::WindowManager::render(bool force)
         // No tile's applets will render if a fullscreen applet, or the menu applet, is displayed
         for (Tile *t : userTiles) {
 
+            // Debugging only: runtime
+            uint32_t start = millis();
+
             // Check whether the user applet assigned to a tile wants to render, and that it is not obscured by a system applet
             bool shouldRender = false;
             shouldRender |= requestedRenderAll;
@@ -733,6 +736,10 @@ void InkHUD::WindowManager::render(bool force)
                 t->displayedApplet->render();            // Run the drawing operation, feeding pixels via Tile, into WindowManager
                 imageChanged = true;
             }
+
+            // Debugging only: runtime
+            uint32_t stop = millis();
+            LOG_DEBUG("%s took %dms to render", t->displayedApplet->name, stop - start);
         }
     }
 
