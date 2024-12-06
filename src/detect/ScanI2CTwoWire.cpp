@@ -40,10 +40,12 @@ ScanI2C::FoundDevice ScanI2CTwoWire::firstOfOrNONE(size_t count, DeviceType type
 {
     concurrency::LockGuard guard((concurrency::Lock *)&lock);
 
-    for (size_t k = 0; k < count; k++) {
+    for (size_t k = 0; k < count; k++)
+    {
         ScanI2C::DeviceType current = types[k];
 
-        if (exists(current)) {
+        if (exists(current))
+        {
             return ScanI2C::FoundDevice(current, deviceAddresses.at(current));
         }
     }
@@ -59,21 +61,26 @@ ScanI2C::DeviceType ScanI2CTwoWire::probeOLED(ScanI2C::DeviceAddress addr) const
     uint8_t r_prev = 0;
     uint8_t c = 0;
     ScanI2C::DeviceType o_probe = ScanI2C::DeviceType::SCREEN_UNKNOWN;
-    do {
+    do
+    {
         r_prev = r;
         i2cBus->beginTransmission(addr.address);
         i2cBus->write((uint8_t)0x00);
         i2cBus->endTransmission();
         i2cBus->requestFrom((int)addr.address, 1);
-        if (i2cBus->available()) {
+        if (i2cBus->available())
+        {
             r = i2cBus->read();
         }
         r &= 0x0f;
 
-        if (r == 0x08 || r == 0x00) {
+        if (r == 0x08 || r == 0x00)
+        {
             logFoundDevice("SH1106", (uint8_t)addr.address);
             o_probe = SCREEN_SH1106; // SH1106
-        } else if (r == 0x03 || r == 0x04 || r == 0x06 || r == 0x07) {
+        }
+        else if (r == 0x03 || r == 0x04 || r == 0x06 || r == 0x07)
+        {
             logFoundDevice("SSD1306", (uint8_t)addr.address);
             o_probe = SCREEN_SSD1306; // SSD1306
         }
@@ -94,20 +101,23 @@ uint16_t ScanI2CTwoWire::getRegisterValue(const ScanI2CTwoWire::RegisterLocation
     i2cBus->endTransmission();
     delay(20);
     i2cBus->requestFrom(registerLocation.i2cAddress.address, responseWidth);
-    if (i2cBus->available() == 2) {
+    if (i2cBus->available() == 2)
+    {
         // Read MSB, then LSB
         value = (uint16_t)i2cBus->read() << 8;
         value |= i2cBus->read();
-    } else if (i2cBus->available()) {
+    }
+    else if (i2cBus->available())
+    {
         value = i2cBus->read();
     }
     return value;
 }
 
-#define SCAN_SIMPLE_CASE(ADDR, T, ...)                                                                                           \
-    case ADDR:                                                                                                                   \
-        logFoundDevice(__VA_ARGS__);                                                                                             \
-        type = T;                                                                                                                \
+#define SCAN_SIMPLE_CASE(ADDR, T, ...) \
+    case ADDR:                         \
+        logFoundDevice(__VA_ARGS__);   \
+        type = T;                      \
         break;
 
 void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
@@ -128,9 +138,12 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 #endif
 
 #if WIRE_INTERFACES_COUNT == 2
-    if (port == I2CPort::WIRE1) {
+    if (port == I2CPort::WIRE1)
+    {
         i2cBus = &Wire1;
-    } else {
+    }
+    else
+    {
 #endif
         i2cBus = &Wire;
 #if WIRE_INTERFACES_COUNT == 2
@@ -146,8 +159,10 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
     // 0x78-0x7B 10-bit slave addressing
     // 0x7C-0x7F Reserved for future purposes
 
-    for (addr.address = 8; addr.address < 120; addr.address++) {
-        if (asize != 0) {
+    for (addr.address = 8; addr.address < 120; addr.address++)
+    {
+        if (asize != 0)
+        {
             if (!in_array(address, asize, (uint8_t)addr.address))
                 continue;
             LOG_DEBUG("Scan address 0x%x", (uint8_t)addr.address);
@@ -162,8 +177,10 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
         err = i2cBus->endTransmission();
 #endif
         type = NONE;
-        if (err == 0) {
-            switch (addr.address) {
+        if (err == 0)
+        {
+            switch (addr.address)
+            {
             case SSD1306_ADDRESS:
                 type = probeOLED(addr);
                 break;
@@ -186,11 +203,14 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
             case CARDKB_ADDR:
                 // Do we have the RAK14006 instead?
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x04), 1);
-                if (registerValue == 0x02) {
+                if (registerValue == 0x02)
+                {
                     // KEYPAD_VERSION
                     logFoundDevice("RAK14004", (uint8_t)addr.address);
                     type = RAK14004;
-                } else {
+                }
+                else
+                {
                     logFoundDevice("M5 cardKB", (uint8_t)addr.address);
                     type = CARDKB;
                 }
@@ -209,7 +229,8 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
             case BME_ADDR:
             case BME_ADDR_ALTERNATE:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xD0), 1); // GET_ID
-                switch (registerValue) {
+                switch (registerValue)
+                {
                 case 0x61:
                     logFoundDevice("BME680", (uint8_t)addr.address);
                     type = BME_680;
@@ -224,7 +245,8 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     break;
                 default:
                     registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 1); // GET_ID
-                    switch (registerValue) {
+                    switch (registerValue)
+                    {
                     case 0x50: // BMP-388 should be 0x50
                         logFoundDevice("BMP-388", (uint8_t)addr.address);
                         type = BMP_3XX;
@@ -249,10 +271,13 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
             case INA_ADDR_WAVESHARE_UPS:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFE), 2);
                 LOG_DEBUG("Register MFG_UID: 0x%x", registerValue);
-                if (registerValue == 0x5449) {
+                if (registerValue == 0x5449)
+                {
                     logFoundDevice("INA260", (uint8_t)addr.address);
                     type = INA260;
-                } else { // Assume INA219 if INA260 ID is not found
+                }
+                else
+                { // Assume INA219 if INA260 ID is not found
                     logFoundDevice("INA219", (uint8_t)addr.address);
                     type = INA219;
                 }
@@ -261,10 +286,13 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
             case INA3221_ADDR: // (0x40) can be INA3221, RAK12500 or DFROBOT Lark weather station
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFE), 2);
                 LOG_DEBUG("Register MFG_UID FE: 0x%x", registerValue);
-                if (registerValue == 0x5449) {
+                if (registerValue == 0x5449)
+                {
                     logFoundDevice("INA3221", (uint8_t)addr.address);
                     type = INA3221;
-                } else {
+                }
+                else
+                {
                     /* check the first 2 bytes of the 6 byte response register
                     LARK FW 1.0 should return:
                     RESPONSE_STATUS STATUS_SUCCESS (0x53)
@@ -276,7 +304,8 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     */
                     registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x05), 2);
                     LOG_DEBUG("Register MFG_UID 05: 0x%x", registerValue);
-                    if (registerValue == 0x5305) {
+                    if (registerValue == 0x5305)
+                    {
                         logFoundDevice("DFRobot Lark", (uint8_t)addr.address);
                         type = DFROBOT_LARK;
                     }
@@ -285,29 +314,32 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 break;
 
             case RAK12035VB_ADDR: // (0x20) can be RAK12023VB Soil Sensor or TCA9535 I2C expander
-                // Check if it is a RAK12035, if not can assume it is a TCA9535 I2C expander
-                // the check.. 
-                //  - registry address to interrogate is 0x02,
-                //  - expected value is 0x20
-                // Additional info about registry values for the RAK12035 can be found here [https://github.com/RAKWireless/RAK12035_SoilMoisture/blob/main/RAK12035_SoilMoisture.h]
+                                  // Check if it is a RAK12035, if not can assume it is a TCA9535 I2C expander
+                                  // the check..
+                                  //  - registry address to interrogate is 0x02,
+                                  //  - expected value is 0x20
+                                  // Additional info about registry values for the RAK12035 can be found here [https://github.com/RAKWireless/RAK12035_SoilMoisture/blob/main/RAK12035_SoilMoisture.h]
 
-    #ifdef CAN_HOST_RAK12035VBSOIL
+#ifdef CAN_HOST_RAK12035VBSOIL
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x02), 1); // get the default address for the device (stored in registry here [0x02]).. should come back as 0x20
                 LOG_INFO("Checking for RAK12035VB Soil Sensor with registry address 0x02...");
-                if (registerValue == 0x20) {
+                if (registerValue == 0x20)
+                {
                     LOG_INFO("Found registry value 0x%x", registerValue);
                     type = RAK12035VB;
                     LOG_INFO("RAK12035VB Soil Sensor found");
-                } else {
+                }
+                else
+                {
                     LOG_INFO("Found registry value 0x%x", registerValue);
                     type = TCA9535;
                     LOG_INFO("TCA9535 I2C expander found\n");
                 }
-    #else
+#else
                 LOG_INFO("Found registry value 0x%x", registerValue);
                 type = TCA9535;
                 LOG_INFO("TCA9535 I2C expander found\n");
-    #endif
+#endif
                 break;
 
             case MCP9808_ADDR:
@@ -317,7 +349,8 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 #ifdef HAS_STK8XXX
                     // Check register 0x00 for 0x8700 response to ID STK8BA53 chip.
                     registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 2);
-                    if (registerValue == 0x8700) {
+                    if (registerValue == 0x8700)
+                    {
                         type = STK8BAXX;
                         logFoundDevice("STK8BAXX", (uint8_t)addr.address);
                         break;
@@ -326,7 +359,8 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 
                     // Check register 0x07 for 0x0400 response to ID MCP9808 chip.
                     registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x07), 2);
-                    if (registerValue == 0x0400) {
+                    if (registerValue == 0x0400)
+                    {
                         type = MCP9808;
                         logFoundDevice("MCP9808", (uint8_t)addr.address);
                         break;
@@ -334,7 +368,8 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 
                     // Check register 0x0F for 0x3300 response to ID LIS3DH chip.
                     registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0F), 2);
-                    if (registerValue == 0x3300 || registerValue == 0x3333) { // RAK4631 WisBlock has LIS3DH register at 0x3333
+                    if (registerValue == 0x3300 || registerValue == 0x3333)
+                    { // RAK4631 WisBlock has LIS3DH register at 0x3333
                         type = LIS3DH;
                         logFoundDevice("LIS3DH", (uint8_t)addr.address);
                     }
@@ -342,13 +377,18 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 }
             case SHT31_4x_ADDR:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x89), 2);
-                if (registerValue == 0x11a2 || registerValue == 0x11da || registerValue == 0xe9c) {
+                if (registerValue == 0x11a2 || registerValue == 0x11da || registerValue == 0xe9c)
+                {
                     type = SHT4X;
                     logFoundDevice("SHT4X", (uint8_t)addr.address);
-                } else if (getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x7E), 2) == 0x5449) {
+                }
+                else if (getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x7E), 2) == 0x5449)
+                {
                     type = OPT3001;
                     logFoundDevice("OPT3001", (uint8_t)addr.address);
-                } else {
+                }
+                else
+                {
                     type = SHT31;
                     logFoundDevice("SHT31", (uint8_t)addr.address);
                 }
@@ -359,11 +399,14 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
             case RCWL9620_ADDR:
                 // get MAX30102 PARTID
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFF), 1);
-                if (registerValue == 0x15) {
+                if (registerValue == 0x15)
+                {
                     type = MAX30102;
                     logFoundDevice("MAX30102", (uint8_t)addr.address);
                     break;
-                } else {
+                }
+                else
+                {
                     type = RCWL9620;
                     logFoundDevice("RCWL9620", (uint8_t)addr.address);
                 }
@@ -375,16 +418,20 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 
             case QMI8658_ADDR:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0A), 1); // get ID
-                if (registerValue == 0xC0) {
+                if (registerValue == 0xC0)
+                {
                     type = BQ24295;
                     logFoundDevice("BQ24295", (uint8_t)addr.address);
                     break;
                 }
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0F), 1); // get ID
-                if (registerValue == 0x6A) {
+                if (registerValue == 0x6A)
+                {
                     type = LSM6DS3;
                     logFoundDevice("LSM6DS3", (uint8_t)addr.address);
-                } else {
+                }
+                else
+                {
                     type = QMI8658;
                     logFoundDevice("QMI8658", (uint8_t)addr.address);
                 }
@@ -399,10 +446,13 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 #endif
             case BMA423_ADDR: // this can also be LIS3DH_ADDR_ALT
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0F), 2);
-                if (registerValue == 0x3300 || registerValue == 0x3333) { // RAK4631 WisBlock has LIS3DH register at 0x3333
+                if (registerValue == 0x3300 || registerValue == 0x3333)
+                { // RAK4631 WisBlock has LIS3DH register at 0x3333
                     type = LIS3DH;
                     logFoundDevice("LIS3DH", (uint8_t)addr.address);
-                } else {
+                }
+                else
+                {
                     type = BMA423;
                     logFoundDevice("BMA423", (uint8_t)addr.address);
                 }
@@ -424,10 +474,13 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 
             case MLX90614_ADDR_DEF:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0e), 1);
-                if (registerValue == 0x5a) {
+                if (registerValue == 0x5a)
+                {
                     type = MLX90614;
                     logFoundDevice("MLX90614", (uint8_t)addr.address);
-                } else {
+                }
+                else
+                {
                     type = MPR121KB;
                     logFoundDevice("MPR121KB", (uint8_t)addr.address);
                 }
@@ -436,15 +489,20 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
             case ICM20948_ADDR:     // same as BMX160_ADDR
             case ICM20948_ADDR_ALT: // same as MPU6050_ADDR
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 1);
-                if (registerValue == 0xEA) {
+                if (registerValue == 0xEA)
+                {
                     type = ICM20948;
                     logFoundDevice("ICM20948", (uint8_t)addr.address);
                     break;
-                } else if (addr.address == BMX160_ADDR) {
+                }
+                else if (addr.address == BMX160_ADDR)
+                {
                     type = BMX160;
                     logFoundDevice("BMX160", (uint8_t)addr.address);
                     break;
-                } else {
+                }
+                else
+                {
                     type = MPU6050;
                     logFoundDevice("MPU6050", (uint8_t)addr.address);
                     break;
@@ -454,7 +512,8 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
             case CGRADSENS_ADDR:
                 // Register 0x00 of the RadSens sensor contains is product identifier 0x7D
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 1);
-                if (registerValue == 0x7D) {
+                if (registerValue == 0x7D)
+                {
                     type = CGRADSENS;
                     logFoundDevice("ClimateGuard RadSens", (uint8_t)addr.address);
                     break;
@@ -464,12 +523,15 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
             default:
                 LOG_INFO("Device found at address 0x%x was not able to be enumerated", (uint8_t)addr.address);
             }
-        } else if (err == 4) {
+        }
+        else if (err == 4)
+        {
             LOG_ERROR("Unknown error at address 0x%x", (uint8_t)addr.address);
         }
 
         // Check if a type was found for the enumerated device - save, if so
-        if (type != NONE) {
+        if (type != NONE)
+        {
             deviceAddresses[type] = addr;
             foundDevices[addr] = type;
         }
@@ -483,9 +545,12 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
 
 TwoWire *ScanI2CTwoWire::fetchI2CBus(ScanI2C::DeviceAddress address) const
 {
-    if (address.port == ScanI2C::I2CPort::WIRE) {
+    if (address.port == ScanI2C::I2CPort::WIRE)
+    {
         return &Wire;
-    } else {
+    }
+    else
+    {
 #if WIRE_INTERFACES_COUNT == 2
         return &Wire1;
 #else
