@@ -39,7 +39,9 @@
 #include "Sensor/T1000xSensor.h"
 #include "Sensor/TSL2591Sensor.h"
 #include "Sensor/VEML7700Sensor.h"
-#include "Sensor/RAK12035VBSensor.h"
+#ifdef CAN_HAVE_RAK12035VB_SENSOR
+    #include "Sensor/RAK12035VBSensor.h"
+#endif
 
 BMP085Sensor bmp085Sensor;
 BMP280Sensor bmp280Sensor;
