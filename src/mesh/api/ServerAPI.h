@@ -2,6 +2,8 @@
 
 #include "StreamAPI.h"
 
+#define SERVER_API_DEFAULT_PORT 4403
+
 /**
  * Provides both debug printing and, if the client starts sending protobufs to us, switches to send/receive protobufs
  * (and starts dropping debug printing - FIXME, eventually those prints should be encapsulated in protobufs).
