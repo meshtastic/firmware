@@ -39,9 +39,7 @@
 #include "Sensor/T1000xSensor.h"
 #include "Sensor/TSL2591Sensor.h"
 #include "Sensor/VEML7700Sensor.h"
-#ifdef CAN_HAVE_RAK12035VB_SENSOR
-    #include "Sensor/RAK12035VBSensor.h"
-#endif
+#include "Sensor/RAK12035VBSensor.h"
 
 BMP085Sensor bmp085Sensor;
 BMP280Sensor bmp280Sensor;
@@ -61,9 +59,7 @@ MLX90632Sensor mlx90632Sensor;
 DFRobotLarkSensor dfRobotLarkSensor;
 NAU7802Sensor nau7802Sensor;
 BMP3XXSensor bmp3xxSensor;
-#ifdef CAN_HAVE_RAK12035VB_SENSOR
 RAK12035VBSensor rak12035vbSensor;
-#endif
 #ifdef T1000X_SENSOR_EN
 T1000xSensor t1000xSensor;
 #endif
@@ -157,10 +153,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = max17048Sensor.runOnce();
             if (cgRadSens.hasSensor())
                 result = cgRadSens.runOnce();
-#ifdef CAN_HAVE_RAK12035VB_SENSOR
             if (rak12035vbSensor.hasSensor())
                 result = rak12035vbSensor.runOnce();
-#endif
 #endif
         }
         return result;
@@ -417,12 +411,10 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
         valid = valid && cgRadSens.getMetrics(m);
         hasSensor = true;
     }
-    #ifdef CAN_HAVE_RAK12035VB_SENSOR
     if (rak12035vbSensor.hasSensor()){
         valid = valid && rak12035vbSensor.getMetrics(m);
         hasSensor = true;
     }
-    #endif
 
 #endif
     return valid && hasSensor;
@@ -629,14 +621,12 @@ AdminMessageHandleResult EnvironmentTelemetryModule::handleAdminMessageForModule
         if (result != AdminMessageHandleResult::NOT_HANDLED)
             return result;
     }
-    #ifdef CAN_HAVE_RAK12035VB_SENSOR
     if (rak12035vbSensor.hasSensor()){
         result = rak12035vbSensor.handleAdminMessage(mp, request, response);
         if (result != AdminMessageHandleResult::NOT_HANDLED)
             return result;
     }
     return result;
-    #endif
 }
 
 #endif
