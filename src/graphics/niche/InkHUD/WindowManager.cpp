@@ -60,16 +60,23 @@ void InkHUD::WindowManager::setDriver(Drivers::EInk *driver)
 // This is called in setupNicheGraphics()
 // This should be the only time that specific user applets are mentioned in the code
 // If a user applet is not added with this method, its code should not be built
-void InkHUD::WindowManager::addApplet(const char *name, Applet *a, bool activeByDefault)
+void InkHUD::WindowManager::addApplet(const char *name, Applet *a, bool defaultActive, bool defaultAutoshow)
 {
     userApplets.push_back(a);
 
     // If requested, mark in settings that this applet should be active by default
     // This means that it will be available for the user to cycle to with short-press of the button
-    // This is the default state only: user can activate or deactive applets through the the menu.
+    // This is the default state only: user can activate or deactive applets through the menu.
     // User's choice of active applets is stored in settings, and will be honored instead of these defaults, if present
-    if (activeByDefault)
+    if (defaultActive)
         settings.userApplets.active[userApplets.size() - 1] = true;
+
+    // If requested, mark in settings that this applet should "autoshow" by default
+    // This means that the applet will be automatically brought to foreground when it has new data to show
+    // This is the default state only: user can select which applets have this behavior through the menu
+    // User's selection is stored in settings, and will be honored instead of these defaults, if present
+    if (defaultAutoshow)
+        settings.userApplets.autoshow[userApplets.size() - 1] = true;
 
     // The label that will be show in the applet selection menu, on the device
     a->name = name;
@@ -706,6 +713,22 @@ void InkHUD::WindowManager::render(bool force)
     // otherwise system applets might leave pixels in the gutters between user applets
     if (requestedRenderAll)
         clearBuffer();
+
+    // Autoshow
+    // ---------
+    // If a backgrounded applet requests update, switch it to foreground, if permitted
+    // User selects which applets have this permission via on-screen menu
+    // Priority is determined by the order which applets were added to WindowManager in setupNicheGraphics
+    for (uint8_t i = 0; i < userApplets.size(); i++) {
+        Applet *a = userApplets.at(i);
+        if (a->wantsToRender() && !a->isForeground() && settings.userApplets.autoshow[i]) {
+            Tile *t = userTiles.at(settings.userTiles.focused); // Get focused tile
+            t->displayedApplet->sendToBackground();             // Background whatever applet is already on the tile
+            t->displayedApplet = a;                             // Assign our new applet to tile
+            a->bringToForeground();                             // Foreground our new applet
+            break;                                              // Only do this for one applet. Avoid conflicts.
+        }
+    }
 
     bool imageChanged = false; // If nobody requested an update, we might skip it?
 

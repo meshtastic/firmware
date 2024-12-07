@@ -12,10 +12,9 @@ Features
 []      secondary buttons
 []      eink drivers for other devices
 []      gps menu
-[wip]   jump to applet
+[tbc]   autoshow
 []      mini-compass on nodelist
 [wip]   notifications / vetos
-[tbc]   timeout for menu applet
 []      additional user applets
 [wip]   add extended ascii / foreign language chars
 
@@ -33,6 +32,9 @@ Improvements
 []      Nodelist applet should fill new space from NodeDB when layout changes and applet size increases
 []      Better detection of position changes in PositionsApplet
 []      Don't show hops in nodelist applets if unknown
+[]      Refactor WindowManager::render
+[]      Refactor NodeList applets
+[]      Handle layout / applet changes with render(), instead of the "stale render" technique
 
 Known Bugs
 =====================
@@ -47,10 +49,7 @@ Known Bugs
 
 Chores
 ==========
-[]      Refactor WindowManager::render
-[]      Refactor NodeList applets
 []      Make runOnce methods private
 []      Helper method in InkHUD::Drivers::EInk to simplify framebuffer arithmetic, for anyone else using NicheGraphics
 []      Don't repeat logs from Applet::getTimeString
-[]      Investigate: clearing wantRender flag in getter method bool wantsToRender(), instead of resetDrawingSpace()
 []      honour "max tiles" setting in nicheGraphics.h

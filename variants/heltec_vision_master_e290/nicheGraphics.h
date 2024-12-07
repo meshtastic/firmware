@@ -82,12 +82,13 @@ void setupNicheGraphics()
     InkHUD::settings.userTiles.count = 2;    // Two applets side-by-side
 
     // Pick applets
+    // Note: order of applets determines priority of "auto-show" feature
     windowManager->addApplet("Big Message", new InkHUD::SingleMessageApplet, true);
     windowManager->addApplet("Channel 0", new InkHUD::ThreadedMessageApplet(0), true);
     windowManager->addApplet("Channel 1", new InkHUD::ThreadedMessageApplet(1));
-    windowManager->addApplet("Last Heard", new InkHUD::LastHeardNodesApplet, true);
-    windowManager->addApplet("Active Nodes", new InkHUD::ActiveNodesApplet);
     windowManager->addApplet("Positions", new InkHUD::PositionsApplet, true);
+    windowManager->addApplet("Active Nodes", new InkHUD::ActiveNodesApplet);
+    windowManager->addApplet("Last Heard", new InkHUD::LastHeardNodesApplet, true);
     // windowManager->addApplet("Basic", new InkHUD::BasicExampleApplet);
     // windowManager->addApplet("NewMsg", new InkHUD::NewMsgExampleApplet);
 

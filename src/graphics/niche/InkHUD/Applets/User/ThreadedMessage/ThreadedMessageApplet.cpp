@@ -202,9 +202,9 @@ int InkHUD::ThreadedMessageApplet::onReceiveTextMessage(const meshtastic_MeshPac
     // These records are used when rendering, and also stored in flash at shutdown
     messages.push_front(newMessage);
 
-    // If Applet is currently displayed, redraw it
-    if (isForeground())
-        requestUpdate();
+    // Redraw the applet, perhaps.
+    // Foreground-background and auto-show will be considered by WindowManager
+    requestUpdate();
 
     return 0;
 }

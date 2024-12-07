@@ -44,8 +44,8 @@ class WindowManager : protected concurrency::OSThread
   public:
     static WindowManager *getInstance(); // Get or create singleton instance
 
-    void setDriver(NicheGraphics::Drivers::EInk *driver);                      // Assign a driver class
-    void addApplet(const char *name, Applet *a, bool activeByDefault = false); // Register an applet (during provisioning)
+    void setDriver(NicheGraphics::Drivers::EInk *driver); // Assign a driver class
+    void addApplet(const char *name, Applet *a, bool defaultActive = false, bool defaultAutoshow = false); // Select feature-set
     void begin(); // Start running the window manager (provisioning done)
 
     void createSystemApplets(); // Instantiate and activate system applets

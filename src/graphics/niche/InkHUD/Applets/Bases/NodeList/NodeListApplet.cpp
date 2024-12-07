@@ -350,8 +350,8 @@ bool InkHUD::NodeListApplet::heardRecently(NodeListItem item)
 // Do we want to process this packet with handleReceived()?
 bool InkHUD::NodeListApplet::wantPacket(const meshtastic_MeshPacket *p)
 {
-    // Only interested if the packet *didn't* come from us
-    return !isFromUs(p);
+    // Only interested if the packet *didn't* come from us, and our applet is active
+    return isActive() && !isFromUs(p);
 }
 
 // MeshModule packets arrive here. Hand off the appropriate module
@@ -380,8 +380,9 @@ ProcessMessage InkHUD::NodeListApplet::handleReceived(const meshtastic_MeshPacke
     // Put node in list
     recordHeard(justHeard);
 
-    // Update if applet shown
-    if (isActive() && isForeground() && listChanged)
+    // Redraw the applet, perhaps.
+    // Foreground-background and auto-show will be considered by WindowManager
+    if (listChanged)
         requestUpdate();
 
     return ProcessMessage::CONTINUE; // Let others look at this message also if they want
