@@ -9,6 +9,7 @@
 #include <assert.h>
 
 #include "PortduinoGlue.h"
+#include "api/ServerAPI.h"
 #include "linux/gpio/LinuxGPIOPin.h"
 #include "yaml-cpp/yaml.h"
 #include <filesystem>
@@ -34,7 +35,7 @@ void cpuDeepSleep(uint32_t msecs)
 
 void updateBatteryLevel(uint8_t level) NOT_IMPLEMENTED("updateBatteryLevel");
 
-int TCPPort = 4403;
+int TCPPort = SERVER_API_DEFAULT_PORT;
 
 static error_t parse_opt(int key, char *arg, struct argp_state *state)
 {
