@@ -72,6 +72,7 @@ bool ascending = true;
 
 #define ASCII_BELL 0x07
 
+<<<<<<< HEAD
 struct ExternalNotificationModule::RGB {
     constexpr RGB(uint8_t red, uint8_t green, uint8_t blue) : red{red}, green{green}, blue{blue} {}
 
@@ -81,6 +82,18 @@ struct ExternalNotificationModule::RGB {
     {
     }
 #undef SCALE_ALPHA
+=======
+struct ExternalNotificationModule::Color {
+    constexpr Color(uint8_t red, uint8_t green,uint8_t blue)
+    : red{red}, green{green}, blue{blue}
+    {}
+    
+    #define SCALE_ALPHA(COLOR, ALPHA) (uint8_t)((((uint16_t)COLOR) * ALPHA) / (uint16_t)255)
+    constexpr Color(uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha)
+    : red{SCALE_ALPHA(red, alpha)}, green{SCALE_ALPHA(green, alpha)}, blue{SCALE_ALPHA(blue, alpha)}
+    {}
+    #undef SCALE_ALPHA
+>>>>>>> 79093de8 (Fix compilation error due to `rgb` name conflict.)
 
     uint8_t red = 0;
     uint8_t green = 0;
@@ -254,32 +267,32 @@ void ExternalNotificationModule::stopNow()
 #endif
 }
 
-void ExternalNotificationModule::setLEDs(const RGB &rgb)
+void ExternalNotificationModule::setLEDs(const Color& color)
 {
 
 #ifdef HAS_LED
-    // LOG_DEBUG("setLEDs red=%d, green=%d, blue=%d", rgb.red, rgb.green, rgb.blue);
+    // LOG_DEBUG("setLEDs red=%d, green=%d, blue=%d", color.red, color.green, color.blue);
 
 #ifdef HAS_NCP5623
     if (rgb_found.type == ScanI2C::NCP5623) {
-        rgb.setColor(rgb.red, rgb.green, rgb.blue);
+        rgb.setColor(color.red, color.green, color.blue);
     }
 #endif
 #ifdef RGBLED_CA
-    analogWrite(RGBLED_RED, 255 - rgb.red); // CA type needs reverse logic
-    analogWrite(RGBLED_GREEN, 255 - rgb.green);
-    analogWrite(RGBLED_BLUE, 255 - rgb.blue);
+    analogWrite(RGBLED_RED, 255 - color.red); // CA type needs reverse logic
+    analogWrite(RGBLED_GREEN, 255 - color.green);
+    analogWrite(RGBLED_BLUE, 255 - color.blue);
 #elif defined(RGBLED_RED)
-    analogWrite(RGBLED_RED, rgb.red);
-    analogWrite(RGBLED_GREEN, rgb.green);
-    analogWrite(RGBLED_BLUE, rgb.blue);
+    analogWrite(RGBLED_RED, color.red);
+    analogWrite(RGBLED_GREEN, color.green);
+    analogWrite(RGBLED_BLUE, color.blue);
 #endif
 #ifdef HAS_NEOPIXEL
-    pixels.fill(pixels.Color(rgb.red, rgb.green, rgb.blue), 0, NEOPIXEL_COUNT);
+    pixels.fill(pixels.Color(color.red, color.green, color.blue), 0, NEOPIXEL_COUNT);
     pixels.show();
 #endif
 #ifdef UNPHONE
-    unphone.rgb(rgb.red, rgb.green, rgb.blue);
+    unphone.rgb(color.red, color.green, color.blue);
 #endif
 #endif
 }
