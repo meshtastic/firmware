@@ -1372,11 +1372,14 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
             if (oldestBoringIndex != -1) {
                 oldestIndex = oldestBoringIndex;
             }
-            // Shove the remaining nodes down the chain
-            for (int i = oldestIndex; i < numMeshNodes - 1; i++) {
-                meshNodes->at(i) = meshNodes->at(i + 1);
+
+            if (oldestIndex != -1) {
+                // Shove the remaining nodes down the chain
+                for (int i = oldestIndex; i < numMeshNodes - 1; i++) {
+                    meshNodes->at(i) = meshNodes->at(i + 1);
+                }
+                (numMeshNodes)--;
             }
-            (numMeshNodes)--;
         }
         // add the node at the end
         lite = &meshNodes->at((numMeshNodes)++);
