@@ -8,12 +8,6 @@
 
 using namespace NicheGraphics;
 
-InkHUD::NotificationApplet::NotificationApplet()
-{
-    // Testing only: trigger notification 30 seconds after boot
-    // OSThread::setIntervalFromNow(30 * 1000UL);
-}
-
 void InkHUD::NotificationApplet::onActivate()
 {
     textMessageObserver.observe(textMessageModule);

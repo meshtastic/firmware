@@ -5,7 +5,7 @@
 Base class for Applets which display a list of nodes
 
 Currently, the nodes are always ordered by "most recently seen".
-The two current child classes (ActiveNodesApplet, LastHeardApplet) override the shouldListNode method,
+The two current child classes (ActiveNodesApplet, LastHeardNodesApplet) override the shouldListNode method,
 to determine whether this base class will render an item for any given node.
 
 This is likely to change if more functionality is added (e.g alternative sorting methods)
@@ -32,7 +32,7 @@ class Applet;
 class NodeListApplet : public Applet, public MeshModule, public concurrency::OSThread
 {
   public:
-    NodeListApplet();
+    NodeListApplet(const char *name);
     void render() override;
 
     void onForeground() override;

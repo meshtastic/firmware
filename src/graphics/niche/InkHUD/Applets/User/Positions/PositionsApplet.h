@@ -23,7 +23,7 @@ namespace NicheGraphics::InkHUD
 class PositionsApplet : public MapApplet, public SinglePortModule
 {
   public:
-    PositionsApplet() : SinglePortModule("Positions Applet", meshtastic_PortNum_POSITION_APP) {}
+    PositionsApplet() : SinglePortModule("PositionsApplet", meshtastic_PortNum_POSITION_APP) {}
     void render() override;
 
   protected:

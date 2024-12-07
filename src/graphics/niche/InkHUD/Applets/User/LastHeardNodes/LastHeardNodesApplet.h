@@ -21,7 +21,7 @@ class Applet;
 class LastHeardNodesApplet : public NodeListApplet
 {
   public:
-    LastHeardNodesApplet();
+    LastHeardNodesApplet() : NodeListApplet("LastHeardNodesApplet") {}
     void onActivate() override;
 
   protected:

@@ -7,7 +7,7 @@
 
 using namespace NicheGraphics;
 
-InkHUD::ActiveNodesApplet::ActiveNodesApplet() : NodeListApplet()
+InkHUD::ActiveNodesApplet::ActiveNodesApplet() : NodeListApplet("ActiveNodesApplet")
 {
     // No timer activity at boot
     OSThread::disable();

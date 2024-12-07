@@ -6,7 +6,7 @@
 
 using namespace NicheGraphics;
 
-InkHUD::NodeListApplet::NodeListApplet() : MeshModule("NodeList Applet"), OSThread("NodeList Applet")
+InkHUD::NodeListApplet::NodeListApplet(const char *name) : MeshModule(name), OSThread(name)
 {
     // No scheduled tasks initially
     OSThread::disable();

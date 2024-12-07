@@ -6,6 +6,9 @@ using namespace NicheGraphics;
 
 InkHUD::PlaceholderApplet::PlaceholderApplet()
 {
+    // Because this applet sometimes gets processed as if it were a bonafide user applet,
+    // it's probably better that we do give it a human readable name, just in case it comes up later.
+    // For genuine user applets, this is set by WindowManager::addApplet
     Applet::name = "Placeholder";
 }
 

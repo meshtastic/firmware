@@ -4,11 +4,11 @@
 
 Base class for Applets which show nodes on a map
 
-Currently, the nodes are always ordered by "most recently seen".
-The two current child classes (ActiveNodesApplet, LastHeardApplet) override the shouldListNode method,
-to determine whether this base class will render an item for any given node.
+Plots position of for a selection of nodes, with north facing up.
+Size of cross represents hops away.
+Our own node is identified with a faded label.
 
-This is likely to change if more functionality is added (e.g alternative sorting methods)
+The base applet doesn't handle any events; this is left to the derived applets.
 
 */
 

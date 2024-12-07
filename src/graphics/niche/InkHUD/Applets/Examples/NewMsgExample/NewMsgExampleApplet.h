@@ -31,7 +31,7 @@ class NewMsgExampleApplet : public Applet, public SinglePortModule
 {
   public:
     // The MeshModule API requires us to have a constructor, to specify that we're interested in Text Messages.
-    NewMsgExampleApplet() : SinglePortModule("New Msg", meshtastic_PortNum_TEXT_MESSAGE_APP) {}
+    NewMsgExampleApplet() : SinglePortModule("NewMsgExampleApplet", meshtastic_PortNum_TEXT_MESSAGE_APP) {}
 
     // All drawing happens here
     void render() override;

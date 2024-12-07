@@ -24,8 +24,6 @@ namespace NicheGraphics::InkHUD
 class NotificationApplet : public Applet
 {
   public:
-    NotificationApplet();
-
     void render() override;
     void onActivate() override;
     void onDeactivate() override;
