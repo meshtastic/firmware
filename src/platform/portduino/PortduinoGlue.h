@@ -73,3 +73,4 @@ int initGPIOPin(int pinNum, std::string gpioChipname);
 bool loadConfig(const char *configPath);
 static bool ends_with(std::string_view str, std::string_view suffix);
 void getMacAddr(uint8_t *dmac);
+bool MAC_from_string(std::string mac_str, uint8_t *dmac);

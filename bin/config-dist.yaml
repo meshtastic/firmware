@@ -162,3 +162,4 @@ General:
   MaxMessageQueue: 100
   ConfigDirectory: /etc/meshtasticd/config.d/
 #  MACAddress: AA:BB:CC:DD:EE:FF
+#  MACAddressSource: eth0
