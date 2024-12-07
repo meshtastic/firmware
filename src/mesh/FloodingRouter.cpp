@@ -62,6 +62,7 @@ void FloodingRouter::perhapsCancelDupe(const meshtastic_MeshPacket *p)
 bool FloodingRouter::isRebroadcaster()
 {
     return config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE &&
+           config.device.role != meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND &&
            config.device.rebroadcast_mode != meshtastic_Config_DeviceConfig_RebroadcastMode_NONE;
 }
 
@@ -87,7 +88,7 @@ void FloodingRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
                 // We are careful not to call our hooked version of send() - because we don't want to check this again
                 Router::send(tosend);
             } else {
-                LOG_DEBUG("No rebroadcast: Role = CLIENT_MUTE or Rebroadcast Mode = NONE");
+                LOG_DEBUG("No rebroadcast: CLIENT_MUTE/LOST_AND_FOUND or Rebroadcast Mode = NONE");
             }
         } else {
             LOG_DEBUG("Ignore 0 id broadcast");
