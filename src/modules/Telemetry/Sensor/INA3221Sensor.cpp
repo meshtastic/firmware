@@ -102,4 +102,9 @@ uint16_t INA3221Sensor::getBusVoltageMv()
     return lround(ina3221.getVoltage(BAT_CH) * 1000);
 }
 
+int16_t INA3221Sensor::getCurrentMa()
+{
+    return lround(ina3221.getCurrent(BAT_CH));
+}
+
 #endif
