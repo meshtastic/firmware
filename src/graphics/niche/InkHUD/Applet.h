@@ -126,7 +126,7 @@ class Applet : public GFX
 
     void activate();
     void deactivate();
-    void bringToForeground();
+    void bringToForeground(Drivers::EInk::UpdateTypes updateType = Drivers::EInk::UpdateTypes::UNSPECIFIED);
     void sendToBackground();
 
     // Info about applet's state

@@ -41,11 +41,13 @@ Known Bugs
 [tbc]   detect userinfo (lastheard)
 []      stuck if long-ish button press
 []      T-Echo frontlight: remains on if shutdown while active
-[]      Rare phantom user button short-press on T-Echo when unattended for extended period
+[]      (Rare) phantom user button short-press on T-Echo when unattended for extended period
 []      Timestamps don't update. Needs to happen once a day. "6PM -> Yesterday". Make the WindowManager do it.
 []      Lightsleep shouldn't be possible while update in progress. Set canSleep=false? 
 []      Root menu: header breaks spacing if rtc set while menu open
 []      Applets don't re-render when node is removed via admin command
+[]      (Rare) Incorrect number of lines in threaded message display. Observed in T-Echo with msg "All received here. Happy Saturday all."
+[]      Unexpected "fast refresh" when autoshow occurs 
 
 Chores
 ==========
@@ -53,3 +55,4 @@ Chores
 []      Helper method in InkHUD::Drivers::EInk to simplify framebuffer arithmetic, for anyone else using NicheGraphics
 []      Don't repeat logs from Applet::getTimeString
 []      honour "max tiles" setting in nicheGraphics.h
+[]      Remove parentheses from methods mentioned in comments, to make code search easier

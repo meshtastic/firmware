@@ -344,7 +344,7 @@ void InkHUD::WindowManager::handleButtonLong()
     if (!menuApplet->isForeground()) {
         userTiles.at(settings.userTiles.focused)->displayedApplet->sendToBackground();
         menuApplet->setTile(userTiles.at(settings.userTiles.focused));
-        menuApplet->bringToForeground();
+        menuApplet->bringToForeground(Drivers::EInk::UpdateTypes::FAST);
     }
     // Or let the menu handle it
     else
@@ -434,7 +434,7 @@ void InkHUD::WindowManager::nextApplet()
     // Hide old applet, show new applet
     t->displayedApplet->sendToBackground();
     t->displayedApplet = nextValidApplet;
-    t->displayedApplet->bringToForeground();
+    t->displayedApplet->bringToForeground(Drivers::EInk::UpdateTypes::FAST);
     render(true);
 }
 
