@@ -5,21 +5,27 @@
 #include "sleep.h"
 #include "target_specific.h"
 
+#include "PortduinoGlue.h"
+#include "api/ServerAPI.h"
+#include "linux/gpio/LinuxGPIOPin.h"
+#include "meshUtils.h"
+#include "yaml-cpp/yaml.h"
 #include <Utility.h>
 #include <assert.h>
-
-#include "PortduinoGlue.h"
-#include "linux/gpio/LinuxGPIOPin.h"
-#include "yaml-cpp/yaml.h"
+#include <bluetooth/bluetooth.h>
+#include <bluetooth/hci.h>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <map>
+#include <sys/ioctl.h>
 #include <unistd.h>
 
 std::map<configNames, int> settingsMap;
 std::map<configNames, std::string> settingsStrings;
 std::ofstream traceFile;
 char *configPath = nullptr;
+char *optionMac = nullptr;
 
 // FIXME - move setBluetoothEnable into a HALPlatform class
 void setBluetoothEnable(bool enable)
@@ -34,7 +40,7 @@ void cpuDeepSleep(uint32_t msecs)
 
 void updateBatteryLevel(uint8_t level) NOT_IMPLEMENTED("updateBatteryLevel");
 
-int TCPPort = 4403;
+int TCPPort = SERVER_API_DEFAULT_PORT;
 
 static error_t parse_opt(int key, char *arg, struct argp_state *state)
 {
@@ -48,6 +54,10 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
     case 'c':
         configPath = arg;
         break;
+    case 'h':
+        optionMac = arg;
+        break;
+
     case ARGP_KEY_ARG:
         return 0;
     default:
@@ -60,6 +70,7 @@ void portduinoCustomInit()
 {
     static struct argp_option options[] = {{"port", 'p', "PORT", 0, "The TCP port to use."},
                                            {"config", 'c', "CONFIG_PATH", 0, "Full path of the .yaml config file to use."},
+                                           {"hwid", 'h', "HWID", 0, "The mac address to assign to this virtual machine"},
                                            {0}};
     static void *childArguments;
     static char doc[] = "Meshtastic native build.";
@@ -67,6 +78,51 @@ void portduinoCustomInit()
     static struct argp argp = {options, parse_opt, args_doc, doc, 0, 0, 0};
     const struct argp_child child = {&argp, OPTION_ARG_OPTIONAL, 0, 0};
     portduinoAddArguments(child, childArguments);
+}
+
+void getMacAddr(uint8_t *dmac)
+{
+    // We should store this value, and short-circuit all this if it's already been set.
+    if (optionMac != nullptr && strlen(optionMac) > 0) {
+        if (strlen(optionMac) >= 12) {
+            MAC_from_string(optionMac, dmac);
+            std::cout << optionMac << std::endl;
+        } else {
+            uint32_t hwId = sscanf(optionMac, "%u", &hwId);
+            dmac[0] = 0x80;
+            dmac[1] = 0;
+            dmac[2] = hwId >> 24;
+            dmac[3] = hwId >> 16;
+            dmac[4] = hwId >> 8;
+            dmac[5] = hwId & 0xff;
+        }
+    } else if (settingsStrings[mac_address].length() > 11) {
+        MAC_from_string(settingsStrings[mac_address], dmac);
+        std::cout << settingsStrings[mac_address] << std::endl;
+        exit;
+    } else {
+
+        struct hci_dev_info di;
+        di.dev_id = 0;
+        bdaddr_t bdaddr;
+        char addr[18];
+        int btsock;
+        btsock = socket(AF_BLUETOOTH, SOCK_RAW, 1);
+        if (btsock < 0) { // If anything fails, just return with the default value
+            return;
+        }
+
+        if (ioctl(btsock, HCIGETDEVINFO, (void *)&di)) {
+            return;
+        }
+
+        dmac[0] = di.bdaddr.b[5];
+        dmac[1] = di.bdaddr.b[4];
+        dmac[2] = di.bdaddr.b[3];
+        dmac[3] = di.bdaddr.b[2];
+        dmac[4] = di.bdaddr.b[1];
+        dmac[5] = di.bdaddr.b[0];
+    }
 }
 
 /** apps run under portduino can optionally define a portduinoSetup() to
@@ -113,10 +169,20 @@ void portduinoSetup()
             std::cout << "Unable to use " << configPath << " as config file" << std::endl;
             exit(EXIT_FAILURE);
         }
-    } else if (access("config.yaml", R_OK) == 0 && loadConfig("config.yaml")) {
-        std::cout << "Using local config.yaml as config file" << std::endl;
-    } else if (access("/etc/meshtasticd/config.yaml", R_OK) == 0 && loadConfig("/etc/meshtasticd/config.yaml")) {
-        std::cout << "Using /etc/meshtasticd/config.yaml as config file" << std::endl;
+    } else if (access("config.yaml", R_OK) == 0) {
+        if (loadConfig("config.yaml")) {
+            std::cout << "Using local config.yaml as config file" << std::endl;
+        } else {
+            std::cout << "Unable to use local config.yaml as config file" << std::endl;
+            exit(EXIT_FAILURE);
+        }
+    } else if (access("/etc/meshtasticd/config.yaml", R_OK) == 0) {
+        if (loadConfig("/etc/meshtasticd/config.yaml")) {
+            std::cout << "Using /etc/meshtasticd/config.yaml as config file" << std::endl;
+        } else {
+            std::cout << "Unable to use /etc/meshtasticd/config.yaml as config file" << std::endl;
+            exit(EXIT_FAILURE);
+        }
     } else {
         std::cout << "No 'config.yaml' found, running simulated." << std::endl;
         settingsMap[maxnodes] = 200;               // Default to 200 nodes
@@ -137,6 +203,14 @@ void portduinoSetup()
         }
     }
 
+    uint8_t dmac[6];
+    getMacAddr(dmac);
+    if (dmac[0] == 0 && dmac[1] == 0 && dmac[2] == 0 && dmac[3] == 0 && dmac[4] == 0 && dmac[5] == 0) {
+        std::cout << "*** Blank MAC Address not allowed!" << std::endl;
+        std::cout << "Please set a MAC Address in config.yaml using either MACAddress or MACAddressSource." << std::endl;
+        exit(EXIT_FAILURE);
+    }
+    printBytes("MAC Address: ", dmac, 6);
     // Rather important to set this, if not running simulated.
     randomSeed(time(NULL));
 
@@ -272,6 +346,9 @@ bool loadConfig(const char *configPath)
             settingsMap[use_sx1262] = false;
             settingsMap[use_rf95] = false;
             settingsMap[use_sx1280] = false;
+            settingsMap[use_lr1110] = false;
+            settingsMap[use_lr1120] = false;
+            settingsMap[use_lr1121] = false;
             settingsMap[use_sx1268] = false;
 
             if (yamlConfig["Lora"]["Module"] && yamlConfig["Lora"]["Module"].as<std::string>("") == "sx1262") {
@@ -280,6 +357,12 @@ bool loadConfig(const char *configPath)
                 settingsMap[use_rf95] = true;
             } else if (yamlConfig["Lora"]["Module"] && yamlConfig["Lora"]["Module"].as<std::string>("") == "sx1280") {
                 settingsMap[use_sx1280] = true;
+            } else if (yamlConfig["Lora"]["Module"] && yamlConfig["Lora"]["Module"].as<std::string>("") == "lr1110") {
+                settingsMap[use_lr1110] = true;
+            } else if (yamlConfig["Lora"]["Module"] && yamlConfig["Lora"]["Module"].as<std::string>("") == "lr1120") {
+                settingsMap[use_lr1120] = true;
+            } else if (yamlConfig["Lora"]["Module"] && yamlConfig["Lora"]["Module"].as<std::string>("") == "lr1121") {
+                settingsMap[use_lr1121] = true;
             } else if (yamlConfig["Lora"]["Module"] && yamlConfig["Lora"]["Module"].as<std::string>("") == "sx1268") {
                 settingsMap[use_sx1268] = true;
             }
@@ -400,10 +483,27 @@ bool loadConfig(const char *configPath)
             settingsStrings[webserverrootpath] = (yamlConfig["Webserver"]["RootPath"]).as<std::string>("");
         }
 
-        settingsMap[maxnodes] = (yamlConfig["General"]["MaxNodes"]).as<int>(200);
-        settingsMap[maxtophone] = (yamlConfig["General"]["MaxMessageQueue"]).as<int>(100);
-        settingsStrings[config_directory] = (yamlConfig["General"]["ConfigDirectory"]).as<std::string>("");
+        if (yamlConfig["General"]) {
+            settingsMap[maxnodes] = (yamlConfig["General"]["MaxNodes"]).as<int>(200);
+            settingsMap[maxtophone] = (yamlConfig["General"]["MaxMessageQueue"]).as<int>(100);
+            settingsStrings[config_directory] = (yamlConfig["General"]["ConfigDirectory"]).as<std::string>("");
+            if ((yamlConfig["General"]["MACAddress"]).as<std::string>("") != "" &&
+                (yamlConfig["General"]["MACAddressSource"]).as<std::string>("") != "") {
+                std::cout << "Cannot set both MACAddress and MACAddressSource!" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            settingsStrings[mac_address] = (yamlConfig["General"]["MACAddress"]).as<std::string>("");
+            if ((yamlConfig["General"]["MACAddressSource"]).as<std::string>("") != "") {
+                std::ifstream infile("/sys/class/net/" + (yamlConfig["General"]["MACAddressSource"]).as<std::string>("") +
+                                     "/address");
+                std::getline(infile, settingsStrings[mac_address]);
+            }
 
+            // https://stackoverflow.com/a/20326454
+            settingsStrings[mac_address].erase(
+                std::remove(settingsStrings[mac_address].begin(), settingsStrings[mac_address].end(), ':'),
+                settingsStrings[mac_address].end());
+        }
     } catch (YAML::Exception &e) {
         std::cout << "*** Exception " << e.what() << std::endl;
         return false;
@@ -415,4 +515,20 @@ bool loadConfig(const char *configPath)
 static bool ends_with(std::string_view str, std::string_view suffix)
 {
     return str.size() >= suffix.size() && str.compare(str.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
+bool MAC_from_string(std::string mac_str, uint8_t *dmac)
+{
+    mac_str.erase(std::remove(mac_str.begin(), mac_str.end(), ':'), mac_str.end());
+    if (mac_str.length() == 12) {
+        dmac[0] = std::stoi(settingsStrings[mac_address].substr(0, 2), nullptr, 16);
+        dmac[1] = std::stoi(settingsStrings[mac_address].substr(2, 2), nullptr, 16);
+        dmac[2] = std::stoi(settingsStrings[mac_address].substr(4, 2), nullptr, 16);
+        dmac[3] = std::stoi(settingsStrings[mac_address].substr(6, 2), nullptr, 16);
+        dmac[4] = std::stoi(settingsStrings[mac_address].substr(8, 2), nullptr, 16);
+        dmac[5] = std::stoi(settingsStrings[mac_address].substr(10, 2), nullptr, 16);
+        return true;
+    } else {
+        return false;
+    }
 }
