@@ -203,7 +203,7 @@ void portduinoSetup()
         }
     }
 
-    uint8_t dmac[6];
+    uint8_t dmac[6] = {0};
     getMacAddr(dmac);
     if (dmac[0] == 0 && dmac[1] == 0 && dmac[2] == 0 && dmac[3] == 0 && dmac[4] == 0 && dmac[5] == 0) {
         std::cout << "*** Blank MAC Address not allowed!" << std::endl;
