@@ -35,6 +35,7 @@ Improvements
 []      Refactor WindowManager::render
 []      Refactor NodeList applets
 []      Handle layout / applet changes with render(), instead of the "stale render" technique
+[]      NodeListApplet should only requestUpdate for changed signal strength if node 0-hops (showing signal bars)
 
 Known Bugs
 =====================
@@ -47,7 +48,6 @@ Known Bugs
 []      Root menu: header breaks spacing if rtc set while menu open
 []      Applets don't re-render when node is removed via admin command
 []      (Rare) Incorrect number of lines in threaded message display. Observed in T-Echo with msg "All received here. Happy Saturday all."
-[]      Unexpected "fast refresh" when autoshow occurs 
 
 Chores
 ==========

@@ -344,7 +344,8 @@ void InkHUD::WindowManager::handleButtonLong()
     if (!menuApplet->isForeground()) {
         userTiles.at(settings.userTiles.focused)->displayedApplet->sendToBackground();
         menuApplet->setTile(userTiles.at(settings.userTiles.focused));
-        menuApplet->bringToForeground(Drivers::EInk::UpdateTypes::FAST);
+        menuApplet->bringToForeground();
+        requestUpdate(Drivers::EInk::UpdateTypes::FAST, true, false); // Upgrading request to FAST
     }
     // Or let the menu handle it
     else
@@ -434,8 +435,8 @@ void InkHUD::WindowManager::nextApplet()
     // Hide old applet, show new applet
     t->displayedApplet->sendToBackground();
     t->displayedApplet = nextValidApplet;
-    t->displayedApplet->bringToForeground(Drivers::EInk::UpdateTypes::FAST);
-    render(true);
+    t->displayedApplet->bringToForeground();
+    requestUpdate(Drivers::EInk::UpdateTypes::FAST, true, false); // bringToForeground already requested. Just upgrading to FAST
 }
 
 // Focus on a different tile

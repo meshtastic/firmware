@@ -117,16 +117,14 @@ bool InkHUD::Applet::isActive()
 // Begin showing the Applet
 // It will be rendered immediately to whichever tile it is assigned
 // The window manager will also now honor requestUpdate() calls from this applet
-// An update type may be manually specified, as this method is both used for low-priority unattended behaviors,
-// and for time-critical response to user input
-void InkHUD::Applet::bringToForeground(Drivers::EInk::UpdateTypes updateType)
+void InkHUD::Applet::bringToForeground()
 {
     if (!foreground) {
         foreground = true;
         onForeground(); // Run derived applet class' handler
     }
 
-    requestUpdate(updateType);
+    requestUpdate();
 }
 
 // Stop showing the Applet
