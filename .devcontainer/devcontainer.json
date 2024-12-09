@@ -13,12 +13,23 @@
   },
   "customizations": {
     "vscode": {
-      "extensions": ["ms-vscode.cpptools", "platformio.platformio-ide"]
+      "extensions": [
+        "ms-vscode.cpptools",
+        "platformio.platformio-ide",
+        "Trunk.io"
+      ],
+      "unwantedRecommendations": ["ms-azuretools.vscode-docker"],
+      "settings": {
+        "extensions.ignoreRecommendations": true
+      }
     }
   },
 
   // Use 'forwardPorts' to make a list of ports inside the container available locally.
   "forwardPorts": [4403],
+
+  // Use "--device=" to make a local device available inside the container.
+  // "runArgs": ["--device=/dev/ttyACM0"],
 
   // Run commands to prepare the container for use
   "postCreateCommand": ".devcontainer/setup.sh"
