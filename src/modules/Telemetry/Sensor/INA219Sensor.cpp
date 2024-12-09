@@ -45,4 +45,9 @@ uint16_t INA219Sensor::getBusVoltageMv()
     return lround(ina219.getBusVoltage_V() * 1000);
 }
 
+int16_t INA219Sensor::getCurrentMa()
+{
+    return lround(ina219.getCurrent_mA());
+}
+
 #endif
