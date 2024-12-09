@@ -142,6 +142,9 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /** Attempt to cancel a previously sent packet.  Returns true if a packet was found we could cancel */
     virtual bool cancelSending(NodeNum from, PacketId id) override;
 
+    void enableFan();
+    void disableFan();
+
   private:
     /** if we have something waiting to send, start a short (random) timer so we can come check for collision before actually
      * doing the transmit */

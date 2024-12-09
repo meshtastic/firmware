@@ -49,6 +49,8 @@ template <typename T> bool SX126xInterface<T>::init()
     pinMode(SX126X_POWER_EN, OUTPUT);
 #endif
 
+    enableFan();
+
 #if ARCH_PORTDUINO
     float tcxoVoltage = 0;
     if (settingsMap[dio3_tcxo_voltage])
