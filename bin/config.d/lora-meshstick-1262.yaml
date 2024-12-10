@@ -1,0 +1,8 @@
+Lora:
+  Module: sx1262
+  CS: 0
+  IRQ: 6
+  Reset: 2
+  Busy: 4
+  spidev: ch341
+  DIO3_TCXO_VOLTAGE: true
