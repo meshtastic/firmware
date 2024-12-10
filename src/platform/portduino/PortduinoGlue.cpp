@@ -106,7 +106,6 @@ void getMacAddr(uint8_t *dmac)
         struct hci_dev_info di;
         di.dev_id = 0;
         bdaddr_t bdaddr;
-        char addr[18];
         int btsock;
         btsock = socket(AF_BLUETOOTH, SOCK_RAW, 1);
         if (btsock < 0) { // If anything fails, just return with the default value

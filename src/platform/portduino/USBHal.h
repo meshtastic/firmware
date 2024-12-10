@@ -132,7 +132,8 @@ class Ch341Hal : public RadioLibHal
 
     long pulseIn(uint32_t pin, uint32_t state, unsigned long timeout) override
     {
-        fprintf(stderr, "pulseIn for pin %d is not supported!\n", pin);
+        fprintf(stderr, "pulseIn for pin %u is not supported!\n", pin);
+        return 0;
     }
 
     void spiBegin()
