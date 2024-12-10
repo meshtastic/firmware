@@ -69,8 +69,8 @@ jobs:
           # Transition /usr/share/doc/meshtasticd to /usr/share/meshtasticd
           echo "rm -rf /usr/share/doc/meshtasticd" > .debpkg/DEBIAN/preinst
           chmod +x .debpkg/DEBIAN/preinst
-          echo "/usr/share/meshtasticd /usr/share/doc/meshtasticd" > .debpkg/DEBIAN/meshtasticd.links
-          chmod +x .debpkg/DEBIAN/meshtasticd.links
+          echo "ln -sf /usr/share/meshtasticd /usr/share/doc/meshtasticd" > .debpkg/DEBIAN/postinst
+          chmod +x .debpkg/DEBIAN/postinst
 
       - uses: jiro4989/build-deb-action@v3
         with:
