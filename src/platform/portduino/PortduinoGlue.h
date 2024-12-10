@@ -2,6 +2,8 @@
 #include <fstream>
 #include <map>
 
+#include "platform/portduino/USBHal.h"
+
 enum configNames {
     use_sx1262,
     cs,
@@ -19,6 +21,9 @@ enum configNames {
     use_lr1120,
     use_lr1121,
     use_sx1268,
+    lora_usb_serial_num,
+    lora_usb_pid,
+    lora_usb_vid,
     user,
     gpiochip,
     spidev,
@@ -68,6 +73,7 @@ enum { level_error, level_warn, level_info, level_debug, level_trace };
 extern std::map<configNames, int> settingsMap;
 extern std::map<configNames, std::string> settingsStrings;
 extern std::ofstream traceFile;
+extern Ch341Hal *ch341Hal;
 int initGPIOPin(int pinNum, std::string gpioChipname);
 bool loadConfig(const char *configPath);
 static bool ends_with(std::string_view str, std::string_view suffix);

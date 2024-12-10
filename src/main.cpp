@@ -824,7 +824,7 @@ void setup()
         if (!rIf) {
             LOG_DEBUG("Activate sx1262 radio on SPI port %s", settingsStrings[spidev].c_str());
             if (settingsStrings[spidev] == "ch341") {
-                RadioLibHAL = new Ch341Hal(0);
+                RadioLibHAL = ch341Hal;
             } else {
                 RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
             }

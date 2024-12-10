@@ -21,9 +21,12 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 
+#include "platform/portduino/USBHal.h"
+
 std::map<configNames, int> settingsMap;
 std::map<configNames, std::string> settingsStrings;
 std::ofstream traceFile;
+Ch341Hal *ch341Hal = nullptr;
 char *configPath = nullptr;
 char *optionMac = nullptr;
 
@@ -200,8 +203,36 @@ void portduinoSetup()
             }
         }
     }
-
+    // if we're using a usermode driver, we need to initialize it here, to get a serial number back for mac address
     uint8_t dmac[6] = {0};
+    if (settingsStrings[spidev] == "ch341") {
+        ch341Hal = new Ch341Hal(0);
+        if (settingsStrings[lora_usb_serial_num] != "") {
+            ch341Hal->serial = settingsStrings[lora_usb_serial_num];
+        }
+        ch341Hal->vid = settingsMap[lora_usb_vid];
+        ch341Hal->pid = settingsMap[lora_usb_pid];
+        ch341Hal->init();
+        if (!ch341Hal->isInit()) {
+            std::cout << "Could not initialize CH341 device!" << std::endl;
+            exit(EXIT_FAILURE);
+        }
+        char serial[9] = {0};
+        ch341Hal->getSerialString(serial, 8);
+        std::cout << "Serial " << serial << std::endl;
+        if (strlen(serial) == 8 && settingsStrings[mac_address].length() < 12) {
+            uint8_t hash[32] = {0};
+            memcpy(hash, serial, 8);
+            crypto->hash(hash, 8);
+            dmac[0] = (hash[0] << 4) | 2;
+            dmac[1] = hash[1];
+            dmac[2] = hash[2];
+            dmac[3] = hash[3];
+            dmac[4] = hash[4];
+            dmac[5] = hash[5];
+        }
+    }
+
     getMacAddr(dmac);
     if (dmac[0] == 0 && dmac[1] == 0 && dmac[2] == 0 && dmac[3] == 0 && dmac[4] == 0 && dmac[5] == 0) {
         std::cout << "*** Blank MAC Address not allowed!" << std::endl;
@@ -375,6 +406,9 @@ bool loadConfig(const char *configPath)
             settingsMap[sx126x_ant_sw] = yamlConfig["Lora"]["SX126X_ANT_SW"].as<int>(RADIOLIB_NC);
             settingsMap[gpiochip] = yamlConfig["Lora"]["gpiochip"].as<int>(0);
             settingsMap[spiSpeed] = yamlConfig["Lora"]["spiSpeed"].as<int>(2000000);
+            settingsStrings[lora_usb_serial_num] = yamlConfig["Lora"]["USB_Serialnum"].as<std::string>("");
+            settingsMap[lora_usb_pid] = yamlConfig["Lora"]["USB_PID"].as<int>(0x5512);
+            settingsMap[lora_usb_vid] = yamlConfig["Lora"]["USB_VID"].as<int>(0x1A86);
 
             settingsStrings[spidev] = yamlConfig["Lora"]["spidev"].as<std::string>("spidev0.0");
             if (settingsStrings[spidev] != "ch341") {

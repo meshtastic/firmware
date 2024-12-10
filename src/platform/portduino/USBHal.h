@@ -2,6 +2,7 @@
 #define PI_HAL_LGPIO_H
 
 // include RadioLib
+#include "platform/portduino/PortduinoGlue.h"
 #include <RadioLib.h>
 #include <csignal>
 #include <libpinedio-usb.h>
@@ -27,6 +28,14 @@ class Ch341Hal : public RadioLibHal
     Ch341Hal(uint8_t spiChannel, uint32_t spiSpeed = 2000000, uint8_t spiDevice = 0, uint8_t gpioDevice = 0)
         : RadioLibHal(PI_INPUT, PI_OUTPUT, PI_LOW, PI_HIGH, PI_RISING, PI_FALLING)
     {
+    }
+
+    void getSerialString(char *_serial, size_t len)
+    {
+        if (!pinedio_is_init) {
+            return;
+        }
+        strncpy(_serial, pinedio.serial_number, len);
     }
 
     void init() override
@@ -72,7 +81,7 @@ class Ch341Hal : public RadioLibHal
         if ((interruptNum == RADIOLIB_NC)) {
             return;
         }
-        LOG_DEBUG("Attach interrupt to pin %d", interruptNum);
+        // LOG_DEBUG("Attach interrupt to pin %d", interruptNum);
         pinedio_attach_interrupt(&this->pinedio, (pinedio_int_pin)interruptNum, (pinedio_int_mode)mode, interruptCb);
     }
 
@@ -81,7 +90,7 @@ class Ch341Hal : public RadioLibHal
         if ((interruptNum == RADIOLIB_NC)) {
             return;
         }
-        LOG_DEBUG("Detach interrupt from pin %d", interruptNum);
+        // LOG_DEBUG("Detach interrupt from pin %d", interruptNum);
 
         pinedio_deattach_interrupt(&this->pinedio, (pinedio_int_pin)interruptNum);
     }
@@ -129,11 +138,18 @@ class Ch341Hal : public RadioLibHal
     void spiBegin()
     {
         if (!pinedio_is_init) {
+            if (serial != "") {
+                strncpy(pinedio.serial_number, serial.c_str(), 8);
+                pinedio_set_option(&pinedio, PINEDIO_OPTION_SEARCH_SERIAL, 1);
+            }
+            pinedio_set_option(&pinedio, PINEDIO_OPTION_PID, pid);
+            pinedio_set_option(&pinedio, PINEDIO_OPTION_VID, vid);
             int32_t ret = pinedio_init(&pinedio, NULL);
             if (ret != 0) {
                 fprintf(stderr, "Could not open SPI: %d\n", ret);
             } else {
                 pinedio_is_init = true;
+                // LOG_INFO("USB Serial: %s", pinedio.serial_number);
                 pinedio_set_option(&pinedio, PINEDIO_OPTION_AUTO_CS, 0);
                 pinedio_set_pin_mode(&pinedio, 3, true);
                 pinedio_set_pin_mode(&pinedio, 5, true);
@@ -161,9 +177,15 @@ class Ch341Hal : public RadioLibHal
         }
     }
 
+    bool isInit() { return pinedio_is_init; }
+
+    std::string serial = "";
+    uint32_t pid = 0x5512;
+    uint32_t vid = 0x1A86;
+
   private:
     // the HAL can contain any additional private members
-    pinedio_inst pinedio;
+    pinedio_inst pinedio = {0};
     bool pinedio_is_init = false;
 };
 
