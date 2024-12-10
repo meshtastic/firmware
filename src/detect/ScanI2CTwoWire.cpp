@@ -425,11 +425,14 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 
             case CGRADSENS_ADDR:
                 // Register 0x00 of the RadSens sensor contains is product identifier 0x7D
+                // Undocumented, but some devices return a product identifier of 0x7A
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 1);
-                if (registerValue == 0x7D) {
+                if (registerValue == 0x7D || registerValue == 0x7A) {
                     type = CGRADSENS;
                     logFoundDevice("ClimateGuard RadSens", (uint8_t)addr.address);
                     break;
+                } else {
+                    LOG_DEBUG("Unexpected Device ID for RadSense: addr=0x%x id=0x%x", CGRADSENS_ADDR, registerValue);
                 }
                 break;
 
