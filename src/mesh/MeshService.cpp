@@ -166,27 +166,10 @@ NodeNum MeshService::getNodenumFromRequestId(uint32_t request_id)
  */
 void MeshService::handleToRadio(meshtastic_MeshPacket &p)
 {
-#if defined(ARCH_PORTDUINO) && !HAS_RADIO
-    // Simulates device received a packet via the LoRa chip
-    if (p.decoded.portnum == meshtastic_PortNum_SIMULATOR_APP) {
-        // Simulator packet (=Compressed packet) is encapsulated in a MeshPacket, so need to unwrap first
-        meshtastic_Compressed scratch;
-        meshtastic_Compressed *decoded = NULL;
-        if (p.which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
-            memset(&scratch, 0, sizeof(scratch));
-            p.decoded.payload.size =
-                pb_decode_from_bytes(p.decoded.payload.bytes, p.decoded.payload.size, &meshtastic_Compressed_msg, &scratch);
-            if (p.decoded.payload.size) {
-                decoded = &scratch;
-                // Extract the original payload and replace
-                memcpy(&p.decoded.payload, &decoded->data, sizeof(decoded->data));
-                // Switch the port from PortNum_SIMULATOR_APP back to the original PortNum
-                p.decoded.portnum = decoded->portnum;
-            } else
-                LOG_ERROR("Error decoding proto for simulator message!");
-        }
-        // Let SimRadio receive as if it did via its LoRa chip
-        SimRadio::instance->startReceive(&p);
+#if defined(ARCH_PORTDUINO)
+    if (SimRadio::instance && p.decoded.portnum == meshtastic_PortNum_SIMULATOR_APP) {
+        // Simulates device received a packet via the LoRa chip
+        SimRadio::instance->unpackAndReceive(p);
         return;
     }
 #endif

@@ -215,6 +215,11 @@ typedef enum _meshtastic_HardwareModel {
     /* WisMesh Tap
  RAK-4631 w/ TFT in injection modled case */
     meshtastic_HardwareModel_WISMESH_TAP = 84,
+    /* Similar to PORTDUINO but used by Routastic devices, this is not any
+ particular device and does not run Meshtastic's code but supports
+ the same frame format.
+ Runs on linux, see https://github.com/Jorropo/routastic */
+    meshtastic_HardwareModel_ROUTASTIC = 85,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
