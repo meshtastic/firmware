@@ -20,8 +20,8 @@ Suggest a max of two channel, to minimize fs usage?
 
 #include "configuration.h"
 
-#include "./StoredMessage.h"
 #include "graphics/niche/InkHUD/Applet.h"
+#include "graphics/niche/InkHUD/MessageStore.h"
 
 #include "modules/TextMessageModule.h"
 
@@ -52,7 +52,7 @@ class ThreadedMessageApplet : public Applet
     void saveMessagesToFlash();
     void loadMessagesFromFlash();
 
-    std::deque<StoredMessage> messages;
+    MessageStore *store; // Messages, held in RAM for use, ready to save to flash on shutdown
     uint8_t channelIndex = 0;
 };
 

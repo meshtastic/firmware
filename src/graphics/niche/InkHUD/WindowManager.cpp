@@ -93,7 +93,7 @@ void InkHUD::WindowManager::begin()
         assert(false);
     }
 
-    loadSettingsFromFlash();
+    loadDataFromFlash();
 
     createSystemApplets();
     createSystemTiles();
@@ -287,7 +287,7 @@ int InkHUD::WindowManager::beforeDeepSleep(void *unused)
         a->onShutdown();
     }
 
-    saveSettingsToFlash();
+    saveDataToFlash();
     return 0; // We agree: deep sleep now
 }
 
@@ -300,21 +300,30 @@ int InkHUD::WindowManager::onReceiveTextMessage(const meshtastic_MeshPacket *pac
     // If message is incoming, not outgoing
     if (getFrom(packet) != nodeDB->getNodeNum()) {
 
-        // Copy data from the text message into our InkHUD settings
-        strncpy(settings.lastMessage.text, (const char *)packet->decoded.payload.bytes, packet->decoded.payload.size);
-        settings.lastMessage.text[packet->decoded.payload.size] = '\0'; // Append null term
+        // Determine whether the message is broadcast or a DM
+        // Store this info to prevent confusion after a reboot
+        // Avoids need to compare timestamps, because of situation where "future" messages block newly received, if time not set
+        latestMessage.wasBroadcast = isBroadcast(packet->to);
+
+        // Pick the appropriate variable to store the message in
+        MessageStore::Message *storedMessage = latestMessage.wasBroadcast ? &latestMessage.broadcast : &latestMessage.dm;
 
         // Store nodenum of the sender
         // Applets can use this to fetch user data from nodedb, if they want
-        settings.lastMessage.nodeNum = packet->from;
+        storedMessage->sender = packet->from;
 
         // Store the time (epoch seconds) when message received
-        settings.lastMessage.timestamp = getValidTime(RTCQuality::RTCQualityDevice, true); // Current RTC time
+        storedMessage->timestamp = getValidTime(RTCQuality::RTCQualityDevice, true); // Current RTC time
 
         // Store the channel
         // - (potentially) used to determine whether notification shows
         // - (potentially) used to determine which applet to focus
-        settings.lastMessage.channelIndex = packet->channel;
+        storedMessage->channelIndex = packet->channel;
+
+        // Store the text
+        // Need to specify manually how many bytes, because source not null-terminated
+        storedMessage->text =
+            std::string(&packet->decoded.payload.bytes[0], &packet->decoded.payload.bytes[packet->decoded.payload.size]);
     }
 
     return 0; // Tell caller to continue notifying other observers. (No reason to abort this event)

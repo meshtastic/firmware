@@ -15,6 +15,7 @@ The save / load mechanism is a shared NicheGraphics feature.
 #include "configuration.h"
 
 #include "graphics/niche/FlashData.h"
+#include "graphics/niche/InkHUD/MessageStore.h"
 
 namespace NicheGraphics::InkHUD
 {
@@ -62,17 +63,9 @@ struct Settings {
         bool batteryIcon = false;
     } optionalFeatures;
 
-    // Most recently received text message
-    // Value is updated by InkHUD::WindowManager, as a courtesty to applets
-    // Note: different from devicestate.rx_text_message,
-    // which may contain an *outgoing message* to broadcast
-    struct LastMessage {
-        uint32_t nodeNum = 0;     // Who from
-        uint32_t timestamp = 0;   // When (epoch seconds)
-        uint8_t channelIndex = 0; // Received on which channel
-        char text[255]{0};
-    } lastMessage;
-
+    // Rotation of the display
+    // Multiples of 90 degrees clockwise
+    // Most commonly: rotation is 0 when flex connector is oriented below display
     uint8_t rotation = 1;
 
     // How long do we consider another node to be "active"?
@@ -80,10 +73,21 @@ struct Settings {
     uint32_t recentlyActiveSeconds = 2 * 60;
 };
 
-extern Settings settings;
+// Most recently received text message
+// Value is updated by InkHUD::WindowManager, as a courtesty to applets
+// Note: different from devicestate.rx_text_message,
+// which may contain an *outgoing message* to broadcast
+struct LatestMessage {
+    MessageStore::Message broadcast; // Most recent message received broadcast
+    MessageStore::Message dm;        // Most recent received DM
+    bool wasBroadcast;               // True if most recent broadcast is newer than most recent dm
+};
 
-void loadSettingsFromFlash();
-void saveSettingsToFlash();
+extern Settings settings;
+extern LatestMessage latestMessage;
+
+void loadDataFromFlash();
+void saveDataToFlash();
 
 } // namespace NicheGraphics::InkHUD
 

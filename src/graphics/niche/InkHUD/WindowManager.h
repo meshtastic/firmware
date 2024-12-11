@@ -25,7 +25,7 @@
 
 #include "./Applet.h"
 #include "./Applets/System/Notification/Notification.h"
-#include "./Settings.h"
+#include "./Persistence.h"
 #include "./Tile.h"
 #include "./Types.h"
 #include "graphics/niche/Drivers/EInk/EInk.h"

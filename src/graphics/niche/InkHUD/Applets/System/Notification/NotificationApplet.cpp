@@ -20,14 +20,14 @@ void InkHUD::NotificationApplet::onDeactivate()
 }
 
 // Collect meta-info about the text message, and ask for approval for the notification
-// No need to save the message itself; we can use the cached settings.lastMessage data during render()
+// No need to save the message itself; we can use the cached InkHUD::latestMessage data during render()
 int InkHUD::NotificationApplet::onReceiveTextMessage(const meshtastic_MeshPacket *p)
 {
     Notification n;
     n.timestamp = getValidTime(RTCQuality::RTCQualityDevice, true); // Current RTC time
 
     // Gather info: in-channel message
-    if (p->to == NODENUM_BROADCAST) {
+    if (isBroadcast(p->to)) {
         n.type = Notification::Type::NOTIFICATION_MESSAGE_BROADCAST;
         n.channel = p->channel;
     }
@@ -135,19 +135,23 @@ std::string InkHUD::NotificationApplet::getNotificationText(uint16_t widthAvaila
     if (IS_ONE_OF(currentNotification.type, Notification::Type::NOTIFICATION_MESSAGE_DIRECT,
                   Notification::Type::NOTIFICATION_MESSAGE_BROADCAST)) {
 
-        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(settings.lastMessage.nodeNum);
+        // Although we are handling DM and broadcast notifications together, we do need to treat them slightly differently
+        bool isBroadcast = currentNotification.type == Notification::Type::NOTIFICATION_MESSAGE_BROADCAST;
+
+        // Pick source of message
+        MessageStore::Message *message = isBroadcast ? &latestMessage.broadcast : &latestMessage.dm;
+
+        // Find info about the sender
+        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(message->sender);
 
         // Leading tag (channel vs. DM)
-        if (currentNotification.type == Notification::Type::NOTIFICATION_MESSAGE_DIRECT)
-            text += "DM: ";
-        else
-            text += "From: ";
+        text += isBroadcast ? "From:" : "DM: ";
 
         // Sender id
         if (node && node->has_user)
             text += node->user.short_name;
         else
-            text += hexifyNodeNum(settings.lastMessage.nodeNum);
+            text += hexifyNodeNum(message->sender);
 
         // Check if text fits
         // - use a longer string, if we have the space
@@ -155,19 +159,16 @@ std::string InkHUD::NotificationApplet::getNotificationText(uint16_t widthAvaila
             text.clear();
 
             // Leading tag (channel vs. DM)
-            if (currentNotification.type == Notification::Type::NOTIFICATION_MESSAGE_DIRECT)
-                text += "DM from ";
-            else
-                text += "Msg from ";
+            text += isBroadcast ? "Msg from " : "DM from ";
 
             // Sender id
             if (node && node->has_user)
                 text += node->user.short_name;
             else
-                text += hexifyNodeNum(settings.lastMessage.nodeNum);
+                text += hexifyNodeNum(message->sender);
 
             text += ": ";
-            text += settings.lastMessage.text;
+            text += message->text;
         }
     }
 

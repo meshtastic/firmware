@@ -13,10 +13,13 @@ using namespace NicheGraphics;
 constexpr uint8_t MAX_MESSAGES_SAVED = 10;
 constexpr uint32_t MAX_MESSAGE_SIZE = 250;
 
-// Nested subdirectories where the messages are stored in flash at shutdown
-const char *dirs[3] = {"NicheGraphics", "InkHUD", "thrMsg"};
-
-InkHUD::ThreadedMessageApplet::ThreadedMessageApplet(uint8_t channelIndex) : channelIndex(channelIndex) {}
+InkHUD::ThreadedMessageApplet::ThreadedMessageApplet(uint8_t channelIndex) : channelIndex(channelIndex)
+{
+    // Create the message store
+    // Will shortly attempt to load messages from RAM, if applet is active
+    // Label (filename in flash) is set from channel index
+    store = new MessageStore("ch" + to_string(channelIndex));
+}
 
 void InkHUD::ThreadedMessageApplet::render()
 {
@@ -63,10 +66,10 @@ void InkHUD::ThreadedMessageApplet::render()
     // Loop over messages
     // - until no messages left, or
     // - until no part of message fits on screen
-    while (msgB >= (0 - fontSmall.lineHeight()) && i < messages.size()) {
+    while (msgB >= (0 - fontSmall.lineHeight()) && i < store->messages.size()) {
 
         // Grab data for message
-        StoredMessage &m = messages.at(i);
+        MessageStore::Message &m = store->messages.at(i);
         bool outgoing = (m.sender == 0);
         meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(m.sender);
 
@@ -155,8 +158,8 @@ void InkHUD::ThreadedMessageApplet::render()
 
     // If we've run out of screen to draw messages, we can drop any leftover data from the queue
     // Those messages have been pushed off the screen-top by newer ones
-    while (i < messages.size())
-        messages.pop_back();
+    while (i < store->messages.size())
+        store->messages.pop_back();
 }
 
 // Code which runs when the applet begins running
@@ -193,14 +196,15 @@ int InkHUD::ThreadedMessageApplet::onReceiveTextMessage(const meshtastic_MeshPac
         return 0;
 
     // Extract info into our slimmed-down "StoredMessage" type
-    StoredMessage newMessage;
+    MessageStore::Message newMessage;
     newMessage.timestamp = getValidTime(RTCQuality::RTCQualityDevice, true); // Current RTC time
     newMessage.sender = p->from;
-    newMessage.text = (const char *)p->decoded.payload.bytes;
+    newMessage.channelIndex = p->channel;
+    newMessage.text = std::string(&p->decoded.payload.bytes[0], &p->decoded.payload.bytes[p->decoded.payload.size]);
 
     // Store newest message at front
     // These records are used when rendering, and also stored in flash at shutdown
-    messages.push_front(newMessage);
+    store->messages.push_front(newMessage);
 
     // Redraw the applet, perhaps.
     // Foreground-background and auto-show will be considered by WindowManager
@@ -215,47 +219,10 @@ int InkHUD::ThreadedMessageApplet::onReceiveTextMessage(const meshtastic_MeshPac
 // Messages are packed "back-to-back", to minimize blocks of flash used
 void InkHUD::ThreadedMessageApplet::saveMessagesToFlash()
 {
+    // Create a label (will become the filename in flash)
+    std::string label = "ch" + to_string(channelIndex);
 
-#ifdef FSCom
-    // Create the nested directories, if they don't already exist
-    std::string dir;
-    for (uint8_t i = 0; i < (sizeof(dirs) / sizeof(dirs[0])); i++) {
-        dir += '/';
-        dir += dirs[i];
-        FSCom.mkdir(dir.c_str());
-    }
-
-    // Get a filename based on the channel index
-    std::string filename = dir;
-    filename += "/ch" + to_string(channelIndex) + ".dat";
-
-    // Open or create the file
-    // No "full atomic": don't save then rename
-    auto f = SafeFile(filename.c_str(), false);
-
-    LOG_INFO("Saving ch%u messages in %s", (uint32_t)channelIndex, filename.c_str());
-
-    // 1st byte: how many messages will be written to store
-    f.write(messages.size());
-
-    // For each message
-    for (uint8_t i = 0; i < messages.size() && i < MAX_MESSAGES_SAVED; i++) {
-        StoredMessage &m = messages.at(i);
-        f.write((uint8_t *)&m.timestamp, sizeof(m.timestamp));                    // Write timestamp. 4 bytes
-        f.write((uint8_t *)&m.sender, sizeof(m.sender));                          // Write sender NodeId. 4 Bytes
-        f.write((uint8_t *)m.text.c_str(), min(MAX_MESSAGE_SIZE, m.text.size())); // Write message text. Variable length
-        f.write('\0');                                                            // Append null term
-        LOG_DEBUG("Wrote message %u, length %u, text \"%s\"", (uint32_t)i, min(MAX_MESSAGE_SIZE, m.text.size()), m.text.c_str());
-    }
-
-    bool writeSucceeded = f.close();
-
-    if (!writeSucceeded) {
-        LOG_ERROR("Can't write data!");
-    }
-#else
-    LOG_ERROR("ERROR: Filesystem not implemented\n");
-#endif
+    store->saveToFlash();
 }
 
 // Load recent messages to flash
@@ -263,73 +230,10 @@ void InkHUD::ThreadedMessageApplet::saveMessagesToFlash()
 // Just enough messages have been stored to cover the display
 void InkHUD::ThreadedMessageApplet::loadMessagesFromFlash()
 {
-#ifdef FSCom
-    // Get a filename based on the channel index
-    std::string filename;
-    for (uint8_t i = 0; i < (sizeof(dirs) / sizeof(dirs[0])); i++) {
-        filename += '/';
-        filename += dirs[i];
-    }
-    filename += "/ch" + to_string(channelIndex) + ".dat";
+    // Create a label (will become the filename in flash)
+    std::string label = "ch" + to_string(channelIndex);
 
-    // Check that the file *does* actually exist
-    if (!FSCom.exists(filename.c_str())) {
-        LOG_INFO("'%s' not found.", filename.c_str());
-        return;
-    }
-
-    // Open the file
-    auto f = FSCom.open(filename.c_str(), FILE_O_READ);
-
-    if (f.size() == 0) {
-        LOG_INFO("%s is empty", filename.c_str());
-        f.close();
-        return;
-    }
-
-    // If opened, start reading
-    if (f) {
-        LOG_INFO("Loading threaded messages '%s'", filename.c_str());
-
-        // First byte: how many messages are in the flash store
-        uint8_t flashMessageCount = 0;
-        f.readBytes((char *)&flashMessageCount, 1);
-        LOG_DEBUG("Messages available: %u", (uint32_t)flashMessageCount);
-
-        // For each message
-        for (uint8_t i = 0; i < flashMessageCount && i < MAX_MESSAGES_SAVED; i++) {
-            StoredMessage m;
-
-            // Read meta data (fixed width)
-            f.readBytes((char *)&m.timestamp, sizeof(m.timestamp));
-            f.readBytes((char *)&m.sender, sizeof(m.sender));
-
-            // Read characters until we find a null term
-            char c;
-            while (m.text.size() < MAX_MESSAGE_SIZE) {
-                f.readBytes(&c, 1);
-                if (c != '\0')
-                    m.text += c;
-                else
-                    break;
-            }
-
-            // Store in RAM
-            messages.push_back(m);
-
-            LOG_DEBUG("#%u, timestamp=%u, sender(num)=%u, sender(id)=%s, text=\"%s\"", (uint32_t)i, m.timestamp, m.sender,
-                      hexifyNodeNum(m.sender).c_str(), m.text.c_str());
-        }
-
-        f.close();
-    } else {
-        LOG_ERROR("Could not open / read %s", filename.c_str());
-    }
-#else
-    LOG_ERROR("Filesystem not implemented");
-    state = LoadFileState::NO_FILESYSTEM;
-#endif
-    return;
+    store->loadFromFlash();
 }
 
 // Code to run when device is shutting down
