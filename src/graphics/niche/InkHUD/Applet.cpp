@@ -355,7 +355,7 @@ void InkHUD::Applet::printWrapped(int16_t left, int16_t top, uint16_t width, std
             // Word is short
             if (w < width) {
                 // Word fits on current line
-                if ((l + w) < left + width) {
+                if ((l + w + wSp) < left + width) {
                     // Print the word (or simulate printing)
                     if (!simulate)
                         print(word.c_str());
