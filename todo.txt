@@ -47,7 +47,7 @@ Known Bugs
 []      Lightsleep shouldn't be possible while update in progress. Set canSleep=false? 
 []      Root menu: header breaks spacing if rtc set while menu open
 []      Applets don't re-render when node is removed via admin command
-[]      (Rare) Incorrect number of lines in threaded message display. Observed in T-Echo with msg "All received here. Happy Saturday all."
+[tbc]   (Rare) Incorrect number of lines in threaded message display. Observed in T-Echo with msg "All received here. Happy Saturday all."
 
 Chores
 ==========

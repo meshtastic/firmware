@@ -23,9 +23,10 @@ Different NicheGraphics UIs and different hardware variants will each have their
 
 // Applets
 #include "graphics/niche/InkHUD/Applets/User/ActiveNodes/ActiveNodesApplet.h"
+#include "graphics/niche/InkHUD/Applets/User/AllMessage/AllMessageApplet.h"
+#include "graphics/niche/InkHUD/Applets/User/DM/DMApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/LastHeardNodes/LastHeardNodesApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/Positions/PositionsApplet.h"
-#include "graphics/niche/InkHUD/Applets/User/SingleMessage/SingleMessageApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/ThreadedMessage/ThreadedMessageApplet.h"
 
 // #include "graphics/niche/InkHUD/Applets/Examples/BasicExample/BasicExampleApplet.h"
@@ -83,8 +84,9 @@ void setupNicheGraphics()
 
     // Pick applets
     // Note: order of applets determines priority of "auto-show" feature
-    windowManager->addApplet("Big Message", new InkHUD::SingleMessageApplet, true);
-    windowManager->addApplet("Channel 0", new InkHUD::ThreadedMessageApplet(0), true);
+    windowManager->addApplet("All Messages", new InkHUD::AllMessageApplet, true);
+    windowManager->addApplet("DMs", new InkHUD::DMApplet);
+    windowManager->addApplet("Channel 0", new InkHUD::ThreadedMessageApplet(0));
     windowManager->addApplet("Channel 1", new InkHUD::ThreadedMessageApplet(1));
     windowManager->addApplet("Positions", new InkHUD::PositionsApplet, true);
     windowManager->addApplet("Active Nodes", new InkHUD::ActiveNodesApplet);

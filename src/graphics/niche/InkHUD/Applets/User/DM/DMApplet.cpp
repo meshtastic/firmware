@@ -1,43 +1,37 @@
 #ifdef MESHTASTIC_INCLUDE_INKHUD
 
-#include "./SingleMessageApplet.h"
+#include "./DMApplet.h"
 
 using namespace NicheGraphics;
 
-void InkHUD::SingleMessageApplet::onActivate()
+void InkHUD::DMApplet::onActivate()
 {
     textMessageObserver.observe(textMessageModule);
 }
 
-void InkHUD::SingleMessageApplet::onDeactivate()
+void InkHUD::DMApplet::onDeactivate()
 {
     textMessageObserver.unobserve(textMessageModule);
 }
 
 // We're not consuming the data passed to this method;
 // we're just just using it to trigger a render
-int InkHUD::SingleMessageApplet::onReceiveTextMessage(const meshtastic_MeshPacket *p)
+int InkHUD::DMApplet::onReceiveTextMessage(const meshtastic_MeshPacket *p)
 {
-    requestUpdate();
+    if (!isBroadcast(p->to))
+        requestUpdate();
 
     // Return zero: no issues here, carry on notifying other observers!
     return 0;
 }
 
-void InkHUD::SingleMessageApplet::render()
+void InkHUD::DMApplet::render()
 {
     setFont(fontSmall);
 
-    // Find newest message, regardless of whether DM or broadcast
-    MessageStore::Message *message;
-    if (latestMessage.wasBroadcast)
-        message = &latestMessage.broadcast;
-    else
-        message = &latestMessage.dm;
-
-    // Short circuit: no text message
-    if (!message->sender) {
-        printAt(X(0.5), Y(0.5), "No Message", CENTER, MIDDLE);
+    // Abort if no text message
+    if (!latestMessage.dm.sender) {
+        printAt(X(0.5), Y(0.5), "No DMs", CENTER, MIDDLE);
         return;
     }
 
@@ -52,28 +46,32 @@ void InkHUD::SingleMessageApplet::render()
 
     // RX Time
     // - if valid
-    std::string timeString = getTimeString(message->timestamp);
-    if (timeString.length() > 0)
+    std::string timeString = getTimeString(latestMessage.dm.timestamp);
+    if (timeString.length() > 0) {
         header += timeString;
-    else
-        header += "From";
-
-    header += ": ";
+        header += ": ";
+    }
 
     // Sender's id
     // - shortname, if available, or
     // - node id
-    meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(message->sender);
+    meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(latestMessage.dm.sender);
     if (sender && sender->has_user) {
         header += sender->user.short_name;
         header += " (";
         header += sender->user.long_name;
         header += ")";
     } else
-        header += hexifyNodeNum(message->sender);
+        header += hexifyNodeNum(latestMessage.dm.sender);
 
     // Draw a "standard" applet header
     drawHeader(header);
+
+    // Fade the right edge of the header, if text spills over edge
+    uint8_t wF = getFont().lineHeight() / 2; // Width of fade effect
+    uint8_t hF = getHeaderHeight();          // Height of fade effect
+    if (getCursorX() > width())
+        hatchRegion(width() - wF - 1, 1, wF, hF, 2, WHITE);
 
     // Dimensions of the header
     constexpr int16_t padDivH = 2;
@@ -88,23 +86,20 @@ void InkHUD::SingleMessageApplet::render()
 
     // Determine size if printed large
     setFont(fontLarge);
-    uint32_t textHeight = getWrappedTextHeight(0, width(), message->text);
+    uint32_t textHeight = getWrappedTextHeight(0, width(), latestMessage.dm.text);
 
     // If too large, swap to small font
     if (textHeight + textTop > (uint32_t)height()) // (compare signed and unsigned)
         setFont(fontSmall);
 
     // Print text
-    printWrapped(0, textTop, width(), message->text);
+    printWrapped(0, textTop, width(), latestMessage.dm.text);
 }
 
-// Don't show notifications for text messages when our applet is displayed
-bool InkHUD::SingleMessageApplet::approveNotification(Notification &n)
+// Don't show notifications for direct messages when our applet is displayed
+bool InkHUD::DMApplet::approveNotification(Notification &n)
 {
-    if (n.type == Notification::Type::NOTIFICATION_MESSAGE_BROADCAST)
-        return false;
-
-    else if (n.type == Notification::Type::NOTIFICATION_MESSAGE_DIRECT)
+    if (n.type == Notification::Type::NOTIFICATION_MESSAGE_DIRECT)
         return false;
 
     else

@@ -20,7 +20,7 @@
     This concept is only for our understanding; as far at the code is concerned, both are just "Applets"
 
     User applets are the "normal" applets.
-    User applets are applets like "SingleMessageApplet", or "MapApplet".
+    User applets are applets like "AllMessageApplet", or "MapApplet".
     User applets may be enabled / disabled by user, via the on-screen menu.
     Incorporating new UserApplets is easy: just add them during setupNicheGraphics
     If a UserApplet is not added during setupNicheGraphics, it will not be built.

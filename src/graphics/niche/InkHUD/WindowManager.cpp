@@ -602,7 +602,7 @@ void InkHUD::WindowManager::toggleBatteryIcon()
 // Allow applets to suppress notifications
 // Applets will be asked whether they approve, before a notification is shown via the NotificationApplet
 // An applet might want to suppress a notification if the applet itself already displays this info
-// Example: SingleMessageApplet should not approve notifications for messages, if it is in foreground
+// Example: AllMessageApplet should not approve notifications for messages, if it is in foreground
 bool InkHUD::WindowManager::approveNotification(InkHUD::Notification &n)
 {
     // Ask all currently displayed applets

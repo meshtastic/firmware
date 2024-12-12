@@ -2,7 +2,8 @@
 
 /*
 
-Shows the latest incoming text message, as well as sender
+Shows the latest incoming *Direct Message* (DM), as well as sender.
+This compliments the threaded message applets
 
 This module doesn't doesn't use the devicestate.rx_text_message,' as this is overwritten to contain outgoing messages
 This module doesn't collect its own text message. Instead, the WindowManager stores the most recent incoming text message.
@@ -26,7 +27,7 @@ namespace NicheGraphics::InkHUD
 
 class Applet;
 
-class SingleMessageApplet : public Applet
+class DMApplet : public Applet
 {
   public:
     void render() override;
@@ -39,8 +40,8 @@ class SingleMessageApplet : public Applet
     int onReceiveTextMessage(const meshtastic_MeshPacket *p);
 
   protected:
-    CallbackObserver<SingleMessageApplet, const meshtastic_MeshPacket *> textMessageObserver =
-        CallbackObserver<SingleMessageApplet, const meshtastic_MeshPacket *>(this, &SingleMessageApplet::onReceiveTextMessage);
+    CallbackObserver<DMApplet, const meshtastic_MeshPacket *> textMessageObserver =
+        CallbackObserver<DMApplet, const meshtastic_MeshPacket *>(this, &DMApplet::onReceiveTextMessage);
 };
 
 } // namespace NicheGraphics::InkHUD

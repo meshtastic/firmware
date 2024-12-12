@@ -588,7 +588,7 @@ void InkHUD::Applet::printThick(int16_t xCenter, int16_t yCenter, std::string te
 // Allow this applet to suppress notifications
 // Asked before a notification is shown via the NotificationApplet
 // An applet might want to suppress a notification if the applet itself already displays this info
-// Example: SingleMessageApplet should not approve notifications for messages, if it is in foreground
+// Example: AllMessageApplet should not approve notifications for messages, if it is in foreground
 bool InkHUD::Applet::approveNotification(InkHUD::Notification &n)
 {
     // By default, no objection
