@@ -22,6 +22,12 @@ void InkHUD::PositionsApplet::render()
 // Determine if we need to redraw the map, when we receive a new position packet
 ProcessMessage InkHUD::PositionsApplet::handleReceived(const meshtastic_MeshPacket &mp)
 {
+    // If applet is not active, we shouldn't be handling any data
+    // It's good practice for all applets to implement an early return like this
+    // for PositionsApplet, this is **required** - it's where we're handling active vs deactive
+    if (!isActive())
+        return ProcessMessage::CONTINUE;
+
     // Try decode a position from the packet
     bool hasPosition = false;
     float lat;

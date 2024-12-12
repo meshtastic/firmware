@@ -23,6 +23,11 @@ void InkHUD::NotificationApplet::onDeactivate()
 // No need to save the message itself; we can use the cached InkHUD::latestMessage data during render()
 int InkHUD::NotificationApplet::onReceiveTextMessage(const meshtastic_MeshPacket *p)
 {
+    // Abort if applet fully deactivated
+    // Already handled by onActivate and onDeactivate, but good practice for all applets
+    if (!isActive())
+        return 0;
+
     Notification n;
     n.timestamp = getValidTime(RTCQuality::RTCQualityDevice, true); // Current RTC time
 

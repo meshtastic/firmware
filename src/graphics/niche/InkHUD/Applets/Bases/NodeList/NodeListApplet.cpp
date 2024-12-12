@@ -357,6 +357,11 @@ bool InkHUD::NodeListApplet::wantPacket(const meshtastic_MeshPacket *p)
 // MeshModule packets arrive here. Hand off the appropriate module
 ProcessMessage InkHUD::NodeListApplet::handleReceived(const meshtastic_MeshPacket &mp)
 {
+    // Abort if applet fully deactivated
+    // Already handled by wantPacket in this case, but good practice for all applets, as some *do* require this early return
+    if (!isActive())
+        return ProcessMessage::CONTINUE;
+
     // Compile info about this event
     NodeListItem justHeard;
     justHeard.nodeNum = mp.from;

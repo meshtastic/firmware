@@ -18,7 +18,11 @@ void InkHUD::AllMessageApplet::onDeactivate()
 // we're just just using it to trigger a render
 int InkHUD::AllMessageApplet::onReceiveTextMessage(const meshtastic_MeshPacket *p)
 {
-    requestUpdate();
+    // Abort if applet fully deactivated
+    // Already handled by onActivate and onDeactivate, but good practice for all applets
+    if (!isActive())
+        return 0;
+
 
     // Return zero: no issues here, carry on notifying other observers!
     return 0;

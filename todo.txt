@@ -26,6 +26,10 @@ Critical Tasks
 []      imperial units
 []      optimize fast / full referesh: less blinking
 []      handle emoji in shortname
+[]      ble pairing screen
+[]      boot and shutdown screens
+[]      hook reboot to save flash data
+[]      Split requestUpdate and requestAutoshow
 
 Improvements
 ====================
@@ -36,6 +40,7 @@ Improvements
 []      Refactor NodeList applets
 []      Handle layout / applet changes with render(), instead of the "stale render" technique
 []      NodeListApplet should only requestUpdate for changed signal strength if node 0-hops (showing signal bars)
+[]      Descriptive headers for some settings in menu
 
 Known Bugs
 =====================

@@ -183,7 +183,8 @@ void InkHUD::ThreadedMessageApplet::onDeactivate()
 // Method should return 0, to indicate general success to TextMessageModule
 int InkHUD::ThreadedMessageApplet::onReceiveTextMessage(const meshtastic_MeshPacket *p)
 {
-    // Short circuit: applet is fully disabled
+    // Abort if applet fully deactivated
+    // Already handled by onActivate and onDeactivate, but good practice for all applets
     if (!isActive())
         return 0;
 

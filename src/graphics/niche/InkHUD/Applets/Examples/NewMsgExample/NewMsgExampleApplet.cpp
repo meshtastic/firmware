@@ -8,6 +8,10 @@ using namespace NicheGraphics;
 ProcessMessage InkHUD::NewMsgExampleApplet::handleReceived(const meshtastic_MeshPacket &mp)
 {
 
+    // Abort if applet fully deactivated
+    if (!isActive())
+        return ProcessMessage::CONTINUE;
+
     // Check that this is an incoming message
     // Outgoing messages (sent by us) will also call handleReceived
 

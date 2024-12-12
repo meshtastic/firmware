@@ -22,6 +22,11 @@ void InkHUD::BatteryIconApplet::onDeactivate()
 
 int InkHUD::BatteryIconApplet::onPowerStatusUpdate(const meshtastic::Status *status)
 {
+    // Abort if applet fully deactivated
+    // Already handled by onActivate and onDeactivate, but good practice for all applets
+    if (!isActive())
+        return 0;
+
     // This method should only receive power statuses
     // If we get a different type of status, something has gone weird elsewhere
     assert(status->getStatusType() == STATUS_TYPE_POWER);
