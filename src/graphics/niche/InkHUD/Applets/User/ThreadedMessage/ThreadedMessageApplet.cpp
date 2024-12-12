@@ -208,8 +208,8 @@ int InkHUD::ThreadedMessageApplet::onReceiveTextMessage(const meshtastic_MeshPac
     store->messages.push_front(newMessage);
 
     // Redraw the applet, perhaps.
-    // Foreground-background and auto-show will be considered by WindowManager
-    requestUpdate();
+    requestAutoshow(); // Want to become foreground, if permitted
+    requestUpdate();   // Want to update display, if applet is foreground
 
     return 0;
 }

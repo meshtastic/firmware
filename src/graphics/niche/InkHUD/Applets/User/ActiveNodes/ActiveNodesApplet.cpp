@@ -56,6 +56,8 @@ void InkHUD::ActiveNodesApplet::updateActivityInfo()
             i++;
     }
 
+    // Note: not requesting autoshow, because we're purging old data, not displaying new
+    // In this situtaion, the display will only update if our applet is already foreground, even if autoshow is permitted
     if (modified)
         requestUpdate();
 }

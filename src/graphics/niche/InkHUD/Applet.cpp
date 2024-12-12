@@ -55,6 +55,16 @@ bool InkHUD::Applet::wantsToRender()
     return wantRender;
 }
 
+// Does the applet want to be moved to foreground before next render, to show new data?
+// User specifies whether an applet has permission for this, using the on-screen menu
+// Note: calling this method clears a pending autoshow request
+bool InkHUD::Applet::wantsToAutoshow()
+{
+    bool want = wantAutoshow;
+    wantAutoshow = false; // Clear the flag now, because we're reading it
+    return want;
+}
+
 // Ensure that render() always starts with the same initial drawing config
 void InkHUD::Applet::resetDrawingSpace()
 {
@@ -76,6 +86,13 @@ void InkHUD::Applet::requestUpdate(Drivers::EInk::UpdateTypes type, bool async, 
 {
     wantRender = true;
     WindowManager::getInstance()->requestUpdate(type, async, allTiles);
+}
+
+// Ask window manager to move this applet to foreground at start of next render
+// Users select which applets have permission for this using the on-screen menu
+void InkHUD::Applet::requestAutoshow()
+{
+    wantAutoshow = true;
 }
 
 // Called when an Applet begins running

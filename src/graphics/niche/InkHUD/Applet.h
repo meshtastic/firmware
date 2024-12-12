@@ -119,6 +119,7 @@ class Applet : public GFX
     void setTile(Tile *t); // Applets draw via a tile (for multiplexing)
     Tile *getTile();
     bool wantsToRender();      // Check whether applet wants to render, or okay to skip, preserving old tile image
+    bool wantsToAutoshow();    // Check whether applets wants to become foreground, to show new data, if permitted
     void resetDrawingSpace();  // Clear wantRender flag, and reset the drawing space
     virtual void render() = 0; // All drawing happens here
 
@@ -158,6 +159,9 @@ class Applet : public GFX
     // Tell WindowManager to update display
     void requestUpdate(EInk::UpdateTypes type = EInk::UpdateTypes::UNSPECIFIED, bool async = true, bool allTiles = false);
 
+    // Ask for applet to be moved to foreground
+    void requestAutoshow();
+
     uint16_t X(float f);                                                      // Map applet width, mapped from 0 to 1.0
     uint16_t Y(float f);                                                      // Map applet height, mapped from 0 to 1.0
     void setCrop(int16_t left, int16_t top, uint16_t width, uint16_t height); // Ignore pixels drawn outside a certain region
@@ -190,10 +194,11 @@ class Applet : public GFX
     static AppletFont fontSmall, fontLarge; // General purpose fonts, used cross-applet
 
   private:
-    Tile *assignedTile;      // Rendered pixels are fed into a Tile object, which translates them, then passes to WM
-    bool active = false;     // Has the user enabled this applet (at run-time)?
-    bool foreground = false; // Is the applet currently drawn on a tile?
-    bool wantRender = false; // In some situations, checked by WindowManager when updating, to skip unneeded redrawing.
+    Tile *assignedTile;        // Rendered pixels are fed into a Tile object, which translates them, then passes to WM
+    bool active = false;       // Has the user enabled this applet (at run-time)?
+    bool foreground = false;   // Is the applet currently drawn on a tile?
+    bool wantRender = false;   // In some situations, checked by WindowManager when updating, to skip unneeded redrawing.
+    bool wantAutoshow = false; // Does the applet have new data it would like to display in foreground?
 
     using GFX::setFont;     // Make sure derived classes use AppletFont instead of AdafruitGFX fonts directly
     using GFX::setRotation; // Block setRotation calls. Rotation is handled globally by WindowManager.

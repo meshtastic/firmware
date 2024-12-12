@@ -386,9 +386,10 @@ ProcessMessage InkHUD::NodeListApplet::handleReceived(const meshtastic_MeshPacke
     recordHeard(justHeard);
 
     // Redraw the applet, perhaps.
-    // Foreground-background and auto-show will be considered by WindowManager
-    if (listChanged)
-        requestUpdate();
+    if (listChanged) {
+        requestAutoshow(); // Want to become foreground, if permitted
+        requestUpdate();   // Want to update display, if applet is foreground
+    }
 
     return ProcessMessage::CONTINUE; // Let others look at this message also if they want
 }

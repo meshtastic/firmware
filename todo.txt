@@ -29,7 +29,7 @@ Critical Tasks
 []      ble pairing screen
 []      boot and shutdown screens
 []      hook reboot to save flash data
-[]      Split requestUpdate and requestAutoshow
+[tbc]   Split requestUpdate and requestAutoshow
 
 Improvements
 ====================
@@ -53,6 +53,7 @@ Known Bugs
 []      Root menu: header breaks spacing if rtc set while menu open
 []      Applets don't re-render when node is removed via admin command
 [tbc]   (Rare) Incorrect number of lines in threaded message display. Observed in T-Echo with msg "All received here. Happy Saturday all."
+[]      Autoshow focusing oldest of two competing requests, if render is deferred
 
 Chores
 ==========

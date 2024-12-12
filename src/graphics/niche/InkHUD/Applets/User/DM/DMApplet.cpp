@@ -23,6 +23,11 @@ int InkHUD::DMApplet::onReceiveTextMessage(const meshtastic_MeshPacket *p)
     if (!isActive())
         return 0;
 
+    if (!isBroadcast(p->to)) {
+        requestAutoshow(); // Want to become foreground, if permitted
+        requestUpdate();   // Want to update display, if applet is foreground
+    }
+
     // Return zero: no issues here, carry on notifying other observers!
     return 0;
 }

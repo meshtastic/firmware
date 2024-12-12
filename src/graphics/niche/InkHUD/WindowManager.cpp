@@ -726,17 +726,24 @@ void InkHUD::WindowManager::render(bool force)
 
     // Autoshow
     // ---------
-    // If a backgrounded applet requests update, switch it to foreground, if permitted
+    // Some applets may be permitted to bring themselved to foreground, to show new data
     // User selects which applets have this permission via on-screen menu
     // Priority is determined by the order which applets were added to WindowManager in setupNicheGraphics
+    // We will only autoshow one applet, but we need to check wantsToAutoshow for all applets, as this clears the flag,
+    // in case of a conflict which has not been honored.
     for (uint8_t i = 0; i < userApplets.size(); i++) {
         Applet *a = userApplets.at(i);
-        if (a->wantsToRender() && !a->isForeground() && settings.userApplets.autoshow[i]) {
+
+        static bool swapped = false;       // Only perform one autoshow operation
+        bool wants = a->wantsToAutoshow(); // Call for every applet: clears the flag
+
+        if (!swapped && wants && !a->isForeground() && settings.userApplets.autoshow[i]) {
             Tile *t = userTiles.at(settings.userTiles.focused); // Get focused tile
             t->displayedApplet->sendToBackground();             // Background whatever applet is already on the tile
             t->displayedApplet = a;                             // Assign our new applet to tile
             a->bringToForeground();                             // Foreground our new applet
-            break;                                              // Only do this for one applet. Avoid conflicts.
+            swapped = true;                                     // No more autoshows now until next render
+            // Keep looping though, to clear the wantAutoshow flag for all applets
         }
     }
 

@@ -99,8 +99,10 @@ ProcessMessage InkHUD::PositionsApplet::handleReceived(const meshtastic_MeshPack
     // Decision reached
     // -----------------
 
-    if (somethingChanged)
+    if (somethingChanged) {
+        requestAutoshow(); // Todo: only request this in some situations?
         requestUpdate();
+    }
 
     return ProcessMessage::CONTINUE;
 }
