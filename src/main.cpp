@@ -413,13 +413,13 @@ void setup()
     digitalWrite(AQ_SET_PIN, HIGH);
 #endif
 
-#ifdef T_DECK
+#if defined(T_DECK)
     // enable keyboard
     pinMode(KB_POWERON, OUTPUT);
     digitalWrite(KB_POWERON, HIGH);
     // There needs to be a delay after power on, give LILYGO-KEYBOARD some startup time
     // otherwise keyboard and touch screen will not work
-    delay(800);
+    delay(200);
 #endif
 
     // Currently only the tbeam has a PMU
@@ -580,7 +580,6 @@ void setup()
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::INA219, meshtastic_TelemetrySensorType_INA219);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::INA3221, meshtastic_TelemetrySensorType_INA3221);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MAX17048, meshtastic_TelemetrySensorType_MAX17048);
-    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MCP9808, meshtastic_TelemetrySensorType_MCP9808);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MCP9808, meshtastic_TelemetrySensorType_MCP9808);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::SHT31, meshtastic_TelemetrySensorType_SHT31);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::SHTC3, meshtastic_TelemetrySensorType_SHTC3);
