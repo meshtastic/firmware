@@ -33,11 +33,13 @@ int32_t BMX160Sensor::runOnce()
 
     if (doCalibration) {
 
+#if !defined(MESHTASTIC_EXCLUDE_SCREEN)
         if (!showingScreen) {
             powerFSM.trigger(EVENT_PRESS); // keep screen alive during calibration
             showingScreen = true;
             screen->startAlert((FrameCallback)drawFrameCalibration);
         }
+#endif
 
         if (magAccel.x > highestX)
             highestX = magAccel.x;
@@ -103,6 +105,7 @@ int32_t BMX160Sensor::runOnce()
         heading += 270;
         break;
     }
+
     screen->setHeading(heading);
 #endif
 
@@ -117,7 +120,9 @@ void BMX160Sensor::calibrate(uint16_t forSeconds)
     doCalibration = true;
     uint16_t calibrateFor = forSeconds * 1000; // calibrate for seconds provided
     endCalibrationAt = millis() + calibrateFor;
+#if !defined(MESHTASTIC_EXCLUDE_SCREEN)
     screen->setEndCalibration(endCalibrationAt);
+#endif
 }
 
 #endif

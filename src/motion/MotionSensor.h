@@ -58,7 +58,7 @@ class MotionSensor
 
     // Do calibration if true
     bool doCalibration = false;
-    uint32_t endCalibrationAt;
+    uint32_t endCalibrationAt = 0;
 };
 
 namespace MotionSensorI2C
