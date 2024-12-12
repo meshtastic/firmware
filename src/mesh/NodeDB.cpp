@@ -1,4 +1,3 @@
-#include "../userPrefs.h"
 #include "configuration.h"
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
@@ -465,7 +464,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #endif
 #if defined(USERPREFS_CONFIG_GPS_MODE)
     config.position.gps_mode = USERPREFS_CONFIG_GPS_MODE;
-#elif !HAS_GPS || defined(T_DECK) || defined(TLORA_T3S3_EPAPER)
+#elif !HAS_GPS || GPS_DEFAULT_NOT_PRESENT
     config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT;
 #elif !defined(GPS_RX_PIN)
     if (config.position.rx_gpio == 0)
@@ -1243,7 +1242,6 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
         return false;
     }
 
-    LOG_DEBUG("old user %s/%s, channel=%d", info->user.long_name, info->user.short_name, info->channel);
 #if !(MESHTASTIC_EXCLUDE_PKI)
     if (p.public_key.size > 0) {
         printBytes("Incoming Pubkey: ", p.public_key.bytes, 32);
@@ -1267,7 +1265,8 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
     }
     if (nodeId != getNodeNum())
         info->channel = channelIndex; // Set channel we need to use to reach this node (but don't set our own channel)
-    LOG_DEBUG("Update changed=%d user %s/%s, channel=%d", changed, info->user.long_name, info->user.short_name, info->channel);
+    LOG_DEBUG("Update changed=%d user %s/%s, id=0x%08x, channel=%d", changed, info->user.long_name, info->user.short_name, nodeId,
+              info->channel);
     info->has_user = true;
 
     if (changed) {
@@ -1349,7 +1348,7 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
 
     if (!lite) {
         if (isFull()) {
-            LOG_INFO("Node database full with %i nodes and %i bytes free. Erasing oldest entry", numMeshNodes,
+            LOG_INFO("Node database full with %i nodes and %u bytes free. Erasing oldest entry", numMeshNodes,
                      memGet.getFreeHeap());
             // look for oldest node and erase it
             uint32_t oldest = UINT32_MAX;
@@ -1373,11 +1372,14 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
             if (oldestBoringIndex != -1) {
                 oldestIndex = oldestBoringIndex;
             }
-            // Shove the remaining nodes down the chain
-            for (int i = oldestIndex; i < numMeshNodes - 1; i++) {
-                meshNodes->at(i) = meshNodes->at(i + 1);
+
+            if (oldestIndex != -1) {
+                // Shove the remaining nodes down the chain
+                for (int i = oldestIndex; i < numMeshNodes - 1; i++) {
+                    meshNodes->at(i) = meshNodes->at(i + 1);
+                }
+                (numMeshNodes)--;
             }
-            (numMeshNodes)--;
         }
         // add the node at the end
         lite = &meshNodes->at((numMeshNodes)++);
@@ -1385,7 +1387,7 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
         // everything is missing except the nodenum
         memset(lite, 0, sizeof(*lite));
         lite->num = n;
-        LOG_INFO("Adding node to database with %i nodes and %i bytes free!", numMeshNodes, memGet.getFreeHeap());
+        LOG_INFO("Adding node to database with %i nodes and %u bytes free!", numMeshNodes, memGet.getFreeHeap());
     }
 
     return lite;
