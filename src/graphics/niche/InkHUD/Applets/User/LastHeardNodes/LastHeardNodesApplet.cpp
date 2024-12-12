@@ -4,8 +4,6 @@
 
 using namespace NicheGraphics;
 
-InkHUD::LastHeardNodesApplet::LastHeardNodesApplet() : NodeListApplet() {}
-
 // When applet starts
 // This happens at boot, or from config changes via menu
 // This does *not* happen when user cycles through applets with the user button
