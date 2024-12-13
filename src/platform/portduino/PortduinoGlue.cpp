@@ -365,7 +365,10 @@ bool loadConfig(const char *configPath)
                 settingsMap[use_sx1268] = true;
             }
             settingsMap[dio2_as_rf_switch] = yamlConfig["Lora"]["DIO2_AS_RF_SWITCH"].as<bool>(false);
-            settingsMap[dio3_tcxo_voltage] = yamlConfig["Lora"]["DIO3_TCXO_VOLTAGE"].as<bool>(false);
+            settingsMap[dio3_tcxo_voltage] = yamlConfig["Lora"]["DIO3_TCXO_VOLTAGE"].as<float>(0) * 1000;
+            if (settingsMap[dio3_tcxo_voltage] == 0 && yamlConfig["Lora"]["DIO3_TCXO_VOLTAGE"].as<bool>(false)) {
+                settingsMap[dio3_tcxo_voltage] = 1800; // default millivolts for "true"
+            }
             settingsMap[cs] = yamlConfig["Lora"]["CS"].as<int>(RADIOLIB_NC);
             settingsMap[irq] = yamlConfig["Lora"]["IRQ"].as<int>(RADIOLIB_NC);
             settingsMap[busy] = yamlConfig["Lora"]["Busy"].as<int>(RADIOLIB_NC);
