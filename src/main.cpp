@@ -1,4 +1,3 @@
-#include "../userPrefs.h"
 #include "configuration.h"
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
@@ -83,7 +82,7 @@ NRF52Bluetooth *nrf52Bluetooth = nullptr;
 #include "STM32WLE5JCInterface.h"
 #endif
 
-#if !HAS_RADIO && defined(ARCH_PORTDUINO)
+#if defined(ARCH_PORTDUINO)
 #include "platform/portduino/SimRadio.h"
 #endif
 
@@ -410,13 +409,13 @@ void setup()
     digitalWrite(AQ_SET_PIN, HIGH);
 #endif
 
-#ifdef T_DECK
+#if defined(T_DECK)
     // enable keyboard
     pinMode(KB_POWERON, OUTPUT);
     digitalWrite(KB_POWERON, HIGH);
     // There needs to be a delay after power on, give LILYGO-KEYBOARD some startup time
     // otherwise keyboard and touch screen will not work
-    delay(800);
+    delay(200);
 #endif
 
     // Currently only the tbeam has a PMU
@@ -577,7 +576,6 @@ void setup()
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::INA219, meshtastic_TelemetrySensorType_INA219);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::INA3221, meshtastic_TelemetrySensorType_INA3221);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MAX17048, meshtastic_TelemetrySensorType_MAX17048);
-    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MCP9808, meshtastic_TelemetrySensorType_MCP9808);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MCP9808, meshtastic_TelemetrySensorType_MCP9808);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::SHT31, meshtastic_TelemetrySensorType_SHT31);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::SHTC3, meshtastic_TelemetrySensorType_SHTC3);
@@ -859,6 +857,51 @@ void setup()
                 LOG_INFO("SX1280 init success");
             }
         }
+    } else if (settingsMap[use_lr1110]) {
+        if (!rIf) {
+            LOG_DEBUG("Activate lr1110 radio on SPI port %s", settingsStrings[spidev].c_str());
+            LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
+            rIf = new LR1110Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
+                                      settingsMap[busy]);
+            if (!rIf->init()) {
+                LOG_WARN("No LR1110 radio");
+                delete rIf;
+                rIf = NULL;
+                exit(EXIT_FAILURE);
+            } else {
+                LOG_INFO("LR1110 init success");
+            }
+        }
+    } else if (settingsMap[use_lr1120]) {
+        if (!rIf) {
+            LOG_DEBUG("Activate lr1120 radio on SPI port %s", settingsStrings[spidev].c_str());
+            LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
+            rIf = new LR1120Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
+                                      settingsMap[busy]);
+            if (!rIf->init()) {
+                LOG_WARN("No LR1120 radio");
+                delete rIf;
+                rIf = NULL;
+                exit(EXIT_FAILURE);
+            } else {
+                LOG_INFO("LR1120 init success");
+            }
+        }
+    } else if (settingsMap[use_lr1121]) {
+        if (!rIf) {
+            LOG_DEBUG("Activate lr1121 radio on SPI port %s", settingsStrings[spidev].c_str());
+            LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
+            rIf = new LR1121Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
+                                      settingsMap[busy]);
+            if (!rIf->init()) {
+                LOG_WARN("No LR1121 radio");
+                delete rIf;
+                rIf = NULL;
+                exit(EXIT_FAILURE);
+            } else {
+                LOG_INFO("LR1121 init success");
+            }
+        }
     } else if (settingsMap[use_sx1268]) {
         if (!rIf) {
             LOG_DEBUG("Activate sx1268 radio on SPI port %s", settingsStrings[spidev].c_str());
@@ -897,7 +940,7 @@ void setup()
     }
 #endif
 
-#if !HAS_RADIO && defined(ARCH_PORTDUINO)
+#if defined(ARCH_PORTDUINO)
     if (!rIf) {
         rIf = new SimRadio;
         if (!rIf->init()) {
