@@ -14,13 +14,19 @@
 #ifdef HAS_SDCARD
 #include <SD.h>
 #include <SPI.h>
-
 #ifdef SDCARD_USE_SPI1
+#ifdef ARCH_ESP32   //when using esp32, using esp32 specific libary for SD Card
 SPIClass SPI1(HSPI);
+#endif //ARCH_ESP32
+#ifdef ARCH_NRF52   //when using NRF52, initialize arduino/SD library
+Sd2Card SD;
+SdVolume volume;
+SdFile root;
+#endif //ARCH_ESP32
 #define SDHandler SPI1
 #else
 #define SDHandler SPI
-#endif
+#endif //SDCARD_USE_SPI1
 
 #endif // HAS_SDCARD
 
@@ -46,7 +52,7 @@ void OSFS::writeNBytes(uint16_t address, unsigned int num, const byte *input)
         input++;
     }
 }
-#endif
+#endif  //ARCH_STM32WL
 
 bool lfs_assert_failed =
     false; // Note: we use this global on all platforms, though it can only be set true on nrf52 (in our modified lfs_util.h)
@@ -347,31 +353,47 @@ void fsInit()
 void setupSDCard()
 {
 #ifdef HAS_SDCARD
-    SDHandler.begin(SPI_SCK, SPI_MISO, SPI_MOSI);
+    #if defined(ARCH_ESP32)
+        SDHandler.begin(SPI_SCK, SPI_MISO, SPI_MOSI);
 
-    if (!SD.begin(SDCARD_CS, SDHandler)) {
-        LOG_DEBUG("No SD_MMC card detected");
-        return;
-    }
-    uint8_t cardType = SD.cardType();
-    if (cardType == CARD_NONE) {
-        LOG_DEBUG("No SD_MMC card attached");
-        return;
-    }
-    LOG_DEBUG("SD_MMC Card Type: ");
-    if (cardType == CARD_MMC) {
-        LOG_DEBUG("MMC");
-    } else if (cardType == CARD_SD) {
-        LOG_DEBUG("SDSC");
-    } else if (cardType == CARD_SDHC) {
-        LOG_DEBUG("SDHC");
-    } else {
-        LOG_DEBUG("UNKNOWN");
-    }
+        if (!SD.begin(SDCARD_CS, SDHandler)) {
+            LOG_DEBUG("No SD_MMC card detected");
+            return;
+        }
+        uint8_t cardType = SD.cardType();
+        if (cardType == CARD_NONE) {
+            LOG_DEBUG("No SD_MMC card attached");
+            return;
+        }
+        LOG_DEBUG("SD_MMC Card Type: ");
+        if (cardType == CARD_MMC) {
+            LOG_DEBUG("MMC");
+        } else if (cardType == CARD_SD) {
+            LOG_DEBUG("SDSC");
+        } else if (cardType == CARD_SDHC) {
+            LOG_DEBUG("SDHC");
+        } else {
+            LOG_DEBUG("UNKNOWN");
+        }
 
-    uint64_t cardSize = SD.cardSize() / (1024 * 1024);
-    LOG_DEBUG("SD Card Size: %lu MB", (uint32_t)cardSize);
-    LOG_DEBUG("Total space: %lu MB", (uint32_t)(SD.totalBytes() / (1024 * 1024)));
-    LOG_DEBUG("Used space: %lu MB", (uint32_t)(SD.usedBytes() / (1024 * 1024)));
+        uint64_t cardSize = SD.cardSize() / (1024 * 1024);
+        LOG_DEBUG("SD Card Size: %lu MB", (uint32_t)cardSize);
+        LOG_DEBUG("Total space: %lu MB", (uint32_t)(SD.totalBytes() / (1024 * 1024)));
+        LOG_DEBUG("Used space: %lu MB", (uint32_t)(SD.usedBytes() / (1024 * 1024)));
+    #endif
+    #if defined(ARCH_NRF52)
+        if (SD.init())                  //not getting any errors while compiling, card not being initialized yet
+        {
+            LOG_ERROR("Succesfully initialized SD Card");
+            return;
+        }
+        else
+        {
+            LOG_ERROR("Could not initialize SD Card");
+            LOG_ERROR("Error code: %d", SD.errorCode());
+            return;
+        }
+    #endif
 #endif
 }
+

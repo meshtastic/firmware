@@ -98,18 +98,23 @@ void StoreForwardModule::populatePSRAM()
 void StoreForwardModule::populateSDCard()
 {
 #if defined(HAS_SDCARD)
-    if (SD.cardType() != CARD_NONE) {
-        if (!SD.exists("/storeforward")) {
-            LOG_INFO("Creating StoreForward directory");
-            SD.mkdir("/storeforward");
+    #if defined(ARCH_ESP32)
+        if (SD.cardType() != CARD_NONE) {
+            if (!SD.exists("/storeforward")) {
+                LOG_INFO("Creating StoreForward directory");
+                SD.mkdir("/storeforward");
+            }
+            this->storageType = StorageType::ST_SDCARD;
+            uint32_t numberOfPackets = (this->records ? this->records : (((SD.totalBytes() / 3) * 2) / sizeof(PacketHistoryStruct)));
+            // only allocate space for one temp copy
+            this->packetHistory = (PacketHistoryStruct *)malloc(sizeof(PacketHistoryStruct));
+            LOG_DEBUG("numberOfPackets for packetHistory - %u", numberOfPackets);
         }
-        this->storageType = StorageType::ST_SDCARD;
-        uint32_t numberOfPackets = (this->records ? this->records : (((SD.totalBytes() / 3) * 2) / sizeof(PacketHistoryStruct)));
-        // only allocate space for one temp copy
-        this->packetHistory = (PacketHistoryStruct *)malloc(sizeof(PacketHistoryStruct));
-        LOG_DEBUG("numberOfPackets for packetHistory - %u", numberOfPackets);
-    }
-#endif
+    #endif  //ARCH_ESP32
+    #if defined(ARCH_NRF52)
+
+    #endif //ARCH_NRF52
+#endif  //HAS_SDCARD
 }
 
 /**
@@ -166,18 +171,23 @@ uint32_t StoreForwardModule::getNumAvailablePackets(NodeNum dest, uint32_t last_
             }
         } else if (this->storageType == StorageType::ST_SDCARD) {
 #if defined(HAS_SDCARD)
-            auto handler = SD.open("/storeforward/" + String(i), FILE_READ);
-            if (handler) {
-                handler.read((uint8_t *)&this->packetHistory[0], sizeof(PacketHistoryStruct));
-                handler.close();
-                if (this->packetHistory[0].time && (this->packetHistory[0].time > last_time)) {
-                    // Client is only interested in packets not from itself and only in broadcast packets or packets towards it.
-                    if (this->packetHistory[0].from != dest &&
-                        (this->packetHistory[0].to == NODENUM_BROADCAST || this->packetHistory[0].to == dest)) {
-                        count++;
+    #if defined(ARCH_ESP32)
+                auto handler = SD.open("/storeforward/" + String(i), FILE_READ);
+                if (handler) {
+                    handler.read((uint8_t *)&this->packetHistory[0], sizeof(PacketHistoryStruct));
+                    handler.close();
+                    if (this->packetHistory[0].time && (this->packetHistory[0].time > last_time)) {
+                        // Client is only interested in packets not from itself and only in broadcast packets or packets towards it.
+                        if (this->packetHistory[0].from != dest &&
+                            (this->packetHistory[0].to == NODENUM_BROADCAST || this->packetHistory[0].to == dest)) {
+                            count++;
+                        }
                     }
                 }
-            }
+    #endif
+    #if defined(ARCH_NRF52)
+
+    #endif //ARCH_NRF52
 #endif
         } else {
             LOG_ERROR("S&F: Unknown storage type");
@@ -245,15 +255,17 @@ void StoreForwardModule::historyAdd(const meshtastic_MeshPacket &mp)
     } else if (this->storageType == StorageType::ST_SDCARD) {
 // Save to SDCARD
 #if defined(HAS_SDCARD)
-        this->packetHistory[0].time = getTime();
-        this->packetHistory[0].to = mp.to;
-        this->packetHistory[0].channel = mp.channel;
-        this->packetHistory[0].from = getFrom(&mp);
-        this->packetHistory[0].payload_size = p.payload.size;
-        memcpy(this->packetHistory[0].payload, p.payload.bytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
-        auto handler = SD.open("/storeforward/" + String(this->packetHistoryTotalCount), FILE_WRITE);
-        handler.write((uint8_t *)&this->packetHistory, sizeof(PacketHistoryStruct));
-        handler.close();
+    #if defined (ARCH_ESP32)
+            this->packetHistory[0].time = getTime();
+            this->packetHistory[0].to = mp.to;
+            this->packetHistory[0].channel = mp.channel;
+            this->packetHistory[0].from = getFrom(&mp);
+            this->packetHistory[0].payload_size = p.payload.size;
+            memcpy(this->packetHistory[0].payload, p.payload.bytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
+            auto handler = SD.open("/storeforward/" + String(this->packetHistoryTotalCount), FILE_WRITE);
+            handler.write((uint8_t *)&this->packetHistory, sizeof(PacketHistoryStruct));
+            handler.close();
+    #endif
 #endif
     } else {
         LOG_ERROR("S&F: Unknown storage type");
@@ -337,49 +349,54 @@ meshtastic_MeshPacket *StoreForwardModule::preparePayload(NodeNum dest, uint32_t
             }
         } else if (this->storageType == StorageType::ST_SDCARD) {
 #if defined(HAS_SDCARD)
-            auto handler = SD.open("/storeforward/" + String(i), FILE_READ);
-            if (handler) {
-                handler.read((uint8_t *)&this->packetHistory[0], sizeof(PacketHistoryStruct));
-                handler.close();
-                if (this->packetHistory[0].time && (this->packetHistory[0].time > last_time)) {
-                    if (this->packetHistory[0].from != dest &&
-                        (this->packetHistory[0].to == NODENUM_BROADCAST || this->packetHistory[0].to == dest)) {
+    #if defined(ARCH_ESP32)
+                auto handler = SD.open("/storeforward/" + String(i), FILE_READ);
+                if (handler) {
+                    handler.read((uint8_t *)&this->packetHistory[0], sizeof(PacketHistoryStruct));
+                    handler.close();
+                    if (this->packetHistory[0].time && (this->packetHistory[0].time > last_time)) {
+                        if (this->packetHistory[0].from != dest &&
+                            (this->packetHistory[0].to == NODENUM_BROADCAST || this->packetHistory[0].to == dest)) {
 
-                        meshtastic_MeshPacket *p = allocDataPacket();
+                            meshtastic_MeshPacket *p = allocDataPacket();
 
-                        p->to = local ? this->packetHistory[0].to : dest; // PhoneAPI can handle original `to`
-                        p->from = this->packetHistory[0].from;
-                        p->channel = this->packetHistory[0].channel;
-                        p->rx_time = this->packetHistory[0].time;
+                            p->to = local ? this->packetHistory[0].to : dest; // PhoneAPI can handle original `to`
+                            p->from = this->packetHistory[0].from;
+                            p->channel = this->packetHistory[0].channel;
+                            p->rx_time = this->packetHistory[0].time;
 
-                        // Let's assume that if the server received the S&F request that the client is in range.
-                        p->want_ack = false;
+                            // Let's assume that if the server received the S&F request that the client is in range.
+                            p->want_ack = false;
 
-                        if (local) { // PhoneAPI gets normal TEXT_MESSAGE_APP
-                            p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
-                            memcpy(p->decoded.payload.bytes, this->packetHistory[0].payload, this->packetHistory[0].payload_size);
-                            p->decoded.payload.size = this->packetHistory[0].payload_size;
-                        } else {
-                            meshtastic_StoreAndForward sf = meshtastic_StoreAndForward_init_zero;
-                            sf.which_variant = meshtastic_StoreAndForward_text_tag;
-                            sf.variant.text.size = this->packetHistory[0].payload_size;
-                            memcpy(sf.variant.text.bytes, this->packetHistory[0].payload, this->packetHistory[0].payload_size);
-                            if (this->packetHistory[0].to == NODENUM_BROADCAST) {
-                                sf.rr = meshtastic_StoreAndForward_RequestResponse_ROUTER_TEXT_BROADCAST;
+                            if (local) { // PhoneAPI gets normal TEXT_MESSAGE_APP
+                                p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+                                memcpy(p->decoded.payload.bytes, this->packetHistory[0].payload, this->packetHistory[0].payload_size);
+                                p->decoded.payload.size = this->packetHistory[0].payload_size;
                             } else {
-                                sf.rr = meshtastic_StoreAndForward_RequestResponse_ROUTER_TEXT_DIRECT;
+                                meshtastic_StoreAndForward sf = meshtastic_StoreAndForward_init_zero;
+                                sf.which_variant = meshtastic_StoreAndForward_text_tag;
+                                sf.variant.text.size = this->packetHistory[0].payload_size;
+                                memcpy(sf.variant.text.bytes, this->packetHistory[0].payload, this->packetHistory[0].payload_size);
+                                if (this->packetHistory[0].to == NODENUM_BROADCAST) {
+                                    sf.rr = meshtastic_StoreAndForward_RequestResponse_ROUTER_TEXT_BROADCAST;
+                                } else {
+                                    sf.rr = meshtastic_StoreAndForward_RequestResponse_ROUTER_TEXT_DIRECT;
+                                }
+
+                                p->decoded.payload.size = pb_encode_to_bytes(
+                                    p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_StoreAndForward_msg, &sf);
                             }
 
-                            p->decoded.payload.size = pb_encode_to_bytes(
-                                p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_StoreAndForward_msg, &sf);
+                            lastRequest[dest] = i + 1; // Update the last request index for the client device
+
+                            return p;
                         }
-
-                        lastRequest[dest] = i + 1; // Update the last request index for the client device
-
-                        return p;
                     }
                 }
-            }
+    #endif
+    #if defined(ARCH_NRF52)
+
+    #endif //ARCH_NRF52
 #endif
         } else {
             LOG_ERROR("S&F: Unknown storage type");
