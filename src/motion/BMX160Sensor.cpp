@@ -67,7 +67,7 @@ int32_t BMX160Sensor::runOnce()
             showingScreen = false;
             screen->endAlert();
 
-            updateState();
+            saveState();
         }
 
         // LOG_DEBUG("BMX160 min_x: %.4f, max_X: %.4f, min_Y: %.4f, max_Y: %.4f, min_Z: %.4f, max_Z: %.4f", lowestX, highestX,
@@ -150,7 +150,7 @@ void BMX160Sensor::loadState()
 #endif
 }
 
-void BMX160Sensor::updateState()
+void BMX160Sensor::saveState()
 {
 #ifdef FSCom
     memcpy(&bmx160State, &bmx160Config, sizeof(BMX160Config));
