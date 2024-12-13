@@ -12,12 +12,33 @@
 #include "Fusion/Fusion.h"
 #include <Rak_BMX160.h>
 
+#define BMX160_MAX_STATE_BLOB_SIZE (144) // pad size to allow for additional saved config parameters (accel, gyro, etc)
+
+struct xyzFloat {
+    float x;
+    float y;
+    float z;
+};
+struct minMaxXYZ {
+    xyzFloat min;
+    xyzFloat max;
+};
+struct BMX160Config {
+    minMaxXYZ mAccel;
+};
+
 class BMX160Sensor : public MotionSensor
 {
   private:
     RAK_BMX160 sensor;
     bool showingScreen = false;
-    float highestX = 0, lowestX = 0, highestY = 0, lowestY = 0, highestZ = 0, lowestZ = 0;
+    BMX160Config bmx160Config;
+
+  protected:
+    const char *bmx160ConfigFileName = "/prefs/bmx160.dat";
+    uint8_t bmx160State[BMX160_MAX_STATE_BLOB_SIZE] = {0};
+    void loadState();
+    void updateState();
 
   public:
     explicit BMX160Sensor(ScanI2C::FoundDevice foundDevice);

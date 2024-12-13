@@ -1,4 +1,5 @@
 #include "BMX160Sensor.h"
+#include "FSCommon.h"
 
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
 
@@ -16,7 +17,13 @@ bool BMX160Sensor::init()
     if (sensor.begin()) {
         // set output data rate
         sensor.ODR_Config(BMX160_ACCEL_ODR_100HZ, BMX160_GYRO_ODR_100HZ);
-        LOG_DEBUG("BMX160 init ok");
+
+        loadState();
+
+        LOG_DEBUG("BMX160 min_x: %.4f, max_X: %.4f, min_Y: %.4f, max_Y: %.4f, min_Z: %.4f, max_Z: %.4f",
+                  bmx160Config.mAccel.min.x, bmx160Config.mAccel.max.x, bmx160Config.mAccel.min.y, bmx160Config.mAccel.max.y,
+                  bmx160Config.mAccel.min.z, bmx160Config.mAccel.max.z);
+
         return true;
     }
     LOG_DEBUG("BMX160 init failed");
@@ -40,18 +47,18 @@ int32_t BMX160Sensor::runOnce()
             screen->startAlert((FrameCallback)drawFrameCalibration);
         }
 
-        if (magAccel.x > highestX)
-            highestX = magAccel.x;
-        if (magAccel.x < lowestX)
-            lowestX = magAccel.x;
-        if (magAccel.y > highestY)
-            highestY = magAccel.y;
-        if (magAccel.y < lowestY)
-            lowestY = magAccel.y;
-        if (magAccel.z > highestZ)
-            highestZ = magAccel.z;
-        if (magAccel.z < lowestZ)
-            lowestZ = magAccel.z;
+        if (magAccel.x > bmx160Config.mAccel.max.x)
+            bmx160Config.mAccel.max.x = magAccel.x;
+        if (magAccel.x < bmx160Config.mAccel.min.x)
+            bmx160Config.mAccel.min.x = magAccel.x;
+        if (magAccel.y > bmx160Config.mAccel.max.y)
+            bmx160Config.mAccel.max.y = magAccel.y;
+        if (magAccel.y < bmx160Config.mAccel.min.y)
+            bmx160Config.mAccel.min.y = magAccel.y;
+        if (magAccel.z > bmx160Config.mAccel.max.z)
+            bmx160Config.mAccel.max.z = magAccel.z;
+        if (magAccel.z < bmx160Config.mAccel.min.z)
+            bmx160Config.mAccel.min.z = magAccel.z;
 
         uint32_t now = millis();
         if (now > endCalibrationAt) {
@@ -59,17 +66,19 @@ int32_t BMX160Sensor::runOnce()
             endCalibrationAt = 0;
             showingScreen = false;
             screen->endAlert();
+
+            updateState();
         }
 
         // LOG_DEBUG("BMX160 min_x: %.4f, max_X: %.4f, min_Y: %.4f, max_Y: %.4f, min_Z: %.4f, max_Z: %.4f", lowestX, highestX,
         // lowestY, highestY, lowestZ, highestZ);
     }
 
-    int highestRealX = highestX - (highestX + lowestX) / 2;
+    int highestRealX = bmx160Config.mAccel.max.x - (bmx160Config.mAccel.max.x + bmx160Config.mAccel.min.x) / 2;
 
-    magAccel.x -= (highestX + lowestX) / 2;
-    magAccel.y -= (highestY + lowestY) / 2;
-    magAccel.z -= (highestZ + lowestZ) / 2;
+    magAccel.x -= (bmx160Config.mAccel.max.x + bmx160Config.mAccel.min.x) / 2;
+    magAccel.y -= (bmx160Config.mAccel.max.y + bmx160Config.mAccel.min.y) / 2;
+    magAccel.z -= (bmx160Config.mAccel.max.z + bmx160Config.mAccel.min.z) / 2;
     FusionVector ga, ma;
     ga.axis.x = -gAccel.x; // default location for the BMX160 is on the rear of the board
     ga.axis.y = -gAccel.y;
@@ -119,6 +128,51 @@ void BMX160Sensor::calibrate(uint16_t forSeconds)
     uint16_t calibrateFor = forSeconds * 1000; // calibrate for seconds provided
     endCalibrationAt = millis() + calibrateFor;
     screen->setEndCalibration(endCalibrationAt);
+#endif
+}
+
+void BMX160Sensor::loadState()
+{
+#ifdef FSCom
+    auto file = FSCom.open(bmx160ConfigFileName, FILE_O_READ);
+    if (file) {
+        file.read((uint8_t *)&bmx160State, BMX160_MAX_STATE_BLOB_SIZE);
+        file.close();
+
+        memcpy(&bmx160Config, &bmx160State, sizeof(BMX160Config));
+
+        LOG_INFO("BMX160 config state read from %s", bmx160ConfigFileName);
+    } else {
+        LOG_INFO("No BMX160 config state found (File: %s)", bmx160ConfigFileName);
+    }
+#else
+    LOG_ERROR("ERROR: Filesystem not implemented");
+#endif
+}
+
+void BMX160Sensor::updateState()
+{
+#ifdef FSCom
+    memcpy(&bmx160State, &bmx160Config, sizeof(BMX160Config));
+
+    LOG_DEBUG("BMX160 min_x: %.4f, max_X: %.4f, min_Y: %.4f, max_Y: %.4f, min_Z: %.4f, max_Z: %.4f", bmx160Config.mAccel.min.x,
+              bmx160Config.mAccel.max.x, bmx160Config.mAccel.min.y, bmx160Config.mAccel.max.y, bmx160Config.mAccel.min.z,
+              bmx160Config.mAccel.max.z);
+
+    if (FSCom.exists(bmx160ConfigFileName) && !FSCom.remove(bmx160ConfigFileName)) {
+        LOG_WARN("Can't remove old state file");
+    }
+    auto file = FSCom.open(bmx160ConfigFileName, FILE_O_WRITE);
+    if (file) {
+        LOG_INFO("Write BMX160 config state to %s", bmx160ConfigFileName);
+        file.write((uint8_t *)&bmx160State, BMX160_MAX_STATE_BLOB_SIZE);
+        file.flush();
+        file.close();
+    } else {
+        LOG_INFO("Can't write BMX160 config state (File: %s)", bmx160ConfigFileName);
+    }
+#else
+    LOG_ERROR("ERROR: Filesystem not implemented");
 #endif
 }
 
