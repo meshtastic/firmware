@@ -1,12 +1,6 @@
 name: "Setup Build Base Composite Action"
 description: "Base build actions for Meshtastic Platform IO steps"
 
-inputs:
-  USER_PREFS:
-    description: Custom userPrefs.h
-    required: false
-    default: ""
-
 runs:
   using: "composite"
   steps:
@@ -21,13 +15,6 @@ runs:
       shell: bash
       run: |
         sed -i 's/#-DBUILD_EPOCH=$UNIX_TIME/-DBUILD_EPOCH=$UNIX_TIME/' platformio.ini
-
-    - name: Getting custom userPrefs.h
-      uses: mobiledevops/secret-to-file-action@v1
-      if: inputs.USER_PREFS != ''
-      with:
-        base64-encoded-secret: ${{ inputs.USER_PREFS }}
-        filename: userPrefs.h
 
     - name: Install dependencies
       shell: bash
