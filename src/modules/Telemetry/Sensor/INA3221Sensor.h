@@ -3,9 +3,9 @@
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "CurrentSensor.h"
 #include "TelemetrySensor.h"
 #include "VoltageSensor.h"
-#include "CurrentSensor.h"
 #include <INA3221.h>
 
 class INA3221Sensor : public TelemetrySensor, VoltageSensor, CurrentSensor

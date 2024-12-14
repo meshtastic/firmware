@@ -3,9 +3,9 @@
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "CurrentSensor.h"
 #include "TelemetrySensor.h"
 #include "VoltageSensor.h"
-#include "CurrentSensor.h"
 #include <Adafruit_INA219.h>
 
 class INA219Sensor : public TelemetrySensor, VoltageSensor, CurrentSensor

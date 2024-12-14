@@ -10,5 +10,4 @@ class CurrentSensor
     virtual int16_t getCurrentMa() = 0;
 };
 
-
 #endif
