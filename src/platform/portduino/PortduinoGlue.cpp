@@ -86,7 +86,6 @@ void getMacAddr(uint8_t *dmac)
     if (optionMac != nullptr && strlen(optionMac) > 0) {
         if (strlen(optionMac) >= 12) {
             MAC_from_string(optionMac, dmac);
-            std::cout << optionMac << std::endl;
         } else {
             uint32_t hwId = sscanf(optionMac, "%u", &hwId);
             dmac[0] = 0x80;
@@ -98,7 +97,6 @@ void getMacAddr(uint8_t *dmac)
         }
     } else if (settingsStrings[mac_address].length() > 11) {
         MAC_from_string(settingsStrings[mac_address], dmac);
-        std::cout << settingsStrings[mac_address] << std::endl;
         exit;
     } else {
 
@@ -203,14 +201,14 @@ void portduinoSetup()
         }
     }
 
-    uint8_t dmac[6];
+    uint8_t dmac[6] = {0};
     getMacAddr(dmac);
     if (dmac[0] == 0 && dmac[1] == 0 && dmac[2] == 0 && dmac[3] == 0 && dmac[4] == 0 && dmac[5] == 0) {
         std::cout << "*** Blank MAC Address not allowed!" << std::endl;
         std::cout << "Please set a MAC Address in config.yaml using either MACAddress or MACAddressSource." << std::endl;
         exit(EXIT_FAILURE);
     }
-    printBytes("MAC Address: ", dmac, 6);
+    std::cout << "MAC Address: " << std::hex << +dmac[0] << +dmac[1] << +dmac[2] << +dmac[3] << +dmac[4] << +dmac[5] << std::endl;
     // Rather important to set this, if not running simulated.
     randomSeed(time(NULL));
 
