@@ -37,6 +37,8 @@
 extern "C" {
 #endif // __cplusplus
 
+#define CAN_HAVE_RAK12035 1
+
 // Number of pins defined in PinDescription array
 #define PINS_COUNT (48)
 #define NUM_DIGITAL_PINS (48)
