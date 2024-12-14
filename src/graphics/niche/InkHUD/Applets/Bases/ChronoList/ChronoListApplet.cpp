@@ -1,12 +1,12 @@
 #ifdef MESHTASTIC_INCLUDE_INKHUD
 
-#include "./NodeListApplet.h"
+#include "./ChronoListApplet.h"
 
 #include "rtc.h"
 
 using namespace NicheGraphics;
 
-InkHUD::NodeListApplet::NodeListApplet(const char *name) : MeshModule(name), OSThread(name)
+InkHUD::ChronoListApplet::ChronoListApplet(const char *name) : MeshModule(name), OSThread(name)
 {
     // No scheduled tasks initially
     OSThread::disable();
@@ -14,14 +14,14 @@ InkHUD::NodeListApplet::NodeListApplet(const char *name) : MeshModule(name), OST
 
 // When applet fully stops, due to disabled via on-screen menu
 // This does *not* happen user cycles through applets with the user button
-void InkHUD::NodeListApplet::onDeactivate()
+void InkHUD::ChronoListApplet::onDeactivate()
 {
     // Free some memory; we'll have to recalculate this when we reactivate anyway
     ordered.clear();
     ordered.shrink_to_fit();
 }
 
-void InkHUD::NodeListApplet::render()
+void InkHUD::ChronoListApplet::render()
 {
     /*
     +-------------------------------+
@@ -70,7 +70,7 @@ void InkHUD::NodeListApplet::render()
 
     // -- Each node in list --
     for (uint16_t i = 0; i < ordered.size(); i++) {
-        NodeListItem record = ordered.at(i);
+        ChronoListItem record = ordered.at(i);
 
         // Gather info
         // ========================================
@@ -179,7 +179,7 @@ void InkHUD::NodeListApplet::render()
         // Once we've run out of screen:
         // - stop drawing cards
         // - drop any unused HeardRecords from the vector
-        //     This frees a significant amount of memory after a populateNodeList() call
+        //     This frees a significant amount of memory after a populateChronoList() call
         //     It also prevents the vector growing slowly during normal use
         if (cardTopY > height()) {
             ordered.resize(i + 1);
@@ -192,7 +192,7 @@ void InkHUD::NodeListApplet::render()
 // Draw element: a "mobile phone" style signal indicator
 // We will calculate values as floats, then "rasterize" at the last moment, relative to x and w, etc
 // This prevents issues with premature rounding when rendering tiny elements
-void InkHUD::NodeListApplet::drawSignalIndicator(int16_t x, int16_t y, uint16_t w, uint16_t h, SignalStrength strength)
+void InkHUD::ChronoListApplet::drawSignalIndicator(int16_t x, int16_t y, uint16_t w, uint16_t h, SignalStrength strength)
 {
 
     /*
@@ -248,7 +248,7 @@ void InkHUD::NodeListApplet::drawSignalIndicator(int16_t x, int16_t y, uint16_t 
     }
 }
 
-void InkHUD::NodeListApplet::populateNodeList()
+void InkHUD::ChronoListApplet::populateChronoList()
 {
     // Erase the old invalid order
     ordered.clear();
@@ -262,7 +262,7 @@ void InkHUD::NodeListApplet::populateNodeList()
     uint32_t now = getValidTime(RTCQuality::RTCQualityNone, true); // Current RTC time
     for (uint32_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
-        NodeListItem oldRecord;
+        ChronoListItem oldRecord;
 
         if (node->num != nodeDB->getNodeNum()) { // Don't store our own node
             oldRecord.nodeNum = node->num;
@@ -276,19 +276,19 @@ void InkHUD::NodeListApplet::populateNodeList()
         }
     }
 
-    sortNodeList();
+    sortChronoList();
 
     // The "ordered" vector is truncated at the end of render()
     // At that point, we know how many nodes we can fit on the display
 }
 
-void InkHUD::NodeListApplet::sortNodeList()
+void InkHUD::ChronoListApplet::sortChronoList()
 {
     // Sort from youngest to oldest
-    std::sort(ordered.begin(), ordered.end(), NodeListApplet::compareLastHeard);
+    std::sort(ordered.begin(), ordered.end(), ChronoListApplet::compareHeard);
 }
 
-void InkHUD::NodeListApplet::recordHeard(NodeListItem justHeard)
+void InkHUD::ChronoListApplet::recordHeard(ChronoListItem justHeard)
 {
     if (!ordered.empty()) {
         for (uint16_t i = 0; i < ordered.size(); i++) {
@@ -312,7 +312,7 @@ void InkHUD::NodeListApplet::recordHeard(NodeListItem justHeard)
 // Sort function: youngest to oldest
 // True if n1 heard more recently than n2
 // When std::sort-ing, true will push r1 towards the front, and r2 towards the back
-bool InkHUD::NodeListApplet::compareLastHeard(NodeListItem r1, NodeListItem r2)
+bool InkHUD::ChronoListApplet::compareHeard(ChronoListItem r1, ChronoListItem r2)
 {
     meshtastic_NodeInfoLite *n1 = nodeDB->getMeshNode(r1.nodeNum);
     meshtastic_NodeInfoLite *n2 = nodeDB->getMeshNode(r2.nodeNum);
@@ -330,7 +330,7 @@ bool InkHUD::NodeListApplet::compareLastHeard(NodeListItem r1, NodeListItem r2)
     return (n1->last_heard > n2->last_heard);
 }
 
-bool InkHUD::NodeListApplet::heardRecently(NodeListItem item)
+bool InkHUD::ChronoListApplet::heardRecently(ChronoListItem item)
 {
     uint32_t now = getValidTime(RTCQuality::RTCQualityNone, true); // Current RTC time
 
@@ -348,14 +348,14 @@ bool InkHUD::NodeListApplet::heardRecently(NodeListItem item)
 }
 
 // Do we want to process this packet with handleReceived()?
-bool InkHUD::NodeListApplet::wantPacket(const meshtastic_MeshPacket *p)
+bool InkHUD::ChronoListApplet::wantPacket(const meshtastic_MeshPacket *p)
 {
     // Only interested if the packet *didn't* come from us, and our applet is active
     return isActive() && !isFromUs(p);
 }
 
 // MeshModule packets arrive here. Hand off the appropriate module
-ProcessMessage InkHUD::NodeListApplet::handleReceived(const meshtastic_MeshPacket &mp)
+ProcessMessage InkHUD::ChronoListApplet::handleReceived(const meshtastic_MeshPacket &mp)
 {
     // Abort if applet fully deactivated
     // Already handled by wantPacket in this case, but good practice for all applets, as some *do* require this early return
@@ -363,7 +363,7 @@ ProcessMessage InkHUD::NodeListApplet::handleReceived(const meshtastic_MeshPacke
         return ProcessMessage::CONTINUE;
 
     // Compile info about this event
-    NodeListItem justHeard;
+    ChronoListItem justHeard;
     justHeard.nodeNum = mp.from;
     justHeard.strength = getSignalStrength(mp.rx_snr, mp.rx_rssi);
     justHeard.lastHeardEpoch =
@@ -375,7 +375,7 @@ ProcessMessage InkHUD::NodeListApplet::handleReceived(const meshtastic_MeshPacke
     if (ordered.empty()) // List changed: no nodes yet
         listChanged = true;
     else {
-        NodeListItem previouslyHeard = ordered.front();
+        ChronoListItem previouslyHeard = ordered.front();
         if (previouslyHeard.nodeNum != justHeard.nodeNum) // List changed: re-ordered
             listChanged = true;
         else if (previouslyHeard.strength != justHeard.strength) // List changed: signal
@@ -394,19 +394,19 @@ ProcessMessage InkHUD::NodeListApplet::handleReceived(const meshtastic_MeshPacke
     return ProcessMessage::CONTINUE; // Let others look at this message also if they want
 }
 
-void InkHUD::NodeListApplet::onForeground()
+void InkHUD::ChronoListApplet::onForeground()
 {
     // Start applet's thread, running every minute
     OSThread::setIntervalFromNow(60 * 1000UL);
     OSThread::enabled = true;
 }
 
-void InkHUD::NodeListApplet::onBackground()
+void InkHUD::ChronoListApplet::onBackground()
 {
     OSThread::disable();
 }
 
-int32_t InkHUD::NodeListApplet::runOnce()
+int32_t InkHUD::ChronoListApplet::runOnce()
 {
     updateActivityInfo();
     return interval; // Same as always: once a minute

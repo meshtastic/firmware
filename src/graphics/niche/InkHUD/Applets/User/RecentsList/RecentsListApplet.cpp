@@ -1,29 +1,29 @@
 #ifdef MESHTASTIC_INCLUDE_INKHUD
 
-#include "./ActiveNodesApplet.h"
+#include "./RecentsListApplet.h"
 
 #include "gps/RTC.h"
 #include "mesh/NodeDB.h"
 
 using namespace NicheGraphics;
 
-InkHUD::ActiveNodesApplet::ActiveNodesApplet() : NodeListApplet("ActiveNodesApplet")
+InkHUD::RecentsListApplet::RecentsListApplet() : ChronoListApplet("RecentsListApplet")
 {
     // No timer activity at boot
     OSThread::disable();
 }
 
 // Tell base class which nodes should be drawn
-bool InkHUD::ActiveNodesApplet::shouldListNode(NodeListItem item)
+bool InkHUD::RecentsListApplet::shouldListNode(ChronoListItem item)
 {
     // Only draw if heard within our time limit
     return heardRecently(item);
 }
 
 // Text to be shown at top of applet
-// NodeListApplet base class allows us to set this dynamically
+// ChronoListApplet base class allows us to set this dynamically
 // Might want to adjust depending on node count, RTC status, etc
-std::string InkHUD::ActiveNodesApplet::getHeaderText()
+std::string InkHUD::RecentsListApplet::getHeaderText()
 {
     std::string text;
 
@@ -48,7 +48,7 @@ std::string InkHUD::ActiveNodesApplet::getHeaderText()
 
 // Prune our applets list of active nodes, in case any are now too old
 // Runs at regular intervals
-void InkHUD::ActiveNodesApplet::updateActivityInfo()
+void InkHUD::RecentsListApplet::updateActivityInfo()
 {
     bool modified = false;
 

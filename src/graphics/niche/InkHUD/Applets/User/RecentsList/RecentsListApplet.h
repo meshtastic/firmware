@@ -6,7 +6,7 @@ Shows a list of nodes which have been recently active
 For testing, this duration is 2 minutes(?)
 In future, this duration will be configurable in the onscreen menu
 
-Most of the work is done by the shared InkHUD::NodeListApplet base class
+Most of the work is done by the shared InkHUD::ChronoListApplet base class
 
 */
 
@@ -14,20 +14,20 @@ Most of the work is done by the shared InkHUD::NodeListApplet base class
 
 #include "configuration.h"
 
-#include "graphics/niche/InkHUD/Applets/Bases/NodeList/NodeListApplet.h"
+#include "graphics/niche/InkHUD/Applets/Bases/ChronoList/ChronoListApplet.h"
 
 namespace NicheGraphics::InkHUD
 {
 
 class Applet;
 
-class ActiveNodesApplet : public NodeListApplet
+class RecentsListApplet : public ChronoListApplet
 {
   public:
-    ActiveNodesApplet();
+    RecentsListApplet();
 
   protected:
-    bool shouldListNode(NodeListItem item) override;
+    bool shouldListNode(ChronoListItem item) override;
     std::string getHeaderText() override;
 
     void updateActivityInfo() override;

@@ -2,7 +2,6 @@ A non-exhaustive task list
 
 Features
 ====================
-[]      activity period
 []      adhoc ping
 []      canned message
 []      backlight toggle
@@ -37,10 +36,11 @@ Improvements
 []      Better detection of position changes in PositionsApplet
 []      Don't show hops in nodelist applets if unknown
 []      Refactor WindowManager::render
-[]      Refactor NodeList applets
+[]      Refactor ChronoList applets
 []      Handle layout / applet changes with render(), instead of the "stale render" technique
-[]      NodeListApplet should only requestUpdate for changed signal strength if node 0-hops (showing signal bars)
+[]      ChronoListApplet should only requestUpdate for changed signal strength if node 0-hops (showing signal bars)
 []      Descriptive headers for some settings in menu
+[]      Re-render applets when RTC is set. Some UI elements change (e.g. "Recents" applet counts) 
 
 Known Bugs
 =====================
@@ -52,7 +52,7 @@ Known Bugs
 []      Lightsleep shouldn't be possible while update in progress. Set canSleep=false? 
 []      Root menu: header breaks spacing if rtc set while menu open
 []      Applets don't re-render when node is removed via admin command
-[tbc]   (Rare) Incorrect number of lines in threaded message display. Observed in T-Echo with msg "All received here. Happy Saturday all."
+[]      Incorrect number of lines in threaded message display. (When '\n' is used. With long text such as URL)
 []      Autoshow focusing oldest of two competing requests, if render is deferred
 
 Chores

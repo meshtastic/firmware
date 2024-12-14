@@ -22,11 +22,11 @@ Different NicheGraphics UIs and different hardware variants will each have their
 #include "graphics/niche/InkHUD/WindowManager.h"
 
 // Applets
-#include "graphics/niche/InkHUD/Applets/User/ActiveNodes/ActiveNodesApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/AllMessage/AllMessageApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/DM/DMApplet.h"
-#include "graphics/niche/InkHUD/Applets/User/LastHeardNodes/LastHeardNodesApplet.h"
+#include "graphics/niche/InkHUD/Applets/User/Heard/HeardApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/Positions/PositionsApplet.h"
+#include "graphics/niche/InkHUD/Applets/User/RecentsList/RecentsListApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/ThreadedMessage/ThreadedMessageApplet.h"
 
 // #include "graphics/niche/InkHUD/Applets/Examples/BasicExample/BasicExampleApplet.h"
@@ -89,8 +89,8 @@ void setupNicheGraphics()
     windowManager->addApplet("Channel 0", new InkHUD::ThreadedMessageApplet(0));
     windowManager->addApplet("Channel 1", new InkHUD::ThreadedMessageApplet(1));
     windowManager->addApplet("Positions", new InkHUD::PositionsApplet, true);
-    windowManager->addApplet("Active Nodes", new InkHUD::ActiveNodesApplet);
-    windowManager->addApplet("Last Heard", new InkHUD::LastHeardNodesApplet, true);
+    windowManager->addApplet("Recents List", new InkHUD::RecentsListApplet);
+    windowManager->addApplet("Heard", new InkHUD::HeardApplet, true);
     // windowManager->addApplet("Basic", new InkHUD::BasicExampleApplet);
     // windowManager->addApplet("NewMsg", new InkHUD::NewMsgExampleApplet);
 
