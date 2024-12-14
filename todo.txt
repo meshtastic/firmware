@@ -33,7 +33,7 @@ Critical Tasks
 
 Improvements
 ====================
-[]      Nodelist applet should fill new space from NodeDB when layout changes and applet size increases
+[]      Nodelist applet should fill new space from NodeDB when layout changes and applet size increases, or when recents duration increases
 []      Better detection of position changes in PositionsApplet
 []      Don't show hops in nodelist applets if unknown
 []      Refactor WindowManager::render

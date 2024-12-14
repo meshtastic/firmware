@@ -31,6 +31,7 @@ class MenuApplet : public Applet, public concurrency::OSThread
     void showPage(MenuPage page); // Load and display a MenuPage
     void populateAppletPage();    // Dynamically create MenuItems for toggling loaded applets
     void populateAutoshowPage();  // Dynamically create MenuItems for selecting which applets can autoshow
+    void populateRecentsPage();   // Create menu items: a choice of values for settings.recentlyActiveSeconds
     uint16_t getSystemInfoPanelHeight();
     void drawSystemInfoPanel(int16_t left, int16_t top, uint16_t width,
                              uint16_t *height = nullptr); // Info panel at top of root menu

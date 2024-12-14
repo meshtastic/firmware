@@ -26,7 +26,7 @@ namespace NicheGraphics::InkHUD
 class MenuItem
 {
   public:
-    const char *label;
+    std::string label;
     MenuAction action = NO_ACTION;
     MenuPage nextPage = EXIT;
     bool *checkState = nullptr;

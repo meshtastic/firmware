@@ -27,17 +27,21 @@ std::string InkHUD::ActiveNodesApplet::getHeaderText()
 {
     std::string text;
 
-    // Print node count, on right side of header
-    // - only if our RTC is set, to avoid weird things, if "last heard" is in the future
-    const uint16_t nodeCount = getActiveNodeCount();
+    // Print the length of our "Recents" time-window
+    text += "Last ";
+    text += to_string(settings.recentlyActiveSeconds / 60);
+    text += " mins";
 
-    if (nodeCount > 0) {
-        text += "Active: ";
-        text += to_string(getActiveNodeCount());
-        text += " of ";
-        text += to_string(nodeDB->getNumMeshNodes() - 1); // Minus one: exclude our own node
-    } else
-        text += "Active Nodes";
+    // Print the node count
+    // - only if our RTC is set, to avoid weird things, if "last heard" is in the future
+
+    if (getRTCQuality() != RTCQualityNone) {
+        const uint16_t nodeCount = getActiveNodeCount();
+        text += ": ";
+        text += to_string(nodeCount);
+        text += " ";
+        text += (nodeCount == 1) ? "node" : "nodes";
+    }
 
     return text;
 }

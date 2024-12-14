@@ -9,6 +9,10 @@ using namespace NicheGraphics;
 
 static constexpr uint8_t MENU_TIMEOUT_SEC = 30; // How many seconds before menu auto-closes
 
+// Options for the "Recents" menu
+// These are offered to users as possible values for settings.recentlyActiveSeconds
+static constexpr uint8_t RECENTS_OPTIONS_MINUTES[] = {2, 5, 10, 30, 60, 120};
+
 InkHUD::MenuApplet::MenuApplet() : concurrency::OSThread("MenuApplet")
 {
     // No timer tasks at boot
@@ -112,6 +116,13 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         *items.at(cursor).checkState = !(*items.at(cursor).checkState);
         break;
 
+    case SET_RECENTS:
+        // Set value of settings.recentlyActiveSeconds
+        // Uses menu cursor to read RECENTS_OPTIONS_MINUTES array (defined at top of this file)
+        assert(cursor < sizeof(RECENTS_OPTIONS_MINUTES) / sizeof(RECENTS_OPTIONS_MINUTES[0]));
+        settings.recentlyActiveSeconds = RECENTS_OPTIONS_MINUTES[cursor] * 60; // Menu items are in minutes
+        break;
+
     case SHUTDOWN:
         LOG_INFO("Shutting down from menu");
         power->shutdown();
@@ -157,6 +168,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     case OPTIONS:
         items.push_back(MenuItem("Applets", MenuPage::APPLETS));
         items.push_back(MenuItem("Auto-show", MenuPage::AUTOSHOW));
+        items.push_back(MenuItem("Recents", MenuPage::RECENTS));
         items.push_back(MenuItem("Layout", MenuAction::LAYOUT, MenuPage::OPTIONS));
         items.push_back(MenuItem("Rotate", MenuAction::ROTATE, MenuPage::OPTIONS));
         items.push_back(
@@ -178,6 +190,10 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     case AUTOSHOW:
         populateAutoshowPage();
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
+
+    case RECENTS:
+        populateRecentsPage();
         break;
 
     case EXIT:
@@ -364,6 +380,19 @@ void InkHUD::MenuApplet::populateAutoshowPage()
             bool *isActive = &(settings.userApplets.autoshow[i]);
             items.push_back(MenuItem(name, MenuAction::TOGGLE_AUTOSHOW, MenuPage::AUTOSHOW, isActive));
         }
+    }
+}
+
+void InkHUD::MenuApplet::populateRecentsPage()
+{
+    // How many values are shown for use to choose from
+    constexpr uint8_t optionCount = sizeof(RECENTS_OPTIONS_MINUTES) / sizeof(RECENTS_OPTIONS_MINUTES[0]);
+
+    // Create an entry for each item in RECENTS_OPTIONS_MINUTES array
+    // (Defined at top of this file)
+    for (uint8_t i = 0; i < optionCount; i++) {
+        std::string label = to_string(RECENTS_OPTIONS_MINUTES[i]) + " mins";
+        items.push_back(MenuItem(label.c_str(), MenuAction::SET_RECENTS, MenuPage::EXIT));
     }
 }
 

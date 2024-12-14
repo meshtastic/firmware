@@ -21,7 +21,8 @@ enum MenuPage : uint8_t {
     OPTIONS,
     APPLETS,
     AUTOSHOW,
-    EXIT, // Dismiss the menu applet
+    RECENTS, // Select length of "recentlyActiveSeconds"
+    EXIT,    // Dismiss the menu applet
 };
 
 } // namespace NicheGraphics::InkHUD
