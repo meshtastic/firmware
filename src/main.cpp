@@ -1148,11 +1148,6 @@ void setup()
     initApiServer(TCPPort);
 #endif
 
-#ifdef USE_PACKET_API
-    MeshPacketServer::init();
-    PacketClient::init();
-#endif
-
     // Start airtime logger thread.
     airTime = new AirTime();
 
