@@ -58,6 +58,7 @@ class MotionSensor
 
     // Do calibration if true
     bool doCalibration = false;
+    bool firstCalibrationRead = false;
     uint32_t endCalibrationAt = 0;
 };
 

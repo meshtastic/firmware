@@ -40,18 +40,28 @@ int32_t BMX160Sensor::runOnce()
             screen->startAlert((FrameCallback)drawFrameCalibration);
         }
 
-        if (magAccel.x > highestX)
+        if (firstCalibrationRead) {
             highestX = magAccel.x;
-        if (magAccel.x < lowestX)
             lowestX = magAccel.x;
-        if (magAccel.y > highestY)
             highestY = magAccel.y;
-        if (magAccel.y < lowestY)
             lowestY = magAccel.y;
-        if (magAccel.z > highestZ)
             highestZ = magAccel.z;
-        if (magAccel.z < lowestZ)
             lowestZ = magAccel.z;
+            firstCalibrationRead = false;
+        } else {
+            if (magAccel.x > highestX)
+                highestX = magAccel.x;
+            if (magAccel.x < lowestX)
+                lowestX = magAccel.x;
+            if (magAccel.y > highestY)
+                highestY = magAccel.y;
+            if (magAccel.y < lowestY)
+                lowestY = magAccel.y;
+            if (magAccel.z > highestZ)
+                highestZ = magAccel.z;
+            if (magAccel.z < lowestZ)
+                lowestZ = magAccel.z;
+        }
 
         uint32_t now = millis();
         if (now > endCalibrationAt) {
@@ -116,6 +126,7 @@ void BMX160Sensor::calibrate(uint16_t forSeconds)
     LOG_DEBUG("BMX160 calibration started for %is", forSeconds);
 
     doCalibration = true;
+    firstCalibrationRead = true;
     uint16_t calibrateFor = forSeconds * 1000; // calibrate for seconds provided
     endCalibrationAt = millis() + calibrateFor;
     screen->setEndCalibration(endCalibrationAt);
