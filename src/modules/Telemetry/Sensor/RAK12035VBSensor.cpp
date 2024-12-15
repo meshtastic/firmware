@@ -30,6 +30,7 @@ int32_t RAK12035VBSensor::runOnce()
         LOG_ERROR("RAK12035VBSensor Init Failed");
         status = false;
     }
+    sensor.sensor_sleep();
     return initI2CSensor();
 }
 
@@ -40,9 +41,11 @@ void RAK12035VBSensor::setup() {
     uint16_t hundred_val = 0;
     uint16_t default_zero_val = 550;
     uint16_t default_hundred_val = 420;
+    sensor.sensor_on();
+    delay(200);
 	sensor.get_dry_cal(&zero_val);
 	sensor.get_wet_cal(&hundred_val);
-    delay(100);
+    delay(200);
     if(zero_val == 0 || zero_val <= hundred_val){
         LOG_ERROR("Dry calibration value is %d", zero_val);
         LOG_ERROR("Wet calibration value is %d", hundred_val);
@@ -61,7 +64,8 @@ void RAK12035VBSensor::setup() {
         sensor.get_wet_cal(&hundred_val);
         LOG_ERROR("Wet calibration reset complete. New value is %d", hundred_val);
     }  
-    delay(100);
+    sensor.sensor_sleep();
+    delay(200);
 	LOG_INFO("Dry calibration value is %d", zero_val);
 	LOG_INFO("Wet calibration value is %d", hundred_val);
 }
@@ -75,11 +79,14 @@ bool RAK12035VBSensor::getMetrics(meshtastic_Telemetry *measurement)
     uint16_t temp = 0;
     bool success = false;
 
+    sensor.sensor_on();
+    delay(200);
     success = sensor.get_sensor_moisture(&moisture);
-    delay(500);
+    delay(200);
     success = sensor.get_sensor_temperature(&temp);
-    delay(500);
-
+    delay(200);
+    sensor.sensor_sleep();
+    
     if(success == false){
         LOG_ERROR("Failed to read sensor data");
         return false;
