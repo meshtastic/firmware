@@ -55,7 +55,7 @@ void NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t cha
         }
 #ifdef USERPREFS_CONFIG_DISCOVERY_CHANNEL
         // If this is a broadcast over the default channel, we can safely change this to the discovery channel if defined
-        if (dest === NODENUM_BROADCAST && channel === 0) {
+        if (dest == NODENUM_BROADCAST && channel == 0) {
             p->channel = USERPREFS_CONFIG_DISCOVERY_CHANNEL;
         }
 #endif
