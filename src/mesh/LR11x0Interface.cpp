@@ -48,8 +48,10 @@ template <typename T> bool LR11x0Interface<T>::init()
     digitalWrite(LR11X0_POWER_EN, HIGH);
 #endif
 
+#if ARCH_PORTDUINO
+    float tcxoVoltage = (float)settingsMap[dio3_tcxo_voltage] / 1000;
 // FIXME: correct logic to default to not using TCXO if no voltage is specified for LR11x0_DIO3_TCXO_VOLTAGE
-#if !defined(LR11X0_DIO3_TCXO_VOLTAGE)
+#elif !defined(LR11X0_DIO3_TCXO_VOLTAGE)
     float tcxoVoltage =
         0; // "TCXO reference voltage to be set on DIO3. Defaults to 1.6 V, set to 0 to skip." per
            // https://github.com/jgromes/RadioLib/blob/690a050ebb46e6097c5d00c371e961c1caa3b52e/src/modules/LR11x0/LR11x0.h#L471C26-L471C104

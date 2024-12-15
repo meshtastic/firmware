@@ -50,9 +50,7 @@ template <typename T> bool SX126xInterface<T>::init()
 #endif
 
 #if ARCH_PORTDUINO
-    float tcxoVoltage = 0;
-    if (settingsMap[dio3_tcxo_voltage])
-        tcxoVoltage = 1.8;
+    float tcxoVoltage = (float)settingsMap[dio3_tcxo_voltage] / 1000;
     if (settingsMap[sx126x_ant_sw] != RADIOLIB_NC) {
         digitalWrite(settingsMap[sx126x_ant_sw], HIGH);
         pinMode(settingsMap[sx126x_ant_sw], OUTPUT);
