@@ -18,11 +18,6 @@
 #ifdef ARCH_ESP32   //when using esp32, using esp32 specific libary for SD Card
 SPIClass SPI1(HSPI);
 #endif //ARCH_ESP32
-#ifdef ARCH_NRF52   //when using NRF52, initialize arduino/SD library
-Sd2Card SD;
-SdVolume volume;
-SdFile root;
-#endif //ARCH_ESP32
 #define SDHandler SPI1
 #else
 #define SDHandler SPI
@@ -382,15 +377,14 @@ void setupSDCard()
         LOG_DEBUG("Used space: %lu MB", (uint32_t)(SD.usedBytes() / (1024 * 1024)));
     #endif
     #if defined(ARCH_NRF52)
-        if (SD.init())                  //not getting any errors while compiling, card not being initialized yet
+        if (SDLib::SD.begin(SDCARD_CS))
         {
-            LOG_ERROR("Succesfully initialized SD Card");
+            LOG_INFO("Succesfully initialized SD Card");
             return;
         }
         else
         {
-            LOG_ERROR("Could not initialize SD Card");
-            LOG_ERROR("Error code: %d", SD.errorCode());
+            LOG_INFO("Could not initialize SD Card");
             return;
         }
     #endif
