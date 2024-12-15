@@ -14,7 +14,23 @@
 #include "../graphics/Screen.h"
 #include "../graphics/ScreenFonts.h"
 #include "../power.h"
+#include "FSCommon.h"
 #include "Wire.h"
+
+#define MAX_STATE_BLOB_SIZE (256) // pad size to allow for additional saved config parameters (accel, gyro, etc)
+
+struct xyzFloat {
+    float x;
+    float y;
+    float z;
+};
+struct minMaxXYZ {
+    xyzFloat min;
+    xyzFloat max;
+};
+struct SensorConfig {
+    minMaxXYZ mAccel;
+};
 
 // Base class for motion processing
 class MotionSensor
@@ -56,10 +72,18 @@ class MotionSensor
 
     ScanI2C::FoundDevice device;
 
-    // Do calibration if true
+    SensorConfig sensorConfig;
+    bool showingScreen = false;
     bool doCalibration = false;
     bool firstCalibrationRead = false;
     uint32_t endCalibrationAt = 0;
+
+    void getMagCalibrationData(float x, float y, float z);
+
+    const char *configFileName = "/prefs/motionSensor.dat";
+    uint8_t sensorState[MAX_STATE_BLOB_SIZE] = {0};
+    void loadState();
+    void saveState();
 };
 
 namespace MotionSensorI2C

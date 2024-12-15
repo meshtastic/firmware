@@ -84,4 +84,91 @@ void MotionSensor::buttonPress() {}
 
 #endif
 
+void MotionSensor::getMagCalibrationData(float x, float y, float z)
+{
+    if (!showingScreen) {
+        powerFSM.trigger(EVENT_PRESS); // keep screen alive during calibration
+        showingScreen = true;
+        screen->startAlert((FrameCallback)drawFrameCalibration);
+    }
+
+    if (firstCalibrationRead) {
+        sensorConfig.mAccel.min.x = x;
+        sensorConfig.mAccel.max.x = x;
+        sensorConfig.mAccel.min.y = y;
+        sensorConfig.mAccel.max.y = y;
+        sensorConfig.mAccel.min.z = z;
+        sensorConfig.mAccel.max.z = z;
+        firstCalibrationRead = false;
+    } else {
+        if (x > sensorConfig.mAccel.max.x)
+            sensorConfig.mAccel.max.x = x;
+        if (x < sensorConfig.mAccel.min.x)
+            sensorConfig.mAccel.min.x = x;
+        if (y > sensorConfig.mAccel.max.y)
+            sensorConfig.mAccel.max.y = y;
+        if (y < sensorConfig.mAccel.min.y)
+            sensorConfig.mAccel.min.y = y;
+        if (z > sensorConfig.mAccel.max.z)
+            sensorConfig.mAccel.max.z = z;
+        if (z < sensorConfig.mAccel.min.z)
+            sensorConfig.mAccel.min.z = z;
+    }
+
+    uint32_t now = millis();
+    if (now > endCalibrationAt) {
+        doCalibration = false;
+        endCalibrationAt = 0;
+        showingScreen = false;
+        screen->endAlert();
+
+        saveState();
+    }
+}
+
+void MotionSensor::loadState()
+{
+#ifdef FSCom
+    auto file = FSCom.open(configFileName, FILE_O_READ);
+    if (file) {
+        file.read((uint8_t *)&sensorState, MAX_STATE_BLOB_SIZE);
+        file.close();
+
+        memcpy(&sensorConfig, &sensorState, sizeof(SensorConfig));
+
+        LOG_INFO("Motion Sensor config state read from %s", configFileName);
+    } else {
+        LOG_INFO("No Motion Sensor config state found (File: %s)", configFileName);
+    }
+#else
+    LOG_ERROR("ERROR: Filesystem not implemented");
+#endif
+}
+
+void MotionSensor::saveState()
+{
+#ifdef FSCom
+    memcpy(&sensorState, &sensorConfig, sizeof(SensorConfig));
+
+    LOG_INFO("Motion Sensor save calibration min_x: %.4f, max_X: %.4f, min_Y: %.4f, max_Y: %.4f, min_Z: %.4f, max_Z: %.4f",
+             sensorConfig.mAccel.min.x, sensorConfig.mAccel.max.x, sensorConfig.mAccel.min.y, sensorConfig.mAccel.max.y,
+             sensorConfig.mAccel.min.z, sensorConfig.mAccel.max.z);
+
+    if (FSCom.exists(configFileName) && !FSCom.remove(configFileName)) {
+        LOG_WARN("Can't remove old Motion Sensor config state file");
+    }
+    auto file = FSCom.open(configFileName, FILE_O_WRITE);
+    if (file) {
+        LOG_INFO("Write Motion Sensor config state to %s", configFileName);
+        file.write((uint8_t *)&sensorState, MAX_STATE_BLOB_SIZE);
+        file.flush();
+        file.close();
+    } else {
+        LOG_INFO("Can't write Motion Sensor config state (File: %s)", configFileName);
+    }
+#else
+    LOG_ERROR("ERROR: Filesystem not implemented");
+#endif
+}
+
 #endif
