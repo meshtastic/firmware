@@ -220,6 +220,9 @@ typedef enum _meshtastic_HardwareModel {
  the same frame format.
  Runs on linux, see https://github.com/Jorropo/routastic */
     meshtastic_HardwareModel_ROUTASTIC = 85,
+    /* Mesh-Tab, esp32 based
+ https://github.com/valzzu/Mesh-Tab */
+    meshtastic_HardwareModel_MESH_TAB = 86,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
@@ -414,6 +417,8 @@ typedef enum _meshtastic_MeshPacket_Priority {
     meshtastic_MeshPacket_Priority_RESPONSE = 80,
     /* Higher priority for specific message types (portnums) to distinguish between other reliable packets. */
     meshtastic_MeshPacket_Priority_HIGH = 100,
+    /* Higher priority alert message used for critical alerts which take priority over other reliable packets. */
+    meshtastic_MeshPacket_Priority_ALERT = 110,
     /* Ack/naks are sent with very high priority to ensure that retransmission
  stops as soon as possible */
     meshtastic_MeshPacket_Priority_ACK = 120,
