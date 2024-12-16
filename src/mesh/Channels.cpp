@@ -314,6 +314,15 @@ void Channels::setChannel(const meshtastic_Channel &c)
     old = c; // slam in the new settings/role
 }
 
+int8_t Channels::getIndexByHash(ChannelHash channelHash)
+{
+    for (int i = 0; i < getNumChannels(); i++)
+        if (getHash(i) == channelHash)
+            return i;
+
+    return -1;
+}
+
 bool Channels::anyMqttEnabled()
 {
 #if USERPREFS_EVENT_MODE
