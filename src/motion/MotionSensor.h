@@ -19,10 +19,15 @@
 
 #define MAX_STATE_BLOB_SIZE (256) // pad size to allow for additional saved config parameters (accel, gyro, etc)
 
+struct xyzInt {
+    int x = 0;
+    int y = 0;
+    int z = 0;
+};
 struct xyzFloat {
-    float x;
-    float y;
-    float z;
+    float x = 0.0;
+    float y = 0.0;
+    float z = 0.0;
 };
 struct minMaxXYZ {
     xyzFloat min;
@@ -30,6 +35,9 @@ struct minMaxXYZ {
 };
 struct SensorConfig {
     minMaxXYZ mAccel;
+    xyzFloat gyroAccel;
+    // xyzFloat gAccel;
+    xyzInt orientation;
 };
 
 // Base class for motion processing
@@ -68,17 +76,28 @@ class MotionSensor
 #if defined(RAK_4631) & !MESHTASTIC_EXCLUDE_SCREEN
     // draw an OLED frame (currently only used by the RAK4631 BMX160 sensor)
     static void drawFrameCalibration(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+    static void drawFrameGyroWarning(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+    static void drawFrameGyroCalibration(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 #endif
 
     ScanI2C::FoundDevice device;
 
     SensorConfig sensorConfig;
     bool showingScreen = false;
-    bool doCalibration = false;
+    bool doMagCalibration = false;
+    bool doGyroWarning = false;
+    bool doGyroCalibration = false;
     bool firstCalibrationRead = false;
-    uint32_t endCalibrationAt = 0;
+    uint32_t endMagCalibrationAt = 0;
+    uint32_t endGyroWarningAt = 0;
+    uint32_t endGyroCalibrationAt = 0;
+    xyzFloat gyroCalibrationSum;
+    xyzInt accelCalibrationSum;
+    uint16_t calibrationCount = 0;
 
     void getMagCalibrationData(float x, float y, float z);
+    void gyroCalibrationWarning();
+    void getGyroCalibrationData(float g_x, float g_y, float g_z, float a_x, float a_y, float a_z);
 
     const char *configFileName = "/prefs/motionSensor.dat";
     uint8_t sensorState[MAX_STATE_BLOB_SIZE] = {0};

@@ -59,6 +59,33 @@ void MotionSensor::drawFrameCalibration(OLEDDisplay *display, OLEDDisplayUiState
     display->drawCircle(compassX, compassY, compassDiam / 2);
     screen->drawCompassNorth(display, compassX, compassY, screen->getHeading() * PI / 180);
 }
+
+void MotionSensor::drawFrameGyroWarning(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    // int x_offset = display->width() / 2;
+    // int y_offset = display->height() <= 80 ? 0 : 32;
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
+    display->drawString(x, y, "Place Screen Face Up\nPointing North\nKeep Still");
+
+    uint8_t timeRemaining = (screen->getEndCalibration() - millis()) / 1000;
+    sprintf(timeRemainingBuffer, "Starting in ( %02d )", timeRemaining);
+    display->drawString(x, y + 40, timeRemainingBuffer);
+}
+
+void MotionSensor::drawFrameGyroCalibration(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    // int x_offset = display->width() / 2;
+    // int y_offset = display->height() <= 80 ? 0 : 32;
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_MEDIUM);
+    display->drawString(x, y, "Calibrating\nGyroscope");
+
+    uint8_t timeRemaining = (screen->getEndCalibration() - millis()) / 1000;
+    sprintf(timeRemainingBuffer, "Keep Still ( %02d )", timeRemaining);
+    display->setFont(FONT_SMALL);
+    display->drawString(x, y + 40, timeRemainingBuffer);
+}
 #endif
 
 #if !MESHTASTIC_EXCLUDE_POWER_FSM
@@ -116,13 +143,126 @@ void MotionSensor::getMagCalibrationData(float x, float y, float z)
     }
 
     uint32_t now = millis();
-    if (now > endCalibrationAt) {
-        doCalibration = false;
-        endCalibrationAt = 0;
+    if (now > endMagCalibrationAt) {
+        doMagCalibration = false;
+        endMagCalibrationAt = 0;
         showingScreen = false;
         screen->endAlert();
 
+        doGyroWarning = true;
+        endGyroWarningAt = now + 10000;
+        screen->setEndCalibration(endGyroWarningAt);
+    }
+}
+
+void MotionSensor::gyroCalibrationWarning()
+{
+    if (!showingScreen) {
+        powerFSM.trigger(EVENT_PRESS); // keep screen alive during calibration
+        showingScreen = true;
+        screen->startAlert((FrameCallback)drawFrameGyroWarning);
+    }
+
+    uint32_t now = millis();
+    if (now > endGyroWarningAt) {
+        doGyroWarning = false;
+        endGyroWarningAt = 0;
+        showingScreen = false;
+        screen->endAlert();
+
+        doGyroCalibration = true;
+        endGyroCalibrationAt = now + 10000;
+        screen->setEndCalibration(endGyroCalibrationAt);
+    }
+}
+
+void MotionSensor::getGyroCalibrationData(float g_x, float g_y, float g_z, float a_x, float a_y, float a_z)
+{
+    if (!showingScreen) {
+        powerFSM.trigger(EVENT_PRESS); // keep screen alive during calibration
+        showingScreen = true;
+        screen->startAlert((FrameCallback)drawFrameGyroCalibration);
+    }
+
+    gyroCalibrationSum.x += g_x;
+    gyroCalibrationSum.y += g_y;
+    gyroCalibrationSum.z += g_z;
+
+    // increment x, y, or z based on greatest accel vector to identify down direction
+    if (abs(a_x) > abs(a_y) && abs(a_x) > abs(a_z)) {
+        if (a_x >= 0) {
+            accelCalibrationSum.x += 1;
+        } else {
+            accelCalibrationSum.x += -1;
+        }
+    } else if (abs(a_y) > abs(a_x) && abs(a_y) > abs(a_z)) {
+        if (a_y >= 0) {
+            accelCalibrationSum.y += 1;
+        } else {
+            accelCalibrationSum.y += -1;
+        }
+    } else if (abs(a_z) > abs(a_x) && abs(a_z) > abs(a_y)) {
+        if (a_z >= 0) {
+            accelCalibrationSum.z += 1;
+        } else {
+            accelCalibrationSum.z += -1;
+        }
+    }
+    calibrationCount++;
+
+    LOG_DEBUG("Accel calibration x: %i, y: %i, z: %i", accelCalibrationSum.x, accelCalibrationSum.y, accelCalibrationSum.z);
+
+    uint32_t now = millis();
+    if (now > endGyroCalibrationAt) {
+        sensorConfig.gyroAccel.x = gyroCalibrationSum.x / calibrationCount;
+        sensorConfig.gyroAccel.y = gyroCalibrationSum.y / calibrationCount;
+        sensorConfig.gyroAccel.z = gyroCalibrationSum.z / calibrationCount;
+
+        // determine orientation multipliers based on down direction
+        if (abs(accelCalibrationSum.x) > abs(accelCalibrationSum.y) && abs(accelCalibrationSum.x) > abs(accelCalibrationSum.z)) {
+            if (accelCalibrationSum.x >= 0) {
+                sensorConfig.orientation.x = 1;
+                sensorConfig.orientation.y = 1;
+                sensorConfig.orientation.z = 1;
+            } else {
+                sensorConfig.orientation.x = 1;
+                sensorConfig.orientation.y = 1;
+                sensorConfig.orientation.z = 1;
+            }
+        } else if (abs(accelCalibrationSum.y) > abs(accelCalibrationSum.x) &&
+                   abs(accelCalibrationSum.y) > abs(accelCalibrationSum.z)) {
+            if (accelCalibrationSum.y >= 0) {
+                sensorConfig.orientation.x = 1;
+                sensorConfig.orientation.y = 1;
+                sensorConfig.orientation.z = 1;
+            } else {
+                sensorConfig.orientation.x = 1;
+                sensorConfig.orientation.y = 1;
+                sensorConfig.orientation.z = 1;
+            }
+        } else if (abs(accelCalibrationSum.z) > abs(accelCalibrationSum.x) &&
+                   abs(accelCalibrationSum.z) > abs(accelCalibrationSum.y)) {
+            if (accelCalibrationSum.z >= 0) {
+                sensorConfig.orientation.x = -1;
+                sensorConfig.orientation.y = -1;
+                sensorConfig.orientation.z = -1;
+            } else {
+                sensorConfig.orientation.x = -1;
+                sensorConfig.orientation.y = -1;
+                sensorConfig.orientation.z = 1;
+            }
+        }
+
+        LOG_INFO("Gyro center x: %.4f, y: %.4f, z: %.4f", sensorConfig.gyroAccel.x, sensorConfig.gyroAccel.y,
+                 sensorConfig.gyroAccel.z);
+        LOG_INFO("Orientation vector x: %i, y: %i, z: %i", sensorConfig.orientation.x, sensorConfig.orientation.y,
+                 sensorConfig.orientation.z);
+
         saveState();
+        doGyroCalibration = false;
+        endGyroCalibrationAt = 0;
+        showingScreen = false;
+        screen->endAlert();
     }
 }
 

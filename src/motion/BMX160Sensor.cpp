@@ -33,13 +33,18 @@ int32_t BMX160Sensor::runOnce()
 {
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN)
     sBmx160SensorData_t magAccel;
+    sBmx160SensorData_t gyroAccel;
     sBmx160SensorData_t gAccel;
 
     /* Get a new sensor event */
-    sensor.getAllData(&magAccel, NULL, &gAccel);
+    sensor.getAllData(&magAccel, &gyroAccel, &gAccel);
 
-    if (doCalibration) {
+    if (doMagCalibration) {
         getMagCalibrationData(magAccel.x, magAccel.y, magAccel.z);
+    } else if (doGyroWarning) {
+        gyroCalibrationWarning();
+    } else if (doGyroCalibration) {
+        getGyroCalibrationData(gyroAccel.x, gyroAccel.y, gyroAccel.z, gAccel.x, gAccel.y, gAccel.z);
     }
 
     int highestRealX = sensorConfig.mAccel.max.x - (sensorConfig.mAccel.max.x + sensorConfig.mAccel.min.x) / 2;
@@ -48,12 +53,12 @@ int32_t BMX160Sensor::runOnce()
     magAccel.y -= (sensorConfig.mAccel.max.y + sensorConfig.mAccel.min.y) / 2;
     magAccel.z -= (sensorConfig.mAccel.max.z + sensorConfig.mAccel.min.z) / 2;
     FusionVector ga, ma;
-    ga.axis.x = -gAccel.x; // default location for the BMX160 is on the rear of the board
-    ga.axis.y = -gAccel.y;
-    ga.axis.z = gAccel.z;
-    ma.axis.x = -magAccel.x;
-    ma.axis.y = -magAccel.y;
-    ma.axis.z = magAccel.z * 3;
+    ga.axis.x = gAccel.x * sensorConfig.orientation.x; // default location for the BMX160 is on the rear of the board
+    ga.axis.y = gAccel.y * sensorConfig.orientation.y;
+    ga.axis.z = gAccel.z * sensorConfig.orientation.z;
+    ma.axis.x = magAccel.x * sensorConfig.orientation.x;
+    ma.axis.y = magAccel.y * sensorConfig.orientation.y;
+    ma.axis.z = magAccel.z * sensorConfig.orientation.z * 3;
 
     // If we're set to one of the inverted positions
     if (config.display.compass_orientation > meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270) {
@@ -92,11 +97,11 @@ void BMX160Sensor::calibrate(uint16_t forSeconds)
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN)
     LOG_INFO("BMX160 calibration started for %is", forSeconds);
 
-    doCalibration = true;
+    doMagCalibration = true;
     firstCalibrationRead = true;
     uint16_t calibrateFor = forSeconds * 1000; // calibrate for seconds provided
-    endCalibrationAt = millis() + calibrateFor;
-    screen->setEndCalibration(endCalibrationAt);
+    endMagCalibrationAt = millis() + calibrateFor;
+    screen->setEndCalibration(endMagCalibrationAt);
 #endif
 }
 
