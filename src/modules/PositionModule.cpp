@@ -1,6 +1,5 @@
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "PositionModule.h"
-#include "NodeInfoModule.h"
 #include "Default.h"
 #include "GPS.h"
 #include "MeshService.h"
@@ -316,13 +315,6 @@ void PositionModule::sendOurPosition()
     // If we changed channels, ask everyone else for their latest info
     LOG_INFO("Send pos@%x:6 to mesh (wantReplies=%d)", localPosition.timestamp, requestReplies);
     sendOurPosition(NODENUM_BROADCAST, requestReplies);
-
-#ifdef USERPREFS_CONFIG_DISCOVERY_CHANNEL_HASH
-    // If the user wants discovery on a different channel, send only nodeinfo to that channel
-    // sendOurNodeInfo() will automatically handle routing a nodeinfo packet to the correct channel
-    assert(nodeInfoModule);
-    nodeInfoModule->sendOurNodeInfo();
-#endif
 }
 
 void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t channel)
