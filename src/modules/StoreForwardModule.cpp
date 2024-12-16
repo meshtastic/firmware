@@ -112,7 +112,19 @@ void StoreForwardModule::populateSDCard()
         }
     #endif  //ARCH_ESP32
     #if defined(ARCH_NRF52)
-
+        if(SDFileSystem.getCardType() != 0)
+        {
+            if(!SDFileSystem.exists("/storeforward"))
+            {
+                SDFileSystem.mkdir("/storeforward");
+                LOG_INFO("Creating StoreForward directory");
+            }
+            this->storageType = StorageType::ST_SDCARD;
+            uint32_t numberOfPackets = (this->records ? this->records : (((SDFileSystem.getVolumeSize() / 3) * 2 * 1024) / sizeof(PacketHistoryStruct))); //getVolumeSize returns size in kB
+            // only allocate space for one temp copy
+            this->packetHistory = (PacketHistoryStruct *)malloc(sizeof(PacketHistoryStruct));
+            LOG_DEBUG("numberOfPackets for packetHistory - %u", numberOfPackets);
+        }
     #endif //ARCH_NRF52
 #endif  //HAS_SDCARD
 }
