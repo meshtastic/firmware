@@ -178,7 +178,7 @@ class Applet : public GFX
     void printThick(int16_t xCenter, int16_t yCenter, std::string text, uint8_t thicknessX, uint8_t thicknessY);
 
     // Print text, with per-word line wrapping
-    void printWrapped(int16_t left, int16_t top, uint16_t width, std::string text, bool simulate = false);
+    void printWrapped(int16_t left, int16_t top, uint16_t width, std::string text);
     uint32_t getWrappedTextHeight(int16_t left, uint16_t width, std::string text);
 
     std::string getTimeString(uint32_t epochSeconds); // Human readable

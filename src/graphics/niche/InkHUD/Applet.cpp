@@ -336,7 +336,7 @@ std::string InkHUD::Applet::hexifyNodeNum(NodeNum num)
     return std::string(nodeIdHex);
 }
 
-void InkHUD::Applet::printWrapped(int16_t left, int16_t top, uint16_t width, std::string text, bool simulate)
+void InkHUD::Applet::printWrapped(int16_t left, int16_t top, uint16_t width, std::string text)
 {
     // Custom font glyphs
     // - set with AppletFont::addSubstitution
@@ -356,9 +356,15 @@ void InkHUD::Applet::printWrapped(int16_t left, int16_t top, uint16_t width, std
     uint16_t wordStart = 0;
     for (uint16_t i = 0; i < text.length(); i++) {
 
+        // Found: explicit newline
+        if (text[i] == '\n') {
+            setCursor(left, getCursorY() + getFont().lineHeight()); // Manual newline
+            wordStart = i + 1; // New word begins after the newline. Otherwise print will add an *extra* line
+        }
+
         // Found: end of word (split by spaces)
         // Also handles end of string
-        if (text[i] == ' ' || i == text.length() - 1) {
+        else if (text[i] == ' ' || i == text.length() - 1) {
             // Isolate this word
             uint16_t wordLength = (i - wordStart) + 1; // Plus one. Imagine: "a". End - Start is 0, but length is 1
             std::string word = text.substr(wordStart, wordLength);
@@ -370,24 +376,15 @@ void InkHUD::Applet::printWrapped(int16_t left, int16_t top, uint16_t width, std
             getTextBounds(word.c_str(), getCursorX(), getCursorY(), &l, &t, &w, &h);
 
             // Word is short
-            if (w < width) {
+            if ((l + w) < width) {
                 // Word fits on current line
-                if ((l + w + wSp) < left + width) {
-                    // Print the word (or simulate printing)
-                    if (!simulate)
-                        print(word.c_str());
-                    else
-                        setCursor(getCursorX() + w + wSp, getCursorY());
-                }
+                if ((l + w + wSp) < left + width)
+                    print(word.c_str());
+
                 // Word doesn't fit on current line
                 else {
-                    // Manual newline
-                    setCursor(left, getCursorY() + getFont().lineHeight());
-                    // Print (or simulate)
-                    if (!simulate) {
-                        print(word.c_str());
-                    } else
-                        setCursor(getCursorX() + w + wSp, getCursorY());
+                    setCursor(left, getCursorY() + getFont().lineHeight()); // Newline
+                    print(word.c_str());
                 }
             }
 
@@ -409,24 +406,37 @@ void InkHUD::Applet::printWrapped(int16_t left, int16_t top, uint16_t width, std
                     // Shove next char into a c string
                     cstr[0] = word[c];
                     getTextBounds(cstr, getCursorX(), getCursorY(), &l, &t, &w, &h);
-                    // If next character will spill beyond screen edge
-                    if ((l + w) > left + width)
-                        setCursor(left, getCursorY() + getFont().lineHeight()); // Manual newline
 
-                    // If not simulating, print the character (not the whole word!)
-                    if (!simulate)
-                        print(word[c]);
-                    else
-                        setCursor(getCursorX() + w + wSp, getCursorY());
+                    // Manual newline, ff next character will spill beyond screen edge
+                    if ((l + w) > left + width)
+                        setCursor(left, getCursorY() + getFont().lineHeight());
+
+                    // Print next character
+                    print(word[c]);
                 }
             }
         }
     }
 }
 
+// Simulate running printWrapped, to determine how tall the block of text will be.
+// This is a wasteful way of handling things. Maybe some way to optimize in future?
 uint32_t InkHUD::Applet::getWrappedTextHeight(int16_t left, uint16_t width, std::string text)
 {
-    printWrapped(left, 0, width, text, true); // Simulate only
+    // Cache the current crop region
+    int16_t cL = cropLeft;
+    int16_t cT = cropTop;
+    uint16_t cW = cropWidth;
+    uint16_t cH = cropHeight;
+
+    setCrop(-1, -1, 0, 0);              // Set crop to temporarily discard all pixels
+    printWrapped(left, 0, width, text); // Simulate only - no pixels drawn
+
+    // Restore previous crop region
+    cropLeft = cL;
+    cropTop = cT;
+    cropWidth = cW;
+    cropHeight = cH;
 
     // Note: printWrapped() offsets the initial cursor position by heightAboveCursor() val,
     // so we need to account for that when determining the height
