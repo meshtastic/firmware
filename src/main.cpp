@@ -361,6 +361,8 @@ void setup()
 #endif
 #endif
 
+    initSPI();
+
     OSThread::setup();
 
     ledPeriodic = new Periodic("Blink", ledBlinker);
