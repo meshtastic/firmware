@@ -137,7 +137,6 @@ inline void onReceiveJson(byte *payload, size_t length)
         return;
     }
 
-    // check if it is a valid envelope
     JSONObject json;
     json = json_value->AsObject();
 
