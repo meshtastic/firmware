@@ -13,7 +13,10 @@ struct PacketHistoryStruct {
     uint32_t time;
     uint32_t to;
     uint32_t from;
+    uint32_t id;
     uint8_t channel;
+    uint32_t reply_id;
+    bool emoji;
     uint8_t payload[meshtastic_Constants_DATA_PAYLOAD_LEN];
     pb_size_t payload_size;
 };
