@@ -35,6 +35,11 @@ static MemoryDynamic<meshtastic_ServiceEnvelope> staticMqttPool;
 
 Allocator<meshtastic_ServiceEnvelope> &mqttPool = staticMqttPool;
 
+// FIXME - this size calculation is super sloppy, but it will go away once we dynamically alloc meshpackets
+static uint8_t bytes[meshtastic_MqttClientProxyMessage_size + 30]; // 12 for channel name and 16 for nodeid
+
+static bool isMqttServerAddressPrivate = false;
+
 // meshtastic_ServiceEnvelope that automatically releases dynamically allocated memory when it goes out of scope.
 struct DecodedServiceEnvelope : public meshtastic_ServiceEnvelope {
     DecodedServiceEnvelope() = delete;
@@ -48,14 +53,9 @@ struct DecodedServiceEnvelope : public meshtastic_ServiceEnvelope {
     const bool validDecode;
 };
 
-// FIXME - this size calculation is super sloppy, but it will go away once we dynamically alloc meshpackets
-static uint8_t bytes[meshtastic_MqttClientProxyMessage_size + 30]; // 12 for channel name and 16 for nodeid
-
-static bool isMqttServerAddressPrivate = false;
-
 inline void onReceiveProto(char *topic, byte *payload, size_t length)
 {
-    DecodedServiceEnvelope e(payload, length);
+    const DecodedServiceEnvelope e(payload, length);
     if (!e.validDecode) {
         LOG_ERROR("Invalid MQTT service envelope, topic %s, len %u!", topic, length);
         return;
