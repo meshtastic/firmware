@@ -56,11 +56,7 @@ struct DecodedServiceEnvelope : public meshtastic_ServiceEnvelope {
 inline void onReceiveProto(char *topic, byte *payload, size_t length)
 {
     const DecodedServiceEnvelope e(payload, length);
-    if (!e.validDecode) {
-        LOG_ERROR("Invalid MQTT service envelope, topic %s, len %u!", topic, length);
-        return;
-    }
-    if (e.channel_id == NULL || e.gateway_id == NULL || e.packet == NULL) {
+    if (!e.validDecode || e.channel_id == NULL || e.gateway_id == NULL || e.packet == NULL) {
         LOG_ERROR("Invalid MQTT service envelope, topic %s, len %u!", topic, length);
         return;
     }
