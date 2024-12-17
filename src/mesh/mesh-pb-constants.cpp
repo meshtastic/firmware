@@ -1,6 +1,7 @@
 #include "configuration.h"
 
 #include "FSCommon.h"
+#include "SPILock.h"
 #include "mesh-pb-constants.h"
 #include <Arduino.h>
 #include <pb_decode.h>
@@ -36,6 +37,7 @@ bool pb_decode_from_bytes(const uint8_t *srcbuf, size_t srcbufsize, const pb_msg
 bool readcb(pb_istream_t *stream, uint8_t *buf, size_t count)
 {
     bool status = false;
+    spiLock->lock();
     File *file = (File *)stream->state;
 
     if (buf == NULL) {
@@ -49,15 +51,20 @@ bool readcb(pb_istream_t *stream, uint8_t *buf, size_t count)
     if (file->available() == 0)
         stream->bytes_left = 0;
 
+    spiLock->unlock();
+
     return status;
 }
 
 /// Write to an arduino file
 bool writecb(pb_ostream_t *stream, const uint8_t *buf, size_t count)
 {
+    spiLock->lock();
     auto file = (Print *)stream->state;
     // LOG_DEBUG("writing %d bytes to protobuf file", count);
-    return file->write(buf, count) == count;
+    bool status = file->write(buf, count) == count;
+    spiLock->unlock();
+    return status;
 }
 #endif
 

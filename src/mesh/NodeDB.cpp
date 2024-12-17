@@ -13,6 +13,7 @@
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "Router.h"
+#include "SPILock.h"
 #include "SafeFile.h"
 #include "TypeConversions.h"
 #include "error.h"
@@ -351,12 +352,14 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
 {
     LOG_INFO("Perform factory reset!");
     // first, remove the "/prefs" (this removes most prefs)
-    rmDir("/prefs");
+    rmDir("/prefs"); // this uses spilock internally...
+    spiLock->lock();
 #ifdef FSCom
     if (FSCom.exists("/static/rangetest.csv") && !FSCom.remove("/static/rangetest.csv")) {
         LOG_ERROR("Could not remove rangetest.csv file");
     }
 #endif
+    spiLock->unlock();
     // second, install default state (this will deal with the duplicate mac address issue)
     installDefaultDeviceState();
     installDefaultConfig(!eraseBleBonds); // Also preserve the private key if we're not erasing BLE bonds
@@ -835,6 +838,7 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
 {
     LoadFileResult state = LoadFileResult::OTHER_FAILURE;
 #ifdef FSCom
+    spiLock->lock();
 
     auto f = FSCom.open(filename, FILE_O_READ);
 
@@ -854,6 +858,7 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
     } else {
         LOG_ERROR("Could not open / read %s", filename);
     }
+    spiLock->unlock();
 #else
     LOG_ERROR("ERROR: Filesystem not implemented");
     state = LoadFileResult::NO_FILESYSTEM;
@@ -868,8 +873,10 @@ void NodeDB::loadFromDisk()
     // disk we will still factoryReset to restore things.
 
 #ifdef ARCH_ESP32
+    spiLock->lock();
     if (FSCom.exists("/static/static"))
         rmDir("/static/static"); // Remove bad static web files bundle from initial 2.5.13 release
+    spiLock->unlock();
 #endif
 
     // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
@@ -1016,11 +1023,9 @@ void NodeDB::loadFromDisk()
 bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_t *fields, const void *dest_struct,
                        bool fullAtomic)
 {
-#ifdef ARCH_ESP32
-    concurrency::LockGuard g(spiLock);
-#endif
     bool okay = false;
 #ifdef FSCom
+    spiLock->lock();
     auto f = SafeFile(filename, fullAtomic);
 
     LOG_INFO("Save %s", filename);
@@ -1033,6 +1038,7 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
     }
 
     bool writeSucceeded = f.close();
+    spiLock->unlock();
 
     if (!okay || !writeSucceeded) {
         LOG_ERROR("Can't write prefs!");
@@ -1046,7 +1052,9 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
 bool NodeDB::saveChannelsToDisk()
 {
 #ifdef FSCom
+    spiLock->lock();
     FSCom.mkdir("/prefs");
+    spiLock->unlock();
 #endif
     return saveProto(channelFileName, meshtastic_ChannelFile_size, &meshtastic_ChannelFile_msg, &channelFile);
 }
@@ -1054,7 +1062,9 @@ bool NodeDB::saveChannelsToDisk()
 bool NodeDB::saveDeviceStateToDisk()
 {
 #ifdef FSCom
+    spiLock->lock();
     FSCom.mkdir("/prefs");
+    spiLock->unlock();
 #endif
     // Note: if MAX_NUM_NODES=100 and meshtastic_NodeInfoLite_size=166, so will be approximately 17KB
     // Because so huge we _must_ not use fullAtomic, because the filesystem is probably too small to hold two copies of this
@@ -1067,7 +1077,9 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
     bool success = true;
 
 #ifdef FSCom
+    spiLock->lock();
     FSCom.mkdir("/prefs");
+    spiLock->unlock();
 #endif
     if (saveWhat & SEGMENT_CONFIG) {
         config.has_device = true;
@@ -1118,7 +1130,9 @@ bool NodeDB::saveToDisk(int saveWhat)
     if (!success) {
         LOG_ERROR("Failed to save to disk, retrying");
 #ifdef ARCH_NRF52 // @geeksville is not ready yet to say we should do this on other platforms.  See bug #4184 discussion
+        spiLock->lock();
         FSCom.format();
+        spiLock->unlock();
 
 #endif
         success = saveToDiskNoRetry(saveWhat);
