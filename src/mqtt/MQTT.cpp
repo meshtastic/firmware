@@ -82,13 +82,13 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
     }
     LOG_INFO("Received MQTT topic %s, len=%u", topic, length);
 
-    UniquePacketPoolPacket p = packetPool.allocUniqueCopy(*e.packet);
-    p->via_mqtt = true; // Mark that the packet was received via MQTT
-
-    if (isFromUs(p.get())) {
+    if (isFromUs(e.packet)) {
         LOG_INFO("Ignore downlink message we originally sent");
         return;
     }
+
+    UniquePacketPoolPacket p = packetPool.allocUniqueCopy(*e.packet);
+    p->via_mqtt = true; // Mark that the packet was received via MQTT
 
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         if (moduleConfig.mqtt.encryption_enabled) {
@@ -126,9 +126,8 @@ inline bool isValidJsonEnvelope(JSONObject &json)
            (json.find("payload") != json.end());                            // should have a payload
 }
 
-inline void onReceiveJson(char *channelName, byte *payload, size_t length)
+inline void onReceiveJson(byte *payload, size_t length)
 {
-    // check if this is a json payload message by comparing the topic start
     char payloadStr[length + 1];
     memcpy(payloadStr, payload, length);
     payloadStr[length] = 0; // null terminated string
@@ -141,14 +140,6 @@ inline void onReceiveJson(char *channelName, byte *payload, size_t length)
     // check if it is a valid envelope
     JSONObject json;
     json = json_value->AsObject();
-
-    meshtastic_Channel sendChannel = channels.getByName(channelName);
-    // We allow downlink JSON packets only on a channel named "mqtt"
-    if (!(strncasecmp(channels.getGlobalId(sendChannel.index), Channels::mqttChannel, strlen(Channels::mqttChannel)) == 0 &&
-          sendChannel.settings.downlink_enabled)) {
-        LOG_WARN("JSON downlink received on channel not called 'mqtt' or without downlink enabled");
-        return;
-    }
 
     if (!isValidJsonEnvelope(json)) {
         LOG_ERROR("JSON received payload on MQTT but not a valid envelope");
@@ -227,13 +218,21 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
         LOG_WARN("Empty MQTT payload received, topic %s!", topic);
         return;
     }
+    // check if this is a json payload message by comparing the topic start
     if (moduleConfig.mqtt.json_enabled && (strncmp(topic, jsonTopic.c_str(), jsonTopic.length()) == 0)) {
         // parse the channel name from the topic string
         // the topic has been checked above for having jsonTopic prefix, so just move past it
         char *channelName = topic + jsonTopic.length();
         // if another "/" was added, parse string up to that character
         channelName = strtok(channelName, "/") ? strtok(channelName, "/") : channelName;
-        onReceiveJson(channelName, payload, length);
+        // We allow downlink JSON packets only on a channel named "mqtt"
+        meshtastic_Channel &sendChannel = channels.getByName(channelName);
+        if (!(strncasecmp(channels.getGlobalId(sendChannel.index), Channels::mqttChannel, strlen(Channels::mqttChannel)) == 0 &&
+              sendChannel.settings.downlink_enabled)) {
+            LOG_WARN("JSON downlink received on channel not called 'mqtt' or without downlink enabled");
+            return;
+        }
+        onReceiveJson(payload, length);
     } else {
         onReceiveProto(topic, payload, length);
     }
