@@ -11,7 +11,7 @@ template <class T> class Allocator
 {
 
   public:
-    Allocator() : deleter([this](T *p) { this->release(p); }) {}
+    Allocator() : deleter(std::bind(&Allocator::release, this, std::placeholders::_1)) {}
     virtual ~Allocator() {}
 
     /// Return a queable object which has been prefilled with zeros.  Panic if no buffer is available
@@ -47,7 +47,7 @@ template <class T> class Allocator
     }
 
     /// Variations of the above methods that return std::unique_ptr instead of raw pointers.
-    using UniqueAllocation = std::unique_ptr<T, std::function<void(T *)>>;
+    using UniqueAllocation = std::unique_ptr<T, const std::function<void(T *)> &>;
     /// Return a queable object which has been prefilled with zeros.
     /// std::unique_ptr wrapped variant of allocZeroed().
     UniqueAllocation allocUniqueZeroed() { return UniqueAllocation(allocZeroed(), deleter); }
