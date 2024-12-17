@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <assert.h>
+#include <functional>
 #include <memory>
 
 #include "PointerQueue.h"
