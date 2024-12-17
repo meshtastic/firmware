@@ -126,7 +126,7 @@ inline bool isValidJsonEnvelope(JSONObject &json)
            (json.find("payload") != json.end());                            // should have a payload
 }
 
-inline void onReceiveJson(char *topic, byte *payload, size_t length)
+inline void onReceiveJson(char *channelName, byte *payload, size_t length)
 {
     // check if this is a json payload message by comparing the topic start
     char payloadStr[length + 1];
@@ -142,7 +142,7 @@ inline void onReceiveJson(char *topic, byte *payload, size_t length)
     JSONObject json;
     json = json_value->AsObject();
 
-    meshtastic_Channel sendChannel = channels.getByName(topic);
+    meshtastic_Channel sendChannel = channels.getByName(channelName);
     // We allow downlink JSON packets only on a channel named "mqtt"
     if (!(strncasecmp(channels.getGlobalId(sendChannel.index), Channels::mqttChannel, strlen(Channels::mqttChannel)) == 0 &&
           sendChannel.settings.downlink_enabled)) {
@@ -230,9 +230,10 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
     if (moduleConfig.mqtt.json_enabled && (strncmp(topic, jsonTopic.c_str(), jsonTopic.length()) == 0)) {
         // parse the channel name from the topic string
         // the topic has been checked above for having jsonTopic prefix, so just move past it
-        char *ptr = topic + jsonTopic.length();
-        ptr = strtok(ptr, "/") ? strtok(ptr, "/") : ptr; // if another "/" was added, parse string up to that character
-        onReceiveJson(ptr, payload, length);
+        char *channelName = topic + jsonTopic.length();
+        // if another "/" was added, parse string up to that character
+        channelName = strtok(channelName, "/") ? strtok(channelName, "/") : channelName;
+        onReceiveJson(channelName, payload, length);
     } else {
         onReceiveProto(topic, payload, length);
     }
