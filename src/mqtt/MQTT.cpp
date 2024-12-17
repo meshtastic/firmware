@@ -64,7 +64,7 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
         LOG_ERROR("Invalid MQTT service envelope, topic %s, len %u!", topic, length);
         return;
     }
-    meshtastic_Channel ch = channels.getByName(e.channel_id);
+    const meshtastic_Channel &ch = channels.getByName(e.channel_id);
     if (strcmp(e.gateway_id, owner.id) == 0) {
         // Generate an implicit ACK towards ourselves (handled and processed only locally!) for this message.
         // We do this because packets are not rebroadcasted back into MQTT anymore and we assume that at least one node
@@ -75,17 +75,17 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
             LOG_INFO("Ignore downlink message we originally sent");
         return;
     }
+    if (isFromUs(e.packet)) {
+        LOG_INFO("Ignore downlink message we originally sent");
+        return;
+    }
+
     // Find channel by channel_id and check downlink_enabled
     if (!(strcmp(e.channel_id, "PKI") == 0 ||
           (strcmp(e.channel_id, channels.getGlobalId(ch.index)) == 0 && ch.settings.downlink_enabled))) {
         return;
     }
     LOG_INFO("Received MQTT topic %s, len=%u", topic, length);
-
-    if (isFromUs(e.packet)) {
-        LOG_INFO("Ignore downlink message we originally sent");
-        return;
-    }
 
     UniquePacketPoolPacket p = packetPool.allocUniqueCopy(*e.packet);
     p->via_mqtt = true; // Mark that the packet was received via MQTT
@@ -217,6 +217,7 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
         LOG_WARN("Empty MQTT payload received, topic %s!", topic);
         return;
     }
+
     // check if this is a json payload message by comparing the topic start
     if (moduleConfig.mqtt.json_enabled && (strncmp(topic, jsonTopic.c_str(), jsonTopic.length()) == 0)) {
         // parse the channel name from the topic string
@@ -232,9 +233,10 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
             return;
         }
         onReceiveJson(payload, length);
-    } else {
-        onReceiveProto(topic, payload, length);
+        return;
     }
+
+    onReceiveProto(topic, payload, length);
 }
 
 void mqttInit()
