@@ -352,8 +352,9 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
 {
     LOG_INFO("Perform factory reset!");
     // first, remove the "/prefs" (this removes most prefs)
-    rmDir("/prefs"); // this uses spilock internally...
     spiLock->lock();
+    rmDir("/prefs"); // this uses spilock internally...
+
 #ifdef FSCom
     if (FSCom.exists("/static/rangetest.csv") && !FSCom.remove("/static/rangetest.csv")) {
         LOG_ERROR("Could not remove rangetest.csv file");

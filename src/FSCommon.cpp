@@ -328,14 +328,14 @@ void listDir(const char *dirname, uint8_t levels, bool del)
 void rmDir(const char *dirname)
 {
 #ifdef FSCom
-    spiLock->lock();
+
 #if (defined(ARCH_ESP32) || defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
     listDir(dirname, 10, true);
 #elif defined(ARCH_NRF52)
     // nRF52 implementation of LittleFS has a recursive delete function
     FSCom.rmdir_r(dirname);
 #endif
-    spiLock->unlock();
+
 #endif
 }
 
