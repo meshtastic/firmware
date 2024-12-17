@@ -48,7 +48,11 @@ struct DecodedServiceEnvelope : public meshtastic_ServiceEnvelope {
           validDecode(pb_decode_from_bytes(payload, length, &meshtastic_ServiceEnvelope_msg, this))
     {
     }
-    ~DecodedServiceEnvelope() { pb_release(&meshtastic_ServiceEnvelope_msg, this); }
+    ~DecodedServiceEnvelope()
+    {
+        if (validDecode)
+            pb_release(&meshtastic_ServiceEnvelope_msg, this);
+    }
     // Clients must check that this is true before using.
     const bool validDecode;
 };
