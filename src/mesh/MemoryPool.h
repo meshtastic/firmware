@@ -56,7 +56,7 @@ template <class T> class Allocator
     /// std::unique_ptr wrapped variant of allocZeroed(TickType_t maxWait).
     UniqueAllocation allocUniqueZeroed(TickType_t maxWait) { return UniqueAllocation(allocZeroed(maxWait), deleter); }
     /// Return a queable object which is a copy of some other object
-    // std::unique_ptr wrapped variant of allocCopy(const T &src, TickType_t maxWait).
+    /// std::unique_ptr wrapped variant of allocCopy(const T &src, TickType_t maxWait).
     UniqueAllocation allocUniqueCopy(const T &src, TickType_t maxWait = portMAX_DELAY)
     {
         return UniqueAllocation(allocCopy(src, maxWait), deleter);
@@ -70,6 +70,7 @@ template <class T> class Allocator
     virtual T *alloc(TickType_t maxWait) = 0;
 
   private:
+    // std::unique_ptr Deleter function; calls release().
     const std::function<void(T *)> deleter;
 };
 
