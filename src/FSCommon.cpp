@@ -377,7 +377,7 @@ void setupSDCard()
         LOG_DEBUG("Used space: %lu MB", (uint32_t)(SD.usedBytes() / (1024 * 1024)));
     #endif
     #if defined(ARCH_NRF52)
-        if (!SDFileSystem.begin(SDCARD_CS))
+        if (!SD.begin(SDCARD_CS))
         {
             LOG_DEBUG("Could not initialize SD Card");
             return;    
@@ -385,8 +385,8 @@ void setupSDCard()
         else
         {
             LOG_DEBUG("Succesfully initialized SD Card");
-            LOG_DEBUG("SD Card size: %d MB", (SDFileSystem.getVolumeSize() / 1024 ));
-            SDFile testfile = SDFileSystem.open("initFile.txt", FILE_WRITE);
+            LOG_DEBUG("SD Card size: %d MB", (SD.getVolumeSize() / 1024 ));
+            SDFile testfile = SD.open("initFile.txt", FILE_WRITE);
             testfile.print("SD card initialized at: ");
             testfile.println(millis());
             testfile.close();
