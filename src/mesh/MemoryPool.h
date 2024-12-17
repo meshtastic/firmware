@@ -11,7 +11,7 @@ template <class T> class Allocator
 {
 
   public:
-    Allocator() : deleter(std::bind(&Allocator::release, this, std::placeholders::_1)) {}
+    Allocator() : deleter([this](T *p) { this->release(p); }) {}
     virtual ~Allocator() {}
 
     /// Return a queable object which has been prefilled with zeros.  Panic if no buffer is available
