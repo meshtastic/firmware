@@ -25,19 +25,21 @@ bool BMX160Sensor::init()
 
 int32_t BMX160Sensor::runOnce()
 {
+#if !defined(MESHTASTIC_EXCLUDE_SCREEN)
     sBmx160SensorData_t magAccel;
     sBmx160SensorData_t gAccel;
 
     /* Get a new sensor event */
     sensor.getAllData(&magAccel, NULL, &gAccel);
 
-#if !defined(MESHTASTIC_EXCLUDE_SCREEN)
-    // experimental calibrate routine. Limited to between 10 and 30 seconds after boot
-    if (millis() > 12 * 1000 && millis() < 30 * 1000) {
+    if (doCalibration) {
+
         if (!showingScreen) {
+            powerFSM.trigger(EVENT_PRESS); // keep screen alive during calibration
             showingScreen = true;
             screen->startAlert((FrameCallback)drawFrameCalibration);
         }
+
         if (magAccel.x > highestX)
             highestX = magAccel.x;
         if (magAccel.x < lowestX)
@@ -50,9 +52,17 @@ int32_t BMX160Sensor::runOnce()
             highestZ = magAccel.z;
         if (magAccel.z < lowestZ)
             lowestZ = magAccel.z;
-    } else if (showingScreen && millis() >= 30 * 1000) {
-        showingScreen = false;
-        screen->endAlert();
+
+        uint32_t now = millis();
+        if (now > endCalibrationAt) {
+            doCalibration = false;
+            endCalibrationAt = 0;
+            showingScreen = false;
+            screen->endAlert();
+        }
+
+        // LOG_DEBUG("BMX160 min_x: %.4f, max_X: %.4f, min_Y: %.4f, max_Y: %.4f, min_Z: %.4f, max_Z: %.4f", lowestX, highestX,
+        // lowestY, highestY, lowestZ, highestZ);
     }
 
     int highestRealX = highestX - (highestX + lowestX) / 2;
@@ -93,10 +103,23 @@ int32_t BMX160Sensor::runOnce()
         heading += 270;
         break;
     }
+
     screen->setHeading(heading);
 #endif
 
     return MOTION_SENSOR_CHECK_INTERVAL_MS;
+}
+
+void BMX160Sensor::calibrate(uint16_t forSeconds)
+{
+#if !defined(MESHTASTIC_EXCLUDE_SCREEN)
+    LOG_DEBUG("BMX160 calibration started for %is", forSeconds);
+
+    doCalibration = true;
+    uint16_t calibrateFor = forSeconds * 1000; // calibrate for seconds provided
+    endCalibrationAt = millis() + calibrateFor;
+    screen->setEndCalibration(endCalibrationAt);
+#endif
 }
 
 #endif
