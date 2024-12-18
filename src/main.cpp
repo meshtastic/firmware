@@ -90,6 +90,7 @@ NRF52Bluetooth *nrf52Bluetooth = nullptr;
 #include "linux/LinuxHardwareI2C.h"
 #include "mesh/raspihttp/PiWebServer.h"
 #include "platform/portduino/PortduinoGlue.h"
+#include "platform/portduino/USBHal.h"
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -213,6 +214,9 @@ static OSThread *powerFSMthread;
 static OSThread *ambientLightingThread;
 
 RadioInterface *rIf = NULL;
+#ifdef ARCH_PORTDUINO
+RadioLibHal *RadioLibHAL = NULL;
+#endif
 
 /**
  * Some platforms (nrf52) might provide an alterate version that suppresses calling delay from sleep.
@@ -703,12 +707,16 @@ void setup()
     pinMode(LORA_CS, OUTPUT);
     digitalWrite(LORA_CS, HIGH);
     SPI1.begin(false);
-#else                      // HW_SPI1_DEVICE
+#else  // HW_SPI1_DEVICE
     SPI.setSCK(LORA_SCK);
     SPI.setTX(LORA_MOSI);
     SPI.setRX(LORA_MISO);
     SPI.begin(false);
-#endif                     // HW_SPI1_DEVICE
+#endif // HW_SPI1_DEVICE
+#elif ARCH_PORTDUINO
+    if (settingsStrings[spidev] != "ch341") {
+        SPI.begin();
+    }
 #elif !defined(ARCH_ESP32) // ARCH_RP2040
     SPI.begin();
 #else
@@ -814,8 +822,11 @@ void setup()
     if (settingsMap[use_sx1262]) {
         if (!rIf) {
             LOG_DEBUG("Activate sx1262 radio on SPI port %s", settingsStrings[spidev].c_str());
-            LockingArduinoHal *RadioLibHAL =
-                new LockingArduinoHal(SPI, spiSettings, (settingsMap[ch341Quirk] ? settingsMap[busy] : RADIOLIB_NC));
+            if (settingsStrings[spidev] == "ch341") {
+                RadioLibHAL = ch341Hal;
+            } else {
+                RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
+            }
             rIf = new SX1262Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
                                       settingsMap[busy]);
             if (!rIf->init()) {
@@ -829,8 +840,7 @@ void setup()
     } else if (settingsMap[use_rf95]) {
         if (!rIf) {
             LOG_DEBUG("Activate rf95 radio on SPI port %s", settingsStrings[spidev].c_str());
-            LockingArduinoHal *RadioLibHAL =
-                new LockingArduinoHal(SPI, spiSettings, (settingsMap[ch341Quirk] ? settingsMap[busy] : RADIOLIB_NC));
+            RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
             rIf = new RF95Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
                                     settingsMap[busy]);
             if (!rIf->init()) {
@@ -845,7 +855,7 @@ void setup()
     } else if (settingsMap[use_sx1280]) {
         if (!rIf) {
             LOG_DEBUG("Activate sx1280 radio on SPI port %s", settingsStrings[spidev].c_str());
-            LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
+            RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
             rIf = new SX1280Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
                                       settingsMap[busy]);
             if (!rIf->init()) {
@@ -905,7 +915,7 @@ void setup()
     } else if (settingsMap[use_sx1268]) {
         if (!rIf) {
             LOG_DEBUG("Activate sx1268 radio on SPI port %s", settingsStrings[spidev].c_str());
-            LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
+            RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
             rIf = new SX1268Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
                                       settingsMap[busy]);
             if (!rIf->init()) {
