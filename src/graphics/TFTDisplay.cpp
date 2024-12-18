@@ -755,7 +755,7 @@ void TFTDisplay::sendCommand(uint8_t com)
 #endif
 #ifdef RAK14014
 #elif !defined(M5STACK)
-        tft->setBrightness(0);
+        tft->setBrightness(255);
 #endif
         break;
     }
