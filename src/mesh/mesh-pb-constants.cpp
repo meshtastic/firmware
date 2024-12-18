@@ -43,6 +43,7 @@ bool readcb(pb_istream_t *stream, uint8_t *buf, size_t count)
     if (buf == NULL) {
         while (count-- && file->read() != EOF)
             ;
+        spiLock->unlock();
         return count == 0;
     }
 
