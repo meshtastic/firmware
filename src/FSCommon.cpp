@@ -9,6 +9,7 @@
  *
  */
 #include "FSCommon.h"
+#include "SPILock.h"
 #include "configuration.h"
 
 #ifdef HAS_SDCARD
@@ -93,17 +94,21 @@ bool copyFile(const char *from, const char *to)
     return true;
 
 #elif defined(FSCom)
+    // take SPI Lock
+    spiLock->lock();
     unsigned char cbuffer[16];
 
     File f1 = FSCom.open(from, FILE_O_READ);
     if (!f1) {
         LOG_ERROR("Failed to open source file %s", from);
+        spiLock->unlock();
         return false;
     }
 
     File f2 = FSCom.open(to, FILE_O_WRITE);
     if (!f2) {
         LOG_ERROR("Failed to open destination file %s", to);
+        spiLock->unlock();
         return false;
     }
 
@@ -115,6 +120,7 @@ bool copyFile(const char *from, const char *to)
     f2.flush();
     f2.close();
     f1.close();
+    spiLock->unlock();
     return true;
 #endif
 }
@@ -136,16 +142,23 @@ bool renameFile(const char *pathFrom, const char *pathTo)
         return false;
     }
 #elif defined(FSCom)
+
 #ifdef ARCH_ESP32
+    // take SPI Lock
+    spiLock->lock();
     // rename was fixed for ESP32 IDF LittleFS in April
-    return FSCom.rename(pathFrom, pathTo);
+    bool result = FSCom.rename(pathFrom, pathTo);
+    spiLock->unlock();
+    return result;
 #else
+    // copyFile does its own locking.
     if (copyFile(pathFrom, pathTo) && FSCom.remove(pathFrom)) {
         return true;
     } else {
         return false;
     }
 #endif
+
 #endif
 }
 
@@ -155,6 +168,7 @@ bool renameFile(const char *pathFrom, const char *pathTo)
  * @brief Get the list of files in a directory.
  *
  * This function returns a list of files in a directory. The list includes the full path of each file.
+ * We can't use SPILOCK here because of recursion. Callers of this function should use SPILOCK.
  *
  * @param dirname The name of the directory.
  * @param levels The number of levels of subdirectories to list.
@@ -203,6 +217,7 @@ std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels)
 
 /**
  * Lists the contents of a directory.
+ * We can't use SPILOCK here because of recursion. Callers of this function should use SPILOCK.
  *
  * @param dirname The name of the directory to list.
  * @param levels The number of levels of subdirectories to list.
@@ -316,18 +331,21 @@ void listDir(const char *dirname, uint8_t levels, bool del)
 void rmDir(const char *dirname)
 {
 #ifdef FSCom
+
 #if (defined(ARCH_ESP32) || defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
     listDir(dirname, 10, true);
 #elif defined(ARCH_NRF52)
     // nRF52 implementation of LittleFS has a recursive delete function
     FSCom.rmdir_r(dirname);
 #endif
+
 #endif
 }
 
 void fsInit()
 {
 #ifdef FSCom
+    spiLock->lock();
     if (!FSBegin()) {
         LOG_ERROR("Filesystem mount failed");
         // assert(0); This auto-formats the partition, so no need to fail here.
@@ -338,6 +356,7 @@ void fsInit()
     LOG_DEBUG("Filesystem files:");
 #endif
     listDir("/", 10);
+    spiLock->unlock();
 #endif
 }
 
@@ -347,6 +366,7 @@ void fsInit()
 void setupSDCard()
 {
 #ifdef HAS_SDCARD
+    spiLock->lock();
     SDHandler.begin(SPI_SCK, SPI_MISO, SPI_MOSI);
 
     if (!SD.begin(SDCARD_CS, SDHandler)) {
@@ -373,5 +393,6 @@ void setupSDCard()
     LOG_DEBUG("SD Card Size: %lu MB", (uint32_t)cardSize);
     LOG_DEBUG("Total space: %lu MB", (uint32_t)(SD.totalBytes() / (1024 * 1024)));
     LOG_DEBUG("Used space: %lu MB", (uint32_t)(SD.usedBytes() / (1024 * 1024)));
+    spiLock->unlock();
 #endif
 }
