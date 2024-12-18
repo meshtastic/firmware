@@ -18,6 +18,8 @@
             frequency_switching, wide_lora, #name                                                                                \
     }
 
+DataInfo DataRegion;
+
 const RegionInfo regions[] = {
     /*
         https://link.springer.com/content/pdf/bbm%3A978-1-4842-4357-2%2F1.pdf
@@ -212,6 +214,8 @@ uint32_t RadioInterface::getPacketTime(uint32_t pl)
     float tPacket = tPreamble + tPayload;
 
     uint32_t msecs = tPacket * 1000;
+    DataRegion.lora_sf=sf;
+    DataRegion.lora_cr=cr;
 
     return msecs;
 }
@@ -554,6 +558,12 @@ void RadioInterface::applyModemConfig()
     slotTimeMsec = computeSlotTimeMsec(bw, sf);
     preambleTimeMsec = getPacketTime((uint32_t)0);
     maxPacketTimeMsec = getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader));
+
+    DataRegion.lora_channel_num=channel_num;
+    DataRegion.lora_freq=getFreq();
+    DataRegion.lora_channel_name=channelName;
+    DataRegion.lora_power_output=power;
+    DataRegion.lora_bw=bw;
 
     LOG_INFO("Radio freq=%.3f, config.lora.frequency_offset=%.3f", freq, loraConfig.frequency_offset);
     LOG_INFO("Set radio: region=%s, name=%s, config=%u, ch=%d, power=%d", myRegion->name, channelName, loraConfig.modem_preset,
