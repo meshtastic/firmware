@@ -376,7 +376,7 @@ void InkHUD::Applet::printWrapped(int16_t left, int16_t top, uint16_t width, std
             getTextBounds(word.c_str(), getCursorX(), getCursorY(), &l, &t, &w, &h);
 
             // Word is short
-            if ((l + w) < width) {
+            if (w < width) {
                 // Word fits on current line
                 if ((l + w + wSp) < left + width)
                     print(word.c_str());

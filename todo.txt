@@ -52,8 +52,9 @@ Known Bugs
 []      Lightsleep shouldn't be possible while update in progress. Set canSleep=false? 
 []      Root menu: header breaks spacing if rtc set while menu open
 []      Applets don't re-render when node is removed via admin command
-[]      Incorrect number of lines in threaded message display. (When '\n' is used. With long text such as URL)
+[tbc]   Incorrect number of lines in threaded message display.
 []      Autoshow focusing oldest of two competing requests, if render is deferred
+[]      (Rare) Recents List: count in header label may not match number of items shown
 
 Chores
 ==========

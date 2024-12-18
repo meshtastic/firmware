@@ -58,7 +58,8 @@ void InkHUD::ThreadedMessageApplet::render()
     // - separates text from the vertical line which marks its edge
     constexpr uint16_t padW = 2;
     constexpr int16_t msgL = padW;
-    const uint16_t msgR = (width() - 1) - padW;
+    const int16_t msgR = (width() - 1) - padW;
+    const uint16_t msgW = (msgR - msgL) + 1;
 
     int16_t msgB = height() - 1; // Vertical cursor for drawing. Messages are bottom-aligned to this value.
     uint8_t i = 0;               // Index of stored message
@@ -78,13 +79,13 @@ void InkHUD::ThreadedMessageApplet::render()
         const int16_t dotsB = msgB;
 
         // Get dimensions for message text
-        uint16_t bodyH = getWrappedTextHeight(0, width(), m.text);
+        uint16_t bodyH = getWrappedTextHeight(msgL, msgW, m.text);
         int16_t bodyT = msgB - bodyH;
 
         // Print message
         // - if incoming
         if (!outgoing)
-            printWrapped(msgL, bodyT, msgR, m.text);
+            printWrapped(msgL, bodyT, msgW, m.text);
 
         // Print message
         // - if outgoing
@@ -92,7 +93,7 @@ void InkHUD::ThreadedMessageApplet::render()
             if (getTextWidth(m.text) < width())          // If short,
                 printAt(msgR, bodyT, m.text, RIGHT);     // print right align
             else                                         // If long,
-                printWrapped(msgL, bodyT, msgR, m.text); // need printWrapped(), which doesn't support right align
+                printWrapped(msgL, bodyT, msgW, m.text); // need printWrapped(), which doesn't support right align
         }
 
         // Move cursor up
