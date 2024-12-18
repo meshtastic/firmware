@@ -101,12 +101,14 @@ bool copyFile(const char *from, const char *to)
     File f1 = FSCom.open(from, FILE_O_READ);
     if (!f1) {
         LOG_ERROR("Failed to open source file %s", from);
+        spiLock->unlock();
         return false;
     }
 
     File f2 = FSCom.open(to, FILE_O_WRITE);
     if (!f2) {
         LOG_ERROR("Failed to open destination file %s", to);
+        spiLock->unlock();
         return false;
     }
 
@@ -145,8 +147,9 @@ bool renameFile(const char *pathFrom, const char *pathTo)
     // take SPI Lock
     spiLock->lock();
     // rename was fixed for ESP32 IDF LittleFS in April
-    return FSCom.rename(pathFrom, pathTo);
+    bool result = FSCom.rename(pathFrom, pathTo);
     spiLock->unlock();
+    return result;
 #else
     // copyFile does its own locking.
     if (copyFile(pathFrom, pathTo) && FSCom.remove(pathFrom)) {
