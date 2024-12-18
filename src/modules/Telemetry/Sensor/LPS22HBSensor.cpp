@@ -1,7 +1,10 @@
-#include "LPS22HBSensor.h"
-#include "../mesh/generated/meshtastic/telemetry.pb.h"
-#include "TelemetrySensor.h"
 #include "configuration.h"
+
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+
+#include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "LPS22HBSensor.h"
+#include "TelemetrySensor.h"
 #include <Adafruit_LPS2X.h>
 #include <Adafruit_Sensor.h>
 
@@ -9,7 +12,7 @@ LPS22HBSensor::LPS22HBSensor() : TelemetrySensor(meshtastic_TelemetrySensorType_
 
 int32_t LPS22HBSensor::runOnce()
 {
-    LOG_INFO("Init sensor: %s\n", sensorName);
+    LOG_INFO("Init sensor: %s", sensorName);
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
@@ -24,6 +27,9 @@ void LPS22HBSensor::setup()
 
 bool LPS22HBSensor::getMetrics(meshtastic_Telemetry *measurement)
 {
+    measurement->variant.environment_metrics.has_temperature = true;
+    measurement->variant.environment_metrics.has_barometric_pressure = true;
+
     sensors_event_t temp;
     sensors_event_t pressure;
     lps22hb.getEvent(&pressure, &temp);
@@ -33,3 +39,5 @@ bool LPS22HBSensor::getMetrics(meshtastic_Telemetry *measurement)
 
     return true;
 }
+
+#endif

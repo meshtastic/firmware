@@ -1,0 +1,30 @@
+{
+  "build": {
+    "arduino": {
+      "variant_h": "variant_RAK3172_MODULE.h"
+    },
+    "core": "stm32",
+    "cpu": "cortex-m4",
+    "extra_flags": "-DSTM32WLxx -DSTM32WLE5xx -DARDUINO_GENERIC_WLE5CCUX",
+    "f_cpu": "48000000L",
+    "mcu": "stm32wle5ccu",
+    "variant": "STM32WLxx/WL54CCU_WL55CCU_WLE4C(8-B-C)U_WLE5C(8-B-C)U",
+    "product_line": "STM32WLE5xx"
+  },
+  "debug": {
+    "default_tools": ["stlink"],
+    "jlink_device": "STM32WLE5CC",
+    "openocd_target": "stm32wlx",
+    "svd_path": "STM32WLE5_CM4.svd"
+  },
+  "frameworks": ["arduino"],
+  "name": "BB-STM32WL",
+  "upload": {
+    "maximum_ram_size": 65536,
+    "maximum_size": 262144,
+    "protocol": "cmsis-dap",
+    "protocols": ["cmsis-dap", "stlink"]
+  },
+  "url": "https://www.st.com/en/microcontrollers-microprocessors/stm32wl-series.html",
+  "vendor": "ST"
+}

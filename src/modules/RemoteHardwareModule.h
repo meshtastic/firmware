@@ -17,6 +17,9 @@ class RemoteHardwareModule : public ProtobufModule<meshtastic_HardwareMessage>, 
     /// The timestamp of our last watch event (we throttle watches to 1 change every 30 seconds)
     uint32_t lastWatchMsec = 0;
 
+    /// A bitmask of GPIOs that are exposed to the mesh if undefined access is not enabled
+    uint64_t availablePins = 0;
+
   public:
     /** Constructor
      * name is for debugging output

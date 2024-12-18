@@ -32,7 +32,7 @@ class Channels
     Channels() {}
 
     /// Well known channel names
-    static const char *adminChannel, *gpioChannel, *serialChannel;
+    static const char *adminChannel, *gpioChannel, *serialChannel, *mqttChannel;
 
     const meshtastic_ChannelSettings &getPrimary() { return getByIndex(getPrimaryIndex()).settings; }
 
@@ -61,25 +61,6 @@ class Channels
 
     ChannelIndex getNumChannels() { return channelFile.channels_count; }
 
-    /**
-     * Generate a short suffix used to disambiguate channels that might have the same "name" entered by the human but different
-    PSKs.
-     * The ideas is that the PSK changing should be visible to the user so that they see they probably messed up and that's why
-    they their nodes
-     * aren't talking to each other.
-     *
-     * This string is of the form "#name-X".
-     *
-     * Where X is either:
-     * (for custom PSKS) a letter from A to Z (base26), and formed by xoring all the bytes of the PSK together,
-     * OR (for the standard minimially secure PSKs) a number from 0 to 9.
-     *
-     * This function will also need to be implemented in GUI apps that talk to the radio.
-     *
-     * https://github.com/meshtastic/firmware/issues/269
-    */
-    const char *getPrimaryName();
-
     /// Called by NodeDB on initial boot when the radio config settings are unset.  Set a default single channel config.
     void initDefaults();
 
@@ -101,6 +82,15 @@ class Channels
      * @eturn the (0 to 255) hash for that channel - if no suitable channel could be found, return -1
      */
     int16_t setActiveByIndex(ChannelIndex channelIndex);
+
+    // Returns true if the channel has the default name and PSK
+    bool isDefaultChannel(ChannelIndex chIndex);
+
+    // Returns true if we can be reached via a channel with the default settings given a region and modem preset
+    bool hasDefaultChannel();
+
+    // Returns true if any of our channels have enabled MQTT uplink or downlink
+    bool anyMqttEnabled();
 
   private:
     /** Given a channel index, change to use the crypto key specified by that index
@@ -127,7 +117,12 @@ class Channels
     meshtastic_Channel &fixupChannel(ChannelIndex chIndex);
 
     /**
-     * Write a default channel to the specified channel index
+     * Writes the default lora config
+     */
+    void initDefaultLoraConfig();
+
+    /**
+     * Write default channels defined in UserPrefs
      */
     void initDefaultChannel(ChannelIndex chIndex);
 
@@ -140,3 +135,11 @@ class Channels
 
 /// Singleton channel table
 extern Channels channels;
+
+/// 16 bytes of random PSK for our _public_ default channel that all devices power up on (AES128)
+static const uint8_t defaultpsk[] = {0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x07, 0x59,
+                                     0xf0, 0xbc, 0xff, 0xab, 0xcf, 0x4e, 0x69, 0x01};
+
+static const uint8_t eventpsk[] = {0x38, 0x4b, 0xbc, 0xc0, 0x1d, 0xc0, 0x22, 0xd1, 0x81, 0xbf, 0x36,
+                                   0xb8, 0x61, 0x21, 0xe1, 0xfb, 0x96, 0xb7, 0x2e, 0x55, 0xbf, 0x74,
+                                   0x22, 0x7e, 0x9d, 0x6a, 0xfb, 0x48, 0xd6, 0x4c, 0xb1, 0xa1};

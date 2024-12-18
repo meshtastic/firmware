@@ -22,6 +22,8 @@ uint32_t MemGet::getFreeHeap()
     return ESP.getFreeHeap();
 #elif defined(ARCH_NRF52)
     return dbgHeapFree();
+#elif defined(ARCH_RP2040)
+    return rp2040.getFreeHeap();
 #else
     // this platform does not have heap management function implemented
     return UINT32_MAX;
@@ -38,6 +40,8 @@ uint32_t MemGet::getHeapSize()
     return ESP.getHeapSize();
 #elif defined(ARCH_NRF52)
     return dbgHeapTotal();
+#elif defined(ARCH_RP2040)
+    return rp2040.getTotalHeap();
 #else
     // this platform does not have heap management function implemented
     return UINT32_MAX;
@@ -53,6 +57,8 @@ uint32_t MemGet::getFreePsram()
 {
 #ifdef ARCH_ESP32
     return ESP.getFreePsram();
+#elif defined(ARCH_PORTDUINO)
+    return 4194252;
 #else
     return 0;
 #endif
@@ -67,6 +73,8 @@ uint32_t MemGet::getPsramSize()
 {
 #ifdef ARCH_ESP32
     return ESP.getPsramSize();
+#elif defined(ARCH_PORTDUINO)
+    return 4194252;
 #else
     return 0;
 #endif

@@ -35,10 +35,16 @@ enum class AdminMessageHandleResult {
 /*
  * This struct is used by Screen to figure out whether screen frame should be updated.
  */
-typedef struct _UIFrameEvent {
-    bool frameChanged;
-    bool needRedraw;
-} UIFrameEvent;
+struct UIFrameEvent {
+    // What do we actually want to happen?
+    enum Action {
+        REDRAW_ONLY,                    // Don't change which frames are show, just redraw, asap
+        REGENERATE_FRAMESET,            // Regenerate (change? add? remove?) screen frames, honoring requestFocus()
+        REGENERATE_FRAMESET_BACKGROUND, // Regenerate screen frames, Attempt to remain on the same frame throughout
+    } action = REDRAW_ONLY;
+
+    // We might want to pass additional data inside this struct at some point
+};
 
 /** A baseclass for any mesh "module".
  *
@@ -64,18 +70,17 @@ class MeshModule
 
     /** For use only by MeshService
      */
-    static void callPlugins(const meshtastic_MeshPacket &mp, RxSource src = RX_SRC_RADIO);
+    static void callModules(meshtastic_MeshPacket &mp, RxSource src = RX_SRC_RADIO);
 
     static std::vector<MeshModule *> GetMeshModulesWithUIFrames();
     static void observeUIEvents(Observer<const UIFrameEvent *> *observer);
-    static AdminMessageHandleResult handleAdminMessageForAllPlugins(const meshtastic_MeshPacket &mp,
+    static AdminMessageHandleResult handleAdminMessageForAllModules(const meshtastic_MeshPacket &mp,
                                                                     meshtastic_AdminMessage *request,
                                                                     meshtastic_AdminMessage *response);
 #if HAS_SCREEN
-    virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-    {
-        return;
-    }
+    virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) { return; }
+    virtual bool isRequestingFocus();                          // Checked by screen, when regenerating frameset
+    virtual bool interceptingKeyboardInput() { return false; } // Can screen use keyboard for nav, or is module handling input?
 #endif
   protected:
     const char *name;
@@ -135,10 +140,12 @@ class MeshModule
     @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be considered for
     it
     */
-    virtual ProcessMessage handleReceived(const meshtastic_MeshPacket &mp)
-    {
-        return ProcessMessage::CONTINUE;
-    }
+    virtual ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) { return ProcessMessage::CONTINUE; }
+
+    /** Called to change a particular incoming message
+        This allows the module to change the message before it is passed through the rest of the call-chain.
+    */
+    virtual void alterReceived(meshtastic_MeshPacket &mp) {}
 
     /** Messages can be received that have the want_response bit set.  If set, this callback will be invoked
      * so that subclasses can (optionally) send a response back to the original sender.
@@ -151,16 +158,11 @@ class MeshModule
     /***
      * @return true if you want to be alloced a UI screen frame
      */
-    virtual bool wantUIFrame()
-    {
-        return false;
-    }
-    virtual Observable<const UIFrameEvent *> *getUIFrameObservable()
-    {
-        return NULL;
-    }
+    virtual bool wantUIFrame() { return false; }
+    virtual Observable<const UIFrameEvent *> *getUIFrameObservable() { return NULL; }
 
-    meshtastic_MeshPacket *allocAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex);
+    meshtastic_MeshPacket *allocAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex,
+                                       uint8_t hopLimit = 0);
 
     /// Send an error response for the specified packet.
     meshtastic_MeshPacket *allocErrorResponse(meshtastic_Routing_Error err, const meshtastic_MeshPacket *p);
@@ -181,6 +183,19 @@ class MeshModule
     {
         return AdminMessageHandleResult::NOT_HANDLED;
     };
+
+#if HAS_SCREEN
+    /** Request that our module's screen frame be focused when Screen::setFrames runs
+     * Only considered if Screen::setFrames is triggered via a UIFrameEvent
+     *
+     * Having this as a separate call, instead of part of the UIFrameEvent, allows the module to delay decision
+     * until drawFrame() is called. This required less restructuring.
+     */
+    bool _requestingFocus = false;
+    void requestFocus() { _requestingFocus = true; }
+#else
+    void requestFocus(){}; // No-op
+#endif
 
   private:
     /**

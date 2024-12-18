@@ -11,28 +11,7 @@
 
 #define PI 3.1415926535897932384626433832795
 #define OLC_CODE_LEN 11
-
-// Helper functions
-// Raises a number to an exponent, handling negative exponents.
-static inline double pow_neg(double base, double exponent)
-{
-    if (exponent == 0) {
-        return 1;
-    } else if (exponent > 0) {
-        return pow(base, exponent);
-    }
-    return 1 / pow(base, -exponent);
-}
-
-static inline double toRadians(double deg)
-{
-    return deg * PI / 180;
-}
-
-static inline double toDegrees(double r)
-{
-    return r * 180 / PI;
-}
+#define DEG_CONVERT (180 / PI)
 
 // GeoCoord structs/classes
 // A struct to hold the data for a DMS coordinate.
@@ -116,6 +95,13 @@ class GeoCoord
     static float bearing(double lat1, double lon1, double lat2, double lon2);
     static float rangeRadiansToMeters(double range_radians);
     static float rangeMetersToRadians(double range_meters);
+    static unsigned int bearingToDegrees(const char *bearing);
+    static const char *degreesToBearing(unsigned int degrees);
+
+    // Raises a number to an exponent, handling negative exponents.
+    static double pow_neg(double base, double exponent);
+    static double toRadians(double deg);
+    static double toDegrees(double r);
 
     // Point to point conversions
     int32_t distanceTo(const GeoCoord &pointB);

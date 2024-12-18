@@ -2,6 +2,11 @@
 #include "InputBroker.h"
 #include "PowerFSM.h"
 #include "configuration.h"
+#include "modules/ExternalNotificationModule.h"
+
+#if ARCH_PORTDUINO
+#include "platform/portduino/PortduinoGlue.h"
+#endif
 
 TouchScreenImpl1 *touchScreenImpl1;
 
@@ -12,7 +17,14 @@ TouchScreenImpl1::TouchScreenImpl1(uint16_t width, uint16_t height, bool (*getTo
 
 void TouchScreenImpl1::init()
 {
-#if !HAS_TOUCHSCREEN
+#if ARCH_PORTDUINO
+    if (settingsMap[touchscreenModule]) {
+        TouchScreenBase::init(true);
+        inputBroker->registerSource(this);
+    } else {
+        TouchScreenBase::init(false);
+    }
+#elif !HAS_TOUCHSCREEN
     TouchScreenBase::init(false);
     return;
 #else
@@ -37,6 +49,10 @@ void TouchScreenImpl1::onEvent(const TouchEvent &event)
 {
     InputEvent e;
     e.source = event.source;
+
+    e.touchX = event.x;
+    e.touchY = event.y;
+
     switch (event.touchEvent) {
     case TOUCH_ACTION_LEFT: {
         e.inputEvent = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT);
@@ -63,7 +79,11 @@ void TouchScreenImpl1::onEvent(const TouchEvent &event)
         break;
     }
     case TOUCH_ACTION_TAP: {
-        powerFSM.trigger(EVENT_INPUT);
+        if (moduleConfig.external_notification.enabled && (externalNotificationModule->nagCycleCutoff != UINT32_MAX)) {
+            externalNotificationModule->stopNow();
+        } else {
+            powerFSM.trigger(EVENT_INPUT);
+        }
         break;
     }
     default:

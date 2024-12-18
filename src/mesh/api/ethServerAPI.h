@@ -14,7 +14,7 @@ class ethServerAPI : public ServerAPI<EthernetClient>
 };
 
 /**
- * Listens for incoming connections and does accepts and creates instances of WiFiServerAPI as needed
+ * Listens for incoming connections and does accepts and creates instances of EthernetServerAPI as needed
  */
 class ethServerPort : public APIServerPort<ethServerAPI, EthernetServer>
 {
@@ -22,4 +22,4 @@ class ethServerPort : public APIServerPort<ethServerAPI, EthernetServer>
     explicit ethServerPort(int port);
 };
 
-void initApiServer(int port = 4403);
+void initApiServer(int port = SERVER_API_DEFAULT_PORT);

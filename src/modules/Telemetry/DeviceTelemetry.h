@@ -7,11 +7,17 @@
 
 class DeviceTelemetryModule : private concurrency::OSThread, public ProtobufModule<meshtastic_Telemetry>
 {
+    CallbackObserver<DeviceTelemetryModule, const meshtastic::Status *> nodeStatusObserver =
+        CallbackObserver<DeviceTelemetryModule, const meshtastic::Status *>(this, &DeviceTelemetryModule::handleStatusUpdate);
+
   public:
     DeviceTelemetryModule()
-        : concurrency::OSThread("DeviceTelemetryModule"),
+        : concurrency::OSThread("DeviceTelemetry"),
           ProtobufModule("DeviceTelemetry", meshtastic_PortNum_TELEMETRY_APP, &meshtastic_Telemetry_msg)
     {
+        uptimeWrapCount = 0;
+        uptimeLastMs = millis();
+        nodeStatusObserver.observe(&nodeStatus->onNewStatus);
         setIntervalFromNow(45 * 1000); // Wait until NodeInfo is sent
     }
     virtual bool wantUIFrame() { return false; }
@@ -28,8 +34,32 @@ class DeviceTelemetryModule : private concurrency::OSThread, public ProtobufModu
      */
     bool sendTelemetry(NodeNum dest = NODENUM_BROADCAST, bool phoneOnly = false);
 
+    /**
+     * Get the uptime in seconds
+     * Loses some accuracy after 49 days, but that's fine
+     */
+    uint32_t getUptimeSeconds() { return (0xFFFFFFFF / 1000) * uptimeWrapCount + (uptimeLastMs / 1000); }
+
   private:
     meshtastic_Telemetry getDeviceTelemetry();
-    uint32_t sendToPhoneIntervalMs = SECONDS_IN_MINUTE * 1000; // Send to phone every minute
+    meshtastic_Telemetry getLocalStatsTelemetry();
+
+    void sendLocalStatsToPhone();
+    uint32_t sendToPhoneIntervalMs = SECONDS_IN_MINUTE * 1000;           // Send to phone every minute
+    uint32_t sendStatsToPhoneIntervalMs = 15 * SECONDS_IN_MINUTE * 1000; // Send stats to phone every 15 minutes
+    uint32_t lastSentStatsToPhone = 0;
     uint32_t lastSentToMesh = 0;
+
+    void refreshUptime()
+    {
+        auto now = millis();
+        // If we wrapped around (~49 days), increment the wrap count
+        if (now < uptimeLastMs)
+            uptimeWrapCount++;
+
+        uptimeLastMs = now;
+    }
+
+    uint32_t uptimeWrapCount;
+    uint32_t uptimeLastMs;
 };

@@ -24,11 +24,12 @@
 #define USE_RF95 // RFM95/SX127x
 #define USE_SX1262
 #define USE_SX1280
+#define USE_LR1121
 
-#define RF95_SCK 5
-#define RF95_MISO 3
-#define RF95_MOSI 6
-#define RF95_NSS 7
+#define LORA_SCK 5
+#define LORA_MISO 3
+#define LORA_MOSI 6
+#define LORA_CS 7
 #define LORA_RESET 8
 
 // per SX1276_Receive_Interrupt/utilities.h
@@ -40,7 +41,7 @@
 
 // per SX1262_Receive_Interrupt/utilities.h
 #ifdef USE_SX1262
-#define SX126X_CS RF95_NSS
+#define SX126X_CS LORA_CS
 #define SX126X_DIO1 33
 #define SX126X_BUSY 34
 #define SX126X_RESET LORA_RESET
@@ -50,7 +51,7 @@
 
 // per SX128x_Receive_Interrupt/utilities.h
 #ifdef USE_SX1280
-#define SX128X_CS RF95_NSS
+#define SX128X_CS LORA_CS
 #define SX128X_DIO1 9
 #define SX128X_DIO2 33
 #define SX128X_DIO3 34
@@ -60,3 +61,19 @@
 #define SX128X_TXEN 10
 #define SX128X_MAX_POWER 3
 #endif
+
+// LR1121
+#ifdef USE_LR1121
+#define LR1121_IRQ_PIN 36
+#define LR1121_NRESET_PIN LORA_RESET
+#define LR1121_BUSY_PIN LORA_DIO2
+#define LR1121_SPI_NSS_PIN LORA_CS
+#define LR1121_SPI_SCK_PIN LORA_SCK
+#define LR1121_SPI_MOSI_PIN LORA_MOSI
+#define LR1121_SPI_MISO_PIN LORA_MISO
+#define LR11X0_DIO3_TCXO_VOLTAGE 3.0
+#define LR11X0_DIO_AS_RF_SWITCH
+#endif
+
+#define HAS_SDCARD // Have SPI interface SD card slot
+#define SDCARD_USE_SPI1

@@ -1,9 +1,14 @@
 #pragma once
 
+#ifdef USE_EINK
+
+#include "GxEPD2_BW.h"
 #include <OLEDDisplay.h>
 
 /**
  * An adapter class that allows using the GxEPD2 library as if it was an OLEDDisplay implementation.
+ *
+ * Note: EInkDynamicDisplay derives from this class.
  *
  * Remaining TODO:
  * optimize display() to only draw changed pixels (see other OLED subclasses for examples)
@@ -11,6 +16,7 @@
  * Use the fast NRF52 SPI API rather than the slow standard arduino version
  *
  * turn radio back on - currently with both on spi bus is fucked? or are we leaving chip select asserted?
+ * Suggestion: perhaps similar to HELTEC_WIRELESS_PAPER issue, which resolved with rtc_gpio_hold_dis()
  */
 class EInkDisplay : public OLEDDisplay
 {
@@ -32,7 +38,14 @@ class EInkDisplay : public OLEDDisplay
      *
      * @return true if we did draw the screen
      */
-    bool forceDisplay(uint32_t msecLimit = 1000);
+    virtual bool forceDisplay(uint32_t msecLimit = 1000);
+
+    /**
+     * Run any code needed to complete an update, after the physical refresh has completed.
+     * Split from forceDisplay(), to enable async refresh in derived EInkDynamicDisplay class.
+     *
+     */
+    virtual void endUpdate();
 
     /**
      * shim to make the abstraction happy
@@ -49,4 +62,19 @@ class EInkDisplay : public OLEDDisplay
 
     // Connect to the display
     virtual bool connect() override;
+
+    // AdafruitGFX display object - instantiated in connect(), variant specific
+    GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT> *adafruitDisplay = NULL;
+
+    // If display uses HSPI
+#if defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_WIRELESS_PAPER_V1_0) || defined(HELTEC_VISION_MASTER_E213) ||               \
+    defined(HELTEC_VISION_MASTER_E290) || defined(TLORA_T3S3_EPAPER)
+    SPIClass *hspi = NULL;
+#endif
+
+  private:
+    // FIXME quick hack to limit drawing to a very slow rate
+    uint32_t lastDrawMsec = 0;
 };
+
+#endif

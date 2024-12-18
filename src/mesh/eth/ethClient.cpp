@@ -2,12 +2,17 @@
 #include "NodeDB.h"
 #include "RTC.h"
 #include "concurrency/Periodic.h"
+#include "configuration.h"
 #include "main.h"
 #include "mesh/api/ethServerAPI.h"
+#if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
+#endif
 #include "target_specific.h"
 #include <RAK13800_W5100S.h>
 #include <SPI.h>
+
+#if HAS_NETWORKING
 
 #ifndef DISABLE_NTP
 #include <NTPClient.h>
@@ -33,16 +38,16 @@ static int32_t reconnectETH()
         Ethernet.maintain();
         if (!ethStartupComplete) {
             // Start web server
-            LOG_INFO("... Starting network services\n");
+            LOG_INFO("Start Ethernet network services");
 
 #ifndef DISABLE_NTP
-            LOG_INFO("Starting NTP time client\n");
+            LOG_INFO("Start NTP time client");
             timeClient.begin();
             timeClient.setUpdateInterval(60 * 60); // Update once an hour
 #endif
 
             if (config.network.rsyslog_server[0]) {
-                LOG_INFO("Starting Syslog client\n");
+                LOG_INFO("Start Syslog client");
                 // Defaults
                 int serverPort = 514;
                 const char *serverAddr = config.network.rsyslog_server;
@@ -66,19 +71,20 @@ static int32_t reconnectETH()
 
             ethStartupComplete = true;
         }
-
+#if !MESHTASTIC_EXCLUDE_MQTT
         // FIXME this is kinda yucky, instead we should just have an observable for 'wifireconnected'
         if (mqtt && !moduleConfig.mqtt.proxy_to_client_enabled && !mqtt->isConnectedDirectly()) {
             mqtt->reconnect();
         }
+#endif
     }
 
 #ifndef DISABLE_NTP
     if (isEthernetAvailable() && (ntp_renew < millis())) {
 
-        LOG_INFO("Updating NTP time from %s\n", config.network.ntp_server);
+        LOG_INFO("Update NTP time from %s", config.network.ntp_server);
         if (timeClient.update()) {
-            LOG_DEBUG("NTP Request Success - Setting RTCQualityNTP if needed\n");
+            LOG_DEBUG("NTP Request Success - Set RTCQualityNTP if needed");
 
             struct timeval tv;
             tv.tv_sec = timeClient.getEpochTime();
@@ -88,18 +94,13 @@ static int32_t reconnectETH()
 
             ntp_renew = millis() + 43200 * 1000; // success, refresh every 12 hours
         } else {
-            LOG_ERROR("NTP Update failed\n");
+            LOG_ERROR("NTP Update failed");
             ntp_renew = millis() + 300 * 1000; // failure, retry every 5 minutes
         }
     }
 #endif
 
     return 5000; // every 5 seconds
-}
-
-static uint32_t bigToLittleEndian(uint32_t value)
-{
-    return ((value >> 24) & 0xFF) | ((value >> 8) & 0xFF00) | ((value << 8) & 0xFF0000) | ((value << 24) & 0xFF000000);
 }
 
 // Startup Ethernet
@@ -126,51 +127,45 @@ bool initEthernet()
         mac[0] &= 0xfe;  // Make sure this is not a multicast MAC
 
         if (config.network.address_mode == meshtastic_Config_NetworkConfig_AddressMode_DHCP) {
-            LOG_INFO("starting Ethernet DHCP\n");
+            LOG_INFO("Start Ethernet DHCP");
             status = Ethernet.begin(mac);
         } else if (config.network.address_mode == meshtastic_Config_NetworkConfig_AddressMode_STATIC) {
-            LOG_INFO("starting Ethernet Static\n");
-
-            IPAddress ip = IPAddress(bigToLittleEndian(config.network.ipv4_config.ip));
-            IPAddress dns = IPAddress(bigToLittleEndian(config.network.ipv4_config.dns));
-            IPAddress gateway = IPAddress(bigToLittleEndian(config.network.ipv4_config.gateway));
-            IPAddress subnet = IPAddress(bigToLittleEndian(config.network.ipv4_config.subnet));
-
-            Ethernet.begin(mac, ip, dns, gateway, subnet);
-
+            LOG_INFO("Start Ethernet Static");
+            Ethernet.begin(mac, config.network.ipv4_config.ip, config.network.ipv4_config.dns, config.network.ipv4_config.gateway,
+                           config.network.ipv4_config.subnet);
             status = 1;
         } else {
-            LOG_INFO("Ethernet Disabled\n");
+            LOG_INFO("Ethernet Disabled");
             return false;
         }
 
         if (status == 0) {
             if (Ethernet.hardwareStatus() == EthernetNoHardware) {
-                LOG_ERROR("Ethernet shield was not found.\n");
+                LOG_ERROR("Ethernet shield was not found");
                 return false;
             } else if (Ethernet.linkStatus() == LinkOFF) {
-                LOG_ERROR("Ethernet cable is not connected.\n");
+                LOG_ERROR("Ethernet cable is not connected");
                 return false;
             } else {
-                LOG_ERROR("Unknown Ethernet error.\n");
+                LOG_ERROR("Unknown Ethernet error");
                 return false;
             }
         } else {
-            LOG_INFO("Local IP %u.%u.%u.%u\n", Ethernet.localIP()[0], Ethernet.localIP()[1], Ethernet.localIP()[2],
+            LOG_INFO("Local IP %u.%u.%u.%u", Ethernet.localIP()[0], Ethernet.localIP()[1], Ethernet.localIP()[2],
                      Ethernet.localIP()[3]);
-            LOG_INFO("Subnet Mask %u.%u.%u.%u\n", Ethernet.subnetMask()[0], Ethernet.subnetMask()[1], Ethernet.subnetMask()[2],
+            LOG_INFO("Subnet Mask %u.%u.%u.%u", Ethernet.subnetMask()[0], Ethernet.subnetMask()[1], Ethernet.subnetMask()[2],
                      Ethernet.subnetMask()[3]);
-            LOG_INFO("Gateway IP %u.%u.%u.%u\n", Ethernet.gatewayIP()[0], Ethernet.gatewayIP()[1], Ethernet.gatewayIP()[2],
+            LOG_INFO("Gateway IP %u.%u.%u.%u", Ethernet.gatewayIP()[0], Ethernet.gatewayIP()[1], Ethernet.gatewayIP()[2],
                      Ethernet.gatewayIP()[3]);
-            LOG_INFO("DNS Server IP %u.%u.%u.%u\n", Ethernet.dnsServerIP()[0], Ethernet.dnsServerIP()[1],
-                     Ethernet.dnsServerIP()[2], Ethernet.dnsServerIP()[3]);
+            LOG_INFO("DNS Server IP %u.%u.%u.%u", Ethernet.dnsServerIP()[0], Ethernet.dnsServerIP()[1], Ethernet.dnsServerIP()[2],
+                     Ethernet.dnsServerIP()[3]);
         }
 
         ethEvent = new Periodic("ethConnect", reconnectETH);
 
         return true;
     } else {
-        LOG_INFO("Not using Ethernet\n");
+        LOG_INFO("Not using Ethernet");
         return false;
     }
 }
@@ -191,3 +186,5 @@ bool isEthernetAvailable()
         return true;
     }
 }
+
+#endif

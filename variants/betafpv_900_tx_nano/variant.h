@@ -9,10 +9,10 @@
 
 #define USE_RF95
 
-#define RF95_SCK 18
-#define RF95_MISO 19
-#define RF95_MOSI 23
-#define RF95_NSS 5
+#define LORA_SCK 18
+#define LORA_MISO 19
+#define LORA_MOSI 23
+#define LORA_CS 5
 
 #define LORA_DIO0 4
 #define LORA_RESET 14

@@ -1,13 +1,16 @@
 #pragma once
 #include "ProtobufModule.h"
+#define MAX_NUM_NEIGHBORS 10 // also defined in NeighborInfo protobuf options
 
 /*
  * Neighborinfo module for sending info on each node's 0-hop neighbors to the mesh
  */
 class NeighborInfoModule : public ProtobufModule<meshtastic_NeighborInfo>, private concurrency::OSThread
 {
-    meshtastic_Neighbor *neighbors;
-    pb_size_t *numNeighbors;
+    CallbackObserver<NeighborInfoModule, const meshtastic::Status *> nodeStatusObserver =
+        CallbackObserver<NeighborInfoModule, const meshtastic::Status *>(this, &NeighborInfoModule::handleStatusUpdate);
+
+    std::vector<meshtastic_Neighbor> neighbors;
 
   public:
     /*
@@ -18,15 +21,7 @@ class NeighborInfoModule : public ProtobufModule<meshtastic_NeighborInfo>, priva
     /* Reset neighbor info after clearing nodeDB*/
     void resetNeighbors();
 
-    bool saveProtoForModule();
-
-    // Let FloodingRouter call updateLastSentById upon rebroadcasting a NeighborInfo packet
-    friend class FloodingRouter;
-
   protected:
-    // Note: this holds our local info.
-    meshtastic_NeighborInfo neighborState;
-
     /*
      * Called to handle a particular incoming message
      * @return true if you've guaranteed you've handled this message and no other handlers should be considered for it
@@ -40,10 +35,9 @@ class NeighborInfoModule : public ProtobufModule<meshtastic_NeighborInfo>, priva
     uint32_t collectNeighborInfo(meshtastic_NeighborInfo *neighborInfo);
 
     /*
-    Remove neighbors from the database that we haven't heard from in a while
-    @returns new number of neighbors
+      Remove neighbors from the database that we haven't heard from in a while
     */
-    size_t cleanUpNeighbors();
+    void cleanUpNeighbors();
 
     /* Allocate a new NeighborInfo packet */
     meshtastic_NeighborInfo *allocateNeighborInfoPacket();
@@ -56,29 +50,21 @@ class NeighborInfoModule : public ProtobufModule<meshtastic_NeighborInfo>, priva
      */
     void sendNeighborInfo(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
 
-    size_t getNumNeighbors() { return *numNeighbors; }
-
-    meshtastic_Neighbor *getNeighborByIndex(size_t x)
-    {
-        assert(x < *numNeighbors);
-        return &neighbors[x];
-    }
-
     /* update neighbors with subpacket sniffed from network */
     void updateNeighbors(const meshtastic_MeshPacket &mp, const meshtastic_NeighborInfo *np);
 
     /* update a NeighborInfo packet with our NodeNum as last_sent_by_id */
-    void updateLastSentById(meshtastic_MeshPacket *p);
-
-    void loadProtoForModule();
+    void alterReceivedProtobuf(meshtastic_MeshPacket &p, meshtastic_NeighborInfo *n) override;
 
     /* Does our periodic broadcast */
     int32_t runOnce() override;
 
+    /* Override wantPacket to say we want to see all packets when enabled, not just those for our port number.
+      Exception is when the packet came via MQTT */
+    virtual bool wantPacket(const meshtastic_MeshPacket *p) override { return enabled && !p->via_mqtt; }
+
     /* These are for debugging only */
     void printNeighborInfo(const char *header, const meshtastic_NeighborInfo *np);
-    void printNodeDBNodes(const char *header);
-    void printNodeDBNeighbors(const char *header);
-    void printNodeDBSelection(const char *header, const meshtastic_NeighborInfo *np);
+    void printNodeDBNeighbors();
 };
 extern NeighborInfoModule *neighborInfoModule;

@@ -1,0 +1,165 @@
+### Many device configs have been moved to /etc/meshtasticd/available.d
+### To activate, simply copy or link the appropriate file into /etc/meshtasticd/config.d
+
+### Define your devices here using Broadcom pin numbering
+### Uncomment the block that corresponds to your hardware
+### Including the "Module:" line!
+---
+Lora:
+
+#  Module: sx1262  # Waveshare SX1302 LISTEN ONLY AT THIS TIME!
+#  CS: 7
+#  IRQ: 17
+#  Reset: 22
+
+#  Module: sx1262  # pinedio
+#  CS: 0
+#  IRQ: 10
+#  Busy: 11
+#  DIO2_AS_RF_SWITCH: true
+#  spidev: spidev0.1
+
+#  Module: RF95  # Adafruit RFM9x
+#  Reset: 25
+#  CS: 7
+#  IRQ: 22
+#  Busy: 23
+
+#  Module: RF95  # Elecrow Lora RFM95 IOT https://www.elecrow.com/lora-rfm95-iot-board-for-rpi.html
+#  Reset: 22
+#  CS: 7
+#  IRQ: 25
+
+#  Module: sx1280  # SX1280
+#  CS: 21
+#  IRQ: 16
+#  Busy: 20
+#  Reset: 18
+
+#  Module: sx1268  # SX1268-based modules, tested with Ebyte E22 400M33S
+#  CS: 21
+#  IRQ: 16
+#  Busy: 20
+#  Reset: 18
+#  TXen: 6
+#  RXen: 12
+#  DIO3_TCXO_VOLTAGE: true
+
+#  DIO3_TCXO_VOLTAGE: true  # the Waveshare Core1262 and others are known to need this setting
+
+#  TXen: x  # TX and RX enable pins
+#  RXen: x
+
+#  ch341_quirk: true # Uncomment this to use the chunked SPI transfer that seems to fix the ch341
+
+#  spiSpeed: 2000000
+
+### Set gpio chip to use in /dev/. Defaults to 0.
+### Notably the Raspberry Pi 5 puts the GPIO header on gpiochip4
+#  gpiochip: 4
+
+### Specify the SPI device to use in /dev/. Defaults to spidev0.0
+### Some devices, like the pinedio, may require spidev0.1 as a workaround.
+#  spidev: spidev0.0
+
+### Define GPIO buttons here:
+
+GPIO:
+#  User: 6
+
+### Define GPS
+
+GPS:
+#  SerialPath: /dev/ttyS0
+
+### Specify I2C device, or leave blank for none
+
+I2C:
+#  I2CDevice: /dev/i2c-1
+
+### Set up SPI displays here. Note that I2C displays are generally auto-detected.
+
+Display:
+
+### Waveshare 1.44inch LCD HAT
+#  Panel: ST7735S
+#  CS: 8         #Chip Select
+#  DC: 25        # Data/Command pin
+#  Backlight: 24
+#  Width: 128
+#  Height: 128
+#  Reset: 27
+#  OffsetX: 0
+#  OffsetY: 0
+
+### Adafruit PiTFT 2.8 TFT+Touchscreen
+#  Panel: ILI9341
+#  CS: 8
+#  DC: 25
+#  Width: 240
+#  Height: 320
+#  Rotate: true
+
+### SHCHV 3.5 RPi TFT+Touchscreen
+#  Panel: ILI9486
+#  spidev: spidev0.0
+#  BusFrequency: 30000000
+#  DC: 24
+#  Reset: 25
+#  Width: 320
+#  Height: 480
+#  OffsetRotate: 2
+
+### TZT 2.0 Inch TFT Display ST7789V 240RGBx320
+#  Panel: ST7789
+#  spidev: spidev0.0
+#  # CS: 8     # can be freely chosen
+#  BusFrequency: 80000000
+#  DC: 24      # can be freely chosen
+#  Width: 320
+#  Height: 240
+#  Reset: 25   # can be freely chosen
+#  Rotate: true
+#  OffsetRotate: 1
+#  Invert: true
+
+### You can also specify the spi device for the display to use
+# spidev: spidev0.0
+
+Touchscreen:
+### Note, at least for now, the touchscreen must have a CS pin defined, even if you let Linux manage the CS switching.
+
+#  Module: STMPE610 # Option 1 for Adafruit PiTFT 2.8
+#  CS: 7
+#  IRQ: 24
+
+#  Module: FT5x06 # Option 2 for Adafruit PiTFT 2.8
+#  IRQ: 24
+#  I2CAddr: 0x38
+
+### You can also specify the spi device for the touchscreen to use
+# spidev: spidev0.0
+
+
+Input:
+### Configure device for direct keyboard input
+
+#  KeyboardDevice: /dev/input/by-id/usb-_Raspberry_Pi_Internal_Keyboard-event-kbd
+
+###
+
+Logging:
+  LogLevel: info # debug, info, warn, error
+#  TraceFile: /var/log/meshtasticd.json
+#  AsciiLogs: true     # default if not specified is !isatty() on stdout
+
+Webserver:
+#  Port: 443 # Port for Webserver & Webservices
+#  RootPath: /usr/share/meshtasticd/web # Root Dir of WebServer
+
+General:
+  MaxNodes: 200
+  MaxMessageQueue: 100
+  ConfigDirectory: /etc/meshtasticd/config.d/
+#  MACAddress: AA:BB:CC:DD:EE:FF
+#  MACAddressSource: eth0

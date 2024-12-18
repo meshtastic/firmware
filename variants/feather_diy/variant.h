@@ -81,10 +81,10 @@ extern "C" {
 #define LORA_DIO2 (0 + 8)   // P0.08 12  // BUSY for SX1262/SX1268
 #define LORA_DIO3           // Not connected on PCB, but internally on the TTGO SX1262/SX1268, if DIO3 is high the TXCO is enabled
 
-#define RF95_SCK SCK
-#define RF95_MISO MI
-#define RF95_MOSI MO
-#define RF95_NSS SS
+#define LORA_SCK SCK
+#define LORA_MISO MI
+#define LORA_MOSI MO
+#define LORA_CS SS
 
 // enables 3.3V periphery like GPS or IO Module
 #define PIN_3V3_EN (-1)
@@ -95,7 +95,7 @@ extern "C" {
 #define USE_SX1262
 
 // common pinouts for SX126X modules
-#define SX126X_CS RF95_NSS // NSS for SX126X
+#define SX126X_CS LORA_CS // NSS for SX126X
 #define SX126X_DIO1 LORA_DIO1
 #define SX126X_BUSY LORA_DIO2
 #define SX126X_RESET LORA_RESET

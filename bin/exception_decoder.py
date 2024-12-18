@@ -11,19 +11,22 @@ Meshtastic notes:
 * version that's checked into meshtastic repo is based on: https://github.com/me21/EspArduinoExceptionDecoder
   which adds in ESP32 Backtrace decoding.
 * this also updates the defaults to use ESP32, instead of ESP8266 and defaults to the built firmware.bin
+* also updated the toolchain name, which will be set according to the platform
 
 To use, copy the "Backtrace: 0x...." line to a file, e.g., backtrace.txt, then run:
 $ bin/exception_decoder.py backtrace.txt
+For a platform other than ESP32, use the -p option, e.g.:
+$ bin/exception_decoder.py -p ESP32S3 backtrace.txt
+To specify a specific .elf file, use the -e option, e.g.:
+$ bin/exception_decoder.py -e firmware.elf backtrace.txt
 """
 
 import argparse
+import os
 import re
 import subprocess
-from collections import namedtuple
-
 import sys
-
-import os
+from collections import namedtuple
 
 EXCEPTIONS = [
     "Illegal instruction",
@@ -55,24 +58,39 @@ EXCEPTIONS = [
     "LoadStorePrivilege: A load or store referenced a virtual address at a ring level less than CRING",
     "reserved",
     "LoadProhibited: A load referenced a page mapped with an attribute that does not permit loads",
-    "StoreProhibited: A store referenced a page mapped with an attribute that does not permit stores"
+    "StoreProhibited: A store referenced a page mapped with an attribute that does not permit stores",
 ]
 
 PLATFORMS = {
-    "ESP8266": "lx106",
-    "ESP32": "esp32"
+    "ESP8266": "xtensa-lx106",
+    "ESP32": "xtensa-esp32",
+    "ESP32S3": "xtensa-esp32s3",
+    "ESP32C3": "riscv32-esp",
+}
+TOOLS = {
+    "ESP8266": "xtensa",
+    "ESP32": "xtensa-esp32",
+    "ESP32S3": "xtensa-esp32s3",
+    "ESP32C3": "riscv32-esp",
 }
 
-BACKTRACE_REGEX = re.compile(r"(?:\s+(0x40[0-2](?:\d|[a-f]|[A-F]){5}):0x(?:\d|[a-f]|[A-F]){8})\b")
+BACKTRACE_REGEX = re.compile(
+    r"(?:\s+(0x40[0-2](?:\d|[a-f]|[A-F]){5}):0x(?:\d|[a-f]|[A-F]){8})\b"
+)
 EXCEPTION_REGEX = re.compile("^Exception \\((?P<exc>[0-9]*)\\):$")
-COUNTER_REGEX = re.compile('^epc1=(?P<epc1>0x[0-9a-f]+) epc2=(?P<epc2>0x[0-9a-f]+) epc3=(?P<epc3>0x[0-9a-f]+) '
-                           'excvaddr=(?P<excvaddr>0x[0-9a-f]+) depc=(?P<depc>0x[0-9a-f]+)$')
+COUNTER_REGEX = re.compile(
+    "^epc1=(?P<epc1>0x[0-9a-f]+) epc2=(?P<epc2>0x[0-9a-f]+) epc3=(?P<epc3>0x[0-9a-f]+) "
+    "excvaddr=(?P<excvaddr>0x[0-9a-f]+) depc=(?P<depc>0x[0-9a-f]+)$"
+)
 CTX_REGEX = re.compile("^ctx: (?P<ctx>.+)$")
-POINTER_REGEX = re.compile('^sp: (?P<sp>[0-9a-f]+) end: (?P<end>[0-9a-f]+) offset: (?P<offset>[0-9a-f]+)$')
-STACK_BEGIN = '>>>stack>>>'
-STACK_END = '<<<stack<<<'
+POINTER_REGEX = re.compile(
+    "^sp: (?P<sp>[0-9a-f]+) end: (?P<end>[0-9a-f]+) offset: (?P<offset>[0-9a-f]+)$"
+)
+STACK_BEGIN = ">>>stack>>>"
+STACK_END = "<<<stack<<<"
 STACK_REGEX = re.compile(
-    '^(?P<off>[0-9a-f]+):\W+(?P<c1>[0-9a-f]+) (?P<c2>[0-9a-f]+) (?P<c3>[0-9a-f]+) (?P<c4>[0-9a-f]+)(\W.*)?$')
+    "^(?P<off>[0-9a-f]+):\W+(?P<c1>[0-9a-f]+) (?P<c2>[0-9a-f]+) (?P<c3>[0-9a-f]+) (?P<c4>[0-9a-f]+)(\W.*)?$"
+)
 
 StackLine = namedtuple("StackLine", ["offset", "content"])
 
@@ -96,15 +114,18 @@ class ExceptionDataParser(object):
         self.stack = []
 
     def _parse_backtrace(self, line):
-        if line.startswith('Backtrace:'):
-            self.stack = [StackLine(offset=0, content=(addr,)) for addr in BACKTRACE_REGEX.findall(line)]
+        if line.startswith("Backtrace:"):
+            self.stack = [
+                StackLine(offset=0, content=(addr,))
+                for addr in BACKTRACE_REGEX.findall(line)
+            ]
             return None
         return self._parse_backtrace
 
     def _parse_exception(self, line):
         match = EXCEPTION_REGEX.match(line)
         if match is not None:
-            self.exception = int(match.group('exc'))
+            self.exception = int(match.group("exc"))
             return self._parse_counters
         return self._parse_exception
 
@@ -144,14 +165,22 @@ class ExceptionDataParser(object):
         if line != STACK_END:
             match = STACK_REGEX.match(line)
             if match is not None:
-                self.stack.append(StackLine(offset=match.group("off"),
-                                            content=(match.group("c1"), match.group("c2"), match.group("c3"),
-                                                     match.group("c4"))))
+                self.stack.append(
+                    StackLine(
+                        offset=match.group("off"),
+                        content=(
+                            match.group("c1"),
+                            match.group("c2"),
+                            match.group("c3"),
+                            match.group("c4"),
+                        ),
+                    )
+                )
             return self._parse_stack_line
         return None
 
     def parse_file(self, file, platform, stack_only=False):
-        if platform == 'ESP32':
+        if platform != "ESP8266":
             func = self._parse_backtrace
         else:
             func = self._parse_exception
@@ -175,7 +204,9 @@ class AddressResolver(object):
         self._address_map = {}
 
     def _lookup(self, addresses):
-        cmd = [self._tool, "-aipfC", "-e", self._elf] + [addr for addr in addresses if addr is not None]
+        cmd = [self._tool, "-aipfC", "-e", self._elf] + [
+            addr for addr in addresses if addr is not None
+        ]
 
         if sys.version_info[0] < 3:
             output = subprocess.check_output(cmd)
@@ -190,19 +221,27 @@ class AddressResolver(object):
             match = line_regex.match(line)
 
             if match is None:
-                if last is not None and line.startswith('(inlined by)'):
-                    line = line [12:].strip()
-                    self._address_map[last] += ("\n  \-> inlined by: " + line)
+                if last is not None and line.startswith("(inlined by)"):
+                    line = line[12:].strip()
+                    self._address_map[last] += "\n  \-> inlined by: " + line
                 continue
 
-            if match.group("result") == '?? ??:0':
+            if match.group("result") == "?? ??:0":
                 continue
 
             self._address_map[match.group("addr")] = match.group("result")
             last = match.group("addr")
 
     def fill(self, parser):
-        addresses = [parser.epc1, parser.epc2, parser.epc3, parser.excvaddr, parser.sp, parser.end, parser.offset]
+        addresses = [
+            parser.epc1,
+            parser.epc2,
+            parser.epc3,
+            parser.excvaddr,
+            parser.sp,
+            parser.end,
+            parser.offset,
+        ]
         for line in parser.stack:
             addresses.extend(line.content)
 
@@ -257,8 +296,10 @@ def print_stack(lines, resolver):
 
 
 def print_result(parser, resolver, platform, full=True, stack_only=False):
-    if platform == 'ESP8266' and not stack_only:
-        print('Exception: {} ({})'.format(parser.exception, EXCEPTIONS[parser.exception]))
+    if platform == "ESP8266" and not stack_only:
+        print(
+            "Exception: {} ({})".format(parser.exception, EXCEPTIONS[parser.exception])
+        )
 
         print("")
         print_addr("epc1", parser.epc1, resolver)
@@ -285,15 +326,33 @@ def print_result(parser, resolver, platform, full=True, stack_only=False):
 def parse_args():
     parser = argparse.ArgumentParser(description="decode ESP Stacktraces.")
 
-    parser.add_argument("-p", "--platform", help="The platform to decode from", choices=PLATFORMS.keys(),
-                        default="ESP32")
-    parser.add_argument("-t", "--tool", help="Path to the xtensa toolchain",
-                        default="~/.platformio/packages/toolchain-xtensa32/")
-    parser.add_argument("-e", "--elf", help="path to elf file",
-                        default=".pio/build/esp32/firmware.elf")
-    parser.add_argument("-f", "--full", help="Print full stack dump", action="store_true")
-    parser.add_argument("-s", "--stack_only", help="Decode only a stractrace", action="store_true")
-    parser.add_argument("file", help="The file to read the exception data from ('-' for STDIN)", default="-")
+    parser.add_argument(
+        "-p",
+        "--platform",
+        help="The platform to decode from",
+        choices=PLATFORMS.keys(),
+        default="ESP32",
+    )
+    parser.add_argument(
+        "-t",
+        "--tool",
+        help="Path to the toolchain (without specific platform)",
+        default="~/.platformio/packages/toolchain-",
+    )
+    parser.add_argument(
+        "-e", "--elf", help="path to elf file", default=".pio/build/tbeam/firmware.elf"
+    )
+    parser.add_argument(
+        "-f", "--full", help="Print full stack dump", action="store_true"
+    )
+    parser.add_argument(
+        "-s", "--stack_only", help="Decode only a stractrace", action="store_true"
+    )
+    parser.add_argument(
+        "file",
+        help="The file to read the exception data from ('-' for STDIN)",
+        default="-",
+    )
 
     return parser.parse_args()
 
@@ -309,10 +368,12 @@ if __name__ == "__main__":
             sys.exit(1)
         file = open(args.file, "r")
 
-    addr2line = os.path.join(os.path.abspath(os.path.expanduser(args.tool)),
-                             "bin/xtensa-" + PLATFORMS[args.platform] + "-elf-addr2line")
-    if os.name == 'nt':
-        addr2line += '.exe'
+    addr2line = os.path.join(
+        os.path.abspath(os.path.expanduser(args.tool + TOOLS[args.platform])),
+        "bin/" + PLATFORMS[args.platform] + "-elf-addr2line",
+    )
+    if os.name == "nt":
+        addr2line += ".exe"
     if not os.path.exists(addr2line):
         print("ERROR: addr2line not found (" + addr2line + ")")
 

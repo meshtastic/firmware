@@ -24,6 +24,39 @@ SPIClass SPI1(HSPI);
 
 #endif // HAS_SDCARD
 
+#if defined(ARCH_STM32WL)
+
+uint16_t OSFS::startOfEEPROM = 1;
+uint16_t OSFS::endOfEEPROM = 2048;
+
+// 3) How do I read from the medium?
+void OSFS::readNBytes(uint16_t address, unsigned int num, byte *output)
+{
+    for (uint16_t i = address; i < address + num; i++) {
+        *output = EEPROM.read(i);
+        output++;
+    }
+}
+
+// 4) How to I write to the medium?
+void OSFS::writeNBytes(uint16_t address, unsigned int num, const byte *input)
+{
+    for (uint16_t i = address; i < address + num; i++) {
+        EEPROM.update(i, *input);
+        input++;
+    }
+}
+#endif
+
+bool lfs_assert_failed =
+    false; // Note: we use this global on all platforms, though it can only be set true on nrf52 (in our modified lfs_util.h)
+
+extern "C" void lfs_assert(const char *reason)
+{
+    LOG_ERROR("LFS assert: %s", reason);
+    lfs_assert_failed = true;
+}
+
 /**
  * @brief Copies a file from one location to another.
  *
@@ -33,18 +66,44 @@ SPIClass SPI1(HSPI);
  */
 bool copyFile(const char *from, const char *to)
 {
-#ifdef FSCom
+#ifdef ARCH_STM32WL
+    unsigned char cbuffer[2048];
+
+    // Var to hold the result of actions
+    OSFS::result r;
+
+    r = OSFS::getFile(from, cbuffer);
+
+    if (r == notfound) {
+        LOG_ERROR("Failed to open source file %s", from);
+        return false;
+    } else if (r == noerr) {
+        r = OSFS::newFile(to, cbuffer, true);
+        if (r == noerr) {
+            return true;
+        } else {
+            LOG_ERROR("OSFS Error %d", r);
+            return false;
+        }
+
+    } else {
+        LOG_ERROR("OSFS Error %d", r);
+        return false;
+    }
+    return true;
+
+#elif defined(FSCom)
     unsigned char cbuffer[16];
 
     File f1 = FSCom.open(from, FILE_O_READ);
     if (!f1) {
-        LOG_ERROR("Failed to open source file %s\n", from);
+        LOG_ERROR("Failed to open source file %s", from);
         return false;
     }
 
     File f2 = FSCom.open(to, FILE_O_WRITE);
     if (!f2) {
-        LOG_ERROR("Failed to open destination file %s\n", to);
+        LOG_ERROR("Failed to open destination file %s", to);
         return false;
     }
 
@@ -70,7 +129,13 @@ bool copyFile(const char *from, const char *to)
  */
 bool renameFile(const char *pathFrom, const char *pathTo)
 {
-#ifdef FSCom
+#ifdef ARCH_STM32WL
+    if (copyFile(pathFrom, pathTo) && (OSFS::deleteFile(pathFrom) == OSFS::result::NO_ERROR)) {
+        return true;
+    } else {
+        return false;
+    }
+#elif defined(FSCom)
 #ifdef ARCH_ESP32
     // rename was fixed for ESP32 IDF LittleFS in April
     return FSCom.rename(pathFrom, pathTo);
@@ -84,6 +149,58 @@ bool renameFile(const char *pathFrom, const char *pathTo)
 #endif
 }
 
+#include <vector>
+
+/**
+ * @brief Get the list of files in a directory.
+ *
+ * This function returns a list of files in a directory. The list includes the full path of each file.
+ *
+ * @param dirname The name of the directory.
+ * @param levels The number of levels of subdirectories to list.
+ * @return A vector of strings containing the full path of each file in the directory.
+ */
+std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels)
+{
+    std::vector<meshtastic_FileInfo> filenames = {};
+#ifdef FSCom
+    File root = FSCom.open(dirname, FILE_O_READ);
+    if (!root)
+        return filenames;
+    if (!root.isDirectory())
+        return filenames;
+
+    File file = root.openNextFile();
+    while (file) {
+        if (file.isDirectory() && !String(file.name()).endsWith(".")) {
+            if (levels) {
+#ifdef ARCH_ESP32
+                std::vector<meshtastic_FileInfo> subDirFilenames = getFiles(file.path(), levels - 1);
+#else
+                std::vector<meshtastic_FileInfo> subDirFilenames = getFiles(file.name(), levels - 1);
+#endif
+                filenames.insert(filenames.end(), subDirFilenames.begin(), subDirFilenames.end());
+                file.close();
+            }
+        } else {
+            meshtastic_FileInfo fileInfo = {"", file.size()};
+#ifdef ARCH_ESP32
+            strcpy(fileInfo.file_name, file.path());
+#else
+            strcpy(fileInfo.file_name, file.name());
+#endif
+            if (!String(fileInfo.file_name).endsWith(".")) {
+                filenames.push_back(fileInfo);
+            }
+            file.close();
+        }
+        file = root.openNextFile();
+    }
+    root.close();
+#endif
+    return filenames;
+}
+
 /**
  * Lists the contents of a directory.
  *
@@ -91,7 +208,7 @@ bool renameFile(const char *pathFrom, const char *pathTo)
  * @param levels The number of levels of subdirectories to list.
  * @param del Whether or not to delete the contents of the directory after listing.
  */
-void listDir(const char *dirname, uint8_t levels, bool del = false)
+void listDir(const char *dirname, uint8_t levels, bool del)
 {
 #ifdef FSCom
 #if (defined(ARCH_ESP32) || defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
@@ -106,13 +223,15 @@ void listDir(const char *dirname, uint8_t levels, bool del = false)
     }
 
     File file = root.openNextFile();
-    while (file) {
+    while (
+        file &&
+        file.name()[0]) { // This file.name() check is a workaround for a bug in the Adafruit LittleFS nrf52 glue (see issue 4395)
         if (file.isDirectory() && !String(file.name()).endsWith(".")) {
             if (levels) {
 #ifdef ARCH_ESP32
                 listDir(file.path(), levels - 1, del);
                 if (del) {
-                    LOG_DEBUG("Removing %s\n", file.path());
+                    LOG_DEBUG("Remove %s", file.path());
                     strncpy(buffer, file.path(), sizeof(buffer));
                     file.close();
                     FSCom.rmdir(buffer);
@@ -122,7 +241,7 @@ void listDir(const char *dirname, uint8_t levels, bool del = false)
 #elif (defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
                 listDir(file.name(), levels - 1, del);
                 if (del) {
-                    LOG_DEBUG("Removing %s\n", file.name());
+                    LOG_DEBUG("Remove %s", file.name());
                     strncpy(buffer, file.name(), sizeof(buffer));
                     file.close();
                     FSCom.rmdir(buffer);
@@ -130,6 +249,7 @@ void listDir(const char *dirname, uint8_t levels, bool del = false)
                     file.close();
                 }
 #else
+                LOG_DEBUG(" %s (directory)", file.name());
                 listDir(file.name(), levels - 1, del);
                 file.close();
 #endif
@@ -137,26 +257,26 @@ void listDir(const char *dirname, uint8_t levels, bool del = false)
         } else {
 #ifdef ARCH_ESP32
             if (del) {
-                LOG_DEBUG("Deleting %s\n", file.path());
+                LOG_DEBUG("Delete %s", file.path());
                 strncpy(buffer, file.path(), sizeof(buffer));
                 file.close();
                 FSCom.remove(buffer);
             } else {
-                LOG_DEBUG(" %s (%i Bytes)\n", file.path(), file.size());
+                LOG_DEBUG(" %s (%i Bytes)", file.path(), file.size());
                 file.close();
             }
 #elif (defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
             if (del) {
-                LOG_DEBUG("Deleting %s\n", file.name());
+                LOG_DEBUG("Delete %s", file.name());
                 strncpy(buffer, file.name(), sizeof(buffer));
                 file.close();
                 FSCom.remove(buffer);
             } else {
-                LOG_DEBUG(" %s (%i Bytes)\n", file.name(), file.size());
+                LOG_DEBUG(" %s (%i Bytes)", file.name(), file.size());
                 file.close();
             }
 #else
-            LOG_DEBUG(" %s (%i Bytes)\n", file.name(), file.size());
+            LOG_DEBUG("   %s (%i Bytes)", file.name(), file.size());
             file.close();
 #endif
         }
@@ -164,7 +284,7 @@ void listDir(const char *dirname, uint8_t levels, bool del = false)
     }
 #ifdef ARCH_ESP32
     if (del) {
-        LOG_DEBUG("Removing %s\n", root.path());
+        LOG_DEBUG("Remove %s", root.path());
         strncpy(buffer, root.path(), sizeof(buffer));
         root.close();
         FSCom.rmdir(buffer);
@@ -173,7 +293,7 @@ void listDir(const char *dirname, uint8_t levels, bool del = false)
     }
 #elif (defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
     if (del) {
-        LOG_DEBUG("Removing %s\n", root.name());
+        LOG_DEBUG("Remove %s", root.name());
         strncpy(buffer, root.name(), sizeof(buffer));
         root.close();
         FSCom.rmdir(buffer);
@@ -209,13 +329,13 @@ void fsInit()
 {
 #ifdef FSCom
     if (!FSBegin()) {
-        LOG_ERROR("Filesystem mount Failed.\n");
+        LOG_ERROR("Filesystem mount failed");
         // assert(0); This auto-formats the partition, so no need to fail here.
     }
-#ifdef ARCH_ESP32
-    LOG_DEBUG("Filesystem files (%d/%d Bytes):\n", FSCom.usedBytes(), FSCom.totalBytes());
+#if defined(ARCH_ESP32)
+    LOG_DEBUG("Filesystem files (%d/%d Bytes):", FSCom.usedBytes(), FSCom.totalBytes());
 #else
-    LOG_DEBUG("Filesystem files:\n");
+    LOG_DEBUG("Filesystem files:");
 #endif
     listDir("/", 10);
 #endif
@@ -230,28 +350,28 @@ void setupSDCard()
     SDHandler.begin(SPI_SCK, SPI_MISO, SPI_MOSI);
 
     if (!SD.begin(SDCARD_CS, SDHandler)) {
-        LOG_DEBUG("No SD_MMC card detected\n");
+        LOG_DEBUG("No SD_MMC card detected");
         return;
     }
     uint8_t cardType = SD.cardType();
     if (cardType == CARD_NONE) {
-        LOG_DEBUG("No SD_MMC card attached\n");
+        LOG_DEBUG("No SD_MMC card attached");
         return;
     }
     LOG_DEBUG("SD_MMC Card Type: ");
     if (cardType == CARD_MMC) {
-        LOG_DEBUG("MMC\n");
+        LOG_DEBUG("MMC");
     } else if (cardType == CARD_SD) {
-        LOG_DEBUG("SDSC\n");
+        LOG_DEBUG("SDSC");
     } else if (cardType == CARD_SDHC) {
-        LOG_DEBUG("SDHC\n");
+        LOG_DEBUG("SDHC");
     } else {
-        LOG_DEBUG("UNKNOWN\n");
+        LOG_DEBUG("UNKNOWN");
     }
 
     uint64_t cardSize = SD.cardSize() / (1024 * 1024);
-    LOG_DEBUG("SD Card Size: %lluMB\n", cardSize);
-    LOG_DEBUG("Total space: %llu MB\n", SD.totalBytes() / (1024 * 1024));
-    LOG_DEBUG("Used space: %llu MB\n", SD.usedBytes() / (1024 * 1024));
+    LOG_DEBUG("SD Card Size: %lu MB", (uint32_t)cardSize);
+    LOG_DEBUG("Total space: %lu MB", (uint32_t)(SD.totalBytes() / (1024 * 1024)));
+    LOG_DEBUG("Used space: %lu MB", (uint32_t)(SD.usedBytes() / (1024 * 1024)));
 #endif
 }

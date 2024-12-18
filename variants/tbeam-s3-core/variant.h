@@ -11,7 +11,7 @@
 //  anywhere.
 //  #define EXT_NOTIFY_OUT 13 // Default pin to use for Ext Notify Module.
 
-#define LED_INVERTED 1
+#define LED_STATE_ON 0 // State when LED is lit
 
 // TTGO uses a common pinout for their SX1262 vs RF95 modules - both can be enabled and we will probe at runtime for RF95 and if
 // not found then probe for SX1262
@@ -47,10 +47,10 @@
 #define PMU_USE_WIRE1
 #define RTC_USE_WIRE1
 
-#define RF95_SCK 12
-#define RF95_MISO 13
-#define RF95_MOSI 11
-#define RF95_NSS 10
+#define LORA_SCK 12
+#define LORA_MISO 13
+#define LORA_MOSI 11
+#define LORA_CS 10
 
 #define GPS_RX_PIN 9
 #define GPS_TX_PIN 8

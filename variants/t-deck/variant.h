@@ -8,7 +8,7 @@
 #define ST7789_BUSY -1
 #define ST7789_BL 42
 #define ST7789_SPI_HOST SPI2_HOST
-#define ST7789_BACKLIGHT_EN 42
+#define TFT_BL 42
 #define SPI_FREQUENCY 40000000
 #define SPI_READ_FREQUENCY 16000000
 #define TFT_HEIGHT 320
@@ -18,15 +18,18 @@
 #define TFT_OFFSET_ROTATION 0
 #define SCREEN_ROTATE
 #define SCREEN_TRANSITION_FRAMERATE 5
+#define BRIGHTNESS_DEFAULT 130 // Medium Low Brightness
 
 #define HAS_TOUCHSCREEN 1
 #define SCREEN_TOUCH_INT 16
 #define TOUCH_I2C_PORT 0
 #define TOUCH_SLAVE_ADDRESS 0x5D // GT911
 
+#define SLEEP_TIME 120
+
 #define BUTTON_PIN 0
 // #define BUTTON_NEED_PULLUP
-
+#define GPS_DEFAULT_NOT_PRESENT 1
 #define GPS_RX_PIN 44
 #define GPS_TX_PIN 43
 
@@ -65,14 +68,21 @@
 #define ES7210_LRCK 21
 #define ES7210_MCLK 48
 
+// dac / amp
+#define HAS_I2S
+#define DAC_I2S_BCK 7
+#define DAC_I2S_WS 5
+#define DAC_I2S_DOUT 6
+#define DAC_I2S_MCLK 21 // GPIO lrck mic
+
 // LoRa
 #define USE_SX1262
 #define USE_SX1268
 
-#define RF95_SCK 40
-#define RF95_MISO 38
-#define RF95_MOSI 41
-#define RF95_NSS 9
+#define LORA_SCK 40
+#define LORA_MISO 38
+#define LORA_MOSI 41
+#define LORA_CS 9
 
 #define LORA_DIO0 -1 // a No connect on the SX1262 module
 #define LORA_RESET 17
@@ -80,7 +90,7 @@
 #define LORA_DIO2 13 // SX1262 BUSY
 #define LORA_DIO3    // Not connected on PCB, but internally on the TTGO SX1262, if DIO3 is high the TXCO is enabled
 
-#define SX126X_CS RF95_NSS // FIXME - we really should define LORA_CS instead
+#define SX126X_CS LORA_CS // FIXME - we really should define LORA_CS instead
 #define SX126X_DIO1 LORA_DIO1
 #define SX126X_BUSY LORA_DIO2
 #define SX126X_RESET LORA_RESET

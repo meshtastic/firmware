@@ -23,7 +23,7 @@
 #define LORA_DIO3    // Not connected on PCB
 
 #ifdef USE_SX1262
-#define SX126X_CS RF95_NSS // FIXME - we really should define LORA_CS instead
+#define SX126X_CS LORA_CS // FIXME - we really should define LORA_CS instead
 #define SX126X_DIO1 LORA_DIO1
 #define SX126X_BUSY LORA_DIO2
 #define SX126X_RESET LORA_RESET

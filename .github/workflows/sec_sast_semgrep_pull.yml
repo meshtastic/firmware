@@ -4,14 +4,14 @@ on: pull_request
 
 jobs:
   semgrep-diff:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     container:
-      image: returntocorp/semgrep
+      image: semgrep/semgrep
 
     steps:
       # step 1
       - name: clone application source code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 

@@ -8,8 +8,8 @@
 //  anywhere.
 #define EXT_NOTIFY_OUT 13 // Default pin to use for Ext Notify Module.
 
-#define LED_INVERTED 1
-#define LED_PIN 4 // Newer tbeams (1.1) have an extra led on GPIO4
+#define LED_STATE_ON 0 // State when LED is lit
+#define LED_PIN 4      // Newer tbeams (1.1) have an extra led on GPIO4
 
 // TTGO uses a common pinout for their SX1262 vs RF95 modules - both can be enabled and we will probe at runtime for RF95 and if
 // not found then probe for SX1262
@@ -24,7 +24,7 @@
 #define LORA_DIO3    // Not connected on PCB, but internally on the TTGO SX1262, if DIO3 is high the TXCO is enabled
 
 #ifdef USE_SX1262
-#define SX126X_CS RF95_NSS // FIXME - we really should define LORA_CS instead
+#define SX126X_CS LORA_CS // FIXME - we really should define LORA_CS instead
 #define SX126X_DIO1 LORA_DIO1
 #define SX126X_BUSY LORA_DIO2
 #define SX126X_RESET LORA_RESET

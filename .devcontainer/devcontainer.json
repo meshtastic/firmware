@@ -1,0 +1,36 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// README at: https://github.com/devcontainers/templates/tree/main/src/cpp
+{
+  "name": "Meshtastic Firmware Dev",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/python:1": {
+      "installTools": true,
+      "version": "latest"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.cpptools",
+        "platformio.platformio-ide",
+        "Trunk.io"
+      ],
+      "unwantedRecommendations": ["ms-azuretools.vscode-docker"],
+      "settings": {
+        "extensions.ignoreRecommendations": true
+      }
+    }
+  },
+
+  // Use 'forwardPorts' to make a list of ports inside the container available locally.
+  "forwardPorts": [4403],
+
+  // Use "--device=" to make a local device available inside the container.
+  // "runArgs": ["--device=/dev/ttyACM0"],
+
+  // Run commands to prepare the container for use
+  "postCreateCommand": ".devcontainer/setup.sh"
+}

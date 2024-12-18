@@ -4,14 +4,9 @@
 
 #define ARDUINO_ARCH_AVR
 
-#undef CBC
-#define CBC 0
-#undef CTR
-#define CTR 1
-#undef ECB
-#define ECB 0
-
-#define USE_SH1106 1
+#ifndef HAS_WIFI
+#define HAS_WIFI 1
+#endif
 
 // default I2C pins:
 // SDA = 4
@@ -24,21 +19,24 @@
 #define EXT_NOTIFY_OUT 22
 #define BUTTON_PIN 17
 
+#define LED_PIN LED_BUILTIN
+
 #define BATTERY_PIN 26
 // ratio of voltage divider = 3.0 (R17=200k, R18=100k)
 #define ADC_MULTIPLIER 3.1 // 3.0 + a bit for being optimistic
+#define BATTERY_SENSE_RESOLUTION_BITS ADC_RESOLUTION
 
 #define USE_SX1262
 
-#undef RF95_SCK
-#undef RF95_MISO
-#undef RF95_MOSI
-#undef RF95_NSS
+#undef LORA_SCK
+#undef LORA_MISO
+#undef LORA_MOSI
+#undef LORA_CS
 
-#define RF95_SCK 10
-#define RF95_MISO 12
-#define RF95_MOSI 11
-#define RF95_NSS 3
+#define LORA_SCK 10
+#define LORA_MISO 12
+#define LORA_MOSI 11
+#define LORA_CS 3
 
 #define LORA_DIO0 RADIOLIB_NC
 #define LORA_RESET 15
@@ -47,7 +45,7 @@
 #define LORA_DIO3 RADIOLIB_NC
 
 #ifdef USE_SX1262
-#define SX126X_CS RF95_NSS
+#define SX126X_CS LORA_CS
 #define SX126X_DIO1 LORA_DIO1
 #define SX126X_BUSY LORA_DIO2
 #define SX126X_RESET LORA_RESET

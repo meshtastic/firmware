@@ -133,10 +133,6 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define PIN_EINK_SCLK (0 + 3)
 #define PIN_EINK_MOSI (0 + 30) // also called SDI
 
-// Controls power for the eink display - Board power is enabled either by VBUS from USB or the CPU asserting PWR_ON
-// FIXME - I think this is actually just the board power enable - it enables power to the CPU also
-// #define PIN_EINK_PWR_ON (-1)
-
 #define USE_EINK
 
 // RAKRGB
@@ -209,25 +205,19 @@ static const uint8_t SCK = PIN_SPI_SCK;
 // RAK12002 RTC Module
 #define RV3028_RTC (uint8_t)0b1010010
 
+// Testing USB detection
+#define NRF_APM
+
 // Battery
 // The battery sense is hooked to pin A0 (5)
 #define BATTERY_PIN PIN_A0
 // and has 12 bit resolution
 #define BATTERY_SENSE_RESOLUTION_BITS 12
 #define BATTERY_SENSE_RESOLUTION 4096.0
-// Definition of milliVolt per LSB => 3.0V ADC range and 12-bit ADC resolution = 3000mV/4096
-#define VBAT_MV_PER_LSB (0.73242188F)
-// Voltage divider value => 1.5M + 1M voltage divider on VBAT = (1.5M / (1M + 1.5M))
-#define VBAT_DIVIDER (0.4F)
-// Compensation factor for the VBAT divider
-#define VBAT_DIVIDER_COMP (1.73)
-// Fixed calculation of milliVolt from compensation value
-#define REAL_VBAT_MV_PER_LSB (VBAT_DIVIDER_COMP * VBAT_MV_PER_LSB)
 #undef AREF_VOLTAGE
 #define AREF_VOLTAGE 3.0
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
-#define ADC_MULTIPLIER VBAT_DIVIDER_COMP // REAL_VBAT_MV_PER_LSB
-#define VBAT_RAW_TO_SCALED(x) (REAL_VBAT_MV_PER_LSB * x)
+#define ADC_MULTIPLIER 1.73
 
 #define HAS_RTC 1
 

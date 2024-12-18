@@ -2,8 +2,6 @@
 
 #include "PacketHistory.h"
 #include "Router.h"
-#include "modules/NeighborInfoModule.h"
-#include "modules/TraceRouteModule.h"
 
 /**
  * This is a mixin that extends Router with the ability to do Naive Flooding (in the standard mesh protocol sense)
@@ -31,6 +29,12 @@
 class FloodingRouter : public Router, protected PacketHistory
 {
   private:
+    bool isRebroadcaster();
+
+    /** Check if we should rebroadcast this packet, and do so if needed
+     * @return true if rebroadcasted */
+    bool perhapsRebroadcast(const meshtastic_MeshPacket *p);
+
   public:
     /**
      * Constructor

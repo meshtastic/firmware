@@ -5,7 +5,7 @@
     },
     "core": "nRF5",
     "cpu": "cortex-m4",
-    "extra_flags": "-DARDUINO_NRF52840_FEATHER -DNRF52840_XXAA",
+    "extra_flags": "-DNORDIC_PCA10059 -DNRF52840_XXAA",
     "f_cpu": "64000000L",
     "hwids": [
       ["0x239A", "0x8029"],
@@ -32,7 +32,8 @@
   "connectivity": ["bluetooth"],
   "debug": {
     "jlink_device": "nRF52840_xxAA",
-    "svd_path": "nrf52840.svd"
+    "svd_path": "nrf52840.svd",
+    "openocd_target": "nrf52840-mdk-rs"
   },
   "frameworks": ["arduino"],
   "name": "nRF52840 Dongle",

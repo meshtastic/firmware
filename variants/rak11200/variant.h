@@ -3,14 +3,6 @@
 
 #include <stdint.h>
 
-#define EXTERNAL_NUM_INTERRUPTS 16
-#define NUM_DIGITAL_PINS 40
-#define NUM_ANALOG_INPUTS 16
-
-#define analogInputToDigitalPin(p) (((p) < 20) ? (esp32_adc2gpio[(p)]) : -1)
-#define digitalPinToInterrupt(p) (((p) < 40) ? (p) : -1)
-#define digitalPinHasPWM(p) (p < 34)
-
 #define LED_GREEN 12
 #define LED_BLUE 2
 
@@ -56,6 +48,8 @@ static const uint8_t SCK = 33;
 #define LED_PIN LED_BLUE
 
 #define PIN_VBAT WB_A0
+#define BATTERY_PIN PIN_VBAT
+#define ADC_CHANNEL ADC1_GPIO36_CHANNEL
 
 // https://docs.rakwireless.com/Product-Categories/WisBlock/RAK13300/
 
@@ -66,21 +60,22 @@ static const uint8_t SCK = 33;
 #define LORA_DIO3                                                                                                                \
     RADIOLIB_NC // Not connected on PCB, but internally on the TTGO SX1262/SX1268, if DIO3 is high the TXCO is enabled
 
-#undef RF95_SCK
-#define RF95_SCK SCK
-#undef RF95_MISO
-#define RF95_MISO MISO
-#undef RF95_MOSI
-#define RF95_MOSI MOSI
-#undef RF95_NSS
-#define RF95_NSS SS
+#undef LORA_SCK
+#define LORA_SCK SCK
+#undef LORA_MISO
+#define LORA_MISO MISO
+#undef LORA_MOSI
+#define LORA_MOSI MOSI
+#undef LORA_CS
+#define LORA_CS SS
 
 #define USE_SX1262
+#define SX126X_ANT_SW WB_IO3
 #define SX126X_CS SS // NSS for SX126X
 #define SX126X_DIO1 LORA_DIO1
 #define SX126X_BUSY LORA_DIO2
 #define SX126X_RESET LORA_RESET
-#define SX126X_POWER_EN WB_IO3
+#define SX126X_POWER_EN WB_IO2
 // DIO2 controlls an antenna switch and the TCXO voltage is controlled by DIO3
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8

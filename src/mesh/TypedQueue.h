@@ -14,7 +14,7 @@
  */
 template <class T> class TypedQueue
 {
-    static_assert(std::is_pod<T>::value, "T must be pod");
+    static_assert(std::is_standard_layout<T>::value, "T must be standard layout");
     QueueHandle_t h;
     concurrency::OSThread *reader = NULL;
 
@@ -26,6 +26,8 @@ template <class T> class TypedQueue
     int numFree() { return uxQueueSpacesAvailable(h); }
 
     bool isEmpty() { return uxQueueMessagesWaiting(h) == 0; }
+
+    int numUsed() { return uxQueueMessagesWaiting(h); }
 
     /** euqueue a packet.  Also, maxWait used to default to portMAX_DELAY, but we now want to callers to THINK about what blocking
      * they want */
@@ -79,6 +81,8 @@ template <class T> class TypedQueue
     int numFree() { return 1; } // Always claim 1 free, because we can grow to any size
 
     bool isEmpty() { return q.empty(); }
+
+    int numUsed() { return q.size(); }
 
     bool enqueue(T x, TickType_t maxWait = portMAX_DELAY)
     {

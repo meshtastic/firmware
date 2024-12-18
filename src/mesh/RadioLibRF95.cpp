@@ -1,8 +1,6 @@
+#if RADIOLIB_EXCLUDE_SX127X != 1
 #include "RadioLibRF95.h"
 #include "configuration.h"
-
-#define RF95_CHIP_VERSION 0x12
-#define RF95_ALT_VERSION 0x11 // Supposedly some versions of the chip have id 0x11
 
 // From datasheet but radiolib doesn't know anything about this
 #define SX127X_REG_TCXO 0x4B
@@ -13,19 +11,18 @@ int16_t RadioLibRF95::begin(float freq, float bw, uint8_t sf, uint8_t cr, uint8_
                             uint8_t gain)
 {
     // execute common part
-    int16_t state = SX127x::begin(RF95_CHIP_VERSION, syncWord, preambleLength);
-    if (state != RADIOLIB_ERR_NONE)
-        state = SX127x::begin(RF95_ALT_VERSION, syncWord, preambleLength);
+    uint8_t rf95versions[2] = {0x12, 0x11};
+    int16_t state = SX127x::begin(rf95versions, sizeof(rf95versions), syncWord, preambleLength);
     RADIOLIB_ASSERT(state);
 
     // current limit was removed from module' ctor
     // override default value (60 mA)
     state = setCurrentLimit(currentLimit);
-    LOG_DEBUG("Current limit set to %f\n", currentLimit);
-    LOG_DEBUG("Current limit set result %d\n", state);
+    LOG_DEBUG("Current limit set to %f", currentLimit);
+    LOG_DEBUG("Current limit set result %d", state);
 
     // configure settings not accessible by API
-    state = config();
+    // state = config();
     RADIOLIB_ASSERT(state);
 
 #ifdef RF95_TCXO
@@ -46,7 +43,11 @@ int16_t RadioLibRF95::begin(float freq, float bw, uint8_t sf, uint8_t cr, uint8_
     state = setCodingRate(cr);
     RADIOLIB_ASSERT(state);
 
+#ifdef USE_RF95_RFO
+    state = setOutputPower(power, true);
+#else
     state = setOutputPower(power);
+#endif
     RADIOLIB_ASSERT(state);
 
     state = setGain(gain);
@@ -72,12 +73,14 @@ bool RadioLibRF95::isReceiving()
 {
     // 0x0b == Look for header info valid, signal synchronized or signal detected
     uint8_t reg = readReg(RADIOLIB_SX127X_REG_MODEM_STAT);
-    // Serial.printf("reg %x\n", reg);
+    // Serial.printf("reg %x", reg);
     return (reg & (RH_RF95_MODEM_STATUS_SIGNAL_DETECTED | RH_RF95_MODEM_STATUS_SIGNAL_SYNCHRONIZED |
                    RH_RF95_MODEM_STATUS_HEADER_INFO_VALID)) != 0;
 }
 
 uint8_t RadioLibRF95::readReg(uint8_t addr)
 {
+    Module *mod = this->getMod();
     return mod->SPIreadRegister(addr);
 }
+#endif

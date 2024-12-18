@@ -1,4 +1,5 @@
 #pragma once
+#include <vector>
 
 #include "mesh/generated/meshtastic/admin.pb.h"
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
@@ -13,10 +14,16 @@
 /// max number of packets which can be waiting for delivery to android - note, this value comes from mesh.options protobuf
 // FIXME - max_count is actually 32 but we save/load this as one long string of preencoded MeshPacket bytes - not a big array in
 // RAM #define MAX_RX_TOPHONE (member_size(DeviceState, receive_queue) / member_size(DeviceState, receive_queue[0]))
+#ifndef MAX_RX_TOPHONE
 #define MAX_RX_TOPHONE 32
+#endif
 
 /// max number of nodes allowed in the mesh
-#define MAX_NUM_NODES (member_size(meshtastic_DeviceState, node_db_lite) / member_size(meshtastic_DeviceState, node_db_lite[0]))
+#ifndef MAX_NUM_NODES
+#define MAX_NUM_NODES 100
+#endif
+
+#define MAX_NUM_NODES_FS 100
 
 /// Max number of channels allowed
 #define MAX_NUM_CHANNELS (member_size(meshtastic_ChannelFile, channels) / member_size(meshtastic_ChannelFile, channels[0]))

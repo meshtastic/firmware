@@ -29,7 +29,8 @@
 #define LORA_DIO1 35 // https://www.thethingsnetwork.org/forum/t/big-esp32-sx127x-topic-part-3/18436
 #define LORA_DIO2 34 // Not really used
 
-#define ADC_MULTIPLIER 3.8
+#define ADC_MULTIPLIER 3.2 // 220k + 100k (320k/100k=3.2)
+// #define ADC_WIDTH ADC_WIDTH_BIT_10
 
 #define BATTERY_PIN 37 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 #define ADC_CHANNEL ADC1_GPIO37_CHANNEL

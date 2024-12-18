@@ -1,5 +1,4 @@
 #pragma once
-
 void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer);
 
 // Declare some handler functions for the various URLs on the server
@@ -14,6 +13,7 @@ void handleFsBrowseStatic(HTTPRequest *req, HTTPResponse *res);
 void handleFsDeleteStatic(HTTPRequest *req, HTTPResponse *res);
 void handleBlinkLED(HTTPRequest *req, HTTPResponse *res);
 void handleReport(HTTPRequest *req, HTTPResponse *res);
+void handleNodes(HTTPRequest *req, HTTPResponse *res);
 void handleUpdateFs(HTTPRequest *req, HTTPResponse *res);
 void handleDeleteFsContent(HTTPRequest *req, HTTPResponse *res);
 void handleFs(HTTPRequest *req, HTTPResponse *res);
