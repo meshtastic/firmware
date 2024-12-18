@@ -7,7 +7,7 @@
 #define STATUS_TYPE_POWER 1
 #define STATUS_TYPE_GPS 2
 #define STATUS_TYPE_NODE 3
-
+#define STATUS_TYPE_MAGNOTOMETER 4
 namespace meshtastic
 {
 
