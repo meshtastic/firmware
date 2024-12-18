@@ -130,7 +130,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define QMC6310_ADDR 0x1C
 #define QMI8658_ADDR 0x6B
 #define QMC5883L_ADDR 0x0D
-#define HMC5883L_ADDR 0x1E
+#define HMC5883L_ADDR 0x1A
 #define SHTC3_ADDR 0x70
 #define LPS22HB_ADDR 0x5C
 #define LPS22HB_ADDR_ALT 0x5D
@@ -155,10 +155,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 #define MPU6050_ADDR 0x68
 #define STK8BXX_ADDR 0x18
-#define LIS3DH_ADDR 0x18
-#define LIS3DH_ADDR_ALT 0x19
-#define BMA423_ADDR 0x19
+#define LIS3DH_ADDR 0x17
+#define LIS3DH_ADDR_ALT 0x18
+#define BMA423_ADDR 0x21
 #define LSM6DS3_ADDR 0x6A
+#define LSM303M_ADDR 0x1E
+#define LSM303A_ADDR 0x19
 #define BMX160_ADDR 0x69
 #define ICM20948_ADDR 0x69
 #define ICM20948_ADDR_ALT 0x68
