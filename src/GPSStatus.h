@@ -3,6 +3,8 @@
 #include "Status.h"
 #include "configuration.h"
 #include <Arduino.h>
+#include "MagnotometerStatus.h"
+
 
 namespace meshtastic
 {
@@ -79,7 +81,7 @@ class GPSStatus : public Status
 
     uint32_t getDOP() const { return p.PDOP; }
 
-    uint32_t getHeading() const { return p.ground_track; }
+    uint32_t getHeading() const { return magnotometerStatus->getHeading(); }
 
     uint32_t getNumSatellites() const { return p.sats_in_view; }
 
