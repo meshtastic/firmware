@@ -250,8 +250,16 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFE), 2);
                 LOG_DEBUG("Register MFG_UID: 0x%x", registerValue);
                 if (registerValue == 0x5449) {
-                    logFoundDevice("INA260", (uint8_t)addr.address);
-                    type = INA260;
+                    registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFF), 2);
+                    LOG_DEBUG("Register DIE_UID: 0x%x", registerValue);
+
+                    if (registerValue == 0x2260) {
+                        logFoundDevice("INA226", (uint8_t)addr.address);
+                        type = INA226;
+                    } else {
+                        logFoundDevice("INA260", (uint8_t)addr.address);
+                        type = INA260;
+                    }
                 } else { // Assume INA219 if INA260 ID is not found
                     logFoundDevice("INA219", (uint8_t)addr.address);
                     type = INA219;
