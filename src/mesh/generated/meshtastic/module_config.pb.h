@@ -118,7 +118,7 @@ typedef struct _meshtastic_ModuleConfig_MQTTConfig {
     bool enabled;
     /* The server to use for our MQTT global message gateway feature.
  If not set, the default server will be used */
-    char address[64];
+    char address[128];
     /* MQTT username to use (most useful for a custom MQTT server).
  If using a custom server, this will be honoured even if empty.
  If using the default server, this will only be honoured if set, otherwise the device will use the default username */
