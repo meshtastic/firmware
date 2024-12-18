@@ -35,7 +35,7 @@ template <typename T, std::size_t N> std::size_t array_count(const T (&)[N])
 }
 
 #if defined(NRF52840_XXAA) || defined(NRF52833_XXAA) || defined(ARCH_ESP32) || defined(ARCH_PORTDUINO)
-HardwareSerial *GPS::_serial_gps = &Serial1;
+HardwareSerial *GPS::_serial_gps = &Serial2;
 #elif defined(ARCH_RP2040)
 SerialUART *GPS::_serial_gps = &Serial1;
 #else
@@ -1285,6 +1285,14 @@ GnssModel_t GPS::probe(int serialSpeed)
     return GNSS_MODEL_UNKNOWN;
 }
 
+int calculateChecksum(const char* sentence) {
+  int checksum = 0;
+  for (int i = 1; sentence[i] != '\0'; i++) {
+    checksum ^= sentence[i];
+  }
+  return checksum;
+}
+
 GPS *GPS::createGps()
 {
     int8_t _rx_gpio = config.position.rx_gpio;
@@ -1368,6 +1376,15 @@ GPS *GPS::createGps()
         LOG_DEBUG("Use GPIO%d for GPS RX", new_gps->rx_gpio);
         LOG_DEBUG("Use GPIO%d for GPS TX", new_gps->tx_gpio);
         _serial_gps->begin(GPS_BAUDRATE, SERIAL_8N1, new_gps->rx_gpio, new_gps->tx_gpio);
+        // Send the PMTK353 command to enable all satellite systems
+        // Todo(hugh): Test this with probing?
+        // _serial_gps->print("$PMTK353,1,1,1,0,1*"); // Enable GPS, GLONASS, Galileo, BDS
+        // int checksum = calculateChecksum("$PMTK353,1,1,1,0,1");
+        // if (checksum < 16) {
+        //     _serial_gps->print("0");
+        // }
+        // _serial_gps->println(checksum, HEX);
+
 #elif defined(ARCH_RP2040)
         _serial_gps->setFIFOSize(256);
         _serial_gps->begin(GPS_BAUDRATE);
