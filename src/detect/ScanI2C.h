@@ -44,6 +44,8 @@ class ScanI2C
         BMA423,
         BQ24295,
         LSM6DS3,
+        LSM303A,
+        LSM303M,
         TCA9535,
         TCA9555,
         VEML7700,
@@ -115,7 +117,7 @@ class ScanI2C
     FoundDevice firstKeyboard() const;
 
     FoundDevice firstAccelerometer() const;
-
+    FoundDevice firstMagnotometer() const;
     virtual FoundDevice find(DeviceType) const;
 
     virtual bool exists(DeviceType) const;
