@@ -147,10 +147,16 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      * doing the transmit */
     void setTransmitDelay();
 
-    /** random timer with certain min. and max. settings */
+    /**
+     * random timer with certain min. and max. settings
+     * @return Timestamp after which the packet may be sent
+     */
     void startTransmitTimer(bool withDelay = true);
 
-    /** timer scaled to SNR of to be flooded packet */
+    /**
+     * timer scaled to SNR of to be flooded packet
+     * @return Timestamp after which the packet may be sent
+     */
     void startTransmitTimerSNR(float snr);
 
     void handleTransmitInterrupt();
@@ -200,4 +206,9 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     virtual void setStandby();
 
     const char *radioLibErr = "RadioLib err=";
+
+    /**
+     * If the packet is not already in the late rebroadcast window, move it there
+     */
+    void clampToLateRebroadcastWindow(NodeNum from, PacketId id);
 };
