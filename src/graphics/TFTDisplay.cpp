@@ -347,12 +347,12 @@ static LGFX *tft = nullptr;
 #include <TFT_eSPI.h> // Graphics and font library for ILI9342 driver chip
 
 static TFT_eSPI *tft = nullptr; // Invoke library, pins defined in User_Setup.h
-#elif ARCH_PORTDUINO && HAS_SCREEN != 0
+#elif ARCH_PORTDUINO && HAS_SCREEN != 0 && !HAS_TFT
 #include <LovyanGFX.hpp> // Graphics and font library for ST7735 driver chip
 
 class LGFX : public lgfx::LGFX_Device
 {
-    lgfx::Panel_LCD *_panel_instance;
+    lgfx::Panel_Device *_panel_instance;
     lgfx::Bus_SPI _bus_instance;
 
     lgfx::ITouch *_touch_instance;
@@ -366,10 +366,21 @@ class LGFX : public lgfx::LGFX_Device
             _panel_instance = new lgfx::Panel_ST7735;
         else if (settingsMap[displayPanel] == st7735s)
             _panel_instance = new lgfx::Panel_ST7735S;
+        else if (settingsMap[displayPanel] == st7796)
+            _panel_instance = new lgfx::Panel_ST7796;
         else if (settingsMap[displayPanel] == ili9341)
             _panel_instance = new lgfx::Panel_ILI9341;
         else if (settingsMap[displayPanel] == ili9342)
             _panel_instance = new lgfx::Panel_ILI9342;
+        else if (settingsMap[displayPanel] == ili9488)
+            _panel_instance = new lgfx::Panel_ILI9488;
+        else if (settingsMap[displayPanel] == hx8357d)
+            _panel_instance = new lgfx::Panel_HX8357D;
+        else {
+            _panel_instance = new lgfx::Panel_NULL;
+            LOG_ERROR("Unknown display panel configured!");
+        }
+
         auto buscfg = _bus_instance.config();
         buscfg.spi_mode = 0;
         buscfg.spi_host = settingsMap[displayspidev];
@@ -383,12 +394,12 @@ class LGFX : public lgfx::LGFX_Device
         LOG_DEBUG("Height: %d, Width: %d ", settingsMap[displayHeight], settingsMap[displayWidth]);
         cfg.pin_cs = settingsMap[displayCS]; // Pin number where CS is connected (-1 = disable)
         cfg.pin_rst = settingsMap[displayReset];
-        cfg.panel_width = settingsMap[displayWidth];   // actual displayable width
-        cfg.panel_height = settingsMap[displayHeight]; // actual displayable height
-        cfg.offset_x = settingsMap[displayOffsetX];    // Panel offset amount in X direction
-        cfg.offset_y = settingsMap[displayOffsetY];    // Panel offset amount in Y direction
-        cfg.offset_rotation = 0;                       // Rotation direction value offset 0~7 (4~7 is mirrored)
-        cfg.invert = settingsMap[displayInvert];       // Set to true if the light/darkness of the panel is reversed
+        cfg.panel_width = settingsMap[displayWidth];            // actual displayable width
+        cfg.panel_height = settingsMap[displayHeight];          // actual displayable height
+        cfg.offset_x = settingsMap[displayOffsetX];             // Panel offset amount in X direction
+        cfg.offset_y = settingsMap[displayOffsetY];             // Panel offset amount in Y direction
+        cfg.offset_rotation = settingsMap[displayOffsetRotate]; // Rotation direction value offset 0~7 (4~7 is mirrored)
+        cfg.invert = settingsMap[displayInvert];                // Set to true if the light/darkness of the panel is reversed
 
         _panel_instance->config(cfg);
 
@@ -410,7 +421,7 @@ class LGFX : public lgfx::LGFX_Device
             touch_cfg.y_max = settingsMap[displayWidth] - 1;
             touch_cfg.pin_int = settingsMap[touchscreenIRQ];
             touch_cfg.bus_shared = true;
-            touch_cfg.offset_rotation = 1;
+            touch_cfg.offset_rotation = settingsMap[touchscreenRotate];
             if (settingsMap[touchscreenI2CAddr] != -1) {
                 touch_cfg.i2c_addr = settingsMap[touchscreenI2CAddr];
             } else {

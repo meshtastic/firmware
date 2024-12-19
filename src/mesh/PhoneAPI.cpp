@@ -164,6 +164,7 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
  *
  * Our sending states progress in the following sequence (the client apps ASSUME THIS SEQUENCE, DO NOT CHANGE IT):
     STATE_SEND_MY_INFO, // send our my info record
+    STATE_SEND_UIDATA,
     STATE_SEND_OWN_NODEINFO,
     STATE_SEND_METADATA,
     STATE_SEND_CHANNELS
@@ -188,7 +189,6 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
     case STATE_SEND_NOTHING:
         LOG_DEBUG("FromRadio=STATE_SEND_NOTHING");
         break;
-
     case STATE_SEND_MY_INFO:
         LOG_DEBUG("FromRadio=STATE_SEND_MY_INFO");
         // If the user has specified they don't want our node to share its location, make sure to tell the phone
@@ -196,9 +196,16 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         fromRadioScratch.which_payload_variant = meshtastic_FromRadio_my_info_tag;
         strncpy(myNodeInfo.pio_env, optstr(APP_ENV), sizeof(myNodeInfo.pio_env));
         fromRadioScratch.my_info = myNodeInfo;
-        state = STATE_SEND_OWN_NODEINFO;
+        state = STATE_SEND_UIDATA;
 
         service->refreshLocalMeshNode(); // Update my NodeInfo because the client will be asking for it soon.
+        break;
+
+    case STATE_SEND_UIDATA:
+        LOG_INFO("getFromRadio=STATE_SEND_UIDATA");
+        fromRadioScratch.which_payload_variant = meshtastic_FromRadio_deviceuiConfig_tag;
+        fromRadioScratch.deviceuiConfig = uiconfig;
+        state = STATE_SEND_OWN_NODEINFO;
         break;
 
     case STATE_SEND_OWN_NODEINFO: {
@@ -283,6 +290,9 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         case meshtastic_Config_sessionkey_tag:
             LOG_DEBUG("Send config: sessionkey");
             fromRadioScratch.config.which_payload_variant = meshtastic_Config_sessionkey_tag;
+            break;
+        case meshtastic_Config_device_ui_tag: // NOOP!
+            fromRadioScratch.config.which_payload_variant = meshtastic_Config_device_ui_tag;
             break;
         default:
             LOG_ERROR("Unknown config type %d", config_state);
@@ -518,6 +528,7 @@ bool PhoneAPI::available()
     case STATE_SEND_NOTHING:
         return false;
     case STATE_SEND_MY_INFO:
+    case STATE_SEND_UIDATA:
     case STATE_SEND_CHANNELS:
     case STATE_SEND_CONFIG:
     case STATE_SEND_MODULECONFIG:
