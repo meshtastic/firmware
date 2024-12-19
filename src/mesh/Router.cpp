@@ -357,12 +357,13 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
 
     // assert(p->which_payloadVariant == MeshPacket_encrypted_tag);
     if (!decrypted) {
-        memcpy(bytes, p->encrypted.bytes,
-               rawSize); // we have to copy into a scratch buffer, because these bytes are a union with the decoded protobuf
         // Try to find a channel that works with this hash
         for (chIndex = 0; chIndex < channels.getNumChannels(); chIndex++) {
             // Try to use this hash/channel pair
             if (channels.decryptForHash(chIndex, p->channel)) {
+                // we have to copy into a scratch buffer, because these bytes are a union with the decoded protobuf. Create a
+                // fresh copy for each decrypt attempt.
+                memcpy(bytes, p->encrypted.bytes, rawSize);
                 // Try to decrypt the packet if we can
                 crypto->decrypt(p->from, p->id, rawSize, bytes);
 
