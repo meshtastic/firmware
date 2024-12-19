@@ -176,6 +176,9 @@ class RadioInterface
     /** The delay to use when we want to flood a message. Use a weighted scale based on SNR */
     uint32_t getTxDelayMsecWeighted(float snr);
 
+    /** Clamp the hop limit to the greater of the hop count provided, or the hop count in the queue */
+    virtual void clampHopsToMax(NodeNum from, PacketId id, uint32_t hop_limit) { return; }
+
     /**
      * Calculate airtime per
      * https://www.rs-online.com/designspark/rel-assets/ds-assets/uploads/knowledge-items/application-notes-for-the-internet-of-things/LoRa%20Design%20Guide.pdf
