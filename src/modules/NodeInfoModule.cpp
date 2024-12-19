@@ -1,6 +1,7 @@
 #include "NodeInfoModule.h"
 #include "Default.h"
 #include "MeshService.h"
+#include "Channels.h"
 #include "NodeDB.h"
 #include "RTC.h"
 #include "Router.h"
@@ -53,6 +54,14 @@ void NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t cha
             LOG_DEBUG("Send ourNodeInfo to channel %d", channel);
             p->channel = channel;
         }
+#ifdef USERPREFS_NODEINFO_BROADCAST_CHANNEL_HASH
+        // If this is a broadcast over the default channel, we can safely change this to the discovery channel if defined
+        if (dest == NODENUM_BROADCAST && channel == 0) {
+            int8_t discoveryChannelIdx = channels.getIndexByHash((ChannelHash)USERPREFS_NODEINFO_BROADCAST_CHANNEL_HASH);
+            // Fallback to primary channel if discovery channel is not found by its hash
+            p->channel = discoveryChannelIdx > 0 ? discoveryChannelIdx : channel;
+        }
+#endif
 
         prevPacketId = p->id;
 
