@@ -58,10 +58,16 @@ void CryptoEngine::clearKeys()
  * Encrypt a packet's payload using a key generated with Curve25519 and SHA256
  * for a specific node.
  *
- * @param bytes is updated in place
+ * @param toNode The MeshPacket `to` field.
+ * @param fromNode The MeshPacket `from` field.
+ * @param remotePublic The remote node's Curve25519 public key.
+ * @param packetId The MeshPacket `id` field.
+ * @param numBytes Number of bytes of plaintext in the bytes buffer.
+ * @param bytes Buffer containing plaintext input.
+ * @param bytesOut Output buffer to be populated with encrypted ciphertext.
  */
 bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtastic_UserLite_public_key_t remotePublic,
-                                     uint64_t packetNum, size_t numBytes, uint8_t *bytes, uint8_t *bytesOut)
+                                     uint64_t packetNum, size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut)
 {
     uint8_t *auth;
     long extraNonceTmp = random();
@@ -93,14 +99,18 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtas
  * Decrypt a packet's payload using a key generated with Curve25519 and SHA256
  * for a specific node.
  *
- * @param bytes is updated in place
+ * @param fromNode The MeshPacket `from` field.
+ * @param remotePublic The remote node's Curve25519 public key.
+ * @param packetId The MeshPacket `id` field.
+ * @param numBytes Number of bytes of ciphertext in the bytes buffer.
+ * @param bytes Buffer containing ciphertext input.
+ * @param bytesOut Output buffer to be populated with decrypted plaintext.
  */
 bool CryptoEngine::decryptCurve25519(uint32_t fromNode, meshtastic_UserLite_public_key_t remotePublic, uint64_t packetNum,
-                                     size_t numBytes, uint8_t *bytes, uint8_t *bytesOut)
+                                     size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut)
 {
-    uint8_t *auth;       // set to last 8 bytes of text?
-    uint32_t extraNonce; // pointer was not really used
-    auth = bytes + numBytes - 12;
+    const uint8_t *auth = bytes + numBytes - 12; // set to last 8 bytes of text?
+    uint32_t extraNonce;                         // pointer was not really used
     memcpy(&extraNonce, auth + 8,
            sizeof(uint32_t)); // do not use dereference on potential non aligned pointers : (uint32_t *)(auth + 8);
     LOG_INFO("Random nonce value: %d", extraNonce);

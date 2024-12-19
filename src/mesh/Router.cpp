@@ -37,7 +37,6 @@ static MemoryDynamic<meshtastic_MeshPacket> staticPool;
 Allocator<meshtastic_MeshPacket> &packetPool = staticPool;
 
 static uint8_t bytes[MAX_LORA_PAYLOAD_LEN + 1] __attribute__((__aligned__));
-static uint8_t ScratchEncrypted[MAX_LORA_PAYLOAD_LEN + 1] __attribute__((__aligned__));
 
 /**
  * Constructor
@@ -327,9 +326,6 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
     }
     bool decrypted = false;
     ChannelIndex chIndex = 0;
-    memcpy(bytes, p->encrypted.bytes,
-           rawSize); // we have to copy into a scratch buffer, because these bytes are a union with the decoded protobuf
-    memcpy(ScratchEncrypted, p->encrypted.bytes, rawSize);
 #if !(MESHTASTIC_EXCLUDE_PKI)
     // Attempt PKI decryption first
     if (p->channel == 0 && isToUs(p) && p->to > 0 && !isBroadcast(p->to) && nodeDB->getMeshNode(p->from) != nullptr &&
@@ -337,7 +333,7 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
         rawSize > MESHTASTIC_PKC_OVERHEAD) {
         LOG_DEBUG("Attempt PKI decryption");
 
-        if (crypto->decryptCurve25519(p->from, nodeDB->getMeshNode(p->from)->user.public_key, p->id, rawSize, ScratchEncrypted,
+        if (crypto->decryptCurve25519(p->from, nodeDB->getMeshNode(p->from)->user.public_key, p->id, rawSize, p->encrypted.bytes,
                                       bytes)) {
             LOG_INFO("PKI Decryption worked!");
             memset(&p->decoded, 0, sizeof(p->decoded));
@@ -349,8 +345,6 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
                 p->pki_encrypted = true;
                 memcpy(&p->public_key.bytes, nodeDB->getMeshNode(p->from)->user.public_key.bytes, 32);
                 p->public_key.size = 32;
-                // memcpy(bytes, ScratchEncrypted, rawSize); // TODO: Rename the bytes buffers
-                // chIndex = 8;
             } else {
                 LOG_ERROR("PKC Decrypted, but pb_decode failed!");
                 return false;
@@ -367,6 +361,9 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
         for (chIndex = 0; chIndex < channels.getNumChannels(); chIndex++) {
             // Try to use this hash/channel pair
             if (channels.decryptForHash(chIndex, p->channel)) {
+                // we have to copy into a scratch buffer, because these bytes are a union with the decoded protobuf. Create a
+                // fresh copy for each decrypt attempt.
+                memcpy(bytes, p->encrypted.bytes, rawSize);
                 // Try to decrypt the packet if we can
                 crypto->decrypt(p->from, p->id, rawSize, bytes);
 
@@ -515,9 +512,8 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
                          *node->user.public_key.bytes);
                 return meshtastic_Routing_Error_PKI_FAILED;
             }
-            crypto->encryptCurve25519(p->to, getFrom(p), node->user.public_key, p->id, numbytes, bytes, ScratchEncrypted);
+            crypto->encryptCurve25519(p->to, getFrom(p), node->user.public_key, p->id, numbytes, bytes, p->encrypted.bytes);
             numbytes += MESHTASTIC_PKC_OVERHEAD;
-            memcpy(p->encrypted.bytes, ScratchEncrypted, numbytes);
             p->channel = 0;
             p->pki_encrypted = true;
         } else {
