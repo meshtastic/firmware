@@ -86,10 +86,10 @@ class CryptoEngine
     /**
      * Init our 128 bit nonce for a new packet
      *
-     * The NONCE is constructed by concatenating (from MSB to LSB):
+     * The NONCE is constructed by concatenating:
      * a 32 bit packet number (stored in little endian order)
-     * a 32 bit sending node number (stored in little endian order)
      * a 32 bit block counter (starts at zero)
+     * a 32 bit sending node number (stored in little endian order)
      */
     void initNonce(uint32_t fromNode, uint32_t packetId, uint32_t extraNonce = 0);
 };
