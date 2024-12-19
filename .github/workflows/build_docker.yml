@@ -38,6 +38,10 @@ jobs:
       - name: Build Native
         run: bin/build-native.sh
 
+      - name: Get release version string
+        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+        id: version
+
       - name: Docker login
         if: ${{ github.event_name != 'pull_request_target' && github.event_name != 'pull_request' }}
         uses: docker/login-action@v3
