@@ -61,7 +61,7 @@ void CryptoEngine::clearKeys()
  * @param toNode The MeshPacket `to` field.
  * @param fromNode The MeshPacket `from` field.
  * @param remotePublic The remote node's Curve25519 public key.
- * @param packetId The MeshPacket `packet_id` field.
+ * @param packetId The MeshPacket `id` field.
  * @param numBytes Number of bytes of plaintext in the bytes buffer.
  * @param bytes Buffer containing plaintext input.
  * @param bytesOut Output buffer to be populated with encrypted ciphertext.
@@ -101,7 +101,7 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtas
  *
  * @param fromNode The MeshPacket `from` field.
  * @param remotePublic The remote node's Curve25519 public key.
- * @param packetId The MeshPacket `packet_id` field.
+ * @param packetId The MeshPacket `id` field.
  * @param numBytes Number of bytes of ciphertext in the bytes buffer.
  * @param bytes Buffer containing ciphertext input.
  * @param bytesOut Output buffer to be populated with decrypted plaintext.
