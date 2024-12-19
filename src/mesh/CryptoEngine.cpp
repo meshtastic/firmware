@@ -61,7 +61,7 @@ void CryptoEngine::clearKeys()
  * @param bytes is updated in place
  */
 bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtastic_UserLite_public_key_t remotePublic,
-                                     uint64_t packetNum, size_t numBytes, uint8_t *bytes, uint8_t *bytesOut)
+                                     uint32_t packetId, size_t numBytes, uint8_t *bytes, uint8_t *bytesOut)
 {
     uint8_t *auth;
     long extraNonceTmp = random();
@@ -77,7 +77,7 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtas
         return false;
     }
     crypto->hash(shared_key, 32);
-    initNonce(fromNode, packetNum, extraNonceTmp);
+    initNonce(fromNode, packetId, extraNonceTmp);
 
     // Calculate the shared secret with the destination node and encrypt
     printBytes("Attempt encrypt with nonce: ", nonce, 13);
@@ -95,7 +95,7 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtas
  *
  * @param bytes is updated in place
  */
-bool CryptoEngine::decryptCurve25519(uint32_t fromNode, meshtastic_UserLite_public_key_t remotePublic, uint64_t packetNum,
+bool CryptoEngine::decryptCurve25519(uint32_t fromNode, meshtastic_UserLite_public_key_t remotePublic, uint32_t packetId,
                                      size_t numBytes, uint8_t *bytes, uint8_t *bytesOut)
 {
     uint8_t *auth;       // set to last 8 bytes of text?
@@ -116,7 +116,7 @@ bool CryptoEngine::decryptCurve25519(uint32_t fromNode, meshtastic_UserLite_publ
     }
     crypto->hash(shared_key, 32);
 
-    initNonce(fromNode, packetNum, extraNonce);
+    initNonce(fromNode, packetId, extraNonce);
     printBytes("Attempt decrypt with nonce: ", nonce, 13);
     printBytes("Attempt decrypt with shared_key starting with: ", shared_key, 8);
     return aes_ccm_ad(shared_key, 32, nonce, 8, bytes, numBytes - 12, nullptr, 0, auth, bytesOut);
@@ -194,7 +194,7 @@ void CryptoEngine::setKey(const CryptoKey &k)
  *
  * @param bytes is updated in place
  */
-void CryptoEngine::encryptPacket(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes)
+void CryptoEngine::encryptPacket(uint32_t fromNode, uint32_t packetId, size_t numBytes, uint8_t *bytes)
 {
     if (key.length > 0) {
         initNonce(fromNode, packetId);
@@ -206,7 +206,7 @@ void CryptoEngine::encryptPacket(uint32_t fromNode, uint64_t packetId, size_t nu
     }
 }
 
-void CryptoEngine::decrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes)
+void CryptoEngine::decrypt(uint32_t fromNode, uint32_t packetId, size_t numBytes, uint8_t *bytes)
 {
     // For CTR, the implementation is the same
     encryptPacket(fromNode, packetId, numBytes, bytes);
@@ -236,16 +236,26 @@ void CryptoEngine::encryptAESCtr(CryptoKey _key, uint8_t *_nonce, size_t numByte
 
 /**
  * Init our 128 bit nonce for a new packet
+ *
+ * 0            4            8            12           16
+ * +------------+------------+------------+------------+
+ * |  packetId  | extraNonce |  fromNode  |  all zero  |
+ * +------------+------------+------------+------------+
+ *
+ * |<--- 13 bytes used for AES-CCM nonce ---->|
+ * |<-------- 16 bytes used for AES-CTR nonce -------->|
+ *
+ * Note: extraNonce is always 0 for AES-CTR (Channel/classic) encryption.
  */
-void CryptoEngine::initNonce(uint32_t fromNode, uint64_t packetId, uint32_t extraNonce)
+void CryptoEngine::initNonce(uint32_t fromNode, uint32_t packetId, uint32_t extraNonce)
 {
     memset(nonce, 0, sizeof(nonce));
 
     // use memcpy to avoid breaking strict-aliasing
-    memcpy(nonce, &packetId, sizeof(uint64_t));
-    memcpy(nonce + sizeof(uint64_t), &fromNode, sizeof(uint32_t));
+    memcpy(nonce, &packetId, sizeof(uint32_t));
     if (extraNonce)
         memcpy(nonce + sizeof(uint32_t), &extraNonce, sizeof(uint32_t));
+    memcpy(nonce + sizeof(uint32_t) * 2, &fromNode, sizeof(uint32_t));
 }
 #ifndef HAS_CUSTOM_CRYPTO_ENGINE
 CryptoEngine *crypto = new CryptoEngine;

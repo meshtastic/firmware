@@ -40,8 +40,8 @@ class CryptoEngine
     void clearKeys();
     void setDHPrivateKey(uint8_t *_private_key);
     virtual bool encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtastic_UserLite_public_key_t remotePublic,
-                                   uint64_t packetNum, size_t numBytes, uint8_t *bytes, uint8_t *bytesOut);
-    virtual bool decryptCurve25519(uint32_t fromNode, meshtastic_UserLite_public_key_t remotePublic, uint64_t packetNum,
+                                   uint32_t packetId, size_t numBytes, uint8_t *bytes, uint8_t *bytesOut);
+    virtual bool decryptCurve25519(uint32_t fromNode, meshtastic_UserLite_public_key_t remotePublic, uint32_t packetId,
                                    size_t numBytes, uint8_t *bytes, uint8_t *bytesOut);
     virtual bool setDHPublicKey(uint8_t *publicKey);
     virtual void hash(uint8_t *bytes, size_t numBytes);
@@ -69,8 +69,8 @@ class CryptoEngine
      *
      * @param bytes is updated in place
      */
-    virtual void encryptPacket(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes);
-    virtual void decrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes);
+    virtual void encryptPacket(uint32_t fromNode, uint32_t packetId, size_t numBytes, uint8_t *bytes);
+    virtual void decrypt(uint32_t fromNode, uint32_t packetId, size_t numBytes, uint8_t *bytes);
     virtual void encryptAESCtr(CryptoKey key, uint8_t *nonce, size_t numBytes, uint8_t *bytes);
 #ifndef PIO_UNIT_TESTING
   protected:
@@ -87,11 +87,11 @@ class CryptoEngine
      * Init our 128 bit nonce for a new packet
      *
      * The NONCE is constructed by concatenating (from MSB to LSB):
-     * a 64 bit packet number (stored in little endian order)
+     * a 32 bit packet number (stored in little endian order)
      * a 32 bit sending node number (stored in little endian order)
      * a 32 bit block counter (starts at zero)
      */
-    void initNonce(uint32_t fromNode, uint64_t packetId, uint32_t extraNonce = 0);
+    void initNonce(uint32_t fromNode, uint32_t packetId, uint32_t extraNonce = 0);
 };
 
 extern CryptoEngine *crypto;
