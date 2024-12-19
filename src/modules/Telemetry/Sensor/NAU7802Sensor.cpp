@@ -99,7 +99,6 @@ void NAU7802Sensor::tare()
 
 bool NAU7802Sensor::saveCalibrationData()
 {
-    spiLock->lock();
     auto file = SafeFile(nau7802ConfigFileName);
     nau7802config.zeroOffset = nau7802.getZeroOffset();
     nau7802config.calibrationFactor = nau7802.getCalibrationFactor();
@@ -113,6 +112,7 @@ bool NAU7802Sensor::saveCalibrationData()
     } else {
         okay = true;
     }
+    spiLock->lock();
     okay &= file.close();
     spiLock->unlock();
 

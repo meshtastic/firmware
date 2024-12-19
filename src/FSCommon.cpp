@@ -95,20 +95,18 @@ bool copyFile(const char *from, const char *to)
 
 #elif defined(FSCom)
     // take SPI Lock
-    spiLock->lock();
+    concurrency::LockGuard g(spiLock);
     unsigned char cbuffer[16];
 
     File f1 = FSCom.open(from, FILE_O_READ);
     if (!f1) {
         LOG_ERROR("Failed to open source file %s", from);
-        spiLock->unlock();
         return false;
     }
 
     File f2 = FSCom.open(to, FILE_O_WRITE);
     if (!f2) {
         LOG_ERROR("Failed to open destination file %s", to);
-        spiLock->unlock();
         return false;
     }
 
@@ -120,7 +118,6 @@ bool copyFile(const char *from, const char *to)
     f2.flush();
     f2.close();
     f1.close();
-    spiLock->unlock();
     return true;
 #endif
 }

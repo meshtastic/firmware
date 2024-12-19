@@ -37,13 +37,11 @@ bool pb_decode_from_bytes(const uint8_t *srcbuf, size_t srcbufsize, const pb_msg
 bool readcb(pb_istream_t *stream, uint8_t *buf, size_t count)
 {
     bool status = false;
-    spiLock->lock();
     File *file = (File *)stream->state;
 
     if (buf == NULL) {
         while (count-- && file->read() != EOF)
             ;
-        spiLock->unlock();
         return count == 0;
     }
 
@@ -51,8 +49,6 @@ bool readcb(pb_istream_t *stream, uint8_t *buf, size_t count)
 
     if (file->available() == 0)
         stream->bytes_left = 0;
-
-    spiLock->unlock();
 
     return status;
 }

@@ -210,16 +210,14 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
         LOG_DEBUG("gpsStatus->getDOP()          %d", gpsStatus->getDOP());
         LOG_DEBUG("-----------------------------------------");
     */
-    spiLock->lock();
+    concurrency::LockGuard g(spiLock);
     if (!FSBegin()) {
         LOG_DEBUG("An Error has occurred while mounting the filesystem");
-        spiLock->unlock();
         return 0;
     }
 
     if (FSCom.totalBytes() - FSCom.usedBytes() < 51200) {
         LOG_DEBUG("Filesystem doesn't have enough free space. Aborting write");
-        spiLock->unlock();
         return 0;
     }
 
@@ -232,7 +230,6 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
 
         if (!fileToWrite) {
             LOG_ERROR("There was an error opening the file for writing");
-            spiLock->unlock();
             return 0;
         }
 
@@ -252,7 +249,6 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
 
     if (!fileToAppend) {
         LOG_ERROR("There was an error opening the file for appending");
-        spiLock->unlock();
         return 0;
     }
 
@@ -295,7 +291,6 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
     fileToAppend.printf("\"%s\"\n", p.payload.bytes);
     fileToAppend.flush();
     fileToAppend.close();
-    spiLock->unlock();
 #endif
 
     return 1;

@@ -839,7 +839,7 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
 {
     LoadFileResult state = LoadFileResult::OTHER_FAILURE;
 #ifdef FSCom
-    spiLock->lock();
+    concurrency::LockGuard g(spiLock);
 
     auto f = FSCom.open(filename, FILE_O_READ);
 
@@ -859,7 +859,6 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
     } else {
         LOG_ERROR("Could not open / read %s", filename);
     }
-    spiLock->unlock();
 #else
     LOG_ERROR("ERROR: Filesystem not implemented");
     state = LoadFileResult::NO_FILESYSTEM;
@@ -1026,7 +1025,6 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
 {
     bool okay = false;
 #ifdef FSCom
-    spiLock->lock();
     auto f = SafeFile(filename, fullAtomic);
 
     LOG_INFO("Save %s", filename);
@@ -1039,7 +1037,6 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
     }
 
     bool writeSucceeded = f.close();
-    spiLock->unlock();
 
     if (!okay || !writeSucceeded) {
         LOG_ERROR("Can't write prefs!");
