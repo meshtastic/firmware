@@ -1,5 +1,5 @@
 #include "FloodingRouter.h"
-#include "../userPrefs.h"
+
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 
@@ -36,7 +36,8 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
         if (isRepeated) {
             LOG_DEBUG("Repeated reliable tx");
             if (!perhapsRebroadcast(p) && isToUs(p) && p->want_ack) {
-                sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, p->channel, 0);
+                // FIXME - channel index should be used, but the packet is still encrypted here
+                sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, 0, 0);
             }
         }
 

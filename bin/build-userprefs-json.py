@@ -1,6 +1,8 @@
+#!/usr/bin/env python3
 import json
-import subprocess
 import re
+import subprocess
+
 
 def get_macros_from_header(header_file):
     # Run clang to preprocess the header file and capture the output
@@ -12,15 +14,17 @@ def get_macros_from_header(header_file):
     macros = {}
     macro_pattern = re.compile(r'#define\s+(\w+)\s+(.*)')
     for line in result.stdout.splitlines():
-        match = macro_pattern.match(line) 
-        if match and 'USERPREFS_' in line and '_USERPREFS_' not in line:
+        match = macro_pattern.match(line)
+        if match and ('USERPREFS_' in line or 'OLED_UA' in line) and '_USERPREFS_' not in line:
             macros[match.group(1)] = match.group(2)
 
     return macros
 
+
 def write_macros_to_json(macros, output_file):
     with open(output_file, 'w') as f:
         json.dump(macros, f, indent=4)
+
 
 def main():
     header_file = 'userPrefs.h'
@@ -39,10 +43,11 @@ def main():
 
     with open(header_file, 'w') as file:
         for line in uncommented_lines:
-                file.write(line)
+            file.write(line)
     macros = get_macros_from_header(header_file)
     write_macros_to_json(macros, output_file)
     print(f"Macros have been written to {output_file}")
+
 
 if __name__ == "__main__":
     main()
