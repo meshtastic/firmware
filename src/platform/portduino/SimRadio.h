@@ -33,6 +33,9 @@ class SimRadio : public RadioInterface, protected concurrency::NotifiedWorkerThr
     /** Attempt to cancel a previously sent packet.  Returns true if a packet was found we could cancel */
     virtual bool cancelSending(NodeNum from, PacketId id) override;
 
+    /** Attempt to find a packet in the TxQueue. Returns true if the packet was found. */
+    virtual bool findInTxQueue(NodeNum from, PacketId id) override;
+
     /**
      * Start waiting to receive a message
      *
