@@ -245,7 +245,7 @@ void setup()
     // GPIO10 manages all peripheral power supplies
     // Turn on peripheral power immediately after MUC starts.
     // If some boards are turned on late, ESP32 will reset due to low voltage.
-    // ESP32-C3(Keyboard) , MAX98357A(Audio Power Amplifier) , 
+    // ESP32-C3(Keyboard) , MAX98357A(Audio Power Amplifier) ,
     // TF Card , Display backlight(AW9364DNR) , AN48841B(Trackball) , ES7210(Decoder)
     pinMode(KB_POWERON, OUTPUT);
     digitalWrite(KB_POWERON, HIGH);
@@ -423,7 +423,6 @@ void setup()
     pinMode(AQ_SET_PIN, OUTPUT);
     digitalWrite(AQ_SET_PIN, HIGH);
 #endif
-
 
     // Currently only the tbeam has a PMU
     // PMU initialization needs to be placed before i2c scanning
