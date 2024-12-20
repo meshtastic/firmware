@@ -78,7 +78,11 @@ class MQTT : private concurrency::OSThread
     void start() { setIntervalFromNow(0); };
 
   protected:
-    PointerQueue<meshtastic_ServiceEnvelope> mqttQueue;
+    struct QueueEntry {
+        std::string topic;
+        std::basic_string<uint8_t> envBytes; // binary/pb_encode_to_bytes ServiceEnvelope
+    };
+    PointerQueue<QueueEntry> mqttQueue;
 
     int reconnectCount = 0;
 
