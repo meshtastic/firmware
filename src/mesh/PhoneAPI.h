@@ -34,6 +34,7 @@ class PhoneAPI
 {
     enum State {
         STATE_SEND_NOTHING, // Initial state, don't send anything until the client starts asking for config
+        STATE_SEND_UIDATA,  // send stored data for device-ui
         STATE_SEND_MY_INFO, // send our my info record
         STATE_SEND_OWN_NODEINFO,
         STATE_SEND_METADATA,
