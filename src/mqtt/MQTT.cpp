@@ -26,6 +26,14 @@
 #include <pb_decode.h>
 #include <utility>
 
+#include <IPAddress.h>
+#if defined(ARCH_PORTDUINO)
+#include <netinet/in.h>
+#elif !defined(ntohl)
+#include <machine/endian.h>
+#define ntohl __ntohl
+#endif
+
 MQTT *mqtt;
 
 namespace
@@ -196,6 +204,29 @@ inline void onReceiveJson(byte *payload, size_t length)
         LOG_DEBUG("JSON ignore downlink message with unsupported type");
     }
 }
+
+/// Determines if the given IPAddress is a private IPv4 address, i.e. not routable on the public internet.
+bool isPrivateIpAddress(const IPAddress &ip)
+{
+    constexpr struct {
+        uint32_t network;
+        uint32_t mask;
+    } privateCidrRanges[] = {
+        {.network = 192u << 24 | 168 << 16, .mask = 0xffff0000}, // 192.168.0.0/16
+        {.network = 172u << 24 | 16 << 16, .mask = 0xfff00000},  // 172.16.0.0/12
+        {.network = 169u << 24 | 254 << 16, .mask = 0xffff0000}, // 169.254.0.0/16
+        {.network = 10u << 24, .mask = 0xff000000},              // 10.0.0.0/8
+        {.network = 127u << 24 | 1, .mask = 0xffffffff},         // 127.0.0.1/32
+    };
+    const uint32_t addr = ntohl(ip);
+    for (const auto &cidrRange : privateCidrRanges) {
+        if (cidrRange.network == (addr & cidrRange.mask)) {
+            LOG_INFO("MQTT server on a private IP");
+            return true;
+        }
+    }
+    return false;
+}
 } // namespace
 
 void MQTT::mqttCallback(char *topic, byte *payload, unsigned int length)
@@ -270,10 +301,8 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
                 moduleConfig.mqtt.map_report_settings.publish_interval_secs, default_map_publish_interval_secs);
         }
 
-        isMqttServerAddressPrivate = isPrivateIpAddress(moduleConfig.mqtt.address);
-        if (isMqttServerAddressPrivate) {
-            LOG_INFO("MQTT server on a private IP");
-        }
+        IPAddress ip;
+        isMqttServerAddressPrivate = ip.fromString(moduleConfig.mqtt.address) && isPrivateIpAddress(ip);
 
 #if HAS_NETWORKING
         if (!moduleConfig.mqtt.proxy_to_client_enabled)
@@ -716,70 +745,4 @@ void MQTT::perhapsReportToMap()
 
     // Update the last report time
     last_report_to_map = millis();
-}
-
-bool MQTT::isPrivateIpAddress(const char address[])
-{
-    // Min. length like 10.0.0.0 (8), max like 192.168.255.255:65535 (21)
-    size_t length = strlen(address);
-    if (length < 8 || length > 21) {
-        return false;
-    }
-
-    // Ensure the address contains only digits and dots and maybe a colon.
-    // Some limited validation is done.
-    // Even if it's not a valid IP address, we will know it's not a domain.
-    bool hasColon = false;
-    int numDots = 0;
-    for (size_t i = 0; i < length; i++) {
-        if (!isdigit(address[i]) && address[i] != '.' && address[i] != ':') {
-            return false;
-        }
-
-        // Dots can't be the first character, immediately follow another dot,
-        // occur more than 3 times, or occur after a colon.
-        if (address[i] == '.') {
-            if (++numDots > 3 || i == 0 || address[i - 1] == '.' || hasColon) {
-                return false;
-            }
-        }
-        // There can only be a single colon, and it can only occur after 3 dots
-        else if (address[i] == ':') {
-            if (hasColon || numDots < 3) {
-                return false;
-            }
-
-            hasColon = true;
-        }
-    }
-
-    // Final validation for IPv4 address and port format.
-    // Note that the values of octets haven't been tested, only the address format.
-    if (numDots != 3) {
-        return false;
-    }
-
-    // Check the easy ones first.
-    if (strcmp(address, "127.0.0.1") == 0 || strncmp(address, "10.", 3) == 0 || strncmp(address, "192.168", 7) == 0 ||
-        strncmp(address, "169.254", 7) == 0) {
-        return true;
-    }
-
-    // See if it's definitely not a 172 address.
-    if (strncmp(address, "172", 3) != 0) {
-        return false;
-    }
-
-    // We know it's a 172 address, now see if the second octet is 2 digits.
-    if (address[6] != '.') {
-        return false;
-    }
-
-    // Copy the second octet into a secondary buffer we can null-terminate and parse.
-    char octet2[3];
-    strncpy(octet2, address + 4, 2);
-    octet2[2] = 0;
-
-    int octet2Num = atoi(octet2);
-    return octet2Num >= 16 && octet2Num <= 31;
 }
