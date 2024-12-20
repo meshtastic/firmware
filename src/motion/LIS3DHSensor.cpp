@@ -22,7 +22,7 @@ int32_t LIS3DHSensor::runOnce()
 {
     if (sensor.getClick() > 0) {
         uint8_t click = sensor.getClick();
-        if (!config.device.double_tap_as_button_press) {
+        if (!config.device.double_tap_as_button_press && config.display.wake_on_tap_or_motion) {
             wakeScreen();
         }
 
