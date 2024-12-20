@@ -6,6 +6,7 @@
 #include <RadioLib.h>
 #include <csignal>
 #include <libpinedio-usb.h>
+#include <unistd.h>
 
 // include the library for Raspberry GPIO pins
 
