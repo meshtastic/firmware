@@ -231,6 +231,23 @@ bool isPrivateIpAddress(const IPAddress &ip)
     }
     return false;
 }
+
+// Separate a <host>[:<port>] string. Returns a pair containing the parsed host and port. If the port is
+// not present in the input string, or is invalid, the value of the `port` argument will be returned.
+std::pair<String, uint16_t> parseHostAndPort(String server, uint16_t port = 0)
+{
+    const int delimIndex = server.indexOf(':');
+    if (delimIndex > 0) {
+        const long parsedPort = server.substring(delimIndex + 1, server.length()).toInt();
+        if (parsedPort < 1 || parsedPort > UINT16_MAX) {
+            LOG_WARN("Invalid MQTT port %d: %s", parsedPort, server.c_str());
+        } else {
+            port = parsedPort;
+        }
+        server[delimIndex] = 0;
+    }
+    return std::make_pair(std::move(server), port);
+}
 } // namespace
 
 void MQTT::mqttCallback(char *topic, byte *payload, unsigned int length)
@@ -308,7 +325,8 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
         }
 
         IPAddress ip;
-        isMqttServerAddressPrivate = ip.fromString(moduleConfig.mqtt.address) && isPrivateIpAddress(ip);
+        isMqttServerAddressPrivate =
+            ip.fromString(parseHostAndPort(moduleConfig.mqtt.address).first.c_str()) && isPrivateIpAddress(ip);
 
 #if HAS_NETWORKING
         if (!moduleConfig.mqtt.proxy_to_client_enabled)
@@ -424,14 +442,9 @@ void MQTT::reconnect()
         pubSub.setClient(mqttClient);
 #endif
 
-        String server = String(serverAddr);
-        int delimIndex = server.indexOf(':');
-        if (delimIndex > 0) {
-            String port = server.substring(delimIndex + 1, server.length());
-            server[delimIndex] = 0;
-            serverPort = port.toInt();
-            serverAddr = server.c_str();
-        }
+        std::pair<String, uint16_t> hostAndPort = parseHostAndPort(serverAddr, serverPort);
+        serverAddr = hostAndPort.first.c_str();
+        serverPort = hostAndPort.second;
         pubSub.setServer(serverAddr, serverPort);
         pubSub.setBufferSize(512);
 
