@@ -116,16 +116,17 @@ float FloodingRouter::calculateForwardProbability(const meshtastic_MeshPacket *p
     float NEIGHBOR_INFLUENCE_FACTOR = 0.1f;
     float neighborFactor = 1.0f / (1.0f + neighborCount * NEIGHBOR_INFLUENCE_FACTOR);
 
-    float REDUNDANCY_INFLUENCE_FACTOR = 0.1f;
+    float REDUNDANCY_INFLUENCE_FACTOR = 0.05f;
     int distinctSources = getDistinctSourcesCount(p->id);
     float redundancyFactor = 1.0f / (1.0f + distinctSources * REDUNDANCY_INFLUENCE_FACTOR);
 
-    float LOAD_INFLUENCE_FACTOR = 0.1f;
-    float recentPacketRate = getRecentUniquePacketRate(RECENCY_THRESHOLD_MINUTES * 60 * 1000);
+    float LOAD_INFLUENCE_FACTOR = 0.01f;
+    float LOAD_THRESHOLD_MINUTES = 2;
+    float recentPacketRate = getRecentUniquePacketRate(LOAD_THRESHOLD_MINUTES * 60 * 1000);
     float loadFactor = 1.0f / (1.0f + recentPacketRate * LOAD_INFLUENCE_FACTOR);
 
     // Start from a base probability
-    float BASELINE_FORWARDING_PROBABILITY = 0.9f;
+    float BASELINE_FORWARDING_PROBABILITY = 1.0f;
     float prob = BASELINE_FORWARDING_PROBABILITY;
 
     // Adjust with observed factors
