@@ -58,23 +58,29 @@ bool FloodingRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
     if (!isToUs(p) && (p->hop_limit > 0) && !isFromUs(p)) {
         if (p->id != 0) {
             if (isRebroadcaster()) {
-                meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
+                float forwardProb = calculateForwardProbability(p);
+                float rnd = (float)rand() / (float)RAND_MAX;
+                if (rnd <= forwardProb) {
+                    meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
 
-                tosend->hop_limit--; // bump down the hop count
+                    tosend->hop_limit--; // bump down the hop count
 #if USERPREFS_EVENT_MODE
-                if (tosend->hop_limit > 2) {
-                    // if we are "correcting" the hop_limit, "correct" the hop_start by the same amount to preserve hops away.
-                    tosend->hop_start -= (tosend->hop_limit - 2);
-                    tosend->hop_limit = 2;
-                }
+                    if (tosend->hop_limit > 2) {
+                        // if we are "correcting" the hop_limit, "correct" the hop_start by the same amount to preserve hops away.
+                        tosend->hop_start -= (tosend->hop_limit - 2);
+                        tosend->hop_limit = 2;
+                    }
 #endif
 
-                LOG_INFO("Rebroadcast received floodmsg");
-                // Note: we are careful to resend using the original senders node id
-                // We are careful not to call our hooked version of send() - because we don't want to check this again
-                Router::send(tosend);
+                    LOG_INFO("Rebroadcast received floodmsg");
+                    // Note: we are careful to resend using the original senders node id
+                    // We are careful not to call our hooked version of send() - because we don't want to check this again
+                    Router::send(tosend);
 
-                return true;
+                    return true;
+                } else {
+                    LOG_DEBUG("No rebroadcast: Random number %f > Forward Probability %f", rnd, forwardProb);
+                }
             } else {
                 LOG_DEBUG("No rebroadcast: Role = CLIENT_MUTE or Rebroadcast Mode = NONE");
             }
@@ -99,4 +105,35 @@ void FloodingRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
 
     // handle the packet as normal
     Router::sniffReceived(p, c);
+}
+
+float FloodingRouter::calculateForwardProbability(const meshtastic_MeshPacket *p)
+{
+
+    uint8_t RECENCY_THRESHOLD_MINUTES = 5;
+    size_t neighborCount = nodeDB->getDistinctRecentDirectNeighborCount((RECENCY_THRESHOLD_MINUTES * 60));
+
+    float NEIGHBOR_INFLUENCE_FACTOR = 0.1f;
+    float neighborFactor = 1.0f / (1.0f + neighborCount * NEIGHBOR_INFLUENCE_FACTOR);
+
+    float REDUNDANCY_INFLUENCE_FACTOR = 0.1f;
+    int distinctSources = getDistinctSourcesCount(p->id);
+    float redundancyFactor = 1.0f / (1.0f + distinctSources * REDUNDANCY_INFLUENCE_FACTOR);
+
+    float LOAD_INFLUENCE_FACTOR = 0.1f;
+    float recentPacketRate = getRecentUniquePacketRate(RECENCY_THRESHOLD_MINUTES * 60 * 1000);
+    float loadFactor = 1.0f / (1.0f + recentPacketRate * LOAD_INFLUENCE_FACTOR);
+
+    // Start from a base probability
+    float BASELINE_FORWARDING_PROBABILITY = 0.9f;
+    float prob = BASELINE_FORWARDING_PROBABILITY;
+
+    // Adjust with observed factors
+    prob *= neighborFactor;
+    prob *= redundancyFactor;
+    prob *= loadFactor;
+
+    // Clamp probability
+    prob = min(max(prob, 0.0f), 1.0f);
+    return prob;
 }

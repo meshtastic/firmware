@@ -35,6 +35,8 @@ class FloodingRouter : public Router, protected PacketHistory
      * @return true if rebroadcasted */
     bool perhapsRebroadcast(const meshtastic_MeshPacket *p);
 
+    float calculateForwardProbability(const meshtastic_MeshPacket *p);
+
   public:
     /**
      * Constructor

@@ -807,6 +807,40 @@ void NodeDB::clearLocalPosition()
     setLocalPosition(meshtastic_Position_init_default);
 }
 
+size_t NodeDB::getDistinctRecentDirectNeighborCount(uint32_t timeWindowSecs)
+{
+    uint32_t now = getTime();
+    size_t count = 0;
+    for (int i = 0; i < numMeshNodes; i++) {
+        const meshtastic_NodeInfoLite &node = meshNodes->at(i);
+
+        // Skip our own node entry
+        if (node.num == getNodeNum()) {
+            continue;
+        }
+
+        // Skip ignored nodes
+        if (node.is_ignored) {
+            continue;
+        }
+
+        // Check if this node is a direct neighbor (hops_away == 0)
+        if (!node.has_hops_away || node.hops_away != 0) {
+            continue;
+        }
+
+        if (node.via_mqtt) {
+            continue;
+        }
+
+        // Check if the node was heard recently
+        if (node.last_heard > 0 && (now - node.last_heard <= timeWindowSecs)) {
+            count++;
+        }
+    }
+    return count;
+}
+
 void NodeDB::cleanupMeshDB()
 {
     int newPos = 0, removed = 0;

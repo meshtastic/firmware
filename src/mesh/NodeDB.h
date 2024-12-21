@@ -167,6 +167,9 @@ class NodeDB
 
     bool hasValidPosition(const meshtastic_NodeInfoLite *n);
 
+    /// get the number of recent nodes we've directly heard from
+    size_t getDistinctRecentDirectNeighborCount(uint32_t timeWindowSecs);
+
   private:
     uint32_t lastNodeDbSave = 0; // when we last saved our db to flash
     /// Find a node in our DB, create an empty NodeInfoLite if missing
