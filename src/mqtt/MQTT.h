@@ -5,7 +5,9 @@
 #include "concurrency/OSThread.h"
 #include "mesh/Channels.h"
 #include "mesh/generated/meshtastic/mqtt.pb.h"
+#if !defined(ARCH_NRF52) || NRF52_USE_JSON
 #include "serialization/JSON.h"
+#endif
 #if HAS_WIFI
 #include <WiFiClient.h>
 #if !defined(ARCH_PORTDUINO)
@@ -78,7 +80,11 @@ class MQTT : private concurrency::OSThread
     void start() { setIntervalFromNow(0); };
 
   protected:
-    PointerQueue<meshtastic_ServiceEnvelope> mqttQueue;
+    struct QueueEntry {
+        std::string topic;
+        std::basic_string<uint8_t> envBytes; // binary/pb_encode_to_bytes ServiceEnvelope
+    };
+    PointerQueue<QueueEntry> mqttQueue;
 
     int reconnectCount = 0;
 
@@ -116,10 +122,6 @@ class MQTT : private concurrency::OSThread
 
     // Check if we should report unencrypted information about our node for consumption by a map
     void perhapsReportToMap();
-
-    /// Determines if the given address is a private IPv4 address, i.e. not routable on the public internet.
-    /// These are the ranges: 127.0.0.1, 10.0.0.0-10.255.255.255, 172.16.0.0-172.31.255.255, 192.168.0.0-192.168.255.255.
-    bool isPrivateIpAddress(const char address[]);
 
     /// Return 0 if sleep is okay, veto sleep if we are connected to pubsub server
     // int preflightSleepCb(void *unused = NULL) { return pubSub.connected() ? 1 : 0; }
