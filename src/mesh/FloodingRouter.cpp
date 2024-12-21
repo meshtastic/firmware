@@ -109,6 +109,11 @@ void FloodingRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
 
 float FloodingRouter::calculateForwardProbability(const meshtastic_MeshPacket *p)
 {
+    // Routers and repeaters always forward, so skip expensive calcs and return the highest value
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
+        config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
+        return 1.0f;
+    }
 
     uint8_t RECENCY_THRESHOLD_MINUTES = 5;
     size_t neighborCount = nodeDB->getDistinctRecentDirectNeighborCount((RECENCY_THRESHOLD_MINUTES * 60));
