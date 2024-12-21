@@ -119,12 +119,14 @@ int32_t ExternalNotificationModule::runOnce()
             if (externalTurnedOn[1] + (moduleConfig.external_notification.output_ms ? moduleConfig.external_notification.output_ms
                                                                                     : EXT_NOTIFICATION_MODULE_OUTPUT_MS) <
                 millis()) {
-                setExternalState(0, !getExternal(1));
+                setExternalState(1, !getExternal(1));
             }
             if (externalTurnedOn[2] + (moduleConfig.external_notification.output_ms ? moduleConfig.external_notification.output_ms
                                                                                     : EXT_NOTIFICATION_MODULE_OUTPUT_MS) <
                 millis()) {
-                setExternalState(0, !getExternal(2));
+                LOG_DEBUG("EXTERNAL 2 %d compared to %d", externalTurnedOn[2] + moduleConfig.external_notification.output_ms,
+                          millis());
+                setExternalState(2, !getExternal(2));
             }
 #if defined(HAS_NCP5623) || defined(RGBLED_RED) || defined(HAS_NEOPIXEL) || defined(UNPHONE)
             red = (colorState & 4) ? brightnessValues[brightnessIndex] : 0;          // Red enabled on colorState = 4,5,6,7
@@ -291,7 +293,7 @@ void ExternalNotificationModule::stopNow()
 
 ExternalNotificationModule::ExternalNotificationModule()
     : SinglePortModule("ExternalNotificationModule", meshtastic_PortNum_TEXT_MESSAGE_APP),
-      concurrency::OSThread("ExternalNotificationModule")
+      concurrency::OSThread("ExternalNotification")
 {
     /*
         Uncomment the preferences below if you want to use the module
@@ -327,34 +329,34 @@ ExternalNotificationModule::ExternalNotificationModule()
                     sizeof(rtttlConfig.ringtone));
         }
 
-        LOG_INFO("Initializing External Notification Module");
+        LOG_INFO("Init External Notification Module");
 
         output = moduleConfig.external_notification.output ? moduleConfig.external_notification.output
                                                            : EXT_NOTIFICATION_MODULE_OUTPUT;
 
         // Set the direction of a pin
         if (output > 0) {
-            LOG_INFO("Using Pin %i in digital mode", output);
+            LOG_INFO("Use Pin %i in digital mode", output);
             pinMode(output, OUTPUT);
         }
         setExternalState(0, false);
         externalTurnedOn[0] = 0;
         if (moduleConfig.external_notification.output_vibra) {
-            LOG_INFO("Using Pin %i for vibra motor", moduleConfig.external_notification.output_vibra);
+            LOG_INFO("Use Pin %i for vibra motor", moduleConfig.external_notification.output_vibra);
             pinMode(moduleConfig.external_notification.output_vibra, OUTPUT);
             setExternalState(1, false);
             externalTurnedOn[1] = 0;
         }
         if (moduleConfig.external_notification.output_buzzer) {
             if (!moduleConfig.external_notification.use_pwm) {
-                LOG_INFO("Using Pin %i for buzzer", moduleConfig.external_notification.output_buzzer);
+                LOG_INFO("Use Pin %i for buzzer", moduleConfig.external_notification.output_buzzer);
                 pinMode(moduleConfig.external_notification.output_buzzer, OUTPUT);
                 setExternalState(2, false);
                 externalTurnedOn[2] = 0;
             } else {
                 config.device.buzzer_gpio = config.device.buzzer_gpio ? config.device.buzzer_gpio : PIN_BUZZER;
                 // in PWM Mode we force the buzzer pin if it is set
-                LOG_INFO("Using Pin %i in PWM mode", config.device.buzzer_gpio);
+                LOG_INFO("Use Pin %i in PWM mode", config.device.buzzer_gpio);
             }
         }
 #ifdef HAS_NCP5623
@@ -518,13 +520,13 @@ AdminMessageHandleResult ExternalNotificationModule::handleAdminMessageForModule
 
     switch (request->which_payload_variant) {
     case meshtastic_AdminMessage_get_ringtone_request_tag:
-        LOG_INFO("Client is getting ringtone");
+        LOG_INFO("Client getting ringtone");
         this->handleGetRingtone(mp, response);
         result = AdminMessageHandleResult::HANDLED_WITH_RESPONSE;
         break;
 
     case meshtastic_AdminMessage_set_ringtone_message_tag:
-        LOG_INFO("Client is setting ringtone");
+        LOG_INFO("Client setting ringtone");
         this->handleSetRingtone(request->set_canned_message_module_messages);
         result = AdminMessageHandleResult::HANDLED;
         break;

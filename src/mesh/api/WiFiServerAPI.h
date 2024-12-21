@@ -22,5 +22,5 @@ class WiFiServerPort : public APIServerPort<WiFiServerAPI, WiFiServer>
     explicit WiFiServerPort(int port);
 };
 
-void initApiServer(int port = 4403);
+void initApiServer(int port = SERVER_API_DEFAULT_PORT);
 void deInitApiServer();

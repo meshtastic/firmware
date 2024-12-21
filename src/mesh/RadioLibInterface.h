@@ -22,18 +22,11 @@
 class LockingArduinoHal : public ArduinoHal
 {
   public:
-    LockingArduinoHal(SPIClass &spi, SPISettings spiSettings, RADIOLIB_PIN_TYPE _busy = RADIOLIB_NC)
-        : ArduinoHal(spi, spiSettings)
-    {
-#if ARCH_PORTDUINO
-        busy = _busy;
-#endif
-    };
+    LockingArduinoHal(SPIClass &spi, SPISettings spiSettings) : ArduinoHal(spi, spiSettings){};
 
     void spiBeginTransaction() override;
     void spiEndTransaction() override;
 #if ARCH_PORTDUINO
-    RADIOLIB_PIN_TYPE busy;
     void spiTransfer(uint8_t *out, size_t len, uint8_t *in) override;
 
 #endif
@@ -162,8 +155,9 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     /** start an immediate transmit
      *  This method is virtual so subclasses can hook as needed, subclasses should not call directly
+     *  @return true if packet was sent
      */
-    virtual void startSend(meshtastic_MeshPacket *txp);
+    virtual bool startSend(meshtastic_MeshPacket *txp);
 
     meshtastic_QueueStatus getQueueStatus();
 

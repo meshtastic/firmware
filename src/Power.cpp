@@ -251,7 +251,6 @@ class AnalogBatteryLevel : public HasBatteryLevel
 #if HAS_TELEMETRY && !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !defined(HAS_PMU) &&                                  \
     !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
         if (hasINA()) {
-            LOG_DEBUG("Using INA on I2C addr 0x%x for device battery voltage", config.power.device_battery_ina_address);
             return getINAVoltage();
         }
 #endif
@@ -271,7 +270,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
             config.power.adc_multiplier_override > 0 ? config.power.adc_multiplier_override : ADC_MULTIPLIER;
         // Do not call analogRead() often.
         const uint32_t min_read_interval = 5000;
-        if (!Throttle::isWithinTimespanMs(last_read_time_ms, min_read_interval)) {
+        if (!initial_read_done || !Throttle::isWithinTimespanMs(last_read_time_ms, min_read_interval)) {
             last_read_time_ms = millis();
 
             uint32_t raw = 0;
@@ -511,7 +510,7 @@ bool Power::analogInit()
 #endif
 
 #ifdef BATTERY_PIN
-    LOG_DEBUG("Using analog input %d for battery level", BATTERY_PIN);
+    LOG_DEBUG("Use analog input %d for battery level", BATTERY_PIN);
 
     // disable any internal pullups
     pinMode(BATTERY_PIN, INPUT);
@@ -542,18 +541,18 @@ bool Power::analogInit()
     esp_adc_cal_value_t val_type = esp_adc_cal_characterize(unit, atten, width, DEFAULT_VREF, adc_characs);
     // show ADC characterization base
     if (val_type == ESP_ADC_CAL_VAL_EFUSE_TP) {
-        LOG_INFO("ADCmod: ADC characterization based on Two Point values stored in eFuse");
+        LOG_INFO("ADC config based on Two Point values stored in eFuse");
     } else if (val_type == ESP_ADC_CAL_VAL_EFUSE_VREF) {
-        LOG_INFO("ADCmod: ADC characterization based on reference voltage stored in eFuse");
+        LOG_INFO("ADC config based on reference voltage stored in eFuse");
     }
 #ifdef CONFIG_IDF_TARGET_ESP32S3
     // ESP32S3
     else if (val_type == ESP_ADC_CAL_VAL_EFUSE_TP_FIT) {
-        LOG_INFO("ADCmod: ADC Characterization based on Two Point values and fitting curve coefficients stored in eFuse");
+        LOG_INFO("ADC config based on Two Point values and fitting curve coefficients stored in eFuse");
     }
 #endif
     else {
-        LOG_INFO("ADCmod: ADC characterization based on default reference voltage");
+        LOG_INFO("ADC config based on default reference voltage");
     }
 #endif // ARCH_ESP32
 
@@ -614,7 +613,7 @@ void Power::shutdown()
 #ifdef PIN_LED3
     ledOff(PIN_LED3);
 #endif
-    doDeepSleep(DELAY_FOREVER, false);
+    doDeepSleep(DELAY_FOREVER, false, false);
 #endif
 }
 
@@ -722,9 +721,9 @@ void Power::readPowerStatus()
             if (low_voltage_counter > 10) {
 #ifdef ARCH_NRF52
                 // We can't trigger deep sleep on NRF52, it's freezing the board
-                LOG_DEBUG("Low voltage detected, but not triggering deep sleep");
+                LOG_DEBUG("Low voltage detected, but not trigger deep sleep");
 #else
-                LOG_INFO("Low voltage detected, triggering deep sleep");
+                LOG_INFO("Low voltage detected, trigger deep sleep");
                 powerFSM.trigger(EVENT_LOW_BATTERY);
 #endif
             }
@@ -816,22 +815,22 @@ bool Power::axpChipInit()
     if (!PMU) {
         PMU = new XPowersAXP2101(*w);
         if (!PMU->init()) {
-            LOG_WARN("Failed to find AXP2101 power management");
+            LOG_WARN("No AXP2101 power management");
             delete PMU;
             PMU = NULL;
         } else {
-            LOG_INFO("AXP2101 PMU init succeeded, using AXP2101 PMU");
+            LOG_INFO("AXP2101 PMU init succeeded");
         }
     }
 
     if (!PMU) {
         PMU = new XPowersAXP192(*w);
         if (!PMU->init()) {
-            LOG_WARN("Failed to find AXP192 power management");
+            LOG_WARN("No AXP192 power management");
             delete PMU;
             PMU = NULL;
         } else {
-            LOG_INFO("AXP192 PMU init succeeded, using AXP192 PMU");
+            LOG_INFO("AXP192 PMU init succeeded");
         }
     }
 

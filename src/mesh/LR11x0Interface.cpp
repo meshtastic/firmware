@@ -48,8 +48,10 @@ template <typename T> bool LR11x0Interface<T>::init()
     digitalWrite(LR11X0_POWER_EN, HIGH);
 #endif
 
+#if ARCH_PORTDUINO
+    float tcxoVoltage = (float)settingsMap[dio3_tcxo_voltage] / 1000;
 // FIXME: correct logic to default to not using TCXO if no voltage is specified for LR11x0_DIO3_TCXO_VOLTAGE
-#if !defined(LR11X0_DIO3_TCXO_VOLTAGE)
+#elif !defined(LR11X0_DIO3_TCXO_VOLTAGE)
     float tcxoVoltage =
         0; // "TCXO reference voltage to be set on DIO3. Defaults to 1.6 V, set to 0 to skip." per
            // https://github.com/jgromes/RadioLib/blob/690a050ebb46e6097c5d00c371e961c1caa3b52e/src/modules/LR11x0/LR11x0.h#L471C26-L471C104
@@ -77,13 +79,13 @@ template <typename T> bool LR11x0Interface<T>::init()
 #ifdef LR11X0_RF_SWITCH_SUBGHZ
     pinMode(LR11X0_RF_SWITCH_SUBGHZ, OUTPUT);
     digitalWrite(LR11X0_RF_SWITCH_SUBGHZ, getFreq() < 1e9 ? HIGH : LOW);
-    LOG_DEBUG("Setting RF0 switch to %s", getFreq() < 1e9 ? "SubGHz" : "2.4GHz");
+    LOG_DEBUG("Set RF0 switch to %s", getFreq() < 1e9 ? "SubGHz" : "2.4GHz");
 #endif
 
 #ifdef LR11X0_RF_SWITCH_2_4GHZ
     pinMode(LR11X0_RF_SWITCH_2_4GHZ, OUTPUT);
     digitalWrite(LR11X0_RF_SWITCH_2_4GHZ, getFreq() < 1e9 ? LOW : HIGH);
-    LOG_DEBUG("Setting RF1 switch to %s", getFreq() < 1e9 ? "SubGHz" : "2.4GHz");
+    LOG_DEBUG("Set RF1 switch to %s", getFreq() < 1e9 ? "SubGHz" : "2.4GHz");
 #endif
 
     int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
@@ -122,7 +124,7 @@ template <typename T> bool LR11x0Interface<T>::init()
 
     if (dioAsRfSwitch) {
         lora.setRfSwitchTable(rfswitch_dio_pins, rfswitch_table);
-        LOG_DEBUG("Setting DIO RF switch", res);
+        LOG_DEBUG("Set DIO RF switch", res);
     }
 
     if (res == RADIOLIB_ERR_NONE) {

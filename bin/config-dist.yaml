@@ -12,13 +12,6 @@ Lora:
 #  IRQ: 17
 #  Reset: 22
 
-#  Module: sx1262  # pinedio
-#  CS: 0
-#  IRQ: 10
-#  Busy: 11
-#  DIO2_AS_RF_SWITCH: true
-#  spidev: spidev0.1
-
 #  Module: RF95  # Adafruit RFM9x
 #  Reset: 25
 #  CS: 7
@@ -50,8 +43,6 @@ Lora:
 #  TXen: x  # TX and RX enable pins
 #  RXen: x
 
-#  ch341_quirk: true # Uncomment this to use the chunked SPI transfer that seems to fix the ch341
-
 #  spiSpeed: 2000000
 
 ### Set gpio chip to use in /dev/. Defaults to 0.
@@ -80,17 +71,6 @@ I2C:
 ### Set up SPI displays here. Note that I2C displays are generally auto-detected.
 
 Display:
-
-### Waveshare 2.8inch RPi LCD
-#  Panel: ST7789
-#  CS: 8
-#  DC: 22        # Data/Command pin
-#  Backlight: 18
-#  Width: 240
-#  Height: 320
-#  Reset: 27
-#  Rotate: true
-#  Invert: true
 
 ### Waveshare 1.44inch LCD HAT
 #  Panel: ST7735S
@@ -148,10 +128,6 @@ Touchscreen:
 #  IRQ: 24
 #  I2CAddr: 0x38
 
-#  Module: XPT2046 # Waveshare 2.8inch
-#  CS: 7
-#  IRQ: 17
-
 ### You can also specify the spi device for the touchscreen to use
 # spidev: spidev0.0
 
@@ -170,9 +146,11 @@ Logging:
 
 Webserver:
 #  Port: 443 # Port for Webserver & Webservices
-#  RootPath: /usr/share/doc/meshtasticd/web # Root Dir of WebServer
+#  RootPath: /usr/share/meshtasticd/web # Root Dir of WebServer
 
 General:
   MaxNodes: 200
   MaxMessageQueue: 100
   ConfigDirectory: /etc/meshtasticd/config.d/
+#  MACAddress: AA:BB:CC:DD:EE:FF
+#  MACAddressSource: eth0

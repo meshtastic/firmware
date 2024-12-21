@@ -34,7 +34,7 @@ int32_t KbI2cBase::runOnce()
         switch (cardkb_found.port) {
         case ScanI2C::WIRE1:
 #if WIRE_INTERFACES_COUNT == 2
-            LOG_DEBUG("Using I2C Bus 1 (the second one)");
+            LOG_DEBUG("Use I2C Bus 1 (the second one)");
             i2cBus = &Wire1;
             if (cardkb_found.address == BBQ10_KB_ADDR) {
                 Q10keyboard.begin(BBQ10_KB_ADDR, &Wire1);
@@ -46,7 +46,7 @@ int32_t KbI2cBase::runOnce()
             break;
 #endif
         case ScanI2C::WIRE:
-            LOG_DEBUG("Using I2C Bus 0 (the first one)");
+            LOG_DEBUG("Use I2C Bus 0 (the first one)");
             i2cBus = &Wire;
             if (cardkb_found.address == BBQ10_KB_ADDR) {
                 Q10keyboard.begin(BBQ10_KB_ADDR, &Wire);

@@ -1,5 +1,5 @@
 #include "Channels.h"
-#include "../userPrefs.h"
+
 #include "CryptoEngine.h"
 #include "Default.h"
 #include "DisplayFormatters.h"
@@ -178,19 +178,18 @@ CryptoKey Channels::getKey(ChannelIndex chIndex)
 {
     meshtastic_Channel &ch = getByIndex(chIndex);
     const meshtastic_ChannelSettings &channelSettings = ch.settings;
-    assert(ch.has_settings);
 
     CryptoKey k;
     memset(k.bytes, 0, sizeof(k.bytes)); // In case the user provided a short key, we want to pad the rest with zeros
 
-    if (ch.role == meshtastic_Channel_Role_DISABLED) {
+    if (!ch.has_settings || ch.role == meshtastic_Channel_Role_DISABLED) {
         k.length = -1; // invalid
     } else {
         memcpy(k.bytes, channelSettings.psk.bytes, channelSettings.psk.size);
         k.length = channelSettings.psk.size;
         if (k.length == 0) {
             if (ch.role == meshtastic_Channel_Role_SECONDARY) {
-                LOG_DEBUG("Unset PSK for secondary channel %s. using primary key", ch.settings.name);
+                LOG_DEBUG("Unset PSK for secondary channel %s. use primary key", ch.settings.name);
                 k = getKey(primaryIndex);
             } else {
                 LOG_WARN("User disabled encryption");
@@ -199,7 +198,7 @@ CryptoKey Channels::getKey(ChannelIndex chIndex)
             // Convert the short single byte variants of psk into variant that can be used more generally
 
             uint8_t pskIndex = k.bytes[0];
-            LOG_DEBUG("Expanding short PSK #%d", pskIndex);
+            LOG_DEBUG("Expand short PSK #%d", pskIndex);
             if (pskIndex == 0)
                 k.length = 0; // Turn off encryption
             else {
@@ -384,11 +383,11 @@ bool Channels::hasDefaultChannel()
 bool Channels::decryptForHash(ChannelIndex chIndex, ChannelHash channelHash)
 {
     if (chIndex > getNumChannels() || getHash(chIndex) != channelHash) {
-        // LOG_DEBUG("Skipping channel %d (hash %x) due to invalid hash/index, want=%x", chIndex, getHash(chIndex),
+        // LOG_DEBUG("Skip channel %d (hash %x) due to invalid hash/index, want=%x", chIndex, getHash(chIndex),
         // channelHash);
         return false;
     } else {
-        LOG_DEBUG("Using channel %d (hash 0x%x)", chIndex, channelHash);
+        LOG_DEBUG("Use channel %d (hash 0x%x)", chIndex, channelHash);
         setCrypto(chIndex);
         return true;
     }
