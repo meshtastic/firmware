@@ -5,7 +5,9 @@
 #include "concurrency/OSThread.h"
 #include "mesh/Channels.h"
 #include "mesh/generated/meshtastic/mqtt.pb.h"
+#if !defined(ARCH_NRF52) || NRF52_USE_JSON
 #include "serialization/JSON.h"
+#endif
 #if HAS_WIFI
 #include <WiFiClient.h>
 #if !defined(ARCH_PORTDUINO)
