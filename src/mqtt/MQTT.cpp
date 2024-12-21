@@ -19,8 +19,10 @@
 #include <WiFi.h>
 #endif
 #include "Default.h"
+#if !defined(ARCH_NRF52) || NRF52_USE_JSON
 #include "serialization/JSON.h"
 #include "serialization/MeshPacketSerializer.h"
+#endif
 #include <Throttle.h>
 #include <assert.h>
 #include <pb_decode.h>
@@ -119,6 +121,7 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
         router->enqueueReceivedMessage(p.release());
 }
 
+#if !defined(ARCH_NRF52) || NRF52_USE_JSON
 // returns true if this is a valid JSON envelope which we accept on downlink
 inline bool isValidJsonEnvelope(JSONObject &json)
 {
@@ -204,6 +207,7 @@ inline void onReceiveJson(byte *payload, size_t length)
         LOG_DEBUG("JSON ignore downlink message with unsupported type");
     }
 }
+#endif
 
 /// Determines if the given IPAddress is a private IPv4 address, i.e. not routable on the public internet.
 bool isPrivateIpAddress(const IPAddress &ip)
@@ -258,6 +262,7 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
 
     // check if this is a json payload message by comparing the topic start
     if (moduleConfig.mqtt.json_enabled && (strncmp(topic, jsonTopic.c_str(), jsonTopic.length()) == 0)) {
+#if !defined(ARCH_NRF52) || NRF52_USE_JSON
         // parse the channel name from the topic string
         // the topic has been checked above for having jsonTopic prefix, so just move past it
         char *channelName = topic + jsonTopic.length();
@@ -271,6 +276,7 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
             return;
         }
         onReceiveJson(payload, length);
+#endif
         return;
     }
 
