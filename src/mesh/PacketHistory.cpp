@@ -13,6 +13,34 @@ PacketHistory::PacketHistory()
                                           // setup our periodic task
 }
 
+// Determines the number of distinct sources that have sent a packet with the given ID
+size_t PacketHistory::getDistinctSourcesCount(PacketId targetId)
+{
+    std::unordered_set<NodeNum> distinctSenders;
+    for (auto &record : recentPackets) {
+        if (record.id == targetId) {
+            distinctSenders.insert(record.sender);
+        }
+    }
+    return distinctSenders.size();
+}
+
+// Returns the rate of unique packets received in the last windowMs milliseconds
+float PacketHistory::getRecentUniquePacketRate(uint32_t windowMs)
+{
+    uint32_t now = millis();
+    std::unordered_set<PacketId> uniqueIds;
+
+    for (auto &record : recentPackets) {
+        if (now - record.rxTimeMsec <= windowMs) {
+            uniqueIds.insert(record.id);
+        }
+    }
+
+    float windowSec = (float)windowMs / 1000.0f;
+    return (windowSec > 0) ? (uniqueIds.size() / windowSec) : 0.0f;
+}
+
 /**
  * Update recentBroadcasts and return true if we have already seen this packet
  */

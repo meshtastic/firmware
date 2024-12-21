@@ -36,6 +36,10 @@ class PacketHistory
   public:
     PacketHistory();
 
+    size_t getDistinctSourcesCount(PacketId targetId);
+
+    float getRecentUniquePacketRate(uint32_t windowMs);
+
     /**
      * Update recentBroadcasts and return true if we have already seen this packet
      *
