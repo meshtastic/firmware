@@ -438,6 +438,9 @@ void MQTT::reconnect()
             enabled = true; // Start running background process again
             runASAP = true;
             reconnectCount = 0;
+#if !defined(ARCH_PORTDUINO)
+            isMqttServerAddressPrivate = isPrivateIpAddress(mqttClient.remoteIP());
+#endif
 
             publishNodeInfo();
             sendSubscriptions();
