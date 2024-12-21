@@ -231,16 +231,6 @@ bool isPrivateIpAddress(const IPAddress &ip)
     }
     return false;
 }
-
-std::pair<std::string, uint16_t> parseHostAndPort(std::string address, uint16_t port = 0)
-{
-    const size_t delimIndex = address.find_first_of(':');
-    if (delimIndex > 0) {
-        port = std::stoul(address.substr(delimIndex + 1, address.length()));
-        address.resize(delimIndex);
-    }
-    return std::make_pair(std::move(address), port);
-}
 } // namespace
 
 void MQTT::mqttCallback(char *topic, byte *payload, unsigned int length)
@@ -318,8 +308,7 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
         }
 
         IPAddress ip;
-        isMqttServerAddressPrivate =
-            ip.fromString(parseHostAndPort(moduleConfig.mqtt.address).first.c_str()) && isPrivateIpAddress(ip);
+        isMqttServerAddressPrivate = ip.fromString(moduleConfig.mqtt.address) && isPrivateIpAddress(ip);
 
 #if HAS_NETWORKING
         if (!moduleConfig.mqtt.proxy_to_client_enabled)
@@ -435,9 +424,14 @@ void MQTT::reconnect()
         pubSub.setClient(mqttClient);
 #endif
 
-        std::pair<std::string, uint16_t> hostAndPort = parseHostAndPort(serverAddr, serverPort);
-        serverAddr = hostAndPort.first.c_str();
-        serverPort = hostAndPort.second;
+        String server = String(serverAddr);
+        int delimIndex = server.indexOf(':');
+        if (delimIndex > 0) {
+            String port = server.substring(delimIndex + 1, server.length());
+            server[delimIndex] = 0;
+            serverPort = port.toInt();
+            serverAddr = server.c_str();
+        }
         pubSub.setServer(serverAddr, serverPort);
         pubSub.setBufferSize(512);
 
