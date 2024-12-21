@@ -13,6 +13,7 @@ PacketHistory::PacketHistory()
                                           // setup our periodic task
 }
 
+// Determines the number of distinct sources that have sent a packet with the given ID
 size_t PacketHistory::getDistinctSourcesCount(PacketId targetId)
 {
     std::unordered_set<NodeNum> distinctSenders;
@@ -24,6 +25,7 @@ size_t PacketHistory::getDistinctSourcesCount(PacketId targetId)
     return distinctSenders.size();
 }
 
+// Returns the rate of unique packets received in the last windowMs milliseconds
 float PacketHistory::getRecentUniquePacketRate(uint32_t windowMs)
 {
     uint32_t now = millis();
