@@ -6,18 +6,21 @@
 #include "CurrentSensor.h"
 #include "TelemetrySensor.h"
 #include "VoltageSensor.h"
-#include <Adafruit_INA219.h>
+#include <INA226.h>
 
-class INA219Sensor : public TelemetrySensor, VoltageSensor, CurrentSensor
+class INA226Sensor : public TelemetrySensor, VoltageSensor, CurrentSensor
 {
   private:
-    Adafruit_INA219 ina219;
+    uint8_t _addr = INA_ADDR;
+    TwoWire *_wire = &Wire;
+    INA226 ina226 = INA226(_addr, _wire);
 
   protected:
     virtual void setup() override;
+    void begin(TwoWire *wire = &Wire, uint8_t addr = INA_ADDR);
 
   public:
-    INA219Sensor();
+    INA226Sensor();
     virtual int32_t runOnce() override;
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
     virtual uint16_t getBusVoltageMv() override;
