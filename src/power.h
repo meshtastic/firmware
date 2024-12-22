@@ -42,10 +42,12 @@ extern RTC_NOINIT_ATTR uint64_t RTC_reg_b;
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(ARCH_PORTDUINO)
 #include "modules/Telemetry/Sensor/INA219Sensor.h"
+#include "modules/Telemetry/Sensor/INA226Sensor.h"
 #include "modules/Telemetry/Sensor/INA260Sensor.h"
 #include "modules/Telemetry/Sensor/INA3221Sensor.h"
-extern INA260Sensor ina260Sensor;
 extern INA219Sensor ina219Sensor;
+extern INA226Sensor ina226Sensor;
+extern INA260Sensor ina260Sensor;
 extern INA3221Sensor ina3221Sensor;
 #endif
 
