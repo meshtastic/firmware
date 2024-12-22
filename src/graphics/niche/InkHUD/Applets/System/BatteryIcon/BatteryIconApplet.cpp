@@ -11,6 +11,7 @@ void InkHUD::BatteryIconApplet::onActivate()
         bringToForeground();
 
     // Register to our have BatteryIconApplet::onPowerStatusUpdate method called when new power info is available
+    // This happens whether or not the battery icon feature is enabled
     powerStatusObserver.observe(&powerStatus->onNewStatus);
 }
 
@@ -20,12 +21,13 @@ void InkHUD::BatteryIconApplet::onDeactivate()
     powerStatusObserver.unobserve(&powerStatus->onNewStatus);
 }
 
+// We handle power status' even when the feature is disabled,
+// so that we have up to date data ready if the feature is enabled later.
+// Otherwise could be 30s before new status update, with weird battery value displayed
 int InkHUD::BatteryIconApplet::onPowerStatusUpdate(const meshtastic::Status *status)
 {
-    // Abort if applet fully deactivated
-    // Already handled by onActivate and onDeactivate, but good practice for all applets
-    if (!isActive())
-        return 0;
+    // System applets are always active
+    assert(isActive());
 
     // This method should only receive power statuses
     // If we get a different type of status, something has gone weird elsewhere
@@ -38,7 +40,8 @@ int InkHUD::BatteryIconApplet::onPowerStatusUpdate(const meshtastic::Status *sta
 
     // If rounded value has changed, trigger a display update
     // It's okay to requestUpdate before we store the new value, as the update won't run until next loop()
-    if (this->socRounded != newSocRounded)
+    // Don't trigger an update if the feature is disabled
+    if (this->socRounded != newSocRounded && settings.optionalFeatures.batteryIcon)
         requestUpdate();
 
     // Store the new value

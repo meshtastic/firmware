@@ -128,7 +128,7 @@ void InkHUD::WindowManager::createSystemApplets()
 
     // System applets are always active
     bootscreenApplet->activate();
-    // notificationApplet->activate();
+    notificationApplet->activate();
     batteryIconApplet->activate();
     menuApplet->activate();
     placeholderApplet->activate();
@@ -334,8 +334,10 @@ int InkHUD::WindowManager::onReceiveTextMessage(const meshtastic_MeshPacket *pac
 // It is connected in setupNicheGraphics()
 void InkHUD::WindowManager::handleButtonShort()
 {
-    if (notificationApplet->isForeground())
+    if (notificationApplet->isForeground()) {
         notificationApplet->dismiss();
+        requestUpdate(EInk::UpdateTypes::FAST, true, true); // Redraw everything, to clear the notification
+    }
 
     else if (!menuApplet->isForeground())
         nextApplet();
@@ -724,6 +726,10 @@ void InkHUD::WindowManager::render(bool force)
     if (requestedRenderAll)
         clearBuffer();
 
+    // If nobody requested an update, we might skip it?
+    // Todo: check if this *ever* happens? Maybe remnant of some early menu code?
+    bool imageChanged = false;
+
     // Autoshow
     // ---------
     // Some applets may be permitted to bring themselved to foreground, to show new data
@@ -746,7 +752,10 @@ void InkHUD::WindowManager::render(bool force)
         }
     }
 
-    bool imageChanged = false; // If nobody requested an update, we might skip it?
+    // Check if autoshow has shown the same information as notification intended to
+    // In this case, we can dismiss the notification before it is shown
+    if (autoshown && notificationApplet->isForeground() && !notificationApplet->isApproved())
+        notificationApplet->dismiss();
 
     // User applets
     // -------------

@@ -24,11 +24,12 @@ enum MenuAction {
     NEXT_TILE,
     TOGGLE_APPLET,
     ACTIVATE_APPLETS, // Todo: remove? Possible redundant, handled by TOGGLE_APPLET?
-    TOGGLE_AUTOSHOW,
+    TOGGLE_AUTOSHOW_APPLET,
     SET_RECENTS,
     ROTATE,
     LAYOUT,
     TOGGLE_BATTERY_ICON,
+    TOGGLE_NOTIFICATIONS,
 };
 
 } // namespace NicheGraphics::InkHUD

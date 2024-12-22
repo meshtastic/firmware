@@ -23,9 +23,9 @@ class Notification
 
     uint32_t timestamp;
 
-    uint8_t getChannel();
-    uint32_t getSender();
-    uint8_t getBatteryPercentage();
+    uint8_t getChannel() { return channel; }
+    uint32_t getSender() { return sender; }
+    uint8_t getBatteryPercentage() { return batteryPercentage; }
 
     friend class NotificationApplet;
 

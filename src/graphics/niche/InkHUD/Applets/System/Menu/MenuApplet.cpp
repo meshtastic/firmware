@@ -111,9 +111,13 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         windowManager->changeActivatedApplets();
         break;
 
-    case TOGGLE_AUTOSHOW:
+    case TOGGLE_AUTOSHOW_APPLET:
         // Toggle settings.userApplets.autoshow[] value, via MenuItem::checkState pointer set in populateAutoshowPage()
         *items.at(cursor).checkState = !(*items.at(cursor).checkState);
+        break;
+
+    case TOGGLE_NOTIFICATIONS:
+        settings.optionalFeatures.notifications = !settings.optionalFeatures.notifications;
         break;
 
     case SET_RECENTS:
@@ -168,9 +172,11 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     case OPTIONS:
         items.push_back(MenuItem("Applets", MenuPage::APPLETS));
         items.push_back(MenuItem("Auto-show", MenuPage::AUTOSHOW));
-        items.push_back(MenuItem("Recents", MenuPage::RECENTS));
+        items.push_back(MenuItem("Recents Duration", MenuPage::RECENTS));
         items.push_back(MenuItem("Layout", MenuAction::LAYOUT, MenuPage::OPTIONS));
         items.push_back(MenuItem("Rotate", MenuAction::ROTATE, MenuPage::OPTIONS));
+        items.push_back(MenuItem("Notifications", MenuAction::TOGGLE_NOTIFICATIONS, MenuPage::OPTIONS,
+                                 &settings.optionalFeatures.notifications));
         items.push_back(
             MenuItem("Battery Icon", MenuAction::TOGGLE_BATTERY_ICON, MenuPage::OPTIONS, &settings.optionalFeatures.batteryIcon));
         if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_DISABLED)
@@ -378,7 +384,7 @@ void InkHUD::MenuApplet::populateAutoshowPage()
         if (settings.userApplets.active[i]) {
             const char *name = windowManager->getAppletName(i);
             bool *isActive = &(settings.userApplets.autoshow[i]);
-            items.push_back(MenuItem(name, MenuAction::TOGGLE_AUTOSHOW, MenuPage::AUTOSHOW, isActive));
+            items.push_back(MenuItem(name, MenuAction::TOGGLE_AUTOSHOW_APPLET, MenuPage::AUTOSHOW, isActive));
         }
     }
 }

@@ -30,7 +30,8 @@ class NotificationApplet : public Applet
 
     int onReceiveTextMessage(const meshtastic_MeshPacket *p);
 
-    void dismiss(); // Close the Notification Popup
+    bool isApproved(); // Does a foreground applet make notification redundant?
+    void dismiss();    // Close the Notification Popup
 
   protected:
     // Get notified when a new text message arrives

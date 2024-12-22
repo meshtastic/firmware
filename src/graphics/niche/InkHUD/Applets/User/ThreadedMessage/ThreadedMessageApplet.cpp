@@ -215,6 +215,17 @@ int InkHUD::ThreadedMessageApplet::onReceiveTextMessage(const meshtastic_MeshPac
     return 0;
 }
 
+// Don't show notifications for text messages broadcast to our channel, when the applet is displayed
+bool InkHUD::ThreadedMessageApplet::approveNotification(Notification &n)
+{
+    if (n.type == Notification::Type::NOTIFICATION_MESSAGE_BROADCAST && n.getChannel() == channelIndex)
+        return false;
+
+    // None of our business. Allow the notification.
+    else
+        return true;
+}
+
 // Save several recent messages to flash
 // Stores the contents of ThreadedMessageApplet::messages
 // Just enough messages to fill the display

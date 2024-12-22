@@ -23,9 +23,12 @@ void InkHUD::NotificationApplet::onDeactivate()
 // No need to save the message itself; we can use the cached InkHUD::latestMessage data during render()
 int InkHUD::NotificationApplet::onReceiveTextMessage(const meshtastic_MeshPacket *p)
 {
-    // Abort if applet fully deactivated
-    // Already handled by onActivate and onDeactivate, but good practice for all applets
-    if (!isActive())
+    // System applets are always active
+    assert(isActive());
+
+    // Abort if feature disabled
+    // This is a bit clumsy, but avoids complicated handling when the feature is enabled / disabled
+    if (!settings.optionalFeatures.notifications)
         return 0;
 
     Notification n;
@@ -43,13 +46,15 @@ int InkHUD::NotificationApplet::onReceiveTextMessage(const meshtastic_MeshPacket
         n.sender = p->from;
     }
 
-    // If all currently displayed applets approve, show the notification
-    if (WindowManager::getInstance()->approveNotification(n)) {
-        hasNotification = true;
-        currentNotification = n;
+    // Check if we should display the notification
+    // A foreground applet might already be displaying this info
+    hasNotification = true;
+    currentNotification = n;
+    if (isApproved()) {
         bringToForeground();
         requestUpdate();
-    }
+    } else
+        hasNotification = false; // Clear the pending notification: it was rejected
 
     // Return zero: no issues here, carry on notifying other observers!
     return 0;
@@ -118,11 +123,28 @@ void InkHUD::NotificationApplet::render()
     printThick(textM, height() / 2, text, 2, 1);
 }
 
+// Ask the WindowManager to check whether any displayed applets are already displaying the info from this notification
+// Called internally when we first get a "notifiable event", and then again before render,
+// in case autoshow swapped which applet was displayed
+bool InkHUD::NotificationApplet::isApproved()
+{
+    // Instead of an assert
+    if (!hasNotification) {
+        LOG_WARN("No notif to approve");
+        return false;
+    }
+
+    return WindowManager::getInstance()->approveNotification(currentNotification);
+}
+
+// Mark that the notification should no-longer be rendered
+// In addition to calling thing method, code needs to request a re-render of all applets
 void InkHUD::NotificationApplet::dismiss()
 {
     sendToBackground();
     hasNotification = false;
-    requestUpdate(NicheGraphics::Drivers::EInk::FAST, true, true);
+    // Not requesting update directly from this method,
+    // as it is used to dismiss notifications which have been made redundant by autoshow settings, before they are ever drawn
 }
 
 // Get a string for the main body text of a notification

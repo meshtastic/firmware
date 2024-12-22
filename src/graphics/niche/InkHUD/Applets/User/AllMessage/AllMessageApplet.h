@@ -32,14 +32,14 @@ class AllMessageApplet : public Applet
   public:
     void render() override;
 
-    bool approveNotification(Notification &n) override;
-
     void onActivate() override;
     void onDeactivate() override;
-
     int onReceiveTextMessage(const meshtastic_MeshPacket *p);
 
+    bool approveNotification(Notification &n) override; // Which notifications to suppress
+
   protected:
+    // Used to register our text message callback
     CallbackObserver<AllMessageApplet, const meshtastic_MeshPacket *> textMessageObserver =
         CallbackObserver<AllMessageApplet, const meshtastic_MeshPacket *>(this, &AllMessageApplet::onReceiveTextMessage);
 };
