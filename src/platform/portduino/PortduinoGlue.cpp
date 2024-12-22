@@ -153,6 +153,7 @@ void portduinoSetup()
     std::string gpioChipName = "gpiochip";
     settingsStrings[i2cdev] = "";
     settingsStrings[keyboardDevice] = "";
+    settingsStrings[pointerDevice] = "";
     settingsStrings[webserverrootpath] = "";
     settingsStrings[spidev] = "";
     settingsStrings[displayspidev] = "";
@@ -455,6 +456,8 @@ bool loadConfig(const char *configPath)
                 settingsMap[displayPanel] = ili9341;
             else if (yamlConfig["Display"]["Panel"].as<std::string>("") == "ILI9342")
                 settingsMap[displayPanel] = ili9342;
+            else if (yamlConfig["Display"]["Panel"].as<std::string>("") == "ILI9486")
+                settingsMap[displayPanel] = ili9486;
             else if (yamlConfig["Display"]["Panel"].as<std::string>("") == "ILI9488")
                 settingsMap[displayPanel] = ili9488;
             else if (yamlConfig["Display"]["Panel"].as<std::string>("") == "HX8357D")
@@ -515,6 +518,7 @@ bool loadConfig(const char *configPath)
         }
         if (yamlConfig["Input"]) {
             settingsStrings[keyboardDevice] = (yamlConfig["Input"]["KeyboardDevice"]).as<std::string>("");
+            settingsStrings[pointerDevice] = (yamlConfig["Input"]["PointerDevice"]).as<std::string>("");
         }
 
         if (yamlConfig["Webserver"]) {

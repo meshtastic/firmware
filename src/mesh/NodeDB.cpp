@@ -57,6 +57,7 @@ NodeDB *nodeDB = nullptr;
 EXT_RAM_BSS_ATTR meshtastic_DeviceState devicestate;
 meshtastic_MyNodeInfo &myNodeInfo = devicestate.my_node;
 meshtastic_LocalConfig config;
+meshtastic_DeviceUIConfig uiconfig{.screen_brightness = 153, .screen_timeout = 30};
 meshtastic_LocalModuleConfig moduleConfig;
 meshtastic_ChannelFile channelFile;
 
@@ -407,6 +408,13 @@ bool NodeDB::resetRadioConfig(bool factory_reset)
         screen->startAlert("Rebooting...");
         rebootAtMsec = millis() + (5 * 1000);
     }
+
+#if (defined(T_DECK) || defined(T_WATCH_S3) || defined(UNPHONE) || defined(PICOMPUTER_S3)) && defined(HAS_TFT)
+    // as long as PhoneAPI shares BT and TFT app switch BT off
+    config.bluetooth.enabled = false;
+    if (moduleConfig.external_notification.nag_timeout == 60)
+        moduleConfig.external_notification.nag_timeout = 0;
+#endif
 
     return didFactoryReset;
 }
@@ -895,6 +903,7 @@ void NodeDB::pickNewNodeNum()
 
 static const char *prefFileName = "/prefs/db.proto";
 static const char *configFileName = "/prefs/config.proto";
+static const char *uiconfigFileName = "/prefs/uiconfig.proto";
 static const char *moduleConfigFileName = "/prefs/module.proto";
 static const char *channelFileName = "/prefs/channels.proto";
 
@@ -1052,6 +1061,12 @@ void NodeDB::loadFromDisk()
         } else {
             LOG_INFO("Loaded saved channelFile version %d", channelFile.version);
         }
+    }
+
+    state = loadProto(uiconfigFileName, meshtastic_DeviceUIConfig_size, sizeof(meshtastic_DeviceUIConfig),
+                      &meshtastic_DeviceUIConfig_msg, &uiconfig);
+    if (state == LoadFileResult::LOAD_SUCCESS) {
+        LOG_INFO("Loaded UIConfig");
     }
 
     // 2.4.X - configuration migration to update new default intervals

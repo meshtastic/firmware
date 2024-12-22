@@ -55,6 +55,7 @@ enum configNames {
     displayOffsetY,
     displayInvert,
     keyboardDevice,
+    pointerDevice,
     logoutputlevel,
     traceFilename,
     webserver,
@@ -66,7 +67,7 @@ enum configNames {
     config_directory,
     mac_address
 };
-enum { no_screen, x11, st7789, st7735, st7735s, st7796, ili9341, ili9342, ili9488, hx8357d };
+enum { no_screen, x11, st7789, st7735, st7735s, st7796, ili9341, ili9342, ili9486, ili9488, hx8357d };
 enum { no_touchscreen, xpt2046, stmpe610, gt911, ft5x06 };
 enum { level_error, level_warn, level_info, level_debug, level_trace };
 
