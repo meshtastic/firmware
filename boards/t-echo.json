@@ -48,6 +48,6 @@
     "require_upload_port": true,
     "wait_for_upload_port": true
   },
-  "url": "FIXME",
-  "vendor": "TTGO"
+  "url": "https://lilygo.cc/products/t-echo-lilygo",
+  "vendor": "LILYGO"
 }
