@@ -10,7 +10,7 @@
 #define MAX_TX_QUEUE 16 // max number of packets which can be waiting for transmission
 
 #define MAX_LORA_PAYLOAD_LEN 255 // max length of 255 per Semtech's datasheets on SX12xx
-#define MESHTASTIC_HEADER_LENGTH 16
+#define MESHTASTIC_HEADER_LENGTH 32
 #define MESHTASTIC_PKC_OVERHEAD 12
 
 #define PACKET_FLAGS_HOP_LIMIT_MASK 0x07
@@ -43,6 +43,9 @@ typedef struct {
 
     // ***For future use*** Last byte of the NodeNum of the node that will relay/relayed this packet
     uint8_t relay_node;
+
+    // A 16-byte Bloom filter that tracks coverage of the current node.
+    std::array<uint8_t, BLOOM_FILTER_SIZE_BYTES> coverage_filter;
 } PacketHeader;
 
 /**

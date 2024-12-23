@@ -167,6 +167,14 @@ class NodeDB
 
     bool hasValidPosition(const meshtastic_NodeInfoLite *n);
 
+    /**
+     * @brief Retrieves a list of distinct recent direct neighbor NodeNums.
+     *
+     * @param timeWindowSecs The time window in seconds to consider a node as "recently heard."
+     * @return std::vector<NodeNum> A vector containing the NodeNums of recent direct neighbors.
+     */
+    std::vector<NodeNum> getDistinctRecentDirectNeighborIds(uint32_t timeWindowSecs);
+
   private:
     uint32_t lastNodeDbSave = 0; // when we last saved our db to flash
     /// Find a node in our DB, create an empty NodeInfoLite if missing

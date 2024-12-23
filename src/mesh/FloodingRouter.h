@@ -1,5 +1,6 @@
 #pragma once
 
+#include "CoverageFilter.h"
 #include "PacketHistory.h"
 #include "Router.h"
 
@@ -34,6 +35,14 @@ class FloodingRouter : public Router, protected PacketHistory
     /** Check if we should rebroadcast this packet, and do so if needed
      * @return true if rebroadcasted */
     bool perhapsRebroadcast(const meshtastic_MeshPacket *p);
+
+    void loadCoverageFilterFromPacket(const meshtastic_MeshPacket *p, CoverageFilter &filter);
+
+    void storeCoverageFilterInPacket(const CoverageFilter &filter, meshtastic_MeshPacket *p);
+
+    void mergeMyCoverage(CoverageFilter &coverage);
+
+    float calculateForwardProbability(const CoverageFilter &incoming);
 
   public:
     /**

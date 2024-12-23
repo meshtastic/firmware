@@ -807,6 +807,82 @@ void NodeDB::clearLocalPosition()
     setLocalPosition(meshtastic_Position_init_default);
 }
 
+/**
+ * @brief Retrieves a list of distinct recent direct neighbor NodeNums.
+ *
+ * Filters out:
+ * - The local node itself.
+ * - Ignored nodes.
+ * - Nodes not within the direct neighbor (hops_away == 0).
+ * - Nodes heard via MQTT.
+ * - Nodes not heard within the specified time window.
+ *
+ * @param timeWindowSecs The time window in seconds to consider a node as "recently heard."
+ * @return std::vector<NodeNum> A vector containing the NodeNums of recent direct neighbors.
+ */
+std::vector<NodeNum> NodeDB::getDistinctRecentDirectNeighborIds(uint32_t timeWindowSecs)
+{
+    uint32_t now = getTime();
+    NodeNum localNode = getNodeNum();
+
+    // Temporary vector to hold neighbors with their SNR for sorting
+    std::vector<std::pair<NodeNum, float>> neighborsWithSnr;
+    neighborsWithSnr.reserve(MAX_NEIGHBORS_PER_HOP); // Reserve space to avoid multiple reallocations
+
+    for (size_t i = 0; i < numMeshNodes; ++i) {
+        const meshtastic_NodeInfoLite &node = meshNodes->at(i);
+
+        // Skip our own node entry
+        if (node.num == localNode) {
+            continue;
+        }
+
+        // Skip ignored nodes
+        if (node.is_ignored) {
+            continue;
+        }
+
+        // Check if this node is a direct neighbor (hops_away == 0)
+        if (!node.has_hops_away || node.hops_away != 0) {
+            continue;
+        }
+
+        // Skip nodes heard via MQTT
+        if (node.via_mqtt) {
+            continue;
+        }
+
+        // Check if the node was heard recently within the time window
+        if (node.last_heard > 0 && (now - node.last_heard <= timeWindowSecs)) {
+            neighborsWithSnr.emplace_back(node.num, node.snr);
+        }
+    }
+
+    LOG_DEBUG("Found %zu candidates before limiting.", neighborsWithSnr.size());
+
+    // If the number of candidates exceeds MAX_NEIGHBORS_PER_HOP, select the top N based on SNR
+    if (neighborsWithSnr.size() > MAX_NEIGHBORS_PER_HOP) {
+        // Use nth_element to partially sort the vector, bringing the top N SNRs to the front
+        std::nth_element(neighborsWithSnr.begin(), neighborsWithSnr.begin() + MAX_NEIGHBORS_PER_HOP, neighborsWithSnr.end(),
+                         [](const std::pair<NodeNum, float> &a, const std::pair<NodeNum, float> &b) {
+                             return a.second > b.second; // Sort in descending order of SNR
+                         });
+
+        // Resize to keep only the top N neighbors
+        neighborsWithSnr.resize(MAX_NEIGHBORS_PER_HOP);
+    }
+
+    // Extract NodeNums from the sorted and limited list
+    std::vector<NodeNum> recentNeighbors;
+    recentNeighbors.reserve(neighborsWithSnr.size());
+    for (const auto &pair : neighborsWithSnr) {
+        recentNeighbors.push_back(pair.first);
+    }
+
+    LOG_DEBUG("Returning %zu recent direct neighbors within %u seconds.", recentNeighbors.size(), timeWindowSecs);
+    return recentNeighbors;
+}
+
 void NodeDB::cleanupMeshDB()
 {
     int newPos = 0, removed = 0;

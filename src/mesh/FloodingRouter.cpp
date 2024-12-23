@@ -58,23 +58,39 @@ bool FloodingRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
     if (!isToUs(p) && (p->hop_limit > 0) && !isFromUs(p)) {
         if (p->id != 0) {
             if (isRebroadcaster()) {
-                meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
+                CoverageFilter incomingCoverage;
+                loadCoverageFilterFromPacket(p, incomingCoverage);
 
-                tosend->hop_limit--; // bump down the hop count
+                float forwardProb = calculateForwardProbability(incomingCoverage);
+
+                float rnd = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+                if (rnd <= forwardProb) {
+
+                    meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
+
+                    tosend->hop_limit--; // bump down the hop count
 #if USERPREFS_EVENT_MODE
-                if (tosend->hop_limit > 2) {
-                    // if we are "correcting" the hop_limit, "correct" the hop_start by the same amount to preserve hops away.
-                    tosend->hop_start -= (tosend->hop_limit - 2);
-                    tosend->hop_limit = 2;
-                }
+                    if (tosend->hop_limit > 2) {
+                        // if we are "correcting" the hop_limit, "correct" the hop_start by the same amount to preserve hops away.
+                        tosend->hop_start -= (tosend->hop_limit - 2);
+                        tosend->hop_limit = 2;
+                    }
 #endif
 
-                LOG_INFO("Rebroadcast received floodmsg");
-                // Note: we are careful to resend using the original senders node id
-                // We are careful not to call our hooked version of send() - because we don't want to check this again
-                Router::send(tosend);
+                    LOG_INFO("Rebroadcasting packet ID=0x%x with ForwardProb=%.2f", p->id, forwardProb);
 
-                return true;
+                    CoverageFilter updatedCoverage = incomingCoverage;
+                    mergeMyCoverage(updatedCoverage);
+                    storeCoverageFilterInPacket(updatedCoverage, tosend);
+
+                    // Note: we are careful to resend using the original senders node id
+                    // We are careful not to call our hooked version of send() - because we don't want to check this again
+                    Router::send(tosend);
+
+                    return true;
+                } else {
+                    LOG_DEBUG("No rebroadcast: Random number %f > Forward Probability %f", rnd, forwardProb);
+                }
             } else {
                 LOG_DEBUG("No rebroadcast: Role = CLIENT_MUTE or Rebroadcast Mode = NONE");
             }
@@ -99,4 +115,62 @@ void FloodingRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
 
     // handle the packet as normal
     Router::sniffReceived(p, c);
+}
+
+void FloodingRouter::loadCoverageFilterFromPacket(const meshtastic_MeshPacket *p, CoverageFilter &filter)
+{
+    // If packet has coverage bytes (16 bytes), copy them into filter
+    // e.g. p->coverage_filter is a 16-byte array in your packet struct
+    std::array<uint8_t, BLOOM_FILTER_SIZE_BYTES> bits;
+    memcpy(bits.data(), p->coverage_filter.bytes, BLOOM_FILTER_SIZE_BYTES);
+    filter.setBits(bits);
+}
+
+void FloodingRouter::storeCoverageFilterInPacket(const CoverageFilter &filter, meshtastic_MeshPacket *p)
+{
+    auto bits = filter.getBits();
+    memcpy(p->coverage_filter.bytes, bits.data(), BLOOM_FILTER_SIZE_BYTES);
+}
+
+void FloodingRouter::mergeMyCoverage(CoverageFilter &coverage)
+{
+    // Retrieve recent direct neighbors within the time window
+    std::vector<NodeNum> recentNeighbors = nodeDB->getDistinctRecentDirectNeighborIds(RECENCY_THRESHOLD_MINUTES * 60);
+    for (auto &nodeId : recentNeighbors) {
+        coverage.add(nodeId);
+    }
+}
+
+float FloodingRouter::calculateForwardProbability(const CoverageFilter &incoming)
+{
+    // Retrieve recent direct neighbors within the time window
+    std::vector<NodeNum> recentNeighbors = nodeDB->getDistinctRecentDirectNeighborIds(RECENCY_THRESHOLD_MINUTES * 60);
+
+    if (recentNeighbors.empty()) {
+        // No neighbors to add coverage for
+        LOG_DEBUG("No recent direct neighbors to add coverage for.");
+        return 0.0f;
+    }
+
+    // Count how many neighbors are NOT yet in the coverage
+    int uncovered = 0;
+    for (auto nodeId : recentNeighbors) {
+        if (!incoming.check(nodeId)) {
+            uncovered++;
+        }
+    }
+
+    // Calculate coverage ratio
+    float coverageRatio = static_cast<float>(uncovered) / static_cast<float>(recentNeighbors.size());
+
+    // Calculate forwarding probability
+    float forwardProb = BASE_FORWARD_PROB + (coverageRatio * COVERAGE_SCALE_FACTOR);
+
+    // Clamp probability between 0 and 1
+    forwardProb = std::min(std::max(forwardProb, 0.0f), 1.0f);
+
+    LOG_DEBUG("CoverageRatio=%.2f, ForwardProb=%.2f (Uncovered=%d, Total=%zu)", coverageRatio, forwardProb, uncovered,
+              recentNeighbors.size());
+
+    return forwardProb;
 }
