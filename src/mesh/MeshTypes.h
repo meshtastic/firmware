@@ -53,13 +53,14 @@ enum RxSource {
 #define NUM_HASH_FUNCTIONS 2
 
 // Base forwarding probability - never drop below this value
-#define BASE_FORWARD_PROB 0.1f
+#define BASE_FORWARD_PROB 0.2f
 
 // Coverage scaling factor
 #define COVERAGE_SCALE_FACTOR 0.9f
 
 // Recency threshold in minutes
-#define RECENCY_THRESHOLD_MINUTES 5
+// Currently set to 1 hour because that is the minimum interval for nodeinfo broadcasts
+#define RECENCY_THRESHOLD_MINUTES 60
 
 typedef int ErrorCode;
 

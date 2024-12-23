@@ -143,6 +143,12 @@ void FloodingRouter::mergeMyCoverage(CoverageFilter &coverage)
 
 float FloodingRouter::calculateForwardProbability(const CoverageFilter &incoming)
 {
+    // If we are a router or repeater, always forward because it's assumed these are in the most advantageous locations
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
+        config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
+        return 1.0f;
+    }
+
     // Retrieve recent direct neighbors within the time window
     std::vector<NodeNum> recentNeighbors = nodeDB->getDistinctRecentDirectNeighborIds(RECENCY_THRESHOLD_MINUTES * 60);
 
