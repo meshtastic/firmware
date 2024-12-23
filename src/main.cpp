@@ -376,6 +376,8 @@ void setup()
 #endif
 #endif
 
+    initSPI();
+
     OSThread::setup();
 
     ledPeriodic = new Periodic("Blink", ledBlinker);
@@ -651,8 +653,6 @@ void setup()
 #ifdef ARCH_RP2040
     rp2040Setup();
 #endif
-
-    initSPI(); // needed here before reading from littleFS
 
     // We do this as early as possible because this loads preferences from flash
     // but we need to do this after main cpu init (esp32setup), because we need the random seed set
