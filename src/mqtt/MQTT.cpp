@@ -457,6 +457,7 @@ void MQTT::reconnect()
             enabled = true; // Start running background process again
             runASAP = true;
             reconnectCount = 0;
+            isMqttServerAddressPrivate = isPrivateIpAddress(mqttClient.remoteIP());
 
             publishNodeInfo();
             sendSubscriptions();
