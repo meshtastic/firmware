@@ -10,11 +10,11 @@ jobs:
   build-ubuntu:
     runs-on: [self-hosted, linux, self-hosted-ubuntu, ARM64]
     steps:
-      - name: Install libbluetooth
+      - name: Install libs needed for ubuntu build
         shell: bash
         run: |
           apt-get update -y --fix-missing
-          apt-get install -y libbluetooth-dev libgpiod-dev libyaml-cpp-dev openssl libssl-dev libulfius-dev liborcania-dev
+          apt-get install -y libbluetooth-dev libgpiod-dev libyaml-cpp-dev openssl libssl-dev libulfius-dev liborcania-dev libusb-1.0-0-dev libi2c-dev
 
       - name: Checkout code
         uses: actions/checkout@v4
