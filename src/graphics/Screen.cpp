@@ -126,7 +126,7 @@ static bool heartbeat = false;
 /// Check if the display can render a string (detect special chars; emoji)
 static bool haveGlyphs(const char *str)
 {
-#if defined(OLED_PL) || defined(OLED_UA) || defined(OLED_RU)
+#if defined(OLED_PL) || defined(OLED_UA) || defined(OLED_RU) || defined(OLED_CS)
     // Don't want to make any assumptions about custom language support
     return true;
 #endif
