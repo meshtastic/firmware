@@ -46,7 +46,6 @@ constexpr int reconnectMax = 5;
 static uint8_t bytes[meshtastic_MqttClientProxyMessage_size + 30]; // 12 for channel name and 16 for nodeid
 
 static bool isMqttServerAddressPrivate = false;
-static bool isDefaultMqttServer;
 
 // meshtastic_ServiceEnvelope that automatically releases dynamically allocated memory when it goes out of scope.
 struct DecodedServiceEnvelope : public meshtastic_ServiceEnvelope {
