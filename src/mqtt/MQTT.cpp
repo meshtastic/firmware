@@ -232,14 +232,21 @@ bool isPrivateIpAddress(const IPAddress &ip)
     return false;
 }
 
-std::pair<std::string, uint16_t> parseHostAndPort(std::string address, uint16_t port = 0)
+// Separate a <host>[:<port>] string. Returns a pair containing the parsed host and port. If the port is
+// not present in the input string, or is invalid, the value of the `port` argument will be returned.
+std::pair<String, uint16_t> parseHostAndPort(String server, uint16_t port = 0)
 {
-    const size_t delimIndex = address.find_first_of(':');
+    const int delimIndex = server.indexOf(':');
     if (delimIndex > 0) {
-        port = std::stoul(address.substr(delimIndex + 1, address.length()));
-        address.resize(delimIndex);
+        const long parsedPort = server.substring(delimIndex + 1, server.length()).toInt();
+        if (parsedPort < 1 || parsedPort > UINT16_MAX) {
+            LOG_WARN("Invalid MQTT port %d: %s", parsedPort, server.c_str());
+        } else {
+            port = parsedPort;
+        }
+        server[delimIndex] = 0;
     }
-    return std::make_pair(std::move(address), port);
+    return std::make_pair(std::move(server), port);
 }
 } // namespace
 
@@ -435,7 +442,7 @@ void MQTT::reconnect()
         pubSub.setClient(mqttClient);
 #endif
 
-        std::pair<std::string, uint16_t> hostAndPort = parseHostAndPort(serverAddr, serverPort);
+        std::pair<String, uint16_t> hostAndPort = parseHostAndPort(serverAddr, serverPort);
         serverAddr = hostAndPort.first.c_str();
         serverPort = hostAndPort.second;
         pubSub.setServer(serverAddr, serverPort);
@@ -450,9 +457,7 @@ void MQTT::reconnect()
             enabled = true; // Start running background process again
             runASAP = true;
             reconnectCount = 0;
-#if !defined(ARCH_PORTDUINO)
             isMqttServerAddressPrivate = isPrivateIpAddress(mqttClient.remoteIP());
-#endif
 
             publishNodeInfo();
             sendSubscriptions();

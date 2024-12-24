@@ -56,6 +56,8 @@ int32_t PowerTelemetryModule::runOnce()
             // therefore, we should only enable the sensor loop if measurement is also enabled
             if (ina219Sensor.hasSensor() && !ina219Sensor.isInitialized())
                 result = ina219Sensor.runOnce();
+            if (ina226Sensor.hasSensor() && !ina226Sensor.isInitialized())
+                result = ina226Sensor.runOnce();
             if (ina260Sensor.hasSensor() && !ina260Sensor.isInitialized())
                 result = ina260Sensor.runOnce();
             if (ina3221Sensor.hasSensor() && !ina3221Sensor.isInitialized())
@@ -170,6 +172,8 @@ bool PowerTelemetryModule::getPowerTelemetry(meshtastic_Telemetry *m)
 #if HAS_TELEMETRY && !defined(ARCH_PORTDUINO)
     if (ina219Sensor.hasSensor())
         valid = ina219Sensor.getMetrics(m);
+    if (ina226Sensor.hasSensor())
+        valid = ina226Sensor.getMetrics(m);
     if (ina260Sensor.hasSensor())
         valid = ina260Sensor.getMetrics(m);
     if (ina3221Sensor.hasSensor())
