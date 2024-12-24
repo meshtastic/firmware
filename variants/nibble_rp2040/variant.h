@@ -6,7 +6,7 @@
 
 #define HAS_CPU_SHUTDOWN 1
 
-#define USE_RFM95
+#define USE_RF95
 #define LORA_SCK 10
 #define LORA_MISO 12
 #define LORA_MOSI 11
