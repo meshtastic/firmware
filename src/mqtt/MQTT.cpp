@@ -326,7 +326,7 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
         }
 
         String host = parseHostAndPort(moduleConfig.mqtt.address).first;
-        isDefaultMqttServer = host.length() == 0 || host == default_mqtt_address;
+        isConfiguredForDefaultServer = host.length() == 0 || host == default_mqtt_address;
         IPAddress ip;
         isMqttServerAddressPrivate = ip.fromString(host.c_str()) && isPrivateIpAddress(ip);
 
@@ -635,8 +635,8 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
             return;
         }
 
-        if (isDefaultMqttServer && (mp_decoded.decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP ||
-                                    mp_decoded.decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP)) {
+        if (isConfiguredForDefaultServer && (mp_decoded.decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP ||
+                                             mp_decoded.decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP)) {
             LOG_DEBUG("MQTT onSend - Ignoring range test or detection sensor message on public mqtt");
             return;
         }
