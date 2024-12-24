@@ -149,8 +149,8 @@ jobs:
   #  uses: ./.github/workflows/package_raspbian_armv7l.yml
   #  secrets: inherit
 
-  package-ubuntu:
-    uses: ./.github/workflows/package_ubuntu.yml
+  package-ubuntu-arm64:
+    uses: ./.github/workflows/package_ubuntu_arm64.yml
     secrets: inherit
 
   package-native:
@@ -182,7 +182,8 @@ jobs:
       matrix:
         arch: [esp32, esp32s3, esp32c3, esp32c6, nrf52840, rp2040, stm32]
     runs-on: ubuntu-latest
-    needs: [
+    needs:
+      [
         build-esp32,
         build-esp32-s3,
         build-esp32-c3,
@@ -190,10 +191,7 @@ jobs:
         build-nrf52,
         build-rpi2040,
         build-stm32,
-        #package-raspbian,
-        #package-raspbian-armv7l,
-        package-native,
-        package-ubuntu,
+        package-ubuntu-arm64,
       ]
     steps:
       - name: Checkout code
@@ -274,13 +272,12 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' }}
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
-    needs:
-      [
+    needs: [
         gather-artifacts,
         #package-raspbian,
         #package-raspbian-armv7l,
         package-native,
-        package-ubuntu,
+        package-ubuntu-arm64,
       ]
     steps:
       - name: Checkout

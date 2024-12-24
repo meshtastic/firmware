@@ -7,7 +7,7 @@ permissions:
   packages: write
 
 jobs:
-  build-ubuntu:
+  build-ubuntu-arm64:
     runs-on: [self-hosted, linux, self-hosted-ubuntu, ARM64]
     steps:
       - name: Install libs needed for ubuntu build
