@@ -9,11 +9,11 @@ jobs:
   test-simulator:
     runs-on: ubuntu-latest
     steps:
-      - name: Install libbluetooth
+      - name: Install libs needed for native build
         shell: bash
         run: |
           sudo apt-get update --fix-missing
-          sudo apt-get install -y libbluetooth-dev libgpiod-dev libyaml-cpp-dev openssl libssl-dev libulfius-dev liborcania-dev
+          sudo apt-get install -y libbluetooth-dev libgpiod-dev libyaml-cpp-dev openssl libssl-dev libulfius-dev liborcania-dev libusb-1.0-0-dev libi2c-dev
 
       - name: Checkout code
         uses: actions/checkout@v4
