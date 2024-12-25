@@ -46,10 +46,12 @@ jobs:
 
       - name: Integration test
         run: |
-          .pio/build/coverage/program & sleep 10 # 5 seconds was not enough
+          .pio/build/coverage/program &
+          PID=$!
+          timeout 20 bash -c "until ls -al /proc/$PID/fd | grep socket; do sleep 1; done"
           echo "Simulator started, launching python test..."
           python3 -c 'from meshtastic.test import testSimulator; testSimulator()'
-          sleep 10
+          wait
           lcov ${{ env.LCOV_CAPTURE_FLAGS }} --test-name integration --output-file coverage_integration.info
 
       - name: PlatformIO Tests
