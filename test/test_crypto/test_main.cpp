@@ -1,5 +1,6 @@
 #include "CryptoEngine.h"
 
+#include "TestUtil.h"
 #include <unity.h>
 
 void HexToBytes(uint8_t *result, const std::string hex, size_t len = 0)
@@ -170,6 +171,7 @@ void setup()
     delay(10);
     delay(2000);
 
+    initializeTestEnvironment();
     UNITY_BEGIN(); // IMPORTANT LINE!
     RUN_TEST(test_SHA256);
     RUN_TEST(test_ECB_AES256);
