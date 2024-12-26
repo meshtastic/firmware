@@ -66,7 +66,7 @@ void MotionSensor::drawFrameGyroWarning(OLEDDisplay *display, OLEDDisplayUiState
     // int y_offset = display->height() <= 80 ? 0 : 32;
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
-    display->drawString(x, y, "Place Screen Face Up\nPointing North\nKeep Still");
+    display->drawString(x, y, "Place Screen Face Up\n& Keep Still");
 
     uint8_t timeRemaining = (screen->getEndCalibration() - millis()) / 1000;
     sprintf(timeRemainingBuffer, "Starting in ( %02d )", timeRemaining);
@@ -120,32 +120,42 @@ void MotionSensor::getMagCalibrationData(float x, float y, float z)
     }
 
     if (firstCalibrationRead) {
-        sensorConfig.mAccel.min.x = x;
-        sensorConfig.mAccel.max.x = x;
-        sensorConfig.mAccel.min.y = y;
-        sensorConfig.mAccel.max.y = y;
-        sensorConfig.mAccel.min.z = z;
-        sensorConfig.mAccel.max.z = z;
+        magCalibrationMinMax.min.x = x;
+        magCalibrationMinMax.max.x = x;
+        magCalibrationMinMax.min.y = y;
+        magCalibrationMinMax.max.y = y;
+        magCalibrationMinMax.min.z = z;
+        magCalibrationMinMax.max.z = z;
         firstCalibrationRead = false;
     } else {
-        if (x > sensorConfig.mAccel.max.x)
-            sensorConfig.mAccel.max.x = x;
-        if (x < sensorConfig.mAccel.min.x)
-            sensorConfig.mAccel.min.x = x;
-        if (y > sensorConfig.mAccel.max.y)
-            sensorConfig.mAccel.max.y = y;
-        if (y < sensorConfig.mAccel.min.y)
-            sensorConfig.mAccel.min.y = y;
-        if (z > sensorConfig.mAccel.max.z)
-            sensorConfig.mAccel.max.z = z;
-        if (z < sensorConfig.mAccel.min.z)
-            sensorConfig.mAccel.min.z = z;
+        if (x > magCalibrationMinMax.max.x)
+            magCalibrationMinMax.max.x = x;
+        if (x < magCalibrationMinMax.min.x)
+            magCalibrationMinMax.min.x = x;
+        if (y > magCalibrationMinMax.max.y)
+            magCalibrationMinMax.max.y = y;
+        if (y < magCalibrationMinMax.min.y)
+            magCalibrationMinMax.min.y = y;
+        if (z > magCalibrationMinMax.max.z)
+            magCalibrationMinMax.max.z = z;
+        if (z < magCalibrationMinMax.min.z)
+            magCalibrationMinMax.min.z = z;
     }
 
     uint32_t now = millis();
     if (now > endMagCalibrationAt) {
+        sensorConfig.mAccel.x = (magCalibrationMinMax.max.x + magCalibrationMinMax.min.x) / 2;
+        sensorConfig.mAccel.y = (magCalibrationMinMax.max.y + magCalibrationMinMax.min.y) / 2;
+        sensorConfig.mAccel.z = (magCalibrationMinMax.max.z + magCalibrationMinMax.min.z) / 2;
+
         doMagCalibration = false;
         endMagCalibrationAt = 0;
+        magCalibrationMinMax.min.x = 0;
+        magCalibrationMinMax.max.x = 0;
+        magCalibrationMinMax.min.y = 0;
+        magCalibrationMinMax.max.y = 0;
+        magCalibrationMinMax.min.z = 0;
+        magCalibrationMinMax.max.z = 0;
         showingScreen = false;
         screen->endAlert();
 
@@ -221,32 +231,38 @@ void MotionSensor::getGyroCalibrationData(float g_x, float g_y, float g_z, float
         // determine orientation multipliers based on down direction
         if (abs(accelCalibrationSum.x) > abs(accelCalibrationSum.y) && abs(accelCalibrationSum.x) > abs(accelCalibrationSum.z)) {
             if (accelCalibrationSum.x >= 0) {
+                // X axis oriented with down positive
                 sensorConfig.orientation.x = 1;
                 sensorConfig.orientation.y = 1;
                 sensorConfig.orientation.z = 1;
             } else {
+                // X axis oriented with down negative
                 sensorConfig.orientation.x = 1;
-                sensorConfig.orientation.y = 1;
-                sensorConfig.orientation.z = 1;
+                sensorConfig.orientation.y = -1;
+                sensorConfig.orientation.z = -1;
             }
         } else if (abs(accelCalibrationSum.y) > abs(accelCalibrationSum.x) &&
                    abs(accelCalibrationSum.y) > abs(accelCalibrationSum.z)) {
             if (accelCalibrationSum.y >= 0) {
+                // Y axis oriented with down positive
                 sensorConfig.orientation.x = 1;
                 sensorConfig.orientation.y = 1;
                 sensorConfig.orientation.z = 1;
             } else {
-                sensorConfig.orientation.x = 1;
+                // Y axis oriented with down negative
+                sensorConfig.orientation.x = -1;
                 sensorConfig.orientation.y = 1;
-                sensorConfig.orientation.z = 1;
+                sensorConfig.orientation.z = -1;
             }
         } else if (abs(accelCalibrationSum.z) > abs(accelCalibrationSum.x) &&
                    abs(accelCalibrationSum.z) > abs(accelCalibrationSum.y)) {
             if (accelCalibrationSum.z >= 0) {
-                sensorConfig.orientation.x = -1;
-                sensorConfig.orientation.y = -1;
-                sensorConfig.orientation.z = -1;
+                // Z axis oriented with down positive
+                sensorConfig.orientation.x = 1;
+                sensorConfig.orientation.y = 1;
+                sensorConfig.orientation.z = 1;
             } else {
+                // Z axis oriented with down negative
                 sensorConfig.orientation.x = -1;
                 sensorConfig.orientation.y = -1;
                 sensorConfig.orientation.z = 1;
@@ -261,6 +277,12 @@ void MotionSensor::getGyroCalibrationData(float g_x, float g_y, float g_z, float
         saveState();
         doGyroCalibration = false;
         endGyroCalibrationAt = 0;
+        accelCalibrationSum.x = 0;
+        accelCalibrationSum.y = 0;
+        accelCalibrationSum.z = 0;
+        gyroCalibrationSum.x = 0;
+        gyroCalibrationSum.y = 0;
+        gyroCalibrationSum.z = 0;
         showingScreen = false;
         screen->endAlert();
     }
@@ -290,9 +312,12 @@ void MotionSensor::saveState()
 #ifdef FSCom
     memcpy(&sensorState, &sensorConfig, sizeof(SensorConfig));
 
-    LOG_INFO("Motion Sensor save calibration min_x: %.4f, max_X: %.4f, min_Y: %.4f, max_Y: %.4f, min_Z: %.4f, max_Z: %.4f",
-             sensorConfig.mAccel.min.x, sensorConfig.mAccel.max.x, sensorConfig.mAccel.min.y, sensorConfig.mAccel.max.y,
-             sensorConfig.mAccel.min.z, sensorConfig.mAccel.max.z);
+    LOG_INFO("Save MAG calibration center_x: %.4f, center_Y: %.4f, center_Z: %.4f", sensorConfig.mAccel.x, sensorConfig.mAccel.y,
+             sensorConfig.mAccel.z);
+    LOG_INFO("Save GYRO calibration center_x: %.4f, center_Y: %.4f, center_Z: %.4f", sensorConfig.gyroAccel.x,
+             sensorConfig.gyroAccel.y, sensorConfig.gyroAccel.z);
+    LOG_INFO("Save ORIENT calibration: x=%i, y=%i, z=%i", sensorConfig.orientation.x, sensorConfig.orientation.y,
+             sensorConfig.orientation.z);
 
     if (FSCom.exists(configFileName) && !FSCom.remove(configFileName)) {
         LOG_WARN("Can't remove old Motion Sensor config state file");

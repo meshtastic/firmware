@@ -16,12 +16,22 @@ bool BMX160Sensor::init()
     if (sensor.begin()) {
         // set output data rate
         sensor.ODR_Config(BMX160_ACCEL_ODR_100HZ, BMX160_GYRO_ODR_100HZ);
+        sensor.setGyroRange(eGyroRange_500DPS);
+        sensor.setAccelRange(eAccelRange_2G);
+
+        // default location for the BMX160 is on the rear of the board with Z negative
+        sensorConfig.orientation.x = -1;
+        sensorConfig.orientation.y = -1;
+        sensorConfig.orientation.z = 1;
 
         loadState();
 
-        LOG_INFO("BMX160 load calibration min_x: %.4f, max_X: %.4f, min_Y: %.4f, max_Y: %.4f, min_Z: %.4f, max_Z: %.4f",
-                 sensorConfig.mAccel.min.x, sensorConfig.mAccel.max.x, sensorConfig.mAccel.min.y, sensorConfig.mAccel.max.y,
-                 sensorConfig.mAccel.min.z, sensorConfig.mAccel.max.z);
+        LOG_INFO("BMX160 MAG calibration center_x: %.4f, center_Y: %.4f, center_Z: %.4f", sensorConfig.mAccel.x,
+                 sensorConfig.mAccel.y, sensorConfig.mAccel.z);
+        LOG_INFO("BMX160 GYRO calibration center_x: %.4f, center_Y: %.4f, center_Z: %.4f", sensorConfig.gyroAccel.x,
+                 sensorConfig.gyroAccel.y, sensorConfig.gyroAccel.z);
+        LOG_INFO("BMX160 ORIENT calibration: x=%i, y=%i, z=%i", sensorConfig.orientation.x, sensorConfig.orientation.y,
+                 sensorConfig.orientation.z);
 
         return true;
     }
@@ -47,24 +57,26 @@ int32_t BMX160Sensor::runOnce()
         getGyroCalibrationData(gyroAccel.x, gyroAccel.y, gyroAccel.z, gAccel.x, gAccel.y, gAccel.z);
     }
 
-    int highestRealX = sensorConfig.mAccel.max.x - (sensorConfig.mAccel.max.x + sensorConfig.mAccel.min.x) / 2;
+    // int highestRealX = sensorConfig.mAccel.max.x - (sensorConfig.mAccel.max.x + sensorConfig.mAccel.min.x) / 2;
 
-    magAccel.x -= (sensorConfig.mAccel.max.x + sensorConfig.mAccel.min.x) / 2;
-    magAccel.y -= (sensorConfig.mAccel.max.y + sensorConfig.mAccel.min.y) / 2;
-    magAccel.z -= (sensorConfig.mAccel.max.z + sensorConfig.mAccel.min.z) / 2;
+    magAccel.x -= sensorConfig.mAccel.x;
+    magAccel.y -= sensorConfig.mAccel.y;
+    magAccel.z -= sensorConfig.mAccel.z;
+
     FusionVector ga, ma;
-    ga.axis.x = gAccel.x * sensorConfig.orientation.x; // default location for the BMX160 is on the rear of the board
+    ga.axis.x = gAccel.x * sensorConfig.orientation.x;
     ga.axis.y = gAccel.y * sensorConfig.orientation.y;
     ga.axis.z = gAccel.z * sensorConfig.orientation.z;
     ma.axis.x = magAccel.x * sensorConfig.orientation.x;
     ma.axis.y = magAccel.y * sensorConfig.orientation.y;
     ma.axis.z = magAccel.z * sensorConfig.orientation.z * 3;
 
+    // Use calibration orientation instead of swap based on CompassOrientation definition
     // If we're set to one of the inverted positions
-    if (config.display.compass_orientation > meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270) {
-        ma = FusionAxesSwap(ma, FusionAxesAlignmentNXNYPZ);
-        ga = FusionAxesSwap(ga, FusionAxesAlignmentNXNYPZ);
-    }
+    // if (config.display.compass_orientation > meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270) {
+    //     ma = FusionAxesSwap(ma, FusionAxesAlignmentNXNYPZ);
+    //     ga = FusionAxesSwap(ga, FusionAxesAlignmentNXNYPZ);
+    // }
 
     float heading = FusionCompassCalculateHeading(FusionConventionNed, ga, ma);
 
@@ -85,6 +97,11 @@ int32_t BMX160Sensor::runOnce()
         heading += 270;
         break;
     }
+
+    // LOG_DEBUG("MAG Sensor Data: X=%.4f, Y=%.4f, Z=%.4f", magAccel.x, magAccel.y, magAccel.z);
+    // LOG_DEBUG("ACCEL Sensor Data: X=%.4f, Y=%.4f, Z=%.4f", gAccel.x, gAccel.y, gAccel.z);
+    // LOG_DEBUG("HEADING Sensor Data: %.1f deg", heading);
+    // LOG_DEBUG("Gyro Sensor Data: X=%.4f, Y=%.4f, Z=%.4f", gyroAccel.x, gyroAccel.y, gyroAccel.z);
 
     screen->setHeading(heading);
 #endif

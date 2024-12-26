@@ -34,7 +34,7 @@ struct minMaxXYZ {
     xyzFloat max;
 };
 struct SensorConfig {
-    minMaxXYZ mAccel;
+    xyzFloat mAccel;
     xyzFloat gyroAccel;
     // xyzFloat gAccel;
     xyzInt orientation;
@@ -93,6 +93,7 @@ class MotionSensor
     uint32_t endGyroCalibrationAt = 0;
     xyzFloat gyroCalibrationSum;
     xyzInt accelCalibrationSum;
+    minMaxXYZ magCalibrationMinMax;
     uint16_t calibrationCount = 0;
 
     void getMagCalibrationData(float x, float y, float z);
