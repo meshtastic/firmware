@@ -79,6 +79,8 @@ class MQTT : private concurrency::OSThread
 
     void start() { setIntervalFromNow(0); };
 
+    bool isUsingDefaultServer() { return isConfiguredForDefaultServer; }
+
   protected:
     struct QueueEntry {
         std::string topic;
@@ -87,6 +89,7 @@ class MQTT : private concurrency::OSThread
     PointerQueue<QueueEntry> mqttQueue;
 
     int reconnectCount = 0;
+    bool isConfiguredForDefaultServer = true;
 
     virtual int32_t runOnce() override;
 
