@@ -2,7 +2,7 @@
 
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
 
-char timeRemainingBuffer[12];
+char timeRemainingBuffer[20];
 
 // screen is defined in main.cpp
 extern graphics::Screen *screen;
