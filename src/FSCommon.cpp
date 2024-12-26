@@ -55,6 +55,11 @@ extern "C" void lfs_assert(const char *reason)
 {
     LOG_ERROR("LFS assert: %s", reason);
     lfs_assert_failed = true;
+
+    // CORRUPTED FILESYSTEM. This causes bootloop so
+    // might as well try formatting now.
+    LOG_ERROR("Trying FSCom.format()");
+    FSCom.format();
 }
 
 /**
