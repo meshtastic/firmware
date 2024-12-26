@@ -178,9 +178,7 @@ void setup()
     RUN_TEST(test_DH25519);
     RUN_TEST(test_AES_CTR);
     RUN_TEST(test_PKC_Decrypt);
+    exit(UNITY_END()); // stop unit testing
 }
 
-void loop()
-{
-    UNITY_END(); // stop unit testing
-}
+void loop() {}
