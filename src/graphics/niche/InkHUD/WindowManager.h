@@ -6,7 +6,7 @@
 
     Tasks include:
     - containing instances of Tiles and Applets
-    - co-ordinating refreshes
+    - co-ordinating display updates
     - interacting with other NicheGraphics componets, such as the driver, and input sources
     - handling system-wide events (e.g. shutdown)
 
@@ -28,6 +28,7 @@
 #include "./Persistence.h"
 #include "./Tile.h"
 #include "./Types.h"
+#include "./UpdateMediator.h"
 #include "graphics/niche/Drivers/EInk/EInk.h"
 
 namespace NicheGraphics::InkHUD
@@ -44,9 +45,11 @@ class WindowManager : protected concurrency::OSThread
   public:
     static WindowManager *getInstance(); // Get or create singleton instance
 
-    void setDriver(NicheGraphics::Drivers::EInk *driver); // Assign a driver class
-    void addApplet(const char *name, Applet *a, bool defaultActive = false, bool defaultAutoshow = false); // Select feature-set
-    void begin(); // Start running the window manager (provisioning done)
+    void setDriver(NicheGraphics::Drivers::EInk *driver);                   // Assign a driver class
+    void setDisplayResilience(uint8_t fastPerFull, float stressMultiplier); // How many FAST updates before FULL
+    void addApplet(const char *name, Applet *a, bool defaultActive = false,
+                   bool defaultAutoshow = false); // Select feature-set
+    void begin();                                 // Start running the window manager (provisioning done)
 
     void createSystemApplets(); // Instantiate and activate system applets
     void createSystemTiles();   // Instantiate tiles which host system applets
@@ -110,6 +113,8 @@ class WindowManager : protected concurrency::OSThread
     uint16_t imageBufferHeight;
     uint16_t imageBufferWidth;
     uint32_t imageBufferSize; // Bytes
+
+    UpdateMediator mediator; // Decides which E-Ink UpdateType to use; responsible for display health
 
     // User Applets
     std::vector<Applet *> userApplets;

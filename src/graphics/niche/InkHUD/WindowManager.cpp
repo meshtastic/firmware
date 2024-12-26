@@ -56,6 +56,18 @@ void InkHUD::WindowManager::setDriver(Drivers::EInk *driver)
     driver->update(imageBuffer, Drivers::EInk::FULL);
 }
 
+// Sets the ideal ratio of FAST updates to FULL updates
+// We want as many FAST updates as possible, without causing gradual degradation of the display
+// If explicitly requested, number of FAST updates may exceed fastPerFull value.
+// In this case, the stressMultiplier is applied, causing the "FULL update debt" to increase by more than normal
+// The stressMultplier helps the display recover from particularly taxing periods of use
+// (Default arguments of 5,2 are very conservative values)
+void InkHUD::WindowManager::setDisplayResilience(uint8_t fastPerFull = 5, float stressMultiplier = 2.0)
+{
+    mediator.fastPerFull = fastPerFull;
+    mediator.stressMultiplier = stressMultiplier;
+}
+
 // Register a user applet with the WindowManager
 // This is called in setupNicheGraphics()
 // This should be the only time that specific user applets are mentioned in the code
@@ -336,7 +348,7 @@ void InkHUD::WindowManager::handleButtonShort()
 {
     if (notificationApplet->isForeground()) {
         notificationApplet->dismiss();
-        requestUpdate(EInk::UpdateTypes::FAST, true, true); // Redraw everything, to clear the notification
+        requestUpdate(EInk::UpdateTypes::FULL, true, true); // Redraw everything, to clear the notification
     }
 
     else if (!menuApplet->isForeground())
@@ -832,12 +844,9 @@ void InkHUD::WindowManager::render(bool force)
         }
     }
 
-    // Testing only
-    // Call a simple full refresh, unless explicitly requested otherwise
-    // In future: fewer full refreshes
     if (imageChanged) {
-        LOG_DEBUG("Updating display");
-        driver->update(imageBuffer, requestedUpdateType, requestedAsync);
+        driver->update(imageBuffer, mediator.evaluate(requestedUpdateType), requestedAsync);
+        LOG_DEBUG("Updated display");
     }
 
     // All done; display driver will do the rest

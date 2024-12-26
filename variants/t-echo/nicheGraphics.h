@@ -54,6 +54,10 @@ void setupNicheGraphics()
     // Set the driver
     windowManager->setDriver(driver);
 
+    // Set how many FAST updates per FULL update
+    // Set how unhealthy additional FAST updates beyond this number are
+    windowManager->setDisplayResilience(20, 1.5);
+
     // Prepare fonts
     InkHUD::AppletFont largeFont(FreeSans9pt7b);
     InkHUD::AppletFont smallFont(FreeSans6pt7b);

@@ -205,7 +205,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     case EXIT:
         sendToBackground();                              // Menu applet dismissed, allow normal behavior to resume
         getTile()->displayedApplet->bringToForeground(); // Restore the previous user applet
-        requestUpdate(Drivers::EInk::UpdateTypes::FULL);
+        // requestUpdate(Drivers::EInk::UpdateTypes::FULL);
         break;
 
     default:
