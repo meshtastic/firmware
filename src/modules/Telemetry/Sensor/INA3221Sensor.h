@@ -3,11 +3,12 @@
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "CurrentSensor.h"
 #include "TelemetrySensor.h"
 #include "VoltageSensor.h"
 #include <INA3221.h>
 
-class INA3221Sensor : public TelemetrySensor, VoltageSensor
+class INA3221Sensor : public TelemetrySensor, VoltageSensor, CurrentSensor
 {
   private:
     INA3221 ina3221 = INA3221(INA3221_ADDR42_SDA);
@@ -35,6 +36,7 @@ class INA3221Sensor : public TelemetrySensor, VoltageSensor
     int32_t runOnce() override;
     bool getMetrics(meshtastic_Telemetry *measurement) override;
     virtual uint16_t getBusVoltageMv() override;
+    virtual int16_t getCurrentMa() override;
 };
 
 struct _INA3221Measurement {

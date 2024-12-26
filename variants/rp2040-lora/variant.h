@@ -15,7 +15,7 @@
 // rxd = 9
 
 #define EXT_NOTIFY_OUT 22
-#undef BUTTON_PIN // Pin 17 used for antenna switching via DIO4
+#define BUTTON_PIN -1 // Pin 17 used for antenna switching via DIO4
 
 #define LED_PIN PIN_LED
 
