@@ -73,13 +73,6 @@ class MotionSensor
     // Register a button press when a double-tap is detected
     virtual void buttonPress();
 
-#if defined(RAK_4631) & !MESHTASTIC_EXCLUDE_SCREEN
-    // draw an OLED frame (currently only used by the RAK4631 BMX160 sensor)
-    static void drawFrameCalibration(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-    static void drawFrameGyroWarning(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-    static void drawFrameGyroCalibration(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-#endif
-
     ScanI2C::FoundDevice device;
 
     SensorConfig sensorConfig;
@@ -96,14 +89,21 @@ class MotionSensor
     minMaxXYZ magCalibrationMinMax;
     uint16_t calibrationCount = 0;
 
+    const char *configFileName = "/prefs/motionSensor.dat";
+    uint8_t sensorState[MAX_STATE_BLOB_SIZE] = {0};
+
+#if defined(RAK_4631) & !MESHTASTIC_EXCLUDE_SCREEN
+    // draw an OLED frame (currently only used by the RAK4631 BMX160 sensor)
+    static void drawFrameCalibration(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+    static void drawFrameGyroWarning(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+    static void drawFrameGyroCalibration(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+
     void getMagCalibrationData(float x, float y, float z);
     void gyroCalibrationWarning();
     void getGyroCalibrationData(float g_x, float g_y, float g_z, float a_x, float a_y, float a_z);
-
-    const char *configFileName = "/prefs/motionSensor.dat";
-    uint8_t sensorState[MAX_STATE_BLOB_SIZE] = {0};
     void loadState();
     void saveState();
+#endif
 };
 
 namespace MotionSensorI2C

@@ -31,6 +31,29 @@ ScanI2C::I2CPort MotionSensor::devicePort()
     return device.address.port;
 }
 
+#if !MESHTASTIC_EXCLUDE_POWER_FSM
+void MotionSensor::wakeScreen()
+{
+    if (powerFSM.getState() == &stateDARK) {
+        LOG_DEBUG("Motion wakeScreen detected");
+        powerFSM.trigger(EVENT_INPUT);
+    }
+}
+
+void MotionSensor::buttonPress()
+{
+    LOG_DEBUG("Motion buttonPress detected");
+    powerFSM.trigger(EVENT_PRESS);
+}
+
+#else
+
+void MotionSensor::wakeScreen() {}
+
+void MotionSensor::buttonPress() {}
+
+#endif
+
 #if defined(RAK_4631) & !MESHTASTIC_EXCLUDE_SCREEN
 void MotionSensor::drawFrameCalibration(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
@@ -86,30 +109,6 @@ void MotionSensor::drawFrameGyroCalibration(OLEDDisplay *display, OLEDDisplayUiS
     display->setFont(FONT_SMALL);
     display->drawString(x, y + 40, timeRemainingBuffer);
 }
-#endif
-
-#if !MESHTASTIC_EXCLUDE_POWER_FSM
-void MotionSensor::wakeScreen()
-{
-    if (powerFSM.getState() == &stateDARK) {
-        LOG_DEBUG("Motion wakeScreen detected");
-        powerFSM.trigger(EVENT_INPUT);
-    }
-}
-
-void MotionSensor::buttonPress()
-{
-    LOG_DEBUG("Motion buttonPress detected");
-    powerFSM.trigger(EVENT_PRESS);
-}
-
-#else
-
-void MotionSensor::wakeScreen() {}
-
-void MotionSensor::buttonPress() {}
-
-#endif
 
 void MotionSensor::getMagCalibrationData(float x, float y, float z)
 {
@@ -335,5 +334,7 @@ void MotionSensor::saveState()
     LOG_ERROR("ERROR: Filesystem not implemented");
 #endif
 }
+
+#endif
 
 #endif
