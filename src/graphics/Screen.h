@@ -429,6 +429,86 @@ class Screen : public concurrency::OSThread
 
 #endif
 
+#if defined(OLED_CS)
+
+        switch (last) {
+        case 0xC2: {
+            SKIPREST = false;
+            return (uint8_t)ch;
+        }
+
+        case 0xC3: {
+            SKIPREST = false;
+            return (uint8_t)(ch | 0xC0);
+        }
+
+        case 0xC4: {
+            SKIPREST = false;
+            if (ch == 140)
+                return (uint8_t)(129); // Č
+            if (ch == 141)
+                return (uint8_t)(138); // č
+            if (ch == 142)
+                return (uint8_t)(130); // Ď
+            if (ch == 143)
+                return (uint8_t)(139); // ď
+            if (ch == 154)
+                return (uint8_t)(131); // Ě
+            if (ch == 155)
+                return (uint8_t)(140); // ě
+            // Slovak specific glyphs
+            if (ch == 185)
+                return (uint8_t)(147); // Ĺ
+            if (ch == 186)
+                return (uint8_t)(148); // ĺ
+            if (ch == 189)
+                return (uint8_t)(149); // Ľ
+            if (ch == 190)
+                return (uint8_t)(150); // ľ
+            break;
+        }
+
+        case 0xC5: {
+            SKIPREST = false;
+            if (ch == 135)
+                return (uint8_t)(132); // Ň
+            if (ch == 136)
+                return (uint8_t)(141); // ň
+            if (ch == 152)
+                return (uint8_t)(133); // Ř
+            if (ch == 153)
+                return (uint8_t)(142); // ř
+            if (ch == 160)
+                return (uint8_t)(134); // Š
+            if (ch == 161)
+                return (uint8_t)(143); // š
+            if (ch == 164)
+                return (uint8_t)(135); // Ť
+            if (ch == 165)
+                return (uint8_t)(144); // ť
+            if (ch == 174)
+                return (uint8_t)(136); // Ů
+            if (ch == 175)
+                return (uint8_t)(145); // ů
+            if (ch == 189)
+                return (uint8_t)(137); // Ž
+            if (ch == 190)
+                return (uint8_t)(146); // ž
+            // Slovak specific glyphs
+            if (ch == 148)
+                return (uint8_t)(151); // Ŕ
+            if (ch == 149)
+                return (uint8_t)(152); // ŕ
+            break;
+        }
+        }
+
+        // We want to strip out prefix chars for two-byte char formats
+        if (ch == 0xC2 || ch == 0xC3 || ch == 0xC4 || ch == 0xC5)
+            return (uint8_t)0;
+
+#endif
+
         // If we already returned an unconvertable-character symbol for this unconvertable-character sequence, return NULs for the
         // rest of it
         if (SKIPREST)
