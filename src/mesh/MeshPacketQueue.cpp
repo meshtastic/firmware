@@ -16,6 +16,12 @@ inline uint32_t getPriority(const meshtastic_MeshPacket *p)
 bool CompareMeshPacketFunc(const meshtastic_MeshPacket *p1, const meshtastic_MeshPacket *p2)
 {
     assert(p1 && p2);
+
+    // If one packet is in the late transmit window, prefer the other one
+    if ((bool)p1->tx_after != (bool)p2->tx_after) {
+        return !p1->tx_after;
+    }
+
     auto p1p = getPriority(p1), p2p = getPriority(p2);
     // If priorities differ, use that
     // for equal priorities, prefer packets already on mesh.
@@ -94,11 +100,11 @@ meshtastic_MeshPacket *MeshPacketQueue::getFront()
 }
 
 /** Attempt to find and remove a packet from this queue.  Returns a pointer to the removed packet, or NULL if not found */
-meshtastic_MeshPacket *MeshPacketQueue::remove(NodeNum from, PacketId id)
+meshtastic_MeshPacket *MeshPacketQueue::remove(NodeNum from, PacketId id, bool tx_normal, bool tx_late)
 {
     for (auto it = queue.begin(); it != queue.end(); it++) {
         auto p = (*it);
-        if (getFrom(p) == from && p->id == id) {
+        if (getFrom(p) == from && p->id == id && ((tx_normal && !p->tx_after) || (tx_late && p->tx_after))) {
             queue.erase(it);
             return p;
         }
@@ -114,15 +120,29 @@ bool MeshPacketQueue::replaceLowerPriorityPacket(meshtastic_MeshPacket *p)
     if (queue.empty()) {
         return false; // No packets to replace
     }
+
     // Check if the packet at the back has a lower priority than the new packet
     auto &backPacket = queue.back();
-    if (backPacket->priority < p->priority) {
+    if (!backPacket->tx_after && backPacket->priority < p->priority) {
         // Remove the back packet
         packetPool.release(backPacket);
         queue.pop_back();
         // Insert the new packet in the correct order
         enqueue(p);
         return true;
+    }
+
+    if (backPacket->tx_after) {
+        // Check if there's a non-late packet with lower priority
+        auto it = queue.end();
+        auto refPacket = *--it;
+        for (; refPacket->tx_after && it != queue.begin(); refPacket = *--it)
+            ;
+        if (!refPacket->tx_after && refPacket->priority < p->priority) {
+            packetPool.release(refPacket);
+            enqueue(refPacket);
+            return true;
+        }
     }
 
     // If the back packet's priority is not lower, no replacement occurs
