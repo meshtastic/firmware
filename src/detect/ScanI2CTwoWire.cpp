@@ -458,11 +458,11 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 i2cBus->endTransmission();
                 len = i2cBus->readBytes(info, 5);
                 if (len == 5 && memcmp(expectedInfo, info, len) == 0) {
-                    LOG_INFO("NXP SE050 crypto chip found\n");
+                    LOG_INFO("NXP SE050 crypto chip found");
                     type = NXP_SE050;
 
                 } else {
-                    LOG_INFO("FT6336U touchscreen found\n");
+                    LOG_INFO("FT6336U touchscreen found");
                     type = FT6336U;
                 }
                 break;
