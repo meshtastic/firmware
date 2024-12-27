@@ -88,13 +88,13 @@ bool QMA6100PSingleton::init(ScanI2C::FoundDevice device)
     bool status = begin(device.address.address, &Wire);
 #endif
     if (status != true) {
-        LOG_WARN("QMA6100P init begin failed\n");
+        LOG_WARN("QMA6100P init begin failed");
         return false;
     }
     delay(20);
     // SW reset to make sure the device starts in a known state
     if (softwareReset() != true) {
-        LOG_WARN("QMA6100P init reset failed\n");
+        LOG_WARN("QMA6100P init reset failed");
         return false;
     }
     delay(20);

@@ -176,7 +176,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         handleSetHamMode(r->set_ham_mode);
         break;
     case meshtastic_AdminMessage_get_ui_config_request_tag: {
-        LOG_INFO("Client is getting device-ui config\n");
+        LOG_INFO("Client is getting device-ui config");
         handleGetDeviceUIConfig(mp);
         handled = true;
         break;
@@ -241,7 +241,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         break;
     }
     case meshtastic_AdminMessage_store_ui_config_tag: {
-        LOG_INFO("Storing device-ui config\n");
+        LOG_INFO("Storing device-ui config");
         handleStoreDeviceUIConfig(r->store_ui_config);
         break;
     }
@@ -488,7 +488,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_ROUTER,
                       meshtastic_Config_DeviceConfig_Role_REPEATER)) {
             config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_ALL;
-            const char *warning = "Rebroadcast mode can't be set to NONE for a router or repeater\n";
+            const char *warning = "Rebroadcast mode can't be set to NONE for a router or repeater";
             LOG_WARN(warning);
             sendWarning(warning);
         }
