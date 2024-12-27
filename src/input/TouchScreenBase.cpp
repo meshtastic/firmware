@@ -113,13 +113,13 @@ int32_t TouchScreenBase::runOnce()
         if (_tapped) {
             _tapped = false;
             e.touchEvent = static_cast<char>(TOUCH_ACTION_TAP);
-            LOG_DEBUG("action TAP(%d/%d)\n", _last_x, _last_y);
+            LOG_DEBUG("action TAP(%d/%d)", _last_x, _last_y);
         }
     } else {
         if (_tapped && (time_t(millis()) - _start) > TIME_LONG_PRESS - 50) {
             _tapped = false;
             e.touchEvent = static_cast<char>(TOUCH_ACTION_TAP);
-            LOG_DEBUG("action TAP(%d/%d)\n", _last_x, _last_y);
+            LOG_DEBUG("action TAP(%d/%d)", _last_x, _last_y);
         }
     }
 #else
