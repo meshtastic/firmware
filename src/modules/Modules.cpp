@@ -173,7 +173,7 @@ void setupModules()
         aSerialKeyboardImpl->init();
 #endif // INPUTBROKER_MATRIX_TYPE
 #endif // HAS_BUTTON
-#if ARCH_PORTDUINO
+#if ARCH_PORTDUINO && !HAS_TFT
         aLinuxInputImpl = new LinuxInputImpl();
         aLinuxInputImpl->init();
 #endif
