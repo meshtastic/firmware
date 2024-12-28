@@ -315,6 +315,25 @@ void printPacket(const char *prefix, const meshtastic_MeshPacket *p)
         out += " encrypted";
     }
 
+    // --- Coverage filter logging ---
+    if (p->coverage_filter.size > 0) {
+        // If the coverage_filter.size is 0, you might skip printing or
+        // choose to indicate it differently. Usually it will be 16 though.
+        std::string coverageHex;
+        // Reserve enough space for 2 hex characters per byte.
+        coverageHex.reserve(p->coverage_filter.size * 2);
+
+        for (int i = 0; i < p->coverage_filter.size; i++) {
+            coverageHex += DEBUG_PORT.mt_sprintf("%02x", p->coverage_filter.bytes[i]);
+        }
+
+        // Append the coverage filter to output
+        out += DEBUG_PORT.mt_sprintf(" coverageFilter=0x%s", coverageHex.c_str());
+    } else {
+        out += DEBUG_PORT.mt_sprintf(" coverageFilter=empty");
+    }
+    // --- End coverage filter logging ---
+
     if (p->rx_time != 0)
         out += DEBUG_PORT.mt_sprintf(" rxtime=%u", p->rx_time);
     if (p->rx_snr != 0.0)

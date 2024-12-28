@@ -77,11 +77,12 @@ bool FloodingRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
                     }
 #endif
 
-                    LOG_INFO("Rebroadcasting packet ID=0x%x with ForwardProb=%.2f", p->id, forwardProb);
 
                     CoverageFilter updatedCoverage = incomingCoverage;
                     mergeMyCoverage(updatedCoverage);
                     storeCoverageFilterInPacket(updatedCoverage, tosend);
+
+                    LOG_INFO("Rebroadcasting packet ID=0x%x with ForwardProb=%.2f", p->id, forwardProb);
 
                     // Note: we are careful to resend using the original senders node id
                     // We are careful not to call our hooked version of send() - because we don't want to check this again
@@ -89,7 +90,7 @@ bool FloodingRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
 
                     return true;
                 } else {
-                    LOG_DEBUG("No rebroadcast: Random number %f > Forward Probability %f", rnd, forwardProb);
+                    LOG_INFO("No rebroadcast: Random number %f > Forward Probability %f", rnd, forwardProb);
                 }
             } else {
                 LOG_DEBUG("No rebroadcast: Role = CLIENT_MUTE or Rebroadcast Mode = NONE");
@@ -129,6 +130,7 @@ void FloodingRouter::loadCoverageFilterFromPacket(const meshtastic_MeshPacket *p
 void FloodingRouter::storeCoverageFilterInPacket(const CoverageFilter &filter, meshtastic_MeshPacket *p)
 {
     auto bits = filter.getBits();
+    p->coverage_filter.size = BLOOM_FILTER_SIZE_BYTES;
     memcpy(p->coverage_filter.bytes, bits.data(), BLOOM_FILTER_SIZE_BYTES);
 }
 
