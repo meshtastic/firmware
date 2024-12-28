@@ -6,68 +6,8 @@ on:
   workflow_dispatch: {}
 
 jobs:
-  test-simulator:
-    runs-on: ubuntu-latest
-    env:
-      LCOV_CAPTURE_FLAGS: --quiet --capture --include "${PWD}/src/*" --exclude '*/src/mesh/generated/*' --directory .pio/build/coverage/src --base-directory "${PWD}"
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Setup native build
-        id: base
-        uses: ./.github/actions/setup-native
-
-      - name: Install simulator dependencies
-        run: pip install -U dotmap
-
-      # We now run integration test before other build steps (to quickly see runtime failures)
-      - name: Build for native/coverage
-        run: platformio run -e coverage
-
-      - name: Capture initial coverage information
-        shell: bash
-        run: |
-          sudo apt-get install -y lcov
-          lcov ${{ env.LCOV_CAPTURE_FLAGS }} --initial --output-file coverage_base.info
-
-      - name: Integration test
-        run: |
-          .pio/build/coverage/program &
-          PID=$!
-          timeout 20 bash -c "until ls -al /proc/$PID/fd | grep socket; do sleep 1; done"
-          echo "Simulator started, launching python test..."
-          python3 -c 'from meshtastic.test import testSimulator; testSimulator()'
-          wait
-          lcov ${{ env.LCOV_CAPTURE_FLAGS }} --test-name integration --output-file coverage_integration.info
-
-      - name: PlatformIO Tests
-        run: |
-          platformio test -e coverage --junit-output-path testreport.xml
-          lcov ${{ env.LCOV_CAPTURE_FLAGS }} --test-name tests --output-file coverage_tests.info
-
-      - name: Test Report
-        uses: dorny/test-reporter@v1.9.1
-        if: success() || failure() # run this step even if previous step failed
-        with:
-          name: PlatformIO Tests
-          path: testreport.xml
-          reporter: java-junit
-
-      - name: Generate Code Coverage Report
-        run: |
-          lcov --quiet --add-tracefile coverage_base.info --add-tracefile coverage_integration.info --add-tracefile coverage_tests.info --output-file coverage_src.info
-          mkdir code-coverage-report
-          genhtml --quiet --legend --prefix "${PWD}" coverage_src.info --output-directory code-coverage-report
-          mv coverage_*.info code-coverage-report
-
-      - name: Save Code Coverage Report
-        uses: actions/upload-artifact@v4
-        with:
-          name: code-coverage-report
-          path: code-coverage-report
+  native-tests:
+    uses: ./.github/workflows/test_native.yml
 
   hardware-tests:
     runs-on: test-runner
