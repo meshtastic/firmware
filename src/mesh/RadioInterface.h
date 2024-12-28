@@ -185,6 +185,9 @@ class RadioInterface
     /** If the packet is not already in the late rebroadcast window, move it there */
     virtual void clampToLateRebroadcastWindow(NodeNum from, PacketId id) { return; }
 
+    /** Clamp the hop limit to the greater of the hop count provided, or the hop count in the queue */
+    virtual void clampHopsToMax(NodeNum from, PacketId id, uint32_t hop_limit) { return; }
+
     /**
      * Calculate airtime per
      * https://www.rs-online.com/designspark/rel-assets/ds-assets/uploads/knowledge-items/application-notes-for-the-internet-of-things/LoRa%20Design%20Guide.pdf

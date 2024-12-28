@@ -204,4 +204,9 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      * If the packet is not already in the late rebroadcast window, move it there
      */
     void clampToLateRebroadcastWindow(NodeNum from, PacketId id);
+
+    /**
+     * Clamp the hop limit to the greater of the hop count provided, or the hop count in the queue
+     */
+    void clampHopsToMax(NodeNum from, PacketId id, uint32_t hop_limit);
 };

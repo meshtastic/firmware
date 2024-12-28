@@ -344,6 +344,18 @@ void RadioLibInterface::clampToLateRebroadcastWindow(NodeNum from, PacketId id)
     }
 }
 
+/**
+ * Clamp the hop limit to the greater of the hop count provided, or the hop count in the queue
+ */
+void RadioLibInterface::clampHopsToMax(NodeNum from, PacketId id, uint32_t hop_limit)
+{
+    meshtastic_MeshPacket *p = txQueue.find(from, id);
+    if (p && p->hop_limit < hop_limit) {
+        LOG_DEBUG("Increasing hop limit for packet from %d to %d", p->hop_limit, hop_limit);
+        p->hop_limit = hop_limit;
+    }
+}
+
 void RadioLibInterface::handleTransmitInterrupt()
 {
     // This can be null if we forced the device to enter standby mode.  In that case
