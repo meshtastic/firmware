@@ -206,7 +206,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     void clampToLateRebroadcastWindow(NodeNum from, PacketId id);
 
     /**
-     * Clamp the hop limit to the greater of the hop count provided, or the hop count in the queue
+     * If there is a packet pending TX in the queue with a worse hop limit, remove it pending replacement with a better version
+     * @return Whether a pending packet was removed
      */
-    void clampHopsToMax(NodeNum from, PacketId id, uint32_t hop_limit);
+    bool removePendingTXPacket(NodeNum from, PacketId id, uint32_t hop_limit_lt);
 };

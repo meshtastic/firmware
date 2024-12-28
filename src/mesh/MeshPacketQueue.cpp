@@ -113,11 +113,12 @@ meshtastic_MeshPacket *MeshPacketQueue::find(NodeNum from, PacketId id)
 }
 
 /** Attempt to find and remove a packet from this queue.  Returns a pointer to the removed packet, or NULL if not found */
-meshtastic_MeshPacket *MeshPacketQueue::remove(NodeNum from, PacketId id, bool tx_normal, bool tx_late)
+meshtastic_MeshPacket *MeshPacketQueue::remove(NodeNum from, PacketId id, bool tx_normal, bool tx_late, uint8_t hop_limit_lt)
 {
     for (auto it = queue.begin(); it != queue.end(); it++) {
         auto p = (*it);
-        if (getFrom(p) == from && p->id == id && ((tx_normal && !p->tx_after) || (tx_late && p->tx_after))) {
+        if (getFrom(p) == from && p->id == id && ((tx_normal && !p->tx_after) || (tx_late && p->tx_after)) &&
+            (!hop_limit_lt || p->hop_limit < hop_limit_lt)) {
             queue.erase(it);
             return p;
         }

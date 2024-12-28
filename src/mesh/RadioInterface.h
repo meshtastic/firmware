@@ -185,8 +185,11 @@ class RadioInterface
     /** If the packet is not already in the late rebroadcast window, move it there */
     virtual void clampToLateRebroadcastWindow(NodeNum from, PacketId id) { return; }
 
-    /** Clamp the hop limit to the greater of the hop count provided, or the hop count in the queue */
-    virtual void clampHopsToMax(NodeNum from, PacketId id, uint32_t hop_limit) { return; }
+    /**
+     * If there is a packet pending TX in the queue with a worse hop limit, remove it pending replacement with a better version
+     * @return Whether a pending packet was removed
+     */
+    bool removePendingTXPacket(NodeNum from, PacketId id, uint32_t hop_limit_lt) { return false; }
 
     /**
      * Calculate airtime per
