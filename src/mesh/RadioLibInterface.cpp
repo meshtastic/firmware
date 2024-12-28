@@ -409,6 +409,12 @@ void RadioLibInterface::handleReceiveInterrupt()
             mp->want_ack = !!(radioBuffer.header.flags & PACKET_FLAGS_WANT_ACK_MASK);
             mp->via_mqtt = !!(radioBuffer.header.flags & PACKET_FLAGS_VIA_MQTT_MASK);
 
+            // ----------------- Copy coverage_filter in the packet object ------------------
+            mp->coverage_filter.size = BLOOM_FILTER_SIZE_BYTES;
+            memcpy(mp->coverage_filter.bytes,
+            radioBuffer.header.coverage_filter.data(), BLOOM_FILTER_SIZE_BYTES);
+            // -----------------------------------------------------------------------------
+
             addReceiveMetadata(mp);
 
             mp->which_payload_variant =
