@@ -1113,7 +1113,6 @@ bool AdminModule::messageIsResponse(const meshtastic_AdminMessage *r)
         r->which_payload_variant == meshtastic_AdminMessage_get_ringtone_response_tag ||
         r->which_payload_variant == meshtastic_AdminMessage_get_device_connection_status_response_tag ||
         r->which_payload_variant == meshtastic_AdminMessage_get_node_remote_hardware_pins_response_tag ||
-        r->which_payload_variant == meshtastic_NodeRemoteHardwarePinsResponse_node_remote_hardware_pins_tag ||
         r->which_payload_variant == meshtastic_AdminMessage_get_ui_config_response_tag)
         return true;
     else
