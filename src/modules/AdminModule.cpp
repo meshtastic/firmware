@@ -633,6 +633,9 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             requiresReboot = false;
 
         break;
+    case meshtastic_Config_device_ui_tag:
+        // NOOP! This is handled by handleStoreDeviceUIConfig
+        break;
     }
     if (requiresReboot && !hasOpenEditTransaction) {
         disableBluetooth();
@@ -794,6 +797,10 @@ void AdminModule::handleGetConfig(const meshtastic_MeshPacket &req, const uint32
         case meshtastic_AdminMessage_ConfigType_SESSIONKEY_CONFIG:
             LOG_INFO("Get config: Sessionkey");
             res.get_config_response.which_payload_variant = meshtastic_Config_sessionkey_tag;
+            break;
+        case meshtastic_AdminMessage_ConfigType_DEVICEUI_CONFIG:
+            // NOOP! This is handled by handleGetDeviceUIConfig
+            res.get_config_response.which_payload_variant = meshtastic_Config_device_ui_tag;
             break;
         }
         // NOTE: The phone app needs to know the ls_secs value so it can properly expect sleep behavior.
@@ -1106,7 +1113,6 @@ bool AdminModule::messageIsResponse(const meshtastic_AdminMessage *r)
         r->which_payload_variant == meshtastic_AdminMessage_get_ringtone_response_tag ||
         r->which_payload_variant == meshtastic_AdminMessage_get_device_connection_status_response_tag ||
         r->which_payload_variant == meshtastic_AdminMessage_get_node_remote_hardware_pins_response_tag ||
-        r->which_payload_variant == meshtastic_NodeRemoteHardwarePinsResponse_node_remote_hardware_pins_tag ||
         r->which_payload_variant == meshtastic_AdminMessage_get_ui_config_response_tag)
         return true;
     else

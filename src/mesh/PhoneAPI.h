@@ -149,6 +149,9 @@ class PhoneAPI
      */
     virtual void onNowHasData(uint32_t fromRadioNum) {}
 
+    /// begin a new connection
+    void handleStartConfig();
+
   private:
     void releasePhonePacket();
 
@@ -157,9 +160,6 @@ class PhoneAPI
     void releaseMqttClientProxyPhonePacket();
 
     void releaseClientNotification();
-
-    /// begin a new connection
-    void handleStartConfig();
 
     bool wasSeenRecently(uint32_t packetId);
 
