@@ -44,9 +44,13 @@ jobs:
           wait
           lcov ${{ env.LCOV_CAPTURE_FLAGS }} --test-name integration --output-file coverage_integration.info
 
+      - name: Get release version string
+        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+        id: version
+
       - uses: actions/upload-artifact@v4
         with:
-          name: coverage-native-simulator-test
+          name: lcov-coverage-info-native-simulator-test-${{ steps.version.outputs.version }}.zip
           overwrite: true
           path: |
             ./coverage_*.info
@@ -80,9 +84,13 @@ jobs:
           sudo apt-get install -y lcov
           lcov ${{ env.LCOV_CAPTURE_FLAGS }} --test-name tests --output-file coverage_tests.info
 
+      - name: Get release version string
+        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+        id: version
+
       - uses: actions/upload-artifact@v4
         with:
-          name: coverage-native-platformio-tests
+          name: lcov-coverage-info-native-platformio-tests-${{ steps.version.outputs.version }}.zip
           overwrite: true
           path: |
             ./coverage_*.info
@@ -97,10 +105,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Get release version string
+        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+        id: version
+
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: coverage-native-*
+          pattern: lcov-coverage-info-native-*-${{ steps.version.outputs.version }}.zip
           path: code-coverage-report
           merge-multiple: true
 
@@ -113,5 +125,5 @@ jobs:
       - name: Save Code Coverage Report
         uses: actions/upload-artifact@v4
         with:
-          name: code-coverage-report
+          name: code-coverage-report-${{ steps.version.outputs.version }}.zip
           path: code-coverage-report
