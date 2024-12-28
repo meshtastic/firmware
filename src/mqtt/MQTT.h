@@ -5,7 +5,9 @@
 #include "concurrency/OSThread.h"
 #include "mesh/Channels.h"
 #include "mesh/generated/meshtastic/mqtt.pb.h"
+#if !defined(ARCH_NRF52) || NRF52_USE_JSON
 #include "serialization/JSON.h"
+#endif
 #if HAS_WIFI
 #include <WiFiClient.h>
 #if !defined(ARCH_PORTDUINO)
@@ -77,6 +79,8 @@ class MQTT : private concurrency::OSThread
 
     void start() { setIntervalFromNow(0); };
 
+    bool isUsingDefaultServer() { return isConfiguredForDefaultServer; }
+
   protected:
     struct QueueEntry {
         std::string topic;
@@ -85,6 +89,7 @@ class MQTT : private concurrency::OSThread
     PointerQueue<QueueEntry> mqttQueue;
 
     int reconnectCount = 0;
+    bool isConfiguredForDefaultServer = true;
 
     virtual int32_t runOnce() override;
 

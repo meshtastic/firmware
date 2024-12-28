@@ -173,7 +173,7 @@ void setupModules()
         aSerialKeyboardImpl->init();
 #endif // INPUTBROKER_MATRIX_TYPE
 #endif // HAS_BUTTON
-#if ARCH_PORTDUINO
+#if ARCH_PORTDUINO && !HAS_TFT
         aLinuxInputImpl = new LinuxInputImpl();
         aLinuxInputImpl->init();
 #endif
@@ -195,10 +195,12 @@ void setupModules()
         if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_PMSA003I].first > 0) {
             new AirQualityTelemetryModule();
         }
+#if !MESHTASTIC_EXCLUDE_HEALTH_TELEMETRY
         if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_MAX30102].first > 0 ||
             nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_MLX90614].first > 0) {
             new HealthTelemetryModule();
         }
+#endif
 #endif
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_POWER_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
         new PowerTelemetryModule();

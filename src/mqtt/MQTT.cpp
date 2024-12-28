@@ -19,8 +19,10 @@
 #include <WiFi.h>
 #endif
 #include "Default.h"
+#if !defined(ARCH_NRF52) || NRF52_USE_JSON
 #include "serialization/JSON.h"
 #include "serialization/MeshPacketSerializer.h"
+#endif
 #include <Throttle.h>
 #include <assert.h>
 #include <pb_decode.h>
@@ -94,6 +96,9 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
 
     UniquePacketPoolPacket p = packetPool.allocUniqueCopy(*e.packet);
     p->via_mqtt = true; // Mark that the packet was received via MQTT
+    // Unset received SNR/RSSI which might have been added by the MQTT gateway
+    p->rx_snr = 0;
+    p->rx_rssi = 0;
 
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         if (moduleConfig.mqtt.encryption_enabled) {
@@ -119,6 +124,7 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
         router->enqueueReceivedMessage(p.release());
 }
 
+#if !defined(ARCH_NRF52) || NRF52_USE_JSON
 // returns true if this is a valid JSON envelope which we accept on downlink
 inline bool isValidJsonEnvelope(JSONObject &json)
 {
@@ -204,6 +210,7 @@ inline void onReceiveJson(byte *payload, size_t length)
         LOG_DEBUG("JSON ignore downlink message with unsupported type");
     }
 }
+#endif
 
 /// Determines if the given IPAddress is a private IPv4 address, i.e. not routable on the public internet.
 bool isPrivateIpAddress(const IPAddress &ip)
@@ -227,6 +234,23 @@ bool isPrivateIpAddress(const IPAddress &ip)
     }
     return false;
 }
+
+// Separate a <host>[:<port>] string. Returns a pair containing the parsed host and port. If the port is
+// not present in the input string, or is invalid, the value of the `port` argument will be returned.
+std::pair<String, uint16_t> parseHostAndPort(String server, uint16_t port = 0)
+{
+    const int delimIndex = server.indexOf(':');
+    if (delimIndex > 0) {
+        const long parsedPort = server.substring(delimIndex + 1, server.length()).toInt();
+        if (parsedPort < 1 || parsedPort > UINT16_MAX) {
+            LOG_WARN("Invalid MQTT port %d: %s", parsedPort, server.c_str());
+        } else {
+            port = parsedPort;
+        }
+        server[delimIndex] = 0;
+    }
+    return std::make_pair(std::move(server), port);
+}
 } // namespace
 
 void MQTT::mqttCallback(char *topic, byte *payload, unsigned int length)
@@ -248,6 +272,7 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
 
     // check if this is a json payload message by comparing the topic start
     if (moduleConfig.mqtt.json_enabled && (strncmp(topic, jsonTopic.c_str(), jsonTopic.length()) == 0)) {
+#if !defined(ARCH_NRF52) || NRF52_USE_JSON
         // parse the channel name from the topic string
         // the topic has been checked above for having jsonTopic prefix, so just move past it
         char *channelName = topic + jsonTopic.length();
@@ -261,6 +286,7 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
             return;
         }
         onReceiveJson(payload, length);
+#endif
         return;
     }
 
@@ -301,8 +327,10 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
                 moduleConfig.mqtt.map_report_settings.publish_interval_secs, default_map_publish_interval_secs);
         }
 
+        String host = parseHostAndPort(moduleConfig.mqtt.address).first;
+        isConfiguredForDefaultServer = host.length() == 0 || host == default_mqtt_address;
         IPAddress ip;
-        isMqttServerAddressPrivate = ip.fromString(moduleConfig.mqtt.address) && isPrivateIpAddress(ip);
+        isMqttServerAddressPrivate = ip.fromString(host.c_str()) && isPrivateIpAddress(ip);
 
 #if HAS_NETWORKING
         if (!moduleConfig.mqtt.proxy_to_client_enabled)
@@ -418,14 +446,9 @@ void MQTT::reconnect()
         pubSub.setClient(mqttClient);
 #endif
 
-        String server = String(serverAddr);
-        int delimIndex = server.indexOf(':');
-        if (delimIndex > 0) {
-            String port = server.substring(delimIndex + 1, server.length());
-            server[delimIndex] = 0;
-            serverPort = port.toInt();
-            serverAddr = server.c_str();
-        }
+        std::pair<String, uint16_t> hostAndPort = parseHostAndPort(serverAddr, serverPort);
+        serverAddr = hostAndPort.first.c_str();
+        serverPort = hostAndPort.second;
         pubSub.setServer(serverAddr, serverPort);
         pubSub.setBufferSize(512, 512);
 
@@ -438,9 +461,7 @@ void MQTT::reconnect()
             enabled = true; // Start running background process again
             runASAP = true;
             reconnectCount = 0;
-#if !defined(ARCH_PORTDUINO)
             isMqttServerAddressPrivate = isPrivateIpAddress(mqttClient.remoteIP());
-#endif
 
             publishNodeInfo();
             sendSubscriptions();
@@ -616,9 +637,8 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
             return;
         }
 
-        if (strcmp(moduleConfig.mqtt.address, default_mqtt_address) == 0 &&
-            (mp_decoded.decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP ||
-             mp_decoded.decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP)) {
+        if (isConfiguredForDefaultServer && (mp_decoded.decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP ||
+                                             mp_decoded.decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP)) {
             LOG_DEBUG("MQTT onSend - Ignoring range test or detection sensor message on public mqtt");
             return;
         }

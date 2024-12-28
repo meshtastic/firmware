@@ -33,4 +33,6 @@
 #define HW_VENDOR meshtastic_HardwareModel_RP2040_LORA
 #elif defined(RP2040_FEATHER_RFM95)
 #define HW_VENDOR meshtastic_HardwareModel_RP2040_FEATHER_RFM95
+#elif defined(PRIVATE_HW)
+#define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 #endif
