@@ -11,37 +11,26 @@ jobs:
     env:
       LCOV_CAPTURE_FLAGS: --quiet --capture --include "${PWD}/src/*" --exclude '*/src/mesh/generated/*' --directory .pio/build/coverage/src --base-directory "${PWD}"
     steps:
-      - name: Install libs needed for native build
-        shell: bash
-        run: |
-          sudo apt-get update --fix-missing
-          sudo apt-get install -y libbluetooth-dev libgpiod-dev libyaml-cpp-dev openssl libssl-dev libulfius-dev liborcania-dev libusb-1.0-0-dev libi2c-dev
-          sudo apt-get install -y lcov
-
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Upgrade python tools
-        shell: bash
-        run: |
-          python -m pip install --upgrade pip
-          pip install -U platformio adafruit-nrfutil dotmap
-          pip install -U meshtastic --pre
+      - name: Setup native build
+        id: base
+        uses: ./.github/actions/setup-native
 
-      - name: Upgrade platformio
-        shell: bash
-        run: |
-          pio upgrade
-
-      - name: Build Native
-        run: bin/build-native.sh
+      - name: Install simulator dependencies
+        run: pip install -U dotmap
 
       # We now run integration test before other build steps (to quickly see runtime failures)
       - name: Build for native/coverage
+        run: platformio run -e coverage
+
+      - name: Capture initial coverage information
+        shell: bash
         run: |
-          platformio run -e coverage
+          sudo apt-get install -y lcov
           lcov ${{ env.LCOV_CAPTURE_FLAGS }} --initial --output-file coverage_base.info
 
       - name: Integration test
