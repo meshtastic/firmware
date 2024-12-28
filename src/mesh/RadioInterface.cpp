@@ -634,6 +634,15 @@ size_t RadioInterface::beginSending(meshtastic_MeshPacket *p)
         p->hop_limit | (p->want_ack ? PACKET_FLAGS_WANT_ACK_MASK : 0) | (p->via_mqtt ? PACKET_FLAGS_VIA_MQTT_MASK : 0);
     radioBuffer.header.flags |= (p->hop_start << PACKET_FLAGS_HOP_START_SHIFT) & PACKET_FLAGS_HOP_START_MASK;
 
+    // Coverage filter is 16 bytes, but p->coverage_filter.size might be 0..16.
+    // Usually, you set p->coverage_filter.size = 16 if you want to transmit.
+    radioBuffer.header.coverage_filter.fill(0);  // Clear first, in case size < 16
+    if (p->coverage_filter.size > 0) {
+        memcpy(radioBuffer.header.coverage_filter.data(), 
+               p->coverage_filter.bytes, 
+               std::min((size_t)p->coverage_filter.size, (size_t)BLOOM_FILTER_SIZE_BYTES));
+    }
+
     // if the sender nodenum is zero, that means uninitialized
     assert(radioBuffer.header.from);
 

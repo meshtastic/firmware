@@ -15,6 +15,22 @@ ErrorCode FloodingRouter::send(meshtastic_MeshPacket *p)
     // Add any messages _we_ send to the seen message list (so we will ignore all retransmissions we see)
     wasSeenRecently(p); // FIXME, move this to a sniffSent method
 
+    // -- START coverage filter population --
+    // If this is a floodable packet (for example, has non-zero hop_limit and ID),
+    // we can add our coverage.
+    if (p->id != 0 && p->hop_limit > 0) {
+        CoverageFilter coverage;
+        // Is there anything upstream of this? I think not, but if so, we need to merge coverage.
+        // loadCoverageFilterFromPacket(p, coverage);
+
+        // Add our coverage (neighbors, etc.) so they are in the filter from the get-go
+        mergeMyCoverage(coverage);
+
+        // Save the coverage bits into the packet:
+        storeCoverageFilterInPacket(coverage, p);
+    }
+    // -- END coverage filter population --
+
     return Router::send(p);
 }
 
