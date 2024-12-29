@@ -139,7 +139,11 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
 #endif
     }
 
+#if defined(CONFIG_NIMBLE_CPP_IDF) && (ESP_IDF_VERSION_MAJOR * 100 + ESP_IDF_VERSION_MINOR * 10 + ESP_IDF_VERSION_PATCH) > 514
+    virtual void onAuthenticationComplete(NimBLEConnInfo &connInfo)
+#else
     virtual void onAuthenticationComplete(ble_gap_conn_desc *desc)
+#endif
     {
         LOG_INFO("BLE authentication complete");
 
@@ -149,7 +153,11 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
         }
     }
 
+#if defined(CONFIG_NIMBLE_CPP_IDF) && (ESP_IDF_VERSION_MAJOR * 100 + ESP_IDF_VERSION_MINOR * 10 + ESP_IDF_VERSION_PATCH) > 514
+    virtual void onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo)
+#else
     virtual void onDisconnect(NimBLEServer *pServer, ble_gap_conn_desc *desc)
+#endif
     {
         LOG_INFO("BLE disconnect");
 
