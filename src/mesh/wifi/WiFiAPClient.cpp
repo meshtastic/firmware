@@ -106,7 +106,9 @@ static void onNetworkConnected()
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WEBSERVER
         initWebServer();
 #endif
+#if !MESHTASTIC_EXCLUDE_SOCKETAPI
         initApiServer();
+#endif
         APStartupComplete = true;
     }
 
