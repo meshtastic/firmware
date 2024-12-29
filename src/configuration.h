@@ -172,7 +172,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 // Security
 // -----------------------------------------------------------------------------
-#define ATECC608B_ADDR 0x35
 
 // -----------------------------------------------------------------------------
 // IO Expander
@@ -252,6 +251,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef HAS_SCREEN
 #define HAS_SCREEN 0
 #endif
+#ifndef HAS_TFT
+#define HAS_TFT 0
+#endif
 #ifndef HAS_WIRE
 #define HAS_WIRE 0
 #endif
@@ -314,6 +316,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MESHTASTIC_EXCLUDE_AUDIO 1
 #define MESHTASTIC_EXCLUDE_DETECTIONSENSOR 1
 #define MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR 1
+#define MESHTASTIC_EXCLUDE_HEALTH_TELEMETRY 1
 #define MESHTASTIC_EXCLUDE_EXTERNALNOTIFICATION 1
 #define MESHTASTIC_EXCLUDE_PAXCOUNTER 1
 #define MESHTASTIC_EXCLUDE_POWER_TELEMETRY 1
