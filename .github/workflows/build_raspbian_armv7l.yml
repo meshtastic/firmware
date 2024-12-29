@@ -14,7 +14,7 @@ jobs:
         shell: bash
         run: |
           sudo apt-get update -y --fix-missing
-          sudo apt-get install -y libbluetooth-dev libgpiod-dev libyaml-cpp-dev openssl libssl-dev libulfius-dev liborcania-dev
+          sudo apt-get install -y libbluetooth-dev libgpiod-dev libyaml-cpp-dev openssl libssl-dev libulfius-dev liborcania-dev libusb-1.0-0-dev libi2c-dev
 
       - name: Checkout code
         uses: actions/checkout@v4

@@ -1,5 +1,5 @@
 #include "FloodingRouter.h"
-#include "../userPrefs.h"
+
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 
@@ -24,10 +24,14 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
         printPacket("Ignore dupe incoming msg", p);
         rxDupe++;
         if (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER &&
-            config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER) {
+            config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER &&
+            config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER_LATE) {
             // cancel rebroadcast of this message *if* there was already one, unless we're a router/repeater!
             if (Router::cancelSending(p->from, p->id))
                 txRelayCanceled++;
+        }
+        if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE && iface) {
+            iface->clampToLateRebroadcastWindow(getFrom(p), p->id);
         }
 
         /* If the original transmitter is doing retransmissions (hopStart equals hopLimit) for a reliable transmission, e.g., when
@@ -36,7 +40,8 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
         if (isRepeated) {
             LOG_DEBUG("Repeated reliable tx");
             if (!perhapsRebroadcast(p) && isToUs(p) && p->want_ack) {
-                sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, p->channel, 0);
+                // FIXME - channel index should be used, but the packet is still encrypted here
+                sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, 0, 0);
             }
         }
 

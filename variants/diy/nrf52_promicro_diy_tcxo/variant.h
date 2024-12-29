@@ -122,12 +122,13 @@ NRF52 PRO MICRO PIN ASSIGNMENT
 #define USE_SX1262
 #define USE_RF95
 #define USE_SX1268
+#define USE_LR1121
 
 // RF95 CONFIG
 
-#define LORA_DIO0 (0 + 29) // P0.10 IRQ
+#define LORA_DIO0 (0 + 29) // P0.29 BUSY
 #define LORA_DIO1 (0 + 10) // P0.10 IRQ
-#define LORA_RESET (0 + 9) // P0.09
+#define LORA_RESET (0 + 9) // P0.09 NRST
 
 // RX/TX for RFM95/SX127x
 #define RF95_RXEN (0 + 17)    // P0.17
@@ -142,6 +143,19 @@ NRF52 PRO MICRO PIN ASSIGNMENT
 #define SX126X_RESET (0 + 9)     // P0.09
 #define SX126X_RXEN (0 + 17)     // P0.17
 #define SX126X_TXEN RADIOLIB_NC  // Assuming that DIO2 is connected to TXEN pin. If not, TXEN must be connected.
+
+// LR1121
+#ifdef USE_LR1121
+#define LR1121_IRQ_PIN (0 + 10)      // P0.10 IRQ
+#define LR1121_NRESET_PIN LORA_RESET // P0.09 NRST
+#define LR1121_BUSY_PIN (0 + 29)     // P0.29 BUSY
+#define LR1121_SPI_NSS_PIN LORA_CS   // P1.13
+#define LR1121_SPI_SCK_PIN LORA_SCK
+#define LR1121_SPI_MOSI_PIN LORA_MOSI
+#define LR1121_SPI_MISO_PIN LORA_MISO
+#define LR11X0_DIO3_TCXO_VOLTAGE 1.8
+#define LR11X0_DIO_AS_RF_SWITCH
+#endif
 
 // #define SX126X_MAX_POWER 8 set this if using a high-power board!
 
@@ -164,6 +178,7 @@ settings.
 | Seeed        | Wio-SX1262       | yes  | Int       | Sooooo cute!                          |
 | AI-Thinker   | RA-02            | No   | Int       | SX1278 **433mhz band only**           |
 | RF Solutions | RFM95            | No   | Int       | Untested                              |
+| Ebyte        | E80-900M2213S    | Yes  | Int       | LR1121 radio                          |
 
 */
 

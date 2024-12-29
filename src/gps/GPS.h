@@ -16,13 +16,6 @@
 #define GPS_EN_ACTIVE 1
 #endif
 
-struct uBloxGnssModelInfo {
-    char swVersion[30];
-    char hwVersion[10];
-    uint8_t extensionNo;
-    char extension[10][30];
-};
-
 typedef enum {
     GNSS_MODEL_ATGM336H,
     GNSS_MODEL_MTK,
@@ -53,9 +46,6 @@ enum GPSPowerState : uint8_t {
     GPS_HARDSLEEP, // Physically powered off, but scheduled to wake
     GPS_OFF        // Powered off indefinitely
 };
-
-// Generate a string representation of DOP
-const char *getDOPString(uint32_t dop);
 
 /**
  * A gps class that only reads from the GPS periodically and keeps the gps powered down except when reading
@@ -122,7 +112,9 @@ class GPS : private concurrency::OSThread
     // Let the GPS hardware save power between updates
     void down();
 
-  protected:
+  private:
+    GPS() : concurrency::OSThread("GPS") {}
+
     /// Record that we have a GPS
     void setConnected();
 
@@ -150,9 +142,6 @@ class GPS : private concurrency::OSThread
 
     GnssModel_t gnssModel = GNSS_MODEL_UNKNOWN;
 
-  private:
-    GPS() : concurrency::OSThread("GPS") {}
-
     TinyGPSPlus reader;
     uint8_t fixQual = 0; // fix quality from GPGGA
     uint32_t lastChecksumFailCount = 0;
@@ -164,21 +153,13 @@ class GPS : private concurrency::OSThread
     TinyGPSCustom gsapdop;    // custom extract PDOP from GPGSA
     uint8_t fixType = 0;      // fix type from GPGSA
 #endif
-#if GPS_BAUDRATE_FIXED
-    // if GPS_BAUDRATE is specified in variant, only try that.
-    const int serialSpeeds[1] = {GPS_BAUDRATE};
-    const int rareSerialSpeeds[1] = {GPS_BAUDRATE};
-#else
-    const int serialSpeeds[3] = {9600, 115200, 38400};
-    const int rareSerialSpeeds[3] = {4800, 57600, GPS_BAUDRATE};
-#endif
 
     uint32_t lastWakeStartMsec = 0, lastSleepStartMsec = 0, lastFixStartMsec = 0;
     uint32_t rx_gpio = 0;
     uint32_t tx_gpio = 0;
 
-    int speedSelect = 0;
-    int probeTries = 0;
+    uint8_t speedSelect = 0;
+    uint8_t probeTries = 0;
 
     /**
      * hasValidLocation - indicates that the position variables contain a complete
@@ -207,52 +188,6 @@ class GPS : private concurrency::OSThread
 #else
     static HardwareSerial *_serial_gps;
 #endif
-    static uint8_t _message_PMREQ[];
-    static uint8_t _message_PMREQ_10[];
-    static const uint8_t _message_CFG_RXM_PSM[];
-    static const uint8_t _message_CFG_RXM_ECO[];
-    static const uint8_t _message_CFG_PM2[];
-    static const uint8_t _message_GNSS_7[];
-    static const uint8_t _message_GNSS_8[];
-    static const uint8_t _message_JAM_6_7[];
-    static const uint8_t _message_JAM_8[];
-    static const uint8_t _message_NAVX5[];
-    static const uint8_t _message_NAVX5_8[];
-    static const uint8_t _message_NMEA[];
-    static const uint8_t _message_DISABLE_TXT_INFO[];
-    static const uint8_t _message_1HZ[];
-    static const uint8_t _message_GLL[];
-    static const uint8_t _message_GSA[];
-    static const uint8_t _message_GSV[];
-    static const uint8_t _message_VTG[];
-    static const uint8_t _message_RMC[];
-    static const uint8_t _message_AID[];
-    static const uint8_t _message_GGA[];
-    static const uint8_t _message_PMS[];
-    static const uint8_t _message_SAVE[];
-    static const uint8_t _message_SAVE_10[];
-
-    // VALSET Commands for M10
-    static const uint8_t _message_VALSET_PM[];
-    static const uint8_t _message_VALSET_PM_RAM[];
-    static const uint8_t _message_VALSET_PM_BBR[];
-    static const uint8_t _message_VALSET_ITFM_RAM[];
-    static const uint8_t _message_VALSET_ITFM_BBR[];
-    static const uint8_t _message_VALSET_DISABLE_NMEA_RAM[];
-    static const uint8_t _message_VALSET_DISABLE_NMEA_BBR[];
-    static const uint8_t _message_VALSET_DISABLE_TXT_INFO_RAM[];
-    static const uint8_t _message_VALSET_DISABLE_TXT_INFO_BBR[];
-    static const uint8_t _message_VALSET_ENABLE_NMEA_RAM[];
-    static const uint8_t _message_VALSET_ENABLE_NMEA_BBR[];
-    static const uint8_t _message_VALSET_DISABLE_SBAS_RAM[];
-    static const uint8_t _message_VALSET_DISABLE_SBAS_BBR[];
-
-    // CASIC commands for ATGM336H
-    static const uint8_t _message_CAS_CFG_RST_FACTORY[];
-    static const uint8_t _message_CAS_CFG_NAVX_CONF[];
-    static const uint8_t _message_CAS_CFG_RATE_1HZ[];
-
-    const char *ACK_SUCCESS_MESSAGE = "Get ack success!";
 
     // Create a ublox packet for editing in memory
     uint8_t makeUBXPacket(uint8_t class_id, uint8_t msg_id, uint8_t payload_size, const uint8_t *msg);
@@ -272,10 +207,6 @@ class GPS : private concurrency::OSThread
     /// Prepare the GPS for the cpu entering deep sleep, expect to be gone for at least 100s of msecs
     /// always returns 0 to indicate okay to sleep
     int prepareDeepSleep(void *unused);
-
-    // Calculate checksum
-    void UBXChecksum(uint8_t *message, size_t length);
-    void CASChecksum(uint8_t *message, size_t length);
 
     /** Set power with EN pin, if relevant
      */
@@ -305,8 +236,6 @@ class GPS : private concurrency::OSThread
 
     // delay counter to allow more sats before fixed position stops GPS thread
     uint8_t fixeddelayCtr = 0;
-
-    const char *powerStateToString();
 };
 
 extern GPS *gps;

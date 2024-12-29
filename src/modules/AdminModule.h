@@ -43,6 +43,7 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     void handleGetDeviceMetadata(const meshtastic_MeshPacket &req);
     void handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &req);
     void handleGetNodeRemoteHardwarePins(const meshtastic_MeshPacket &req);
+    void handleGetDeviceUIConfig(const meshtastic_MeshPacket &req);
     /**
      * Setters
      */
@@ -52,6 +53,7 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     void handleSetModuleConfig(const meshtastic_ModuleConfig &c);
     void handleSetChannel();
     void handleSetHamMode(const meshtastic_HamParameters &req);
+    void handleStoreDeviceUIConfig(const meshtastic_DeviceUIConfig &uicfg);
     void reboot(int32_t seconds);
 
     void setPassKey(meshtastic_AdminMessage *res);

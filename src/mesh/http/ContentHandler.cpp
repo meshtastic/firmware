@@ -93,6 +93,7 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     ResourceNode *nodeJsonScanNetworks = new ResourceNode("/json/scanNetworks", "GET", &handleScanNetworks);
     ResourceNode *nodeJsonBlinkLED = new ResourceNode("/json/blink", "POST", &handleBlinkLED);
     ResourceNode *nodeJsonReport = new ResourceNode("/json/report", "GET", &handleReport);
+    ResourceNode *nodeJsonNodes = new ResourceNode("/json/nodes", "GET", &handleNodes);
     ResourceNode *nodeJsonFsBrowseStatic = new ResourceNode("/json/fs/browse/static", "GET", &handleFsBrowseStatic);
     ResourceNode *nodeJsonDelete = new ResourceNode("/json/fs/delete/static", "DELETE", &handleFsDeleteStatic);
 
@@ -112,6 +113,7 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     secureServer->registerNode(nodeJsonFsBrowseStatic);
     secureServer->registerNode(nodeJsonDelete);
     secureServer->registerNode(nodeJsonReport);
+    secureServer->registerNode(nodeJsonNodes);
     //    secureServer->registerNode(nodeUpdateFs);
     //    secureServer->registerNode(nodeDeleteFs);
     secureServer->registerNode(nodeAdmin);
@@ -669,6 +671,77 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
     jsonObjInner["power"] = new JSONValue(jsonObjPower);
     jsonObjInner["device"] = new JSONValue(jsonObjDevice);
     jsonObjInner["radio"] = new JSONValue(jsonObjRadio);
+
+    // create json output structure
+    JSONObject jsonObjOuter;
+    jsonObjOuter["data"] = new JSONValue(jsonObjInner);
+    jsonObjOuter["status"] = new JSONValue("ok");
+    // serialize and write it to the stream
+    JSONValue *value = new JSONValue(jsonObjOuter);
+    res->print(value->Stringify().c_str());
+    delete value;
+}
+
+void handleNodes(HTTPRequest *req, HTTPResponse *res)
+{
+    ResourceParameters *params = req->getParams();
+    std::string content;
+
+    if (!params->getQueryParameter("content", content)) {
+        content = "json";
+    }
+
+    if (content == "json") {
+        res->setHeader("Content-Type", "application/json");
+        res->setHeader("Access-Control-Allow-Origin", "*");
+        res->setHeader("Access-Control-Allow-Methods", "GET");
+    } else {
+        res->setHeader("Content-Type", "text/html");
+        res->println("<pre>");
+    }
+
+    JSONArray nodesArray;
+
+    uint32_t readIndex = 0;
+    const meshtastic_NodeInfoLite *tempNodeInfo = nodeDB->readNextMeshNode(readIndex);
+    while (tempNodeInfo != NULL) {
+        if (tempNodeInfo->has_user) {
+            JSONObject node;
+
+            char id[16];
+            snprintf(id, sizeof(id), "!%08x", tempNodeInfo->num);
+
+            node["id"] = new JSONValue(id);
+            node["snr"] = new JSONValue(tempNodeInfo->snr);
+            node["via_mqtt"] = new JSONValue(BoolToString(tempNodeInfo->via_mqtt));
+            node["last_heard"] = new JSONValue((int)tempNodeInfo->last_heard);
+            node["position"] = new JSONValue();
+
+            if (nodeDB->hasValidPosition(tempNodeInfo)) {
+                JSONObject position;
+                position["latitude"] = new JSONValue((float)tempNodeInfo->position.latitude_i * 1e-7);
+                position["longitude"] = new JSONValue((float)tempNodeInfo->position.longitude_i * 1e-7);
+                position["altitude"] = new JSONValue((int)tempNodeInfo->position.altitude);
+                node["position"] = new JSONValue(position);
+            }
+
+            node["long_name"] = new JSONValue(tempNodeInfo->user.long_name);
+            node["short_name"] = new JSONValue(tempNodeInfo->user.short_name);
+            char macStr[18];
+            snprintf(macStr, sizeof(macStr), "%02X:%02X:%02X:%02X:%02X:%02X", tempNodeInfo->user.macaddr[0],
+                     tempNodeInfo->user.macaddr[1], tempNodeInfo->user.macaddr[2], tempNodeInfo->user.macaddr[3],
+                     tempNodeInfo->user.macaddr[4], tempNodeInfo->user.macaddr[5]);
+            node["mac_address"] = new JSONValue(macStr);
+            node["hw_model"] = new JSONValue(tempNodeInfo->user.hw_model);
+
+            nodesArray.push_back(new JSONValue(node));
+        }
+        tempNodeInfo = nodeDB->readNextMeshNode(readIndex);
+    }
+
+    // collect data to inner data object
+    JSONObject jsonObjInner;
+    jsonObjInner["nodes"] = new JSONValue(nodesArray);
 
     // create json output structure
     JSONObject jsonObjOuter;

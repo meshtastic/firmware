@@ -29,6 +29,8 @@
 #define _MPR121_REG_CONFIG1 0x5C
 #define _MPR121_REG_CONFIG2 0x5D
 #define _MPR121_REG_ELECTRODE_CONFIG 0x5E
+#define _MPR121_REG_AUTOCONF_CTRL0 0x7B
+#define _MPR121_REG_AUTOCONF_CTRL1 0x7C
 #define _MPR121_REG_SOFT_RESET 0x80
 
 #define _KEY_MASK 0x0FFF // Key mask for the first 12 bits
@@ -87,7 +89,7 @@ uint8_t MPR121_KeyMap[12] = {2, 5, 8, 11, 1, 4, 7, 10, 0, 3, 6, 9};
 
 MPR121Keyboard::MPR121Keyboard() : m_wire(nullptr), m_addr(0), readCallback(nullptr), writeCallback(nullptr)
 {
-    // LOG_DEBUG("MPR121 @ %02x\n", m_addr);
+    // LOG_DEBUG("MPR121 @ %02x", m_addr);
     state = Init;
     last_key = -1;
     last_tap = 0L;
@@ -132,18 +134,18 @@ void MPR121Keyboard::reset()
     writeRegister(_MPR121_REG_ELECTRODE_CONFIG, 0x00);
     delay(100);
 
-    LOG_DEBUG("MPR121 Configure");
+    LOG_DEBUG("MPR121 Configuring");
     // Set touch release thresholds
     for (uint8_t i = 0; i < 12; i++) {
         // Set touch threshold
-        writeRegister(_MPR121_REG_TOUCH_THRESHOLD + (i * 2), 15);
+        writeRegister(_MPR121_REG_TOUCH_THRESHOLD + (i * 2), 10);
         delay(20);
         // Set release threshold
-        writeRegister(_MPR121_REG_RELEASE_THRESHOLD + (i * 2), 7);
+        writeRegister(_MPR121_REG_RELEASE_THRESHOLD + (i * 2), 5);
         delay(20);
     }
     // Configure filtering and baseline registers
-    writeRegister(_MPR121_REG_MAX_HALF_DELTA_RISING, 0x01);
+    writeRegister(_MPR121_REG_MAX_HALF_DELTA_RISING, 0x05);
     delay(20);
     writeRegister(_MPR121_REG_MAX_HALF_DELTA_FALLING, 0x01);
     delay(20);
@@ -153,7 +155,7 @@ void MPR121Keyboard::reset()
     delay(20);
     writeRegister(_MPR121_REG_NOISE_HALF_DELTA_TOUCHED, 0x00);
     delay(20);
-    writeRegister(_MPR121_REG_NOISE_COUNT_LIMIT_RISING, 0x0e);
+    writeRegister(_MPR121_REG_NOISE_COUNT_LIMIT_RISING, 0x05);
     delay(20);
     writeRegister(_MPR121_REG_NOISE_COUNT_LIMIT_FALLING, 0x01);
     delay(20);
@@ -165,18 +167,19 @@ void MPR121Keyboard::reset()
     delay(20);
     writeRegister(_MPR121_REG_FILTER_DELAY_COUNT_TOUCHED, 0x00);
     delay(20);
-    // Set Debounce to 0x02
-    writeRegister(_MPR121_REG_DEBOUNCE, 0x00);
+    writeRegister(_MPR121_REG_AUTOCONF_CTRL0, 0x04); // Auto-config enable
     delay(20);
-    // Set Filter1 itterations and discharge current 6x and 16uA respectively (0x10)
-    writeRegister(_MPR121_REG_CONFIG1, 0x10);
+    writeRegister(_MPR121_REG_AUTOCONF_CTRL1, 0x00); // Ensure no auto-config interrupt
     delay(20);
-    // Set CDT to 0.5us, Filter2 itterations to 4x, and Sample interval = 0 (0x20)
-    writeRegister(_MPR121_REG_CONFIG2, 0x20);
+    writeRegister(_MPR121_REG_DEBOUNCE, 0x02);
+    delay(20);
+    writeRegister(_MPR121_REG_CONFIG1, 0x20);
+    delay(20);
+    writeRegister(_MPR121_REG_CONFIG2, 0x21);
     delay(20);
     // Enter run mode by Seting partial filter calibration tracking, disable proximity detection, enable 12 channels
     writeRegister(_MPR121_REG_ELECTRODE_CONFIG,
-                  ECR_CALIBRATION_TRACK_FROM_PARTIAL_FILTER | ECR_PROXIMITY_DETECTION_OFF | ECR_TOUCH_DETECTION_12CH);
+                  ECR_CALIBRATION_TRACK_FROM_FULL_FILTER | ECR_PROXIMITY_DETECTION_OFF | ECR_TOUCH_DETECTION_12CH);
     delay(100);
     LOG_DEBUG("MPR121 Run");
     state = Idle;
