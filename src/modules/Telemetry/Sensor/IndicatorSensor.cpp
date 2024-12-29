@@ -52,7 +52,7 @@ static int cmd_send(uint8_t cmd, const char *p_data, uint8_t len)
     }
     cobs_encode_result ret = cobs_encode(buf, sizeof(buf), data, index);
 
-    LOG_DEBUG("cobs TX status:%d, len:%d, type 0x%x", ret.status, ret.out_len, cmd);
+    // LOG_DEBUG("cobs TX status:%d, len:%d, type 0x%x", ret.status, ret.out_len, cmd);
 
     if (ret.status == COBS_ENCODE_OK) {
         return uart_write_bytes(SENSOR_PORT_NUM, buf, ret.out_len + 1);
@@ -112,7 +112,7 @@ bool IndicatorSensor::getMetrics(meshtastic_Telemetry *measurement)
             memset(data, 0, sizeof(data));
             ret = cobs_decode(data, sizeof(data), p_buf_start, p_buf_end - p_buf_start);
 
-            LOG_DEBUG("cobs RX status:%d, len:%d, type:0x%x  ", ret.status, ret.out_len, data[0]);
+            // LOG_DEBUG("cobs RX status:%d, len:%d, type:0x%x  ", ret.status, ret.out_len, data[0]);
 
             if (ret.out_len > 1 && ret.status == COBS_DECODE_OK) {
 
@@ -121,14 +121,14 @@ bool IndicatorSensor::getMetrics(meshtastic_Telemetry *measurement)
                 switch (pkt_type) {
                 case PKT_TYPE_SENSOR_SCD41_CO2: {
                     memcpy(&value, &data[1], sizeof(value));
-                    LOG_DEBUG("CO2: %.1f", value);
+                    // LOG_DEBUG("CO2: %.1f", value);
                     cmd_send(PKT_TYPE_ACK, ACK_PKT_PARA, 4);
                     break;
                 }
 
                 case PKT_TYPE_SENSOR_AHT20_TEMP: {
                     memcpy(&value, &data[1], sizeof(value));
-                    LOG_DEBUG("Temp: %.1f", value);
+                    // LOG_DEBUG("Temp: %.1f", value);
                     cmd_send(PKT_TYPE_ACK, ACK_PKT_PARA, 4);
                     measurement->variant.environment_metrics.has_temperature = true;
                     measurement->variant.environment_metrics.temperature = value;
@@ -137,7 +137,7 @@ bool IndicatorSensor::getMetrics(meshtastic_Telemetry *measurement)
 
                 case PKT_TYPE_SENSOR_AHT20_HUMIDITY: {
                     memcpy(&value, &data[1], sizeof(value));
-                    LOG_DEBUG("Humidity: %.1f", value);
+                    // LOG_DEBUG("Humidity: %.1f", value);
                     cmd_send(PKT_TYPE_ACK, ACK_PKT_PARA, 4);
                     measurement->variant.environment_metrics.has_relative_humidity = true;
                     measurement->variant.environment_metrics.relative_humidity = value;
@@ -146,7 +146,7 @@ bool IndicatorSensor::getMetrics(meshtastic_Telemetry *measurement)
 
                 case PKT_TYPE_SENSOR_TVOC_INDEX: {
                     memcpy(&value, &data[1], sizeof(value));
-                    LOG_DEBUG("Tvoc: %.1f", value);
+                    // LOG_DEBUG("Tvoc: %.1f", value);
                     cmd_send(PKT_TYPE_ACK, ACK_PKT_PARA, 4);
                     measurement->variant.environment_metrics.has_iaq = true;
                     measurement->variant.environment_metrics.iaq = value;
