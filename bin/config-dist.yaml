@@ -12,13 +12,6 @@ Lora:
 #  IRQ: 17
 #  Reset: 22
 
-#  Module: sx1262  # pinedio
-#  CS: 0
-#  IRQ: 10
-#  Busy: 11
-#  DIO2_AS_RF_SWITCH: true
-#  spidev: spidev0.1
-
 #  Module: RF95  # Adafruit RFM9x
 #  Reset: 25
 #  CS: 7
@@ -49,8 +42,6 @@ Lora:
 
 #  TXen: x  # TX and RX enable pins
 #  RXen: x
-
-#  ch341_quirk: true # Uncomment this to use the chunked SPI transfer that seems to fix the ch341
 
 #  spiSpeed: 2000000
 
@@ -155,9 +146,11 @@ Logging:
 
 Webserver:
 #  Port: 443 # Port for Webserver & Webservices
-#  RootPath: /usr/share/doc/meshtasticd/web # Root Dir of WebServer
+#  RootPath: /usr/share/meshtasticd/web # Root Dir of WebServer
 
 General:
   MaxNodes: 200
   MaxMessageQueue: 100
   ConfigDirectory: /etc/meshtasticd/config.d/
+#  MACAddress: AA:BB:CC:DD:EE:FF
+#  MACAddressSource: eth0

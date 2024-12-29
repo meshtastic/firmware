@@ -254,8 +254,8 @@ uint32_t RadioInterface::getTxDelayMsec()
     return random(0, pow(2, CWsize)) * slotTimeMsec;
 }
 
-/** The delay to use when we want to flood a message */
-uint32_t RadioInterface::getTxDelayMsecWeighted(float snr)
+/** The CW size to use when calculating SNR_based delays */
+uint8_t RadioInterface::getCWsize(float snr)
 {
     // The minimum value for a LoRa SNR
     const uint32_t SNR_MIN = -20;
@@ -263,10 +263,24 @@ uint32_t RadioInterface::getTxDelayMsecWeighted(float snr)
     // The maximum value for a LoRa SNR
     const uint32_t SNR_MAX = 15;
 
+    return map(snr, SNR_MIN, SNR_MAX, CWmin, CWmax);
+}
+
+/** The worst-case SNR_based packet delay */
+uint32_t RadioInterface::getTxDelayMsecWeightedWorst(float snr)
+{
+    uint8_t CWsize = getCWsize(snr);
+    // offset the maximum delay for routers: (2 * CWmax * slotTimeMsec)
+    return (2 * CWmax * slotTimeMsec) + pow(2, CWsize) * slotTimeMsec;
+}
+
+/** The delay to use when we want to flood a message */
+uint32_t RadioInterface::getTxDelayMsecWeighted(float snr)
+{
     //  high SNR = large CW size (Long Delay)
     //  low SNR = small CW size (Short Delay)
     uint32_t delay = 0;
-    uint8_t CWsize = map(snr, SNR_MIN, SNR_MAX, CWmin, CWmax);
+    uint8_t CWsize = getCWsize(snr);
     // LOG_DEBUG("rx_snr of %f so setting CWsize to:%d", snr, CWsize);
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
         config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
@@ -284,8 +298,8 @@ uint32_t RadioInterface::getTxDelayMsecWeighted(float snr)
 void printPacket(const char *prefix, const meshtastic_MeshPacket *p)
 {
 #ifdef DEBUG_PORT
-    std::string out = DEBUG_PORT.mt_sprintf("%s (id=0x%08x fr=0x%02x to=0x%02x, WantAck=%d, HopLim=%d Ch=0x%x", prefix, p->id,
-                                            p->from & 0xff, p->to & 0xff, p->want_ack, p->hop_limit, p->channel);
+    std::string out = DEBUG_PORT.mt_sprintf("%s (id=0x%08x fr=0x%08x to=0x%08x, WantAck=%d, HopLim=%d Ch=0x%x", prefix, p->id,
+                                            p->from, p->to, p->want_ack, p->hop_limit, p->channel);
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         auto &s = p->decoded;
 
@@ -313,6 +327,7 @@ void printPacket(const char *prefix, const meshtastic_MeshPacket *p)
             out += DEBUG_PORT.mt_sprintf(" failId=%08x", s.ackVariant.fail_id); */
     } else {
         out += " encrypted";
+        out += DEBUG_PORT.mt_sprintf(" len=%d", p->encrypted.size + sizeof(PacketHeader));
     }
 
     if (p->rx_time != 0)

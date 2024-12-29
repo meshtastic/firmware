@@ -10,9 +10,6 @@
 #include "mesh/generated/meshtastic/telemetry.pb.h"
 #include <SPI.h>
 #include <map>
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
-#include <SparkFun_ATECCX08a_Arduino_Library.h>
-#endif
 #if defined(ARCH_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32S2)
 #include "nimble/NimbleBluetooth.h"
 extern NimbleBluetooth *nimbleBluetooth;
@@ -20,6 +17,9 @@ extern NimbleBluetooth *nimbleBluetooth;
 #ifdef ARCH_NRF52
 #include "NRF52Bluetooth.h"
 extern NRF52Bluetooth *nrf52Bluetooth;
+#endif
+#if !MESHTASTIC_EXCLUDE_I2C
+#include "detect/ScanI2CTwoWire.h"
 #endif
 
 #if ARCH_PORTDUINO
@@ -38,10 +38,6 @@ extern bool eink_found;
 extern bool pmu_found;
 extern bool isCharging;
 extern bool isUSBPowered;
-
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
-extern ATECCX08A atecc;
-#endif
 
 #ifdef T_WATCH_S3
 #include <Adafruit_DRV2605.h>
@@ -84,6 +80,10 @@ extern bool pauseBluetoothLogging;
 void nrf52Setup(), esp32Setup(), nrf52Loop(), esp32Loop(), rp2040Setup(), clearBonds(), enterDfuMode();
 
 meshtastic_DeviceMetadata getDeviceMetadata();
+#if !MESHTASTIC_EXCLUDE_I2C
+void scannerToSensorsMap(const std::unique_ptr<ScanI2CTwoWire> &i2cScanner, ScanI2C::DeviceType deviceType,
+                         meshtastic_TelemetrySensorType sensorType);
+#endif
 
 // We default to 4MHz SPI, SPI mode 0
 extern SPISettings spiSettings;

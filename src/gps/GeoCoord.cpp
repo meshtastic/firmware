@@ -574,3 +574,23 @@ const char *GeoCoord::degreesToBearing(unsigned int degrees)
     else
         return "N";
 }
+
+double GeoCoord::pow_neg(double base, double exponent)
+{
+    if (exponent == 0) {
+        return 1;
+    } else if (exponent > 0) {
+        return pow(base, exponent);
+    }
+    return 1 / pow(base, -exponent);
+}
+
+double GeoCoord::toRadians(double deg)
+{
+    return deg * PI / 180;
+}
+
+double GeoCoord::toDegrees(double r)
+{
+    return r * 180 / PI;
+}

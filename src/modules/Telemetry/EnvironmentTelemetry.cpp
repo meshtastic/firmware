@@ -18,6 +18,7 @@
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR_EXTERNAL
 // Sensors
 #include "Sensor/AHT10.h"
 #include "Sensor/BME280Sensor.h"
@@ -36,7 +37,6 @@
 #include "Sensor/SHT31Sensor.h"
 #include "Sensor/SHT4XSensor.h"
 #include "Sensor/SHTC3Sensor.h"
-#include "Sensor/T1000xSensor.h"
 #include "Sensor/TSL2591Sensor.h"
 #include "Sensor/VEML7700Sensor.h"
 
@@ -58,11 +58,12 @@ MLX90632Sensor mlx90632Sensor;
 DFRobotLarkSensor dfRobotLarkSensor;
 NAU7802Sensor nau7802Sensor;
 BMP3XXSensor bmp3xxSensor;
+CGRadSensSensor cgRadSens;
+#endif
 #ifdef T1000X_SENSOR_EN
+#include "Sensor/T1000xSensor.h"
 T1000xSensor t1000xSensor;
 #endif
-CGRadSensSensor cgRadSens;
-
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
 
@@ -104,7 +105,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
             // therefore, we should only enable the sensor loop if measurement is also enabled
 #ifdef T1000X_SENSOR_EN
             result = t1000xSensor.runOnce();
-#else
+#elif !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR_EXTERNAL
             if (dfRobotLarkSensor.hasSensor())
                 result = dfRobotLarkSensor.runOnce();
             if (bmp085Sensor.hasSensor())
@@ -159,8 +160,10 @@ int32_t EnvironmentTelemetryModule::runOnce()
         if (!moduleConfig.telemetry.environment_measurement_enabled) {
             return disable();
         } else {
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR_EXTERNAL
             if (bme680Sensor.hasSensor())
                 result = bme680Sensor.runTrigger();
+#endif
         }
 
         if (((lastSentToMesh == 0) ||
@@ -499,6 +502,7 @@ AdminMessageHandleResult EnvironmentTelemetryModule::handleAdminMessageForModule
                                                                                  meshtastic_AdminMessage *response)
 {
     AdminMessageHandleResult result = AdminMessageHandleResult::NOT_HANDLED;
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR_EXTERNAL
     if (dfRobotLarkSensor.hasSensor()) {
         result = dfRobotLarkSensor.handleAdminMessage(mp, request, response);
         if (result != AdminMessageHandleResult::NOT_HANDLED)
@@ -609,6 +613,7 @@ AdminMessageHandleResult EnvironmentTelemetryModule::handleAdminMessageForModule
         if (result != AdminMessageHandleResult::NOT_HANDLED)
             return result;
     }
+#endif
     return result;
 }
 
