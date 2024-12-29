@@ -725,7 +725,6 @@ void handleNodes(HTTPRequest *req, HTTPResponse *res)
                 node["position"] = new JSONValue(position);
             }
 
-            JSONObject user;
             node["long_name"] = new JSONValue(tempNodeInfo->user.long_name);
             node["short_name"] = new JSONValue(tempNodeInfo->user.short_name);
             char macStr[18];
