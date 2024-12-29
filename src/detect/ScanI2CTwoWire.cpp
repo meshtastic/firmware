@@ -1,8 +1,8 @@
 #include "ScanI2CTwoWire.h"
 
 #if !MESHTASTIC_EXCLUDE_I2C
-
 #include "concurrency/LockGuard.h"
+#include <SE05X.h>
 #if defined(ARCH_PORTDUINO)
 #include "linux/LinuxHardwareI2C.h"
 #endif
@@ -460,6 +460,10 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 if (len == 5 && memcmp(expectedInfo, info, len) == 0) {
                     LOG_INFO("NXP SE050 crypto chip found");
                     type = NXP_SE050;
+                    if (SE05X.begin()) {
+                        LOG_INFO("NXP Random %u", SE05X.random(65535));
+                        LOG_INFO("NXP Serial Number: %s", SE05X.serialNumber().c_str());
+                    }
 
                 } else {
                     LOG_INFO("FT6336U touchscreen found");
