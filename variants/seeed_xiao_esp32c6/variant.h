@@ -1,8 +1,11 @@
 #define LED_PIN 15
 #define LED_STATE_ON 1 // State when LED is lit
 
-#define BUTTON_PIN 22 // This is the Program Button
+#define BUTTON_PIN 21 // This is the Program Button
 #define BUTTON_NEED_PULLUP
+
+#define I2C_SDA 22
+#define I2C_SCL 23
 
 #define USE_RF95
 #define LORA_MISO 20
