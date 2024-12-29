@@ -90,7 +90,7 @@ void getMacAddr(uint8_t *dmac)
         if (strlen(optionMac) >= 12) {
             MAC_from_string(optionMac, dmac);
         } else {
-            uint32_t hwId;
+            uint32_t hwId = {0};
             sscanf(optionMac, "%u", &hwId);
             dmac[0] = 0x80;
             dmac[1] = 0;
