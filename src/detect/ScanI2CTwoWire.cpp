@@ -154,9 +154,14 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
         }
         i2cBus->beginTransmission(addr.address);
 #ifdef ARCH_PORTDUINO
-        if (i2cBus->read() != -1)
-            err = 0;
-        else
+        err = 2;
+        if ((addr.address >= 0x30 && addr.address <= 0x37) || (addr.address >= 0x50 && addr.address <= 0x5F)) {
+            if (i2cBus->read() != -1)
+                err = 0;
+        } else {
+            err = i2cBus->writeQuick((uint8_t)0);
+        }
+        if (err != 0)
             err = 2;
 #else
         err = i2cBus->endTransmission();
@@ -250,8 +255,16 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFE), 2);
                 LOG_DEBUG("Register MFG_UID: 0x%x", registerValue);
                 if (registerValue == 0x5449) {
-                    logFoundDevice("INA260", (uint8_t)addr.address);
-                    type = INA260;
+                    registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFF), 2);
+                    LOG_DEBUG("Register DIE_UID: 0x%x", registerValue);
+
+                    if (registerValue == 0x2260) {
+                        logFoundDevice("INA226", (uint8_t)addr.address);
+                        type = INA226;
+                    } else {
+                        logFoundDevice("INA260", (uint8_t)addr.address);
+                        type = INA260;
+                    }
                 } else { // Assume INA219 if INA260 ID is not found
                     logFoundDevice("INA219", (uint8_t)addr.address);
                     type = INA219;
@@ -388,7 +401,6 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 SCAN_SIMPLE_CASE(OPT3001_ADDR, OPT3001, "OPT3001", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(MLX90632_ADDR, MLX90632, "MLX90632", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(NAU7802_ADDR, NAU7802, "NAU7802", (uint8_t)addr.address);
-                SCAN_SIMPLE_CASE(FT6336U_ADDR, FT6336U, "FT6336U", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(MAX1704X_ADDR, MAX17048, "MAX17048", (uint8_t)addr.address);
 #ifdef HAS_TPS65233
                 SCAN_SIMPLE_CASE(TPS65233_ADDR, TPS65233, "TPS65233", (uint8_t)addr.address);
@@ -435,6 +447,26 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     LOG_DEBUG("Unexpected Device ID for RadSense: addr=0x%x id=0x%x", CGRADSENS_ADDR, registerValue);
                 }
                 break;
+
+            case 0x48: {
+                i2cBus->beginTransmission(addr.address);
+                uint8_t getInfo[] = {0x5A, 0xC0, 0x00, 0xFF, 0xFC};
+                uint8_t expectedInfo[] = {0xa5, 0xE0, 0x00, 0x3F, 0x19};
+                uint8_t info[5];
+                size_t len = 0;
+                i2cBus->write(getInfo, 5);
+                i2cBus->endTransmission();
+                len = i2cBus->readBytes(info, 5);
+                if (len == 5 && memcmp(expectedInfo, info, len) == 0) {
+                    LOG_INFO("NXP SE050 crypto chip found");
+                    type = NXP_SE050;
+
+                } else {
+                    LOG_INFO("FT6336U touchscreen found");
+                    type = FT6336U;
+                }
+                break;
+            }
 
             default:
                 LOG_INFO("Device found at address 0x%x was not able to be enumerated", (uint8_t)addr.address);

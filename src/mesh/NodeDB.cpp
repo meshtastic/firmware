@@ -72,6 +72,78 @@ static unsigned char userprefs_admin_key_1[] = USERPREFS_USE_ADMIN_KEY_1;
 static unsigned char userprefs_admin_key_2[] = USERPREFS_USE_ADMIN_KEY_2;
 #endif
 
+#ifdef HELTEC_MESH_NODE_T114
+
+uint32_t read8(uint8_t bits, uint8_t dummy, uint8_t cs, uint8_t sck, uint8_t mosi, uint8_t dc, uint8_t rst)
+{
+    uint32_t ret = 0;
+    uint8_t SDAPIN = mosi;
+    pinMode(SDAPIN, INPUT_PULLUP);
+    digitalWrite(dc, HIGH);
+    for (int i = 0; i < dummy; i++) { // any dummy clocks
+        digitalWrite(sck, HIGH);
+        delay(1);
+        digitalWrite(sck, LOW);
+        delay(1);
+    }
+    for (int i = 0; i < bits; i++) { // read results
+        ret <<= 1;
+        delay(1);
+        if (digitalRead(SDAPIN))
+            ret |= 1;
+        ;
+        digitalWrite(sck, HIGH);
+        delay(1);
+        digitalWrite(sck, LOW);
+    }
+    return ret;
+}
+
+void write9(uint8_t val, uint8_t dc_val, uint8_t cs, uint8_t sck, uint8_t mosi, uint8_t dc, uint8_t rst)
+{
+    pinMode(mosi, OUTPUT);
+    digitalWrite(dc, dc_val);
+    for (int i = 0; i < 8; i++) { // send command
+        digitalWrite(mosi, (val & 0x80) != 0);
+        delay(1);
+        digitalWrite(sck, HIGH);
+        delay(1);
+        digitalWrite(sck, LOW);
+        val <<= 1;
+    }
+}
+
+uint32_t readwrite8(uint8_t cmd, uint8_t bits, uint8_t dummy, uint8_t cs, uint8_t sck, uint8_t mosi, uint8_t dc, uint8_t rst)
+{
+    digitalWrite(cs, LOW);
+    write9(cmd, 0, cs, sck, mosi, dc, rst);
+    uint32_t ret = read8(bits, dummy, cs, sck, mosi, dc, rst);
+    digitalWrite(cs, HIGH);
+    return ret;
+}
+
+uint32_t get_st7789_id(uint8_t cs, uint8_t sck, uint8_t mosi, uint8_t dc, uint8_t rst)
+{
+    pinMode(cs, OUTPUT);
+    digitalWrite(cs, HIGH);
+    pinMode(cs, OUTPUT);
+    pinMode(sck, OUTPUT);
+    pinMode(mosi, OUTPUT);
+    pinMode(dc, OUTPUT);
+    pinMode(rst, OUTPUT);
+    digitalWrite(rst, LOW); // Hardware Reset
+    delay(10);
+    digitalWrite(rst, HIGH);
+    delay(10);
+
+    uint32_t ID = 0;
+    ID = readwrite8(0x04, 24, 1, cs, sck, mosi, dc, rst);
+    ID = readwrite8(0x04, 24, 1, cs, sck, mosi, dc, rst); // ST7789 needs twice
+    return ID;
+}
+
+#endif
+
 bool meshtastic_DeviceState_callback(pb_istream_t *istream, pb_ostream_t *ostream, const pb_field_iter_t *field)
 {
     if (ostream) {
@@ -501,6 +573,12 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7789_CS) ||       \
     defined(HX8357_CS) || defined(USE_ST7789)
     bool hasScreen = true;
+#ifdef HELTEC_MESH_NODE_T114
+    uint32_t st7789_id = get_st7789_id(ST7789_NSS, ST7789_SCK, ST7789_SDA, ST7789_RS, ST7789_RESET);
+    if (st7789_id == 0xFFFFFF) {
+        hasScreen = false;
+    }
+#endif
 #elif ARCH_PORTDUINO
     bool hasScreen = false;
     if (settingsMap[displayPanel])
@@ -786,12 +864,12 @@ void NodeDB::installDefaultDeviceState()
 #ifdef USERPREFS_CONFIG_OWNER_LONG_NAME
     snprintf(owner.long_name, sizeof(owner.long_name), USERPREFS_CONFIG_OWNER_LONG_NAME);
 #else
-    snprintf(owner.long_name, sizeof(owner.long_name), "Meshtastic %02x%02x", ourMacAddr[4], ourMacAddr[5]);
+    snprintf(owner.long_name, sizeof(owner.long_name), "Meshtastic %04x", getNodeNum() & 0x0ffff);
 #endif
 #ifdef USERPREFS_CONFIG_OWNER_SHORT_NAME
     snprintf(owner.short_name, sizeof(owner.short_name), USERPREFS_CONFIG_OWNER_SHORT_NAME);
 #else
-    snprintf(owner.short_name, sizeof(owner.short_name), "%02x%02x", ourMacAddr[4], ourMacAddr[5]);
+    snprintf(owner.short_name, sizeof(owner.short_name), "%04x", getNodeNum() & 0x0ffff);
 #endif
     snprintf(owner.id, sizeof(owner.id), "!%08x", getNodeNum()); // Default node ID now based on nodenum
     memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
