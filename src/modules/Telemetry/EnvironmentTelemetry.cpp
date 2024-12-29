@@ -64,6 +64,10 @@ CGRadSensSensor cgRadSens;
 #include "Sensor/T1000xSensor.h"
 T1000xSensor t1000xSensor;
 #endif
+#ifdef SENSECAP_INDICATOR
+#include "Sensor/IndicatorSensor.h"
+IndicatorSensor indicatorSensor;
+#endif
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
 
@@ -103,6 +107,9 @@ int32_t EnvironmentTelemetryModule::runOnce()
             LOG_INFO("Environment Telemetry: init");
             // it's possible to have this module enabled, only for displaying values on the screen.
             // therefore, we should only enable the sensor loop if measurement is also enabled
+#ifdef SENSECAP_INDICATOR
+            result = indicatorSensor.runOnce();
+#endif
 #ifdef T1000X_SENSOR_EN
             result = t1000xSensor.runOnce();
 #elif !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR_EXTERNAL
@@ -298,6 +305,10 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
     m->which_variant = meshtastic_Telemetry_environment_metrics_tag;
     m->variant.environment_metrics = meshtastic_EnvironmentMetrics_init_zero;
 
+#ifdef SENSECAP_INDICATOR
+    valid = valid && indicatorSensor.getMetrics(m);
+    hasSensor = true;
+#endif
 #ifdef T1000X_SENSOR_EN // add by WayenWeng
     valid = valid && t1000xSensor.getMetrics(m);
     hasSensor = true;
@@ -410,7 +421,6 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
         valid = valid && cgRadSens.getMetrics(m);
         hasSensor = true;
     }
-
 #endif
     return valid && hasSensor;
 }
