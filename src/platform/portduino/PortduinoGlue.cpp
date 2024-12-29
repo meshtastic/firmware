@@ -104,7 +104,7 @@ void getMacAddr(uint8_t *dmac)
         exit;
     } else {
 
-        struct hci_dev_info di;
+        struct hci_dev_info di = {0};
         di.dev_id = 0;
         bdaddr_t bdaddr;
         int btsock;
