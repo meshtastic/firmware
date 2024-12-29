@@ -1,5 +1,5 @@
 #include "Channels.h"
-#include "../userPrefs.h"
+
 #include "CryptoEngine.h"
 #include "Default.h"
 #include "DisplayFormatters.h"
@@ -117,7 +117,6 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
         static const uint8_t defaultpsk0[] = USERPREFS_CHANNEL_0_PSK;
         memcpy(channelSettings.psk.bytes, defaultpsk0, sizeof(defaultpsk0));
         channelSettings.psk.size = sizeof(defaultpsk0);
-
 #endif
 #ifdef USERPREFS_CHANNEL_0_NAME
         strcpy(channelSettings.name, USERPREFS_CHANNEL_0_NAME);
@@ -125,13 +124,18 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
 #ifdef USERPREFS_CHANNEL_0_PRECISION
         channelSettings.module_settings.position_precision = USERPREFS_CHANNEL_0_PRECISION;
 #endif
+#ifdef USERPREFS_CHANNEL_0_UPLINK_ENABLED
+        channelSettings.uplink_enabled = USERPREFS_CHANNEL_0_UPLINK_ENABLED;
+#endif
+#ifdef USERPREFS_CHANNEL_0_DOWNLINK_ENABLED
+        channelSettings.downlink_enabled = USERPREFS_CHANNEL_0_DOWNLINK_ENABLED;
+#endif
         break;
     case 1:
 #ifdef USERPREFS_CHANNEL_1_PSK
         static const uint8_t defaultpsk1[] = USERPREFS_CHANNEL_1_PSK;
         memcpy(channelSettings.psk.bytes, defaultpsk1, sizeof(defaultpsk1));
         channelSettings.psk.size = sizeof(defaultpsk1);
-
 #endif
 #ifdef USERPREFS_CHANNEL_1_NAME
         strcpy(channelSettings.name, USERPREFS_CHANNEL_1_NAME);
@@ -139,19 +143,30 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
 #ifdef USERPREFS_CHANNEL_1_PRECISION
         channelSettings.module_settings.position_precision = USERPREFS_CHANNEL_1_PRECISION;
 #endif
+#ifdef USERPREFS_CHANNEL_1_UPLINK_ENABLED
+        channelSettings.uplink_enabled = USERPREFS_CHANNEL_1_UPLINK_ENABLED;
+#endif
+#ifdef USERPREFS_CHANNEL_1_DOWNLINK_ENABLED
+        channelSettings.downlink_enabled = USERPREFS_CHANNEL_1_DOWNLINK_ENABLED;
+#endif
         break;
     case 2:
 #ifdef USERPREFS_CHANNEL_2_PSK
         static const uint8_t defaultpsk2[] = USERPREFS_CHANNEL_2_PSK;
         memcpy(channelSettings.psk.bytes, defaultpsk2, sizeof(defaultpsk2));
         channelSettings.psk.size = sizeof(defaultpsk2);
-
 #endif
 #ifdef USERPREFS_CHANNEL_2_NAME
         strcpy(channelSettings.name, USERPREFS_CHANNEL_2_NAME);
 #endif
 #ifdef USERPREFS_CHANNEL_2_PRECISION
         channelSettings.module_settings.position_precision = USERPREFS_CHANNEL_2_PRECISION;
+#endif
+#ifdef USERPREFS_CHANNEL_2_UPLINK_ENABLED
+        channelSettings.uplink_enabled = USERPREFS_CHANNEL_2_UPLINK_ENABLED;
+#endif
+#ifdef USERPREFS_CHANNEL_2_DOWNLINK_ENABLED
+        channelSettings.downlink_enabled = USERPREFS_CHANNEL_2_DOWNLINK_ENABLED;
 #endif
         break;
     default:
@@ -163,19 +178,18 @@ CryptoKey Channels::getKey(ChannelIndex chIndex)
 {
     meshtastic_Channel &ch = getByIndex(chIndex);
     const meshtastic_ChannelSettings &channelSettings = ch.settings;
-    assert(ch.has_settings);
 
     CryptoKey k;
     memset(k.bytes, 0, sizeof(k.bytes)); // In case the user provided a short key, we want to pad the rest with zeros
 
-    if (ch.role == meshtastic_Channel_Role_DISABLED) {
+    if (!ch.has_settings || ch.role == meshtastic_Channel_Role_DISABLED) {
         k.length = -1; // invalid
     } else {
         memcpy(k.bytes, channelSettings.psk.bytes, channelSettings.psk.size);
         k.length = channelSettings.psk.size;
         if (k.length == 0) {
             if (ch.role == meshtastic_Channel_Role_SECONDARY) {
-                LOG_DEBUG("Unset PSK for secondary channel %s. using primary key", ch.settings.name);
+                LOG_DEBUG("Unset PSK for secondary channel %s. use primary key", ch.settings.name);
                 k = getKey(primaryIndex);
             } else {
                 LOG_WARN("User disabled encryption");
@@ -184,7 +198,7 @@ CryptoKey Channels::getKey(ChannelIndex chIndex)
             // Convert the short single byte variants of psk into variant that can be used more generally
 
             uint8_t pskIndex = k.bytes[0];
-            LOG_DEBUG("Expanding short PSK #%d", pskIndex);
+            LOG_DEBUG("Expand short PSK #%d", pskIndex);
             if (pskIndex == 0)
                 k.length = 0; // Turn off encryption
             else {
@@ -304,7 +318,7 @@ bool Channels::anyMqttEnabled()
 {
 #if USERPREFS_EVENT_MODE
     // Don't publish messages on the public MQTT broker if we are in event mode
-    if (strcmp(moduleConfig.mqtt.address, default_mqtt_address) == 0) {
+    if (mqtt && mqtt.isUsingDefaultServer()) {
         return false;
     }
 #endif
@@ -369,11 +383,11 @@ bool Channels::hasDefaultChannel()
 bool Channels::decryptForHash(ChannelIndex chIndex, ChannelHash channelHash)
 {
     if (chIndex > getNumChannels() || getHash(chIndex) != channelHash) {
-        // LOG_DEBUG("Skipping channel %d (hash %x) due to invalid hash/index, want=%x", chIndex, getHash(chIndex),
+        // LOG_DEBUG("Skip channel %d (hash %x) due to invalid hash/index, want=%x", chIndex, getHash(chIndex),
         // channelHash);
         return false;
     } else {
-        LOG_DEBUG("Using channel %d (hash 0x%x)", chIndex, channelHash);
+        LOG_DEBUG("Use channel %d (hash 0x%x)", chIndex, channelHash);
         setCrypto(chIndex);
         return true;
     }
@@ -383,7 +397,7 @@ bool Channels::decryptForHash(ChannelIndex chIndex, ChannelHash channelHash)
  *
  * This method is called before encoding outbound packets
  *
- * @eturn the (0 to 255) hash for that channel - if no suitable channel could be found, return -1
+ * @return the (0 to 255) hash for that channel - if no suitable channel could be found, return -1
  */
 int16_t Channels::setActiveByIndex(ChannelIndex channelIndex)
 {

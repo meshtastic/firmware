@@ -15,7 +15,7 @@
 // rxd = 9
 
 #define EXT_NOTIFY_OUT 22
-#undef BUTTON_PIN // Pin 17 used for antenna switching via DIO4
+#define BUTTON_PIN -1 // Pin 17 used for antenna switching via DIO4
 
 #define LED_PIN PIN_LED
 
@@ -54,7 +54,7 @@
 #define SX126X_DIO1 LORA_DIO1
 #define SX126X_BUSY LORA_BUSY
 #define SX126X_RESET LORA_RESET
-#define SX126X_DIO2_AS_RF_SWITCH  // Antenna switch CTRL
-#define SX126X_POWER_EN LORA_DIO4 // Antenna switch !CTRL via GPIO17
+#define SX126X_DIO2_AS_RF_SWITCH // Antenna switch CTRL
+#define SX126X_RXEN LORA_DIO4    // Antenna switch !CTRL via GPIO17
 // #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 #endif

@@ -51,7 +51,11 @@ void updateBatteryLevel(uint8_t level) {}
 
 void getMacAddr(uint8_t *dmac)
 {
+#if defined(CONFIG_IDF_TARGET_ESP32C6) && defined(CONFIG_SOC_IEEE802154_SUPPORTED)
+    assert(esp_base_mac_addr_get(dmac) == ESP_OK);
+#else
     assert(esp_efuse_mac_get_default(dmac) == ESP_OK);
+#endif
 }
 
 #ifdef HAS_32768HZ
@@ -79,7 +83,7 @@ void enableSlowCLK()
         LOG_DEBUG("32K XTAL OSC has not started up");
     } else {
         rtc_clk_slow_freq_set(RTC_SLOW_FREQ_32K_XTAL);
-        LOG_DEBUG("Switching RTC Source to 32.768Khz succeeded, using 32K XTAL");
+        LOG_DEBUG("Switch RTC Source to 32.768Khz succeeded, using 32K XTAL");
         CALIBRATE_ONE(RTC_CAL_RTC_MUX);
         CALIBRATE_ONE(RTC_CAL_32K_XTAL);
     }
@@ -97,7 +101,7 @@ void esp32Setup()
     /* We explicitly don't want to do call randomSeed,
     // as that triggers the esp32 core to use a less secure pseudorandom function.
     uint32_t seed = esp_random();
-    LOG_DEBUG("Setting random seed %u", seed);
+    LOG_DEBUG("Set random seed %u", seed);
     randomSeed(seed);
     */
 
@@ -165,26 +169,6 @@ void esp32Setup()
     enableSlowCLK();
 #endif
 }
-
-#if 0
-// Turn off for now
-
-uint32_t axpDebugRead()
-{
-  axp.debugCharging();
-  LOG_DEBUG("vbus current %f", axp.getVbusCurrent());
-  LOG_DEBUG("charge current %f", axp.getBattChargeCurrent());
-  LOG_DEBUG("bat voltage %f", axp.getBattVoltage());
-  LOG_DEBUG("batt pct %d", axp.getBattPercentage());
-  LOG_DEBUG("is battery connected %d", axp.isBatteryConnect());
-  LOG_DEBUG("is USB connected %d", axp.isVBUSPlug());
-  LOG_DEBUG("is charging %d", axp.isChargeing());
-
-  return 30 * 1000;
-}
-
-Periodic axpDebugOutput(axpDebugRead);
-#endif
 
 /// loop code specific to ESP32 targets
 void esp32Loop()

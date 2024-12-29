@@ -50,9 +50,7 @@ template <typename T> bool SX126xInterface<T>::init()
 #endif
 
 #if ARCH_PORTDUINO
-    float tcxoVoltage = 0;
-    if (settingsMap[dio3_tcxo_voltage])
-        tcxoVoltage = 1.8;
+    float tcxoVoltage = (float)settingsMap[dio3_tcxo_voltage] / 1000;
     if (settingsMap[sx126x_ant_sw] != RADIOLIB_NC) {
         digitalWrite(settingsMap[sx126x_ant_sw], HIGH);
         pinMode(settingsMap[sx126x_ant_sw], OUTPUT);
@@ -94,7 +92,7 @@ template <typename T> bool SX126xInterface<T>::init()
 
     // Overriding current limit
     // (https://github.com/jgromes/RadioLib/blob/690a050ebb46e6097c5d00c371e961c1caa3b52e/src/modules/SX126x/SX126x.cpp#L85) using
-    // value in SX126xInterface.h (currently 140 mA) It may or may not be neccessary, depending on how RadioLib functions, from
+    // value in SX126xInterface.h (currently 140 mA) It may or may not be necessary, depending on how RadioLib functions, from
     // SX1261/2 datasheet: OCP after setting DeviceSel with SetPaConfig(): SX1261 - 60 mA, SX1262 - 140 mA For the SX1268 the IC
     // defaults to 140mA no matter the set power level, but RadioLib set it lower, this would need further checking Default values
     // are: SX1262, SX1268: 0x38 (140 mA), SX1261: 0x18 (60 mA)
@@ -123,7 +121,7 @@ template <typename T> bool SX126xInterface<T>::init()
     // no effect
 #if ARCH_PORTDUINO
     if (res == RADIOLIB_ERR_NONE) {
-        LOG_DEBUG("Using MCU pin %i as RXEN and pin %i as TXEN to control RF switching", settingsMap[rxen], settingsMap[txen]);
+        LOG_DEBUG("Use MCU pin %i as RXEN and pin %i as TXEN to control RF switching", settingsMap[rxen], settingsMap[txen]);
         lora.setRfSwitchPins(settingsMap[rxen], settingsMap[txen]);
     }
 #else
@@ -136,7 +134,7 @@ template <typename T> bool SX126xInterface<T>::init()
     LOG_DEBUG("SX126X_TXEN not defined, defaulting to RADIOLIB_NC");
 #endif
     if (res == RADIOLIB_ERR_NONE) {
-        LOG_DEBUG("Using MCU pin %i as RXEN and pin %i as TXEN to control RF switching", SX126X_RXEN, SX126X_TXEN);
+        LOG_DEBUG("Use MCU pin %i as RXEN and pin %i as TXEN to control RF switching", SX126X_RXEN, SX126X_TXEN);
         lora.setRfSwitchPins(SX126X_RXEN, SX126X_TXEN);
     }
 #endif

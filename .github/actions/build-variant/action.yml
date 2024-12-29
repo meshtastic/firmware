@@ -51,6 +51,7 @@ runs:
         file: build.tar
         target: build.tar
         token: ${{ inputs.github_token }}
+        version: tags/v2.5.3
 
     - name: Unpack web ui
       if: inputs.include-web-ui == 'true'

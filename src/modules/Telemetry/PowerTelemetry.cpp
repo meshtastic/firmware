@@ -27,8 +27,8 @@ int32_t PowerTelemetryModule::runOnce()
         sleepOnNextExecution = false;
         uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.power_update_interval,
                                                                    default_telemetry_broadcast_interval_secs);
-        LOG_DEBUG("Sleeping for %ims, then awaking to send metrics again.", nightyNightMs);
-        doDeepSleep(nightyNightMs, true);
+        LOG_DEBUG("Sleep for %ims, then awake to send metrics again", nightyNightMs);
+        doDeepSleep(nightyNightMs, true, false);
     }
 
     uint32_t result = UINT32_MAX;
@@ -51,11 +51,13 @@ int32_t PowerTelemetryModule::runOnce()
         firstTime = 0;
 #if HAS_TELEMETRY && !defined(ARCH_PORTDUINO)
         if (moduleConfig.telemetry.power_measurement_enabled) {
-            LOG_INFO("Power Telemetry: Initializing");
+            LOG_INFO("Power Telemetry: init");
             // it's possible to have this module enabled, only for displaying values on the screen.
             // therefore, we should only enable the sensor loop if measurement is also enabled
             if (ina219Sensor.hasSensor() && !ina219Sensor.isInitialized())
                 result = ina219Sensor.runOnce();
+            if (ina226Sensor.hasSensor() && !ina226Sensor.isInitialized())
+                result = ina226Sensor.runOnce();
             if (ina260Sensor.hasSensor() && !ina260Sensor.isInitialized())
                 result = ina260Sensor.runOnce();
             if (ina3221Sensor.hasSensor() && !ina3221Sensor.isInitialized())
@@ -170,6 +172,8 @@ bool PowerTelemetryModule::getPowerTelemetry(meshtastic_Telemetry *m)
 #if HAS_TELEMETRY && !defined(ARCH_PORTDUINO)
     if (ina219Sensor.hasSensor())
         valid = ina219Sensor.getMetrics(m);
+    if (ina226Sensor.hasSensor())
+        valid = ina226Sensor.getMetrics(m);
     if (ina260Sensor.hasSensor())
         valid = ina260Sensor.getMetrics(m);
     if (ina3221Sensor.hasSensor())
@@ -199,7 +203,7 @@ meshtastic_MeshPacket *PowerTelemetryModule::allocReply()
         if (decoded->which_variant == meshtastic_Telemetry_power_metrics_tag) {
             meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
             if (getPowerTelemetry(&m)) {
-                LOG_INFO("Power telemetry replying to request");
+                LOG_INFO("Power telemetry reply to request");
                 return allocDataProtobuf(m);
             } else {
                 return NULL;
@@ -216,7 +220,7 @@ bool PowerTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     m.which_variant = meshtastic_Telemetry_power_metrics_tag;
     m.time = getTime();
     if (getPowerTelemetry(&m)) {
-        LOG_INFO("(Sending): ch1_voltage=%f, ch1_current=%f, ch2_voltage=%f, ch2_current=%f, "
+        LOG_INFO("Send: ch1_voltage=%f, ch1_current=%f, ch2_voltage=%f, ch2_current=%f, "
                  "ch3_voltage=%f, ch3_current=%f",
                  m.variant.power_metrics.ch1_voltage, m.variant.power_metrics.ch1_current, m.variant.power_metrics.ch2_voltage,
                  m.variant.power_metrics.ch2_current, m.variant.power_metrics.ch3_voltage, m.variant.power_metrics.ch3_current);
@@ -236,14 +240,14 @@ bool PowerTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 
         lastMeasurementPacket = packetPool.allocCopy(*p);
         if (phoneOnly) {
-            LOG_INFO("Sending packet to phone");
+            LOG_INFO("Send packet to phone");
             service->sendToPhone(p);
         } else {
-            LOG_INFO("Sending packet to mesh");
+            LOG_INFO("Send packet to mesh");
             service->sendToMesh(p, RX_SRC_LOCAL, true);
 
             if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving) {
-                LOG_DEBUG("Starting next execution in 5s then going to sleep.");
+                LOG_DEBUG("Start next execution in 5s then sleep");
                 sleepOnNextExecution = true;
                 setIntervalFromNow(5000);
             }

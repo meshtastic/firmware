@@ -29,7 +29,7 @@
 
 #define BUTTON_PIN 0
 // #define BUTTON_NEED_PULLUP
-
+#define GPS_DEFAULT_NOT_PRESENT 1
 #define GPS_RX_PIN 44
 #define GPS_TX_PIN 43
 
@@ -73,6 +73,7 @@
 #define DAC_I2S_BCK 7
 #define DAC_I2S_WS 5
 #define DAC_I2S_DOUT 6
+#define DAC_I2S_MCLK 21 // GPIO lrck mic
 
 // LoRa
 #define USE_SX1262

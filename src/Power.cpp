@@ -72,8 +72,9 @@ static const uint8_t ext_chrg_detect_value = EXT_CHRG_DETECT_VALUE;
 #endif
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(ARCH_PORTDUINO)
-INA260Sensor ina260Sensor;
 INA219Sensor ina219Sensor;
+INA226Sensor ina226Sensor;
+INA260Sensor ina260Sensor;
 INA3221Sensor ina3221Sensor;
 #endif
 
@@ -155,8 +156,15 @@ static void adcEnable()
 #ifdef ADC_USE_PULLUP
     pinMode(ADC_CTRL, INPUT_PULLUP);
 #else
+#ifdef HELTEC_V3
+    pinMode(ADC_CTRL, INPUT);
+    uint8_t adc_ctl_enable_value = !(digitalRead(ADC_CTRL));
+    pinMode(ADC_CTRL, OUTPUT);
+    digitalWrite(ADC_CTRL, adc_ctl_enable_value);
+#else
     pinMode(ADC_CTRL, OUTPUT);
     digitalWrite(ADC_CTRL, ADC_CTRL_ENABLED);
+#endif
 #endif
     delay(10);
 #endif
@@ -168,7 +176,11 @@ static void adcDisable()
 #ifdef ADC_USE_PULLUP
     pinMode(ADC_CTRL, INPUT_PULLDOWN);
 #else
+#ifdef HELTEC_V3
+    pinMode(ADC_CTRL, ANALOG);
+#else
     digitalWrite(ADC_CTRL, !ADC_CTRL_ENABLED);
+#endif
 #endif
 #endif
 }
@@ -240,7 +252,6 @@ class AnalogBatteryLevel : public HasBatteryLevel
 #if HAS_TELEMETRY && !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !defined(HAS_PMU) &&                                  \
     !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
         if (hasINA()) {
-            LOG_DEBUG("Using INA on I2C addr 0x%x for device battery voltage", config.power.device_battery_ina_address);
             return getINAVoltage();
         }
 #endif
@@ -260,7 +271,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
             config.power.adc_multiplier_override > 0 ? config.power.adc_multiplier_override : ADC_MULTIPLIER;
         // Do not call analogRead() often.
         const uint32_t min_read_interval = 5000;
-        if (!Throttle::isWithinTimespanMs(last_read_time_ms, min_read_interval)) {
+        if (!initial_read_done || !Throttle::isWithinTimespanMs(last_read_time_ms, min_read_interval)) {
             last_read_time_ms = millis();
 
             uint32_t raw = 0;
@@ -360,7 +371,12 @@ class AnalogBatteryLevel : public HasBatteryLevel
     /**
      * return true if there is a battery installed in this unit
      */
+    // if we have a integrated device with a battery, we can assume that the battery is always connected
+#ifdef BATTERY_IMMUTABLE
+    virtual bool isBatteryConnect() override { return true; }
+#else
     virtual bool isBatteryConnect() override { return getBatteryPercent() != -1; }
+#endif
 
     /// If we see a battery voltage higher than physics allows - assume charger is pumping
     /// in power
@@ -398,7 +414,20 @@ class AnalogBatteryLevel : public HasBatteryLevel
 #ifdef EXT_CHRG_DETECT
         return digitalRead(EXT_CHRG_DETECT) == ext_chrg_detect_value;
 #else
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) &&           \
+    !defined(DISABLE_INA_CHARGING_DETECTION)
+        if (hasINA()) {
+            // get current flow from INA sensor - negative value means power flowing into the battery
+            // default assuming  BATTERY+  <--> INA_VIN+ <--> SHUNT RESISTOR <--> INA_VIN- <--> LOAD
+            LOG_DEBUG("Using INA on I2C addr 0x%x for charging detection", config.power.device_battery_ina_address);
+#if defined(INA_CHARGING_DETECTION_INVERT)
+            return getINACurrent() > 0;
+#else
+            return getINACurrent() < 0;
+#endif
+        }
         return isBatteryConnect() && isVbusIn();
+#endif
 #endif
     }
 
@@ -435,12 +464,29 @@ class AnalogBatteryLevel : public HasBatteryLevel
     {
         if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA219].first == config.power.device_battery_ina_address) {
             return ina219Sensor.getBusVoltageMv();
+        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA226].first ==
+                   config.power.device_battery_ina_address) {
+            return ina226Sensor.getBusVoltageMv();
         } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA260].first ==
                    config.power.device_battery_ina_address) {
             return ina260Sensor.getBusVoltageMv();
         } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA3221].first ==
                    config.power.device_battery_ina_address) {
             return ina3221Sensor.getBusVoltageMv();
+        }
+        return 0;
+    }
+
+    int16_t getINACurrent()
+    {
+        if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA219].first == config.power.device_battery_ina_address) {
+            return ina219Sensor.getCurrentMa();
+        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA226].first ==
+                   config.power.device_battery_ina_address) {
+            return ina226Sensor.getCurrentMa();
+        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA3221].first ==
+                   config.power.device_battery_ina_address) {
+            return ina3221Sensor.getCurrentMa();
         }
         return 0;
     }
@@ -454,6 +500,10 @@ class AnalogBatteryLevel : public HasBatteryLevel
             if (!ina219Sensor.isInitialized())
                 return ina219Sensor.runOnce() > 0;
             return ina219Sensor.isRunning();
+        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA226].first ==
+                   config.power.device_battery_ina_address) {
+            if (!ina226Sensor.isInitialized())
+                return ina226Sensor.runOnce() > 0;
         } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA260].first ==
                    config.power.device_battery_ina_address) {
             if (!ina260Sensor.isInitialized())
@@ -495,7 +545,7 @@ bool Power::analogInit()
 #endif
 
 #ifdef BATTERY_PIN
-    LOG_DEBUG("Using analog input %d for battery level", BATTERY_PIN);
+    LOG_DEBUG("Use analog input %d for battery level", BATTERY_PIN);
 
     // disable any internal pullups
     pinMode(BATTERY_PIN, INPUT);
@@ -526,18 +576,18 @@ bool Power::analogInit()
     esp_adc_cal_value_t val_type = esp_adc_cal_characterize(unit, atten, width, DEFAULT_VREF, adc_characs);
     // show ADC characterization base
     if (val_type == ESP_ADC_CAL_VAL_EFUSE_TP) {
-        LOG_INFO("ADCmod: ADC characterization based on Two Point values stored in eFuse");
+        LOG_INFO("ADC config based on Two Point values stored in eFuse");
     } else if (val_type == ESP_ADC_CAL_VAL_EFUSE_VREF) {
-        LOG_INFO("ADCmod: ADC characterization based on reference voltage stored in eFuse");
+        LOG_INFO("ADC config based on reference voltage stored in eFuse");
     }
 #ifdef CONFIG_IDF_TARGET_ESP32S3
     // ESP32S3
     else if (val_type == ESP_ADC_CAL_VAL_EFUSE_TP_FIT) {
-        LOG_INFO("ADCmod: ADC Characterization based on Two Point values and fitting curve coefficients stored in eFuse");
+        LOG_INFO("ADC config based on Two Point values and fitting curve coefficients stored in eFuse");
     }
 #endif
     else {
-        LOG_INFO("ADCmod: ADC characterization based on default reference voltage");
+        LOG_INFO("ADC config based on default reference voltage");
     }
 #endif // ARCH_ESP32
 
@@ -598,7 +648,7 @@ void Power::shutdown()
 #ifdef PIN_LED3
     ledOff(PIN_LED3);
 #endif
-    doDeepSleep(DELAY_FOREVER, false);
+    doDeepSleep(DELAY_FOREVER, false, false);
 #endif
 }
 
@@ -624,7 +674,7 @@ void Power::readPowerStatus()
                 batteryChargePercent = batteryLevel->getBatteryPercent();
             } else {
                 // If the AXP192 returns a percentage less than 0, the feature is either not supported or there is an error
-                // In that case, we compute an estimate of the charge percent based on open circuite voltage table defined
+                // In that case, we compute an estimate of the charge percent based on open circuit voltage table defined
                 // in power.h
                 batteryChargePercent = clamp((int)(((batteryVoltageMv - (OCV[NUM_OCV_POINTS - 1] * NUM_CELLS)) * 1e2) /
                                                    ((OCV[0] * NUM_CELLS) - (OCV[NUM_OCV_POINTS - 1] * NUM_CELLS))),
@@ -706,9 +756,9 @@ void Power::readPowerStatus()
             if (low_voltage_counter > 10) {
 #ifdef ARCH_NRF52
                 // We can't trigger deep sleep on NRF52, it's freezing the board
-                LOG_DEBUG("Low voltage detected, but not triggering deep sleep");
+                LOG_DEBUG("Low voltage detected, but not trigger deep sleep");
 #else
-                LOG_INFO("Low voltage detected, triggering deep sleep");
+                LOG_INFO("Low voltage detected, trigger deep sleep");
                 powerFSM.trigger(EVENT_LOW_BATTERY);
 #endif
             }
@@ -800,22 +850,22 @@ bool Power::axpChipInit()
     if (!PMU) {
         PMU = new XPowersAXP2101(*w);
         if (!PMU->init()) {
-            LOG_WARN("Failed to find AXP2101 power management");
+            LOG_WARN("No AXP2101 power management");
             delete PMU;
             PMU = NULL;
         } else {
-            LOG_INFO("AXP2101 PMU init succeeded, using AXP2101 PMU");
+            LOG_INFO("AXP2101 PMU init succeeded");
         }
     }
 
     if (!PMU) {
         PMU = new XPowersAXP192(*w);
         if (!PMU->init()) {
-            LOG_WARN("Failed to find AXP192 power management");
+            LOG_WARN("No AXP192 power management");
             delete PMU;
             PMU = NULL;
         } else {
-            LOG_INFO("AXP192 PMU init succeeded, using AXP192 PMU");
+            LOG_INFO("AXP192 PMU init succeeded");
         }
     }
 

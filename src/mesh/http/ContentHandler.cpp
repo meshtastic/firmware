@@ -74,6 +74,7 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
 
     ResourceNode *nodeAPIv1ToRadioOptions = new ResourceNode("/api/v1/toradio", "OPTIONS", &handleAPIv1ToRadio);
     ResourceNode *nodeAPIv1ToRadio = new ResourceNode("/api/v1/toradio", "PUT", &handleAPIv1ToRadio);
+    ResourceNode *nodeAPIv1FromRadioOptions = new ResourceNode("/api/v1/fromradio", "OPTIONS", &handleAPIv1FromRadio);
     ResourceNode *nodeAPIv1FromRadio = new ResourceNode("/api/v1/fromradio", "GET", &handleAPIv1FromRadio);
 
     //    ResourceNode *nodeHotspotApple = new ResourceNode("/hotspot-detect.html", "GET", &handleHotspot);
@@ -92,6 +93,7 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     ResourceNode *nodeJsonScanNetworks = new ResourceNode("/json/scanNetworks", "GET", &handleScanNetworks);
     ResourceNode *nodeJsonBlinkLED = new ResourceNode("/json/blink", "POST", &handleBlinkLED);
     ResourceNode *nodeJsonReport = new ResourceNode("/json/report", "GET", &handleReport);
+    ResourceNode *nodeJsonNodes = new ResourceNode("/json/nodes", "GET", &handleNodes);
     ResourceNode *nodeJsonFsBrowseStatic = new ResourceNode("/json/fs/browse/static", "GET", &handleFsBrowseStatic);
     ResourceNode *nodeJsonDelete = new ResourceNode("/json/fs/delete/static", "DELETE", &handleFsDeleteStatic);
 
@@ -100,6 +102,7 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     // Secure nodes
     secureServer->registerNode(nodeAPIv1ToRadioOptions);
     secureServer->registerNode(nodeAPIv1ToRadio);
+    secureServer->registerNode(nodeAPIv1FromRadioOptions);
     secureServer->registerNode(nodeAPIv1FromRadio);
     //    secureServer->registerNode(nodeHotspotApple);
     //    secureServer->registerNode(nodeHotspotAndroid);
@@ -110,6 +113,7 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     secureServer->registerNode(nodeJsonFsBrowseStatic);
     secureServer->registerNode(nodeJsonDelete);
     secureServer->registerNode(nodeJsonReport);
+    secureServer->registerNode(nodeJsonNodes);
     //    secureServer->registerNode(nodeUpdateFs);
     //    secureServer->registerNode(nodeDeleteFs);
     secureServer->registerNode(nodeAdmin);
@@ -121,6 +125,7 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     // Insecure nodes
     insecureServer->registerNode(nodeAPIv1ToRadioOptions);
     insecureServer->registerNode(nodeAPIv1ToRadio);
+    insecureServer->registerNode(nodeAPIv1FromRadioOptions);
     insecureServer->registerNode(nodeAPIv1FromRadio);
     //    insecureServer->registerNode(nodeHotspotApple);
     //    insecureServer->registerNode(nodeHotspotAndroid);
@@ -162,6 +167,12 @@ void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "GET");
     res->setHeader("X-Protobuf-Schema", "https://raw.githubusercontent.com/meshtastic/protobufs/master/meshtastic/mesh.proto");
+
+    if (req->getMethod() == "OPTIONS") {
+        res->setStatusCode(204); // Success with no content
+        // res->print(""); @todo remove
+        return;
+    }
 
     uint8_t txBuf[MAX_STREAM_BUF_SIZE];
     uint32_t len = 1;
@@ -441,15 +452,15 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
 
         return;
     } else {
-        LOG_ERROR("This should not have happened...");
-        res->println("ERROR: This should not have happened...");
+        LOG_ERROR("This should not have happened");
+        res->println("ERROR: This should not have happened");
     }
 }
 
 void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
 {
 
-    LOG_DEBUG("Form Upload - Disabling keep-alive");
+    LOG_DEBUG("Form Upload - Disable keep-alive");
     res->setHeader("Connection", "close");
 
     // First, we need to check the encoding of the form that we have received.
@@ -508,14 +519,14 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
 
         // Double check that it is what we expect
         if (name != "file") {
-            LOG_DEBUG("Skipping unexpected field");
+            LOG_DEBUG("Skip unexpected field");
             res->println("<p>No file found.</p>");
             return;
         }
 
         // Double check that it is what we expect
         if (filename == "") {
-            LOG_DEBUG("Skipping unexpected field");
+            LOG_DEBUG("Skip unexpected field");
             res->println("<p>No file found.</p>");
             return;
         }
@@ -671,6 +682,77 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
     delete value;
 }
 
+void handleNodes(HTTPRequest *req, HTTPResponse *res)
+{
+    ResourceParameters *params = req->getParams();
+    std::string content;
+
+    if (!params->getQueryParameter("content", content)) {
+        content = "json";
+    }
+
+    if (content == "json") {
+        res->setHeader("Content-Type", "application/json");
+        res->setHeader("Access-Control-Allow-Origin", "*");
+        res->setHeader("Access-Control-Allow-Methods", "GET");
+    } else {
+        res->setHeader("Content-Type", "text/html");
+        res->println("<pre>");
+    }
+
+    JSONArray nodesArray;
+
+    uint32_t readIndex = 0;
+    const meshtastic_NodeInfoLite *tempNodeInfo = nodeDB->readNextMeshNode(readIndex);
+    while (tempNodeInfo != NULL) {
+        if (tempNodeInfo->has_user) {
+            JSONObject node;
+
+            char id[16];
+            snprintf(id, sizeof(id), "!%08x", tempNodeInfo->num);
+
+            node["id"] = new JSONValue(id);
+            node["snr"] = new JSONValue(tempNodeInfo->snr);
+            node["via_mqtt"] = new JSONValue(BoolToString(tempNodeInfo->via_mqtt));
+            node["last_heard"] = new JSONValue((int)tempNodeInfo->last_heard);
+            node["position"] = new JSONValue();
+
+            if (nodeDB->hasValidPosition(tempNodeInfo)) {
+                JSONObject position;
+                position["latitude"] = new JSONValue((float)tempNodeInfo->position.latitude_i * 1e-7);
+                position["longitude"] = new JSONValue((float)tempNodeInfo->position.longitude_i * 1e-7);
+                position["altitude"] = new JSONValue((int)tempNodeInfo->position.altitude);
+                node["position"] = new JSONValue(position);
+            }
+
+            node["long_name"] = new JSONValue(tempNodeInfo->user.long_name);
+            node["short_name"] = new JSONValue(tempNodeInfo->user.short_name);
+            char macStr[18];
+            snprintf(macStr, sizeof(macStr), "%02X:%02X:%02X:%02X:%02X:%02X", tempNodeInfo->user.macaddr[0],
+                     tempNodeInfo->user.macaddr[1], tempNodeInfo->user.macaddr[2], tempNodeInfo->user.macaddr[3],
+                     tempNodeInfo->user.macaddr[4], tempNodeInfo->user.macaddr[5]);
+            node["mac_address"] = new JSONValue(macStr);
+            node["hw_model"] = new JSONValue(tempNodeInfo->user.hw_model);
+
+            nodesArray.push_back(new JSONValue(node));
+        }
+        tempNodeInfo = nodeDB->readNextMeshNode(readIndex);
+    }
+
+    // collect data to inner data object
+    JSONObject jsonObjInner;
+    jsonObjInner["nodes"] = new JSONValue(nodesArray);
+
+    // create json output structure
+    JSONObject jsonObjOuter;
+    jsonObjOuter["data"] = new JSONValue(jsonObjInner);
+    jsonObjOuter["status"] = new JSONValue("ok");
+    // serialize and write it to the stream
+    JSONValue *value = new JSONValue(jsonObjOuter);
+    res->print(value->Stringify().c_str());
+    delete value;
+}
+
 /*
     This supports the Apple Captive Network Assistant (CNA) Portal
 */
@@ -700,9 +782,9 @@ void handleDeleteFsContent(HTTPRequest *req, HTTPResponse *res)
     res->setHeader("Access-Control-Allow-Methods", "GET");
 
     res->println("<h1>Meshtastic</h1>");
-    res->println("Deleting Content in /static/*");
+    res->println("Delete Content in /static/*");
 
-    LOG_INFO("Deleting files from /static/* : ");
+    LOG_INFO("Delete files from /static/* : ");
 
     htmlDeleteDir("/static");
 

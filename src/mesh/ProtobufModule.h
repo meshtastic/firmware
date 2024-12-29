@@ -91,7 +91,7 @@ template <class T> class ProtobufModule : protected SinglePortModule
             if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, fields, &scratch)) {
                 decoded = &scratch;
             } else {
-                LOG_ERROR("Error decoding protobuf module!");
+                LOG_ERROR("Error decoding proto module!");
                 // if we can't decode it, nobody can process it!
                 return ProcessMessage::STOP;
             }
@@ -112,7 +112,7 @@ template <class T> class ProtobufModule : protected SinglePortModule
             if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, fields, &scratch)) {
                 decoded = &scratch;
             } else {
-                LOG_ERROR("Error decoding protobuf module!");
+                LOG_ERROR("Error decoding proto module!");
                 // if we can't decode it, nobody can process it!
                 return;
             }

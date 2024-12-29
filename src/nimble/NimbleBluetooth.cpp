@@ -59,7 +59,7 @@ class NimbleBluetoothToRadioCallback : public NimBLECharacteristicCallbacks
             memcpy(lastToRadio, val.data(), val.length());
             bluetoothPhoneAPI->handleToRadio(val.data(), val.length());
         } else {
-            LOG_DEBUG("Dropping duplicate ToRadio packet we just saw");
+            LOG_DEBUG("Drop dup ToRadio packet we just saw");
         }
     }
 };
@@ -84,7 +84,7 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
         uint32_t passkey = config.bluetooth.fixed_pin;
 
         if (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN) {
-            LOG_INFO("Using random passkey");
+            LOG_INFO("Use random passkey");
             // This is the passkey to be entered on peer - we pick a number >100,000 to ensure 6 digits
             passkey = random(100000, 999999);
         }
@@ -193,7 +193,7 @@ void NimbleBluetooth::setup()
     // Uncomment for testing
     // NimbleBluetooth::clearBonds();
 
-    LOG_INFO("Initialise the NimBLE bluetooth module");
+    LOG_INFO("Init the NimBLE bluetooth module");
 
     NimBLEDevice::init(getDeviceName());
     NimBLEDevice::setPower(ESP_PWR_LVL_P9);

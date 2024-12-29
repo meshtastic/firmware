@@ -31,14 +31,14 @@ ScanI2C::FoundDevice ScanI2C::firstRTC() const
 
 ScanI2C::FoundDevice ScanI2C::firstKeyboard() const
 {
-    ScanI2C::DeviceType types[] = {CARDKB, TDECKKB, BBQ10KB, RAK14004};
-    return firstOfOrNONE(4, types);
+    ScanI2C::DeviceType types[] = {CARDKB, TDECKKB, BBQ10KB, RAK14004, MPR121KB};
+    return firstOfOrNONE(5, types);
 }
 
 ScanI2C::FoundDevice ScanI2C::firstAccelerometer() const
 {
-    ScanI2C::DeviceType types[] = {MPU6050, LIS3DH, BMA423, LSM6DS3, BMX160, STK8BAXX, ICM20948};
-    return firstOfOrNONE(7, types);
+    ScanI2C::DeviceType types[] = {MPU6050, LIS3DH, BMA423, LSM6DS3, BMX160, STK8BAXX, ICM20948, QMA6100P};
+    return firstOfOrNONE(8, types);
 }
 
 ScanI2C::FoundDevice ScanI2C::find(ScanI2C::DeviceType) const

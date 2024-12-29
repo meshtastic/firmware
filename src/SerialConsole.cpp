@@ -99,25 +99,7 @@ bool SerialConsole::handleToRadio(const uint8_t *buf, size_t len)
 void SerialConsole::log_to_serial(const char *logLevel, const char *format, va_list arg)
 {
     if (usingProtobufs && config.security.debug_log_api_enabled) {
-        meshtastic_LogRecord_Level ll = meshtastic_LogRecord_Level_UNSET; // default to unset
-        switch (logLevel[0]) {
-        case 'D':
-            ll = meshtastic_LogRecord_Level_DEBUG;
-            break;
-        case 'I':
-            ll = meshtastic_LogRecord_Level_INFO;
-            break;
-        case 'W':
-            ll = meshtastic_LogRecord_Level_WARNING;
-            break;
-        case 'E':
-            ll = meshtastic_LogRecord_Level_ERROR;
-            break;
-        case 'C':
-            ll = meshtastic_LogRecord_Level_CRITICAL;
-            break;
-        }
-
+        meshtastic_LogRecord_Level ll = RedirectablePrint::getLogLevel(logLevel);
         auto thread = concurrency::OSThread::currentThread;
         emitLogRecord(ll, thread ? thread->ThreadName.c_str() : "", format, arg);
     } else

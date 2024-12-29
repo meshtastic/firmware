@@ -68,6 +68,10 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
 
     String drawWithCursor(String text, int cursor);
 
+#ifdef RAK14014
+    cannedMessageModuleRunState getRunState() const { return runState; }
+#endif
+
     /*
       -Override the wantPacket method. We need the Routing Messages to look for ACKs.
     */
@@ -98,7 +102,7 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     int getNextIndex();
     int getPrevIndex();
 
-#if defined(T_WATCH_S3) || defined(RAK14014)
+#if defined(USE_VIRTUAL_KEYBOARD)
     void drawKeyboard(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
     String keyForCoordinates(uint x, uint y);
     bool shift = false;
@@ -113,8 +117,10 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     int handleInputEvent(const InputEvent *event);
     virtual bool wantUIFrame() override { return this->shouldDraw(); }
     virtual Observable<const UIFrameEvent *> *getUIFrameObservable() override { return this; }
-    virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) override;
     virtual bool interceptingKeyboardInput() override;
+#if !HAS_TFT
+    virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) override;
+#endif
     virtual AdminMessageHandleResult handleAdminMessageForModule(const meshtastic_MeshPacket &mp,
                                                                  meshtastic_AdminMessage *request,
                                                                  meshtastic_AdminMessage *response) override;
@@ -152,7 +158,7 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     unsigned long lastTouchMillis = 0;
     String temporaryMessage;
 
-#if defined(T_WATCH_S3) || defined(RAK14014)
+#if defined(USE_VIRTUAL_KEYBOARD)
     Letter keyboard[2][4][10] = {{{{"Q", 20, 0, 0, 0, 0},
                                    {"W", 22, 0, 0, 0, 0},
                                    {"E", 17, 0, 0, 0, 0},

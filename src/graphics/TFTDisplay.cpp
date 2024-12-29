@@ -347,7 +347,7 @@ static LGFX *tft = nullptr;
 #include <TFT_eSPI.h> // Graphics and font library for ILI9342 driver chip
 
 static TFT_eSPI *tft = nullptr; // Invoke library, pins defined in User_Setup.h
-#elif ARCH_PORTDUINO && HAS_SCREEN != 0
+#elif ARCH_PORTDUINO && HAS_SCREEN != 0 && !HAS_TFT
 #include <LovyanGFX.hpp> // Graphics and font library for ST7735 driver chip
 
 class LGFX : public lgfx::LGFX_Device
@@ -823,7 +823,7 @@ void TFTDisplay::setDetected(uint8_t detected)
 bool TFTDisplay::connect()
 {
     concurrency::LockGuard g(spiLock);
-    LOG_INFO("Doing TFT init");
+    LOG_INFO("Do TFT init");
 #ifdef RAK14014
     tft = new TFT_eSPI;
 #else
