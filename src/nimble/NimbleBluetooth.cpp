@@ -49,7 +49,11 @@ static uint8_t lastToRadio[MAX_TO_FROM_RADIO_SIZE];
 
 class NimbleBluetoothToRadioCallback : public NimBLECharacteristicCallbacks
 {
+#if defined(CONFIG_NIMBLE_CPP_IDF) && (ESP_IDF_VERSION_MAJOR * 100 + ESP_IDF_VERSION_MINOR * 10 + ESP_IDF_VERSION_PATCH) > 514
     virtual void onWrite(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo)
+#else
+    virtual void onWrite(NimBLECharacteristic *pCharacteristic)
+#endif
     {
         LOG_INFO("To Radio onwrite");
         auto val = pCharacteristic->getValue();
@@ -66,7 +70,11 @@ class NimbleBluetoothToRadioCallback : public NimBLECharacteristicCallbacks
 
 class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
 {
+#if defined(CONFIG_NIMBLE_CPP_IDF) && (ESP_IDF_VERSION_MAJOR * 100 + ESP_IDF_VERSION_MINOR * 10 + ESP_IDF_VERSION_PATCH) > 514
     virtual void onRead(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo)
+#else
+    virtual void onRead(NimBLECharacteristic *pCharacteristic)
+#endif
     {
         uint8_t fromRadioBytes[meshtastic_FromRadio_size];
         size_t numBytes = bluetoothPhoneAPI->getFromRadio(fromRadioBytes);
@@ -79,7 +87,11 @@ class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
 
 class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
 {
+#if defined(CONFIG_NIMBLE_CPP_IDF) && (ESP_IDF_VERSION_MAJOR * 100 + ESP_IDF_VERSION_MINOR * 10 + ESP_IDF_VERSION_PATCH) > 514
     virtual void onPassKeyEntry(NimBLEConnInfo &connInfo)
+#else
+    virtual uint32_t onPassKeyRequest()
+#endif
     {
         uint32_t passkey = config.bluetooth.fixed_pin;
 
@@ -120,7 +132,11 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
 #endif
         passkeyShowing = true;
 
+#if defined(CONFIG_NIMBLE_CPP_IDF) && (ESP_IDF_VERSION_MAJOR * 100 + ESP_IDF_VERSION_MINOR * 10 + ESP_IDF_VERSION_PATCH) > 514
         NimBLEDevice::injectPassKey(connInfo, passkey);
+#else
+        return passkey;
+#endif
     }
 
     virtual void onAuthenticationComplete(ble_gap_conn_desc *desc)
@@ -183,7 +199,11 @@ int NimbleBluetooth::getRssi()
     if (bleServer && isConnected()) {
         auto service = bleServer->getServiceByUUID(MESH_SERVICE_UUID);
         uint16_t handle = service->getHandle();
+#if defined(CONFIG_NIMBLE_CPP_IDF) && (ESP_IDF_VERSION_MAJOR * 100 + ESP_IDF_VERSION_MINOR * 10 + ESP_IDF_VERSION_PATCH) > 514
         return NimBLEDevice::getClientByHandle(handle)->getRssi();
+#else
+        return NimBLEDevice::getClientByID(handle)->getRssi();
+#endif
     }
     return 0; // FIXME figure out where to source this
 }
