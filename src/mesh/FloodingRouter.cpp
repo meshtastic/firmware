@@ -24,6 +24,7 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
     if (wasSeenRecently(p)) { // Note: this will also add a recent packet record
         printPacket("Ignore dupe incoming msg", p);
         rxDupe++;
+
         /* If the original transmitter is doing retransmissions (hopStart equals hopLimit) for a reliable transmission, e.g., when
         the ACK got lost, we will handle the packet again to make sure it gets an implicit ACK. */
         bool isRepeated = p->hop_start > 0 && p->hop_start == p->hop_limit;
@@ -45,10 +46,14 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 void FloodingRouter::perhapsCancelDupe(const meshtastic_MeshPacket *p)
 {
     if (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER &&
-        config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER) {
+        config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER &&
+        config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER_LATE) {
         // cancel rebroadcast of this message *if* there was already one, unless we're a router/repeater!
         if (Router::cancelSending(p->from, p->id))
             txRelayCanceled++;
+    }
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE && iface) {
+        iface->clampToLateRebroadcastWindow(getFrom(p), p->id);
     }
 }
 

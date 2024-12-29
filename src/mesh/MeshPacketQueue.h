@@ -36,7 +36,7 @@ class MeshPacketQueue
     meshtastic_MeshPacket *getFront();
 
     /** Attempt to find and remove a packet from this queue.  Returns the packet which was removed from the queue */
-    meshtastic_MeshPacket *remove(NodeNum from, PacketId id);
+    meshtastic_MeshPacket *remove(NodeNum from, PacketId id, bool tx_normal = true, bool tx_late = true);
 
     /* Attempt to find a packet from this queue. Return true if it was found. */
     bool find(NodeNum from, PacketId id);

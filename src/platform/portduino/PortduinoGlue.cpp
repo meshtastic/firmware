@@ -21,9 +21,12 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 
+#include "platform/portduino/USBHal.h"
+
 std::map<configNames, int> settingsMap;
 std::map<configNames, std::string> settingsStrings;
 std::ofstream traceFile;
+Ch341Hal *ch341Hal = nullptr;
 char *configPath = nullptr;
 char *optionMac = nullptr;
 
@@ -87,7 +90,7 @@ void getMacAddr(uint8_t *dmac)
         if (strlen(optionMac) >= 12) {
             MAC_from_string(optionMac, dmac);
         } else {
-            uint32_t hwId;
+            uint32_t hwId = {0};
             sscanf(optionMac, "%u", &hwId);
             dmac[0] = 0x80;
             dmac[1] = 0;
@@ -101,10 +104,9 @@ void getMacAddr(uint8_t *dmac)
         exit;
     } else {
 
-        struct hci_dev_info di;
+        struct hci_dev_info di = {0};
         di.dev_id = 0;
         bdaddr_t bdaddr;
-        char addr[18];
         int btsock;
         btsock = socket(AF_BLUETOOTH, SOCK_RAW, 1);
         if (btsock < 0) { // If anything fails, just return with the default value
@@ -151,6 +153,7 @@ void portduinoSetup()
     std::string gpioChipName = "gpiochip";
     settingsStrings[i2cdev] = "";
     settingsStrings[keyboardDevice] = "";
+    settingsStrings[pointerDevice] = "";
     settingsStrings[webserverrootpath] = "";
     settingsStrings[spidev] = "";
     settingsStrings[displayspidev] = "";
@@ -201,8 +204,36 @@ void portduinoSetup()
             }
         }
     }
-
+    // if we're using a usermode driver, we need to initialize it here, to get a serial number back for mac address
     uint8_t dmac[6] = {0};
+    if (settingsStrings[spidev] == "ch341") {
+        ch341Hal = new Ch341Hal(0);
+        if (settingsStrings[lora_usb_serial_num] != "") {
+            ch341Hal->serial = settingsStrings[lora_usb_serial_num];
+        }
+        ch341Hal->vid = settingsMap[lora_usb_vid];
+        ch341Hal->pid = settingsMap[lora_usb_pid];
+        ch341Hal->init();
+        if (!ch341Hal->isInit()) {
+            std::cout << "Could not initialize CH341 device!" << std::endl;
+            exit(EXIT_FAILURE);
+        }
+        char serial[9] = {0};
+        ch341Hal->getSerialString(serial, 8);
+        std::cout << "Serial " << serial << std::endl;
+        if (strlen(serial) == 8 && settingsStrings[mac_address].length() < 12) {
+            uint8_t hash[32] = {0};
+            memcpy(hash, serial, 8);
+            crypto->hash(hash, 8);
+            dmac[0] = (hash[0] << 4) | 2;
+            dmac[1] = hash[1];
+            dmac[2] = hash[2];
+            dmac[3] = hash[3];
+            dmac[4] = hash[4];
+            dmac[5] = hash[5];
+        }
+    }
+
     getMacAddr(dmac);
     if (dmac[0] == 0 && dmac[1] == 0 && dmac[2] == 0 && dmac[3] == 0 && dmac[4] == 0 && dmac[5] == 0) {
         std::cout << "*** Blank MAC Address not allowed!" << std::endl;
@@ -225,47 +256,11 @@ void portduinoSetup()
     // Need to bind all the configured GPIO pins so they're not simulated
     // TODO: Can we do this in the for loop above?
     // TODO: If one of these fails, we should log and terminate
-    if (settingsMap.count(cs) > 0 && settingsMap[cs] != RADIOLIB_NC) {
-        if (initGPIOPin(settingsMap[cs], gpioChipName) != ERRNO_OK) {
-            settingsMap[cs] = RADIOLIB_NC;
-        }
-    }
-    if (settingsMap.count(irq) > 0 && settingsMap[irq] != RADIOLIB_NC) {
-        if (initGPIOPin(settingsMap[irq], gpioChipName) != ERRNO_OK) {
-            settingsMap[irq] = RADIOLIB_NC;
-        }
-    }
-    if (settingsMap.count(busy) > 0 && settingsMap[busy] != RADIOLIB_NC) {
-        if (initGPIOPin(settingsMap[busy], gpioChipName) != ERRNO_OK) {
-            settingsMap[busy] = RADIOLIB_NC;
-        }
-    }
-    if (settingsMap.count(reset) > 0 && settingsMap[reset] != RADIOLIB_NC) {
-        if (initGPIOPin(settingsMap[reset], gpioChipName) != ERRNO_OK) {
-            settingsMap[reset] = RADIOLIB_NC;
-        }
-    }
-    if (settingsMap.count(sx126x_ant_sw) > 0 && settingsMap[sx126x_ant_sw] != RADIOLIB_NC) {
-        if (initGPIOPin(settingsMap[sx126x_ant_sw], gpioChipName) != ERRNO_OK) {
-            settingsMap[sx126x_ant_sw] = RADIOLIB_NC;
-        }
-    }
     if (settingsMap.count(user) > 0 && settingsMap[user] != RADIOLIB_NC) {
         if (initGPIOPin(settingsMap[user], gpioChipName) != ERRNO_OK) {
             settingsMap[user] = RADIOLIB_NC;
         }
     }
-    if (settingsMap.count(rxen) > 0 && settingsMap[rxen] != RADIOLIB_NC) {
-        if (initGPIOPin(settingsMap[rxen], gpioChipName) != ERRNO_OK) {
-            settingsMap[rxen] = RADIOLIB_NC;
-        }
-    }
-    if (settingsMap.count(txen) > 0 && settingsMap[txen] != RADIOLIB_NC) {
-        if (initGPIOPin(settingsMap[txen], gpioChipName) != ERRNO_OK) {
-            settingsMap[txen] = RADIOLIB_NC;
-        }
-    }
-
     if (settingsMap[displayPanel] != no_screen) {
         if (settingsMap[displayCS] > 0)
             initGPIOPin(settingsMap[displayCS], gpioChipName);
@@ -283,7 +278,43 @@ void portduinoSetup()
             initGPIOPin(settingsMap[touchscreenIRQ], gpioChipName);
     }
 
-    if (settingsStrings[spidev] != "") {
+    // Only initialize the radio pins when dealing with real, kernel controlled SPI hardware
+    if (settingsStrings[spidev] != "" && settingsStrings[spidev] != "ch341") {
+        if (settingsMap.count(cs) > 0 && settingsMap[cs] != RADIOLIB_NC) {
+            if (initGPIOPin(settingsMap[cs], gpioChipName) != ERRNO_OK) {
+                settingsMap[cs] = RADIOLIB_NC;
+            }
+        }
+        if (settingsMap.count(irq) > 0 && settingsMap[irq] != RADIOLIB_NC) {
+            if (initGPIOPin(settingsMap[irq], gpioChipName) != ERRNO_OK) {
+                settingsMap[irq] = RADIOLIB_NC;
+            }
+        }
+        if (settingsMap.count(busy) > 0 && settingsMap[busy] != RADIOLIB_NC) {
+            if (initGPIOPin(settingsMap[busy], gpioChipName) != ERRNO_OK) {
+                settingsMap[busy] = RADIOLIB_NC;
+            }
+        }
+        if (settingsMap.count(reset) > 0 && settingsMap[reset] != RADIOLIB_NC) {
+            if (initGPIOPin(settingsMap[reset], gpioChipName) != ERRNO_OK) {
+                settingsMap[reset] = RADIOLIB_NC;
+            }
+        }
+        if (settingsMap.count(sx126x_ant_sw) > 0 && settingsMap[sx126x_ant_sw] != RADIOLIB_NC) {
+            if (initGPIOPin(settingsMap[sx126x_ant_sw], gpioChipName) != ERRNO_OK) {
+                settingsMap[sx126x_ant_sw] = RADIOLIB_NC;
+            }
+        }
+        if (settingsMap.count(rxen) > 0 && settingsMap[rxen] != RADIOLIB_NC) {
+            if (initGPIOPin(settingsMap[rxen], gpioChipName) != ERRNO_OK) {
+                settingsMap[rxen] = RADIOLIB_NC;
+            }
+        }
+        if (settingsMap.count(txen) > 0 && settingsMap[txen] != RADIOLIB_NC) {
+            if (initGPIOPin(settingsMap[txen], gpioChipName) != ERRNO_OK) {
+                settingsMap[txen] = RADIOLIB_NC;
+            }
+        }
         SPI.begin(settingsStrings[spidev].c_str());
     }
     if (settingsStrings[traceFilename] != "") {
@@ -378,17 +409,24 @@ bool loadConfig(const char *configPath)
             settingsMap[rxen] = yamlConfig["Lora"]["RXen"].as<int>(RADIOLIB_NC);
             settingsMap[sx126x_ant_sw] = yamlConfig["Lora"]["SX126X_ANT_SW"].as<int>(RADIOLIB_NC);
             settingsMap[gpiochip] = yamlConfig["Lora"]["gpiochip"].as<int>(0);
-            settingsMap[ch341Quirk] = yamlConfig["Lora"]["ch341_quirk"].as<bool>(false);
             settingsMap[spiSpeed] = yamlConfig["Lora"]["spiSpeed"].as<int>(2000000);
+            settingsStrings[lora_usb_serial_num] = yamlConfig["Lora"]["USB_Serialnum"].as<std::string>("");
+            settingsMap[lora_usb_pid] = yamlConfig["Lora"]["USB_PID"].as<int>(0x5512);
+            settingsMap[lora_usb_vid] = yamlConfig["Lora"]["USB_VID"].as<int>(0x1A86);
 
-            settingsStrings[spidev] = "/dev/" + yamlConfig["Lora"]["spidev"].as<std::string>("spidev0.0");
-            if (settingsStrings[spidev].length() == 14) {
-                int x = settingsStrings[spidev].at(11) - '0';
-                int y = settingsStrings[spidev].at(13) - '0';
-                if (x >= 0 && x < 10 && y >= 0 && y < 10) {
-                    settingsMap[spidev] = x + y << 4;
-                    settingsMap[displayspidev] = settingsMap[spidev];
-                    settingsMap[touchscreenspidev] = settingsMap[spidev];
+            settingsStrings[spidev] = yamlConfig["Lora"]["spidev"].as<std::string>("spidev0.0");
+            if (settingsStrings[spidev] != "ch341") {
+                settingsStrings[spidev] = "/dev/" + settingsStrings[spidev];
+                if (settingsStrings[spidev].length() == 14) {
+                    int x = settingsStrings[spidev].at(11) - '0';
+                    int y = settingsStrings[spidev].at(13) - '0';
+                    // Pretty sure this is always true
+                    if (x >= 0 && x < 10 && y >= 0 && y < 10) {
+                        // I believe this bit of weirdness is specifically for the new GUI
+                        settingsMap[spidev] = x + y << 4;
+                        settingsMap[displayspidev] = settingsMap[spidev];
+                        settingsMap[touchscreenspidev] = settingsMap[spidev];
+                    }
                 }
             }
         }
@@ -418,6 +456,8 @@ bool loadConfig(const char *configPath)
                 settingsMap[displayPanel] = ili9341;
             else if (yamlConfig["Display"]["Panel"].as<std::string>("") == "ILI9342")
                 settingsMap[displayPanel] = ili9342;
+            else if (yamlConfig["Display"]["Panel"].as<std::string>("") == "ILI9486")
+                settingsMap[displayPanel] = ili9486;
             else if (yamlConfig["Display"]["Panel"].as<std::string>("") == "ILI9488")
                 settingsMap[displayPanel] = ili9488;
             else if (yamlConfig["Display"]["Panel"].as<std::string>("") == "HX8357D")
@@ -478,6 +518,7 @@ bool loadConfig(const char *configPath)
         }
         if (yamlConfig["Input"]) {
             settingsStrings[keyboardDevice] = (yamlConfig["Input"]["KeyboardDevice"]).as<std::string>("");
+            settingsStrings[pointerDevice] = (yamlConfig["Input"]["PointerDevice"]).as<std::string>("");
         }
 
         if (yamlConfig["Webserver"]) {
