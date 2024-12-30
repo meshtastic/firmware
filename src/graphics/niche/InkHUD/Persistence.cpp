@@ -4,17 +4,13 @@
 
 using namespace NicheGraphics;
 
-// Used to invalidate old settings, if needed
-// Version 0 is reserved for testing, and will always load defaults
-static const uint32_t SETTINGS_VERSION = 1;
-
 // Load settings and latestMessage data
 void InkHUD::loadDataFromFlash()
 {
     // Load the InkHUD settings from flash, and check version number
     InkHUD::Settings loadedSettings;
     FlashData<Settings>::load(&loadedSettings, "settings");
-    if (loadedSettings.meta.version == SETTINGS_VERSION)
+    if (loadedSettings.meta.version == SETTINGS_VERSION && loadedSettings.meta.version != 0)
         settings = loadedSettings; // Version matched, replace the defaults with the loaded values
     else
         LOG_WARN("Settings version changed. Using defaults");

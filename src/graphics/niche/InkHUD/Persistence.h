@@ -23,10 +23,14 @@ namespace NicheGraphics::InkHUD
 constexpr uint8_t MAX_TILES_GLOBAL = 4;
 constexpr uint8_t MAX_USERAPPLETS_GLOBAL = 16;
 
+// Used to invalidate old settings, if needed
+// Version 0 is reserved for testing, and will always load defaults
+constexpr uint32_t SETTINGS_VERSION = 1;
+
 struct Settings {
     struct Meta {
         // Used to invalidate old savefiles, if we make breaking changes
-        uint32_t version = -1;
+        uint32_t version = SETTINGS_VERSION;
     } meta;
 
     struct UserTiles {
