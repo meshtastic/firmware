@@ -353,7 +353,7 @@ void InkHUD::WindowManager::handleButtonShort()
 {
     if (notificationApplet->isForeground()) {
         notificationApplet->dismiss();
-        requestUpdate(EInk::UpdateTypes::FULL, true, true); // Redraw everything, to clear the notification
+        requestUpdate(EInk::UpdateTypes::FULL, true); // Redraw everything, to clear the notification
     }
 
     else if (!menuApplet->isForeground())
@@ -373,7 +373,7 @@ void InkHUD::WindowManager::handleButtonLong()
         userTiles.at(settings.userTiles.focused)->displayedApplet->sendToBackground();
         menuApplet->setTile(userTiles.at(settings.userTiles.focused));
         menuApplet->bringToForeground();
-        requestUpdate(Drivers::EInk::UpdateTypes::FAST, true, false); // Upgrading request to FAST
+        requestUpdate(Drivers::EInk::UpdateTypes::FAST, false); // bringToForeground already requested. Just upgrading to FAST
     }
     // Or let the menu handle it
     else
@@ -426,7 +426,7 @@ void InkHUD::WindowManager::nextApplet()
     t->displayedApplet->sendToBackground();
     t->displayedApplet = nextValidApplet;
     t->displayedApplet->bringToForeground();
-    requestUpdate(Drivers::EInk::UpdateTypes::FAST, true, false); // bringToForeground already requested. Just upgrading to FAST
+    requestUpdate(Drivers::EInk::UpdateTypes::FAST, false); // bringToForeground already requested. Just upgrading to FAST
 }
 
 // Focus on a different tile
@@ -451,10 +451,10 @@ void InkHUD::WindowManager::nextTile()
     // Ask the tile to draw an indicator showing which tile is now focused, when next rendered
     userTiles.at(settings.userTiles.focused)->highlight();
 
-    // Redraw the screen, to draw the indicator
+    // Redraw the screen, to draw the "highlight" indicator
     // We're requesting that all applets are redrawn, because Applet::requestUpdate is inaccessible
-    // Todo: make that public?
-    requestUpdate(Drivers::EInk::UpdateTypes::FAST, true, true);
+    // Todo: make Applet::requestUpdate public?
+    requestUpdate(Drivers::EInk::UpdateTypes::FAST, true);
 }
 
 // Perform necessary reconfiguration when user changes number of tiles (or rotation) at run-time
@@ -618,7 +618,7 @@ bool InkHUD::WindowManager::approveNotification(InkHUD::Notification &n)
 // Quite likely, other applets are also about to receive the same notification.
 // Each notified applet can independently call requestUpdate(), and all share the one opportunity to render, at next runOnce
 void InkHUD::WindowManager::requestUpdate(Drivers::EInk::UpdateTypes type = Drivers::EInk::UpdateTypes::UNSPECIFIED,
-                                          bool async = true, bool allTiles = false)
+                                          bool allTiles = false)
 {
     this->updateRequested = true;
 
@@ -626,8 +626,6 @@ void InkHUD::WindowManager::requestUpdate(Drivers::EInk::UpdateTypes type = Driv
     // Todo: OR requested update types together, and decode it later
     if (type != Drivers::EInk::UpdateTypes::UNSPECIFIED)
         this->requestedUpdateType = type;
-    if (async == false)
-        this->requestedAsync = false;
     if (allTiles)
         this->requestedRenderAll = true;
 
@@ -827,7 +825,7 @@ void InkHUD::WindowManager::render(bool force)
     }
 
     if (imageChanged) {
-        driver->update(imageBuffer, mediator.evaluate(requestedUpdateType), requestedAsync);
+        driver->update(imageBuffer, mediator.evaluate(requestedUpdateType));
         LOG_DEBUG("Updated display");
     }
 
@@ -836,7 +834,6 @@ void InkHUD::WindowManager::render(bool force)
     updateRequested = false;
     requestedRenderAll = false;
     requestedUpdateType = EInk::UpdateTypes::UNSPECIFIED;
-    requestedAsync = true;
 }
 
 // Set a ready-to-draw pixel into the image buffer

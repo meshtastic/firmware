@@ -76,8 +76,8 @@ class WindowManager : protected concurrency::OSThread
     void toggleBatteryIcon();                  // Change whether the battery icon is shown
     bool approveNotification(Notification &n); // Ask applets if a notification is worth showing
 
-    void requestUpdate(Drivers::EInk::UpdateTypes type, bool async, bool allTiles); // Update the display image
-    void handleTilePixel(int16_t x, int16_t y, Color c);                            // Apply rotation, then store the pixel
+    void requestUpdate(Drivers::EInk::UpdateTypes type, bool allTiles); // Update the display image
+    void handleTilePixel(int16_t x, int16_t y, Color c);                // Apply rotation, then store the pixel
 
     uint16_t getWidth();                      // Display width, relative to rotation
     uint16_t getHeight();                     // Display height, relative to rotation
@@ -130,7 +130,6 @@ class WindowManager : protected concurrency::OSThread
     // Set by requestUpdate
     bool updateRequested = false;
     Drivers::EInk::UpdateTypes requestedUpdateType = Drivers::EInk::UpdateTypes::UNSPECIFIED;
-    bool requestedAsync = true;
     bool requestedRenderAll = false;
 };
 

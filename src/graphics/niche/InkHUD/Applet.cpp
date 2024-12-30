@@ -82,10 +82,10 @@ void InkHUD::Applet::resetDrawingSpace()
 // When an applet decides it has heard something important, and wants to redraw, it calls this method
 // Once the window manager has given other applets a chance to process whatever event we just detected,
 // it will run Applet::render() for any applets which have called requestUpdate
-void InkHUD::Applet::requestUpdate(Drivers::EInk::UpdateTypes type, bool async, bool allTiles)
+void InkHUD::Applet::requestUpdate(Drivers::EInk::UpdateTypes type, bool allTiles)
 {
     wantRender = true;
-    WindowManager::getInstance()->requestUpdate(type, async, allTiles);
+    WindowManager::getInstance()->requestUpdate(type, allTiles);
 }
 
 // Ask window manager to move this applet to foreground at start of next render

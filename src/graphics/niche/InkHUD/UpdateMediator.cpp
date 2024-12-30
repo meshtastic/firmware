@@ -98,7 +98,7 @@ int32_t InkHUD::UpdateMediator::runOnce()
 
         // Ask WindowManager to redraw everything, purely for the refresh
         // Todo: optimize? Could update without re-rendering
-        WindowManager::getInstance()->requestUpdate(Drivers::EInk::UpdateTypes::FULL, true, true);
+        WindowManager::getInstance()->requestUpdate(Drivers::EInk::UpdateTypes::FULL, true);
 
         // Record that we have paid back (some of) the FULL refresh debt
         debt = max(debt - 1.0, 0.0);

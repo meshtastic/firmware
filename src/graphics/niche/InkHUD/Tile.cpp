@@ -11,7 +11,7 @@ using namespace NicheGraphics;
 static concurrency::Periodic *taskDismissHighlight;
 int32_t InkHUD::Tile::dismissHighlight()
 {
-    InkHUD::WindowManager::getInstance()->requestUpdate(Drivers::EInk::UpdateTypes::FAST, true, true);
+    InkHUD::WindowManager::getInstance()->requestUpdate(Drivers::EInk::UpdateTypes::FAST, true);
     return taskDismissHighlight->disable();
 }
 

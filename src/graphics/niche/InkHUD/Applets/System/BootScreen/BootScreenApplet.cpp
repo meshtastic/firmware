@@ -37,7 +37,7 @@ int32_t InkHUD::BootScreenApplet::runOnce()
 {
     LOG_DEBUG("End of boot screen");
     sendToBackground();
-    requestUpdate(Drivers::EInk::UpdateTypes::FULL, true, true);
+    requestUpdate(Drivers::EInk::UpdateTypes::FULL, true);
     return OSThread::disable();
 }
 

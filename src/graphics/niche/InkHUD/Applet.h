@@ -157,7 +157,7 @@ class Applet : public GFX
     void drawPixel(int16_t x, int16_t y, uint16_t color) override;
 
     // Tell WindowManager to update display
-    void requestUpdate(EInk::UpdateTypes type = EInk::UpdateTypes::UNSPECIFIED, bool async = true, bool allTiles = false);
+    void requestUpdate(EInk::UpdateTypes type = EInk::UpdateTypes::UNSPECIFIED, bool allTiles = false);
 
     // Ask for applet to be moved to foreground
     void requestAutoshow();
