@@ -411,8 +411,7 @@ void RadioLibInterface::handleReceiveInterrupt()
 
             // ----------------- Copy coverage_filter in the packet object ------------------
             mp->coverage_filter.size = BLOOM_FILTER_SIZE_BYTES;
-            memcpy(mp->coverage_filter.bytes,
-            radioBuffer.header.coverage_filter.data(), BLOOM_FILTER_SIZE_BYTES);
+            memcpy(mp->coverage_filter.bytes, radioBuffer.header.coverage_filter, BLOOM_FILTER_SIZE_BYTES);
             // -----------------------------------------------------------------------------
 
             addReceiveMetadata(mp);
