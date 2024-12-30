@@ -143,6 +143,12 @@ void TwoButton::stopThread()
     if (OSThread::enabled) {
         OSThread::disable();
     }
+
+    // Reset both buttons manually
+    // Just in case an IRQ fires during the process of resetting the system
+    // Can occur with super rapid presses?
+    buttons[0].state = REST;
+    buttons[1].state = REST;
 }
 
 // Our button thread

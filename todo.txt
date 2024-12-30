@@ -42,7 +42,6 @@ Improvements
 Known Bugs
 =====================
 [tbc]   detect userinfo (lastheard)
-[]      stuck if long-ish button press
 []      T-Echo frontlight: remains on if shutdown while active
 []      (Rare) phantom user button short-press on T-Echo when unattended for extended period
 []      Timestamps don't update. Needs to happen once a day. "6PM -> Yesterday". Make the WindowManager do it.
