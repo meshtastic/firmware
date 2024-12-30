@@ -1,5 +1,3 @@
-#ifdef ARCH_NRF52
-
 #include "configuration.h"
 #include "rtos.h"
 #include <assert.h>
@@ -32,5 +30,3 @@ void operator delete[](void *ptr)
 {
     rtos_free(ptr);
 }
-
-#endif // ARCH_NRF52

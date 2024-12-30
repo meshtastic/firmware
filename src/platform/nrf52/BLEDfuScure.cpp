@@ -34,8 +34,6 @@
 */
 /**************************************************************************/
 
-#ifdef ARCH_NRF52
-
 #include "BLEDfuSecure.h"
 #include "bluefruit.h"
 
@@ -143,5 +141,3 @@ err_t BLEDfuSecure::begin(void)
 
     return ERROR_NONE;
 }
-
-#endif // ARCH_NRF52

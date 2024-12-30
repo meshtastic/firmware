@@ -1,5 +1,3 @@
-#ifdef ARCH_NRF52
-
 #include "CryptoEngine.h"
 #include "aes-256/tiny-aes.h"
 #include "configuration.h"
@@ -32,4 +30,3 @@ class NRF52CryptoEngine : public CryptoEngine
 };
 
 CryptoEngine *crypto = new NRF52CryptoEngine();
-#endif // ARCH_NRF52

@@ -1,5 +1,3 @@
-#ifdef ARCH_STM32WL
-
 #include "RTC.h"
 #include "configuration.h"
 #include <stm32wle5xx.h>
@@ -28,5 +26,3 @@ void getMacAddr(uint8_t *dmac)
 }
 
 void cpuDeepSleep(uint32_t msecToWake) {}
-
-#endif // ARCH_STM32WL

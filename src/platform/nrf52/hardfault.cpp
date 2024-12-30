@@ -1,4 +1,3 @@
-#ifdef ARCH_NRF52
 #include "configuration.h"
 #include <core_cm4.h>
 
@@ -111,4 +110,3 @@ extern "C" void HardFault_Handler(void)
                    " handler2_address_const: .word HardFault_Impl    \n");
 }
 #endif
-#endif // ARCH_NRF52

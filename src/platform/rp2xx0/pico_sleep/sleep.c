@@ -3,7 +3,6 @@
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
-#ifdef ARCH_RP2040
 
 #include "pico.h"
 
@@ -154,4 +153,3 @@ void sleep_goto_dormant_until_pin(uint gpio_pin, bool edge, bool high)
     // Clear the irq so we can go back to dormant mode again if we want
     gpio_acknowledge_irq(gpio_pin, event);
 }
-#endif // ARCH_RP2040
