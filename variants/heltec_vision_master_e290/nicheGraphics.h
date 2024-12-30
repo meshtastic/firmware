@@ -82,9 +82,10 @@ void setupNicheGraphics()
     InkHUD::Applet::setDefaultFonts(largeFont, smallFont);
 
     // Init settings, and customize defaults
-    InkHUD::settings.userTiles.maxCount = 2; // How many tiles can the display handle?
-    InkHUD::settings.rotation = 1;           // 90 degrees clockwise
-    InkHUD::settings.userTiles.count = 2;    // Two applets side-by-side
+    InkHUD::settings.userTiles.maxCount = 2;             // How many tiles can the display handle?
+    InkHUD::settings.rotation = 1;                       // 90 degrees clockwise
+    InkHUD::settings.userTiles.count = 2;                // Two applets side-by-side
+    InkHUD::settings.optionalMenuItems.nextTile = false; // Behavior handled by aux button instead
 
     // Pick applets
     // Note: order of applets determines priority of "auto-show" feature
@@ -116,10 +117,7 @@ void setupNicheGraphics()
     // Setup the aux button
     // Bonus feature of VME290
     buttons->setWiring(AUX_BUTTON, BUTTON_PIN_SECONDARY);
-    buttons->setHandlerDown(AUX_BUTTON, []() { InkHUD::WindowManager::getInstance()->handleAuxButtonDown(); });
-    buttons->setHandlerUp(AUX_BUTTON, []() { InkHUD::WindowManager::getInstance()->handleAuxButtonUp(); });
-    buttons->setHandlerShortPress(AUX_BUTTON, []() { InkHUD::WindowManager::getInstance()->handleAuxButtonShort(); });
-    buttons->setHandlerLongPress(AUX_BUTTON, []() { InkHUD::WindowManager::getInstance()->handleAuxButtonLong(); });
+    buttons->setHandlerShortPress(AUX_BUTTON, []() { InkHUD::WindowManager::getInstance()->nextTile(); });
 
     buttons->start();
 }

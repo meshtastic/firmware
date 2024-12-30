@@ -67,6 +67,9 @@ struct Settings {
     // Some menu items may not be required, based on device / configuration
     // We can enable them only when needed, to de-clutter the menu
     struct OptionalMenuItems {
+        // If aux button is used to swap between tiles, we have to need for this menu item
+        bool nextTile = true;
+
         // Used if backlight present, and not controlled by AUX button
         // If this item is added to menu: backlight is always active when menu is open
         // The added menu items then allows the user to "Keep Backlight On", globally.

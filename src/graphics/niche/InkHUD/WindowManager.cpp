@@ -427,19 +427,35 @@ void InkHUD::WindowManager::nextApplet()
 // Focus on a different tile
 // The "focused tile" is the one which cycles applets on user button press,
 // and the one where the menu will be displayed
+// Note: this method is only used by an aux button
+// The menuApplet manually performs a subset of these actions, to avoid disturbing the stale image on adjacent tiles
 void InkHUD::WindowManager::nextTile()
 {
-    settings.userTiles.focused = (settings.userTiles.focused + 1) % userTiles.size();
+    // Close the menu applet if open
+    // We done *really* want to do this, but it simplifies handling *a lot*
+    if (menuApplet->isForeground())
+        menuApplet->sendToBackground();
+
+    // Swap to next tile
+    settings.userTiles.focused = (settings.userTiles.focused + 1) % settings.userTiles.count;
+
+    // Make sure that we don't get stuck on the placeholder tile
+    // changeLayout reassigns applets to tiles
     changeLayout();
+
+    // Ask the tile to draw an indicator showing which tile is now focused, when next rendered
+    userTiles.at(settings.userTiles.focused)->highlight();
+
+    // Redraw the screen, to draw the indicator
+    // We're requesting that all applets are redrawn, because Applet::requestUpdate is inaccessible
+    // Todo: make that public?
+    requestUpdate(Drivers::EInk::UpdateTypes::FAST, true, true);
 }
 
 // Perform necessary reconfiguration when user changes number of tiles (or rotation) at run-time
 // Call after changing settings.tiles.count
 void InkHUD::WindowManager::changeLayout()
 {
-    // Tile count or rotation can only change at run-time via the menu applet
-    assert(menuApplet->isForeground());
-
     // Remove all old drawing
     // Prevents pixels getting stuck in space which forms the gap between applets
     clearBuffer();
@@ -753,9 +769,7 @@ void InkHUD::WindowManager::render(bool force)
             shouldRender |= (t->displayedApplet->isForeground() && t->displayedApplet->wantsToRender());
 
             if (shouldRender) {
-                t->displayedApplet->setTile(t);          // Sets applet dimension. Also sets which tile receives applet pixels
-                t->displayedApplet->resetDrawingSpace(); // Reset the drawing environment
-                t->displayedApplet->render();            // Run the drawing operation, feeding pixels via Tile, into WindowManager
+                t->render();
                 imageChanged = true;
             }
 
@@ -791,6 +805,7 @@ void InkHUD::WindowManager::render(bool force)
     // -----------------------------------
     if (menuApplet->isForeground() && menuApplet->wantsToRender()) {
         assert(menuApplet->getTile()); // Confirm that menu is assigned to a tile
+        menuApplet->getTile()->dismissHighlight();
         menuApplet->resetDrawingSpace();
         menuApplet->render();
         imageChanged = true; // Todo: handle refresh specially for the menu

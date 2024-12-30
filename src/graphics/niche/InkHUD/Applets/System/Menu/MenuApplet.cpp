@@ -100,7 +100,10 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         break;
 
     case NEXT_TILE:
-        windowManager->nextTile();
+        // Note performed manually;
+        // WindowManager::nextTile is raised by aux button press only, and will interact poorly with the menu
+        settings.userTiles.focused = (settings.userTiles.focused + 1) % settings.userTiles.count;
+        windowManager->changeLayout();
         cursor = 0; // No menu item selected, for quick exit after tile swap
         cursorShown = false;
         break;
@@ -190,8 +193,10 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
 
     switch (page) {
     case ROOT:
-        if (settings.userTiles.count > 1)
+        // Optional: next applet
+        if (settings.optionalMenuItems.nextTile && settings.userTiles.count > 1)
             items.push_back(MenuItem("Next Tile", MenuAction::NEXT_TILE, MenuPage::ROOT)); // Only if multiple applets shown
+
         items.push_back(MenuItem("Send", MenuPage::SEND));
         items.push_back(MenuItem("Options", MenuPage::OPTIONS));
         items.push_back(MenuItem("Display Off", MenuPage::EXIT)); // TODO
