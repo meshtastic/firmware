@@ -27,9 +27,11 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     hwdata \
     gpg \
     gnupg2 \
+    libusb-1.0-0-dev \
+    libi2c-dev \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-RUN pipx install platformio==6.1.15
+RUN pipx install platformio
 
 COPY 99-platformio-udev.rules /etc/udev/rules.d/99-platformio-udev.rules
 
