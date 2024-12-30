@@ -21,8 +21,9 @@
 
 // Shared NicheGraphics components
 // --------------------------------
+#include "graphics/niche/Drivers/Backlight/LatchingBacklight.h"
+#include "graphics/niche/Drivers/Eink/GDEY0154D67.h"
 #include "graphics/niche/Inputs/TwoButton.h"
-#include "graphics/niche/drivers/Eink/GDEY0154D67.h"
 
 #include "graphics/niche/Fonts/FreeSans6pt7b.h"
 #include "graphics/niche/Fonts/FreeSans6pt8bCyrillic.h"
@@ -70,8 +71,15 @@ void setupNicheGraphics()
 
     // Init settings, and customize defaults
     // Values ignored individually if found saved to flash
-    InkHUD::settings.userTiles.maxCount = 2; // Two applets side-by-side
-    InkHUD::settings.rotation = 3;           // 270 degrees clockwise
+    InkHUD::settings.userTiles.maxCount = 2;              // Two applets side-by-side
+    InkHUD::settings.rotation = 3;                        // 270 degrees clockwise
+    InkHUD::settings.optionalFeatures.batteryIcon = true; // Device definitely has a battery
+    InkHUD::settings.optionalMenuItems.backlight = true;  // Until proven (by touch) that user still has the capacitive button
+
+    // Setup backlight
+    // Note: AUX button behavior configured further down
+    Drivers::LatchingBacklight *backlight = Drivers::LatchingBacklight::getInstance();
+    backlight->setPin(PIN_EINK_EN);
 
     // Pick applets
     // Note: order of applets determines priority of "auto-show" feature
@@ -101,9 +109,16 @@ void setupNicheGraphics()
     buttons->setHandlerLongPress(MAIN_BUTTON, []() { InkHUD::WindowManager::getInstance()->handleButtonLong(); });
 
     // Setup the capacitive touch button
+    // - short: momentary backlight
+    // - long: latch backlight on
     buttons->setWiring(TOUCH_BUTTON, PIN_BUTTON_TOUCH, LOW);
-    buttons->setHandlerDown(TOUCH_BUTTON, []() { InkHUD::WindowManager::getInstance()->handleAuxButtonDown(); });
-    buttons->setHandlerUp(TOUCH_BUTTON, []() { InkHUD::WindowManager::getInstance()->handleAuxButtonUp(); });
+    buttons->setTiming(TOUCH_BUTTON, 50, 5000); // 5 seconds before latch - limited by T-Echo's capacitive touch IC
+    buttons->setHandlerDown(TOUCH_BUTTON, [backlight]() {
+        backlight->peek();
+        InkHUD::settings.optionalMenuItems.backlight = false; // We've proved user still has the button. No need for menu entry.
+    });
+    buttons->setHandlerLongPress(TOUCH_BUTTON, [backlight]() { backlight->latch(); });
+    buttons->setHandlerShortPress(TOUCH_BUTTON, [backlight]() { backlight->off(); });
 
     buttons->start();
 }

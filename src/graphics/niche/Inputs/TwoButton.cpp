@@ -59,6 +59,13 @@ void TwoButton::setWiring(uint8_t whichButton, uint8_t pin, bool internalPullup)
     pinMode(buttons[whichButton].pin, buttons[whichButton].mode);
 }
 
+void TwoButton::setTiming(uint8_t whichButton, uint32_t debounceMs, uint32_t longpressMs)
+{
+    assert(whichButton < 2);
+    buttons[whichButton].debounceLength = debounceMs;
+    buttons[whichButton].longpressLength = longpressMs;
+}
+
 // Set what should happen when a button becomes pressed
 // Use this to implement a "while held" behavior
 void TwoButton::setHandlerDown(uint8_t whichButton, Callback onDown)
@@ -101,7 +108,7 @@ void TwoButton::isrPrimary()
         TwoButton *b = TwoButton::getInstance();
         if (b->buttons[0].state == State::REST) {
             b->buttons[0].state = State::IRQ;
-            b->buttons[0].pressMs = millis();
+            b->buttons[0].irqAtMillis = millis();
             b->startThread();
         }
         isrRunning = false;
@@ -119,7 +126,7 @@ void TwoButton::isrSecondary()
         TwoButton *b = TwoButton::getInstance();
         if (b->buttons[1].state == State::REST) {
             b->buttons[1].state = State::IRQ;
-            b->buttons[1].pressMs = millis();
+            b->buttons[1].irqAtMillis = millis();
             b->startThread();
         }
         isrRunning = false;
@@ -158,8 +165,6 @@ void TwoButton::stopThread()
 int32_t TwoButton::runOnce()
 {
     constexpr uint8_t BUTTON_COUNT = sizeof(buttons) / sizeof(Button);
-    constexpr uint8_t DEBOUNCE_MS = 50; // Ignore handle presses shorter than this - TODO, set in nichegraphics.h
-    constexpr uint16_t LONGPRESS_MS = 500;
 
     // Allow either button to request that our thread should continue polling
     bool awaitingRelease = false;
@@ -182,20 +187,20 @@ int32_t TwoButton::runOnce()
         // An existing press continues
         // Not held long enough to register as longpress
         case POLLING_UNFIRED: {
-            uint32_t length = millis() - buttons[i].pressMs;
+            uint32_t length = millis() - buttons[i].irqAtMillis;
 
             // If button released since last thread tick,
             if (digitalRead(buttons[i].pin) != buttons[i].activeLogic) {
                 buttons[i].onUp();              // Inform that press has ended (possible release of a hold)
                 buttons[i].state = State::REST; // Mark that the button has reset
-                if (length > DEBOUNCE_MS && length < LONGPRESS_MS)
+                if (length > buttons[i].debounceLength && length < buttons[i].longpressLength)
                     buttons[i].onShortPress();
             }
 
             // If button not yet released
             else {
                 awaitingRelease = true; // Mark that polling-for-release should continue
-                if (length >= LONGPRESS_MS) {
+                if (length >= buttons[i].longpressLength) {
                     // Raise a long press event, once
                     // Then continue waiting for release, to rearm
                     buttons[i].state = State::POLLING_FIRED;
@@ -208,11 +213,14 @@ int32_t TwoButton::runOnce()
         // Button still held, but duration long enough that longpress event already fired
         // Just waiting for release
         case POLLING_FIRED:
-            awaitingRelease = true;
+            // Release detected
             if (digitalRead(buttons[i].pin) != buttons[i].activeLogic) {
                 buttons[i].state = State::REST;
                 buttons[i].onUp(); // Possible release of hold (in this case: *after* longpress has fired)
             }
+            // Not yet released, keep polling
+            else
+                awaitingRelease = true;
             break;
         }
     }

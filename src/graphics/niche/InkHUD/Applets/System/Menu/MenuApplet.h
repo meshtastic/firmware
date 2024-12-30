@@ -2,6 +2,7 @@
 
 #include "configuration.h"
 
+#include "graphics/niche/Drivers/Backlight/LatchingBacklight.h"
 #include "graphics/niche/InkHUD/Applet.h"
 #include "graphics/niche/InkHUD/WindowManager.h"
 
@@ -44,7 +45,8 @@ class MenuApplet : public Applet, public concurrency::OSThread
 
     std::vector<MenuItem> items; // MenuItems for the current page. Filled by ShowPage
 
-    WindowManager *windowManager; // Convenient access to the InkHUD::WindowManager singleton
+    WindowManager *windowManager;                    // Convenient access to the InkHUD::WindowManager singleton
+    Drivers::LatchingBacklight *backlight = nullptr; // Convenient access to the backlight singleton
 };
 
 } // namespace NicheGraphics::InkHUD

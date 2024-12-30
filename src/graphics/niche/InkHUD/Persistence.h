@@ -58,10 +58,20 @@ struct Settings {
         bool autoshow[MAX_USERAPPLETS_GLOBAL]{false};
     } userApplets;
 
+    // Features which the use can enable / disable via the on-screen menu
     struct OptionalFeatures {
         bool notifications = true;
         bool batteryIcon = false;
     } optionalFeatures;
+
+    // Some menu items may not be required, based on device / configuration
+    // We can enable them only when needed, to de-clutter the menu
+    struct OptionalMenuItems {
+        // Used if backlight present, and not controlled by AUX button
+        // If this item is added to menu: backlight is always active when menu is open
+        // The added menu items then allows the user to "Keep Backlight On", globally.
+        bool backlight = false;
+    } optionalMenuItems;
 
     // Rotation of the display
     // Multiples of 90 degrees clockwise

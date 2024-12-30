@@ -65,12 +65,8 @@ class WindowManager : protected concurrency::OSThread
     int beforeDeepSleep(void *unused);                             // Prepare for shutdown
     int onReceiveTextMessage(const meshtastic_MeshPacket *packet); // Store most recent text message
 
-    void handleButtonShort();    // User button: short press
-    void handleButtonLong();     // User button: longp press
-    void handleAuxButtonDown();  // Secondary button: press/hold starts
-    void handleAuxButtonUp();    // Secondary button: press/hold ends
-    void handleAuxButtonShort(); // Secondary button: short press
-    void handleAuxButtonLong();  // Secondary button: long press
+    void handleButtonShort(); // User button: short press
+    void handleButtonLong();  // User button: long press
 
     void nextApplet(); // Cycle through user applets
     void nextTile();   // Focus the next tile (when showing multiple applets at once)

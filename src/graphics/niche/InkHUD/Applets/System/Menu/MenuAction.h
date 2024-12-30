@@ -30,6 +30,7 @@ enum MenuAction {
     LAYOUT,
     TOGGLE_BATTERY_ICON,
     TOGGLE_NOTIFICATIONS,
+    TOGGLE_BACKLIGHT,
 };
 
 } // namespace NicheGraphics::InkHUD

@@ -21,8 +21,17 @@ InkHUD::MenuApplet::MenuApplet() : concurrency::OSThread("MenuApplet")
 
 void InkHUD::MenuApplet::onActivate()
 {
-    // For convenience only
+    // Grab pointers to some singleton components which the menu interacts with
+    // We could do this every time we needed them, in place,
+    // but this just makes the code tidier
+
     this->windowManager = WindowManager::getInstance();
+
+    // Note: don't get instance if we're not actually using the backlight,
+    // or else you will unintentionally instantiate it
+    if (settings.optionalMenuItems.backlight) {
+        backlight = Drivers::LatchingBacklight::getInstance();
+    }
 }
 
 void InkHUD::MenuApplet::onForeground()
@@ -33,6 +42,15 @@ void InkHUD::MenuApplet::onForeground()
     // Display initial menu page
     showPage(MenuPage::ROOT);
 
+    // If device has a backlight which isn't controlled by aux button:
+    // backlight on always when menu opens.
+    // Courtesy to T-Echo users who removed the capacitive touch button
+    if (settings.optionalMenuItems.backlight) {
+        assert(backlight);
+        if (!backlight->isOn())
+            backlight->peek();
+    }
+
     // Begin the auto-close timeout
     OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
     OSThread::enabled = true;
@@ -40,6 +58,15 @@ void InkHUD::MenuApplet::onForeground()
 
 void InkHUD::MenuApplet::onBackground()
 {
+    // If device has a backlight which isn't controlled by aux button:
+    // Item in options submenu allows keeping backlight on after menu is closed
+    // If this item is deselected we will turn backlight off again, now that menu is closing
+    if (settings.optionalMenuItems.backlight) {
+        assert(backlight);
+        if (!backlight->isLatched())
+            backlight->off();
+    }
+
     // Stop the auto-timeout
     OSThread::disable();
 }
@@ -136,6 +163,16 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         windowManager->toggleBatteryIcon();
         break;
 
+    case TOGGLE_BACKLIGHT:
+        // Note: backlight is already on in this situation
+        // We're marking that it should *remain* on once menu closes
+        assert(backlight);
+        if (backlight->isLatched())
+            backlight->off();
+        else
+            backlight->latch();
+        break;
+
     default:
         LOG_WARN("Action not implemented");
     }
@@ -170,6 +207,15 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         break;
 
     case OPTIONS:
+        // Optional: backlight
+        if (settings.optionalMenuItems.backlight) {
+            assert(backlight);
+            items.push_back(MenuItem(backlight->isLatched() ? "Backlight Off" : "Keep Backlight On", // Label
+                                     MenuAction::TOGGLE_BACKLIGHT,                                   // Action
+                                     MenuPage::EXIT                                                  // Exit once complete
+                                     ));
+        }
+
         items.push_back(MenuItem("Applets", MenuPage::APPLETS));
         items.push_back(MenuItem("Auto-show", MenuPage::AUTOSHOW));
         items.push_back(MenuItem("Recents Duration", MenuPage::RECENTS));
@@ -179,10 +225,14 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
                                  &settings.optionalFeatures.notifications));
         items.push_back(
             MenuItem("Battery Icon", MenuAction::TOGGLE_BATTERY_ICON, MenuPage::OPTIONS, &settings.optionalFeatures.batteryIcon));
+
+        // Optional: has GPS
         if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_DISABLED)
             items.push_back(MenuItem("Enable GPS", MenuPage::EXIT)); // TODO
         if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED)
             items.push_back(MenuItem("Disable GPS", MenuPage::EXIT)); // TODO
+
+        // Optional: using wifi
         if (!config.bluetooth.enabled)
             items.push_back(MenuItem("Enable Bluetooth", MenuPage::EXIT)); // TODO: escape hatch if wifi configured wrong
         items.push_back(MenuItem("Exit", MenuPage::EXIT));

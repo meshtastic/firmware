@@ -375,44 +375,6 @@ void InkHUD::WindowManager::handleButtonLong()
         menuApplet->onButtonLongPress();
 }
 
-// Some devices will have a secondary button
-// In InkHUD, this has a configurable behavior
-// This handler is raised by the (Non-InkHUD) input source as soon as the button moves down
-// This is before a short click fires
-// This is used to handle "indefinite hold" behavior, if required
-void InkHUD::WindowManager::handleAuxButtonDown()
-{
-// Testing only
-#ifdef TTGO_T_ECHO
-    pinMode(PIN_EINK_EN, OUTPUT);
-    digitalWrite(PIN_EINK_EN, HIGH);
-#endif
-}
-
-// Some devices will have a secondary button
-// In InkHUD, this has a configurable behavior
-// This handler is raised by the (Non-InkHUD) input source as soon as the button moves up
-// This will happen on every release, regardless of any short or less press which is also raised
-// This is used to handle "indefinite hold" behavior, if required
-void InkHUD::WindowManager::handleAuxButtonUp()
-{
-// Testing only
-#ifdef TTGO_T_ECHO
-    digitalWrite(PIN_EINK_EN, LOW);
-#endif
-}
-
-// Some devices will have a secondary button
-// In InkHUD, this has a configurable behavior
-// This handler is raised by the (Non-InkHUD) input source when this secondary button is short pressed
-void InkHUD::WindowManager::handleAuxButtonShort() {}
-
-// Some devices will have a secondary button
-// In InkHUD, this has a configurable behavior
-// This handler is raised by the (Non-InkHUD) input source when this secondary button is long pressed
-// Note: should fire while still held
-void InkHUD::WindowManager::handleAuxButtonLong() {}
-
 // On the currently focussed tile: cycle to the next available user applet
 // Applets available for this must be activated, and not already displayed on another tile
 void InkHUD::WindowManager::nextApplet()
