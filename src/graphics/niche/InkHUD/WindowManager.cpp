@@ -72,7 +72,7 @@ void InkHUD::WindowManager::setDisplayResilience(uint8_t fastPerFull = 5, float 
 // This is called in setupNicheGraphics()
 // This should be the only time that specific user applets are mentioned in the code
 // If a user applet is not added with this method, its code should not be built
-void InkHUD::WindowManager::addApplet(const char *name, Applet *a, bool defaultActive, bool defaultAutoshow)
+void InkHUD::WindowManager::addApplet(const char *name, Applet *a, bool defaultActive, bool defaultAutoshow, uint8_t onTile)
 {
     userApplets.push_back(a);
 
@@ -89,6 +89,11 @@ void InkHUD::WindowManager::addApplet(const char *name, Applet *a, bool defaultA
     // User's selection is stored in settings, and will be honored instead of these defaults, if present
     if (defaultAutoshow)
         settings.userApplets.autoshow[userApplets.size() - 1] = true;
+
+    // If specified, mark this as the default applet for a given tile index
+    // Used only to avoid placeholder applet "out of the box", when default settings have more than one tile
+    if (onTile != (uint8_t)-1)
+        settings.userTiles.displayedUserApplet[onTile] = userApplets.size() - 1;
 
     // The label that will be show in the applet selection menu, on the device
     a->name = name;

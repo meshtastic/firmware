@@ -47,9 +47,9 @@ class WindowManager : protected concurrency::OSThread
 
     void setDriver(NicheGraphics::Drivers::EInk *driver);                   // Assign a driver class
     void setDisplayResilience(uint8_t fastPerFull, float stressMultiplier); // How many FAST updates before FULL
-    void addApplet(const char *name, Applet *a, bool defaultActive = false,
-                   bool defaultAutoshow = false); // Select feature-set
-    void begin();                                 // Start running the window manager (provisioning done)
+    void addApplet(const char *name, Applet *a, bool defaultActive = false, bool defaultAutoshow = false,
+                   uint8_t onTile = -1); // Select which applets are used with InkHUD
+    void begin();                        // Start running the window manager (provisioning done)
 
     void createSystemApplets(); // Instantiate and activate system applets
     void createSystemTiles();   // Instantiate tiles which host system applets
