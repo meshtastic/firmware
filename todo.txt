@@ -4,11 +4,9 @@ Features
 ====================
 []      adhoc ping
 []      canned message
-[]      backlight toggle
 []      map scale indicator 
 []      boot screen
 []      shutdown screen
-[]      secondary buttons
 []      eink drivers for other devices
 []      gps menu
 []      mini-compass on nodelist
@@ -21,11 +19,9 @@ Critical Tasks
 [tbc]   fix attach/detach interrupts for ButtonThread.cpp
             - check with older ESP32 variants
 []      imperial units
-[tbc]      optimize fast / full referesh: less blinking
 []      ble pairing screen
 []      boot and shutdown screens
 []      hook reboot to save flash data
-[]      aux button behaviors (set this early: jarring to users if it changes later)
 
 Improvements
 ====================
@@ -41,14 +37,12 @@ Improvements
 
 Known Bugs
 =====================
-[tbc]   detect userinfo (lastheard)
-[]      T-Echo frontlight: remains on if shutdown while active
+[]      ChronoList applets: no event raised on nodeinfo rx
 []      (Rare) phantom user button short-press on T-Echo when unattended for extended period
 []      Timestamps don't update. Needs to happen once a day. "6PM -> Yesterday". Make the WindowManager do it.
 []      Lightsleep shouldn't be possible while update in progress. Set canSleep=false? 
 []      Root menu: header breaks spacing if rtc set while menu open
 []      Applets don't re-render when node is removed via admin command
-[tbc]   Incorrect number of lines in threaded message display.
 []      Autoshow focusing oldest of two competing requests, if render is deferred
 []      (Rare) Recents List: count in header label may not match number of items shown
 
