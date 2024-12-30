@@ -29,6 +29,7 @@ extern meshtastic_DeviceState devicestate;
 extern meshtastic_ChannelFile channelFile;
 extern meshtastic_MyNodeInfo &myNodeInfo;
 extern meshtastic_LocalConfig config;
+extern meshtastic_DeviceUIConfig uiconfig;
 extern meshtastic_LocalModuleConfig moduleConfig;
 extern meshtastic_User &owner;
 extern meshtastic_Position localPosition;

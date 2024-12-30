@@ -45,7 +45,7 @@
 #define LOG_CRIT(...) SEGGER_RTT_printf(0, __VA_ARGS__)
 #define LOG_TRACE(...) SEGGER_RTT_printf(0, __VA_ARGS__)
 #else
-#if defined(DEBUG_PORT) && !defined(DEBUG_MUTE) && !defined(PIO_UNIT_TESTING)
+#if defined(DEBUG_PORT) && !defined(DEBUG_MUTE)
 #define LOG_DEBUG(...) DEBUG_PORT.log(MESHTASTIC_LOG_LEVEL_DEBUG, __VA_ARGS__)
 #define LOG_INFO(...) DEBUG_PORT.log(MESHTASTIC_LOG_LEVEL_INFO, __VA_ARGS__)
 #define LOG_WARN(...) DEBUG_PORT.log(MESHTASTIC_LOG_LEVEL_WARN, __VA_ARGS__)
