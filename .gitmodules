@@ -1,6 +1,7 @@
 [submodule "protobufs"]
 	path = protobufs
 	url = https://github.com/medentem/protobufs.git
+	branch = master
 [submodule "meshtestic"]
 	path = meshtestic
 	url = https://github.com/meshtastic/meshTestic
