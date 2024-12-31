@@ -28,10 +28,10 @@
 
 // RAK BSP somehow uses SPI1 instead of SPI0
 #define HW_SPI1_DEVICE
-#define LORA_SCK PIN_SPI0_SCK
-#define LORA_MOSI PIN_SPI0_MOSI
-#define LORA_MISO PIN_SPI0_MISO
-#define LORA_CS PIN_SPI0_SS
+#define LORA_SCK (10u)
+#define LORA_MOSI (11u)
+#define LORA_MISO (12u)
+#define LORA_CS (13u)
 
 #define LORA_DIO0 RADIOLIB_NC
 #define LORA_RESET 14
