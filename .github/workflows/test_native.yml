@@ -4,6 +4,8 @@ on:
   workflow_call:
   workflow_dispatch:
 
+permissions: {}
+
 env:
   LCOV_CAPTURE_FLAGS: --quiet --capture --include "${PWD}/src/*" --exclude '*/src/mesh/generated/*' --directory .pio/build/coverage/src --base-directory "${PWD}"
 
