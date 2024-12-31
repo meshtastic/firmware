@@ -76,7 +76,7 @@ bool FloodingRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
                 CoverageFilter incomingCoverage;
                 loadCoverageFilterFromPacket(p, incomingCoverage);
 
-                float forwardProb = calculateForwardProbability(incomingCoverage);
+                float forwardProb = calculateForwardProbability(incomingCoverage, p->from);
 
                 float rnd = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
                 if (rnd <= forwardProb) {
@@ -158,7 +158,7 @@ void FloodingRouter::mergeMyCoverage(CoverageFilter &coverage)
     }
 }
 
-float FloodingRouter::calculateForwardProbability(const CoverageFilter &incoming)
+float FloodingRouter::calculateForwardProbability(const CoverageFilter &incoming, NodeNum lastSender)
 {
     // If we are a router or repeater, always forward because it's assumed these are in the most advantageous locations
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
@@ -177,14 +177,20 @@ float FloodingRouter::calculateForwardProbability(const CoverageFilter &incoming
 
     // Count how many neighbors are NOT yet in the coverage
     int uncovered = 0;
+    int neighbors = 0;
     for (auto nodeId : recentNeighbors) {
+        // Don't count the person we got this packet from
+        if (nodeId == lastSender) continue;
+
+        neighbors++;
+
         if (!incoming.check(nodeId)) {
             uncovered++;
         }
     }
 
     // Calculate coverage ratio
-    float coverageRatio = static_cast<float>(uncovered) / static_cast<float>(recentNeighbors.size());
+    float coverageRatio = static_cast<float>(uncovered) / static_cast<float>(neighbors);
 
     // Calculate forwarding probability
     float forwardProb = BASE_FORWARD_PROB + (coverageRatio * COVERAGE_SCALE_FACTOR);

@@ -42,7 +42,7 @@ class FloodingRouter : public Router, protected PacketHistory
 
     void mergeMyCoverage(CoverageFilter &coverage);
 
-    float calculateForwardProbability(const CoverageFilter &incoming);
+    float calculateForwardProbability(const CoverageFilter &incoming, NodeNum lastSender);
 
   public:
     /**

@@ -771,12 +771,12 @@ typedef struct _meshtastic_MeshPacket {
     /* Last byte of the node number of the node that will relay/relayed this packet.
  Set by the firmware internally, clients are not supposed to set this. */
     uint8_t relay_node;
-
-    meshtastic_MeshPacket_coverage_filter_t coverage_filter;
     /* *Never* sent over the radio links.
  Timestamp after which this packet may be sent.
  Set by the firmware internally, clients are not supposed to set this. */
     uint32_t tx_after;
+   /* Flips two bits per node added to the filter */
+    meshtastic_MeshPacket_coverage_filter_t coverage_filter;
 } meshtastic_MeshPacket;
 
 /* The bluetooth to device link:
@@ -1309,6 +1309,7 @@ extern "C" {
 #define meshtastic_MeshPacket_next_hop_tag       18
 #define meshtastic_MeshPacket_relay_node_tag     19
 #define meshtastic_MeshPacket_tx_after_tag       20
+#define meshtastic_MeshPacket_coverage_filter_tag 21
 #define meshtastic_NodeInfo_num_tag              1
 #define meshtastic_NodeInfo_user_tag             2
 #define meshtastic_NodeInfo_position_tag         3
@@ -1506,7 +1507,8 @@ X(a, STATIC,   SINGULAR, BYTES,    public_key,       16) \
 X(a, STATIC,   SINGULAR, BOOL,     pki_encrypted,    17) \
 X(a, STATIC,   SINGULAR, UINT32,   next_hop,         18) \
 X(a, STATIC,   SINGULAR, UINT32,   relay_node,       19) \
-X(a, STATIC,   SINGULAR, UINT32,   tx_after,         20)
+X(a, STATIC,   SINGULAR, UINT32,   tx_after,         20) \
+X(a, STATIC,   SINGULAR, BYTES,    coverage_filter,  21)
 #define meshtastic_MeshPacket_CALLBACK NULL
 #define meshtastic_MeshPacket_DEFAULT NULL
 #define meshtastic_MeshPacket_payload_variant_decoded_MSGTYPE meshtastic_Data
