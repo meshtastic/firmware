@@ -107,6 +107,11 @@ static int32_t reconnectETH()
 bool initEthernet()
 {
     if (config.network.eth_enabled) {
+#ifdef PIN_ETH_POWER_EN
+        pinMode(PIN_ETH_POWER_EN, OUTPUT);
+        digitalWrite(PIN_ETH_POWER_EN, HIGH); // Power up.
+        delay(100);
+#endif
 
 #ifdef PIN_ETHERNET_RESET
         pinMode(PIN_ETHERNET_RESET, OUTPUT);
@@ -115,6 +120,12 @@ bool initEthernet()
         digitalWrite(PIN_ETHERNET_RESET, HIGH); // Reset Time.
 #endif
 
+#ifdef RAK11310 // Initialize the SPI port
+        ETH_SPI_PORT.setSCK(PIN_SPI0_SCK);
+        ETH_SPI_PORT.setTX(PIN_SPI0_MOSI);
+        ETH_SPI_PORT.setRX(PIN_SPI0_MISO);
+        ETH_SPI_PORT.begin();
+#endif
         Ethernet.init(ETH_SPI_PORT, PIN_ETHERNET_SS);
 
         uint8_t mac[6];
