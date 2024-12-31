@@ -158,7 +158,7 @@ void FloodingRouter::mergeMyCoverage(CoverageFilter &coverage)
     }
 }
 
-float FloodingRouter::calculateForwardProbability(const CoverageFilter &incoming, NodeNum lastSender)
+float FloodingRouter::calculateForwardProbability(const CoverageFilter &incoming, NodeNum from)
 {
     // If we are a router or repeater, always forward because it's assumed these are in the most advantageous locations
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
@@ -180,7 +180,7 @@ float FloodingRouter::calculateForwardProbability(const CoverageFilter &incoming
     int neighbors = 0;
     for (auto nodeId : recentNeighbors) {
         // Don't count the person we got this packet from
-        if (nodeId == lastSender) continue;
+        if (nodeId == from) continue;
 
         neighbors++;
 
