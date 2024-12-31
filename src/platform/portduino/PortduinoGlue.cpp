@@ -85,6 +85,11 @@ void portduinoCustomInit()
 
 void getMacAddr(uint8_t *dmac)
 {
+    std::cout << "settingsStrings length " << settingsStrings[mac_address].length() << std::endl;
+    if (optionMac != nullptr) {
+        std::cout << "optionsMac " << optionMac << std::endl;
+        std::cout << "optionsMac len " << strlen(optionMac) << std::endl;
+    }
     // We should store this value, and short-circuit all this if it's already been set.
     if (optionMac != nullptr && strlen(optionMac) > 0) {
         if (strlen(optionMac) >= 12) {
@@ -221,6 +226,8 @@ void portduinoSetup()
         char serial[9] = {0};
         ch341Hal->getSerialString(serial, 8);
         std::cout << "Serial " << serial << std::endl;
+        std::cout << "Serial length " << strlen(serial) << std::endl;
+        std::cout << "settingsStrings length " << settingsStrings[mac_address].length() << std::endl;
         if (strlen(serial) == 8 && settingsStrings[mac_address].length() < 12) {
             uint8_t hash[32] = {0};
             memcpy(hash, serial, 8);
@@ -231,6 +238,8 @@ void portduinoSetup()
             dmac[3] = hash[3];
             dmac[4] = hash[4];
             dmac[5] = hash[5];
+            std::cout << "MAC Address from CH341: " << std::hex << +dmac[0] << +dmac[1] << +dmac[2] << +dmac[3] << +dmac[4]
+                      << +dmac[5] << std::endl;
         }
     }
 
