@@ -982,6 +982,7 @@ bool CannedMessageModule::interceptingKeyboardInput()
     }
 }
 
+#if !HAS_TFT
 void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     char buffer[50];
@@ -1140,6 +1141,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         }
     }
 }
+#endif //! HAS_TFT
 
 ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
