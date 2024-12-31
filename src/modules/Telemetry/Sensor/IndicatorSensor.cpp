@@ -35,8 +35,8 @@ enum sensor_pkt_type {
 
 static int cmd_send(uint8_t cmd, const char *p_data, uint8_t len)
 {
-    uint8_t buf[32] = {0};
-    uint8_t data[32] = {0};
+    uint8_t send_buf[32] = {0};
+    uint8_t send_data[32] = {0};
 
     if (len > 31) {
         return -1;
@@ -44,18 +44,18 @@ static int cmd_send(uint8_t cmd, const char *p_data, uint8_t len)
 
     uint8_t index = 1;
 
-    data[0] = cmd;
+    send_data[0] = cmd;
 
     if (len > 0 && p_data != NULL) {
-        memcpy(&data[1], p_data, len);
+        memcpy(&send_data[1], p_data, len);
         index += len;
     }
-    cobs_encode_result ret = cobs_encode(buf, sizeof(buf), data, index);
+    cobs_encode_result ret = cobs_encode(send_buf, sizeof(send_buf), send_data, index);
 
     // LOG_DEBUG("cobs TX status:%d, len:%d, type 0x%x", ret.status, ret.out_len, cmd);
 
     if (ret.status == COBS_ENCODE_OK) {
-        return uart_write_bytes(SENSOR_PORT_NUM, buf, ret.out_len + 1);
+        return uart_write_bytes(SENSOR_PORT_NUM, send_buf, ret.out_len + 1);
     }
 
     return -1;
@@ -96,7 +96,6 @@ bool IndicatorSensor::getMetrics(meshtastic_Telemetry *measurement)
     int len = uart_read_bytes(SENSOR_PORT_NUM, buf, (SENSOR_BUF_SIZE - 1), 100 / portTICK_PERIOD_MS);
 
     float value = 0.0;
-    uint8_t pkt_type = 0;
     uint8_t *p_buf_start = buf;
     uint8_t *p_buf_end = buf;
     if (len > 0) {
@@ -117,7 +116,7 @@ bool IndicatorSensor::getMetrics(meshtastic_Telemetry *measurement)
             if (ret.out_len > 1 && ret.status == COBS_DECODE_OK) {
 
                 value = 0.0;
-                pkt_type = data[0];
+                uint8_t pkt_type = data[0];
                 switch (pkt_type) {
                 case PKT_TYPE_SENSOR_SCD41_CO2: {
                     memcpy(&value, &data[1], sizeof(value));
