@@ -121,10 +121,10 @@ bool initEthernet()
 #endif
 
 #ifdef RAK11310 // Initialize the SPI port
-		ETH_SPI_PORT.setSCK(PIN_SPI0_SCK);
-		ETH_SPI_PORT.setTX(PIN_SPI0_MOSI);
-		ETH_SPI_PORT.setRX(PIN_SPI0_MISO);
-		ETH_SPI_PORT.begin();
+        ETH_SPI_PORT.setSCK(PIN_SPI0_SCK);
+        ETH_SPI_PORT.setTX(PIN_SPI0_MOSI);
+        ETH_SPI_PORT.setRX(PIN_SPI0_MISO);
+        ETH_SPI_PORT.begin();
 #endif
         Ethernet.init(ETH_SPI_PORT, PIN_ETHERNET_SS);
 
