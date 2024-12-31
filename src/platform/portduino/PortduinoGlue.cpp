@@ -18,6 +18,7 @@
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <sstream>
 #include <sys/ioctl.h>
 #include <unistd.h>
 
@@ -231,6 +232,9 @@ void portduinoSetup()
             dmac[3] = hash[3];
             dmac[4] = hash[4];
             dmac[5] = hash[5];
+            std::stringstream mactmp;
+            mactmp << std::hex << +dmac[0] << +dmac[1] << +dmac[2] << +dmac[3] << +dmac[4] << +dmac[5];
+            settingsStrings[mac_address] = mactmp.str();
         }
     }
 
