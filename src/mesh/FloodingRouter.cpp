@@ -190,7 +190,11 @@ float FloodingRouter::calculateForwardProbability(const CoverageFilter &incoming
     }
 
     // Calculate coverage ratio
-    float coverageRatio = static_cast<float>(uncovered) / static_cast<float>(neighbors);
+    float coverageRatio = 0.0;
+    // coverage only exists if neighbors are more than 0
+    if (neighbors > 0) {
+        coverageRatio = static_cast<float>(uncovered) / static_cast<float>(neighbors);
+    }
 
     // Calculate forwarding probability
     float forwardProb = BASE_FORWARD_PROB + (coverageRatio * COVERAGE_SCALE_FACTOR);
