@@ -5,6 +5,7 @@
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "FSCommon.h"
 #include "NAU7802Sensor.h"
+#include "SPILock.h"
 #include "SafeFile.h"
 #include "TelemetrySensor.h"
 #include <Throttle.h>
@@ -111,13 +112,16 @@ bool NAU7802Sensor::saveCalibrationData()
     } else {
         okay = true;
     }
+    spiLock->lock();
     okay &= file.close();
+    spiLock->unlock();
 
     return okay;
 }
 
 bool NAU7802Sensor::loadCalibrationData()
 {
+    spiLock->lock();
     auto file = FSCom.open(nau7802ConfigFileName, FILE_O_READ);
     bool okay = false;
     if (file) {
@@ -134,6 +138,7 @@ bool NAU7802Sensor::loadCalibrationData()
     } else {
         LOG_INFO("No %s state found (File: %s)", sensorName, nau7802ConfigFileName);
     }
+    spiLock->unlock();
     return okay;
 }
 
