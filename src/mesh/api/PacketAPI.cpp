@@ -83,7 +83,11 @@ bool PacketAPI::sendPacket(void)
         // if (typeid(*server) == typeid(MeshPacketServer))
         //    return dynamic_cast<MeshPacketServer*>(server)->sendPacket(fromRadioScratch);
         // else
-        return server->sendPacket(DataPacket<meshtastic_FromRadio>(id, fromRadioScratch));
+        bool result = server->sendPacket(DataPacket<meshtastic_FromRadio>(id, fromRadioScratch));
+        if (!result) {
+            LOG_ERROR("send queue full");
+        }
+        return result;
     } else
         return false;
 }
