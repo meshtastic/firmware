@@ -378,7 +378,7 @@ class LGFX : public lgfx::LGFX_Device
             _panel_instance = new lgfx::Panel_HX8357D;
         else {
             _panel_instance = new lgfx::Panel_NULL;
-            LOG_ERROR("Unknown display panel configured!\n");
+            LOG_ERROR("Unknown display panel configured!");
         }
 
         auto buscfg = _bus_instance.config();
