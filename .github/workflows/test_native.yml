@@ -60,6 +60,10 @@ jobs:
   platformio-tests:
     name: Native PlatformIO Tests
     runs-on: ubuntu-latest
+    permissions: # Needed for dorny/test-reporter.
+      contents: read
+      actions: read
+      checks: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
