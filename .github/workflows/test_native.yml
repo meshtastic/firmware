@@ -103,7 +103,7 @@ jobs:
           path: ./coverage_*.info
 
   generate-reports:
-    name: Generate Reports
+    name: Generate Test Reports
     runs-on: ubuntu-latest
     permissions: # Needed for dorny/test-reporter.
       contents: read
