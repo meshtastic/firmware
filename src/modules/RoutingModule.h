@@ -13,7 +13,8 @@ class RoutingModule : public ProtobufModule<meshtastic_Routing>
      */
     RoutingModule();
 
-    void sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopLimit = 0);
+    virtual void sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex,
+                            uint8_t hopLimit = 0);
 
     // Given the hopStart and hopLimit upon reception of a request, return the hop limit to use for the response
     uint8_t getHopLimitForResponse(uint8_t hopStart, uint8_t hopLimit);
