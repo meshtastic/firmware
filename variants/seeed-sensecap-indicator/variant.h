@@ -1,6 +1,12 @@
 #define I2C_SDA 39
 #define I2C_SCL 40
 
+// This board has a serial coprocessor for sensor readings
+#define SENSOR_RP2040_TXD 19
+#define SENSOR_RP2040_RXD 20
+#define SENSOR_PORT_NUM 2
+#define SENSOR_BAUD_RATE 115200
+
 #define BUTTON_PIN 38
 // #define BUTTON_NEED_PULLUP
 
@@ -19,8 +25,7 @@
 #define ST7701_BL 45
 #define ST7701_SPI_HOST SPI2_HOST
 #define ST7701_BACKLIGHT_EN 45
-#define SPI_FREQUENCY 20000000
-#define SPI_READ_FREQUENCY 16000000
+#define SPI_FREQUENCY 12000000
 #define TFT_HEIGHT 480
 #define TFT_WIDTH 480
 #define TFT_OFFSET_X 0
