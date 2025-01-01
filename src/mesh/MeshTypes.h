@@ -53,10 +53,12 @@ enum RxSource {
 #define NUM_HASH_FUNCTIONS 2
 
 // Base forwarding probability - never drop below this value
+// 0.2 seems suitable because the worst case False Positive Rate of the
+// coverage filter is 37%. That's if its fully saturated with 60 unique nodes.
 #define BASE_FORWARD_PROB 0.2f
 
 // Coverage scaling factor
-#define COVERAGE_SCALE_FACTOR 0.9f
+#define COVERAGE_SCALE_FACTOR 2.0f
 
 // Recency threshold in minutes
 // Currently set to 1 hour because that is the minimum interval for nodeinfo broadcasts

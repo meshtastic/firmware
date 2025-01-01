@@ -160,6 +160,10 @@ void FloodingRouter::mergeMyCoverage(CoverageFilter &coverage)
 
 float FloodingRouter::calculateForwardProbability(const CoverageFilter &incoming, NodeNum from)
 {
+#ifdef USERPREFS_USE_COVERAGE_FILTER
+    bool useCoverageFilter = USERPREFS_USE_COVERAGE_FILTER;
+    if (!useCoverageFilter) return 1.0f;
+#endif
     // If we are a router or repeater, always forward because it's assumed these are in the most advantageous locations
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
         config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
@@ -203,7 +207,7 @@ float FloodingRouter::calculateForwardProbability(const CoverageFilter &incoming
     forwardProb = std::min(std::max(forwardProb, 0.0f), 1.0f);
 
     LOG_DEBUG("CoverageRatio=%.2f, ForwardProb=%.2f (Uncovered=%d, Total=%zu)", coverageRatio, forwardProb, uncovered,
-              recentNeighbors.size());
+              neighbors);
 
     return forwardProb;
 }
