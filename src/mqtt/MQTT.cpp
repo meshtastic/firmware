@@ -282,7 +282,9 @@ void mqttInit()
 }
 
 #if HAS_NETWORKING
-MQTT::MQTT() : concurrency::OSThread("mqtt"), pubSub(mqttClient), mqttQueue(MAX_MQTT_QUEUE)
+MQTT::MQTT() : MQTT(std::unique_ptr<MQTTClient>(new MQTTClient())) {}
+MQTT::MQTT(std::unique_ptr<MQTTClient> _mqttClient)
+    : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE), mqttClient(std::move(_mqttClient)), pubSub(*mqttClient)
 #else
 MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
 #endif
@@ -420,13 +422,13 @@ void MQTT::reconnect()
             }
         } else {
             LOG_INFO("Use non-TLS-encrypted session");
-            pubSub.setClient(mqttClient);
+            pubSub.setClient(*mqttClient);
         }
 #else
-        pubSub.setClient(mqttClient);
+        pubSub.setClient(*mqttClient);
 #endif
 #elif HAS_NETWORKING
-        pubSub.setClient(mqttClient);
+        pubSub.setClient(*mqttClient);
 #endif
 
         std::pair<String, uint16_t> hostAndPort = parseHostAndPort(serverAddr, serverPort);
@@ -444,7 +446,7 @@ void MQTT::reconnect()
             enabled = true; // Start running background process again
             runASAP = true;
             reconnectCount = 0;
-            isMqttServerAddressPrivate = isPrivateIpAddress(mqttClient.remoteIP());
+            isMqttServerAddressPrivate = isPrivateIpAddress(mqttClient->remoteIP());
 
             publishNodeInfo();
             sendSubscriptions();
