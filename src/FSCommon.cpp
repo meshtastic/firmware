@@ -12,16 +12,22 @@
 #include "configuration.h"
 
 #ifdef HAS_SDCARD
-#include <SD.h>
-#include <SPI.h>
-#ifdef SDCARD_USE_SPI1
-#ifdef ARCH_ESP32   //when using esp32, using esp32 specific libary for SD Card
-SPIClass SPI1(HSPI);
-#endif //ARCH_ESP32
-#define SDHandler SPI1
-#else
-#define SDHandler SPI
-#endif //SDCARD_USE_SPI1
+    #include <SD.h>
+    #include <SPI.h>
+    #ifdef SDCARD_USE_SPI1
+        #ifdef ARCH_ESP32
+            SPIClass SPI1(HSPI);
+        #endif //ARCH_ESP32
+        #ifdef ARCH_NRF52
+            #define SDCARD_SPI SPI1
+        #endif //NRF52
+        #define SDHandler SPI1  //only used for esp32
+    #else
+        #ifdef ARCH_NRF52
+            #define SDCARD_SPI SPI
+        #endif //NRF52
+        #define SDHandler SPI   //only used for esp32
+    #endif //SDCARD_USE_SPI1
 
 #endif // HAS_SDCARD
 
@@ -357,10 +363,11 @@ void fsInit()
 void setupSDCard()
 {
 #ifdef HAS_SDCARD
-    #if defined(ARCH_ESP32)
+    #if (defined(ARCH_ESP32) || defined(ARCH_NRF52))
+        #if(defined(ARCH_ESP32))
         SDHandler.begin(SPI_SCK, SPI_MISO, SPI_MOSI);
-
-        if (!SD.begin(SDCARD_CS, SDHandler)) {
+        #endif
+        if (!SD.begin(SDCARD_CS, SDHandler)) {      //param SDHandler only used for esp32
             LOG_DEBUG("No SD_MMC card detected");
             return;
         }
@@ -383,24 +390,9 @@ void setupSDCard()
         uint64_t cardSize = SD.cardSize() / (1024 * 1024);
         LOG_DEBUG("SD Card Size: %lu MB", (uint32_t)cardSize);
         LOG_DEBUG("Total space: %lu MB", (uint32_t)(SD.totalBytes() / (1024 * 1024)));
-        LOG_DEBUG("Used space: %lu MB", (uint32_t)(SD.usedBytes() / (1024 * 1024)));
-    #endif
-    #if defined(ARCH_NRF52)
-        if (!SD.begin(SDCARD_CS))
-        {
-            LOG_DEBUG("Could not initialize SD Card");
-            return;    
-        }
-        else
-        {
-            LOG_DEBUG("Succesfully initialized SD Card");
-            LOG_DEBUG("SD Card size: %d MB", (SD.getVolumeSize() / 1024 ));
-            SDFile testfile = SD.open("initFile.txt", FILE_WRITE);
-            testfile.print("SD card initialized at: ");
-            testfile.println(millis());
-            testfile.close();
-            return;
-        }
+        #if(defined(ARCH_ESP32))    //not implemented in arduino sd library
+        //LOG_DEBUG("Used space: %lu MB", (uint32_t)(SD.usedBytes() / (1024 * 1024)));
+        #endif
     #endif
 #endif
 }

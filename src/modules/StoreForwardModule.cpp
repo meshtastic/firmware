@@ -98,7 +98,7 @@ void StoreForwardModule::populatePSRAM()
 void StoreForwardModule::populateSDCard()
 {
 #if defined(HAS_SDCARD)
-    #if defined(ARCH_ESP32)
+    #if (defined(ARCH_ESP32) || defined(ARCH_NRF52))
         if (SD.cardType() != CARD_NONE) {
             if (!SD.exists("/storeforward")) {
                 LOG_INFO("Creating StoreForward directory");
@@ -110,22 +110,7 @@ void StoreForwardModule::populateSDCard()
             this->packetHistory = (PacketHistoryStruct *)malloc(sizeof(PacketHistoryStruct));
             LOG_DEBUG("numberOfPackets for packetHistory - %u", numberOfPackets);
         }
-    #endif  //ARCH_ESP32
-    #if defined(ARCH_NRF52)
-        if(SD.getCardType() != 0)
-        {
-            if(!SD.exists("/storeforward"))
-            {
-                SD.mkdir("/storeforward");
-                LOG_INFO("Creating StoreForward directory");
-            }
-            this->storageType = StorageType::ST_SDCARD;
-            uint32_t numberOfPackets = (this->records ? this->records : (((SD.getVolumeSize() / 3) * 2 * 1024) / sizeof(PacketHistoryStruct))); //getVolumeSize returns size in kB
-            // only allocate space for one temp copy
-            this->packetHistory = (PacketHistoryStruct *)malloc(sizeof(PacketHistoryStruct));
-            LOG_DEBUG("numberOfPackets for packetHistory - %u", numberOfPackets);
-        }
-    #endif //ARCH_NRF52
+    #endif  //ARCH_ESP32 || ARCH_NRF52
 #endif  //HAS_SDCARD
 }
 
