@@ -23,7 +23,7 @@ class MenuApplet : public Applet, public concurrency::OSThread
     void onBackground() override;
     void onButtonShortPress() override;
     void onButtonLongPress() override;
-    void render() override;
+    void onRender() override;
 
   protected:
     int32_t runOnce() override;

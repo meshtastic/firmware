@@ -60,7 +60,7 @@ int InkHUD::NotificationApplet::onReceiveTextMessage(const meshtastic_MeshPacket
     return 0;
 }
 
-void InkHUD::NotificationApplet::render()
+void InkHUD::NotificationApplet::onRender()
 {
     setFont(fontSmall);
 

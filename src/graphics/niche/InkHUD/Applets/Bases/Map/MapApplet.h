@@ -27,7 +27,7 @@ namespace NicheGraphics::InkHUD
 class MapApplet : public Applet
 {
   public:
-    void render() override;
+    void onRender() override;
 
   protected:
     virtual bool shouldDrawNode(meshtastic_NodeInfoLite *node) { return true; } // Allow derived applets to filter the nodes

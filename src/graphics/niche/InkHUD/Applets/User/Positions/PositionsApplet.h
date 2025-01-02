@@ -24,7 +24,7 @@ class PositionsApplet : public MapApplet, public SinglePortModule
 {
   public:
     PositionsApplet() : SinglePortModule("PositionsApplet", meshtastic_PortNum_POSITION_APP) {}
-    void render() override;
+    void onRender() override;
 
   protected:
     ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;

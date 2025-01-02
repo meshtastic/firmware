@@ -10,7 +10,7 @@ InkHUD::BootScreenApplet::BootScreenApplet() : concurrency::OSThread("BootScreen
     OSThread::disable();
 }
 
-void InkHUD::BootScreenApplet::render()
+void InkHUD::BootScreenApplet::onRender()
 {
     // Testing only
     print("Booting");
@@ -20,7 +20,7 @@ void InkHUD::BootScreenApplet::onForeground()
 {
     // Testing only
 
-    getTile()->displayedApplet = this; // Take ownership of the fullscreen tile
+    getTile()->assignedApplet = this; // Take ownership of the fullscreen tile
     requestUpdate();
 
     // Timer for 10 seconds
@@ -30,7 +30,7 @@ void InkHUD::BootScreenApplet::onForeground()
 
 void InkHUD::BootScreenApplet::onBackground()
 {
-    getTile()->displayedApplet = nullptr; // Release ownership of the fullscreen tile
+    getTile()->assignedApplet = nullptr; // Release ownership of the fullscreen tile
 }
 
 int32_t InkHUD::BootScreenApplet::runOnce()

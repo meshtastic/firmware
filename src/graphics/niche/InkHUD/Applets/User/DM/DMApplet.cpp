@@ -32,7 +32,7 @@ int InkHUD::DMApplet::onReceiveTextMessage(const meshtastic_MeshPacket *p)
     return 0;
 }
 
-void InkHUD::DMApplet::render()
+void InkHUD::DMApplet::onRender()
 {
     setFont(fontSmall);
 

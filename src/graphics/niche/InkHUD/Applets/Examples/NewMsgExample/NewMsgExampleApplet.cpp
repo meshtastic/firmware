@@ -4,7 +4,7 @@
 
 using namespace NicheGraphics;
 
-// We configured MeshModule API to call this message when we receive a new text message
+// We configured MeshModule API to call this method when we receive a new text message
 ProcessMessage InkHUD::NewMsgExampleApplet::handleReceived(const meshtastic_MeshPacket &mp)
 {
 
@@ -34,7 +34,7 @@ ProcessMessage InkHUD::NewMsgExampleApplet::handleReceived(const meshtastic_Mesh
 // We can trigger a render by calling requestUpdate()
 // Render might be called by some external source
 // We should always be ready to draw
-void InkHUD::NewMsgExampleApplet::render()
+void InkHUD::NewMsgExampleApplet::onRender()
 {
     setFont(fontSmall);
 

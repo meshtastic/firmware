@@ -30,7 +30,7 @@ int InkHUD::AllMessageApplet::onReceiveTextMessage(const meshtastic_MeshPacket *
     return 0;
 }
 
-void InkHUD::AllMessageApplet::render()
+void InkHUD::AllMessageApplet::onRender()
 {
     setFont(fontSmall);
 

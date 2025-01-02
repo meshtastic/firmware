@@ -233,7 +233,7 @@ void InkHUD::WindowManager::placeUserTiles()
 
 void InkHUD::WindowManager::assignUserAppletsToTiles()
 {
-    // Set "displayedApplet" property
+    // Set "assignedApplet" property
     // Which applet should be initially shown on a tile?
     // This is preserved between reboots, but the value needs validating at startup
     for (uint8_t i = 0; i < userTiles.size(); i++) {
@@ -258,10 +258,10 @@ void InkHUD::WindowManager::assignUserAppletsToTiles()
         // Restore previously shown applet if possible,
         // otherwise show placeholder
         if (canRestore) {
-            t->displayedApplet = userApplets.at(oldIndex);
-            t->displayedApplet->bringToForeground();
+            t->assignedApplet = userApplets.at(oldIndex);
+            t->assignedApplet->bringToForeground();
         } else {
-            t->displayedApplet = placeholderApplet;
+            t->assignedApplet = placeholderApplet;
             settings.userTiles.displayedUserApplet[i] = -1; // Update settings: current tile has no valid applet
         }
     }
@@ -279,14 +279,14 @@ void InkHUD::WindowManager::refocusTile()
     // - scan for another valid applet, which we can addSubstitution
     // - reason: nextApplet() won't cycle if placeholder is shown
     Tile *focusedTile = userTiles.at(settings.userTiles.focused);
-    if (focusedTile->displayedApplet == placeholderApplet) {
+    if (focusedTile->assignedApplet == placeholderApplet) {
         // Search for available applets
         for (uint8_t i = 0; i < userApplets.size(); i++) {
             Applet *a = userApplets.at(i);
             if (a->isActive() && !a->isForeground()) {
                 // Found a suitable applet
                 // Assign it to the focused tile
-                focusedTile->displayedApplet = a;
+                focusedTile->assignedApplet = a;
                 a->bringToForeground();
                 settings.userTiles.displayedUserApplet[settings.userTiles.focused] = i; // Record change: persist after reboot
                 break;
@@ -387,13 +387,13 @@ void InkHUD::WindowManager::nextApplet()
     Tile *t = userTiles.at(settings.userTiles.focused);
 
     // Short circuit: zero applets available
-    if (t->displayedApplet == placeholderApplet)
+    if (t->assignedApplet == placeholderApplet)
         return;
 
     // Find the index of the applet currently shown on the tile
     uint8_t appletIndex = -1;
     for (uint8_t i = 0; i < userApplets.size(); i++) {
-        if (userApplets.at(i) == t->displayedApplet) {
+        if (userApplets.at(i) == t->assignedApplet) {
             appletIndex = i;
             break;
         }
@@ -423,9 +423,9 @@ void InkHUD::WindowManager::nextApplet()
         return;
 
     // Hide old applet, show new applet
-    t->displayedApplet->sendToBackground();
-    t->displayedApplet = nextValidApplet;
-    t->displayedApplet->bringToForeground();
+    t->assignedApplet->sendToBackground();
+    t->assignedApplet = nextValidApplet;
+    t->assignedApplet->bringToForeground();
     requestUpdate(Drivers::EInk::UpdateTypes::FAST, false); // bringToForeground already requested. Just upgrading to FAST
 }
 
@@ -604,7 +604,7 @@ bool InkHUD::WindowManager::approveNotification(InkHUD::Notification &n)
 {
     // Ask all currently displayed applets
     for (Tile *t : userTiles) {
-        Applet *a = t->displayedApplet;
+        Applet *a = t->assignedApplet;
         if (!a->approveNotification(n))
             return false;
     }
@@ -737,8 +737,8 @@ void InkHUD::WindowManager::render(bool force)
 
         if (!autoshown && wants && !a->isForeground() && settings.userApplets.autoshow[i]) {
             Tile *t = userTiles.at(settings.userTiles.focused); // Get focused tile
-            t->displayedApplet->sendToBackground();             // Background whatever applet is already on the tile
-            t->displayedApplet = a;                             // Assign our new applet to tile
+            t->assignedApplet->sendToBackground();              // Background whatever applet is already on the tile
+            t->assignedApplet = a;                              // Assign our new applet to tile
             a->bringToForeground();                             // Foreground our new applet
             autoshown = true;                                   // No more autoshows now until next render
             // Keep looping though, to clear the wantAutoshow flag for all applets
@@ -900,7 +900,7 @@ void InkHUD::WindowManager::findOrphanApplets()
         for (uint8_t it = 0; it < userTiles.size(); it++) {
             Tile *t = userTiles.at(it);
             // A tile claims this applet: not orphaned
-            if (t->displayedApplet == a) {
+            if (t->assignedApplet == a) {
                 foundOwner = true;
                 break;
             }

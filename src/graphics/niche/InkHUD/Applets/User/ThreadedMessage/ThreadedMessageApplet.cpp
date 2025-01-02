@@ -21,7 +21,7 @@ InkHUD::ThreadedMessageApplet::ThreadedMessageApplet(uint8_t channelIndex) : cha
     store = new MessageStore("ch" + to_string(channelIndex));
 }
 
-void InkHUD::ThreadedMessageApplet::render()
+void InkHUD::ThreadedMessageApplet::onRender()
 {
     setFont(fontSmall);
 

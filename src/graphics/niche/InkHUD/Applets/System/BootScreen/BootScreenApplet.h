@@ -22,7 +22,7 @@ class BootScreenApplet : public Applet, public concurrency::OSThread
 {
   public:
     BootScreenApplet();
-    void render() override;
+    void onRender() override;
 
     void onForeground() override;
     void onBackground() override;

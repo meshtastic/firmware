@@ -4,7 +4,7 @@
 
 using namespace NicheGraphics;
 
-void InkHUD::MapApplet::render()
+void InkHUD::MapApplet::onRender()
 {
     setFont(fontSmall);
 

@@ -118,10 +118,7 @@ class Applet : public GFX
     Applet();
     void setTile(Tile *t); // Applets draw via a tile (for multiplexing)
     Tile *getTile();
-    bool wantsToRender();      // Check whether applet wants to render, or okay to skip, preserving old tile image
-    bool wantsToAutoshow();    // Check whether applets wants to become foreground, to show new data, if permitted
-    void resetDrawingSpace();  // Clear wantRender flag, and reset the drawing space
-    virtual void render() = 0; // All drawing happens here
+    void resetDrawingSpace(); // Clear wantRender flag, and reset the drawing space
 
     // Change the applet's state
 
@@ -137,6 +134,7 @@ class Applet : public GFX
 
     // Allow derived applets to handle changes in state
 
+    virtual void onRender() = 0; // All drawing happens here
     virtual void onActivate() {}
     virtual void onDeactivate() {}
     virtual void onForeground() {}

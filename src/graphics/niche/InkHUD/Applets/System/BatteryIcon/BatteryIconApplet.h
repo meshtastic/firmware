@@ -21,7 +21,7 @@ namespace NicheGraphics::InkHUD
 class BatteryIconApplet : public Applet
 {
   public:
-    void render() override;
+    void onRender() override;
 
     void onActivate() override;
     void onDeactivate() override;

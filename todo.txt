@@ -22,6 +22,7 @@ Critical Tasks
 []      ble pairing screen
 []      boot and shutdown screens
 []      hook reboot to save flash data
+[]      hotfix for handling emoji tapbacks
 
 Improvements
 ====================

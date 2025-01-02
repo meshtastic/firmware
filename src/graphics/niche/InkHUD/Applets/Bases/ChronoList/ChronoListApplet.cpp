@@ -21,7 +21,7 @@ void InkHUD::ChronoListApplet::onDeactivate()
     ordered.shrink_to_fit();
 }
 
-void InkHUD::ChronoListApplet::render()
+void InkHUD::ChronoListApplet::onRender()
 {
     /*
     +-------------------------------+

@@ -18,7 +18,7 @@ class PlaceholderApplet : public Applet
 {
   public:
     PlaceholderApplet();
-    void render() override;
+    void onRender() override;
 
     // Note: onForeground, onBackground, and wantsToRender are not meaningful for this applet.
     // The window manager decides when and where it should be rendered

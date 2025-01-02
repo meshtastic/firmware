@@ -25,10 +25,10 @@ namespace NicheGraphics::InkHUD
 class BasicExampleApplet : public Applet
 {
   public:
-    // You must have a render() method
+    // You must have an onRender() method
     // All drawing happens here
 
-    void render() override;
+    void onRender() override;
 };
 
 } // namespace NicheGraphics::InkHUD

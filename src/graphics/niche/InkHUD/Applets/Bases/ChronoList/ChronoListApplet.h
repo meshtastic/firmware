@@ -33,7 +33,7 @@ class ChronoListApplet : public Applet, public MeshModule, public concurrency::O
 {
   public:
     ChronoListApplet(const char *name);
-    void render() override;
+    void onRender() override;
 
     void onForeground() override;
     void onBackground() override;

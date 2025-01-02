@@ -36,7 +36,7 @@ class ThreadedMessageApplet : public Applet
     ThreadedMessageApplet(uint8_t channelIndex);
     ThreadedMessageApplet() = delete;
 
-    void render() override;
+    void onRender() override;
 
     void onActivate() override;
     void onDeactivate() override;
