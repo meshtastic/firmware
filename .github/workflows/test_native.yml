@@ -84,6 +84,11 @@ jobs:
         run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
         id: version
 
+      # Disable (comment-out) BUILD_EPOCH. It causes a full rebuild between tests and resets the
+      # coverage information each time.
+      - name: Disable BUILD_EPOCH
+        run: sed -i 's/-DBUILD_EPOCH=$UNIX_TIME/#-DBUILD_EPOCH=$UNIX_TIME/' platformio.ini
+
       - name: PlatformIO Tests
         run: platformio test -e coverage --junit-output-path testreport.xml
 
