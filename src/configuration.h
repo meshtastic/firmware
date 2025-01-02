@@ -149,7 +149,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MAX30102_ADDR 0x57
 #define MLX90614_ADDR_DEF 0x5A
 #define CGRADSENS_ADDR 0x66
-#define RAK12035VB_ADDR 0x20
 
 // -----------------------------------------------------------------------------
 // ACCELEROMETER
@@ -172,11 +171,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 // Security
 // -----------------------------------------------------------------------------
+#define ATECC608B_ADDR 0x35
 
 // -----------------------------------------------------------------------------
 // IO Expander
 // -----------------------------------------------------------------------------
-#define TCA9535_ADDR 0x20
+//#define TCA9535_ADDR 0x20
 #define TCA9555_ADDR 0x26
 
 // -----------------------------------------------------------------------------
@@ -190,6 +190,18 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Touchscreen
 // -----------------------------------------------------------------------------
 #define FT6336U_ADDR 0x48
+
+// -----------------------------------------------------------------------------
+// RAK12035VB Soil Monitor (using RAK12023VB up to 3 RAK12035 monitors can be connected)
+// - the default i2c address for this sensor is 0x20 which is already in use so I am using the 
+//   Constructor to set the sensor addresses to 0x90, 0x91, 0x92
+// -----------------------------------------------------------------------------
+#define RAK12035VB1_ADDR 0x20
+#define RAK12035VB2_ADDR 0x21
+#define RAK12035VB3_ADDR 0x22
+#define RAK12035VB1_ALT_ADDR 0x90
+#define RAK12035VB2_ALT_ADDR 0x91
+#define RAK12035VB3_ALT_ADDR 0x92
 
 // -----------------------------------------------------------------------------
 // BIAS-T Generator
