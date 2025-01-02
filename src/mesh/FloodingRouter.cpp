@@ -200,8 +200,26 @@ float FloodingRouter::calculateForwardProbability(const CoverageFilter &incoming
         coverageRatio = static_cast<float>(uncovered) / static_cast<float>(neighbors);
     }
 
-    // Calculate forwarding probability
-    float forwardProb = BASE_FORWARD_PROB + (coverageRatio * COVERAGE_SCALE_FACTOR);
+    float forwardProb = BASE_FORWARD_PROB;
+
+    /* BEGIN OPTION 1: forward probability is based on coverage ratio and scales up or down
+     *           depending on the extent to which this node provides new coverage
+     * forwardProb = BASE_FORWARD_PROB + (coverageRatio * COVERAGE_SCALE_FACTOR);
+     */
+    /* END OPTION 1 */
+
+    /* BEGIN OPTION 2: forward probability is piecewise logic:
+     *          - Reduce to BASE_FORWARD_PROB if no new coverage is likely
+     *              (remember false positive rate of bloom filter means a node that think its neighbor is covered when it isnt)
+     *          - If 1 uncovered neighbor, ramp probability up significantly to 0.8
+     *          - If more than 1 uncovered neighbor, ramp probability up to 1.0
+     */
+    if (uncovered == 1) {
+        forwardProb = 0.8f;
+    } else if (uncovered > 1) {
+        forwardProb = 1.0f;
+    }
+    /* END OPTION 2 */
 
     // Clamp probability between 0 and 1
     forwardProb = std::min(std::max(forwardProb, 0.0f), 1.0f);
