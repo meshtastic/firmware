@@ -140,14 +140,14 @@ jobs:
           path: code-coverage-report
           merge-multiple: true
 
-      - name: Generate Code Coverage Report
-        run: |
-          sudo apt-get install -y lcov
-          lcov --quiet --add-tracefile code-coverage-report/coverage_base.info --add-tracefile code-coverage-report/coverage_integration.info --add-tracefile code-coverage-report/coverage_tests.info --output-file code-coverage-report/coverage_src.info
-          genhtml --quiet --legend --prefix "${PWD}" code-coverage-report/coverage_src.info --output-directory code-coverage-report
+      # - name: Generate Code Coverage Report
+      #   run: |
+      #     sudo apt-get install -y lcov
+      #     lcov --quiet --add-tracefile code-coverage-report/coverage_base.info --add-tracefile code-coverage-report/coverage_integration.info --add-tracefile code-coverage-report/coverage_tests.info --output-file code-coverage-report/coverage_src.info
+      #     genhtml --quiet --legend --prefix "${PWD}" code-coverage-report/coverage_src.info --output-directory code-coverage-report
 
-      - name: Save Code Coverage Report
-        uses: actions/upload-artifact@v4
-        with:
-          name: code-coverage-report-${{ steps.version.outputs.version }}.zip
-          path: code-coverage-report
+      # - name: Save Code Coverage Report
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: code-coverage-report-${{ steps.version.outputs.version }}.zip
+      #     path: code-coverage-report
