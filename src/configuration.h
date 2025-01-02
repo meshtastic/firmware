@@ -179,13 +179,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define TCA9555_ADDR 0x26
 
 // -----------------------------------------------------------------------------
-// GPS
-// -----------------------------------------------------------------------------
-#ifndef GPS_THREAD_INTERVAL
-#define GPS_THREAD_INTERVAL 200
-#endif
-
-// -----------------------------------------------------------------------------
 // Touchscreen
 // -----------------------------------------------------------------------------
 #define FT6336U_ADDR 0x48
@@ -206,11 +199,19 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define VEXT_ON_VALUE LOW
 #endif
 
+// -----------------------------------------------------------------------------
+// GPS
+// -----------------------------------------------------------------------------
+
 #ifndef GPS_BAUDRATE
 #define GPS_BAUDRATE 9600
 #define GPS_BAUDRATE_FIXED 0
 #else
 #define GPS_BAUDRATE_FIXED 1
+#endif
+
+#ifndef GPS_THREAD_INTERVAL
+#define GPS_THREAD_INTERVAL 200
 #endif
 
 /* Step #2: follow with defines common to the architecture;

@@ -2,6 +2,7 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
+#include "ServiceEnvelope.h"
 #include "configuration.h"
 #include "main.h"
 #include "mesh/Channels.h"
@@ -25,7 +26,6 @@
 #endif
 #include <Throttle.h>
 #include <assert.h>
-#include <pb_decode.h>
 #include <utility>
 
 #include <IPAddress.h>
@@ -46,23 +46,6 @@ constexpr int reconnectMax = 5;
 static uint8_t bytes[meshtastic_MqttClientProxyMessage_size + 30]; // 12 for channel name and 16 for nodeid
 
 static bool isMqttServerAddressPrivate = false;
-
-// meshtastic_ServiceEnvelope that automatically releases dynamically allocated memory when it goes out of scope.
-struct DecodedServiceEnvelope : public meshtastic_ServiceEnvelope {
-    DecodedServiceEnvelope() = delete;
-    DecodedServiceEnvelope(const uint8_t *payload, size_t length)
-        : meshtastic_ServiceEnvelope(meshtastic_ServiceEnvelope_init_default),
-          validDecode(pb_decode_from_bytes(payload, length, &meshtastic_ServiceEnvelope_msg, this))
-    {
-    }
-    ~DecodedServiceEnvelope()
-    {
-        if (validDecode)
-            pb_release(&meshtastic_ServiceEnvelope_msg, this);
-    }
-    // Clients must check that this is true before using.
-    const bool validDecode;
-};
 
 inline void onReceiveProto(char *topic, byte *payload, size_t length)
 {
@@ -299,7 +282,9 @@ void mqttInit()
 }
 
 #if HAS_NETWORKING
-MQTT::MQTT() : concurrency::OSThread("mqtt"), pubSub(mqttClient), mqttQueue(MAX_MQTT_QUEUE)
+MQTT::MQTT() : MQTT(std::unique_ptr<MQTTClient>(new MQTTClient())) {}
+MQTT::MQTT(std::unique_ptr<MQTTClient> _mqttClient)
+    : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE), mqttClient(std::move(_mqttClient)), pubSub(*mqttClient)
 #else
 MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
 #endif
@@ -437,13 +422,13 @@ void MQTT::reconnect()
             }
         } else {
             LOG_INFO("Use non-TLS-encrypted session");
-            pubSub.setClient(mqttClient);
+            pubSub.setClient(*mqttClient);
         }
 #else
-        pubSub.setClient(mqttClient);
+        pubSub.setClient(*mqttClient);
 #endif
 #elif HAS_NETWORKING
-        pubSub.setClient(mqttClient);
+        pubSub.setClient(*mqttClient);
 #endif
 
         std::pair<String, uint16_t> hostAndPort = parseHostAndPort(serverAddr, serverPort);
@@ -461,7 +446,7 @@ void MQTT::reconnect()
             enabled = true; // Start running background process again
             runASAP = true;
             reconnectCount = 0;
-            isMqttServerAddressPrivate = isPrivateIpAddress(mqttClient.remoteIP());
+            isMqttServerAddressPrivate = isPrivateIpAddress(mqttClient->remoteIP());
 
             publishNodeInfo();
             sendSubscriptions();
