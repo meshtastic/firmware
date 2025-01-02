@@ -16,6 +16,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{github.event.pull_request.head.ref}}
+          repository: ${{github.event.pull_request.head.repo.full_name}}
           submodules: recursive
 
       - name: Setup native build
@@ -67,6 +69,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{github.event.pull_request.head.ref}}
+          repository: ${{github.event.pull_request.head.repo.full_name}}
           submodules: recursive
 
       - name: Setup native build
@@ -115,23 +119,26 @@ jobs:
     if: always()
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{github.event.pull_request.head.ref}}
+          repository: ${{github.event.pull_request.head.repo.full_name}}
 
       - name: Get release version string
         run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
         id: version
 
-      # - name: Download test artifacts
-      #   uses: actions/download-artifact@v4
-      #   with:
-      #     name: platformio-test-report-${{ steps.version.outputs.version }}.zip
-      #     merge-multiple: true
+      - name: Download test artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: platformio-test-report-${{ steps.version.outputs.version }}.zip
+          merge-multiple: true
 
-      # - name: Test Report
-      #   uses: dorny/test-reporter@v1.9.1
-      #   with:
-      #     name: PlatformIO Tests
-      #     path: testreport.xml
-      #     reporter: java-junit
+      - name: Test Report
+        uses: dorny/test-reporter@v1.9.1
+        with:
+          name: PlatformIO Tests
+          path: testreport.xml
+          reporter: java-junit
 
       # - name: Download coverage artifacts
       #   uses: actions/download-artifact@v4
