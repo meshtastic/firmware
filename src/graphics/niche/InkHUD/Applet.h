@@ -116,9 +116,15 @@ class Applet : public GFX
 {
   public:
     Applet();
+
     void setTile(Tile *t); // Applets draw via a tile (for multiplexing)
     Tile *getTile();
-    void resetDrawingSpace(); // Clear wantRender flag, and reset the drawing space
+
+    void render();
+    bool wantsToRender();     // Check whether applet wants to render, or okay to skip, preserving old tile image
+    bool wantsToAutoshow();   // Check whether applets wants to become foreground, to show new data, if permitted
+    void updateDimensions();  // Get current size from tile
+    void resetDrawingSpace(); // Makes sure every render starts with same parameters
 
     // Change the applet's state
 
@@ -192,11 +198,11 @@ class Applet : public GFX
     static AppletFont fontSmall, fontLarge; // General purpose fonts, used cross-applet
 
   private:
-    Tile *assignedTile;        // Rendered pixels are fed into a Tile object, which translates them, then passes to WM
-    bool active = false;       // Has the user enabled this applet (at run-time)?
-    bool foreground = false;   // Is the applet currently drawn on a tile?
-    bool wantRender = false;   // In some situations, checked by WindowManager when updating, to skip unneeded redrawing.
-    bool wantAutoshow = false; // Does the applet have new data it would like to display in foreground?
+    Tile *assignedTile = nullptr; // Rendered pixels are fed into a Tile object, which translates them, then passes to WM
+    bool active = false;          // Has the user enabled this applet (at run-time)?
+    bool foreground = false;      // Is the applet currently drawn on a tile?
+    bool wantRender = false;      // In some situations, checked by WindowManager when updating, to skip unneeded redrawing.
+    bool wantAutoshow = false;    // Does the applet have new data it would like to display in foreground?
 
     using GFX::setFont;     // Make sure derived classes use AppletFont instead of AdafruitGFX fonts directly
     using GFX::setRotation; // Block setRotation calls. Rotation is handled globally by WindowManager.

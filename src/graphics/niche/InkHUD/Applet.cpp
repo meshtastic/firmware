@@ -27,7 +27,6 @@ void InkHUD::Applet::drawPixel(int16_t x, int16_t y, uint16_t color)
 }
 
 // Sets which tile the applet renders for
-// Dimensions are set now
 // Pixel output is passed to tile during render()
 void InkHUD::Applet::setTile(Tile *t)
 {
@@ -35,16 +34,38 @@ void InkHUD::Applet::setTile(Tile *t)
     assert(t != nullptr);
 
     assignedTile = t;
-    WIDTH = t->getWidth();
-    HEIGHT = t->getHeight();
-    _width = WIDTH;
-    _height = HEIGHT;
 }
 
 // Which tile will the applet render() to?
 InkHUD::Tile *InkHUD::Applet::getTile()
 {
     return assignedTile;
+}
+
+void InkHUD::Applet::render()
+{
+    wantRender = false; // Clear the flag set by requestUpdate
+
+    updateDimensions();
+    resetDrawingSpace();
+    onRender(); // Derived applet's drawing takes place here
+
+    // If our tile is (or was) highlighted, to indicate a change in focus
+    if (Tile::highlightTarget == assignedTile) {
+        // Draw the highlight
+        if (!Tile::highlightShown) {
+            drawRect(0, 0, width(), height(), BLACK);
+            Tile::startHighlightTimeout();
+            Tile::highlightShown = true;
+        }
+
+        // Clear the highlight
+        else {
+            Tile::cancelHighlightTimeout();
+            Tile::highlightShown = false;
+            Tile::highlightTarget = nullptr;
+        }
+    }
 }
 
 // Does the applet want to render now?
@@ -65,10 +86,18 @@ bool InkHUD::Applet::wantsToAutoshow()
     return want;
 }
 
+void InkHUD::Applet::updateDimensions()
+{
+    assert(assignedTile);
+    WIDTH = assignedTile->getWidth();
+    HEIGHT = assignedTile->getHeight();
+    _width = WIDTH;
+    _height = HEIGHT;
+}
+
 // Ensure that render() always starts with the same initial drawing config
 void InkHUD::Applet::resetDrawingSpace()
 {
-    wantRender = false;  // Clear the flag, we're rendering now!
     resetCrop();         // Allow pixel from any region of the applet to draw
     fillScreen(WHITE);   // Clear old drawing
     setTextColor(BLACK); // Reset text params

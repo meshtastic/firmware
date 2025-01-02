@@ -69,6 +69,9 @@ void InkHUD::MenuApplet::onBackground()
 
     // Stop the auto-timeout
     OSThread::disable();
+
+    // Restore the user applet whose tile we borrowed
+    getTile()->assignedApplet->bringToForeground();
 }
 
 // Auto-exit the menu applet after a period of inactivity
@@ -258,8 +261,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         break;
 
     case EXIT:
-        sendToBackground();                              // Menu applet dismissed, allow normal behavior to resume
-        getTile()->displayedApplet->bringToForeground(); // Restore the previous user applet
+        sendToBackground(); // Menu applet dismissed, allow normal behavior to resume
         // requestUpdate(Drivers::EInk::UpdateTypes::FULL);
         break;
 

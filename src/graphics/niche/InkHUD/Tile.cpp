@@ -6,13 +6,30 @@
 
 using namespace NicheGraphics;
 
+// Static members of Tile class (for linking)
+InkHUD::Tile *InkHUD::Tile::highlightTarget;
+bool InkHUD::Tile::highlightShown;
+
 // For dismissing the highlight indicator, after a few seconds
 // Highlighting is used to inform user of which tile is now focused
-static concurrency::Periodic *taskDismissHighlight;
-int32_t InkHUD::Tile::dismissHighlight()
+static concurrency::Periodic *taskHighlight;
+static int32_t runtaskHighlight()
 {
-    InkHUD::WindowManager::getInstance()->requestUpdate(Drivers::EInk::UpdateTypes::FAST, true);
-    return taskDismissHighlight->disable();
+    LOG_DEBUG("Dismissing");
+    InkHUD::Tile::highlightShown = false;
+    InkHUD::Tile::highlightTarget = nullptr;
+    InkHUD::WindowManager::getInstance()->requestUpdate(Drivers::EInk::UpdateTypes::FAST, true); // Re-render all
+    return taskHighlight->disable();
+}
+static void inittaskHighlight()
+{
+    static bool doneOnce = false;
+    if (!doneOnce) {
+        LOG_DEBUG("inittaskHighlight");
+        taskHighlight = new concurrency::Periodic("Highlight", runtaskHighlight);
+        taskHighlight->disable();
+        doneOnce = true;
+    }
 }
 
 InkHUD::Tile::Tile()
@@ -20,13 +37,9 @@ InkHUD::Tile::Tile()
     // For convenince
     windowManager = InkHUD::WindowManager::getInstance();
 
-    // Instantiate (once only) the task used to schedule the dismissal of tile highlighting
-    static bool highlightSetupDone = false;
-    if (!highlightSetupDone) {
-        taskDismissHighlight = new concurrency::Periodic("Highlight", Tile::dismissHighlight);
-        taskDismissHighlight->disable();
-        highlightSetupDone = true;
-    }
+    inittaskHighlight();
+    Tile::highlightTarget = nullptr;
+    Tile::highlightShown = false;
 }
 
 // Set the region of the tile automatically, based on the user's chosen layout
@@ -132,45 +145,6 @@ void InkHUD::Tile::placeSystemTile(int16_t left, int16_t top, uint16_t width, ui
     this->height = height;
 }
 
-// Render whichever applet is currently assigned to the tile
-// The setTile call in responsible for informing at applet of its dimensions
-// This is done here immediately prior to rendering
-void InkHUD::Tile::render()
-{
-    // Render the tile's applet
-    // ------------------------
-
-    displayedApplet->setTile(this);
-    displayedApplet->resetDrawingSpace();
-    displayedApplet->render();
-
-    // Highlighting:
-    // identify which tile is focused when focus changes by aux button
-    // --------------
-
-    // Clear any old highlighting
-    // Occurs at very next organic render of tile, or automatically after several seconds
-    if (highlightShowing) {
-        highlightShowing = false;
-        taskDismissHighlight->disable();
-    }
-
-    // New highlighting, if requested
-    if (highlightPending) {
-        // Mark that a highlight is shown
-        highlightPending = false;
-        highlightShowing = true;
-
-        // Drawing shouldn't really take place outside the Applet class itself,
-        // But we're making an exception in this case
-        displayedApplet->drawRect(0, 0, width, height, BLACK);
-
-        // Schedule another refresh a few seconds from now, to remove the highlighting
-        taskDismissHighlight->setIntervalFromNow(5 * 1000UL);
-        taskDismissHighlight->enabled = true;
-    }
-}
-
 // Receive drawing output from the assigned applet,
 // and translate it from "applet-space" coordinates, to it's true location.
 // The final "rotation" step is performed by the windowManager
@@ -199,11 +173,29 @@ uint16_t InkHUD::Tile::getHeight()
     return height;
 }
 
-// (At next render) draw a border around the tile to indicate which applet is focused
-// Used with WindowManager::nextApplet, which is sometimes assigned to the aux button
-void InkHUD::Tile::highlight()
+// Ask for this tile to be highlighted
+// Used to indicate which tile is now indicated after focus changes
+// Only used for aux button focus changes, not changes via menu
+void InkHUD::Tile::requestHighlight()
 {
-    highlightPending = true;
+    Tile::highlightTarget = this;
+    Tile::highlightShown = false;
+    windowManager->requestUpdate(Drivers::EInk::UpdateTypes::FAST, true);
+}
+
+// Starts the timer which will automatically dismiss the highlighting, if the tile doesn't organically redraw first
+void InkHUD::Tile::startHighlightTimeout()
+{
+    taskHighlight->setIntervalFromNow(5 * 1000UL);
+    taskHighlight->enabled = true;
+}
+
+// Stop the timer which would automatically dismiss the highlighting
+// Called if the tile organically renders before the timer is up
+void InkHUD::Tile::cancelHighlightTimeout()
+{
+    if (taskHighlight->enabled)
+        taskHighlight->disable();
 }
 
 #endif

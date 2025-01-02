@@ -89,10 +89,13 @@ class WindowManager : protected concurrency::OSThread
 
     int32_t runOnce() override;
 
-    void render(bool force = false);                    // Attempt to update the display
+    void clearBuffer();                                 // Empty the framebuffer
+    void autoshow();                                    // Show a different applet, to display new info
+    bool renderUserApplets();                           // Draw the normal applets. Part of render
+    bool renderSystemApplets();                         // Draw applets which need special handling. Part of render
+    void render();                                      // Attempt to update the display
     void setBufferPixel(int16_t x, int16_t y, Color c); // Place pixels into the frame buffer. All translation / rotation done.
     void rotatePixelCoords(int16_t *x, int16_t *y);     // Apply the display rotation
-    void clearBuffer();                                 // Empty the framebuffer
 
     void findOrphanApplets(); // Find any applets left-behind when layout changes
 
@@ -117,7 +120,6 @@ class WindowManager : protected concurrency::OSThread
     std::vector<Tile *> userTiles;
 
     // System Applets
-    std::vector<Applet *> systemApplets;
     Tile *fullscreenTile = nullptr;
     Tile *notificationTile = nullptr;
     Tile *batteryIconTile = nullptr;

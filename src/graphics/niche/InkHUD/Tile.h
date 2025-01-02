@@ -31,6 +31,17 @@ class Tile
     Tile();
     void placeUserTile(uint8_t layoutSize, uint8_t tileIndex); // Assign region automatically, based on layout
     void placeSystemTile(int16_t left, int16_t top, uint16_t width, uint16_t height); // Assign region manually
+    void handleAppletPixel(int16_t x, int16_t y, Color c);                            // Receive px output from assigned applet
+    uint16_t getWidth();  // Used to set the assigned applet's width before render
+    uint16_t getHeight(); // Used to set the assigned applet's height before render
+
+    void requestHighlight();              // Ask for this tile to be highlighted
+    static void startHighlightTimeout();  // Start the auto-dismissal timer
+    static void cancelHighlightTimeout(); // Cancel the auto-dismissal timer early; already dismissed
+
+    static Tile *highlightTarget; // Which tile are we highlighting? (Intending to highlight?)
+    static bool highlightShown;   // Is the tile highlighted yet? Controlls highlight vs dismiss
+
     Applet *assignedApplet = nullptr; // Pointer to the applet which is currently displayed on the tile
 
   protected:
@@ -40,9 +51,6 @@ class Tile
     uint16_t height;
 
     WindowManager *windowManager; // Convenient access to the WindowManager singleton
-
-    bool highlightPending = false; // Asking to highlight focused tile with indicator at next render
-    bool highlightShowing = false; // Focused tile is currently highlighted on display with an indicator
 };
 
 } // namespace NicheGraphics::InkHUD
