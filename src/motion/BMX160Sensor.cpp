@@ -16,7 +16,23 @@ bool BMX160Sensor::init()
     if (sensor.begin()) {
         // set output data rate
         sensor.ODR_Config(BMX160_ACCEL_ODR_100HZ, BMX160_GYRO_ODR_100HZ);
-        LOG_DEBUG("BMX160 init ok");
+        sensor.setGyroRange(eGyroRange_500DPS);
+        sensor.setAccelRange(eAccelRange_2G);
+
+        // default location for the BMX160 is on the rear of the board with Z negative
+        sensorConfig.orientation.x = -1;
+        sensorConfig.orientation.y = -1;
+        sensorConfig.orientation.z = 1;
+
+        loadState();
+
+        LOG_INFO("BMX160 MAG calibration center_x: %.4f, center_Y: %.4f, center_Z: %.4f", sensorConfig.mAccel.x,
+                 sensorConfig.mAccel.y, sensorConfig.mAccel.z);
+        LOG_INFO("BMX160 GYRO calibration center_x: %.4f, center_Y: %.4f, center_Z: %.4f", sensorConfig.gyroAccel.x,
+                 sensorConfig.gyroAccel.y, sensorConfig.gyroAccel.z);
+        LOG_INFO("BMX160 ORIENT calibration: x=%i, y=%i, z=%i", sensorConfig.orientation.x, sensorConfig.orientation.y,
+                 sensorConfig.orientation.z);
+
         return true;
     }
     LOG_DEBUG("BMX160 init failed");
@@ -25,54 +41,42 @@ bool BMX160Sensor::init()
 
 int32_t BMX160Sensor::runOnce()
 {
+#if !defined(MESHTASTIC_EXCLUDE_SCREEN)
     sBmx160SensorData_t magAccel;
+    sBmx160SensorData_t gyroAccel;
     sBmx160SensorData_t gAccel;
 
     /* Get a new sensor event */
-    sensor.getAllData(&magAccel, NULL, &gAccel);
+    sensor.getAllData(&magAccel, &gyroAccel, &gAccel);
 
-#if !defined(MESHTASTIC_EXCLUDE_SCREEN)
-    // experimental calibrate routine. Limited to between 10 and 30 seconds after boot
-    if (millis() > 12 * 1000 && millis() < 30 * 1000) {
-        if (!showingScreen) {
-            showingScreen = true;
-            screen->startAlert((FrameCallback)drawFrameCalibration);
-        }
-        if (magAccel.x > highestX)
-            highestX = magAccel.x;
-        if (magAccel.x < lowestX)
-            lowestX = magAccel.x;
-        if (magAccel.y > highestY)
-            highestY = magAccel.y;
-        if (magAccel.y < lowestY)
-            lowestY = magAccel.y;
-        if (magAccel.z > highestZ)
-            highestZ = magAccel.z;
-        if (magAccel.z < lowestZ)
-            lowestZ = magAccel.z;
-    } else if (showingScreen && millis() >= 30 * 1000) {
-        showingScreen = false;
-        screen->endAlert();
+    if (doMagCalibration) {
+        getMagCalibrationData(magAccel.x, magAccel.y, magAccel.z);
+    } else if (doGyroWarning) {
+        gyroCalibrationWarning();
+    } else if (doGyroCalibration) {
+        getGyroCalibrationData(gyroAccel.x, gyroAccel.y, gyroAccel.z, gAccel.x, gAccel.y, gAccel.z);
     }
 
-    int highestRealX = highestX - (highestX + lowestX) / 2;
+    // int highestRealX = sensorConfig.mAccel.max.x - (sensorConfig.mAccel.max.x + sensorConfig.mAccel.min.x) / 2;
 
-    magAccel.x -= (highestX + lowestX) / 2;
-    magAccel.y -= (highestY + lowestY) / 2;
-    magAccel.z -= (highestZ + lowestZ) / 2;
+    magAccel.x -= sensorConfig.mAccel.x;
+    magAccel.y -= sensorConfig.mAccel.y;
+    magAccel.z -= sensorConfig.mAccel.z;
+
     FusionVector ga, ma;
-    ga.axis.x = -gAccel.x; // default location for the BMX160 is on the rear of the board
-    ga.axis.y = -gAccel.y;
-    ga.axis.z = gAccel.z;
-    ma.axis.x = -magAccel.x;
-    ma.axis.y = -magAccel.y;
-    ma.axis.z = magAccel.z * 3;
+    ga.axis.x = gAccel.x * sensorConfig.orientation.x;
+    ga.axis.y = gAccel.y * sensorConfig.orientation.y;
+    ga.axis.z = gAccel.z * sensorConfig.orientation.z;
+    ma.axis.x = magAccel.x * sensorConfig.orientation.x;
+    ma.axis.y = magAccel.y * sensorConfig.orientation.y;
+    ma.axis.z = magAccel.z * sensorConfig.orientation.z * 3;
 
+    // Use calibration orientation instead of swap based on CompassOrientation definition
     // If we're set to one of the inverted positions
-    if (config.display.compass_orientation > meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270) {
-        ma = FusionAxesSwap(ma, FusionAxesAlignmentNXNYPZ);
-        ga = FusionAxesSwap(ga, FusionAxesAlignmentNXNYPZ);
-    }
+    // if (config.display.compass_orientation > meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270) {
+    //     ma = FusionAxesSwap(ma, FusionAxesAlignmentNXNYPZ);
+    //     ga = FusionAxesSwap(ga, FusionAxesAlignmentNXNYPZ);
+    // }
 
     float heading = FusionCompassCalculateHeading(FusionConventionNed, ga, ma);
 
@@ -93,10 +97,29 @@ int32_t BMX160Sensor::runOnce()
         heading += 270;
         break;
     }
+
+    // LOG_DEBUG("MAG Sensor Data: X=%.4f, Y=%.4f, Z=%.4f", magAccel.x, magAccel.y, magAccel.z);
+    // LOG_DEBUG("ACCEL Sensor Data: X=%.4f, Y=%.4f, Z=%.4f", gAccel.x, gAccel.y, gAccel.z);
+    // LOG_DEBUG("HEADING Sensor Data: %.1f deg", heading);
+    // LOG_DEBUG("Gyro Sensor Data: X=%.4f, Y=%.4f, Z=%.4f", gyroAccel.x, gyroAccel.y, gyroAccel.z);
+
     screen->setHeading(heading);
 #endif
 
     return MOTION_SENSOR_CHECK_INTERVAL_MS;
+}
+
+void BMX160Sensor::calibrate(uint16_t forSeconds)
+{
+#if !defined(MESHTASTIC_EXCLUDE_SCREEN)
+    LOG_INFO("BMX160 calibration started for %is", forSeconds);
+
+    doMagCalibration = true;
+    firstCalibrationRead = true;
+    uint16_t calibrateFor = forSeconds * 1000; // calibrate for seconds provided
+    endMagCalibrationAt = millis() + calibrateFor;
+    screen->setEndCalibration(endMagCalibrationAt);
+#endif
 }
 
 #endif
