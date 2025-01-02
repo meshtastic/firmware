@@ -120,25 +120,25 @@ jobs:
         run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
         id: version
 
-      - name: Download test artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: platformio-test-report-${{ steps.version.outputs.version }}.zip
-          merge-multiple: true
+      # - name: Download test artifacts
+      #   uses: actions/download-artifact@v4
+      #   with:
+      #     name: platformio-test-report-${{ steps.version.outputs.version }}.zip
+      #     merge-multiple: true
 
-      - name: Test Report
-        uses: dorny/test-reporter@v1.9.1
-        with:
-          name: PlatformIO Tests
-          path: testreport.xml
-          reporter: java-junit
+      # - name: Test Report
+      #   uses: dorny/test-reporter@v1.9.1
+      #   with:
+      #     name: PlatformIO Tests
+      #     path: testreport.xml
+      #     reporter: java-junit
 
-      - name: Download coverage artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: lcov-coverage-info-native-*-${{ steps.version.outputs.version }}.zip
-          path: code-coverage-report
-          merge-multiple: true
+      # - name: Download coverage artifacts
+      #   uses: actions/download-artifact@v4
+      #   with:
+      #     pattern: lcov-coverage-info-native-*-${{ steps.version.outputs.version }}.zip
+      #     path: code-coverage-report
+      #     merge-multiple: true
 
       # - name: Generate Code Coverage Report
       #   run: |
