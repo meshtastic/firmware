@@ -43,7 +43,11 @@ extern "C" {
 
 
 
-// LEDs
+#define BUTTON_PIN (38) // If defined, this will be used for user button presses,
+#define BUTTON_NEED_PULLUP
+
+
+// LEDs 
 #define PIN_LED1 (24) //24
 #define PIN_LED2 (-1)  //Watchdog enable pin25
 //#define PIN_LED3 (-1)

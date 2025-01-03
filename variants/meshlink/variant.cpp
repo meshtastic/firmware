@@ -38,13 +38,16 @@ void initVariant()
 
     //pinMode(PIN_LED2, OUTPUT);
     //ledOff(PIN_LED2);
-    pinMode(PIN_LED1, OUTPUT);
-    digitalWrite(PIN_LED1, LOW);
-
+    //pinMode(PIN_LED1, OUTPUT);
+    //digitalWrite(PIN_LED1, LOW);
+    pinMode(24,OUTPUT);
+    digitalWrite(24, HIGH);
+    //pinMode(25,OUTPUT);
+    //digitalWrite(25, HIGH);
 
     // 3V3 Power Rail
     pinMode(PIN_3V3_EN, OUTPUT);
-    digitalWrite(PIN_3V3_EN, LOW);
+    digitalWrite(PIN_3V3_EN, HIGH);
     //pinMode(PIN_GPS_EN, OUTPUT);
     //digitalWrite(PIN_GPS_EN, HIGH);
     //pinMode(GPS_TX_PIN, OUTPUT);

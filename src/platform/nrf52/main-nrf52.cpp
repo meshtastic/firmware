@@ -254,6 +254,11 @@ void cpuDeepSleep(uint32_t msecToWake)
     nrf_gpio_cfg_default(WB_I2C1_SDA);
 #endif
 #endif
+#ifdef MESHLINK
+#ifdef PIN_3V3_EN
+    digitalWrite(PIN_3V3_EN, LOW);
+#endif
+#endif
 
 #ifdef HELTEC_MESH_NODE_T114
     nrf_gpio_cfg_default(PIN_GPS_PPS);
