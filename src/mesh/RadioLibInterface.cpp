@@ -431,6 +431,7 @@ void RadioLibInterface::handleReceiveInterrupt()
             // nodes.
             meshtastic_MeshPacket *mp = packetPool.allocZeroed();
 
+            // Keep the assigned fields in sync with src/mqtt/MQTT.cpp:onReceiveProto
             mp->from = radioBuffer.header.from;
             mp->to = radioBuffer.header.to;
             mp->id = radioBuffer.header.id;
