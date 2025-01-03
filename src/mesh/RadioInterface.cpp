@@ -652,8 +652,8 @@ size_t RadioInterface::beginSending(meshtastic_MeshPacket *p)
 
     // Copy if size > 0:
     if (p->coverage_filter.size > 0) {
-        memcpy(radioBuffer.header.coverage_filter, p->coverage_filter.bytes, 
-            std::min<size_t>(p->coverage_filter.size, BLOOM_FILTER_SIZE_BYTES));
+        memcpy(radioBuffer.header.coverage_filter, p->coverage_filter.bytes,
+               std::min<size_t>(p->coverage_filter.size, BLOOM_FILTER_SIZE_BYTES));
     }
 
     // if the sender nodenum is zero, that means uninitialized
