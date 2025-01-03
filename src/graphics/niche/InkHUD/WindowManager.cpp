@@ -644,7 +644,7 @@ int32_t InkHUD::WindowManager::runOnce()
     // If our render() call failed, try again shortly
     // otherwise, stop our thread until next update due
     if (updateRequested)
-        return 1000UL;
+        return 250UL;
     else
         return OSThread::disable();
 }

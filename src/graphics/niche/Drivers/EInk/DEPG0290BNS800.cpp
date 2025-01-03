@@ -93,7 +93,7 @@ void DEPG0290BNS800::detachFromUpdate()
 {
     switch (updateType) {
     case FAST:
-        return beginPolling(50, 300); // At least 300ms for fast refresh
+        return beginPolling(50, 450); // At least 450ms for fast refresh
     case FULL:
     default:
         return beginPolling(100, 3000); // At least 3 seconds for full refresh

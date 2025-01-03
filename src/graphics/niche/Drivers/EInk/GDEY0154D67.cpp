@@ -50,9 +50,9 @@ void GDEY0154D67::detachFromUpdate()
 {
     switch (updateType) {
     case FAST:
-        return beginPolling(50, 300); // At least 300ms for fast refresh (todo: tweak)
+        return beginPolling(50, 500); // At least 500ms for fast refresh
     case FULL:
     default:
-        return beginPolling(100, 2500); // At least 2.5 seconds for full refresh (todo: tweak)
+        return beginPolling(100, 2000); // At least 2 seconds for full refresh
     }
 }
