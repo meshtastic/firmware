@@ -1,0 +1,4 @@
+function meshtastic_version {
+    meshtastic_version=$(python3 bin/buildinfo.py long)
+    echo -n "$meshtastic_version"
+}
