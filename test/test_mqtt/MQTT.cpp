@@ -625,6 +625,32 @@ void test_receiveIgnoresDecodedAdminApp(void)
     TEST_ASSERT_TRUE(mockRouter->packets_.empty());
 }
 
+// Only the same fields that are transmitted over LoRa should be set in MQTT messages.
+void test_receiveIgnoresUnexpectedFields(void)
+{
+    meshtastic_MeshPacket input = decoded;
+    input.rx_snr = 10;
+    input.rx_rssi = 20;
+
+    unitTest->publish(&input);
+
+    TEST_ASSERT_EQUAL(1, mockRouter->packets_.size());
+    const meshtastic_MeshPacket &p = mockRouter->packets_.front();
+    TEST_ASSERT_EQUAL(0, p.rx_snr);
+    TEST_ASSERT_EQUAL(0, p.rx_rssi);
+}
+
+// Messages with an invalid hop_limit are ignored.
+void test_receiveIgnoresInvalidHopLimit(void)
+{
+    meshtastic_MeshPacket p = decoded;
+    p.hop_limit = 10;
+
+    unitTest->publish(&p);
+
+    TEST_ASSERT_TRUE(mockRouter->packets_.empty());
+}
+
 // Publishing to a text channel.
 void test_publishTextMessageDirect(void)
 {
@@ -801,6 +827,8 @@ void setup()
     RUN_TEST(test_receiveIgnoresSentMessagesFromOthers);
     RUN_TEST(test_receiveIgnoresDecodedWhenEncryptionEnabled);
     RUN_TEST(test_receiveIgnoresDecodedAdminApp);
+    RUN_TEST(test_receiveIgnoresUnexpectedFields);
+    RUN_TEST(test_receiveIgnoresInvalidHopLimit);
     RUN_TEST(test_publishTextMessageDirect);
     RUN_TEST(test_publishTextMessageWithProxy);
     RUN_TEST(test_reportToMapDefaultImprecise);
