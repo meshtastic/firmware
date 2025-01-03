@@ -219,10 +219,10 @@ float FloodingRouter::calculateForwardProbability(const CoverageFilter &incoming
      *     forwardProb = 1.0f;
      * }
      */
-    /* END OPTION 2 */∏
+    /* END OPTION 2 */
 
-        // Clamp probability between 0 and 1
-        forwardProb = std::min(std::max(forwardProb, 0.0f), 1.0f);
+    // Clamp probability between 0 and 1
+    forwardProb = std::min(std::max(forwardProb, 0.0f), 1.0f);
 
     LOG_DEBUG("CoverageRatio=%.2f, ForwardProb=%.2f (Uncovered=%d, Total=%zu)", coverageRatio, forwardProb, uncovered, neighbors);
 
