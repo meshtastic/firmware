@@ -40,6 +40,30 @@ enum RxSource {
 /// We normally just use max 3 hops for sending reliable messages
 #define HOP_RELIABLE 3
 
+// Maximum number of neighbors a node adds to the Bloom filter per hop
+#define MAX_NEIGHBORS_PER_HOP 20
+
+// Size of the Bloom filter in bytes (128 bits)
+#define BLOOM_FILTER_SIZE_BYTES 16
+
+// Size of the Bloom filter in bits (128 bits)
+#define BLOOM_FILTER_SIZE_BITS (BLOOM_FILTER_SIZE_BYTES * 8)
+
+// Number of hash functions to use in the Bloom filter
+#define NUM_HASH_FUNCTIONS 2
+
+// Base forwarding probability - never drop below this value
+// 0.2 seems suitable because the worst case False Positive Rate of the
+// coverage filter is 37%. That's if its fully saturated with 60 unique nodes.
+#define BASE_FORWARD_PROB 0.2f
+
+// Coverage scaling factor
+#define COVERAGE_SCALE_FACTOR 4.0f
+
+// Recency threshold in minutes
+// Currently set to 1 hour because that is the minimum interval for nodeinfo broadcasts
+#define RECENCY_THRESHOLD_MINUTES 60
+
 typedef int ErrorCode;
 
 /// Alloc and free packets to our global, ISR safe pool

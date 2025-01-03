@@ -15,6 +15,17 @@ ErrorCode FloodingRouter::send(meshtastic_MeshPacket *p)
     // Add any messages _we_ send to the seen message list (so we will ignore all retransmissions we see)
     wasSeenRecently(p); // FIXME, move this to a sniffSent method
 
+    CoverageFilter coverage;
+    // Is there anything upstream of this?
+    // I think not, but if so, we need to merge coverage.
+    // loadCoverageFilterFromPacket(p, coverage);
+
+    // Add our coverage (neighbors, etc.) so they are in the filter from the get-go
+    mergeMyCoverage(coverage);
+
+    // Save the coverage bits into the packet:
+    storeCoverageFilterInPacket(coverage, p);
+
     return Router::send(p);
 }
 
@@ -62,23 +73,39 @@ bool FloodingRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
     if (!isToUs(p) && (p->hop_limit > 0) && !isFromUs(p)) {
         if (p->id != 0) {
             if (isRebroadcaster()) {
-                meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
+                CoverageFilter incomingCoverage;
+                loadCoverageFilterFromPacket(p, incomingCoverage);
 
-                tosend->hop_limit--; // bump down the hop count
+                float forwardProb = calculateForwardProbability(incomingCoverage, p->from);
+
+                float rnd = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+                if (rnd <= forwardProb) {
+
+                    meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
+
+                    tosend->hop_limit--; // bump down the hop count
 #if USERPREFS_EVENT_MODE
-                if (tosend->hop_limit > 2) {
-                    // if we are "correcting" the hop_limit, "correct" the hop_start by the same amount to preserve hops away.
-                    tosend->hop_start -= (tosend->hop_limit - 2);
-                    tosend->hop_limit = 2;
-                }
+                    if (tosend->hop_limit > 2) {
+                        // if we are "correcting" the hop_limit, "correct" the hop_start by the same amount to preserve hops away.
+                        tosend->hop_start -= (tosend->hop_limit - 2);
+                        tosend->hop_limit = 2;
+                    }
 #endif
 
-                LOG_INFO("Rebroadcast received floodmsg");
-                // Note: we are careful to resend using the original senders node id
-                // We are careful not to call our hooked version of send() - because we don't want to check this again
-                Router::send(tosend);
+                    CoverageFilter updatedCoverage = incomingCoverage;
+                    mergeMyCoverage(updatedCoverage);
+                    storeCoverageFilterInPacket(updatedCoverage, tosend);
 
-                return true;
+                    LOG_INFO("Rebroadcasting packet ID=0x%x with ForwardProb=%.2f", p->id, forwardProb);
+
+                    // Note: we are careful to resend using the original senders node id
+                    // We are careful not to call our hooked version of send() - because we don't want to check this again
+                    Router::send(tosend);
+
+                    return true;
+                } else {
+                    LOG_INFO("No rebroadcast: Random number %f > Forward Probability %f", rnd, forwardProb);
+                }
             } else {
                 LOG_DEBUG("No rebroadcast: Role = CLIENT_MUTE or Rebroadcast Mode = NONE");
             }
@@ -103,4 +130,101 @@ void FloodingRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
 
     // handle the packet as normal
     Router::sniffReceived(p, c);
+}
+
+void FloodingRouter::loadCoverageFilterFromPacket(const meshtastic_MeshPacket *p, CoverageFilter &filter)
+{
+    // If packet has coverage bytes (16 bytes), copy them into filter
+    // e.g. p->coverage_filter is a 16-byte array in your packet struct
+    std::array<uint8_t, BLOOM_FILTER_SIZE_BYTES> bits;
+    memcpy(bits.data(), p->coverage_filter.bytes, BLOOM_FILTER_SIZE_BYTES);
+    filter.setBits(bits);
+}
+
+void FloodingRouter::storeCoverageFilterInPacket(const CoverageFilter &filter, meshtastic_MeshPacket *p)
+{
+    auto bits = filter.getBits();
+    p->coverage_filter.size = BLOOM_FILTER_SIZE_BYTES;
+    memcpy(p->coverage_filter.bytes, bits.data(), BLOOM_FILTER_SIZE_BYTES);
+}
+
+void FloodingRouter::mergeMyCoverage(CoverageFilter &coverage)
+{
+    // Retrieve recent direct neighbors within the time window
+    std::vector<NodeNum> recentNeighbors = nodeDB->getDistinctRecentDirectNeighborIds(RECENCY_THRESHOLD_MINUTES * 60);
+    for (auto &nodeId : recentNeighbors) {
+        coverage.add(nodeId);
+    }
+}
+
+float FloodingRouter::calculateForwardProbability(const CoverageFilter &incoming, NodeNum from)
+{
+#ifdef USERPREFS_USE_COVERAGE_FILTER
+    bool useCoverageFilter = USERPREFS_USE_COVERAGE_FILTER;
+    if (!useCoverageFilter)
+        return 1.0f;
+#endif
+    // If we are a router or repeater, always forward because it's assumed these are in the most advantageous locations
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
+        config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
+        return 1.0f;
+    }
+
+    // Retrieve recent direct neighbors within the time window
+    std::vector<NodeNum> recentNeighbors = nodeDB->getDistinctRecentDirectNeighborIds(RECENCY_THRESHOLD_MINUTES * 60);
+
+    if (recentNeighbors.empty()) {
+        // No neighbors to add coverage for
+        LOG_DEBUG("No recent direct neighbors to add coverage for.");
+        return 0.0f;
+    }
+
+    // Count how many neighbors are NOT yet in the coverage
+    int uncovered = 0;
+    int neighbors = 0;
+    for (auto nodeId : recentNeighbors) {
+        // Don't count the person we got this packet from
+        if (nodeId == from)
+            continue;
+
+        neighbors++;
+
+        if (!incoming.check(nodeId)) {
+            uncovered++;
+        }
+    }
+
+    // Calculate coverage ratio
+    float coverageRatio = 0.0;
+    // coverage only exists if neighbors are more than 0
+    if (neighbors > 0) {
+        coverageRatio = static_cast<float>(uncovered) / static_cast<float>(neighbors);
+    }
+    float forwardProb = BASE_FORWARD_PROB;
+
+    /* BEGIN OPTION 1: forward probability is based on coverage ratio and scales up or down
+     *           depending on the extent to which this node provides new coverage
+     */
+    /* END OPTION 1 */
+    forwardProb = BASE_FORWARD_PROB + (coverageRatio * COVERAGE_SCALE_FACTOR);
+
+    /* BEGIN OPTION 2: forward probability is piecewise logic:
+     *          - Reduce to BASE_FORWARD_PROB if no new coverage is likely
+     *              (remember false positive rate of bloom filter means a node that think its neighbor is covered when it isnt)
+     *          - If 1 uncovered neighbor, ramp probability up significantly to 0.8
+     *          - If more than 1 uncovered neighbor, ramp probability up to 1.0
+     * if (uncovered == 1) {
+     *     forwardProb = 0.8f;
+     * } else if (uncovered > 1) {
+     *     forwardProb = 1.0f;
+     * }
+     */
+    /* END OPTION 2 */
+
+    // Clamp probability between 0 and 1
+    forwardProb = std::min(std::max(forwardProb, 0.0f), 1.0f);
+
+    LOG_DEBUG("CoverageRatio=%.2f, ForwardProb=%.2f (Uncovered=%d, Total=%zu)", coverageRatio, forwardProb, uncovered, neighbors);
+
+    return forwardProb;
 }
