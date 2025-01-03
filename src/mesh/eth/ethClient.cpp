@@ -66,8 +66,9 @@ static int32_t reconnectETH()
                 syslog.enable();
             }
 
-            // initWebServer();
+#if !MESHTASTIC_EXCLUDE_SOCKETAPI
             initApiServer();
+#endif
 
             ethStartupComplete = true;
         }
