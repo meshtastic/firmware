@@ -14,9 +14,9 @@ ErrorCode FloodingRouter::send(meshtastic_MeshPacket *p)
 {
     // Add any messages _we_ send to the seen message list (so we will ignore all retransmissions we see)
     wasSeenRecently(p); // FIXME, move this to a sniffSent method
-    
+
     CoverageFilter coverage;
-    // Is there anything upstream of this? 
+    // Is there anything upstream of this?
     // I think not, but if so, we need to merge coverage.
     // loadCoverageFilterFromPacket(p, coverage);
 
@@ -92,7 +92,6 @@ bool FloodingRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
                     }
 #endif
 
-
                     CoverageFilter updatedCoverage = incomingCoverage;
                     mergeMyCoverage(updatedCoverage);
                     storeCoverageFilterInPacket(updatedCoverage, tosend);
@@ -162,7 +161,8 @@ float FloodingRouter::calculateForwardProbability(const CoverageFilter &incoming
 {
 #ifdef USERPREFS_USE_COVERAGE_FILTER
     bool useCoverageFilter = USERPREFS_USE_COVERAGE_FILTER;
-    if (!useCoverageFilter) return 1.0f;
+    if (!useCoverageFilter)
+        return 1.0f;
 #endif
     // If we are a router or repeater, always forward because it's assumed these are in the most advantageous locations
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
@@ -184,7 +184,8 @@ float FloodingRouter::calculateForwardProbability(const CoverageFilter &incoming
     int neighbors = 0;
     for (auto nodeId : recentNeighbors) {
         // Don't count the person we got this packet from
-        if (nodeId == from) continue;
+        if (nodeId == from)
+            continue;
 
         neighbors++;
 
@@ -199,15 +200,31 @@ float FloodingRouter::calculateForwardProbability(const CoverageFilter &incoming
     if (neighbors > 0) {
         coverageRatio = static_cast<float>(uncovered) / static_cast<float>(neighbors);
     }
+    float forwardProb = BASE_FORWARD_PROB;
 
-    // Calculate forwarding probability
-    float forwardProb = BASE_FORWARD_PROB + (coverageRatio * COVERAGE_SCALE_FACTOR);
+    /* BEGIN OPTION 1: forward probability is based on coverage ratio and scales up or down
+     *           depending on the extent to which this node provides new coverage
+     */
+    /* END OPTION 1 */
+    forwardProb = BASE_FORWARD_PROB + (coverageRatio * COVERAGE_SCALE_FACTOR);
 
-    // Clamp probability between 0 and 1
-    forwardProb = std::min(std::max(forwardProb, 0.0f), 1.0f);
+    /* BEGIN OPTION 2: forward probability is piecewise logic:
+     *          - Reduce to BASE_FORWARD_PROB if no new coverage is likely
+     *              (remember false positive rate of bloom filter means a node that think its neighbor is covered when it isnt)
+     *          - If 1 uncovered neighbor, ramp probability up significantly to 0.8
+     *          - If more than 1 uncovered neighbor, ramp probability up to 1.0
+     * if (uncovered == 1) {
+     *     forwardProb = 0.8f;
+     * } else if (uncovered > 1) {
+     *     forwardProb = 1.0f;
+     * }
+     */
+    /* END OPTION 2 */∏
 
-    LOG_DEBUG("CoverageRatio=%.2f, ForwardProb=%.2f (Uncovered=%d, Total=%zu)", coverageRatio, forwardProb, uncovered,
-              neighbors);
+        // Clamp probability between 0 and 1
+        forwardProb = std::min(std::max(forwardProb, 0.0f), 1.0f);
+
+    LOG_DEBUG("CoverageRatio=%.2f, ForwardProb=%.2f (Uncovered=%d, Total=%zu)", coverageRatio, forwardProb, uncovered, neighbors);
 
     return forwardProb;
 }

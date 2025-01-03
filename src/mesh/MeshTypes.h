@@ -58,7 +58,7 @@ enum RxSource {
 #define BASE_FORWARD_PROB 0.2f
 
 // Coverage scaling factor
-#define COVERAGE_SCALE_FACTOR 2.0f
+#define COVERAGE_SCALE_FACTOR 4.0f
 
 // Recency threshold in minutes
 // Currently set to 1 hour because that is the minimum interval for nodeinfo broadcasts
