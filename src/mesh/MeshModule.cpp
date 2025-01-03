@@ -4,6 +4,7 @@
 #include "NodeDB.h"
 #include "configuration.h"
 #include "modules/RoutingModule.h"
+#include <algorithm>
 #include <assert.h>
 
 std::vector<MeshModule *> *MeshModule::modules;
@@ -29,7 +30,9 @@ void MeshModule::setup() {}
 
 MeshModule::~MeshModule()
 {
-    assert(0); // FIXME - remove from list of modules once someone needs this feature
+    auto it = std::find(modules->begin(), modules->end(), this);
+    assert(it != modules->end());
+    modules->erase(it);
 }
 
 meshtastic_MeshPacket *MeshModule::allocAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex,
