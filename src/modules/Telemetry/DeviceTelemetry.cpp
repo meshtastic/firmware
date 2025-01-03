@@ -77,9 +77,10 @@ meshtastic_MeshPacket *DeviceTelemetryModule::allocReply()
         // Check for a request for device metrics
         if (decoded->which_variant == meshtastic_Telemetry_device_metrics_tag) {
             LOG_INFO("Device telemetry reply to request");
-
-            meshtastic_Telemetry telemetry = getDeviceTelemetry();
-            return allocDataProtobuf(telemetry);
+            return allocDataProtobuf(getDeviceTelemetry());
+        } else if (decoded->which_variant == meshtastic_Telemetry_local_stats_tag) {
+            LOG_INFO("Device telemetry reply w/ LocalStats to request");
+            return allocDataProtobuf(getLocalStatsTelemetry());
         }
     }
     return NULL;
@@ -112,7 +113,7 @@ meshtastic_Telemetry DeviceTelemetryModule::getDeviceTelemetry()
     return t;
 }
 
-void DeviceTelemetryModule::sendLocalStatsToPhone()
+meshtastic_Telemetry DeviceTelemetryModule::getLocalStatsTelemetry()
 {
     meshtastic_Telemetry telemetry = meshtastic_Telemetry_init_zero;
     telemetry.which_variant = meshtastic_Telemetry_local_stats_tag;
@@ -129,6 +130,14 @@ void DeviceTelemetryModule::sendLocalStatsToPhone()
         telemetry.variant.local_stats.num_packets_rx_bad = RadioLibInterface::instance->rxBad;
         telemetry.variant.local_stats.num_tx_relay = RadioLibInterface::instance->txRelay;
     }
+#ifdef ARCH_PORTDUINO
+    if (SimRadio::instance) {
+        telemetry.variant.local_stats.num_packets_tx = SimRadio::instance->txGood;
+        telemetry.variant.local_stats.num_packets_rx = SimRadio::instance->rxGood + SimRadio::instance->rxBad;
+        telemetry.variant.local_stats.num_packets_rx_bad = SimRadio::instance->rxBad;
+        telemetry.variant.local_stats.num_tx_relay = SimRadio::instance->txRelay;
+    }
+#endif
     if (router) {
         telemetry.variant.local_stats.num_rx_dupe = router->rxDupe;
         telemetry.variant.local_stats.num_tx_relay_canceled = router->txRelayCanceled;
@@ -142,7 +151,12 @@ void DeviceTelemetryModule::sendLocalStatsToPhone()
     LOG_INFO("num_packets_tx=%i, num_packets_rx=%i, num_packets_rx_bad=%i", telemetry.variant.local_stats.num_packets_tx,
              telemetry.variant.local_stats.num_packets_rx, telemetry.variant.local_stats.num_packets_rx_bad);
 
-    meshtastic_MeshPacket *p = allocDataProtobuf(telemetry);
+    return telemetry;
+}
+
+void DeviceTelemetryModule::sendLocalStatsToPhone()
+{
+    meshtastic_MeshPacket *p = allocDataProtobuf(getLocalStatsTelemetry());
     p->to = NODENUM_BROADCAST;
     p->decoded.want_response = false;
     p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;

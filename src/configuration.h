@@ -148,6 +148,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define NAU7802_ADDR 0x2A
 #define MAX30102_ADDR 0x57
 #define MLX90614_ADDR_DEF 0x5A
+#define CGRADSENS_ADDR 0x66
 
 // -----------------------------------------------------------------------------
 // ACCELEROMETER
@@ -170,20 +171,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 // Security
 // -----------------------------------------------------------------------------
-#define ATECC608B_ADDR 0x35
 
 // -----------------------------------------------------------------------------
 // IO Expander
 // -----------------------------------------------------------------------------
 #define TCA9535_ADDR 0x20
 #define TCA9555_ADDR 0x26
-
-// -----------------------------------------------------------------------------
-// GPS
-// -----------------------------------------------------------------------------
-#ifndef GPS_THREAD_INTERVAL
-#define GPS_THREAD_INTERVAL 200
-#endif
 
 // -----------------------------------------------------------------------------
 // Touchscreen
@@ -206,11 +199,19 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define VEXT_ON_VALUE LOW
 #endif
 
+// -----------------------------------------------------------------------------
+// GPS
+// -----------------------------------------------------------------------------
+
 #ifndef GPS_BAUDRATE
 #define GPS_BAUDRATE 9600
 #define GPS_BAUDRATE_FIXED 0
 #else
 #define GPS_BAUDRATE_FIXED 1
+#endif
+
+#ifndef GPS_THREAD_INTERVAL
+#define GPS_THREAD_INTERVAL 200
 #endif
 
 /* Step #2: follow with defines common to the architecture;
@@ -249,6 +250,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 #ifndef HAS_SCREEN
 #define HAS_SCREEN 0
+#endif
+#ifndef HAS_TFT
+#define HAS_TFT 0
 #endif
 #ifndef HAS_WIRE
 #define HAS_WIRE 0
@@ -312,6 +316,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MESHTASTIC_EXCLUDE_AUDIO 1
 #define MESHTASTIC_EXCLUDE_DETECTIONSENSOR 1
 #define MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR 1
+#define MESHTASTIC_EXCLUDE_HEALTH_TELEMETRY 1
 #define MESHTASTIC_EXCLUDE_EXTERNALNOTIFICATION 1
 #define MESHTASTIC_EXCLUDE_PAXCOUNTER 1
 #define MESHTASTIC_EXCLUDE_POWER_TELEMETRY 1

@@ -204,9 +204,11 @@ int32_t SerialModule::runOnce()
                     lastNmeaTime = millis();
                     uint32_t readIndex = 0;
                     const meshtastic_NodeInfoLite *tempNodeInfo = nodeDB->readNextMeshNode(readIndex);
-                    while (tempNodeInfo != NULL && tempNodeInfo->has_user && hasValidPosition(tempNodeInfo)) {
-                        printWPL(outbuf, sizeof(outbuf), tempNodeInfo->position, tempNodeInfo->user.long_name, true);
-                        serialPrint->printf("%s", outbuf);
+                    while (tempNodeInfo != NULL) {
+                        if (tempNodeInfo->has_user && nodeDB->hasValidPosition(tempNodeInfo)) {
+                            printWPL(outbuf, sizeof(outbuf), tempNodeInfo->position, tempNodeInfo->user.long_name, true);
+                            serialPrint->printf("%s", outbuf);
+                        }
                         tempNodeInfo = nodeDB->readNextMeshNode(readIndex);
                     }
                 }
@@ -472,7 +474,7 @@ void SerialModule::processWXSerial()
                         if (windDirPos != NULL) {
                             // Extract data after "=" for WindDir
                             strcpy(windDir, windDirPos + 15); // Add 15 to skip "WindDir = "
-                            double radians = toRadians(strtof(windDir, nullptr));
+                            double radians = GeoCoord::toRadians(strtof(windDir, nullptr));
                             dir_sum_sin += sin(radians);
                             dir_sum_cos += cos(radians);
                             dirCount++;
@@ -539,7 +541,7 @@ void SerialModule::processWXSerial()
         double avgCos = dir_sum_cos / dirCount;
 
         double avgRadians = atan2(avgSin, avgCos);
-        float dirAvg = toDegrees(avgRadians);
+        float dirAvg = GeoCoord::toDegrees(avgRadians);
 
         if (dirAvg < 0) {
             dirAvg += 360.0;

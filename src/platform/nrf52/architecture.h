@@ -47,6 +47,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_PPR
 #elif defined(RAK2560)
 #define HW_VENDOR meshtastic_HardwareModel_RAK2560
+#elif defined(WISMESH_TAP)
+#define HW_VENDOR meshtastic_HardwareModel_WISMESH_TAP
 #elif defined(RAK4630)
 #define HW_VENDOR meshtastic_HardwareModel_RAK4631
 #elif defined(TTGO_T_ECHO)

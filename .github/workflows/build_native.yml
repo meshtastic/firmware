@@ -10,12 +10,6 @@ jobs:
   build-native:
     runs-on: ubuntu-latest
     steps:
-      - name: Install libs needed for native build
-        shell: bash
-        run: |
-          sudo apt-get update --fix-missing
-          sudo apt-get install -y libbluetooth-dev libgpiod-dev libyaml-cpp-dev openssl libssl-dev libulfius-dev liborcania-dev
-
       - name: Checkout code
         uses: actions/checkout@v4
         with:
@@ -23,17 +17,9 @@ jobs:
           ref: ${{github.event.pull_request.head.ref}}
           repository: ${{github.event.pull_request.head.repo.full_name}}
 
-      - name: Upgrade python tools
-        shell: bash
-        run: |
-          python -m pip install --upgrade pip
-          pip install -U platformio adafruit-nrfutil
-          pip install -U meshtastic --pre
-
-      - name: Upgrade platformio
-        shell: bash
-        run: |
-          pio upgrade
+      - name: Setup native build
+        id: base
+        uses: ./.github/actions/setup-native
 
       - name: Build Native
         run: bin/build-native.sh
@@ -50,36 +36,3 @@ jobs:
           path: |
             release/meshtasticd_linux_x86_64
             bin/config-dist.yaml
-
-      - name: Docker login
-        if: ${{ github.event_name != 'pull_request_target' && github.event_name != 'pull_request' }}
-        uses: docker/login-action@v3
-        continue-on-error: true # FIXME: Failing docker login auth
-        with:
-          username: meshtastic
-          password: ${{ secrets.DOCKER_FIRMWARE_TOKEN }}
-
-      - name: Docker setup
-        if: ${{ github.event_name != 'pull_request_target' && github.event_name != 'pull_request' }}
-        continue-on-error: true # FIXME: Failing docker login auth
-        uses: docker/setup-buildx-action@v3
-
-      - name: Docker build and push tagged versions
-        if: ${{ github.event_name == 'workflow_dispatch' }}
-        continue-on-error: true # FIXME: Failing docker login auth
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile
-          push: true
-          tags: meshtastic/device-simulator:${{ steps.version.outputs.version }}
-
-      - name: Docker build and push
-        if: ${{ github.ref == 'refs/heads/master' && github.event_name != 'pull_request_target' && github.event_name != 'pull_request' }}
-        continue-on-error: true # FIXME: Failing docker login auth
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile
-          push: true
-          tags: meshtastic/device-simulator:latest

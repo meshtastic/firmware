@@ -4,6 +4,7 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "RTC.h"
+#include "SPILock.h"
 #include "meshUtils.h"
 #include <FSCommon.h>
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH
@@ -18,7 +19,7 @@
 #ifdef ARCH_PORTDUINO
 #include "unistd.h"
 #endif
-#include "../userPrefs.h"
+
 #include "Default.h"
 #include "TypeConversions.h"
 
@@ -175,6 +176,12 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         LOG_INFO("Client set ham mode");
         handleSetHamMode(r->set_ham_mode);
         break;
+    case meshtastic_AdminMessage_get_ui_config_request_tag: {
+        LOG_INFO("Client is getting device-ui config");
+        handleGetDeviceUIConfig(mp);
+        handled = true;
+        break;
+    }
 
     /**
      * Other
@@ -232,6 +239,12 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         LOG_INFO("Initiate node-db reset");
         nodeDB->resetNodes();
         reboot(DEFAULT_REBOOT_SECONDS);
+        break;
+    }
+    case meshtastic_AdminMessage_store_ui_config_tag: {
+        LOG_INFO("Storing device-ui config");
+        handleStoreDeviceUIConfig(r->store_ui_config);
+        handled = true;
         break;
     }
     case meshtastic_AdminMessage_begin_edit_settings_tag: {
@@ -346,19 +359,22 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
     case meshtastic_AdminMessage_delete_file_request_tag: {
         LOG_DEBUG("Client requesting to delete file: %s", r->delete_file_request);
+
 #ifdef FSCom
+        spiLock->lock();
         if (FSCom.remove(r->delete_file_request)) {
             LOG_DEBUG("Successfully deleted file");
         } else {
             LOG_DEBUG("Failed to delete file");
         }
+        spiLock->unlock();
 #endif
         break;
     }
 #ifdef ARCH_PORTDUINO
     case meshtastic_AdminMessage_exit_simulator_tag:
         LOG_INFO("Exiting simulator");
-        _exit(0);
+        exit(0);
         break;
 #endif
 
@@ -477,7 +493,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_ROUTER,
                       meshtastic_Config_DeviceConfig_Role_REPEATER)) {
             config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_ALL;
-            const char *warning = "Rebroadcast mode can't be set to NONE for a router or repeater\n";
+            const char *warning = "Rebroadcast mode can't be set to NONE for a router or repeater";
             LOG_WARN(warning);
             sendWarning(warning);
         }
@@ -526,6 +542,11 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             requiresReboot = false;
         }
         config.power = c.payload_variant.power;
+        if (c.payload_variant.power.on_battery_shutdown_after_secs > 0 &&
+            c.payload_variant.power.on_battery_shutdown_after_secs < 30) {
+            LOG_WARN("Tried to set on_battery_shutdown_after_secs too low, set to min 30 seconds");
+            config.power.on_battery_shutdown_after_secs = 30;
+        }
         break;
     case meshtastic_Config_network_tag:
         LOG_INFO("Set config: WiFi");
@@ -615,6 +636,9 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             config.security.serial_enabled == c.payload_variant.security.serial_enabled)
             requiresReboot = false;
 
+        break;
+    case meshtastic_Config_device_ui_tag:
+        // NOOP! This is handled by handleStoreDeviceUIConfig
         break;
     }
     if (requiresReboot && !hasOpenEditTransaction) {
@@ -777,6 +801,10 @@ void AdminModule::handleGetConfig(const meshtastic_MeshPacket &req, const uint32
         case meshtastic_AdminMessage_ConfigType_SESSIONKEY_CONFIG:
             LOG_INFO("Get config: Sessionkey");
             res.get_config_response.which_payload_variant = meshtastic_Config_sessionkey_tag;
+            break;
+        case meshtastic_AdminMessage_ConfigType_DEVICEUI_CONFIG:
+            // NOOP! This is handled by handleGetDeviceUIConfig
+            res.get_config_response.which_payload_variant = meshtastic_Config_device_ui_tag;
             break;
         }
         // NOTE: The phone app needs to know the ls_secs value so it can properly expect sleep behavior.
@@ -990,6 +1018,14 @@ void AdminModule::handleGetChannel(const meshtastic_MeshPacket &req, uint32_t ch
     }
 }
 
+void AdminModule::handleGetDeviceUIConfig(const meshtastic_MeshPacket &req)
+{
+    meshtastic_AdminMessage r = meshtastic_AdminMessage_init_default;
+    r.which_payload_variant = meshtastic_AdminMessage_get_ui_config_response_tag;
+    r.get_ui_config_response = uiconfig;
+    myReply = allocDataProtobuf(r);
+}
+
 void AdminModule::reboot(int32_t seconds)
 {
     LOG_INFO("Reboot in %d seconds", seconds);
@@ -1008,6 +1044,11 @@ void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
     if (shouldReboot && !hasOpenEditTransaction) {
         reboot(DEFAULT_REBOOT_SECONDS);
     }
+}
+
+void AdminModule::handleStoreDeviceUIConfig(const meshtastic_DeviceUIConfig &uicfg)
+{
+    nodeDB->saveProto("/prefs/uiconfig.proto", meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg, &uicfg);
 }
 
 void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
@@ -1076,7 +1117,7 @@ bool AdminModule::messageIsResponse(const meshtastic_AdminMessage *r)
         r->which_payload_variant == meshtastic_AdminMessage_get_ringtone_response_tag ||
         r->which_payload_variant == meshtastic_AdminMessage_get_device_connection_status_response_tag ||
         r->which_payload_variant == meshtastic_AdminMessage_get_node_remote_hardware_pins_response_tag ||
-        r->which_payload_variant == meshtastic_NodeRemoteHardwarePinsResponse_node_remote_hardware_pins_tag)
+        r->which_payload_variant == meshtastic_AdminMessage_get_ui_config_response_tag)
         return true;
     else
         return false;
@@ -1092,7 +1133,8 @@ bool AdminModule::messageIsRequest(const meshtastic_AdminMessage *r)
         r->which_payload_variant == meshtastic_AdminMessage_get_device_metadata_request_tag ||
         r->which_payload_variant == meshtastic_AdminMessage_get_ringtone_request_tag ||
         r->which_payload_variant == meshtastic_AdminMessage_get_device_connection_status_request_tag ||
-        r->which_payload_variant == meshtastic_AdminMessage_get_node_remote_hardware_pins_request_tag)
+        r->which_payload_variant == meshtastic_AdminMessage_get_node_remote_hardware_pins_request_tag ||
+        r->which_payload_variant == meshtastic_AdminMessage_get_ui_config_request_tag)
         return true;
     else
         return false;

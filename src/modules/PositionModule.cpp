@@ -146,9 +146,18 @@ bool PositionModule::hasQualityTimesource()
 #if MESHTASTIC_EXCLUDE_GPS
     bool hasGpsOrRtc = (rtc_found.address != ScanI2C::ADDRESS_NONE.address);
 #else
-    bool hasGpsOrRtc = (gps && gps->isConnected()) || (rtc_found.address != ScanI2C::ADDRESS_NONE.address);
+    bool hasGpsOrRtc = hasGPS() || (rtc_found.address != ScanI2C::ADDRESS_NONE.address);
 #endif
     return hasGpsOrRtc || setFromPhoneOrNtpToday;
+}
+
+bool PositionModule::hasGPS()
+{
+#if MESHTASTIC_EXCLUDE_GPS
+    return false;
+#else
+    return gps && gps->isConnected();
+#endif
 }
 
 meshtastic_MeshPacket *PositionModule::allocReply()
@@ -194,10 +203,21 @@ meshtastic_MeshPacket *PositionModule::allocReply()
     p.precision_bits = precision;
     p.has_latitude_i = true;
     p.has_longitude_i = true;
-    p.time = getValidTime(RTCQualityNTP) > 0 ? getValidTime(RTCQualityNTP) : localPosition.time;
+    // Always use NTP / GPS time if available
+    if (getValidTime(RTCQualityNTP) > 0) {
+        p.time = getValidTime(RTCQualityNTP);
+    } else if (rtc_found.address != ScanI2C::ADDRESS_NONE.address) {
+        LOG_INFO("Use RTC time for position");
+        p.time = getValidTime(RTCQualityDevice);
+    } else if (getRTCQuality() < RTCQualityNTP) {
+        LOG_INFO("Strip low RTCQuality (%d) time from position", getRTCQuality());
+        p.time = 0;
+    }
 
     if (config.position.fixed_position) {
         p.location_source = meshtastic_Position_LocSource_LOC_MANUAL;
+    } else {
+        p.location_source = localPosition.location_source;
     }
 
     if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE) {
@@ -240,20 +260,6 @@ meshtastic_MeshPacket *PositionModule::allocReply()
     if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_SPEED) {
         p.ground_speed = localPosition.ground_speed;
         p.has_ground_speed = true;
-    }
-
-    // Strip out any time information before sending packets to other nodes - to keep the wire size small (and because other
-    // nodes shouldn't trust it anyways) Note: we allow a device with a local GPS or NTP to include the time, so that devices
-    // without can get time.
-    if (getRTCQuality() < RTCQualityNTP) {
-        LOG_INFO("Strip time %u from position", p.time);
-        p.time = 0;
-    } else if (rtc_found.address != ScanI2C::ADDRESS_NONE.address) {
-        LOG_INFO("Use RTC time %u for position", p.time);
-        p.time = getValidTime(RTCQualityDevice);
-    } else {
-        p.time = getValidTime(RTCQualityNTP);
-        LOG_INFO("Provide time to mesh %u", p.time);
     }
 
     LOG_INFO("Position reply: time=%i lat=%i lon=%i", p.time, p.latitude_i, p.longitude_i);
@@ -383,7 +389,7 @@ int32_t PositionModule::runOnce()
     }
 
     if (lastGpsSend == 0 || msSinceLastSend >= intervalMs) {
-        if (hasValidPosition(node)) {
+        if (nodeDB->hasValidPosition(node)) {
             lastGpsSend = now;
 
             lastGpsLatitude = node->position.latitude_i;
@@ -397,7 +403,7 @@ int32_t PositionModule::runOnce()
     } else if (config.position.position_broadcast_smart_enabled) {
         const meshtastic_NodeInfoLite *node2 = service->refreshLocalMeshNode(); // should guarantee there is now a position
 
-        if (hasValidPosition(node2)) {
+        if (nodeDB->hasValidPosition(node2)) {
             // The minimum time (in seconds) that would pass before we are able to send a new position packet.
 
             auto smartPosition = getDistanceTraveledSinceLastSend(node->position);
@@ -458,7 +464,7 @@ void PositionModule::handleNewPosition()
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
     const meshtastic_NodeInfoLite *node2 = service->refreshLocalMeshNode(); // should guarantee there is now a position
     // We limit our GPS broadcasts to a max rate
-    if (hasValidPosition(node2)) {
+    if (nodeDB->hasValidPosition(node2)) {
         auto smartPosition = getDistanceTraveledSinceLastSend(node->position);
         uint32_t msSinceLastSend = millis() - lastGpsSend;
         if (smartPosition.hasTraveledOverThreshold &&

@@ -1,6 +1,7 @@
 #!/bin/sh
 
 PYTHON=${PYTHON:-$(which python3 python | head -n 1)}
+WEB_APP=false
 
 # Determine the correct esptool command to use
 if "$PYTHON" -m esptool version >/dev/null 2>&1; then
@@ -19,16 +20,26 @@ set -e
 # Usage info
 show_help() {
 	cat <<EOF
-Usage: $(basename $0) [-h] [-p ESPTOOL_PORT] [-P PYTHON] [-f FILENAME|FILENAME]
+Usage: $(basename $0) [-h] [-p ESPTOOL_PORT] [-P PYTHON] [-f FILENAME|FILENAME] [--web]
 Flash image file to device, but first erasing and writing system information"
 
     -h               Display this help and exit
     -p ESPTOOL_PORT  Set the environment variable for ESPTOOL_PORT.  If not set, ESPTOOL iterates all ports (Dangerous).
     -P PYTHON        Specify alternate python interpreter to use to invoke esptool. (Default: "$PYTHON")
     -f FILENAME      The .bin file to flash.  Custom to your device type and region.
+    --web            Flash WEB APP.
 
 EOF
 }
+# Preprocess long options like --web
+for arg in "$@"; do
+    case "$arg" in
+        --web)
+            WEB_APP=true
+            shift # Remove this argument from the list
+            ;;
+    esac
+done
 
 while getopts ":hp:P:f:" opt; do
 	case "${opt}" in
@@ -73,7 +84,11 @@ if [ -f "${FILENAME}" ] && [ -n "${FILENAME##*"update"*}" ]; then
 	else
 		$ESPTOOL_CMD write_flash 0x260000 bleota-s3.bin
 	fi
-	$ESPTOOL_CMD write_flash 0x300000 littlefs-*.bin
+	if [ "$WEB_APP" = true ]; then
+		$ESPTOOL_CMD write_flash 0x300000 littlefswebui-*.bin
+	else
+		$ESPTOOL_CMD write_flash 0x300000 littlefs-*.bin
+	fi
 
 else
 	show_help

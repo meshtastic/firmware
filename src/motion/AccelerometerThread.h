@@ -7,7 +7,9 @@
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
 
 #include "../concurrency/OSThread.h"
+#ifdef HAS_BMA423
 #include "BMA423Sensor.h"
+#endif
 #include "BMX160Sensor.h"
 #include "ICM20948Sensor.h"
 #include "LIS3DHSensor.h"
@@ -17,7 +19,9 @@
 #ifdef HAS_QMA6100P
 #include "QMA6100PSensor.h"
 #endif
+#ifdef HAS_STK8XXX
 #include "STK8XXXSensor.h"
+#endif
 
 extern ScanI2C::DeviceAddress accelerometer_found;
 
@@ -79,9 +83,11 @@ class AccelerometerThread : public concurrency::OSThread
 #endif
 
         switch (device.type) {
+#ifdef HAS_BMA423
         case ScanI2C::DeviceType::BMA423:
             sensor = new BMA423Sensor(device);
             break;
+#endif
         case ScanI2C::DeviceType::MPU6050:
             sensor = new MPU6050Sensor(device);
             break;
@@ -94,9 +100,11 @@ class AccelerometerThread : public concurrency::OSThread
         case ScanI2C::DeviceType::LSM6DS3:
             sensor = new LSM6DS3Sensor(device);
             break;
+#ifdef HAS_STK8XXX
         case ScanI2C::DeviceType::STK8BAXX:
             sensor = new STK8XXXSensor(device);
             break;
+#endif
         case ScanI2C::DeviceType::ICM20948:
             sensor = new ICM20948Sensor(device);
             break;

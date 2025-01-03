@@ -1,6 +1,12 @@
 #define I2C_SDA 39
 #define I2C_SCL 40
 
+// This board has a serial coprocessor for sensor readings
+#define SENSOR_RP2040_TXD 19
+#define SENSOR_RP2040_RXD 20
+#define SENSOR_PORT_NUM 2
+#define SENSOR_BAUD_RATE 115200
+
 #define BUTTON_PIN 38
 // #define BUTTON_NEED_PULLUP
 
@@ -19,8 +25,7 @@
 #define ST7701_BL 45
 #define ST7701_SPI_HOST SPI2_HOST
 #define ST7701_BACKLIGHT_EN 45
-#define SPI_FREQUENCY 20000000
-#define SPI_READ_FREQUENCY 16000000
+#define SPI_FREQUENCY 12000000
 #define TFT_HEIGHT 480
 #define TFT_WIDTH 480
 #define TFT_OFFSET_X 0
@@ -36,12 +41,14 @@
 #define TOUCH_I2C_PORT 0
 #define TOUCH_SLAVE_ADDRESS 0x48
 
-// Buzzer
-#define PIN_BUZZER 19
+// in future, we may want to add a buzzer and add all sensors to the indicator via a data protocol for now only GPS is supported
+// // Buzzer
+// #define PIN_BUZZER 19
 
-#define HAS_GPS 0
-#undef GPS_RX_PIN
-#undef GPS_TX_PIN
+#define GPS_DEFAULT_NOT_PRESENT 1
+#define GPS_RX_PIN 20
+#define GPS_TX_PIN 19
+#define HAS_GPS 1
 
 #define USE_SX1262
 #define USE_SX1268
@@ -62,3 +69,6 @@
 #define SX126X_BUSY LORA_DIO2
 #define SX126X_RESET LORA_RESET
 #define SX126X_DIO2_AS_RF_SWITCH
+
+#define USE_VIRTUAL_KEYBOARD 1
+#define DISPLAY_CLOCK_FRAME 1
