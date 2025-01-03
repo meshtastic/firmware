@@ -5,6 +5,7 @@
 // Only way to work on both esp32 and nrf52
 static File openFile(const char *filename, bool fullAtomic)
 {
+    concurrency::LockGuard g(spiLock);
     if (!fullAtomic)
         FSCom.remove(filename); // Nuke the old file to make space (ignore if it !exists)
 
@@ -53,14 +54,19 @@ bool SafeFile::close()
     if (!f)
         return false;
 
+    spiLock->lock();
     f.close();
+    spiLock->unlock();
     if (!testReadback())
         return false;
 
-    // brief window of risk here ;-)
-    if (fullAtomic && FSCom.exists(filename.c_str()) && !FSCom.remove(filename.c_str())) {
-        LOG_ERROR("Can't remove old pref file");
-        return false;
+    { // Scope for lock
+        concurrency::LockGuard g(spiLock);
+        // brief window of risk here ;-)
+        if (fullAtomic && FSCom.exists(filename.c_str()) && !FSCom.remove(filename.c_str())) {
+            LOG_ERROR("Can't remove old pref file");
+            return false;
+        }
     }
 
     String filenameTmp = filename;
@@ -76,6 +82,7 @@ bool SafeFile::close()
 /// Read our (closed) tempfile back in and compare the hash
 bool SafeFile::testReadback()
 {
+    concurrency::LockGuard g(spiLock);
     bool lfs_failed = lfs_assert_failed;
     lfs_assert_failed = false;
 
