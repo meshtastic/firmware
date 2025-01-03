@@ -29,6 +29,13 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
             // cancel rebroadcast of this message *if* there was already one, unless we're a router/repeater!
             if (Router::cancelSending(p->from, p->id))
                 txRelayCanceled++;
+        } else if (iface && p->hop_limit > 0) {
+            // If we overhear a duplicate copy of the packet with more hops left than the one we are waiting to
+            // rebroadcast, then remove the packet currently sitting in the TX queue and use this one instead.
+            if (iface->removePendingTXPacket(getFrom(p), p->id, p->hop_limit - 1)) {
+                LOG_DEBUG("Processing packet %d again for rebroadcast with with better hop limit (%d)", p->hop_limit - 1);
+                return false;
+            }
         }
         if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE && iface) {
             iface->clampToLateRebroadcastWindow(getFrom(p), p->id);
