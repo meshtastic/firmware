@@ -49,6 +49,7 @@
  **********************************************************************************************************************/
 
 #include "xmodem.h"
+#include "SPILock.h"
 
 #ifdef FSCom
 
@@ -119,8 +120,11 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
         if ((xmodemPacket.seq == 0) && !isReceiving && !isTransmitting) {
             // NULL packet has the destination filename
             memcpy(filename, &xmodemPacket.buffer.bytes, xmodemPacket.buffer.size);
+
             if (xmodemPacket.control == meshtastic_XModem_Control_SOH) { // Receive this file and put to Flash
+                spiLock->lock();
                 file = FSCom.open(filename, FILE_O_WRITE);
+                spiLock->unlock();
                 if (file) {
                     sendControl(meshtastic_XModem_Control_ACK);
                     isReceiving = true;
@@ -132,14 +136,18 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
                 break;
             } else { // Transmit this file from Flash
                 LOG_INFO("XModem: Transmit file %s", filename);
+                spiLock->lock();
                 file = FSCom.open(filename, FILE_O_READ);
+                spiLock->unlock();
                 if (file) {
                     packetno = 1;
                     isTransmitting = true;
                     xmodemStore = meshtastic_XModem_init_zero;
                     xmodemStore.control = meshtastic_XModem_Control_SOH;
                     xmodemStore.seq = packetno;
+                    spiLock->lock();
                     xmodemStore.buffer.size = file.read(xmodemStore.buffer.bytes, sizeof(meshtastic_XModem_buffer_t::bytes));
+                    spiLock->unlock();
                     xmodemStore.crc16 = crc16_ccitt(xmodemStore.buffer.bytes, xmodemStore.buffer.size);
                     LOG_DEBUG("XModem: STX Notify Send packet %d, %d Bytes", packetno, xmodemStore.buffer.size);
                     if (xmodemStore.buffer.size < sizeof(meshtastic_XModem_buffer_t::bytes)) {
@@ -159,7 +167,9 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
                 if ((xmodemPacket.seq == packetno) &&
                     check(xmodemPacket.buffer.bytes, xmodemPacket.buffer.size, xmodemPacket.crc16)) {
                     // valid packet
+                    spiLock->lock();
                     file.write(xmodemPacket.buffer.bytes, xmodemPacket.buffer.size);
+                    spiLock->unlock();
                     sendControl(meshtastic_XModem_Control_ACK);
                     packetno++;
                     break;
@@ -178,16 +188,21 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
     case meshtastic_XModem_Control_EOT:
         // End of transmission
         sendControl(meshtastic_XModem_Control_ACK);
+        spiLock->lock();
         file.flush();
         file.close();
+        spiLock->unlock();
         isReceiving = false;
         break;
     case meshtastic_XModem_Control_CAN:
         // Cancel transmission and remove file
         sendControl(meshtastic_XModem_Control_ACK);
+        spiLock->lock();
         file.flush();
         file.close();
+
         FSCom.remove(filename);
+        spiLock->unlock();
         isReceiving = false;
         break;
     case meshtastic_XModem_Control_ACK:
@@ -195,7 +210,9 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
         if (isTransmitting) {
             if (isEOT) {
                 sendControl(meshtastic_XModem_Control_EOT);
+                spiLock->lock();
                 file.close();
+                spiLock->unlock();
                 LOG_INFO("XModem: Finished send file %s", filename);
                 isTransmitting = false;
                 isEOT = false;
@@ -206,7 +223,9 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
             xmodemStore = meshtastic_XModem_init_zero;
             xmodemStore.control = meshtastic_XModem_Control_SOH;
             xmodemStore.seq = packetno;
+            spiLock->lock();
             xmodemStore.buffer.size = file.read(xmodemStore.buffer.bytes, sizeof(meshtastic_XModem_buffer_t::bytes));
+            spiLock->unlock();
             xmodemStore.crc16 = crc16_ccitt(xmodemStore.buffer.bytes, xmodemStore.buffer.size);
             LOG_DEBUG("XModem: ACK Notify Send packet %d, %d Bytes", packetno, xmodemStore.buffer.size);
             if (xmodemStore.buffer.size < sizeof(meshtastic_XModem_buffer_t::bytes)) {
@@ -224,7 +243,9 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
         if (isTransmitting) {
             if (--retrans <= 0) {
                 sendControl(meshtastic_XModem_Control_CAN);
+                spiLock->lock();
                 file.close();
+                spiLock->unlock();
                 LOG_INFO("XModem: Retransmit timeout, cancel file %s", filename);
                 isTransmitting = false;
                 break;
@@ -232,8 +253,11 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
             xmodemStore = meshtastic_XModem_init_zero;
             xmodemStore.control = meshtastic_XModem_Control_SOH;
             xmodemStore.seq = packetno;
+            spiLock->lock();
             file.seek((packetno - 1) * sizeof(meshtastic_XModem_buffer_t::bytes));
+
             xmodemStore.buffer.size = file.read(xmodemStore.buffer.bytes, sizeof(meshtastic_XModem_buffer_t::bytes));
+            spiLock->unlock();
             xmodemStore.crc16 = crc16_ccitt(xmodemStore.buffer.bytes, xmodemStore.buffer.size);
             LOG_DEBUG("XModem: NAK Notify Send packet %d, %d Bytes", packetno, xmodemStore.buffer.size);
             if (xmodemStore.buffer.size < sizeof(meshtastic_XModem_buffer_t::bytes)) {

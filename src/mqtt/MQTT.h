@@ -22,6 +22,7 @@
 
 #if HAS_NETWORKING
 #include <PubSubClient.h>
+#include <memory>
 #endif
 
 #define MAX_MQTT_QUEUE 16
@@ -32,24 +33,7 @@
  */
 class MQTT : private concurrency::OSThread
 {
-    // supposedly the current version is busted:
-    // http://www.iotsharing.com/2017/08/how-to-use-esp32-mqtts-with-mqtts-mosquitto-broker-tls-ssl.html
-#if HAS_WIFI
-    WiFiClient mqttClient;
-#if !defined(ARCH_PORTDUINO)
-#if (defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR < 3) || defined(RPI_PICO)
-    WiFiClientSecure wifiSecureClient;
-#endif
-#endif
-#endif
-#if HAS_ETHERNET
-    EthernetClient mqttClient;
-#endif
-
   public:
-#if HAS_NETWORKING
-    PubSubClient pubSub;
-#endif
     MQTT();
 
     /**
@@ -93,7 +77,29 @@ class MQTT : private concurrency::OSThread
 
     virtual int32_t runOnce() override;
 
+#ifndef PIO_UNIT_TESTING
   private:
+#endif
+    // supposedly the current version is busted:
+    // http://www.iotsharing.com/2017/08/how-to-use-esp32-mqtts-with-mqtts-mosquitto-broker-tls-ssl.html
+#if HAS_WIFI
+    using MQTTClient = WiFiClient;
+#if !defined(ARCH_PORTDUINO)
+#if (defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR < 3) || defined(RPI_PICO)
+    WiFiClientSecure wifiSecureClient;
+#endif
+#endif
+#endif
+#if HAS_ETHERNET
+    using MQTTClient = EthernetClient;
+#endif
+
+#if HAS_NETWORKING
+    std::unique_ptr<MQTTClient> mqttClient;
+    PubSubClient pubSub;
+    explicit MQTT(std::unique_ptr<MQTTClient> mqttClient);
+#endif
+
     std::string cryptTopic = "/2/e/";   // msh/2/e/CHANNELID/NODEID
     std::string jsonTopic = "/2/json/"; // msh/2/json/CHANNELID/NODEID
     std::string mapTopic = "/2/map/";   // For protobuf-encoded MapReport messages

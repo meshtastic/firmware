@@ -13,6 +13,7 @@
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "Router.h"
+#include "SPILock.h"
 #include "SafeFile.h"
 #include "TypeConversions.h"
 #include "error.h"
@@ -409,6 +410,13 @@ bool NodeDB::resetRadioConfig(bool factory_reset)
         rebootAtMsec = millis() + (5 * 1000);
     }
 
+#if (defined(T_DECK) || defined(T_WATCH_S3) || defined(UNPHONE) || defined(PICOMPUTER_S3)) && defined(HAS_TFT)
+    // as long as PhoneAPI shares BT and TFT app switch BT off
+    config.bluetooth.enabled = false;
+    if (moduleConfig.external_notification.nag_timeout == 60)
+        moduleConfig.external_notification.nag_timeout = 0;
+#endif
+
     return didFactoryReset;
 }
 
@@ -416,12 +424,15 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
 {
     LOG_INFO("Perform factory reset!");
     // first, remove the "/prefs" (this removes most prefs)
-    rmDir("/prefs");
+    spiLock->lock();
+    rmDir("/prefs"); // this uses spilock internally...
+
 #ifdef FSCom
     if (FSCom.exists("/static/rangetest.csv") && !FSCom.remove("/static/rangetest.csv")) {
         LOG_ERROR("Could not remove rangetest.csv file");
     }
 #endif
+    spiLock->unlock();
     // second, install default state (this will deal with the duplicate mac address issue)
     installDefaultDeviceState();
     installDefaultConfig(!eraseBleBonds); // Also preserve the private key if we're not erasing BLE bonds
@@ -906,6 +917,7 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
 {
     LoadFileResult state = LoadFileResult::OTHER_FAILURE;
 #ifdef FSCom
+    concurrency::LockGuard g(spiLock);
 
     auto f = FSCom.open(filename, FILE_O_READ);
 
@@ -939,8 +951,10 @@ void NodeDB::loadFromDisk()
     // disk we will still factoryReset to restore things.
 
 #ifdef ARCH_ESP32
+    spiLock->lock();
     if (FSCom.exists("/static/static"))
         rmDir("/static/static"); // Remove bad static web files bundle from initial 2.5.13 release
+    spiLock->unlock();
 #endif
 
     // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
@@ -985,8 +999,11 @@ void NodeDB::loadFromDisk()
     // Make sure we load hard coded admin keys even when the configuration file has none.
     // Initialize admin_key_count to zero
     byte numAdminKeys = 0;
+#if defined(USERPREFS_USE_ADMIN_KEY_0) || defined(USERPREFS_USE_ADMIN_KEY_1) || defined(USERPREFS_USE_ADMIN_KEY_2)
     uint16_t sum = 0;
+#endif
 #ifdef USERPREFS_USE_ADMIN_KEY_0
+
     for (uint8_t b = 0; b < 32; b++) {
         sum += config.security.admin_key[0].bytes[b];
     }
@@ -995,8 +1012,6 @@ void NodeDB::loadFromDisk()
         LOG_INFO("Admin 0 key zero. Loading hard coded key from user preferences.");
         memcpy(config.security.admin_key[0].bytes, userprefs_admin_key_0, 32);
         config.security.admin_key[0].size = 32;
-        config.security.admin_key_count = numAdminKeys;
-        saveToDisk(SEGMENT_CONFIG);
     }
 #endif
 
@@ -1010,8 +1025,6 @@ void NodeDB::loadFromDisk()
         LOG_INFO("Admin 1 key zero. Loading hard coded key from user preferences.");
         memcpy(config.security.admin_key[1].bytes, userprefs_admin_key_1, 32);
         config.security.admin_key[1].size = 32;
-        config.security.admin_key_count = numAdminKeys;
-        saveToDisk(SEGMENT_CONFIG);
     }
 #endif
 
@@ -1025,10 +1038,14 @@ void NodeDB::loadFromDisk()
         LOG_INFO("Admin 2 key zero. Loading hard coded key from user preferences.");
         memcpy(config.security.admin_key[2].bytes, userprefs_admin_key_2, 32);
         config.security.admin_key[2].size = 32;
+    }
+#endif
+
+    if (numAdminKeys > 0) {
+        LOG_INFO("Saving %d hard coded admin keys.", numAdminKeys);
         config.security.admin_key_count = numAdminKeys;
         saveToDisk(SEGMENT_CONFIG);
     }
-#endif
 
     state = loadProto(moduleConfigFileName, meshtastic_LocalModuleConfig_size, sizeof(meshtastic_LocalModuleConfig),
                       &meshtastic_LocalModuleConfig_msg, &moduleConfig);
@@ -1087,9 +1104,6 @@ void NodeDB::loadFromDisk()
 bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_t *fields, const void *dest_struct,
                        bool fullAtomic)
 {
-#ifdef ARCH_ESP32
-    concurrency::LockGuard g(spiLock);
-#endif
     bool okay = false;
 #ifdef FSCom
     auto f = SafeFile(filename, fullAtomic);
@@ -1117,7 +1131,9 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
 bool NodeDB::saveChannelsToDisk()
 {
 #ifdef FSCom
+    spiLock->lock();
     FSCom.mkdir("/prefs");
+    spiLock->unlock();
 #endif
     return saveProto(channelFileName, meshtastic_ChannelFile_size, &meshtastic_ChannelFile_msg, &channelFile);
 }
@@ -1125,7 +1141,9 @@ bool NodeDB::saveChannelsToDisk()
 bool NodeDB::saveDeviceStateToDisk()
 {
 #ifdef FSCom
+    spiLock->lock();
     FSCom.mkdir("/prefs");
+    spiLock->unlock();
 #endif
     // Note: if MAX_NUM_NODES=100 and meshtastic_NodeInfoLite_size=166, so will be approximately 17KB
     // Because so huge we _must_ not use fullAtomic, because the filesystem is probably too small to hold two copies of this
@@ -1138,7 +1156,9 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
     bool success = true;
 
 #ifdef FSCom
+    spiLock->lock();
     FSCom.mkdir("/prefs");
+    spiLock->unlock();
 #endif
     if (saveWhat & SEGMENT_CONFIG) {
         config.has_device = true;
@@ -1189,7 +1209,9 @@ bool NodeDB::saveToDisk(int saveWhat)
     if (!success) {
         LOG_ERROR("Failed to save to disk, retrying");
 #ifdef ARCH_NRF52 // @geeksville is not ready yet to say we should do this on other platforms.  See bug #4184 discussion
+        spiLock->lock();
         FSCom.format();
+        spiLock->unlock();
 
 #endif
         success = saveToDiskNoRetry(saveWhat);

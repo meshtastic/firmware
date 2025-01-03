@@ -9,6 +9,7 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h" // needed for button bypass
+#include "SPILock.h"
 #include "detect/ScanI2C.h"
 #include "input/ScanAndSelect.h"
 #include "mesh/generated/meshtastic/cannedmessages.pb.h"
@@ -982,6 +983,7 @@ bool CannedMessageModule::interceptingKeyboardInput()
     }
 }
 
+#if !HAS_TFT
 void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     char buffer[50];
@@ -1140,6 +1142,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         }
     }
 }
+#endif //! HAS_TFT
 
 ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
@@ -1182,8 +1185,10 @@ bool CannedMessageModule::saveProtoForModule()
 {
     bool okay = true;
 
-#ifdef FS
-    FS.mkdir("/prefs");
+#ifdef FSCom
+    spiLock->lock();
+    FSCom.mkdir("/prefs");
+    spiLock->unlock();
 #endif
 
     okay &= nodeDB->saveProto(cannedMessagesConfigFile, meshtastic_CannedMessageModuleConfig_size,

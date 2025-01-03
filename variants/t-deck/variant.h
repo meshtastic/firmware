@@ -27,8 +27,10 @@
 
 #define SLEEP_TIME 120
 
+#ifndef HAS_TFT
 #define BUTTON_PIN 0
 // #define BUTTON_NEED_PULLUP
+#endif
 #define GPS_DEFAULT_NOT_PRESENT 1
 #define GPS_RX_PIN 44
 #define GPS_TX_PIN 43
@@ -60,7 +62,7 @@
 #define TB_DOWN 15
 #define TB_LEFT 1
 #define TB_RIGHT 2
-#define TB_PRESS BUTTON_PIN
+#define TB_PRESS 0 // BUTTON_PIN
 
 // microphone
 #define ES7210_SCK 47

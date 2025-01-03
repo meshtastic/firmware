@@ -38,15 +38,15 @@ static const uint8_t A3 = PIN_A3;
 #define PIN_SERIAL2_RX (5ul)
 
 // SPI
-#define PIN_SPI0_MISO (12u)
-#define PIN_SPI0_MOSI (11u)
-#define PIN_SPI0_SCK (10u)
-#define PIN_SPI0_SS (13u)
+#define PIN_SPI1_MISO (12u)
+#define PIN_SPI1_MOSI (11u)
+#define PIN_SPI1_SCK (10u)
+#define PIN_SPI1_SS (13u)
 
-#define PIN_SPI1_MISO (16u)
-#define PIN_SPI1_MOSI (19u)
-#define PIN_SPI1_SCK (18u)
-#define PIN_SPI1_SS (17u)
+#define PIN_SPI0_MISO (16u)
+#define PIN_SPI0_MOSI (19u)
+#define PIN_SPI0_SCK (18u)
+#define PIN_SPI0_SS (17u)
 
 // Wire
 #define PIN_WIRE0_SDA (2u)

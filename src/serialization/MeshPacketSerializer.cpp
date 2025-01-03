@@ -13,6 +13,8 @@
 #include "mesh/generated/meshtastic/remote_hardware.pb.h"
 #include <sys/types.h>
 
+static const char *errStr = "Error decoding proto for %s message!";
+
 std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp, bool shouldLog)
 {
     // the created jsonObj is immutable after creation, so
