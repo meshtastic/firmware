@@ -12,12 +12,6 @@ Lora:
 #  IRQ: 17
 #  Reset: 22
 
-#  Module: RF95  # Adafruit RFM9x
-#  Reset: 25
-#  CS: 7
-#  IRQ: 22
-#  Busy: 23
-
 #  Module: RF95  # Elecrow Lora RFM95 IOT https://www.elecrow.com/lora-rfm95-iot-board-for-rpi.html
 #  Reset: 22
 #  CS: 7

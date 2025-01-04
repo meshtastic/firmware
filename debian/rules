@@ -7,8 +7,10 @@
 override_dh_auto_build:
 	# Terrible hack to use modern platformio to build the native version
 	python3 -m venv venv
-	venv/bin/pip install platformio
-	venv/bin/platformio run -e native
+	. venv/bin/activate
+	pip install platformio
+	platformio run -e native
+	deactivate
 	rm -rf venv
 	# Move the binary and default config to the correct name
 	mv .pio/build/native/program .pio/build/native/meshtasticd
