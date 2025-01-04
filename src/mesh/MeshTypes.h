@@ -53,9 +53,9 @@ enum RxSource {
 #define NUM_HASH_FUNCTIONS 2
 
 // Base forwarding probability - never drop below this value
-// 0.2 seems suitable because the worst case False Positive Rate of the
-// coverage filter is 37%. That's if its fully saturated with 60 unique nodes.
-#define BASE_FORWARD_PROB 0.2f
+// 0.2 could be suitable because the worst case False Positive Rate of the
+// coverage filter is 37%. That's if its saturated with 60 unique nodes.
+#define BASE_FORWARD_PROB 0.0f
 
 // Coverage scaling factor
 #define COVERAGE_SCALE_FACTOR 4.0f
