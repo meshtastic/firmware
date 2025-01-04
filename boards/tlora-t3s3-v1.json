@@ -27,7 +27,7 @@
   "name": "LilyGo TLora-T3S3-V1",
   "upload": {
     "flash_size": "4MB",
-    "maximum_ram_size": 327680,
+    "maximum_ram_size": 2621440,
     "maximum_size": 4194304,
     "wait_for_upload_port": true,
     "require_upload_port": true,
