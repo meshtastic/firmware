@@ -140,7 +140,7 @@ void SSD16XX::configFullscreen()
     sendData(sy2);
 }
 
-void SSD16XX::update(uint8_t *imageData, UpdateTypes type, bool async)
+void SSD16XX::update(uint8_t *imageData, UpdateTypes type)
 {
     this->updateType = type;
     this->buffer = imageData;
@@ -163,14 +163,11 @@ void SSD16XX::update(uint8_t *imageData, UpdateTypes type, bool async)
     configUpdateSequence();
     sendCommand(0x20); // Begin executing the update
 
-    if (!async) {
-        wait();
-        finalizeUpdate();
-    }
-
-    else
-        detachFromUpdate(); // Let the update run async, on display hardware. Base class will poll completion, then finalize.
+    // Let the update run async, on display hardware. Base class will poll completion, then finalize.
+    // For a blocking update, call await after update
+    detachFromUpdate();
 }
+
 // Send SPI commands for controller IC to begin executing the refresh operation
 void SSD16XX::configUpdateSequence()
 {

@@ -51,3 +51,17 @@ int32_t EInk::runOnce()
     updateRunning = false; // Change what we report via EInk::busy()
     return disable();      // Stop polling
 }
+
+// Wait for an in progress update to complete before continuing
+// Run a normal (async) update first, *then* call await
+void EInk::await()
+{
+    // Stop our concurrency thread
+    OSThread::disable();
+
+    // Sit and block until the update is complete
+    while (updateRunning) {
+        runOnce();
+        yield();
+    }
+}

@@ -93,7 +93,7 @@ class WindowManager : protected concurrency::OSThread
     void autoshow();                                    // Show a different applet, to display new info
     bool renderUserApplets();                           // Draw the normal applets. Part of render
     bool renderSystemApplets();                         // Draw applets which need special handling. Part of render
-    void render();                                      // Attempt to update the display
+    void render(bool async = true);                     // Attempt to update the display
     void setBufferPixel(int16_t x, int16_t y, Color c); // Place pixels into the frame buffer. All translation / rotation done.
     void rotatePixelCoords(int16_t *x, int16_t *y);     // Apply the display rotation
 

@@ -22,7 +22,7 @@ class SSD16XX : public EInk
   public:
     SSD16XX(uint16_t width, uint16_t height, UpdateTypes supported, uint8_t bufferOffsetX = 0);
     virtual void begin(SPIClass *spi, uint8_t pin_dc, uint8_t pin_cs, uint8_t pin_busy, uint8_t pin_rst = -1);
-    virtual void update(uint8_t *imageData, UpdateTypes type, bool blocking = false) override;
+    virtual void update(uint8_t *imageData, UpdateTypes type) override;
 
   protected:
     virtual void wait();

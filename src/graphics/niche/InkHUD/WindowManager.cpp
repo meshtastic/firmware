@@ -776,12 +776,15 @@ bool InkHUD::WindowManager::renderSystemApplets()
 
 // Make an attempt to gather image data from some / all applets, and update the display
 // Might not be possible right now, if update already is progress.
-void InkHUD::WindowManager::render()
+void InkHUD::WindowManager::render(bool async)
 {
-    // Previous update still running
-    // Will try again shortly, via runOnce()
-    if (driver->busy())
-        return;
+    // Make sure the display is ready for a new update
+    if (async) {
+        // Previous update still running, Will try again shortly, via runOnce()
+        if (driver->busy())
+            return;
+    } else
+        driver->await(); // Wait here for update to complete
 
     // Whether an update will actually take place
     // Can't be certain about this any earlier,
@@ -808,10 +811,14 @@ void InkHUD::WindowManager::render()
     // Update the display, if some of the image did change
     if (updateNeeded) {
         Drivers::EInk::UpdateTypes type = mediator.evaluate(requestedUpdateType);
-        LOG_INFO("Updating");
+        LOG_INFO("Updating display");
         driver->update(imageBuffer, type);
+
+        // If not async, wait here until the update is complete
+        if (!async)
+            driver->await();
     } else
-        LOG_DEBUG("Not updating");
+        LOG_DEBUG("Not updating display");
 
     // All done; display driver will do the rest
     // Tidy up - clear the request
