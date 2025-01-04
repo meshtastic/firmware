@@ -8,7 +8,7 @@
 // System applets
 // Must be defined in .cpp to prevent a circular dependency with Applet base class
 #include "./Applets/System/BatteryIcon/BatteryIconApplet.h"
-#include "./Applets/System/BootScreen/BootScreenApplet.h"
+#include "./Applets/System/Logo/LogoApplet.h"
 #include "./Applets/System/Menu/MenuApplet.h"
 #include "./Applets/System/Notification/NotificationApplet.h"
 #include "./Applets/System/Placeholder/PlaceholderApplet.h"
@@ -50,10 +50,6 @@ void InkHUD::WindowManager::setDriver(Drivers::EInk *driver)
 
     // Allocate the image buffer
     imageBuffer = new uint8_t[imageBufferWidth * imageBufferHeight];
-
-    // Clear the display right now
-    clearBuffer();
-    driver->update(imageBuffer, Drivers::EInk::FULL);
 }
 
 // Sets the ideal ratio of FAST updates to FULL updates
@@ -123,9 +119,8 @@ void InkHUD::WindowManager::begin()
     assignUserAppletsToTiles();
     refocusTile();
 
-    // menuApplet is assigned to the focused user tile when opened
-
-    bootscreenApplet->bringToForeground();
+    logoApplet->showBootScreen();
+    render(false); // Update now, and wait here until complete
 
     deepSleepObserver.observe(&notifyDeepSleep);
     textMessageObserver.observe(textMessageModule);
@@ -137,14 +132,14 @@ void InkHUD::WindowManager::begin()
 // They also won't be activated or deactivated
 void InkHUD::WindowManager::createSystemApplets()
 {
-    bootscreenApplet = new BootScreenApplet;
+    logoApplet = new LogoApplet;
     notificationApplet = new NotificationApplet;
     batteryIconApplet = new BatteryIconApplet;
     menuApplet = new MenuApplet;
     placeholderApplet = new PlaceholderApplet;
 
     // System applets are always active
-    bootscreenApplet->activate();
+    logoApplet->activate();
     notificationApplet->activate();
     batteryIconApplet->activate();
     menuApplet->activate();
@@ -173,7 +168,7 @@ void InkHUD::WindowManager::placeSystemTiles()
 void InkHUD::WindowManager::assignSystemAppletsToTiles()
 {
     // Assign tiles
-    bootscreenApplet->setTile(fullscreenTile);
+    logoApplet->setTile(fullscreenTile);
     notificationApplet->setTile(notificationTile);
     batteryIconApplet->setTile(batteryIconTile);
 }
@@ -301,7 +296,15 @@ int InkHUD::WindowManager::beforeDeepSleep(void *unused)
         a->onShutdown();
     }
 
+    // Remember to add any relevant system applets here
+    menuApplet->onShutdown();
+
     saveDataToFlash();
+
+    // Display the shutdown screen, and wait here until the update is complete
+    logoApplet->showShutdownScreen();
+    render(false);
+
     return 0; // We agree: deep sleep now
 }
 
@@ -790,9 +793,9 @@ bool InkHUD::WindowManager::renderSystemApplets()
     }
 
     // Boot screen
-    if (bootscreenApplet->isForeground() && bootscreenApplet->wantsToRender()) {
+    if (logoApplet->isForeground() && logoApplet->wantsToRender()) {
         updateNeeded = true;
-        bootscreenApplet->render();
+        logoApplet->render();
         renderCount++;
     }
 

@@ -37,7 +37,7 @@ namespace NicheGraphics::InkHUD
 class Applet;
 class Tile;
 
-class BootScreenApplet;
+class LogoApplet;
 class NotificationApplet;
 
 class WindowManager : protected concurrency::OSThread
@@ -127,7 +127,7 @@ class WindowManager : protected concurrency::OSThread
     Tile *fullscreenTile = nullptr;
     Tile *notificationTile = nullptr;
     Tile *batteryIconTile = nullptr;
-    BootScreenApplet *bootscreenApplet;
+    LogoApplet *logoApplet;
     NotificationApplet *notificationApplet;
     Applet *batteryIconApplet;
     Applet *menuApplet;

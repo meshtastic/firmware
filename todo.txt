@@ -5,8 +5,6 @@ Features
 []      adhoc ping
 []      canned message
 []      map scale indicator 
-[]      boot screen
-[]      shutdown screen
 []      eink drivers for other devices
 []      gps menu
 []      mini-compass on nodelist
@@ -20,7 +18,6 @@ Critical Tasks
             - check with older ESP32 variants
 []      imperial units
 []      ble pairing screen
-[]      boot and shutdown screens
 []      hook reboot to save flash data
 []      hotfix for handling emoji tapbacks
 
@@ -35,6 +32,7 @@ Improvements
 []      ChronoListApplet should only requestUpdate for changed signal strength if node 0-hops (showing signal bars)
 []      Descriptive headers for some settings in menu
 []      Re-render applets when RTC is set. Some UI elements change (e.g. "Recents" applet counts)
+[]      Re-render all applets every time we update. Apparently it's faster to re-render than to blank the pixels for just one tile
 
 Known Bugs
 =====================

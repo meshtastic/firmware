@@ -7,7 +7,7 @@
 
 using namespace NicheGraphics;
 
-static constexpr uint8_t MENU_TIMEOUT_SEC = 30; // How many seconds before menu auto-closes
+static constexpr uint8_t MENU_TIMEOUT_SEC = 60; // How many seconds before menu auto-closes
 
 // Options for the "Recents" menu
 // These are offered to users as possible values for settings.recentlyActiveSeconds
@@ -78,6 +78,12 @@ void InkHUD::MenuApplet::onBackground()
 
     // Restore the user applet whose tile we borrowed
     getTile()->assignedApplet->bringToForeground();
+}
+
+void InkHUD::MenuApplet::onShutdown()
+{
+    // Make sure we close the menu, which release the rendering lock, allowing us to show the shutdown screen
+    sendToBackground();
 }
 
 // Auto-exit the menu applet after a period of inactivity
@@ -168,8 +174,8 @@ void InkHUD::MenuApplet::execute(MenuItem item)
 
     case SHUTDOWN:
         LOG_INFO("Shutting down from menu");
-        unlockRendering(); // Allow the shutdown screen to display
         power->shutdown();
+        // Menu is then sent to background via onShutdown
         break;
 
     case TOGGLE_BATTERY_ICON:

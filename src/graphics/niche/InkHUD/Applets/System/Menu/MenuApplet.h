@@ -21,6 +21,7 @@ class MenuApplet : public Applet, public concurrency::OSThread
     void onActivate() override;
     void onForeground() override;
     void onBackground() override;
+    void onShutdown() override;
     void onButtonShortPress() override;
     void onButtonLongPress() override;
     void onRender() override;
