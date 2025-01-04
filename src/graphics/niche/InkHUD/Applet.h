@@ -171,6 +171,9 @@ class Applet : public GFX
     void setCrop(int16_t left, int16_t top, uint16_t width, uint16_t height); // Ignore pixels drawn outside a certain region
     void resetCrop();                                                         // Removes setCrop()
 
+    void lockRendering();   // Lock rendering to this applet only
+    void unlockRendering(); // Remove a lock placed by this applet
+
     void setFont(AppletFont f);
     AppletFont getFont();
 

@@ -84,6 +84,10 @@ class WindowManager : protected concurrency::OSThread
     uint8_t getAppletCount();                 // How many user applets are available, including inactivated
     const char *getAppletName(uint8_t index); // By order in userApplets
 
+    void lockRendering(Applet *lockedBy);   // Allows system applets to prevent other applets triggering a refresh
+    void unlockRendering(Applet *lockedBy); // Allows normal updating of user applets to continue
+    bool isRenderingPermitted(Applet *a);   // Checks if an applet is allowed to request an update (not locked by other applet)
+
   protected:
     WindowManager(); // Private constructor for singleton
 
@@ -133,6 +137,7 @@ class WindowManager : protected concurrency::OSThread
     bool updateRequested = false;
     Drivers::EInk::UpdateTypes requestedUpdateType = Drivers::EInk::UpdateTypes::UNSPECIFIED;
     bool requestedRenderAll = false;
+    Applet *renderingLockedBy = nullptr; // Which system applet (if any) is preventing other applets from rendering
 };
 
 }; // namespace NicheGraphics::InkHUD

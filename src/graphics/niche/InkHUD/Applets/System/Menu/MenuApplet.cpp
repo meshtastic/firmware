@@ -51,6 +51,9 @@ void InkHUD::MenuApplet::onForeground()
             backlight->peek();
     }
 
+    // Suspend normal rendering of user applets
+    lockRendering();
+
     // Begin the auto-close timeout
     OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
     OSThread::enabled = true;
@@ -69,6 +72,9 @@ void InkHUD::MenuApplet::onBackground()
 
     // Stop the auto-timeout
     OSThread::disable();
+
+    // Resume normal rendering of user applets
+    unlockRendering();
 
     // Restore the user applet whose tile we borrowed
     getTile()->assignedApplet->bringToForeground();
@@ -162,6 +168,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
 
     case SHUTDOWN:
         LOG_INFO("Shutting down from menu");
+        unlockRendering(); // Allow the shutdown screen to display
         power->shutdown();
         break;
 

@@ -207,6 +207,21 @@ void InkHUD::Applet::resetCrop()
     setCrop(0, 0, width(), height());
 }
 
+// Lock rendering to this applet only
+// Only system applets may use this!
+// Wrapper function for convenience
+void InkHUD::Applet::lockRendering()
+{
+    WindowManager::getInstance()->lockRendering(this);
+}
+
+// Removes a lock on rendering placed by this system applet
+// Wrapper function for convenience
+void InkHUD::Applet::unlockRendering()
+{
+    WindowManager::getInstance()->unlockRendering(this);
+}
+
 // Convert relative width to absolute width, in px
 // X(0) is 0
 // X(0.5) is width() / 2

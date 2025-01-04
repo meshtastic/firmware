@@ -630,6 +630,39 @@ const char *InkHUD::WindowManager::getAppletName(uint8_t index)
     return userApplets.at(index)->name;
 }
 
+// Allows a system applet to prevent other applets from temporarily requesting updates
+// All user applets will honor this. Some system applets might not, although they probably should
+void InkHUD::WindowManager::lockRendering(Applet *owner)
+{
+    // Only one system applet may lock render at once
+    assert(!renderingLockedBy);
+
+    // Only system applets may lock rendering
+    for (Applet *a : userApplets)
+        assert(owner != a);
+
+    renderingLockedBy = owner;
+}
+
+// Remove a lock placed by a system applet, which prevents other applets from rendering
+void InkHUD::WindowManager::unlockRendering(Applet *owner)
+{
+    assert(renderingLockedBy = owner);
+    renderingLockedBy = nullptr;
+}
+
+// Is an applet blocked by a current lock on rendering?
+// Applets are allowed to render if there is no lock, or if they are the owner of the lock
+bool InkHUD::WindowManager::isRenderingPermitted(Applet *a)
+{
+    if (!renderingLockedBy)
+        return true;
+    else if (renderingLockedBy == a)
+        return true;
+    else
+        return false;
+}
+
 // Runs at regular intervals
 // WindowManager's uses of this include:
 // - postponing render: until next loop(), allowing all applets to be notified of some Mesh event before render
@@ -696,7 +729,7 @@ bool InkHUD::WindowManager::renderUserApplets()
         // Decide whether to render
         bool shouldRender = false;
         shouldRender |= requestedRenderAll;
-        shouldRender |= a->isForeground() && a->wantsToRender() && !menuApplet->isForeground();
+        shouldRender |= a->isForeground() && a->wantsToRender() && isRenderingPermitted(a);
 
         // If decided to render
         if (shouldRender) {
@@ -732,7 +765,7 @@ bool InkHUD::WindowManager::renderSystemApplets()
     // Battery Icon
     // - overlay: drawn regardless of wantsToRender
     // - might want to render though, if battery level changed
-    if (batteryIconApplet->isForeground()) {
+    if (batteryIconApplet->isForeground() && isRenderingPermitted(batteryIconApplet)) {
         if (batteryIconApplet->wantsToRender())
             updateNeeded = true;
         batteryIconApplet->render();
@@ -750,7 +783,7 @@ bool InkHUD::WindowManager::renderSystemApplets()
     }
 
     // Menu applet
-    if (menuApplet->isForeground() && menuApplet->wantsToRender()) {
+    if (menuApplet->isForeground() && menuApplet->wantsToRender() && isRenderingPermitted(menuApplet)) {
         updateNeeded = true;
         menuApplet->render();
         renderCount++;
