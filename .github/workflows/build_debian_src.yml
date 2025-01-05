@@ -1,0 +1,45 @@
+name: Build Debian Source Package
+
+on: workflow_call
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build-debian-src:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ref: ${{github.event.pull_request.head.ref}}
+          repository: ${{github.event.pull_request.head.repo.full_name}}
+
+      - name: Install deps
+        shell: bash
+        run: |
+          sudo apt-get update -y --fix-missing
+          sudo apt-get install -y software-properties-common
+          sudo add-apt-repository ppa:meshtastic/meshtastic-daily -y
+          sudo apt-get install -y build-essential devscripts equivs \
+            platformio python3-protobuf python3-grpcio \
+            libyaml-cpp-dev libgpiod-dev libbluetooth-dev libusb-1.0-0-dev libi2c-dev
+
+      - name: Fetch libdeps, package debian source
+        run: debian/ci_pack_sdeb.sh
+
+      - name: Get release version string
+        run: |
+          echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+          echo "short=$(./bin/buildinfo.py short)" >> $GITHUB_OUTPUT
+        id: version
+
+      - name: Store binaries as an artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-debian-${{ steps.version.outputs.long }}-src.zip
+          overwrite: true
+          path: |
+            ../meshtasticd_${{ steps.version.outputs.short }}*
