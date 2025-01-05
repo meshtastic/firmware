@@ -6,4 +6,4 @@ export PLATFORMIO_PACKAGES_DIR=pio/packages
 platformio pkg install -e native
 
 # Build the source deb
-debuild -S
+debuild -S -k$GPG_KEY_ID
