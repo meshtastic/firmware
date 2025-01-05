@@ -391,7 +391,7 @@ void setupSDCard()
     LOG_DEBUG("SD Card Size: %lu MB", (uint32_t)cardSize);
     LOG_DEBUG("Total space: %lu MB", (uint32_t)(SD.totalBytes() / (1024 * 1024)));
 #if (defined(ARCH_ESP32)) // not implemented in arduino sd library
-// LOG_DEBUG("Used space: %lu MB", (uint32_t)(SD.usedBytes() / (1024 * 1024)));
+    LOG_DEBUG("Used space: %lu MB", (uint32_t)(SD.usedBytes() / (1024 * 1024)));
 #endif
 #endif
 #endif
