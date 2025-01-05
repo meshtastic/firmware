@@ -21,7 +21,11 @@ jobs:
         shell: bash
         run: |
           sudo apt-get update -y --fix-missing
-          sudo apt-get install -y devscripts equivs
+          sudo apt-get install -y software-properties-common
+          sudo add-apt-repository ppa:meshtastic/meshtastic-daily -y
+          sudo apt-get install -y build-essential devscripts equivs \
+            platformio python3-protobuf python3-grpcio \
+            libyaml-cpp-dev libgpiod-dev libbluetooth-dev libusb-1.0-0-dev libi2c-dev
 
       - name: Fetch libdeps, package debian source
         run: debian/ci_pack_sdeb.sh
