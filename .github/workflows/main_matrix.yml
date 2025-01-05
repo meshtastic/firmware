@@ -130,6 +130,7 @@ jobs:
 
   package-ppa:
     uses: ./.github/workflows/package_ppa.yml
+    secrets: inherit
 
   package-raspbian:
     uses: ./.github/workflows/package_raspbian.yml
