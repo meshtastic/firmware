@@ -231,6 +231,9 @@ void portduinoSetup()
             dmac[3] = hash[3];
             dmac[4] = hash[4];
             dmac[5] = hash[5];
+            char macBuf[13] = {0};
+            sprintf(macBuf, "%02X%02X%02X%02X%02X%02X", dmac[0], dmac[1], dmac[2], dmac[3], dmac[4], dmac[5]);
+            settingsStrings[mac_address] = macBuf;
         }
     }
 
@@ -240,7 +243,7 @@ void portduinoSetup()
         std::cout << "Please set a MAC Address in config.yaml using either MACAddress or MACAddressSource." << std::endl;
         exit(EXIT_FAILURE);
     }
-    std::cout << "MAC Address: " << std::hex << +dmac[0] << +dmac[1] << +dmac[2] << +dmac[3] << +dmac[4] << +dmac[5] << std::endl;
+    printf("MAC ADDRESS: %02X:%02X:%02X:%02X:%02X:%02X\n", dmac[0], dmac[1], dmac[2], dmac[3], dmac[4], dmac[5]);
     // Rather important to set this, if not running simulated.
     randomSeed(time(NULL));
 

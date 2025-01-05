@@ -1,4 +1,5 @@
 .pio
+pio
 
 # ignore vscode IDE settings files
 .vscode/*
