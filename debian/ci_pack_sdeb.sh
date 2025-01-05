@@ -7,11 +7,10 @@ export PLATFORMIO_PACKAGES_DIR=pio/packages
 platformio pkg install -e native
 
 package=$(dpkg-parsechangelog --show-field Source)
-pkg_version=$(dpkg-parsechangelog --show-field Version | cut -d- -f1)
 
 rm -rf debian/changelog
-dch --create --distribution $SERIES --package $package --newversion $pkg_version-ppa${REVISION::7}~$SERIES \
-	"GitHub Actions Automatic packaging for $SERIES"
+dch --create --distribution $SERIES --package $package --newversion $PKG_VERSION~$SERIES \
+	"GitHub Actions Automatic packaging for $PKG_VERSION~$SERIES"
 
 # Build the source deb
 debuild -S -k$GPG_KEY_ID
