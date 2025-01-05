@@ -51,6 +51,8 @@ typedef enum _meshtastic_Language {
     meshtastic_Language_GREEK = 13,
     /* Norwegian */
     meshtastic_Language_NORWEGIAN = 14,
+    /* Slovenian */
+    meshtastic_Language_SLOVENIAN = 15,
     /* Simplified Chinese (experimental) */
     meshtastic_Language_SIMPLIFIED_CHINESE = 30,
     /* Traditional Chinese (experimental) */
@@ -71,6 +73,8 @@ typedef struct _meshtastic_NodeFilter {
     bool position_switch;
     /* Filter nodes by matching name string */
     char node_name[16];
+    /* Filter based on channel */
+    int8_t channel;
 } meshtastic_NodeFilter;
 
 typedef struct _meshtastic_NodeHighlight {
@@ -138,10 +142,10 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define meshtastic_DeviceUIConfig_init_default   {0, 0, 0, 0, 0, 0, _meshtastic_Theme_MIN, 0, 0, 0, _meshtastic_Language_MIN, false, meshtastic_NodeFilter_init_default, false, meshtastic_NodeHighlight_init_default, {0, {0}}}
-#define meshtastic_NodeFilter_init_default       {0, 0, 0, 0, 0, ""}
+#define meshtastic_NodeFilter_init_default       {0, 0, 0, 0, 0, "", 0}
 #define meshtastic_NodeHighlight_init_default    {0, 0, 0, 0, ""}
 #define meshtastic_DeviceUIConfig_init_zero      {0, 0, 0, 0, 0, 0, _meshtastic_Theme_MIN, 0, 0, 0, _meshtastic_Language_MIN, false, meshtastic_NodeFilter_init_zero, false, meshtastic_NodeHighlight_init_zero, {0, {0}}}
-#define meshtastic_NodeFilter_init_zero          {0, 0, 0, 0, 0, ""}
+#define meshtastic_NodeFilter_init_zero          {0, 0, 0, 0, 0, "", 0}
 #define meshtastic_NodeHighlight_init_zero       {0, 0, 0, 0, ""}
 
 /* Field tags (for use in manual encoding/decoding) */
@@ -151,6 +155,7 @@ extern "C" {
 #define meshtastic_NodeFilter_hops_away_tag      4
 #define meshtastic_NodeFilter_position_switch_tag 5
 #define meshtastic_NodeFilter_node_name_tag      6
+#define meshtastic_NodeFilter_channel_tag        7
 #define meshtastic_NodeHighlight_chat_switch_tag 1
 #define meshtastic_NodeHighlight_position_switch_tag 2
 #define meshtastic_NodeHighlight_telemetry_switch_tag 3
@@ -198,7 +203,8 @@ X(a, STATIC,   SINGULAR, BOOL,     offline_switch,    2) \
 X(a, STATIC,   SINGULAR, BOOL,     public_key_switch,   3) \
 X(a, STATIC,   SINGULAR, INT32,    hops_away,         4) \
 X(a, STATIC,   SINGULAR, BOOL,     position_switch,   5) \
-X(a, STATIC,   SINGULAR, STRING,   node_name,         6)
+X(a, STATIC,   SINGULAR, STRING,   node_name,         6) \
+X(a, STATIC,   SINGULAR, INT32,    channel,           7)
 #define meshtastic_NodeFilter_CALLBACK NULL
 #define meshtastic_NodeFilter_DEFAULT NULL
 
@@ -222,8 +228,8 @@ extern const pb_msgdesc_t meshtastic_NodeHighlight_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_DEVICE_UI_PB_H_MAX_SIZE meshtastic_DeviceUIConfig_size
-#define meshtastic_DeviceUIConfig_size           117
-#define meshtastic_NodeFilter_size               36
+#define meshtastic_DeviceUIConfig_size           128
+#define meshtastic_NodeFilter_size               47
 #define meshtastic_NodeHighlight_size            25
 
 #ifdef __cplusplus
