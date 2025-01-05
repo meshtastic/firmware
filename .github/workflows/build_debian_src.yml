@@ -18,6 +18,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          path: meshtasticd
           ref: ${{github.event.pull_request.head.ref}}
           repository: ${{github.event.pull_request.head.repo.full_name}}
 
@@ -38,11 +39,13 @@ jobs:
         id: gpg
 
       - name: Fetch libdeps, package debian source
+        working-directory: meshtasticd
         run: debian/ci_pack_sdeb.sh
         env:
           GPG_KEY_ID: ${{ steps.gpg.outputs.keyid }}
 
       - name: Get release version string
+        working-directory: meshtasticd
         run: |
           echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
           echo "short=$(./bin/buildinfo.py short)" >> $GITHUB_OUTPUT
@@ -54,4 +57,4 @@ jobs:
           name: firmware-debian-${{ steps.version.outputs.long }}-src.zip
           overwrite: true
           path: |
-            ../meshtasticd_${{ steps.version.outputs.short }}*
+            meshtasticd_${{ steps.version.outputs.short }}*
