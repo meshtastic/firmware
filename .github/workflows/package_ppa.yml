@@ -1,0 +1,58 @@
+name: Package Launchpad PPA
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build-debian-src:
+    uses: ./.github/workflows/build_debian_src.yml
+
+  package-ppa:
+    runs-on: ubuntu-24.04
+    needs: build-debian-src
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ref: ${{github.event.pull_request.head.ref}}
+          repository: ${{github.event.pull_request.head.repo.full_name}}
+
+      - name: Get release version string
+        run: |
+          echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+          echo "short=$(./bin/buildinfo.py short)" >> $GITHUB_OUTPUT
+        id: version
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: firmware-debian-${{ steps.version.outputs.long }}-src.zip
+          merge-multiple: true
+
+      # - name: Install deps
+      #   shell: bash
+      #   run: |
+      #     sudo apt-get update -y --fix-missing
+      #     sudo apt-get install -y dput
+
+      - name: Display structure of downloaded files
+        run: ls -R
+
+      - name: Publish PPA
+        if: ${{ github.event_name != 'pull_request_target' && github.event_name != 'pull_request' }}
+        uses: yuezk/publish-ppa-package@v2
+        with:
+            # See https://launchpad.net/~meshtastic/+archive/ubuntu/meshtastic-daily
+            repository: "meshtastic/meshtastic-daily"
+            gpg_private_key: ${{ secrets.PPA_GPG_PRIVATE_KEY }}
+            tarball: "meshtasticd_${{ steps.version.outputs.short }}.tar.xz"
+            # Supported Ubuntu versions
+            series: "plucky oracular noble jammy"
+            deb_email: "github-actions[bot]@users.noreply.github.com"
+            deb_fullname: "github-actions[bot]"
