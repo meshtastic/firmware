@@ -1,6 +1,10 @@
 name: Build Debian Source Package
 
-on: workflow_call
+on:
+  workflow_call:
+    secrets:
+      PPA_GPG_PRIVATE_KEY:
+        required: true
 
 permissions:
   contents: write

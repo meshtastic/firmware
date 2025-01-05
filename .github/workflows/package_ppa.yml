@@ -2,6 +2,9 @@ name: Package Launchpad PPA
 
 on:
   workflow_call:
+    secrets:
+      PPA_GPG_PRIVATE_KEY:
+        required: true
   workflow_dispatch:
 
 permissions:
@@ -11,6 +14,7 @@ permissions:
 jobs:
   build-debian-src:
     uses: ./.github/workflows/build_debian_src.yml
+    secrets: inherit
 
   package-ppa:
     runs-on: ubuntu-24.04
