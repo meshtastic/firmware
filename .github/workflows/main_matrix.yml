@@ -128,6 +128,9 @@ jobs:
     with:
       board: ${{ matrix.board }}
 
+  package-ppa:
+    uses: ./.github/workflows/package_ppa.yml
+
   package-raspbian:
     uses: ./.github/workflows/package_raspbian.yml
 
@@ -332,12 +335,17 @@ jobs:
         run: >-
           bin/bump_version.py
 
+      - name: Update debian changelog
+        run: >-
+          debian/ci_changelog.sh
+
       - name: Create version.properties pull request
         uses: peter-evans/create-pull-request@v7
         with:
           title: Bump version.properties
           add-paths: |
             version.properties
+            debian/changelog
 
   release-firmware:
     strategy:
