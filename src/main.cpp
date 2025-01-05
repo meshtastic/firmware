@@ -863,24 +863,22 @@ void setup()
       }
     };
     for (auto& loraModule : loraModules) {
-        if (settingsMap[loraModule.cfgName]) {
-            if (!rIf) {
-                LOG_DEBUG("Activate %s radio on SPI port %s", loraModule.strName, settingsStrings[spidev].c_str());
-                if (loraModule.ch341halsupport
-                  && settingsStrings[spidev] == "ch341") {
-                    RadioLibHAL = ch341Hal;
-                } else {
-                    RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
-                }
-                rIf = loraModuleInterface(loraModule.cfgName, (LockingArduinoHal *)RadioLibHAL, settingsMap[cs_pin], settingsMap[irq_pin], settingsMap[reset_pin], settingsMap[busy_pin]);
-                if (!rIf->init()) {
-                    LOG_WARN("No %s radio", loraModule.strName);
-                    delete rIf;
-                    rIf = NULL;
-                    exit(EXIT_FAILURE);
-                } else {
-                    LOG_INFO("%s init success", loraModule.strName);
-                }
+        if (settingsMap[loraModule.cfgName] && !rIf) {
+            LOG_DEBUG("Activate %s radio on SPI port %s", loraModule.strName, settingsStrings[spidev].c_str());
+            if (loraModule.ch341halsupport
+              && settingsStrings[spidev] == "ch341") {
+                RadioLibHAL = ch341Hal;
+            } else {
+                RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
+            }
+            rIf = loraModuleInterface(loraModule.cfgName, (LockingArduinoHal *)RadioLibHAL, settingsMap[cs_pin], settingsMap[irq_pin], settingsMap[reset_pin], settingsMap[busy_pin]);
+            if (!rIf->init()) {
+                LOG_WARN("No %s radio", loraModule.strName);
+                delete rIf;
+                rIf = NULL;
+                exit(EXIT_FAILURE);
+            } else {
+                LOG_INFO("%s init success", loraModule.strName);
             }
         }
     }
