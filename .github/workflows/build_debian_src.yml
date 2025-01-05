@@ -5,6 +5,11 @@ on:
     secrets:
       PPA_GPG_PRIVATE_KEY:
         required: true
+    inputs:
+      series:
+        description: 'Ubuntu series to target'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -42,7 +47,9 @@ jobs:
         working-directory: meshtasticd
         run: debian/ci_pack_sdeb.sh
         env:
+          SERIES: ${{ inputs.series }}
           GPG_KEY_ID: ${{ steps.gpg.outputs.keyid }}
+          REVISION: ${{ github.sha }}
 
       - name: Get release version string
         working-directory: meshtasticd
@@ -54,7 +61,7 @@ jobs:
       - name: Store binaries as an artifact
         uses: actions/upload-artifact@v4
         with:
-          name: firmware-debian-${{ steps.version.outputs.long }}-src
+          name: firmware-debian-${{ steps.version.outputs.long }}-${{ inputs.series }}-src
           overwrite: true
           path: |
             meshtasticd_${{ steps.version.outputs.short }}*

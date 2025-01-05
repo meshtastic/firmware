@@ -5,6 +5,11 @@ on:
     secrets:
       PPA_GPG_PRIVATE_KEY:
         required: true
+    inputs:
+      series:
+        description: 'Ubuntu series to target'
+        required: true
+        type: string
   workflow_dispatch:
 
 permissions:
@@ -15,6 +20,8 @@ jobs:
   build-debian-src:
     uses: ./.github/workflows/build_debian_src.yml
     secrets: inherit
+    with:
+      series: ${{ inputs.series }}
 
   package-ppa:
     runs-on: ubuntu-24.04
@@ -50,11 +57,11 @@ jobs:
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          name: firmware-debian-${{ steps.version.outputs.long }}-src
+          name: firmware-debian-${{ steps.version.outputs.long }}-${{ inputs.series }}-src
           merge-multiple: true
 
       - name: Display structure of downloaded files
-        run: ls -R
+        run: ls -lah
 
       - name: Publish with dput
         if: ${{ github.event_name != 'pull_request_target' && github.event_name != 'pull_request' }}
