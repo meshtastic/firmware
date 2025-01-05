@@ -27,8 +27,16 @@ jobs:
             platformio python3-protobuf python3-grpcio \
             libyaml-cpp-dev libgpiod-dev libbluetooth-dev libusb-1.0-0-dev libi2c-dev
 
+      - name: Import GPG key
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ secrets.PPA_GPG_PRIVATE_KEY }}
+        id: gpg
+
       - name: Fetch libdeps, package debian source
         run: debian/ci_pack_sdeb.sh
+        env:
+          GPG_KEY_ID: ${{ steps.gpg.outputs.keyid }}
 
       - name: Get release version string
         run: |
