@@ -12,22 +12,22 @@
 #include "configuration.h"
 
 #ifdef HAS_SDCARD
-    #include <SD.h>
-    #include <SPI.h>
-    #ifdef SDCARD_USE_SPI1
-        #ifdef ARCH_ESP32
-            SPIClass SPI1(HSPI);
-        #endif //ARCH_ESP32
-        #ifdef ARCH_NRF52
-            #define SDCARD_SPI SPI1
-        #endif //NRF52
-        #define SDHandler SPI1  //only used for esp32
-    #else
-        #ifdef ARCH_NRF52
-            #define SDCARD_SPI SPI
-        #endif //NRF52
-        #define SDHandler SPI   //only used for esp32
-    #endif //SDCARD_USE_SPI1
+#include <SD.h>
+#include <SPI.h>
+#ifdef SDCARD_USE_SPI1
+#ifdef ARCH_ESP32
+SPIClass SPI1(HSPI);
+#endif // ARCH_ESP32
+#ifdef ARCH_NRF52
+#define SDCARD_SPI SPI1
+#endif                 // NRF52
+#define SDHandler SPI1 // only used for esp32
+#else
+#ifdef ARCH_NRF52
+#define SDCARD_SPI SPI
+#endif                // NRF52
+#define SDHandler SPI // only used for esp32
+#endif                // SDCARD_USE_SPI1
 
 #endif // HAS_SDCARD
 
@@ -53,7 +53,7 @@ void OSFS::writeNBytes(uint16_t address, unsigned int num, const byte *input)
         input++;
     }
 }
-#endif  //ARCH_STM32WL
+#endif // ARCH_STM32WL
 
 bool lfs_assert_failed =
     false; // Note: we use this global on all platforms, though it can only be set true on nrf52 (in our modified lfs_util.h)
@@ -363,36 +363,36 @@ void fsInit()
 void setupSDCard()
 {
 #ifdef HAS_SDCARD
-    #if (defined(ARCH_ESP32) || defined(ARCH_NRF52))
-        #if(defined(ARCH_ESP32))
-        SDHandler.begin(SPI_SCK, SPI_MISO, SPI_MOSI);
-        #endif
-        if (!SD.begin(SDCARD_CS, SDHandler)) {      //param SDHandler only used for esp32
-            LOG_DEBUG("No SD_MMC card detected");
-            return;
-        }
-        uint8_t cardType = SD.cardType();
-        if (cardType == CARD_NONE) {
-            LOG_DEBUG("No SD_MMC card attached");
-            return;
-        }
-        LOG_DEBUG("SD_MMC Card Type: ");
-        if (cardType == CARD_MMC) {
-            LOG_DEBUG("MMC");
-        } else if (cardType == CARD_SD) {
-            LOG_DEBUG("SDSC");
-        } else if (cardType == CARD_SDHC) {
-            LOG_DEBUG("SDHC");
-        } else {
-            LOG_DEBUG("UNKNOWN");
-        }
+#if (defined(ARCH_ESP32) || defined(ARCH_NRF52))
+#if (defined(ARCH_ESP32))
+    SDHandler.begin(SPI_SCK, SPI_MISO, SPI_MOSI);
+#endif
+    if (!SD.begin(SDCARD_CS, SDHandler)) { // param SDHandler only used for esp32
+        LOG_DEBUG("No SD_MMC card detected");
+        return;
+    }
+    uint8_t cardType = SD.cardType();
+    if (cardType == CARD_NONE) {
+        LOG_DEBUG("No SD_MMC card attached");
+        return;
+    }
+    LOG_DEBUG("SD_MMC Card Type: ");
+    if (cardType == CARD_MMC) {
+        LOG_DEBUG("MMC");
+    } else if (cardType == CARD_SD) {
+        LOG_DEBUG("SDSC");
+    } else if (cardType == CARD_SDHC) {
+        LOG_DEBUG("SDHC");
+    } else {
+        LOG_DEBUG("UNKNOWN");
+    }
 
-        uint64_t cardSize = SD.cardSize() / (1024 * 1024);
-        LOG_DEBUG("SD Card Size: %lu MB", (uint32_t)cardSize);
-        LOG_DEBUG("Total space: %lu MB", (uint32_t)(SD.totalBytes() / (1024 * 1024)));
-        #if(defined(ARCH_ESP32))    //not implemented in arduino sd library
-        //LOG_DEBUG("Used space: %lu MB", (uint32_t)(SD.usedBytes() / (1024 * 1024)));
-        #endif
-    #endif
+    uint64_t cardSize = SD.cardSize() / (1024 * 1024);
+    LOG_DEBUG("SD Card Size: %lu MB", (uint32_t)cardSize);
+    LOG_DEBUG("Total space: %lu MB", (uint32_t)(SD.totalBytes() / (1024 * 1024)));
+#if (defined(ARCH_ESP32)) // not implemented in arduino sd library
+// LOG_DEBUG("Used space: %lu MB", (uint32_t)(SD.usedBytes() / (1024 * 1024)));
+#endif
+#endif
 #endif
 }
