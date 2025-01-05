@@ -10,6 +10,7 @@ def readProps(prefsLoc):
     version = dict(config.items("VERSION"))
     verObj = dict(
         short="{}.{}.{}".format(version["major"], version["minor"], version["build"]),
+        deb="unset",
         long="unset",
     )
 
@@ -27,13 +28,13 @@ def readProps(prefsLoc):
         # if isDirty:
         #     # short for 'dirty', we want to keep our verstrings source for protobuf reasons
         #     suffix = sha + "-d"
-        verObj["long"] = "{}.{}.{}.{}".format(
-            version["major"], version["minor"], version["build"], suffix
-        )
+        verObj["long"] = "{}.{}".format(verObj["short"], suffix)
+        verObj["deb"] = "{}-ppa{}".format(verObj["short"], sha)
     except:
         # print("Unexpected error:", sys.exc_info()[0])
         # traceback.print_exc()
         verObj["long"] = verObj["short"]
+        verObj["deb"] = "{}-ppa".format(verObj["short"])
 
     # print("firmware version " + verStr)
     return verObj

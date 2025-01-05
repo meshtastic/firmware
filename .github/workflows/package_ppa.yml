@@ -50,14 +50,13 @@ jobs:
       - name: Get release version string
         working-directory: meshtasticd
         run: |
-          echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
-          echo "short=$(./bin/buildinfo.py short)" >> $GITHUB_OUTPUT
+          echo "deb=$(./bin/buildinfo.py deb)" >> $GITHUB_OUTPUT
         id: version
 
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          name: firmware-debian-${{ steps.version.outputs.long }}-${{ inputs.series }}-src
+          name: firmware-debian-${{ steps.version.outputs.deb }}~${{ inputs.series }}-src
           merge-multiple: true
 
       - name: Display structure of downloaded files
@@ -66,18 +65,4 @@ jobs:
       - name: Publish with dput
         if: ${{ github.event_name != 'pull_request_target' && github.event_name != 'pull_request' }}
         run: |
-          dput ppa:meshtastic/meshtastic-daily meshtasticd_${{ steps.version.outputs.short }}_source.changes
-
-      # - name: Publish PPA
-      #   if: ${{ github.event_name != 'pull_request_target' && github.event_name != 'pull_request' }}
-      #   uses: yuezk/publish-ppa-package@v2
-      #   with:
-      #       # See https://launchpad.net/~meshtastic/+archive/ubuntu/meshtastic-daily
-      #       repository: "meshtastic/meshtastic-daily"
-      #       gpg_private_key: ${{ secrets.PPA_GPG_PRIVATE_KEY }}
-      #       gpg_passphrase: ""
-      #       tarball: "meshtasticd_${{ steps.version.outputs.short }}.tar.xz"
-      #       deb_email: "github-actions[bot]@users.noreply.github.com"
-      #       deb_fullname: "github-actions[bot]"
-      #       # Supported Ubuntu versions
-      #       series: "plucky oracular noble jammy"
+          dput ppa:meshtastic/meshtastic-daily meshtasticd_${{ steps.version.outputs.deb }}~${{ inputs.series }}_source.changes
