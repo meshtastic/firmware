@@ -1,5 +1,5 @@
 #!/usr/bin/bash
-export DEBEMAIL="github-actions[bot]@users.noreply.github.com"
+export DEBEMAIL="jbennett@incomsystems.biz"
 export PLATFORMIO_LIBDEPS_DIR=pio/libdeps
 export PLATFORMIO_PACKAGES_DIR=pio/packages
 
