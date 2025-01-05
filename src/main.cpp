@@ -613,6 +613,9 @@ void setup()
     i2cScanner.reset();
 #endif
 
+    // Init our SPI controller (must be before screen and lora)
+    initSPI();
+
 #ifdef HAS_SDCARD
     setupSDCard();
 #endif
@@ -704,7 +707,6 @@ void setup()
     drv.setMode(DRV2605_MODE_INTTRIG);
 #endif
 
-    // Init our SPI controller (must be before screen and lora)
 #ifdef ARCH_RP2040
 #ifdef HW_SPI1_DEVICE
     SPI1.setSCK(LORA_SCK);

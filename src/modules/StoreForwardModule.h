@@ -10,6 +10,7 @@
 #include <unordered_map>
 
 #ifdef HAS_SDCARD
+#include "SPILock.h"
 #include <SD.h>
 #endif
 

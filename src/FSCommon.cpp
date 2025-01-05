@@ -13,8 +13,10 @@
 #include "configuration.h"
 
 #ifdef HAS_SDCARD
+#include "SPILock.h"
 #include <SD.h>
 #include <SPI.h>
+#ifndef SDCARD_USE_HSPI // old ESP32
 #ifdef SDCARD_USE_SPI1
 #ifdef ARCH_ESP32
 SPIClass SPI1(HSPI);
@@ -29,7 +31,9 @@ SPIClass SPI1(HSPI);
 #endif                // NRF52
 #define SDHandler SPI // only used for esp32
 #endif                // SDCARD_USE_SPI1
-
+#else
+SPIClass SDHandler = SPIClass(HSPI);
+#endif
 #endif // HAS_SDCARD
 
 #if defined(ARCH_STM32WL)
@@ -379,10 +383,10 @@ void fsInit()
 void setupSDCard()
 {
 #ifdef HAS_SDCARD
-concurrency::LockGuard g(spiLock);
+    concurrency::LockGuard g(spiLock);
 #if (defined(ARCH_ESP32) || defined(ARCH_NRF52))
 #if (defined(ARCH_ESP32))
-        SDHandler.begin(SPI_SCK, SPI_MISO, SPI_MOSI);
+    SDHandler.begin(SPI_SCK, SPI_MISO, SPI_MOSI);
 #endif
     if (!SD.begin(SDCARD_CS, SDHandler)) { // param SDHandler only used for esp32
         LOG_DEBUG("No SD_MMC card detected");

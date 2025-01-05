@@ -99,6 +99,7 @@ void StoreForwardModule::populateSDCard()
 {
 #if defined(HAS_SDCARD)
 #if (defined(ARCH_ESP32) || defined(ARCH_NRF52))
+    spiLock->lock();
     if (SD.cardType() != CARD_NONE) {
         if (!SD.exists("/storeforward")) {
             LOG_INFO("Creating StoreForward directory");
@@ -110,6 +111,7 @@ void StoreForwardModule::populateSDCard()
         this->packetHistory = (PacketHistoryStruct *)malloc(sizeof(PacketHistoryStruct));
         LOG_DEBUG("numberOfPackets for packetHistory - %u", numberOfPackets);
     }
+    spiLock->unlock();
 #endif // ARCH_ESP32 || ARCH_NRF52
 #endif // HAS_SDCARD
 }
@@ -169,6 +171,7 @@ uint32_t StoreForwardModule::getNumAvailablePackets(NodeNum dest, uint32_t last_
         } else if (this->storageType == StorageType::ST_SDCARD) {
 #if defined(HAS_SDCARD)
 #if defined(ARCH_ESP32) || defined(ARCH_NRF52)
+            spiLock->lock();
             auto handler = SD.open("/storeforward/" + String(i), FILE_READ);
             if (handler) {
                 handler.read((uint8_t *)&this->packetHistory[0], sizeof(PacketHistoryStruct));
@@ -181,6 +184,7 @@ uint32_t StoreForwardModule::getNumAvailablePackets(NodeNum dest, uint32_t last_
                     }
                 }
             }
+            spiLock->unlock();
 #endif
 #endif
         } else {
@@ -262,9 +266,11 @@ void StoreForwardModule::historyAdd(const meshtastic_MeshPacket &mp)
         this->packetHistory[0].emoji = (bool)p.emoji;
         this->packetHistory[0].payload_size = p.payload.size;
         memcpy(this->packetHistory[0].payload, p.payload.bytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
+        spiLock->lock();
         auto handler = SD.open("/storeforward/" + String(this->packetHistoryTotalCount), FILE_WRITE);
         handler.write((uint8_t *)&this->packetHistory, sizeof(PacketHistoryStruct));
         handler.close();
+        spiLock->unlock();
 #endif
 #endif
     } else {
@@ -353,10 +359,12 @@ meshtastic_MeshPacket *StoreForwardModule::preparePayload(NodeNum dest, uint32_t
         } else if (this->storageType == StorageType::ST_SDCARD) {
 #if defined(HAS_SDCARD)
 #if defined(ARCH_ESP32) || defined(ARCH_NRF52)
+            spiLock->lock();
             auto handler = SD.open("/storeforward/" + String(i), FILE_READ);
             if (handler) {
                 handler.read((uint8_t *)&this->packetHistory[0], sizeof(PacketHistoryStruct));
                 handler.close();
+                spiLock->unlock();
                 if (this->packetHistory[0].time && (this->packetHistory[0].time > last_time)) {
                     if (this->packetHistory[0].from != dest &&
                         (this->packetHistory[0].to == NODENUM_BROADCAST || this->packetHistory[0].to == dest)) {
@@ -395,6 +403,8 @@ meshtastic_MeshPacket *StoreForwardModule::preparePayload(NodeNum dest, uint32_t
                         return p;
                     }
                 }
+            } else {
+                spiLock->unlock();
             }
 #endif
 #endif
@@ -735,11 +745,12 @@ StoreForwardModule::StoreForwardModule()
             }
 #ifdef HAS_SDCARD
             // If we have an SDCARD, format it for store&forward use
-            this->populateSDCard();
-            LOG_INFO("S&F: SDCARD initialized");
-            is_server = true;
+            if (SD.cardType() != CARD_NONE) {
+                this->populateSDCard();
+                LOG_INFO("S&F: SDCARD initialized");
+                is_server = true;
+            }
 #endif
-
             // Client
         } else {
             is_client = true;
