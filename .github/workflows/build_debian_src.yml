@@ -24,13 +24,13 @@ jobs:
 
       - name: Install deps
         shell: bash
+        working-directory: meshtasticd
         run: |
           sudo apt-get update -y --fix-missing
           sudo apt-get install -y software-properties-common
           sudo add-apt-repository ppa:meshtastic/meshtastic-daily -y
-          sudo apt-get install -y build-essential devscripts equivs \
-            platformio python3-protobuf python3-grpcio \
-            libyaml-cpp-dev libgpiod-dev libbluetooth-dev libusb-1.0-0-dev libi2c-dev
+          sudo apt-get install -y build-essential devscripts equivs
+          sudo mk-build-deps --install --remove --tool='apt-get -o Debug::pkgProblemResolver=yes --no-install-recommends --yes' debian/control
 
       - name: Import GPG key
         uses: crazy-max/ghaction-import-gpg@v6
@@ -54,7 +54,7 @@ jobs:
       - name: Store binaries as an artifact
         uses: actions/upload-artifact@v4
         with:
-          name: firmware-debian-${{ steps.version.outputs.long }}-src.zip
+          name: firmware-debian-${{ steps.version.outputs.long }}-src
           overwrite: true
           path: |
             meshtasticd_${{ steps.version.outputs.short }}*
