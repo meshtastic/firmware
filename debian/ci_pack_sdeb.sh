@@ -9,6 +9,7 @@ platformio pkg install -e native
 package=$(dpkg-parsechangelog --show-field Source)
 pkg_version=$(dpkg-parsechangelog --show-field Version | cut -d- -f1)
 
+rm -rf debian/changelog
 dch --create --distribution $SERIES --package $package --newversion $pkg_version-ppa${REVISION::7}~$SERIES \
 	"GitHub Actions Automatic packaging for $SERIES"
 
