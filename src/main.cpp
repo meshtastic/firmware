@@ -835,7 +835,8 @@ void setup()
       { use_sx1280, "sx1280", false },
       { use_lr1110, "lr1110", false },
       { use_lr1120, "lr1120", false },
-      { use_lr1121, "lr1121", false }
+      { use_lr1121, "lr1121", false },
+      { use_llcc68, "LLCC68", false }
     };
     // as one can't use a function pointer to the class constructor:
     auto loraModuleInterface = [](configNames cfgName, LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE busy) {
@@ -854,6 +855,8 @@ void setup()
         return (RadioInterface*)new LR1120Interface(hal, cs, irq, rst, busy);
       case use_lr1121:
         return (RadioInterface*)new LR1121Interface(hal, cs, irq, rst, busy);
+      case use_llcc68:
+        return (RadioInterface*)new LLCC68Interface(hal, cs, irq, rst, busy);
       default:
         assert(0); // shouldn't happen
         return (RadioInterface*)nullptr;

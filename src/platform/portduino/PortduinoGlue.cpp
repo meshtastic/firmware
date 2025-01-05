@@ -367,7 +367,8 @@ bool loadConfig(const char *configPath)
                 { use_sx1280, "sx1280" },
                 { use_lr1110, "lr1110" },
                 { use_lr1120, "lr1120" },
-                { use_lr1121, "lr1121" }
+                { use_lr1121, "lr1121" },
+                { use_llcc68, "LLCC68" }
             };
             for (auto& loraModule : loraModules) {
                 settingsMap[loraModule.cfgName] = false;

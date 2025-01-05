@@ -36,6 +36,7 @@ enum configNames {
     use_lr1110,
     use_lr1120,
     use_lr1121,
+    use_llcc68,
     lora_usb_serial_num,
     lora_usb_pid,
     lora_usb_vid,
