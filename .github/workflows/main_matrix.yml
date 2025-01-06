@@ -128,16 +128,6 @@ jobs:
     with:
       board: ${{ matrix.board }}
 
-  package-ppa:
-    strategy:
-      fail-fast: false
-      matrix:
-        series: [plucky, oracular, noble, jammy]
-    uses: ./.github/workflows/package_ppa.yml
-    with:
-      series: ${{ matrix.series }}
-    secrets: inherit
-
   package-raspbian:
     uses: ./.github/workflows/package_raspbian.yml
 
