@@ -895,6 +895,22 @@ std::vector<NodeNum> NodeDB::getDistinctRecentDirectNeighborIds(uint32_t timeWin
     return recentNeighbors;
 }
 
+uint32_t NodeDB::secondsSinceLastNodeHeard()
+{
+    // If maxLastHeard_ == 0, we have not heard from any remote node
+    if (maxLastHeard_ == 0) {
+        return UINT32_MAX;
+    }
+
+    uint32_t now = getTime();
+    // If the clock isn’t set or has jumped backwards, clamp to 0
+    if (now < maxLastHeard_) {
+        return 0;
+    }
+
+    return (now - maxLastHeard_);
+}
+
 void NodeDB::cleanupMeshDB()
 {
     int newPos = 0, removed = 0;
@@ -907,6 +923,14 @@ void NodeDB::cleanupMeshDB()
             }
             meshNodes->at(newPos++) = meshNodes->at(i);
         } else {
+            // Check if this unknown node is a direct neighbor (hops_away == 0)
+            if (meshNodes->at(i).has_hops_away && meshNodes->at(i).hops_away == 0) {
+                // ADD for unknown coverage:
+                // If this node doesn't have user data, we consider it "unknown"
+                // and add it to the unknownCoverage_ filter:
+                unknownCoverage_.add(meshNodes->at(i).num);
+            }
+
             removed++;
         }
     }
@@ -1483,8 +1507,12 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
             return;
         }
 
-        if (mp.rx_time) // if the packet has a valid timestamp use it to update our last_heard
+        if (mp.rx_time) { // if the packet has a valid timestamp use it to update our last_heard
             info->last_heard = mp.rx_time;
+            if (info->last_heard > maxLastHeard_) {
+                maxLastHeard_ = info->last_heard;
+            }
+        }
 
         if (mp.rx_snr)
             info->snr = mp.rx_snr; // keep the most recent SNR we received for this node.

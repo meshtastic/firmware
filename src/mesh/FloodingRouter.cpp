@@ -76,7 +76,10 @@ bool FloodingRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
                 CoverageFilter incomingCoverage;
                 loadCoverageFilterFromPacket(p, incomingCoverage);
 
-                float forwardProb = calculateForwardProbability(incomingCoverage, p->from);
+                CoverageFilter updatedCoverage = incomingCoverage;
+                mergeMyCoverage(updatedCoverage);
+
+                float forwardProb = calculateForwardProbability(incomingCoverage, updatedCoverage, p->from);
 
                 float rnd = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
                 if (rnd <= forwardProb) {
@@ -92,8 +95,6 @@ bool FloodingRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
                     }
 #endif
 
-                    CoverageFilter updatedCoverage = incomingCoverage;
-                    mergeMyCoverage(updatedCoverage);
                     storeCoverageFilterInPacket(updatedCoverage, tosend);
 
                     LOG_INFO("Rebroadcasting packet ID=0x%x with ForwardProb=%.2f", p->id, forwardProb);
@@ -155,9 +156,12 @@ void FloodingRouter::mergeMyCoverage(CoverageFilter &coverage)
     for (auto &nodeId : recentNeighbors) {
         coverage.add(nodeId);
     }
+
+    // Always add ourselves to prevent a rebroadcast for a packet we've already seen
+    coverage.add(nodeDB->getNodeNum());
 }
 
-float FloodingRouter::calculateForwardProbability(const CoverageFilter &incoming, NodeNum from)
+float FloodingRouter::calculateForwardProbability(const CoverageFilter &incoming, const CoverageFilter &updated, NodeNum from)
 {
 #ifdef USERPREFS_USE_COVERAGE_FILTER
     bool useCoverageFilter = USERPREFS_USE_COVERAGE_FILTER;
@@ -165,8 +169,10 @@ float FloodingRouter::calculateForwardProbability(const CoverageFilter &incoming
         return 1.0f;
 #endif
     // If we are a router or repeater, always forward because it's assumed these are in the most advantageous locations
+    // or if we haven't heard from any other nodes within the stale coverage time
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
-        config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
+        config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER ||
+        nodeDB->secondsSinceLastNodeHeard() >= STALE_COVERAGE_SECONDS) {
         return 1.0f;
     }
 
@@ -200,31 +206,21 @@ float FloodingRouter::calculateForwardProbability(const CoverageFilter &incoming
     if (neighbors > 0) {
         coverageRatio = static_cast<float>(uncovered) / static_cast<float>(neighbors);
     }
-    float forwardProb = BASE_FORWARD_PROB;
 
-    /* BEGIN OPTION 1: forward probability is based on coverage ratio and scales up or down
-     *           depending on the extent to which this node provides new coverage
-     */
-    /* END OPTION 1 */
-    forwardProb = BASE_FORWARD_PROB + (coverageRatio * COVERAGE_SCALE_FACTOR);
+    // Compare our unknown node coverage filter to our updated coverage filter
+    // We use the updated coverage filter because we don't want to double count nodes
+    // that have already made it into the main in memory nodedb storage mechanism
+    float unknownNodeCoverageRatio = nodeDB->getUnknownCoverage().approximateCoverageRatio(updated);
 
-    /* BEGIN OPTION 2: forward probability is piecewise logic:
-     *          - Reduce to BASE_FORWARD_PROB if no new coverage is likely
-     *              (remember false positive rate of bloom filter means a node that think its neighbor is covered when it isnt)
-     *          - If 1 uncovered neighbor, ramp probability up significantly to 0.8
-     *          - If more than 1 uncovered neighbor, ramp probability up to 1.0
-     * if (uncovered == 1) {
-     *     forwardProb = 0.8f;
-     * } else if (uncovered > 1) {
-     *     forwardProb = 1.0f;
-     * }
-     */
-    /* END OPTION 2 */
+    // unknownNodeCoverageRatio is inherently iffy so don't scale up its contribution to the probability of rebroadcast
+    // This essentially makes the forward probability non-zero for nodes that have a set of "unknown" neighbors
+    float forwardProb = BASE_FORWARD_PROB + (coverageRatio * COVERAGE_SCALE_FACTOR) + unknownNodeCoverageRatio;
 
     // Clamp probability between 0 and 1
     forwardProb = std::min(std::max(forwardProb, 0.0f), 1.0f);
 
-    LOG_DEBUG("CoverageRatio=%.2f, ForwardProb=%.2f (Uncovered=%d, Total=%zu)", coverageRatio, forwardProb, uncovered, neighbors);
+    LOG_DEBUG("CoverageRatio=%.2f, UnknownNodeCoverageRatio=%.2f, ForwardProb=%.2f (Uncovered=%d, Total=%zu)", coverageRatio,
+              unknownNodeCoverageRatio, forwardProb, uncovered, neighbors);
 
     return forwardProb;
 }

@@ -1,3 +1,5 @@
+#pragma once
+
 #include "MeshTypes.h"
 #include <array>
 #include <cstddef>

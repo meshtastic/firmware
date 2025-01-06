@@ -43,14 +43,14 @@ enum RxSource {
 // Maximum number of neighbors a node adds to the Bloom filter per hop
 #define MAX_NEIGHBORS_PER_HOP 20
 
+// Number of seconds after which coverage is considered stale
+#define STALE_COVERAGE_SECONDS 60 * 60 * 0.5 // 1 hour
+
 // Size of the Bloom filter in bytes (128 bits)
 #define BLOOM_FILTER_SIZE_BYTES 16
 
 // Size of the Bloom filter in bits (128 bits)
 #define BLOOM_FILTER_SIZE_BITS (BLOOM_FILTER_SIZE_BYTES * 8)
-
-// Number of hash functions to use in the Bloom filter
-#define NUM_HASH_FUNCTIONS 2
 
 // Base forwarding probability - never drop below this value
 // 0.2 could be suitable because the worst case False Positive Rate of the
@@ -63,6 +63,12 @@ enum RxSource {
 // Recency threshold in minutes
 // Currently set to 1 hour because that is the minimum interval for nodeinfo broadcasts
 #define RECENCY_THRESHOLD_MINUTES 60
+
+#define NUM_UNKNOWN_NODE_COUNTERS 64
+
+#define BITS_PER_UNKNOWN_NODE_COUNTER 4
+
+#define BLOOM_HASH_FUNCTIONS 2
 
 typedef int ErrorCode;
 

@@ -6,6 +6,7 @@
 #include <assert.h>
 #include <vector>
 
+#include "CountingCoverageFilter.h"
 #include "MeshTypes.h"
 #include "NodeStatus.h"
 #include "configuration.h"
@@ -176,8 +177,15 @@ class NodeDB
      */
     std::vector<NodeNum> getDistinctRecentDirectNeighborIds(uint32_t timeWindowSecs);
 
+    uint32_t secondsSinceLastNodeHeard();
+
+    const CountingCoverageFilter &getUnknownCoverage() const { return unknownCoverage_; }
+
   private:
     uint32_t lastNodeDbSave = 0; // when we last saved our db to flash
+    uint32_t maxLastHeard_ = 0;  // the most recent last_heard value we've seen
+    CountingCoverageFilter unknownCoverage_;
+
     /// Find a node in our DB, create an empty NodeInfoLite if missing
     meshtastic_NodeInfoLite *getOrCreateMeshNode(NodeNum n);
 

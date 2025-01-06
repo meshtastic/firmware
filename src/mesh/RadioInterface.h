@@ -45,7 +45,7 @@ typedef struct {
     uint8_t relay_node;
 
     // A 16-byte Bloom filter that tracks coverage of the current node.
-    uint8_t coverage_filter[BLOOM_FILTER_SIZE_BYTES] __attribute__((__aligned));
+    uint8_t coverage_filter[BLOOM_FILTER_SIZE_BYTES] __attribute__((__aligned__));
 } PacketHeader;
 
 /**
