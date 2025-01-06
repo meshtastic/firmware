@@ -3,8 +3,9 @@ Section: misc
 Priority: optional
 Maintainer: Austin Lane <vidplace7@gmail.com>
 Build-Depends: debhelper-compat (= 13),
-               python3-pip,
-               python3-venv,
+               platformio,
+               python3-protobuf,
+               python3-grpcio,
                git,
                g++,
                pkg-config,
