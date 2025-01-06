@@ -132,6 +132,9 @@ int CountingCoverageFilter::approximateNewCoverageCount(const CoverageFilter &in
 
 float CountingCoverageFilter::approximateCoverageRatio(const CoverageFilter &incoming) const
 {
+    if (isStale())
+        return 0.0f;
+
     // 1) How many "new coverage" bits do we see?
     int newBits = approximateNewCoverageCount(incoming);
 
