@@ -48,10 +48,9 @@ class UdpMulticastThread : public concurrency::OSThread
         if (!mp || WiFi.status() != WL_CONNECTED) {
             return false;
         }
-        LOG_DEBUG("Broadcasting MeshPacket (id=%u)", mp->id);
+        LOG_DEBUG("Broadcasting packet over UDP (id=%u)", mp->id);
         uint8_t buffer[meshtastic_MeshPacket_size];
         size_t encodedLength = pb_encode_to_bytes(buffer, sizeof(buffer), &meshtastic_MeshPacket_msg, mp);
-        LOG_DEBUG("Encoded MeshPacket size: %u", encodedLength);
         udp.broadcastTo(buffer, encodedLength, UDP_MULTICAST_DEFAUL_PORT);
         return true;
     }
