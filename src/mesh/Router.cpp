@@ -274,6 +274,12 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
             abortSendAndNak(encodeResult, p);
             return encodeResult; // FIXME - this isn't a valid ErrorCode
         }
+#if HAS_UDP_MULTICAST
+        if (udpThread && isFromUs(p) &&
+            config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST) {
+            udpThread->onSend(const_cast<meshtastic_MeshPacket *>(p));
+        }
+#endif
 #if !MESHTASTIC_EXCLUDE_MQTT
         // Only publish to MQTT if we're the original transmitter of the packet
         if (moduleConfig.mqtt.enabled && isFromUs(p) && mqtt) {
@@ -624,6 +630,12 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
         // After potentially altering it, publish received message to MQTT if we're not the original transmitter of the packet
         if ((decoded || p_encrypted->pki_encrypted) && moduleConfig.mqtt.enabled && !isFromUs(p) && mqtt)
             mqtt->onSend(*p_encrypted, *p, p->channel);
+#endif
+#if HAS_UDP_MULTICAST
+        if ((decoded || p_encrypted->pki_encrypted) && !isFromUs(p) && udpThread &&
+            config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST) {
+            udpThread->onSend(const_cast<meshtastic_MeshPacket *>(p_encrypted));
+        }
 #endif
     }
 

@@ -114,6 +114,11 @@ AccelerometerThread *accelerometerThread = nullptr;
 AudioThread *audioThread = nullptr;
 #endif
 
+#ifdef HAS_UDP_MULTICAST
+#include "mesh/udp/UdpMulticastThread.h"
+UdpMulticastThread *udpThread = nullptr;
+#endif
+
 #if defined(TCXO_OPTIONAL)
 float tcxoVoltage = SX126X_DIO3_TCXO_VOLTAGE; // if TCXO is optional, put this here so it can be changed further down.
 #endif
@@ -782,6 +787,11 @@ void setup()
 #ifdef HAS_I2S
     LOG_DEBUG("Start audio thread");
     audioThread = new AudioThread();
+#endif
+
+#ifdef HAS_UDP_MULTICAST
+    LOG_DEBUG("Start multicast thread");
+    udpThread = new UdpMulticastThread();
 #endif
     service = new MeshService();
     service->init();
