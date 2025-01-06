@@ -261,7 +261,7 @@ uint8_t RadioInterface::getCWsize(float snr)
     const uint32_t SNR_MIN = -20;
 
     // The maximum value for a LoRa SNR
-    const uint32_t SNR_MAX = 10;
+    const uint32_t SNR_MAX = 15;
 
     return map(snr, SNR_MIN, SNR_MAX, CWmin, CWmax);
 }
@@ -566,7 +566,7 @@ void RadioInterface::applyModemConfig()
     saveChannelNum(channel_num);
     saveFreq(freq + loraConfig.frequency_offset);
 
-    slotTimeMsec = computeSlotTimeMsec();
+    slotTimeMsec = computeSlotTimeMsec(bw, sf);
     preambleTimeMsec = getPacketTime((uint32_t)0);
     maxPacketTimeMsec = getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader));
 
@@ -579,25 +579,6 @@ void RadioInterface::applyModemConfig()
     LOG_INFO("channel_num: %d", channel_num + 1);
     LOG_INFO("frequency: %f", getFreq());
     LOG_INFO("Slot time: %u msec", slotTimeMsec);
-}
-
-/** Slottime is the time to detect a transmission has started, consisting of:
-  - CAD duration;
-  - roundtrip air propagation time (assuming max. 30km between nodes);
-  - Tx/Rx turnaround time (maximum of SX126x and SX127x);
-  - MAC processing time (measured on T-beam) */
-uint32_t RadioInterface::computeSlotTimeMsec()
-{
-    float sumPropagationTurnaroundMACTime = 0.2 + 0.4 + 7; // in milliseconds
-    float symbolTime = pow(2, sf) / bw;                    // in milliseconds
-
-    if (myRegion->wideLora) {
-        // CAD duration derived from AN1200.22 of SX1280
-        return (NUM_SYM_CAD_24GHZ + (2 * sf + 3) / 32) * symbolTime + sumPropagationTurnaroundMACTime;
-    } else {
-        // CAD duration for SX127x is max. 2.25 symbols, for SX126x it is number of symbols + 0.5 symbol
-        return max(2.25, NUM_SYM_CAD + 0.5) * symbolTime + sumPropagationTurnaroundMACTime;
-    }
 }
 
 /**
