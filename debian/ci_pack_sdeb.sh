@@ -6,6 +6,7 @@ export PLATFORMIO_CORE_DIR=pio/core
 
 # Download libraries to `libdeps`
 platformio pkg install -e native
+tar -cf pio.tar pio/
 
 package=$(dpkg-parsechangelog --show-field Source)
 
