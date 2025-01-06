@@ -916,6 +916,9 @@ void NodeDB::cleanupMeshDB()
     int newPos = 0, removed = 0;
     for (int i = 0; i < numMeshNodes; i++) {
         if (meshNodes->at(i).has_user) {
+            if (meshNodes->at(i).last_heard > maxLastHeard_) {
+                maxLastHeard_ = meshNodes->at(i).last_heard;
+            }
             if (meshNodes->at(i).user.public_key.size > 0) {
                 if (memfll(meshNodes->at(i).user.public_key.bytes, 0, meshNodes->at(i).user.public_key.size)) {
                     meshNodes->at(i).user.public_key.size = 0;
