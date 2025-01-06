@@ -1,1 +1,2 @@
 extend-diff-ignore = "\.pio\w*?$"
+tar-ignore = ""
