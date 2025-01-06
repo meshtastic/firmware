@@ -336,7 +336,6 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     LOG_INFO("TCA9535 I2C expander found\n");
                 }
 #else
-                LOG_INFO("Found registry value 0x%x", registerValue);
                 type = TCA9535;
                 LOG_INFO("TCA9535 I2C expander found\n");
 #endif
