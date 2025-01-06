@@ -143,6 +143,9 @@ static int32_t reconnectWiFi()
         delay(5000);
 
         if (!WiFi.isConnected()) {
+            WiFi.mode(WIFI_MODE_NULL);
+            WiFi.useStaticBuffers(true);
+            WiFi.mode(WIFI_STA);
             WiFi.begin(wifiName, wifiPsw);
         }
         isReconnecting = false;
