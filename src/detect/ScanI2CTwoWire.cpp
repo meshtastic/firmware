@@ -313,7 +313,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 }
                 break;
 
-            case RAK12035VB_ADDR: // (0x20) can be RAK12023VB Soil Sensor or TCA9535 I2C expander
+            case RAK12035VB1_ADDR: // (0x20) can be RAK12023VB Soil Sensor or TCA9535 I2C expander
                                   // Check if it is a RAK12035, if not can assume it is a TCA9535 I2C expander
                                   // the check..
                                   //  - registry address to interrogate is 0x02,

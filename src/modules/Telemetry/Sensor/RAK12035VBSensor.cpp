@@ -14,7 +14,7 @@ int32_t RAK12035VBSensor::runOnce()
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
 
-    sensor.set_sensor_addr(RAK12035VB_ADDR);
+    sensor.set_sensor_addr(RAK12035VB1_ADDR);
 
     sensor.begin(nodeTelemetrySensorsMap[sensorType].first);
     // Get sensor firmware version
