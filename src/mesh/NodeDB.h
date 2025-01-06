@@ -6,7 +6,6 @@
 #include <assert.h>
 #include <vector>
 
-#include "CountingCoverageFilter.h"
 #include "MeshTypes.h"
 #include "NodeStatus.h"
 #include "configuration.h"
@@ -65,6 +64,7 @@ class NodeDB
 
   public:
     std::vector<meshtastic_NodeInfoLite> *meshNodes;
+    std::vector<meshtastic_NodeInfoLite> ephemeralNodes;
     bool updateGUI = false; // we think the gui should definitely be redrawn, screen will clear this once handled
     meshtastic_NodeInfoLite *updateGUIforNode = NULL; // if currently showing this node, we think you should update the GUI
     Observable<const meshtastic::NodeStatus *> newStatus;
@@ -175,16 +175,13 @@ class NodeDB
      * @param timeWindowSecs The time window in seconds to consider a node as "recently heard."
      * @return std::vector<NodeNum> A vector containing the NodeNums of recent direct neighbors.
      */
-    std::vector<NodeNum> getDistinctRecentDirectNeighborIds(uint32_t timeWindowSecs);
+    std::vector<NodeNum> getCoveredNodes(uint32_t timeWindowSecs);
 
     uint32_t secondsSinceLastNodeHeard();
-
-    const CountingCoverageFilter &getUnknownCoverage() const { return unknownCoverage_; }
 
   private:
     uint32_t lastNodeDbSave = 0; // when we last saved our db to flash
     uint32_t maxLastHeard_ = 0;  // the most recent last_heard value we've seen
-    CountingCoverageFilter unknownCoverage_;
 
     /// Find a node in our DB, create an empty NodeInfoLite if missing
     meshtastic_NodeInfoLite *getOrCreateMeshNode(NodeNum n);
@@ -213,6 +210,8 @@ class NodeDB
 
     bool saveChannelsToDisk();
     bool saveDeviceStateToDisk();
+
+    bool isValidCandidateForCoverage(const meshtastic_NodeInfoLite &node)
 };
 
 extern NodeDB *nodeDB;

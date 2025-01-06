@@ -152,7 +152,7 @@ void FloodingRouter::storeCoverageFilterInPacket(const CoverageFilter &filter, m
 void FloodingRouter::mergeMyCoverage(CoverageFilter &coverage)
 {
     // Retrieve recent direct neighbors within the time window
-    std::vector<NodeNum> recentNeighbors = nodeDB->getDistinctRecentDirectNeighborIds(RECENCY_THRESHOLD_MINUTES * 60);
+    std::vector<NodeNum> recentNeighbors = nodeDB->getCoveredNodes(RECENCY_THRESHOLD_MINUTES * 60);
     for (auto &nodeId : recentNeighbors) {
         coverage.add(nodeId);
     }
@@ -177,7 +177,7 @@ float FloodingRouter::calculateForwardProbability(const CoverageFilter &incoming
     }
 
     // Retrieve recent direct neighbors within the time window
-    std::vector<NodeNum> recentNeighbors = nodeDB->getDistinctRecentDirectNeighborIds(RECENCY_THRESHOLD_MINUTES * 60);
+    std::vector<NodeNum> recentNeighbors = nodeDB->getCoveredNodes(RECENCY_THRESHOLD_MINUTES * 60);
 
     if (recentNeighbors.empty()) {
         // No neighbors to add coverage for
@@ -207,20 +207,14 @@ float FloodingRouter::calculateForwardProbability(const CoverageFilter &incoming
         coverageRatio = static_cast<float>(uncovered) / static_cast<float>(neighbors);
     }
 
-    // Compare our unknown node coverage filter to our updated coverage filter
-    // We use the updated coverage filter because we don't want to double count nodes
-    // that have already made it into the main in memory nodedb storage mechanism
-    float unknownNodeCoverageRatio = nodeDB->getUnknownCoverage().approximateCoverageRatio(updated);
-
     // unknownNodeCoverageRatio is inherently iffy so don't scale up its contribution to the probability of rebroadcast
     // This essentially makes the forward probability non-zero for nodes that have a set of "unknown" neighbors
-    float forwardProb = BASE_FORWARD_PROB + (coverageRatio * COVERAGE_SCALE_FACTOR) + unknownNodeCoverageRatio;
+    float forwardProb = BASE_FORWARD_PROB + (coverageRatio * COVERAGE_SCALE_FACTOR);
 
     // Clamp probability between 0 and 1
     forwardProb = std::min(std::max(forwardProb, 0.0f), 1.0f);
 
-    LOG_DEBUG("CoverageRatio=%.2f, UnknownNodeCoverageRatio=%.2f, ForwardProb=%.2f (Uncovered=%d, Total=%zu)", coverageRatio,
-              unknownNodeCoverageRatio, forwardProb, uncovered, neighbors);
+    LOG_DEBUG("CoverageRatio=%.2f, ForwardProb=%.2f (Uncovered=%d, Total=%zu)", coverageRatio, forwardProb, uncovered, neighbors);
 
     return forwardProb;
 }

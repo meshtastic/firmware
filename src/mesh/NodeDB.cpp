@@ -819,6 +819,31 @@ void NodeDB::clearLocalPosition()
     setLocalPosition(meshtastic_Position_init_default);
 }
 
+bool NodeDB::isValidCandidateForCoverage(const meshtastic_NodeInfoLite &node)
+{
+    // 1) Exclude self
+    if (node.num == getNodeNum()) {
+        return false;
+    }
+    // 2) Exclude ignored
+    if (node.is_ignored) {
+        return false;
+    }
+    // 3) Exclude nodes that aren't direct neighbors
+    if (!node.has_hops_away || node.hops_away != 0) {
+        return false;
+    }
+    // 4) Exclude MQTT-based nodes if desired
+    if (node.via_mqtt) {
+        return false;
+    }
+    // 5) Must have last_heard
+    if (node.last_heard == 0) {
+        return false;
+    }
+    return true; // If we pass all checks, it's valid
+}
+
 /**
  * @brief Retrieves a list of distinct recent direct neighbor NodeNums.
  *
@@ -832,66 +857,71 @@ void NodeDB::clearLocalPosition()
  * @param timeWindowSecs The time window in seconds to consider a node as "recently heard."
  * @return std::vector<NodeNum> A vector containing the NodeNums of recent direct neighbors.
  */
-std::vector<NodeNum> NodeDB::getDistinctRecentDirectNeighborIds(uint32_t timeWindowSecs)
+std::vector<NodeNum> NodeDB::getCoveredNodes(uint32_t timeWindowSecs)
 {
     uint32_t now = getTime();
     NodeNum localNode = getNodeNum();
 
-    // Temporary vector to hold neighbors with their SNR for sorting
-    std::vector<std::pair<NodeNum, float>> neighborsWithSnr;
-    neighborsWithSnr.reserve(MAX_NEIGHBORS_PER_HOP); // Reserve space to avoid multiple reallocations
+    // We'll collect (nodeNum, last_heard, snr) for both main DB + ephemeral
+    struct NodeCandidate {
+        NodeNum num;
+        uint32_t lastHeard;
+        float snr;
+    };
 
+    std::vector<NodeCandidate> allCandidates;
+    allCandidates.reserve(numMeshNodes + ephemeralNodes.size());
+
+    // 1) Collect from main node vector
     for (size_t i = 0; i < numMeshNodes; ++i) {
-        const meshtastic_NodeInfoLite &node = meshNodes->at(i);
+        const auto &node = meshNodes->at(i);
 
-        // Skip our own node entry
-        if (node.num == localNode) {
+        if (!isValidCandidateForCoverage(node)) {
             continue;
         }
 
-        // Skip ignored nodes
-        if (node.is_ignored) {
-            continue;
-        }
-
-        // Check if this node is a direct neighbor (hops_away == 0)
-        if (!node.has_hops_away || node.hops_away != 0) {
-            continue;
-        }
-
-        // Skip nodes heard via MQTT
-        if (node.via_mqtt) {
-            continue;
-        }
-
-        // Check if the node was heard recently within the time window
-        if (node.last_heard > 0 && (now - node.last_heard <= timeWindowSecs)) {
-            neighborsWithSnr.emplace_back(node.num, node.snr);
+        uint32_t age = now - node.last_heard;
+        if (age <= timeWindowSecs) {
+            allCandidates.push_back(NodeCandidate{node.num, node.last_heard, node.snr});
         }
     }
 
-    LOG_DEBUG("Found %zu candidates before limiting.", neighborsWithSnr.size());
+    // 2) Collect from ephemeral node vector
+    for (const auto &node : ephemeralNodes) {
+        if (!isValidCandidateForCoverage(node)) {
+            continue;
+        }
 
-    // If the number of candidates exceeds MAX_NEIGHBORS_PER_HOP, select the top N based on SNR
-    if (neighborsWithSnr.size() > MAX_NEIGHBORS_PER_HOP) {
-        // Use nth_element to partially sort the vector, bringing the top N SNRs to the front
-        std::nth_element(neighborsWithSnr.begin(), neighborsWithSnr.begin() + MAX_NEIGHBORS_PER_HOP, neighborsWithSnr.end(),
-                         [](const std::pair<NodeNum, float> &a, const std::pair<NodeNum, float> &b) {
-                             return a.second > b.second; // Sort in descending order of SNR
-                         });
-
-        // Resize to keep only the top N neighbors
-        neighborsWithSnr.resize(MAX_NEIGHBORS_PER_HOP);
+        uint32_t age = now - node.last_heard;
+        if (age <= timeWindowSecs) {
+            allCandidates.push_back(NodeCandidate{node.num, node.last_heard, node.snr});
+        }
     }
 
-    // Extract NodeNums from the sorted and limited list
+    // We want the most recent, and highest SNR neighbors to determine
+    // the most likely coverage this node will offer on its hop
+    // In this case recency is more important than SNR because we need a fresh picture of coverage
+    std::sort(allCandidates.begin(), allCandidates.end(), [](const NodeCandidate &a, const NodeCandidate &b) {
+        // 1) Descending by lastHeard
+        if (a.lastHeard != b.lastHeard) {
+            return a.lastHeard > b.lastHeard;
+        }
+        // 2) If tie, descending by snr
+        return a.snr > b.snr;
+    });
+
+    // 4) Reduce to MAX_NEIGHBORS_PER_HOP
+    if (allCandidates.size() > MAX_NEIGHBORS_PER_HOP) {
+        allCandidates.resize(MAX_NEIGHBORS_PER_HOP);
+    }
+
+    // 5) Extract just the node ids for return
     std::vector<NodeNum> recentNeighbors;
-    recentNeighbors.reserve(neighborsWithSnr.size());
-    for (const auto &pair : neighborsWithSnr) {
-        recentNeighbors.push_back(pair.first);
+    recentNeighbors.reserve(allCandidates.size());
+    for (auto &cand : allCandidates) {
+        recentNeighbors.push_back(cand.num);
     }
 
-    LOG_DEBUG("Returning %zu recent direct neighbors within %u seconds.", recentNeighbors.size(), timeWindowSecs);
     return recentNeighbors;
 }
 
@@ -914,6 +944,9 @@ uint32_t NodeDB::secondsSinceLastNodeHeard()
 void NodeDB::cleanupMeshDB()
 {
     int newPos = 0, removed = 0;
+    std::vector<meshtastic_NodeInfoLite> newlyEphemeral;
+    newlyEphemeral.reserve(numMeshNodes);
+
     for (int i = 0; i < numMeshNodes; i++) {
         if (meshNodes->at(i).has_user) {
             if (meshNodes->at(i).last_heard > maxLastHeard_) {
@@ -926,20 +959,18 @@ void NodeDB::cleanupMeshDB()
             }
             meshNodes->at(newPos++) = meshNodes->at(i);
         } else {
-            // Check if this unknown node is a direct neighbor (hops_away == 0)
-            if (meshNodes->at(i).has_hops_away && meshNodes->at(i).hops_away == 0) {
-                // ADD for unknown coverage:
-                // If this node doesn't have user data, we consider it "unknown"
-                // and add it to the unknownCoverage_ filter:
-                unknownCoverage_.add(meshNodes->at(i).num);
-            }
-
             removed++;
+
+            // If this node doesn't have user data, we consider it "unknown" and ephemeral
+            newlyEphemeral.push_back(meshNodes->at(i));
         }
     }
     numMeshNodes -= removed;
     std::fill(devicestate.node_db_lite.begin() + numMeshNodes, devicestate.node_db_lite.begin() + numMeshNodes + removed,
               meshtastic_NodeInfoLite());
+
+    ephemeralNodes = std::move(newlyEphemeral);
+
     LOG_DEBUG("cleanupMeshDB purged %d entries", removed);
 }
 
