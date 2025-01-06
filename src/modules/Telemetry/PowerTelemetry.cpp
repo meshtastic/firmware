@@ -100,29 +100,30 @@ void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *s
 {
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
-    display->drawString(x, y, "Power Telemetry");
+    
     if (lastMeasurementPacket == nullptr) {
-        display->setFont(FONT_SMALL);
+        // In case of  no valid packet, display "Power Telemetry", "No measurement"
+        display->drawString(x, y, "Power Telemetry");
         display->drawString(x, y += _fontHeight(FONT_SMALL), "No measurement");
         return;
     }
 
+    // Decode the last power packet
     meshtastic_Telemetry lastMeasurement;
-
     uint32_t agoSecs = service->GetTimeSinceMeshPacket(lastMeasurementPacket);
     const char *lastSender = getSenderShortName(*lastMeasurementPacket);
 
     const meshtastic_Data &p = lastMeasurementPacket->decoded;
     if (!pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Telemetry_msg, &lastMeasurement)) {
-        display->setFont(FONT_SMALL);
-        display->drawString(x, y += _fontHeight(FONT_MEDIUM), "Measurement Error");
+        display->drawString(x, y, "Measurement Error");
         LOG_ERROR("Unable to decode last packet");
         return;
     }
 
+    // Display "Pow. From: ..."
+    display->drawString(x, y, "Pow. From: " + String(lastSender) + "(" + String(agoSecs) + "s)");    
+
     // Display current and voltage based on ...power_metrics.has_[channel/voltage/current]... flags
-    display->setFont(FONT_SMALL);
-    display->drawString(x, y += _fontHeight(FONT_SMALL) - 2, "From: " + String(lastSender) + "(" + String(agoSecs) + "s)");
     if (lastMeasurement.variant.power_metrics.has_ch1_voltage || lastMeasurement.variant.power_metrics.has_ch1_current) {
         display->drawString(x, y += _fontHeight(FONT_SMALL),
                             "Ch1: " + String(lastMeasurement.variant.power_metrics.ch1_voltage, 2) +
