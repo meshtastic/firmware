@@ -64,12 +64,6 @@ enum RxSource {
 // Currently set to 1 hour because that is the minimum interval for nodeinfo broadcasts
 #define RECENCY_THRESHOLD_MINUTES 60
 
-#define NUM_UNKNOWN_NODE_COUNTERS 64
-
-#define BITS_PER_UNKNOWN_NODE_COUNTER 4
-
-#define BLOOM_HASH_FUNCTIONS 2
-
 typedef int ErrorCode;
 
 /// Alloc and free packets to our global, ISR safe pool

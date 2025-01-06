@@ -211,7 +211,7 @@ class NodeDB
     bool saveChannelsToDisk();
     bool saveDeviceStateToDisk();
 
-    bool isValidCandidateForCoverage(const meshtastic_NodeInfoLite &node)
+    bool isValidCandidateForCoverage(const meshtastic_NodeInfoLite &node);
 };
 
 extern NodeDB *nodeDB;
