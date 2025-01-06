@@ -24,5 +24,6 @@ jobs:
         series: [plucky, oracular, noble, jammy]
     uses: ./.github/workflows/package_ppa.yml
     with:
+      ppa_repo: daily
       series: ${{ matrix.series }}
     secrets: inherit
