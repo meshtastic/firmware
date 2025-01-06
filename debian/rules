@@ -7,7 +7,7 @@
 
 # https://docs.platformio.org/en/latest/envvars.html
 PIO_ENV:=\
-	PLATFORMIO_CORE_DIR=.pio_core \
+	PLATFORMIO_CORE_DIR=pio/core \
 	PLATFORMIO_LIBDEPS_DIR=pio/libdeps \
 	PLATFORMIO_PACKAGES_DIR=pio/packages
 
