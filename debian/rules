@@ -14,7 +14,7 @@ PIO_ENV:=\
 override_dh_auto_build:
 	# Extract tarballs within source deb
 	tar -xf pio.tar
-	tar -xf web.tar web
+	mkdir -p web && tar -xf web.tar -C web
 	gunzip web/ -r
 	# Build with platformio
 	$(PIO_ENV) platformio run -e native
