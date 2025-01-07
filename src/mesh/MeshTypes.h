@@ -36,11 +36,12 @@ enum RxSource {
  * too long.
  **/
 
-#if defined(USERPREFS_USE_COVERAGE_FILTER) && USERPREFS_USE_COVERAGE_FILTER == true
+#ifdef USERPREFS_USE_COVERAGE_FILTER
     #define HOP_MAX 15
 #else
     #define HOP_MAX 7
 #endif
+
 
 /// We normally just use max 3 hops for sending reliable messages
 #define HOP_RELIABLE 3

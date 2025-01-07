@@ -163,7 +163,8 @@ void FloodingRouter::mergeMyCoverage(CoverageFilter &coverage)
 
 float FloodingRouter::calculateForwardProbability(const CoverageFilter &incoming, NodeNum from)
 {
-#if defined(USERPREFS_USE_COVERAGE_FILTER) && USERPREFS_USE_COVERAGE_FILTER == true
+#ifndef USERPREFS_USE_COVERAGE_FILTER
+    LOG_DEBUG("Coverage filter is NOT enabled.");
     return 1.0f;
 #endif
     // If we are a router or repeater, always forward because it's assumed these are in the most advantageous locations
