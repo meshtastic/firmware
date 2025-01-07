@@ -493,10 +493,12 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #else
     config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
 #endif
-    config.lora.hop_limit = HOP_RELIABLE;
 #ifdef USERPREFS_USE_COVERAGE_FILTER
     config.lora.hop_limit = HOP_MAX;
+#else
+    config.lora.hop_limit = HOP_RELIABLE;
 #endif
+LOG_DEBUG("Hop Limit set to %x", config.lora.hop_limit);
 #ifdef USERPREFS_CONFIG_LORA_IGNORE_MQTT
     config.lora.ignore_mqtt = USERPREFS_CONFIG_LORA_IGNORE_MQTT;
 #else
