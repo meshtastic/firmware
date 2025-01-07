@@ -6,8 +6,12 @@ on:
       PPA_GPG_PRIVATE_KEY:
         required: true
     inputs:
+      ppa_repo:
+        description: Meshtastic PPA to target
+        required: true
+        type: string
       series:
-        description: 'Ubuntu series to target'
+        description: Ubuntu series to target
         required: true
         type: string
   workflow_dispatch:
@@ -65,4 +69,4 @@ jobs:
       - name: Publish with dput
         if: ${{ github.event_name != 'pull_request_target' && github.event_name != 'pull_request' }}
         run: |
-          dput ppa:meshtastic/meshtastic-daily meshtasticd_${{ steps.version.outputs.deb }}~${{ inputs.series }}_source.changes
+          dput ppa:meshtastic/${{ inputs.ppa_repo }} meshtasticd_${{ steps.version.outputs.deb }}~${{ inputs.series }}_source.changes
