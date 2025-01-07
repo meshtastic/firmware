@@ -4,11 +4,14 @@ export PLATFORMIO_LIBDEPS_DIR=pio/libdeps
 export PLATFORMIO_PACKAGES_DIR=pio/packages
 export PLATFORMIO_CORE_DIR=pio/core
 
-# Download libraries to `libdeps`
+# Download libraries to `pio`
 platformio pkg install -e native
-platformio pkg install -t platformio/tool-scons@4.40502.0
+platformio pkg install -e native -t platformio/tool-scons@4.40502.0
+# Compress `pio` directory to prevent dh_clean from sanitizing it
 tar -cf pio.tar pio/
 rm -rf pio
+# Download the latest meshtastic/web release build.tar to `web.tar`
+curl https://github.com/meshtastic/web/releases/download/latest/build.tar -o web.tar
 
 package=$(dpkg-parsechangelog --show-field Source)
 

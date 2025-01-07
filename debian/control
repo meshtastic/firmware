@@ -13,7 +13,11 @@ Build-Depends: debhelper-compat (= 13),
                libgpiod-dev,
                libbluetooth-dev,
                libusb-1.0-0-dev,
-               libi2c-dev
+               libi2c-dev,
+               openssl,
+               libssl-dev,
+               libulfius-dev,
+               liborcania-dev
 Standards-Version: 4.6.2
 Homepage: https://github.com/meshtastic/firmware
 Rules-Requires-Root: no
