@@ -163,10 +163,8 @@ void FloodingRouter::mergeMyCoverage(CoverageFilter &coverage)
 
 float FloodingRouter::calculateForwardProbability(const CoverageFilter &incoming, NodeNum from)
 {
-#ifdef USERPREFS_USE_COVERAGE_FILTER
-    bool useCoverageFilter = USERPREFS_USE_COVERAGE_FILTER;
-    if (!useCoverageFilter)
-        return 1.0f;
+#if defined(USERPREFS_USE_COVERAGE_FILTER) && USERPREFS_USE_COVERAGE_FILTER == true
+    return 1.0f;
 #endif
     // If we are a router or repeater, always forward because it's assumed these are in the most advantageous locations
     // or if we haven't heard from any other nodes within the stale coverage time, fall back to always forward

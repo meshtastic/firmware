@@ -36,7 +36,7 @@ enum RxSource {
  * too long.
  **/
 
-#if defined(USERPREFS_USE_COVERAGE_FILTER) && USERPREFS_USE_COVERAGE_FILTER
+#if defined(USERPREFS_USE_COVERAGE_FILTER) && USERPREFS_USE_COVERAGE_FILTER == true
     #define HOP_MAX 15
 #else
     #define HOP_MAX 7
