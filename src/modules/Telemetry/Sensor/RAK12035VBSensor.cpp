@@ -1,6 +1,6 @@
 #include "configuration.h"
 
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && CAN_HOST_RAK12035VBSOIL
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "RAK12035VBSensor.h"
