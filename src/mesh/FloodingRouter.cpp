@@ -168,11 +168,14 @@ float FloodingRouter::calculateForwardProbability(const CoverageFilter &incoming
     return 1.0f;
 #endif
     // If we are a router or repeater, always forward because it's assumed these are in the most advantageous locations
-    // or if we haven't heard from any other nodes directly within the stale coverage time, fall back to always forward
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
-        config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER ||
-        nodeDB->secondsSinceLastDirectNeighborHeard() >= STALE_COVERAGE_SECONDS) {
+        config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
         return 1.0f;
+    }
+    
+    // If we haven't heard from any other nodes directly within the stale coverage time, fall back to always forward
+    if (nodeDB->secondsSinceLastDirectNeighborHeard() >= STALE_COVERAGE_SECONDS){
+        return UNKNOWN_COVERAGE_FORWARD_PROB;
     }
 
     // Retrieve recent direct neighbors within the time window

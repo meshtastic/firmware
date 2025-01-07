@@ -62,6 +62,7 @@ enum RxSource {
 // 0.2 could be suitable because the worst case False Positive Rate of the
 // coverage filter is 37%. That's if its saturated with 60 unique nodes.
 #define BASE_FORWARD_PROB 0.0f
+#define UNKNOWN_COVERAGE_FORWARD_PROB 0.8f
 
 // Coverage scaling factor
 #define COVERAGE_SCALE_FACTOR 4.0f
