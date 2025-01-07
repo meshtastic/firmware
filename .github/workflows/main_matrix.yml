@@ -137,6 +137,9 @@ jobs:
   package-native:
     uses: ./.github/workflows/package_amd64.yml
 
+  test-native:
+    uses: ./.github/workflows/test_native.yml
+
   build-docker:
     if: ${{ github.event_name == 'workflow_dispatch' }}
     uses: ./.github/workflows/build_docker.yml
@@ -329,12 +332,17 @@ jobs:
         run: >-
           bin/bump_version.py
 
+      - name: Update debian changelog
+        run: >-
+          debian/ci_changelog.sh
+
       - name: Create version.properties pull request
         uses: peter-evans/create-pull-request@v7
         with:
           title: Bump version.properties
           add-paths: |
             version.properties
+            debian/changelog
 
   release-firmware:
     strategy:
