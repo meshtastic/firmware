@@ -1,6 +1,8 @@
 .pio
-.pio_core
 pio
+pio.tar
+web
+web.tar
 
 # ignore vscode IDE settings files
 .vscode/*
