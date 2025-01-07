@@ -1190,6 +1190,8 @@ GnssModel_t GPS::probe(int serialSpeed)
     PROBE_SIMPLE("L76B", "$PMTK605*31", "Quectel-L76B", GNSS_MODEL_MTK_L76B, 500);
     PROBE_SIMPLE("PA1616S", "$PMTK605*31", "1616S", GNSS_MODEL_MTK_PA1616S, 500);
 
+    PROBE_SIMPLE("LS20031", "$PMTK605*31", "MC-1513", GNSS_MODEL_LS20031, 500);
+
     uint8_t cfg_rate[] = {0xB5, 0x62, 0x06, 0x08, 0x00, 0x00, 0x00, 0x00};
     UBXChecksum(cfg_rate, sizeof(cfg_rate));
     clearBuffer();
