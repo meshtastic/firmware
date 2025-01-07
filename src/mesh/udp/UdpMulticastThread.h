@@ -36,7 +36,7 @@ class UdpMulticastThread : public concurrency::OSThread
         bool isPacketDecoded = pb_decode_from_bytes(bytes, packetLength, &meshtastic_MeshPacket_msg, &mp);
         if (isPacketDecoded && router) {
             UniquePacketPoolPacket p = packetPool.allocUniqueCopy(mp);
-            // Unset received SNR/RSSI which might have been added by the MQTT gateway
+            // Unset received SNR/RSSI
             p->rx_snr = 0;
             p->rx_rssi = 0;
             router->enqueueReceivedMessage(p.release());
