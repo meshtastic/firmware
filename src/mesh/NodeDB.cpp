@@ -936,20 +936,20 @@ std::vector<NodeNum> NodeDB::getCoveredNodes(uint32_t timeWindowSecs)
     return recentNeighbors;
 }
 
-uint32_t NodeDB::secondsSinceLastNodeHeard()
+uint32_t NodeDB::secondsSinceLastDirectNeighborHeard()
 {
-    // If maxLastHeard_ == 0, we have not heard from any remote node
-    if (maxLastHeard_ == 0) {
+    // If maxLastHeardDirectNeighbor_ == 0, we have not heard from any direct neighbors
+    if (maxLastHeardDirectNeighbor_ == 0) {
         return UINT32_MAX;
     }
 
     uint32_t now = getTime();
     // If the clock isn’t set or has jumped backwards, clamp to 0
-    if (now < maxLastHeard_) {
+    if (now < maxLastHeardDirectNeighbor_) {
         return 0;
     }
 
-    return (now - maxLastHeard_);
+    return (now - maxLastHeardDirectNeighbor_);
 }
 
 void NodeDB::cleanupMeshDB()
@@ -960,8 +960,8 @@ void NodeDB::cleanupMeshDB()
 
     for (int i = 0; i < numMeshNodes; i++) {
         if (meshNodes->at(i).has_user) {
-            if (meshNodes->at(i).last_heard > maxLastHeard_) {
-                maxLastHeard_ = meshNodes->at(i).last_heard;
+            if (meshNodes->at(i).has_hops_away && meshNodes->at(i).hops_away == 0 && meshNodes->at(i).last_heard > maxLastHeardDirectNeighbor_) {
+                maxLastHeardDirectNeighbor_ = meshNodes->at(i).last_heard;
             }
             if (meshNodes->at(i).user.public_key.size > 0) {
                 if (memfll(meshNodes->at(i).user.public_key.bytes, 0, meshNodes->at(i).user.public_key.size)) {
@@ -1554,9 +1554,6 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
 
         if (mp.rx_time) { // if the packet has a valid timestamp use it to update our last_heard
             info->last_heard = mp.rx_time;
-            if (info->last_heard > maxLastHeard_) {
-                maxLastHeard_ = info->last_heard;
-            }
         }
 
         if (mp.rx_snr)
@@ -1568,6 +1565,9 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
         if (mp.hop_start != 0 && mp.hop_limit <= mp.hop_start) {
             info->has_hops_away = true;
             info->hops_away = mp.hop_start - mp.hop_limit;
+            if (info->hops_away == 0 && info->last_heard && info->last_heard > maxLastHeardDirectNeighbor_) {
+                maxLastHeardDirectNeighbor_ = info->last_heard;
+            }
         }
     }
 }
