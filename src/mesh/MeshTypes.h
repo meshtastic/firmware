@@ -35,7 +35,13 @@ enum RxSource {
  * maxhops to 3 should be fine for a while.  This also serves to prevent routing/flooding attempts to be attempted for
  * too long.
  **/
+
 #define HOP_MAX 7
+#ifdef USERPREFS_USE_COVERAGE_FILTER
+    bool useCoverageFilter = USERPREFS_USE_COVERAGE_FILTER;
+    if (useCoverageFilter)
+        #define HOP_MAX 15
+#endif
 
 /// We normally just use max 3 hops for sending reliable messages
 #define HOP_RELIABLE 3

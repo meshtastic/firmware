@@ -494,6 +494,11 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
 #endif
     config.lora.hop_limit = HOP_RELIABLE;
+#ifdef USERPREFS_USE_COVERAGE_FILTER
+    bool useCoverageFilter = USERPREFS_USE_COVERAGE_FILTER;
+    if (useCoverageFilter)
+        config.lora.hop_limit = HOP_MAX;
+#endif
 #ifdef USERPREFS_CONFIG_LORA_IGNORE_MQTT
     config.lora.ignore_mqtt = USERPREFS_CONFIG_LORA_IGNORE_MQTT;
 #else
@@ -827,18 +832,22 @@ bool NodeDB::isValidCandidateForCoverage(const meshtastic_NodeInfoLite &node)
     }
     // 2) Exclude ignored
     if (node.is_ignored) {
+        LOG_DEBUG("Node 0x%x is not valid for coverage: Ignored", node.num);
         return false;
     }
     // 3) Exclude nodes that aren't direct neighbors
     if (!node.has_hops_away || node.hops_away != 0) {
+        LOG_DEBUG("Node 0x%x is not valid for coverage: Not Direct Neighbor", node.num);
         return false;
     }
     // 4) Exclude MQTT-based nodes if desired
     if (node.via_mqtt) {
+        LOG_DEBUG("Node 0x%x is not valid for coverage: MQTT", node.num);
         return false;
     }
     // 5) Must have last_heard
     if (node.last_heard == 0) {
+        LOG_DEBUG("Node 0x%x is not valid for coverage: Missing Last Heard", node.num);
         return false;
     }
     return true; // If we pass all checks, it's valid
@@ -895,6 +904,8 @@ std::vector<NodeNum> NodeDB::getCoveredNodes(uint32_t timeWindowSecs)
         uint32_t age = now - node.last_heard;
         if (age <= timeWindowSecs) {
             allCandidates.push_back(NodeCandidate{node.num, node.last_heard, node.snr});
+        } else {
+            LOG_DEBUG("Node 0x%x is not valid for coverage: Aged Out", node.num);
         }
     }
 
