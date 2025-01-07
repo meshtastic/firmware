@@ -1,0 +1,37 @@
+name: Nightly Debian Packaging
+on:
+  schedule:
+    - cron: 0 9 * * *
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - debian/**
+      - .github/workflows/nightly_debian.yml
+      - .github/workflows/build_debian_src.yml
+      - .github/workflows/package_ppa.yml
+      - .github/workflows/package_obs.yml
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  package-ppa:
+    strategy:
+      fail-fast: false
+      matrix:
+        series: [plucky, oracular, noble, jammy]
+    uses: ./.github/workflows/package_ppa.yml
+    with:
+      ppa_repo: daily
+      series: ${{ matrix.series }}
+    secrets: inherit
+
+  package-obs:
+    uses: ./.github/workflows/package_obs.yml
+    with:
+      obs_repo: meshtasticd
+      series: unstable
+    secrets: inherit
