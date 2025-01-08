@@ -52,7 +52,7 @@ for f in .clusterfuzzlite/*_fuzzer.cpp; do
 	cp ".pio/build/$PIO_ENV/program" "$OUT/$fuzzer"
 
 	# Copy shared libraries used by the fuzzer.
-	cp -f $(ldd .pio/build/buildroot/program | sed -n 's/[^=]\+=> \([^ ]\+\).*/\1/p') "$OUT/lib/"
+	cp -f $(ldd ".pio/build/$PIO_ENV/program" | sed -n 's/[^=]\+=> \([^ ]\+\).*/\1/p') "$OUT/lib/"
 
 	# Build the initial fuzzer seed corpus.
 	corpus_name="${fuzzer}_seed_corpus"
