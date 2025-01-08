@@ -20,6 +20,7 @@ Critical Tasks
 []      ble pairing screen
 []      hook reboot to save flash data
 []      hotfix for handling emoji tapbacks
+[]      remove "not yet implemented" menu items
 
 Improvements
 ====================
@@ -44,6 +45,8 @@ Known Bugs
 []      Applets don't re-render when node is removed via admin command
 []      Autoshow focusing oldest of two competing requests, if render is deferred
 []      (Rare) Recents List: count in header label may not match number of items shown
+[]      (Rare) Menu stuck after changing tile using aux button
+[]      Tile highlight rendered below header for threaded message applets
 
 Chores
 ==========
@@ -52,3 +55,4 @@ Chores
 []      Don't repeat logs from Applet::getTimeString
 []      honour "max tiles" setting in nicheGraphics.h
 []      Remove parentheses from methods mentioned in comments, to make code search easier
+[]      Decouple the original Screen class from bluetooth code: observe "BluetoothStatus" instead

@@ -139,6 +139,9 @@ meshtastic::GPSStatus *gpsStatus = new meshtastic::GPSStatus();
 // Global Node status
 meshtastic::NodeStatus *nodeStatus = new meshtastic::NodeStatus();
 
+// Global Bluetooth status
+meshtastic::BluetoothStatus *bluetoothStatus = new meshtastic::BluetoothStatus();
+
 // Scan for I2C Devices
 
 /// The I2C address of our display (if found)
