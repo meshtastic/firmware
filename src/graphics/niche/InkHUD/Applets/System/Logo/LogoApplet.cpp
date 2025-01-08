@@ -51,7 +51,8 @@ void InkHUD::LogoApplet::onForeground()
 
 void InkHUD::LogoApplet::onBackground()
 {
-    unlockRendering();                                     // Allow other applets to render, now that we're done
+    OSThread::disable(); // Disable auto-dismiss timer, in case applet was dismissed early (sendToBackground from outside class)
+    unlockRendering();   // Allow other applets to render, now that we're done
     requestUpdate(Drivers::EInk::UpdateTypes::FULL, true); // Use FULL instead of UNSPECIFIED, and redraw all applets
 }
 

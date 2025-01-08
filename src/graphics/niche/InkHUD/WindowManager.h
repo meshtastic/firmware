@@ -84,9 +84,10 @@ class WindowManager : protected concurrency::OSThread
     uint8_t getAppletCount();                 // How many user applets are available, including inactivated
     const char *getAppletName(uint8_t index); // By order in userApplets
 
-    void lockRendering(Applet *lockedBy);   // Allows system applets to prevent other applets triggering a refresh
-    void unlockRendering(Applet *lockedBy); // Allows normal updating of user applets to continue
-    bool isRenderingPermitted(Applet *a);   // Checks if an applet is allowed to request an update (not locked by other applet)
+    void lockRendering(Applet *lockedBy);           // Allows system applets to prevent other applets triggering a refresh
+    void unlockRendering(Applet *lockedBy);         // Allows normal updating of user applets to continue
+    bool isRenderingPermitted(Applet *a = nullptr); // Checks if allowed to request an update (not locked by other applet)
+    Applet *whoLockedRendering();                   // Find which applet owns the rendering lock, if any
 
   protected:
     WindowManager(); // Private constructor for singleton
@@ -128,6 +129,7 @@ class WindowManager : protected concurrency::OSThread
     Tile *notificationTile = nullptr;
     Tile *batteryIconTile = nullptr;
     LogoApplet *logoApplet;
+    Applet *pairingApplet;
     NotificationApplet *notificationApplet;
     Applet *batteryIconApplet;
     Applet *menuApplet;

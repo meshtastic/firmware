@@ -11,6 +11,7 @@
 #include "./Applets/System/Logo/LogoApplet.h"
 #include "./Applets/System/Menu/MenuApplet.h"
 #include "./Applets/System/Notification/NotificationApplet.h"
+#include "./Applets/System/Pairing/PairingApplet.h"
 #include "./Applets/System/Placeholder/PlaceholderApplet.h"
 
 using namespace NicheGraphics;
@@ -133,6 +134,7 @@ void InkHUD::WindowManager::begin()
 void InkHUD::WindowManager::createSystemApplets()
 {
     logoApplet = new LogoApplet;
+    pairingApplet = new PairingApplet;
     notificationApplet = new NotificationApplet;
     batteryIconApplet = new BatteryIconApplet;
     menuApplet = new MenuApplet;
@@ -140,6 +142,7 @@ void InkHUD::WindowManager::createSystemApplets()
 
     // System applets are always active
     logoApplet->activate();
+    pairingApplet->activate();
     notificationApplet->activate();
     batteryIconApplet->activate();
     menuApplet->activate();
@@ -169,6 +172,7 @@ void InkHUD::WindowManager::assignSystemAppletsToTiles()
 {
     // Assign tiles
     logoApplet->setTile(fullscreenTile);
+    pairingApplet->setTile(fullscreenTile);
     notificationApplet->setTile(notificationTile);
     batteryIconApplet->setTile(batteryIconTile);
 }
@@ -373,7 +377,7 @@ void InkHUD::WindowManager::handleButtonShort()
 void InkHUD::WindowManager::handleButtonLong()
 {
     // Open the menu
-    if (!menuApplet->isForeground()) {
+    if (!menuApplet->isForeground() && isRenderingPermitted(menuApplet)) {
         Tile *t = userTiles.at(settings.userTiles.focused);
         Applet *ua = t->assignedApplet; // User applet whose tile we're borrowing
 
@@ -453,6 +457,10 @@ void InkHUD::WindowManager::nextTile()
     // We done *really* want to do this, but it simplifies handling *a lot*
     if (menuApplet->isForeground())
         menuApplet->sendToBackground();
+
+    // Seems like some system applet other than menu is open. Pairing? Booting?
+    if (!isRenderingPermitted())
+        return;
 
     // Swap to next tile
     settings.userTiles.focused = (settings.userTiles.focused + 1) % settings.userTiles.count;
@@ -656,6 +664,7 @@ void InkHUD::WindowManager::unlockRendering(Applet *owner)
 
 // Is an applet blocked by a current lock on rendering?
 // Applets are allowed to render if there is no lock, or if they are the owner of the lock
+// If a == nullptr, checks permission "for everyone and anyone"
 bool InkHUD::WindowManager::isRenderingPermitted(Applet *a)
 {
     if (!renderingLockedBy)
@@ -664,6 +673,13 @@ bool InkHUD::WindowManager::isRenderingPermitted(Applet *a)
         return true;
     else
         return false;
+}
+
+// Get the applet which is currently locking rendering
+// We might be able to convince it release its lock, if we want it instead
+InkHUD::Applet *InkHUD::WindowManager::whoLockedRendering()
+{
+    return WindowManager::renderingLockedBy;
 }
 
 // Runs at regular intervals
@@ -698,7 +714,7 @@ void InkHUD::WindowManager::autoshow()
         Applet *a = userApplets.at(i);
         bool wants = a->wantsToAutoshow(); // Call for every applet: clears the flag
 
-        if (!autoshown && wants && !a->isForeground() && settings.userApplets.autoshow[i]) {
+        if (!autoshown && wants && !a->isForeground() && isRenderingPermitted() && settings.userApplets.autoshow[i]) {
             Tile *t = userTiles.at(settings.userTiles.focused); // Get focused tile
             t->assignedApplet->sendToBackground();              // Background whatever applet is already on the tile
             t->assignedApplet = a;                              // Assign our new applet to tile
@@ -796,6 +812,13 @@ bool InkHUD::WindowManager::renderSystemApplets()
     if (logoApplet->isForeground() && logoApplet->wantsToRender()) {
         updateNeeded = true;
         logoApplet->render();
+        renderCount++;
+    }
+
+    // Bluetooth pairing screen
+    if (pairingApplet->isForeground() && pairingApplet->wantsToRender()) {
+        updateNeeded = true;
+        pairingApplet->render();
         renderCount++;
     }
 

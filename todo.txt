@@ -17,7 +17,6 @@ Critical Tasks
 [tbc]   fix attach/detach interrupts for ButtonThread.cpp
             - check with older ESP32 variants
 []      imperial units
-[]      ble pairing screen
 []      hook reboot to save flash data
 []      hotfix for handling emoji tapbacks
 []      remove "not yet implemented" menu items
@@ -29,7 +28,6 @@ Improvements
 []      Don't show signal strength in ChronoListApplets if hops unknown
 []      Refactor WindowManager::render
 []      Refactor ChronoList applets
-[]      Handle layout / applet changes with render(), instead of the "stale render" technique
 []      ChronoListApplet should only requestUpdate for changed signal strength if node 0-hops (showing signal bars)
 []      Descriptive headers for some settings in menu
 []      Re-render applets when RTC is set. Some UI elements change (e.g. "Recents" applet counts)
@@ -56,3 +54,4 @@ Chores
 []      honour "max tiles" setting in nicheGraphics.h
 []      Remove parentheses from methods mentioned in comments, to make code search easier
 []      Decouple the original Screen class from bluetooth code: observe "BluetoothStatus" instead
+[]      Honor userprefs / config gpio overrides
