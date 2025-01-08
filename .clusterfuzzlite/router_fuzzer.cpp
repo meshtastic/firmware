@@ -82,8 +82,8 @@ int LLVMFuzzerInitialize(int *argc, char ***argv)
     std::thread t([program = *argv[0]]() {
         char nodeIdStr[12];
         strcpy(nodeIdStr, std::to_string(nodeId).c_str());
-        int argc = 3;
-        char *argv[] = {program, "-h", nodeIdStr, nullptr};
+        int argc = 5;
+        char *argv[] = {program, "-d", "/tmp/meshtastic", "-h", nodeIdStr, nullptr};
         portduino_main(argc, argv);
     });
     t.detach();
