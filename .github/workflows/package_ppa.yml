@@ -1,4 +1,4 @@
-name: Package Launchpad PPA
+name: Package for Launchpad PPA
 
 on:
   workflow_call:
@@ -14,7 +14,6 @@ on:
         description: Ubuntu series to target
         required: true
         type: string
-  workflow_dispatch:
 
 permissions:
   contents: write
@@ -26,6 +25,7 @@ jobs:
     secrets: inherit
     with:
       series: ${{ inputs.series }}
+      build_location: ppa
 
   package-ppa:
     runs-on: ubuntu-24.04
@@ -55,6 +55,8 @@ jobs:
         working-directory: meshtasticd
         run: |
           echo "deb=$(./bin/buildinfo.py deb)" >> $GITHUB_OUTPUT
+        env:
+          BUILD_LOCATION: ppa
         id: version
 
       - name: Download artifacts
