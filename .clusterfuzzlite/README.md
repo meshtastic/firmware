@@ -31,7 +31,7 @@ More background on these commands can be found in the
 ## router_fuzzer.cpp
 
 This fuzzer submits MeshPacket protos to the `Router::enqueueReceivedMessage` method. It takes the binary
-data from the fuzzer and decodes that data is a MeshPacket using nanopb. A few fields in
+data from the fuzzer and decodes that data to a MeshPacket using nanopb. A few fields in
 the MeshPacket are modified by the fuzzer.
 
 - If the `to` field is 0, it will be replaced with the NodeID of the running node.
