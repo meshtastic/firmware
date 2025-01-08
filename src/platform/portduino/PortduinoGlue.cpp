@@ -21,6 +21,10 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 
+#ifdef PORTDUINO_LINUX_HARDWARE
+#include <cxxabi.h>
+#endif
+
 #include "platform/portduino/USBHal.h"
 
 std::map<configNames, int> settingsMap;
@@ -343,8 +347,8 @@ int initGPIOPin(int pinNum, const std::string gpioChipName)
         gpioBind(csPin);
         return ERRNO_OK;
     } catch (...) {
-        std::exception_ptr p = std::current_exception();
-        std::cout << "Warning, cannot claim pin " << gpio_name << (p ? p.__cxa_exception_type()->name() : "null") << std::endl;
+        const std::type_info *t = abi::__cxa_current_exception_type();
+        std::cout << "Warning, cannot claim pin " << gpio_name << (t ? t->name() : "null") << std::endl;
         return ERRNO_DISABLED;
     }
 #else

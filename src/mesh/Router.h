@@ -8,6 +8,10 @@
 #include "RadioInterface.h"
 #include "concurrency/OSThread.h"
 
+#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#include <mutex>
+#endif
+
 /**
  * A mesh aware router that supports multiple interfaces.
  */
@@ -85,6 +89,12 @@ class Router : protected concurrency::OSThread
     /* Statistics for the amount of duplicate received packets and the amount of times we cancel a relay because someone did it
         before us */
     uint32_t rxDupe = 0, txRelayCanceled = 0;
+
+#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+    // Used by router_fuzzer.cpp to detect when the Router has finished processing a packet.
+    // See LLVMFuzzerTestOneInput in router_fuzzer.cpp & Router::runOnce for how this is used.
+    std::mutex inProgressLock;
+#endif
 
   protected:
     friend class RoutingModule;

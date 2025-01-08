@@ -70,6 +70,10 @@ int32_t Router::runOnce()
         perhapsHandleReceived(mp);
     }
 
+#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+    inProgressLock.unlock();
+    return 5;
+#endif
     // LOG_DEBUG("Sleep forever!");
     return INT32_MAX; // Wait a long time - until we get woken for the message queue
 }
