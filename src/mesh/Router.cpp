@@ -632,7 +632,7 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
             mqtt->onSend(*p_encrypted, *p, p->channel);
 #endif
 #if HAS_UDP_MULTICAST
-        if ((decoded || p_encrypted->pki_encrypted) && !isFromUs(p) && udpThread &&
+        if ((decoded || p_encrypted->pki_encrypted) && udpThread &&
             config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST) {
             udpThread->onSend(const_cast<meshtastic_MeshPacket *>(p_encrypted));
         }

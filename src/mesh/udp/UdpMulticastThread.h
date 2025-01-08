@@ -59,7 +59,7 @@ class UdpMulticastThread : public concurrency::OSThread
     int32_t runOnce() override
     {
         canSleep = true;
-        // TODO: Might consider a heartbeat for discovery or keep alive?
+        // TODO: Implement nodeinfo broadcast
         return UDP_MULTICAST_THREAD_INTERVAL_MS;
     }
 
