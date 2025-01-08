@@ -77,6 +77,8 @@ int portduino_main(int argc, char **argv); // Renamed "main" function from Mesht
 // Start Meshtastic in a thread and wait till it has reached the ON state.
 int LLVMFuzzerInitialize(int *argc, char ***argv)
 {
+    settingsMap[maxtophone] = 5;
+
     std::thread t([program = *argv[0]]() {
         char nodeIdStr[12];
         strcpy(nodeIdStr, std::to_string(nodeId).c_str());
