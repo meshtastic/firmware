@@ -25,13 +25,13 @@ jobs:
         series: [plucky, oracular, noble, jammy]
     uses: ./.github/workflows/package_ppa.yml
     with:
-      ppa_repo: daily
+      ppa_repo: ppa:meshtastic/daily
       series: ${{ matrix.series }}
     secrets: inherit
 
   package-obs:
     uses: ./.github/workflows/package_obs.yml
     with:
-      obs_repo: meshtasticd
+      obs_project: home:meshtastic:daily
       series: unstable
     secrets: inherit
