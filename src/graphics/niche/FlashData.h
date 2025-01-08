@@ -44,8 +44,11 @@ template <typename T> class FlashData
     }
 
   public:
-    static void load(T *data, const char *label)
+    static bool load(T *data, const char *label)
     {
+        // Set false if we run into issues
+        bool okay = true;
+
         // Get a filename based on the label
         std::string filename = getFilename(label);
 
@@ -54,7 +57,8 @@ template <typename T> class FlashData
         // Check that the file *does* actually exist
         if (!FSCom.exists(filename.c_str())) {
             LOG_WARN("'%s' not found. Using default values", filename.c_str());
-            return;
+            okay = false;
+            return okay;
         }
 
         // Open the file
@@ -80,20 +84,23 @@ template <typename T> class FlashData
             // Calculate hash of the loaded data, then compare with the saved hash
             // If hash looks good, copy the values to the main data object
             uint32_t calculatedHash = getHash(&flashData);
-            if (savedHash != calculatedHash)
+            if (savedHash != calculatedHash) {
                 LOG_WARN("'%s' is corrupt (hash mismatch). Using default values", filename.c_str());
-            else
+                okay = false;
+            } else
                 *data = flashData;
 
             f.close();
         } else {
             LOG_ERROR("Could not open / read %s", filename.c_str());
+            okay = false;
         }
 #else
         LOG_ERROR("Filesystem not implemented");
         state = LoadFileState::NO_FILESYSTEM;
+        okay = false;
 #endif
-        return;
+        return okay;
     }
 
     // Save module's custom data (settings?) to flash. Does use protobufs

@@ -8,9 +8,10 @@ using namespace NicheGraphics;
 void InkHUD::loadDataFromFlash()
 {
     // Load the InkHUD settings from flash, and check version number
+    // We should only consider the version number if the InkHUD flashdata component reports that we *did* actually load flash data
     InkHUD::Settings loadedSettings;
-    FlashData<Settings>::load(&loadedSettings, "settings");
-    if (loadedSettings.meta.version == SETTINGS_VERSION && loadedSettings.meta.version != 0)
+    bool loadSucceeded = FlashData<Settings>::load(&loadedSettings, "settings");
+    if (loadSucceeded && loadedSettings.meta.version == SETTINGS_VERSION && loadedSettings.meta.version != 0)
         settings = loadedSettings; // Version matched, replace the defaults with the loaded values
     else
         LOG_WARN("Settings version changed. Using defaults");
