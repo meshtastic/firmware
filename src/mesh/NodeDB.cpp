@@ -574,6 +574,8 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
         hasScreen = true;
     else
         hasScreen = screen_found.port != ScanI2C::I2CPort::NO_I2C;
+#elif MESHTASTIC_INCLUDE_NICHE_GRAPHICS // See "src/graphics/niche"
+    bool hasScreen = true; // Use random pin for Bluetooth pairing
 #else
     bool hasScreen = screen_found.port != ScanI2C::I2CPort::NO_I2C;
 #endif
