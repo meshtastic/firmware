@@ -83,13 +83,13 @@ runs:
 
     - name: Get release version string
       shell: bash
-      run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+      run: echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
       id: version
 
     - name: Store binaries as an artifact
       uses: actions/upload-artifact@v4
       with:
-        name: firmware-${{ inputs.arch }}-${{ inputs.board }}-${{ steps.version.outputs.version }}.zip
+        name: firmware-${{ inputs.arch }}-${{ inputs.board }}-${{ steps.version.outputs.long }}.zip
         overwrite: true
         path: |
           ${{ inputs.artifact-paths }}

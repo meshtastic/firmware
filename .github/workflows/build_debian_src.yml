@@ -7,7 +7,11 @@ on:
         required: true
     inputs:
       series:
-        description: Ubuntu series to target
+        description: Ubuntu/Debian series to target
+        required: true
+        type: string
+      build_location:
+        description: Location where build will execute
         required: true
         type: string
 
@@ -47,6 +51,8 @@ jobs:
         working-directory: meshtasticd
         run: |
           echo "deb=$(./bin/buildinfo.py deb)" >> $GITHUB_OUTPUT
+        env:
+          BUILD_LOCATION: ${{ inputs.build_location }}
         id: version
 
       - name: Fetch libdeps, package debian source
