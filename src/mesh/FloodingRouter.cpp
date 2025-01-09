@@ -153,9 +153,9 @@ void FloodingRouter::storeCoverageFilterInPacket(const CoverageFilter &filter, m
 void FloodingRouter::mergeMyCoverage(CoverageFilter &coverage)
 {
     // Retrieve recent direct neighbors within the time window
-    std::vector<NodeNum> recentNeighbors = nodeDB->getCoveredNodes(RECENCY_THRESHOLD_MINUTES * 60);
-    for (auto &nodeId : recentNeighbors) {
-        coverage.add(nodeId);
+    std::vector<meshtastic_RelayNode> recentNeighbors = nodeDB->getCoveredNodes();
+    for (auto &relay : recentNeighbors) {
+        coverage.add(relay.num);
     }
 
     // Always add ourselves to prevent a rebroadcast for a packet we've already seen
@@ -175,7 +175,7 @@ float FloodingRouter::calculateForwardProbability(const CoverageFilter &incoming
     }
 
     // Retrieve recent direct neighbors within the time window
-    std::vector<NodeNum> recentNeighbors = nodeDB->getCoveredNodes(RECENCY_THRESHOLD_MINUTES * 60);
+    std::vector<meshtastic_RelayNode> recentNeighbors = nodeDB->getCoveredNodes();
 
     if (recentNeighbors.empty()) {
         // Having no direct neighbors is a sign that our coverage is
@@ -192,20 +192,16 @@ float FloodingRouter::calculateForwardProbability(const CoverageFilter &incoming
     uint8_t neighbors = 0;
     uint8_t uncovered = 0;
 
-    for (auto nodeId : recentNeighbors) {
-        if (nodeId == from || nodeId == relayNode)
+    for (auto relay : recentNeighbors) {
+        if (relay.num == from || relay.num == relayNode)
             continue;
 
-        auto nodeInfo = nodeDB->getMeshNode(nodeId);
-        if (!nodeInfo)
-            continue;
-
-        uint32_t age = now - nodeInfo->last_heard;
+        uint32_t age = now - relay.last_heard;
         float recency = computeRecencyWeight(age, RECENCY_THRESHOLD_MINUTES * 60);
 
         totalWeight += recency;
         neighbors += 1;
-        if (!incoming.check(nodeId)) {
+        if (!incoming.check(relay.num)) {
             uncoveredWeight += recency;
             uncovered += 1;
         }

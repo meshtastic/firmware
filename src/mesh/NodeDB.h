@@ -63,12 +63,13 @@ class NodeDB
     // Note: these two references just point into our static array we serialize to/from disk
 
   public:
+    std::vector<meshtastic_RelayNode> *relayNodes;
     std::vector<meshtastic_NodeInfoLite> *meshNodes;
-    std::vector<meshtastic_NodeInfoLite> ephemeralNodes;
     bool updateGUI = false; // we think the gui should definitely be redrawn, screen will clear this once handled
     meshtastic_NodeInfoLite *updateGUIforNode = NULL; // if currently showing this node, we think you should update the GUI
     Observable<const meshtastic::NodeStatus *> newStatus;
     pb_size_t numMeshNodes;
+    pb_size_t numRelayNodes;
 
     /// don't do mesh based algorithm for node id assignment (initially)
     /// instead just store in flash - possibly even in the initial alpha release do this hack
@@ -149,8 +150,13 @@ class NodeDB
     meshtastic_NodeInfoLite *getMeshNode(NodeNum n);
     size_t getNumMeshNodes() { return numMeshNodes; }
 
+    meshtastic_RelayNode *getRelayNode(NodeNum n);
+
     // returns true if the maximum number of nodes is reached or we are running low on memory
     bool isFull();
+
+    // returns true if the maximum number of relay nodes is reached or we are running low on memory
+    bool isRelayBufferFull();
 
     void clearLocalPosition();
 
@@ -170,18 +176,20 @@ class NodeDB
     bool hasValidPosition(const meshtastic_NodeInfoLite *n);
 
     /**
-     * @brief Retrieves a list of distinct recent direct neighbor NodeNums.
+     * @brief Retrieves a list of distinct recent direct neighbor meshtastic_RelayNode.
      *
-     * @param timeWindowSecs The time window in seconds to consider a node as "recently heard."
-     * @return std::vector<NodeNum> A vector containing the NodeNums of recent direct neighbors.
+     * @return std::vector<meshtastic_RelayNode> A vector containing the meshtastic_RelayNode of recent direct neighbors.
      */
-    std::vector<NodeNum> getCoveredNodes(uint32_t timeWindowSecs);
+    std::vector<meshtastic_RelayNode> getCoveredNodes();
 
   private:
     uint32_t lastNodeDbSave = 0; // when we last saved our db to flash
 
     /// Find a node in our DB, create an empty NodeInfoLite if missing
     meshtastic_NodeInfoLite *getOrCreateMeshNode(NodeNum n);
+
+    /// Find a relay node in our DB, create an empty RelayNode if missing
+    meshtastic_RelayNode *getOrCreateRelayNode(NodeNum n);
 
     /// Notify observers of changes to the DB
     void notifyObservers(bool forceUpdate = false)
@@ -208,7 +216,7 @@ class NodeDB
     bool saveChannelsToDisk();
     bool saveDeviceStateToDisk();
 
-    bool isValidCandidateForCoverage(const meshtastic_NodeInfoLite &node);
+    bool isValidCandidateForCoverage(const meshtastic_RelayNode &node);
 };
 
 extern NodeDB *nodeDB;

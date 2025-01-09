@@ -824,23 +824,14 @@ void NodeDB::clearLocalPosition()
     setLocalPosition(meshtastic_Position_init_default);
 }
 
-bool NodeDB::isValidCandidateForCoverage(const meshtastic_NodeInfoLite &node)
+bool NodeDB::isValidCandidateForCoverage(const meshtastic_RelayNode &node)
 {
     // 1) Exclude self
     if (node.num == getNodeNum()) {
         return false;
     }
-    // 2) Exclude ignored
-    if (node.is_ignored) {
-        LOG_DEBUG("Node 0x%x is not valid for coverage: Ignored", node.num);
-        return false;
-    }
-    // 3) Exclude MQTT-based nodes if desired
-    if (node.via_mqtt) {
-        LOG_DEBUG("Node 0x%x is not valid for coverage: MQTT", node.num);
-        return false;
-    }
-    // 4) Must have last_heard
+
+    // 2) Must have last_heard
     if (node.last_heard == 0) {
         LOG_DEBUG("Node 0x%x is not valid for coverage: Missing Last Heard", node.num);
         return false;
@@ -849,7 +840,7 @@ bool NodeDB::isValidCandidateForCoverage(const meshtastic_NodeInfoLite &node)
 }
 
 /**
- * @brief Retrieves a list of distinct recent direct neighbor NodeNums.
+ * @brief Retrieves a list of distinct recent direct neighbor meshtastic_RelayNode.
  *
  * Filters out:
  * - The local node itself.
@@ -858,83 +849,52 @@ bool NodeDB::isValidCandidateForCoverage(const meshtastic_NodeInfoLite &node)
  * - Nodes heard via MQTT.
  * - Nodes not heard within the specified time window.
  *
- * @param timeWindowSecs The time window in seconds to consider a node as "recently heard."
- * @return std::vector<NodeNum> A vector containing the NodeNums of recent direct neighbors.
+ * @return std::vector<meshtastic_RelayNode> A vector containing the meshtastic_RelayNode of recent direct neighbors.
  */
-std::vector<NodeNum> NodeDB::getCoveredNodes(uint32_t timeWindowSecs)
+std::vector<meshtastic_RelayNode> NodeDB::getCoveredNodes()
 {
     uint32_t now = getTime();
 
-    // We'll collect (nodeNum, last_heard, snr) for both main DB + ephemeral
-    struct NodeCandidate {
-        NodeNum num;
-        uint32_t lastHeard;
-        float snr;
-    };
-
-    std::vector<NodeCandidate> allCandidates;
-    allCandidates.reserve(numMeshNodes + ephemeralNodes.size());
+    std::vector<meshtastic_RelayNode> allCandidates;
+    allCandidates.reserve(numRelayNodes);
 
     // 1) Collect from main node vector
-    for (size_t i = 0; i < numMeshNodes; ++i) {
-        const auto &node = meshNodes->at(i);
+    for (size_t i = 0; i < numRelayNodes; ++i) {
+        const auto &node = relayNodes->at(i);
 
         if (!isValidCandidateForCoverage(node)) {
             continue;
         }
 
         uint32_t age = now - node.last_heard;
-        if (age <= timeWindowSecs) {
-            allCandidates.push_back(NodeCandidate{node.num, node.last_heard, node.snr});
-        }
-    }
-
-    // 2) Collect from ephemeral node vector
-    for (const auto &node : ephemeralNodes) {
-        if (!isValidCandidateForCoverage(node)) {
-            continue;
-        }
-
-        uint32_t age = now - node.last_heard;
-        if (age <= timeWindowSecs) {
-            allCandidates.push_back(NodeCandidate{node.num, node.last_heard, node.snr});
-        } else {
-            LOG_DEBUG("Node 0x%x is not valid for coverage: Aged Out", node.num);
+        if (age <= (RECENCY_THRESHOLD_MINUTES * 60)) {
+            allCandidates.push_back(meshtastic_RelayNode{node.num, node.last_heard, node.snr});
         }
     }
 
     // We want the most recent, and highest SNR neighbors to determine
     // the most likely coverage this node will offer on its hop
     // In this case recency is more important than SNR because we need a fresh picture of coverage
-    std::sort(allCandidates.begin(), allCandidates.end(), [](const NodeCandidate &a, const NodeCandidate &b) {
+    std::sort(allCandidates.begin(), allCandidates.end(), [](const meshtastic_RelayNode &a, const meshtastic_RelayNode &b) {
         // 1) Descending by lastHeard
-        if (a.lastHeard != b.lastHeard) {
-            return a.lastHeard > b.lastHeard;
+        if (a.last_heard != b.last_heard) {
+            return a.last_heard > b.last_heard;
         }
         // 2) If tie, descending by snr
         return a.snr > b.snr;
     });
 
-    // 4) Reduce to MAX_NEIGHBORS_PER_HOP
+    // 3) Reduce to MAX_NEIGHBORS_PER_HOP
     if (allCandidates.size() > MAX_NEIGHBORS_PER_HOP) {
         allCandidates.resize(MAX_NEIGHBORS_PER_HOP);
     }
 
-    // 5) Extract just the node ids for return
-    std::vector<NodeNum> recentNeighbors;
-    recentNeighbors.reserve(allCandidates.size());
-    for (auto &cand : allCandidates) {
-        recentNeighbors.push_back(cand.num);
-    }
-
-    return recentNeighbors;
+    return allCandidates;
 }
 
 void NodeDB::cleanupMeshDB()
 {
     int newPos = 0, removed = 0;
-    std::vector<meshtastic_NodeInfoLite> newlyEphemeral;
-    newlyEphemeral.reserve(numMeshNodes);
 
     for (int i = 0; i < numMeshNodes; i++) {
         if (meshNodes->at(i).has_user) {
@@ -946,18 +906,29 @@ void NodeDB::cleanupMeshDB()
             meshNodes->at(newPos++) = meshNodes->at(i);
         } else {
             removed++;
-
-            // If this node doesn't have user data, we consider it "unknown" and ephemeral
-            newlyEphemeral.push_back(meshNodes->at(i));
         }
     }
     numMeshNodes -= removed;
     std::fill(devicestate.node_db_lite.begin() + numMeshNodes, devicestate.node_db_lite.begin() + numMeshNodes + removed,
               meshtastic_NodeInfoLite());
 
-    ephemeralNodes = std::move(newlyEphemeral);
+    LOG_DEBUG("cleanupMeshDB purged %d node entries", removed);
 
-    LOG_DEBUG("cleanupMeshDB purged %d entries", removed);
+    uint32_t now = getTime();
+    newPos = 0, removed = 0;
+    for (int i = 0; i < numRelayNodes; i++) {
+        uint32_t age = now - relayNodes->at(i).last_heard;
+        if (age <= (RECENCY_THRESHOLD_MINUTES * 60)) {
+            relayNodes->at(newPos++) = relayNodes->at(i);
+        } else {
+            removed++;
+        }
+    }
+    numRelayNodes -= removed;
+    std::fill(devicestate.relay_db.begin() + numRelayNodes, devicestate.relay_db.begin() + numRelayNodes + removed,
+              meshtastic_RelayNode());
+
+    LOG_DEBUG("cleanupMeshDB purged %d relay entries", removed);
 }
 
 void NodeDB::installDefaultDeviceState()
@@ -966,7 +937,9 @@ void NodeDB::installDefaultDeviceState()
     // memset(&devicestate, 0, sizeof(meshtastic_DeviceState));
 
     numMeshNodes = 0;
+    numRelayNodes = 0;
     meshNodes = &devicestate.node_db_lite;
+    relayNodes = &devicestate.relay_db;
 
     // init our devicestate with valid flags so protobuf writing/reading will work
     devicestate.has_my_node = true;
@@ -1093,15 +1066,25 @@ void NodeDB::loadFromDisk()
         LOG_WARN("Devicestate %d is old, discard", devicestate.version);
         installDefaultDeviceState();
     } else {
-        LOG_INFO("Loaded saved devicestate version %d, with nodecount: %d", devicestate.version, devicestate.node_db_lite.size());
+        LOG_INFO("Loaded saved devicestate version %d, with nodecount: %d, relaycount: %d", devicestate.version,
+                 devicestate.node_db_lite.size(), devicestate.relay_db.size());
         meshNodes = &devicestate.node_db_lite;
         numMeshNodes = devicestate.node_db_lite.size();
+        relayNodes = &devicestate.relay_db;
+        numRelayNodes = devicestate.relay_db.size();
     }
+
     if (numMeshNodes > MAX_NUM_NODES) {
         LOG_WARN("Node count %d exceeds MAX_NUM_NODES %d, truncating", numMeshNodes, MAX_NUM_NODES);
         numMeshNodes = MAX_NUM_NODES;
     }
     meshNodes->resize(MAX_NUM_NODES);
+
+    if (numRelayNodes > MAX_NUM_RELAYS) {
+        LOG_WARN("Relay node count %d exceeds MAX_NUM_RELAYS %d, truncating", numRelayNodes, MAX_NUM_RELAYS);
+        numRelayNodes = MAX_NUM_RELAYS;
+    }
+    relayNodes->resize(MAX_NUM_RELAYS);
 
     state = loadProto(configFileName, meshtastic_LocalConfig_size, sizeof(meshtastic_LocalConfig), &meshtastic_LocalConfig_msg,
                       &config);
@@ -1267,8 +1250,10 @@ bool NodeDB::saveDeviceStateToDisk()
 #endif
     // Note: if MAX_NUM_NODES=100 and meshtastic_NodeInfoLite_size=166, so will be approximately 17KB
     // Because so huge we _must_ not use fullAtomic, because the filesystem is probably too small to hold two copies of this
-    return saveProto(prefFileName, sizeof(devicestate) + numMeshNodes * meshtastic_NodeInfoLite_size, &meshtastic_DeviceState_msg,
-                     &devicestate, false);
+    return saveProto(prefFileName,
+                     sizeof(devicestate) + (numMeshNodes * meshtastic_NodeInfoLite_size) +
+                         (numRelayNodes * meshtastic_RelayNode_size),
+                     &meshtastic_DeviceState_msg, &devicestate, false);
 }
 
 bool NodeDB::saveToDiskNoRetry(int saveWhat)
@@ -1523,16 +1508,20 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
         LOG_DEBUG("Update DB node 0x%x, rx_time=%u", mp.from, mp.rx_time);
 
         meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getFrom(&mp));
+        meshtastic_RelayNode *relay = getOrCreateRelayNode(mp.relay_node);
         if (!info) {
             return;
         }
 
         if (mp.rx_time) { // if the packet has a valid timestamp use it to update our last_heard
             info->last_heard = mp.rx_time;
+            relay->last_heard = mp.rx_time;
         }
 
-        if (mp.rx_snr)
+        if (mp.rx_snr) {
             info->snr = mp.rx_snr; // keep the most recent SNR we received for this node.
+            relay->snr = mp.rx_snr;
+        }
 
         info->via_mqtt = mp.via_mqtt; // Store if we received this packet via MQTT
 
@@ -1564,10 +1553,26 @@ meshtastic_NodeInfoLite *NodeDB::getMeshNode(NodeNum n)
     return NULL;
 }
 
+/// Find a relay node in our DB, return null for missing
+/// NOTE: This function might be called from an ISR
+meshtastic_RelayNode *NodeDB::getRelayNode(NodeNum n)
+{
+    for (int i = 0; i < numRelayNodes; i++)
+        if (relayNodes->at(i).num == n)
+            return &relayNodes->at(i);
+
+    return NULL;
+}
+
 // returns true if the maximum number of nodes is reached or we are running low on memory
 bool NodeDB::isFull()
 {
     return (numMeshNodes >= MAX_NUM_NODES) || (memGet.getFreeHeap() < MINIMUM_SAFE_FREE_HEAP);
+}
+
+bool NodeDB::isRelayBufferFull()
+{
+    return (numRelayNodes >= MAX_NUM_RELAYS) || (memGet.getFreeHeap() < MINIMUM_SAFE_FREE_HEAP);
 }
 
 /// Find a node in our DB, create an empty NodeInfo if missing
@@ -1620,6 +1625,44 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
     }
 
     return lite;
+}
+
+meshtastic_RelayNode *NodeDB::getOrCreateRelayNode(NodeNum n)
+{
+    meshtastic_RelayNode *relay = getRelayNode(n);
+
+    if (!relay) {
+        if (isRelayBufferFull()) {
+            LOG_INFO("Relay database full with %i relays and %u bytes free. Erasing oldest entry", numRelayNodes,
+                     memGet.getFreeHeap());
+            // look for oldest node and erase it
+            uint32_t oldest = UINT32_MAX;
+            int oldestIndex = -1;
+            for (int i = 1; i < numRelayNodes; i++) {
+                // Simply the oldest non-favorite node
+                if (relayNodes->at(i).last_heard < oldest) {
+                    oldest = relayNodes->at(i).last_heard;
+                    oldestIndex = i;
+                }
+            }
+            if (oldestIndex != -1) {
+                // Shove the remaining nodes down the chain
+                for (int i = oldestIndex; i < numRelayNodes - 1; i++) {
+                    relayNodes->at(i) = relayNodes->at(i + 1);
+                }
+                (numRelayNodes)--;
+            }
+        }
+        // add the node at the end
+        relay = &relayNodes->at((numRelayNodes)++);
+
+        // everything is missing except the nodenum
+        memset(relay, 0, sizeof(*relay));
+        relay->num = n;
+        LOG_INFO("Adding relay to database with %i nodes and %u bytes free!", numRelayNodes, memGet.getFreeHeap());
+    }
+
+    return relay;
 }
 
 /// Sometimes we will have Position objects that only have a time, so check for

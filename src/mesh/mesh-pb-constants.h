@@ -23,6 +23,11 @@
 #define MAX_NUM_NODES 100
 #endif
 
+/// max number of relays allowed
+#ifndef MAX_NUM_RELAYS
+#define MAX_NUM_RELAYS 20
+#endif
+
 #define MAX_NUM_NODES_FS 100
 
 /// Max number of channels allowed
