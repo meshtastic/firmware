@@ -498,7 +498,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #else
     config.lora.hop_limit = HOP_RELIABLE;
 #endif
-LOG_DEBUG("Hop Limit set to %x", config.lora.hop_limit);
+    LOG_DEBUG("Hop Limit set to %x", config.lora.hop_limit);
 #ifdef USERPREFS_CONFIG_LORA_IGNORE_MQTT
     config.lora.ignore_mqtt = USERPREFS_CONFIG_LORA_IGNORE_MQTT;
 #else
@@ -835,17 +835,12 @@ bool NodeDB::isValidCandidateForCoverage(const meshtastic_NodeInfoLite &node)
         LOG_DEBUG("Node 0x%x is not valid for coverage: Ignored", node.num);
         return false;
     }
-    // 3) Exclude nodes that aren't direct neighbors
-    if (!node.has_hops_away || node.hops_away != 0) {
-        LOG_DEBUG("Node 0x%x is not valid for coverage: Not Direct Neighbor", node.num);
-        return false;
-    }
-    // 4) Exclude MQTT-based nodes if desired
+    // 3) Exclude MQTT-based nodes if desired
     if (node.via_mqtt) {
         LOG_DEBUG("Node 0x%x is not valid for coverage: MQTT", node.num);
         return false;
     }
-    // 5) Must have last_heard
+    // 4) Must have last_heard
     if (node.last_heard == 0) {
         LOG_DEBUG("Node 0x%x is not valid for coverage: Missing Last Heard", node.num);
         return false;
@@ -869,7 +864,6 @@ bool NodeDB::isValidCandidateForCoverage(const meshtastic_NodeInfoLite &node)
 std::vector<NodeNum> NodeDB::getCoveredNodes(uint32_t timeWindowSecs)
 {
     uint32_t now = getTime();
-    NodeNum localNode = getNodeNum();
 
     // We'll collect (nodeNum, last_heard, snr) for both main DB + ephemeral
     struct NodeCandidate {
@@ -891,7 +885,7 @@ std::vector<NodeNum> NodeDB::getCoveredNodes(uint32_t timeWindowSecs)
 
         uint32_t age = now - node.last_heard;
         if (age <= timeWindowSecs) {
-            allCandidates.push_back(NodeCandidate{node.num, node.last_heard, node.snr});
+            allCandidates.push_back(NodeCandidate{node.relay_node, node.last_heard, node.snr});
         }
     }
 
@@ -903,9 +897,9 @@ std::vector<NodeNum> NodeDB::getCoveredNodes(uint32_t timeWindowSecs)
 
         uint32_t age = now - node.last_heard;
         if (age <= timeWindowSecs) {
-            allCandidates.push_back(NodeCandidate{node.num, node.last_heard, node.snr});
+            allCandidates.push_back(NodeCandidate{node.relay_node, node.last_heard, node.snr});
         } else {
-            LOG_DEBUG("Node 0x%x is not valid for coverage: Aged Out", node.num);
+            LOG_DEBUG("Node 0x%x is not valid for coverage: Aged Out", node.relay_node);
         }
     }
 
@@ -960,7 +954,7 @@ void NodeDB::cleanupMeshDB()
 
     for (int i = 0; i < numMeshNodes; i++) {
         if (meshNodes->at(i).has_user) {
-            if (meshNodes->at(i).has_hops_away && meshNodes->at(i).hops_away == 0 && meshNodes->at(i).last_heard > maxLastHeardDirectNeighbor_) {
+            if (meshNodes->at(i).last_heard > maxLastHeardDirectNeighbor_) {
                 maxLastHeardDirectNeighbor_ = meshNodes->at(i).last_heard;
             }
             if (meshNodes->at(i).user.public_key.size > 0) {

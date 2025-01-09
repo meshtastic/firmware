@@ -42,7 +42,7 @@ typedef struct {
     uint8_t next_hop;
 
     // ***For future use*** Last byte of the NodeNum of the node that will relay/relayed this packet
-    uint8_t relay_node;
+    NodeNum relay_node;
 
     // A 16-byte Bloom filter that tracks coverage of the current node.
     uint8_t coverage_filter[BLOOM_FILTER_SIZE_BYTES] __attribute__((__aligned__));

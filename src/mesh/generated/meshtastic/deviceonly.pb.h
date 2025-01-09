@@ -92,6 +92,8 @@ typedef struct _meshtastic_NodeInfoLite {
     bool is_ignored;
     /* Last byte of the node number of the node that should be used as the next hop to reach this node. */
     uint8_t next_hop;
+    /* Node id of the relaying node. */
+    uint32_t relay_node;
 } meshtastic_NodeInfoLite;
 
 /* This message is never sent over the wire, but it is used for serializing DB

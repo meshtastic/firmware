@@ -37,11 +37,10 @@ enum RxSource {
  **/
 
 #ifdef USERPREFS_USE_COVERAGE_FILTER
-    #define HOP_MAX 15
+#define HOP_MAX 15
 #else
-    #define HOP_MAX 7
+#define HOP_MAX 7
 #endif
-
 
 /// We normally just use max 3 hops for sending reliable messages
 #define HOP_RELIABLE 3
@@ -53,7 +52,7 @@ enum RxSource {
 #define STALE_COVERAGE_SECONDS 60 * 60 * 0.5 // 1 hour
 
 // Size of the Bloom filter in bytes (128 bits)
-#define BLOOM_FILTER_SIZE_BYTES 16
+#define BLOOM_FILTER_SIZE_BYTES 13
 
 // Size of the Bloom filter in bits (128 bits)
 #define BLOOM_FILTER_SIZE_BITS (BLOOM_FILTER_SIZE_BYTES * 8)

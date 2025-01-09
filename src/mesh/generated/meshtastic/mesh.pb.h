@@ -690,7 +690,7 @@ typedef struct _meshtastic_MqttClientProxyMessage {
 
 typedef PB_BYTES_ARRAY_T(256) meshtastic_MeshPacket_encrypted_t;
 typedef PB_BYTES_ARRAY_T(32) meshtastic_MeshPacket_public_key_t;
-typedef PB_BYTES_ARRAY_T(16) meshtastic_MeshPacket_coverage_filter_t;
+typedef PB_BYTES_ARRAY_T(13) meshtastic_MeshPacket_coverage_filter_t;
 /* A packet envelope sent/received over the mesh
  only payload_variant is sent in the payload portion of the LORA packet.
  The other fields are either not sent at all, or sent in the special 16 byte LORA header. */
@@ -770,7 +770,7 @@ typedef struct _meshtastic_MeshPacket {
     uint8_t next_hop;
     /* Last byte of the node number of the node that will relay/relayed this packet.
  Set by the firmware internally, clients are not supposed to set this. */
-    uint8_t relay_node;
+    uint32_t relay_node;
     /* *Never* sent over the radio links.
  Timestamp after which this packet may be sent.
  Set by the firmware internally, clients are not supposed to set this. */
