@@ -1,4 +1,12 @@
+# This container is used to build Meshtastic with the libraries required by the fuzzer.
+# ClusterFuzzLite starts the container, runs the build.sh script, and then exits.
+
+# As this is not a long running service, health-checks are not required. ClusterFuzzLite
+# also only works if the user remains unchanged from the base image (it expects to run
+# as root).
 # trunk-ignore-all(trivy/DS026): No healthcheck is needed for this builder container
+# trunk-ignore-all(checkov/CKV_DOCKER_2): No healthcheck is needed for this builder container
+# trunk-ignore-all(checkov/CKV_DOCKER_3): We must run as root for this container
 # trunk-ignore-all(trivy/DS002): We must run as root for this container
 # trunk-ignore-all(checkov/CKV_DOCKER_8): We must run as root for this container
 # trunk-ignore-all(hadolint/DL3002): We must run as root for this container
