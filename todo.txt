@@ -14,8 +14,6 @@ Features
 
 Critical Tasks
 ====================
-[tbc]   fix attach/detach interrupts for ButtonThread.cpp
-            - check with older ESP32 variants
 []      imperial units
 []      hook reboot to save flash data
 []      hotfix for handling emoji tapbacks
@@ -32,6 +30,7 @@ Improvements
 []      Descriptive headers for some settings in menu
 []      Re-render applets when RTC is set. Some UI elements change (e.g. "Recents" applet counts)
 []      Re-render all applets every time we update. Apparently it's faster to re-render than to blank the pixels for just one tile
+[]      SNR from NodeDB. No need to remember this manually anymore!
 
 Known Bugs
 =====================
