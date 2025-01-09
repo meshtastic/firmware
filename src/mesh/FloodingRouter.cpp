@@ -77,7 +77,7 @@ bool FloodingRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
                 CoverageFilter incomingCoverage;
                 loadCoverageFilterFromPacket(p, incomingCoverage);
 
-                float forwardProb = calculateForwardProbability(incomingCoverage, p->from);
+                float forwardProb = calculateForwardProbability(incomingCoverage, p->from, p->relay_node);
 
                 float rnd = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
                 if (rnd <= forwardProb) {
@@ -162,7 +162,7 @@ void FloodingRouter::mergeMyCoverage(CoverageFilter &coverage)
     coverage.add(nodeDB->getNodeNum());
 }
 
-float FloodingRouter::calculateForwardProbability(const CoverageFilter &incoming, NodeNum from)
+float FloodingRouter::calculateForwardProbability(const CoverageFilter &incoming, NodeNum from, NodeNum relayNode)
 {
 #ifndef USERPREFS_USE_COVERAGE_FILTER
     LOG_DEBUG("Coverage filter is NOT enabled.");
@@ -193,7 +193,7 @@ float FloodingRouter::calculateForwardProbability(const CoverageFilter &incoming
     uint8_t uncovered = 0;
 
     for (auto nodeId : recentNeighbors) {
-        if (nodeId == from)
+        if (nodeId == from || nodeId == relayNode)
             continue;
 
         auto nodeInfo = nodeDB->getMeshNode(nodeId);
