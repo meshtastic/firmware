@@ -5,6 +5,7 @@
 #include <string>
 #include <thread>
 
+#include "PortduinoGPIO.h"
 #include "PortduinoGlue.h"
 #include "PowerFSM.h"
 #include "mesh/MeshTypes.h"
@@ -34,6 +35,7 @@ std::condition_variable loopCV;
 // single, currently running, test case.
 void runLoopOnce()
 {
+    realHardware = true; // Avoids delay(100) within portduino/main.cpp
     std::unique_lock<std::mutex> lck(loopLock);
     fuzzerRunning = true;
     loopCanRun = true;
