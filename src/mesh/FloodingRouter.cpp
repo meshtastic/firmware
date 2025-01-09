@@ -2,6 +2,7 @@
 
 #include "configuration.h"
 #include "mesh-pb-constants.h"
+#include <RTC.h>
 
 FloodingRouter::FloodingRouter() {}
 
@@ -184,30 +185,39 @@ float FloodingRouter::calculateForwardProbability(const CoverageFilter &incoming
         return UNKNOWN_COVERAGE_FORWARD_PROB;
     }
 
+    uint32_t now = getTime();
     // Count how many neighbors are NOT yet in the coverage
-    int uncovered = 0;
-    int neighbors = 0;
+    float totalWeight = 0.0f;
+    float uncoveredWeight = 0.0f;
+    uint8_t neighbors = 0;
+    uint8_t uncovered = 0;
+
     for (auto nodeId : recentNeighbors) {
-        // Don't count the person we got this packet from
         if (nodeId == from)
             continue;
 
-        neighbors++;
+        auto nodeInfo = nodeDB->getMeshNode(nodeId);
+        if (!nodeInfo)
+            continue;
 
+        uint32_t age = now - nodeInfo->last_heard;
+        float recency = computeRecencyWeight(age, RECENCY_THRESHOLD_MINUTES * 60);
+
+        totalWeight += recency;
+        neighbors += 1;
         if (!incoming.check(nodeId)) {
-            uncovered++;
+            uncoveredWeight += recency;
+            uncovered += 1;
         }
     }
 
-    // Calculate coverage ratio
-    float coverageRatio = 0.0;
+    float coverageRatio = 0.0f;
+
     // coverage only exists if neighbors are more than 0
-    if (neighbors > 0) {
-        coverageRatio = static_cast<float>(uncovered) / static_cast<float>(neighbors);
+    if (totalWeight > 0) {
+        coverageRatio = uncoveredWeight / totalWeight;
     }
 
-    // unknownNodeCoverageRatio is inherently iffy so don't scale up its contribution to the probability of rebroadcast
-    // This essentially makes the forward probability non-zero for nodes that have a set of "unknown" neighbors
     float forwardProb = BASE_FORWARD_PROB + (coverageRatio * COVERAGE_SCALE_FACTOR);
 
     // Clamp probability between 0 and 1
@@ -216,4 +226,13 @@ float FloodingRouter::calculateForwardProbability(const CoverageFilter &incoming
     LOG_DEBUG("CoverageRatio=%.2f, ForwardProb=%.2f (Uncovered=%d, Total=%zu)", coverageRatio, forwardProb, uncovered, neighbors);
 
     return forwardProb;
+}
+
+float FloodingRouter::computeRecencyWeight(uint32_t age, uint32_t timeWindowSecs)
+{
+    // A node just heard from age=0 => weight=1.0
+    // A node at the edge of timeWindowSecs => weight approaches 0.
+    // We clamp to [0, 1] just in case of rounding.
+    float ratio = 1.0f - (static_cast<float>(age) / static_cast<float>(timeWindowSecs));
+    return std::max(std::min(ratio, 1.0f), 0.0f);
 }

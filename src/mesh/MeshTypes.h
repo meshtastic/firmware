@@ -68,7 +68,7 @@ enum RxSource {
 
 // Recency threshold in minutes
 // Currently set to 1 hour because that is the minimum interval for nodeinfo broadcasts
-#define RECENCY_THRESHOLD_MINUTES 60
+#define RECENCY_THRESHOLD_MINUTES 90
 
 typedef int ErrorCode;
 

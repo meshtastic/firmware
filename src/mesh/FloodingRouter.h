@@ -44,6 +44,8 @@ class FloodingRouter : public Router, protected PacketHistory
 
     float calculateForwardProbability(const CoverageFilter &incoming, NodeNum from);
 
+    float computeRecencyWeight(uint32_t age, uint32_t timeWindowSecs);
+
   public:
     /**
      * Constructor
