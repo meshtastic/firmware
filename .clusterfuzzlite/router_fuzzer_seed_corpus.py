@@ -17,7 +17,13 @@ will be copied into the `public_key` field.
 import base64
 
 from meshtastic import BROADCAST_NUM
-from meshtastic.protobuf import admin_pb2, mesh_pb2, portnums_pb2, telemetry_pb2
+from meshtastic.protobuf import (
+    admin_pb2,
+    atak_pb2,
+    mesh_pb2,
+    portnums_pb2,
+    telemetry_pb2,
+)
 
 
 def From(node: int = 9):
@@ -132,6 +138,26 @@ packets = (
                 ).SerializeToString(),
             ),
             pki_encrypted=True,
+            **From(),
+        ),
+    ),
+    (
+        "atak",
+        mesh_pb2.MeshPacket(
+            decoded=mesh_pb2.Data(
+                portnum=portnums_pb2.PortNum.ATAK_PLUGIN,
+                payload=atak_pb2.TAKPacket(
+                    is_compressed=True,
+                    # Note, the strings are not valid for a compressed message, but will
+                    # give the fuzzer a starting point.
+                    contact=atak_pb2.Contact(
+                        callsign="callsign", device_callsign="device_callsign"
+                    ),
+                    chat=atak_pb2.GeoChat(
+                        message="message", to="to", to_callsign="to_callsign"
+                    ),
+                ).SerializeToString(),
+            ),
             **From(),
         ),
     ),
