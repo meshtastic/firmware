@@ -885,7 +885,7 @@ std::vector<NodeNum> NodeDB::getCoveredNodes(uint32_t timeWindowSecs)
 
         uint32_t age = now - node.last_heard;
         if (age <= timeWindowSecs) {
-            allCandidates.push_back(NodeCandidate{node.relay_node, node.last_heard, node.snr});
+            allCandidates.push_back(NodeCandidate{node.num, node.last_heard, node.snr});
         }
     }
 
@@ -897,9 +897,9 @@ std::vector<NodeNum> NodeDB::getCoveredNodes(uint32_t timeWindowSecs)
 
         uint32_t age = now - node.last_heard;
         if (age <= timeWindowSecs) {
-            allCandidates.push_back(NodeCandidate{node.relay_node, node.last_heard, node.snr});
+            allCandidates.push_back(NodeCandidate{node.num, node.last_heard, node.snr});
         } else {
-            LOG_DEBUG("Node 0x%x is not valid for coverage: Aged Out", node.relay_node);
+            LOG_DEBUG("Node 0x%x is not valid for coverage: Aged Out", node.num);
         }
     }
 
