@@ -173,18 +173,15 @@ float FloodingRouter::calculateForwardProbability(const CoverageFilter &incoming
         return 1.0f;
     }
 
-    // If we haven't heard from any other nodes directly within the stale coverage time, fall back to always forward
-    if (nodeDB->secondsSinceLastDirectNeighborHeard() >= STALE_COVERAGE_SECONDS) {
-        return UNKNOWN_COVERAGE_FORWARD_PROB;
-    }
-
     // Retrieve recent direct neighbors within the time window
     std::vector<NodeNum> recentNeighbors = nodeDB->getCoveredNodes(RECENCY_THRESHOLD_MINUTES * 60);
 
     if (recentNeighbors.empty()) {
-        // No neighbors to add coverage for
+        // Having no direct neighbors is a sign that our coverage is
+        // inconclusive, so we should forward the packet using UNKNOWN_COVERAGE_FORWARD_PROB
+        // And if we truly have no neighbors, there is no harm in emitting another packet
         LOG_DEBUG("No recent direct neighbors to add coverage for.");
-        return 0.0f;
+        return UNKNOWN_COVERAGE_FORWARD_PROB;
     }
 
     // Count how many neighbors are NOT yet in the coverage

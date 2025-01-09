@@ -177,11 +177,8 @@ class NodeDB
      */
     std::vector<NodeNum> getCoveredNodes(uint32_t timeWindowSecs);
 
-    uint32_t secondsSinceLastDirectNeighborHeard();
-
   private:
-    uint32_t lastNodeDbSave = 0;              // when we last saved our db to flash
-    uint32_t maxLastHeardDirectNeighbor_ = 0; // the most recent last_heard value we've seen
+    uint32_t lastNodeDbSave = 0; // when we last saved our db to flash
 
     /// Find a node in our DB, create an empty NodeInfoLite if missing
     meshtastic_NodeInfoLite *getOrCreateMeshNode(NodeNum n);
