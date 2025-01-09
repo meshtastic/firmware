@@ -172,9 +172,9 @@ float FloodingRouter::calculateForwardProbability(const CoverageFilter &incoming
         config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
         return 1.0f;
     }
-    
+
     // If we haven't heard from any other nodes directly within the stale coverage time, fall back to always forward
-    if (nodeDB->secondsSinceLastDirectNeighborHeard() >= STALE_COVERAGE_SECONDS){
+    if (nodeDB->secondsSinceLastDirectNeighborHeard() >= STALE_COVERAGE_SECONDS) {
         return UNKNOWN_COVERAGE_FORWARD_PROB;
     }
 
