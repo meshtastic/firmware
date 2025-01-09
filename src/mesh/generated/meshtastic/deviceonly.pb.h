@@ -64,6 +64,9 @@ typedef struct _meshtastic_RelayNode {
     uint32_t num;
     /* Set to indicate the last time we received a packet from this node */
     uint32_t last_heard;
+    /* Returns the Signal-to-noise ratio (SNR) of the last received message,
+ as measured by the receiver. Return SNR of the last received message in dB */
+    float snr;
 } meshtastic_RelayNode;
 
 typedef struct _meshtastic_NodeInfoLite {
@@ -164,13 +167,13 @@ extern "C" {
 /* Initializer values for message structs */
 #define meshtastic_PositionLite_init_default     {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN}
 #define meshtastic_UserLite_init_default         {{0}, "", "", _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}}
-#define meshtastic_RelayNode_init_default        {0, 0}
+#define meshtastic_RelayNode_init_default        {0, 0, 0}
 #define meshtastic_NodeInfoLite_init_default     {0, false, meshtastic_UserLite_init_default, false, meshtastic_PositionLite_init_default, 0, 0, false, meshtastic_DeviceMetrics_init_default, 0, 0, false, 0, 0, 0, 0}
 #define meshtastic_DeviceState_init_default      {false, meshtastic_MyNodeInfo_init_default, false, meshtastic_User_init_default, 0, {meshtastic_MeshPacket_init_default}, false, meshtastic_MeshPacket_init_default, 0, 0, 0, false, meshtastic_MeshPacket_init_default, 0, {meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default}, {0}, {0}}
 #define meshtastic_ChannelFile_init_default      {0, {meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default}, 0}
 #define meshtastic_PositionLite_init_zero        {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN}
 #define meshtastic_UserLite_init_zero            {{0}, "", "", _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}}
-#define meshtastic_RelayNode_init_zero           {0, 0}
+#define meshtastic_RelayNode_init_zero           {0, 0, 0}
 #define meshtastic_NodeInfoLite_init_zero        {0, false, meshtastic_UserLite_init_zero, false, meshtastic_PositionLite_init_zero, 0, 0, false, meshtastic_DeviceMetrics_init_zero, 0, 0, false, 0, 0, 0, 0}
 #define meshtastic_DeviceState_init_zero         {false, meshtastic_MyNodeInfo_init_zero, false, meshtastic_User_init_zero, 0, {meshtastic_MeshPacket_init_zero}, false, meshtastic_MeshPacket_init_zero, 0, 0, 0, false, meshtastic_MeshPacket_init_zero, 0, {meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero}, {0}, {0}}
 #define meshtastic_ChannelFile_init_zero         {0, {meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero}, 0}
@@ -190,6 +193,7 @@ extern "C" {
 #define meshtastic_UserLite_public_key_tag       7
 #define meshtastic_RelayNode_num_tag             1
 #define meshtastic_RelayNode_last_heard_tag      2
+#define meshtastic_RelayNode_snr_tag             3
 #define meshtastic_NodeInfoLite_num_tag          1
 #define meshtastic_NodeInfoLite_user_tag         2
 #define meshtastic_NodeInfoLite_position_tag     3
@@ -239,7 +243,8 @@ X(a, STATIC,   SINGULAR, BYTES,    public_key,        7)
 
 #define meshtastic_RelayNode_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   num,               1) \
-X(a, STATIC,   SINGULAR, FIXED32,  last_heard,        2)
+X(a, STATIC,   SINGULAR, FIXED32,  last_heard,        2) \
+X(a, STATIC,   SINGULAR, FLOAT,    snr,               3)
 #define meshtastic_RelayNode_CALLBACK NULL
 #define meshtastic_RelayNode_DEFAULT NULL
 
@@ -314,7 +319,7 @@ extern const pb_msgdesc_t meshtastic_ChannelFile_msg;
 #define meshtastic_ChannelFile_size              718
 #define meshtastic_NodeInfoLite_size             188
 #define meshtastic_PositionLite_size             28
-#define meshtastic_RelayNode_size                11
+#define meshtastic_RelayNode_size                16
 #define meshtastic_UserLite_size                 96
 
 #ifdef __cplusplus
