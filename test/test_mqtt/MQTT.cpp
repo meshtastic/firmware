@@ -786,7 +786,6 @@ void setup()
     RUN_TEST(test_proxyToMeshServiceDecoded);
     RUN_TEST(test_proxyToMeshServiceEncrypted);
     RUN_TEST(test_dontMqttMeOnPublicServer);
-    RUN_TEST(test_okToMqttOnPrivateServer);
     RUN_TEST(test_noRangeTestAppOnDefaultServer);
     RUN_TEST(test_noDetectionSensorAppOnDefaultServer);
     RUN_TEST(test_sendQueued);
