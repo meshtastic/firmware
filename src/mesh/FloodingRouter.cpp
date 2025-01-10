@@ -169,6 +169,7 @@ float FloodingRouter::calculateForwardProbability(const CoverageFilter &incoming
     return 1.0f;
 #endif
     // If we are a router or repeater, always forward because it's assumed these are in the most advantageous locations
+    // Small meshes don't use coverage filter
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
         config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
         return 1.0f;
@@ -214,7 +215,11 @@ float FloodingRouter::calculateForwardProbability(const CoverageFilter &incoming
         coverageRatio = uncoveredWeight / totalWeight;
     }
 
-    float forwardProb = (coverageRatio * COVERAGE_SCALE_FACTOR);
+    float smallMeshCorrection = 0.0f;
+    if (nodeDB->getNumOnlineMeshNodes(true) <= 10) {
+        smallMeshCorrection = 0.5f;
+    }
+    float forwardProb = (coverageRatio * COVERAGE_SCALE_FACTOR) + smallMeshCorrection;
 
     // Clamp probability between BASE_FORWARD_PROB and 1
     forwardProb = std::min(std::max(forwardProb, BASE_FORWARD_PROB), 1.0f);
