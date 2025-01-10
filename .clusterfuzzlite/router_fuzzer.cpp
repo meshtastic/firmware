@@ -1,7 +1,9 @@
 // Fuzzer implementation that sends MeshPackets to Router::enqueueReceivedMessage.
 #include <condition_variable>
+#include <cstdlib>
 #include <mutex>
 #include <pb_decode.h>
+#include <stdexcept>
 #include <string>
 #include <thread>
 
@@ -23,12 +25,21 @@ bool hasBeenConfigured = false;
 // These are used to block the Arduino loop() function until a fuzzer input is ready. This is
 // an optimization that prevents a sleep from happening before the loop is run. The Arduino loop
 // function calls loopCanSleep() before sleeping. loopCanSleep is implemented here in the fuzzer
-// and blocks until startLoop() is called to signal for the loop to run.
-bool fuzzerRunning = false; // Set to true once LLVMFuzzerTestOneInput has started running.
-bool loopCanRun = true;     // The main Arduino loop() can run when this is true.
-bool loopIsWaiting = false; // The main Arduino loop() is waiting to be signaled to run.
+// and blocks until runLoopOnce() is called to signal for the loop to run.
+bool fuzzerRunning = false;  // Set to true once LLVMFuzzerTestOneInput has started running.
+bool loopCanRun = true;      // The main Arduino loop() can run when this is true.
+bool loopIsWaiting = false;  // The main Arduino loop() is waiting to be signaled to run.
+bool loopShouldExit = false; // Indicates that the main Arduino thread should exit by throwing ShouldExitException.
 std::mutex loopLock;
 std::condition_variable loopCV;
+std::thread meshtasticThread;
+
+// This exception is thrown when the portuino main thread should exit.
+class ShouldExitException : public std::runtime_error
+{
+  public:
+    using std::runtime_error::runtime_error;
+};
 
 // Start the loop for one test case and wait till the loop has completed. This ensures fuzz
 // test cases do not overlap with one another. This helps the fuzzer attribute a crash to the
@@ -43,6 +54,24 @@ void runLoopOnce()
     loopCV.wait(lck, [] { return !loopCanRun && loopIsWaiting; });
 }
 } // namespace
+
+// Called in the main Arduino loop function to determine if the loop can delay/sleep before running again.
+// We use this as a way to block the loop from sleeping and to start the loop function immediately when a
+// fuzzer input is ready.
+bool loopCanSleep()
+{
+    std::unique_lock<std::mutex> lck(loopLock);
+    loopIsWaiting = true;
+    loopCV.notify_one();
+    loopCV.wait(lck, [] { return loopCanRun || loopShouldExit; });
+    loopIsWaiting = false;
+    if (loopShouldExit)
+        throw ShouldExitException("exit");
+    if (!fuzzerRunning)
+        return true;    // The loop can sleep before the fuzzer starts.
+    loopCanRun = false; // Only run the loop once before waiting again.
+    return false;
+}
 
 // Called just prior to starting Meshtastic. Allows for setting config values before startup.
 void lateInitVariant()
@@ -97,22 +126,6 @@ void lateInitVariant()
     hasBeenConfigured = true;
 }
 
-// Called in the main Arduino loop function to determine if the loop can delay/sleep before running again.
-// We use this as a way to block the loop from sleeping and to start the loop function immediately when a
-// fuzzer input is ready.
-bool loopCanSleep()
-{
-    std::unique_lock<std::mutex> lck(loopLock);
-    loopIsWaiting = true;
-    loopCV.notify_one();
-    loopCV.wait(lck, [] { return loopCanRun; });
-    loopIsWaiting = false;
-    if (!fuzzerRunning)
-        return true;    // The loop can sleep before the fuzzer starts.
-    loopCanRun = false; // Only run the loop once before waiting again.
-    return false;
-}
-
 extern "C" {
 int portduino_main(int argc, char **argv); // Renamed "main" function from Meshtastic binary.
 
@@ -121,14 +134,24 @@ int LLVMFuzzerInitialize(int *argc, char ***argv)
 {
     settingsMap[maxtophone] = 5;
 
-    std::thread t([program = *argv[0]]() {
+    meshtasticThread = std::thread([program = *argv[0]]() {
         char nodeIdStr[12];
         strcpy(nodeIdStr, std::to_string(nodeId).c_str());
         int argc = 5;
         char *argv[] = {program, "-d", "/tmp/meshtastic", "-h", nodeIdStr, nullptr};
-        portduino_main(argc, argv);
+        try {
+            portduino_main(argc, argv);
+        } catch (const ShouldExitException &) {
+        }
     });
-    t.detach();
+    std::atexit([] {
+        {
+            const std::lock_guard<std::mutex> lck(loopLock);
+            loopShouldExit = true;
+            loopCV.notify_one();
+        }
+        meshtasticThread.join();
+    });
 
     // Wait for startup.
     for (int i = 1; i < 20; ++i) {
