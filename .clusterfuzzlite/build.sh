@@ -8,25 +8,25 @@ env
 cd "$SRC"
 NPROC=$(nproc || echo 1)
 
-LDFLAGS=-lpthread cmake -S "$SRC/yaml-cpp" -B "$SRC/yaml-cpp/build" \
+LDFLAGS=-lpthread cmake -S "$SRC/yaml-cpp" -B "$WORK/yaml-cpp" \
 	-DBUILD_SHARED_LIBS=OFF
-cmake --build "$SRC/yaml-cpp/build" -j "$NPROC"
-cmake --install "$SRC/yaml-cpp/build" --prefix /usr
+cmake --build "$WORK/yaml-cpp" -j "$NPROC"
+cmake --install "$WORK/yaml-cpp" --prefix /usr
 
-cmake -S "$SRC/orcania" -B "$SRC/orcania/build" \
+cmake -S "$SRC/orcania" -B "$WORK/orcania" \
 	-DBUILD_STATIC=ON
-cmake --build "$SRC/orcania/build" -j "$NPROC"
-cmake --install "$SRC/orcania/build" --prefix /usr
+cmake --build "$WORK/orcania" -j "$NPROC"
+cmake --install "$WORK/orcania" --prefix /usr
 
-cmake -S "$SRC/yder" -B "$SRC/yder/build" \
+cmake -S "$SRC/yder" -B "$WORK/yder" \
 	-DBUILD_STATIC=ON -DWITH_JOURNALD=OFF
-cmake --build "$SRC/yder/build" -j "$NPROC"
-cmake --install "$SRC/yder/build" --prefix /usr
+cmake --build "$WORK/yder" -j "$NPROC"
+cmake --install "$WORK/yder" --prefix /usr
 
-cmake -S "$SRC/ulfius" -B "$SRC/ulfius/build" \
+cmake -S "$SRC/ulfius" -B "$WORK/ulfius" \
 	-DBUILD_STATIC=ON -DWITH_JANSSON=OFF -DWITH_CURL=OFF -DWITH_WEBSOCKET=OFF
-cmake --build "$SRC/ulfius/build" -j "$NPROC"
-cmake --install "$SRC/ulfius/build" --prefix /usr
+cmake --build "$WORK/ulfius" -j "$NPROC"
+cmake --install "$WORK/ulfius" --prefix /usr
 
 cd "$SRC/firmware"
 
@@ -50,10 +50,11 @@ for f in .clusterfuzzlite/*_fuzzer.cpp; do
 	fuzzer=$(basename "$f" .cpp)
 	cp -f "$f" src/fuzzer.cpp
 	pio run -vvv --environment "$PIO_ENV"
-	cp ".pio/build/$PIO_ENV/program" "$OUT/$fuzzer"
+	program="$PLATFORMIO_WORKSPACE_DIR/build/$PIO_ENV/program"
+	cp "$program" "$OUT/$fuzzer"
 
 	# Copy shared libraries used by the fuzzer.
-	read -ra shared_libs < <(ldd ".pio/build/$PIO_ENV/program" | sed -n 's/[^=]\+=> \([^ ]\+\).*/\1/p')
+	read -ra shared_libs < <(ldd "$program" | sed -n 's/[^=]\+=> \([^ ]\+\).*/\1/p')
 	cp -f "${shared_libs[@]}" "$OUT/lib/"
 
 	# Build the initial fuzzer seed corpus.
