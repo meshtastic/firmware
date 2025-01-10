@@ -12,8 +12,11 @@ PIO_ENV:=\
 	PLATFORMIO_PACKAGES_DIR=pio/packages
 
 override_dh_auto_build:
-	# Build with platformio
+	# Extract tarballs within source deb
 	tar -xf pio.tar
+	mkdir -p web && tar -xf web.tar -C web
+	gunzip web/ -r
+	# Build with platformio
 	$(PIO_ENV) platformio run -e native
 	# Move the binary and default config to the correct name
 	mv .pio/build/native/program .pio/build/native/meshtasticd

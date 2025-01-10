@@ -1,0 +1,27 @@
+name: Trigger release workflows upon Publish
+
+on:
+  release:
+    types: [published, released]
+
+permissions: read-all
+
+jobs:
+  package-ppa:
+    strategy:
+      fail-fast: false
+      matrix:
+        series: [plucky, oracular, noble, jammy]
+    uses: ./.github/workflows/package_ppa.yml
+    with:
+      ppa_repo: |-
+        ${{ contains(github.event.release.name, 'Beta') && 'beta' || contains(github.event.release.name, 'Alpha') && 'alpha' }}
+      series: ${{ matrix.series }}
+    secrets: inherit
+
+  # package-obs:
+  #   uses: ./.github/workflows/package_obs.yml
+  #   with:
+  #     obs_repo: meshtasticd
+  #     series: ${{ contains(github.event.release.name, 'Beta') && 'beta' || contains(github.event.release.name, 'Alpha') && 'alpha' }}
+  #   secrets: inherit
