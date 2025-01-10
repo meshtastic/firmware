@@ -19,3 +19,5 @@
 #define HAS_GPS 0
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
+
+#define USE_XIAO_ESP32C6_EXTERNAL_ANTENNA

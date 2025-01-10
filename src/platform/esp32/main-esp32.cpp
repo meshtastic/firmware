@@ -173,6 +173,17 @@ void esp32Setup()
 #ifdef HAS_32768HZ
     enableSlowCLK();
 #endif
+
+#ifdef USE_XIAO_ESP32C6_EXTERNAL_ANTENNA
+#warning "Connect an external antenna to your XIAO ESP32C6; otherwise, it may be damaged!"
+    gpio_reset_pin(GPIO_NUM_3);
+    gpio_set_direction(GPIO_NUM_3, GPIO_MODE_OUTPUT);
+    gpio_set_level(GPIO_NUM_3, LOW);
+
+    gpio_reset_pin(GPIO_NUM_14);
+    gpio_set_direction(GPIO_NUM_14, GPIO_MODE_OUTPUT);
+    gpio_set_level(GPIO_NUM_14, HIGH);
+#endif
 }
 
 /// loop code specific to ESP32 targets
