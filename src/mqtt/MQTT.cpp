@@ -45,8 +45,6 @@ constexpr int reconnectMax = 5;
 // FIXME - this size calculation is super sloppy, but it will go away once we dynamically alloc meshpackets
 static uint8_t bytes[meshtastic_MqttClientProxyMessage_size + 30]; // 12 for channel name and 16 for nodeid
 
-static bool isMqttServerAddressPrivate = false;
-
 inline void onReceiveProto(char *topic, byte *payload, size_t length)
 {
     const DecodedServiceEnvelope e(payload, length);
@@ -325,7 +323,6 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
         String host = parseHostAndPort(moduleConfig.mqtt.address).first;
         isConfiguredForDefaultServer = host.length() == 0 || host == default_mqtt_address;
         IPAddress ip;
-        isMqttServerAddressPrivate = ip.fromString(host.c_str()) && isPrivateIpAddress(ip);
 
 #if HAS_NETWORKING
         if (!moduleConfig.mqtt.proxy_to_client_enabled)
@@ -456,7 +453,6 @@ void MQTT::reconnect()
             enabled = true; // Start running background process again
             runASAP = true;
             reconnectCount = 0;
-            isMqttServerAddressPrivate = isPrivateIpAddress(mqttClient->remoteIP());
 
             publishNodeInfo();
             sendSubscriptions();
@@ -624,7 +620,7 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
         // For uplinking other's packets, check if it's not OK to MQTT or if it's an older packet without the bitfield
         bool dontUplink = !mp_decoded.decoded.has_bitfield || !(mp_decoded.decoded.bitfield & BITFIELD_OK_TO_MQTT_MASK);
         // check for the lowest bit of the data bitfield set false, and the use of one of the default keys.
-        if (!isFromUs(&mp_decoded) && dontUplink && !isMqttServerAddressPrivate &&
+        if (!isFromUs(&mp_decoded) && dontUplink &&
             (ch.settings.psk.size < 2 || (ch.settings.psk.size == 16 && memcmp(ch.settings.psk.bytes, defaultpsk, 16)) ||
              (ch.settings.psk.size == 32 && memcmp(ch.settings.psk.bytes, eventpsk, 32)))) {
             LOG_INFO("MQTT onSend - Not forwarding packet due to DontMqttMeBro flag");
