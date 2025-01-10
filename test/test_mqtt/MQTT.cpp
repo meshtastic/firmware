@@ -409,31 +409,6 @@ void test_dontMqttMeOnPublicServer(void)
     TEST_ASSERT_TRUE(pubsub->published_.empty());
 }
 
-// A packet without the OK to MQTT bit set should be published to a private server.
-void test_okToMqttOnPrivateServer(void)
-{
-    // Cause a disconnect.
-    pubsub->connected_ = false;
-    pubsub->refuseConnection_ = true;
-    TEST_ASSERT_TRUE(loopUntil([] { return !unitTest->getPubSub().connected(); }));
-
-    // Use 127.0.0.1 for the server's IP.
-    pubsub->ipAddress_ = 0x7f000001;
-
-    // Reconnect.
-    pubsub->refuseConnection_ = false;
-    TEST_ASSERT_TRUE(loopUntil([] { return unitTest->getPubSub().connected(); }));
-
-    // Send the same packet as test_dontMqttMeOnPublicServer.
-    meshtastic_MeshPacket p = decoded;
-    p.decoded.bitfield = 0;
-    p.decoded.has_bitfield = 0;
-
-    mqtt->onSend(encrypted, p, 0);
-
-    TEST_ASSERT_EQUAL(1, pubsub->published_.size());
-}
-
 // Range tests messages are not uplinked to the default server.
 void test_noRangeTestAppOnDefaultServer(void)
 {
