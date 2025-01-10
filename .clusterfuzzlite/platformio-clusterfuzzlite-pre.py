@@ -14,6 +14,7 @@ from SCons.Script import DefaultEnvironment, Literal
 
 env = DefaultEnvironment()
 
+cxxflags = shlex.split(os.getenv("CXXFLAGS"))
 sanitizer_flags = shlex.split(os.getenv("SANITIZER_FLAGS"))
 lib_fuzzing_engine = shlex.split(os.getenv("LIB_FUZZING_ENGINE"))
 statics = glob.glob("/usr/lib/lib*.a") + glob.glob("/usr/lib/*/lib*.a")
@@ -34,9 +35,12 @@ def replaceStatic(lib):
 # Setup the environment for building with Clang and the OSS-Fuzz required build flags.
 env.Append(
     CFLAGS=os.getenv("CFLAGS"),
-    CXXFLAGS=os.getenv("CXXFLAGS"),
+    CXXFLAGS=cxxflags,
     LIBSOURCE_DIRS=["/usr/lib/x86_64-linux-gnu"],
-    LINKFLAGS=sanitizer_flags + lib_fuzzing_engine + ["-stdlib=libc++", "-std=c++17"],
+    LINKFLAGS=cxxflags
+    + sanitizer_flags
+    + lib_fuzzing_engine
+    + ["-stdlib=libc++", "-std=c++17"],
     _LIBFLAGS=[replaceStatic(s) for s in shlex.split(os.getenv("STATIC_LIBS"))]
     + [
         "/usr/lib/x86_64-linux-gnu/libunistring.a",  # Needs to be at the end.
