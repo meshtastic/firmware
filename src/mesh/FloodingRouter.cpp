@@ -95,7 +95,8 @@ void FloodingRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
 
 void FloodingRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Routing *c)
 {
-    bool isAckorReply = (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) && (p->decoded.request_id != 0);
+    bool isAckorReply = (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) &&
+                        (p->decoded.request_id != 0 || p->decoded.reply_id != 0);
     if (isAckorReply && !isToUs(p) && !isBroadcast(p->to)) {
         // do not flood direct message that is ACKed or replied to
         LOG_DEBUG("Rxd an ACK/reply not for me, cancel rebroadcast");

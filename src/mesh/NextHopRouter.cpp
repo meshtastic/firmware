@@ -63,7 +63,8 @@ void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtast
 {
     NodeNum ourNodeNum = getNodeNum();
     uint8_t ourRelayID = nodeDB->getLastByteOfNodeNum(ourNodeNum);
-    bool isAckorReply = (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) && (p->decoded.request_id != 0);
+    bool isAckorReply = (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) &&
+                        (p->decoded.request_id != 0 || p->decoded.reply_id != 0);
     if (isAckorReply) {
         // Update next-hop for the original transmitter of this successful transmission to the relay node, but ONLY if "from" is
         // not 0 (means implicit ACK) and original packet was also relayed by this node, or we sent it directly to the destination
