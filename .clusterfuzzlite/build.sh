@@ -54,7 +54,7 @@ for f in .clusterfuzzlite/*_fuzzer.cpp; do
 	cp "$program" "$OUT/$fuzzer"
 
 	# Copy shared libraries used by the fuzzer.
-	read -ra shared_libs < <(ldd "$program" | sed -n 's/[^=]\+=> \([^ ]\+\).*/\1/p')
+	read -d '' -ra shared_libs < <(ldd "$program" | sed -n 's/[^=]\+=> \([^ ]\+\).*/\1/p') || true
 	cp -f "${shared_libs[@]}" "$OUT/lib/"
 
 	# Build the initial fuzzer seed corpus.
