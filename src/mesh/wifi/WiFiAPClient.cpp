@@ -143,6 +143,11 @@ static int32_t reconnectWiFi()
         delay(5000);
 
         if (!WiFi.isConnected()) {
+#ifdef CONFIG_IDF_TARGET_ESP32C3
+            WiFi.mode(WIFI_MODE_NULL);
+            WiFi.useStaticBuffers(true);
+            WiFi.mode(WIFI_STA);
+#endif
             WiFi.begin(wifiName, wifiPsw);
         }
         isReconnecting = false;

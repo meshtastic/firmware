@@ -145,7 +145,7 @@ class NodeDB
         return &meshNodes->at(x);
     }
 
-    meshtastic_NodeInfoLite *getMeshNode(NodeNum n);
+    virtual meshtastic_NodeInfoLite *getMeshNode(NodeNum n);
     size_t getNumMeshNodes() { return numMeshNodes; }
 
     // returns true if the maximum number of nodes is reached or we are running low on memory

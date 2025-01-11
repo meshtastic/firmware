@@ -4,3 +4,5 @@ bin/config.yaml                etc/meshtasticd
 bin/config.d/*                 etc/meshtasticd/available.d
 
 bin/meshtasticd.service        lib/systemd/system
+
+web/*                          usr/share/meshtasticd/web
