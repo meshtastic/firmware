@@ -1,0 +1,110 @@
+name: Package for OpenSUSE Build Service
+
+on:
+  workflow_call:
+    secrets:
+      OBS_PASSWORD:
+        required: true
+      PPA_GPG_PRIVATE_KEY:
+        required: true
+    inputs:
+      obs_project:
+        description: Meshtastic OBS project to target
+        required: true
+        type: string
+      series:
+        description: Debian series to target
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build-debian-src:
+    uses: ./.github/workflows/build_debian_src.yml
+    secrets: inherit
+    with:
+      series: ${{ inputs.series }}
+      build_location: obs
+
+  package-obs:
+    runs-on: ubuntu-24.04
+    needs: build-debian-src
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          path: meshtasticd
+          ref: ${{github.event.pull_request.head.ref}}
+          repository: ${{github.event.pull_request.head.repo.full_name}}
+
+      - name: Install OpenSUSE Build Service deps
+        shell: bash
+        run: |
+          echo 'deb http://download.opensuse.org/repositories/openSUSE:/Tools/xUbuntu_24.04/ /' | sudo tee /etc/apt/sources.list.d/openSUSE:Tools.list
+          curl -fsSL https://download.opensuse.org/repositories/openSUSE:Tools/xUbuntu_24.04/Release.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/openSUSE_Tools.gpg > /dev/null
+          sudo apt-get update -y --fix-missing
+          sudo apt-get install -y osc
+
+      - name: Get release version string
+        working-directory: meshtasticd
+        run: |
+          echo "deb=$(./bin/buildinfo.py deb)" >> $GITHUB_OUTPUT
+        env:
+          BUILD_LOCATION: obs
+        id: version
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: firmware-debian-${{ steps.version.outputs.deb }}~${{ inputs.series }}-src
+          merge-multiple: true
+
+      - name: Display structure of downloaded files
+        run: ls -lah
+
+      - name: Configure osc
+        env:
+          OBS_USERNAME: meshtastic
+        run: |
+          # Setup OpenSUSE Build Service credentials
+          mkdir -p ~/.config/osc
+          echo "[general]" > ~/.config/osc/oscrc
+          echo "apiurl=https://api.opensuse.org" >> ~/.config/osc/oscrc
+          echo "[https://api.opensuse.org]" >> ~/.config/osc/oscrc
+          echo "user=${{ env.OBS_USERNAME }}" >> ~/.config/osc/oscrc
+          echo "pass=${{ secrets.OBS_PASSWORD }}" >> ~/.config/osc/oscrc
+          echo "credentials_mgr_class=osc.credentials.PlaintextConfigFileCredentialsManager" >> ~/.config/osc/oscrc
+          # Create a temporary directory for osc checkout
+          mkdir -p osc
+
+      # Intentionally fail if credentials are invalid
+      # Update secrets if this returns `401`
+      - name: Verify OBS authentication
+        run: osc token
+
+      - name: Upload package to OBS
+        shell: bash
+        working-directory: osc
+        env:
+          OBS_PROJECT: ${{ inputs.obs_project }}
+          OBS_PACKAGE: meshtasticd
+        run: |
+          # Initialize the package in the current directory
+          osc checkout --output-dir . $OBS_PROJECT $OBS_PACKAGE
+
+          # Remove the existing package files
+          rm -rf *.dsc *.tar.xz
+
+          # Copy new package files to the directory
+          cp $GITHUB_WORKSPACE/*.dsc .
+          cp $GITHUB_WORKSPACE/*.tar.xz .
+
+          # Add/Remove the files
+          osc addremove
+
+          # Commit changes and push to OpenSUSE Build Service
+          osc commit -m "GitHub Actions: ${{ steps.version.outputs.deb }}~${{ inputs.series }}"
