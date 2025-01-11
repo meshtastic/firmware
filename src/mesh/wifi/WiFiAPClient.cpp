@@ -112,6 +112,12 @@ static void onNetworkConnected()
         APStartupComplete = true;
     }
 
+#if HAS_UDP_MULTICAST
+    if (udpThread) {
+        udpThread->start();
+    }
+#endif
+
     // FIXME this is kinda yucky, instead we should just have an observable for 'wifireconnected'
 #ifndef MESHTASTIC_EXCLUDE_MQTT
     if (mqtt)
