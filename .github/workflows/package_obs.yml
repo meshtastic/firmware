@@ -3,11 +3,13 @@ name: Package for OpenSUSE Build Service
 on:
   workflow_call:
     secrets:
+      OBS_PASSWORD:
+        required: true
       PPA_GPG_PRIVATE_KEY:
         required: true
     inputs:
-      obs_repo:
-        description: Meshtastic OBS repo to target
+      obs_project:
+        description: Meshtastic OBS project to target
         required: true
         type: string
       series:
@@ -64,40 +66,45 @@ jobs:
       - name: Display structure of downloaded files
         run: ls -lah
 
-      # - name: Configure osc
-      #   shell: bash
-      #   env:
-      #     OBS_USERNAME: ${{ secrets.OBS_USERNAME }}
-      #     OBS_PASSWORD: ${{ secrets.OBS_PASSWORD }}
-      #   run: |
-      #     mkdir -p ~/.config/osc
-      #     echo -e "[https://api.opensuse.org]\n" > ~/.config/osc/oscrc
-      #     echo -e "user = $OBS_USERNAME" >> ~/.config/osc/oscrc
-      #     echo -e "pass = $OBS_PASSWORD" >> ~/.config/osc/oscrc
-      #     echo -e "aliases = obs" >> ~/.config/osc/oscrc
-      #     # Authenticate to OBS
-      #     osc meta prj -v
+      - name: Configure osc
+        env:
+          OBS_USERNAME: meshtastic
+        run: |
+          # Setup OpenSUSE Build Service credentials
+          mkdir -p ~/.config/osc
+          echo "[general]" > ~/.config/osc/oscrc
+          echo "apiurl=https://api.opensuse.org" >> ~/.config/osc/oscrc
+          echo "[https://api.opensuse.org]" >> ~/.config/osc/oscrc
+          echo "user=${{ env.OBS_USERNAME }}" >> ~/.config/osc/oscrc
+          echo "pass=${{ secrets.OBS_PASSWORD }}" >> ~/.config/osc/oscrc
+          echo "credentials_mgr_class=osc.credentials.PlaintextConfigFileCredentialsManager" >> ~/.config/osc/oscrc
+          # Create a temporary directory for osc checkout
+          mkdir -p osc
 
-      # - name: Upload Package to OBS
-      #   shell: bash
-      #   run: |
-      #     # Define your OBS project and repository
-      #     OBS_PROJECT="application:meshtastic"
-      #     OBS_REPO="${{ inputs.obs_repo }}"
+      # Intentionally fail if credentials are invalid
+      # Update secrets if this returns `401`
+      - name: Verify OBS authentication
+        run: osc token
 
-      #     # Create a temporary directory for osc
-      #     mkdir -p /tmp/osc/$OBS_PROJECT/$OBS_REPO
-      #     cd /tmp/osc/$OBS_PROJECT/$OBS_REPO
+      - name: Upload package to OBS
+        shell: bash
+        working-directory: osc
+        env:
+          OBS_PROJECT: ${{ inputs.obs_project }}
+          OBS_PACKAGE: meshtasticd
+        run: |
+          # Initialize the package in the current directory
+          osc checkout --output-dir . $OBS_PROJECT $OBS_PACKAGE
 
-      #     # Initialize the package directory
-      #     osc checkout $OBS_PROJECT $OBS_REPO
+          # Remove the existing package files
+          rm -rf *.dsc *.tar.xz
 
-      #     # Copy package files to the osc directory
-      #     cp $GITHUB_WORKSPACE/*.dsc .
-      #     cp $GITHUB_WORKSPACE/*.tar.xz .
+          # Copy new package files to the directory
+          cp $GITHUB_WORKSPACE/*.dsc .
+          cp $GITHUB_WORKSPACE/*.tar.xz .
 
-      #     # Add files to osc
-      #     osc addremove
+          # Add/Remove the files
+          osc addremove
 
-      #     # Commit and push the changes
-      #     osc commit -m "Automated upload from GitHub Actions"
+          # Commit changes and push to OpenSUSE Build Service
+          osc commit -m "GitHub Actions: ${{ steps.version.outputs.deb }}~${{ inputs.series }}"
