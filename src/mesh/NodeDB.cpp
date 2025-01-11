@@ -57,6 +57,7 @@ NodeDB *nodeDB = nullptr;
 // we have plenty of ram so statically alloc this tempbuf (for now)
 EXT_RAM_BSS_ATTR meshtastic_DeviceState devicestate;
 meshtastic_MyNodeInfo &myNodeInfo = devicestate.my_node;
+meshtastic_NodeDatabase nodeDatabase;
 meshtastic_LocalConfig config;
 meshtastic_DeviceUIConfig uiconfig{.screen_brightness = 153, .screen_timeout = 30};
 meshtastic_LocalModuleConfig moduleConfig;
@@ -144,7 +145,7 @@ uint32_t get_st7789_id(uint8_t cs, uint8_t sck, uint8_t mosi, uint8_t dc, uint8_
 
 #endif
 
-bool meshtastic_DeviceState_callback(pb_istream_t *istream, pb_ostream_t *ostream, const pb_field_iter_t *field)
+bool meshtastic_NodeDatabase_callback(pb_istream_t *istream, pb_ostream_t *ostream, const pb_field_iter_t *field)
 {
     if (ostream) {
         std::vector<meshtastic_NodeInfoLite> const *vec = (std::vector<meshtastic_NodeInfoLite> *)field->pData;
@@ -193,6 +194,7 @@ NodeDB::NodeDB()
     cleanupMeshDB();
 
     uint32_t devicestateCRC = crc32Buffer(&devicestate, sizeof(devicestate));
+    uint32_t nodeDatabaseCRC = crc32Buffer(&nodeDatabase, sizeof(nodeDatabase));
     uint32_t configCRC = crc32Buffer(&config, sizeof(config));
     uint32_t channelFileCRC = crc32Buffer(&channelFile, sizeof(channelFile));
 
@@ -249,15 +251,15 @@ NodeDB::NodeDB()
     // Ensure macaddr is set to our macaddr as it will be copied in our info below
     memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
 
-    // Include our owner in the node db under our nodenum
-    meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
     if (!config.has_security) {
         config.has_security = true;
+        config.security = meshtastic_Config_SecurityConfig_init_default;
         config.security.serial_enabled = config.device.serial_enabled;
         config.security.is_managed = config.device.is_managed;
     }
 
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+
     if (!owner.is_licensed) {
         bool keygenSuccess = false;
         if (config.security.private_key.size == 32) {
@@ -284,7 +286,8 @@ NodeDB::NodeDB()
         crypto->setDHPrivateKey(config.security.private_key.bytes);
     }
 #endif
-
+    // Include our owner in the node db under our nodenum
+    meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
     info->user = TypeConversions::ConvertToUserLite(owner);
     info->has_user = true;
 
@@ -318,8 +321,12 @@ NodeDB::NodeDB()
     moduleConfig.neighbor_info.update_interval =
         Default::getConfiguredOrMinimumValue(moduleConfig.neighbor_info.update_interval, min_neighbor_info_broadcast_secs);
 
+    LOG_DEBUG("nodeDatabaseCRC: %u, crc32Buffer(&nodeDatabase, sizeof(nodeDatabase): %u", nodeDatabaseCRC,
+              crc32Buffer(&nodeDatabase, sizeof(nodeDatabase)));
     if (devicestateCRC != crc32Buffer(&devicestate, sizeof(devicestate)))
         saveWhat |= SEGMENT_DEVICESTATE;
+    if (nodeDatabaseCRC != crc32Buffer(&nodeDatabase, sizeof(nodeDatabase)))
+        saveWhat |= SEGMENT_NODEDATABASE;
     if (configCRC != crc32Buffer(&config, sizeof(config)))
         saveWhat |= SEGMENT_CONFIG;
     if (channelFileCRC != crc32Buffer(&channelFile, sizeof(channelFile)))
@@ -434,6 +441,7 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
 #endif
     spiLock->unlock();
     // second, install default state (this will deal with the duplicate mac address issue)
+    installDefaultNodeDatabase();
     installDefaultDeviceState();
     installDefaultConfig(!eraseBleBonds); // Also preserve the private key if we're not erasing BLE bonds
     installDefaultModuleConfig();
@@ -456,6 +464,15 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
 #endif
     }
     return true;
+}
+
+void NodeDB::installDefaultNodeDatabase()
+{
+    LOG_DEBUG("Install default NodeDatabase");
+    nodeDatabase.version = DEVICESTATE_CUR_VER;
+    nodeDatabase.nodes = std::vector<meshtastic_NodeInfoLite>(MAX_NUM_NODES);
+    numMeshNodes = 0;
+    meshNodes = &nodeDatabase.nodes;
 }
 
 void NodeDB::installDefaultConfig(bool preserveKey = false)
@@ -785,9 +802,10 @@ void NodeDB::resetNodes()
     if (!config.position.fixed_position)
         clearLocalPosition();
     numMeshNodes = 1;
-    std::fill(devicestate.node_db_lite.begin() + 1, devicestate.node_db_lite.end(), meshtastic_NodeInfoLite());
+    std::fill(nodeDatabase.nodes.begin() + 1, nodeDatabase.nodes.end(), meshtastic_NodeInfoLite());
     devicestate.has_rx_text_message = false;
     devicestate.has_rx_waypoint = false;
+    saveNodeDatabaseToDisk();
     saveDeviceStateToDisk();
     if (neighborInfoModule && moduleConfig.neighbor_info.enabled)
         neighborInfoModule->resetNeighbors();
@@ -803,10 +821,10 @@ void NodeDB::removeNodeByNum(NodeNum nodeNum)
             removed++;
     }
     numMeshNodes -= removed;
-    std::fill(devicestate.node_db_lite.begin() + numMeshNodes, devicestate.node_db_lite.begin() + numMeshNodes + 1,
+    std::fill(nodeDatabase.nodes.begin() + numMeshNodes, nodeDatabase.nodes.begin() + numMeshNodes + 1,
               meshtastic_NodeInfoLite());
     LOG_DEBUG("NodeDB::removeNodeByNum purged %d entries. Save changes", removed);
-    saveDeviceStateToDisk();
+    saveNodeDatabaseToDisk();
 }
 
 void NodeDB::clearLocalPosition()
@@ -835,7 +853,7 @@ void NodeDB::cleanupMeshDB()
         }
     }
     numMeshNodes -= removed;
-    std::fill(devicestate.node_db_lite.begin() + numMeshNodes, devicestate.node_db_lite.begin() + numMeshNodes + removed,
+    std::fill(nodeDatabase.nodes.begin() + numMeshNodes, nodeDatabase.nodes.begin() + numMeshNodes + removed,
               meshtastic_NodeInfoLite());
     LOG_DEBUG("cleanupMeshDB purged %d entries", removed);
 }
@@ -845,13 +863,9 @@ void NodeDB::installDefaultDeviceState()
     LOG_INFO("Install default DeviceState");
     // memset(&devicestate, 0, sizeof(meshtastic_DeviceState));
 
-    numMeshNodes = 0;
-    meshNodes = &devicestate.node_db_lite;
-
     // init our devicestate with valid flags so protobuf writing/reading will work
     devicestate.has_my_node = true;
     devicestate.has_owner = true;
-    // devicestate.node_db_lite_count = 0;
     devicestate.version = DEVICESTATE_CUR_VER;
     devicestate.receive_queue_count = 0; // Not yet implemented FIXME
     devicestate.has_rx_waypoint = false;
@@ -905,7 +919,9 @@ void NodeDB::pickNewNodeNum()
     myNodeInfo.my_node_num = nodeNum;
 }
 
-static const char *prefFileName = "/prefs/db.proto";
+static const char *deviceStateFileName = "/prefs/device.proto";
+static const char *legacyPrefFileName = "/prefs/db.proto";
+static const char *nodeDatabaseFileName = "/prefs/nodes.proto";
 static const char *configFileName = "/prefs/config.proto";
 static const char *uiconfigFileName = "/prefs/uiconfig.proto";
 static const char *moduleConfigFileName = "/prefs/module.proto";
@@ -946,20 +962,41 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
 
 void NodeDB::loadFromDisk()
 {
-    devicestate.version =
-        0; // Mark the current device state as completely unusable, so that if we fail reading the entire file from
+    // Mark the current device state as completely unusable, so that if we fail reading the entire file from
     // disk we will still factoryReset to restore things.
+    devicestate.version = 0;
 
 #ifdef ARCH_ESP32
     spiLock->lock();
+    // If the legacy deviceState exists, start over with a factory reset
+    if (FSCom.exists(legacyPrefFileName)) {
+        rmDir("/prefs");
+    }
     if (FSCom.exists("/static/static"))
         rmDir("/static/static"); // Remove bad static web files bundle from initial 2.5.13 release
     spiLock->unlock();
 #endif
 
+    auto state = loadProto(nodeDatabaseFileName, getMaxNodesAllocatedSize(), sizeof(meshtastic_NodeDatabase),
+                           &meshtastic_NodeDatabase_msg, &nodeDatabase);
+    if (nodeDatabase.version < DEVICESTATE_MIN_VER) {
+        LOG_WARN("NodeDatabase %d is old, discard", nodeDatabase.version);
+        installDefaultNodeDatabase();
+    } else {
+        meshNodes = &nodeDatabase.nodes;
+        numMeshNodes = nodeDatabase.nodes.size();
+        LOG_INFO("Loaded saved nodedatabase version %d, with nodes count: %d", nodeDatabase.version, nodeDatabase.nodes.size());
+    }
+
+    if (numMeshNodes > MAX_NUM_NODES) {
+        LOG_WARN("Node count %d exceeds MAX_NUM_NODES %d, truncating", numMeshNodes, MAX_NUM_NODES);
+        numMeshNodes = MAX_NUM_NODES;
+    }
+    meshNodes->resize(MAX_NUM_NODES);
+
     // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
-    auto state = loadProto(prefFileName, sizeof(meshtastic_DeviceState) + MAX_NUM_NODES_FS * sizeof(meshtastic_NodeInfo),
-                           sizeof(meshtastic_DeviceState), &meshtastic_DeviceState_msg, &devicestate);
+    state = loadProto(deviceStateFileName, meshtastic_DeviceState_size, sizeof(meshtastic_DeviceState),
+                      &meshtastic_DeviceState_msg, &devicestate);
 
     // See https://github.com/meshtastic/firmware/issues/4184#issuecomment-2269390786
     // It is very important to try and use the saved prefs even if we fail to read meshtastic_DeviceState.  Because most of our
@@ -973,15 +1010,8 @@ void NodeDB::loadFromDisk()
         LOG_WARN("Devicestate %d is old, discard", devicestate.version);
         installDefaultDeviceState();
     } else {
-        LOG_INFO("Loaded saved devicestate version %d, with nodecount: %d", devicestate.version, devicestate.node_db_lite.size());
-        meshNodes = &devicestate.node_db_lite;
-        numMeshNodes = devicestate.node_db_lite.size();
+        LOG_INFO("Loaded saved devicestate version %d", devicestate.version);
     }
-    if (numMeshNodes > MAX_NUM_NODES) {
-        LOG_WARN("Node count %d exceeds MAX_NUM_NODES %d, truncating", numMeshNodes, MAX_NUM_NODES);
-        numMeshNodes = MAX_NUM_NODES;
-    }
-    meshNodes->resize(MAX_NUM_NODES);
 
     state = loadProto(configFileName, meshtastic_LocalConfig_size, sizeof(meshtastic_LocalConfig), &meshtastic_LocalConfig_msg,
                       &config);
@@ -1147,14 +1177,24 @@ bool NodeDB::saveDeviceStateToDisk()
 #endif
     // Note: if MAX_NUM_NODES=100 and meshtastic_NodeInfoLite_size=166, so will be approximately 17KB
     // Because so huge we _must_ not use fullAtomic, because the filesystem is probably too small to hold two copies of this
-    return saveProto(prefFileName, sizeof(devicestate) + numMeshNodes * meshtastic_NodeInfoLite_size, &meshtastic_DeviceState_msg,
-                     &devicestate, false);
+    return saveProto(deviceStateFileName, meshtastic_DeviceState_size, &meshtastic_DeviceState_msg, &devicestate, true);
+}
+
+bool NodeDB::saveNodeDatabaseToDisk()
+{
+#ifdef FSCom
+    spiLock->lock();
+    FSCom.mkdir("/prefs");
+    spiLock->unlock();
+#endif
+    size_t nodeDatabaseSize;
+    pb_get_encoded_size(&nodeDatabaseSize, meshtastic_NodeDatabase_fields, &nodeDatabase);
+    return saveProto(nodeDatabaseFileName, nodeDatabaseSize, &meshtastic_NodeDatabase_msg, &nodeDatabase, false);
 }
 
 bool NodeDB::saveToDiskNoRetry(int saveWhat)
 {
     bool success = true;
-
 #ifdef FSCom
     spiLock->lock();
     FSCom.mkdir("/prefs");
@@ -1199,11 +1239,16 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
         success &= saveDeviceStateToDisk();
     }
 
+    if (saveWhat & SEGMENT_NODEDATABASE) {
+        success &= saveNodeDatabaseToDisk();
+    }
+
     return success;
 }
 
 bool NodeDB::saveToDisk(int saveWhat)
 {
+    LOG_DEBUG("Save to disk %d", saveWhat);
     bool success = saveToDiskNoRetry(saveWhat);
 
     if (!success) {
@@ -1385,7 +1430,7 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
         // We just changed something about a User,
         // store our DB unless we just did so less than a minute ago
         if (!Throttle::isWithinTimespanMs(lastNodeDbSave, ONE_MINUTE_MS)) {
-            saveToDisk(SEGMENT_DEVICESTATE);
+            saveToDisk(SEGMENT_NODEDATABASE);
             lastNodeDbSave = millis();
         } else {
             LOG_DEBUG("Defer NodeDB saveToDisk for now");
@@ -1399,6 +1444,10 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
 /// we updateGUI and updateGUIforNode if we think our this change is big enough for a redraw
 void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
 {
+    // if (mp.from == getNodeNum()) {
+    //     LOG_DEBUG("Ignore update from self");
+    //     return;
+    // }
     if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag && mp.from) {
         LOG_DEBUG("Update DB node 0x%x, rx_time=%u", mp.from, mp.rx_time);
 

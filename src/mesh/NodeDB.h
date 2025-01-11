@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <algorithm>
 #include <assert.h>
+#include <pb_encode.h>
 #include <vector>
 
 #include "MeshTypes.h"
@@ -21,11 +22,13 @@ DeviceState versions used to be defined in the .proto file but really only this 
 #define SEGMENT_MODULECONFIG 2
 #define SEGMENT_DEVICESTATE 4
 #define SEGMENT_CHANNELS 8
+#define SEGMENT_NODEDATABASE 16
 
-#define DEVICESTATE_CUR_VER 23
-#define DEVICESTATE_MIN_VER 22
+#define DEVICESTATE_CUR_VER 24
+#define DEVICESTATE_MIN_VER 24
 
 extern meshtastic_DeviceState devicestate;
+extern meshtastic_NodeDatabase nodeDatabase;
 extern meshtastic_ChannelFile channelFile;
 extern meshtastic_MyNodeInfo &myNodeInfo;
 extern meshtastic_LocalConfig config;
@@ -75,7 +78,8 @@ class NodeDB
 
     /// write to flash
     /// @return true if the save was successful
-    bool saveToDisk(int saveWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
+    bool saveToDisk(int saveWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS |
+                                   SEGMENT_NODEDATABASE);
 
     /** Reinit radio config if needed, because either:
      * a) sometimes a buggy android app might send us bogus settings or
@@ -148,6 +152,15 @@ class NodeDB
     virtual meshtastic_NodeInfoLite *getMeshNode(NodeNum n);
     size_t getNumMeshNodes() { return numMeshNodes; }
 
+    size_t getMaxNodesAllocatedSize()
+    {
+        meshtastic_NodeDatabase emptyNodeDatabase;
+        emptyNodeDatabase.version = DEVICESTATE_CUR_VER;
+        size_t nodeDatabaseSize;
+        pb_get_encoded_size(&nodeDatabaseSize, meshtastic_NodeDatabase_fields, &emptyNodeDatabase);
+        return nodeDatabaseSize + (MAX_NUM_NODES * meshtastic_NodeInfoLite_size);
+    }
+
     // returns true if the maximum number of nodes is reached or we are running low on memory
     bool isFull();
 
@@ -188,8 +201,8 @@ class NodeDB
     void cleanupMeshDB();
 
     /// Reinit device state from scratch (not loading from disk)
-    void installDefaultDeviceState(), installDefaultChannels(), installDefaultConfig(bool preserveKey),
-        installDefaultModuleConfig();
+    void installDefaultDeviceState(), installDefaultNodeDatabase(), installDefaultChannels(),
+        installDefaultConfig(bool preserveKey), installDefaultModuleConfig();
 
     /// write to flash
     /// @return true if the save was successful
@@ -197,6 +210,7 @@ class NodeDB
 
     bool saveChannelsToDisk();
     bool saveDeviceStateToDisk();
+    bool saveNodeDatabaseToDisk();
 };
 
 extern NodeDB *nodeDB;
