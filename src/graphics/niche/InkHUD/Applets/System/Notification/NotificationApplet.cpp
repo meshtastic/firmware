@@ -31,6 +31,12 @@ int InkHUD::NotificationApplet::onReceiveTextMessage(const meshtastic_MeshPacket
     if (!settings.optionalFeatures.notifications)
         return 0;
 
+
+    // Abort if message was only an "emoji reaction"
+    // Possibly some implemetation of this in future?
+    if (p->decoded.emoji)
+        return 0;
+
     Notification n;
     n.timestamp = getValidTime(RTCQuality::RTCQualityDevice, true); // Current RTC time
 

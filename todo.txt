@@ -16,7 +16,6 @@ Critical Tasks
 ====================
 []      imperial units
 []      hook reboot to save flash data
-[]      hotfix for handling emoji tapbacks
 []      remove "not yet implemented" menu items
 
 Improvements

@@ -318,8 +318,10 @@ int InkHUD::WindowManager::beforeDeepSleep(void *unused)
 // Note: this is different from devicestate.rx_text_message, which may contain an *outgoing* message
 int InkHUD::WindowManager::onReceiveTextMessage(const meshtastic_MeshPacket *packet)
 {
-    // If message is incoming, not outgoing
-    if (getFrom(packet) != nodeDB->getNodeNum()) {
+    // Short circuit: don't store "emoji reactions"
+    // Possibly some implemetation of this in future?
+    if (packet->decoded.emoji)
+        return 0;
 
         // Determine whether the message is broadcast or a DM
         // Store this info to prevent confusion after a reboot
