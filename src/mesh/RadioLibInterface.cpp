@@ -501,13 +501,12 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
             powerMon->clearState(meshtastic_PowerMon_State_Lora_TXOn); // Transmitter off now
             startReceive(); // Restart receive mode (because startTransmit failed to put us in xmit mode)
         } else {
+            // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register
+            // bits
+            enableInterrupt(isrTxLevel0);
             lastTxStart = millis();
             printPacket("Started Tx", txp);
         }
-
-        // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register
-        // bits
-        enableInterrupt(isrTxLevel0);
 
         return res == RADIOLIB_ERR_NONE;
     }

@@ -73,7 +73,7 @@ shift "$((OPTIND - 1))"
 if [ -f "${FILENAME}" ] && [ -n "${FILENAME##*"update"*}" ]; then
 	echo "Trying to flash ${FILENAME}, but first erasing and writing system information"
 	$ESPTOOL_CMD erase_flash
-	$ESPTOOL_CMD write_flash 0x00 ${FILENAME}
+	$ESPTOOL_CMD write_flash 0x00 "${FILENAME}"
 	# Account for S3 board's different OTA partition
 	if [ -n "${FILENAME##*"s3"*}" ] && [ -n "${FILENAME##*"-v3"*}" ] && [ -n "${FILENAME##*"t-deck"*}" ] && [ -n "${FILENAME##*"wireless-paper"*}" ] && [ -n "${FILENAME##*"wireless-tracker"*}" ] && [ -n "${FILENAME##*"station-g2"*}" ] && [ -n "${FILENAME##*"unphone"*}" ]; then
 		if [ -n "${FILENAME##*"esp32c3"*}" ]; then
