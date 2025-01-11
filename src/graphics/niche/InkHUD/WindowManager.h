@@ -63,6 +63,7 @@ class WindowManager : protected concurrency::OSThread
     void refocusTile();    // Ensure focused tile has a valid applet
 
     int beforeDeepSleep(void *unused);                             // Prepare for shutdown
+    int beforeReboot(void *unused);                                // Prepare for reboot
     int onReceiveTextMessage(const meshtastic_MeshPacket *packet); // Store most recent text message
 
     void handleButtonShort(); // User button: short press
@@ -107,6 +108,10 @@ class WindowManager : protected concurrency::OSThread
     // Get notified when the system is shutting down
     CallbackObserver<WindowManager, void *> deepSleepObserver =
         CallbackObserver<WindowManager, void *>(this, &WindowManager::beforeDeepSleep);
+
+    // Get notified when the system is rebooting
+    CallbackObserver<WindowManager, void *> rebootObserver =
+        CallbackObserver<WindowManager, void *>(this, &WindowManager::beforeReboot);
 
     // Cache *incoming* text messages, for use by applets
     CallbackObserver<WindowManager, const meshtastic_MeshPacket *> textMessageObserver =

@@ -124,6 +124,7 @@ void InkHUD::WindowManager::begin()
     render(false); // Update now, and wait here until complete
 
     deepSleepObserver.observe(&notifyDeepSleep);
+    rebootObserver.observe(&notifyReboot);
     textMessageObserver.observe(textMessageModule);
 }
 
@@ -295,6 +296,7 @@ void InkHUD::WindowManager::refocusTile()
 // Returns 0 to signal that we agree to sleep now
 int InkHUD::WindowManager::beforeDeepSleep(void *unused)
 {
+    // Notify all applets that we're shutting down
     for (Applet *a : userApplets) {
         a->onDeactivate();
         a->onShutdown();
@@ -310,6 +312,27 @@ int InkHUD::WindowManager::beforeDeepSleep(void *unused)
     render(false);
 
     return 0; // We agree: deep sleep now
+}
+
+// Callback for rebootObserver
+// Same as shutdown, without drawing the logoApplet
+// Makes sure we don't lose message history / InkHUD config
+int InkHUD::WindowManager::beforeReboot(void *unused)
+{
+
+    // Notify all applets that we're "shutting down"
+    // They don't need to know that it's really a reboot
+    for (Applet *a : userApplets) {
+        a->onDeactivate();
+        a->onShutdown();
+    }
+
+    // Remember to add any relevant system applets here
+    menuApplet->onShutdown();
+
+    saveDataToFlash();
+
+    return 0; // No special status to report. Ignored anyway by this Observable
 }
 
 // Callback when a new text message is received

@@ -41,6 +41,9 @@ Observable<void *> preflightSleep;
 /// Called to tell observers we are now entering (deep) sleep and you should prepare.  Must return 0
 Observable<void *> notifyDeepSleep;
 
+/// Called to tell observers we are rebooting ASAP.  Must return 0
+Observable<void *> notifyReboot;
+
 #ifdef ARCH_ESP32
 /// Called to tell observers that light sleep is about to begin
 Observable<void *> notifyLightSleep;
