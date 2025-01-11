@@ -3,6 +3,7 @@
 #include "graphics/Screen.h"
 #include "main.h"
 #include "power.h"
+#include "sleep.h"
 #if defined(ARCH_PORTDUINO)
 #include "api/WiFiServerAPI.h"
 #include "input/LinuxInputImpl.h"
@@ -13,6 +14,7 @@ void powerCommandsCheck()
 {
     if (rebootAtMsec && millis() > rebootAtMsec) {
         LOG_INFO("Rebooting");
+        notifyReboot.notifyObservers(NULL);
 #if defined(ARCH_ESP32)
         ESP.restart();
 #elif defined(ARCH_NRF52)
