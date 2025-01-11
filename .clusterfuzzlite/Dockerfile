@@ -44,8 +44,7 @@ WORKDIR $SRC/firmware
 COPY . $SRC/firmware/
 
 # https://docs.platformio.org/en/latest/envvars.html
-ENV PLATFORMIO_WORKSPACE_DIR=$WORK/pio \
-    PLATFORMIO_CORE_DIR=$SRC/pio/core \
+ENV PLATFORMIO_CORE_DIR=$SRC/pio/core \
     PLATFORMIO_LIBDEPS_DIR=$SRC/pio/libdeps \
     PLATFORMIO_PACKAGES_DIR=$SRC/pio/packages \
     PLATFORMIO_SETTING_ENABLE_CACHE=No \

@@ -8,25 +8,25 @@ env
 cd "$SRC"
 NPROC=$(nproc || echo 1)
 
-LDFLAGS=-lpthread cmake -S "$SRC/yaml-cpp" -B "$WORK/yaml-cpp" \
+LDFLAGS=-lpthread cmake -S "$SRC/yaml-cpp" -B "$WORK/yaml-cpp/$SANITIZER" \
 	-DBUILD_SHARED_LIBS=OFF
-cmake --build "$WORK/yaml-cpp" -j "$NPROC"
-cmake --install "$WORK/yaml-cpp" --prefix /usr
+cmake --build "$WORK/yaml-cpp/$SANITIZER" -j "$NPROC"
+cmake --install "$WORK/yaml-cpp/$SANITIZER" --prefix /usr
 
-cmake -S "$SRC/orcania" -B "$WORK/orcania" \
+cmake -S "$SRC/orcania" -B "$WORK/orcania/$SANITIZER" \
 	-DBUILD_STATIC=ON
-cmake --build "$WORK/orcania" -j "$NPROC"
-cmake --install "$WORK/orcania" --prefix /usr
+cmake --build "$WORK/orcania/$SANITIZER" -j "$NPROC"
+cmake --install "$WORK/orcania/$SANITIZER" --prefix /usr
 
-cmake -S "$SRC/yder" -B "$WORK/yder" \
+cmake -S "$SRC/yder" -B "$WORK/yder/$SANITIZER" \
 	-DBUILD_STATIC=ON -DWITH_JOURNALD=OFF
-cmake --build "$WORK/yder" -j "$NPROC"
-cmake --install "$WORK/yder" --prefix /usr
+cmake --build "$WORK/yder/$SANITIZER" -j "$NPROC"
+cmake --install "$WORK/yder/$SANITIZER" --prefix /usr
 
-cmake -S "$SRC/ulfius" -B "$WORK/ulfius" \
+cmake -S "$SRC/ulfius" -B "$WORK/ulfius/$SANITIZER" \
 	-DBUILD_STATIC=ON -DWITH_JANSSON=OFF -DWITH_CURL=OFF -DWITH_WEBSOCKET=OFF
-cmake --build "$WORK/ulfius" -j "$NPROC"
-cmake --install "$WORK/ulfius" --prefix /usr
+cmake --build "$WORK/ulfius/$SANITIZER" -j "$NPROC"
+cmake --install "$WORK/ulfius/$SANITIZER" --prefix /usr
 
 cd "$SRC/firmware"
 
@@ -34,6 +34,7 @@ PLATFORMIO_EXTRA_SCRIPTS=$(echo -e "pre:.clusterfuzzlite/platformio-clusterfuzzl
 STATIC_LIBS=$(pkg-config --libs --static libulfius openssl libgpiod yaml-cpp bluez --silence-errors)
 export PLATFORMIO_EXTRA_SCRIPTS
 export STATIC_LIBS
+export PLATFORMIO_WORKSPACE_DIR="$WORK/pio/$SANITIZER"
 export TARGET_CC=$CC
 export TARGET_CXX=$CXX
 export TARGET_LD=$CXX
