@@ -318,36 +318,39 @@ int InkHUD::WindowManager::beforeDeepSleep(void *unused)
 // Note: this is different from devicestate.rx_text_message, which may contain an *outgoing* message
 int InkHUD::WindowManager::onReceiveTextMessage(const meshtastic_MeshPacket *packet)
 {
+    // Short circuit: don't store outgoing messages
+    if (getFrom(packet) == nodeDB->getNodeNum())
+        return 0;
+
     // Short circuit: don't store "emoji reactions"
     // Possibly some implemetation of this in future?
     if (packet->decoded.emoji)
         return 0;
 
-        // Determine whether the message is broadcast or a DM
-        // Store this info to prevent confusion after a reboot
-        // Avoids need to compare timestamps, because of situation where "future" messages block newly received, if time not set
-        latestMessage.wasBroadcast = isBroadcast(packet->to);
+    // Determine whether the message is broadcast or a DM
+    // Store this info to prevent confusion after a reboot
+    // Avoids need to compare timestamps, because of situation where "future" messages block newly received, if time not set
+    latestMessage.wasBroadcast = isBroadcast(packet->to);
 
-        // Pick the appropriate variable to store the message in
-        MessageStore::Message *storedMessage = latestMessage.wasBroadcast ? &latestMessage.broadcast : &latestMessage.dm;
+    // Pick the appropriate variable to store the message in
+    MessageStore::Message *storedMessage = latestMessage.wasBroadcast ? &latestMessage.broadcast : &latestMessage.dm;
 
-        // Store nodenum of the sender
-        // Applets can use this to fetch user data from nodedb, if they want
-        storedMessage->sender = packet->from;
+    // Store nodenum of the sender
+    // Applets can use this to fetch user data from nodedb, if they want
+    storedMessage->sender = packet->from;
 
-        // Store the time (epoch seconds) when message received
-        storedMessage->timestamp = getValidTime(RTCQuality::RTCQualityDevice, true); // Current RTC time
+    // Store the time (epoch seconds) when message received
+    storedMessage->timestamp = getValidTime(RTCQuality::RTCQualityDevice, true); // Current RTC time
 
-        // Store the channel
-        // - (potentially) used to determine whether notification shows
-        // - (potentially) used to determine which applet to focus
-        storedMessage->channelIndex = packet->channel;
+    // Store the channel
+    // - (potentially) used to determine whether notification shows
+    // - (potentially) used to determine which applet to focus
+    storedMessage->channelIndex = packet->channel;
 
-        // Store the text
-        // Need to specify manually how many bytes, because source not null-terminated
-        storedMessage->text =
-            std::string(&packet->decoded.payload.bytes[0], &packet->decoded.payload.bytes[packet->decoded.payload.size]);
-    }
+    // Store the text
+    // Need to specify manually how many bytes, because source not null-terminated
+    storedMessage->text =
+        std::string(&packet->decoded.payload.bytes[0], &packet->decoded.payload.bytes[packet->decoded.payload.size]);
 
     return 0; // Tell caller to continue notifying other observers. (No reason to abort this event)
 }

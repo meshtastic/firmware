@@ -28,9 +28,14 @@ int InkHUD::DMApplet::onReceiveTextMessage(const meshtastic_MeshPacket *p)
     if (p->decoded.emoji)
         return 0;
 
+    // If DM (not broadcast)
     if (!isBroadcast(p->to)) {
-        requestAutoshow(); // Want to become foreground, if permitted
-        requestUpdate();   // Want to update display, if applet is foreground
+        // Want to update display, if applet is foreground
+        requestUpdate();
+
+        // If this was an incoming message, suggest that our applet becomes foreground, if permitted
+        if (getFrom(p) != nodeDB->getNodeNum())
+            requestAutoshow();
     }
 
     // Return zero: no issues here, carry on notifying other observers!

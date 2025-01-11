@@ -189,11 +189,11 @@ int InkHUD::ThreadedMessageApplet::onReceiveTextMessage(const meshtastic_MeshPac
     if (!isActive())
         return 0;
 
-    // Short circuit: wrong channel
+    // Abort if wrong channel
     if (p->channel != this->channelIndex)
         return 0;
 
-    // Short circuit: don't show DMs
+    // Abort if message was a DM
     if (p->to != NODENUM_BROADCAST)
         return 0;
 
@@ -213,9 +213,12 @@ int InkHUD::ThreadedMessageApplet::onReceiveTextMessage(const meshtastic_MeshPac
     // These records are used when rendering, and also stored in flash at shutdown
     store->messages.push_front(newMessage);
 
+    // If this was an incoming message, suggest that our applet becomes foreground, if permitted
+    if (getFrom(p) != nodeDB->getNodeNum())
+        requestAutoshow();
+
     // Redraw the applet, perhaps.
-    requestAutoshow(); // Want to become foreground, if permitted
-    requestUpdate();   // Want to update display, if applet is foreground
+    requestUpdate(); // Want to update display, if applet is foreground
 
     return 0;
 }
