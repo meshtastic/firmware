@@ -137,6 +137,13 @@ jobs:
   package-native:
     uses: ./.github/workflows/package_amd64.yml
 
+  build-debian-src:
+    uses: ./.github/workflows/build_debian_src.yml
+    with:
+      series: UNRELEASED
+      build_location: local
+    secrets: inherit
+
   test-native:
     uses: ./.github/workflows/test_native.yml
 
@@ -260,6 +267,7 @@ jobs:
         package-raspbian,
         package-raspbian-armv7l,
         package-native,
+        build-debian-src,
       ]
     steps:
       - name: Checkout
@@ -271,8 +279,12 @@ jobs:
           python-version: 3.x
 
       - name: Get release version string
-        run: echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+        run: |
+          echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+          echo "deb=$(./bin/buildinfo.py deb)" >> $GITHUB_OUTPUT
         id: version
+        env:
+          BUILD_LOCATION: local
 
       - name: Create release
         uses: softprops/action-gh-release@v2
@@ -292,6 +304,17 @@ jobs:
           merge-multiple: true
           path: ./output
 
+      - name: Download source deb
+        uses: actions/download-artifact@v4
+        with:
+          pattern: firmware-debian-${{ steps.version.outputs.deb }}~UNRELEASED-src
+          merge-multiple: true
+          path: ./output/debian-src
+
+      - name: Zip source deb
+        working-directory: output
+        run: zip -j -9 -r ./meshtasticd-${{ steps.version.outputs.deb }}-src.zip ./debian-src
+
       # For diagnostics
       - name: Display structure of downloaded files
         run: ls -lR
@@ -304,6 +327,7 @@ jobs:
             ./output/meshtasticd_${{ steps.version.outputs.long }}_arm64.deb
             ./output/meshtasticd_${{ steps.version.outputs.long }}_armhf.deb
             ./output/meshtasticd_${{ steps.version.outputs.long }}_amd64.deb
+            ./output/meshtasticd-${{ steps.version.outputs.deb }}-src.zip
 
       - name: Bump version.properties
         run: >-

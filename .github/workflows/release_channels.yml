@@ -15,13 +15,15 @@ jobs:
     uses: ./.github/workflows/package_ppa.yml
     with:
       ppa_repo: |-
-        ${{ contains(github.event.release.name, 'Beta') && 'beta' || contains(github.event.release.name, 'Alpha') && 'alpha' }}
+        ppa:meshtastic/${{ contains(github.event.release.name, 'Beta') && 'beta' || contains(github.event.release.name, 'Alpha') && 'alpha' }}
       series: ${{ matrix.series }}
     secrets: inherit
 
-  # package-obs:
-  #   uses: ./.github/workflows/package_obs.yml
-  #   with:
-  #     obs_repo: meshtasticd
-  #     series: ${{ contains(github.event.release.name, 'Beta') && 'beta' || contains(github.event.release.name, 'Alpha') && 'alpha' }}
-  #   secrets: inherit
+  package-obs:
+    uses: ./.github/workflows/package_obs.yml
+    with:
+      obs_project: |-
+        home:meshtastic:${{ contains(github.event.release.name, 'Beta') && 'beta' || contains(github.event.release.name, 'Alpha') && 'alpha' }}
+      series: |-
+        ${{ contains(github.event.release.name, 'Beta') && 'beta' || contains(github.event.release.name, 'Alpha') && 'alpha' }}
+    secrets: inherit
