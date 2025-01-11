@@ -3,8 +3,6 @@ name: Package for OpenSUSE Build Service
 on:
   workflow_call:
     secrets:
-      OBS_USERNAME:
-        required: true
       OBS_PASSWORD:
         required: true
       PPA_GPG_PRIVATE_KEY:
@@ -69,13 +67,15 @@ jobs:
         run: ls -lah
 
       - name: Configure osc
+        env:
+          OBS_USERNAME: meshtastic
         run: |
           # Setup OpenSUSE Build Service credentials
           mkdir -p ~/.config/osc
           echo "[general]" > ~/.config/osc/oscrc
           echo "apiurl=https://api.opensuse.org" >> ~/.config/osc/oscrc
           echo "[https://api.opensuse.org]" >> ~/.config/osc/oscrc
-          echo "user=${{ secrets.OBS_USERNAME }}" >> ~/.config/osc/oscrc
+          echo "user=${{ env.OBS_USERNAME }}" >> ~/.config/osc/oscrc
           echo "pass=${{ secrets.OBS_PASSWORD }}" >> ~/.config/osc/oscrc
           echo "credentials_mgr_class=osc.credentials.PlaintextConfigFileCredentialsManager" >> ~/.config/osc/oscrc
           # Create a temporary directory for osc checkout
