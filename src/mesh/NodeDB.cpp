@@ -324,8 +324,6 @@ NodeDB::NodeDB()
     moduleConfig.neighbor_info.update_interval =
         Default::getConfiguredOrMinimumValue(moduleConfig.neighbor_info.update_interval, min_neighbor_info_broadcast_secs);
 
-    LOG_DEBUG("nodeDatabaseCRC: %u, crc32Buffer(&nodeDatabase, sizeof(nodeDatabase): %u", nodeDatabaseCRC,
-              crc32Buffer(&nodeDatabase, sizeof(nodeDatabase)));
     if (devicestateCRC != crc32Buffer(&devicestate, sizeof(devicestate)))
         saveWhat |= SEGMENT_DEVICESTATE;
     if (nodeDatabaseCRC != crc32Buffer(&nodeDatabase, sizeof(nodeDatabase)))
