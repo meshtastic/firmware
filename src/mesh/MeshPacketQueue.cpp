@@ -129,7 +129,7 @@ bool MeshPacketQueue::replaceLowerPriorityPacket(meshtastic_MeshPacket *p)
     }
 
     // Check if the packet at the back has a lower priority than the new packet
-    auto &backPacket = queue.back();
+    auto *backPacket = queue.back();
     if (!backPacket->tx_after && backPacket->priority < p->priority) {
         LOG_WARN("Dropping packet 0x%08x to make room in the TX queue for higher-priority packet 0x%08x", backPacket->id, p->id);
         // Remove the back packet
