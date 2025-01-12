@@ -20,9 +20,15 @@
      defined(ST7789_CS) || defined(USE_ST7789) || defined(HX8357_CS)) &&                                                         \
     !defined(DISPLAY_FORCE_SMALL_FONTS)
 // The screen is bigger so use bigger fonts
+#ifdef OLED_PL
+#define FONT_SMALL ArialMT_Plain_16_PL  // Height: 19
+#define FONT_MEDIUM ArialMT_Plain_24_PL // Height: 28
+#define FONT_LARGE ArialMT_Plain_24_PL  // Height: 28
+#else
 #define FONT_SMALL ArialMT_Plain_16  // Height: 19
 #define FONT_MEDIUM ArialMT_Plain_24 // Height: 28
 #define FONT_LARGE ArialMT_Plain_24  // Height: 28
+#endif
 #else
 #ifdef OLED_PL
 #define FONT_SMALL ArialMT_Plain_10_PL
@@ -41,6 +47,9 @@
 #endif
 #endif
 #endif
+#ifdef OLED_PL
+#define FONT_MEDIUM ArialMT_Plain_16_PL // Height: 19
+#else
 #ifdef OLED_UA
 #define FONT_MEDIUM ArialMT_Plain_16_UA // Height: 19
 #else
@@ -50,6 +59,10 @@
 #define FONT_MEDIUM ArialMT_Plain_16 // Height: 19
 #endif
 #endif
+#endif
+#ifdef OLED_PL
+#define FONT_LARGE ArialMT_Plain_24_PL // Height: 28
+#else
 #ifdef OLED_UA
 #define FONT_LARGE ArialMT_Plain_24_UA // Height: 28
 #else
@@ -57,6 +70,7 @@
 #define FONT_LARGE ArialMT_Plain_24_CS // Height: 28
 #else
 #define FONT_LARGE ArialMT_Plain_24 // Height: 28
+#endif
 #endif
 #endif
 #endif
