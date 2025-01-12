@@ -609,6 +609,48 @@ uint16_t InkHUD::Applet::getActiveNodeCount()
     return count;
 }
 
+// Get an abbreviated, human readable, distance string
+// Honors config.display.units, to offer both metric and imperial
+std::string InkHUD::Applet::localizeDistance(uint32_t meters)
+{
+    constexpr float FEET_PER_METER = 3.28084;
+    constexpr uint16_t FEET_PER_MILE = 5280;
+
+    // Resulting string
+    std::string localized;
+
+    // Imeperial
+    if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
+        uint32_t feet = meters * FEET_PER_METER;
+        // Distant (miles, rounded)
+        if (feet > FEET_PER_MILE / 2) {
+            localized += to_string((uint32_t)roundf(feet / FEET_PER_MILE));
+            localized += "mi";
+        }
+        // Nearby (feet)
+        else {
+            localized += to_string(feet);
+            localized += "ft";
+        }
+    }
+
+    // Metric
+    else {
+        // Distant (kilometers, rounded)
+        if (meters >= 500) {
+            localized += to_string((uint32_t)roundf(meters / 1000.0));
+            localized += "km";
+        }
+        // Nearby (meters)
+        else {
+            localized += to_string(meters);
+            localized += "m";
+        }
+    }
+
+    return localized;
+}
+
 void InkHUD::Applet::printThick(int16_t xCenter, int16_t yCenter, std::string text, uint8_t thicknessX, uint8_t thicknessY)
 {
     // How many times to draw along x axis

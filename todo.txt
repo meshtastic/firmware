@@ -14,7 +14,6 @@ Features
 
 Critical Tasks
 ====================
-[]      imperial units
 []      remove "not yet implemented" menu items
 
 Improvements
@@ -43,6 +42,7 @@ Known Bugs
 []      (Rare) Recents List: count in header label may not match number of items shown
 []      (Rare) Menu stuck after changing tile using aux button
 []      Tile highlight rendered below header for threaded message applets
+[]      ChronoList applets: *very* large distances spill over the divider
 
 Chores
 ==========

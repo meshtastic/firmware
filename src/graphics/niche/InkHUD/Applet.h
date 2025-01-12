@@ -188,9 +188,6 @@ class Applet : public GFX
     void printWrapped(int16_t left, int16_t top, uint16_t width, std::string text);
     uint32_t getWrappedTextHeight(int16_t left, uint16_t width, std::string text);
 
-    std::string getTimeString(uint32_t epochSeconds); // Human readable
-    std::string getTimeString();                      // Current time, human readable
-
     void hatchRegion(int16_t x, int16_t y, uint16_t w, uint16_t h, uint8_t spacing, Color color); // Fill with sparse lines
     void drawHeader(std::string text); // Draw the standard applet header
 
@@ -199,9 +196,12 @@ class Applet : public GFX
     uint16_t getLogoHeight(uint16_t limitWidth, uint16_t limitHeight); // Size Meshtastic logo to fit within region
     void drawLogo(int16_t centerX, int16_t centerY, uint16_t width, uint16_t height); // Draw the meshtastic logo
 
-    SignalStrength getSignalStrength(float snr, float rssi); // Interpret SNR and RSSI, as an easy to understand value
     std::string hexifyNodeNum(NodeNum num);
-    uint16_t getActiveNodeCount(); // Duration determined by user, in onscreen menu
+    SignalStrength getSignalStrength(float snr, float rssi); // Interpret SNR and RSSI, as an easy to understand value
+    std::string getTimeString(uint32_t epochSeconds);        // Human readable
+    std::string getTimeString();                             // Current time, human readable
+    uint16_t getActiveNodeCount();                           // Duration determined by user, in onscreen menu
+    std::string localizeDistance(uint32_t meters);           // Human readable distance, imperial or metric
 
     static AppletFont fontSmall, fontLarge; // General purpose fonts, used cross-applet
 

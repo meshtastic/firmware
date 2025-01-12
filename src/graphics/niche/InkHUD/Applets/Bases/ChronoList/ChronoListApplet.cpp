@@ -112,12 +112,8 @@ void InkHUD::ChronoListApplet::onRender()
             float theirLong = node->position.longitude_i * 1e-7;
 
             float metersApart = GeoCoord::latLongToMeter(theirLat, theirLong, ourLat, ourLong);
-            int16_t kmApart = ((metersApart / 1000.0) + 0.5); // 0.5 for rounding
-            distance = to_string(kmApart);
-        } else {
-            distance = "? ";
+            distance = localizeDistance(metersApart); // Possibly: kilometers, meters, miles, feet
         }
-        distance += "km";
 
         // -- Hops Away --
         // Not drawn if unknown
