@@ -69,7 +69,11 @@ bool MeshPacketQueue::enqueue(meshtastic_MeshPacket *p)
 {
     // no space - try to replace a lower priority packet in the queue
     if (queue.size() >= maxLen) {
-        return replaceLowerPriorityPacket(p);
+        bool replaced = replaceLowerPriorityPacket(p);
+        if (!replaced) {
+            LOG_WARN("TX queue is full, and there is no lower-priority packet available to evict in favour of 0x%08x", p->id);
+        }
+        return replaced;
     }
 
     // Find the correct position using upper_bound to maintain a stable order
@@ -127,6 +131,7 @@ bool MeshPacketQueue::replaceLowerPriorityPacket(meshtastic_MeshPacket *p)
     // Check if the packet at the back has a lower priority than the new packet
     auto &backPacket = queue.back();
     if (!backPacket->tx_after && backPacket->priority < p->priority) {
+        LOG_WARN("Dropping packet 0x%08x to make room in the TX queue for higher-priority packet 0x%08x", backPacket->id, p->id);
         // Remove the back packet
         packetPool.release(backPacket);
         queue.pop_back();
@@ -142,6 +147,8 @@ bool MeshPacketQueue::replaceLowerPriorityPacket(meshtastic_MeshPacket *p)
         for (; refPacket->tx_after && it != queue.begin(); refPacket = *--it)
             ;
         if (!refPacket->tx_after && refPacket->priority < p->priority) {
+            LOG_WARN("Dropping packet 0x%08x to make room in the TX queue for higher-priority packet 0x%08x", refPacket->id,
+                     p->id);
             packetPool.release(refPacket);
             // Insert the new packet in the correct order
             enqueue(p);
