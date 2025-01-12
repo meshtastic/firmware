@@ -113,7 +113,10 @@ meshtastic_MeshPacket *MeshPacketQueue::remove(NodeNum from, PacketId id, bool t
     return NULL;
 }
 
-/** Attempt to find and remove a packet from this queue.  Returns the packet which was removed from the queue */
+/**
+ * Attempt to find a lower-priority packet in the queue and replace it with the provided one.
+ * @return True if the replacement succeeded, false otherwise
+ */
 bool MeshPacketQueue::replaceLowerPriorityPacket(meshtastic_MeshPacket *p)
 {
 
