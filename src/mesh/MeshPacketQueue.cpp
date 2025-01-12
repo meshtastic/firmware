@@ -143,7 +143,8 @@ bool MeshPacketQueue::replaceLowerPriorityPacket(meshtastic_MeshPacket *p)
             ;
         if (!refPacket->tx_after && refPacket->priority < p->priority) {
             packetPool.release(refPacket);
-            enqueue(refPacket);
+            // Insert the new packet in the correct order
+            enqueue(p);
             return true;
         }
     }
