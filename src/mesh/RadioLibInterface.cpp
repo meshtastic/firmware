@@ -271,6 +271,7 @@ void RadioLibInterface::onNotify(uint32_t notification)
                             uint32_t xmitMsec = getPacketTime(txp);
                             airTime->logAirtime(TX_LOG, xmitMsec);
                         }
+                        LOG_DEBUG("%d packets remain in the TX queue", txQueue.getMaxLen() - txQueue.getFree());
                     }
                 }
             }
