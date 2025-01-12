@@ -828,16 +828,15 @@ void setup()
 #ifdef ARCH_PORTDUINO
     const struct { configNames cfgName;
                    std::string strName;
-                   bool ch341halsupport;
     } loraModules[] = {
-      { use_rf95, "RF95", false },
-      { use_sx1262, "sx1262", true },
-      { use_sx1268, "sx1268", false },
-      { use_sx1280, "sx1280", false },
-      { use_lr1110, "lr1110", false },
-      { use_lr1120, "lr1120", false },
-      { use_lr1121, "lr1121", false },
-      { use_llcc68, "LLCC68", false }
+      { use_rf95, "RF95" },
+      { use_sx1262, "sx1262" },
+      { use_sx1268, "sx1268" },
+      { use_sx1280, "sx1280" },
+      { use_lr1110, "lr1110" },
+      { use_lr1120, "lr1120" },
+      { use_lr1121, "lr1121" },
+      { use_llcc68, "LLCC68" }
     };
     // as one can't use a function pointer to the class constructor:
     auto loraModuleInterface = [](configNames cfgName, LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE busy) {
@@ -866,8 +865,7 @@ void setup()
     for (auto& loraModule : loraModules) {
         if (settingsMap[loraModule.cfgName] && !rIf) {
             LOG_DEBUG("Activate %s radio on SPI port %s", loraModule.strName.c_str(), settingsStrings[spidev].c_str());
-            if (loraModule.ch341halsupport
-              && settingsStrings[spidev] == "ch341") {
+            if (settingsStrings[spidev] == "ch341") {
                 RadioLibHAL = ch341Hal;
             } else {
                 RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
