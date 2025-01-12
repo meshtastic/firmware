@@ -246,7 +246,6 @@ void portduinoSetup()
     gpioInit(max_GPIO + 1); // Done here so we can inform Portduino how many GPIOs we need.
 
     // Need to bind all the configured GPIO pins so they're not simulated
-    // TODO: Can we do this in the for loop above?
     // TODO: If one of these fails, we should log and terminate
     if (settingsMap.count(user) > 0 && settingsMap[user] != RADIOLIB_NC) {
         if (initGPIOPin(settingsMap[user], defaultGpioChipName, settingsMap[user]) != ERRNO_OK) {
@@ -288,9 +287,9 @@ void portduinoSetup()
             if (setMapIter != settingsMap.end() && setMapIter->second != RADIOLIB_NC) {
                 if (initGPIOPin(setMapIter->second, gpioChipName + std::to_string(settingsMap[pinMap.gpiochip]),
                                 settingsMap[pinMap.line]) != ERRNO_OK) {
-                    settingsMap[pinMap.pin] = RADIOLIB_NC;
-                    settingsMap[pinMap.gpiochip] = RADIOLIB_NC;
-                    settingsMap[pinMap.line] = RADIOLIB_NC;
+                    printf("Error setting pin number %d. It may not exist, or may already be in use.\n",
+                           settingsMap[pinMap.line]);
+                    exit(EXIT_FAILURE);
                 }
             }
         }
