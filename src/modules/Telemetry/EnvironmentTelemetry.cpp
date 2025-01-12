@@ -264,6 +264,14 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
     if (lastMeasurement.variant.environment_metrics.radiation != 0)
         display->drawString(x, y += _fontHeight(FONT_SMALL),
                             "Rad: " + String(lastMeasurement.variant.environment_metrics.radiation, 2) + "µR/h");
+
+    if (lastMeasurement.variant.environment_metrics.lux != 0) {
+        display->drawString(x, y += _fontHeight(FONT_SMALL), "Illuminance: " + String(lastMeasurement.variant.environment_metrics.lux, 2) + "lx");
+    }
+
+    if (lastMeasurement.variant.environment_metrics.white_lux != 0) {
+        display->drawString(x, y += _fontHeight(FONT_SMALL), "W_Lux: " + String(lastMeasurement.variant.environment_metrics.white_lux, 2) + "lx");
+    }                            
 }
 
 bool EnvironmentTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *t)
