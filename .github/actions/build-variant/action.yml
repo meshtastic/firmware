@@ -68,6 +68,12 @@ runs:
           sed -i '/DDEBUG_HEAP/d' ${INI_FILE}
         done
 
+    - name: PlatformIO ${{ inputs.arch }} download cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.platformio/.cache
+        key: pio-cache-${{ inputs.arch }}-${{ hashFiles('.github/actions/**', '**.ini') }}
+
     - name: Build ${{ inputs.board }}
       shell: bash
       run: ${{ inputs.build-script-path }} ${{ inputs.board }}
@@ -83,13 +89,13 @@ runs:
 
     - name: Get release version string
       shell: bash
-      run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+      run: echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
       id: version
 
     - name: Store binaries as an artifact
       uses: actions/upload-artifact@v4
       with:
-        name: firmware-${{ inputs.arch }}-${{ inputs.board }}-${{ steps.version.outputs.version }}.zip
+        name: firmware-${{ inputs.arch }}-${{ inputs.board }}-${{ steps.version.outputs.long }}.zip
         overwrite: true
         path: |
           ${{ inputs.artifact-paths }}
