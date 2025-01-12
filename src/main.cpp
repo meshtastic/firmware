@@ -116,11 +116,11 @@ AudioThread *audioThread = nullptr;
 #endif
 
 #if HAS_TFT
-#include "DeviceScreen.h"
-#include "DisplayDriverConfig.h"
-#include "PacketClient.h"
-#include "PacketServer.h"
 #include "api/PacketAPI.h"
+#include "comms/PacketClient.h"
+#include "comms/PacketServer.h"
+#include "graphics/DeviceScreen.h"
+#include "graphics/driver/DisplayDriverConfig.h"
 
 void tft_task_handler(void *);
 
