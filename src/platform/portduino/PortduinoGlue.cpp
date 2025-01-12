@@ -393,9 +393,7 @@ bool loadConfig(const char *configPath)
                 {sx126x_ant_sw_pin, sx126x_ant_sw_gpiochip, sx126x_ant_sw_line, "SX126X_ANT_SW"},
             };
             for (auto &pinMap : pinMappings) {
-                if (yamlConfig["Lora"][pinMap.strName].IsMap() &&
-                    (yamlConfig["Lora"][pinMap.strName]["pin"] || yamlConfig["Lora"][pinMap.strName]["line"] ||
-                     yamlConfig["Lora"][pinMap.strName]["gpiochip"])) {
+                if (yamlConfig["Lora"][pinMap.strName].IsMap()) {
                     settingsMap[pinMap.pin] = yamlConfig["Lora"][pinMap.strName]["pin"].as<int>(RADIOLIB_NC);
                     settingsMap[pinMap.line] = yamlConfig["Lora"][pinMap.strName]["line"].as<int>(settingsMap[pinMap.pin]);
                     settingsMap[pinMap.gpiochip] = yamlConfig["Lora"][pinMap.strName]["gpiochip"].as<int>(defaultGpioChip);
