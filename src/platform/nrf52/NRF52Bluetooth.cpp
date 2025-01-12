@@ -44,11 +44,7 @@ class BluetoothPhoneAPI : public PhoneAPI
     }
 
     /// Check the current underlying physical link to see if the client is currently connected
-    virtual bool checkIsConnected() override
-    {
-        BLEConnection *connection = Bluefruit.Connection(connectionHandle);
-        return connection->connected();
-    }
+    virtual bool checkIsConnected() override { return Bluefruit.connected(connectionHandle); }
 };
 
 static BluetoothPhoneAPI *bluetoothPhoneAPI;
