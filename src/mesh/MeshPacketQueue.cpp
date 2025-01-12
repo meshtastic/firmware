@@ -149,6 +149,7 @@ bool MeshPacketQueue::replaceLowerPriorityPacket(meshtastic_MeshPacket *p)
         if (!refPacket->tx_after && refPacket->priority < p->priority) {
             LOG_WARN("Dropping non-late packet 0x%08x to make room in the TX queue for higher-priority packet 0x%08x",
                      refPacket->id, p->id);
+            queue.erase(it);
             packetPool.release(refPacket);
             // Insert the new packet in the correct order
             enqueue(p);
