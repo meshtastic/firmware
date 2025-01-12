@@ -134,21 +134,10 @@ void portduinoSetup()
 {
     printf("Set up Meshtastic on Portduino...\n");
     int max_GPIO = 0;
-    const configNames GPIO_lines[] = {cs_pin,
-                                      irq_pin,
-                                      busy_pin,
-                                      reset_pin,
-                                      sx126x_ant_sw_pin,
-                                      txen_pin,
-                                      rxen_pin,
-                                      displayDC,
-                                      displayCS,
-                                      displayBacklight,
-                                      displayBacklightPWMChannel,
-                                      displayReset,
-                                      touchscreenCS,
-                                      touchscreenIRQ,
-                                      user};
+    const configNames GPIO_lines[] = {
+        cs_pin,        irq_pin,        busy_pin,  reset_pin,        sx126x_ant_sw_pin,          txen_pin,
+        rxen_pin,      displayDC,      displayCS, displayBacklight, displayBacklightPWMChannel, displayReset,
+        touchscreenCS, touchscreenIRQ, user};
 
     std::string gpioChipName = "gpiochip";
     settingsStrings[i2cdev] = "";
@@ -283,19 +272,22 @@ void portduinoSetup()
 
     // Only initialize the radio pins when dealing with real, kernel controlled SPI hardware
     if (settingsStrings[spidev] != "" && settingsStrings[spidev] != "ch341") {
-        const struct { configNames pin; configNames gpiochip; configNames line; } pinMappings[] = {
-            { cs_pin, cs_gpiochip, cs_line },
-            { irq_pin, irq_gpiochip, irq_line },
-            { busy_pin, busy_gpiochip, busy_line },
-            { reset_pin, reset_gpiochip, reset_line },
-            { rxen_pin, rxen_gpiochip, rxen_line },
-            { txen_pin, txen_gpiochip, txen_line },
-            { sx126x_ant_sw_pin, sx126x_ant_sw_gpiochip, sx126x_ant_sw_line }
-        };
-        for (auto& pinMap : pinMappings) {
+        const struct {
+            configNames pin;
+            configNames gpiochip;
+            configNames line;
+        } pinMappings[] = {{cs_pin, cs_gpiochip, cs_line},
+                           {irq_pin, irq_gpiochip, irq_line},
+                           {busy_pin, busy_gpiochip, busy_line},
+                           {reset_pin, reset_gpiochip, reset_line},
+                           {rxen_pin, rxen_gpiochip, rxen_line},
+                           {txen_pin, txen_gpiochip, txen_line},
+                           {sx126x_ant_sw_pin, sx126x_ant_sw_gpiochip, sx126x_ant_sw_line}};
+        for (auto &pinMap : pinMappings) {
             auto setMapIter = settingsMap.find(pinMap.pin);
             if (setMapIter != settingsMap.end() && setMapIter->second != RADIOLIB_NC) {
-                if (initGPIOPin(setMapIter->second, gpioChipName + std::to_string(settingsMap[pinMap.gpiochip]), settingsMap[pinMap.line] ) != ERRNO_OK) {
+                if (initGPIOPin(setMapIter->second, gpioChipName + std::to_string(settingsMap[pinMap.gpiochip]),
+                                settingsMap[pinMap.line]) != ERRNO_OK) {
                     settingsMap[pinMap.pin] = RADIOLIB_NC;
                     settingsMap[pinMap.gpiochip] = RADIOLIB_NC;
                     settingsMap[pinMap.line] = RADIOLIB_NC;
@@ -360,21 +352,16 @@ bool loadConfig(const char *configPath)
             }
         }
         if (yamlConfig["Lora"]) {
-            const struct { configNames cfgName; std::string strName; } loraModules[] = {
-                { use_rf95, "RF95" },
-                { use_sx1262, "sx1262" },
-                { use_sx1268, "sx1268" },
-                { use_sx1280, "sx1280" },
-                { use_lr1110, "lr1110" },
-                { use_lr1120, "lr1120" },
-                { use_lr1121, "lr1121" },
-                { use_llcc68, "LLCC68" }
-            };
-            for (auto& loraModule : loraModules) {
+            const struct {
+                configNames cfgName;
+                std::string strName;
+            } loraModules[] = {{use_rf95, "RF95"},     {use_sx1262, "sx1262"}, {use_sx1268, "sx1268"}, {use_sx1280, "sx1280"},
+                               {use_lr1110, "lr1110"}, {use_lr1120, "lr1120"}, {use_lr1121, "lr1121"}, {use_llcc68, "LLCC68"}};
+            for (auto &loraModule : loraModules) {
                 settingsMap[loraModule.cfgName] = false;
             }
             if (yamlConfig["Lora"]["Module"]) {
-                for (auto& loraModule : loraModules) {
+                for (auto &loraModule : loraModules) {
                     if (yamlConfig["Lora"]["Module"].as<std::string>("") == loraModule.strName) {
                         settingsMap[loraModule.cfgName] = true;
                         break;
@@ -391,28 +378,28 @@ bool loadConfig(const char *configPath)
             // backwards API compatibility and to globally set gpiochip once
             int defaultGpioChip = settingsMap[default_gpiochip] = yamlConfig["Lora"]["gpiochip"].as<int>(0);
 
-            const struct { configNames pin;
-                           configNames gpiochip;
-                           configNames line;
-                           std::string strName; } pinMappings[] = {
-                { cs_pin, cs_gpiochip, cs_line, "CS" },
-                { irq_pin, irq_gpiochip, irq_line, "IRQ" },
-                { busy_pin, busy_gpiochip, busy_line, "Busy" },
-                { reset_pin, reset_gpiochip, reset_line, "Reset" },
-                { txen_pin, txen_gpiochip, txen_line, "TXen" },
-                { rxen_pin, rxen_gpiochip, rxen_line, "RXen" },
-                { sx126x_ant_sw_pin, sx126x_ant_sw_gpiochip, sx126x_ant_sw_line, "SX126X_ANT_SW" },
+            const struct {
+                configNames pin;
+                configNames gpiochip;
+                configNames line;
+                std::string strName;
+            } pinMappings[] = {
+                {cs_pin, cs_gpiochip, cs_line, "CS"},
+                {irq_pin, irq_gpiochip, irq_line, "IRQ"},
+                {busy_pin, busy_gpiochip, busy_line, "Busy"},
+                {reset_pin, reset_gpiochip, reset_line, "Reset"},
+                {txen_pin, txen_gpiochip, txen_line, "TXen"},
+                {rxen_pin, rxen_gpiochip, rxen_line, "RXen"},
+                {sx126x_ant_sw_pin, sx126x_ant_sw_gpiochip, sx126x_ant_sw_line, "SX126X_ANT_SW"},
             };
-            for (auto& pinMap : pinMappings) {
-                if (yamlConfig["Lora"][pinMap.strName].IsMap()
-                    && (yamlConfig["Lora"][pinMap.strName]["pin"]
-                      || yamlConfig["Lora"][pinMap.strName]["line"]
-                      || yamlConfig["Lora"][pinMap.strName]["gpiochip"])) {
+            for (auto &pinMap : pinMappings) {
+                if (yamlConfig["Lora"][pinMap.strName].IsMap() &&
+                    (yamlConfig["Lora"][pinMap.strName]["pin"] || yamlConfig["Lora"][pinMap.strName]["line"] ||
+                     yamlConfig["Lora"][pinMap.strName]["gpiochip"])) {
                     settingsMap[pinMap.pin] = yamlConfig["Lora"][pinMap.strName]["pin"].as<int>(RADIOLIB_NC);
                     settingsMap[pinMap.line] = yamlConfig["Lora"][pinMap.strName]["line"].as<int>(settingsMap[pinMap.pin]);
                     settingsMap[pinMap.gpiochip] = yamlConfig["Lora"][pinMap.strName]["gpiochip"].as<int>(defaultGpioChip);
-                }
-                else { // backwards API compatibility
+                } else { // backwards API compatibility
                     settingsMap[pinMap.pin] = yamlConfig["Lora"][pinMap.strName].as<int>(RADIOLIB_NC);
                     settingsMap[pinMap.line] = settingsMap[pinMap.pin];
                     settingsMap[pinMap.gpiochip] = defaultGpioChip;

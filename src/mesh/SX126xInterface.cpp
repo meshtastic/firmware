@@ -121,7 +121,8 @@ template <typename T> bool SX126xInterface<T>::init()
     // no effect
 #if ARCH_PORTDUINO
     if (res == RADIOLIB_ERR_NONE) {
-        LOG_DEBUG("Use MCU pin %i as RXEN and pin %i as TXEN to control RF switching", settingsMap[rxen_pin], settingsMap[txen_pin]);
+        LOG_DEBUG("Use MCU pin %i as RXEN and pin %i as TXEN to control RF switching", settingsMap[rxen_pin],
+                  settingsMap[txen_pin]);
         lora.setRfSwitchPins(settingsMap[rxen_pin], settingsMap[txen_pin]);
     }
 #else
