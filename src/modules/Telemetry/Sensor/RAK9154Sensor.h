@@ -1,11 +1,15 @@
-#ifdef HAS_RAKPROT
+#include "configuration.h"
+
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && defined(HAS_RAKPROT)
+
 #ifndef _RAK9154SENSOR_H
 #define _RAK9154SENSOR_H 1
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
-#include "../modules/Telemetry/Sensor/TelemetrySensor.h"
-#include "../modules/Telemetry/Sensor/VoltageSensor.h"
+#include "CurrentSensor.h"
+#include "TelemetrySensor.h"
+#include "VoltageSensor.h"
 
-class RAK9154Sensor : public TelemetrySensor, VoltageSensor
+class RAK9154Sensor : public TelemetrySensor, VoltageSensor, CurrentSensor
 {
   private:
   protected:
@@ -16,6 +20,7 @@ class RAK9154Sensor : public TelemetrySensor, VoltageSensor
     virtual int32_t runOnce() override;
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
     virtual uint16_t getBusVoltageMv() override;
+    virtual int16_t getCurrentMa() override;
     int getBusBatteryPercent();
     bool isCharging();
 };

@@ -64,6 +64,11 @@ int32_t PowerTelemetryModule::runOnce()
                 result = ina3221Sensor.runOnce();
             if (max17048Sensor.hasSensor() && !max17048Sensor.isInitialized())
                 result = max17048Sensor.runOnce();
+#ifdef HAS_RAKPROT // this only works on the wismesh hub with the solar option. This is not an I2C sensor, so we don't need the
+                   // sensormap here.
+            if (rak9154Sensor.hasSensor() && !rak9154Sensor.isInitialized())
+                result = rak9154Sensor.runOnce();
+#endif
         }
         return result;
 #else
@@ -100,7 +105,7 @@ void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *s
 {
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
-    
+
     if (lastMeasurementPacket == nullptr) {
         // In case of  no valid packet, display "Power Telemetry", "No measurement"
         display->drawString(x, y, "Power Telemetry");
@@ -121,23 +126,23 @@ void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *s
     }
 
     // Display "Pow. From: ..."
-    display->drawString(x, y, "Pow. From: " + String(lastSender) + "(" + String(agoSecs) + "s)");    
+    display->drawString(x, y, "Pow. From: " + String(lastSender) + "(" + String(agoSecs) + "s)");
 
     // Display current and voltage based on ...power_metrics.has_[channel/voltage/current]... flags
     if (lastMeasurement.variant.power_metrics.has_ch1_voltage || lastMeasurement.variant.power_metrics.has_ch1_current) {
         display->drawString(x, y += _fontHeight(FONT_SMALL),
-                            "Ch1: " + String(lastMeasurement.variant.power_metrics.ch1_voltage, 2) +
-                                "V " + String(lastMeasurement.variant.power_metrics.ch1_current, 0) + "mA");
+                            "Ch1: " + String(lastMeasurement.variant.power_metrics.ch1_voltage, 2) + "V " +
+                                String(lastMeasurement.variant.power_metrics.ch1_current, 0) + "mA");
     }
     if (lastMeasurement.variant.power_metrics.has_ch2_voltage || lastMeasurement.variant.power_metrics.has_ch2_current) {
         display->drawString(x, y += _fontHeight(FONT_SMALL),
-                            "Ch2: " + String(lastMeasurement.variant.power_metrics.ch2_voltage, 2) +
-                                "V " + String(lastMeasurement.variant.power_metrics.ch2_current, 0) + "mA");
+                            "Ch2: " + String(lastMeasurement.variant.power_metrics.ch2_voltage, 2) + "V " +
+                                String(lastMeasurement.variant.power_metrics.ch2_current, 0) + "mA");
     }
     if (lastMeasurement.variant.power_metrics.has_ch3_voltage || lastMeasurement.variant.power_metrics.has_ch3_current) {
         display->drawString(x, y += _fontHeight(FONT_SMALL),
-                            "Ch3: " + String(lastMeasurement.variant.power_metrics.ch3_voltage, 2) +
-                                "V " + String(lastMeasurement.variant.power_metrics.ch3_current, 0) + "mA");
+                            "Ch3: " + String(lastMeasurement.variant.power_metrics.ch3_voltage, 2) + "V " +
+                                String(lastMeasurement.variant.power_metrics.ch3_current, 0) + "mA");
     }
 }
 
@@ -181,6 +186,10 @@ bool PowerTelemetryModule::getPowerTelemetry(meshtastic_Telemetry *m)
         valid = ina3221Sensor.getMetrics(m);
     if (max17048Sensor.hasSensor())
         valid = max17048Sensor.getMetrics(m);
+#ifdef HAS_RAKPROT
+    valid = rak9154Sensor.getMetrics(m);
+#endif
+
 #endif
 
     return valid;

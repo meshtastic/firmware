@@ -1,8 +1,10 @@
-#ifdef HAS_RAKPROT
-#include "../variants/rak2560/RAK9154Sensor.h"
-#include "../mesh/generated/meshtastic/telemetry.pb.h"
-#include "../modules/Telemetry/Sensor/TelemetrySensor.h"
 #include "configuration.h"
+
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && defined(HAS_RAKPROT)
+
+#include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "RAK9154Sensor.h"
+#include "TelemetrySensor.h"
 
 #include "concurrency/Periodic.h"
 #include <RAK-OneWireSerial.h>
@@ -153,7 +155,8 @@ int32_t RAK9154Sensor::runOnce()
 
     status = true;
     initialized = true;
-    return 0;
+
+    return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
 }
 
 void RAK9154Sensor::setup()
@@ -163,12 +166,22 @@ void RAK9154Sensor::setup()
 
 bool RAK9154Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
+    measurement->variant.environment_metrics.has_voltage = true;
+    measurement->variant.environment_metrics.has_current = true;
+
+    measurement->variant.environment_metrics.voltage = getBusVoltageMv() / 1000;
+    measurement->variant.environment_metrics.current = getCurrentMa() / 1000;
     return true;
 }
 
 uint16_t RAK9154Sensor::getBusVoltageMv()
 {
     return dc_vol;
+}
+
+int16_t RAK9154Sensor::getCurrentMa()
+{
+    return dc_cur;
 }
 
 int RAK9154Sensor::getBusBatteryPercent()
