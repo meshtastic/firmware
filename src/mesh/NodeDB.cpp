@@ -291,6 +291,13 @@ NodeDB::NodeDB()
     info->user = TypeConversions::ConvertToUserLite(owner);
     info->has_user = true;
 
+    // If node database has not been saved for the first time, save it now
+#ifdef FSCom
+    if (!FSCom.exists(nodeDatabaseFileName)) {
+        saveNodeDatabaseToDisk();
+    }
+#endif
+
 #ifdef ARCH_ESP32
     Preferences preferences;
     preferences.begin("meshtastic", false);
@@ -920,14 +927,6 @@ void NodeDB::pickNewNodeNum()
     myNodeInfo.my_node_num = nodeNum;
 }
 
-static const char *deviceStateFileName = "/prefs/device.proto";
-static const char *legacyPrefFileName = "/prefs/db.proto";
-static const char *nodeDatabaseFileName = "/prefs/nodes.proto";
-static const char *configFileName = "/prefs/config.proto";
-static const char *uiconfigFileName = "/prefs/uiconfig.proto";
-static const char *moduleConfigFileName = "/prefs/module.proto";
-static const char *channelFileName = "/prefs/channels.proto";
-
 /** Load a protobuf from a file, return LoadFileResult */
 LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields,
                                  void *dest_struct)
@@ -970,14 +969,17 @@ void NodeDB::loadFromDisk()
 #ifdef ARCH_ESP32
     spiLock->lock();
     // If the legacy deviceState exists, start over with a factory reset
-    if (FSCom.exists(legacyPrefFileName)) {
-        rmDir("/prefs");
-    }
     if (FSCom.exists("/static/static"))
         rmDir("/static/static"); // Remove bad static web files bundle from initial 2.5.13 release
     spiLock->unlock();
 #endif
-
+#ifdef FSCom
+    spiLock->lock();
+    if (FSCom.exists(legacyPrefFileName)) {
+        rmDir("/prefs");
+    }
+    spiLock->unlock();
+#endif
     auto state = loadProto(nodeDatabaseFileName, getMaxNodesAllocatedSize(), sizeof(meshtastic_NodeDatabase),
                            &meshtastic_NodeDatabase_msg, &nodeDatabase);
     if (nodeDatabase.version < DEVICESTATE_MIN_VER) {
@@ -1430,6 +1432,7 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
 
         // We just changed something about a User,
         // store our DB unless we just did so less than a minute ago
+
         if (!Throttle::isWithinTimespanMs(lastNodeDbSave, ONE_MINUTE_MS)) {
             saveToDisk(SEGMENT_NODEDATABASE);
             lastNodeDbSave = millis();
