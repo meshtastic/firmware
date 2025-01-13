@@ -332,11 +332,6 @@ jobs:
         run: >-
           bin/bump_version.py
 
-      - name: Install debian tools for changelog
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y devscripts
-
       - name: Update debian changelog
         run: >-
           debian/ci_changelog.sh
