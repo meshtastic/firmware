@@ -4,10 +4,10 @@
 // include RadioLib
 #include "platform/portduino/PortduinoGlue.h"
 #include <RadioLib.h>
-#include <libpinedio-usb.h>
-#include <unistd.h>
 #include <csignal>
 #include <iostream>
+#include <libpinedio-usb.h>
+#include <unistd.h>
 
 // include the library for Raspberry GPIO pins
 
@@ -27,7 +27,8 @@ class Ch341Hal : public RadioLibHal
 {
   public:
     // default constructor - initializes the base HAL and any needed private members
-    explicit Ch341Hal(uint8_t spiChannel, std::string serial = "", uint32_t vid = 0x1A86, uint32_t pid = 0x5512, uint32_t spiSpeed = 2000000, uint8_t spiDevice = 0, uint8_t gpioDevice = 0)
+    explicit Ch341Hal(uint8_t spiChannel, std::string serial = "", uint32_t vid = 0x1A86, uint32_t pid = 0x5512,
+                      uint32_t spiSpeed = 2000000, uint8_t spiDevice = 0, uint8_t gpioDevice = 0)
         : RadioLibHal(PI_INPUT, PI_OUTPUT, PI_LOW, PI_HIGH, PI_RISING, PI_FALLING)
     {
         if (serial != "") {
@@ -44,7 +45,7 @@ class Ch341Hal : public RadioLibHal
         int32_t ret = pinedio_init(&pinedio, NULL);
         if (ret != 0) {
             std::string s = "Could not open SPI: ";
-            throw (s + std::to_string(ret));
+            throw(s + std::to_string(ret));
         }
 
         pinedio_set_option(&pinedio, PINEDIO_OPTION_AUTO_CS, 0);
@@ -52,10 +53,7 @@ class Ch341Hal : public RadioLibHal
         pinedio_set_pin_mode(&pinedio, 5, true);
     }
 
-    ~Ch341Hal()
-    {
-        pinedio_deinit(&pinedio);
-    }
+    ~Ch341Hal() { pinedio_deinit(&pinedio); }
 
     void getSerialString(char *_serial, size_t len)
     {
@@ -110,10 +108,7 @@ class Ch341Hal : public RadioLibHal
         pinedio_deattach_interrupt(&this->pinedio, (pinedio_int_pin)interruptNum);
     }
 
-    void delay(unsigned long ms) override
-    {
-        delayMicroseconds(ms * 1000);
-    }
+    void delay(unsigned long ms) override { delayMicroseconds(ms * 1000); }
 
     void delayMicroseconds(unsigned long us) override
     {
@@ -153,7 +148,7 @@ class Ch341Hal : public RadioLibHal
     {
         int32_t ret = pinedio_transceive(&this->pinedio, out, in, len);
         if (ret < 0) {
-            std::cerr << "Could not perform SPI transfer: " << ret << std::endl;;
+            std::cerr << "Could not perform SPI transfer: " << ret << std::endl;
         }
     }
 
