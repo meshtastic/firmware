@@ -12,7 +12,9 @@ on:
         required: true
         type: string
 
-permissions: read-all
+permissions:
+  contents: write
+  packages: write
 
 jobs:
   build-copr-hook:
