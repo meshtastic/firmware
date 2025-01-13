@@ -213,9 +213,9 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         if (settings.optionalMenuItems.nextTile && settings.userTiles.count > 1)
             items.push_back(MenuItem("Next Tile", MenuAction::NEXT_TILE, MenuPage::ROOT)); // Only if multiple applets shown
 
-        items.push_back(MenuItem("Send", MenuPage::SEND));
+        // items.push_back(MenuItem("Send", MenuPage::SEND)); // TODO
         items.push_back(MenuItem("Options", MenuPage::OPTIONS));
-        items.push_back(MenuItem("Display Off", MenuPage::EXIT)); // TODO
+        // items.push_back(MenuItem("Display Off", MenuPage::EXIT)); // TODO
         items.push_back(MenuItem("Shutdown", MenuAction::SHUTDOWN));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
@@ -247,6 +247,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         items.push_back(
             MenuItem("Battery Icon", MenuAction::TOGGLE_BATTERY_ICON, MenuPage::OPTIONS, &settings.optionalFeatures.batteryIcon));
 
+        // TODO - GPS and Wifi switches
+        /*
         // Optional: has GPS
         if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_DISABLED)
             items.push_back(MenuItem("Enable GPS", MenuPage::EXIT)); // TODO
@@ -256,6 +258,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         // Optional: using wifi
         if (!config.bluetooth.enabled)
             items.push_back(MenuItem("Enable Bluetooth", MenuPage::EXIT)); // TODO: escape hatch if wifi configured wrong
+        */
+
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
 
@@ -512,7 +516,7 @@ void InkHUD::MenuApplet::drawSystemInfoPanel(int16_t left, int16_t top, uint16_t
     // Create a variable number of columns
     // Either 3 or 4, depending on whether we have GPS
     // Todo
-    constexpr uint8_t N_COL = 4;
+    constexpr uint8_t N_COL = 3;
     int16_t colL[N_COL];
     int16_t colC[N_COL];
     int16_t colR[N_COL];
@@ -551,6 +555,7 @@ void InkHUD::MenuApplet::drawSystemInfoPanel(int16_t left, int16_t top, uint16_t
     printAt(colC[2], labelT, "Duty", CENTER, TOP);
     printAt(colC[2], valT, dutyUtilStr, CENTER, TOP);
 
+    /*
     // Divider
     for (int16_t y = valT; y <= divY; y += 3)
         drawPixel(colR[2], y, BLACK);
@@ -558,6 +563,7 @@ void InkHUD::MenuApplet::drawSystemInfoPanel(int16_t left, int16_t top, uint16_t
     // GPS satellites - todo
     printAt(colC[3], labelT, "Sats", CENTER, TOP);
     printAt(colC[3], valT, "ToDo", CENTER, TOP);
+    */
 
     // Horizontal divider, at bottom of system info panel
     for (int16_t x = 0; x < width; x += 2) // Divider, centered in the padding between first system panel and first item

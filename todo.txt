@@ -9,12 +9,14 @@ Features
 []      gps menu
 []      mini-compass on nodelist
 []      additional user applets
+[]      GPS stats in menu
+[]      GPS & Bluetooth toggle in menu
 [wip]   add extended ascii / foreign language chars - Fonts for Windows-1250, Windows-1251 (Windows-1252?)
 
 
 Critical Tasks
 ====================
-[]      remove "not yet implemented" menu items
+Currently, none 🎉
 
 Improvements
 ====================
