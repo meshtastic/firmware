@@ -42,11 +42,18 @@ bool ScanAndSelectInput::init()
     else
         pin = 0; // GPIO 0 then
 
-// Short circuit: if selected pin conficts with the user button
-#ifdef USERPREFS_BUTTON_PIN
-    int pinUserButton = config.device.button_gpio ? config.device.button_gpio : USERPREFS_BUTTON_PIN; // Resolved button pin
+        // Short circuit: if selected pin conficts with the user button
+#if defined(ARCH_PORTDUINO)
+    int pinUserButton = 0;
+    if (settingsMap.count(user) != 0 && settingsMap[user] != RADIOLIB_NC) {
+        pinUserButton = settingsMap[user];
+    }
+#elif defined(USERPREFS_BUTTON_PIN)
+    int pinUserButton = config.device.button_gpio ? config.device.button_gpio : USERPREFS_BUTTON_PIN;
+#elif defined(BUTTON_PIN)
+    int pinUserButton = config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN;
 #else
-    int pinUserButton = config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN; // Resolved button pin
+    int pinUserButton = config.device.button_gpio;
 #endif
     if (pin == pinUserButton) {
         LOG_ERROR("ScanAndSelect conflict with user button");
