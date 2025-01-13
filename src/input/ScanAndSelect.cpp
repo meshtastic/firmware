@@ -7,6 +7,9 @@
 #include "ScanAndSelect.h"
 #include "modules/CannedMessageModule.h"
 #include <Throttle.h>
+#ifdef ARCH_PORTDUINO // Only to check for pin conflict with user button
+#include "platform/portduino/PortduinoGlue.h"
+#endif
 
 // Config
 static const char name[] = "scanAndSelect"; // should match "allow input source" string
