@@ -1,0 +1,91 @@
+# meshtasticd spec file for RPM-based distributions
+#
+# Build locally with:
+# ```
+# sudo dnf install rpkg-util
+# rpkg local
+# ```
+#
+# See:
+# - https://docs.pagure.org/rpkg-util/v3/index.html
+# - https://docs.fedoraproject.org/en-US/packaging-guidelines/Versioning/
+
+Name:           meshtasticd
+# Version Ex:   2.5.19
+Version:        {{{ meshtastic_version }}}
+# Release Ex:   9127.daily.gitd7f5f620.fc41
+Release:        {{{ git_commits_num }}}%{?copr_projectname:.%{copr_projectname}}.git{{{ git_commit_sha }}}%{?dist}
+VCS:            {{{ git_dir_vcs }}}
+Summary:        Meshtastic daemon for communicating with Meshtastic devices
+
+License:        GPL-3.0
+URL:            https://github.com/meshtastic/firmware
+Source0:        {{{ git_dir_pack }}}
+Source1:        https://github.com/meshtastic/web/releases/download/latest/build.tar
+
+BuildRequires: systemd-rpm-macros
+BuildRequires: python3-devel
+BuildRequires: platformio
+BuildRequires: python3dist(protobuf)
+BuildRequires: python3dist(grpcio[protobuf])
+BuildRequires: python3dist(grpcio-tools)
+BuildRequires: git-core
+BuildRequires: gcc-c++
+BuildRequires: pkgconfig(yaml-cpp)
+BuildRequires: pkgconfig(libgpiod)
+BuildRequires: pkgconfig(bluez)
+BuildRequires: pkgconfig(libusb-1.0)
+BuildRequires: libi2c-devel
+# Web components:
+BuildRequires: pkgconfig(openssl)
+BuildRequires: pkgconfig(liborcania)
+BuildRequires: pkgconfig(libyder)
+BuildRequires: pkgconfig(libulfius)
+
+%description
+Meshtastic daemon for controlling Meshtastic devices. Meshtastic is an off-grid
+text communication platform that uses inexpensive LoRa radios.
+
+%prep
+{{{ git_dir_setup_macro }}}
+# Unpack the web files
+mkdir -p web
+tar -xf %{SOURCE1} -C web
+gzip -dr web
+
+%build
+# Use the “native” environment from platformio to build a Linux binary
+platformio run -e native
+
+%install
+mkdir -p %{buildroot}%{_sbindir}
+install -m 0755 .pio/build/native/program %{buildroot}%{_sbindir}/meshtasticd
+
+mkdir -p %{buildroot}%{_sysconfdir}/meshtasticd
+install -m 0644 bin/config-dist.yaml %{buildroot}%{_sysconfdir}/meshtasticd/config.yaml
+mkdir -p %{buildroot}%{_sysconfdir}/meshtasticd/config.d
+mkdir -p %{buildroot}%{_sysconfdir}/meshtasticd/available.d
+cp -r bin/config.d/* %{buildroot}%{_sysconfdir}/meshtasticd/available.d
+
+install -D -m 0644 bin/meshtasticd.service %{buildroot}%{_unitdir}/meshtasticd.service
+
+# Install the web files under /usr/share/meshtasticd/web
+mkdir -p %{buildroot}%{_datadir}/meshtasticd/web
+cp -r web/* %{buildroot}%{_datadir}/meshtasticd/web
+
+%files
+%license LICENSE
+%doc README.md
+%{_sbindir}/meshtasticd
+%dir %{_sysconfdir}/meshtasticd
+%dir %{_sysconfdir}/meshtasticd/config.d
+%dir %{_sysconfdir}/meshtasticd/available.d
+%config(noreplace) %{_sysconfdir}/meshtasticd/config.yaml
+%config %{_sysconfdir}/meshtasticd/available.d/*
+%{_unitdir}/meshtasticd.service
+%dir %{_datadir}/meshtasticd
+%dir %{_datadir}/meshtasticd/web
+%{_datadir}/meshtasticd/web/*
+
+%changelog
+%autochangelog
