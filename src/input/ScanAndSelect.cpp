@@ -45,7 +45,7 @@ bool ScanAndSelectInput::init()
         // Short circuit: if selected pin conficts with the user button
 #if defined(ARCH_PORTDUINO)
     int pinUserButton = 0;
-    if (settingsMap.count(user) != 0 && settingsMap[user] != RADIOLIB_NC) {
+    if (settingsMap.count(user) != 0) {
         pinUserButton = settingsMap[user];
     }
 #elif defined(USERPREFS_BUTTON_PIN)
