@@ -9,6 +9,13 @@ permissions:
   packages: write
 
 jobs:
+  build-docker:
+    uses: ./.github/workflows/docker_manifest.yml
+    with:
+      release_channel: |-
+        ${{ contains(github.event.release.name, 'Beta') && 'beta' || contains(github.event.release.name, 'Alpha') && 'alpha' }}
+    secrets: inherit
+
   package-ppa:
     strategy:
       fail-fast: false

@@ -1,0 +1,70 @@
+name: Build Docker
+
+# Build Docker image, push untagged (digest-only)
+
+on:
+  workflow_call:
+    inputs:
+      distro:
+        description: Distro to target
+        required: true
+        type: string
+        # choices: [debian, alpine]
+      platform:
+        description: Platform to target
+        required: true
+        type: string
+      runs-on:
+        description: Runner to use
+        required: true
+        type: string
+      push:
+        description: Push images to registry
+        required: false
+        type: boolean
+        default: false
+    outputs:
+      digest:
+        description: Digest of built image
+        value: ${{ jobs.docker-build.outputs.digest }}
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  docker-build:
+    outputs:
+      digest: ${{ steps.docker_variant.outputs.digest }}
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ref: ${{github.event.pull_request.head.ref}}
+          repository: ${{github.event.pull_request.head.repo.full_name}}
+
+      - name: Docker login
+        if: ${{ inputs.push }}
+        uses: docker/login-action@v3
+        with:
+          username: meshtastic
+          password: ${{ secrets.DOCKER_FIRMWARE_TOKEN }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Docker setup
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker build and push
+        uses: docker/build-push-action@v6
+        id: docker_variant
+        with:
+          context: .
+          file: |
+            ${{ contains(inputs.distro, 'debian') && './Dockerfile' || contains(inputs.distro, 'alpine') && './alpine.Dockerfile' }}
+          push: ${{ inputs.push }}
+          tags: "" # Intentionally empty, push with digest only
+          platforms: ${{ inputs.platform }}
