@@ -236,12 +236,13 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
                 String(UnitConversions::CelsiusToFahrenheit(lastMeasurement.variant.environment_metrics.temperature), 0) + "°F";
         }
 
-        sensorData[sensorCount++] = "Temp/Hum: " + last_temp + " / " +
-                                    String(lastMeasurement.variant.environment_metrics.relative_humidity, 0) + "%";
+        sensorData[sensorCount++] =
+            "Temp/Hum: " + last_temp + " / " + String(lastMeasurement.variant.environment_metrics.relative_humidity, 0) + "%";
     }
 
     if (lastMeasurement.variant.environment_metrics.barometric_pressure != 0) {
-        sensorData[sensorCount++] = "Press: " + String(lastMeasurement.variant.environment_metrics.barometric_pressure, 0) + "hPA";
+        sensorData[sensorCount++] =
+            "Press: " + String(lastMeasurement.variant.environment_metrics.barometric_pressure, 0) + "hPA";
     }
 
     if (lastMeasurement.variant.environment_metrics.voltage != 0) {
@@ -303,7 +304,6 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
         }
     }
 }
-
 
 bool EnvironmentTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *t)
 {
