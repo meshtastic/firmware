@@ -194,38 +194,27 @@ void portduinoSetup()
         }
     }
     // if we're using a usermode driver, we need to initialize it here, to get a serial number back for mac address
-    uint8_t dmac[6] = {0};
     if (settingsStrings[spidev] == "ch341") {
-        ch341Hal = new Ch341Hal(0);
-        if (settingsStrings[lora_usb_serial_num] != "") {
-            ch341Hal->serial = settingsStrings[lora_usb_serial_num];
-        }
-        ch341Hal->vid = settingsMap[lora_usb_vid];
-        ch341Hal->pid = settingsMap[lora_usb_pid];
-        ch341Hal->init();
-        if (!ch341Hal->isInit()) {
-            std::cout << "Could not initialize CH341 device!" << std::endl;
+        try {
+            ch341Hal = new Ch341Hal(0, settingsStrings[lora_usb_serial_num], settingsMap[lora_usb_vid], settingsMap[lora_usb_pid]);
+        } catch (std::exception &e) {
+            std::cerr << e.what() << std::endl;
+            std::cerr << "Could not initialize CH341 device!" << std::endl;
             exit(EXIT_FAILURE);
         }
         char serial[9] = {0};
         ch341Hal->getSerialString(serial, 8);
         std::cout << "Serial " << serial << std::endl;
         if (strlen(serial) == 8 && settingsStrings[mac_address].length() < 12) {
-            uint8_t hash[32] = {0};
-            memcpy(hash, serial, 8);
+            uint8_t *hash = (uint8_t*)serial;
             crypto->hash(hash, 8);
-            dmac[0] = (hash[0] << 4) | 2;
-            dmac[1] = hash[1];
-            dmac[2] = hash[2];
-            dmac[3] = hash[3];
-            dmac[4] = hash[4];
-            dmac[5] = hash[5];
             char macBuf[13] = {0};
-            sprintf(macBuf, "%02X%02X%02X%02X%02X%02X", dmac[0], dmac[1], dmac[2], dmac[3], dmac[4], dmac[5]);
+            sprintf(macBuf, "%02X%02X%02X%02X%02X%02X", ((hash[0] << 4) | 2), hash[1], hash[2], hash[3], hash[4], hash[5]);
             settingsStrings[mac_address] = macBuf;
         }
     }
 
+    uint8_t dmac[6] = {0};
     getMacAddr(dmac);
     if (dmac[0] == 0 && dmac[1] == 0 && dmac[2] == 0 && dmac[3] == 0 && dmac[4] == 0 && dmac[5] == 0) {
         std::cout << "*** Blank MAC Address not allowed!" << std::endl;
