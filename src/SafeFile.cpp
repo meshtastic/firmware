@@ -9,7 +9,9 @@ static File openFile(const char *filename, bool fullAtomic)
     LOG_DEBUG("Opening %s, fullAtomic=%d", filename, fullAtomic);
 #ifdef ARCH_NRF52
     lfs_assert_failed = false;
-    return FSCom.open(filename, FILE_O_WRITE);
+    File f = FSCom.open(filename, FILE_O_WRITE);
+    f.seek(0); // Prevent appending
+    return f;
 #endif
     if (!fullAtomic)
         FSCom.remove(filename); // Nuke the old file to make space (ignore if it !exists)
