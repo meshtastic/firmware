@@ -194,6 +194,7 @@ void portduinoSetup()
         }
     }
     // if we're using a usermode driver, we need to initialize it here, to get a serial number back for mac address
+    uint8_t dmac[6] = {0};
     if (settingsStrings[spidev] == "ch341") {
         try {
             ch341Hal =
@@ -207,15 +208,21 @@ void portduinoSetup()
         ch341Hal->getSerialString(serial, 8);
         std::cout << "Serial " << serial << std::endl;
         if (strlen(serial) == 8 && settingsStrings[mac_address].length() < 12) {
-            uint8_t *hash = (uint8_t *)serial;
+            uint8_t hash[32] = {0};
+            memcpy(hash, serial, 8);
             crypto->hash(hash, 8);
+            dmac[0] = (hash[0] << 4) | 2;
+            dmac[1] = hash[1];
+            dmac[2] = hash[2];
+            dmac[3] = hash[3];
+            dmac[4] = hash[4];
+            dmac[5] = hash[5];
             char macBuf[13] = {0};
-            sprintf(macBuf, "%02X%02X%02X%02X%02X%02X", ((hash[0] << 4) | 2), hash[1], hash[2], hash[3], hash[4], hash[5]);
+            sprintf(macBuf, "%02X%02X%02X%02X%02X%02X", dmac[0], dmac[1], dmac[2], dmac[3], dmac[4], dmac[5]);
             settingsStrings[mac_address] = macBuf;
         }
     }
 
-    uint8_t dmac[6] = {0};
     getMacAddr(dmac);
     if (dmac[0] == 0 && dmac[1] == 0 && dmac[2] == 0 && dmac[3] == 0 && dmac[4] == 0 && dmac[5] == 0) {
         std::cout << "*** Blank MAC Address not allowed!" << std::endl;
