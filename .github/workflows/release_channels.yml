@@ -4,7 +4,9 @@ on:
   release:
     types: [published, released]
 
-permissions: read-all
+permissions:
+  contents: write
+  packages: write
 
 jobs:
   package-ppa:
