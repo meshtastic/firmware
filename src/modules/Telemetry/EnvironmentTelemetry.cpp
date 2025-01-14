@@ -278,8 +278,18 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
     static bool scrollingDown = true;
     static uint32_t lastScrollTime = millis();
 
-    // Draw up to 3 sensor data lines
-    int linesToShow = min(3, sensorCount);
+    // Determine how many lines we can fit on display
+    // Calculated once only: display dimensions don't change during runtime.
+    static int maxLines = 0;
+    if (!maxLines) {
+        const int16_t paddingTop = _fontHeight(FONT_SMALL); // Heading text
+        const int16_t paddingBottom = 8;                    // Indicator dots
+        maxLines = (display->getHeight() - paddingTop - paddingBottom) / _fontHeight(FONT_SMALL);
+        assert(maxLines > 0);
+    }
+
+    // Draw as many lines of data as we can fit
+    int linesToShow = min(maxLines, sensorCount);
     for (int i = 0; i < linesToShow; i++) {
         int index = (scrollOffset + i) % sensorCount;
         display->drawString(x, y += _fontHeight(FONT_SMALL), sensorData[index]);
