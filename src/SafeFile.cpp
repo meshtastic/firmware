@@ -3,14 +3,15 @@
 #ifdef FSCom
 
 // Only way to work on both esp32 and nrf52
-static File openFile(const char *filename, bool fullAtomic)
+static File openFile(const char *filename, bool fullAtomic, bool removeFirst)
 {
     concurrency::LockGuard g(spiLock);
     LOG_DEBUG("Opening %s, fullAtomic=%d", filename, fullAtomic);
 #ifdef ARCH_NRF52
-    File file = FSCom.open(filename, FILE_O_WRITE);
-    file.seek(0);
-    return file;
+    lfs_assert_failed = false;
+    if (removeFirst)
+        FSCom.remove(filename);
+    return FSCom.open(filename, FILE_O_WRITE);
 #endif
     if (!fullAtomic)
         FSCom.remove(filename); // Nuke the old file to make space (ignore if it !exists)
@@ -22,8 +23,8 @@ static File openFile(const char *filename, bool fullAtomic)
     return FSCom.open(filenameTmp.c_str(), FILE_O_WRITE);
 }
 
-SafeFile::SafeFile(const char *_filename, bool fullAtomic)
-    : filename(_filename), f(openFile(_filename, fullAtomic)), fullAtomic(fullAtomic)
+SafeFile::SafeFile(const char *_filename, bool fullAtomic, bool removeFirst)
+    : filename(_filename), f(openFile(_filename, fullAtomic, removeFirst)), fullAtomic(fullAtomic)
 {
 }
 

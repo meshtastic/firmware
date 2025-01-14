@@ -1104,7 +1104,15 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
 {
     bool okay = false;
 #ifdef FSCom
-    auto f = SafeFile(filename, fullAtomic);
+    bool removeFirst = false;
+#ifdef ARCH_NRF52
+    // On nrf52 we have to fully remove the device state file before writing it,
+    // because the filesystem seems to just append to the file otherwise.
+    if (filename == prefFileName) {
+        removeFirst = true;
+    }
+#endif
+    auto f = SafeFile(filename, fullAtomic, removeFirst);
 
     LOG_INFO("Save %s", filename);
     pb_ostream_t stream = {&writecb, static_cast<Print *>(&f), protoSize};
