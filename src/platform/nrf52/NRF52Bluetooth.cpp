@@ -210,7 +210,10 @@ void NRF52Bluetooth::shutdown()
             LOG_INFO("NRF52 bluetooth disconnecting handle %d", i);
             Bluefruit.disconnect(i);
         }
-        delay(100); // wait for ondisconnect;
+        // Wait for disconnection
+        while (Bluefruit.connected())
+            yield();
+        LOG_INFO("All bluetooth connections ended");
     }
     Bluefruit.Advertising.stop();
 }
