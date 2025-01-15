@@ -826,116 +826,56 @@ void setup()
 #endif
 
 #ifdef ARCH_PORTDUINO
-    if (settingsMap[use_sx1262]) {
-        if (!rIf) {
-            LOG_DEBUG("Activate sx1262 radio on SPI port %s", settingsStrings[spidev].c_str());
+    const struct {
+        configNames cfgName;
+        std::string strName;
+    } loraModules[] = {{use_rf95, "RF95"},     {use_sx1262, "sx1262"}, {use_sx1268, "sx1268"}, {use_sx1280, "sx1280"},
+                       {use_lr1110, "lr1110"}, {use_lr1120, "lr1120"}, {use_lr1121, "lr1121"}, {use_llcc68, "LLCC68"}};
+    // as one can't use a function pointer to the class constructor:
+    auto loraModuleInterface = [](configNames cfgName, LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq,
+                                  RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE busy) {
+        switch (cfgName) {
+        case use_rf95:
+            return (RadioInterface *)new RF95Interface(hal, cs, irq, rst, busy);
+        case use_sx1262:
+            return (RadioInterface *)new SX1262Interface(hal, cs, irq, rst, busy);
+        case use_sx1268:
+            return (RadioInterface *)new SX1268Interface(hal, cs, irq, rst, busy);
+        case use_sx1280:
+            return (RadioInterface *)new SX1280Interface(hal, cs, irq, rst, busy);
+        case use_lr1110:
+            return (RadioInterface *)new LR1110Interface(hal, cs, irq, rst, busy);
+        case use_lr1120:
+            return (RadioInterface *)new LR1120Interface(hal, cs, irq, rst, busy);
+        case use_lr1121:
+            return (RadioInterface *)new LR1121Interface(hal, cs, irq, rst, busy);
+        case use_llcc68:
+            return (RadioInterface *)new LLCC68Interface(hal, cs, irq, rst, busy);
+        default:
+            assert(0); // shouldn't happen
+            return (RadioInterface *)nullptr;
+        }
+    };
+    for (auto &loraModule : loraModules) {
+        if (settingsMap[loraModule.cfgName] && !rIf) {
+            LOG_DEBUG("Activate %s radio on SPI port %s", loraModule.strName.c_str(), settingsStrings[spidev].c_str());
             if (settingsStrings[spidev] == "ch341") {
                 RadioLibHAL = ch341Hal;
             } else {
                 RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
             }
-            rIf = new SX1262Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
-                                      settingsMap[busy]);
+            rIf = loraModuleInterface(loraModule.cfgName, (LockingArduinoHal *)RadioLibHAL, settingsMap[cs_pin],
+                                      settingsMap[irq_pin], settingsMap[reset_pin], settingsMap[busy_pin]);
             if (!rIf->init()) {
-                LOG_WARN("No SX1262 radio");
-                delete rIf;
-                exit(EXIT_FAILURE);
-            } else {
-                LOG_INFO("SX1262 init success");
-            }
-        }
-    } else if (settingsMap[use_rf95]) {
-        if (!rIf) {
-            LOG_DEBUG("Activate rf95 radio on SPI port %s", settingsStrings[spidev].c_str());
-            RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
-            rIf = new RF95Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
-                                    settingsMap[busy]);
-            if (!rIf->init()) {
-                LOG_WARN("No RF95 radio");
+                LOG_WARN("No %s radio", loraModule.strName.c_str());
                 delete rIf;
                 rIf = NULL;
                 exit(EXIT_FAILURE);
             } else {
-                LOG_INFO("RF95 init success");
-            }
-        }
-    } else if (settingsMap[use_sx1280]) {
-        if (!rIf) {
-            LOG_DEBUG("Activate sx1280 radio on SPI port %s", settingsStrings[spidev].c_str());
-            RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
-            rIf = new SX1280Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
-                                      settingsMap[busy]);
-            if (!rIf->init()) {
-                LOG_WARN("No SX1280 radio");
-                delete rIf;
-                rIf = NULL;
-                exit(EXIT_FAILURE);
-            } else {
-                LOG_INFO("SX1280 init success");
-            }
-        }
-    } else if (settingsMap[use_lr1110]) {
-        if (!rIf) {
-            LOG_DEBUG("Activate lr1110 radio on SPI port %s", settingsStrings[spidev].c_str());
-            LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
-            rIf = new LR1110Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
-                                      settingsMap[busy]);
-            if (!rIf->init()) {
-                LOG_WARN("No LR1110 radio");
-                delete rIf;
-                rIf = NULL;
-                exit(EXIT_FAILURE);
-            } else {
-                LOG_INFO("LR1110 init success");
-            }
-        }
-    } else if (settingsMap[use_lr1120]) {
-        if (!rIf) {
-            LOG_DEBUG("Activate lr1120 radio on SPI port %s", settingsStrings[spidev].c_str());
-            LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
-            rIf = new LR1120Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
-                                      settingsMap[busy]);
-            if (!rIf->init()) {
-                LOG_WARN("No LR1120 radio");
-                delete rIf;
-                rIf = NULL;
-                exit(EXIT_FAILURE);
-            } else {
-                LOG_INFO("LR1120 init success");
-            }
-        }
-    } else if (settingsMap[use_lr1121]) {
-        if (!rIf) {
-            LOG_DEBUG("Activate lr1121 radio on SPI port %s", settingsStrings[spidev].c_str());
-            LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
-            rIf = new LR1121Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
-                                      settingsMap[busy]);
-            if (!rIf->init()) {
-                LOG_WARN("No LR1121 radio");
-                delete rIf;
-                rIf = NULL;
-                exit(EXIT_FAILURE);
-            } else {
-                LOG_INFO("LR1121 init success");
-            }
-        }
-    } else if (settingsMap[use_sx1268]) {
-        if (!rIf) {
-            LOG_DEBUG("Activate sx1268 radio on SPI port %s", settingsStrings[spidev].c_str());
-            RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
-            rIf = new SX1268Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
-                                      settingsMap[busy]);
-            if (!rIf->init()) {
-                LOG_WARN("No SX1268 radio");
-                delete rIf;
-                rIf = NULL;
-                exit(EXIT_FAILURE);
-            } else {
-                LOG_INFO("SX1268 init success");
+                LOG_INFO("%s init success", loraModule.strName.c_str());
             }
         }
     }
-
 #elif defined(HW_SPI1_DEVICE)
     LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI1, spiSettings);
 #else // HW_SPI1_DEVICE
