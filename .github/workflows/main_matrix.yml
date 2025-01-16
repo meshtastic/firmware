@@ -320,14 +320,13 @@ jobs:
         run: ls -lR
 
       - name: Add deb files to release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ steps.version.outputs.long }}
-          files: |
-            ./output/meshtasticd_${{ steps.version.outputs.long }}_arm64.deb
-            ./output/meshtasticd_${{ steps.version.outputs.long }}_armhf.deb
-            ./output/meshtasticd_${{ steps.version.outputs.long }}_amd64.deb
-            ./output/meshtasticd-${{ steps.version.outputs.deb }}-src.zip
+        run: |
+          gh release upload v${{ steps.version.outputs.long }} ./output/meshtasticd_${{ steps.version.outputs.long }}_arm64.deb
+          gh release upload v${{ steps.version.outputs.long }} ./output/meshtasticd_${{ steps.version.outputs.long }}_armhf.deb
+          gh release upload v${{ steps.version.outputs.long }} ./output/meshtasticd_${{ steps.version.outputs.long }}_amd64.deb
+          gh release upload v${{ steps.version.outputs.long }} ./output/meshtasticd-${{ steps.version.outputs.deb }}-src.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Bump version.properties
         run: >-
@@ -397,9 +396,8 @@ jobs:
         run: ls -lR
 
       - name: Add bins and debug elfs to release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ steps.version.outputs.long }}
-          files: |
-            ./firmware-${{matrix.arch}}-${{ steps.version.outputs.long }}.zip
-            ./debug-elfs-${{matrix.arch}}-${{ steps.version.outputs.long }}.zip
+        run: |
+          gh release upload v${{ steps.version.outputs.long }} ./firmware-${{matrix.arch}}-${{ steps.version.outputs.long }}.zip
+          gh release upload v${{ steps.version.outputs.long }} ./debug-elfs-${{matrix.arch}}-${{ steps.version.outputs.long }}.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

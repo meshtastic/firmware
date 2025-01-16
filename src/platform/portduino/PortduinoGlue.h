@@ -5,27 +5,42 @@
 #include "platform/portduino/USBHal.h"
 
 enum configNames {
-    use_sx1262,
-    cs,
-    irq,
-    busy,
-    reset,
-    sx126x_ant_sw,
-    txen,
-    rxen,
+    default_gpiochip,
+    cs_pin,
+    cs_line,
+    cs_gpiochip,
+    irq_pin,
+    irq_line,
+    irq_gpiochip,
+    busy_pin,
+    busy_line,
+    busy_gpiochip,
+    reset_pin,
+    reset_line,
+    reset_gpiochip,
+    txen_pin,
+    txen_line,
+    txen_gpiochip,
+    rxen_pin,
+    rxen_line,
+    rxen_gpiochip,
+    sx126x_ant_sw_pin,
+    sx126x_ant_sw_line,
+    sx126x_ant_sw_gpiochip,
     dio2_as_rf_switch,
     dio3_tcxo_voltage,
     use_rf95,
+    use_sx1262,
+    use_sx1268,
     use_sx1280,
     use_lr1110,
     use_lr1120,
     use_lr1121,
-    use_sx1268,
+    use_llcc68,
     lora_usb_serial_num,
     lora_usb_pid,
     lora_usb_vid,
     user,
-    gpiochip,
     spidev,
     spiSpeed,
     i2cdev,
@@ -75,7 +90,7 @@ extern std::map<configNames, int> settingsMap;
 extern std::map<configNames, std::string> settingsStrings;
 extern std::ofstream traceFile;
 extern Ch341Hal *ch341Hal;
-int initGPIOPin(int pinNum, std::string gpioChipname);
+int initGPIOPin(int pinNum, std::string gpioChipname, int line);
 bool loadConfig(const char *configPath);
 static bool ends_with(std::string_view str, std::string_view suffix);
 void getMacAddr(uint8_t *dmac);
