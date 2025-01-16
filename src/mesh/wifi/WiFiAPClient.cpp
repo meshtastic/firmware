@@ -106,7 +106,9 @@ static void onNetworkConnected()
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WEBSERVER
         initWebServer();
 #endif
+#if !MESHTASTIC_EXCLUDE_SOCKETAPI
         initApiServer();
+#endif
         APStartupComplete = true;
     }
 
@@ -141,6 +143,11 @@ static int32_t reconnectWiFi()
         delay(5000);
 
         if (!WiFi.isConnected()) {
+#ifdef CONFIG_IDF_TARGET_ESP32C3
+            WiFi.mode(WIFI_MODE_NULL);
+            WiFi.useStaticBuffers(true);
+            WiFi.mode(WIFI_STA);
+#endif
             WiFi.begin(wifiName, wifiPsw);
         }
         isReconnecting = false;

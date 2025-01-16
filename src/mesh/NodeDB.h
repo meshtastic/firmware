@@ -29,6 +29,7 @@ extern meshtastic_DeviceState devicestate;
 extern meshtastic_ChannelFile channelFile;
 extern meshtastic_MyNodeInfo &myNodeInfo;
 extern meshtastic_LocalConfig config;
+extern meshtastic_DeviceUIConfig uiconfig;
 extern meshtastic_LocalModuleConfig moduleConfig;
 extern meshtastic_User &owner;
 extern meshtastic_Position localPosition;
@@ -144,7 +145,7 @@ class NodeDB
         return &meshNodes->at(x);
     }
 
-    meshtastic_NodeInfoLite *getMeshNode(NodeNum n);
+    virtual meshtastic_NodeInfoLite *getMeshNode(NodeNum n);
     size_t getNumMeshNodes() { return numMeshNodes; }
 
     // returns true if the maximum number of nodes is reached or we are running low on memory

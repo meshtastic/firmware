@@ -6,55 +6,8 @@ on:
   workflow_dispatch: {}
 
 jobs:
-  test-simulator:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Install libbluetooth
-        shell: bash
-        run: |
-          sudo apt-get update --fix-missing
-          sudo apt-get install -y libbluetooth-dev libgpiod-dev libyaml-cpp-dev openssl libssl-dev libulfius-dev liborcania-dev
-
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Upgrade python tools
-        shell: bash
-        run: |
-          python -m pip install --upgrade pip
-          pip install -U platformio adafruit-nrfutil
-          pip install -U meshtastic --pre
-
-      - name: Upgrade platformio
-        shell: bash
-        run: |
-          pio upgrade
-
-      - name: Build Native
-        run: bin/build-native.sh
-
-      # We now run integration test before other build steps (to quickly see runtime failures)
-      - name: Build for native
-        run: platformio run -e native
-
-      - name: Integration test
-        run: |
-          .pio/build/native/program & sleep 10 # 5 seconds was not enough
-          echo "Simulator started, launching python test..."
-          python3 -c 'from meshtastic.test import testSimulator; testSimulator()'
-
-      - name: PlatformIO Tests
-        run: platformio test -e native --junit-output-path testreport.xml
-
-      - name: Test Report
-        uses: dorny/test-reporter@v1.9.1
-        if: success() || failure() # run this step even if previous step failed
-        with:
-          name: PlatformIO Tests
-          path: testreport.xml
-          reporter: java-junit
+  native-tests:
+    uses: ./.github/workflows/test_native.yml
 
   hardware-tests:
     runs-on: test-runner

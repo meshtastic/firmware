@@ -40,6 +40,7 @@
 #include <utility>
 
 #ifdef ARCH_ESP32
+#include "freertosinc.h"
 #if !MESHTASTIC_EXCLUDE_WEBSERVER
 #include "mesh/http/WebServer.h"
 #endif
@@ -90,6 +91,8 @@ NRF52Bluetooth *nrf52Bluetooth = nullptr;
 #include "linux/LinuxHardwareI2C.h"
 #include "mesh/raspihttp/PiWebServer.h"
 #include "platform/portduino/PortduinoGlue.h"
+#include "platform/portduino/USBHal.h"
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -172,6 +175,8 @@ std::pair<uint8_t, TwoWire *> nodeTelemetrySensorsMap[_meshtastic_TelemetrySenso
 
 Router *router = NULL; // Users of router don't care what sort of subclass implements that API
 
+const char *firmware_version = optstr(APP_VERSION_SHORT);
+
 const char *getDeviceName()
 {
     uint8_t dmac[6];
@@ -213,6 +218,9 @@ static OSThread *powerFSMthread;
 static OSThread *ambientLightingThread;
 
 RadioInterface *rIf = NULL;
+#ifdef ARCH_PORTDUINO
+RadioLibHal *RadioLibHAL = NULL;
+#endif
 
 /**
  * Some platforms (nrf52) might provide an alterate version that suppresses calling delay from sleep.
@@ -237,6 +245,17 @@ void printInfo()
 #ifndef PIO_UNIT_TESTING
 void setup()
 {
+#if defined(T_DECK)
+    // GPIO10 manages all peripheral power supplies
+    // Turn on peripheral power immediately after MUC starts.
+    // If some boards are turned on late, ESP32 will reset due to low voltage.
+    // ESP32-C3(Keyboard) , MAX98357A(Audio Power Amplifier) ,
+    // TF Card , Display backlight(AW9364DNR) , AN48841B(Trackball) , ES7210(Decoder)
+    pinMode(KB_POWERON, OUTPUT);
+    digitalWrite(KB_POWERON, HIGH);
+    delay(100);
+#endif
+
     concurrency::hasBeenSetup = true;
 #if ARCH_PORTDUINO
     SPISettings spiSettings(settingsMap[spiSpeed], MSBFIRST, SPI_MODE0);
@@ -346,6 +365,8 @@ void setup()
 #endif
 #endif
 
+    initSPI();
+
     OSThread::setup();
 
     ledPeriodic = new Periodic("Blink", ledBlinker);
@@ -407,15 +428,6 @@ void setup()
     // RAK-12039 set pin for Air quality sensor. Detectable on I2C after ~3 seconds, so we need to rescan later
     pinMode(AQ_SET_PIN, OUTPUT);
     digitalWrite(AQ_SET_PIN, HIGH);
-#endif
-
-#if defined(T_DECK)
-    // enable keyboard
-    pinMode(KB_POWERON, OUTPUT);
-    digitalWrite(KB_POWERON, HIGH);
-    // There needs to be a delay after power on, give LILYGO-KEYBOARD some startup time
-    // otherwise keyboard and touch screen will not work
-    delay(200);
 #endif
 
     // Currently only the tbeam has a PMU
@@ -573,6 +585,7 @@ void setup()
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::BMP_3XX, meshtastic_TelemetrySensorType_BMP3XX);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::BMP_085, meshtastic_TelemetrySensorType_BMP085);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::INA260, meshtastic_TelemetrySensorType_INA260);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::INA226, meshtastic_TelemetrySensorType_INA226);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::INA219, meshtastic_TelemetrySensorType_INA219);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::INA3221, meshtastic_TelemetrySensorType_INA3221);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MAX17048, meshtastic_TelemetrySensorType_MAX17048);
@@ -629,8 +642,6 @@ void setup()
 #ifdef ARCH_RP2040
     rp2040Setup();
 #endif
-
-    initSPI(); // needed here before reading from littleFS
 
     // We do this as early as possible because this loads preferences from flash
     // but we need to do this after main cpu init (esp32setup), because we need the random seed set
@@ -703,12 +714,16 @@ void setup()
     pinMode(LORA_CS, OUTPUT);
     digitalWrite(LORA_CS, HIGH);
     SPI1.begin(false);
-#else                      // HW_SPI1_DEVICE
+#else  // HW_SPI1_DEVICE
     SPI.setSCK(LORA_SCK);
     SPI.setTX(LORA_MOSI);
     SPI.setRX(LORA_MISO);
     SPI.begin(false);
-#endif                     // HW_SPI1_DEVICE
+#endif // HW_SPI1_DEVICE
+#elif ARCH_PORTDUINO
+    if (settingsStrings[spidev] != "ch341") {
+        SPI.begin();
+    }
 #elif !defined(ARCH_ESP32) // ARCH_RP2040
     SPI.begin();
 #else
@@ -811,114 +826,56 @@ void setup()
 #endif
 
 #ifdef ARCH_PORTDUINO
-    if (settingsMap[use_sx1262]) {
-        if (!rIf) {
-            LOG_DEBUG("Activate sx1262 radio on SPI port %s", settingsStrings[spidev].c_str());
-            LockingArduinoHal *RadioLibHAL =
-                new LockingArduinoHal(SPI, spiSettings, (settingsMap[ch341Quirk] ? settingsMap[busy] : RADIOLIB_NC));
-            rIf = new SX1262Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
-                                      settingsMap[busy]);
-            if (!rIf->init()) {
-                LOG_WARN("No SX1262 radio");
-                delete rIf;
-                exit(EXIT_FAILURE);
-            } else {
-                LOG_INFO("SX1262 init success");
-            }
+    const struct {
+        configNames cfgName;
+        std::string strName;
+    } loraModules[] = {{use_rf95, "RF95"},     {use_sx1262, "sx1262"}, {use_sx1268, "sx1268"}, {use_sx1280, "sx1280"},
+                       {use_lr1110, "lr1110"}, {use_lr1120, "lr1120"}, {use_lr1121, "lr1121"}, {use_llcc68, "LLCC68"}};
+    // as one can't use a function pointer to the class constructor:
+    auto loraModuleInterface = [](configNames cfgName, LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq,
+                                  RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE busy) {
+        switch (cfgName) {
+        case use_rf95:
+            return (RadioInterface *)new RF95Interface(hal, cs, irq, rst, busy);
+        case use_sx1262:
+            return (RadioInterface *)new SX1262Interface(hal, cs, irq, rst, busy);
+        case use_sx1268:
+            return (RadioInterface *)new SX1268Interface(hal, cs, irq, rst, busy);
+        case use_sx1280:
+            return (RadioInterface *)new SX1280Interface(hal, cs, irq, rst, busy);
+        case use_lr1110:
+            return (RadioInterface *)new LR1110Interface(hal, cs, irq, rst, busy);
+        case use_lr1120:
+            return (RadioInterface *)new LR1120Interface(hal, cs, irq, rst, busy);
+        case use_lr1121:
+            return (RadioInterface *)new LR1121Interface(hal, cs, irq, rst, busy);
+        case use_llcc68:
+            return (RadioInterface *)new LLCC68Interface(hal, cs, irq, rst, busy);
+        default:
+            assert(0); // shouldn't happen
+            return (RadioInterface *)nullptr;
         }
-    } else if (settingsMap[use_rf95]) {
-        if (!rIf) {
-            LOG_DEBUG("Activate rf95 radio on SPI port %s", settingsStrings[spidev].c_str());
-            LockingArduinoHal *RadioLibHAL =
-                new LockingArduinoHal(SPI, spiSettings, (settingsMap[ch341Quirk] ? settingsMap[busy] : RADIOLIB_NC));
-            rIf = new RF95Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
-                                    settingsMap[busy]);
+    };
+    for (auto &loraModule : loraModules) {
+        if (settingsMap[loraModule.cfgName] && !rIf) {
+            LOG_DEBUG("Activate %s radio on SPI port %s", loraModule.strName.c_str(), settingsStrings[spidev].c_str());
+            if (settingsStrings[spidev] == "ch341") {
+                RadioLibHAL = ch341Hal;
+            } else {
+                RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
+            }
+            rIf = loraModuleInterface(loraModule.cfgName, (LockingArduinoHal *)RadioLibHAL, settingsMap[cs_pin],
+                                      settingsMap[irq_pin], settingsMap[reset_pin], settingsMap[busy_pin]);
             if (!rIf->init()) {
-                LOG_WARN("No RF95 radio");
+                LOG_WARN("No %s radio", loraModule.strName.c_str());
                 delete rIf;
                 rIf = NULL;
                 exit(EXIT_FAILURE);
             } else {
-                LOG_INFO("RF95 init success");
-            }
-        }
-    } else if (settingsMap[use_sx1280]) {
-        if (!rIf) {
-            LOG_DEBUG("Activate sx1280 radio on SPI port %s", settingsStrings[spidev].c_str());
-            LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
-            rIf = new SX1280Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
-                                      settingsMap[busy]);
-            if (!rIf->init()) {
-                LOG_WARN("No SX1280 radio");
-                delete rIf;
-                rIf = NULL;
-                exit(EXIT_FAILURE);
-            } else {
-                LOG_INFO("SX1280 init success");
-            }
-        }
-    } else if (settingsMap[use_lr1110]) {
-        if (!rIf) {
-            LOG_DEBUG("Activate lr1110 radio on SPI port %s", settingsStrings[spidev].c_str());
-            LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
-            rIf = new LR1110Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
-                                      settingsMap[busy]);
-            if (!rIf->init()) {
-                LOG_WARN("No LR1110 radio");
-                delete rIf;
-                rIf = NULL;
-                exit(EXIT_FAILURE);
-            } else {
-                LOG_INFO("LR1110 init success");
-            }
-        }
-    } else if (settingsMap[use_lr1120]) {
-        if (!rIf) {
-            LOG_DEBUG("Activate lr1120 radio on SPI port %s", settingsStrings[spidev].c_str());
-            LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
-            rIf = new LR1120Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
-                                      settingsMap[busy]);
-            if (!rIf->init()) {
-                LOG_WARN("No LR1120 radio");
-                delete rIf;
-                rIf = NULL;
-                exit(EXIT_FAILURE);
-            } else {
-                LOG_INFO("LR1120 init success");
-            }
-        }
-    } else if (settingsMap[use_lr1121]) {
-        if (!rIf) {
-            LOG_DEBUG("Activate lr1121 radio on SPI port %s", settingsStrings[spidev].c_str());
-            LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
-            rIf = new LR1121Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
-                                      settingsMap[busy]);
-            if (!rIf->init()) {
-                LOG_WARN("No LR1121 radio");
-                delete rIf;
-                rIf = NULL;
-                exit(EXIT_FAILURE);
-            } else {
-                LOG_INFO("LR1121 init success");
-            }
-        }
-    } else if (settingsMap[use_sx1268]) {
-        if (!rIf) {
-            LOG_DEBUG("Activate sx1268 radio on SPI port %s", settingsStrings[spidev].c_str());
-            LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
-            rIf = new SX1268Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
-                                      settingsMap[busy]);
-            if (!rIf->init()) {
-                LOG_WARN("No SX1268 radio");
-                delete rIf;
-                rIf = NULL;
-                exit(EXIT_FAILURE);
-            } else {
-                LOG_INFO("SX1268 init success");
+                LOG_INFO("%s init success", loraModule.strName.c_str());
             }
         }
     }
-
 #elif defined(HW_SPI1_DEVICE)
     LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI1, spiSettings);
 #else // HW_SPI1_DEVICE
@@ -1143,6 +1100,7 @@ void setup()
 #if __has_include(<ulfius.h>)
     if (settingsMap[webserverport] != -1) {
         piwebServerThread = new PiWebServerThread();
+        std::atexit([] { delete piwebServerThread; });
     }
 #endif
     initApiServer(TCPPort);

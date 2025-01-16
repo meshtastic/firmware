@@ -12,14 +12,15 @@ jobs:
           submodules: true
 
       - name: Update submodule
+        if: ${{ github.ref == 'refs/heads/master' }}
         run: |
           git submodule update --remote protobufs
 
       - name: Download nanopb
         run: |
-          wget https://jpa.kapsi.fi/nanopb/download/nanopb-0.4.9-linux-x86.tar.gz
-          tar xvzf nanopb-0.4.9-linux-x86.tar.gz
-          mv nanopb-0.4.9-linux-x86 nanopb-0.4.9
+          wget https://jpa.kapsi.fi/nanopb/download/nanopb-0.4.9.1-linux-x86.tar.gz
+          tar xvzf nanopb-0.4.9.1-linux-x86.tar.gz
+          mv nanopb-0.4.9.1-linux-x86 nanopb-0.4.9
 
       - name: Re-generate protocol buffers
         run: |

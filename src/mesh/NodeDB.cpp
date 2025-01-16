@@ -13,6 +13,7 @@
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "Router.h"
+#include "SPILock.h"
 #include "SafeFile.h"
 #include "TypeConversions.h"
 #include "error.h"
@@ -57,6 +58,7 @@ NodeDB *nodeDB = nullptr;
 EXT_RAM_BSS_ATTR meshtastic_DeviceState devicestate;
 meshtastic_MyNodeInfo &myNodeInfo = devicestate.my_node;
 meshtastic_LocalConfig config;
+meshtastic_DeviceUIConfig uiconfig{.screen_brightness = 153, .screen_timeout = 30};
 meshtastic_LocalModuleConfig moduleConfig;
 meshtastic_ChannelFile channelFile;
 
@@ -68,6 +70,78 @@ static unsigned char userprefs_admin_key_1[] = USERPREFS_USE_ADMIN_KEY_1;
 #endif
 #ifdef USERPREFS_USE_ADMIN_KEY_2
 static unsigned char userprefs_admin_key_2[] = USERPREFS_USE_ADMIN_KEY_2;
+#endif
+
+#ifdef HELTEC_MESH_NODE_T114
+
+uint32_t read8(uint8_t bits, uint8_t dummy, uint8_t cs, uint8_t sck, uint8_t mosi, uint8_t dc, uint8_t rst)
+{
+    uint32_t ret = 0;
+    uint8_t SDAPIN = mosi;
+    pinMode(SDAPIN, INPUT_PULLUP);
+    digitalWrite(dc, HIGH);
+    for (int i = 0; i < dummy; i++) { // any dummy clocks
+        digitalWrite(sck, HIGH);
+        delay(1);
+        digitalWrite(sck, LOW);
+        delay(1);
+    }
+    for (int i = 0; i < bits; i++) { // read results
+        ret <<= 1;
+        delay(1);
+        if (digitalRead(SDAPIN))
+            ret |= 1;
+        ;
+        digitalWrite(sck, HIGH);
+        delay(1);
+        digitalWrite(sck, LOW);
+    }
+    return ret;
+}
+
+void write9(uint8_t val, uint8_t dc_val, uint8_t cs, uint8_t sck, uint8_t mosi, uint8_t dc, uint8_t rst)
+{
+    pinMode(mosi, OUTPUT);
+    digitalWrite(dc, dc_val);
+    for (int i = 0; i < 8; i++) { // send command
+        digitalWrite(mosi, (val & 0x80) != 0);
+        delay(1);
+        digitalWrite(sck, HIGH);
+        delay(1);
+        digitalWrite(sck, LOW);
+        val <<= 1;
+    }
+}
+
+uint32_t readwrite8(uint8_t cmd, uint8_t bits, uint8_t dummy, uint8_t cs, uint8_t sck, uint8_t mosi, uint8_t dc, uint8_t rst)
+{
+    digitalWrite(cs, LOW);
+    write9(cmd, 0, cs, sck, mosi, dc, rst);
+    uint32_t ret = read8(bits, dummy, cs, sck, mosi, dc, rst);
+    digitalWrite(cs, HIGH);
+    return ret;
+}
+
+uint32_t get_st7789_id(uint8_t cs, uint8_t sck, uint8_t mosi, uint8_t dc, uint8_t rst)
+{
+    pinMode(cs, OUTPUT);
+    digitalWrite(cs, HIGH);
+    pinMode(cs, OUTPUT);
+    pinMode(sck, OUTPUT);
+    pinMode(mosi, OUTPUT);
+    pinMode(dc, OUTPUT);
+    pinMode(rst, OUTPUT);
+    digitalWrite(rst, LOW); // Hardware Reset
+    delay(10);
+    digitalWrite(rst, HIGH);
+    delay(10);
+
+    uint32_t ID = 0;
+    ID = readwrite8(0x04, 24, 1, cs, sck, mosi, dc, rst);
+    ID = readwrite8(0x04, 24, 1, cs, sck, mosi, dc, rst); // ST7789 needs twice
+    return ID;
+}
+
 #endif
 
 bool meshtastic_DeviceState_callback(pb_istream_t *istream, pb_ostream_t *ostream, const pb_field_iter_t *field)
@@ -123,9 +197,8 @@ NodeDB::NodeDB()
     uint32_t channelFileCRC = crc32Buffer(&channelFile, sizeof(channelFile));
 
     int saveWhat = 0;
-    // bool hasUniqueId = false;
     // Get device unique id
-#if defined(ARCH_ESP32) && defined(ESP_EFUSE_OPTIONAL_UNIQUE_ID)
+#if defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S3)
     uint32_t unique_id[4];
     // ESP32 factory burns a unique id in efuse for S2+ series and evidently C3+ series
     // This is used for HMACs in the esp-rainmaker AIOT platform and seems to be a good choice for us
@@ -133,7 +206,6 @@ NodeDB::NodeDB()
     if (err == ESP_OK) {
         memcpy(myNodeInfo.device_id.bytes, unique_id, sizeof(unique_id));
         myNodeInfo.device_id.size = 16;
-        hasUniqueId = true;
     } else {
         LOG_WARN("Failed to read unique id from efuse");
     }
@@ -147,12 +219,12 @@ NodeDB::NodeDB()
     memcpy(myNodeInfo.device_id.bytes + sizeof(device_id_start), &device_id_end, sizeof(device_id_end));
     myNodeInfo.device_id.size = 16;
     // Uncomment below to print the device id
-    // hasUniqueId = true;
+
 #else
     // FIXME - implement for other platforms
 #endif
 
-    // if (hasUniqueId) {
+    // if (myNodeInfo.device_id.size == 16) {
     //     std::string deviceIdHex;
     //     for (size_t i = 0; i < myNodeInfo.device_id.size; ++i) {
     //         char buf[3];
@@ -336,6 +408,13 @@ bool NodeDB::resetRadioConfig(bool factory_reset)
         rebootAtMsec = millis() + (5 * 1000);
     }
 
+#if (defined(T_DECK) || defined(T_WATCH_S3) || defined(UNPHONE) || defined(PICOMPUTER_S3)) && defined(HAS_TFT)
+    // as long as PhoneAPI shares BT and TFT app switch BT off
+    config.bluetooth.enabled = false;
+    if (moduleConfig.external_notification.nag_timeout == 60)
+        moduleConfig.external_notification.nag_timeout = 0;
+#endif
+
     return didFactoryReset;
 }
 
@@ -343,12 +422,15 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
 {
     LOG_INFO("Perform factory reset!");
     // first, remove the "/prefs" (this removes most prefs)
-    rmDir("/prefs");
+    spiLock->lock();
+    rmDir("/prefs"); // this uses spilock internally...
+
 #ifdef FSCom
     if (FSCom.exists("/static/rangetest.csv") && !FSCom.remove("/static/rangetest.csv")) {
         LOG_ERROR("Could not remove rangetest.csv file");
     }
 #endif
+    spiLock->unlock();
     // second, install default state (this will deal with the duplicate mac address issue)
     installDefaultDeviceState();
     installDefaultConfig(!eraseBleBonds); // Also preserve the private key if we're not erasing BLE bonds
@@ -489,6 +571,12 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7789_CS) ||       \
     defined(HX8357_CS) || defined(USE_ST7789)
     bool hasScreen = true;
+#ifdef HELTEC_MESH_NODE_T114
+    uint32_t st7789_id = get_st7789_id(ST7789_NSS, ST7789_SCK, ST7789_SDA, ST7789_RS, ST7789_RESET);
+    if (st7789_id == 0xFFFFFF) {
+        hasScreen = false;
+    }
+#endif
 #elif ARCH_PORTDUINO
     bool hasScreen = false;
     if (settingsMap[displayPanel])
@@ -774,12 +862,12 @@ void NodeDB::installDefaultDeviceState()
 #ifdef USERPREFS_CONFIG_OWNER_LONG_NAME
     snprintf(owner.long_name, sizeof(owner.long_name), USERPREFS_CONFIG_OWNER_LONG_NAME);
 #else
-    snprintf(owner.long_name, sizeof(owner.long_name), "Meshtastic %02x%02x", ourMacAddr[4], ourMacAddr[5]);
+    snprintf(owner.long_name, sizeof(owner.long_name), "Meshtastic %04x", getNodeNum() & 0x0ffff);
 #endif
 #ifdef USERPREFS_CONFIG_OWNER_SHORT_NAME
     snprintf(owner.short_name, sizeof(owner.short_name), USERPREFS_CONFIG_OWNER_SHORT_NAME);
 #else
-    snprintf(owner.short_name, sizeof(owner.short_name), "%02x%02x", ourMacAddr[4], ourMacAddr[5]);
+    snprintf(owner.short_name, sizeof(owner.short_name), "%04x", getNodeNum() & 0x0ffff);
 #endif
     snprintf(owner.id, sizeof(owner.id), "!%08x", getNodeNum()); // Default node ID now based on nodenum
     memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
@@ -817,6 +905,7 @@ void NodeDB::pickNewNodeNum()
 
 static const char *prefFileName = "/prefs/db.proto";
 static const char *configFileName = "/prefs/config.proto";
+static const char *uiconfigFileName = "/prefs/uiconfig.proto";
 static const char *moduleConfigFileName = "/prefs/module.proto";
 static const char *channelFileName = "/prefs/channels.proto";
 
@@ -826,6 +915,7 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
 {
     LoadFileResult state = LoadFileResult::OTHER_FAILURE;
 #ifdef FSCom
+    concurrency::LockGuard g(spiLock);
 
     auto f = FSCom.open(filename, FILE_O_READ);
 
@@ -859,12 +949,14 @@ void NodeDB::loadFromDisk()
     // disk we will still factoryReset to restore things.
 
 #ifdef ARCH_ESP32
+    spiLock->lock();
     if (FSCom.exists("/static/static"))
         rmDir("/static/static"); // Remove bad static web files bundle from initial 2.5.13 release
+    spiLock->unlock();
 #endif
 
     // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
-    auto state = loadProto(prefFileName, sizeof(meshtastic_DeviceState) + MAX_NUM_NODES_FS * sizeof(meshtastic_NodeInfo),
+    auto state = loadProto(prefFileName, sizeof(meshtastic_DeviceState) + MAX_NUM_NODES_FS * meshtastic_NodeInfoLite_size,
                            sizeof(meshtastic_DeviceState), &meshtastic_DeviceState_msg, &devicestate);
 
     // See https://github.com/meshtastic/firmware/issues/4184#issuecomment-2269390786
@@ -905,8 +997,11 @@ void NodeDB::loadFromDisk()
     // Make sure we load hard coded admin keys even when the configuration file has none.
     // Initialize admin_key_count to zero
     byte numAdminKeys = 0;
+#if defined(USERPREFS_USE_ADMIN_KEY_0) || defined(USERPREFS_USE_ADMIN_KEY_1) || defined(USERPREFS_USE_ADMIN_KEY_2)
     uint16_t sum = 0;
+#endif
 #ifdef USERPREFS_USE_ADMIN_KEY_0
+
     for (uint8_t b = 0; b < 32; b++) {
         sum += config.security.admin_key[0].bytes[b];
     }
@@ -915,8 +1010,6 @@ void NodeDB::loadFromDisk()
         LOG_INFO("Admin 0 key zero. Loading hard coded key from user preferences.");
         memcpy(config.security.admin_key[0].bytes, userprefs_admin_key_0, 32);
         config.security.admin_key[0].size = 32;
-        config.security.admin_key_count = numAdminKeys;
-        saveToDisk(SEGMENT_CONFIG);
     }
 #endif
 
@@ -930,8 +1023,6 @@ void NodeDB::loadFromDisk()
         LOG_INFO("Admin 1 key zero. Loading hard coded key from user preferences.");
         memcpy(config.security.admin_key[1].bytes, userprefs_admin_key_1, 32);
         config.security.admin_key[1].size = 32;
-        config.security.admin_key_count = numAdminKeys;
-        saveToDisk(SEGMENT_CONFIG);
     }
 #endif
 
@@ -945,10 +1036,14 @@ void NodeDB::loadFromDisk()
         LOG_INFO("Admin 2 key zero. Loading hard coded key from user preferences.");
         memcpy(config.security.admin_key[2].bytes, userprefs_admin_key_2, 32);
         config.security.admin_key[2].size = 32;
+    }
+#endif
+
+    if (numAdminKeys > 0) {
+        LOG_INFO("Saving %d hard coded admin keys.", numAdminKeys);
         config.security.admin_key_count = numAdminKeys;
         saveToDisk(SEGMENT_CONFIG);
     }
-#endif
 
     state = loadProto(moduleConfigFileName, meshtastic_LocalModuleConfig_size, sizeof(meshtastic_LocalModuleConfig),
                       &meshtastic_LocalModuleConfig_msg, &moduleConfig);
@@ -976,6 +1071,12 @@ void NodeDB::loadFromDisk()
         }
     }
 
+    state = loadProto(uiconfigFileName, meshtastic_DeviceUIConfig_size, sizeof(meshtastic_DeviceUIConfig),
+                      &meshtastic_DeviceUIConfig_msg, &uiconfig);
+    if (state == LoadFileResult::LOAD_SUCCESS) {
+        LOG_INFO("Loaded UIConfig");
+    }
+
     // 2.4.X - configuration migration to update new default intervals
     if (moduleConfig.version < 23) {
         LOG_DEBUG("ModuleConfig version %d is stale, upgrading to new default intervals", moduleConfig.version);
@@ -1001,9 +1102,6 @@ void NodeDB::loadFromDisk()
 bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_t *fields, const void *dest_struct,
                        bool fullAtomic)
 {
-#ifdef ARCH_ESP32
-    concurrency::LockGuard g(spiLock);
-#endif
     bool okay = false;
 #ifdef FSCom
     auto f = SafeFile(filename, fullAtomic);
@@ -1031,7 +1129,9 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
 bool NodeDB::saveChannelsToDisk()
 {
 #ifdef FSCom
+    spiLock->lock();
     FSCom.mkdir("/prefs");
+    spiLock->unlock();
 #endif
     return saveProto(channelFileName, meshtastic_ChannelFile_size, &meshtastic_ChannelFile_msg, &channelFile);
 }
@@ -1039,12 +1139,15 @@ bool NodeDB::saveChannelsToDisk()
 bool NodeDB::saveDeviceStateToDisk()
 {
 #ifdef FSCom
+    spiLock->lock();
     FSCom.mkdir("/prefs");
+    spiLock->unlock();
 #endif
     // Note: if MAX_NUM_NODES=100 and meshtastic_NodeInfoLite_size=166, so will be approximately 17KB
     // Because so huge we _must_ not use fullAtomic, because the filesystem is probably too small to hold two copies of this
-    return saveProto(prefFileName, sizeof(devicestate) + numMeshNodes * meshtastic_NodeInfoLite_size, &meshtastic_DeviceState_msg,
-                     &devicestate, false);
+    size_t deviceStateSize;
+    pb_get_encoded_size(&deviceStateSize, meshtastic_DeviceState_fields, &devicestate);
+    return saveProto(prefFileName, deviceStateSize, &meshtastic_DeviceState_msg, &devicestate, false);
 }
 
 bool NodeDB::saveToDiskNoRetry(int saveWhat)
@@ -1052,7 +1155,9 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
     bool success = true;
 
 #ifdef FSCom
+    spiLock->lock();
     FSCom.mkdir("/prefs");
+    spiLock->unlock();
 #endif
     if (saveWhat & SEGMENT_CONFIG) {
         config.has_device = true;
@@ -1103,7 +1208,9 @@ bool NodeDB::saveToDisk(int saveWhat)
     if (!success) {
         LOG_ERROR("Failed to save to disk, retrying");
 #ifdef ARCH_NRF52 // @geeksville is not ready yet to say we should do this on other platforms.  See bug #4184 discussion
+        spiLock->lock();
         FSCom.format();
+        spiLock->unlock();
 
 #endif
         success = saveToDiskNoRetry(saveWhat);

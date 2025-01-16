@@ -16,6 +16,12 @@ inline uint32_t getPriority(const meshtastic_MeshPacket *p)
 bool CompareMeshPacketFunc(const meshtastic_MeshPacket *p1, const meshtastic_MeshPacket *p2)
 {
     assert(p1 && p2);
+
+    // If one packet is in the late transmit window, prefer the other one
+    if ((bool)p1->tx_after != (bool)p2->tx_after) {
+        return !p1->tx_after;
+    }
+
     auto p1p = getPriority(p1), p2p = getPriority(p2);
     // If priorities differ, use that
     // for equal priorities, prefer packets already on mesh.
@@ -63,7 +69,11 @@ bool MeshPacketQueue::enqueue(meshtastic_MeshPacket *p)
 {
     // no space - try to replace a lower priority packet in the queue
     if (queue.size() >= maxLen) {
-        return replaceLowerPriorityPacket(p);
+        bool replaced = replaceLowerPriorityPacket(p);
+        if (!replaced) {
+            LOG_WARN("TX queue is full, and there is no lower-priority packet available to evict in favour of 0x%08x", p->id);
+        }
+        return replaced;
     }
 
     // Find the correct position using upper_bound to maintain a stable order
@@ -94,11 +104,11 @@ meshtastic_MeshPacket *MeshPacketQueue::getFront()
 }
 
 /** Attempt to find and remove a packet from this queue.  Returns a pointer to the removed packet, or NULL if not found */
-meshtastic_MeshPacket *MeshPacketQueue::remove(NodeNum from, PacketId id)
+meshtastic_MeshPacket *MeshPacketQueue::remove(NodeNum from, PacketId id, bool tx_normal, bool tx_late)
 {
     for (auto it = queue.begin(); it != queue.end(); it++) {
         auto p = (*it);
-        if (getFrom(p) == from && p->id == id) {
+        if (getFrom(p) == from && p->id == id && ((tx_normal && !p->tx_after) || (tx_late && p->tx_after))) {
             queue.erase(it);
             return p;
         }
@@ -107,22 +117,44 @@ meshtastic_MeshPacket *MeshPacketQueue::remove(NodeNum from, PacketId id)
     return NULL;
 }
 
-/** Attempt to find and remove a packet from this queue.  Returns the packet which was removed from the queue */
+/**
+ * Attempt to find a lower-priority packet in the queue and replace it with the provided one.
+ * @return True if the replacement succeeded, false otherwise
+ */
 bool MeshPacketQueue::replaceLowerPriorityPacket(meshtastic_MeshPacket *p)
 {
 
     if (queue.empty()) {
         return false; // No packets to replace
     }
+
     // Check if the packet at the back has a lower priority than the new packet
-    auto &backPacket = queue.back();
-    if (backPacket->priority < p->priority) {
+    auto *backPacket = queue.back();
+    if (!backPacket->tx_after && backPacket->priority < p->priority) {
+        LOG_WARN("Dropping packet 0x%08x to make room in the TX queue for higher-priority packet 0x%08x", backPacket->id, p->id);
         // Remove the back packet
-        packetPool.release(backPacket);
         queue.pop_back();
+        packetPool.release(backPacket);
         // Insert the new packet in the correct order
         enqueue(p);
         return true;
+    }
+
+    if (backPacket->tx_after) {
+        // Check if there's a non-late packet with lower priority
+        auto it = queue.end();
+        auto refPacket = *--it;
+        for (; refPacket->tx_after && it != queue.begin(); refPacket = *--it)
+            ;
+        if (!refPacket->tx_after && refPacket->priority < p->priority) {
+            LOG_WARN("Dropping non-late packet 0x%08x to make room in the TX queue for higher-priority packet 0x%08x",
+                     refPacket->id, p->id);
+            queue.erase(it);
+            packetPool.release(refPacket);
+            // Insert the new packet in the correct order
+            enqueue(p);
+            return true;
+        }
     }
 
     // If the back packet's priority is not lower, no replacement occurs
