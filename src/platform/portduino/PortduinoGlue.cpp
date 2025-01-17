@@ -200,15 +200,12 @@ void portduinoSetup()
     // if we're using a usermode driver, we need to initialize it here, to get a serial number back for mac address
     uint8_t dmac[6] = {0};
     if (settingsStrings[spidev] == "ch341") {
-        ch341Hal = new Ch341Hal(0);
-        if (settingsStrings[lora_usb_serial_num] != "") {
-            ch341Hal->serial = settingsStrings[lora_usb_serial_num];
-        }
-        ch341Hal->vid = settingsMap[lora_usb_vid];
-        ch341Hal->pid = settingsMap[lora_usb_pid];
-        ch341Hal->init();
-        if (!ch341Hal->isInit()) {
-            std::cout << "Could not initialize CH341 device!" << std::endl;
+        try {
+            ch341Hal =
+                new Ch341Hal(0, settingsStrings[lora_usb_serial_num], settingsMap[lora_usb_vid], settingsMap[lora_usb_pid]);
+        } catch (std::exception &e) {
+            std::cerr << e.what() << std::endl;
+            std::cerr << "Could not initialize CH341 device!" << std::endl;
             exit(EXIT_FAILURE);
         }
         char serial[9] = {0};
