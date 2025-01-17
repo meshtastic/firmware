@@ -31,7 +31,7 @@ jobs:
         env:
           COPR_API_TOKEN_CONFIG: ${{ secrets.COPR_API_CONFIG }}
         with:
-          owner: meshtastic
+          owner: "@meshtastic"
           package-name: meshtasticd
           project-name: ${{ inputs.copr_project }}
           git-remote: "${{ github.server_url }}/${{ github.repository }}.git"
