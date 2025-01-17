@@ -1,0 +1,61 @@
+name: Trigger COPR build
+
+on:
+  workflow_call:
+    secrets:
+      COPR_HOOK_DAILY:
+      COPR_HOOK_ALPHA:
+      COPR_HOOK_BETA:
+    inputs:
+      copr_project:
+        description: COPR project to target
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build-copr-hook:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ref: ${{ github.ref }}
+          repository: ${{ github.repository }}
+
+      - name: Install Python dependencies
+        run: |
+          pip install requests
+
+      - name: Trigger COPR build
+        shell: python
+        run: |
+          import requests
+
+          project_name = "${{ inputs.copr_project }}"
+          if project_name == "daily":
+            hook_secret = "${{ secrets.COPR_HOOK_DAILY }}"
+            project_id = 160277
+          elif project_name == "alpha":
+            hook_secret = "${{ secrets.COPR_HOOK_ALPHA }}"
+            project_id = 160278
+          elif project_name == "beta":
+            hook_secret = "${{ secrets.COPR_HOOK_BETA }}"
+            project_id = 160279
+          else:
+            raise ValueError(f"Unknown COPR project: {project_name}")
+
+          webhook_url = f"https://copr.fedorainfracloud.org/webhooks/github/{project_id}/{hook_secret}/meshtasticd/"
+          copr_payload = {
+            "ref": "${{ github.ref }}",
+            "after": "${{ github.sha }}",
+            "repository": {
+              "clone_url": "${{ github.server_url }}/${{ github.repository }}.git",
+            }
+          }
+          r = requests.post(webhook_url, json=copr_payload, headers={"X-GitHub-Event": "push"})
+          r.raise_for_status()
