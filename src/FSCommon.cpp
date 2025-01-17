@@ -203,7 +203,7 @@ std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels)
                 file.close();
             }
         } else {
-            meshtastic_FileInfo fileInfo = {"", file.size()};
+            meshtastic_FileInfo fileInfo = {"", static_cast<uint32_t>(file.size())};
 #ifdef ARCH_ESP32
             strcpy(fileInfo.file_name, file.path());
 #else

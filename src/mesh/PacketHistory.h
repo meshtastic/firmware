@@ -4,7 +4,11 @@
 #include <unordered_set>
 
 /// We clear our old flood record 10 minutes after we see the last of it
+#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#define FLOOD_EXPIRE_TIME (5 * 1000L) // Don't allow too many packets to accumulate when fuzzing.
+#else
 #define FLOOD_EXPIRE_TIME (10 * 60 * 1000L)
+#endif
 
 /**
  * A record of a recent message broadcast
