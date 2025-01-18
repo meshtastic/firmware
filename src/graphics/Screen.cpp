@@ -2661,6 +2661,7 @@ int Screen::handleStatusUpdate(const meshtastic::Status *arg)
 }
 
 int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
+// If auto carousel is disabled, the focus doesn't chage on the incoming message
 {
     if (config.display.auto_screen_carousel_secs != 0) {
         if (showingNormalScreen) {
@@ -2676,7 +2677,6 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
 
     return 0;
 }
-
 
 // Triggered by MeshModules
 int Screen::handleUIFrameEvent(const UIFrameEvent *event)
