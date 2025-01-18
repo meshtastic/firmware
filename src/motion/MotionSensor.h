@@ -40,6 +40,8 @@ class MotionSensor
     // Refer to /src/concurrency/OSThread.h for more information
     inline virtual int32_t runOnce() { return MOTION_SENSOR_CHECK_INTERVAL_MS; };
 
+    virtual void calibrate(uint16_t forSeconds){};
+
   protected:
     // Turn on the screen when a tap or motion is detected
     virtual void wakeScreen();
@@ -53,6 +55,10 @@ class MotionSensor
 #endif
 
     ScanI2C::FoundDevice device;
+
+    // Do calibration if true
+    bool doCalibration = false;
+    uint32_t endCalibrationAt = 0;
 };
 
 namespace MotionSensorI2C
