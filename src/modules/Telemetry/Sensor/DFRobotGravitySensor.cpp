@@ -23,7 +23,8 @@ int32_t DFRobotGravitySensor::runOnce()
     return initI2CSensor();
 }
 
-void DFRobotGravitySensor::setup() {
+void DFRobotGravitySensor::setup()
+{
     LOG_DEBUG("%s VID: %x, PID: %x, Version: %s", sensorName, gravity.vid, gravity.pid, gravity.getFirmwareVersion().c_str());
 }
 
