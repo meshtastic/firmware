@@ -64,10 +64,10 @@ int32_t PowerTelemetryModule::runOnce()
                 result = ina3221Sensor.runOnce();
             if (max17048Sensor.hasSensor() && !max17048Sensor.isInitialized())
                 result = max17048Sensor.runOnce();
-#ifdef HAS_RAKPROT // this only works on the wismesh hub with the solar option. This is not an I2C sensor, so we don't need the
-                   // sensormap here.
-            if (rak9154Sensor.hasSensor() && !rak9154Sensor.isInitialized())
-                result = rak9154Sensor.runOnce();
+                // this only works on the wismesh hub with the solar option. This is not an I2C sensor, so we don't need the
+                // sensormap here.
+#ifdef HAS_RAKPROT
+            result = rak9154Sensor.runOnce();
 #endif
         }
         return result;
