@@ -7,7 +7,11 @@ on:
         required: true
     inputs:
       series:
-        description: 'Ubuntu series to target'
+        description: Ubuntu/Debian series to target
+        required: true
+        type: string
+      build_location:
+        description: Location where build will execute
         required: true
         type: string
 
@@ -32,9 +36,9 @@ jobs:
         working-directory: meshtasticd
         run: |
           sudo apt-get update -y --fix-missing
-          sudo apt-get install -y software-properties-common
-          sudo add-apt-repository ppa:meshtastic/meshtastic-daily -y
-          sudo apt-get install -y build-essential devscripts equivs
+          sudo apt-get install -y software-properties-common build-essential devscripts equivs
+          sudo add-apt-repository ppa:meshtastic/build-tools -y
+          sudo apt-get update -y --fix-missing
           sudo mk-build-deps --install --remove --tool='apt-get -o Debug::pkgProblemResolver=yes --no-install-recommends --yes' debian/control
 
       - name: Import GPG key
@@ -47,6 +51,8 @@ jobs:
         working-directory: meshtasticd
         run: |
           echo "deb=$(./bin/buildinfo.py deb)" >> $GITHUB_OUTPUT
+        env:
+          BUILD_LOCATION: ${{ inputs.build_location }}
         id: version
 
       - name: Fetch libdeps, package debian source

@@ -84,22 +84,32 @@ ScanI2C::DeviceType ScanI2CTwoWire::probeOLED(ScanI2C::DeviceAddress addr) const
     return o_probe;
 }
 uint16_t ScanI2CTwoWire::getRegisterValue(const ScanI2CTwoWire::RegisterLocation &registerLocation,
-                                          ScanI2CTwoWire::ResponseWidth responseWidth) const
+                                          ScanI2CTwoWire::ResponseWidth responseWidth, bool zeropad = false) const
 {
     uint16_t value = 0x00;
     TwoWire *i2cBus = fetchI2CBus(registerLocation.i2cAddress);
 
     i2cBus->beginTransmission(registerLocation.i2cAddress.address);
     i2cBus->write(registerLocation.registerAddress);
+    if (zeropad) {
+        // Lark Commands need the argument list length in 2 bytes.
+        i2cBus->write((int)0);
+        i2cBus->write((int)0);
+    }
     i2cBus->endTransmission();
     delay(20);
     i2cBus->requestFrom(registerLocation.i2cAddress.address, responseWidth);
-    if (i2cBus->available() == 2) {
+    if (i2cBus->available() > 1) {
         // Read MSB, then LSB
         value = (uint16_t)i2cBus->read() << 8;
         value |= i2cBus->read();
     } else if (i2cBus->available()) {
         value = i2cBus->read();
+    }
+    // Drain excess bytes
+    for (uint8_t i = 0; i < responseWidth - 1; i++) {
+        if (i2cBus->available())
+            i2cBus->read();
     }
     return value;
 }
@@ -286,7 +296,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     RESPONSE_PAYLOAD 0x01
                     RESPONSE_PAYLOAD+1 0x00
                     */
-                    registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x05), 2);
+                    registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x05), 6, true);
                     LOG_DEBUG("Register MFG_UID 05: 0x%x", registerValue);
                     if (registerValue == 0x5305) {
                         logFoundDevice("DFRobot Lark", (uint8_t)addr.address);
@@ -402,6 +412,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 SCAN_SIMPLE_CASE(MLX90632_ADDR, MLX90632, "MLX90632", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(NAU7802_ADDR, NAU7802, "NAU7802", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(MAX1704X_ADDR, MAX17048, "MAX17048", (uint8_t)addr.address);
+                SCAN_SIMPLE_CASE(DFROBOT_RAIN_ADDR, DFROBOT_RAIN, "DFRobot Rain Gauge", (uint8_t)addr.address);
 #ifdef HAS_TPS65233
                 SCAN_SIMPLE_CASE(TPS65233_ADDR, TPS65233, "TPS65233", (uint8_t)addr.address);
 #endif

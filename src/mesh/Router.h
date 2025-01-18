@@ -71,7 +71,7 @@ class Router : protected concurrency::OSThread
      * RadioInterface calls this to queue up packets that have been received from the radio.  The router is now responsible for
      * freeing the packet
      */
-    void enqueueReceivedMessage(meshtastic_MeshPacket *p);
+    virtual void enqueueReceivedMessage(meshtastic_MeshPacket *p);
 
     /**
      * Send a packet on a suitable interface.  This routine will

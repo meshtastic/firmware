@@ -55,14 +55,14 @@ jobs:
 
       - name: Get release version string
         if: always() # run this step even if previous step failed
-        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+        run: echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
         id: version
 
       - name: Save coverage information
         uses: actions/upload-artifact@v4
         if: always() # run this step even if previous step failed
         with:
-          name: lcov-coverage-info-native-simulator-test-${{ steps.version.outputs.version }}.zip
+          name: lcov-coverage-info-native-simulator-test-${{ steps.version.outputs.long }}.zip
           overwrite: true
           path: ./coverage_*.info
 
@@ -81,7 +81,7 @@ jobs:
         uses: ./.github/actions/setup-native
 
       - name: Get release version string
-        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+        run: echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
         id: version
 
       # Disable (comment-out) BUILD_EPOCH. It causes a full rebuild between tests and resets the
@@ -90,13 +90,13 @@ jobs:
         run: sed -i 's/-DBUILD_EPOCH=$UNIX_TIME/#-DBUILD_EPOCH=$UNIX_TIME/' platformio.ini
 
       - name: PlatformIO Tests
-        run: platformio test -e coverage --junit-output-path testreport.xml
+        run: platformio test -e coverage -v --junit-output-path testreport.xml
 
       - name: Save test results
         if: always() # run this step even if previous step failed
         uses: actions/upload-artifact@v4
         with:
-          name: platformio-test-report-${{ steps.version.outputs.version }}.zip
+          name: platformio-test-report-${{ steps.version.outputs.long }}.zip
           overwrite: true
           path: ./testreport.xml
 
@@ -111,7 +111,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always() # run this step even if previous step failed
         with:
-          name: lcov-coverage-info-native-platformio-tests-${{ steps.version.outputs.version }}.zip
+          name: lcov-coverage-info-native-platformio-tests-${{ steps.version.outputs.long }}.zip
           overwrite: true
           path: ./coverage_*.info
 
@@ -133,13 +133,13 @@ jobs:
           repository: ${{github.event.pull_request.head.repo.full_name}}
 
       - name: Get release version string
-        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+        run: echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
         id: version
 
       - name: Download test artifacts
         uses: actions/download-artifact@v4
         with:
-          name: platformio-test-report-${{ steps.version.outputs.version }}.zip
+          name: platformio-test-report-${{ steps.version.outputs.long }}.zip
           merge-multiple: true
 
       - name: Test Report
@@ -152,7 +152,7 @@ jobs:
       - name: Download coverage artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: lcov-coverage-info-native-*-${{ steps.version.outputs.version }}.zip
+          pattern: lcov-coverage-info-native-*-${{ steps.version.outputs.long }}.zip
           path: code-coverage-report
           merge-multiple: true
 
@@ -165,5 +165,5 @@ jobs:
       - name: Save Code Coverage Report
         uses: actions/upload-artifact@v4
         with:
-          name: code-coverage-report-${{ steps.version.outputs.version }}.zip
+          name: code-coverage-report-${{ steps.version.outputs.long }}.zip
           path: code-coverage-report
