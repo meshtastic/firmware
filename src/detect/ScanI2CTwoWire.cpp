@@ -93,8 +93,8 @@ uint16_t ScanI2CTwoWire::getRegisterValue(const ScanI2CTwoWire::RegisterLocation
     i2cBus->write(registerLocation.registerAddress);
     if (zeropad) {
         // Lark Commands need the argument list length in 2 bytes.
-        i2cBus->write(0x00);
-        i2cBus->write(0x00);
+        i2cBus->write((int)0);
+        i2cBus->write((int)0);
     }
     i2cBus->endTransmission();
     delay(20);
@@ -412,6 +412,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 SCAN_SIMPLE_CASE(MLX90632_ADDR, MLX90632, "MLX90632", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(NAU7802_ADDR, NAU7802, "NAU7802", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(MAX1704X_ADDR, MAX17048, "MAX17048", (uint8_t)addr.address);
+                SCAN_SIMPLE_CASE(DFROBOT_RAIN_ADDR, DFROBOT_RAIN, "DFROBOT_RAIN ", (uint8_t)addr.address);
 #ifdef HAS_TPS65233
                 SCAN_SIMPLE_CASE(TPS65233_ADDR, TPS65233, "TPS65233", (uint8_t)addr.address);
 #endif
