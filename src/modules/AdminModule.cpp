@@ -4,6 +4,7 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "RTC.h"
+#include "SPILock.h"
 #include "meshUtils.h"
 #include <FSCommon.h>
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH
@@ -358,12 +359,15 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
     case meshtastic_AdminMessage_delete_file_request_tag: {
         LOG_DEBUG("Client requesting to delete file: %s", r->delete_file_request);
+
 #ifdef FSCom
+        spiLock->lock();
         if (FSCom.remove(r->delete_file_request)) {
             LOG_DEBUG("Successfully deleted file");
         } else {
             LOG_DEBUG("Failed to delete file");
         }
+        spiLock->unlock();
 #endif
         break;
     }
