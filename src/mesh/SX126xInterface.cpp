@@ -51,9 +51,9 @@ template <typename T> bool SX126xInterface<T>::init()
 
 #if ARCH_PORTDUINO
     float tcxoVoltage = (float)settingsMap[dio3_tcxo_voltage] / 1000;
-    if (settingsMap[sx126x_ant_sw] != RADIOLIB_NC) {
-        digitalWrite(settingsMap[sx126x_ant_sw], HIGH);
-        pinMode(settingsMap[sx126x_ant_sw], OUTPUT);
+    if (settingsMap[sx126x_ant_sw_pin] != RADIOLIB_NC) {
+        digitalWrite(settingsMap[sx126x_ant_sw_pin], HIGH);
+        pinMode(settingsMap[sx126x_ant_sw_pin], OUTPUT);
     }
 // FIXME: correct logic to default to not using TCXO if no voltage is specified for SX126X_DIO3_TCXO_VOLTAGE
 #elif !defined(SX126X_DIO3_TCXO_VOLTAGE)
@@ -121,8 +121,9 @@ template <typename T> bool SX126xInterface<T>::init()
     // no effect
 #if ARCH_PORTDUINO
     if (res == RADIOLIB_ERR_NONE) {
-        LOG_DEBUG("Use MCU pin %i as RXEN and pin %i as TXEN to control RF switching", settingsMap[rxen], settingsMap[txen]);
-        lora.setRfSwitchPins(settingsMap[rxen], settingsMap[txen]);
+        LOG_DEBUG("Use MCU pin %i as RXEN and pin %i as TXEN to control RF switching", settingsMap[rxen_pin],
+                  settingsMap[txen_pin]);
+        lora.setRfSwitchPins(settingsMap[rxen_pin], settingsMap[txen_pin]);
     }
 #else
 #ifndef SX126X_RXEN

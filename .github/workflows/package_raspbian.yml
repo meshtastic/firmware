@@ -32,13 +32,13 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Get release version string
-        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+        run: echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
         id: version
 
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          name: firmware-raspbian-${{ steps.version.outputs.version }}.zip
+          name: firmware-raspbian-${{ steps.version.outputs.long }}.zip
           merge-multiple: true
 
       - name: Display structure of downloaded files
@@ -77,14 +77,14 @@ jobs:
           package: meshtasticd
           package_root: .debpkg
           maintainer: Jonathan Bennett
-          version: ${{ steps.version.outputs.version }} # refs/tags/v*.*.*
+          version: ${{ steps.version.outputs.long }} # refs/tags/v*.*.*
           arch: arm64
           depends: libyaml-cpp0.7, openssl, libulfius2.7, libi2c0
           desc: Native Linux Meshtastic binary.
 
       - uses: actions/upload-artifact@v4
         with:
-          name: meshtasticd_${{ steps.version.outputs.version }}_arm64.deb
+          name: meshtasticd_${{ steps.version.outputs.long }}_arm64.deb
           overwrite: true
           path: |
             ./*.deb
