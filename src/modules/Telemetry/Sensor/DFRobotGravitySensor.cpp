@@ -18,19 +18,14 @@ int32_t DFRobotGravitySensor::runOnce()
     }
 
     gravity = DFRobot_RainfallSensor_I2C(nodeTelemetrySensorsMap[sensorType].second);
+    status = gravity.begin();
 
-    if (gravity.begin() == 0) // DFRobotRainfallSensor init
-    {
-        LOG_DEBUG("DFRobotRainfallSensor Init Succeed");
-        status = true;
-    } else {
-        LOG_ERROR("DFRobotRainfallSensor Init Failed");
-        status = false;
-    }
     return initI2CSensor();
 }
 
-void DFRobotGravitySensor::setup() {}
+void DFRobotGravitySensor::setup() {
+    LOG_DEBUG("%s VID: %x, PID: %x, Version: %s", sensorName, gravity.vid, gravity.pid, gravity.getFirmwareVersion().c_str());
+}
 
 bool DFRobotGravitySensor::getMetrics(meshtastic_Telemetry *measurement)
 {
