@@ -34,6 +34,8 @@ bool SCD30Sensor::getMetrics(meshtastic_Telemetry *measurement)
   measurement->variant.environment_metrics.has_relative_humidity = true;
   measurement->variant.air_quality_metrics.has_co2 = true;
 
+  sensors_event_t humidity, temp, co2;
+  scd30
   LOG_DEBUG("SCD30 getMetrics");
   if (!scd30.read()) { LOG_DEBUG("SCD30 error reading sensor data"); return false; }
 
