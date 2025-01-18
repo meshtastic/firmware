@@ -2662,18 +2662,21 @@ int Screen::handleStatusUpdate(const meshtastic::Status *arg)
 
 int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
 {
-    if (showingNormalScreen) {
-        // Outgoing message
-        if (packet->from == 0)
-            setFrames(FOCUS_PRESERVE); // Return to same frame (quietly hiding the rx text message frame)
+    if (config.display.auto_screen_carousel_secs != 0) {
+        if (showingNormalScreen) {
+            // Outgoing message
+            if (packet->from == 0)
+                setFrames(FOCUS_PRESERVE); // Return to same frame (quietly hiding the rx text message frame)
 
-        // Incoming message
-        else
-            setFrames(FOCUS_TEXTMESSAGE); // Focus on the new message
+            // Incoming message
+            else
+                setFrames(FOCUS_TEXTMESSAGE); // Focus on the new message
+        }
     }
 
     return 0;
 }
+
 
 // Triggered by MeshModules
 int Screen::handleUIFrameEvent(const UIFrameEvent *event)
