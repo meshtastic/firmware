@@ -171,14 +171,12 @@ void RAK9154Sensor::setup()
 
 bool RAK9154Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
-    if (lastRead > 0)
-        LOG_DEBUG("Last valid read from RAK9154Sensor: %d s ago", (millis() - lastRead) / 1000);
     if (getBusVoltageMv() > 0) {
         measurement->variant.environment_metrics.has_voltage = true;
         measurement->variant.environment_metrics.has_current = true;
 
-        measurement->variant.environment_metrics.voltage = getBusVoltageMv() / 1000;
-        measurement->variant.environment_metrics.current = getCurrentMa() / 1000;
+        measurement->variant.environment_metrics.voltage = (float)getBusVoltageMv() / 1000;
+        measurement->variant.environment_metrics.current = (float)getCurrentMa() / 1000;
         return true;
     } else {
         return false;
