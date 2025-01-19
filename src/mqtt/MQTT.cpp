@@ -76,12 +76,22 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
         return;
     }
     LOG_INFO("Received MQTT topic %s, len=%u", topic, length);
+    if (e.packet->hop_limit > HOP_MAX || e.packet->hop_start > HOP_MAX) {
+        LOG_INFO("Invalid hop_limit(%u) or hop_start(%u)", e.packet->hop_limit, e.packet->hop_start);
+        return;
+    }
 
-    UniquePacketPoolPacket p = packetPool.allocUniqueCopy(*e.packet);
+    UniquePacketPoolPacket p = packetPool.allocUniqueZeroed();
+    p->from = e.packet->from;
+    p->to = e.packet->to;
+    p->id = e.packet->id;
+    p->channel = e.packet->channel;
+    p->hop_limit = e.packet->hop_limit;
+    p->hop_start = e.packet->hop_start;
+    p->want_ack = e.packet->want_ack;
     p->via_mqtt = true; // Mark that the packet was received via MQTT
-    // Unset received SNR/RSSI which might have been added by the MQTT gateway
-    p->rx_snr = 0;
-    p->rx_rssi = 0;
+    p->which_payload_variant = e.packet->which_payload_variant;
+    memcpy(&p->decoded, &e.packet->decoded, std::max(sizeof(p->decoded), sizeof(p->encrypted)));
 
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         if (moduleConfig.mqtt.encryption_enabled) {
