@@ -14,6 +14,7 @@ class RAK9154Sensor : public TelemetrySensor, VoltageSensor, CurrentSensor
   private:
   protected:
     virtual void setup() override;
+    uint32_t lastRead = 0;
 
   public:
     RAK9154Sensor();
@@ -23,6 +24,7 @@ class RAK9154Sensor : public TelemetrySensor, VoltageSensor, CurrentSensor
     virtual int16_t getCurrentMa() override;
     int getBusBatteryPercent();
     bool isCharging();
+    void setLastRead(uint32_t lastRead);
 };
 #endif // _RAK9154SENSOR_H
 #endif // HAS_RAKPROT

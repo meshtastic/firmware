@@ -5,7 +5,6 @@
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "RAK9154Sensor.h"
 #include "TelemetrySensor.h"
-
 #include "concurrency/Periodic.h"
 #include <RAK-OneWireSerial.h>
 
@@ -26,6 +25,8 @@ static int16_t dc_cur = 0;
 static uint16_t dc_vol = 0;
 static uint8_t dc_prec = 0;
 static uint8_t provision = 0;
+
+extern RAK9154Sensor rak9154Sensor;
 
 static void onewire_evt(const uint8_t pid, const uint8_t sid, const SNHUBAPI_EVT_E eid, uint8_t *msg, uint16_t len)
 {
@@ -80,6 +81,7 @@ static void onewire_evt(const uint8_t pid, const uint8_t sid, const SNHUBAPI_EVT
         default:
             break;
         }
+        rak9154Sensor.setLastRead(millis());
 
         break;
     case SNHUBAPI_EVT_REPORT:
@@ -108,6 +110,7 @@ static void onewire_evt(const uint8_t pid, const uint8_t sid, const SNHUBAPI_EVT
         default:
             break;
         }
+        rak9154Sensor.setLastRead(millis());
 
         break;
 
@@ -147,14 +150,16 @@ static int32_t onewireHandle()
 
 int32_t RAK9154Sensor::runOnce()
 {
-    onewirePeriodic = new Periodic("onewireHandle", onewireHandle);
+    if (!rak9154Sensor.isInitialized()) {
+        onewirePeriodic = new Periodic("onewireHandle", onewireHandle);
 
-    mySerial.begin(9600);
+        mySerial.begin(9600);
 
-    RakSNHub_Protocl_API.init(onewire_evt);
+        RakSNHub_Protocl_API.init(onewire_evt);
 
-    status = true;
-    initialized = true;
+        status = true;
+        initialized = true;
+    }
 
     return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
 }
@@ -166,12 +171,18 @@ void RAK9154Sensor::setup()
 
 bool RAK9154Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
-    measurement->variant.environment_metrics.has_voltage = true;
-    measurement->variant.environment_metrics.has_current = true;
+    if (lastRead > 0)
+        LOG_DEBUG("Last valid read from RAK9154Sensor: %d s ago", (millis() - lastRead) / 1000);
+    if (getBusVoltageMv() > 0) {
+        measurement->variant.environment_metrics.has_voltage = true;
+        measurement->variant.environment_metrics.has_current = true;
 
-    measurement->variant.environment_metrics.voltage = getBusVoltageMv() / 1000;
-    measurement->variant.environment_metrics.current = getCurrentMa() / 1000;
-    return true;
+        measurement->variant.environment_metrics.voltage = getBusVoltageMv() / 1000;
+        measurement->variant.environment_metrics.current = getCurrentMa() / 1000;
+        return true;
+    } else {
+        return false;
+    }
 }
 
 uint16_t RAK9154Sensor::getBusVoltageMv()
@@ -192,5 +203,9 @@ int RAK9154Sensor::getBusBatteryPercent()
 bool RAK9154Sensor::isCharging()
 {
     return (dc_cur > 0) ? true : false;
+}
+void RAK9154Sensor::setLastRead(uint32_t lastRead)
+{
+    this->lastRead = lastRead;
 }
 #endif // HAS_RAKPROT
