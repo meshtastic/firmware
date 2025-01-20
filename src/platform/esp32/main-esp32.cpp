@@ -109,6 +109,7 @@ void esp32Setup()
     LOG_DEBUG("Free heap: %d", ESP.getFreeHeap());
     LOG_DEBUG("Total PSRAM: %d", ESP.getPsramSize());
     LOG_DEBUG("Free PSRAM: %d", ESP.getFreePsram());
+    esp_log_level_set("gpio", ESP_LOG_WARN);
 
     auto res = nvs_flash_init();
     assert(res == ESP_OK);

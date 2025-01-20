@@ -1,5 +1,5 @@
 #define LED_PIN 15
-#define LED_STATE_ON 1 // State when LED is lit
+#define LED_STATE_ON 0 // State when LED is lit
 
 #define BUTTON_PIN 21 // This is the Program Button
 #define BUTTON_NEED_PULLUP
