@@ -4,7 +4,7 @@
 
 BMX160Sensor::BMX160Sensor(ScanI2C::FoundDevice foundDevice) : MotionSensor::MotionSensor(foundDevice) {}
 
-#ifdef RAK_4631
+#if defined(RAK_4631) && !defined(RAK2560)
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN)
 
 // screen is defined in main.cpp
