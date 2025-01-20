@@ -163,6 +163,12 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = max17048Sensor.runOnce();
             if (cgRadSens.hasSensor())
                 result = cgRadSens.runOnce();
+                // this only works on the wismesh hub with the solar option. This is not an I2C sensor, so we don't need the
+                // sensormap here.
+#ifdef HAS_RAKPROT
+
+            result = rak9154Sensor.runOnce();
+#endif
 #endif
         }
         return result;
@@ -480,6 +486,10 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
         valid = valid && cgRadSens.getMetrics(m);
         hasSensor = true;
     }
+#ifdef HAS_RAKPROT
+    valid = valid && rak9154Sensor.getMetrics(m);
+    hasSensor = true;
+#endif
 #endif
     return valid && hasSensor;
 }

@@ -100,7 +100,7 @@ void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *s
 {
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
-    
+
     if (lastMeasurementPacket == nullptr) {
         // In case of  no valid packet, display "Power Telemetry", "No measurement"
         display->drawString(x, y, "Power Telemetry");
@@ -121,23 +121,23 @@ void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *s
     }
 
     // Display "Pow. From: ..."
-    display->drawString(x, y, "Pow. From: " + String(lastSender) + "(" + String(agoSecs) + "s)");    
+    display->drawString(x, y, "Pow. From: " + String(lastSender) + "(" + String(agoSecs) + "s)");
 
     // Display current and voltage based on ...power_metrics.has_[channel/voltage/current]... flags
     if (lastMeasurement.variant.power_metrics.has_ch1_voltage || lastMeasurement.variant.power_metrics.has_ch1_current) {
         display->drawString(x, y += _fontHeight(FONT_SMALL),
-                            "Ch1: " + String(lastMeasurement.variant.power_metrics.ch1_voltage, 2) +
-                                "V " + String(lastMeasurement.variant.power_metrics.ch1_current, 0) + "mA");
+                            "Ch1: " + String(lastMeasurement.variant.power_metrics.ch1_voltage, 2) + "V " +
+                                String(lastMeasurement.variant.power_metrics.ch1_current, 0) + "mA");
     }
     if (lastMeasurement.variant.power_metrics.has_ch2_voltage || lastMeasurement.variant.power_metrics.has_ch2_current) {
         display->drawString(x, y += _fontHeight(FONT_SMALL),
-                            "Ch2: " + String(lastMeasurement.variant.power_metrics.ch2_voltage, 2) +
-                                "V " + String(lastMeasurement.variant.power_metrics.ch2_current, 0) + "mA");
+                            "Ch2: " + String(lastMeasurement.variant.power_metrics.ch2_voltage, 2) + "V " +
+                                String(lastMeasurement.variant.power_metrics.ch2_current, 0) + "mA");
     }
     if (lastMeasurement.variant.power_metrics.has_ch3_voltage || lastMeasurement.variant.power_metrics.has_ch3_current) {
         display->drawString(x, y += _fontHeight(FONT_SMALL),
-                            "Ch3: " + String(lastMeasurement.variant.power_metrics.ch3_voltage, 2) +
-                                "V " + String(lastMeasurement.variant.power_metrics.ch3_current, 0) + "mA");
+                            "Ch3: " + String(lastMeasurement.variant.power_metrics.ch3_voltage, 2) + "V " +
+                                String(lastMeasurement.variant.power_metrics.ch3_current, 0) + "mA");
     }
 }
 
