@@ -1,4 +1,4 @@
-name: Nightly Debian Packaging
+name: Daily Packaging
 on:
   schedule:
     - cron: 0 9 * * *
@@ -8,10 +8,12 @@ on:
       - master
     paths:
       - debian/**
-      - .github/workflows/nightly_debian.yml
+      - "*.rpkg"
+      - .github/workflows/nightly_packaging.yml
       - .github/workflows/build_debian_src.yml
       - .github/workflows/package_ppa.yml
       - .github/workflows/package_obs.yml
+      - .github/workflows/hook_copr.yml
 
 permissions:
   contents: write
@@ -25,13 +27,19 @@ jobs:
         series: [plucky, oracular, noble, jammy]
     uses: ./.github/workflows/package_ppa.yml
     with:
-      ppa_repo: daily
+      ppa_repo: ppa:meshtastic/daily
       series: ${{ matrix.series }}
     secrets: inherit
 
   package-obs:
     uses: ./.github/workflows/package_obs.yml
     with:
-      obs_repo: meshtasticd
+      obs_project: home:meshtastic:daily
       series: unstable
+    secrets: inherit
+
+  hook-copr:
+    uses: ./.github/workflows/hook_copr.yml
+    with:
+      copr_project: daily
     secrets: inherit

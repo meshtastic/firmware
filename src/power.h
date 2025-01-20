@@ -1,5 +1,4 @@
 #pragma once
-#include "../variants/rak2560/RAK9154Sensor.h"
 #include "PowerStatus.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
@@ -56,8 +55,8 @@ extern INA3221Sensor ina3221Sensor;
 extern MAX17048Sensor max17048Sensor;
 #endif
 
-#if HAS_RAKPROT && !defined(ARCH_PORTDUINO)
-#include "../variants/rak2560/RAK9154Sensor.h"
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && HAS_RAKPROT && !defined(ARCH_PORTDUINO)
+#include "modules/Telemetry/Sensor/RAK9154Sensor.h"
 extern RAK9154Sensor rak9154Sensor;
 #endif
 

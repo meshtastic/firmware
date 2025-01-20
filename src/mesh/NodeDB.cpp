@@ -197,9 +197,8 @@ NodeDB::NodeDB()
     uint32_t channelFileCRC = crc32Buffer(&channelFile, sizeof(channelFile));
 
     int saveWhat = 0;
-    // bool hasUniqueId = false;
     // Get device unique id
-#if defined(ARCH_ESP32) && defined(ESP_EFUSE_OPTIONAL_UNIQUE_ID)
+#if defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S3)
     uint32_t unique_id[4];
     // ESP32 factory burns a unique id in efuse for S2+ series and evidently C3+ series
     // This is used for HMACs in the esp-rainmaker AIOT platform and seems to be a good choice for us
@@ -207,7 +206,6 @@ NodeDB::NodeDB()
     if (err == ESP_OK) {
         memcpy(myNodeInfo.device_id.bytes, unique_id, sizeof(unique_id));
         myNodeInfo.device_id.size = 16;
-        hasUniqueId = true;
     } else {
         LOG_WARN("Failed to read unique id from efuse");
     }
@@ -221,12 +219,12 @@ NodeDB::NodeDB()
     memcpy(myNodeInfo.device_id.bytes + sizeof(device_id_start), &device_id_end, sizeof(device_id_end));
     myNodeInfo.device_id.size = 16;
     // Uncomment below to print the device id
-    // hasUniqueId = true;
+
 #else
     // FIXME - implement for other platforms
 #endif
 
-    // if (hasUniqueId) {
+    // if (myNodeInfo.device_id.size == 16) {
     //     std::string deviceIdHex;
     //     for (size_t i = 0; i < myNodeInfo.device_id.size; ++i) {
     //         char buf[3];
@@ -958,7 +956,7 @@ void NodeDB::loadFromDisk()
 #endif
 
     // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
-    auto state = loadProto(prefFileName, sizeof(meshtastic_DeviceState) + MAX_NUM_NODES_FS * sizeof(meshtastic_NodeInfo),
+    auto state = loadProto(prefFileName, sizeof(meshtastic_DeviceState) + MAX_NUM_NODES_FS * meshtastic_NodeInfoLite_size,
                            sizeof(meshtastic_DeviceState), &meshtastic_DeviceState_msg, &devicestate);
 
     // See https://github.com/meshtastic/firmware/issues/4184#issuecomment-2269390786
@@ -1147,8 +1145,9 @@ bool NodeDB::saveDeviceStateToDisk()
 #endif
     // Note: if MAX_NUM_NODES=100 and meshtastic_NodeInfoLite_size=166, so will be approximately 17KB
     // Because so huge we _must_ not use fullAtomic, because the filesystem is probably too small to hold two copies of this
-    return saveProto(prefFileName, sizeof(devicestate) + numMeshNodes * meshtastic_NodeInfoLite_size, &meshtastic_DeviceState_msg,
-                     &devicestate, false);
+    size_t deviceStateSize;
+    pb_get_encoded_size(&deviceStateSize, meshtastic_DeviceState_fields, &devicestate);
+    return saveProto(prefFileName, deviceStateSize, &meshtastic_DeviceState_msg, &devicestate, false);
 }
 
 bool NodeDB::saveToDiskNoRetry(int saveWhat)
