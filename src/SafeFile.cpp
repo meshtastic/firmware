@@ -6,6 +6,12 @@
 static File openFile(const char *filename, bool fullAtomic)
 {
     concurrency::LockGuard g(spiLock);
+    LOG_DEBUG("Opening %s, fullAtomic=%d", filename, fullAtomic);
+#ifdef ARCH_NRF52
+    File file = FSCom.open(filename, FILE_O_WRITE);
+    file.seek(0);
+    return file;
+#endif
     if (!fullAtomic)
         FSCom.remove(filename); // Nuke the old file to make space (ignore if it !exists)
 
@@ -13,8 +19,6 @@ static File openFile(const char *filename, bool fullAtomic)
     filenameTmp += ".tmp";
 
     // clear any previous LFS errors
-    lfs_assert_failed = false;
-
     return FSCom.open(filenameTmp.c_str(), FILE_O_WRITE);
 }
 
@@ -55,8 +59,15 @@ bool SafeFile::close()
         return false;
 
     spiLock->lock();
+#ifdef ARCH_NRF52
+    f.truncate();
+#endif
     f.close();
     spiLock->unlock();
+
+#ifdef ARCH_NRF52
+    return true;
+#endif
     if (!testReadback())
         return false;
 
@@ -83,8 +94,6 @@ bool SafeFile::close()
 bool SafeFile::testReadback()
 {
     concurrency::LockGuard g(spiLock);
-    bool lfs_failed = lfs_assert_failed;
-    lfs_assert_failed = false;
 
     String filenameTmp = filename;
     filenameTmp += ".tmp";
@@ -106,7 +115,7 @@ bool SafeFile::testReadback()
         return false;
     }
 
-    return !lfs_failed;
+    return true;
 }
 
 #endif
