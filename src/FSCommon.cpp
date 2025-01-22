@@ -49,24 +49,6 @@ void OSFS::writeNBytes(uint16_t address, unsigned int num, const byte *input)
 }
 #endif
 
-bool lfs_assert_failed =
-    false; // Note: we use this global on all platforms, though it can only be set true on nrf52 (in our modified lfs_util.h)
-
-extern "C" void lfs_assert(const char *reason)
-{
-    LOG_ERROR("LFS assert: %s", reason);
-    lfs_assert_failed = true;
-
-#ifndef ARCH_PORTDUINO
-#ifdef FSCom
-    // CORRUPTED FILESYSTEM. This causes bootloop so
-    // might as well try formatting now.
-    LOG_ERROR("Trying FSCom.format()");
-    FSCom.format();
-#endif
-#endif
-}
-
 /**
  * @brief Copies a file from one location to another.
  *
@@ -348,10 +330,16 @@ void rmDir(const char *dirname)
 #endif
 }
 
+/**
+ * Some platforms (nrf52) might need to do an extra step before FSBegin().
+ */
+__attribute__((weak, noinline)) void preFSBegin() {}
+
 void fsInit()
 {
 #ifdef FSCom
-    spiLock->lock();
+    concurrency::LockGuard g(spiLock);
+    preFSBegin();
     if (!FSBegin()) {
         LOG_ERROR("Filesystem mount failed");
         // assert(0); This auto-formats the partition, so no need to fail here.
@@ -362,7 +350,6 @@ void fsInit()
     LOG_DEBUG("Filesystem files:");
 #endif
     listDir("/", 10);
-    spiLock->unlock();
 #endif
 }
 
