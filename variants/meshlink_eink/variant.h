@@ -100,12 +100,11 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define PIN_QSPI_IO1 23
 #define PIN_QSPI_IO2 32
 #define PIN_QSPI_IO3 20
-/*
+
 // On-board QSPI Flash
 #define EXTERNAL_FLASH_DEVICES W25Q16JVUXIQ
 #define EXTERNAL_FLASH_USE_QSPI
 
-*/
 
 #define USE_SX1262
 #define SX126X_CS (12)
