@@ -4,6 +4,9 @@ name: Build Docker
 
 on:
   workflow_call:
+    secrets:
+      DOCKER_FIRMWARE_TOKEN:
+        required: false # Only required for push
     inputs:
       distro:
         description: Distro to target

@@ -2,6 +2,9 @@ name: Build Docker Multi-Arch Manifest
 
 on:
   workflow_call:
+    secrets:
+      DOCKER_FIRMWARE_TOKEN:
+        required: true
     inputs:
       release_channel:
         description: Release channel to target
@@ -20,6 +23,7 @@ jobs:
       platform: linux/amd64
       runs-on: ubuntu-24.04
       push: true
+    secrets: inherit
 
   docker-debian-arm64:
     uses: ./.github/workflows/docker_build.yml
@@ -28,6 +32,7 @@ jobs:
       platform: linux/arm64
       runs-on: ubuntu-24.04-arm
       push: true
+    secrets: inherit
 
   docker-debian-armv7:
     uses: ./.github/workflows/docker_build.yml
@@ -36,6 +41,7 @@ jobs:
       platform: linux/arm/v7
       runs-on: ubuntu-24.04-arm
       push: true
+    secrets: inherit
 
   docker-alpine-amd64:
     uses: ./.github/workflows/docker_build.yml
@@ -44,6 +50,7 @@ jobs:
       platform: linux/amd64
       runs-on: ubuntu-24.04
       push: true
+    secrets: inherit
 
   docker-alpine-arm64:
     uses: ./.github/workflows/docker_build.yml
@@ -52,6 +59,7 @@ jobs:
       platform: linux/arm64
       runs-on: ubuntu-24.04-arm
       push: true
+    secrets: inherit
 
   docker-alpine-armv7:
     uses: ./.github/workflows/docker_build.yml
@@ -60,6 +68,7 @@ jobs:
       platform: linux/arm/v7
       runs-on: ubuntu-24.04-arm
       push: true
+    secrets: inherit
 
   docker-manifest:
     needs:
