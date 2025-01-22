@@ -84,11 +84,14 @@ static const uint8_t A5 = PIN_A5;
 /*
  * Serial interfaces
  */
-#define PIN_SERIAL1_RX (-1) // (7)
+#define PIN_SERIAL1_RX D6 // GPS RX UART 
 #define PIN_SERIAL1_TX (-1) // (6)
 
 #define PIN_SERIAL2_RX (-1)
 #define PIN_SERIAL2_TX (-1)
+
+#define HAS_GPS 1
+#define GPS_RX_PIN PIN_SERIAL1_RX
 
 /*
  * SPI Interfaces
