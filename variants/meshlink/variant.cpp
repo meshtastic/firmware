@@ -1,23 +1,3 @@
-/*
-  Copyright (c) 2014-2015 Arduino LLC.  All right reserved.
-  Copyright (c) 2016 Sandeep Mistry All right reserved.
-  Copyright (c) 2018, Adafruit Industries (adafruit.com)
-
-  This library is free software; you can redistribute it and/or
-  modify it under the terms of the GNU Lesser General Public
-  License as published by the Free Software Foundation; either
-  version 2.1 of the License, or (at your option) any later version.
-
-  This library is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-  See the GNU Lesser General Public License for more details.
-
-  You should have received a copy of the GNU Lesser General Public
-  License along with this library; if not, write to the Free Software
-  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
-*/
-
 #include "variant.h"
 #include "nrf.h"
 #include "wiring_constants.h"
@@ -32,24 +12,12 @@ const uint32_t g_ADigitalPinMap[] = {
 
 void initVariant()
 {
-    // LED1 & LED2
-    // pinMode(PIN_LED1, OUTPUT);
-    // ledOff(PIN_LED1);
+    pinMode(PIN_LED1, OUTPUT);
+    digitalWrite(PIN_LED1, HIGH); // turn off the white led while booting
+                                  // otherwise it will stay lit for several seconds (could be annoying)
 
-    // pinMode(PIN_LED2, OUTPUT);
-    // ledOff(PIN_LED2);
-    // pinMode(PIN_LED1, OUTPUT);
-    // digitalWrite(PIN_LED1, LOW);
-    pinMode(24, OUTPUT);
-    digitalWrite(24, HIGH);
-    // pinMode(25,OUTPUT);
-    // digitalWrite(25, HIGH);
-
-    // 3V3 Power Rail
-    pinMode(PIN_3V3_EN, OUTPUT);
-    digitalWrite(PIN_3V3_EN, HIGH);
-    // pinMode(PIN_GPS_EN, OUTPUT);
-    // digitalWrite(PIN_GPS_EN, HIGH);
-    // pinMode(GPS_TX_PIN, OUTPUT);
-    // pinMode(GPS_RX_PIN, INPUT_PULLUP);
+#ifdef PIN_WD_EN
+    pinMode(PIN_WD_EN, OUTPUT);
+    digitalWrite(PIN_WD_EN, HIGH); // Enable the Watchdog at boot
+#endif
 }

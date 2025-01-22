@@ -305,8 +305,8 @@ void cpuDeepSleep(uint32_t msecToWake)
 #endif
 #endif
 #ifdef MESHLINK
-#ifdef PIN_3V3_EN
-    digitalWrite(PIN_3V3_EN, LOW);
+#ifdef PIN_WD_EN
+    digitalWrite(PIN_WD_EN, LOW);
 #endif
 #endif
 
