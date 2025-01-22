@@ -12,6 +12,9 @@ web.tar
 *.code-workspace
 
 .idea
+.platformio
+.local
+.cache
 
 .DS_Store
 Thumbs.db
