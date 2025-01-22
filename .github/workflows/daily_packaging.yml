@@ -40,7 +40,7 @@ jobs:
   package-obs:
     uses: ./.github/workflows/package_obs.yml
     with:
-      obs_project: home:meshtastic:daily
+      obs_project: network:Meshtastic:daily
       series: unstable
     secrets: inherit
 
