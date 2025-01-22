@@ -48,6 +48,11 @@ jobs:
           ref: ${{github.event.pull_request.head.ref}}
           repository: ${{github.event.pull_request.head.repo.full_name}}
 
+      - name: Get release version string
+        run: |
+          echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+        id: version
+
       - name: Docker login
         if: ${{ inputs.push }}
         uses: docker/login-action@v3
@@ -61,6 +66,20 @@ jobs:
       - name: Docker setup
         uses: docker/setup-buildx-action@v3
 
+      - name: Sanitize platform string
+        id: sanitize_platform
+        # Replace slashes with underscores
+        run: echo "cleaned_platform=${{ inputs.platform }}" | sed 's/\//_/g' >> $GITHUB_OUTPUT
+
+      - name: Docker tag
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: meshtastic/meshtasticd
+          tags: |
+            GHA-${{ steps.version.outputs.long }}-${{ inputs.distro }}-${{ steps.sanitize_platform.outputs.cleaned_platform }}
+          flavor: latest=false
+
       - name: Docker build and push
         uses: docker/build-push-action@v6
         id: docker_variant
@@ -69,5 +88,5 @@ jobs:
           file: |
             ${{ contains(inputs.distro, 'debian') && './Dockerfile' || contains(inputs.distro, 'alpine') && './alpine.Dockerfile' }}
           push: ${{ inputs.push }}
-          tags: "" # Intentionally empty, push with digest only
+          tags: ${{ steps.meta.outputs.tags }} # Tag is only meant to be consumed by the "manifest" job
           platforms: ${{ inputs.platform }}

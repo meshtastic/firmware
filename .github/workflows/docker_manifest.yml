@@ -145,6 +145,7 @@ jobs:
         with:
           images: meshtastic/meshtasticd
           tags: ${{ steps.tags.outputs.debian }}
+          flavor: latest=false
 
       - name: Create Docker manifest (Debian)
         id: manifest_debian
