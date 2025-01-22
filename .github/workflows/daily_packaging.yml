@@ -20,6 +20,12 @@ permissions:
   packages: write
 
 jobs:
+  docker-multiarch:
+    uses: ./.github/workflows/docker_manifest.yml
+    with:
+      release_channel: daily
+    secrets: inherit
+
   package-ppa:
     strategy:
       fail-fast: false
