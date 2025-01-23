@@ -22,7 +22,7 @@ static File openFile(const char *filename, bool fullAtomic)
     return FSCom.open(filenameTmp.c_str(), FILE_O_WRITE);
 }
 
-SafeFile::SafeFile(const char *_filename, bool fullAtomic, bool removeFirst)
+SafeFile::SafeFile(const char *_filename, bool fullAtomic)
     : filename(_filename), f(openFile(_filename, fullAtomic)), fullAtomic(fullAtomic)
 {
 }
