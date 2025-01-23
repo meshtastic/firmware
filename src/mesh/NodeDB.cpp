@@ -1103,9 +1103,9 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
                        bool fullAtomic)
 {
     bool okay = false;
+#ifdef FSCom
     auto f = SafeFile(filename, fullAtomic);
 
-#ifdef FSCom
     LOG_INFO("Save %s", filename);
     pb_ostream_t stream = {&writecb, static_cast<Print *>(&f), protoSize};
 
