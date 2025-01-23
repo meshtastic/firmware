@@ -59,9 +59,6 @@ bool SafeFile::close()
         return false;
 
     spiLock->lock();
-#ifdef ARCH_NRF52
-    f.truncate();
-#endif
     f.close();
     spiLock->unlock();
 
