@@ -25,7 +25,7 @@
 class SafeFile : public Print
 {
   public:
-    explicit SafeFile(char const *filepath, bool fullAtomic = false, bool removeFirst = false);
+    explicit SafeFile(char const *filepath, bool fullAtomic = false);
 
     virtual size_t write(uint8_t);
     virtual size_t write(const uint8_t *buffer, size_t size);
