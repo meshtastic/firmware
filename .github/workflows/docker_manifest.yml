@@ -1,0 +1,186 @@
+name: Build Docker Multi-Arch Manifest
+
+on:
+  workflow_call:
+    secrets:
+      DOCKER_FIRMWARE_TOKEN:
+        required: true
+    inputs:
+      release_channel:
+        description: Release channel to target
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  docker-debian-amd64:
+    uses: ./.github/workflows/docker_build.yml
+    with:
+      distro: debian
+      platform: linux/amd64
+      runs-on: ubuntu-24.04
+      push: true
+    secrets: inherit
+
+  docker-debian-arm64:
+    uses: ./.github/workflows/docker_build.yml
+    with:
+      distro: debian
+      platform: linux/arm64
+      runs-on: ubuntu-24.04-arm
+      push: true
+    secrets: inherit
+
+  docker-debian-armv7:
+    uses: ./.github/workflows/docker_build.yml
+    with:
+      distro: debian
+      platform: linux/arm/v7
+      runs-on: ubuntu-24.04-arm
+      push: true
+    secrets: inherit
+
+  docker-alpine-amd64:
+    uses: ./.github/workflows/docker_build.yml
+    with:
+      distro: alpine
+      platform: linux/amd64
+      runs-on: ubuntu-24.04
+      push: true
+    secrets: inherit
+
+  docker-alpine-arm64:
+    uses: ./.github/workflows/docker_build.yml
+    with:
+      distro: alpine
+      platform: linux/arm64
+      runs-on: ubuntu-24.04-arm
+      push: true
+    secrets: inherit
+
+  docker-alpine-armv7:
+    uses: ./.github/workflows/docker_build.yml
+    with:
+      distro: alpine
+      platform: linux/arm/v7
+      runs-on: ubuntu-24.04-arm
+      push: true
+    secrets: inherit
+
+  docker-manifest:
+    needs:
+      # Debian
+      - docker-debian-amd64
+      - docker-debian-arm64
+      - docker-debian-armv7
+      # Alpine
+      - docker-alpine-amd64
+      - docker-alpine-arm64
+      - docker-alpine-armv7
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ref: ${{github.event.pull_request.head.ref}}
+          repository: ${{github.event.pull_request.head.repo.full_name}}
+
+      - name: Get release version string
+        run: |
+          echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+          echo "short=$(./bin/buildinfo.py short)" >> $GITHUB_OUTPUT
+        id: version
+
+      - name: Enumerate tags
+        shell: python
+        run: |
+          import os
+
+          short = "${{ steps.version.outputs.short }}"
+          long = "${{ steps.version.outputs.long }}"
+          release_channel = "${{ inputs.release_channel }}"
+          tags = {
+            "beta": {
+              "debian": [
+                f"{short}", f"{long}", f"{short}-beta", f"{long}-beta", "beta", "latest",
+                f"{short}-debian", f"{long}-debian", f"{short}-beta-debian", f"{long}-beta-debian", "beta-debian"
+              ],
+              "alpine": [
+                f"{short}-alpine", f"{long}-alpine", f"{short}-beta-alpine", f"{long}-beta-alpine", "beta-alpine"
+              ]
+            },
+            "alpha": {
+              "debian": [
+                f"{short}-alpha", f"{long}-alpha", "alpha",
+                f"{short}-alpha-debian", f"{long}-alpha-debian", "alpha-debian"
+              ],
+              "alpine": [
+                f"{short}-alpha-alpine", f"{long}-alpha-alpine", "alpha-alpine"
+              ]
+            },
+            "daily": {
+              "debian": ["daily", "daily-debian"],
+              "alpine": ["daily-alpine"]
+            }
+          }
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
+            fh.write("debian<<EOF\n")
+            fh.write("\n".join(tags[release_channel]["debian"]))
+            fh.write("\nEOF\n")
+
+            fh.write("alpine<<EOF\n")
+            fh.write("\n".join(tags[release_channel]["alpine"]))
+            fh.write("\nEOF\n")
+        id: tags
+
+      - name: Docker login
+        uses: docker/login-action@v3
+        with:
+          username: meshtastic
+          password: ${{ secrets.DOCKER_FIRMWARE_TOKEN }}
+
+      - name: Docker meta (Debian)
+        id: meta_debian
+        uses: docker/metadata-action@v5
+        with:
+          images: meshtastic/meshtasticd
+          tags: |
+            ${{ steps.tags.outputs.debian }}
+          flavor: latest=false
+
+      - name: Create Docker manifest (Debian)
+        id: manifest_debian
+        uses: int128/docker-manifest-create-action@v2
+        with:
+          tags: |
+            ${{ steps.meta_debian.outputs.tags }}
+          push: true
+          sources: |
+            meshtastic/meshtasticd@${{ needs.docker-debian-amd64.outputs.digest }}
+            meshtastic/meshtasticd@${{ needs.docker-debian-arm64.outputs.digest }}
+            meshtastic/meshtasticd@${{ needs.docker-debian-armv7.outputs.digest }}
+
+      - name: Docker meta (Alpine)
+        id: meta_alpine
+        uses: docker/metadata-action@v5
+        with:
+          images: meshtastic/meshtasticd
+          tags: |
+            ${{ steps.tags.outputs.alpine }}
+
+      - name: Create Docker manifest (Alpine)
+        id: manifest_alpine
+        uses: int128/docker-manifest-create-action@v2
+        with:
+          tags: |
+            ${{ steps.meta_alpine.outputs.tags }}
+          push: true
+          sources: |
+            meshtastic/meshtasticd@${{ needs.docker-alpine-amd64.outputs.digest }}
+            meshtastic/meshtasticd@${{ needs.docker-alpine-arm64.outputs.digest }}
+            meshtastic/meshtasticd@${{ needs.docker-alpine-armv7.outputs.digest }}
