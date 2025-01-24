@@ -3,7 +3,7 @@
 #include "input/ExpressLRSFiveWay.h"
 #include "input/InputBroker.h"
 #include "input/RotaryEncoderInterruptImpl1.h"
-#include "input/anAndSelect.h"
+#include "input/ScanAndSelect.h"
 #include "input/SerialKeyboardImpl.h"
 #include "input/TrackballInterruptImpl1.h"
 #include "input/UpDownInterruptImpl1.h"

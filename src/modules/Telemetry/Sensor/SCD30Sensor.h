@@ -9,7 +9,7 @@
 class SCD30Sensor : public TelemetrySensor
 {
   private:
-    Adafruit_SCD30 scd30 = Adafrui_;
+    Adafruit_SCD30 scd30;
 
   protected:
     virtual void setup() override;
