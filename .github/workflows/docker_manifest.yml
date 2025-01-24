@@ -128,9 +128,14 @@ jobs:
             }
           }
 
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as fh:
-            fh.write(f"debian={','.join(tags[release_channel]['debian'])}\n")
-            fh.write(f"alpine={','.join(tags[release_channel]['alpine'])}\n")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
+            fh.write("debian<<EOF\n")
+            fh.write("\n".join(tags[release_channel]["debian"]))
+            fh.write("\nEOF\n")
+
+            fh.write("alpine<<EOF\n")
+            fh.write("\n".join(tags[release_channel]["alpine"]))
+            fh.write("\nEOF\n")
         id: tags
 
       - name: Docker login
@@ -144,14 +149,16 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: meshtastic/meshtasticd
-          tags: ${{ steps.tags.outputs.debian }}
+          tags: |
+            ${{ steps.tags.outputs.debian }}
           flavor: latest=false
 
       - name: Create Docker manifest (Debian)
         id: manifest_debian
         uses: int128/docker-manifest-create-action@v2
         with:
-          tags: ${{ steps.meta_debian.outputs.tags }}
+          tags: |
+            ${{ steps.meta_debian.outputs.tags }}
           push: true
           sources: |
             meshtastic/meshtasticd@${{ needs.docker-debian-amd64.outputs.digest }}
@@ -163,13 +170,15 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: meshtastic/meshtasticd
-          tags: ${{ steps.tags.outputs.alpine }}
+          tags: |
+            ${{ steps.tags.outputs.alpine }}
 
       - name: Create Docker manifest (Alpine)
         id: manifest_alpine
         uses: int128/docker-manifest-create-action@v2
         with:
-          tags: ${{ steps.meta_alpine.outputs.tags }}
+          tags: |
+            ${{ steps.meta_alpine.outputs.tags }}
           push: true
           sources: |
             meshtastic/meshtasticd@${{ needs.docker-alpine-amd64.outputs.digest }}
