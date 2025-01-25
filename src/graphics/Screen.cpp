@@ -2662,8 +2662,8 @@ int Screen::handleStatusUpdate(const meshtastic::Status *arg)
 
 int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
 {
-    // If auto carousel is disabled -> return 0 and skip new messages handling
-    if (config.display.auto_screen_carousel_secs == 0)
+    // Temporary: If auto_screen_carousel_secs is set to 1337, disable the focus to new messages
+    if (config.display.auto_screen_carousel_secs == 1337)
         return 0;
 
     // Handle focus change based on message type
