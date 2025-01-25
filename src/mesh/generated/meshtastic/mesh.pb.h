@@ -223,6 +223,9 @@ typedef enum _meshtastic_HardwareModel {
     /* Mesh-Tab, esp32 based
  https://github.com/valzzu/Mesh-Tab */
     meshtastic_HardwareModel_MESH_TAB = 86,
+    /* MeshLink board developed by LoraItalia. NRF52840, eByte E22900M22S (Will also come with other frequencies), 25w MPPT solar charger (5v,12v,18v selectable), support for gps, buzzer, oled or e-ink display, 10 gpios, hardware watchdog
+ https://www.loraitalia.it */
+    meshtastic_HardwareModel_MESHLINK = 87,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
