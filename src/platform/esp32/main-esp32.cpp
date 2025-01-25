@@ -248,3 +248,12 @@ void cpuDeepSleep(uint32_t msecToWake)
     esp_sleep_enable_timer_wakeup(msecToWake * 1000ULL); // call expects usecs
     esp_deep_sleep_start();                              // TBD mA sleep current (battery)
 }
+
+void enterDfuMode()
+{
+#if defined(ARDUINO_USB_CDC_ON_BOOT)
+    // This is a no-op on the ESP32 normally, but on the ESP32-S3/C3 it will reboot to USB/JTAG mode
+    REG_WRITE(RTC_CNTL_OPTION1_REG, RTC_CNTL_FORCE_DOWNLOAD_BOOT);
+    esp_restart();
+#endif
+}

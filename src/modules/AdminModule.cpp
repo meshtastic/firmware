@@ -352,7 +352,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
     case meshtastic_AdminMessage_enter_dfu_mode_request_tag: {
         LOG_INFO("Client requesting to enter DFU mode");
-#if defined(ARCH_NRF52) || defined(ARCH_RP2040)
+#if defined(ARCH_NRF52) || defined(ARCH_RP2040) || defined(ARDUINO_USB_CDC_ON_BOOT)
         enterDfuMode();
 #endif
         break;
