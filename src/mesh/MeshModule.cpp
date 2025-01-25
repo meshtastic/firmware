@@ -36,7 +36,7 @@ MeshModule::~MeshModule()
     modules->erase(it);
 }
 
-// Set the start delay for a module that broadcasts periodically
+// ⚠️ **Only call once** to set the initial delay before a module starts broadcasting periodically
 int32_t MeshModule::setStartDelay()
 {
     int32_t startDelay = MESHMODULE_MIN_BROADCAST_DELAY_MS + numPeriodicModules * MESHMODULE_BROADCAST_SPACING_MS;
