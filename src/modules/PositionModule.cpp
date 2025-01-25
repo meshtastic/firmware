@@ -28,8 +28,9 @@ PositionModule::PositionModule()
     nodeStatusObserver.observe(&nodeStatus->onNewStatus);
 
     if (config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER &&
-        config.device.role != meshtastic_Config_DeviceConfig_Role_TAK_TRACKER)
-        setIntervalFromNow(60 * 1000);
+        config.device.role != meshtastic_Config_DeviceConfig_Role_TAK_TRACKER) {
+        setIntervalFromNow(setStartDelay());
+    }
 
     // Power saving trackers should clear their position on startup to avoid waking up and sending a stale position
     if ((config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER ||
