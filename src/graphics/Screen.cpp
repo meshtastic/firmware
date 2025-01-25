@@ -2662,13 +2662,14 @@ int Screen::handleStatusUpdate(const meshtastic::Status *arg)
 
 int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
 {
-    // If auto carousel is disabled -> return 0 and skip new messages handling
-    if (config.display.auto_screen_carousel_secs == 0)
-        return 0;
-
-    // Handle focus change based on message type
     if (showingNormalScreen) {
-        setFrames(packet->from == 0 ? FOCUS_PRESERVE : FOCUS_TEXTMESSAGE);
+        // Outgoing message
+        if (packet->from == 0)
+            setFrames(FOCUS_PRESERVE); // Return to same frame (quietly hiding the rx text message frame)
+
+        // Incoming message
+        else
+            setFrames(FOCUS_TEXTMESSAGE); // Focus on the new message
     }
 
     return 0;
