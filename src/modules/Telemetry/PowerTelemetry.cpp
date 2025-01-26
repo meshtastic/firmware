@@ -65,7 +65,7 @@ int32_t PowerTelemetryModule::runOnce()
             if (max17048Sensor.hasSensor() && !max17048Sensor.isInitialized())
                 result = max17048Sensor.runOnce();
         }
-        return result;
+        return result == UINT32_MAX ? disable() : setStartDelay();
 #else
         return disable();
 #endif
