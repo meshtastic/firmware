@@ -1,0 +1,45 @@
+name: Trigger release workflows upon Publish
+
+on:
+  release:
+    types: [published, released]
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build-docker:
+    uses: ./.github/workflows/docker_manifest.yml
+    with:
+      release_channel: |-
+        ${{ contains(github.event.release.name, 'Beta') && 'beta' || contains(github.event.release.name, 'Alpha') && 'alpha' }}
+    secrets: inherit
+
+  package-ppa:
+    strategy:
+      fail-fast: false
+      matrix:
+        series: [plucky, oracular, noble, jammy]
+    uses: ./.github/workflows/package_ppa.yml
+    with:
+      ppa_repo: |-
+        ppa:meshtastic/${{ contains(github.event.release.name, 'Beta') && 'beta' || contains(github.event.release.name, 'Alpha') && 'alpha' }}
+      series: ${{ matrix.series }}
+    secrets: inherit
+
+  package-obs:
+    uses: ./.github/workflows/package_obs.yml
+    with:
+      obs_project: |-
+        network:Meshtastic:${{ contains(github.event.release.name, 'Beta') && 'beta' || contains(github.event.release.name, 'Alpha') && 'alpha' }}
+      series: |-
+        ${{ contains(github.event.release.name, 'Beta') && 'beta' || contains(github.event.release.name, 'Alpha') && 'alpha' }}
+    secrets: inherit
+
+  # hook-copr:
+  #   uses: ./.github/workflows/hook_copr.yml
+  #   with:
+  #     copr_project: |-
+  #       ${{ contains(github.event.release.name, 'Beta') && 'beta' || contains(github.event.release.name, 'Alpha') && 'alpha' }}
+  #   secrets: inherit
