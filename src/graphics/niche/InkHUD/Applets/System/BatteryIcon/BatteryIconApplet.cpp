@@ -59,6 +59,11 @@ void InkHUD::BatteryIconApplet::onRender()
     uint16_t w = width();
     int16_t h = height();
 
+    // Clear the region beneath the tile
+    // Most applets are drawing onto an empty frame buffer and don't need to do this
+    // We do need to do this with the battery though, as it is an "overlay"
+    fillRect(l, t, w, h, WHITE);
+
     // Vertical centerline
     const int16_t m = t + (h / 2);
 

@@ -71,6 +71,11 @@ int InkHUD::NotificationApplet::onReceiveTextMessage(const meshtastic_MeshPacket
 
 void InkHUD::NotificationApplet::onRender()
 {
+    // Clear the region beneath the tile
+    // Most applets are drawing onto an empty frame buffer and don't need to do this
+    // We do need to do this with the battery though, as it is an "overlay"
+    fillRect(0, 0, width(), height(), WHITE);
+
     setFont(fontSmall);
 
     // Padding (horizontal)

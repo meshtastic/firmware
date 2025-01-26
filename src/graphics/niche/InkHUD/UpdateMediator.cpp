@@ -84,6 +84,25 @@ Drivers::EInk::UpdateTypes InkHUD::UpdateMediator::evaluate(Drivers::EInk::Updat
     }
 }
 
+// Determine which of two update types is more important to honor
+// Explicit FAST is more important than UNSPECIFIED - prioritize responsiveness
+// Explicit FULL is more important than explicint FAST - prioritize image quality: explicit FULL is rare
+Drivers::EInk::UpdateTypes InkHUD::UpdateMediator::prioritize(Drivers::EInk::UpdateTypes type1, Drivers::EInk::UpdateTypes type2)
+{
+    switch (type1) {
+    case Drivers::EInk::UpdateTypes::UNSPECIFIED:
+        return type2;
+
+    case Drivers::EInk::UpdateTypes::FAST:
+        return (type2 == Drivers::EInk::UpdateTypes::FULL) ? Drivers::EInk::UpdateTypes::FULL : Drivers::EInk::UpdateTypes::FAST;
+
+    case Drivers::EInk::UpdateTypes::FULL:
+        return type1;
+    }
+
+    return Drivers::EInk::UpdateTypes::UNSPECIFIED; // Suppress compiler warning only
+}
+
 // We're using the timer to perform "maintenance"
 // If signifcant FULL-refresh debt has accumulated, we will occasionally run FULL refreshes unprovoked.
 // This prevents gradual build-up of debt,
@@ -98,7 +117,7 @@ int32_t InkHUD::UpdateMediator::runOnce()
 
         // Ask WindowManager to redraw everything, purely for the refresh
         // Todo: optimize? Could update without re-rendering
-        WindowManager::getInstance()->requestUpdate(Drivers::EInk::UpdateTypes::FULL, true);
+        WindowManager::getInstance()->forceUpdate(EInk::UpdateTypes::FULL);
 
         // Record that we have paid back (some of) the FULL refresh debt
         debt = max(debt - 1.0, 0.0);

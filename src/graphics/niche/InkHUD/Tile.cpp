@@ -15,17 +15,16 @@ bool InkHUD::Tile::highlightShown;
 static concurrency::Periodic *taskHighlight;
 static int32_t runtaskHighlight()
 {
-    LOG_DEBUG("Dismissing");
+    LOG_DEBUG("Dismissing Highlight");
     InkHUD::Tile::highlightShown = false;
     InkHUD::Tile::highlightTarget = nullptr;
-    InkHUD::WindowManager::getInstance()->requestUpdate(Drivers::EInk::UpdateTypes::FAST, true); // Re-render all
+    InkHUD::WindowManager::getInstance()->forceUpdate(Drivers::EInk::UpdateTypes::FAST); // Re-render, clearing the highlighting
     return taskHighlight->disable();
 }
 static void inittaskHighlight()
 {
     static bool doneOnce = false;
     if (!doneOnce) {
-        LOG_DEBUG("inittaskHighlight");
         taskHighlight = new concurrency::Periodic("Highlight", runtaskHighlight);
         taskHighlight->disable();
         doneOnce = true;
@@ -180,7 +179,7 @@ void InkHUD::Tile::requestHighlight()
 {
     Tile::highlightTarget = this;
     Tile::highlightShown = false;
-    windowManager->requestUpdate(Drivers::EInk::UpdateTypes::FAST, true);
+    windowManager->forceUpdate(Drivers::EInk::UpdateTypes::FAST);
 }
 
 // Starts the timer which will automatically dismiss the highlighting, if the tile doesn't organically redraw first

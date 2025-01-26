@@ -77,29 +77,34 @@ class WindowManager : protected concurrency::OSThread
     void toggleBatteryIcon();                  // Change whether the battery icon is shown
     bool approveNotification(Notification &n); // Ask applets if a notification is worth showing
 
-    void requestUpdate(Drivers::EInk::UpdateTypes type, bool allTiles); // Update the display image
-    void handleTilePixel(int16_t x, int16_t y, Color c);                // Apply rotation, then store the pixel
+    void handleTilePixel(int16_t x, int16_t y, Color c); // Apply rotation, then store the pixel in framebuffer
+    void requestUpdate();                                // Update display, if a foreground applet has info it wants to show
+    void forceUpdate(Drivers::EInk::UpdateTypes type = Drivers::EInk::UpdateTypes::UNSPECIFIED,
+                     bool async = true); // Update display, regardless of whether any applets requested this
 
     uint16_t getWidth();                      // Display width, relative to rotation
     uint16_t getHeight();                     // Display height, relative to rotation
     uint8_t getAppletCount();                 // How many user applets are available, including inactivated
     const char *getAppletName(uint8_t index); // By order in userApplets
 
-    void lockRendering(Applet *lockedBy);           // Allows system applets to prevent other applets triggering a refresh
-    void unlockRendering(Applet *lockedBy);         // Allows normal updating of user applets to continue
-    bool isRenderingPermitted(Applet *a = nullptr); // Checks if allowed to request an update (not locked by other applet)
-    Applet *whoLockedRendering();                   // Find which applet owns the rendering lock, if any
+    void lock(Applet *owner);                   // Allows system applets to prevent other applets triggering a refresh
+    void unlock(Applet *owner);                 // Allows normal updating of user applets to continue
+    bool canRequestUpdate(Applet *a = nullptr); // Checks if allowed to request an update (not locked by other applet)
+    Applet *whoLocked();                        // Find which applet is blocking update requests, if any
 
   protected:
     WindowManager(); // Private constructor for singleton
 
     int32_t runOnce() override;
 
-    void clearBuffer();                                 // Empty the framebuffer
-    void autoshow();                                    // Show a different applet, to display new info
-    bool renderUserApplets();                           // Draw the normal applets. Part of render
-    bool renderSystemApplets();                         // Draw applets which need special handling. Part of render
-    void render(bool async = true);                     // Attempt to update the display
+    void clearBuffer();                            // Empty the framebuffer
+    void autoshow();                               // Show a different applet, to display new info
+    bool shouldUpdate();                           // Check if reason to change display image
+    Drivers::EInk::UpdateTypes selectUpdateType(); // Determine how the display hardware will perform the image update
+    void renderUserApplets();                      // Draw all currently displayed user applets to the frame buffer
+    void renderSystemApplets();                    // Draw all currently displayed system applets to the frame buffer
+    void render(bool async = true);                // Attempt to update the display
+
     void setBufferPixel(int16_t x, int16_t y, Color c); // Place pixels into the frame buffer. All translation / rotation done.
     void rotatePixelCoords(int16_t *x, int16_t *y);     // Apply the display rotation
 
@@ -123,13 +128,16 @@ class WindowManager : protected concurrency::OSThread
     uint16_t imageBufferWidth;
     uint32_t imageBufferSize; // Bytes
 
-    UpdateMediator mediator; // Decides which E-Ink UpdateType to use; responsible for display health
+    // Encapsulates decision making about E-Ink update types
+    // Responsible for display health
+    UpdateMediator mediator;
 
     // User Applets
     std::vector<Applet *> userApplets;
     std::vector<Tile *> userTiles;
 
     // System Applets
+    std::vector<Applet *> systemApplets;
     Tile *fullscreenTile = nullptr;
     Tile *notificationTile = nullptr;
     Tile *batteryIconTile = nullptr;
@@ -140,11 +148,14 @@ class WindowManager : protected concurrency::OSThread
     Applet *menuApplet;
     Applet *placeholderApplet;
 
-    // Set by requestUpdate
-    bool updateRequested = false;
-    Drivers::EInk::UpdateTypes requestedUpdateType = Drivers::EInk::UpdateTypes::UNSPECIFIED;
-    bool requestedRenderAll = false;
-    Applet *renderingLockedBy = nullptr; // Which system applet (if any) is preventing other applets from rendering
+    // requestUpdate
+    bool requestingUpdate = false; // WindowManager::render run pending
+
+    // forceUpdate
+    bool forcingUpdate = false; // WindowManager::render run pending, guaranteed no skip of update
+    Drivers::EInk::UpdateTypes forcedUpdateType = Drivers::EInk::UpdateTypes::UNSPECIFIED; // guaranteed update using this type
+
+    Applet *lockOwner = nullptr; // Which system applet (if any) is preventing other applets from requesting update
 };
 
 }; // namespace NicheGraphics::InkHUD

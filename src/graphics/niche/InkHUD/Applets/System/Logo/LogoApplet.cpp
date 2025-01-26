@@ -45,15 +45,25 @@ void InkHUD::LogoApplet::onRender()
 
 void InkHUD::LogoApplet::onForeground()
 {
-    lockRendering();                                 // Prevent other applets from rendering while logo shows
-    requestUpdate(Drivers::EInk::UpdateTypes::FULL); // Upgrades from the normal UNSPECIFIED refresh
+    // If another applet has locked the display, ask it to exit
+    Applet *other = WindowManager::getInstance()->whoLocked();
+    if (other != nullptr)
+        other->sendToBackground();
+
+    getTile()->assignedApplet = this;         // Take ownership of fullscreen tile
+    WindowManager::getInstance()->lock(this); // Prevent other applets from requesting updates
 }
 
 void InkHUD::LogoApplet::onBackground()
 {
     OSThread::disable(); // Disable auto-dismiss timer, in case applet was dismissed early (sendToBackground from outside class)
-    unlockRendering();   // Allow other applets to render, now that we're done
-    requestUpdate(Drivers::EInk::UpdateTypes::FULL, true); // Use FULL instead of UNSPECIFIED, and redraw all applets
+
+    getTile()->assignedApplet = nullptr;        // Relinquish ownership of fullscreen tile
+    WindowManager::getInstance()->unlock(this); // Allow normal user applet update requests to resume
+
+    // Need to force an update, as a polite request wouldn't be honored, seeing how we are now in the background
+    // Usually, onBackground is followed by another applet's onForeground (which requests update), but not in this case
+    WindowManager::getInstance()->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 int32_t InkHUD::LogoApplet::runOnce()
@@ -76,7 +86,7 @@ void InkHUD::LogoApplet::showBootScreen()
     fontTitle = fontSmall;
 
     bringToForeground();
-    requestUpdate(Drivers::EInk::UpdateTypes::FULL, true);
+    requestUpdate(Drivers::EInk::UpdateTypes::FULL); // Already requested, just upgrading to FULL
 }
 
 // Begin displaying the screen which is shown at shutdown
@@ -89,7 +99,7 @@ void InkHUD::LogoApplet::showShutdownScreen()
     fontTitle = fontLarge;
 
     bringToForeground();
-    requestUpdate(Drivers::EInk::UpdateTypes::FULL, true);
+    requestUpdate(Drivers::EInk::UpdateTypes::FULL); // Already requested, just upgrading to FULL
 }
 
 #endif

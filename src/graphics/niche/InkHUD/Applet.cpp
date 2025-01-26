@@ -45,7 +45,9 @@ InkHUD::Tile *InkHUD::Applet::getTile()
 
 void InkHUD::Applet::render()
 {
-    wantRender = false; // Clear the flag set by requestUpdate
+    wantRender = false;   // Clear the flag set by requestUpdate
+    wantAutoshow = false; // If we're rendering now, it means our request was considered. It may or may not have been granted.
+    wantUpdateType = Drivers::EInk::UpdateTypes::UNSPECIFIED; // Our requested type has been considered by now. Tidy up.
 
     updateDimensions();
     resetDrawingSpace();
@@ -71,7 +73,6 @@ void InkHUD::Applet::render()
 
 // Does the applet want to render now?
 // Checks whether the applet called requestUpdate() recently, in response to an event
-// If we don't want to render, our previously drawn image will be left un-touched, as data in the framebuffer
 bool InkHUD::Applet::wantsToRender()
 {
     return wantRender;
@@ -79,14 +80,18 @@ bool InkHUD::Applet::wantsToRender()
 
 // Does the applet want to be moved to foreground before next render, to show new data?
 // User specifies whether an applet has permission for this, using the on-screen menu
-// Note: calling this method clears a pending autoshow request
 bool InkHUD::Applet::wantsToAutoshow()
 {
-    bool want = wantAutoshow;
-    wantAutoshow = false; // Clear the flag now, because we're reading it
-    return want;
+    return wantAutoshow;
 }
 
+// Which technique would this applet prefer that the display use to change the image?
+Drivers::EInk::UpdateTypes InkHUD::Applet::wantsUpdateType()
+{
+    return wantUpdateType;
+}
+
+// Get size of the applet's drawing space from its tile
 void InkHUD::Applet::updateDimensions()
 {
     assert(assignedTile);
@@ -100,7 +105,6 @@ void InkHUD::Applet::updateDimensions()
 void InkHUD::Applet::resetDrawingSpace()
 {
     resetCrop();         // Allow pixel from any region of the applet to draw
-    fillScreen(WHITE);   // Clear old drawing
     setTextColor(BLACK); // Reset text params
     setCursor(0, 0);
     setTextWrap(false);
@@ -111,11 +115,12 @@ void InkHUD::Applet::resetDrawingSpace()
 // Applets should internally listen for events they are interested in, via MeshModule, CallbackObserver etc
 // When an applet decides it has heard something important, and wants to redraw, it calls this method
 // Once the window manager has given other applets a chance to process whatever event we just detected,
-// it will run Applet::render() for any applets which have called requestUpdate
-void InkHUD::Applet::requestUpdate(Drivers::EInk::UpdateTypes type, bool allTiles)
+// it will run Applet::render(), which may draw our applet to screen, if it is shown (forgeround)
+void InkHUD::Applet::requestUpdate(Drivers::EInk::UpdateTypes type)
 {
     wantRender = true;
-    WindowManager::getInstance()->requestUpdate(type, allTiles);
+    wantUpdateType = type;
+    WindowManager::getInstance()->requestUpdate();
 }
 
 // Ask window manager to move this applet to foreground at start of next render
@@ -206,21 +211,6 @@ void InkHUD::Applet::setCrop(int16_t left, int16_t top, uint16_t width, uint16_t
 void InkHUD::Applet::resetCrop()
 {
     setCrop(0, 0, width(), height());
-}
-
-// Lock rendering to this applet only
-// Only system applets may use this!
-// Wrapper function for convenience
-void InkHUD::Applet::lockRendering()
-{
-    WindowManager::getInstance()->lockRendering(this);
-}
-
-// Removes a lock on rendering placed by this system applet
-// Wrapper function for convenience
-void InkHUD::Applet::unlockRendering()
-{
-    WindowManager::getInstance()->unlockRendering(this);
 }
 
 // Convert relative width to absolute width, in px

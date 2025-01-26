@@ -51,8 +51,8 @@ void InkHUD::MenuApplet::onForeground()
             backlight->peek();
     }
 
-    // Suspend normal rendering of user applets
-    lockRendering();
+    // Prevent user applets requested update while menu is open
+    windowManager->lock(this);
 
     // Begin the auto-close timeout
     OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
@@ -74,10 +74,14 @@ void InkHUD::MenuApplet::onBackground()
     OSThread::disable();
 
     // Resume normal rendering of user applets
-    unlockRendering();
+    windowManager->unlock(this);
 
     // Restore the user applet whose tile we borrowed
     getTile()->assignedApplet->bringToForeground();
+
+    // Need to force an update, as a polite request wouldn't be honored, seeing how we are now in the background
+    // We're only updating here to ugrade from UNSPECIFIED to FAST, to ensure responsiveness when exiting menu
+    WindowManager::getInstance()->forceUpdate(EInk::UpdateTypes::FAST);
 }
 
 void InkHUD::MenuApplet::onShutdown()

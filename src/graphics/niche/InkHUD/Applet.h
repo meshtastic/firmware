@@ -121,10 +121,11 @@ class Applet : public GFX
     Tile *getTile();
 
     void render();
-    bool wantsToRender();     // Check whether applet wants to render, or okay to skip, preserving old tile image
-    bool wantsToAutoshow();   // Check whether applets wants to become foreground, to show new data, if permitted
-    void updateDimensions();  // Get current size from tile
-    void resetDrawingSpace(); // Makes sure every render starts with same parameters
+    bool wantsToRender();   // Check whether applet wants to render, or okay to skip, preserving old tile image
+    bool wantsToAutoshow(); // Check whether applets wants to become foreground, to show new data, if permitted
+    Drivers::EInk::UpdateTypes wantsUpdateType(); // Check which display update type the applet would prefer
+    void updateDimensions();                      // Get current size from tile
+    void resetDrawingSpace();                     // Makes sure every render starts with same parameters
 
     // Change the applet's state
 
@@ -154,14 +155,14 @@ class Applet : public GFX
     static void setDefaultFonts(AppletFont large, AppletFont small); // Set the general purpose fonts
     static uint16_t getHeaderHeight();                               // How tall is the "standard" applet header
 
-    const char *name; // Shown in applet selection menu
+    const char *name = nullptr; // Shown in applet selection menu
 
   protected:
     // Place a single pixel. All drawing methods output through here
     void drawPixel(int16_t x, int16_t y, uint16_t color) override;
 
     // Tell WindowManager to update display
-    void requestUpdate(EInk::UpdateTypes type = EInk::UpdateTypes::UNSPECIFIED, bool allTiles = false);
+    void requestUpdate(EInk::UpdateTypes type = EInk::UpdateTypes::UNSPECIFIED);
 
     // Ask for applet to be moved to foreground
     void requestAutoshow();
@@ -170,9 +171,6 @@ class Applet : public GFX
     uint16_t Y(float f);                                                      // Map applet height, mapped from 0 to 1.0
     void setCrop(int16_t left, int16_t top, uint16_t width, uint16_t height); // Ignore pixels drawn outside a certain region
     void resetCrop();                                                         // Removes setCrop()
-
-    void lockRendering();   // Lock rendering to this applet only
-    void unlockRendering(); // Remove a lock placed by this applet
 
     void setFont(AppletFont f);
     AppletFont getFont();
@@ -209,8 +207,11 @@ class Applet : public GFX
     Tile *assignedTile = nullptr; // Rendered pixels are fed into a Tile object, which translates them, then passes to WM
     bool active = false;          // Has the user enabled this applet (at run-time)?
     bool foreground = false;      // Is the applet currently drawn on a tile?
-    bool wantRender = false;      // In some situations, checked by WindowManager when updating, to skip unneeded redrawing.
-    bool wantAutoshow = false;    // Does the applet have new data it would like to display in foreground?
+
+    bool wantRender = false;   // In some situations, checked by WindowManager when updating, to skip unneeded redrawing.
+    bool wantAutoshow = false; // Does the applet have new data it would like to display in foreground?
+    NicheGraphics::Drivers::EInk::UpdateTypes wantUpdateType =
+        NicheGraphics::Drivers::EInk::UpdateTypes::UNSPECIFIED; // Which update method we'd prefer when redrawing the display
 
     using GFX::setFont;     // Make sure derived classes use AppletFont instead of AdafruitGFX fonts directly
     using GFX::setRotation; // Block setRotation calls. Rotation is handled globally by WindowManager.

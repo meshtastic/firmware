@@ -121,7 +121,7 @@ void InkHUD::WindowManager::begin()
     refocusTile();
 
     logoApplet->showBootScreen();
-    render(false); // Update now, and wait here until complete
+    forceUpdate(Drivers::EInk::FULL, false); // Update now, and wait here until complete
 
     deepSleepObserver.observe(&notifyDeepSleep);
     rebootObserver.observe(&notifyReboot);
@@ -148,6 +148,16 @@ void InkHUD::WindowManager::createSystemApplets()
     batteryIconApplet->activate();
     menuApplet->activate();
     placeholderApplet->activate();
+
+    // Add to the systemApplets vector
+    // Although system applets often need special handling, sometimes we can process them en-masse with this vector
+    // e.g. rendering, raising events
+    systemApplets.push_back(logoApplet);
+    systemApplets.push_back(pairingApplet);
+    systemApplets.push_back(notificationApplet);
+    systemApplets.push_back(batteryIconApplet);
+    systemApplets.push_back(menuApplet);
+    // Note: placeholder applet is technically a system applet, but it renders with the user applets
 }
 
 void InkHUD::WindowManager::createSystemTiles()
@@ -297,19 +307,20 @@ void InkHUD::WindowManager::refocusTile()
 int InkHUD::WindowManager::beforeDeepSleep(void *unused)
 {
     // Notify all applets that we're shutting down
-    for (Applet *a : userApplets) {
-        a->onDeactivate();
-        a->onShutdown();
+    for (Applet *ua : userApplets) {
+        ua->onDeactivate();
+        ua->onShutdown();
     }
-
-    // Remember to add any relevant system applets here
-    menuApplet->onShutdown();
+    for (Applet *sa : userApplets) {
+        // Note: no onDeactivate. System applets are always active.
+        sa->onShutdown();
+    }
 
     saveDataToFlash();
 
     // Display the shutdown screen, and wait here until the update is complete
     logoApplet->showShutdownScreen();
-    render(false);
+    forceUpdate(Drivers::EInk::UpdateTypes::FULL, false);
 
     return 0; // We agree: deep sleep now
 }
@@ -326,9 +337,10 @@ int InkHUD::WindowManager::beforeReboot(void *unused)
         a->onDeactivate();
         a->onShutdown();
     }
-
-    // Remember to add any relevant system applets here
-    menuApplet->onShutdown();
+    for (Applet *sa : userApplets) {
+        // Note: no onDeactivate. System applets are always active.
+        sa->onShutdown();
+    }
 
     saveDataToFlash();
 
@@ -386,7 +398,7 @@ void InkHUD::WindowManager::handleButtonShort()
     // If notification is open: close it
     if (notificationApplet->isForeground()) {
         notificationApplet->dismiss();
-        requestUpdate(EInk::UpdateTypes::FULL, true); // Redraw everything, to clear the notification
+        forceUpdate(EInk::UpdateTypes::FULL); // Redraw everything, to clear the notification
     }
 
     // Normally: next applet
@@ -405,22 +417,25 @@ void InkHUD::WindowManager::handleButtonShort()
 void InkHUD::WindowManager::handleButtonLong()
 {
     // Open the menu
-    if (!menuApplet->isForeground() && isRenderingPermitted(menuApplet)) {
-        Tile *t = userTiles.at(settings.userTiles.focused);
-        Applet *ua = t->assignedApplet; // User applet whose tile we're borrowing
+    // - if not already shown
+    // - if another system applet isn't doing something
+    if (!menuApplet->isForeground() && canRequestUpdate(menuApplet)) {
+        Tile *t = userTiles.at(settings.userTiles.focused); // Tile we're borrowing
+        Applet *ua = t->assignedApplet;                     // User applet whose tile we're borrowing
 
         // Hide the current applet
         ua->sendToBackground();
 
-        // Tell menu applet to render using our borrowed applet's tile
+        // Tell menu applet to render using our borrowed tile
         menuApplet->setTile(t);
         menuApplet->bringToForeground();
 
-        // bringToForeground has already requested update, but we're updating it to FAST, for guaranteed responsiveness
-        requestUpdate(Drivers::EInk::UpdateTypes::FAST, false);
+        // bringToForeground has already requested update, but we're overriding this with,
+        // with a forced FAST update, for guaranteed responsiveness
+        forceUpdate(EInk::UpdateTypes::FAST);
     }
 
-    // Or let the menu handle it
+    // If menu already open, menuApplet handles the press
     else
         menuApplet->onButtonLongPress();
 }
@@ -471,7 +486,7 @@ void InkHUD::WindowManager::nextApplet()
     t->assignedApplet->sendToBackground();
     t->assignedApplet = nextValidApplet;
     t->assignedApplet->bringToForeground();
-    requestUpdate(Drivers::EInk::UpdateTypes::FAST, false); // bringToForeground already requested. Just upgrading to FAST
+    forceUpdate(EInk::UpdateTypes::FAST); // bringToForeground already requested, but we're manually forcing FAST
 }
 
 // Focus on a different tile
@@ -487,7 +502,7 @@ void InkHUD::WindowManager::nextTile()
         menuApplet->sendToBackground();
 
     // Seems like some system applet other than menu is open. Pairing? Booting?
-    if (!isRenderingPermitted())
+    if (!canRequestUpdate())
         return;
 
     // Swap to next tile
@@ -536,7 +551,7 @@ void InkHUD::WindowManager::changeLayout()
 
     // Force-render
     // - redraw all applets
-    requestUpdate(Drivers::EInk::UpdateTypes::FAST, true);
+    forceUpdate(EInk::UpdateTypes::FAST);
 }
 
 // Perform necessary reconfiguration when user activates or deactivates applets at run-time
@@ -566,7 +581,7 @@ void InkHUD::WindowManager::changeActivatedApplets()
 
     // Force-render
     // - redraw all applets
-    requestUpdate(Drivers::EInk::UpdateTypes::FAST, true);
+    forceUpdate(EInk::UpdateTypes::FAST);
 }
 
 // Change whether the battery icon is displayed (top left corner)
@@ -584,7 +599,7 @@ void InkHUD::WindowManager::toggleBatteryIcon()
 
     // Force-render
     // - redraw all applets
-    requestUpdate(Drivers::EInk::UpdateTypes::FAST, true);
+    forceUpdate(EInk::UpdateTypes::FAST);
 }
 
 // Allow applets to suppress notifications
@@ -605,25 +620,44 @@ bool InkHUD::WindowManager::approveNotification(InkHUD::Notification &n)
 }
 
 // Set a flag, which will be picked up by runOnce, ASAP.
-// This prevents an applet getting notified by an Observable, and updating immediately.
-// Quite likely, other applets are also about to receive the same notification.
-// Each notified applet can independently call requestUpdate(), and all share the one opportunity to render, at next runOnce
-void InkHUD::WindowManager::requestUpdate(Drivers::EInk::UpdateTypes type = Drivers::EInk::UpdateTypes::UNSPECIFIED,
-                                          bool allTiles = false)
+// Quite likely, multiple applets will all want to respond to one event (Observable, etc)
+// Each affected applet can independently call requestUpdate(), and all share the one opportunity to render, at next runOnce
+void InkHUD::WindowManager::requestUpdate()
 {
-    this->updateRequested = true;
-
-    // Todo: priority of these types
-    if (type != Drivers::EInk::UpdateTypes::UNSPECIFIED)
-        this->requestedUpdateType = type;
-    if (allTiles)
-        this->requestedRenderAll = true;
+    requestingUpdate = true;
 
     // We will run the thread as soon as we loop(),
     // after all Applets have had a chance to observe whatever event set this off
     OSThread::setIntervalFromNow(0);
     OSThread::enabled = true;
     runASAP = true;
+}
+
+// requestUpdate will not actually update if no requests were made by applets which are actually visible
+// This can occur, because applets requestUpdate even from the background,
+// in case the user's autoshow settings permit them to be moved to foreground.
+// Sometimes, however, we will want to trigger a display update manually, in the absense of any sort of applet event
+// Display health, for example.
+// In these situations, we use forceUpdate
+void InkHUD::WindowManager::forceUpdate(EInk::UpdateTypes type, bool async)
+{
+    requestingUpdate = true;
+    forcingUpdate = true;
+    forcedUpdateType = type;
+
+    // Normally, we need to start the timer, in case the display is busy and we briefly defer the update
+    if (async) {
+        // We will run the thread as soon as we loop(),
+        // after all Applets have had a chance to observe whatever event set this off
+        OSThread::setIntervalFromNow(0);
+        OSThread::enabled = true;
+        runASAP = true;
+    }
+
+    // If the update is *not* asynchronous, we begin the render process directly here
+    // so that it can block code flow while running
+    else
+        render(false);
 }
 
 // Receives rendered image data from an Applet, via a tile
@@ -671,33 +705,34 @@ const char *InkHUD::WindowManager::getAppletName(uint8_t index)
 
 // Allows a system applet to prevent other applets from temporarily requesting updates
 // All user applets will honor this. Some system applets might not, although they probably should
-void InkHUD::WindowManager::lockRendering(Applet *owner)
+// WindowManager::forceUpdate will ignore this lock
+void InkHUD::WindowManager::lock(Applet *owner)
 {
     // Only one system applet may lock render at once
-    assert(!renderingLockedBy);
+    assert(!lockOwner);
 
     // Only system applets may lock rendering
     for (Applet *a : userApplets)
         assert(owner != a);
 
-    renderingLockedBy = owner;
+    lockOwner = owner;
 }
 
 // Remove a lock placed by a system applet, which prevents other applets from rendering
-void InkHUD::WindowManager::unlockRendering(Applet *owner)
+void InkHUD::WindowManager::unlock(Applet *owner)
 {
-    assert(renderingLockedBy = owner);
-    renderingLockedBy = nullptr;
+    assert(lockOwner = owner);
+    lockOwner = nullptr;
 }
 
-// Is an applet blocked by a current lock on rendering?
-// Applets are allowed to render if there is no lock, or if they are the owner of the lock
+// Is an applet blocked from requesting update by a current lock?
+// Applets are allowed to request updates if there is no lock, or if they are the owner of the lock
 // If a == nullptr, checks permission "for everyone and anyone"
-bool InkHUD::WindowManager::isRenderingPermitted(Applet *a)
+bool InkHUD::WindowManager::canRequestUpdate(Applet *a)
 {
-    if (!renderingLockedBy)
+    if (!lockOwner)
         return true;
-    else if (renderingLockedBy == a)
+    else if (lockOwner == a)
         return true;
     else
         return false;
@@ -705,9 +740,9 @@ bool InkHUD::WindowManager::isRenderingPermitted(Applet *a)
 
 // Get the applet which is currently locking rendering
 // We might be able to convince it release its lock, if we want it instead
-InkHUD::Applet *InkHUD::WindowManager::whoLockedRendering()
+InkHUD::Applet *InkHUD::WindowManager::whoLocked()
 {
-    return WindowManager::renderingLockedBy;
+    return WindowManager::lockOwner;
 }
 
 // Runs at regular intervals
@@ -717,13 +752,13 @@ InkHUD::Applet *InkHUD::WindowManager::whoLockedRendering()
 int32_t InkHUD::WindowManager::runOnce()
 {
     // If an applet asked to render, and hardware is able, lets try now
-    if (updateRequested && !driver->busy()) {
+    if (requestingUpdate && !driver->busy()) {
         render();
     }
 
     // If our render() call failed, try again shortly
     // otherwise, stop our thread until next update due
-    if (updateRequested)
+    if (requestingUpdate)
         return 250UL;
     else
         return OSThread::disable();
@@ -732,133 +767,148 @@ int32_t InkHUD::WindowManager::runOnce()
 // Some applets may be permitted to bring themselved to foreground, to show new data
 // User selects which applets have this permission via on-screen menu
 // Priority is determined by the order which applets were added to WindowManager in setupNicheGraphics
-// We will only autoshow one applet, but we need to check wantsToAutoshow for all applets, as this clears the flag,
-// in case of a conflict which has not been honored.
+// We will only autoshow one applet
 void InkHUD::WindowManager::autoshow()
 {
-
-    bool autoshown = false;
     for (uint8_t i = 0; i < userApplets.size(); i++) {
         Applet *a = userApplets.at(i);
-        bool wants = a->wantsToAutoshow(); // Call for every applet: clears the flag
-
-        if (!autoshown && wants && !a->isForeground() && isRenderingPermitted() && settings.userApplets.autoshow[i]) {
+        if (a->wantsToAutoshow()                // Applet wants to become foreground
+            && !a->isForeground()               // Not yet foreground
+            && settings.userApplets.autoshow[i] // User permits this applet to autoshow
+            && canRequestUpdate())              // Updates not currently blocked by system applet
+        {
             Tile *t = userTiles.at(settings.userTiles.focused); // Get focused tile
             t->assignedApplet->sendToBackground();              // Background whatever applet is already on the tile
             t->assignedApplet = a;                              // Assign our new applet to tile
             a->bringToForeground();                             // Foreground our new applet
-            autoshown = true;                                   // No more autoshows now until next render
-            // Keep looping though, to clear the wantAutoshow flag for all applets
+
+            // Check if autoshown applet shows the same information as notification intended to
+            // In this case, we can dismiss the notification before it is shown
+            // Note: we are re-running the approval process. This normally occurs when the notification is initially triggered.
+            if (notificationApplet->isForeground() && !notificationApplet->isApproved())
+                notificationApplet->dismiss();
+
+            break; // One autoshow only! Avoid conflicts
+        }
+    }
+}
+
+// Check whether we an update is justified
+// We usually require that a foreground applet requested the update,
+// But forceUpdate call will bypass these checks.
+// Abstraction for WindowManager::render only
+bool InkHUD::WindowManager::shouldUpdate()
+{
+    bool should = false;
+
+    // via forceUpdate
+    should |= forcingUpdate;
+
+    // via user applet
+    for (Tile *ut : userTiles) {
+        Applet *ua = ut->assignedApplet;
+        if (ua->wantsToRender()    // This applet requested
+            && ua->isForeground()  // This applet is currently shown
+            && canRequestUpdate()) // Requests are not currently locked
+        {
+            should = true;
+            break;
         }
     }
 
-    // Check if autoshow has shown the same information as notification intended to
-    // In this case, we can dismiss the notification before it is shown
-    if (autoshown && notificationApplet->isForeground() && !notificationApplet->isApproved())
-        notificationApplet->dismiss();
+    // via system applet
+    for (Applet *sa : systemApplets) {
+        if (sa->wantsToRender()      // This applet requested
+            && sa->isForeground()    // This applet is currently shown
+            && canRequestUpdate(sa)) // Requests are not currently locked, or this applet owns the lock
+        {
+            should = true;
+            break;
+        }
+    }
+
+    return should;
 }
 
-// Renders whichever applets are assigned to userTiles
-// Applets will normally only render if they recently called requestUpdate
-// Applets may be forced to render at any time, though
-// Returns true if any of the user applets wanted to update, and are currently foreground (after autoshow)
-bool InkHUD::WindowManager::renderUserApplets()
+// Determine which type of E-Ink update the display will perform, to change the image.
+// Considers the needs of the various applets, then weighs against display health.
+// An update type specified by forceUpdate will be granted with no further questioning.
+// Abstraction for WindowManager::render only
+Drivers::EInk::UpdateTypes InkHUD::WindowManager::selectUpdateType()
 {
-    bool updateNeeded = false;
+    // Ask applets which update type they would prefer
+    // Some update types take priority over others
+    EInk::UpdateTypes type = EInk::UpdateTypes::UNSPECIFIED;
+    if (forcingUpdate) {
+        // Update type was manually specified via forceUpdate
+        type = forcedUpdateType;
+    } else {
+        // User applets
+        for (Tile *ut : userTiles) {
+            Applet *ua = ut->assignedApplet;
+            if (ua->isForeground() && canRequestUpdate(ua))
+                type = mediator.prioritize(type, ua->wantsUpdateType());
+        }
+        // System Applets
+        for (Applet *sa : systemApplets) {
+            if (sa->isForeground() && canRequestUpdate(sa))
+                type = mediator.prioritize(type, sa->wantsUpdateType());
+        }
+    }
 
-    // For each applet on a user tile
-    for (Tile *t : userTiles) {
-        Applet *a = t->assignedApplet;
+    // Tell the mediator what update type the applets deciced on,
+    // find out what update type the mediator will actually allow us to have
+    type = mediator.evaluate(type);
 
-        // Debugging only: runtime
+    return type;
+}
+
+// Run the drawing operations of any user applets which are currently displayed
+// Pixel output is placed into the framebuffer, ready for handoff to the EInk driver
+// Abstraction for WindowManager::render only
+void InkHUD::WindowManager::renderUserApplets()
+{
+    // Don't render any user applets if the screen is covered by a system applet using the fullscreen tile
+    if (fullscreenTile->assignedApplet)
+        return;
+
+    // For each tile
+    for (Tile *ut : userTiles) {
+        Applet *ua = ut->assignedApplet; // Get the applet on the tile
+
+        // Skip applet if a system applet is borrowing this tile (e.g. menuApplet)
+        if (!ua->isForeground())
+            continue;
+
         uint32_t start = millis();
-
-        // Decide whether to render
-        bool shouldRender = false;
-        shouldRender |= requestedRenderAll;
-        shouldRender |= a->isForeground() && a->wantsToRender() && isRenderingPermitted(a);
-
-        // If decided to render
-        if (shouldRender) {
-            updateNeeded = true; // Tells WindowManager that E-Ink should update
-            a->setTile(t);       // Make sure applet knows what region of display to use
-            a->render();         // Draw!
-
-            // Debugging only: runtime
-            uint32_t stop = millis();
-            LOG_DEBUG("%s took %dms to render", t->assignedApplet->name, stop - start);
-        }
+        ua->setTile(ut); // Relevant for: setup, after layout changed, placeholderApplet. Todo: refactor?
+        ua->render();    // Draw!
+        uint32_t stop = millis();
+        LOG_DEBUG("%s took %dms to render", ut->assignedApplet->name, stop - start);
     }
-
-    // Tell WindowManager whether any of our applets actually drew anything new
-    return updateNeeded;
 }
 
-// Render most of the unique applets which have special behavior
-// These applets are expected to know internally which tile they want
-// Some of these features are optional. This manifests as foreground / background.
-// Returns true if any of the applets do actually want to update for their own sake
-bool InkHUD::WindowManager::renderSystemApplets()
+// Run the drawing operations of any system applets which are currently displayed
+// Pixel output is placed into the framebuffer, ready for handoff to the EInk driver
+// Abstraction for WindowManager::render only
+void InkHUD::WindowManager::renderSystemApplets()
 {
-    // Debugging only: runtime
-    uint32_t start = millis();
-    uint8_t renderCount = 0;
+    // Each system applet
+    for (Applet *sa : systemApplets) {
+        // Skip if not shown
+        if (!sa->isForeground())
+            continue;
 
-    bool updateNeeded = false;
+        // Skip applet if fullscreen tile is in use, but not used by this applet
+        // Applet is "obscured"
+        if (fullscreenTile->assignedApplet && fullscreenTile->assignedApplet != sa)
+            continue;
 
-    // placeholderApplet is technically a system applet,
-    // but processed in renderUserApplets, not here
-
-    // Battery Icon
-    // - overlay: drawn regardless of wantsToRender
-    // - might want to render though, if battery level changed
-    if (batteryIconApplet->isForeground() && isRenderingPermitted(batteryIconApplet)) {
-        if (batteryIconApplet->wantsToRender())
-            updateNeeded = true;
-        batteryIconApplet->render();
-        renderCount++;
+        // uint32_t start = millis(); // Debugging only: runtime
+        sa->render(); // Draw!
+        // uint32_t stop = millis();  // Debugging only: runtime
+        // LOG_DEBUG("%s (system) took %dms to render", (sa->name == nullptr) ? "Unnamed" : sa->name, stop - start);
     }
-
-    // Notification
-    // - overlay: drawn regardless of wantsToRender
-    // - might want to render though, if new notification
-    if (notificationApplet->isForeground()) {
-        if (notificationApplet->wantsToRender())
-            updateNeeded = true;
-        notificationApplet->render();
-        renderCount++;
-    }
-
-    // Menu applet
-    if (menuApplet->isForeground() && menuApplet->wantsToRender() && isRenderingPermitted(menuApplet)) {
-        updateNeeded = true;
-        menuApplet->render();
-        renderCount++;
-    }
-
-    // Boot screen
-    if (logoApplet->isForeground() && logoApplet->wantsToRender()) {
-        updateNeeded = true;
-        logoApplet->render();
-        renderCount++;
-    }
-
-    // Bluetooth pairing screen
-    if (pairingApplet->isForeground() && pairingApplet->wantsToRender()) {
-        updateNeeded = true;
-        pairingApplet->render();
-        renderCount++;
-    }
-
-    // Debugging only: runtime
-    uint32_t stop = millis();
-    if (renderCount > 0)
-        LOG_DEBUG("System applets (%d) took %dms total to render", renderCount, stop - start);
-
-    // Tell WindowManager whether any of our applets want the display to update
-    // Some of them (overlays) may have drawn regardless
-    // This value is considered alongside user applets' return value, and the forced update flag
-    return updateNeeded;
 }
 
 // Make an attempt to gather image data from some / all applets, and update the display
@@ -870,36 +920,30 @@ void InkHUD::WindowManager::render(bool async)
         // Previous update still running, Will try again shortly, via runOnce()
         if (driver->busy())
             return;
-    } else
-        driver->await(); // Wait here for update to complete
-
-    // Whether an update will actually take place
-    // Can't be certain about this any earlier,
-    // because we don't know exactly which applet(s) are foreground until autoshow runs
-    bool updateNeeded = false;
-
-    // If we're re-drawing all applets, clear the entire buffer,
-    // otherwise system applets might leave pixels in the gutters between user applets
-    if (requestedRenderAll) {
-        clearBuffer();
-        updateNeeded = true;
+    } else {
+        // Wait here for previous update to complete
+        driver->await();
     }
 
     // (Potentially) change applet to display new info,
-    // then check if this newly displayed applet makes a pending noftification redundant
+    // then check if this newly displayed applet makes a pending notification redundant
     autoshow();
 
-    // The "normal" applets
-    updateNeeded |= renderUserApplets();
+    // If an update is justified.
+    // We don't know this until after autoshow has run, as new applets may now be in foreground
+    if (shouldUpdate()) {
 
-    // All the unique applets with special handling, e.g. menuApplet, batteryIconApplet etc
-    updateNeeded |= renderSystemApplets();
+        // Decide which technique the display will use to change image
+        EInk::UpdateTypes updateType = selectUpdateType();
 
-    // Update the display, if some of the image did change
-    if (updateNeeded) {
-        Drivers::EInk::UpdateTypes type = mediator.evaluate(requestedUpdateType);
+        // Render the new image
+        clearBuffer();
+        renderUserApplets();
+        renderSystemApplets();
+
+        // Tell display to begin process of drawing new image
         LOG_INFO("Updating display");
-        driver->update(imageBuffer, type);
+        driver->update(imageBuffer, updateType);
 
         // If not async, wait here until the update is complete
         if (!async)
@@ -907,11 +951,14 @@ void InkHUD::WindowManager::render(bool async)
     } else
         LOG_DEBUG("Not updating display");
 
-    // All done; display driver will do the rest
-    // Tidy up - clear the request
-    updateRequested = false;
-    requestedRenderAll = false;
-    requestedUpdateType = EInk::UpdateTypes::UNSPECIFIED;
+    // Our part is done now.
+    // If update is async, the display hardware is still performing the update process,
+    // but that's all handled by NicheGraphics::Drivers::EInk
+
+    // Tidy up, ready for a new request
+    requestingUpdate = false;
+    forcingUpdate = false;
+    forcedUpdateType = EInk::UpdateTypes::UNSPECIFIED;
 }
 
 // Set a ready-to-draw pixel into the image buffer

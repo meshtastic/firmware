@@ -37,13 +37,22 @@ void InkHUD::PairingApplet::onDeactivate()
 
 void InkHUD::PairingApplet::onForeground()
 {
-    lockRendering();
-    requestUpdate(Drivers::EInk::UpdateTypes::FAST); // FAST refresh guaranteed, instead of usual UNSPECIFIED
+    // If another applet has locked the display, ask it to exit
+    Applet *other = WindowManager::getInstance()->whoLocked();
+    if (other != nullptr)
+        other->sendToBackground();
+
+    getTile()->assignedApplet = this;         // Take owneship of the fullscreen tile
+    WindowManager::getInstance()->lock(this); // Prevent user applets from requested update
 }
 void InkHUD::PairingApplet::onBackground()
 {
-    unlockRendering();
-    requestUpdate(Drivers::EInk::UpdateTypes::FULL, true); // FULL refresh, and re-render all applets we were previously covering
+    getTile()->assignedApplet = nullptr;        // Relinquish ownership of the fullscreen tile
+    WindowManager::getInstance()->unlock(this); // Allow normal user applet update requests to resume
+
+    // Need to force an update, as a polite request wouldn't be honored, seeing how we are now in the background
+    // Usually, onBackground is followed by another applet's onForeground (which requests update), but not in this case
+    WindowManager::getInstance()->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 int InkHUD::PairingApplet::onBluetoothStatusUpdate(const meshtastic::Status *status)
@@ -62,7 +71,7 @@ int InkHUD::PairingApplet::onBluetoothStatusUpdate(const meshtastic::Status *sta
 
         // Make sure no other system applets are locking the display
         // Boot screen, menu, etc
-        Applet *lockOwner = WindowManager::getInstance()->whoLockedRendering();
+        Applet *lockOwner = WindowManager::getInstance()->whoLocked();
         if (lockOwner)
             lockOwner->sendToBackground();
 
