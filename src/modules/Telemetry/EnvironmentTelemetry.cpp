@@ -61,6 +61,7 @@ MLX90632Sensor mlx90632Sensor;
 DFRobotLarkSensor dfRobotLarkSensor;
 NAU7802Sensor nau7802Sensor;
 BMP3XXSensor bmp3xxSensor;
+#endif
 #ifdef CAN_HOST_RAK12035VBSOIL
 RAK12035VBSensor rak12035vbSensor;
 CGRadSensSensor cgRadSens;
