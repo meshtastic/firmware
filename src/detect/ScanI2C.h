@@ -64,7 +64,7 @@ class ScanI2C
         TPS65233,
         MPR121KB,
         CGRADSENS,
-        RAK12035VB
+        RAK12035VB,
         INA226,
         NXP_SE050,
     } DeviceType;
