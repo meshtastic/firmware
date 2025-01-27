@@ -155,8 +155,6 @@ ProcessMessage RangeTestModuleRadio::handleReceived(const meshtastic_MeshPacket 
             LOG_DEBUG("mp.from          %d", mp.from);
             LOG_DEBUG("mp.rx_snr        %f", mp.rx_snr);
             LOG_DEBUG("mp.hop_limit     %d", mp.hop_limit);
-            // LOG_DEBUG("mp.decoded.position.latitude_i     %d", mp.decoded.position.latitude_i); // Deprecated
-            // LOG_DEBUG("mp.decoded.position.longitude_i    %d", mp.decoded.position.longitude_i); // Deprecated
             LOG_DEBUG("---- Node Information of Received Packet (mp.from):");
             LOG_DEBUG("n->user.long_name         %s", n->user.long_name);
             LOG_DEBUG("n->user.short_name        %s", n->user.short_name);
@@ -194,8 +192,6 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
         LOG_DEBUG("mp.from          %d", mp.from);
         LOG_DEBUG("mp.rx_snr        %f", mp.rx_snr);
         LOG_DEBUG("mp.hop_limit     %d", mp.hop_limit);
-        // LOG_DEBUG("mp.decoded.position.latitude_i     %d", mp.decoded.position.latitude_i);  // Deprecated
-        // LOG_DEBUG("mp.decoded.position.longitude_i    %d", mp.decoded.position.longitude_i); // Deprecated
         LOG_DEBUG("---- Node Information of Received Packet (mp.from):");
         LOG_DEBUG("n->user.long_name         %s", n->user.long_name);
         LOG_DEBUG("n->user.short_name        %s", n->user.short_name);
@@ -265,13 +261,21 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
         fileToAppend.printf("??:??:??,"); // Time
     }
 
-    fileToAppend.printf("%d,", getFrom(&mp));                     // From
-    fileToAppend.printf("%s,", n->user.long_name);                // Long Name
-    fileToAppend.printf("%f,", n->position.latitude_i * 1e-7);    // Sender Lat
-    fileToAppend.printf("%f,", n->position.longitude_i * 1e-7);   // Sender Long
-    fileToAppend.printf("%f,", gpsStatus->getLatitude() * 1e-7);  // RX Lat
-    fileToAppend.printf("%f,", gpsStatus->getLongitude() * 1e-7); // RX Long
-    fileToAppend.printf("%d,", gpsStatus->getAltitude());         // RX Altitude
+    fileToAppend.printf("%d,", getFrom(&mp));                   // From
+    fileToAppend.printf("%s,", n->user.long_name);              // Long Name
+    fileToAppend.printf("%f,", n->position.latitude_i * 1e-7);  // Sender Lat
+    fileToAppend.printf("%f,", n->position.longitude_i * 1e-7); // Sender Long
+    if (gpsStatus->getIsConnected() || config.position.fixed_position) {
+        fileToAppend.printf("%f,", gpsStatus->getLatitude() * 1e-7);  // RX Lat
+        fileToAppend.printf("%f,", gpsStatus->getLongitude() * 1e-7); // RX Long
+        fileToAppend.printf("%d,", gpsStatus->getAltitude());         // RX Altitude
+    } else {
+        // When the phone API is in use, the node info will be updated with position
+        meshtastic_NodeInfoLite *us = nodeDB->getMeshNode(nodeDB->getNodeNum());
+        fileToAppend.printf("%f,", us->position.latitude_i * 1e-7);  // RX Lat
+        fileToAppend.printf("%f,", us->position.longitude_i * 1e-7); // RX Long
+        fileToAppend.printf("%d,", us->position.altitude);           // RX Altitude
+    }
 
     fileToAppend.printf("%f,", mp.rx_snr); // RX SNR
 

@@ -65,6 +65,8 @@ class ScanI2C
         MPR121KB,
         CGRADSENS,
         RAK12035VB
+        INA226,
+        NXP_SE050,
     } DeviceType;
 
     // typedef uint8_t DeviceAddress;

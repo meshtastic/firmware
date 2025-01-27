@@ -37,7 +37,7 @@ jobs:
           else  
             TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}} quick)
           fi
-          echo "Name: ${{ github.ref_name }} Base: ${{ github.base_ref }} Head: ${{ github.head_ref }} Ref: ${{ github.ref }} Targets: $TARGETS"
+          echo "Name: ${{ github.ref_name }} Base: ${{ github.base_ref }} } Ref: ${{ github.ref }} Targets: $TARGETS"
           echo "${{matrix.arch}}=$(jq -cn --argjson environments "$TARGETS" '{board: $environments}')" >> $GITHUB_OUTPUT
     outputs:
       esp32: ${{ steps.jsonStep.outputs.esp32 }}
@@ -136,6 +136,14 @@ jobs:
 
   package-native:
     uses: ./.github/workflows/package_amd64.yml
+
+  test-native:
+    uses: ./.github/workflows/test_native.yml
+
+  build-docker:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    uses: ./.github/workflows/build_docker.yml
+    secrets: inherit
 
   after-checks:
     runs-on: ubuntu-latest

@@ -44,6 +44,7 @@ typedef int ErrorCode;
 
 /// Alloc and free packets to our global, ISR safe pool
 extern Allocator<meshtastic_MeshPacket> &packetPool;
+using UniquePacketPoolPacket = Allocator<meshtastic_MeshPacket>::UniqueAllocation;
 
 /**
  * Most (but not always) of the time we want to treat packets 'from' the local phone (where from == 0), as if they originated on

@@ -47,25 +47,30 @@ jobs:
       - name: build .debpkg
         run: |
           mkdir -p .debpkg/DEBIAN
-          mkdir -p .debpkg/usr/share/doc/meshtasticd/web
+          mkdir -p .debpkg/usr/share/meshtasticd/web
           mkdir -p .debpkg/usr/sbin
           mkdir -p .debpkg/etc/meshtasticd
           mkdir -p .debpkg/etc/meshtasticd/config.d
           mkdir -p .debpkg/etc/meshtasticd/available.d
           mkdir -p .debpkg/usr/lib/systemd/system/
-          tar -xf build.tar -C .debpkg/usr/share/doc/meshtasticd/web
+          tar -xf build.tar -C .debpkg/usr/share/meshtasticd/web
           shopt -s dotglob nullglob
-          if [ -d .debpkg/usr/share/doc/meshtasticd/web/build ]; then mv  .debpkg/usr/share/doc/meshtasticd/web/build/* .debpkg/usr/share/doc/meshtasticd/web/; fi
-          if [ -d .debpkg/usr/share/doc/meshtasticd/web/build ]; then rmdir .debpkg/usr/share/doc/meshtasticd/web/build; fi
-          if [ -d .debpkg/usr/share/doc/meshtasticd/web/.DS_Store]; then rm -f .debpkg/usr/share/doc/meshtasticd/web/.DS_Store; fi
-          gunzip .debpkg/usr/share/doc/meshtasticd/web/ -r
+          if [ -d .debpkg/usr/share/meshtasticd/web/build ]; then mv  .debpkg/usr/share/meshtasticd/web/build/* .debpkg/usr/share/meshtasticd/web/; fi
+          if [ -d .debpkg/usr/share/meshtasticd/web/build ]; then rmdir .debpkg/usr/share/meshtasticd/web/build; fi
+          if [ -d .debpkg/usr/share/meshtasticd/web/.DS_Store ]; then rm -f .debpkg/usr/share/meshtasticd/web/.DS_Store; fi
+          gunzip .debpkg/usr/share/meshtasticd/web/ -r
           cp release/meshtasticd_linux_aarch64 .debpkg/usr/sbin/meshtasticd
           cp bin/config-dist.yaml .debpkg/etc/meshtasticd/config.yaml
-          cp bin/config.d/* .debpkg/etc/meshtasticd/available.d/
+          cp bin/config.d/* .debpkg/etc/meshtasticd/available.d/ -r
           chmod +x .debpkg/usr/sbin/meshtasticd
           cp bin/meshtasticd.service .debpkg/usr/lib/systemd/system/meshtasticd.service
           echo "/etc/meshtasticd/config.yaml" > .debpkg/DEBIAN/conffiles
           chmod +x .debpkg/DEBIAN/conffiles
+          # Transition /usr/share/doc/meshtasticd to /usr/share/meshtasticd
+          echo "rm -rf /usr/share/doc/meshtasticd" > .debpkg/DEBIAN/preinst
+          chmod +x .debpkg/DEBIAN/preinst
+          echo "ln -sf /usr/share/meshtasticd /usr/share/doc/meshtasticd" > .debpkg/DEBIAN/postinst
+          chmod +x .debpkg/DEBIAN/postinst
 
       - uses: jiro4989/build-deb-action@v3
         with:
@@ -74,7 +79,7 @@ jobs:
           maintainer: Jonathan Bennett
           version: ${{ steps.version.outputs.version }} # refs/tags/v*.*.*
           arch: arm64
-          depends: libyaml-cpp0.7, openssl, libulfius2.7
+          depends: libyaml-cpp0.7, openssl, libulfius2.7, libi2c0
           desc: Native Linux Meshtastic binary.
 
       - uses: actions/upload-artifact@v4

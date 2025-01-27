@@ -1,0 +1,164 @@
+name: Run Tests on Native platform
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions: {}
+
+env:
+  LCOV_CAPTURE_FLAGS: --quiet --capture --include "${PWD}/src/*" --exclude '*/src/mesh/generated/*' --directory .pio/build/coverage/src --base-directory "${PWD}"
+
+jobs:
+  simulator-tests:
+    name: Native Simulator Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{github.event.pull_request.head.ref}}
+          repository: ${{github.event.pull_request.head.repo.full_name}}
+          submodules: recursive
+
+      - name: Setup native build
+        id: base
+        uses: ./.github/actions/setup-native
+
+      - name: Install simulator dependencies
+        run: pip install -U dotmap
+
+      # We now run integration test before other build steps (to quickly see runtime failures)
+      - name: Build for native/coverage
+        run: platformio run -e coverage
+
+      - name: Capture initial coverage information
+        shell: bash
+        run: |
+          sudo apt-get install -y lcov
+          lcov ${{ env.LCOV_CAPTURE_FLAGS }} --initial --output-file coverage_base.info
+          sed -i -e "s#${PWD}#.#" coverage_base.info # Make paths relative.
+
+      - name: Integration test
+        run: |
+          .pio/build/coverage/program &
+          PID=$!
+          timeout 20 bash -c "until ls -al /proc/$PID/fd | grep socket; do sleep 1; done"
+          echo "Simulator started, launching python test..."
+          python3 -c 'from meshtastic.test import testSimulator; testSimulator()'
+          wait
+
+      - name: Capture coverage information
+        if: always() # run this step even if previous step failed
+        run: |
+          lcov ${{ env.LCOV_CAPTURE_FLAGS }} --test-name integration --output-file coverage_integration.info
+          sed -i -e "s#${PWD}#.#" coverage_integration.info # Make paths relative.
+
+      - name: Get release version string
+        if: always() # run this step even if previous step failed
+        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+        id: version
+
+      - name: Save coverage information
+        uses: actions/upload-artifact@v4
+        if: always() # run this step even if previous step failed
+        with:
+          name: lcov-coverage-info-native-simulator-test-${{ steps.version.outputs.version }}.zip
+          overwrite: true
+          path: ./coverage_*.info
+
+  platformio-tests:
+    name: Native PlatformIO Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{github.event.pull_request.head.ref}}
+          repository: ${{github.event.pull_request.head.repo.full_name}}
+          submodules: recursive
+
+      - name: Setup native build
+        id: base
+        uses: ./.github/actions/setup-native
+
+      - name: Get release version string
+        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+        id: version
+
+      - name: PlatformIO Tests
+        run: platformio test -e coverage --junit-output-path testreport.xml
+
+      - name: Save test results
+        if: always() # run this step even if previous step failed
+        uses: actions/upload-artifact@v4
+        with:
+          name: platformio-test-report-${{ steps.version.outputs.version }}.zip
+          overwrite: true
+          path: ./testreport.xml
+
+      - name: Capture coverage information
+        if: always() # run this step even if previous step failed
+        run: |
+          sudo apt-get install -y lcov
+          lcov ${{ env.LCOV_CAPTURE_FLAGS }} --test-name tests --output-file coverage_tests.info
+          sed -i -e "s#${PWD}#.#" coverage_tests.info # Make paths relative.
+
+      - name: Save coverage information
+        uses: actions/upload-artifact@v4
+        if: always() # run this step even if previous step failed
+        with:
+          name: lcov-coverage-info-native-platformio-tests-${{ steps.version.outputs.version }}.zip
+          overwrite: true
+          path: ./coverage_*.info
+
+  generate-reports:
+    name: Generate Test Reports
+    runs-on: ubuntu-latest
+    permissions: # Needed for dorny/test-reporter.
+      contents: read
+      actions: read
+      checks: write
+    needs:
+      - simulator-tests
+      - platformio-tests
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{github.event.pull_request.head.ref}}
+          repository: ${{github.event.pull_request.head.repo.full_name}}
+
+      - name: Get release version string
+        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+        id: version
+
+      - name: Download test artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: platformio-test-report-${{ steps.version.outputs.version }}.zip
+          merge-multiple: true
+
+      - name: Test Report
+        uses: dorny/test-reporter@v1.9.1
+        with:
+          name: PlatformIO Tests
+          path: testreport.xml
+          reporter: java-junit
+
+      - name: Download coverage artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: lcov-coverage-info-native-*-${{ steps.version.outputs.version }}.zip
+          path: code-coverage-report
+          merge-multiple: true
+
+      - name: Generate Code Coverage Report
+        run: |
+          sudo apt-get install -y lcov
+          lcov --quiet --add-tracefile code-coverage-report/coverage_base.info --add-tracefile code-coverage-report/coverage_integration.info --add-tracefile code-coverage-report/coverage_tests.info --output-file code-coverage-report/coverage_src.info
+          genhtml --quiet --legend --prefix "${PWD}" code-coverage-report/coverage_src.info --output-directory code-coverage-report
+
+      - name: Save Code Coverage Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-coverage-report-${{ steps.version.outputs.version }}.zip
+          path: code-coverage-report
