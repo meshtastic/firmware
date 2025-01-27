@@ -107,8 +107,6 @@ int32_t EnvironmentTelemetryModule::runOnce()
 
         if (moduleConfig.telemetry.environment_measurement_enabled) {
             LOG_INFO("Environment Telemetry: init");
-            // it's possible to have this module enabled, only for displaying values on the screen.
-            // therefore, we should only enable the sensor loop if measurement is also enabled
 #ifdef SENSECAP_INDICATOR
             result = indicatorSensor.runOnce();
 #endif
@@ -171,7 +169,9 @@ int32_t EnvironmentTelemetryModule::runOnce()
 #endif
 #endif
         }
-        return result;
+        // it's possible to have this module enabled, only for displaying values on the screen.
+        // therefore, we should only enable the sensor loop if measurement is also enabled
+        return result == UINT32_MAX ? disable() : setStartDelay();
     } else {
         // if we somehow got to a second run of this module with measurement disabled, then just wait forever
         if (!moduleConfig.telemetry.environment_measurement_enabled) {
