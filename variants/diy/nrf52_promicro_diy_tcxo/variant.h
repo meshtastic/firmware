@@ -183,7 +183,7 @@ settings.
 */
 
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
-#define TCXO_OPTIONAL     // make it so that the firmware can try both TCXO and XTAL
+#define TCXO_OPTIONAL // make it so that the firmware can try both TCXO and XTAL
 
 #ifdef __cplusplus
 }
