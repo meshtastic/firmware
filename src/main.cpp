@@ -607,6 +607,9 @@ void setup()
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::ICM20948, meshtastic_TelemetrySensorType_ICM20948);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MAX30102, meshtastic_TelemetrySensorType_MAX30102);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::CGRADSENS, meshtastic_TelemetrySensorType_RADSENS);
+    // #if CAN_HOST_RAK12035VBSOIL
+    // scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::RAK12035VB, meshtastic_TelemetrySensorType_RAK12035VB);
+    // #endif
 
     i2cScanner.reset();
 #endif
