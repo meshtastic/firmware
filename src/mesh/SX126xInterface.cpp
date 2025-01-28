@@ -11,6 +11,9 @@
 
 // Particular boards might define a different max power based on what their hardware can do, default to max power output if not
 // specified (may be dangerous if using external PA and SX126x power config forgotten)
+#if ARCH_PORTDUINO
+#define SX126X_MAX_POWER settingsMap[sx126x_max_power]
+#endif
 #ifndef SX126X_MAX_POWER
 #define SX126X_MAX_POWER 22
 #endif
