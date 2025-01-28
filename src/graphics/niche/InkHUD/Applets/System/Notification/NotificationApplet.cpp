@@ -61,7 +61,7 @@ int InkHUD::NotificationApplet::onReceiveTextMessage(const meshtastic_MeshPacket
     currentNotification = n;
     if (isApproved()) {
         bringToForeground();
-        requestUpdate();
+        WindowManager::getInstance()->forceUpdate();
     } else
         hasNotification = false; // Clear the pending notification: it was rejected
 

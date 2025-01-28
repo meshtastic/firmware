@@ -152,11 +152,12 @@ void InkHUD::WindowManager::createSystemApplets()
     // Add to the systemApplets vector
     // Although system applets often need special handling, sometimes we can process them en-masse with this vector
     // e.g. rendering, raising events
+    // Order of these entries determines Z-Index when rendering
     systemApplets.push_back(logoApplet);
     systemApplets.push_back(pairingApplet);
-    systemApplets.push_back(notificationApplet);
     systemApplets.push_back(batteryIconApplet);
     systemApplets.push_back(menuApplet);
+    systemApplets.push_back(notificationApplet);
     // Note: placeholder applet is technically a system applet, but it renders in WindowManager::renderPlaceholders
 }
 
@@ -933,6 +934,11 @@ void InkHUD::WindowManager::renderSystemApplets()
     for (Applet *sa : systemApplets) {
         // Skip if not shown
         if (!sa->isForeground())
+            continue;
+
+        // Don't draw the battery overtop the menu
+        // Todo: smarter way to handle this
+        if (sa == batteryIconApplet && menuApplet->isForeground())
             continue;
 
         // Skip applet if fullscreen tile is in use, but not used by this applet
