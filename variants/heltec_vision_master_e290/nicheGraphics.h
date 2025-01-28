@@ -84,7 +84,7 @@ void setupNicheGraphics()
     // Init settings, and customize defaults
     InkHUD::settings.userTiles.maxCount = 2;             // How many tiles can the display handle?
     InkHUD::settings.rotation = 1;                       // 90 degrees clockwise
-    InkHUD::settings.userTiles.count = 2;                // Two applets side-by-side
+    InkHUD::settings.userTiles.count = 1;                // One tile only by default, keep things simple for new users
     InkHUD::settings.optionalMenuItems.nextTile = false; // Behavior handled by aux button instead
 
     // Pick applets
@@ -93,13 +93,13 @@ void setupNicheGraphics()
     // - is activated?
     // - is autoshown?
     // - is foreground on a specific tile (index)?
-    windowManager->addApplet("All Messages", new InkHUD::AllMessageApplet, true, false, 0);
+    windowManager->addApplet("All Messages", new InkHUD::AllMessageApplet, true, true); // Activated, autoshown
     windowManager->addApplet("DMs", new InkHUD::DMApplet);
     windowManager->addApplet("Channel 0", new InkHUD::ThreadedMessageApplet(0));
     windowManager->addApplet("Channel 1", new InkHUD::ThreadedMessageApplet(1));
-    windowManager->addApplet("Positions", new InkHUD::PositionsApplet, true);
+    windowManager->addApplet("Positions", new InkHUD::PositionsApplet, true); // Activated
     windowManager->addApplet("Recents List", new InkHUD::RecentsListApplet);
-    windowManager->addApplet("Heard", new InkHUD::HeardApplet, true, false, 1);
+    windowManager->addApplet("Heard", new InkHUD::HeardApplet, true, false, 0); // Activated, not autoshown, default on tile 0
     // windowManager->addApplet("Basic", new InkHUD::BasicExampleApplet);
     // windowManager->addApplet("NewMsg", new InkHUD::NewMsgExampleApplet);
 

@@ -83,13 +83,13 @@ void setupNicheGraphics()
 
     // Pick applets
     // Note: order of applets determines priority of "auto-show" feature
-    windowManager->addApplet("All Messages", new InkHUD::AllMessageApplet, true);
+    windowManager->addApplet("All Messages", new InkHUD::AllMessageApplet, true, true); // Activated, autoshown
     windowManager->addApplet("DMs", new InkHUD::DMApplet);
     windowManager->addApplet("Channel 0", new InkHUD::ThreadedMessageApplet(0));
     windowManager->addApplet("Channel 1", new InkHUD::ThreadedMessageApplet(1));
-    windowManager->addApplet("Positions", new InkHUD::PositionsApplet, true);
+    windowManager->addApplet("Positions", new InkHUD::PositionsApplet, true); // Activated
     windowManager->addApplet("Recents List", new InkHUD::RecentsListApplet);
-    windowManager->addApplet("Heard", new InkHUD::HeardApplet, true);
+    windowManager->addApplet("Heard", new InkHUD::HeardApplet, true, false, 0); // Activated, no autoshow, default on tile 0
     // windowManager->addApplet("Basic", new InkHUD::BasicExampleApplet);
     // windowManager->addApplet("NewMsg", new InkHUD::NewMsgExampleApplet);
 

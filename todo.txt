@@ -31,6 +31,7 @@ Improvements
 []      Don't save on shutdown / reboot within N seconds of boot. Protect flash against weird boot loops.
 []      Applet to display critical faults
 []      OEM Bootscreen
+[]      Aux button: exit menu without switching tile focus
 
 Known Bugs
 =====================
@@ -44,6 +45,7 @@ Known Bugs
 []      Tile highlight rendered below header for threaded message applets
 []      ChronoList applets: *very* large distances spill over the divider
 []      Menu cursor does not always return to top when exited
+[]      ThreadedMessageApplet: text wrapping issues with very long words (i.e. URLs)
 
 Chores
 ==========
