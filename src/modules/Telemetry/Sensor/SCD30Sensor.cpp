@@ -16,6 +16,15 @@ SCD30Sensor::SCD30Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_SCD3
 // do the functions in here need to be run more than once or are we good
 int32_t SCD30Sensor::runOnce()
 {
+  if(!scd30.begin())
+  {
+    scd30.begin();
+  }
+  scd30.setMeasurementInterval(10);
+  scd30.startContinuousMeasurement();
+  LOG_INFO("SCD30 setup:");
+  LOG_INFO("%f, seconds",scd30.getMeasurementInterval());
+
   // LOG_INFO("Init sensor: %s", sensorName);
   // if (!hasSensor()) {
   //   return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
@@ -29,14 +38,6 @@ int32_t SCD30Sensor::runOnce()
 }
 
 void SCD30Sensor::setup() {
-  if(!scd30.begin())
-  {
-    scd30.begin();
-  }
-  LOG_DEBUG("SCD30 setup:");
-  LOG_DEBUG("%f",scd30.getMeasurementInterval());
-  LOG_DEBUG(" seconds");
-
 }
 
 bool SCD30Sensor::getMetrics(meshtastic_Telemetry *measurement)
@@ -48,7 +49,8 @@ bool SCD30Sensor::getMetrics(meshtastic_Telemetry *measurement)
   //is set_measurement_interval being set right at the right time
   if (!scd30.dataReady())
   {
-      LOG_DEBUG("scd30 data not ready yet");
+      LOG_DEBUG("scd30 data not ready yet, delaying");
+      delay(500);
   }
   if (!scd30.read()) {
       LOG_DEBUG("SCD30 read failed!");
