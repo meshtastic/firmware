@@ -157,7 +157,7 @@ void InkHUD::WindowManager::createSystemApplets()
     systemApplets.push_back(notificationApplet);
     systemApplets.push_back(batteryIconApplet);
     systemApplets.push_back(menuApplet);
-    // Note: placeholder applet is technically a system applet, but it renders with the user applets
+    // Note: placeholder applet is technically a system applet, but it renders in WindowManager::renderPlaceholders
 }
 
 void InkHUD::WindowManager::createSystemTiles()
@@ -179,13 +179,44 @@ void InkHUD::WindowManager::placeSystemTiles()
     batteryIconTile->placeSystemTile(getWidth() - batteryIconWidth, 2, batteryIconWidth, batteryIconHeight);
 }
 
+// Assign a system applet to the fullscreen tile
+// Rendering of user tiles is suspended when the fullscreen tile is occupied
+void InkHUD::WindowManager::claimFullscreen(InkHUD::Applet *a)
+{
+    // Make sure that only system applets use the fullscreen tile
+    bool isSystemApplet = false;
+    for (Applet *sa : systemApplets) {
+        if (sa == a) {
+            isSystemApplet = true;
+            break;
+        }
+    }
+    assert(isSystemApplet);
+
+    fullscreenTile->assignApplet(a);
+}
+
+// Clear the fullscreen tile, unlinking whichever system applet is assigned
+// This allows the normal rendering of user tiles to resume
+void InkHUD::WindowManager::releaseFullscreen()
+{
+    // Make sure the applet is ready to release the tile
+    assert(!fullscreenTile->getAssignedApplet()->isForeground());
+
+    // Break the link between the applet and the fullscreen tile
+    fullscreenTile->assignApplet(nullptr);
+}
+
+// Some system applets can be assigned to a tile at boot
+// These are applets which do have their own tile, and whose assignment never changes
+// Applets which:
+// - share the fullscreen tile (e.g. logoApplet, pairingApplet),
+// - render on user tiles (e.g. menuApplet, placeholderApplet),
+// are assigned to the tile only when needed
 void InkHUD::WindowManager::assignSystemAppletsToTiles()
 {
-    // Assign tiles
-    logoApplet->setTile(fullscreenTile);
-    pairingApplet->setTile(fullscreenTile);
-    notificationApplet->setTile(notificationTile);
-    batteryIconApplet->setTile(batteryIconTile);
+    notificationTile->assignApplet(notificationApplet);
+    batteryIconTile->assignApplet(batteryIconApplet);
 }
 
 // Activate or deactivate user applets, to match settings
@@ -263,12 +294,13 @@ void InkHUD::WindowManager::assignUserAppletsToTiles()
         }
 
         // Restore previously shown applet if possible,
-        // otherwise show placeholder
+        // otherwise assign nullptr, which will render specially using placeholderApplet
         if (canRestore) {
-            t->assignedApplet = userApplets.at(oldIndex);
-            t->assignedApplet->bringToForeground();
+            Applet *a = userApplets.at(oldIndex);
+            t->assignApplet(a);
+            a->bringToForeground();
         } else {
-            t->assignedApplet = placeholderApplet;
+            t->assignApplet(nullptr);
             settings.userTiles.displayedUserApplet[i] = -1; // Update settings: current tile has no valid applet
         }
     }
@@ -282,18 +314,18 @@ void InkHUD::WindowManager::refocusTile()
     if (settings.userTiles.focused >= userTiles.size())
         settings.userTiles.focused = 0;
 
-    // Change "focused tile" from placeholder, to a valid applet
+    // Give "focused tile" a valid applet
     // - scan for another valid applet, which we can addSubstitution
-    // - reason: nextApplet() won't cycle if placeholder is shown
+    // - reason: nextApplet() won't cycle if no applet is assigned
     Tile *focusedTile = userTiles.at(settings.userTiles.focused);
-    if (focusedTile->assignedApplet == placeholderApplet) {
+    if (!focusedTile->getAssignedApplet()) {
         // Search for available applets
         for (uint8_t i = 0; i < userApplets.size(); i++) {
             Applet *a = userApplets.at(i);
             if (a->isActive() && !a->isForeground()) {
                 // Found a suitable applet
                 // Assign it to the focused tile
-                focusedTile->assignedApplet = a;
+                focusedTile->assignApplet(a);
                 a->bringToForeground();
                 settings.userTiles.displayedUserApplet[settings.userTiles.focused] = i; // Record change: persist after reboot
                 break;
@@ -421,16 +453,11 @@ void InkHUD::WindowManager::handleButtonLong()
     // - if another system applet isn't doing something
     if (!menuApplet->isForeground() && canRequestUpdate(menuApplet)) {
         Tile *t = userTiles.at(settings.userTiles.focused); // Tile we're borrowing
-        Applet *ua = t->assignedApplet;                     // User applet whose tile we're borrowing
 
-        // Hide the current applet
-        ua->sendToBackground();
+        // Swap out a user applet with menu
+        menuApplet->borrowTile(t);
 
-        // Tell menu applet to render using our borrowed tile
-        menuApplet->setTile(t);
-        menuApplet->bringToForeground();
-
-        // bringToForeground has already requested update, but we're overriding this with,
+        // bringToForeground (via borrowTile) has already requested update, but we're overriding this with,
         // with a forced FAST update, for guaranteed responsiveness
         forceUpdate(EInk::UpdateTypes::FAST);
     }
@@ -446,14 +473,15 @@ void InkHUD::WindowManager::nextApplet()
 {
     Tile *t = userTiles.at(settings.userTiles.focused);
 
-    // Short circuit: zero applets available
-    if (t->assignedApplet == placeholderApplet)
+    // Abort if zero applets available
+    // nullptr means WindowManager::refocusTile determined that there were no available applets
+    if (!t->getAssignedApplet())
         return;
 
     // Find the index of the applet currently shown on the tile
     uint8_t appletIndex = -1;
     for (uint8_t i = 0; i < userApplets.size(); i++) {
-        if (userApplets.at(i) == t->assignedApplet) {
+        if (userApplets.at(i) == t->getAssignedApplet()) {
             appletIndex = i;
             break;
         }
@@ -483,9 +511,9 @@ void InkHUD::WindowManager::nextApplet()
         return;
 
     // Hide old applet, show new applet
-    t->assignedApplet->sendToBackground();
-    t->assignedApplet = nextValidApplet;
-    t->assignedApplet->bringToForeground();
+    t->getAssignedApplet()->sendToBackground();
+    t->assignApplet(nextValidApplet);
+    nextValidApplet->bringToForeground();
     forceUpdate(EInk::UpdateTypes::FAST); // bringToForeground already requested, but we're manually forcing FAST
 }
 
@@ -546,8 +574,10 @@ void InkHUD::WindowManager::changeLayout()
     // Restore menu
     // - its tile was just destroyed and recreated (createUserTiles)
     // - its assignment was cleared (assignUserAppletsToTiles)
-    if (menuApplet->isForeground())
-        menuApplet->setTile(userTiles.at(settings.userTiles.focused));
+    if (menuApplet->isForeground()) {
+        Tile *ft = userTiles.at(settings.userTiles.focused);
+        menuApplet->borrowTile(ft);
+    }
 
     // Force-render
     // - redraw all applets
@@ -576,8 +606,10 @@ void InkHUD::WindowManager::changeActivatedApplets()
 
     // Restore menu
     // - its assignment was cleared (assignUserAppletsToTiles)
-    if (menuApplet->isForeground())
-        menuApplet->setTile(userTiles.at(settings.userTiles.focused));
+    if (menuApplet->isForeground()) {
+        Tile *ft = userTiles.at(settings.userTiles.focused);
+        menuApplet->borrowTile(ft);
+    }
 
     // Force-render
     // - redraw all applets
@@ -609,9 +641,9 @@ void InkHUD::WindowManager::toggleBatteryIcon()
 bool InkHUD::WindowManager::approveNotification(InkHUD::Notification &n)
 {
     // Ask all currently displayed applets
-    for (Tile *t : userTiles) {
-        Applet *a = t->assignedApplet;
-        if (!a->approveNotification(n))
+    for (Tile *ut : userTiles) {
+        Applet *ua = ut->getAssignedApplet();
+        if (ua && !ua->approveNotification(n))
             return false;
     }
 
@@ -778,8 +810,8 @@ void InkHUD::WindowManager::autoshow()
             && canRequestUpdate())              // Updates not currently blocked by system applet
         {
             Tile *t = userTiles.at(settings.userTiles.focused); // Get focused tile
-            t->assignedApplet->sendToBackground();              // Background whatever applet is already on the tile
-            t->assignedApplet = a;                              // Assign our new applet to tile
+            t->getAssignedApplet()->sendToBackground();         // Background whichever applet is already on the tile
+            t->assignApplet(a);                                 // Assign our new applet to tile
             a->bringToForeground();                             // Foreground our new applet
 
             // Check if autoshown applet shows the same information as notification intended to
@@ -793,9 +825,9 @@ void InkHUD::WindowManager::autoshow()
     }
 }
 
-// Check whether we an update is justified
+// Check whether an update is justified
 // We usually require that a foreground applet requested the update,
-// But forceUpdate call will bypass these checks.
+// but forceUpdate call will bypass these checks.
 // Abstraction for WindowManager::render only
 bool InkHUD::WindowManager::shouldUpdate()
 {
@@ -806,8 +838,9 @@ bool InkHUD::WindowManager::shouldUpdate()
 
     // via user applet
     for (Tile *ut : userTiles) {
-        Applet *ua = ut->assignedApplet;
-        if (ua->wantsToRender()    // This applet requested
+        Applet *ua = ut->getAssignedApplet();
+        if (ua                     // Tile has valid applet
+            && ua->wantsToRender() // This applet requested display update
             && ua->isForeground()  // This applet is currently shown
             && canRequestUpdate()) // Requests are not currently locked
         {
@@ -845,8 +878,8 @@ Drivers::EInk::UpdateTypes InkHUD::WindowManager::selectUpdateType()
     } else {
         // User applets
         for (Tile *ut : userTiles) {
-            Applet *ua = ut->assignedApplet;
-            if (ua->isForeground() && canRequestUpdate(ua))
+            Applet *ua = ut->getAssignedApplet();
+            if (ua && ua->isForeground() && canRequestUpdate())
                 type = mediator.prioritize(type, ua->wantsUpdateType());
         }
         // System Applets
@@ -869,22 +902,25 @@ Drivers::EInk::UpdateTypes InkHUD::WindowManager::selectUpdateType()
 void InkHUD::WindowManager::renderUserApplets()
 {
     // Don't render any user applets if the screen is covered by a system applet using the fullscreen tile
-    if (fullscreenTile->assignedApplet)
+    if (fullscreenTile->getAssignedApplet())
         return;
 
     // For each tile
     for (Tile *ut : userTiles) {
-        Applet *ua = ut->assignedApplet; // Get the applet on the tile
+        Applet *ua = ut->getAssignedApplet(); // Get the applet on the tile
 
-        // Skip applet if a system applet is borrowing this tile (e.g. menuApplet)
-        if (!ua->isForeground())
+        // Don't render if tile has no applet. Handled in renderPlaceholders
+        if (!ua)
+            continue;
+
+        // Don't render the menu applet, Handled by renderSystemApplets
+        if (ua == menuApplet)
             continue;
 
         uint32_t start = millis();
-        ua->setTile(ut); // Relevant for: setup, after layout changed, placeholderApplet. Todo: refactor?
-        ua->render();    // Draw!
+        ua->render(); // Draw!
         uint32_t stop = millis();
-        LOG_DEBUG("%s took %dms to render", ut->assignedApplet->name, stop - start);
+        LOG_DEBUG("%s took %dms to render", ua->name, stop - start);
     }
 }
 
@@ -901,13 +937,32 @@ void InkHUD::WindowManager::renderSystemApplets()
 
         // Skip applet if fullscreen tile is in use, but not used by this applet
         // Applet is "obscured"
-        if (fullscreenTile->assignedApplet && fullscreenTile->assignedApplet != sa)
+        if (fullscreenTile->getAssignedApplet() && fullscreenTile->getAssignedApplet() != sa)
             continue;
 
         // uint32_t start = millis(); // Debugging only: runtime
         sa->render(); // Draw!
         // uint32_t stop = millis();  // Debugging only: runtime
         // LOG_DEBUG("%s (system) took %dms to render", (sa->name == nullptr) ? "Unnamed" : sa->name, stop - start);
+    }
+}
+
+// In some situations (e.g. layout or applet selection changes),
+// a user tile can end up without an assigned applet.
+// In this case, we will fill the empty space with diagonal lines.
+void InkHUD::WindowManager::renderPlaceholders()
+{
+    // Don't draw if obscured by the fullscreen tile
+    if (fullscreenTile->getAssignedApplet())
+        return;
+
+    for (Tile *ut : userTiles) {
+        // If no applet assigned
+        if (!ut->getAssignedApplet()) {
+            ut->assignApplet(placeholderApplet);
+            placeholderApplet->render();
+            ut->assignApplet(nullptr);
+        }
     }
 }
 
@@ -940,6 +995,7 @@ void InkHUD::WindowManager::render(bool async)
         clearBuffer();
         renderUserApplets();
         renderSystemApplets();
+        renderPlaceholders();
 
         // Tell display to begin process of drawing new image
         LOG_INFO("Updating display");
@@ -1025,7 +1081,7 @@ void InkHUD::WindowManager::findOrphanApplets()
         for (uint8_t it = 0; it < userTiles.size(); it++) {
             Tile *t = userTiles.at(it);
             // A tile claims this applet: not orphaned
-            if (t->assignedApplet == a) {
+            if (t->getAssignedApplet() == a) {
                 foundOwner = true;
                 break;
             }

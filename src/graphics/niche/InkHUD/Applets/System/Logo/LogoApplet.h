@@ -38,6 +38,8 @@ class LogoApplet : public Applet, public concurrency::OSThread
     std::string textRight;
     std::string textTitle;
     AppletFont fontTitle;
+
+    WindowManager *windowManager = nullptr; // For convenience
 };
 
 } // namespace NicheGraphics::InkHUD

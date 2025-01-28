@@ -4,6 +4,12 @@
 
 using namespace NicheGraphics;
 
+InkHUD::PairingApplet::PairingApplet()
+{
+    // Grab the window manager singleton, for convenience
+    windowManager = WindowManager::getInstance();
+}
+
 void InkHUD::PairingApplet::onRender()
 {
     // Header
@@ -38,21 +44,21 @@ void InkHUD::PairingApplet::onDeactivate()
 void InkHUD::PairingApplet::onForeground()
 {
     // If another applet has locked the display, ask it to exit
-    Applet *other = WindowManager::getInstance()->whoLocked();
+    Applet *other = windowManager->whoLocked();
     if (other != nullptr)
         other->sendToBackground();
 
-    getTile()->assignedApplet = this;         // Take owneship of the fullscreen tile
-    WindowManager::getInstance()->lock(this); // Prevent user applets from requested update
+    windowManager->claimFullscreen(this); // Take ownership of the fullscreen tile
+    windowManager->lock(this);            // Prevent user applets from requesting update
 }
 void InkHUD::PairingApplet::onBackground()
 {
-    getTile()->assignedApplet = nullptr;        // Relinquish ownership of the fullscreen tile
-    WindowManager::getInstance()->unlock(this); // Allow normal user applet update requests to resume
+    windowManager->releaseFullscreen(); // Relinquish ownership of the fullscreen tile
+    windowManager->unlock(this);        // Allow normal user applet update requests to resume
 
     // Need to force an update, as a polite request wouldn't be honored, seeing how we are now in the background
     // Usually, onBackground is followed by another applet's onForeground (which requests update), but not in this case
-    WindowManager::getInstance()->forceUpdate(EInk::UpdateTypes::FULL);
+    windowManager->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 int InkHUD::PairingApplet::onBluetoothStatusUpdate(const meshtastic::Status *status)
@@ -69,9 +75,9 @@ int InkHUD::PairingApplet::onBluetoothStatusUpdate(const meshtastic::Status *sta
         // Store the passkey for rendering
         passkey = bluetoothStatus->getPasskey();
 
-        // Make sure no other system applets are locking the display
+        // Make sure no other system applets have a lock on the display
         // Boot screen, menu, etc
-        Applet *lockOwner = WindowManager::getInstance()->whoLocked();
+        Applet *lockOwner = windowManager->whoLocked();
         if (lockOwner)
             lockOwner->sendToBackground();
 

@@ -144,6 +144,33 @@ void InkHUD::Tile::placeSystemTile(int16_t left, int16_t top, uint16_t width, ui
     this->height = height;
 }
 
+// Place an applet onto a tile
+// Creates a reciprocal link between applet and tile
+// The tile should always know which applet is displayed
+// The applet should always know which tile it is display on
+// This is enforced with asserts
+// Assigning a new applet will break a previous link
+// Link may also be broken by assigning a nullptr
+void InkHUD::Tile::assignApplet(Applet *a)
+{
+    // Break the link between old applet and this tile
+    if (assignedApplet)
+        assignedApplet->setTile(nullptr);
+
+    // Store the new applet
+    assignedApplet = a;
+
+    // Create the reciprocal link between the new applet and this tile
+    if (a)
+        a->setTile(this);
+}
+
+// Get pointer to whichever applet is displayed on this tile
+InkHUD::Applet *InkHUD::Tile::getAssignedApplet()
+{
+    return assignedApplet;
+}
+
 // Receive drawing output from the assigned applet,
 // and translate it from "applet-space" coordinates, to it's true location.
 // The final "rotation" step is performed by the windowManager

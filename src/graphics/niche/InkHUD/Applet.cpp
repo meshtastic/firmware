@@ -29,10 +29,12 @@ void InkHUD::Applet::drawPixel(int16_t x, int16_t y, uint16_t color)
 
 // Sets which tile the applet renders for
 // Pixel output is passed to tile during render()
+// This should only be called by Tile::assignApplet
 void InkHUD::Applet::setTile(Tile *t)
 {
-    // Ensure tile has been created first
-    assert(t != nullptr);
+    // If we're setting (not clearing), make sure the link is "reciprocal"
+    if (t)
+        assert(t->getAssignedApplet() == this);
 
     assignedTile = t;
 }
@@ -45,6 +47,9 @@ InkHUD::Tile *InkHUD::Applet::getTile()
 
 void InkHUD::Applet::render()
 {
+    assert(assignedTile);                              // Ensure that we have a tile
+    assert(assignedTile->getAssignedApplet() == this); // Ensure that we have a reciprocal link with the tile
+
     wantRender = false;   // Clear the flag set by requestUpdate
     wantAutoshow = false; // If we're rendering now, it means our request was considered. It may or may not have been granted.
     wantUpdateType = Drivers::EInk::UpdateTypes::UNSPECIFIED; // Our requested type has been considered by now. Tidy up.

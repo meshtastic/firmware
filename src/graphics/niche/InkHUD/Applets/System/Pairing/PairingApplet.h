@@ -18,6 +18,8 @@ namespace NicheGraphics::InkHUD
 class PairingApplet : public Applet
 {
   public:
+    PairingApplet();
+
     void onRender() override;
     void onActivate() override;
     void onDeactivate() override;
@@ -32,6 +34,8 @@ class PairingApplet : public Applet
         CallbackObserver<PairingApplet, const meshtastic::Status *>(this, &PairingApplet::onBluetoothStatusUpdate);
 
     std::string passkey = ""; // Passkey. Six digits, possibly with leading zeros
+
+    WindowManager *windowManager = nullptr; // For convenience. Set in constructor.
 };
 
 } // namespace NicheGraphics::InkHUD

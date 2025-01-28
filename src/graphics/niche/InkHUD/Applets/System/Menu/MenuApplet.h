@@ -14,6 +14,8 @@
 namespace NicheGraphics::InkHUD
 {
 
+class Applet;
+
 class MenuApplet : public Applet, public concurrency::OSThread
 {
   public:
@@ -25,6 +27,9 @@ class MenuApplet : public Applet, public concurrency::OSThread
     void onButtonShortPress() override;
     void onButtonLongPress() override;
     void onRender() override;
+
+    void borrowTile(Tile *t);   // Temporarily take the place of a user applet
+    void releaseBorrowedTile(); // Restore the original user applet when we the menu
 
   protected:
     int32_t runOnce() override;
@@ -46,7 +51,9 @@ class MenuApplet : public Applet, public concurrency::OSThread
 
     std::vector<MenuItem> items; // MenuItems for the current page. Filled by ShowPage
 
-    WindowManager *windowManager;                    // Convenient access to the InkHUD::WindowManager singleton
+    Applet *borrowedTileOwner = nullptr; // Which applet we have temporarily replaced while displaying menu
+
+    WindowManager *windowManager = nullptr;          // Convenient access to the InkHUD::WindowManager singleton
     Drivers::LatchingBacklight *backlight = nullptr; // Convenient access to the backlight singleton
 };
 

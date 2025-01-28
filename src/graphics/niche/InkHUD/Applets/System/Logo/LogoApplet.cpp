@@ -8,6 +8,9 @@ InkHUD::LogoApplet::LogoApplet() : concurrency::OSThread("LogoApplet")
 {
     // Don't autostart the runOnce() timer
     OSThread::disable();
+
+    // Grab the WindowManager singleton, for convenience
+    windowManager = WindowManager::getInstance();
 }
 
 void InkHUD::LogoApplet::onRender()
@@ -46,24 +49,24 @@ void InkHUD::LogoApplet::onRender()
 void InkHUD::LogoApplet::onForeground()
 {
     // If another applet has locked the display, ask it to exit
-    Applet *other = WindowManager::getInstance()->whoLocked();
+    Applet *other = windowManager->whoLocked();
     if (other != nullptr)
         other->sendToBackground();
 
-    getTile()->assignedApplet = this;         // Take ownership of fullscreen tile
-    WindowManager::getInstance()->lock(this); // Prevent other applets from requesting updates
+    windowManager->claimFullscreen(this); // Take ownership of fullscreen tile
+    windowManager->lock(this);            // Prevent other applets from requesting updates
 }
 
 void InkHUD::LogoApplet::onBackground()
 {
     OSThread::disable(); // Disable auto-dismiss timer, in case applet was dismissed early (sendToBackground from outside class)
 
-    getTile()->assignedApplet = nullptr;        // Relinquish ownership of fullscreen tile
-    WindowManager::getInstance()->unlock(this); // Allow normal user applet update requests to resume
+    windowManager->releaseFullscreen(); // Relinquish ownership of fullscreen tile
+    windowManager->unlock(this);        // Allow normal user applet update requests to resume
 
     // Need to force an update, as a polite request wouldn't be honored, seeing how we are now in the background
     // Usually, onBackground is followed by another applet's onForeground (which requests update), but not in this case
-    WindowManager::getInstance()->forceUpdate(EInk::UpdateTypes::FULL);
+    windowManager->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 int32_t InkHUD::LogoApplet::runOnce()

@@ -77,11 +77,13 @@ void InkHUD::MenuApplet::onBackground()
     windowManager->unlock(this);
 
     // Restore the user applet whose tile we borrowed
-    getTile()->assignedApplet->bringToForeground();
+    if (borrowedTileOwner)
+        borrowedTileOwner->bringToForeground();
+    releaseBorrowedTile();
 
     // Need to force an update, as a polite request wouldn't be honored, seeing how we are now in the background
     // We're only updating here to ugrade from UNSPECIFIED to FAST, to ensure responsiveness when exiting menu
-    WindowManager::getInstance()->forceUpdate(EInk::UpdateTypes::FAST);
+    windowManager->forceUpdate(EInk::UpdateTypes::FAST);
 }
 
 void InkHUD::MenuApplet::onShutdown()
@@ -436,6 +438,33 @@ void InkHUD::MenuApplet::onButtonLongPress()
     // FAST keeps things responsive: important because we're dealing with user input
     if (!wantsToRender())
         requestUpdate(Drivers::EInk::UpdateTypes::FAST);
+}
+
+// Replace an applet with the MenuApplet
+// Remembers which applet we replaced, so we can restore it with replaceBorrowedTile
+void InkHUD::MenuApplet::borrowTile(Tile *t)
+{
+    // Remember who *really* owns this tile
+    borrowedTileOwner = t->getAssignedApplet();
+
+    // Hide the owner, if it is a valid applet
+    if (borrowedTileOwner)
+        borrowedTileOwner->sendToBackground();
+
+    // Break the owner's link with tile
+    // Relink it to menu applet
+    t->assignApplet(this);
+
+    // Show menu
+    bringToForeground();
+}
+
+// Restore whichever applet was originally on a tile when we borrowed it with MenuApplet::borrowTile
+void InkHUD::MenuApplet::releaseBorrowedTile()
+{
+    Tile *t = getTile();
+    t->assignApplet(borrowedTileOwner); // Break our link with the tile, and relink it with real owner
+    borrowedTileOwner = nullptr;
 }
 
 // Dynamically create MenuItem entries for activating / deactivating Applets, for the "Applet Selection" submenu

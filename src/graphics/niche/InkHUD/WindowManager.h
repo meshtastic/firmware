@@ -38,6 +38,7 @@ class Applet;
 class Tile;
 
 class LogoApplet;
+class MenuApplet;
 class NotificationApplet;
 
 class WindowManager : protected concurrency::OSThread
@@ -54,7 +55,9 @@ class WindowManager : protected concurrency::OSThread
     void createSystemApplets(); // Instantiate and activate system applets
     void createSystemTiles();   // Instantiate tiles which host system applets
     void assignSystemAppletsToTiles();
-    void placeSystemTiles(); // Set position and size
+    void placeSystemTiles();          // Set position and size
+    void claimFullscreen(Applet *sa); // Assign a system applet to the fullscreen tile
+    void releaseFullscreen();         // Remove any system applet from the fullscreen tile
 
     void createUserApplets(); // Activate user's selected applets
     void createUserTiles();   // Instantiate enough tiles for user's selected layout
@@ -103,6 +106,7 @@ class WindowManager : protected concurrency::OSThread
     Drivers::EInk::UpdateTypes selectUpdateType(); // Determine how the display hardware will perform the image update
     void renderUserApplets();                      // Draw all currently displayed user applets to the frame buffer
     void renderSystemApplets();                    // Draw all currently displayed system applets to the frame buffer
+    void renderPlaceholders();                     // Draw diagonal lines on user tiles which have no assigned applet
     void render(bool async = true);                // Attempt to update the display
 
     void setBufferPixel(int16_t x, int16_t y, Color c); // Place pixels into the frame buffer. All translation / rotation done.
@@ -145,7 +149,7 @@ class WindowManager : protected concurrency::OSThread
     Applet *pairingApplet;
     NotificationApplet *notificationApplet;
     Applet *batteryIconApplet;
-    Applet *menuApplet;
+    MenuApplet *menuApplet;
     Applet *placeholderApplet;
 
     // requestUpdate
