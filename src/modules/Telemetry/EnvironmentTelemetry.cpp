@@ -27,6 +27,7 @@
 #include "Sensor/BMP280Sensor.h"
 #include "Sensor/BMP3XXSensor.h"
 #include "Sensor/CGRadSensSensor.h"
+#include "Sensor/DFRobotGravitySensor.h"
 #include "Sensor/DFRobotLarkSensor.h"
 #include "Sensor/LPS22HBSensor.h"
 #include "Sensor/MCP9808Sensor.h"
@@ -56,6 +57,7 @@ RCWL9620Sensor rcwl9620Sensor;
 AHT10Sensor aht10Sensor;
 MLX90632Sensor mlx90632Sensor;
 DFRobotLarkSensor dfRobotLarkSensor;
+DFRobotGravitySensor dfRobotGravitySensor;
 NAU7802Sensor nau7802Sensor;
 BMP3XXSensor bmp3xxSensor;
 CGRadSensSensor cgRadSens;
@@ -115,6 +117,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
 #elif !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR_EXTERNAL
             if (dfRobotLarkSensor.hasSensor())
                 result = dfRobotLarkSensor.runOnce();
+            if (dfRobotGravitySensor.hasSensor())
+                result = dfRobotGravitySensor.runOnce();
             if (bmp085Sensor.hasSensor())
                 result = bmp085Sensor.runOnce();
             if (bmp280Sensor.hasSensor())
@@ -159,6 +163,12 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = max17048Sensor.runOnce();
             if (cgRadSens.hasSensor())
                 result = cgRadSens.runOnce();
+                // this only works on the wismesh hub with the solar option. This is not an I2C sensor, so we don't need the
+                // sensormap here.
+#ifdef HAS_RAKPROT
+
+            result = rak9154Sensor.runOnce();
+#endif
 #endif
         }
         return result;
@@ -368,6 +378,10 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
         valid = valid && dfRobotLarkSensor.getMetrics(m);
         hasSensor = true;
     }
+    if (dfRobotGravitySensor.hasSensor()) {
+        valid = valid && dfRobotGravitySensor.getMetrics(m);
+        hasSensor = true;
+    }
     if (sht31Sensor.hasSensor()) {
         valid = valid && sht31Sensor.getMetrics(m);
         hasSensor = true;
@@ -472,6 +486,10 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
         valid = valid && cgRadSens.getMetrics(m);
         hasSensor = true;
     }
+#ifdef HAS_RAKPROT
+    valid = valid && rak9154Sensor.getMetrics(m);
+    hasSensor = true;
+#endif
 #endif
     return valid && hasSensor;
 }
@@ -566,6 +584,11 @@ AdminMessageHandleResult EnvironmentTelemetryModule::handleAdminMessageForModule
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR_EXTERNAL
     if (dfRobotLarkSensor.hasSensor()) {
         result = dfRobotLarkSensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (dfRobotGravitySensor.hasSensor()) {
+        result = dfRobotGravitySensor.handleAdminMessage(mp, request, response);
         if (result != AdminMessageHandleResult::NOT_HANDLED)
             return result;
     }
