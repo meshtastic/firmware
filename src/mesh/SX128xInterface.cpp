@@ -10,6 +10,9 @@
 #endif
 
 // Particular boards might define a different max power based on what their hardware can do
+#if ARCH_PORTDUINO
+#define SX128X_MAX_POWER settingsMap[sx128x_max_power]
+#endif
 #ifndef SX128X_MAX_POWER
 #define SX128X_MAX_POWER 13
 #endif
