@@ -34,8 +34,11 @@ TwoButton *TwoButton::getInstance()
 // We probably need to do this after sleep, as well as at boot
 void TwoButton::start()
 {
-    attachInterrupt(buttons[0].pin, TwoButton::isrPrimary, buttons[0].activeLogic == LOW ? FALLING : RISING);
-    attachInterrupt(buttons[1].pin, TwoButton::isrSecondary, buttons[1].activeLogic == LOW ? FALLING : RISING);
+    if (buttons[0].pin != 0xFF)
+        attachInterrupt(buttons[0].pin, TwoButton::isrPrimary, buttons[0].activeLogic == LOW ? FALLING : RISING);
+
+    if (buttons[1].pin != 0xFF)
+        attachInterrupt(buttons[1].pin, TwoButton::isrSecondary, buttons[1].activeLogic == LOW ? FALLING : RISING);
 }
 
 // Stop receiving button input, and run custom sleep code
@@ -43,8 +46,11 @@ void TwoButton::start()
 // Some devices will want to attach interrupts here, for the user button to wake from sleep
 void TwoButton::stop()
 {
-    detachInterrupt(buttons[0].pin);
-    detachInterrupt(buttons[1].pin);
+    if (buttons[0].pin != 0xFF)
+        detachInterrupt(buttons[0].pin);
+
+    if (buttons[1].pin != 0xFF)
+        detachInterrupt(buttons[1].pin);
 }
 
 // Configures the wiring and logic of either button
