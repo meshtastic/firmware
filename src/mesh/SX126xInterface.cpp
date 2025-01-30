@@ -11,6 +11,9 @@
 
 // Particular boards might define a different max power based on what their hardware can do, default to max power output if not
 // specified (may be dangerous if using external PA and SX126x power config forgotten)
+#if ARCH_PORTDUINO
+#define SX126X_MAX_POWER settingsMap[sx126x_max_power]
+#endif
 #ifndef SX126X_MAX_POWER
 #define SX126X_MAX_POWER 22
 #endif
@@ -50,22 +53,13 @@ template <typename T> bool SX126xInterface<T>::init()
 #endif
 
 #if ARCH_PORTDUINO
-    float tcxoVoltage = (float)settingsMap[dio3_tcxo_voltage] / 1000;
+    tcxoVoltage = (float)settingsMap[dio3_tcxo_voltage] / 1000;
     if (settingsMap[sx126x_ant_sw_pin] != RADIOLIB_NC) {
         digitalWrite(settingsMap[sx126x_ant_sw_pin], HIGH);
         pinMode(settingsMap[sx126x_ant_sw_pin], OUTPUT);
     }
-// FIXME: correct logic to default to not using TCXO if no voltage is specified for SX126X_DIO3_TCXO_VOLTAGE
-#elif !defined(SX126X_DIO3_TCXO_VOLTAGE)
-    float tcxoVoltage =
-        0; // "TCXO reference voltage to be set on DIO3. Defaults to 1.6 V, set to 0 to skip." per
-           // https://github.com/jgromes/RadioLib/blob/690a050ebb46e6097c5d00c371e961c1caa3b52e/src/modules/SX126x/SX126x.h#L471C26-L471C104
-    // (DIO3 is free to be used as an IRQ)
-#elif !defined(TCXO_OPTIONAL)
-    float tcxoVoltage = SX126X_DIO3_TCXO_VOLTAGE;
-    // (DIO3 is not free to be used as an IRQ)
 #endif
-    if (tcxoVoltage == 0)
+    if (tcxoVoltage == 0.0)
         LOG_DEBUG("SX126X_DIO3_TCXO_VOLTAGE not defined, not using DIO3 as TCXO reference voltage");
     else
         LOG_DEBUG("SX126X_DIO3_TCXO_VOLTAGE defined, using DIO3 as TCXO reference voltage at %f V", tcxoVoltage);
@@ -83,7 +77,7 @@ template <typename T> bool SX126xInterface<T>::init()
     int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage, useRegulatorLDO);
     // \todo Display actual typename of the adapter, not just `SX126x`
     LOG_INFO("SX126x init result %d", res);
-    if (res == RADIOLIB_ERR_CHIP_NOT_FOUND)
+    if (res == RADIOLIB_ERR_CHIP_NOT_FOUND || res == RADIOLIB_ERR_SPI_CMD_FAILED)
         return false;
 
     LOG_INFO("Frequency set to %f", getFreq());
