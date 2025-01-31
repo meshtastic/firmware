@@ -5,8 +5,7 @@ Features
 []      adhoc ping
 []      canned message
 []      map scale indicator 
-[]      eink drivers for other devices
-[]      gps menu
+[wip]   eink drivers for other devices
 []      mini-compass on nodelist
 []      additional user applets
 []      GPS stats in menu
