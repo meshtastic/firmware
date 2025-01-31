@@ -12,8 +12,15 @@ Several modules require external switching between transmit (Tx) and receive (Rx
 RXEN is not required to be connected if the selected module already has internal RF switching, or if external RF switching logic is already applied.
 Also worth noting that the Seeed WIO SX1262 in particular only has RXEN exposed (marked RF_SW) and has the DIO2-TXEN link internally.
 
-### LR1121 modules
-The CDEbyte implementation of the LR1121 is contained in their E80 module. Naturally, CDEbyte have chosen to ignore the generic Semtech impelementation of the RF switching logic and have their own table, which is located at the bottom of the page [here](https://www.cdebyte.com/products/E80-900M2213S/2#Pin), and reflected on page 6 of their user manual, and reproduced below:
+### LR1121 modules - E80 is the default
+The E80 from CDEbyte is the most obtainable module at present, and has been selected as the default option.
+
+Naturally, CDEbyte have chosen to ignore the generic Semtech impelementation of the RF switching logic and have supplied confusing and contradictory documentation, which is explained below.
+
+tl;dr: The E80 is chosen as the default. **If you wish to use another module, the table in `rfswitch.h` must be adjusted accordingly.**
+
+#### E80 switching - the saga
+The CDEbyte implementation of the LR1121 is contained in their E80 module. As stated above, CDEbyte have chosen to ignore the generic Semtech implementation of the RF switching logic and have their own table, which is located at the bottom of the page [here](https://www.cdebyte.com/products/E80-900M2213S/2#Pin), and reflected on page 6 of their user manual, and reproduced below:
 
 | DIO5/RFSW0 | DIO6/RFSW1 | RF status                     |
 | ---------- | ---------- | ----------------------------- |
@@ -31,7 +38,7 @@ However, looking at the sample code they provide on page 9, the values would be:
 | 1          | 0          | TX (Sub-1GHz high power mode) |
 | 0          | 0          | TX（2.4GHz）                    |
 
-If you want to use the Semtech default, the values are (taken from [here](https://github.com/Lora-net/SWSD006/blob/v2.6.1/lib/app_subGHz_config_lr11xx.c#L145-L154)):
+The Semtech default, the values are (taken from [here](https://github.com/Lora-net/SWSD006/blob/v2.6.1/lib/app_subGHz_config_lr11xx.c#L145-L154)):
 
 <details>
 
@@ -56,3 +63,15 @@ If you want to use the Semtech default, the values are (taken from [here](https:
 | 1          | 1          | TX (Sub-1GHz low power mode)  |
 | 0          | 1          | TX (Sub-1GHz high power mode) |
 | 0          | 0          | TX（2.4GHz）                    |
+
+It is evident from the tables above that there is no real consistency to those provided by Ebyte. 
+
+##### An experiment
+Tests were conducted in each of the three configurations between a known-good SX1262 and an E80, passing packets in both directions and recording the reported RSSI. The E80 was set at 22db and 14db to activate the high and low power settings respectively. The results are shown in the chart below.
+
+![Chart showing RSSI readings in each configuration and setting](.\E80_RSSI_per_case.png)
+
+#### Conclusion
+The RF switching is based on the code example given. Logically, this shows the DIO5 and DIO6 are swapped compared to the reference design.
+
+If future DIYers wish to use an alternative module, the table in `rfswitch.h` must be adjusted accordingly.
