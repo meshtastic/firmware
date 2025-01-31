@@ -12,6 +12,30 @@ Several modules require external switching between transmit (Tx) and receive (Rx
 RXEN is not required to be connected if the selected module already has internal RF switching, or if external RF switching logic is already applied.
 Also worth noting that the Seeed WIO SX1262 in particular only has RXEN exposed (marked RF_SW) and has the DIO2-TXEN link internally.
 
+<details>
+
+<summary> The table of known modules is at the bottom of the variant.h, and reproduced here for convenience. </summary>
+
+
+| Mfr          | Module           | TCXO | RF Switch | Notes                                 |
+| ------------ | ---------------- | ---- | --------- | ------------------------------------- |
+| Ebyte        | E22-900M22S      | Yes  | Ext       |                                       |
+| Ebyte        | E22-900MM22S     | No   | Ext       |                                       |
+| Ebyte        | E22-900M30S      | Yes  | Ext       |                                       |
+| Ebyte        | E22-900M33S      | Yes  | Ext       | MAX_POWER must be set to 8 for this   |
+| Ebyte        | E220-900M22S     | No   | Ext       | LLCC68, looks like DIO3 not connected |
+| AI-Thinker   | RA-01SH          | No   | Int       | SX1262                                |
+| Heltec       | HT-RA62          | Yes  | Int       |                                       |
+| NiceRF       | Lora1262         | yes  | Int       |                                       |
+| Waveshare    | Core1262-HF      | yes  | Ext       |                                       |
+| Waveshare    | LoRa Node Module | yes  | Int       |                                       |
+| Seeed        | Wio-SX1262       | yes  | Int       | Sooooo cute!                          |
+| AI-Thinker   | RA-02            | No   | Int       | SX1278 **433mhz band only**           |
+| RF Solutions | RFM95            | No   | Int       | Untested                              |
+| Ebyte        | E80-900M2213S    | Yes  | Int       | LR1121 radio                          |
+
+</details>
+
 ### LR1121 modules - E80 is the default
 The E80 from CDEbyte is the most obtainable module at present, and has been selected as the default option.
 
