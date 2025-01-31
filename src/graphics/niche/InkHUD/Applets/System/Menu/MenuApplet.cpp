@@ -136,15 +136,13 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         break;
 
     case LAYOUT:
-        // Testing only
-        // Todo: configure max tiles in nicheGraphics
         // Todo: smarter incrementing of tile count
         settings.userTiles.count++;
 
         if (settings.userTiles.count == 3) // Skip 3 tiles: not done yet
             settings.userTiles.count++;
 
-        if (settings.userTiles.count > 4) // Loop around if tile count now too high
+        if (settings.userTiles.count > settings.userTiles.maxCount) // Loop around if tile count now too high
             settings.userTiles.count = 1;
 
         windowManager->changeLayout();
@@ -246,7 +244,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         items.push_back(MenuItem("Applets", MenuPage::APPLETS));
         items.push_back(MenuItem("Auto-show", MenuPage::AUTOSHOW));
         items.push_back(MenuItem("Recents Duration", MenuPage::RECENTS));
-        items.push_back(MenuItem("Layout", MenuAction::LAYOUT, MenuPage::OPTIONS));
+        if (settings.userTiles.maxCount > 1)
+            items.push_back(MenuItem("Layout", MenuAction::LAYOUT, MenuPage::OPTIONS));
         items.push_back(MenuItem("Rotate", MenuAction::ROTATE, MenuPage::OPTIONS));
         items.push_back(MenuItem("Notifications", MenuAction::TOGGLE_NOTIFICATIONS, MenuPage::OPTIONS,
                                  &settings.optionalFeatures.notifications));

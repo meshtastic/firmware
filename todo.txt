@@ -51,7 +51,6 @@ Chores
 []      Make runOnce methods private
 []      Helper method in InkHUD::Drivers::EInk to simplify framebuffer arithmetic, for anyone else using NicheGraphics
 []      Don't repeat logs from Applet::getTimeString
-[]      honour "max tiles" setting in nicheGraphics.h
 []      Remove parentheses from methods mentioned in comments, to make code search easier
 []      Decouple the original Screen class from bluetooth code: observe "BluetoothStatus" instead
 []      Honor userprefs / config gpio overrides
