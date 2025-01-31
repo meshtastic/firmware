@@ -68,6 +68,9 @@ class WindowManager : protected concurrency::OSThread
     int beforeDeepSleep(void *unused);                             // Prepare for shutdown
     int beforeReboot(void *unused);                                // Prepare for reboot
     int onReceiveTextMessage(const meshtastic_MeshPacket *packet); // Store most recent text message
+#ifdef ARCH_ESP32
+    int beforeLightSleep(void *unused); // Prepare for light sleep
+#endif
 
     void handleButtonShort(); // User button: short press
     void handleButtonLong();  // User button: long press
@@ -125,6 +128,12 @@ class WindowManager : protected concurrency::OSThread
     // Cache *incoming* text messages, for use by applets
     CallbackObserver<WindowManager, const meshtastic_MeshPacket *> textMessageObserver =
         CallbackObserver<WindowManager, const meshtastic_MeshPacket *>(this, &WindowManager::onReceiveTextMessage);
+
+#ifdef ARCH_ESP32
+    // Get notified when the system is entering light sleep
+    CallbackObserver<WindowManager, void *> lightSleepObserver =
+        CallbackObserver<WindowManager, void *>(this, &WindowManager::beforeLightSleep);
+#endif
 
     NicheGraphics::Drivers::EInk *driver = nullptr;
     uint8_t *imageBuffer; // Fed into driver

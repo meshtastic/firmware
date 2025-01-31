@@ -126,6 +126,9 @@ void InkHUD::WindowManager::begin()
     deepSleepObserver.observe(&notifyDeepSleep);
     rebootObserver.observe(&notifyReboot);
     textMessageObserver.observe(textMessageModule);
+#ifdef ARCH_ESP32
+    lightSleepObserver.observe(&notifyLightSleep);
+#endif
 }
 
 // Set-up special "system applets"
@@ -379,6 +382,21 @@ int InkHUD::WindowManager::beforeReboot(void *unused)
 
     return 0; // No special status to report. Ignored anyway by this Observable
 }
+
+#ifdef ARCH_ESP32
+// Callback for lightSleepObserver
+// Make sure the display is not partway through an update when we begin light sleep
+// This is because some displays require active input from us to terminate the update process, and protect the panel hardware
+int InkHUD::WindowManager::beforeLightSleep(void *unused)
+{
+    if (driver->busy()) {
+        LOG_INFO("Waiting for display");
+        driver->await(); // Wait here for update to complete
+    }
+
+    return 0; // No special status to report. Ignored anyway by this Observable
+}
+#endif
 
 // Callback when a new text message is received
 // Caches the most recently received message, for use by applets

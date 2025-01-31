@@ -37,7 +37,6 @@ Known Bugs
 =====================
 []      ChronoList applets: no event raised on nodeinfo rx
 []      Timestamps don't update. Needs to happen once a day. "6PM -> Yesterday". Make the WindowManager do it.
-[]      Lightsleep shouldn't be possible while update in progress. Set canSleep=false? 
 []      Root menu: header breaks spacing if rtc set while menu open
 []      Applets don't re-render when node is removed via admin command
 []      (Rare) Recents List: count in header label may not match number of items shown
