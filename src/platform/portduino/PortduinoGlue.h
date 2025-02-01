@@ -81,6 +81,8 @@ enum configNames {
     webserver,
     webserverport,
     webserverrootpath,
+    websslkeypath,
+    websslcertpath,
     maxtophone,
     maxnodes,
     ascii_logs,
