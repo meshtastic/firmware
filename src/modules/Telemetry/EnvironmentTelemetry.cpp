@@ -27,6 +27,7 @@
 #include "Sensor/BMP280Sensor.h"
 #include "Sensor/BMP3XXSensor.h"
 #include "Sensor/CGRadSensSensor.h"
+#include "Sensor/DFRobotGravitySensor.h"
 #include "Sensor/DFRobotLarkSensor.h"
 #include "Sensor/LPS22HBSensor.h"
 #include "Sensor/MCP9808Sensor.h"
@@ -56,6 +57,7 @@ RCWL9620Sensor rcwl9620Sensor;
 AHT10Sensor aht10Sensor;
 MLX90632Sensor mlx90632Sensor;
 DFRobotLarkSensor dfRobotLarkSensor;
+DFRobotGravitySensor dfRobotGravitySensor;
 NAU7802Sensor nau7802Sensor;
 BMP3XXSensor bmp3xxSensor;
 CGRadSensSensor cgRadSens;
@@ -105,8 +107,6 @@ int32_t EnvironmentTelemetryModule::runOnce()
 
         if (moduleConfig.telemetry.environment_measurement_enabled) {
             LOG_INFO("Environment Telemetry: init");
-            // it's possible to have this module enabled, only for displaying values on the screen.
-            // therefore, we should only enable the sensor loop if measurement is also enabled
 #ifdef SENSECAP_INDICATOR
             result = indicatorSensor.runOnce();
 #endif
@@ -115,6 +115,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
 #elif !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR_EXTERNAL
             if (dfRobotLarkSensor.hasSensor())
                 result = dfRobotLarkSensor.runOnce();
+            if (dfRobotGravitySensor.hasSensor())
+                result = dfRobotGravitySensor.runOnce();
             if (bmp085Sensor.hasSensor())
                 result = bmp085Sensor.runOnce();
             if (bmp280Sensor.hasSensor())
@@ -159,9 +161,17 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = max17048Sensor.runOnce();
             if (cgRadSens.hasSensor())
                 result = cgRadSens.runOnce();
+                // this only works on the wismesh hub with the solar option. This is not an I2C sensor, so we don't need the
+                // sensormap here.
+#ifdef HAS_RAKPROT
+
+            result = rak9154Sensor.runOnce();
+#endif
 #endif
         }
-        return result;
+        // it's possible to have this module enabled, only for displaying values on the screen.
+        // therefore, we should only enable the sensor loop if measurement is also enabled
+        return result == UINT32_MAX ? disable() : setStartDelay();
     } else {
         // if we somehow got to a second run of this module with measurement disabled, then just wait forever
         if (!moduleConfig.telemetry.environment_measurement_enabled) {
@@ -278,8 +288,18 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
     static bool scrollingDown = true;
     static uint32_t lastScrollTime = millis();
 
-    // Draw up to 3 sensor data lines
-    int linesToShow = min(3, sensorCount);
+    // Determine how many lines we can fit on display
+    // Calculated once only: display dimensions don't change during runtime.
+    static int maxLines = 0;
+    if (!maxLines) {
+        const int16_t paddingTop = _fontHeight(FONT_SMALL); // Heading text
+        const int16_t paddingBottom = 8;                    // Indicator dots
+        maxLines = (display->getHeight() - paddingTop - paddingBottom) / _fontHeight(FONT_SMALL);
+        assert(maxLines > 0);
+    }
+
+    // Draw as many lines of data as we can fit
+    int linesToShow = min(maxLines, sensorCount);
     for (int i = 0; i < linesToShow; i++) {
         int index = (scrollOffset + i) % sensorCount;
         display->drawString(x, y += _fontHeight(FONT_SMALL), sensorData[index]);
@@ -356,6 +376,10 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
 #else
     if (dfRobotLarkSensor.hasSensor()) {
         valid = valid && dfRobotLarkSensor.getMetrics(m);
+        hasSensor = true;
+    }
+    if (dfRobotGravitySensor.hasSensor()) {
+        valid = valid && dfRobotGravitySensor.getMetrics(m);
         hasSensor = true;
     }
     if (sht31Sensor.hasSensor()) {
@@ -462,6 +486,10 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
         valid = valid && cgRadSens.getMetrics(m);
         hasSensor = true;
     }
+#ifdef HAS_RAKPROT
+    valid = valid && rak9154Sensor.getMetrics(m);
+    hasSensor = true;
+#endif
 #endif
     return valid && hasSensor;
 }
@@ -556,6 +584,11 @@ AdminMessageHandleResult EnvironmentTelemetryModule::handleAdminMessageForModule
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR_EXTERNAL
     if (dfRobotLarkSensor.hasSensor()) {
         result = dfRobotLarkSensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (dfRobotGravitySensor.hasSensor()) {
+        result = dfRobotGravitySensor.handleAdminMessage(mp, request, response);
         if (result != AdminMessageHandleResult::NOT_HANDLED)
             return result;
     }

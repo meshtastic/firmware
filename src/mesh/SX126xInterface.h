@@ -28,8 +28,11 @@ template <class T> class SX126xInterface : public RadioLibInterface
 
     bool isIRQPending() override { return lora.getIrqFlags() != 0; }
 
+    void setTCXOVoltage(float voltage) { tcxoVoltage = voltage; }
+
   protected:
     float currentLimit = 140; // Higher OCP limit for SX126x PA
+    float tcxoVoltage = 0.0;
 
     /**
      * Specific module instance

@@ -81,7 +81,9 @@ typedef enum _meshtastic_TelemetrySensorType {
     /* ClimateGuard RadSens, radiation, Geiger-Muller Tube */
     meshtastic_TelemetrySensorType_RADSENS = 33,
     /* High accuracy current and voltage */
-    meshtastic_TelemetrySensorType_INA226 = 34
+    meshtastic_TelemetrySensorType_INA226 = 34,
+    /* DFRobot Gravity tipping bucket rain gauge */
+    meshtastic_TelemetrySensorType_DFROBOT_RAIN = 35
 } meshtastic_TelemetrySensorType;
 
 /* Struct definitions */
@@ -162,6 +164,12 @@ typedef struct _meshtastic_EnvironmentMetrics {
     /* Radiation in µR/h */
     bool has_radiation;
     float radiation;
+    /* Rainfall in the last hour in mm */
+    bool has_rainfall_1h;
+    float rainfall_1h;
+    /* Rainfall in the last 24 hours in mm */
+    bool has_rainfall_24h;
+    float rainfall_24h;
 } meshtastic_EnvironmentMetrics;
 
 /* Power Metrics (voltage / current / etc) */
@@ -306,8 +314,8 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _meshtastic_TelemetrySensorType_MIN meshtastic_TelemetrySensorType_SENSOR_UNSET
-#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_INA226
-#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_INA226+1))
+#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_DFROBOT_RAIN
+#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_DFROBOT_RAIN+1))
 
 
 
@@ -320,7 +328,7 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define meshtastic_DeviceMetrics_init_default    {false, 0, false, 0, false, 0, false, 0, false, 0}
-#define meshtastic_EnvironmentMetrics_init_default {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
+#define meshtastic_EnvironmentMetrics_init_default {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_PowerMetrics_init_default     {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_AirQualityMetrics_init_default {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_LocalStats_init_default       {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
@@ -328,7 +336,7 @@ extern "C" {
 #define meshtastic_Telemetry_init_default        {0, 0, {meshtastic_DeviceMetrics_init_default}}
 #define meshtastic_Nau7802Config_init_default    {0, 0}
 #define meshtastic_DeviceMetrics_init_zero       {false, 0, false, 0, false, 0, false, 0, false, 0}
-#define meshtastic_EnvironmentMetrics_init_zero  {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
+#define meshtastic_EnvironmentMetrics_init_zero  {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_PowerMetrics_init_zero        {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_AirQualityMetrics_init_zero   {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_LocalStats_init_zero          {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
@@ -360,6 +368,8 @@ extern "C" {
 #define meshtastic_EnvironmentMetrics_wind_gust_tag 16
 #define meshtastic_EnvironmentMetrics_wind_lull_tag 17
 #define meshtastic_EnvironmentMetrics_radiation_tag 18
+#define meshtastic_EnvironmentMetrics_rainfall_1h_tag 19
+#define meshtastic_EnvironmentMetrics_rainfall_24h_tag 20
 #define meshtastic_PowerMetrics_ch1_voltage_tag  1
 #define meshtastic_PowerMetrics_ch1_current_tag  2
 #define meshtastic_PowerMetrics_ch2_voltage_tag  3
@@ -431,7 +441,9 @@ X(a, STATIC,   OPTIONAL, FLOAT,    wind_speed,       14) \
 X(a, STATIC,   OPTIONAL, FLOAT,    weight,           15) \
 X(a, STATIC,   OPTIONAL, FLOAT,    wind_gust,        16) \
 X(a, STATIC,   OPTIONAL, FLOAT,    wind_lull,        17) \
-X(a, STATIC,   OPTIONAL, FLOAT,    radiation,        18)
+X(a, STATIC,   OPTIONAL, FLOAT,    radiation,        18) \
+X(a, STATIC,   OPTIONAL, FLOAT,    rainfall_1h,      19) \
+X(a, STATIC,   OPTIONAL, FLOAT,    rainfall_24h,     20)
 #define meshtastic_EnvironmentMetrics_CALLBACK NULL
 #define meshtastic_EnvironmentMetrics_DEFAULT NULL
 
@@ -530,12 +542,12 @@ extern const pb_msgdesc_t meshtastic_Nau7802Config_msg;
 #define MESHTASTIC_MESHTASTIC_TELEMETRY_PB_H_MAX_SIZE meshtastic_Telemetry_size
 #define meshtastic_AirQualityMetrics_size        78
 #define meshtastic_DeviceMetrics_size            27
-#define meshtastic_EnvironmentMetrics_size       91
+#define meshtastic_EnvironmentMetrics_size       103
 #define meshtastic_HealthMetrics_size            11
 #define meshtastic_LocalStats_size               60
 #define meshtastic_Nau7802Config_size            16
 #define meshtastic_PowerMetrics_size             30
-#define meshtastic_Telemetry_size                98
+#define meshtastic_Telemetry_size                110
 
 #ifdef __cplusplus
 } /* extern "C" */

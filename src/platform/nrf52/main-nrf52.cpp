@@ -1,6 +1,7 @@
 #include "configuration.h"
 #include <Adafruit_TinyUSB.h>
 #include <Adafruit_nRFCrypto.h>
+#include <InternalFileSystem.h>
 #include <SPI.h>
 #include <Wire.h>
 #include <assert.h>
@@ -130,6 +131,54 @@ int printf(const char *fmt, ...)
     return res;
 }
 
+namespace
+{
+constexpr uint8_t NRF52_MAGIC_LFS_IS_CORRUPT = 0xF5;
+constexpr uint32_t MULTIPLE_CORRUPTION_DELAY_MILLIS = 20 * 60 * 1000;
+static unsigned long millis_until_formatting_again = 0;
+
+// Report the critical error from loop(), giving a chance for the screen to be initialized first.
+inline void reportLittleFSCorruptionOnce()
+{
+    static bool report_corruption = !!millis_until_formatting_again;
+    if (report_corruption) {
+        report_corruption = false;
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE);
+    }
+}
+} // namespace
+
+void preFSBegin()
+{
+    // The GPREGRET register keeps its value across warm boots. Check that this is a warm boot and, if GPREGRET
+    // is set to NRF52_MAGIC_LFS_IS_CORRUPT, format LittleFS.
+    if (!(NRF_POWER->RESETREAS == 0 && NRF_POWER->GPREGRET == NRF52_MAGIC_LFS_IS_CORRUPT))
+        return;
+    NRF_POWER->GPREGRET = 0;
+    millis_until_formatting_again = millis() + MULTIPLE_CORRUPTION_DELAY_MILLIS;
+    InternalFS.format();
+    LOG_INFO("LittleFS format complete; restoring default settings");
+}
+
+extern "C" void lfs_assert(const char *reason)
+{
+    LOG_ERROR("LittleFS corruption detected: %s", reason);
+    if (millis_until_formatting_again > millis()) {
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE);
+        const long millis_remain = millis_until_formatting_again - millis();
+        LOG_WARN("Pausing %d seconds to avoid wear on flash storage", millis_remain / 1000);
+        delay(millis_remain);
+    }
+    LOG_INFO("Rebooting to format LittleFS");
+    delay(500); // Give the serial port a bit of time to output that last message.
+    // Try setting GPREGRET with the SoftDevice first. If that fails (perhaps because the SD hasn't been initialize yet) then set
+    // NRF_POWER->GPREGRET directly.
+    if (!(sd_power_gpregret_clr(0, 0xFF) == NRF_SUCCESS && sd_power_gpregret_set(0, NRF52_MAGIC_LFS_IS_CORRUPT) == NRF_SUCCESS)) {
+        NRF_POWER->GPREGRET = NRF52_MAGIC_LFS_IS_CORRUPT;
+    }
+    NVIC_SystemReset();
+}
+
 void checkSDEvents()
 {
     if (useSoftDevice) {
@@ -154,6 +203,7 @@ void checkSDEvents()
 void nrf52Loop()
 {
     checkSDEvents();
+    reportLittleFSCorruptionOnce();
 }
 
 #ifdef USE_SEMIHOSTING
