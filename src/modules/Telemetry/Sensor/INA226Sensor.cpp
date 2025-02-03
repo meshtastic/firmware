@@ -40,14 +40,14 @@ bool INA226Sensor::getMetrics(meshtastic_Telemetry *measurement)
     measurement->variant.environment_metrics.has_current = true;
 
     // mV conversion to V
-    measurement->variant.environment_metrics.voltage = ina226.getBusVoltage() / 1000;
+    measurement->variant.environment_metrics.voltage = ina226.getBusVoltage();
     measurement->variant.environment_metrics.current = ina226.getCurrent_mA();
     return true;
 }
 
 uint16_t INA226Sensor::getBusVoltageMv()
 {
-    return lround(ina226.getBusVoltage());
+    return lround(ina226.getBusVoltage() * 1000);
 }
 
 int16_t INA226Sensor::getCurrentMa()
