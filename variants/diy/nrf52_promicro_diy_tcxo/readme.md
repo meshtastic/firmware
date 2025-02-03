@@ -1,4 +1,4 @@
-## Notes
+# Notes
 
 ### General
 The pinout is contained in the variant.h file, and a [generic schematic](./Schematic_Pro-Micro_Pinouts%202024-12-14.pdf) is located in this directory. 
@@ -66,7 +66,7 @@ The Semtech default, the values are (taken from [here](https://github.com/Lora-n
 
 <details>
 
-```
+```cpp
 	.rfswitch = {
 		.enable = LR11XX_SYSTEM_RFSW0_HIGH | LR11XX_SYSTEM_RFSW1_HIGH | LR11XX_SYSTEM_RFSW2_HIGH,
 		.standby = 0,
@@ -93,7 +93,7 @@ It is evident from the tables above that there is no real consistency to those p
 ##### An experiment
 Tests were conducted in each of the three configurations between a known-good SX1262 and an E80, passing packets in both directions and recording the reported RSSI. The E80 was set at 22db and 14db to activate the high and low power settings respectively. The results are shown in the chart below.
 
-![Chart showing RSSI readings in each configuration and setting](./E80_RSSI_per_case.png)
+![Chart showing RSSI readings in each configuration and setting](./E80_RSSI_per_case.webp)
 
 #### Conclusion
 The RF switching is based on the code example given. Logically, this shows the DIO5 and DIO6 are swapped compared to the reference design.
