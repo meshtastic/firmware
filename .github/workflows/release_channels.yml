@@ -37,9 +37,9 @@ jobs:
         ${{ contains(github.event.release.name, 'Beta') && 'beta' || contains(github.event.release.name, 'Alpha') && 'alpha' }}
     secrets: inherit
 
-  # hook-copr:
-  #   uses: ./.github/workflows/hook_copr.yml
-  #   with:
-  #     copr_project: |-
-  #       ${{ contains(github.event.release.name, 'Beta') && 'beta' || contains(github.event.release.name, 'Alpha') && 'alpha' }}
-  #   secrets: inherit
+  hook-copr:
+    uses: ./.github/workflows/hook_copr.yml
+    with:
+      copr_project: |-
+        ${{ contains(github.event.release.name, 'Beta') && 'beta' || contains(github.event.release.name, 'Alpha') && 'alpha' }}
+    secrets: inherit
