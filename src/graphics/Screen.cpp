@@ -2670,7 +2670,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     std::string analogClock = "";
 
     // Show uptime as days, hours, minutes OR seconds
-    std::string uptime = "Uptime: ";
+    std::string uptime = "Up: ";
     uptime += screen->drawTimeDelta(days, hours, minutes, seconds);
 
     uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true); // Display local timezone
