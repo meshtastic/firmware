@@ -22,7 +22,6 @@
  * THE SOFTWARE.
  */
 
-#include <iostream>
 #include <math.h>
 #include <sstream>
 #include <stdio.h>
