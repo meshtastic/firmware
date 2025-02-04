@@ -1489,22 +1489,21 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
                 bearingToOther -= myHeading;
             screen->drawNodeHeading(display, compassX, compassY, compassDiam, bearingToOther);
 
-            float bearingToOtherDegrees = (bearingToOther < 0) ? bearingToOther + 2*PI : bearingToOther;
+            float bearingToOtherDegrees = (bearingToOther < 0) ? bearingToOther + 2 * PI : bearingToOther;
             bearingToOtherDegrees = bearingToOtherDegrees * 180 / PI;
 
             if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
                 if (d < (2 * MILES_TO_FEET))
                     snprintf(distStr, sizeof(distStr), "%.0fft   %.0f°", d * METERS_TO_FEET, bearingToOtherDegrees);
                 else
-                    snprintf(distStr, sizeof(distStr), "%.1fmi   %.0f°", d * METERS_TO_FEET / MILES_TO_FEET, bearingToOtherDegrees);
+                    snprintf(distStr, sizeof(distStr), "%.1fmi   %.0f°", d * METERS_TO_FEET / MILES_TO_FEET,
+                             bearingToOtherDegrees);
             } else {
                 if (d < 2000)
                     snprintf(distStr, sizeof(distStr), "%.0fm   %.0f°", d, bearingToOtherDegrees);
                 else
                     snprintf(distStr, sizeof(distStr), "%.1fkm   %.0f°", d / 1000, bearingToOtherDegrees);
             }
-
-
         }
     }
     if (!hasNodeHeading) {
@@ -2655,12 +2654,6 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     //    if (config.display.heading_bold)
     //        display->drawString(x + SCREEN_WIDTH - display->getStringWidth(mode) - 1, y, mode);
 
-    // Display Channel Utilization
-    char chUtil[13];
-    snprintf(chUtil, sizeof(chUtil), "ChUtil %2.0f%%", airTime->channelUtilizationPercent());
-    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(chUtil), y, chUtil);
-
-    // Line 2
     uint32_t currentMillis = millis();
     uint32_t seconds = currentMillis / 1000;
     uint32_t minutes = seconds / 60;
@@ -2695,10 +2688,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
 
         char timebuf[12];
 
-        // Default to 24-hour clock, protobuf update will allow user to elect 12-hour clock
-        int clock_12or24 = 12;
-
-        if (clock_12or24 == 12) {
+        if (config.display.use_12h_clock) {
             std::string meridiem = "am";
             if (hour >= 12) {
                 if (hour > 12)
@@ -2715,11 +2705,16 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
         analogClock += timebuf;
     }
 
-    // display->drawString(x, y + FONT_HEIGHT_SMALL * 1, analogClock.c_str());
+    // Line 1
+    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(uptime.c_str()), y, uptime.c_str());
+
+    // Line 2
     display->drawString(x, y + FONT_HEIGHT_SMALL * 1, analogClock.c_str());
 
-    // display->drawString(x, y + FONT_HEIGHT_SMALL * 2, uptime.c_str());
-    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(uptime.c_str()), y + FONT_HEIGHT_SMALL * 1, uptime.c_str());
+    // Display Channel Utilization
+    char chUtil[13];
+    snprintf(chUtil, sizeof(chUtil), "ChUtil %2.0f%%", airTime->channelUtilizationPercent());
+    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(chUtil), y + FONT_HEIGHT_SMALL * 1, chUtil);
 
 #if HAS_GPS
     if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
