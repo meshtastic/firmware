@@ -2644,11 +2644,16 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
             display->drawString(x + 1, y, String("USB"));
     }
 
-    auto mode = DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, true);
+    //    auto mode = DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, true);
 
-    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(mode), y, mode);
-    if (config.display.heading_bold)
-        display->drawString(x + SCREEN_WIDTH - display->getStringWidth(mode) - 1, y, mode);
+    //    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(mode), y, mode);
+    //    if (config.display.heading_bold)
+    //        display->drawString(x + SCREEN_WIDTH - display->getStringWidth(mode) - 1, y, mode);
+
+    // Display Channel Utilization
+    char chUtil[13];
+    snprintf(chUtil, sizeof(chUtil), "ChUtil %2.0f%%", airTime->channelUtilizationPercent());
+    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(chUtil), y, chUtil);
 
     // Line 2
     uint32_t currentMillis = millis();
@@ -2663,8 +2668,12 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
 
     display->setColor(WHITE);
 
+    // Setup string to assemble analogClock string
+    std::string analogClock = "";
+
     // Show uptime as days, hours, minutes OR seconds
-    std::string uptime = screen->drawTimeDelta(days, hours, minutes, seconds);
+    std::string uptime = "Uptime: ";
+    uptime += screen->drawTimeDelta(days, hours, minutes, seconds);
 
     uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true); // Display local timezone
     if (rtc_sec > 0) {
@@ -2679,17 +2688,34 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
         int min = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
         int sec = (hms % SEC_PER_HOUR) % SEC_PER_MIN; // or hms % SEC_PER_MIN
 
-        char timebuf[10];
-        snprintf(timebuf, sizeof(timebuf), " %02d:%02d:%02d", hour, min, sec);
-        uptime += timebuf;
+        char timebuf[12];
+
+        // Default to 24-hour clock, protobuf update will allow user to elect 12-hour clock
+        int clock_12or24 = 12;
+
+        if (clock_12or24 == 12) {
+            std::string meridiem = "am";
+            if (hour >= 12) {
+                if (hour > 12)
+                    hour -= 12;
+                meridiem = "pm";
+            }
+            if (hour == 00) {
+                hour = 12;
+            }
+            snprintf(timebuf, sizeof(timebuf), "%d:%02d:%02d%s", hour, min, sec, meridiem.c_str());
+        } else {
+            snprintf(timebuf, sizeof(timebuf), "%02d:%02d:%02d", hour, min, sec);
+        }
+        analogClock += timebuf;
     }
 
-    display->drawString(x, y + FONT_HEIGHT_SMALL * 1, uptime.c_str());
+    // display->drawString(x, y + FONT_HEIGHT_SMALL * 1, analogClock.c_str());
+    display->drawString(x, y + FONT_HEIGHT_SMALL * 1, analogClock.c_str());
 
-    // Display Channel Utilization
-    char chUtil[13];
-    snprintf(chUtil, sizeof(chUtil), "ChUtil %2.0f%%", airTime->channelUtilizationPercent());
-    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(chUtil), y + FONT_HEIGHT_SMALL * 1, chUtil);
+    // display->drawString(x, y + FONT_HEIGHT_SMALL * 2, uptime.c_str());
+    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(uptime.c_str()), y + FONT_HEIGHT_SMALL * 1, uptime.c_str());
+
 #if HAS_GPS
     if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
         // Line 3
