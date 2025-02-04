@@ -502,93 +502,92 @@ static int lfs_dir_commit(lfs_t *lfs, lfs_dir_t *dir, const struct lfs_region *r
     bool relocated = false;
 
     while (true) {
-        if (true) {
-            int err = lfs_bd_erase(lfs, dir->pair[0]);
-            if (err) {
-                if (err == LFS_ERR_CORRUPT) {
-                    goto relocate;
-                }
-                return err;
-            }
 
-            uint32_t crc = 0xffffffff;
-            lfs_dir_tole32(&dir->d);
-            lfs_crc(&crc, &dir->d, sizeof(dir->d));
-            err = lfs_bd_prog(lfs, dir->pair[0], 0, &dir->d, sizeof(dir->d));
-            lfs_dir_fromle32(&dir->d);
-            if (err) {
-                if (err == LFS_ERR_CORRUPT) {
-                    goto relocate;
-                }
-                return err;
-            }
-
-            int i = 0;
-            lfs_off_t oldoff = sizeof(dir->d);
-            lfs_off_t newoff = sizeof(dir->d);
-            while (newoff < (0x7fffffff & dir->d.size) - 4) {
-                if (i < count && regions[i].oldoff == oldoff) {
-                    lfs_crc(&crc, regions[i].newdata, regions[i].newlen);
-                    err = lfs_bd_prog(lfs, dir->pair[0], newoff, regions[i].newdata, regions[i].newlen);
-                    if (err) {
-                        if (err == LFS_ERR_CORRUPT) {
-                            goto relocate;
-                        }
-                        return err;
-                    }
-
-                    oldoff += regions[i].oldlen;
-                    newoff += regions[i].newlen;
-                    i += 1;
-                } else {
-                    uint8_t data;
-                    err = lfs_bd_read(lfs, oldpair[1], oldoff, &data, 1);
-                    if (err) {
-                        return err;
-                    }
-
-                    lfs_crc(&crc, &data, 1);
-                    err = lfs_bd_prog(lfs, dir->pair[0], newoff, &data, 1);
-                    if (err) {
-                        if (err == LFS_ERR_CORRUPT) {
-                            goto relocate;
-                        }
-                        return err;
-                    }
-
-                    oldoff += 1;
-                    newoff += 1;
-                }
-            }
-
-            crc = lfs_tole32(crc);
-            err = lfs_bd_prog(lfs, dir->pair[0], newoff, &crc, 4);
-            crc = lfs_fromle32(crc);
-            if (err) {
-                if (err == LFS_ERR_CORRUPT) {
-                    goto relocate;
-                }
-                return err;
-            }
-
-            err = lfs_bd_sync(lfs);
-            if (err) {
-                if (err == LFS_ERR_CORRUPT) {
-                    goto relocate;
-                }
-                return err;
-            }
-
-            // successful commit, check checksum to make sure
-            uint32_t ncrc = 0xffffffff;
-            err = lfs_bd_crc(lfs, dir->pair[0], 0, (0x7fffffff & dir->d.size) - 4, &ncrc);
-            if (err) {
-                return err;
-            }
-
-            if (ncrc != crc) {
+        int err = lfs_bd_erase(lfs, dir->pair[0]);
+        if (err) {
+            if (err == LFS_ERR_CORRUPT) {
                 goto relocate;
             }
+            return err;
+        }
+
+        uint32_t crc = 0xffffffff;
+        lfs_dir_tole32(&dir->d);
+        lfs_crc(&crc, &dir->d, sizeof(dir->d));
+        err = lfs_bd_prog(lfs, dir->pair[0], 0, &dir->d, sizeof(dir->d));
+        lfs_dir_fromle32(&dir->d);
+        if (err) {
+            if (err == LFS_ERR_CORRUPT) {
+                goto relocate;
+            }
+            return err;
+        }
+
+        int i = 0;
+        lfs_off_t oldoff = sizeof(dir->d);
+        lfs_off_t newoff = sizeof(dir->d);
+        while (newoff < (0x7fffffff & dir->d.size) - 4) {
+            if (i < count && regions[i].oldoff == oldoff) {
+                lfs_crc(&crc, regions[i].newdata, regions[i].newlen);
+                err = lfs_bd_prog(lfs, dir->pair[0], newoff, regions[i].newdata, regions[i].newlen);
+                if (err) {
+                    if (err == LFS_ERR_CORRUPT) {
+                        goto relocate;
+                    }
+                    return err;
+                }
+
+                oldoff += regions[i].oldlen;
+                newoff += regions[i].newlen;
+                i += 1;
+            } else {
+                uint8_t data;
+                err = lfs_bd_read(lfs, oldpair[1], oldoff, &data, 1);
+                if (err) {
+                    return err;
+                }
+
+                lfs_crc(&crc, &data, 1);
+                err = lfs_bd_prog(lfs, dir->pair[0], newoff, &data, 1);
+                if (err) {
+                    if (err == LFS_ERR_CORRUPT) {
+                        goto relocate;
+                    }
+                    return err;
+                }
+
+                oldoff += 1;
+                newoff += 1;
+            }
+        }
+
+        crc = lfs_tole32(crc);
+        err = lfs_bd_prog(lfs, dir->pair[0], newoff, &crc, 4);
+        crc = lfs_fromle32(crc);
+        if (err) {
+            if (err == LFS_ERR_CORRUPT) {
+                goto relocate;
+            }
+            return err;
+        }
+
+        err = lfs_bd_sync(lfs);
+        if (err) {
+            if (err == LFS_ERR_CORRUPT) {
+                goto relocate;
+            }
+            return err;
+        }
+
+        // successful commit, check checksum to make sure
+        uint32_t ncrc = 0xffffffff;
+        err = lfs_bd_crc(lfs, dir->pair[0], 0, (0x7fffffff & dir->d.size) - 4, &ncrc);
+        if (err) {
+            return err;
+        }
+
+        if (ncrc != crc) {
+            goto relocate;
         }
 
         break;
@@ -607,7 +606,7 @@ static int lfs_dir_commit(lfs_t *lfs, lfs_dir_t *dir, const struct lfs_region *r
         }
 
         // relocate half of pair
-        int err = lfs_alloc(lfs, &dir->pair[0]);
+        err = lfs_alloc(lfs, &dir->pair[0]);
         if (err) {
             return err;
         }

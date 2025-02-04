@@ -23,7 +23,6 @@
  */
 
 #include "STM32_LittleFS.h"
-#include "littlefs/lfs.h"
 #include <Arduino.h>
 
 #define rtos_malloc malloc

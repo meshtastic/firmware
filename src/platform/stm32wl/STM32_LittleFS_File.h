@@ -25,6 +25,8 @@
 #ifndef STM32_LITTLEFS_FILE_H_
 #define STM32_LITTLEFS_FILE_H_
 
+#include "littlefs/lfs.h"
+
 // Forward declaration
 class STM32_LittleFS;
 
