@@ -772,6 +772,9 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
         setPowerPMU(true);                                        // Power (PMU): on
         writePinStandby(false);                                   // Standby (pin): awake (not standby)
         setPowerUBLOX(true);                                      // Standby (UBLOX): awake
+#ifdef GNSS_AIROHA
+        lastFixStartMsec = 0;
+#endif
         break;
 
     case GPS_SOFTSLEEP:
