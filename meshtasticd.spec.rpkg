@@ -21,7 +21,7 @@ Summary:        Meshtastic daemon for communicating with Meshtastic devices
 License:        GPL-3.0
 URL:            https://github.com/meshtastic/firmware
 Source0:        {{{ git_dir_pack }}}
-Source1:        https://github.com/meshtastic/web/releases/download/latest/build.tar
+Source1:        https://github.com/meshtastic/web/releases/latest/download/build.tar
 
 BuildRequires: systemd-rpm-macros
 BuildRequires: python3-devel
