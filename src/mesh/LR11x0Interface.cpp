@@ -20,12 +20,18 @@ static const Module::RfSwitchMode_t rfswitch_table[] = {
 
 // Particular boards might define a different max power based on what their hardware can do, default to max power output if not
 // specified (may be dangerous if using external PA and LR11x0 power config forgotten)
+#if ARCH_PORTDUINO
+#define LR1110_MAX_POWER settingsMap[lr1110_max_power]
+#endif
 #ifndef LR1110_MAX_POWER
 #define LR1110_MAX_POWER 22
 #endif
 
 // the 2.4G part maxes at 13dBm
 
+#if ARCH_PORTDUINO
+#define LR1120_MAX_POWER settingsMap[lr1120_max_power]
+#endif
 #ifndef LR1120_MAX_POWER
 #define LR1120_MAX_POWER 13
 #endif

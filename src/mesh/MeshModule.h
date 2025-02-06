@@ -9,6 +9,9 @@
 #include <OLEDDisplayUi.h>
 #endif
 
+#define MESHMODULE_MIN_BROADCAST_DELAY_MS 30 * 1000 // Min. delay after boot before sending first broadcast by any module
+#define MESHMODULE_BROADCAST_SPACING_MS 15 * 1000   // Initial spacing between broadcasts of different modules
+
 /** handleReceived return enumeration
  *
  * Use ProcessMessage::CONTINUE to allows other modules to process a message.
@@ -118,6 +121,12 @@ class MeshModule
      * plumodulegin at a time.
      */
     static const meshtastic_MeshPacket *currentRequest;
+
+    // We keep track of the number of modules that send a periodic broadcast to schedule them spaced out over time
+    static uint8_t numPeriodicModules;
+
+    // Set the start delay for module that broadcasts periodically
+    int32_t setStartDelay();
 
     /**
      * If your handler wants to send a response, simply set currentReply and it will be sent at the end of response handling.

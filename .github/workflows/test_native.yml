@@ -90,7 +90,7 @@ jobs:
         run: sed -i 's/-DBUILD_EPOCH=$UNIX_TIME/#-DBUILD_EPOCH=$UNIX_TIME/' platformio.ini
 
       - name: PlatformIO Tests
-        run: platformio test -e coverage --junit-output-path testreport.xml
+        run: platformio test -e coverage -v --junit-output-path testreport.xml
 
       - name: Save test results
         if: always() # run this step even if previous step failed

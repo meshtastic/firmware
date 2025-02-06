@@ -71,4 +71,4 @@ jobs:
       - name: Publish with dput
         if: ${{ github.event_name != 'pull_request_target' && github.event_name != 'pull_request' }}
         run: |
-          dput ppa:meshtastic/${{ inputs.ppa_repo }} meshtasticd_${{ steps.version.outputs.deb }}~${{ inputs.series }}_source.changes
+          dput ${{ inputs.ppa_repo }} meshtasticd_${{ steps.version.outputs.deb }}~${{ inputs.series }}_source.changes
