@@ -97,7 +97,7 @@ class STM32_LittleFS
 #define PRINT_LFS_ERR(_err)                                                                                                      \
     do {                                                                                                                         \
         if (_err) {                                                                                                              \
-            VERIFY_MESS((long int)_err, dbg_strerr_lfs);                                                                         \
+            printf("%s:%d, LFS error: %d\n", __FILE__, __LINE__, _err);                                                          \
         }                                                                                                                        \
     } while (0) // LFS_ERR are of type int, VERIFY_MESS expects long_int
 
