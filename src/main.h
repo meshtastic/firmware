@@ -49,6 +49,11 @@ extern Adafruit_DRV2605 drv;
 extern AudioThread *audioThread;
 #endif
 
+#ifdef HAS_UDP_MULTICAST
+#include "mesh/udp/UdpMulticastThread.h"
+extern UdpMulticastThread *udpThread;
+#endif
+
 // Global Screen singleton.
 extern graphics::Screen *screen;
 

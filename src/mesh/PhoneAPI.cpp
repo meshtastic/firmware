@@ -12,6 +12,7 @@
 #include "PhoneAPI.h"
 #include "PowerFSM.h"
 #include "RadioInterface.h"
+#include "Router.h"
 #include "SPILock.h"
 #include "TypeConversions.h"
 #include "main.h"
