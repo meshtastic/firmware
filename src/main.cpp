@@ -115,7 +115,6 @@ AccelerometerThread *accelerometerThread = nullptr;
 AudioThread *audioThread = nullptr;
 #endif
 
-
 #if HAS_TFT
 #include "api/PacketAPI.h"
 #include "comms/PacketClient.h"
