@@ -1,3 +1,6 @@
+#ifndef HAS_TFT // for TFT-UI the definitions are in device-ui
+#define BUTTON_PIN 0
+
 // ST7789 TFT LCD
 #define ST7789_CS 12
 #define ST7789_RS 11  // DC
@@ -19,6 +22,7 @@
 #define SCREEN_ROTATE
 #define SCREEN_TRANSITION_FRAMERATE 5
 #define BRIGHTNESS_DEFAULT 130 // Medium Low Brightness
+#endif
 
 #define HAS_TOUCHSCREEN 1
 #define SCREEN_TOUCH_INT 16
