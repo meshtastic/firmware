@@ -340,6 +340,10 @@ void printPacket(const char *prefix, const meshtastic_MeshPacket *p)
         out += DEBUG_PORT.mt_sprintf(" via MQTT");
     if (p->hop_start != 0)
         out += DEBUG_PORT.mt_sprintf(" hopStart=%d", p->hop_start);
+    if (p->next_hop != 0)
+        out += DEBUG_PORT.mt_sprintf(" nextHop=0x%x", p->next_hop);
+    if (p->relay_node != 0)
+        out += DEBUG_PORT.mt_sprintf(" relay=0x%x", p->relay_node);
     if (p->priority != 0)
         out += DEBUG_PORT.mt_sprintf(" priority=%d", p->priority);
 
@@ -639,8 +643,8 @@ size_t RadioInterface::beginSending(meshtastic_MeshPacket *p)
     radioBuffer.header.to = p->to;
     radioBuffer.header.id = p->id;
     radioBuffer.header.channel = p->channel;
-    radioBuffer.header.next_hop = 0;   // *** For future use ***
-    radioBuffer.header.relay_node = 0; // *** For future use ***
+    radioBuffer.header.next_hop = p->next_hop;
+    radioBuffer.header.relay_node = p->relay_node;
     if (p->hop_limit > HOP_MAX) {
         LOG_WARN("hop limit %d is too high, setting to %d", p->hop_limit, HOP_RELIABLE);
         p->hop_limit = HOP_RELIABLE;

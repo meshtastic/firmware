@@ -116,6 +116,9 @@ class NodeDB
     /// @return our node number
     NodeNum getNodeNum() { return myNodeInfo.my_node_num; }
 
+    // @return last byte of a NodeNum, 0xFF if it ended at 0x00
+    uint8_t getLastByteOfNodeNum(NodeNum num) { return (uint8_t)((num & 0xFF) ? (num & 0xFF) : 0xFF); }
+
     /// if returns false, that means our node should send a DenyNodeNum response.  If true, we think the number is okay for use
     // bool handleWantNodeNum(NodeNum n);
 
