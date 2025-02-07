@@ -238,7 +238,7 @@ void EInkDynamicDisplay::checkRateLimiting()
 
     // Skip update: too soon for BACKGROUND
     if (frameFlags == BACKGROUND) {
-        if (Throttle::isWithinTimespanMs(previousRunMs, EINK_LIMIT_RATE_BACKGROUND_SEC * 1000)) {
+        if (Throttle::isWithinTimespanMs(previousRunMs, 30000)) {
             refresh = SKIPPED;
             reason = EXCEEDED_RATELIMIT_FULL;
             return;
@@ -251,7 +251,7 @@ void EInkDynamicDisplay::checkRateLimiting()
 
     // Skip update: too soon for RESPONSIVE
     if (frameFlags & RESPONSIVE) {
-        if (Throttle::isWithinTimespanMs(previousRunMs, EINK_LIMIT_RATE_RESPONSIVE_SEC * 1000)) {
+        if (Throttle::isWithinTimespanMs(previousRunMs, 1000)) {
             refresh = SKIPPED;
             reason = EXCEEDED_RATELIMIT_FAST;
             LOG_DEBUG("refresh=SKIPPED, reason=EXCEEDED_RATELIMIT_FAST, frameFlags=0x%x", frameFlags);
