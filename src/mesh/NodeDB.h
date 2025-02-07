@@ -13,6 +13,10 @@
 #include "mesh-pb-constants.h"
 #include "mesh/generated/meshtastic/mesh.pb.h" // For CriticalErrorCode
 
+#if ARCH_PORTDUINO
+#include "PortduinoGlue.h"
+#endif
+
 /*
 DeviceState versions used to be defined in the .proto file but really only this function cares.  So changed to a
 #define here.
@@ -37,13 +41,13 @@ extern meshtastic_LocalModuleConfig moduleConfig;
 extern meshtastic_User &owner;
 extern meshtastic_Position localPosition;
 
-static const char *deviceStateFileName = "/prefs/device.proto";
-static const char *legacyPrefFileName = "/prefs/db.proto";
-static const char *nodeDatabaseFileName = "/prefs/nodes.proto";
-static const char *configFileName = "/prefs/config.proto";
-static const char *uiconfigFileName = "/prefs/uiconfig.proto";
-static const char *moduleConfigFileName = "/prefs/module.proto";
-static const char *channelFileName = "/prefs/channels.proto";
+static constexpr const char *deviceStateFileName = "/prefs/device.proto";
+static constexpr const char *legacyPrefFileName = "/prefs/db.proto";
+static constexpr const char *nodeDatabaseFileName = "/prefs/nodes.proto";
+static constexpr const char *configFileName = "/prefs/config.proto";
+static constexpr const char *uiconfigFileName = "/prefs/uiconfig.proto";
+static constexpr const char *moduleConfigFileName = "/prefs/module.proto";
+static constexpr const char *channelFileName = "/prefs/channels.proto";
 
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
 uint32_t sinceLastSeen(const meshtastic_NodeInfoLite *n);
