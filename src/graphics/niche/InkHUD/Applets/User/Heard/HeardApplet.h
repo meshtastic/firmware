@@ -3,7 +3,7 @@
 /*
 
 Shows a list of all nodes (recently heard or not), sorted by time last heard.
-Most of the work is done by the InkHUD::ChronoListApplet base class
+Most of the work is done by the InkHUD::NodeListApplet base class
 
 */
 
@@ -11,25 +11,23 @@ Most of the work is done by the InkHUD::ChronoListApplet base class
 
 #include "configuration.h"
 
-#include "graphics/niche/InkHUD/Applets/Bases/ChronoList/ChronoListApplet.h"
+#include "graphics/niche/InkHUD/Applets/Bases/NodeList/NodeListApplet.h"
 
 namespace NicheGraphics::InkHUD
 {
 
-class Applet;
-
-class HeardApplet : public ChronoListApplet
+class HeardApplet : public NodeListApplet
 {
   public:
-    HeardApplet() : ChronoListApplet("HeardApplet") {}
+    HeardApplet() : NodeListApplet("HeardApplet") {}
     void onActivate() override;
+    void onDeactivate() override;
 
   protected:
-    bool shouldListNode(ChronoListItem item) override;
-    std::string getHeaderText() override;
-    void updateActivityInfo() override;
+    void handleParsed(CardInfo c) override; // Store new info, and update display if needed
+    std::string getHeaderText() override;   // Set title for this applet
 
-    uint16_t activeNodeCount = 0;
+    void populateFromNodeDB(); // Pre-fill the CardInfo collection from NodeDB
 };
 
 } // namespace NicheGraphics::InkHUD

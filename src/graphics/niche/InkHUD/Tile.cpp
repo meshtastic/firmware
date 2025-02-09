@@ -199,6 +199,16 @@ uint16_t InkHUD::Tile::getHeight()
     return height;
 }
 
+// Longest edge of the display, in pixels
+// Maximum possible size of any tile's width / height
+// Used by some components to allocate resources for the "worst possible situtation"
+// "Sizing the cathedral for christmas eve"
+uint16_t InkHUD::Tile::maxDisplayDimension()
+{
+    WindowManager *wm = WindowManager::getInstance();
+    return max(wm->getHeight(), wm->getWidth());
+}
+
 // Ask for this tile to be highlighted
 // Used to indicate which tile is now indicated after focus changes
 // Only used for aux button focus changes, not changes via menu
