@@ -217,6 +217,7 @@ bool isPrivateIpAddress(const IPAddress &ip)
         {.network = 169u << 24 | 254 << 16, .mask = 0xffff0000}, // 169.254.0.0/16
         {.network = 10u << 24, .mask = 0xff000000},              // 10.0.0.0/8
         {.network = 127u << 24 | 1, .mask = 0xffffffff},         // 127.0.0.1/32
+        {.network = 100u << 24 | 64 << 16, .mask = 0xffc00000},  // 100.64.0.0/10
     };
     const uint32_t addr = ntohl(ip);
     for (const auto &cidrRange : privateCidrRanges) {

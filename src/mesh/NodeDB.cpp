@@ -23,7 +23,6 @@
 #include "modules/NeighborInfoModule.h"
 #include <ErriezCRC32.h>
 #include <algorithm>
-#include <iostream>
 #include <pb_decode.h>
 #include <pb_encode.h>
 #include <vector>

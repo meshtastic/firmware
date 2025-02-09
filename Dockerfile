@@ -38,7 +38,8 @@ USER root
 RUN apt-get update && apt-get --no-install-recommends -y install libc-bin libc6 libgpiod2 libyaml-cpp0.7 libi2c0 libulfius2.7 libusb-1.0-0-dev liborcania2.3 libssl3 && \
     apt-get clean && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /var/lib/meshtasticd \
-    && mkdir -p /etc/meshtasticd/config.d
+    && mkdir -p /etc/meshtasticd/config.d \
+    && mkdir -p /etc/meshtasticd/ssl
 
 # Fetch compiled binary from the builder
 COPY --from=builder /tmp/firmware/release/meshtasticd /usr/sbin/

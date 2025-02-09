@@ -72,6 +72,8 @@ install -D -m 0644 bin/meshtasticd.service %{buildroot}%{_unitdir}/meshtasticd.s
 # Install the web files under /usr/share/meshtasticd/web
 mkdir -p %{buildroot}%{_datadir}/meshtasticd/web
 cp -r web/* %{buildroot}%{_datadir}/meshtasticd/web
+# Install default SSL storage directory (for web)
+mkdir -p %{buildroot}%{_sysconfdir}/meshtasticd/ssl
 
 %files
 %license LICENSE
@@ -86,6 +88,7 @@ cp -r web/* %{buildroot}%{_datadir}/meshtasticd/web
 %dir %{_datadir}/meshtasticd
 %dir %{_datadir}/meshtasticd/web
 %{_datadir}/meshtasticd/web/*
+%dir %{_sysconfdir}/meshtasticd/ssl
 
 %changelog
 %autochangelog

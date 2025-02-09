@@ -78,6 +78,8 @@ Lora:
 #  TXen: x  # TX and RX enable pins
 #  RXen: x
 
+#  SX126X_MAX_POWER: 8  # Limit the output power to 8 dBm, useful for amped nodes
+
 #  spiSpeed: 2000000
 
 ### Set default/fallback gpio chip to use in /dev/. Defaults to 0.
@@ -182,6 +184,8 @@ Logging:
 Webserver:
 #  Port: 443 # Port for Webserver & Webservices
 #  RootPath: /usr/share/meshtasticd/web # Root Dir of WebServer
+#  SSLKey: /etc/meshtasticd/ssl/private_key.pem # Path to SSL Key, generated if not present
+#  SSLCert: /etc/meshtasticd/ssl/certificate.pem # Path to SSL Certificate, generated if not present
 
 General:
   MaxNodes: 200
