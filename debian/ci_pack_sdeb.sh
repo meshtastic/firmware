@@ -11,7 +11,7 @@ platformio pkg install -e native -t platformio/tool-scons@4.40502.0
 tar -cf pio.tar pio/
 rm -rf pio
 # Download the latest meshtastic/web release build.tar to `web.tar`
-curl -L https://github.com/meshtastic/web/releases/download/latest/build.tar -o web.tar
+curl -L https://github.com/meshtastic/web/releases/latest/download/build.tar -o web.tar
 
 package=$(dpkg-parsechangelog --show-field Source)
 
