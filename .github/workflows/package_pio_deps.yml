@@ -60,5 +60,6 @@ jobs:
         with:
           name: platformio-deps-${{ inputs.pio_env }}-${{ steps.version.outputs.long }}
           overwrite: true
+          include-hidden-files: true
           path: |
             pio/*
