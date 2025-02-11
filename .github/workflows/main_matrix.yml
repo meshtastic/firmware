@@ -335,7 +335,7 @@ jobs:
         working-directory: output
         run: |
           zip -j -9 -r ./meshtasticd-${{ steps.version.outputs.deb }}-src.zip ./debian-src
-          zip -j -9 -r ./platformio-deps-native-${{ steps.version.outputs.long }}.zip ./pio-deps-native
+          zip -9 -r ./platformio-deps-native-${{ steps.version.outputs.long }}.zip ./pio-deps-native
 
       # For diagnostics
       - name: Display structure of downloaded files
