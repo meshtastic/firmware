@@ -633,10 +633,6 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.display.screen_on_secs = 30;
     config.display.wake_on_tap_or_motion = true;
 #endif
-#ifdef HELTEC_VISION_MASTER_E290
-    // Orient so that LoRa antenna faces up
-    config.display.flip_screen = true;
-#endif
 
     initConfigIntervals();
 }
