@@ -136,6 +136,11 @@ UdpMulticastThread *udpThread = nullptr;
 float tcxoVoltage = SX126X_DIO3_TCXO_VOLTAGE; // if TCXO is optional, put this here so it can be changed further down.
 #endif
 
+#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+void setupNicheGraphics();
+#include "nicheGraphics.h"
+#endif
+
 using namespace concurrency;
 
 volatile static const char slipstreamTZString[] = USERPREFS_TZ_STRING;
@@ -905,6 +910,11 @@ void setup()
 
     // Now that the mesh service is created, create any modules
     setupModules();
+
+#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+    // After modules are setup, so we can observe modules
+    setupNicheGraphics();
+#endif
 
 #ifdef LED_PIN
     // Turn LED off after boot, if heartbeat by config
