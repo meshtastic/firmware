@@ -156,6 +156,7 @@ class WindowManager : protected concurrency::OSThread
     Tile *batteryIconTile = nullptr;
     LogoApplet *logoApplet;
     Applet *pairingApplet;
+    Applet *tipsApplet;
     NotificationApplet *notificationApplet;
     Applet *batteryIconApplet;
     MenuApplet *menuApplet;

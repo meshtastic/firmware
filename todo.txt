@@ -12,11 +12,6 @@ Features
 []      GPS & Bluetooth toggle in menu
 [wip]   add extended ascii / foreign language chars - Fonts for Windows-1250, Windows-1251 (Windows-1252?)
 
-
-Critical Tasks
-====================
-[]      Make setting-persistence more intuitive
-
 Improvements
 ====================
 []      Better detection of position changes in PositionsApplet
@@ -27,7 +22,6 @@ Improvements
 []      Applet to display critical faults
 []      OEM Bootscreen
 []      Aux button: exit menu without switching tile focus,
-[]      Tips at first boot (set region, how to use menu, etc). Could also catch common mistakes (not shutting down correctly, attempt to rotate via app, etc)
 
 Known Bugs
 =====================

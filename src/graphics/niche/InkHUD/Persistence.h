@@ -25,7 +25,7 @@ constexpr uint8_t MAX_USERAPPLETS_GLOBAL = 16;
 
 // Used to invalidate old settings, if needed
 // Version 0 is reserved for testing, and will always load defaults
-constexpr uint32_t SETTINGS_VERSION = 1;
+constexpr uint32_t SETTINGS_VERSION = 2;
 
 struct Settings {
     struct Meta {
@@ -79,6 +79,18 @@ struct Settings {
         // The added menu items then allows the user to "Keep Backlight On", globally.
         bool backlight = false;
     } optionalMenuItems;
+
+    // Allows tips to be run once only
+    struct Tips {
+        // Enables the longer "tutorial" shown only on first boot
+        // Once tutorial has been completed, it is no longer shown
+        bool firstBoot = true;
+
+        // User is advised to shutdown before removing device power
+        // Once user executes a shutdown (either via menu or client app),
+        // this tip is no longer shown
+        bool safeShutdownSeen = false;
+    } tips;
 
     // Rotation of the display
     // Multiples of 90 degrees clockwise

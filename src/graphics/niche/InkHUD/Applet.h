@@ -49,7 +49,7 @@
     When an applet decides it would like to update the display, it should call requestUpdate()
     The WindowManager will shortly call the onRender() method for all affected applets
 
-    An Applet may be unexpected asked to render at any point in time.
+    An Applet may be unexpectedly asked to render at any point in time.
 
     Applets should cache their data, but not their pixel output: they should re-render when onRender runs.
     An Applet's dimensions are not know until onRender is called, so pre-rendering of UI elements is prohibited.
@@ -58,6 +58,7 @@
     -----
 
     Applets are assigned to "Tiles".
+    Assigning an applet to a tile creates a reciprocal link between the two.
     When an applet renders, it passes pixels to its tile.
     The tile translates these to the correct position, to be placed into the fullscreen framebuffer.
     User applets don't get to choose their own tile; the multiplexing is handled by the WindowManager.
@@ -72,6 +73,8 @@
 
     Although the WindowManager will not render background applets, they should still collect data,
     so they are ready to display when they are brought to foreground again.
+    Even if they are in background, Applets should still request updates when an event affects them,
+    as the user may have given them permission to "autoshow"; bringing themselves foreground automatically
 
     Applets can implement the onForeground and onBackground methods to handle this change in state.
     They can also check their state by calling isForeground() at any time.
@@ -121,7 +124,7 @@ class Applet : public GFX
     Tile *getTile();
 
     void render();
-    bool wantsToRender();   // Check whether applet wants to render, or okay to skip, preserving old tile image
+    bool wantsToRender();   // Check whether applet wants to render
     bool wantsToAutoshow(); // Check whether applets wants to become foreground, to show new data, if permitted
     Drivers::EInk::UpdateTypes wantsUpdateType(); // Check which display update type the applet would prefer
     void updateDimensions();                      // Get current size from tile
@@ -149,6 +152,7 @@ class Applet : public GFX
     virtual void onShutdown() {}
     virtual void onButtonShortPress() {} // For use by System Applets only
     virtual void onButtonLongPress() {}  // For use by System Applets only
+    virtual void onLockAvailable() {}    // For use by System Applets only
 
     virtual bool approveNotification(Notification &n); // Allow an applet to veto a notification
 

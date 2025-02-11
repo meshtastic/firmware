@@ -23,13 +23,11 @@ class MenuApplet : public Applet, public concurrency::OSThread
     void onActivate() override;
     void onForeground() override;
     void onBackground() override;
-    void onShutdown() override;
     void onButtonShortPress() override;
     void onButtonLongPress() override;
     void onRender() override;
 
-    void borrowTile(Tile *t);   // Temporarily take the place of a user applet
-    void releaseBorrowedTile(); // Restore the original user applet when we the menu
+    void show(Tile *t); // Open the menu, onto a user tile
 
   protected:
     int32_t runOnce() override;

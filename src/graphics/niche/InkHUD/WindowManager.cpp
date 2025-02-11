@@ -13,6 +13,7 @@
 #include "./Applets/System/Notification/NotificationApplet.h"
 #include "./Applets/System/Pairing/PairingApplet.h"
 #include "./Applets/System/Placeholder/PlaceholderApplet.h"
+#include "./Applets/System/Tips/TipsApplet.h"
 
 using namespace NicheGraphics;
 
@@ -139,6 +140,7 @@ void InkHUD::WindowManager::createSystemApplets()
 {
     logoApplet = new LogoApplet;
     pairingApplet = new PairingApplet;
+    tipsApplet = new TipsApplet;
     notificationApplet = new NotificationApplet;
     batteryIconApplet = new BatteryIconApplet;
     menuApplet = new MenuApplet;
@@ -147,6 +149,7 @@ void InkHUD::WindowManager::createSystemApplets()
     // System applets are always active
     logoApplet->activate();
     pairingApplet->activate();
+    tipsApplet->activate();
     notificationApplet->activate();
     batteryIconApplet->activate();
     menuApplet->activate();
@@ -158,6 +161,7 @@ void InkHUD::WindowManager::createSystemApplets()
     // Order of these entries determines Z-Index when rendering
     systemApplets.push_back(logoApplet);
     systemApplets.push_back(pairingApplet);
+    systemApplets.push_back(tipsApplet);
     systemApplets.push_back(batteryIconApplet);
     systemApplets.push_back(menuApplet);
     systemApplets.push_back(notificationApplet);
@@ -352,6 +356,10 @@ int InkHUD::WindowManager::beforeDeepSleep(void *unused)
         sa->onShutdown();
     }
 
+    // User has successfull executed a safe shutdown
+    // We don't need to nag at boot anymore
+    settings.tips.safeShutdownSeen = true;
+
     saveDataToFlash();
 
     // Display the shutdown screen, and wait here until the update is complete
@@ -452,13 +460,13 @@ void InkHUD::WindowManager::handleButtonShort()
         forceUpdate(EInk::UpdateTypes::FULL); // Redraw everything, to clear the notification
     }
 
-    // Normally: next applet
-    else if (!menuApplet->isForeground())
-        nextApplet();
+    // If window manager is locked: lock owner handles button
+    else if (lockOwner)
+        lockOwner->onButtonShortPress();
 
-    // If menu is open: scroll menu
+    // Normally: next applet
     else
-        menuApplet->onButtonShortPress();
+        nextApplet();
 }
 
 // Triggered by an input source when a long-press fires
@@ -467,23 +475,11 @@ void InkHUD::WindowManager::handleButtonShort()
 // Note: input source should raise this while button still held
 void InkHUD::WindowManager::handleButtonLong()
 {
-    // Open the menu
-    // - if not already shown
-    // - if another system applet isn't doing something
-    if (!menuApplet->isForeground() && canRequestUpdate(menuApplet)) {
-        Tile *t = userTiles.at(settings.userTiles.focused); // Tile we're borrowing
+    if (lockOwner)
+        lockOwner->onButtonLongPress();
 
-        // Swap out a user applet with menu
-        menuApplet->borrowTile(t);
-
-        // bringToForeground (via borrowTile) has already requested update, but we're overriding this with,
-        // with a forced FAST update, for guaranteed responsiveness
-        forceUpdate(EInk::UpdateTypes::FAST);
-    }
-
-    // If menu already open, menuApplet handles the press
     else
-        menuApplet->onButtonLongPress();
+        menuApplet->show(userTiles.at(settings.userTiles.focused));
 }
 
 // On the currently focussed tile: cycle to the next available user applet
@@ -595,7 +591,7 @@ void InkHUD::WindowManager::changeLayout()
     // - its assignment was cleared (assignUserAppletsToTiles)
     if (menuApplet->isForeground()) {
         Tile *ft = userTiles.at(settings.userTiles.focused);
-        menuApplet->borrowTile(ft);
+        menuApplet->show(ft);
     }
 
     // Force-render
@@ -627,7 +623,7 @@ void InkHUD::WindowManager::changeActivatedApplets()
     // - its assignment was cleared (assignUserAppletsToTiles)
     if (menuApplet->isForeground()) {
         Tile *ft = userTiles.at(settings.userTiles.focused);
-        menuApplet->borrowTile(ft);
+        menuApplet->show(ft);
     }
 
     // Force-render
@@ -774,6 +770,16 @@ void InkHUD::WindowManager::unlock(Applet *owner)
 {
     assert(lockOwner = owner);
     lockOwner = nullptr;
+
+    // Raise this as an event (system applets only)
+    // - in case applet waiting for lock
+    // - in case applet relinquished its lock earlier, and wants it back
+    for (Applet *sa : systemApplets) {
+        // Don't raise event for the applet which is calling unlock
+        // - avoid loop of unlock->lock (some implementations of Applet::onLockAvailable)
+        if (sa != owner)
+            sa->onLockAvailable();
+    }
 }
 
 // Is an applet blocked from requesting update by a current lock?
