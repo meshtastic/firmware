@@ -396,19 +396,18 @@ void InkHUD::Applet::printWrapped(int16_t left, int16_t top, uint16_t width, std
     uint16_t wordStart = 0;
     for (uint16_t i = 0; i < text.length(); i++) {
 
-        // Found: explicit newline
-        if (text[i] == '\n') {
-            setCursor(left, getCursorY() + getFont().lineHeight()); // Manual newline
-            wordStart = i + 1; // New word begins after the newline. Otherwise print will add an *extra* line
-        }
-
-        // Found: end of word (split by spaces)
+        // Found: end of word (split by spaces or newline)
         // Also handles end of string
-        else if (text[i] == ' ' || i == text.length() - 1) {
+        if (text[i] == ' ' || text[i] == '\n' || i == text.length() - 1) {
             // Isolate this word
             uint16_t wordLength = (i - wordStart) + 1; // Plus one. Imagine: "a". End - Start is 0, but length is 1
             std::string word = text.substr(wordStart, wordLength);
             wordStart = i + 1; // Next word starts *after* the space
+
+            // If word is terminated by a newline char, don't actually print it.
+            // We'll manually add a new line later
+            if (word.back() == '\n')
+                word.pop_back();
 
             // Measure the word, in px
             int16_t l, t;
@@ -447,7 +446,7 @@ void InkHUD::Applet::printWrapped(int16_t left, int16_t top, uint16_t width, std
                     cstr[0] = word[c];
                     getTextBounds(cstr, getCursorX(), getCursorY(), &l, &t, &w, &h);
 
-                    // Manual newline, ff next character will spill beyond screen edge
+                    // Manual newline, if next character will spill beyond screen edge
                     if ((l + w) > left + width)
                         setCursor(left, getCursorY() + getFont().lineHeight());
 
@@ -455,6 +454,12 @@ void InkHUD::Applet::printWrapped(int16_t left, int16_t top, uint16_t width, std
                     print(word[c]);
                 }
             }
+        }
+
+        // If word was terminated by a newline char, manually add the new line now
+        if (text[i] == '\n') {
+            setCursor(left, getCursorY() + getFont().lineHeight()); // Manual newline
+            wordStart = i + 1; // New word begins after the newline. Otherwise print will add an *extra* line
         }
     }
 }

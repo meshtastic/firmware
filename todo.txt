@@ -31,7 +31,6 @@ Known Bugs
 []      Tile highlight rendered below header for threaded message applets
 []      NodeListApplets: *very* large distances spill over the divider
 []      Menu cursor does not always return to top when exited
-[]      ThreadedMessageApplet: text wrapping issues with very long words (i.e. URLs)
 
 Chores
 ==========
