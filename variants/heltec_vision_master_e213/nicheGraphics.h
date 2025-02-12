@@ -21,8 +21,8 @@
 
 // Shared NicheGraphics components
 // --------------------------------
+#include "graphics/niche/Drivers/Eink/LCMEN2R13EFC1.h"
 #include "graphics/niche/Inputs/TwoButton.h"
-#include "graphics/niche/drivers/Eink/LCMEN2R13EFC1.h"
 
 #include "graphics/niche/Fonts/FreeSans6pt7b.h"
 #include "graphics/niche/Fonts/FreeSans6pt8bCyrillic.h"
