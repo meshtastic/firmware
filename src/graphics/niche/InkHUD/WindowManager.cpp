@@ -2,8 +2,8 @@
 
 #include "./WindowManager.h"
 
+#include "RTC.h"
 #include "mesh/NodeDB.h"
-#include "rtc.h"
 
 // System applets
 // Must be defined in .cpp to prevent a circular dependency with Applet base class

@@ -2,8 +2,8 @@
 
 #include "./ThreadedMessageApplet.h"
 
+#include "RTC.h"
 #include "mesh/NodeDB.h"
-#include "rtc.h"
 
 using namespace NicheGraphics;
 

@@ -3,7 +3,7 @@
 #include "./MenuApplet.h"
 
 #include "PowerStatus.h"
-#include "rtc.h"
+#include "RTC.h"
 
 using namespace NicheGraphics;
 
