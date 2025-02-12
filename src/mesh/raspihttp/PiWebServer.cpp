@@ -65,6 +65,9 @@ mail:   marchammermann@googlemail.com
 #define DEFAULT_REALM "default_realm"
 #define PREFIX ""
 
+#define KEY_PATH settingsStrings[websslkeypath].c_str()
+#define CERT_PATH settingsStrings[websslcertpath].c_str()
+
 struct _file_config configWeb;
 
 // We need to specify some content-type mapping, so the resources get delivered with the
@@ -81,8 +84,6 @@ char contentTypes[][2][32] = {{".txt", "text/plain"},      {".html", "text/html"
 
 volatile bool isWebServerReady;
 volatile bool isCertReady;
-
-HttpAPI webAPI;
 
 PiWebServerThread *piwebServerThread;
 
@@ -178,14 +179,14 @@ int callback_static_file(const struct _u_request *request, struct _u_response *r
                     content_type = u_map_get_case(&configWeb.mime_types, get_filename_ext(file_requested));
                     if (content_type == NULL) {
                         content_type = u_map_get(&configWeb.mime_types, "*");
-                        LOG_DEBUG("Static File Server - Unknown mime type for extension %s \n", get_filename_ext(file_requested));
+                        LOG_DEBUG("Static File Server - Unknown mime type for extension %s ", get_filename_ext(file_requested));
                     }
                     u_map_put(response->map_header, "Content-Type", content_type);
                     u_map_copy_into(response->map_header, &configWeb.map_header);
 
                     if (ulfius_set_stream_response(response, 200, callback_static_file_stream, callback_static_file_stream_free,
                                                    length, STATIC_FILE_CHUNK, f) != U_OK) {
-                        LOG_DEBUG("callback_static_file - Error ulfius_set_stream_response\n	");
+                        LOG_DEBUG("callback_static_file - Error ulfius_set_stream_response");
                     }
                 }
             } else {
@@ -210,7 +211,7 @@ int callback_static_file(const struct _u_request *request, struct _u_response *r
         free(real_path); // realpath uses malloc
         return U_CALLBACK_CONTINUE;
     } else {
-        LOG_DEBUG("Static File Server - Error, user_data is NULL or inconsistent\n");
+        LOG_DEBUG("Static File Server - Error, user_data is NULL or inconsistent");
         return U_CALLBACK_ERROR;
     }
 }
@@ -223,7 +224,7 @@ static void handleWebResponse() {}
  */
 int handleAPIv1ToRadio(const struct _u_request *req, struct _u_response *res, void *user_data)
 {
-    LOG_DEBUG("handleAPIv1ToRadio web -> radio  \n");
+    LOG_DEBUG("handleAPIv1ToRadio web -> radio  ");
 
     ulfius_add_header_to_response(res, "Content-Type", "application/x-protobuf");
     ulfius_add_header_to_response(res, "Access-Control-Allow-Headers", "Content-Type");
@@ -232,9 +233,9 @@ int handleAPIv1ToRadio(const struct _u_request *req, struct _u_response *res, vo
     ulfius_add_header_to_response(res, "X-Protobuf-Schema",
                                   "https://raw.githubusercontent.com/meshtastic/protobufs/master/meshtastic/mesh.proto");
 
-    if (req->http_verb == "OPTIONS") {
+    if (strcmp(req->http_verb, "OPTIONS") == 0) {
         ulfius_set_response_properties(res, U_OPT_STATUS, 204);
-        return U_CALLBACK_CONTINUE;
+        return U_CALLBACK_COMPLETE;
     }
 
     byte buffer[MAX_TO_FROM_RADIO_SIZE];
@@ -246,9 +247,9 @@ int handleAPIv1ToRadio(const struct _u_request *req, struct _u_response *res, vo
 
     portduinoVFS->mountpoint(configWeb.rootPath);
 
-    LOG_DEBUG("Received %d bytes from PUT request\n", s);
-    webAPI.handleToRadio(buffer, s);
-    LOG_DEBUG("end web->radio  \n");
+    LOG_DEBUG("Received %d bytes from PUT request", s);
+    static_cast<HttpAPI *>(user_data)->handleToRadio(buffer, s);
+    LOG_DEBUG("end web->radio  ");
     return U_CALLBACK_COMPLETE;
 }
 
@@ -259,7 +260,7 @@ int handleAPIv1ToRadio(const struct _u_request *req, struct _u_response *res, vo
 int handleAPIv1FromRadio(const struct _u_request *req, struct _u_response *res, void *user_data)
 {
 
-    // LOG_DEBUG("handleAPIv1FromRadio radio -> web\n");
+    // LOG_DEBUG("handleAPIv1FromRadio radio -> web");
     std::string valueAll;
 
     // Status code is 200 OK by default.
@@ -269,30 +270,35 @@ int handleAPIv1FromRadio(const struct _u_request *req, struct _u_response *res, 
     ulfius_add_header_to_response(res, "X-Protobuf-Schema",
                                   "https://raw.githubusercontent.com/meshtastic/protobufs/master/meshtastic/mesh.proto");
 
+    if (strcmp(req->http_verb, "OPTIONS") == 0) {
+        ulfius_set_response_properties(res, U_OPT_STATUS, 204);
+        return U_CALLBACK_COMPLETE;
+    }
+
     uint8_t txBuf[MAX_STREAM_BUF_SIZE];
     uint32_t len = 1;
 
     if (valueAll == "true") {
         while (len) {
-            len = webAPI.getFromRadio(txBuf);
+            len = static_cast<HttpAPI *>(user_data)->getFromRadio(txBuf);
             ulfius_set_response_properties(res, U_OPT_STATUS, 200, U_OPT_BINARY_BODY, txBuf, len);
             const char *tmpa = (const char *)txBuf;
             ulfius_set_string_body_response(res, 200, tmpa);
-            // LOG_DEBUG("\n----webAPI response all:----\n");
+            // LOG_DEBUG("\n----webAPI response all:----");
             // LOG_DEBUG(tmpa);
-            // LOG_DEBUG("\n");
+            // LOG_DEBUG("");
         }
         // Otherwise, just return one protobuf
     } else {
-        len = webAPI.getFromRadio(txBuf);
+        len = static_cast<HttpAPI *>(user_data)->getFromRadio(txBuf);
         const char *tmpa = (const char *)txBuf;
         ulfius_set_binary_body_response(res, 200, tmpa, len);
-        // LOG_DEBUG("\n----webAPI response:\n");
+        // LOG_DEBUG("\n----webAPI response:");
         // LOG_DEBUG(tmpa);
-        // LOG_DEBUG("\n");
+        // LOG_DEBUG("");
     }
 
-    // LOG_DEBUG("end radio->web\n", len);
+    // LOG_DEBUG("end radio->web", len);
     return U_CALLBACK_COMPLETE;
 }
 
@@ -346,7 +352,7 @@ char *read_file_into_string(const char *filename)
 {
     FILE *file = fopen(filename, "rb");
     if (file == NULL) {
-        LOG_ERROR("Error reading File : %s \n", filename);
+        LOG_ERROR("Error reading File : %s ", filename);
         return NULL;
     }
 
@@ -358,7 +364,7 @@ char *read_file_into_string(const char *filename)
     // reserve mem for file + 1 byte
     char *buffer = (char *)malloc(filesize + 1);
     if (buffer == NULL) {
-        LOG_ERROR("Malloc of mem failed for file : %s \n", filename);
+        LOG_ERROR("Malloc of mem failed for file : %s ", filename);
         fclose(file);
         return NULL;
     }
@@ -366,7 +372,7 @@ char *read_file_into_string(const char *filename)
     // read content
     size_t readSize = fread(buffer, 1, filesize, file);
     if (readSize != filesize) {
-        LOG_ERROR("Error reading file into buffer\n");
+        LOG_ERROR("Error reading file into buffer");
         free(buffer);
         fclose(file);
         return NULL;
@@ -381,15 +387,15 @@ char *read_file_into_string(const char *filename)
 int PiWebServerThread::CheckSSLandLoad()
 {
     // read certificate
-    cert_pem = read_file_into_string("certificate.pem");
+    cert_pem = read_file_into_string(CERT_PATH);
     if (cert_pem == NULL) {
-        LOG_ERROR("ERROR SSL Certificate File can't be loaded or is missing\n");
+        LOG_ERROR("ERROR SSL Certificate File can't be loaded or is missing");
         return 1;
     }
     // read private key
-    key_pem = read_file_into_string("private_key.pem");
+    key_pem = read_file_into_string(KEY_PATH);
     if (key_pem == NULL) {
-        LOG_ERROR("ERROR file private_key can't be loaded or is missing\n");
+        LOG_ERROR("ERROR file private_key can't be loaded or is missing");
         return 2;
     }
 
@@ -403,19 +409,19 @@ int PiWebServerThread::CreateSSLCertificate()
     X509 *x509 = NULL;
 
     if (generate_rsa_key(&pkey) != 0) {
-        LOG_ERROR("Error generating RSA-Key.\n");
+        LOG_ERROR("Error generating RSA-Key");
         return 1;
     }
 
     if (generate_self_signed_x509(pkey, &x509) != 0) {
-        LOG_ERROR("Error generating of X509-Certificat.\n");
+        LOG_ERROR("Error generating X509-Cert");
         return 2;
     }
 
-    // Ope file to write private key file
-    FILE *pkey_file = fopen("private_key.pem", "wb");
+    // Open file to write private key file
+    FILE *pkey_file = fopen(KEY_PATH, "wb");
     if (!pkey_file) {
-        LOG_ERROR("Error opening private key file.\n");
+        LOG_ERROR("Error opening private key file");
         return 3;
     }
     // write private key file
@@ -423,18 +429,19 @@ int PiWebServerThread::CreateSSLCertificate()
     fclose(pkey_file);
 
     // open Certificate file
-    FILE *x509_file = fopen("certificate.pem", "wb");
+    FILE *x509_file = fopen(CERT_PATH, "wb");
     if (!x509_file) {
-        LOG_ERROR("Error opening certificate.\n");
+        LOG_ERROR("Error opening cert");
         return 4;
     }
-    // write cirtificate
+    // write certificate
     PEM_write_X509(x509_file, x509);
     fclose(x509_file);
 
     EVP_PKEY_free(pkey);
+    LOG_INFO("Create SSL Key %s successful", KEY_PATH);
     X509_free(x509);
-    LOG_INFO("Create SSL Certifictate -certificate.pem- succesfull \n");
+    LOG_INFO("Create SSL Cert %s successful", CERT_PATH);
     return 0;
 }
 
@@ -447,24 +454,24 @@ PiWebServerThread::PiWebServerThread()
     if (CheckSSLandLoad() != 0) {
         CreateSSLCertificate();
         if (CheckSSLandLoad() != 0) {
-            LOG_ERROR("Major Error Gen & Read SSL Certificate\n");
+            LOG_ERROR("Major Error Gen & Read SSL Certificate");
         }
     }
 
     if (settingsMap[webserverport] != 0) {
         webservport = settingsMap[webserverport];
-        LOG_INFO("Using webserver port from yaml config. %i \n", webservport);
+        LOG_INFO("Use webserver port from yaml config %i ", webservport);
     } else {
-        LOG_INFO("Webserver port in yaml config set to 0, so defaulting to port 443.\n");
+        LOG_INFO("Webserver port in yaml config set to 0, defaulting to port 443");
         webservport = 443;
     }
 
     // Web Content Service Instance
     if (ulfius_init_instance(&instanceWeb, webservport, NULL, DEFAULT_REALM) != U_OK) {
-        LOG_ERROR("Webserver couldn't be started, abort execution\n");
+        LOG_ERROR("Webserver couldn't be started, abort execution");
     } else {
 
-        LOG_INFO("Webserver started ....\n");
+        LOG_INFO("Webserver started");
         u_map_init(&configWeb.mime_types);
         u_map_put(&configWeb.mime_types, "*", "application/octet-stream");
         u_map_put(&configWeb.mime_types, ".html", "text/html");
@@ -492,8 +499,10 @@ PiWebServerThread::PiWebServerThread()
         u_map_put(instanceWeb.default_headers, "Access-Control-Allow-Origin", "*");
         // Maximum body size sent by the client is 1 Kb
         instanceWeb.max_post_body_size = 1024;
-        ulfius_add_endpoint_by_val(&instanceWeb, "GET", PREFIX, "/api/v1/fromradio/*", 1, &handleAPIv1FromRadio, NULL);
-        ulfius_add_endpoint_by_val(&instanceWeb, "PUT", PREFIX, "/api/v1/toradio/*", 1, &handleAPIv1ToRadio, configWeb.rootPath);
+        ulfius_add_endpoint_by_val(&instanceWeb, "GET", PREFIX, "/api/v1/fromradio/*", 1, &handleAPIv1FromRadio, &webAPI);
+        ulfius_add_endpoint_by_val(&instanceWeb, "OPTIONS", PREFIX, "/api/v1/fromradio/*", 1, &handleAPIv1FromRadio, &webAPI);
+        ulfius_add_endpoint_by_val(&instanceWeb, "PUT", PREFIX, "/api/v1/toradio/*", 1, &handleAPIv1ToRadio, &webAPI);
+        ulfius_add_endpoint_by_val(&instanceWeb, "OPTIONS", PREFIX, "/api/v1/toradio/*", 1, &handleAPIv1ToRadio, &webAPI);
 
         // Add callback function to all endpoints for the Web Server
         ulfius_add_endpoint_by_val(&instanceWeb, "GET", NULL, "/*", 2, &callback_static_file, &configWeb);
@@ -505,10 +514,10 @@ PiWebServerThread::PiWebServerThread()
         retssl = ulfius_start_secure_framework(&instanceWeb, key_pem, cert_pem);
 
         if (retssl == U_OK) {
-            LOG_INFO("Web Server framework started on port: %i \n", webservport);
-            LOG_INFO("Web Server root %s\n", (char *)webrootpath.c_str());
+            LOG_INFO("Web Server framework started on port: %i ", webservport);
+            LOG_INFO("Web Server root %s", (char *)webrootpath.c_str());
         } else {
-            LOG_ERROR("Error starting Web Server framework, error number: %d\n", retssl);
+            LOG_ERROR("Error starting Web Server framework, error number: %d", retssl);
         }
     }
 }
@@ -518,10 +527,9 @@ PiWebServerThread::~PiWebServerThread()
     u_map_clean(&configWeb.mime_types);
 
     ulfius_stop_framework(&instanceWeb);
-    ulfius_stop_framework(&instanceWeb);
+    ulfius_clean_instance(&instanceWeb);
     free(configWeb.rootPath);
-    ulfius_clean_instance(&instanceService);
-    ulfius_clean_instance(&instanceService);
+    free(key_pem);
     free(cert_pem);
     LOG_INFO("End framework");
 }

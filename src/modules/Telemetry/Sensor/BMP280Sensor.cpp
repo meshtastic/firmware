@@ -12,7 +12,7 @@ BMP280Sensor::BMP280Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_BM
 
 int32_t BMP280Sensor::runOnce()
 {
-    LOG_INFO("Init sensor: %s\n", sensorName);
+    LOG_INFO("Init sensor: %s", sensorName);
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
@@ -34,7 +34,7 @@ bool BMP280Sensor::getMetrics(meshtastic_Telemetry *measurement)
     measurement->variant.environment_metrics.has_temperature = true;
     measurement->variant.environment_metrics.has_barometric_pressure = true;
 
-    LOG_DEBUG("BMP280Sensor::getMetrics\n");
+    LOG_DEBUG("BMP280 getMetrics");
     bmp280.takeForcedMeasurement();
     measurement->variant.environment_metrics.temperature = bmp280.readTemperature();
     measurement->variant.environment_metrics.barometric_pressure = bmp280.readPressure() / 100.0F;

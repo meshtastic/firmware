@@ -29,6 +29,12 @@
 class FloodingRouter : public Router, protected PacketHistory
 {
   private:
+    bool isRebroadcaster();
+
+    /** Check if we should rebroadcast this packet, and do so if needed
+     * @return true if rebroadcasted */
+    bool perhapsRebroadcast(const meshtastic_MeshPacket *p);
+
   public:
     /**
      * Constructor

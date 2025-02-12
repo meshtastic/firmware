@@ -76,6 +76,8 @@
 #ifdef HELTEC_V2_1
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_V2_1
 #endif
+#elif defined(HELTEC_WIRELESS_BRIDGE)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_WIRELESS_BRIDGE
 #elif defined(ARDUINO_HELTEC_WIFI_LORA_32)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_V1
 #elif defined(TLORA_V1)
@@ -88,6 +90,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_TLORA_V2_1_1P6
 #elif defined(TLORA_V2_1_18)
 #define HW_VENDOR meshtastic_HardwareModel_TLORA_V2_1_1P8
+#elif defined(TLORA_C6)
+#define HW_VENDOR meshtastic_HardwareModel_TLORA_C6
 #elif defined(T_DECK)
 #define HW_VENDOR meshtastic_HardwareModel_T_DECK
 #elif defined(T_WATCH_S3)
@@ -100,6 +104,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_NANO_G1
 #elif defined(M5STACK)
 #define HW_VENDOR meshtastic_HardwareModel_M5STACK
+#elif defined(M5STACK_CORES3)
+#define HW_VENDOR meshtastic_HardwareModel_M5STACK_CORES3
 #elif defined(STATION_G1)
 #define HW_VENDOR meshtastic_HardwareModel_STATION_G1
 #elif defined(DR_DEV)
@@ -164,6 +170,7 @@
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_VISION_MASTER_E213
 #elif defined(HELTEC_VISION_MASTER_E290)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_VISION_MASTER_E290
+
 #elif defined(HELTEC_MESH_NODE_T114)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_NODE_T114
 
@@ -174,6 +181,13 @@
 
 #elif defined(SENSECAP_INDICATOR)
 #define HW_VENDOR meshtastic_HardwareModel_SENSECAP_INDICATOR
+
+#elif defined(SENSECAP_INDICATOR)
+#define HW_VENDOR meshtastic_HardwareModel_SENSECAP_INDICATOR
+#elif defined(SEEED_XIAO_S3)
+#define HW_VENDOR meshtastic_HardwareModel_SEEED_XIAO_S3
+#elif defined(MESH_TAB)
+#define HW_VENDOR meshtastic_HardwareModel_MESH_TAB
 
 #endif
 

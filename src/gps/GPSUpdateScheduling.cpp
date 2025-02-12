@@ -13,7 +13,7 @@ void GPSUpdateScheduling::informSearching()
 void GPSUpdateScheduling::informGotLock()
 {
     searchEndedMs = millis();
-    LOG_DEBUG("Took %us to get lock\n", (searchEndedMs - searchStartedMs) / 1000);
+    LOG_DEBUG("Took %us to get lock", (searchEndedMs - searchStartedMs) / 1000);
     updateLockTimePrediction();
 }
 
@@ -49,7 +49,7 @@ uint32_t GPSUpdateScheduling::msUntilNextSearch()
 }
 
 // How long have we already been searching?
-// Used to abort a search in progress, if it runs unnaceptably long
+// Used to abort a search in progress, if it runs unacceptably long
 uint32_t GPSUpdateScheduling::elapsedSearchMs()
 {
     // If searching
@@ -70,9 +70,9 @@ bool GPSUpdateScheduling::isUpdateDue()
 // Have we been searching for a GPS position for too long?
 bool GPSUpdateScheduling::searchedTooLong()
 {
-    uint32_t maxSearchMs =
-        Default::getConfiguredOrDefaultMs(config.position.position_broadcast_secs, default_broadcast_interval_secs);
-
+    uint32_t minimumOrConfiguredSecs =
+        Default::getConfiguredOrMinimumValue(config.position.position_broadcast_secs, default_broadcast_interval_secs);
+    uint32_t maxSearchMs = Default::getConfiguredOrDefaultMs(minimumOrConfiguredSecs, default_broadcast_interval_secs);
     // If broadcast interval set to max, no such thing as "too long"
     if (maxSearchMs == UINT32_MAX)
         return false;
@@ -98,7 +98,7 @@ void GPSUpdateScheduling::updateLockTimePrediction()
 
     // Ignore the first lock-time: likely to be long, will skew data
 
-    // Second locktime: likely stable. Use to intialize the smoothing filter
+    // Second locktime: likely stable. Use to initialize the smoothing filter
     if (searchCount == 1)
         predictedMsToGetLock = lockTime;
 
@@ -106,9 +106,9 @@ void GPSUpdateScheduling::updateLockTimePrediction()
     else if (searchCount > 1)
         predictedMsToGetLock = (lockTime * weighting) + (predictedMsToGetLock * (1 - weighting));
 
-    searchCount++; // Only tracked so we can diregard initial lock-times
+    searchCount++; // Only tracked so we can disregard initial lock-times
 
-    LOG_DEBUG("Predicting %us to get next lock\n", predictedMsToGetLock / 1000);
+    LOG_DEBUG("Predict %us to get next lock", predictedMsToGetLock / 1000);
 }
 
 // How long do we expect to spend searching for a lock?

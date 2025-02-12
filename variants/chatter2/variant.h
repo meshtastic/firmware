@@ -6,7 +6,6 @@
 
 // Debugging
 // #define GPS_DEBUG
-// #define GPS_EXTRAVERBOSE
 
 // Lora
 #define USE_LLCC68 // Original Chatter2 with LLCC68 module
@@ -66,6 +65,7 @@
 #define SCREEN_ROTATE
 #define SCREEN_TRANSITION_FRAMERATE 5 // fps
 #define DISPLAY_FORCE_SMALL_FONTS
+#define TFT_BACKLIGHT_ON LOW
 
 // Battery
 

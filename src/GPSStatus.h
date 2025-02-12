@@ -50,9 +50,6 @@ class GPSStatus : public Status
     int32_t getLatitude() const
     {
         if (config.position.fixed_position) {
-#ifdef GPS_EXTRAVERBOSE
-            LOG_WARN("Using fixed latitude\n");
-#endif
             meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
             return node->position.latitude_i;
         } else {
@@ -63,9 +60,6 @@ class GPSStatus : public Status
     int32_t getLongitude() const
     {
         if (config.position.fixed_position) {
-#ifdef GPS_EXTRAVERBOSE
-            LOG_WARN("Using fixed longitude\n");
-#endif
             meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
             return node->position.longitude_i;
         } else {
@@ -76,9 +70,6 @@ class GPSStatus : public Status
     int32_t getAltitude() const
     {
         if (config.position.fixed_position) {
-#ifdef GPS_EXTRAVERBOSE
-            LOG_WARN("Using fixed altitude\n");
-#endif
             meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
             return node->position.altitude;
         } else {
@@ -94,8 +85,8 @@ class GPSStatus : public Status
 
     bool matches(const GPSStatus *newStatus) const
     {
-#ifdef GPS_EXTRAVERBOSE
-        LOG_DEBUG("GPSStatus.match() new pos@%x to old pos@%x\n", newStatus->p.timestamp, p.timestamp);
+#ifdef GPS_DEBUG
+        LOG_DEBUG("GPSStatus.match() new pos@%x to old pos@%x", newStatus->p.timestamp, p.timestamp);
 #endif
         return (newStatus->hasLock != hasLock || newStatus->isConnected != isConnected ||
                 newStatus->isPowerSaving != isPowerSaving || newStatus->p.latitude_i != p.latitude_i ||
@@ -112,7 +103,7 @@ class GPSStatus : public Status
 
         if (isDirty && p.timestamp && (newStatus->p.timestamp == p.timestamp)) {
             // We can NEVER be in two locations at the same time! (also PR #886)
-            LOG_ERROR("BUG: Positional timestamp unchanged from prev solution\n");
+            LOG_ERROR("BUG: Positional timestamp unchanged from prev solution");
         }
 
         initialized = true;
@@ -124,11 +115,11 @@ class GPSStatus : public Status
         if (isDirty) {
             if (hasLock) {
                 // In debug logs, identify position by @timestamp:stage (stage 3 = notify)
-                LOG_DEBUG("New GPS pos@%x:3 lat=%f lon=%f alt=%d pdop=%.2f track=%.2f speed=%.2f sats=%d\n", p.timestamp,
+                LOG_DEBUG("New GPS pos@%x:3 lat=%f lon=%f alt=%d pdop=%.2f track=%.2f speed=%.2f sats=%d", p.timestamp,
                           p.latitude_i * 1e-7, p.longitude_i * 1e-7, p.altitude, p.PDOP * 1e-2, p.ground_track * 1e-5,
                           p.ground_speed * 1e-2, p.sats_in_view);
             } else {
-                LOG_DEBUG("No GPS lock\n");
+                LOG_DEBUG("No GPS lock");
             }
             onNewStatus.notifyObservers(this);
         }

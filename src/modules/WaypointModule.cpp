@@ -14,7 +14,7 @@ ProcessMessage WaypointModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
 #ifdef DEBUG_PORT
     auto &p = mp.decoded;
-    LOG_INFO("Received waypoint msg from=0x%0x, id=0x%x, msg=%.*s\n", mp.from, mp.id, p.payload.size, p.payload.bytes);
+    LOG_INFO("Received waypoint msg from=0x%0x, id=0x%x, msg=%.*s", mp.from, mp.id, p.payload.size, p.payload.bytes);
 #endif
     // We only store/display messages destined for us.
     // Keep a copy of the most recent text message.
@@ -68,7 +68,7 @@ bool WaypointModule::shouldDraw()
     }
 
     // If decoding failed
-    LOG_ERROR("Failed to decode waypoint\n");
+    LOG_ERROR("Failed to decode waypoint");
     devicestate.has_rx_waypoint = false;
     return false;
 #else
@@ -89,7 +89,7 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
         display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
 
     // Decode the waypoint
-    meshtastic_MeshPacket &mp = devicestate.rx_waypoint;
+    const meshtastic_MeshPacket &mp = devicestate.rx_waypoint;
     meshtastic_Waypoint wp;
     memset(&wp, 0, sizeof(wp));
     if (!pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_Waypoint_msg, &wp)) {
@@ -126,7 +126,7 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
     }
 
     // If our node has a position:
-    if (ourNode && (hasValidPosition(ourNode) || screen->hasHeading())) {
+    if (ourNode && (nodeDB->hasValidPosition(ourNode) || screen->hasHeading())) {
         const meshtastic_PositionLite &op = ourNode->position;
         float myHeading;
         if (screen->hasHeading())
@@ -134,20 +134,6 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
         else
             myHeading = screen->estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
         screen->drawCompassNorth(display, compassX, compassY, myHeading);
-
-        // Distance to Waypoint
-        float d = GeoCoord::latLongToMeter(DegD(wp.latitude_i), DegD(wp.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
-        if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
-            if (d < (2 * MILES_TO_FEET))
-                snprintf(distStr, sizeof(distStr), "%.0f ft", d * METERS_TO_FEET);
-            else
-                snprintf(distStr, sizeof(distStr), "%.1f mi", d * METERS_TO_FEET / MILES_TO_FEET);
-        } else {
-            if (d < 2000)
-                snprintf(distStr, sizeof(distStr), "%.0f m", d);
-            else
-                snprintf(distStr, sizeof(distStr), "%.1f km", d / 1000);
-        }
 
         // Compass bearing to waypoint
         float bearingToOther =
@@ -157,6 +143,25 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
         if (!config.display.compass_north_top)
             bearingToOther -= myHeading;
         screen->drawNodeHeading(display, compassX, compassY, compassDiam, bearingToOther);
+
+        float bearingToOtherDegrees = (bearingToOther < 0) ? bearingToOther + 2*PI : bearingToOther;
+            bearingToOtherDegrees = bearingToOtherDegrees * 180 / PI;
+        
+        // Distance to Waypoint
+        float d = GeoCoord::latLongToMeter(DegD(wp.latitude_i), DegD(wp.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
+        if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
+            if (d < (2 * MILES_TO_FEET))
+                snprintf(distStr, sizeof(distStr), "%.0fft   %.0f°", d * METERS_TO_FEET, bearingToOtherDegrees);
+            else
+                snprintf(distStr, sizeof(distStr), "%.1fmi   %.0f°", d * METERS_TO_FEET / MILES_TO_FEET, bearingToOtherDegrees);
+        } else {
+            if (d < 2000)
+                snprintf(distStr, sizeof(distStr), "%.0fm   %.0f°", d, bearingToOtherDegrees);
+            else
+                snprintf(distStr, sizeof(distStr), "%.1fkm   %.0f°", d / 1000, bearingToOtherDegrees);
+        }
+
+
     }
 
     // If our node doesn't have position
@@ -166,19 +171,19 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
 
         // ? in the distance field
         if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL)
-            strncpy(distStr, "? mi", sizeof(distStr));
+            strncpy(distStr, "? mi ?°", sizeof(distStr));
         else
-            strncpy(distStr, "? km", sizeof(distStr));
+            strncpy(distStr, "? km ?°", sizeof(distStr));
     }
+
+    // Draw compass circle
+    display->drawCircle(compassX, compassY, compassDiam / 2);
 
     // Undo color-inversion, if set prior to drawing header
     // Unsure of expected behavior? For now: copy drawNodeInfo
     if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
         display->setColor(BLACK);
     }
-
-    // Draw compass circle
-    display->drawCircle(compassX, compassY, compassDiam / 2);
 
     // Must be after distStr is populated
     screen->drawColumns(display, x, y, fields);

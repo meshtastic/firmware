@@ -1,8 +1,8 @@
 #include "UnitConversions.h"
 
-float UnitConversions::CelsiusToFahrenheit(float celcius)
+float UnitConversions::CelsiusToFahrenheit(float celsius)
 {
-    return (celcius * 9) / 5 + 32;
+    return (celsius * 9) / 5 + 32;
 }
 
 float UnitConversions::MetersPerSecondToKnots(float metersPerSecond)

@@ -1,10 +1,10 @@
 #pragma once
-#include "../variants/rak2560/RAK9154Sensor.h"
 #include "PowerStatus.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
 
 #ifdef ARCH_ESP32
+// "legacy adc calibration driver is deprecated, please migrate to use esp_adc/adc_cali.h and esp_adc/adc_cali_scheme.h
 #include <esp_adc_cal.h>
 #include <soc/adc_channel.h>
 #endif
@@ -24,6 +24,8 @@
 #define OCV_ARRAY 1400, 1300, 1280, 1270, 1260, 1250, 1240, 1230, 1210, 1150, 1000
 #elif defined(CELL_TYPE_LTO)
 #define OCV_ARRAY 2700, 2560, 2540, 2520, 2500, 2460, 2420, 2400, 2380, 2320, 1500
+#elif defined(TRACKER_T1000_E)
+#define OCV_ARRAY 4190, 4078, 4017, 3969, 3887, 3818, 3798, 3791, 3766, 3712, 3100
 #else // LiIon
 #define OCV_ARRAY 4190, 4050, 3990, 3890, 3800, 3720, 3630, 3530, 3420, 3300, 3100
 #endif
@@ -41,15 +43,22 @@ extern RTC_NOINIT_ATTR uint64_t RTC_reg_b;
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(ARCH_PORTDUINO)
 #include "modules/Telemetry/Sensor/INA219Sensor.h"
+#include "modules/Telemetry/Sensor/INA226Sensor.h"
 #include "modules/Telemetry/Sensor/INA260Sensor.h"
 #include "modules/Telemetry/Sensor/INA3221Sensor.h"
-extern INA260Sensor ina260Sensor;
 extern INA219Sensor ina219Sensor;
+extern INA226Sensor ina226Sensor;
+extern INA260Sensor ina260Sensor;
 extern INA3221Sensor ina3221Sensor;
 #endif
 
-#if HAS_RAKPROT && !defined(ARCH_PORTDUINO)
-#include "../variants/rak2560/RAK9154Sensor.h"
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+#include "modules/Telemetry/Sensor/MAX17048Sensor.h"
+extern MAX17048Sensor max17048Sensor;
+#endif
+
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && HAS_RAKPROT && !defined(ARCH_PORTDUINO)
+#include "modules/Telemetry/Sensor/RAK9154Sensor.h"
 extern RAK9154Sensor rak9154Sensor;
 #endif
 
@@ -82,6 +91,8 @@ class Power : private concurrency::OSThread
     bool axpChipInit();
     /// Setup a simple ADC input based battery sensor
     bool analogInit();
+    /// Setup a Lipo battery level sensor
+    bool lipoInit();
 
   private:
     // open circuit voltage lookup table

@@ -46,7 +46,7 @@ void run_codec2(void *parameter)
     // 4 bytes of header in each frame hex c0 de c2 plus the bitrate
     memcpy(audioModule->tx_encode_frame, &audioModule->tx_header, sizeof(audioModule->tx_header));
 
-    LOG_INFO("Starting codec2 task\n");
+    LOG_INFO("Start codec2 task");
 
     while (true) {
         uint32_t tcount = ulTaskNotifyTake(pdFALSE, pdMS_TO_TICKS(10000));
@@ -61,7 +61,7 @@ void run_codec2(void *parameter)
                 audioModule->tx_encode_frame_index += audioModule->encode_codec_size;
 
                 if (audioModule->tx_encode_frame_index == (audioModule->encode_frame_size + sizeof(audioModule->tx_header))) {
-                    LOG_INFO("Sending %d codec2 bytes\n", audioModule->encode_frame_size);
+                    LOG_INFO("Send %d codec2 bytes", audioModule->encode_frame_size);
                     audioModule->sendPayload();
                     audioModule->tx_encode_frame_index = sizeof(audioModule->tx_header);
                 }
@@ -91,7 +91,7 @@ void run_codec2(void *parameter)
     }
 }
 
-AudioModule::AudioModule() : SinglePortModule("AudioModule", meshtastic_PortNum_AUDIO_APP), concurrency::OSThread("AudioModule")
+AudioModule::AudioModule() : SinglePortModule("Audio", meshtastic_PortNum_AUDIO_APP), concurrency::OSThread("Audio")
 {
     // moduleConfig.audio.codec2_enabled = true;
     // moduleConfig.audio.i2s_ws = 13;
@@ -101,8 +101,7 @@ AudioModule::AudioModule() : SinglePortModule("AudioModule", meshtastic_PortNum_
     // moduleConfig.audio.ptt_pin = 39;
 
     if ((moduleConfig.audio.codec2_enabled) && (myRegion->audioPermitted)) {
-        LOG_INFO("Setting up codec2 in mode %u",
-                 (moduleConfig.audio.bitrate ? moduleConfig.audio.bitrate : AUDIO_MODULE_MODE) - 1);
+        LOG_INFO("Set up codec2 in mode %u", (moduleConfig.audio.bitrate ? moduleConfig.audio.bitrate : AUDIO_MODULE_MODE) - 1);
         codec2 = codec2_create((moduleConfig.audio.bitrate ? moduleConfig.audio.bitrate : AUDIO_MODULE_MODE) - 1);
         memcpy(tx_header.magic, c2_magic, sizeof(c2_magic));
         tx_header.mode = (moduleConfig.audio.bitrate ? moduleConfig.audio.bitrate : AUDIO_MODULE_MODE) - 1;
@@ -111,7 +110,7 @@ AudioModule::AudioModule() : SinglePortModule("AudioModule", meshtastic_PortNum_
         encode_frame_num = (meshtastic_Constants_DATA_PAYLOAD_LEN - sizeof(tx_header)) / encode_codec_size;
         encode_frame_size = encode_frame_num * encode_codec_size; // max 233 bytes + 4 header bytes
         adc_buffer_size = codec2_samples_per_frame(codec2);
-        LOG_INFO("using %d frames of %d bytes for a total payload length of %d bytes\n", encode_frame_num, encode_codec_size,
+        LOG_INFO("Use %d frames of %d bytes for a total payload length of %d bytes", encode_frame_num, encode_codec_size,
                  encode_frame_size);
         xTaskCreate(&run_codec2, "codec2_task", 30000, NULL, 5, &codec2HandlerTask);
     } else {
@@ -148,7 +147,7 @@ int32_t AudioModule::runOnce()
         esp_err_t res;
         if (firstTime) {
             // Set up I2S Processor configuration. This will produce 16bit samples at 8 kHz instead of 12 from the ADC
-            LOG_INFO("Initializing I2S SD: %d DIN: %d WS: %d SCK: %d\n", moduleConfig.audio.i2s_sd, moduleConfig.audio.i2s_din,
+            LOG_INFO("Init I2S SD: %d DIN: %d WS: %d SCK: %d", moduleConfig.audio.i2s_sd, moduleConfig.audio.i2s_din,
                      moduleConfig.audio.i2s_ws, moduleConfig.audio.i2s_sck);
             i2s_config_t i2s_config = {.mode = (i2s_mode_t)(I2S_MODE_MASTER | (moduleConfig.audio.i2s_sd ? I2S_MODE_RX : 0) |
                                                             (moduleConfig.audio.i2s_din ? I2S_MODE_TX : 0)),
@@ -164,7 +163,7 @@ int32_t AudioModule::runOnce()
                                        .fixed_mclk = 0};
             res = i2s_driver_install(I2S_PORT, &i2s_config, 0, NULL);
             if (res != ESP_OK) {
-                LOG_ERROR("Failed to install I2S driver: %d\n", res);
+                LOG_ERROR("Failed to install I2S driver: %d", res);
             }
 
             const i2s_pin_config_t pin_config = {
@@ -174,18 +173,18 @@ int32_t AudioModule::runOnce()
                 .data_in_num = moduleConfig.audio.i2s_sd ? moduleConfig.audio.i2s_sd : I2S_PIN_NO_CHANGE};
             res = i2s_set_pin(I2S_PORT, &pin_config);
             if (res != ESP_OK) {
-                LOG_ERROR("Failed to set I2S pin config: %d\n", res);
+                LOG_ERROR("Failed to set I2S pin config: %d", res);
             }
 
             res = i2s_start(I2S_PORT);
             if (res != ESP_OK) {
-                LOG_ERROR("Failed to start I2S: %d\n", res);
+                LOG_ERROR("Failed to start I2S: %d", res);
             }
 
             radio_state = RadioState::rx;
 
             // Configure PTT input
-            LOG_INFO("Initializing PTT on Pin %u\n", moduleConfig.audio.ptt_pin ? moduleConfig.audio.ptt_pin : PTT_PIN);
+            LOG_INFO("Init PTT on Pin %u", moduleConfig.audio.ptt_pin ? moduleConfig.audio.ptt_pin : PTT_PIN);
             pinMode(moduleConfig.audio.ptt_pin ? moduleConfig.audio.ptt_pin : PTT_PIN, INPUT);
 
             firstTime = false;
@@ -194,17 +193,17 @@ int32_t AudioModule::runOnce()
             // Check if PTT is pressed. TODO hook that into Onebutton/Interrupt drive.
             if (digitalRead(moduleConfig.audio.ptt_pin ? moduleConfig.audio.ptt_pin : PTT_PIN) == HIGH) {
                 if (radio_state == RadioState::rx) {
-                    LOG_INFO("PTT pressed, switching to TX\n");
+                    LOG_INFO("PTT pressed, switching to TX");
                     radio_state = RadioState::tx;
                     e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
                     this->notifyObservers(&e);
                 }
             } else {
                 if (radio_state == RadioState::tx) {
-                    LOG_INFO("PTT released, switching to RX\n");
+                    LOG_INFO("PTT released, switching to RX");
                     if (tx_encode_frame_index > sizeof(tx_header)) {
                         // Send the incomplete frame
-                        LOG_INFO("Sending %d codec2 bytes (incomplete)\n", tx_encode_frame_index);
+                        LOG_INFO("Send %d codec2 bytes (incomplete)", tx_encode_frame_index);
                         sendPayload();
                     }
                     tx_encode_frame_index = sizeof(tx_header);
@@ -273,7 +272,7 @@ ProcessMessage AudioModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
     if ((moduleConfig.audio.codec2_enabled) && (myRegion->audioPermitted)) {
         auto &p = mp.decoded;
-        if (getFrom(&mp) != nodeDB->getNodeNum()) {
+        if (!isFromUs(&mp)) {
             memcpy(rx_encode_frame, p.payload.bytes, p.payload.size);
             radio_state = RadioState::rx;
             rx_encode_frame_index = p.payload.size;

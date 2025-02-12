@@ -15,7 +15,7 @@
 // rxd = 9
 
 #define EXT_NOTIFY_OUT 22
-#undef BUTTON_PIN // Pin 17 used for antenna switching via DIO4
+#define BUTTON_PIN -1 // Pin 17 used for antenna switching via DIO4
 
 #define LED_PIN PIN_LED
 
@@ -23,6 +23,7 @@
 //  ratio of voltage divider = 3.0 (R17=200k, R18=100k)
 // #define ADC_MULTIPLIER 3.1 // 3.0 + a bit for being optimistic
 
+#define HAS_CPU_SHUTDOWN 1
 #define USE_SX1262
 
 #undef LORA_SCK

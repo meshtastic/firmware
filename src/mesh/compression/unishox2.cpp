@@ -339,7 +339,7 @@ int32_t readUTF8(const char *in, int len, int l, int *utf8len)
 /// This is also used for Unicode strings \n
 /// This is a crude implementation that is not optimized.  Assuming only short strings \n
 /// are encoded, this is not much of an issue.
-int matchOccurance(const char *in, int len, int l, char *out, int olen, int *ol, uint8_t *state, const uint8_t usx_hcodes[],
+int matchOccurance(const char *in, int len, int l, char *out, int olen, int *ol, const uint8_t *state, const uint8_t usx_hcodes[],
                    const uint8_t usx_hcode_lens[])
 {
     int j, k;
@@ -383,7 +383,7 @@ int matchOccurance(const char *in, int len, int l, char *out, int olen, int *ol,
 /// This is also used for Unicode strings \n
 /// This is a crude implementation that is not optimized.  Assuming only short strings \n
 /// are encoded, this is not much of an issue.
-int matchLine(const char *in, int len, int l, char *out, int olen, int *ol, struct us_lnk_lst *prev_lines, uint8_t *state,
+int matchLine(const char *in, int len, int l, char *out, int olen, int *ol, struct us_lnk_lst *prev_lines, const uint8_t *state,
               const uint8_t usx_hcodes[], const uint8_t usx_hcode_lens[])
 {
     int last_ol = *ol;

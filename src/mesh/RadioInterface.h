@@ -9,7 +9,9 @@
 
 #define MAX_TX_QUEUE 16 // max number of packets which can be waiting for transmission
 
-#define MAX_RHPACKETLEN 256
+#define MAX_LORA_PAYLOAD_LEN 255 // max length of 255 per Semtech's datasheets on SX12xx
+#define MESHTASTIC_HEADER_LENGTH 16
+#define MESHTASTIC_PKC_OVERHEAD 12
 
 #define PACKET_FLAGS_HOP_LIMIT_MASK 0x07
 #define PACKET_FLAGS_WANT_ACK_MASK 0x08
@@ -42,6 +44,20 @@ typedef struct {
     // ***For future use*** Last byte of the NodeNum of the node that will relay/relayed this packet
     uint8_t relay_node;
 } PacketHeader;
+
+/**
+ * This structure represent the structured buffer : a PacketHeader then the payload. The whole is
+ * MAX_LORA_PAYLOAD_LEN + 1 length
+ * It makes the use of its data easier, and avoids manipulating pointers (and potential non aligned accesses)
+ */
+typedef struct {
+    /** The header, as defined just before */
+    PacketHeader header;
+
+    /** The payload, of maximum length minus the header, aligned just to be sure */
+    uint8_t payload[MAX_LORA_PAYLOAD_LEN + 1 - sizeof(PacketHeader)] __attribute__((__aligned__));
+
+} RadioBuffer;
 
 /**
  * Basic operations all radio chipsets must implement.
@@ -89,8 +105,7 @@ class RadioInterface
     /**
      * A temporary buffer used for sending/receiving packets, sized to hold the biggest buffer we might need
      * */
-    uint8_t radiobuf[MAX_RHPACKETLEN];
-
+    RadioBuffer radioBuffer __attribute__((__aligned__));
     /**
      * Enqueue a received packet for the registered receiver
      */
@@ -158,8 +173,17 @@ class RadioInterface
     /** The delay to use when we want to send something */
     uint32_t getTxDelayMsec();
 
+    /** The CW to use when calculating SNR_based delays */
+    uint8_t getCWsize(float snr);
+
+    /** The worst-case SNR_based packet delay */
+    uint32_t getTxDelayMsecWeightedWorst(float snr);
+
     /** The delay to use when we want to flood a message. Use a weighted scale based on SNR */
     uint32_t getTxDelayMsecWeighted(float snr);
+
+    /** If the packet is not already in the late rebroadcast window, move it there */
+    virtual void clampToLateRebroadcastWindow(NodeNum from, PacketId id) { return; }
 
     /**
      * Calculate airtime per

@@ -10,7 +10,7 @@ void BMP3XXSensor::setup() {}
 
 int32_t BMP3XXSensor::runOnce()
 {
-    LOG_INFO("Init sensor: %s\n", sensorName);
+    LOG_INFO("Init sensor: %s", sensorName);
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
@@ -50,11 +50,11 @@ bool BMP3XXSensor::getMetrics(meshtastic_Telemetry *measurement)
         measurement->variant.environment_metrics.barometric_pressure = static_cast<float>(bmp3xx->pressure) / 100.0F;
         measurement->variant.environment_metrics.relative_humidity = 0.0f;
 
-        LOG_DEBUG("BMP3XXSensor::getMetrics id: %i temp: %.1f press %.1f\n", measurement->which_variant,
+        LOG_DEBUG("BMP3XX getMetrics id: %i temp: %.1f press %.1f", measurement->which_variant,
                   measurement->variant.environment_metrics.temperature,
                   measurement->variant.environment_metrics.barometric_pressure);
     } else {
-        LOG_DEBUG("BMP3XXSensor::getMetrics id: %i\n", measurement->which_variant);
+        LOG_DEBUG("BMP3XX getMetrics id: %i", measurement->which_variant);
     }
     return true;
 }

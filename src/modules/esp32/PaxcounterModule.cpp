@@ -15,14 +15,14 @@ PaxcounterModule *paxcounterModule;
 void PaxcounterModule::handlePaxCounterReportRequest()
 {
     // The libpax library already updated our data structure, just before invoking this callback.
-    LOG_INFO("PaxcounterModule: libpax reported new data: wifi=%d; ble=%d; uptime=%lu\n",
+    LOG_INFO("PaxcounterModule: libpax reported new data: wifi=%d; ble=%d; uptime=%lu",
              paxcounterModule->count_from_libpax.wifi_count, paxcounterModule->count_from_libpax.ble_count, millis() / 1000);
     paxcounterModule->reportedDataSent = false;
     paxcounterModule->setIntervalFromNow(0);
 }
 
 PaxcounterModule::PaxcounterModule()
-    : concurrency::OSThread("PaxcounterModule"),
+    : concurrency::OSThread("Paxcounter"),
       ProtobufModule("paxcounter", meshtastic_PortNum_PAXCOUNTER_APP, &meshtastic_Paxcount_msg)
 {
 }
@@ -39,7 +39,7 @@ bool PaxcounterModule::sendInfo(NodeNum dest)
     if (paxcounterModule->reportedDataSent)
         return false;
 
-    LOG_INFO("PaxcounterModule: sending pax info wifi=%d; ble=%d; uptime=%lu\n", count_from_libpax.wifi_count,
+    LOG_INFO("PaxcounterModule: send pax info wifi=%d; ble=%d; uptime=%lu", count_from_libpax.wifi_count,
              count_from_libpax.ble_count, millis() / 1000);
 
     meshtastic_Paxcount pl = meshtastic_Paxcount_init_default;
@@ -78,7 +78,7 @@ int32_t PaxcounterModule::runOnce()
     if (isActive()) {
         if (firstTime) {
             firstTime = false;
-            LOG_DEBUG("Paxcounter starting up with interval of %d seconds\n",
+            LOG_DEBUG("Paxcounter starting up with interval of %d seconds",
                       Default::getConfiguredOrDefault(moduleConfig.paxcounter.paxcounter_update_interval,
                                                       default_telemetry_broadcast_interval_secs));
             struct libpax_config_t configuration;
@@ -95,7 +95,9 @@ int32_t PaxcounterModule::runOnce()
 
             // internal processing initialization
             libpax_counter_init(handlePaxCounterReportRequest, &count_from_libpax,
-                                moduleConfig.paxcounter.paxcounter_update_interval, 0);
+                                Default::getConfiguredOrDefault(moduleConfig.paxcounter.paxcounter_update_interval,
+                                                                default_telemetry_broadcast_interval_secs),
+                                0);
             libpax_counter_start();
         } else {
             sendInfo(NODENUM_BROADCAST);

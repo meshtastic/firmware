@@ -22,7 +22,6 @@
  * THE SOFTWARE.
  */
 
-#include <iostream>
 #include <math.h>
 #include <sstream>
 #include <stdio.h>
@@ -37,14 +36,14 @@
 #define FREE_ARRAY(x)                                                                                                            \
     {                                                                                                                            \
         JSONArray::iterator iter;                                                                                                \
-        for (iter = x.begin(); iter != x.end(); iter++) {                                                                        \
+        for (iter = x.begin(); iter != x.end(); ++iter) {                                                                        \
             delete *iter;                                                                                                        \
         }                                                                                                                        \
     }
 #define FREE_OBJECT(x)                                                                                                           \
     {                                                                                                                            \
         JSONObject::iterator iter;                                                                                               \
-        for (iter = x.begin(); iter != x.end(); iter++) {                                                                        \
+        for (iter = x.begin(); iter != x.end(); ++iter) {                                                                        \
             delete (*iter).second;                                                                                               \
         }                                                                                                                        \
     }
@@ -430,7 +429,7 @@ JSONValue::JSONValue(const JSONValue &m_source)
         JSONArray source_array = *m_source.array_value;
         JSONArray::iterator iter;
         array_value = new JSONArray();
-        for (iter = source_array.begin(); iter != source_array.end(); iter++)
+        for (iter = source_array.begin(); iter != source_array.end(); ++iter)
             array_value->push_back(new JSONValue(**iter));
         break;
     }
@@ -439,7 +438,7 @@ JSONValue::JSONValue(const JSONValue &m_source)
         JSONObject source_object = *m_source.object_value;
         object_value = new JSONObject();
         JSONObject::iterator iter;
-        for (iter = source_object.begin(); iter != source_object.end(); iter++) {
+        for (iter = source_object.begin(); iter != source_object.end(); ++iter) {
             std::string name = (*iter).first;
             (*object_value)[name] = new JSONValue(*((*iter).second));
         }
@@ -462,12 +461,12 @@ JSONValue::~JSONValue()
 {
     if (type == JSONType_Array) {
         JSONArray::iterator iter;
-        for (iter = array_value->begin(); iter != array_value->end(); iter++)
+        for (iter = array_value->begin(); iter != array_value->end(); ++iter)
             delete *iter;
         delete array_value;
     } else if (type == JSONType_Object) {
         JSONObject::iterator iter;
-        for (iter = object_value->begin(); iter != object_value->end(); iter++) {
+        for (iter = object_value->begin(); iter != object_value->end(); ++iter) {
             delete (*iter).second;
         }
         delete object_value;
@@ -722,7 +721,7 @@ std::vector<std::string> JSONValue::ObjectKeys() const
         while (iter != object_value->end()) {
             keys.push_back(iter->first);
 
-            iter++;
+            ++iter;
         }
     }
 
@@ -851,21 +850,29 @@ std::string JSONValue::StringifyString(const std::string &str)
             str_out += "\\r";
         } else if (chr == '\t') {
             str_out += "\\t";
-        } else if (chr < ' ' || chr > 126) {
-            str_out += "\\u";
-            for (int i = 0; i < 4; i++) {
-                int value = (chr >> 12) & 0xf;
-                if (value >= 0 && value <= 9)
-                    str_out += (char)('0' + value);
-                else if (value >= 10 && value <= 15)
-                    str_out += (char)('A' + (value - 10));
-                chr <<= 4;
-            }
+        } else if (chr < 0x20 || chr == 0x7F) {
+            char buf[7];
+            snprintf(buf, sizeof(buf), "\\u%04x", chr);
+            str_out += buf;
+        } else if (chr < 0x80) {
+            str_out += chr;
         } else {
             str_out += chr;
+            size_t remain = str.end() - iter - 1;
+            if ((chr & 0xE0) == 0xC0 && remain >= 1) {
+                ++iter;
+                str_out += *iter;
+            } else if ((chr & 0xF0) == 0xE0 && remain >= 2) {
+                str_out += *(++iter);
+                str_out += *(++iter);
+            } else if ((chr & 0xF8) == 0xF0 && remain >= 3) {
+                str_out += *(++iter);
+                str_out += *(++iter);
+                str_out += *(++iter);
+            }
         }
 
-        iter++;
+        ++iter;
     }
 
     str_out += "\"";

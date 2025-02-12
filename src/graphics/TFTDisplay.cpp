@@ -244,9 +244,9 @@ class LGFX : public lgfx::LGFX_Device
 
 static LGFX *tft = nullptr;
 
-#elif defined(ILI9341_DRIVER)
+#elif defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER)
 
-#include <LovyanGFX.hpp> // Graphics and font library for ILI9341 driver chip
+#include <LovyanGFX.hpp> // Graphics and font library for ILI9341/ILI9342 driver chip
 
 #if defined(ILI9341_BACKLIGHT_EN) && !defined(TFT_BL)
 #define TFT_BL ILI9341_BACKLIGHT_EN
@@ -254,7 +254,11 @@ static LGFX *tft = nullptr;
 
 class LGFX : public lgfx::LGFX_Device
 {
+#if defined(ILI9341_DRIVER)
     lgfx::Panel_ILI9341 _panel_instance;
+#elif defined(ILI9342_DRIVER)
+    lgfx::Panel_ILI9342 _panel_instance;
+#endif
     lgfx::Bus_SPI _bus_instance;
     lgfx::Light_PWM _light_instance;
 
@@ -265,7 +269,11 @@ class LGFX : public lgfx::LGFX_Device
             auto cfg = _bus_instance.config();
 
             // configure SPI
+#if defined(ILI9341_DRIVER)
             cfg.spi_host = ILI9341_SPI_HOST; // ESP32-S2,S3,C3 : SPI2_HOST or SPI3_HOST / ESP32 : VSPI_HOST or HSPI_HOST
+#elif defined(ILI9342_DRIVER)
+            cfg.spi_host = ILI9342_SPI_HOST; // ESP32-S2,S3,C3 : SPI2_HOST or SPI3_HOST / ESP32 : VSPI_HOST or HSPI_HOST
+#endif
             cfg.spi_mode = 0;
             cfg.freq_write = SPI_FREQUENCY; // SPI clock for transmission (up to 80MHz, rounded to the value obtained by dividing
                                             // 80MHz by an integer)
@@ -342,15 +350,15 @@ class LGFX : public lgfx::LGFX_Device
 static LGFX *tft = nullptr;
 
 #elif defined(ST7735_CS)
-#include <TFT_eSPI.h> // Graphics and font library for ILI9341 driver chip
+#include <TFT_eSPI.h> // Graphics and font library for ILI9342 driver chip
 
 static TFT_eSPI *tft = nullptr; // Invoke library, pins defined in User_Setup.h
-#elif ARCH_PORTDUINO && HAS_SCREEN != 0
+#elif ARCH_PORTDUINO && HAS_SCREEN != 0 && !HAS_TFT
 #include <LovyanGFX.hpp> // Graphics and font library for ST7735 driver chip
 
 class LGFX : public lgfx::LGFX_Device
 {
-    lgfx::Panel_LCD *_panel_instance;
+    lgfx::Panel_Device *_panel_instance;
     lgfx::Bus_SPI _bus_instance;
 
     lgfx::ITouch *_touch_instance;
@@ -364,8 +372,21 @@ class LGFX : public lgfx::LGFX_Device
             _panel_instance = new lgfx::Panel_ST7735;
         else if (settingsMap[displayPanel] == st7735s)
             _panel_instance = new lgfx::Panel_ST7735S;
+        else if (settingsMap[displayPanel] == st7796)
+            _panel_instance = new lgfx::Panel_ST7796;
         else if (settingsMap[displayPanel] == ili9341)
             _panel_instance = new lgfx::Panel_ILI9341;
+        else if (settingsMap[displayPanel] == ili9342)
+            _panel_instance = new lgfx::Panel_ILI9342;
+        else if (settingsMap[displayPanel] == ili9488)
+            _panel_instance = new lgfx::Panel_ILI9488;
+        else if (settingsMap[displayPanel] == hx8357d)
+            _panel_instance = new lgfx::Panel_HX8357D;
+        else {
+            _panel_instance = new lgfx::Panel_NULL;
+            LOG_ERROR("Unknown display panel configured!");
+        }
+
         auto buscfg = _bus_instance.config();
         buscfg.spi_mode = 0;
         buscfg.spi_host = settingsMap[displayspidev];
@@ -376,15 +397,15 @@ class LGFX : public lgfx::LGFX_Device
         _panel_instance->setBus(&_bus_instance); // set the bus on the panel.
 
         auto cfg = _panel_instance->config(); // Gets a structure for display panel settings.
-        LOG_DEBUG("Height: %d, Width: %d \n", settingsMap[displayHeight], settingsMap[displayWidth]);
+        LOG_DEBUG("Height: %d, Width: %d ", settingsMap[displayHeight], settingsMap[displayWidth]);
         cfg.pin_cs = settingsMap[displayCS]; // Pin number where CS is connected (-1 = disable)
         cfg.pin_rst = settingsMap[displayReset];
-        cfg.panel_width = settingsMap[displayWidth];   // actual displayable width
-        cfg.panel_height = settingsMap[displayHeight]; // actual displayable height
-        cfg.offset_x = settingsMap[displayOffsetX];    // Panel offset amount in X direction
-        cfg.offset_y = settingsMap[displayOffsetY];    // Panel offset amount in Y direction
-        cfg.offset_rotation = 0;                       // Rotation direction value offset 0~7 (4~7 is mirrored)
-        cfg.invert = settingsMap[displayInvert];       // Set to true if the light/darkness of the panel is reversed
+        cfg.panel_width = settingsMap[displayWidth];            // actual displayable width
+        cfg.panel_height = settingsMap[displayHeight];          // actual displayable height
+        cfg.offset_x = settingsMap[displayOffsetX];             // Panel offset amount in X direction
+        cfg.offset_y = settingsMap[displayOffsetY];             // Panel offset amount in Y direction
+        cfg.offset_rotation = settingsMap[displayOffsetRotate]; // Rotation direction value offset 0~7 (4~7 is mirrored)
+        cfg.invert = settingsMap[displayInvert];                // Set to true if the light/darkness of the panel is reversed
 
         _panel_instance->config(cfg);
 
@@ -406,7 +427,7 @@ class LGFX : public lgfx::LGFX_Device
             touch_cfg.y_max = settingsMap[displayWidth] - 1;
             touch_cfg.pin_int = settingsMap[touchscreenIRQ];
             touch_cfg.bus_shared = true;
-            touch_cfg.offset_rotation = 1;
+            touch_cfg.offset_rotation = settingsMap[touchscreenRotate];
             if (settingsMap[touchscreenI2CAddr] != -1) {
                 touch_cfg.i2c_addr = settingsMap[touchscreenI2CAddr];
             } else {
@@ -624,8 +645,8 @@ static LGFX *tft = nullptr;
 
 #endif
 
-#if defined(ST7701_CS) || defined(ST7735_CS) || defined(ST7789_CS) || defined(ILI9341_DRIVER) || defined(RAK14014) ||            \
-    defined(HX8357_CS) || (ARCH_PORTDUINO && HAS_SCREEN != 0)
+#if defined(ST7701_CS) || defined(ST7735_CS) || defined(ST7789_CS) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) ||      \
+    defined(RAK14014) || defined(HX8357_CS) || (ARCH_PORTDUINO && HAS_SCREEN != 0)
 #include "SPILock.h"
 #include "TFTDisplay.h"
 #include <SPI.h>
@@ -639,7 +660,7 @@ GpioPin *TFTDisplay::backlightEnable = NULL;
 
 TFTDisplay::TFTDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY geometry, HW_I2C i2cBus)
 {
-    LOG_DEBUG("TFTDisplay!\n");
+    LOG_DEBUG("TFTDisplay!");
 
 #ifdef TFT_BL
     GpioPin *p = new GpioHwPin(TFT_BL);
@@ -708,7 +729,7 @@ void TFTDisplay::sendCommand(uint8_t com)
     // handle display on/off directly
     switch (com) {
     case DISPLAYON: {
-        // LOG_DEBUG("Display on\n");
+        // LOG_DEBUG("Display on");
         backlightEnable->set(true);
 #if ARCH_PORTDUINO
         display(true);
@@ -732,7 +753,7 @@ void TFTDisplay::sendCommand(uint8_t com)
         break;
     }
     case DISPLAYOFF: {
-        // LOG_DEBUG("Display off\n");
+        // LOG_DEBUG("Display off");
         backlightEnable->set(false);
 #if ARCH_PORTDUINO
         tft->clear();
@@ -768,14 +789,14 @@ void TFTDisplay::setDisplayBrightness(uint8_t _brightness)
     // todo
 #else
     tft->setBrightness(_brightness);
-    LOG_DEBUG("Brightness is set to value: %i \n", _brightness);
+    LOG_DEBUG("Brightness is set to value: %i ", _brightness);
 #endif
 }
 
 void TFTDisplay::flipScreenVertically()
 {
 #if defined(T_WATCH_S3)
-    LOG_DEBUG("Flip TFT vertically\n"); // T-Watch S3 right-handed orientation
+    LOG_DEBUG("Flip TFT vertically"); // T-Watch S3 right-handed orientation
     tft->setRotation(0);
 #endif
 }
@@ -819,7 +840,7 @@ void TFTDisplay::setDetected(uint8_t detected)
 bool TFTDisplay::connect()
 {
     concurrency::LockGuard g(spiLock);
-    LOG_INFO("Doing TFT init\n");
+    LOG_INFO("Do TFT init");
 #ifdef RAK14014
     tft = new TFT_eSPI;
 #else
@@ -827,7 +848,7 @@ bool TFTDisplay::connect()
 #endif
 
     backlightEnable->set(true);
-    LOG_INFO("Power to TFT Backlight\n");
+    LOG_INFO("Power to TFT Backlight");
 
 #ifdef UNPHONE
     unphone.backlight(true); // using unPhone library

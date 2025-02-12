@@ -12,24 +12,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build base
-        id: base
-        uses: ./.github/actions/setup-base
 
       - name: Build NRF52
-        run: bin/build-nrf52.sh ${{ inputs.board }}
-
-      - name: Get release version string
-        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
-        id: version
-
-      - name: Store binaries as an artifact
-        uses: actions/upload-artifact@v4
+        id: build
+        uses: ./.github/actions/build-variant
         with:
-          name: firmware-${{ inputs.board }}-${{ steps.version.outputs.version }}.zip
-          overwrite: true
-          path: |
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          board: ${{ inputs.board }}
+          build-script-path: bin/build-nrf52.sh
+          artifact-paths: |
             release/*.hex
             release/*.uf2
             release/*.elf
             release/*.zip
+          arch: nrf52840

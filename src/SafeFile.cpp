@@ -5,6 +5,12 @@
 // Only way to work on both esp32 and nrf52
 static File openFile(const char *filename, bool fullAtomic)
 {
+    concurrency::LockGuard g(spiLock);
+    LOG_DEBUG("Opening %s, fullAtomic=%d", filename, fullAtomic);
+#ifdef ARCH_NRF52
+    FSCom.remove(filename);
+    return FSCom.open(filename, FILE_O_WRITE);
+#endif
     if (!fullAtomic)
         FSCom.remove(filename); // Nuke the old file to make space (ignore if it !exists)
 
@@ -12,8 +18,6 @@ static File openFile(const char *filename, bool fullAtomic)
     filenameTmp += ".tmp";
 
     // clear any previous LFS errors
-    lfs_assert_failed = false;
-
     return FSCom.open(filenameTmp.c_str(), FILE_O_WRITE);
 }
 
@@ -53,20 +57,29 @@ bool SafeFile::close()
     if (!f)
         return false;
 
+    spiLock->lock();
     f.close();
+    spiLock->unlock();
+
+#ifdef ARCH_NRF52
+    return true;
+#endif
     if (!testReadback())
         return false;
 
-    // brief window of risk here ;-)
-    if (fullAtomic && FSCom.exists(filename.c_str()) && !FSCom.remove(filename.c_str())) {
-        LOG_ERROR("Can't remove old pref file\n");
-        return false;
+    { // Scope for lock
+        concurrency::LockGuard g(spiLock);
+        // brief window of risk here ;-)
+        if (fullAtomic && FSCom.exists(filename.c_str()) && !FSCom.remove(filename.c_str())) {
+            LOG_ERROR("Can't remove old pref file");
+            return false;
+        }
     }
 
     String filenameTmp = filename;
     filenameTmp += ".tmp";
     if (!renameFile(filenameTmp.c_str(), filename.c_str())) {
-        LOG_ERROR("Error: can't rename new pref file\n");
+        LOG_ERROR("Error: can't rename new pref file");
         return false;
     }
 
@@ -76,14 +89,13 @@ bool SafeFile::close()
 /// Read our (closed) tempfile back in and compare the hash
 bool SafeFile::testReadback()
 {
-    bool lfs_failed = lfs_assert_failed;
-    lfs_assert_failed = false;
+    concurrency::LockGuard g(spiLock);
 
     String filenameTmp = filename;
     filenameTmp += ".tmp";
     auto f2 = FSCom.open(filenameTmp.c_str(), FILE_O_READ);
     if (!f2) {
-        LOG_ERROR("Can't open tmp file for readback\n");
+        LOG_ERROR("Can't open tmp file for readback");
         return false;
     }
 
@@ -95,11 +107,11 @@ bool SafeFile::testReadback()
     f2.close();
 
     if (test_hash != hash) {
-        LOG_ERROR("Readback failed hash mismatch\n");
+        LOG_ERROR("Readback failed hash mismatch");
         return false;
     }
 
-    return !lfs_failed;
+    return true;
 }
 
 #endif

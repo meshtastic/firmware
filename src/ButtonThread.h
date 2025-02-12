@@ -38,7 +38,7 @@ class ButtonThread : public concurrency::OSThread
     void storeClickCount();
 
   private:
-#if defined(BUTTON_PIN) || defined(ARCH_PORTDUINO)
+#if defined(BUTTON_PIN) || defined(ARCH_PORTDUINO) || defined(USERPREFS_BUTTON_PIN)
     static OneButton userButton; // Static - accessed from an interrupt
 #endif
 #ifdef BUTTON_PIN_ALT

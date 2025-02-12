@@ -17,7 +17,7 @@ class EnvironmentTelemetryModule : private concurrency::OSThread, public Protobu
 
   public:
     EnvironmentTelemetryModule()
-        : concurrency::OSThread("EnvironmentTelemetryModule"),
+        : concurrency::OSThread("EnvironmentTelemetry"),
           ProtobufModule("EnvironmentTelemetry", meshtastic_PortNum_TELEMETRY_APP, &meshtastic_Telemetry_msg)
     {
         lastMeasurementPacket = nullptr;
@@ -52,7 +52,6 @@ class EnvironmentTelemetryModule : private concurrency::OSThread, public Protobu
                                                                  meshtastic_AdminMessage *response) override;
 
   private:
-    float CelsiusToFahrenheit(float c);
     bool firstTime = 1;
     meshtastic_MeshPacket *lastMeasurementPacket;
     uint32_t sendToPhoneIntervalMs = SECONDS_IN_MINUTE * 1000; // Send to phone every minute

@@ -27,5 +27,4 @@ rm -r $OUTDIR/* || true
 platformio pkg update --environment native || platformioFailed
 pio run --environment native || platformioFailed
 cp .pio/build/native/program "$OUTDIR/meshtasticd_linux_$(uname -m)"
-cp bin/device-install.* $OUTDIR
-cp bin/device-update.* $OUTDIR
+cp bin/native-install.* $OUTDIR

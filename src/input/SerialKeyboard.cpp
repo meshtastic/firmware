@@ -1,5 +1,6 @@
 #include "SerialKeyboard.h"
 #include "configuration.h"
+#include <Throttle.h>
 
 #ifdef INPUTBROKER_SERIAL_TYPE
 #define CANNED_MESSAGE_MODULE_ENABLE 1 // in case it's not set in the variant file
@@ -51,7 +52,7 @@ int32_t SerialKeyboard::runOnce()
         digitalWrite(KB_LOAD, HIGH);
         digitalWrite(KB_CLK, LOW);
         prevKeys = 0b1111111111111111;
-        LOG_DEBUG("Serial Keyboard setup\n");
+        LOG_DEBUG("Serial Keyboard setup");
     }
 
     if (INPUTBROKER_SERIAL_TYPE == 1) { // Chatter V1.0 & V2.0 keypads
@@ -73,7 +74,7 @@ int32_t SerialKeyboard::runOnce()
         // Serial.print ("X");
         // Serial.println (shiftRegister2, BIN);
 
-        if (millis() - lastPressTime > 500) {
+        if (!Throttle::isWithinTimespanMs(lastPressTime, 500)) {
             quickPress = 0;
         }
 

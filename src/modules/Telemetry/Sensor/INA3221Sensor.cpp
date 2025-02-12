@@ -11,7 +11,7 @@ INA3221Sensor::INA3221Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_
 
 int32_t INA3221Sensor::runOnce()
 {
-    LOG_INFO("Init sensor: %s\n", sensorName);
+    LOG_INFO("Init sensor: %s", sensorName);
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
@@ -100,6 +100,11 @@ bool INA3221Sensor::getPowerMetrics(meshtastic_Telemetry *measurement)
 uint16_t INA3221Sensor::getBusVoltageMv()
 {
     return lround(ina3221.getVoltage(BAT_CH) * 1000);
+}
+
+int16_t INA3221Sensor::getCurrentMa()
+{
+    return lround(ina3221.getCurrent(BAT_CH));
 }
 
 #endif

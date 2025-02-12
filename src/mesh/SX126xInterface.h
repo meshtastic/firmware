@@ -1,4 +1,5 @@
 #pragma once
+#if RADIOLIB_EXCLUDE_SX126X != 1
 
 #include "RadioLibInterface.h"
 
@@ -27,8 +28,11 @@ template <class T> class SX126xInterface : public RadioLibInterface
 
     bool isIRQPending() override { return lora.getIrqFlags() != 0; }
 
+    void setTCXOVoltage(float voltage) { tcxoVoltage = voltage; }
+
   protected:
     float currentLimit = 140; // Higher OCP limit for SX126x PA
+    float tcxoVoltage = 0.0;
 
     /**
      * Specific module instance
@@ -67,7 +71,5 @@ template <class T> class SX126xInterface : public RadioLibInterface
     virtual void addReceiveMetadata(meshtastic_MeshPacket *mp) override;
 
     virtual void setStandby() override;
-
-  private:
-    uint32_t activeReceiveStart = 0;
 };
+#endif

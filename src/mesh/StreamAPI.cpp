@@ -1,6 +1,7 @@
 #include "StreamAPI.h"
 #include "PowerFSM.h"
 #include "RTC.h"
+#include "Throttle.h"
 #include "configuration.h"
 
 #define START1 0x94
@@ -20,10 +21,9 @@ int32_t StreamAPI::runOncePart()
  */
 int32_t StreamAPI::readStream()
 {
-    uint32_t now = millis();
     if (!stream->available()) {
         // Nothing available this time, if the computer has talked to us recently, poll often, otherwise let CPU sleep a long time
-        bool recentRx = (now - lastRxMsec) < 2000;
+        bool recentRx = Throttle::isWithinTimespanMs(lastRxMsec, 2000);
         return recentRx ? 5 : 250;
     } else {
         while (stream->available()) { // Currently we never want to block
@@ -71,7 +71,7 @@ int32_t StreamAPI::readStream()
         }
 
         // we had bytes available this time, so assume we might have them next time also
-        lastRxMsec = now;
+        lastRxMsec = millis();
         return 0;
     }
 }
@@ -115,7 +115,7 @@ void StreamAPI::emitRebooted()
     fromRadioScratch.which_payload_variant = meshtastic_FromRadio_rebooted_tag;
     fromRadioScratch.rebooted = true;
 
-    // LOG_DEBUG("Emitting reboot packet for serial shell\n");
+    // LOG_DEBUG("Emitting reboot packet for serial shell");
     emitTxBuffer(pb_encode_to_bytes(txBuf + HEADER_LEN, meshtastic_FromRadio_size, &meshtastic_FromRadio_msg, &fromRadioScratch));
 }
 

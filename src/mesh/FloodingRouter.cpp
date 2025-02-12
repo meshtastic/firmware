@@ -1,5 +1,5 @@
 #include "FloodingRouter.h"
-#include "../userPrefs.h"
+
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 
@@ -21,33 +21,51 @@ ErrorCode FloodingRouter::send(meshtastic_MeshPacket *p)
 bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 {
     if (wasSeenRecently(p)) { // Note: this will also add a recent packet record
-        printPacket("Ignoring incoming msg we've already seen", p);
+        printPacket("Ignore dupe incoming msg", p);
+        rxDupe++;
         if (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER &&
-            config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER) {
+            config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER &&
+            config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER_LATE) {
             // cancel rebroadcast of this message *if* there was already one, unless we're a router/repeater!
-            Router::cancelSending(p->from, p->id);
+            if (Router::cancelSending(p->from, p->id))
+                txRelayCanceled++;
         }
+        if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE && iface) {
+            iface->clampToLateRebroadcastWindow(getFrom(p), p->id);
+        }
+
+        /* If the original transmitter is doing retransmissions (hopStart equals hopLimit) for a reliable transmission, e.g., when
+        the ACK got lost, we will handle the packet again to make sure it gets an ACK to its packet. */
+        bool isRepeated = p->hop_start > 0 && p->hop_start == p->hop_limit;
+        if (isRepeated) {
+            LOG_DEBUG("Repeated reliable tx");
+            if (!perhapsRebroadcast(p) && isToUs(p) && p->want_ack) {
+                // FIXME - channel index should be used, but the packet is still encrypted here
+                sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, 0, 0);
+            }
+        }
+
         return true;
     }
 
     return Router::shouldFilterReceived(p);
 }
 
-void FloodingRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Routing *c)
+bool FloodingRouter::isRebroadcaster()
 {
-    bool isAckorReply = (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) && (p->decoded.request_id != 0);
-    if (isAckorReply && p->to != getNodeNum() && p->to != NODENUM_BROADCAST) {
-        // do not flood direct message that is ACKed or replied to
-        LOG_DEBUG("Receiving an ACK or reply not for me, but don't need to rebroadcast this direct message anymore.\n");
-        Router::cancelSending(p->to, p->decoded.request_id); // cancel rebroadcast for this DM
-    }
-    if ((p->to != getNodeNum()) && (p->hop_limit > 0) && (getFrom(p) != getNodeNum())) {
+    return config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE &&
+           config.device.rebroadcast_mode != meshtastic_Config_DeviceConfig_RebroadcastMode_NONE;
+}
+
+bool FloodingRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
+{
+    if (!isToUs(p) && (p->hop_limit > 0) && !isFromUs(p)) {
         if (p->id != 0) {
-            if (config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE) {
+            if (isRebroadcaster()) {
                 meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
 
                 tosend->hop_limit--; // bump down the hop count
-#if EVENT_MODE
+#if USERPREFS_EVENT_MODE
                 if (tosend->hop_limit > 2) {
                     // if we are "correcting" the hop_limit, "correct" the hop_start by the same amount to preserve hops away.
                     tosend->hop_start -= (tosend->hop_limit - 2);
@@ -55,17 +73,34 @@ void FloodingRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
                 }
 #endif
 
-                LOG_INFO("Rebroadcasting received floodmsg to neighbors\n");
+                LOG_INFO("Rebroadcast received floodmsg");
                 // Note: we are careful to resend using the original senders node id
                 // We are careful not to call our hooked version of send() - because we don't want to check this again
                 Router::send(tosend);
+
+                return true;
             } else {
-                LOG_DEBUG("Not rebroadcasting. Role = Role_ClientMute\n");
+                LOG_DEBUG("No rebroadcast: Role = CLIENT_MUTE or Rebroadcast Mode = NONE");
             }
         } else {
-            LOG_DEBUG("Ignoring a simple (0 id) broadcast\n");
+            LOG_DEBUG("Ignore 0 id broadcast");
         }
     }
+
+    return false;
+}
+
+void FloodingRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Routing *c)
+{
+    bool isAckorReply = (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) && (p->decoded.request_id != 0);
+    if (isAckorReply && !isToUs(p) && !isBroadcast(p->to)) {
+        // do not flood direct message that is ACKed or replied to
+        LOG_DEBUG("Rxd an ACK/reply not for me, cancel rebroadcast");
+        Router::cancelSending(p->to, p->decoded.request_id); // cancel rebroadcast for this DM
+    }
+
+    perhapsRebroadcast(p);
+
     // handle the packet as normal
     Router::sniffReceived(p, c);
 }

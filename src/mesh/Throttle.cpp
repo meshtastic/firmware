@@ -25,3 +25,11 @@ bool Throttle::execute(uint32_t *lastExecutionMs, uint32_t minumumIntervalMs, vo
     }
     return false;
 }
+
+/// @brief Check if the last execution time is within the interval
+/// @param lastExecutionMs The last execution time in milliseconds
+/// @param timeSpanMs The interval in milliseconds of the timespan
+bool Throttle::isWithinTimespanMs(uint32_t lastExecutionMs, uint32_t timeSpanMs)
+{
+    return (millis() - lastExecutionMs) < timeSpanMs;
+}

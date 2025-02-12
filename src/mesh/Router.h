@@ -71,7 +71,7 @@ class Router : protected concurrency::OSThread
      * RadioInterface calls this to queue up packets that have been received from the radio.  The router is now responsible for
      * freeing the packet
      */
-    void enqueueReceivedMessage(meshtastic_MeshPacket *p);
+    virtual void enqueueReceivedMessage(meshtastic_MeshPacket *p);
 
     /**
      * Send a packet on a suitable interface.  This routine will
@@ -81,6 +81,10 @@ class Router : protected concurrency::OSThread
      * NOTE: This method will free the provided packet (even if we return an error code)
      */
     virtual ErrorCode send(meshtastic_MeshPacket *p);
+
+    /* Statistics for the amount of duplicate received packets and the amount of times we cancel a relay because someone did it
+        before us */
+    uint32_t rxDupe = 0, txRelayCanceled = 0;
 
   protected:
     friend class RoutingModule;
@@ -104,8 +108,7 @@ class Router : protected concurrency::OSThread
     /**
      * Send an ack or a nak packet back towards whoever sent idFrom
      */
-    void sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopStart = 0,
-                    uint8_t hopLimit = 0);
+    void sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopLimit = 0);
 
   private:
     /**
@@ -128,7 +131,7 @@ class Router : protected concurrency::OSThread
      */
     void handleReceived(meshtastic_MeshPacket *p, RxSource src = RX_SRC_RADIO);
 
-    /** Frees the provided packet, and generates a NAK indicating the speicifed error while sending */
+    /** Frees the provided packet, and generates a NAK indicating the specifed error while sending */
     void abortSendAndNak(meshtastic_Routing_Error err, meshtastic_MeshPacket *p);
 };
 
@@ -139,7 +142,7 @@ class Router : protected concurrency::OSThread
  */
 bool perhapsDecode(meshtastic_MeshPacket *p);
 
-/** Return 0 for success or a Routing_Errror code for failure
+/** Return 0 for success or a Routing_Error code for failure
  */
 meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p);
 

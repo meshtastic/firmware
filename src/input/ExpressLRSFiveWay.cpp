@@ -1,5 +1,5 @@
-
 #include "ExpressLRSFiveWay.h"
+#include "Throttle.h"
 
 #ifdef INPUTBROKER_EXPRESSLRSFIVEWAY_TYPE
 
@@ -76,11 +76,10 @@ void ExpressLRSFiveWay::update(int *keyValue, bool *keyLongPressed)
     *keyValue = NO_PRESS;
 
     int newKey = readKey();
-    uint32_t now = millis();
     if (keyInProcess == NO_PRESS) {
         // New key down
         if (newKey != NO_PRESS) {
-            keyDownStart = now;
+            keyDownStart = millis();
             // DBGLN("down=%u", newKey);
         }
     } else {
@@ -88,7 +87,7 @@ void ExpressLRSFiveWay::update(int *keyValue, bool *keyLongPressed)
         if (newKey == NO_PRESS) {
             // DBGLN("up=%u", keyInProcess);
             if (!isLongPressed) {
-                if ((now - keyDownStart) > KEY_DEBOUNCE_MS) {
+                if (!Throttle::isWithinTimespanMs(keyDownStart, KEY_DEBOUNCE_MS)) {
                     *keyValue = keyInProcess;
                     *keyLongPressed = false;
                 }
@@ -101,7 +100,7 @@ void ExpressLRSFiveWay::update(int *keyValue, bool *keyLongPressed)
         }
         // else still pressing, waiting for long if not already signaled
         else if (!isLongPressed) {
-            if ((now - keyDownStart) > KEY_LONG_PRESS_MS) {
+            if (!Throttle::isWithinTimespanMs(keyDownStart, KEY_LONG_PRESS_MS)) {
                 *keyValue = keyInProcess;
                 *keyLongPressed = true;
                 isLongPressed = true;
@@ -234,7 +233,7 @@ void ExpressLRSFiveWay::sendAdhocPing()
 // Contained as one method for easier remapping of buttons by user
 void ExpressLRSFiveWay::shutdown()
 {
-    LOG_INFO("Shutdown from long press\n");
+    LOG_INFO("Shutdown from long press");
     powerFSM.trigger(EVENT_PRESS);
     screen->startAlert("Shutting down...");
     // Don't set alerting = true. We don't want to auto-dismiss this alert.

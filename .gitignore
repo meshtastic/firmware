@@ -1,6 +1,8 @@
 .pio
-main/configuration.h
-main/credentials.h
+pio
+pio.tar
+web
+web.tar
 
 # ignore vscode IDE settings files
 .vscode/*
@@ -10,6 +12,9 @@ main/credentials.h
 *.code-workspace
 
 .idea
+.platformio
+.local
+.cache
 
 .DS_Store
 Thumbs.db

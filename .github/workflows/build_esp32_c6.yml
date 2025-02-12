@@ -1,0 +1,37 @@
+name: Build ESP32-C6
+
+on:
+  workflow_call:
+    inputs:
+      board:
+        required: true
+        type: string
+
+permissions: read-all
+
+jobs:
+  build-esp32-c6:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build ESP32-C6
+        id: build
+        uses: ./.github/actions/build-variant
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          board: ${{ inputs.board }}
+          remove-debug-flags: >-
+            ./arch/esp32/esp32.ini
+            ./arch/esp32/esp32s2.ini
+            ./arch/esp32/esp32s3.ini
+            ./arch/esp32/esp32c3.ini
+            ./arch/esp32/esp32c6.ini
+          build-script-path: bin/build-esp32.sh
+          ota-firmware-source: firmware-c3.bin
+          ota-firmware-target: release/bleota-c3.bin
+          artifact-paths: |
+            release/*.bin
+            release/*.elf
+          include-web-ui: true
+          arch: esp32c6

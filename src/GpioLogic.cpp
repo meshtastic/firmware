@@ -12,7 +12,6 @@ void GpioVirtPin::set(bool value)
 
 void GpioHwPin::set(bool value)
 {
-    // if (num == 3) LOG_DEBUG("Setting pin %d to %d\n", num, value);
     pinMode(num, OUTPUT);
     digitalWrite(num, value);
 }
@@ -66,7 +65,7 @@ GpioBinaryTransformer::GpioBinaryTransformer(GpioVirtPin *inPin1, GpioVirtPin *i
     assert(!inPin2->dependentPin); // We only allow one dependent pin
     inPin2->dependentPin = this;
 
-    // Don't update at construction time, because various GpioPins might be global constructor based not yet initied because
+    // Don't update at construction time, because various GpioPins might be global constructor based not yet initiated because
     // order of operations for global constructors is not defined.
     // update();
 }
@@ -88,7 +87,6 @@ void GpioBinaryTransformer::update()
             newValue = (GpioVirtPin::PinState)(p1 && p2);
             break;
         case Or:
-            // LOG_DEBUG("Doing GPIO OR\n");
             newValue = (GpioVirtPin::PinState)(p1 || p2);
             break;
         case Xor:

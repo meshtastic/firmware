@@ -9,6 +9,7 @@
  *
  */
 #include "FSCommon.h"
+#include "SPILock.h"
 #include "configuration.h"
 
 #ifdef HAS_SDCARD
@@ -48,15 +49,6 @@ void OSFS::writeNBytes(uint16_t address, unsigned int num, const byte *input)
 }
 #endif
 
-bool lfs_assert_failed =
-    false; // Note: we use this global on all platforms, though it can only be set true on nrf52 (in our modified lfs_util.h)
-
-extern "C" void lfs_assert(const char *reason)
-{
-    LOG_ERROR("LFS assert: %s\n", reason);
-    lfs_assert_failed = true;
-}
-
 /**
  * @brief Copies a file from one location to another.
  *
@@ -75,35 +67,37 @@ bool copyFile(const char *from, const char *to)
     r = OSFS::getFile(from, cbuffer);
 
     if (r == notfound) {
-        LOG_ERROR("Failed to open source file %s\n", from);
+        LOG_ERROR("Failed to open source file %s", from);
         return false;
     } else if (r == noerr) {
         r = OSFS::newFile(to, cbuffer, true);
         if (r == noerr) {
             return true;
         } else {
-            LOG_ERROR("OSFS Error %d\n", r);
+            LOG_ERROR("OSFS Error %d", r);
             return false;
         }
 
     } else {
-        LOG_ERROR("OSFS Error %d\n", r);
+        LOG_ERROR("OSFS Error %d", r);
         return false;
     }
     return true;
 
 #elif defined(FSCom)
+    // take SPI Lock
+    concurrency::LockGuard g(spiLock);
     unsigned char cbuffer[16];
 
     File f1 = FSCom.open(from, FILE_O_READ);
     if (!f1) {
-        LOG_ERROR("Failed to open source file %s\n", from);
+        LOG_ERROR("Failed to open source file %s", from);
         return false;
     }
 
     File f2 = FSCom.open(to, FILE_O_WRITE);
     if (!f2) {
-        LOG_ERROR("Failed to open destination file %s\n", to);
+        LOG_ERROR("Failed to open destination file %s", to);
         return false;
     }
 
@@ -136,16 +130,23 @@ bool renameFile(const char *pathFrom, const char *pathTo)
         return false;
     }
 #elif defined(FSCom)
+
 #ifdef ARCH_ESP32
+    // take SPI Lock
+    spiLock->lock();
     // rename was fixed for ESP32 IDF LittleFS in April
-    return FSCom.rename(pathFrom, pathTo);
+    bool result = FSCom.rename(pathFrom, pathTo);
+    spiLock->unlock();
+    return result;
 #else
+    // copyFile does its own locking.
     if (copyFile(pathFrom, pathTo) && FSCom.remove(pathFrom)) {
         return true;
     } else {
         return false;
     }
 #endif
+
 #endif
 }
 
@@ -155,6 +156,7 @@ bool renameFile(const char *pathFrom, const char *pathTo)
  * @brief Get the list of files in a directory.
  *
  * This function returns a list of files in a directory. The list includes the full path of each file.
+ * We can't use SPILOCK here because of recursion. Callers of this function should use SPILOCK.
  *
  * @param dirname The name of the directory.
  * @param levels The number of levels of subdirectories to list.
@@ -183,7 +185,7 @@ std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels)
                 file.close();
             }
         } else {
-            meshtastic_FileInfo fileInfo = {"", file.size()};
+            meshtastic_FileInfo fileInfo = {"", static_cast<uint32_t>(file.size())};
 #ifdef ARCH_ESP32
             strcpy(fileInfo.file_name, file.path());
 #else
@@ -203,6 +205,7 @@ std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels)
 
 /**
  * Lists the contents of a directory.
+ * We can't use SPILOCK here because of recursion. Callers of this function should use SPILOCK.
  *
  * @param dirname The name of the directory to list.
  * @param levels The number of levels of subdirectories to list.
@@ -231,7 +234,7 @@ void listDir(const char *dirname, uint8_t levels, bool del)
 #ifdef ARCH_ESP32
                 listDir(file.path(), levels - 1, del);
                 if (del) {
-                    LOG_DEBUG("Removing %s\n", file.path());
+                    LOG_DEBUG("Remove %s", file.path());
                     strncpy(buffer, file.path(), sizeof(buffer));
                     file.close();
                     FSCom.rmdir(buffer);
@@ -241,7 +244,7 @@ void listDir(const char *dirname, uint8_t levels, bool del)
 #elif (defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
                 listDir(file.name(), levels - 1, del);
                 if (del) {
-                    LOG_DEBUG("Removing %s\n", file.name());
+                    LOG_DEBUG("Remove %s", file.name());
                     strncpy(buffer, file.name(), sizeof(buffer));
                     file.close();
                     FSCom.rmdir(buffer);
@@ -249,7 +252,7 @@ void listDir(const char *dirname, uint8_t levels, bool del)
                     file.close();
                 }
 #else
-                LOG_DEBUG(" %s (directory)\n", file.name());
+                LOG_DEBUG(" %s (directory)", file.name());
                 listDir(file.name(), levels - 1, del);
                 file.close();
 #endif
@@ -257,26 +260,26 @@ void listDir(const char *dirname, uint8_t levels, bool del)
         } else {
 #ifdef ARCH_ESP32
             if (del) {
-                LOG_DEBUG("Deleting %s\n", file.path());
+                LOG_DEBUG("Delete %s", file.path());
                 strncpy(buffer, file.path(), sizeof(buffer));
                 file.close();
                 FSCom.remove(buffer);
             } else {
-                LOG_DEBUG(" %s (%i Bytes)\n", file.path(), file.size());
+                LOG_DEBUG(" %s (%i Bytes)", file.path(), file.size());
                 file.close();
             }
 #elif (defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
             if (del) {
-                LOG_DEBUG("Deleting %s\n", file.name());
+                LOG_DEBUG("Delete %s", file.name());
                 strncpy(buffer, file.name(), sizeof(buffer));
                 file.close();
                 FSCom.remove(buffer);
             } else {
-                LOG_DEBUG(" %s (%i Bytes)\n", file.name(), file.size());
+                LOG_DEBUG(" %s (%i Bytes)", file.name(), file.size());
                 file.close();
             }
 #else
-            LOG_DEBUG("   %s (%i Bytes)\n", file.name(), file.size());
+            LOG_DEBUG("   %s (%i Bytes)", file.name(), file.size());
             file.close();
 #endif
         }
@@ -284,7 +287,7 @@ void listDir(const char *dirname, uint8_t levels, bool del)
     }
 #ifdef ARCH_ESP32
     if (del) {
-        LOG_DEBUG("Removing %s\n", root.path());
+        LOG_DEBUG("Remove %s", root.path());
         strncpy(buffer, root.path(), sizeof(buffer));
         root.close();
         FSCom.rmdir(buffer);
@@ -293,7 +296,7 @@ void listDir(const char *dirname, uint8_t levels, bool del)
     }
 #elif (defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
     if (del) {
-        LOG_DEBUG("Removing %s\n", root.name());
+        LOG_DEBUG("Remove %s", root.name());
         strncpy(buffer, root.name(), sizeof(buffer));
         root.close();
         FSCom.rmdir(buffer);
@@ -316,26 +319,35 @@ void listDir(const char *dirname, uint8_t levels, bool del)
 void rmDir(const char *dirname)
 {
 #ifdef FSCom
+
 #if (defined(ARCH_ESP32) || defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
     listDir(dirname, 10, true);
 #elif defined(ARCH_NRF52)
     // nRF52 implementation of LittleFS has a recursive delete function
     FSCom.rmdir_r(dirname);
 #endif
+
 #endif
 }
+
+/**
+ * Some platforms (nrf52) might need to do an extra step before FSBegin().
+ */
+__attribute__((weak, noinline)) void preFSBegin() {}
 
 void fsInit()
 {
 #ifdef FSCom
+    concurrency::LockGuard g(spiLock);
+    preFSBegin();
     if (!FSBegin()) {
-        LOG_ERROR("Filesystem mount Failed.\n");
+        LOG_ERROR("Filesystem mount failed");
         // assert(0); This auto-formats the partition, so no need to fail here.
     }
 #if defined(ARCH_ESP32)
-    LOG_DEBUG("Filesystem files (%d/%d Bytes):\n", FSCom.usedBytes(), FSCom.totalBytes());
+    LOG_DEBUG("Filesystem files (%d/%d Bytes):", FSCom.usedBytes(), FSCom.totalBytes());
 #else
-    LOG_DEBUG("Filesystem files:\n");
+    LOG_DEBUG("Filesystem files:");
 #endif
     listDir("/", 10);
 #endif
@@ -347,31 +359,32 @@ void fsInit()
 void setupSDCard()
 {
 #ifdef HAS_SDCARD
+    concurrency::LockGuard g(spiLock);
     SDHandler.begin(SPI_SCK, SPI_MISO, SPI_MOSI);
 
     if (!SD.begin(SDCARD_CS, SDHandler)) {
-        LOG_DEBUG("No SD_MMC card detected\n");
+        LOG_DEBUG("No SD_MMC card detected");
         return;
     }
     uint8_t cardType = SD.cardType();
     if (cardType == CARD_NONE) {
-        LOG_DEBUG("No SD_MMC card attached\n");
+        LOG_DEBUG("No SD_MMC card attached");
         return;
     }
     LOG_DEBUG("SD_MMC Card Type: ");
     if (cardType == CARD_MMC) {
-        LOG_DEBUG("MMC\n");
+        LOG_DEBUG("MMC");
     } else if (cardType == CARD_SD) {
-        LOG_DEBUG("SDSC\n");
+        LOG_DEBUG("SDSC");
     } else if (cardType == CARD_SDHC) {
-        LOG_DEBUG("SDHC\n");
+        LOG_DEBUG("SDHC");
     } else {
-        LOG_DEBUG("UNKNOWN\n");
+        LOG_DEBUG("UNKNOWN");
     }
 
     uint64_t cardSize = SD.cardSize() / (1024 * 1024);
-    LOG_DEBUG("SD Card Size: %lluMB\n", cardSize);
-    LOG_DEBUG("Total space: %llu MB\n", SD.totalBytes() / (1024 * 1024));
-    LOG_DEBUG("Used space: %llu MB\n", SD.usedBytes() / (1024 * 1024));
+    LOG_DEBUG("SD Card Size: %lu MB", (uint32_t)cardSize);
+    LOG_DEBUG("Total space: %lu MB", (uint32_t)(SD.totalBytes() / (1024 * 1024)));
+    LOG_DEBUG("Used space: %lu MB", (uint32_t)(SD.usedBytes() / (1024 * 1024)));
 #endif
 }

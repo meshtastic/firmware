@@ -9,6 +9,9 @@
 #include <OLEDDisplayUi.h>
 #endif
 
+#define MESHMODULE_MIN_BROADCAST_DELAY_MS 30 * 1000 // Min. delay after boot before sending first broadcast by any module
+#define MESHMODULE_BROADCAST_SPACING_MS 15 * 1000   // Initial spacing between broadcasts of different modules
+
 /** handleReceived return enumeration
  *
  * Use ProcessMessage::CONTINUE to allows other modules to process a message.
@@ -40,7 +43,7 @@ struct UIFrameEvent {
     enum Action {
         REDRAW_ONLY,                    // Don't change which frames are show, just redraw, asap
         REGENERATE_FRAMESET,            // Regenerate (change? add? remove?) screen frames, honoring requestFocus()
-        REGENERATE_FRAMESET_BACKGROUND, // Regenerate screen frames, attempting to remain on the same frame throughout
+        REGENERATE_FRAMESET_BACKGROUND, // Regenerate screen frames, Attempt to remain on the same frame throughout
     } action = REDRAW_ONLY;
 
     // We might want to pass additional data inside this struct at some point
@@ -79,7 +82,8 @@ class MeshModule
                                                                     meshtastic_AdminMessage *response);
 #if HAS_SCREEN
     virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) { return; }
-    virtual bool isRequestingFocus(); // Checked by screen, when regenerating frameset
+    virtual bool isRequestingFocus();                          // Checked by screen, when regenerating frameset
+    virtual bool interceptingKeyboardInput() { return false; } // Can screen use keyboard for nav, or is module handling input?
 #endif
   protected:
     const char *name;
@@ -117,6 +121,12 @@ class MeshModule
      * plumodulegin at a time.
      */
     static const meshtastic_MeshPacket *currentRequest;
+
+    // We keep track of the number of modules that send a periodic broadcast to schedule them spaced out over time
+    static uint8_t numPeriodicModules;
+
+    // Set the start delay for module that broadcasts periodically
+    int32_t setStartDelay();
 
     /**
      * If your handler wants to send a response, simply set currentReply and it will be sent at the end of response handling.
@@ -161,7 +171,7 @@ class MeshModule
     virtual Observable<const UIFrameEvent *> *getUIFrameObservable() { return NULL; }
 
     meshtastic_MeshPacket *allocAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex,
-                                       uint8_t hopStart = 0, uint8_t hopLimit = 0);
+                                       uint8_t hopLimit = 0);
 
     /// Send an error response for the specified packet.
     meshtastic_MeshPacket *allocErrorResponse(meshtastic_Routing_Error err, const meshtastic_MeshPacket *p);
