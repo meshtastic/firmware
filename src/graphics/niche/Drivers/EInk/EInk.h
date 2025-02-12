@@ -6,6 +6,7 @@
 
 #pragma once
 
+#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
 #include "configuration.h"
 
 #include "concurrency/OSThread.h"
@@ -51,3 +52,5 @@ class EInk : private concurrency::OSThread
 };
 
 } // namespace NicheGraphics::Drivers
+
+#endif // MESHTASTIC_INCLUDE_NICHE_GRAPHICS

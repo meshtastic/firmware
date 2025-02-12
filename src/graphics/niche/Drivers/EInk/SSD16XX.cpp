@@ -1,5 +1,6 @@
 #include "./SSD16XX.h"
 
+#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
 using namespace NicheGraphics::Drivers;
 
 SSD16XX::SSD16XX(uint16_t width, uint16_t height, UpdateTypes supported, uint8_t bufferOffsetX)
@@ -223,3 +224,4 @@ void SSD16XX::finalizeUpdate()
         wait();
     }
 }
+#endif // MESHTASTIC_INCLUDE_NICHE_GRAPHICS

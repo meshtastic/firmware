@@ -11,6 +11,8 @@ E-Ink display driver
 
 #pragma once
 
+#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+
 #include "configuration.h"
 
 #include "./SSD16XX.h"
@@ -36,3 +38,5 @@ class GDEY0154D67 : public SSD16XX
 };
 
 } // namespace NicheGraphics::Drivers
+
+#endif // MESHTASTIC_INCLUDE_NICHE_GRAPHICS

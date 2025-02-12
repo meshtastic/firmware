@@ -14,6 +14,8 @@ It is implemented as a "one-off", directly inheriting the EInk base class, unlik
 
 #pragma once
 
+#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+
 #include "configuration.h"
 
 #include "./EInk.h"
@@ -62,3 +64,5 @@ class LCMEN213EFC1 : public EInk
 };
 
 } // namespace NicheGraphics::Drivers
+
+#endif // MESHTASTIC_INCLUDE_NICHE_GRAPHICS

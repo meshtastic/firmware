@@ -1,5 +1,7 @@
 #include "./LCMEN2R13EFC1.h"
 
+#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+
 #include <assert.h>
 
 using namespace NicheGraphics::Drivers;
@@ -295,3 +297,5 @@ void LCMEN213EFC1::finalizeUpdate()
         wait();
     }
 }
+
+#endif // MESHTASTIC_INCLUDE_NICHE_GRAPHICS

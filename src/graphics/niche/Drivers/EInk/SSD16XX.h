@@ -10,6 +10,8 @@ See DEPG0154BNS800 and DEPG0290BNS800 for examples.
 
 #pragma once
 
+#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+
 #include "configuration.h"
 
 #include "./EInk.h"
@@ -56,3 +58,5 @@ class SSD16XX : public EInk
 };
 
 } // namespace NicheGraphics::Drivers
+
+#endif // MESHTASTIC_INCLUDE_NICHE_GRAPHICS

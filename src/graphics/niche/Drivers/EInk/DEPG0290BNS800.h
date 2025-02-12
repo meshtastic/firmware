@@ -11,6 +11,8 @@ E-Ink display driver
 
 #pragma once
 
+#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+
 #include "configuration.h"
 
 #include "./SSD16XX.h"
@@ -37,3 +39,4 @@ class DEPG0290BNS800 : public SSD16XX
 };
 
 } // namespace NicheGraphics::Drivers
+#endif // MESHTASTIC_INCLUDE_NICHE_GRAPHICS

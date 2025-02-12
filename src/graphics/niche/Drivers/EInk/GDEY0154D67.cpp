@@ -1,5 +1,7 @@
 #include "./GDEY0154D67.h"
 
+#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+
 using namespace NicheGraphics::Drivers;
 
 // Map the display controller IC's output to the conected panel
@@ -56,3 +58,4 @@ void GDEY0154D67::detachFromUpdate()
         return beginPolling(100, 2000); // At least 2 seconds for full refresh
     }
 }
+#endif // MESHTASTIC_INCLUDE_NICHE_GRAPHICS

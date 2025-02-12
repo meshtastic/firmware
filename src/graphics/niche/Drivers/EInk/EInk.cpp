@@ -1,5 +1,7 @@
 #include "./EInk.h"
 
+#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+
 using namespace NicheGraphics::Drivers;
 
 // Separate from EInk::begin method, as derived class constructors can probably supply these parameters as constants
@@ -65,3 +67,4 @@ void EInk::await()
         yield();
     }
 }
+#endif // MESHTASTIC_INCLUDE_NICHE_GRAPHICS

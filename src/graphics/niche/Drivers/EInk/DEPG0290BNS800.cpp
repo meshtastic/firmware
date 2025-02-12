@@ -1,5 +1,7 @@
 #include "./DEPG0290BNS800.h"
 
+#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+
 using namespace NicheGraphics::Drivers;
 
 // Describes the operation performed when a "fast refresh" is performed
@@ -115,3 +117,4 @@ void DEPG0290BNS800::finalizeUpdate()
         wait();
     }
 }
+#endif // MESHTASTIC_INCLUDE_NICHE_GRAPHICS
