@@ -174,10 +174,9 @@ void InkHUD::TipsApplet::onActivate()
     if (settings.tips.firstBoot)
         tipQueue.push_back(Tip::WELCOME);
 
-    // Region and/or Timezone
-    // Shown until sets region and tz
-    if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET ||
-        !(*config.device.tzdef && config.device.tzdef[0] != 0))
+    // Antenna, region, timezone
+    // Shown at boot if region not yet set
+    if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET)
         tipQueue.push_back(Tip::FINISH_SETUP);
 
     // Shutdown info
