@@ -34,7 +34,7 @@ Different NicheGraphics UIs and different hardware variants will each have their
 
 // Shared NicheGraphics components
 // --------------------------------
-#include "graphics/niche/Drivers/Eink/DEPG0290BNS800.h"
+#include "graphics/niche/Drivers/EInk/DEPG0290BNS800.h"
 #include "graphics/niche/Inputs/TwoButton.h"
 
 #include "graphics/niche/Fonts/FreeSans6pt7b.h"

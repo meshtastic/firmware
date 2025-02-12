@@ -22,7 +22,7 @@
 // Shared NicheGraphics components
 // --------------------------------
 #include "graphics/niche/Drivers/Backlight/LatchingBacklight.h"
-#include "graphics/niche/Drivers/Eink/GDEY0154D67.h"
+#include "graphics/niche/Drivers/EInk/GDEY0154D67.h"
 #include "graphics/niche/Inputs/TwoButton.h"
 
 #include "graphics/niche/Fonts/FreeSans6pt7b.h"
