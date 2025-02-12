@@ -2,7 +2,7 @@
 
 #include "./TwoButton.h"
 
-#include "PowerFsm.h"
+#include "PowerFSM.h"
 #include "sleep.h"
 
 using namespace NicheGraphics::Inputs;
