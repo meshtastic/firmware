@@ -601,6 +601,8 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
         hasScreen = true;
     else
         hasScreen = screen_found.port != ScanI2C::I2CPort::NO_I2C;
+#elif MESHTASTIC_INCLUDE_NICHE_GRAPHICS // See "src/graphics/niche"
+    bool hasScreen = true; // Use random pin for Bluetooth pairing
 #else
     bool hasScreen = screen_found.port != ScanI2C::I2CPort::NO_I2C;
 #endif
@@ -633,10 +635,6 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #if defined(T_WATCH_S3) || defined(SENSECAP_INDICATOR)
     config.display.screen_on_secs = 30;
     config.display.wake_on_tap_or_motion = true;
-#endif
-#ifdef HELTEC_VISION_MASTER_E290
-    // Orient so that LoRa antenna faces up
-    config.display.flip_screen = true;
 #endif
 
     initConfigIntervals();
