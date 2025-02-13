@@ -3,8 +3,11 @@ Section: misc
 Priority: optional
 Maintainer: Austin Lane <vidplace7@gmail.com>
 Build-Depends: debhelper-compat (= 13),
-               python3-pip,
-               python3-venv,
+               tar,
+               gzip,
+               platformio,
+               python3-protobuf,
+               python3-grpcio,
                git,
                g++,
                pkg-config,
@@ -12,7 +15,11 @@ Build-Depends: debhelper-compat (= 13),
                libgpiod-dev,
                libbluetooth-dev,
                libusb-1.0-0-dev,
-               libi2c-dev
+               libi2c-dev,
+               openssl,
+               libssl-dev,
+               libulfius-dev,
+               liborcania-dev
 Standards-Version: 4.6.2
 Homepage: https://github.com/meshtastic/firmware
 Rules-Requires-Root: no

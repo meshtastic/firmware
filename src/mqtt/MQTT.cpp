@@ -76,12 +76,22 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
         return;
     }
     LOG_INFO("Received MQTT topic %s, len=%u", topic, length);
+    if (e.packet->hop_limit > HOP_MAX || e.packet->hop_start > HOP_MAX) {
+        LOG_INFO("Invalid hop_limit(%u) or hop_start(%u)", e.packet->hop_limit, e.packet->hop_start);
+        return;
+    }
 
-    UniquePacketPoolPacket p = packetPool.allocUniqueCopy(*e.packet);
+    UniquePacketPoolPacket p = packetPool.allocUniqueZeroed();
+    p->from = e.packet->from;
+    p->to = e.packet->to;
+    p->id = e.packet->id;
+    p->channel = e.packet->channel;
+    p->hop_limit = e.packet->hop_limit;
+    p->hop_start = e.packet->hop_start;
+    p->want_ack = e.packet->want_ack;
     p->via_mqtt = true; // Mark that the packet was received via MQTT
-    // Unset received SNR/RSSI which might have been added by the MQTT gateway
-    p->rx_snr = 0;
-    p->rx_rssi = 0;
+    p->which_payload_variant = e.packet->which_payload_variant;
+    memcpy(&p->decoded, &e.packet->decoded, std::max(sizeof(p->decoded), sizeof(p->encrypted)));
 
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         if (moduleConfig.mqtt.encryption_enabled) {
@@ -207,6 +217,7 @@ bool isPrivateIpAddress(const IPAddress &ip)
         {.network = 169u << 24 | 254 << 16, .mask = 0xffff0000}, // 169.254.0.0/16
         {.network = 10u << 24, .mask = 0xff000000},              // 10.0.0.0/8
         {.network = 127u << 24 | 1, .mask = 0xffffffff},         // 127.0.0.1/32
+        {.network = 100u << 24 | 64 << 16, .mask = 0xffc00000},  // 100.64.0.0/10
     };
     const uint32_t addr = ntohl(ip);
     for (const auto &cidrRange : privateCidrRanges) {

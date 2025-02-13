@@ -29,7 +29,8 @@ USER root
 
 RUN apk add libstdc++ libgpiod yaml-cpp libusb i2c-tools \
     && mkdir -p /var/lib/meshtasticd \
-    && mkdir -p /etc/meshtasticd/config.d
+    && mkdir -p /etc/meshtasticd/config.d \
+    && mkdir -p /etc/meshtasticd/ssl
 COPY --from=builder /tmp/firmware/release/meshtasticd /usr/sbin/
 
 WORKDIR /var/lib/meshtasticd

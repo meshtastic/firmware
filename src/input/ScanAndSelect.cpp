@@ -7,6 +7,9 @@
 #include "ScanAndSelect.h"
 #include "modules/CannedMessageModule.h"
 #include <Throttle.h>
+#ifdef ARCH_PORTDUINO // Only to check for pin conflict with user button
+#include "platform/portduino/PortduinoGlue.h"
+#endif
 
 // Config
 static const char name[] = "scanAndSelect"; // should match "allow input source" string
@@ -30,7 +33,9 @@ bool ScanAndSelectInput::init()
     if (strcasecmp(moduleConfig.canned_message.allow_input_source, name) != 0)
         return false;
 
-    // Use any available inputbroker pin as the button
+    // Determine which pin to use for the single scan-and-select button
+    // User can specify this by setting any of the inputbroker pins
+    // If all values are zero, we'll assume the user *does* want GPIO0
     if (moduleConfig.canned_message.inputbroker_pin_press)
         pin = moduleConfig.canned_message.inputbroker_pin_press;
     else if (moduleConfig.canned_message.inputbroker_pin_a)
@@ -38,7 +43,25 @@ bool ScanAndSelectInput::init()
     else if (moduleConfig.canned_message.inputbroker_pin_b)
         pin = moduleConfig.canned_message.inputbroker_pin_b;
     else
-        return false; // Short circuit: no button found
+        pin = 0; // GPIO 0 then
+
+        // Short circuit: if selected pin conficts with the user button
+#if defined(ARCH_PORTDUINO)
+    int pinUserButton = 0;
+    if (settingsMap.count(user) != 0) {
+        pinUserButton = settingsMap[user];
+    }
+#elif defined(USERPREFS_BUTTON_PIN)
+    int pinUserButton = config.device.button_gpio ? config.device.button_gpio : USERPREFS_BUTTON_PIN;
+#elif defined(BUTTON_PIN)
+    int pinUserButton = config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN;
+#else
+    int pinUserButton = config.device.button_gpio;
+#endif
+    if (pin == pinUserButton) {
+        LOG_ERROR("ScanAndSelect conflict with user button");
+        return false;
+    }
 
     // Set-up the button
     pinMode(pin, INPUT_PULLUP);
