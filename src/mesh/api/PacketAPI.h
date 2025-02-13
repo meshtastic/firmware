@@ -27,8 +27,10 @@ class PacketAPI : public PhoneAPI, public concurrency::OSThread
   private:
     bool receivePacket(void);
     bool sendPacket(void);
+    bool notifyProgrammingMode(void);
 
     bool isConnected;
+    bool programmingMode;
     PacketServer *server;
     uint8_t txBuf[MAX_TO_FROM_RADIO_SIZE] = {0}; // dummy buf to obey PhoneAPI
 };
