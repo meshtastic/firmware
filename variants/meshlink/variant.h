@@ -105,7 +105,6 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define EXTERNAL_FLASH_DEVICES W25Q16JVUXIQ
 #define EXTERNAL_FLASH_USE_QSPI
 
-
 #define USE_SX1262
 #define SX126X_CS (12)
 #define SX126X_DIO1 (32 + 1)
