@@ -422,13 +422,7 @@ bool NodeDB::resetRadioConfig(bool factory_reset)
         rebootAtMsec = millis() + (5 * 1000);
     }
 
-#if (defined(T_DECK) || defined(T_WATCH_S3) || defined(UNPHONE) || defined(PICOMPUTER_S3)) && HAS_TFT
-    // as long as PhoneAPI shares BT and TFT app switch BT off
-    config.bluetooth.enabled = false;
-    if (moduleConfig.external_notification.nag_timeout == 60)
-        moduleConfig.external_notification.nag_timeout = 0;
-#endif
-
+    LOG_ERROR("NodeDB::resetRadioConfig done %d", didFactoryReset);
     return didFactoryReset;
 }
 
@@ -611,6 +605,13 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     bool hasScreen = true; // Use random pin for Bluetooth pairing
 #else
     bool hasScreen = screen_found.port != ScanI2C::I2CPort::NO_I2C;
+#endif
+#if (defined(T_DECK) || defined(T_WATCH_S3) || defined(UNPHONE) || defined(PICOMPUTER_S3) || defined(INDICATOR)) && HAS_TFT
+    // as long as PhoneAPI shares BT and TFT app switch BT off
+    LOG_ERROR("config.bluetooth.enabled = false");
+    config.bluetooth.enabled = false;
+    if (moduleConfig.external_notification.nag_timeout == 60)
+        moduleConfig.external_notification.nag_timeout = 0;
 #endif
 #ifdef USERPREFS_FIXED_BLUETOOTH
     config.bluetooth.fixed_pin = USERPREFS_FIXED_BLUETOOTH;
