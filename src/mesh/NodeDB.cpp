@@ -583,9 +583,16 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.security.admin_channel_enabled = false;
     resetRadioConfig();
     strncpy(config.network.ntp_server, "meshtastic.pool.ntp.org", 32);
-    // FIXME: Default to bluetooth capability of platform as default
+
+#if (defined(T_DECK) || defined(T_WATCH_S3) || defined(UNPHONE) || defined(PICOMPUTER_S3) || defined(INDICATOR)) && HAS_TFT
+    // switch BT off by default; use TFT programming mode or hotkey to enable
+    config.bluetooth.enabled = false;
+#else
+    // default to bluetooth capability of platform as default
     config.bluetooth.enabled = true;
+#endif
     config.bluetooth.fixed_pin = defaultBLEPin;
+
 #if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7789_CS) ||       \
     defined(HX8357_CS) || defined(USE_ST7789)
     bool hasScreen = true;
@@ -606,13 +613,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #else
     bool hasScreen = screen_found.port != ScanI2C::I2CPort::NO_I2C;
 #endif
-#if (defined(T_DECK) || defined(T_WATCH_S3) || defined(UNPHONE) || defined(PICOMPUTER_S3) || defined(INDICATOR)) && HAS_TFT
-    // as long as PhoneAPI shares BT and TFT app switch BT off
-    LOG_ERROR("config.bluetooth.enabled = false");
-    config.bluetooth.enabled = false;
-    if (moduleConfig.external_notification.nag_timeout == 60)
-        moduleConfig.external_notification.nag_timeout = 0;
-#endif
+
 #ifdef USERPREFS_FIXED_BLUETOOTH
     config.bluetooth.fixed_pin = USERPREFS_FIXED_BLUETOOTH;
     config.bluetooth.mode = meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN;
@@ -693,7 +694,12 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.enabled = true;
     moduleConfig.external_notification.use_i2s_as_buzzer = true;
     moduleConfig.external_notification.alert_message_buzzer = true;
+#if HAS_TFT
+    if (moduleConfig.external_notification.nag_timeout == 60)
+        moduleConfig.external_notification.nag_timeout = 0;
+#else
     moduleConfig.external_notification.nag_timeout = 60;
+#endif
 #endif
 #ifdef NANO_G2_ULTRA
     moduleConfig.external_notification.enabled = true;
