@@ -135,6 +135,12 @@ jobs:
       build_location: local
     secrets: inherit
 
+  package-pio-deps-native:
+    uses: ./.github/workflows/package_pio_deps.yml
+    with:
+      pio_env: native
+    secrets: inherit
+
   test-native:
     uses: ./.github/workflows/test_native.yml
 
@@ -279,7 +285,10 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' }}
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
-    needs: [gather-artifacts, build-debian-src]
+    needs:
+      - gather-artifacts
+      - build-debian-src
+      - package-pio-deps-native
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -315,17 +324,27 @@ jobs:
           merge-multiple: true
           path: ./output/debian-src
 
-      - name: Zip source deb
+      - name: Download native pio deps
+        uses: actions/download-artifact@v4
+        with:
+          pattern: platformio-deps-native-${{ steps.version.outputs.long }}
+          merge-multiple: true
+          path: ./output/pio-deps-native
+
+      - name: Zip linux sources
         working-directory: output
-        run: zip -j -9 -r ./meshtasticd-${{ steps.version.outputs.deb }}-src.zip ./debian-src
+        run: |
+          zip -j -9 -r ./meshtasticd-${{ steps.version.outputs.deb }}-src.zip ./debian-src
+          zip -9 -r ./platformio-deps-native-${{ steps.version.outputs.long }}.zip ./pio-deps-native
 
       # For diagnostics
       - name: Display structure of downloaded files
         run: ls -lR
 
-      - name: Add source deb to release
+      - name: Add linux sources to release
         run: |
           gh release upload v${{ steps.version.outputs.long }} ./output/meshtasticd-${{ steps.version.outputs.deb }}-src.zip
+          gh release upload v${{ steps.version.outputs.long }} ./output/platformio-deps-native-${{ steps.version.outputs.long }}.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
