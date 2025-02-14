@@ -422,7 +422,6 @@ bool NodeDB::resetRadioConfig(bool factory_reset)
         rebootAtMsec = millis() + (5 * 1000);
     }
 
-    LOG_ERROR("NodeDB::resetRadioConfig done %d", didFactoryReset);
     return didFactoryReset;
 }
 
