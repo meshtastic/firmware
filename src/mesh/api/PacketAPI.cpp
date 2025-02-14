@@ -24,13 +24,16 @@ PacketAPI::PacketAPI(PacketServer *_server)
 int32_t PacketAPI::runOnce()
 {
     bool success = false;
+#ifndef ARCH_PORTDUINO
     if (config.bluetooth.enabled) {
         if (!programmingMode) {
             // in programmingMode we don't send any packets to the client except this one notify
             programmingMode = true;
             success = notifyProgrammingMode();
         }
-    } else {
+    } else
+#endif
+    {
         success = sendPacket();
     }
     success |= receivePacket();
