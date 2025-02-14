@@ -732,10 +732,10 @@ void AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
 void AdminModule::handleSetChannel(const meshtastic_Channel &cc)
 {
     channels.setChannel(cc);
-    channels.onConfigChanged(); // tell the radios about this change
     if (channels.ensureLicensedOperation()) {
         sendWarning("Licensed mode activated, removing admin channel and encryption from all channels");
     }
+    channels.onConfigChanged(); // tell the radios about this change
     saveChanges(SEGMENT_CHANNELS, false);
 }
 
