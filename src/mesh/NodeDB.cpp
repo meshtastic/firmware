@@ -328,6 +328,11 @@ NodeDB::NodeDB()
     moduleConfig.neighbor_info.update_interval =
         Default::getConfiguredOrMinimumValue(moduleConfig.neighbor_info.update_interval, min_neighbor_info_broadcast_secs);
 
+    // Don't let licensed users to rebroadcast encrypted packets
+    if (owner.is_licensed) {
+        config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY;
+    }
+
     if (devicestateCRC != crc32Buffer(&devicestate, sizeof(devicestate)))
         saveWhat |= SEGMENT_DEVICESTATE;
     if (nodeDatabaseCRC != crc32Buffer(&nodeDatabase, sizeof(nodeDatabase)))
