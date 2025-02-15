@@ -242,6 +242,7 @@ class MQTTUnitTest : public MQTT
         mqttClient.release();
         delete pubsub;
     }
+    using MQTT::reconnect;
     int queueSize() { return mqttQueue.numUsed(); }
     void reportToMap(std::optional<uint32_t> precision = std::nullopt)
     {
@@ -488,7 +489,7 @@ void test_reconnectProxyDoesNotReconnectMqtt(void)
     moduleConfig.mqtt.proxy_to_client_enabled = true;
     MQTTUnitTest::restart();
 
-    mqtt->reconnect();
+    unitTest->reconnect();
 
     TEST_ASSERT_FALSE(pubsub->connected_);
 }

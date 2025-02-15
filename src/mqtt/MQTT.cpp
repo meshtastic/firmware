@@ -217,6 +217,7 @@ bool isPrivateIpAddress(const IPAddress &ip)
         {.network = 169u << 24 | 254 << 16, .mask = 0xffff0000}, // 169.254.0.0/16
         {.network = 10u << 24, .mask = 0xff000000},              // 10.0.0.0/8
         {.network = 127u << 24 | 1, .mask = 0xffffffff},         // 127.0.0.1/32
+        {.network = 100u << 24 | 64 << 16, .mask = 0xffc00000},  // 100.64.0.0/10
     };
     const uint32_t addr = ntohl(ip);
     for (const auto &cidrRange : privateCidrRanges) {
@@ -411,36 +412,28 @@ void MQTT::reconnect()
         const char *serverAddr = default_mqtt_address;
         const char *mqttUsername = default_mqtt_username;
         const char *mqttPassword = default_mqtt_password;
+        MQTTClient *clientConnection = mqttClient.get();
 
         if (*moduleConfig.mqtt.address) {
             serverAddr = moduleConfig.mqtt.address;
             mqttUsername = moduleConfig.mqtt.username;
             mqttPassword = moduleConfig.mqtt.password;
         }
-#if HAS_WIFI && !defined(ARCH_PORTDUINO)
-#if !defined(CONFIG_IDF_TARGET_ESP32C6)
+#if HAS_WIFI && !defined(ARCH_PORTDUINO) && !defined(CONFIG_IDF_TARGET_ESP32C6)
         if (moduleConfig.mqtt.tls_enabled) {
             // change default for encrypted to 8883
             try {
                 serverPort = 8883;
                 wifiSecureClient.setInsecure();
-
-                pubSub.setClient(wifiSecureClient);
                 LOG_INFO("Use TLS-encrypted session");
+                clientConnection = &wifiSecureClient;
             } catch (const std::exception &e) {
                 LOG_ERROR("MQTT ERROR: %s", e.what());
             }
         } else {
             LOG_INFO("Use non-TLS-encrypted session");
-            pubSub.setClient(*mqttClient);
         }
-#else
-        pubSub.setClient(*mqttClient);
 #endif
-#elif HAS_NETWORKING
-        pubSub.setClient(*mqttClient);
-#endif
-
         std::pair<String, uint16_t> hostAndPort = parseHostAndPort(serverAddr, serverPort);
         serverAddr = hostAndPort.first.c_str();
         serverPort = hostAndPort.second;
@@ -450,13 +443,14 @@ void MQTT::reconnect()
         LOG_INFO("Connect directly to MQTT server %s, port: %d, username: %s, password: %s", serverAddr, serverPort, mqttUsername,
                  mqttPassword);
 
+        pubSub.setClient(*clientConnection);
         bool connected = pubSub.connect(owner.id, mqttUsername, mqttPassword);
         if (connected) {
             LOG_INFO("MQTT connected");
             enabled = true; // Start running background process again
             runASAP = true;
             reconnectCount = 0;
-            isMqttServerAddressPrivate = isPrivateIpAddress(mqttClient->remoteIP());
+            isMqttServerAddressPrivate = isPrivateIpAddress(clientConnection->remoteIP());
 
             publishNodeInfo();
             sendSubscriptions();
