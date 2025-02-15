@@ -64,6 +64,8 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     void sendWarning(const char *message);
 };
 
+static constexpr char *licensedModeMessage = "Licensed mode activated, removing admin channel and encryption from all channels";
+
 extern AdminModule *adminModule;
 
 void disableBluetooth();

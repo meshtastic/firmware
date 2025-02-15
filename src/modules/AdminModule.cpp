@@ -448,6 +448,9 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
     if (owner.is_licensed != o.is_licensed) {
         changed = 1;
         owner.is_licensed = o.is_licensed;
+        if (channels.ensureLicensedOperation()) {
+            sendWarning(licensedModeMessage);
+        }
     }
 
     if (changed) { // If nothing really changed, don't broadcast on the network or write to flash
@@ -729,6 +732,9 @@ void AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
 void AdminModule::handleSetChannel(const meshtastic_Channel &cc)
 {
     channels.setChannel(cc);
+    if (channels.ensureLicensedOperation()) {
+        sendWarning(licensedModeMessage);
+    }
     channels.onConfigChanged(); // tell the radios about this change
     saveChanges(SEGMENT_CHANNELS, false);
 }
@@ -1066,15 +1072,14 @@ void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
 
     config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY;
     // Remove PSK of primary channel for plaintext amateur usage
-    auto primaryChannel = channels.getByIndex(channels.getPrimaryIndex());
-    auto &channelSettings = primaryChannel.settings;
-    channelSettings.psk.bytes[0] = 0;
-    channelSettings.psk.size = 0;
-    channels.setChannel(primaryChannel);
+
+    if (channels.ensureLicensedOperation()) {
+        sendWarning(licensedModeMessage);
+    }
     channels.onConfigChanged();
 
     service->reloadOwner(false);
-    saveChanges(SEGMENT_CONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
+    saveChanges(SEGMENT_CONFIG | SEGMENT_NODEDATABASE | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
 }
 
 AdminModule::AdminModule() : ProtobufModule("Admin", meshtastic_PortNum_ADMIN_APP, &meshtastic_AdminMessage_msg)
