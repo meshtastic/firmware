@@ -16,9 +16,6 @@ class STM32WLE5JCInterface : public SX126xInterface<STM32WLx>
     virtual bool init() override;
 };
 
-// https://github.com/Seeed-Studio/LoRaWan-E5-Node/blob/main/Middlewares/Third_Party/SubGHz_Phy/stm32_radio_driver/radio_driver.c
-static const float tcxoVoltage = 1.7;
-
 /* https://wiki.seeedstudio.com/LoRa-E5_STM32WLE5JC_Module/
  * Wio-E5 module ONLY transmits through RFO_HP
  * Receive: PA4=1, PA5=0
