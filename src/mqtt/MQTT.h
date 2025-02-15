@@ -81,7 +81,7 @@ class MQTT : private concurrency::OSThread
 #if HAS_WIFI
     using MQTTClient = WiFiClient;
 #if !defined(ARCH_PORTDUINO)
-#if (defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR < 3) || defined(RPI_PICO)
+#if (defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR < 3) || defined(RPI_PICO) || defined(RPI_PICO2)
     WiFiClientSecure wifiSecureClient;
 #endif
 #endif
