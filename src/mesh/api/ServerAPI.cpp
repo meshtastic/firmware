@@ -51,8 +51,10 @@ template <class T, class U> int32_t APIServerPort<T, U>::runOnce()
 #else
     auto client = U::available();
 #endif
-#else
+#elif defined(ARCH_RP2040)
     auto client = U::accept();
+#else
+    auto client = U::available();
 #endif
     if (client) {
         // Close any previous connection (see FIXME in header file)
