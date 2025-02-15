@@ -449,7 +449,7 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
         changed = 1;
         owner.is_licensed = o.is_licensed;
         if (channels.ensureLicensedOperation()) {
-            sendWarning("Licensed mode activated, removing admin channel and encryption from all channels");
+            sendWarning(licensedModeMessage);
         }
     }
 
@@ -733,7 +733,7 @@ void AdminModule::handleSetChannel(const meshtastic_Channel &cc)
 {
     channels.setChannel(cc);
     if (channels.ensureLicensedOperation()) {
-        sendWarning("Licensed mode activated, removing admin channel and encryption from all channels");
+        sendWarning(licensedModeMessage);
     }
     channels.onConfigChanged(); // tell the radios about this change
     saveChanges(SEGMENT_CHANNELS, false);
@@ -1074,7 +1074,7 @@ void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
     // Remove PSK of primary channel for plaintext amateur usage
 
     if (channels.ensureLicensedOperation()) {
-        sendWarning("Licensed mode activated, removing admin channel and encryption from all channels");
+        sendWarning(licensedModeMessage);
     }
     channels.onConfigChanged();
 
