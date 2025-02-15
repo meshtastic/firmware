@@ -52,7 +52,7 @@ template <class T, class U> int32_t APIServerPort<T, U>::runOnce()
     auto client = U::available();
 #endif
 #else
-    auto client = U::available();
+    auto client = U::accept();
 #endif
     if (client) {
         // Close any previous connection (see FIXME in header file)
