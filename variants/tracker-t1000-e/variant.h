@@ -55,7 +55,7 @@ extern "C" {
 #define BUTTON_PIN (0 + 6) // P0.06
 #define BUTTON_ACTIVE_LOW false
 #define BUTTON_ACTIVE_PULLUP false
-#define BUTTON_SENSE_TYPE 0x6
+#define BUTTON_SENSE_TYPE 0x5 // enable input pull-down
 
 #define HAS_WIRE 1
 
