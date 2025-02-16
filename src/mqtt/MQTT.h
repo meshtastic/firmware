@@ -61,6 +61,8 @@ class MQTT : private concurrency::OSThread
 
     bool isUsingDefaultServer() { return isConfiguredForDefaultServer; }
 
+    static bool isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config);
+
   protected:
     struct QueueEntry {
         std::string topic;
