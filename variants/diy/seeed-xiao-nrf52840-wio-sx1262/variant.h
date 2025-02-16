@@ -84,17 +84,15 @@ static const uint8_t A5 = PIN_A5;
 #define PIN_NFC2 (31)
 
 // RX and TX pins
-#define PIN_SERIAL1_RX (6)
-#define PIN_SERIAL1_TX (7)
+#define PIN_SERIAL1_RX (-1)
+#define PIN_SERIAL1_TX (-1)
 // complains if not defined
 #define PIN_SERIAL2_RX (-1)
 #define PIN_SERIAL2_TX (-1)
 
 // 4 is used as RF_SW and 5 for USR button so...
-#define PIN_WIRE_SDA (-1)
-#define PIN_WIRE_SCL (-1)
-// #define PIN_WIRE_SDA (6)
-// #define PIN_WIRE_SCL (7)
+#define PIN_WIRE_SDA (6)
+#define PIN_WIRE_SCL (7)
 
 static const uint8_t SDA = PIN_WIRE_SDA;
 static const uint8_t SCL = PIN_WIRE_SCL;
