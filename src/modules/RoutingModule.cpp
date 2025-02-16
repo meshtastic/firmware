@@ -20,6 +20,12 @@ bool RoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mesh
         if ((nodeDB->getMeshNode(mp.from) == NULL || !nodeDB->getMeshNode(mp.from)->has_user) &&
             (nodeDB->getMeshNode(mp.to) == NULL || !nodeDB->getMeshNode(mp.to)->has_user))
             return false;
+    } else if (owner.is_licensed && nodeDB->getMeshNode(mp.from) != NULL && nodeDB->getMeshNode(mp.from)->has_user &&
+               !nodeDB->getMeshNode(mp.from)->user.is_licensed) {
+        // Don't let licensed users to rebroadcast packets from unlicensed users
+        // If we know they are in-fact unlicensed
+        LOG_DEBUG("Packet from unlicensed user, ignoring packet");
+        return false;
     }
 
     printPacket("Routing sniffing", &mp);
