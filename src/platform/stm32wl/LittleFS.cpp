@@ -37,10 +37,10 @@
 
 /* FLASH_SIZE from stm32wle5xx.h will read the actual FLASH size from the chip */
 /* use the last 1/4 of the FLASH */
-#define LFS_FLASH_TOTAL_SIZE (FLASH_SIZE / 4)
-#define LFS_BLOCK_SIZE (128)
+#define LFS_FLASH_TOTAL_SIZE (FLASH_SIZE / 8)
+#define LFS_BLOCK_SIZE (2048)
 #define LFS_FLASH_ADDR_END (FLASH_END_ADDR)
-#define LFS_FLASH_ADDR_BASE (LFS_FLASH_ADDR_END - (FLASH_SIZE / 4) + 1)
+#define LFS_FLASH_ADDR_BASE (LFS_FLASH_ADDR_END - (FLASH_SIZE / 8) + 1)
 
 #if !CFG_DEBUG
 #define _LFS_DBG(fmt, ...)
@@ -75,16 +75,17 @@ static int _internal_flash_prog(const struct lfs_config *c, lfs_block_t block, l
 {
     lfs_block_t address = LFS_FLASH_ADDR_BASE + (block * STM32WL_PAGE_SIZE + off);
     HAL_StatusTypeDef hal_rc = HAL_OK;
-    uint32_t block_count = size / 8;
+    uint32_t dw_count = size / 8;
     uint64_t *bufp = (uint64_t *) buffer;
 
     LFS_UNUSED(c);
 
-    if(HAL_FLASH_Unlock() != HAL_OK)
+    _LFS_DBG("Programming %d bytes/%d doublewords at address 0x%08x/block %d, offset %d.", size, dw_count, address, block, off);
+    if (HAL_FLASH_Unlock() != HAL_OK)
     {
         return LFS_ERR_IO;
     }
-    for (uint32_t i = 0; i < block_count; i++) {
+    for (uint32_t i = 0; i < dw_count; i++) {
         if((address < LFS_FLASH_ADDR_BASE) || (address > LFS_FLASH_ADDR_END))
         {
             _LFS_DBG("Wanted to program out of bound of FLASH: 0x%08x.\n", address);
@@ -99,7 +100,7 @@ static int _internal_flash_prog(const struct lfs_config *c, lfs_block_t block, l
             _LFS_DBG("Program error at (0x%08x), 0x%X, error: 0x%08x\n", address, hal_rc, HAL_FLASH_GetError());
         }
         address += 8;
-        bufp += 8;
+        bufp += 1;
     }
     if(HAL_FLASH_Lock() != HAL_OK)
     {
