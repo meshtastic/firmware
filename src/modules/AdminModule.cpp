@@ -656,12 +656,17 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         disableBluetooth();
     switch (c.which_payload_variant) {
     case meshtastic_ModuleConfig_mqtt_tag:
+#if MESHTASTIC_EXCLUDE_MQTT
+        LOG_WARN("Set module config: MESHTASTIC_EXCLUDE_MQTT is defined. Not setting MQTT config");
+        return false;
+#else
         LOG_INFO("Set module config: MQTT");
         if (!MQTT::isValidConfig(c.payload_variant.mqtt)) {
             return false;
         }
         moduleConfig.has_mqtt = true;
         moduleConfig.mqtt = c.payload_variant.mqtt;
+#endif
         break;
     case meshtastic_ModuleConfig_serial_tag:
         LOG_INFO("Set module config: Serial");
