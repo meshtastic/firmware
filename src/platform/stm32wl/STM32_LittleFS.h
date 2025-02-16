@@ -76,17 +76,13 @@ class STM32_LittleFS
      * code. User should not call these directly
      *------------------------------------------------------------------*/
     lfs_t *_getFS(void) { return &_lfs; }
-    void _lockFS(void) { xSemaphoreTake(_mutex, portMAX_DELAY); }
-    void _unlockFS(void) { xSemaphoreGive(_mutex); }
+    void _lockFS(void) { /* no-op */ }
+    void _unlockFS(void) { /* no-op */ }
 
   protected:
     bool _mounted;
     struct lfs_config *_lfs_cfg;
     lfs_t _lfs;
-    SemaphoreHandle_t _mutex;
-
-  private:
-    StaticSemaphore_t _MutexStorageSpace;
 };
 
 #if !CFG_DEBUG
