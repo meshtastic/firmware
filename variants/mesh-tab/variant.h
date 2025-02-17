@@ -25,6 +25,7 @@
 #define GPS_TX_PIN 17
 
 // #define HAS_SDCARD 1
+//#define SDCARD_USE_HSPI
 #define SPI_MOSI 13
 #define SPI_SCK 12
 #define SPI_MISO 11
