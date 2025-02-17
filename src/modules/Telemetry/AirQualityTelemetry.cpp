@@ -50,12 +50,12 @@ int32_t AirQualityTelemetryModule::runOnce()
                     nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_PMSA003I].first = found.address.address;
                     nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_PMSA003I].second =
                         i2cScanner->fetchI2CBus(found.address);
-                    return 1000;
+                    return setStartDelay();
                 }
 #endif
                 return disable();
             }
-            return 1000;
+            return setStartDelay();
         }
         return disable();
     } else {
