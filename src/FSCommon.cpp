@@ -13,19 +13,19 @@
 #include "configuration.h"
 
 #ifdef HAS_SDCARD
-    #include "SPILock.h"
-    #include <SD.h>
-    #include <SPI.h>
-    #if defined(ARCH_ESP32)
-        #if defined(SDCARD_USE_HSPI)
-        SPIClass SDHandler = SPIClass(HSPI);
-        #elif defined(SDCARD_USE_VSPI)
-        SPIClass SDHandler = SPIClass(VSPI);
-        #endif
-    #elif defined(ARCH_NRF52)
-        #define SDHandler SPI // only used for esp32
-    #endif //ESP32/NRF52
-#endif // HAS_SDCARD
+#include "SPILock.h"
+#include <SD.h>
+#include <SPI.h>
+#if defined(ARCH_ESP32)
+#if defined(SDCARD_USE_HSPI)
+SPIClass SDHandler = SPIClass(HSPI);
+#elif defined(SDCARD_USE_VSPI)
+SPIClass SDHandler = SPIClass(VSPI);
+#endif
+#elif defined(ARCH_NRF52)
+#define SDHandler SPI // only used for esp32
+#endif                // ESP32/NRF52
+#endif                // HAS_SDCARD
 
 #if defined(ARCH_STM32WL)
 

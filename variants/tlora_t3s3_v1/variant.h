@@ -74,4 +74,3 @@
 #define LR11X0_DIO3_TCXO_VOLTAGE 3.0
 #define LR11X0_DIO_AS_RF_SWITCH
 #endif
-
