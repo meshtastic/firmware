@@ -49,7 +49,7 @@ void OSFS::writeNBytes(uint16_t address, unsigned int num, const byte *input)
         input++;
     }
 }
-#endif
+#endif // ARCH_STM32WL
 
 /**
  * @brief Copies a file from one location to another.
