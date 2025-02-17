@@ -26,7 +26,6 @@
 // #endif
 #include <ErriezCRC32.h>
 #include <algorithm>
-#include <iostream>
 #include <pb_decode.h>
 #include <pb_encode.h>
 #include <vector>
@@ -411,7 +410,7 @@ bool NodeDB::resetRadioConfig(bool factory_reset)
         rebootAtMsec = millis() + (5 * 1000);
     }
 
-#if (defined(T_DECK) || defined(T_WATCH_S3) || defined(UNPHONE) || defined(PICOMPUTER_S3)) && defined(HAS_TFT)
+#if (defined(T_DECK) || defined(T_WATCH_S3) || defined(UNPHONE) || defined(PICOMPUTER_S3)) && HAS_TFT
     // as long as PhoneAPI shares BT and TFT app switch BT off
     config.bluetooth.enabled = false;
     if (moduleConfig.external_notification.nag_timeout == 60)

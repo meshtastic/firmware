@@ -369,6 +369,12 @@ bool loadConfig(const char *configPath)
                 }
             }
 
+            settingsMap[sx126x_max_power] = yamlConfig["Lora"]["SX126X_MAX_POWER"].as<int>(22);
+            settingsMap[sx128x_max_power] = yamlConfig["Lora"]["SX128X_MAX_POWER"].as<int>(13);
+            settingsMap[lr1110_max_power] = yamlConfig["Lora"]["LR1110_MAX_POWER"].as<int>(22);
+            settingsMap[lr1120_max_power] = yamlConfig["Lora"]["LR1120_MAX_POWER"].as<int>(13);
+            settingsMap[rf95_max_power] = yamlConfig["Lora"]["RF95_MAX_POWER"].as<int>(20);
+
             settingsMap[dio2_as_rf_switch] = yamlConfig["Lora"]["DIO2_AS_RF_SWITCH"].as<bool>(false);
             settingsMap[dio3_tcxo_voltage] = yamlConfig["Lora"]["DIO3_TCXO_VOLTAGE"].as<float>(0) * 1000;
             if (settingsMap[dio3_tcxo_voltage] == 0 && yamlConfig["Lora"]["DIO3_TCXO_VOLTAGE"].as<bool>(false)) {
@@ -518,7 +524,12 @@ bool loadConfig(const char *configPath)
 
         if (yamlConfig["Webserver"]) {
             settingsMap[webserverport] = (yamlConfig["Webserver"]["Port"]).as<int>(-1);
-            settingsStrings[webserverrootpath] = (yamlConfig["Webserver"]["RootPath"]).as<std::string>("");
+            settingsStrings[webserverrootpath] =
+                (yamlConfig["Webserver"]["RootPath"]).as<std::string>("/usr/share/meshtasticd/web");
+            settingsStrings[websslkeypath] =
+                (yamlConfig["Webserver"]["SSLKey"]).as<std::string>("/etc/meshtasticd/ssl/private_key.pem");
+            settingsStrings[websslcertpath] =
+                (yamlConfig["Webserver"]["SSLCert"]).as<std::string>("/etc/meshtasticd/ssl/certificate.pem");
         }
 
         if (yamlConfig["General"]) {
