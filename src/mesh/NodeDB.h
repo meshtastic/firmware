@@ -68,6 +68,8 @@ enum LoadFileResult {
     OTHER_FAILURE = 5
 };
 
+enum UserLicenseStatus { NotKnown, NotLicensed, Licensed };
+
 class NodeDB
 {
     // NodeNum provisionalNodeNum; // if we are trying to find a node num this is our current attempt
@@ -166,6 +168,8 @@ class NodeDB
 
     virtual meshtastic_NodeInfoLite *getMeshNode(NodeNum n);
     size_t getNumMeshNodes() { return numMeshNodes; }
+
+    UserLicenseStatus getLicenseStatus(uint32_t nodeNum);
 
     size_t getMaxNodesAllocatedSize()
     {

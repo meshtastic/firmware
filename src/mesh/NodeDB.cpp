@@ -1567,6 +1567,17 @@ bool NodeDB::hasValidPosition(const meshtastic_NodeInfoLite *n)
     return n->has_position && (n->position.latitude_i != 0 || n->position.longitude_i != 0);
 }
 
+/// If we have a node / user and they report is_licensed = true
+/// we consider them licensed
+UserLicenseStatus NodeDB::getLicenseStatus(uint32_t nodeNum)
+{
+    meshtastic_NodeInfoLite *info = getMeshNode(nodeNum);
+    if (!info || !info->has_user) {
+        return UserLicenseStatus::NotKnown;
+    }
+    return info->user.is_licensed ? UserLicenseStatus::Licensed : UserLicenseStatus::NotLicensed;
+}
+
 /// Record an error that should be reported via analytics
 void recordCriticalError(meshtastic_CriticalErrorCode code, uint32_t address, const char *filename)
 {
