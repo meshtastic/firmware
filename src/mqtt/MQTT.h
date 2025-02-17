@@ -47,10 +47,6 @@ class MQTT : private concurrency::OSThread
      */
     void onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_MeshPacket &mp_decoded, ChannelIndex chIndex);
 
-    /** Attempt to connect to server if necessary
-     */
-    void reconnect();
-
     bool isConnectedDirectly();
 
     bool publish(const char *topic, const char *payload, bool retained);
@@ -64,6 +60,8 @@ class MQTT : private concurrency::OSThread
     void start() { setIntervalFromNow(0); };
 
     bool isUsingDefaultServer() { return isConfiguredForDefaultServer; }
+
+    static bool isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config);
 
   protected:
     struct QueueEntry {
@@ -114,6 +112,10 @@ class MQTT : private concurrency::OSThread
     /** return true if we have a channel that wants uplink/downlink or map reporting is enabled
      */
     bool wantsLink() const;
+
+    /** Attempt to connect to server if necessary
+     */
+    void reconnect();
 
     /** Tell the server what subscriptions we want (based on channels.downlink_enabled)
      */

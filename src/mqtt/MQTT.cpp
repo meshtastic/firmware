@@ -41,6 +41,7 @@ MQTT *mqtt;
 namespace
 {
 constexpr int reconnectMax = 5;
+constexpr uint16_t mqttPort = 1883;
 
 // FIXME - this size calculation is super sloppy, but it will go away once we dynamically alloc meshpackets
 static uint8_t bytes[meshtastic_MqttClientProxyMessage_size + 30]; // 12 for channel name and 16 for nodeid
@@ -245,6 +246,11 @@ std::pair<String, uint16_t> parseHostAndPort(String server, uint16_t port = 0)
     }
     return std::make_pair(std::move(server), port);
 }
+
+bool isDefaultServer(const String &host)
+{
+    return host.length() == 0 || host == default_mqtt_address;
+}
 } // namespace
 
 void MQTT::mqttCallback(char *topic, byte *payload, unsigned int length)
@@ -324,7 +330,7 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
         }
 
         String host = parseHostAndPort(moduleConfig.mqtt.address).first;
-        isConfiguredForDefaultServer = host.length() == 0 || host == default_mqtt_address;
+        isConfiguredForDefaultServer = isDefaultServer(host);
         IPAddress ip;
         isMqttServerAddressPrivate = ip.fromString(host.c_str()) && isPrivateIpAddress(ip);
 
@@ -408,40 +414,32 @@ void MQTT::reconnect()
         }
 #if HAS_NETWORKING
         // Defaults
-        int serverPort = 1883;
+        int serverPort = mqttPort;
         const char *serverAddr = default_mqtt_address;
         const char *mqttUsername = default_mqtt_username;
         const char *mqttPassword = default_mqtt_password;
+        MQTTClient *clientConnection = mqttClient.get();
 
         if (*moduleConfig.mqtt.address) {
             serverAddr = moduleConfig.mqtt.address;
             mqttUsername = moduleConfig.mqtt.username;
             mqttPassword = moduleConfig.mqtt.password;
         }
-#if HAS_WIFI && !defined(ARCH_PORTDUINO)
-#if !defined(CONFIG_IDF_TARGET_ESP32C6)
+#if HAS_WIFI && !defined(ARCH_PORTDUINO) && !defined(CONFIG_IDF_TARGET_ESP32C6)
         if (moduleConfig.mqtt.tls_enabled) {
             // change default for encrypted to 8883
             try {
                 serverPort = 8883;
                 wifiSecureClient.setInsecure();
-
-                pubSub.setClient(wifiSecureClient);
                 LOG_INFO("Use TLS-encrypted session");
+                clientConnection = &wifiSecureClient;
             } catch (const std::exception &e) {
                 LOG_ERROR("MQTT ERROR: %s", e.what());
             }
         } else {
             LOG_INFO("Use non-TLS-encrypted session");
-            pubSub.setClient(*mqttClient);
         }
-#else
-        pubSub.setClient(*mqttClient);
 #endif
-#elif HAS_NETWORKING
-        pubSub.setClient(*mqttClient);
-#endif
-
         std::pair<String, uint16_t> hostAndPort = parseHostAndPort(serverAddr, serverPort);
         serverAddr = hostAndPort.first.c_str();
         serverPort = hostAndPort.second;
@@ -451,13 +449,14 @@ void MQTT::reconnect()
         LOG_INFO("Connect directly to MQTT server %s, port: %d, username: %s, password: %s", serverAddr, serverPort, mqttUsername,
                  mqttPassword);
 
+        pubSub.setClient(*clientConnection);
         bool connected = pubSub.connect(owner.id, mqttUsername, mqttPassword);
         if (connected) {
             LOG_INFO("MQTT connected");
             enabled = true; // Start running background process again
             runASAP = true;
             reconnectCount = 0;
-            isMqttServerAddressPrivate = isPrivateIpAddress(mqttClient->remoteIP());
+            isMqttServerAddressPrivate = isPrivateIpAddress(clientConnection->remoteIP());
 
             publishNodeInfo();
             sendSubscriptions();
@@ -566,6 +565,23 @@ int32_t MQTT::runOnce()
     }
 #endif
     return 30000;
+}
+
+bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config)
+{
+    String host;
+    uint16_t port;
+    std::tie(host, port) = parseHostAndPort(config.address, mqttPort);
+    const bool defaultServer = isDefaultServer(host);
+    if (defaultServer && config.tls_enabled) {
+        LOG_ERROR("Invalid MQTT config: TLS was enabled, but the default server does not support TLS");
+        return false;
+    }
+    if (defaultServer && port != mqttPort) {
+        LOG_ERROR("Invalid MQTT config: Unsupported port '%d' for the default MQTT server", port);
+        return false;
+    }
+    return true;
 }
 
 void MQTT::publishNodeInfo()

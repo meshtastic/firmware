@@ -242,6 +242,7 @@ class MQTTUnitTest : public MQTT
         mqttClient.release();
         delete pubsub;
     }
+    using MQTT::reconnect;
     int queueSize() { return mqttQueue.numUsed(); }
     void reportToMap(std::optional<uint32_t> precision = std::nullopt)
     {
@@ -488,7 +489,7 @@ void test_reconnectProxyDoesNotReconnectMqtt(void)
     moduleConfig.mqtt.proxy_to_client_enabled = true;
     MQTTUnitTest::restart();
 
-    mqtt->reconnect();
+    unitTest->reconnect();
 
     TEST_ASSERT_FALSE(pubsub->connected_);
 }
@@ -799,6 +800,38 @@ void test_customMqttRoot(void)
         [] { return pubsub->subscriptions_.count("custom/2/e/test/+") && pubsub->subscriptions_.count("custom/2/e/PKI/+"); }));
 }
 
+// Empty configuration is valid.
+void test_configurationEmptyIsValid(void)
+{
+    meshtastic_ModuleConfig_MQTTConfig config;
+
+    TEST_ASSERT_TRUE(MQTT::isValidConfig(config));
+}
+
+// Configuration with the default server is valid.
+void test_configWithDefaultServer(void)
+{
+    meshtastic_ModuleConfig_MQTTConfig config = {.address = default_mqtt_address};
+
+    TEST_ASSERT_TRUE(MQTT::isValidConfig(config));
+}
+
+// Configuration with the default server and port 8888 is invalid.
+void test_configWithDefaultServerAndInvalidPort(void)
+{
+    meshtastic_ModuleConfig_MQTTConfig config = {.address = default_mqtt_address ":8888"};
+
+    TEST_ASSERT_FALSE(MQTT::isValidConfig(config));
+}
+
+// Configuration with the default server and tls_enabled = true is invalid.
+void test_configWithDefaultServerAndInvalidTLSEnabled(void)
+{
+    meshtastic_ModuleConfig_MQTTConfig config = {.tls_enabled = true};
+
+    TEST_ASSERT_FALSE(MQTT::isValidConfig(config));
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -842,6 +875,10 @@ void setup()
     RUN_TEST(test_enabled);
     RUN_TEST(test_disabled);
     RUN_TEST(test_customMqttRoot);
+    RUN_TEST(test_configurationEmptyIsValid);
+    RUN_TEST(test_configWithDefaultServer);
+    RUN_TEST(test_configWithDefaultServerAndInvalidPort);
+    RUN_TEST(test_configWithDefaultServerAndInvalidTLSEnabled);
     exit(UNITY_END());
 }
 #else
