@@ -153,7 +153,7 @@ class AmbientLightingThread : public concurrency::OSThread
         pixels.fill(BUTTON1_COLOR, BUTTON1_COLOR_INDEX, 1);
 #endif
 #if defined(BUTTON2_COLOR) && defined(BUTTON2_COLOR_INDEX)
-        pixels.fill(BUTTON2_COLOR, BUTTON1_COLOR_INDEX, 1);
+        pixels.fill(BUTTON2_COLOR, BUTTON2_COLOR_INDEX, 1);
 #endif
 #endif
         pixels.show();

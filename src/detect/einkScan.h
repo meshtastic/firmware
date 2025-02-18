@@ -6,28 +6,28 @@
 
 void d_writeCommand(uint8_t c)
 {
-    SPI1.beginTransaction(SPISettings(4000000, MSBFIRST, SPI_MODE0));
+    SPI.beginTransaction(SPISettings(4000000, MSBFIRST, SPI_MODE0));
     if (PIN_EINK_DC >= 0)
         digitalWrite(PIN_EINK_DC, LOW);
     if (PIN_EINK_CS >= 0)
         digitalWrite(PIN_EINK_CS, LOW);
-    SPI1.transfer(c);
+    SPI.transfer(c);
     if (PIN_EINK_CS >= 0)
         digitalWrite(PIN_EINK_CS, HIGH);
     if (PIN_EINK_DC >= 0)
         digitalWrite(PIN_EINK_DC, HIGH);
-    SPI1.endTransaction();
+    SPI.endTransaction();
 }
 
 void d_writeData(uint8_t d)
 {
-    SPI1.beginTransaction(SPISettings(4000000, MSBFIRST, SPI_MODE0));
+    SPI.beginTransaction(SPISettings(4000000, MSBFIRST, SPI_MODE0));
     if (PIN_EINK_CS >= 0)
         digitalWrite(PIN_EINK_CS, LOW);
-    SPI1.transfer(d);
+    SPI.transfer(d);
     if (PIN_EINK_CS >= 0)
         digitalWrite(PIN_EINK_CS, HIGH);
-    SPI1.endTransaction();
+    SPI.endTransaction();
 }
 
 unsigned long d_waitWhileBusy(uint16_t busy_time)
@@ -53,7 +53,7 @@ unsigned long d_waitWhileBusy(uint16_t busy_time)
 
 void scanEInkDevice(void)
 {
-    SPI1.begin();
+    SPI.begin();
     d_writeCommand(0x22);
     d_writeData(0x83);
     d_writeCommand(0x20);
@@ -62,6 +62,6 @@ void scanEInkDevice(void)
         LOG_DEBUG("EInk display found");
     else
         LOG_DEBUG("EInk display not found");
-    SPI1.end();
+    SPI.end();
 }
 #endif
