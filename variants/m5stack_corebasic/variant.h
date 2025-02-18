@@ -23,6 +23,7 @@
 #define LORA_CS 5   //NSS
 
 #define USE_RF95
+#define RF95_MAX_POWER 17
 #define LORA_DIO0 35  // IRQ 
 #define LORA_RESET 13 // RST
 #define LORA_DIO1 RADIOLIB_NC // Not really used

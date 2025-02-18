@@ -40,9 +40,6 @@ extern bool isCharging;
 extern bool isUSBPowered;
 
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
-extern ATECCX08A atecc;
-#endif
 struct DataInfo {
     int lora_channel_num;
     double lora_freq;
