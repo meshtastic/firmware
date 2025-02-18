@@ -4,7 +4,7 @@
 
 // #define HAS_SCREEN 0
 // #define HAS_SDCARD
-// #define SDCARD_USE_SPI1
+// #define SDCARD_USE_HSPI
 
 // #define USE_SSD1306
 

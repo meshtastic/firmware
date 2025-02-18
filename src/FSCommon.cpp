@@ -16,25 +16,16 @@
 #include "SPILock.h"
 #include <SD.h>
 #include <SPI.h>
-#ifndef SDCARD_USE_HSPI // old ESP32
-#ifdef SDCARD_USE_SPI1
-#ifdef ARCH_ESP32
-SPIClass SPI1(HSPI);
-#endif // ARCH_ESP32
-#ifdef ARCH_NRF52
-#define SDCARD_SPI SPI1
-#endif                 // NRF52
-#define SDHandler SPI1 // only used for esp32
-#else
-#ifdef ARCH_NRF52
-#define SDCARD_SPI SPI
-#endif                // NRF52
-#define SDHandler SPI // only used for esp32
-#endif                // SDCARD_USE_SPI1
-#else
+#if defined(ARCH_ESP32)
+#if defined(SDCARD_USE_HSPI)
 SPIClass SDHandler = SPIClass(HSPI);
+#elif defined(SDCARD_USE_VSPI)
+SPIClass SDHandler = SPIClass(VSPI);
 #endif
-#endif // HAS_SDCARD
+#elif defined(ARCH_NRF52)
+#define SDHandler SPI // only used for esp32
+#endif                // ESP32/NRF52
+#endif                // HAS_SDCARD
 
 #if defined(ARCH_STM32WL)
 
@@ -403,4 +394,4 @@ void setupSDCard()
 #endif
 #endif
 #endif
-
+}
