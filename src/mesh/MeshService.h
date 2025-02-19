@@ -64,7 +64,8 @@ class MeshService
             return true;
         }
         return p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP ||
-               p->decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP;
+               p->decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP ||
+               p->decoded.portnum == meshtastic_PortNum_ALERT_APP;
     }
     /// Called when some new packets have arrived from one of the radios
     Observable<uint32_t> fromNumChanged;
