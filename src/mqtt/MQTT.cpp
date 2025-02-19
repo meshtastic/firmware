@@ -41,7 +41,6 @@ MQTT *mqtt;
 namespace
 {
 constexpr int reconnectMax = 5;
-constexpr uint16_t mqttPort = 1883;
 
 // FIXME - this size calculation is super sloppy, but it will go away once we dynamically alloc meshpackets
 static uint8_t bytes[meshtastic_MqttClientProxyMessage_size + 30]; // 12 for channel name and 16 for nodeid
@@ -251,6 +250,68 @@ bool isDefaultServer(const String &host)
 {
     return host.length() == 0 || host == default_mqtt_address;
 }
+
+struct PubSubConfig {
+    explicit PubSubConfig(const meshtastic_ModuleConfig_MQTTConfig &config)
+    {
+        if (*config.address) {
+            serverAddr = config.address;
+            mqttUsername = config.username;
+            mqttPassword = config.password;
+        }
+        if (config.tls_enabled) {
+            serverPort = 8883;
+        }
+        std::tie(serverAddr, serverPort) = parseHostAndPort(serverAddr.c_str(), serverPort);
+    }
+
+    // Defaults
+    static constexpr uint16_t defaultPort = 1883;
+    uint16_t serverPort = defaultPort;
+    String serverAddr = default_mqtt_address;
+    const char *mqttUsername = default_mqtt_username;
+    const char *mqttPassword = default_mqtt_password;
+};
+
+#if HAS_NETWORKING
+bool connectPubSub(const PubSubConfig &config, PubSubClient &pubSub, Client &client)
+{
+    pubSub.setBufferSize(1024);
+    pubSub.setClient(client);
+    pubSub.setServer(config.serverAddr.c_str(), config.serverPort);
+
+    LOG_INFO("Connecting directly to MQTT server %s, port: %d, username: %s, password: %s", config.serverAddr.c_str(),
+             config.serverPort, config.mqttUsername, config.mqttPassword);
+
+    const bool connected = pubSub.connect(owner.id, config.mqttUsername, config.mqttPassword);
+    if (connected) {
+        LOG_INFO("MQTT connected");
+    } else {
+        LOG_WARN("Failed to connect to MQTT server");
+    }
+    return connected;
+}
+#endif
+
+inline bool isConnectedToNetwork()
+{
+#if HAS_WIFI
+    return WiFi.isConnected();
+#elif HAS_ETHERNET
+    return Ethernet.linkStatus() == LinkON;
+#else
+    return false;
+#endif
+}
+
+/** return true if we have a channel that wants uplink/downlink or map reporting is enabled
+ */
+bool wantsLink()
+{
+    const bool hasChannelorMapReport =
+        moduleConfig.mqtt.enabled && (moduleConfig.mqtt.map_reporting_enabled || channels.anyMqttEnabled());
+    return hasChannelorMapReport && (moduleConfig.mqtt.proxy_to_client_enabled || isConnectedToNetwork());
+}
 } // namespace
 
 void MQTT::mqttCallback(char *topic, byte *payload, unsigned int length)
@@ -413,46 +474,18 @@ void MQTT::reconnect()
             return; // Don't try to connect directly to the server
         }
 #if HAS_NETWORKING
-        // Defaults
-        int serverPort = mqttPort;
-        const char *serverAddr = default_mqtt_address;
-        const char *mqttUsername = default_mqtt_username;
-        const char *mqttPassword = default_mqtt_password;
+        const PubSubConfig config(moduleConfig.mqtt);
         MQTTClient *clientConnection = mqttClient.get();
-
-        if (*moduleConfig.mqtt.address) {
-            serverAddr = moduleConfig.mqtt.address;
-            mqttUsername = moduleConfig.mqtt.username;
-            mqttPassword = moduleConfig.mqtt.password;
-        }
-#if HAS_WIFI && !defined(ARCH_PORTDUINO) && !defined(CONFIG_IDF_TARGET_ESP32C6)
+#if MQTT_SUPPORTS_TLS
         if (moduleConfig.mqtt.tls_enabled) {
-            // change default for encrypted to 8883
-            try {
-                serverPort = 8883;
-                wifiSecureClient.setInsecure();
-                LOG_INFO("Use TLS-encrypted session");
-                clientConnection = &wifiSecureClient;
-            } catch (const std::exception &e) {
-                LOG_ERROR("MQTT ERROR: %s", e.what());
-            }
+            mqttClientTLS.setInsecure();
+            LOG_INFO("Use TLS-encrypted session");
+            clientConnection = &mqttClientTLS;
         } else {
             LOG_INFO("Use non-TLS-encrypted session");
         }
 #endif
-        std::pair<String, uint16_t> hostAndPort = parseHostAndPort(serverAddr, serverPort);
-        serverAddr = hostAndPort.first.c_str();
-        serverPort = hostAndPort.second;
-        pubSub.setServer(serverAddr, serverPort);
-        pubSub.setBufferSize(1024);
-
-        LOG_INFO("Connect directly to MQTT server %s, port: %d, username: %s, password: %s", serverAddr, serverPort, mqttUsername,
-                 mqttPassword);
-
-        pubSub.setClient(*clientConnection);
-        bool connected = pubSub.connect(owner.id, mqttUsername, mqttPassword);
-        if (connected) {
-            LOG_INFO("MQTT connected");
+        if (connectPubSub(config, pubSub, *clientConnection)) {
             enabled = true; // Start running background process again
             runASAP = true;
             reconnectCount = 0;
@@ -507,23 +540,6 @@ void MQTT::sendSubscriptions()
 #endif
 }
 
-bool MQTT::wantsLink() const
-{
-    bool hasChannelorMapReport =
-        moduleConfig.mqtt.enabled && (moduleConfig.mqtt.map_reporting_enabled || channels.anyMqttEnabled());
-
-    if (hasChannelorMapReport && moduleConfig.mqtt.proxy_to_client_enabled)
-        return true;
-
-#if HAS_WIFI
-    return hasChannelorMapReport && WiFi.isConnected();
-#endif
-#if HAS_ETHERNET
-    return hasChannelorMapReport && Ethernet.linkStatus() == LinkON;
-#endif
-    return false;
-}
-
 int32_t MQTT::runOnce()
 {
 #if HAS_NETWORKING
@@ -567,18 +583,42 @@ int32_t MQTT::runOnce()
     return 30000;
 }
 
-bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config)
+bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTClient *client)
 {
-    String host;
-    uint16_t port;
-    std::tie(host, port) = parseHostAndPort(config.address, mqttPort);
-    const bool defaultServer = isDefaultServer(host);
+    const PubSubConfig parsed(config);
+
+    if (config.enabled && !config.proxy_to_client_enabled) {
+#if HAS_NETWORKING
+        std::unique_ptr<MQTTClient> clientConnection;
+        if (config.tls_enabled) {
+#if MQTT_SUPPORTS_TLS
+            MQTTClientTLS *tlsClient = new MQTTClientTLS;
+            clientConnection.reset(tlsClient);
+            tlsClient->setInsecure();
+#else
+            LOG_ERROR("Invalid MQTT config: tls_enabled is not supported on this node");
+            return false;
+#endif
+        } else {
+            clientConnection.reset(new MQTTClient);
+        }
+        std::unique_ptr<PubSubClient> pubSub(new PubSubClient);
+        if (isConnectedToNetwork()) {
+            return connectPubSub(parsed, *pubSub, (client != nullptr) ? *client : *clientConnection);
+        }
+#else
+        LOG_ERROR("Invalid MQTT config: proxy_to_client_enabled must be enabled on nodes that do not have a network");
+        return false;
+#endif
+    }
+
+    const bool defaultServer = isDefaultServer(parsed.serverAddr);
     if (defaultServer && config.tls_enabled) {
         LOG_ERROR("Invalid MQTT config: TLS was enabled, but the default server does not support TLS");
         return false;
     }
-    if (defaultServer && port != mqttPort) {
-        LOG_ERROR("Invalid MQTT config: Unsupported port '%d' for the default MQTT server", port);
+    if (defaultServer && parsed.serverPort != PubSubConfig::defaultPort) {
+        LOG_ERROR("Invalid MQTT config: Unsupported port '%d' for the default MQTT server", parsed.serverPort);
         return false;
     }
     return true;
