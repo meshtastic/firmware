@@ -1,9 +1,10 @@
-#ifdef HAS_RAKPROT
-#include "../variants/rak2560/RAK9154Sensor.h"
-#include "../mesh/generated/meshtastic/telemetry.pb.h"
-#include "../modules/Telemetry/Sensor/TelemetrySensor.h"
 #include "configuration.h"
 
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && defined(HAS_RAKPROT)
+
+#include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "RAK9154Sensor.h"
+#include "TelemetrySensor.h"
 #include "concurrency/Periodic.h"
 #include <RAK-OneWireSerial.h>
 
@@ -24,6 +25,8 @@ static int16_t dc_cur = 0;
 static uint16_t dc_vol = 0;
 static uint8_t dc_prec = 0;
 static uint8_t provision = 0;
+
+extern RAK9154Sensor rak9154Sensor;
 
 static void onewire_evt(const uint8_t pid, const uint8_t sid, const SNHUBAPI_EVT_E eid, uint8_t *msg, uint16_t len)
 {
@@ -78,6 +81,7 @@ static void onewire_evt(const uint8_t pid, const uint8_t sid, const SNHUBAPI_EVT
         default:
             break;
         }
+        rak9154Sensor.setLastRead(millis());
 
         break;
     case SNHUBAPI_EVT_REPORT:
@@ -106,6 +110,7 @@ static void onewire_evt(const uint8_t pid, const uint8_t sid, const SNHUBAPI_EVT
         default:
             break;
         }
+        rak9154Sensor.setLastRead(millis());
 
         break;
 
@@ -145,15 +150,18 @@ static int32_t onewireHandle()
 
 int32_t RAK9154Sensor::runOnce()
 {
-    onewirePeriodic = new Periodic("onewireHandle", onewireHandle);
+    if (!rak9154Sensor.isInitialized()) {
+        onewirePeriodic = new Periodic("onewireHandle", onewireHandle);
 
-    mySerial.begin(9600);
+        mySerial.begin(9600);
 
-    RakSNHub_Protocl_API.init(onewire_evt);
+        RakSNHub_Protocl_API.init(onewire_evt);
 
-    status = true;
-    initialized = true;
-    return 0;
+        status = true;
+        initialized = true;
+    }
+
+    return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
 }
 
 void RAK9154Sensor::setup()
@@ -163,12 +171,26 @@ void RAK9154Sensor::setup()
 
 bool RAK9154Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
-    return true;
+    if (getBusVoltageMv() > 0) {
+        measurement->variant.environment_metrics.has_voltage = true;
+        measurement->variant.environment_metrics.has_current = true;
+
+        measurement->variant.environment_metrics.voltage = (float)getBusVoltageMv() / 1000;
+        measurement->variant.environment_metrics.current = (float)getCurrentMa() / 1000;
+        return true;
+    } else {
+        return false;
+    }
 }
 
 uint16_t RAK9154Sensor::getBusVoltageMv()
 {
     return dc_vol;
+}
+
+int16_t RAK9154Sensor::getCurrentMa()
+{
+    return dc_cur;
 }
 
 int RAK9154Sensor::getBusBatteryPercent()
@@ -179,5 +201,9 @@ int RAK9154Sensor::getBusBatteryPercent()
 bool RAK9154Sensor::isCharging()
 {
     return (dc_cur > 0) ? true : false;
+}
+void RAK9154Sensor::setLastRead(uint32_t lastRead)
+{
+    this->lastRead = lastRead;
 }
 #endif // HAS_RAKPROT

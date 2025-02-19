@@ -10,6 +10,7 @@
 std::vector<MeshModule *> *MeshModule::modules;
 
 const meshtastic_MeshPacket *MeshModule::currentRequest;
+uint8_t MeshModule::numPeriodicModules = 0;
 
 /**
  * If any of the current chain of modules has already sent a reply, it will be here.  This is useful to allow
@@ -33,6 +34,15 @@ MeshModule::~MeshModule()
     auto it = std::find(modules->begin(), modules->end(), this);
     assert(it != modules->end());
     modules->erase(it);
+}
+
+// ⚠️ **Only call once** to set the initial delay before a module starts broadcasting periodically
+int32_t MeshModule::setStartDelay()
+{
+    int32_t startDelay = MESHMODULE_MIN_BROADCAST_DELAY_MS + numPeriodicModules * MESHMODULE_BROADCAST_SPACING_MS;
+    numPeriodicModules++;
+
+    return startDelay;
 }
 
 meshtastic_MeshPacket *MeshModule::allocAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex,

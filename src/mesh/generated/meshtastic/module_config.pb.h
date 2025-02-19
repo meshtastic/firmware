@@ -347,7 +347,7 @@ typedef struct _meshtastic_ModuleConfig_TelemetryConfig {
     bool health_screen_enabled;
 } meshtastic_ModuleConfig_TelemetryConfig;
 
-/* TODO: REPLACE */
+/* Canned Messages Module Config */
 typedef struct _meshtastic_ModuleConfig_CannedMessageConfig {
     /* Enable the rotary encoder #1. This is a 'dumb' encoder sending pulses on both A and B pins while rotating. */
     bool rotary1_enabled;

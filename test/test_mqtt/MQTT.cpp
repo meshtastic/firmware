@@ -94,6 +94,7 @@ class MockPubSubServer : public WiFiClient
 
     int connect(IPAddress ip, uint16_t port) override
     {
+        port_ = port;
         if (refuseConnection_)
             return 0;
         connected_ = true;
@@ -101,6 +102,8 @@ class MockPubSubServer : public WiFiClient
     }
     int connect(const char *host, uint16_t port) override
     {
+        host_ = host;
+        port_ = port;
         if (refuseConnection_)
             return 0;
         connected_ = true;
@@ -197,6 +200,8 @@ class MockPubSubServer : public WiFiClient
     bool connected_ = false;
     bool refuseConnection_ = false;       // Simulate a failed connection.
     uint32_t ipAddress_ = 0x01010101;     // IP address of the MQTT server.
+    std::string host_;                    // Requested host.
+    uint16_t port_;                       // Requested port.
     std::list<std::string> buffer_;       // Buffer of messages for the pubSub client to receive.
     std::string command_;                 // Current command received from the pubSub client.
     std::set<std::string> subscriptions_; // Topics that the pubSub client has subscribed to.
@@ -242,6 +247,8 @@ class MQTTUnitTest : public MQTT
         mqttClient.release();
         delete pubsub;
     }
+    using MQTT::isValidConfig;
+    using MQTT::reconnect;
     int queueSize() { return mqttQueue.numUsed(); }
     void reportToMap(std::optional<uint32_t> precision = std::nullopt)
     {
@@ -488,7 +495,7 @@ void test_reconnectProxyDoesNotReconnectMqtt(void)
     moduleConfig.mqtt.proxy_to_client_enabled = true;
     MQTTUnitTest::restart();
 
-    mqtt->reconnect();
+    unitTest->reconnect();
 
     TEST_ASSERT_FALSE(pubsub->connected_);
 }
@@ -799,6 +806,85 @@ void test_customMqttRoot(void)
         [] { return pubsub->subscriptions_.count("custom/2/e/test/+") && pubsub->subscriptions_.count("custom/2/e/PKI/+"); }));
 }
 
+// Empty configuration is valid.
+void test_configEmptyIsValid(void)
+{
+    meshtastic_ModuleConfig_MQTTConfig config = {};
+
+    TEST_ASSERT_TRUE(MQTT::isValidConfig(config));
+}
+
+// Empty 'enabled' configuration is valid.
+void test_configEnabledEmptyIsValid(void)
+{
+    meshtastic_ModuleConfig_MQTTConfig config = {.enabled = true};
+    MockPubSubServer client;
+
+    TEST_ASSERT_TRUE(MQTTUnitTest::isValidConfig(config, &client));
+    TEST_ASSERT_TRUE(client.connected_);
+    TEST_ASSERT_EQUAL_STRING(default_mqtt_address, client.host_.c_str());
+    TEST_ASSERT_EQUAL(1883, client.port_);
+}
+
+// Configuration with the default server is valid.
+void test_configWithDefaultServer(void)
+{
+    meshtastic_ModuleConfig_MQTTConfig config = {.address = default_mqtt_address};
+
+    TEST_ASSERT_TRUE(MQTT::isValidConfig(config));
+}
+
+// Configuration with the default server and port 8888 is invalid.
+void test_configWithDefaultServerAndInvalidPort(void)
+{
+    meshtastic_ModuleConfig_MQTTConfig config = {.address = default_mqtt_address ":8888"};
+
+    TEST_ASSERT_FALSE(MQTT::isValidConfig(config));
+}
+
+// Configuration with the default server and tls_enabled = true is invalid.
+void test_configWithDefaultServerAndInvalidTLSEnabled(void)
+{
+    meshtastic_ModuleConfig_MQTTConfig config = {.tls_enabled = true};
+
+    TEST_ASSERT_FALSE(MQTT::isValidConfig(config));
+}
+
+// isValidConfig connects to a custom host and port.
+void test_configCustomHostAndPort(void)
+{
+    meshtastic_ModuleConfig_MQTTConfig config = {.enabled = true, .address = "server:1234"};
+    MockPubSubServer client;
+
+    TEST_ASSERT_TRUE(MQTTUnitTest::isValidConfig(config, &client));
+    TEST_ASSERT_TRUE(client.connected_);
+    TEST_ASSERT_EQUAL_STRING("server", client.host_.c_str());
+    TEST_ASSERT_EQUAL(1234, client.port_);
+}
+
+// isValidConfig returns false if a connection cannot be established.
+void test_configWithConnectionFailure(void)
+{
+    meshtastic_ModuleConfig_MQTTConfig config = {.enabled = true, .address = "server"};
+    MockPubSubServer client;
+    client.refuseConnection_ = true;
+
+    TEST_ASSERT_FALSE(MQTTUnitTest::isValidConfig(config, &client));
+}
+
+// isValidConfig returns true when tls_enabled is supported, or false otherwise.
+void test_configWithTLSEnabled(void)
+{
+    meshtastic_ModuleConfig_MQTTConfig config = {.enabled = true, .address = "server", .tls_enabled = true};
+    MockPubSubServer client;
+
+#if MQTT_SUPPORTS_TLS
+    TEST_ASSERT_TRUE(MQTTUnitTest::isValidConfig(config, &client));
+#else
+    TEST_ASSERT_FALSE(MQTTUnitTest::isValidConfig(config, &client));
+#endif
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -842,6 +928,14 @@ void setup()
     RUN_TEST(test_enabled);
     RUN_TEST(test_disabled);
     RUN_TEST(test_customMqttRoot);
+    RUN_TEST(test_configEmptyIsValid);
+    RUN_TEST(test_configEnabledEmptyIsValid);
+    RUN_TEST(test_configWithDefaultServer);
+    RUN_TEST(test_configWithDefaultServerAndInvalidPort);
+    RUN_TEST(test_configWithDefaultServerAndInvalidTLSEnabled);
+    RUN_TEST(test_configCustomHostAndPort);
+    RUN_TEST(test_configWithConnectionFailure);
+    RUN_TEST(test_configWithTLSEnabled);
     exit(UNITY_END());
 }
 #else

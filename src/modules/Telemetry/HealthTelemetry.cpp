@@ -62,7 +62,7 @@ int32_t HealthTelemetryModule::runOnce()
             if (max30102Sensor.hasSensor())
                 result = max30102Sensor.runOnce();
         }
-        return result;
+        return result == UINT32_MAX ? disable() : setStartDelay();
     } else {
         // if we somehow got to a second run of this module with measurement disabled, then just wait forever
         if (!moduleConfig.telemetry.health_measurement_enabled) {

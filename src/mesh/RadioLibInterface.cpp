@@ -340,8 +340,11 @@ void RadioLibInterface::clampToLateRebroadcastWindow(NodeNum from, PacketId id)
     meshtastic_MeshPacket *p = txQueue.remove(from, id, true, false);
     if (p) {
         p->tx_after = millis() + getTxDelayMsecWeightedWorst(p->rx_snr);
-        txQueue.enqueue(p);
-        LOG_DEBUG("Move existing queued packet to the late rebroadcast window %dms from now", p->tx_after - millis());
+        if (txQueue.enqueue(p)) {
+            LOG_DEBUG("Move existing queued packet to the late rebroadcast window %dms from now", p->tx_after - millis());
+        } else {
+            packetPool.release(p);
+        }
     }
 }
 
