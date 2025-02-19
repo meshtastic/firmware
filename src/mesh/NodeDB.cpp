@@ -972,6 +972,8 @@ void NodeDB::loadFromDisk()
     // disk we will still factoryReset to restore things.
     devicestate.version = 0;
 
+    meshtastic_Config_SecurityConfig backupSecurity = meshtastic_Config_SecurityConfig_init_zero;
+
 #ifdef ARCH_ESP32
     spiLock->lock();
     // If the legacy deviceState exists, start over with a factory reset
@@ -982,9 +984,18 @@ void NodeDB::loadFromDisk()
 #ifdef FSCom
     spiLock->lock();
     if (FSCom.exists(legacyPrefFileName)) {
+        spiLock->unlock();
+        LOG_WARN("Legacy prefs version found, factory resetting");
+        if (loadProto(configFileName, meshtastic_LocalConfig_size, sizeof(meshtastic_LocalConfig), &meshtastic_LocalConfig_msg,
+                      &config) == LoadFileResult::LOAD_SUCCESS &&
+            config.has_security && config.security.private_key.size > 0) {
+            LOG_DEBUG("Saving backup of security config and keys");
+            backupSecurity = config.security;
+        }
+        spiLock->lock();
         rmDir("/prefs");
+        spiLock->unlock();
     }
-    spiLock->unlock();
 #endif
     auto state = loadProto(nodeDatabaseFileName, getMaxNodesAllocatedSize(), sizeof(meshtastic_NodeDatabase),
                            &meshtastic_NodeDatabase_msg, &nodeDatabase);
@@ -1033,6 +1044,11 @@ void NodeDB::loadFromDisk()
         } else {
             LOG_INFO("Loaded saved config version %d", config.version);
         }
+    }
+    if (backupSecurity.private_key.size > 0) {
+        LOG_DEBUG("Restoring backup of security config");
+        config.security = backupSecurity;
+        saveToDisk(SEGMENT_CONFIG);
     }
 
     // Make sure we load hard coded admin keys even when the configuration file has none.
