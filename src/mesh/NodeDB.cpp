@@ -995,7 +995,10 @@ void NodeDB::loadFromDisk()
         spiLock->lock();
         rmDir("/prefs");
         spiLock->unlock();
+    } else {
+        spiLock->unlock();
     }
+
 #endif
     auto state = loadProto(nodeDatabaseFileName, getMaxNodesAllocatedSize(), sizeof(meshtastic_NodeDatabase),
                            &meshtastic_NodeDatabase_msg, &nodeDatabase);
