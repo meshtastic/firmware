@@ -291,8 +291,8 @@ extern int unishox2_decompress_simple(const char *in, int len, char *out);
  * @param[in] olen           length of 'out' buffer in bytes. Can be omitted if sufficient buffer is provided
  * @param[in] usx_hcodes     Horizontal codes (array of bytes). See macro section for samples.
  * @param[in] usx_hcode_lens Length of each element in usx_hcodes array
- * @param[in] usx_freq_seq   Frequently occuring sequences. See USX_FREQ_SEQ_* macros for samples
- * @param[in] usx_templates  Templates of frequently occuring patterns. See USX_TEMPLATES macro.
+ * @param[in] usx_freq_seq   Frequently occurring sequences. See USX_FREQ_SEQ_* macros for samples
+ * @param[in] usx_templates  Templates of frequently occurring patterns. See USX_TEMPLATES macro.
  */
 extern int unishox2_compress(const char *in, int len, UNISHOX_API_OUT_AND_LEN(char *out, int olen),
                              const unsigned char usx_hcodes[], const unsigned char usx_hcode_lens[], const char *usx_freq_seq[],
@@ -310,8 +310,8 @@ extern int unishox2_compress(const char *in, int len, UNISHOX_API_OUT_AND_LEN(ch
  * @param[in] olen           length of 'out' buffer in bytes. Can be omitted if sufficient buffer is provided
  * @param[in] usx_hcodes     Horizontal codes (array of bytes). See macro section for samples.
  * @param[in] usx_hcode_lens Length of each element in usx_hcodes array
- * @param[in] usx_freq_seq   Frequently occuring sequences. See USX_FREQ_SEQ_* macros for samples
- * @param[in] usx_templates  Templates of frequently occuring patterns. See USX_TEMPLATES macro.
+ * @param[in] usx_freq_seq   Frequently occurring sequences. See USX_FREQ_SEQ_* macros for samples
+ * @param[in] usx_templates  Templates of frequently occurring patterns. See USX_TEMPLATES macro.
  */
 extern int unishox2_decompress(const char *in, int len, UNISHOX_API_OUT_AND_LEN(char *out, int olen),
                                const unsigned char usx_hcodes[], const unsigned char usx_hcode_lens[], const char *usx_freq_seq[],

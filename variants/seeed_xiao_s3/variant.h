@@ -36,6 +36,10 @@ L76K GPS Module Information : https://www.seeedstudio.com/L76K-GNSS-Module-for-S
 #define BUTTON_PIN 21 // This is the Program Button
 #define BUTTON_NEED_PULLUP
 
+#define BATTERY_PIN -1
+#define ADC_CHANNEL ADC1_GPIO1_CHANNEL
+#define BATTERY_SENSE_RESOLUTION_BITS 12
+
 /*Warning:
     https://www.seeedstudio.com/L76K-GNSS-Module-for-Seeed-Studio-XIAO-p-5864.html
     L76K Expansion Board can not directly used, L76K Reset Pin needs to override or physically remove it,
