@@ -28,8 +28,9 @@ PositionModule::PositionModule()
     nodeStatusObserver.observe(&nodeStatus->onNewStatus);
 
     if (config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER &&
-        config.device.role != meshtastic_Config_DeviceConfig_Role_TAK_TRACKER)
-        setIntervalFromNow(60 * 1000);
+        config.device.role != meshtastic_Config_DeviceConfig_Role_TAK_TRACKER) {
+        setIntervalFromNow(setStartDelay());
+    }
 
     // Power saving trackers should clear their position on startup to avoid waking up and sending a stale position
     if ((config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER ||
@@ -160,7 +161,8 @@ bool PositionModule::hasGPS()
 #endif
 }
 
-meshtastic_MeshPacket *PositionModule::allocReply()
+// Allocate a packet with our position data if we have one
+meshtastic_MeshPacket *PositionModule::allocPositionPacket()
 {
     if (precision == 0) {
         LOG_DEBUG("Skip location send because precision is set to 0!");
@@ -262,13 +264,25 @@ meshtastic_MeshPacket *PositionModule::allocReply()
         p.has_ground_speed = true;
     }
 
-    LOG_INFO("Position reply: time=%i lat=%i lon=%i", p.time, p.latitude_i, p.longitude_i);
+    LOG_INFO("Position packet: time=%i lat=%i lon=%i", p.time, p.latitude_i, p.longitude_i);
+    lastSentToMesh = millis();
 
     // TAK Tracker devices should send their position in a TAK packet over the ATAK port
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER)
         return allocAtakPli();
 
     return allocDataProtobuf(p);
+}
+
+meshtastic_MeshPacket *PositionModule::allocReply()
+{
+    if (config.device.role != meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND && lastSentToMesh &&
+        Throttle::isWithinTimespanMs(lastSentToMesh, 3 * 60 * 1000)) {
+        LOG_DEBUG("Skip Position reply since we sent it <3min ago");
+        ignoreRequest = true; // Mark it as ignored for MeshModule
+        return nullptr;
+    }
+    return allocPositionPacket();
 }
 
 meshtastic_MeshPacket *PositionModule::allocAtakPli()
@@ -333,9 +347,9 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
         precision = 0;
     }
 
-    meshtastic_MeshPacket *p = allocReply();
+    meshtastic_MeshPacket *p = allocPositionPacket();
     if (p == nullptr) {
-        LOG_DEBUG("allocReply returned a nullptr");
+        LOG_DEBUG("allocPositionPacket returned a nullptr");
         return;
     }
 

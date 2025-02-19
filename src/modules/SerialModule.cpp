@@ -60,7 +60,7 @@
 SerialModule *serialModule;
 SerialModuleRadio *serialModuleRadio;
 
-#if defined(TTGO_T_ECHO) || defined(CANARYONE)
+#if defined(TTGO_T_ECHO) || defined(CANARYONE) || defined(MESHLINK)
 SerialModule::SerialModule() : StreamAPI(&Serial), concurrency::OSThread("Serial") {}
 static Print *serialPrint = &Serial;
 #elif defined(CONFIG_IDF_TARGET_ESP32C6)
@@ -158,7 +158,7 @@ int32_t SerialModule::runOnce()
                 Serial.begin(baud);
                 Serial.setTimeout(moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT);
             }
-#elif !defined(TTGO_T_ECHO) && !defined(CANARYONE)
+#elif !defined(TTGO_T_ECHO) && !defined(CANARYONE) && !defined(MESHLINK)
             if (moduleConfig.serial.rxd && moduleConfig.serial.txd) {
 #ifdef ARCH_RP2040
                 Serial2.setFIFOSize(RX_BUFFER);
@@ -214,7 +214,7 @@ int32_t SerialModule::runOnce()
                 }
             }
 
-#if !defined(TTGO_T_ECHO) && !defined(CANARYONE)
+#if !defined(TTGO_T_ECHO) && !defined(CANARYONE) && !defined(MESHLINK)
             else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_WS85)) {
                 processWXSerial();
 
@@ -416,7 +416,7 @@ uint32_t SerialModule::getBaudRate()
  */
 void SerialModule::processWXSerial()
 {
-#if !defined(TTGO_T_ECHO) && !defined(CANARYONE) && !defined(CONFIG_IDF_TARGET_ESP32C6)
+#if !defined(TTGO_T_ECHO) && !defined(CANARYONE) && !defined(CONFIG_IDF_TARGET_ESP32C6) && !defined(MESHLINK)
     static unsigned int lastAveraged = 0;
     static unsigned int averageIntervalMillis = 300000; // 5 minutes hard coded.
     static double dir_sum_sin = 0;
