@@ -150,8 +150,8 @@ meshtastic_MeshPacket *TraceRouteModule::allocReply()
 {
     assert(currentRequest);
 
-    // Ignore broadcast requests
-    if (isBroadcast(currentRequest->to)) {
+    // Ignore multi-hop broadcast requests
+    if (isBroadcast(currentRequest->to) && currentRequest->hop_limit < currentRequest->hop_start) {
         ignoreRequest = true;
         return NULL;
     }
