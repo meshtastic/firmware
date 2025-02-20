@@ -150,6 +150,12 @@ meshtastic_MeshPacket *TraceRouteModule::allocReply()
 {
     assert(currentRequest);
 
+    // Ignore broadcast requests
+    if (isBroadcast(currentRequest->to)) {
+        ignoreRequest = true;
+        return NULL;
+    }
+
     // Copy the payload of the current request
     auto req = *currentRequest;
     const auto &p = req.decoded;
