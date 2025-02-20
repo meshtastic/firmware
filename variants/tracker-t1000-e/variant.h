@@ -111,6 +111,7 @@ extern "C" {
 #define GPS_TX_PIN PIN_SERIAL1_TX
 
 #define GPS_BAUDRATE 115200
+#define GPS_PROBETRIES 5
 
 #define PIN_GPS_EN (32 + 11) // P1.11
 #define GPS_EN_ACTIVE HIGH
