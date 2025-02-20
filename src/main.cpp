@@ -930,6 +930,7 @@ void setup()
 #endif
         if (!sxIf->init()) {
             LOG_WARN("No SX1262 radio");
+            rIf = NULL;
             delete sxIf;
         } else {
             LOG_INFO("SX1262 init success");
