@@ -244,6 +244,10 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                         logFoundDevice("BMP-388", (uint8_t)addr.address);
                         type = BMP_3XX;
                         break;
+                    case 0x60: // BMP-390 should be 0x60
+                        logFoundDevice("BMP-390", (uint8_t)addr.address);
+                        type = BMP_3XX;
+                        break;
                     case 0x58: // BMP-280 should be 0x58
                     default:
                         logFoundDevice("BMP-280", (uint8_t)addr.address);

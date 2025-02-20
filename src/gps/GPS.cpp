@@ -437,6 +437,10 @@ static const int serialSpeeds[3] = {9600, 115200, 38400};
 static const int rareSerialSpeeds[3] = {4800, 57600, GPS_BAUDRATE};
 #endif
 
+#ifndef GPS_PROBETRIES
+#define GPS_PROBETRIES 2
+#endif
+
 /**
  * @brief  Setup the GPS based on the model detected.
  *  We detect the GPS by cycling through a set of baud rates, first common then rare.
@@ -460,11 +464,7 @@ bool GPS::setup()
             digitalWrite(PIN_GPS_EN, HIGH);
             delay(1000);
 #endif
-#ifdef TRACKER_T1000_E
-            if (probeTries < 5) {
-#else
-            if (probeTries < 2) {
-#endif
+            if (probeTries < GPS_PROBETRIES) {
                 LOG_DEBUG("Probe for GPS at %d", serialSpeeds[speedSelect]);
                 gnssModel = probe(serialSpeeds[speedSelect]);
                 if (gnssModel == GNSS_MODEL_UNKNOWN) {
@@ -475,11 +475,7 @@ bool GPS::setup()
                 }
             }
             // Rare Serial Speeds
-#ifdef TRACKER_T1000_E
-            if (probeTries == 5) {
-#else
-            if (probeTries == 2) {
-#endif
+            if (probeTries == GPS_PROBETRIES) {
                 LOG_DEBUG("Probe for GPS at %d", rareSerialSpeeds[speedSelect]);
                 gnssModel = probe(rareSerialSpeeds[speedSelect]);
                 if (gnssModel == GNSS_MODEL_UNKNOWN) {
