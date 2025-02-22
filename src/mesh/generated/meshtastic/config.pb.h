@@ -304,7 +304,7 @@ typedef enum _meshtastic_Config_BluetoothConfig_PairingMode {
 
 typedef enum _meshtastic_Config_RoutingConfig_RoutingAlgo {
    meshtastic_Config_RoutingConfig_Flooding = 0,
-   meshtastic_Config_RoutingConfig_FisheyeState = 1,
+   meshtastic_Config_RoutingConfig_FishEyeState = 1,
    meshtastic_Config_RoutingConfig_Ad_hoc_On_Demand_Distance_Vector = 2
 } meshtastic_Config_RoutingConfig_RoutingAlgo;
 

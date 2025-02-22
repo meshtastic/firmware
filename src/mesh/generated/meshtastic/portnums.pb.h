@@ -84,6 +84,7 @@ typedef enum _meshtastic_PortNum {
     /* Paxcounter lib included in the firmware
  ENCODING: protobuf */
     meshtastic_PortNum_PAXCOUNTER_APP = 34,
+
     /* Provides a hardware serial interface to send and receive from the Meshtastic network.
  Connect to the RX/TX pins of a device with 38400 8N1. Packets received from the Meshtastic
  network is forwarded to the RX pin while sending a packet to TX will go out to the Mesh network.
@@ -128,9 +129,16 @@ typedef enum _meshtastic_PortNum {
     meshtastic_PortNum_MAP_REPORT_APP = 73,
     /* PowerStress based monitoring support (for automated power consumption testing) */
     meshtastic_PortNum_POWERSTRESS_APP = 74,
+<<<<<<< HEAD
     /* Reticulum Network Stack Tunnel App
  ENCODING: Fragmented RNS Packet. Handled by Meshtastic RNS interface */
     meshtastic_PortNum_RETICULUM_TUNNEL_APP = 76,
+||||||| parent of b49c93ed (SetUp for FishEyeStateRoutingModule ready, Implementation still missing)
+=======
+    /* FishEyeStateRouting-Module */
+    meshtastic_PortNum_FISHEYESTATEROUTING_APP = 75,
+
+>>>>>>> b49c93ed (SetUp for FishEyeStateRoutingModule ready, Implementation still missing)
     /* Private applications should use portnums >= 256.
  To simplify initial development and testing you can use "PRIVATE_APP"
  in your code without needing to rebuild protobuf files (via [regen-protos.sh](https://github.com/meshtastic/firmware/blob/master/bin/regen-protos.sh)) */

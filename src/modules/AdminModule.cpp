@@ -764,6 +764,11 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         }
         moduleConfig.neighbor_info = c.payload_variant.neighbor_info;
         break;
+    case meshtastic_ModuleConfig_fish_eye_state_routing_tag:
+        LOG_INFO("Set module config: FishEyeStateRouting");
+        moduleConfig.has_fish_eye_state_routing = true;
+        moduleConfig.fish_eye_state_routing = c.payload_variant.fish_eye_state_routing;
+        break;
     case meshtastic_ModuleConfig_detection_sensor_tag:
         LOG_INFO("Set module config: Detection Sensor");
         moduleConfig.has_detection_sensor = true;
@@ -936,6 +941,11 @@ void AdminModule::handleGetModuleConfig(const meshtastic_MeshPacket &req, const 
             LOG_INFO("Get module config: Neighbor Info");
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_neighbor_info_tag;
             res.get_module_config_response.payload_variant.neighbor_info = moduleConfig.neighbor_info;
+            break;
+        case meshtastic_AdminMessage_ModuleConfigType_FISHEYESTATEROUTING_CONFIG:
+            LOG_INFO("Get module config: FishEyeStateRouting");
+            res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_fish_eye_state_routing_tag;
+            res.get_module_config_response.payload_variant.fish_eye_state_routing = moduleConfig.fish_eye_state_routing;
             break;
         case meshtastic_AdminMessage_ModuleConfigType_DETECTIONSENSOR_CONFIG:
             LOG_INFO("Get module config: Detection Sensor");

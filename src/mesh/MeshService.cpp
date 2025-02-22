@@ -86,7 +86,7 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
         LOG_DEBUG("Received telemetry response. Skip sending our NodeInfo"); //  because this potentially a Repeater which will
                                                                              //  ignore our request for its NodeInfo
     } else if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !nodeDB->getMeshNode(mp->from)->has_user &&
-               nodeInfoModule && !isPreferredRebroadcaster && !nodeDB->isFull() && !(config.network.routingAlgorithm == meshtastic_Config_RoutingConfig_FisheyeState)) {
+               nodeInfoModule && !isPreferredRebroadcaster && !nodeDB->isFull() && !(config.network.routingAlgorithm == meshtastic_Config_RoutingConfig_FishEyeState)) {
         if (airTime->isTxAllowedChannelUtil(true)) {
             // Hops used by the request. If somebody in between running modified firmware modified it, ignore it
             auto hopStart = mp->hop_start;

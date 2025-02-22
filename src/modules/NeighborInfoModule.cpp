@@ -105,7 +105,7 @@ void NeighborInfoModule::sendNeighborInfo(NodeNum dest, bool wantReplies)
 {
     meshtastic_NeighborInfo neighborInfo = meshtastic_NeighborInfo_init_zero;
     collectNeighborInfo(&neighborInfo);
-    neighborInfo.creation = (uint32_t) std::time(nullptr);
+    neighborInfo.creation = getTime();
     meshtastic_MeshPacket *p = allocDataProtobuf(neighborInfo);
     // send regardless of whether or not we have neighbors in our DB,
     // because we want to get neighbors for the next cycle

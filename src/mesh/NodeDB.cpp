@@ -730,6 +730,9 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.has_neighbor_info = true;
     moduleConfig.neighbor_info.enabled = false;
 
+    moduleConfig.has_fish_eye_state_routing = true;
+    moduleConfig.fish_eye_state_routing.enabled = false;
+
     moduleConfig.has_detection_sensor = true;
     moduleConfig.detection_sensor.enabled = false;
     moduleConfig.detection_sensor.detection_trigger_type = meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_LOGIC_HIGH;
@@ -1255,6 +1258,7 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
         moduleConfig.has_ambient_lighting = true;
         moduleConfig.has_audio = true;
         moduleConfig.has_paxcounter = true;
+        moduleConfig.has_fish_eye_state_routing = true;
 
         success &=
             saveProto(moduleConfigFileName, meshtastic_LocalModuleConfig_size, &meshtastic_LocalModuleConfig_msg, &moduleConfig);
