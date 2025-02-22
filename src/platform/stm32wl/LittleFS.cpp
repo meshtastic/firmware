@@ -35,12 +35,15 @@
 #define STM32WL_PAGE_COUNT (FLASH_PAGE_NB)
 #define STM32WL_FLASH_BASE (FLASH_BASE)
 
-/* FLASH_SIZE from stm32wle5xx.h will read the actual FLASH size from the chip */
-/* use the last 1/4 of the FLASH */
-#define LFS_FLASH_TOTAL_SIZE (FLASH_SIZE / 8)
+/*
+ * FLASH_SIZE from stm32wle5xx.h will read the actual FLASH size from the chip.
+ * FLASH_END_ADDR is calculated from FLASH_SIZE.
+ * Use the last 28 KiB of the FLASH
+ */
+#define LFS_FLASH_TOTAL_SIZE (14 * 2048) /* needs to be a multiple of LFS_BLOCK_SIZE */
 #define LFS_BLOCK_SIZE (2048)
 #define LFS_FLASH_ADDR_END (FLASH_END_ADDR)
-#define LFS_FLASH_ADDR_BASE (LFS_FLASH_ADDR_END - (FLASH_SIZE / 8) + 1)
+#define LFS_FLASH_ADDR_BASE (LFS_FLASH_ADDR_END - LFS_FLASH_TOTAL_SIZE + 1)
 
 #if !CFG_DEBUG
 #define _LFS_DBG(fmt, ...)
@@ -182,6 +185,11 @@ LittleFS::LittleFS(void) : STM32_LittleFS(&_InternalFSConfig) {}
 
 bool LittleFS::begin(void)
 {
+    if(FLASH_BASE >= LFS_FLASH_ADDR_BASE)
+    {
+        /* There is not enough space on this device for a filesystem. */
+        return false;
+    }
     // failed to mount, erase all pages then format and mount again
     if (!STM32_LittleFS::begin()) {
         // Erase all pages of internal flash region for Filesystem.
