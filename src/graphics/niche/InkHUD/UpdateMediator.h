@@ -23,11 +23,12 @@ class UpdateMediator : protected concurrency::OSThread
   public:
     UpdateMediator();
 
-    // Tell the mediator what we want, get told what we can have
-    Drivers::EInk::UpdateTypes evaluate(Drivers::EInk::UpdateTypes requested);
+    Drivers::EInk::UpdateTypes
+    evaluate(Drivers::EInk::UpdateTypes requested); // Tell the mediator what we want, get told what we can have
 
-    // Determine which of two update types is more important to honor
-    Drivers::EInk::UpdateTypes prioritize(Drivers::EInk::UpdateTypes type1, Drivers::EInk::UpdateTypes type2);
+    Drivers::EInk::UpdateTypes
+    prioritize(Drivers::EInk::UpdateTypes type1,
+               Drivers::EInk::UpdateTypes type2); // Determine which of two update types is more important to honor
 
     uint8_t fastPerFull = 5;      // Ideal number of fast refreshes between full refreshes
     float stressMultiplier = 2.0; // How bad for the display are extra fast refreshes beyond fastPerFull?

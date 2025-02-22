@@ -47,8 +47,8 @@ enum VerticalAlignment : uint8_t {
     BOTTOM,
 };
 
-// An easy-to-understand intepretation of SNR and RSSI
-// Calculate with Applet::getSignalStringth
+// An easy-to-understand interpretation of SNR and RSSI
+// Calculate with Applet::getSignalStrength
 enum SignalStrength : int8_t {
     SIGNAL_UNKNOWN = -1,
     SIGNAL_NONE,

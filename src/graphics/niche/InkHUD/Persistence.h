@@ -62,7 +62,7 @@ struct Settings {
         bool autoshow[MAX_USERAPPLETS_GLOBAL]{false};
     } userApplets;
 
-    // Features which the use can enable / disable via the on-screen menu
+    // Features which the user can enable / disable via the on-screen menu
     struct OptionalFeatures {
         bool notifications = true;
         bool batteryIcon = false;
@@ -71,7 +71,7 @@ struct Settings {
     // Some menu items may not be required, based on device / configuration
     // We can enable them only when needed, to de-clutter the menu
     struct OptionalMenuItems {
-        // If aux button is used to swap between tiles, we have to need for this menu item
+        // If aux button is used to swap between tiles, we have no need for this menu item
         bool nextTile = true;
 
         // Used if backlight present, and not controlled by AUX button
@@ -103,7 +103,7 @@ struct Settings {
 };
 
 // Most recently received text message
-// Value is updated by InkHUD::WindowManager, as a courtesty to applets
+// Value is updated by InkHUD::WindowManager, as a courtesy to applets
 // Note: different from devicestate.rx_text_message,
 // which may contain an *outgoing message* to broadcast
 struct LatestMessage {

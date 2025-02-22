@@ -32,19 +32,19 @@ class Tile
     void placeUserTile(uint8_t layoutSize, uint8_t tileIndex); // Assign region automatically, based on layout
     void placeSystemTile(int16_t left, int16_t top, uint16_t width, uint16_t height); // Assign region manually
     void handleAppletPixel(int16_t x, int16_t y, Color c);                            // Receive px output from assigned applet
-    uint16_t getWidth();                   // Used to set the assigned applet's width before render
-    uint16_t getHeight();                  // Used to set the assigned applet's height before render
+    uint16_t getWidth();
+    uint16_t getHeight();
     static uint16_t maxDisplayDimension(); // Largest possible width / height any tile may ever encounter
 
-    void assignApplet(Applet *a); // Place an applet onto a tile
-    Applet *getAssignedApplet();  // Applet which is on a tile
+    void assignApplet(Applet *a); // Link an applet with this tile
+    Applet *getAssignedApplet();  // Applet which is currently linked with this tile
 
     void requestHighlight();              // Ask for this tile to be highlighted
     static void startHighlightTimeout();  // Start the auto-dismissal timer
     static void cancelHighlightTimeout(); // Cancel the auto-dismissal timer early; already dismissed
 
     static Tile *highlightTarget; // Which tile are we highlighting? (Intending to highlight?)
-    static bool highlightShown;   // Is the tile highlighted yet? Controlls highlight vs dismiss
+    static bool highlightShown;   // Is the tile highlighted yet? Controls highlight vs dismiss
 
   protected:
     int16_t left;

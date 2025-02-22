@@ -6,8 +6,8 @@
 
     Tasks include:
     - containing instances of Tiles and Applets
-    - co-ordinating display updates
-    - interacting with other NicheGraphics componets, such as the driver, and input sources
+    - coordinating display updates
+    - interacting with other NicheGraphics components, such as the driver, and input sources
     - handling system-wide events (e.g. shutdown)
 
 */
@@ -99,13 +99,13 @@ class WindowManager : protected concurrency::OSThread
     Applet *whoLocked();                        // Find which applet is blocking update requests, if any
 
   protected:
-    WindowManager(); // Private constructor for singleton
+    WindowManager(); // Internal constructor for singleton
 
-    int32_t runOnce() override;
+    int32_t runOnce() override; // Triggers update attempts, when requested by applet(s)
 
     void clearBuffer();                            // Empty the framebuffer
     void autoshow();                               // Show a different applet, to display new info
-    bool shouldUpdate();                           // Check if reason to change display image
+    bool shouldUpdate();                           // Check if have reason to change display image
     Drivers::EInk::UpdateTypes selectUpdateType(); // Determine how the display hardware will perform the image update
     void renderUserApplets();                      // Draw all currently displayed user applets to the frame buffer
     void renderSystemApplets();                    // Draw all currently displayed system applets to the frame buffer
@@ -167,7 +167,7 @@ class WindowManager : protected concurrency::OSThread
 
     // forceUpdate
     bool forcingUpdate = false; // WindowManager::render run pending, guaranteed no skip of update
-    Drivers::EInk::UpdateTypes forcedUpdateType = Drivers::EInk::UpdateTypes::UNSPECIFIED; // guaranteed update using this type
+    Drivers::EInk::UpdateTypes forcedUpdateType = Drivers::EInk::UpdateTypes::UNSPECIFIED; // Guaranteed update using this type
 
     Applet *lockOwner = nullptr; // Which system applet (if any) is preventing other applets from requesting update
 };

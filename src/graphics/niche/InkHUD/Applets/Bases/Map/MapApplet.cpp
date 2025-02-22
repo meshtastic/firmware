@@ -27,6 +27,7 @@ void InkHUD::MapApplet::onRender()
     // Set the region shown on the map
     // - default: fit all nodes, plus padding
     // - maybe overriden by derived applet
+    // - getMapSize *sets* passed parameters (C-style)
     getMapSize(&widthMeters, &heightMeters);
 
     // Set the metersToPx conversion value

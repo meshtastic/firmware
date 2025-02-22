@@ -6,6 +6,8 @@
 
 using namespace NicheGraphics;
 
+// Timing for "maintenance"
+// Paying off full-refresh debt with unprovoked updates, if the display is not very active
 static constexpr uint32_t MAINTENANCE_MS_INITIAL = 60 * 1000UL;
 static constexpr uint32_t MAINTENANCE_MS = 60 * 60 * 1000UL;
 
@@ -16,18 +18,18 @@ InkHUD::UpdateMediator::UpdateMediator() : concurrency::OSThread("Mediator")
 }
 
 // Ask which type of update operation we should perform
-// Even if we explicitly want a FAST or FULL update, we should pass it through this method,
+// Even if we explicitly want a FAST or FULL update, we should still pass it through this method,
 // as it allows UpdateMediator to count the refreshes.
 // Internal "maintenance" refreshes are not passed through evaluate, however.
 Drivers::EInk::UpdateTypes InkHUD::UpdateMediator::evaluate(Drivers::EInk::UpdateTypes requested)
 {
     LOG_DEBUG("FULL-update debt:%f", debt);
 
-    // For conveninece
+    // For convenience
     typedef Drivers::EInk::UpdateTypes UpdateTypes;
 
     // Check whether we've paid off enough debt to stop unprovoked refreshing (if in progress)
-    // This maintenance behavior will also halt itself when the timer next fires,
+    // This maintenance behavior will also have opportunity to halt itself when the timer next fires,
     // but that could be an hour away, so we can stop it early here and free up resources
     if (OSThread::enabled && debt == 0.0)
         endMaintenance();
@@ -49,7 +51,8 @@ Drivers::EInk::UpdateTypes InkHUD::UpdateMediator::evaluate(Drivers::EInk::Updat
             debt += stressMultiplier * (1.0 / fastPerFull); // More debt if too many consecutive FAST refreshes
 
         // If *significant debt*, begin occasionally refreshing *unprovoked*
-        // This maintenance behavior is only triggered here, during periods of user interaction
+        // This maintenance behavior is only triggered here, by periods of user interaction
+        // Debt would otherwise not be able to climb above 1.0
         if (debt >= 2.0)
             beginMaintenance();
 
@@ -86,7 +89,8 @@ Drivers::EInk::UpdateTypes InkHUD::UpdateMediator::evaluate(Drivers::EInk::Updat
 
 // Determine which of two update types is more important to honor
 // Explicit FAST is more important than UNSPECIFIED - prioritize responsiveness
-// Explicit FULL is more important than explicint FAST - prioritize image quality: explicit FULL is rare
+// Explicit FULL is more important than explicit FAST - prioritize image quality: explicit FULL is rare
+// Used when multiple applets have all requested update simultaneously, each with their own preferred UpdateType
 Drivers::EInk::UpdateTypes InkHUD::UpdateMediator::prioritize(Drivers::EInk::UpdateTypes type1, Drivers::EInk::UpdateTypes type2)
 {
     switch (type1) {
@@ -104,9 +108,9 @@ Drivers::EInk::UpdateTypes InkHUD::UpdateMediator::prioritize(Drivers::EInk::Upd
 }
 
 // We're using the timer to perform "maintenance"
-// If signifcant FULL-refresh debt has accumulated, we will occasionally run FULL refreshes unprovoked.
+// If significant FULL-refresh debt has accumulated, we will occasionally run FULL refreshes unprovoked.
 // This prevents gradual build-up of debt,
-// in case we don't have enough UNSPECIFIED refreshes to pay the debt back organically.
+// in case we aren't doing enough UNSPECIFIED refreshes to pay the debt back organically.
 // The first refresh takes place shortly after user finishes interacting with the device; this does the bulk of the restoration
 // Subsequent refreshes take place *much* less frequently.
 // Hopefully an applet will want to render before this, meaning we can cancel the maintenance.

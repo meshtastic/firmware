@@ -39,7 +39,7 @@ class SSD16XX : public EInk
     virtual void configUpdateSequence(); // Tell controller IC which operations to run
 
     virtual void writeNewImage();
-    virtual void writeOldImage();
+    virtual void writeOldImage(); // Image which can be used at *next* update for "differential refresh"
 
     virtual void detachFromUpdate();
     virtual bool isUpdateDone() override;

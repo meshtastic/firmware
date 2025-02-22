@@ -33,7 +33,7 @@ static void inittaskHighlight()
 
 InkHUD::Tile::Tile()
 {
-    // For convenince
+    // For convenience
     windowManager = InkHUD::WindowManager::getInstance();
 
     inittaskHighlight();
@@ -62,10 +62,9 @@ void InkHUD::Tile::placeUserTile(uint8_t userTileCount, uint8_t tileIndex)
         return;
     }
 
-    // Todo: special handling for the notification area
     // Todo: special handling for 3 tile layout
 
-    // Gap between tiles
+    // Gutters between tiles
     const uint16_t spacing = 4;
 
     switch (userTileCount) {
@@ -187,21 +186,22 @@ void InkHUD::Tile::handleAppletPixel(int16_t x, int16_t y, Color c)
     }
 }
 
-// Called by Applet base class, when learning of its dimensions
+// Called by Applet base class, when setting applet dimensions, immediately before render
 uint16_t InkHUD::Tile::getWidth()
 {
     return width;
 }
 
-// Called by Applet base class, when learning of its dimensions
+// Called by Applet base class, when setting applet dimensions, immediately before render
 uint16_t InkHUD::Tile::getHeight()
 {
     return height;
 }
 
 // Longest edge of the display, in pixels
+// A 296px x 250px display will return 296, for example
 // Maximum possible size of any tile's width / height
-// Used by some components to allocate resources for the "worst possible situtation"
+// Used by some components to allocate resources for the "worst possible situation"
 // "Sizing the cathedral for christmas eve"
 uint16_t InkHUD::Tile::maxDisplayDimension()
 {

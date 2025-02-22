@@ -45,7 +45,7 @@ class LCMEN213EFC1 : public EInk
     void configFull(); // Configure display for FULL refresh
     void configFast(); // Configure display for FAST refresh
     void writeNewImage();
-    void writeOldImage();
+    void writeOldImage(); // Used for "differential update", aka FAST refresh
 
     void detachFromUpdate();
     bool isUpdateDone();

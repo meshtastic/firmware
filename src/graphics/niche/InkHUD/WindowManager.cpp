@@ -58,7 +58,7 @@ void InkHUD::WindowManager::setDriver(Drivers::EInk *driver)
 // We want as many FAST updates as possible, without causing gradual degradation of the display
 // If explicitly requested, number of FAST updates may exceed fastPerFull value.
 // In this case, the stressMultiplier is applied, causing the "FULL update debt" to increase by more than normal
-// The stressMultplier helps the display recover from particularly taxing periods of use
+// The stressMultiplier helps the display recover from particularly taxing periods of use
 // (Default arguments of 5,2 are very conservative values)
 void InkHUD::WindowManager::setDisplayResilience(uint8_t fastPerFull = 5, float stressMultiplier = 2.0)
 {
@@ -76,7 +76,7 @@ void InkHUD::WindowManager::addApplet(const char *name, Applet *a, bool defaultA
 
     // If requested, mark in settings that this applet should be active by default
     // This means that it will be available for the user to cycle to with short-press of the button
-    // This is the default state only: user can activate or deactive applets through the menu.
+    // This is the default state only: user can activate or deactivate applets through the menu.
     // User's choice of active applets is stored in settings, and will be honored instead of these defaults, if present
     if (defaultActive)
         settings.userApplets.active[userApplets.size() - 1] = true;
@@ -356,7 +356,7 @@ int InkHUD::WindowManager::beforeDeepSleep(void *unused)
         sa->onShutdown();
     }
 
-    // User has successfull executed a safe shutdown
+    // User has successful executed a safe shutdown
     // We don't need to nag at boot anymore
     settings.tips.safeShutdownSeen = true;
 
@@ -417,7 +417,7 @@ int InkHUD::WindowManager::onReceiveTextMessage(const meshtastic_MeshPacket *pac
         return 0;
 
     // Short circuit: don't store "emoji reactions"
-    // Possibly some implemetation of this in future?
+    // Possibly some implementation of this in future?
     if (packet->decoded.emoji)
         return 0;
 
@@ -683,7 +683,7 @@ void InkHUD::WindowManager::requestUpdate()
 // requestUpdate will not actually update if no requests were made by applets which are actually visible
 // This can occur, because applets requestUpdate even from the background,
 // in case the user's autoshow settings permit them to be moved to foreground.
-// Sometimes, however, we will want to trigger a display update manually, in the absense of any sort of applet event
+// Sometimes, however, we will want to trigger a display update manually, in the absence of any sort of applet event
 // Display health, for example.
 // In these situations, we use forceUpdate
 void InkHUD::WindowManager::forceUpdate(EInk::UpdateTypes type, bool async)
@@ -821,7 +821,7 @@ int32_t InkHUD::WindowManager::runOnce()
         return OSThread::disable();
 }
 
-// Some applets may be permitted to bring themselved to foreground, to show new data
+// Some applets may be permitted to bring themselves to foreground, to show new data
 // User selects which applets have this permission via on-screen menu
 // Priority is determined by the order which applets were added to WindowManager in setupNicheGraphics
 // We will only autoshow one applet
@@ -914,7 +914,7 @@ Drivers::EInk::UpdateTypes InkHUD::WindowManager::selectUpdateType()
         }
     }
 
-    // Tell the mediator what update type the applets deciced on,
+    // Tell the mediator which update type the applets decided on,
     // find out what update type the mediator will actually allow us to have
     type = mediator.evaluate(type);
 
