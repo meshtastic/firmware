@@ -4,6 +4,7 @@
 #include "NodeDB.h"
 #include "RTC.h"
 #include <Throttle.h>
+#include "FishEyeStateRoutingModule.h"
 
 NeighborInfoModule *neighborInfoModule;
 
@@ -144,6 +145,9 @@ bool NeighborInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
     } else if (mp.hop_start != 0 && mp.hop_start == mp.hop_limit) {
         // If the hopLimit is the same as hopStart, then it is a neighbor
         getOrCreateNeighbor(mp.from, mp.from, 0, mp.rx_snr); // Set the broadcast interval to 0, as we don't know it
+    }
+    if(moduleConfig.has_fish_eye_state_routing && moduleConfig.fish_eye_state_routing.enabled && (config.network.routingAlgorithm == meshtastic_Config_RoutingConfig_FishEyeState)){
+        fishEyeStateRoutingModule->addNeighborInfo(*np); 
     }
     // Allow others to handle this packet
     return false;

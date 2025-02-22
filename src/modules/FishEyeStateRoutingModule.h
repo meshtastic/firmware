@@ -39,7 +39,11 @@ class FishEyeStateRoutingModule : public ProtobufModule<meshtastic_FishEyeStateR
 
   private:
 
+    float alpha = 2;
+
     struct LSPDBEntry{
+      uint32_t timeout;
+      bool forwarded;
       uint32_t nextHop;
       meshtastic_FishEyeStateRouting LSP;
     };
@@ -53,6 +57,11 @@ class FishEyeStateRoutingModule : public ProtobufModule<meshtastic_FishEyeStateR
      * Calculate nextHop and distance from this node all other nodes an updates Next-Hop tabel
      */
     bool calcNextHop();
+
+    /*
+     * converts NeighborInfo Struct into LSPDBEntry-Struct
+     */
+    void NinfoToLSPDBEntry(meshtastic_NeighborInfo *Ninfo, LSPDBEntry *fsr);
 
 };
 extern FishEyeStateRoutingModule *fishEyeStateRoutingModule;
