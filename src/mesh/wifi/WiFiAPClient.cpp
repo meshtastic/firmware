@@ -7,9 +7,6 @@
 
 #include "main.h"
 #include "mesh/api/WiFiServerAPI.h"
-#if !MESHTASTIC_EXCLUDE_MQTT
-#include "mqtt/MQTT.h"
-#endif
 #include "target_specific.h"
 #include <WiFi.h>
 #include <WiFiUdp.h>
@@ -106,15 +103,11 @@ static void onNetworkConnected()
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WEBSERVER
         initWebServer();
 #endif
+#if !MESHTASTIC_EXCLUDE_SOCKETAPI
         initApiServer();
+#endif
         APStartupComplete = true;
     }
-
-    // FIXME this is kinda yucky, instead we should just have an observable for 'wifireconnected'
-#ifndef MESHTASTIC_EXCLUDE_MQTT
-    if (mqtt)
-        mqtt->reconnect();
-#endif
 }
 
 static int32_t reconnectWiFi()
@@ -141,6 +134,11 @@ static int32_t reconnectWiFi()
         delay(5000);
 
         if (!WiFi.isConnected()) {
+#ifdef CONFIG_IDF_TARGET_ESP32C3
+            WiFi.mode(WIFI_MODE_NULL);
+            WiFi.useStaticBuffers(true);
+            WiFi.mode(WIFI_STA);
+#endif
             WiFi.begin(wifiName, wifiPsw);
         }
         isReconnecting = false;
@@ -218,7 +216,7 @@ bool initWifi()
 #if !MESHTASTIC_EXCLUDE_WEBSERVER
         createSSLCert(); // For WebServer
 #endif
-        esp_wifi_set_storage(WIFI_STORAGE_RAM); // Disable flash storage for WiFi credentials
+        WiFi.persistent(false); // Disable flash storage for WiFi credentials
 #endif
         if (!*wifiPsw) // Treat empty password as no password
             wifiPsw = NULL;

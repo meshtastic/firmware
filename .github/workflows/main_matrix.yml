@@ -128,19 +128,53 @@ jobs:
     with:
       board: ${{ matrix.board }}
 
-  package-raspbian:
-    uses: ./.github/workflows/package_raspbian.yml
-
-  package-raspbian-armv7l:
-    uses: ./.github/workflows/package_raspbian_armv7l.yml
-
-  package-native:
-    uses: ./.github/workflows/package_amd64.yml
-
-  build-docker:
-    if: ${{ github.event_name == 'workflow_dispatch' }}
-    uses: ./.github/workflows/build_docker.yml
+  build-debian-src:
+    uses: ./.github/workflows/build_debian_src.yml
+    with:
+      series: UNRELEASED
+      build_location: local
     secrets: inherit
+
+  package-pio-deps-native:
+    uses: ./.github/workflows/package_pio_deps.yml
+    with:
+      pio_env: native
+    secrets: inherit
+
+  test-native:
+    uses: ./.github/workflows/test_native.yml
+
+  docker-debian-amd64:
+    uses: ./.github/workflows/docker_build.yml
+    with:
+      distro: debian
+      platform: linux/amd64
+      runs-on: ubuntu-24.04
+      push: false
+
+  docker-alpine-amd64:
+    uses: ./.github/workflows/docker_build.yml
+    with:
+      distro: alpine
+      platform: linux/amd64
+      runs-on: ubuntu-24.04
+      push: false
+
+  docker-debian-arm64:
+    uses: ./.github/workflows/docker_build.yml
+    with:
+      distro: debian
+      platform: linux/arm64
+      runs-on: ubuntu-24.04-arm
+      push: false
+
+  docker-debian-armv7:
+    uses: ./.github/workflows/docker_build.yml
+    with:
+      distro: debian
+      platform: linux/arm/v7
+      runs-on: ubuntu-24.04-arm
+      push: false
 
   after-checks:
     runs-on: ubuntu-latest
@@ -189,7 +223,7 @@ jobs:
         run: ls -R
 
       - name: Get release version string
-        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+        run: echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
         id: version
 
       - name: Move files up
@@ -198,7 +232,7 @@ jobs:
       - name: Repackage in single firmware zip
         uses: actions/upload-artifact@v4
         with:
-          name: firmware-${{matrix.arch}}-${{ steps.version.outputs.version }}
+          name: firmware-${{matrix.arch}}-${{ steps.version.outputs.long }}
           overwrite: true
           path: |
             ./firmware-*.bin
@@ -215,7 +249,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: firmware-${{matrix.arch}}-${{ steps.version.outputs.version }}
+          name: firmware-${{matrix.arch}}-${{ steps.version.outputs.long }}
           merge-multiple: true
           path: ./output
 
@@ -229,12 +263,12 @@ jobs:
           chmod +x ./output/device-update.sh
 
       - name: Zip firmware
-        run: zip -j -9 -r ./firmware-${{matrix.arch}}-${{ steps.version.outputs.version }}.zip ./output
+        run: zip -j -9 -r ./firmware-${{matrix.arch}}-${{ steps.version.outputs.long }}.zip ./output
 
       - name: Repackage in single elfs zip
         uses: actions/upload-artifact@v4
         with:
-          name: debug-elfs-${{matrix.arch}}-${{ steps.version.outputs.version }}.zip
+          name: debug-elfs-${{matrix.arch}}-${{ steps.version.outputs.long }}.zip
           overwrite: true
           path: ./*.elf
           retention-days: 30
@@ -242,8 +276,8 @@ jobs:
       - uses: scruplelesswizard/comment-artifact@main
         if: ${{ github.event_name == 'pull_request' }}
         with:
-          name: firmware-${{matrix.arch}}-${{ steps.version.outputs.version }}
-          description: "Download firmware-${{matrix.arch}}-${{ steps.version.outputs.version }}.zip. This artifact will be available for 90 days from creation"
+          name: firmware-${{matrix.arch}}-${{ steps.version.outputs.long }}
+          description: "Download firmware-${{matrix.arch}}-${{ steps.version.outputs.long }}.zip. This artifact will be available for 90 days from creation"
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
   release-artifacts:
@@ -252,12 +286,9 @@ jobs:
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
     needs:
-      [
-        gather-artifacts,
-        package-raspbian,
-        package-raspbian-armv7l,
-        package-native,
-      ]
+      - gather-artifacts
+      - build-debian-src
+      - package-pio-deps-native
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -268,66 +299,62 @@ jobs:
           python-version: 3.x
 
       - name: Get release version string
-        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+        run: |
+          echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+          echo "deb=$(./bin/buildinfo.py deb)" >> $GITHUB_OUTPUT
         id: version
+        env:
+          BUILD_LOCATION: local
 
       - name: Create release
-        uses: actions/create-release@v1
+        uses: softprops/action-gh-release@v2
         id: create_release
         with:
           draft: true
           prerelease: true
-          release_name: Meshtastic Firmware ${{ steps.version.outputs.version }} Alpha
-          tag_name: v${{ steps.version.outputs.version }}
+          name: Meshtastic Firmware ${{ steps.version.outputs.long }} Alpha
+          tag_name: v${{ steps.version.outputs.long }}
           body: |
             Autogenerated by github action, developer should edit as required before publishing...
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
 
-      - name: Download deb files
+      - name: Download source deb
         uses: actions/download-artifact@v4
         with:
-          pattern: meshtasticd_${{ steps.version.outputs.version }}_*.deb
+          pattern: firmware-debian-${{ steps.version.outputs.deb }}~UNRELEASED-src
           merge-multiple: true
-          path: ./output
+          path: ./output/debian-src
+
+      - name: Download native pio deps
+        uses: actions/download-artifact@v4
+        with:
+          pattern: platformio-deps-native-${{ steps.version.outputs.long }}
+          merge-multiple: true
+          path: ./output/pio-deps-native
+
+      - name: Zip linux sources
+        working-directory: output
+        run: |
+          zip -j -9 -r ./meshtasticd-${{ steps.version.outputs.deb }}-src.zip ./debian-src
+          zip -9 -r ./platformio-deps-native-${{ steps.version.outputs.long }}.zip ./pio-deps-native
 
       # For diagnostics
       - name: Display structure of downloaded files
         run: ls -lR
 
-      - name: Add raspbian aarch64 .deb
-        uses: actions/upload-release-asset@v1
+      - name: Add linux sources to release
+        run: |
+          gh release upload v${{ steps.version.outputs.long }} ./output/meshtasticd-${{ steps.version.outputs.deb }}-src.zip
+          gh release upload v${{ steps.version.outputs.long }} ./output/platformio-deps-native-${{ steps.version.outputs.long }}.zip
         env:
-          GITHUB_TOKEN: ${{ github.token }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./output/meshtasticd_${{ steps.version.outputs.version }}_arm64.deb
-          asset_name: meshtasticd_${{ steps.version.outputs.version }}_arm64.deb
-          asset_content_type: application/vnd.debian.binary-package
-
-      - name: Add raspbian armv7l .deb
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./output/meshtasticd_${{ steps.version.outputs.version }}_armhf.deb
-          asset_name: meshtasticd_${{ steps.version.outputs.version }}_armhf.deb
-          asset_content_type: application/vnd.debian.binary-package
-
-      - name: Add raspbian amd64 .deb
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./output/meshtasticd_${{ steps.version.outputs.version }}_amd64.deb
-          asset_name: meshtasticd_${{ steps.version.outputs.version }}_amd64.deb
-          asset_content_type: application/vnd.debian.binary-package
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Bump version.properties
         run: >-
           bin/bump_version.py
+
+      - name: Update debian changelog
+        run: >-
+          debian/ci_changelog.sh
 
       - name: Create version.properties pull request
         uses: peter-evans/create-pull-request@v7
@@ -335,6 +362,7 @@ jobs:
           title: Bump version.properties
           add-paths: |
             version.properties
+            debian/changelog
 
   release-firmware:
     strategy:
@@ -354,12 +382,12 @@ jobs:
           python-version: 3.x
 
       - name: Get release version string
-        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+        run: echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
         id: version
 
       - uses: actions/download-artifact@v4
         with:
-          pattern: firmware-${{matrix.arch}}-${{ steps.version.outputs.version }}
+          pattern: firmware-${{matrix.arch}}-${{ steps.version.outputs.long }}
           merge-multiple: true
           path: ./output
 
@@ -372,37 +400,24 @@ jobs:
           chmod +x ./output/device-update.sh
 
       - name: Zip firmware
-        run: zip -j -9 -r ./firmware-${{matrix.arch}}-${{ steps.version.outputs.version }}.zip ./output
+        run: zip -j -9 -r ./firmware-${{matrix.arch}}-${{ steps.version.outputs.long }}.zip ./output
 
       - uses: actions/download-artifact@v4
         with:
-          name: debug-elfs-${{matrix.arch}}-${{ steps.version.outputs.version }}.zip
+          name: debug-elfs-${{matrix.arch}}-${{ steps.version.outputs.long }}.zip
           merge-multiple: true
           path: ./elfs
 
-      - name: Zip firmware
-        run: zip -j -9 -r ./debug-elfs-${{matrix.arch}}-${{ steps.version.outputs.version }}.zip ./elfs
+      - name: Zip debug elfs
+        run: zip -j -9 -r ./debug-elfs-${{matrix.arch}}-${{ steps.version.outputs.long }}.zip ./elfs
 
       # For diagnostics
       - name: Display structure of downloaded files
         run: ls -lR
 
-      - name: Add bins to release
-        uses: actions/upload-release-asset@v1
+      - name: Add bins and debug elfs to release
+        run: |
+          gh release upload v${{ steps.version.outputs.long }} ./firmware-${{matrix.arch}}-${{ steps.version.outputs.long }}.zip
+          gh release upload v${{ steps.version.outputs.long }} ./debug-elfs-${{matrix.arch}}-${{ steps.version.outputs.long }}.zip
         env:
-          GITHUB_TOKEN: ${{ github.token }}
-        with:
-          upload_url: ${{needs.release-artifacts.outputs.upload_url}}
-          asset_path: ./firmware-${{matrix.arch}}-${{ steps.version.outputs.version }}.zip
-          asset_name: firmware-${{matrix.arch}}-${{ steps.version.outputs.version }}.zip
-          asset_content_type: application/zip
-
-      - name: Add debug elfs to release
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        with:
-          upload_url: ${{needs.release-artifacts.outputs.upload_url}}
-          asset_path: ./debug-elfs-${{matrix.arch}}-${{ steps.version.outputs.version }}.zip
-          asset_name: debug-elfs-${{matrix.arch}}-${{ steps.version.outputs.version }}.zip
-          asset_content_type: application/zip
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

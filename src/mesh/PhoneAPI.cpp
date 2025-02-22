@@ -12,6 +12,7 @@
 #include "PhoneAPI.h"
 #include "PowerFSM.h"
 #include "RadioInterface.h"
+#include "SPILock.h"
 #include "TypeConversions.h"
 #include "main.h"
 #include "xmodem.h"
@@ -54,7 +55,9 @@ void PhoneAPI::handleStartConfig()
     // even if we were already connected - restart our state machine
     state = STATE_SEND_MY_INFO;
     pauseBluetoothLogging = true;
+    spiLock->lock();
     filesManifest = getFiles("/", 10);
+    spiLock->unlock();
     LOG_DEBUG("Got %d files in manifest", filesManifest.size());
 
     LOG_INFO("Start API client config");
@@ -637,6 +640,11 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
         Throttle::isWithinTimespanMs(lastPortNumToRadio[p.decoded.portnum], THIRTY_SECONDS_MS)) {
         LOG_WARN("Rate limit portnum %d", p.decoded.portnum);
         sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "TraceRoute can only be sent once every 30 seconds");
+        meshtastic_QueueStatus qs = router->getQueueStatus();
+        service->sendQueueStatusToPhone(qs, 0, p.id);
+        return false;
+    } else if (p.decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP && isBroadcast(p.to) && p.hop_limit > 0) {
+        sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "Multi-hop traceroute to broadcast address is not allowed");
         meshtastic_QueueStatus qs = router->getQueueStatus();
         service->sendQueueStatusToPhone(qs, 0, p.id);
         return false;

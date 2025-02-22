@@ -9,6 +9,7 @@
  *
  */
 #include "FSCommon.h"
+#include "SPILock.h"
 #include "configuration.h"
 
 #ifdef HAS_SDCARD
@@ -53,25 +54,7 @@ void OSFS::writeNBytes(uint16_t address, unsigned int num, const byte *input)
         input++;
     }
 }
-#endif // ARCH_STM32WL
-
-bool lfs_assert_failed =
-    false; // Note: we use this global on all platforms, though it can only be set true on nrf52 (in our modified lfs_util.h)
-
-extern "C" void lfs_assert(const char *reason)
-{
-    LOG_ERROR("LFS assert: %s", reason);
-    lfs_assert_failed = true;
-
-#ifndef ARCH_PORTDUINO
-#ifdef FSCom
-    // CORRUPTED FILESYSTEM. This causes bootloop so
-    // might as well try formatting now.
-    LOG_ERROR("Trying FSCom.format()");
-    FSCom.format();
 #endif
-#endif
-}
 
 /**
  * @brief Copies a file from one location to another.
@@ -109,6 +92,8 @@ bool copyFile(const char *from, const char *to)
     return true;
 
 #elif defined(FSCom)
+    // take SPI Lock
+    concurrency::LockGuard g(spiLock);
     unsigned char cbuffer[16];
 
     File f1 = FSCom.open(from, FILE_O_READ);
@@ -152,16 +137,23 @@ bool renameFile(const char *pathFrom, const char *pathTo)
         return false;
     }
 #elif defined(FSCom)
+
 #ifdef ARCH_ESP32
+    // take SPI Lock
+    spiLock->lock();
     // rename was fixed for ESP32 IDF LittleFS in April
-    return FSCom.rename(pathFrom, pathTo);
+    bool result = FSCom.rename(pathFrom, pathTo);
+    spiLock->unlock();
+    return result;
 #else
+    // copyFile does its own locking.
     if (copyFile(pathFrom, pathTo) && FSCom.remove(pathFrom)) {
         return true;
     } else {
         return false;
     }
 #endif
+
 #endif
 }
 
@@ -171,6 +163,7 @@ bool renameFile(const char *pathFrom, const char *pathTo)
  * @brief Get the list of files in a directory.
  *
  * This function returns a list of files in a directory. The list includes the full path of each file.
+ * We can't use SPILOCK here because of recursion. Callers of this function should use SPILOCK.
  *
  * @param dirname The name of the directory.
  * @param levels The number of levels of subdirectories to list.
@@ -199,7 +192,7 @@ std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels)
                 file.close();
             }
         } else {
-            meshtastic_FileInfo fileInfo = {"", file.size()};
+            meshtastic_FileInfo fileInfo = {"", static_cast<uint32_t>(file.size())};
 #ifdef ARCH_ESP32
             strcpy(fileInfo.file_name, file.path());
 #else
@@ -219,6 +212,7 @@ std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels)
 
 /**
  * Lists the contents of a directory.
+ * We can't use SPILOCK here because of recursion. Callers of this function should use SPILOCK.
  *
  * @param dirname The name of the directory to list.
  * @param levels The number of levels of subdirectories to list.
@@ -332,18 +326,27 @@ void listDir(const char *dirname, uint8_t levels, bool del)
 void rmDir(const char *dirname)
 {
 #ifdef FSCom
+
 #if (defined(ARCH_ESP32) || defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
     listDir(dirname, 10, true);
 #elif defined(ARCH_NRF52)
     // nRF52 implementation of LittleFS has a recursive delete function
     FSCom.rmdir_r(dirname);
 #endif
+
 #endif
 }
+
+/**
+ * Some platforms (nrf52) might need to do an extra step before FSBegin().
+ */
+__attribute__((weak, noinline)) void preFSBegin() {}
 
 void fsInit()
 {
 #ifdef FSCom
+    concurrency::LockGuard g(spiLock);
+    preFSBegin();
     if (!FSBegin()) {
         LOG_ERROR("Filesystem mount failed");
         // assert(0); This auto-formats the partition, so no need to fail here.

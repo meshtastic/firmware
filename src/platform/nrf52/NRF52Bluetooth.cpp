@@ -44,11 +44,7 @@ class BluetoothPhoneAPI : public PhoneAPI
     }
 
     /// Check the current underlying physical link to see if the client is currently connected
-    virtual bool checkIsConnected() override
-    {
-        BLEConnection *connection = Bluefruit.Connection(connectionHandle);
-        return connection->connected();
-    }
+    virtual bool checkIsConnected() override { return Bluefruit.connected(connectionHandle); }
 };
 
 static BluetoothPhoneAPI *bluetoothPhoneAPI;
@@ -214,7 +210,10 @@ void NRF52Bluetooth::shutdown()
             LOG_INFO("NRF52 bluetooth disconnecting handle %d", i);
             Bluefruit.disconnect(i);
         }
-        delay(100); // wait for ondisconnect;
+        // Wait for disconnection
+        while (Bluefruit.connected())
+            yield();
+        LOG_INFO("All bluetooth connections ended");
     }
     Bluefruit.Advertising.stop();
 }
