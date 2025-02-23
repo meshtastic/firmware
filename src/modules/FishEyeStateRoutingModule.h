@@ -24,6 +24,7 @@ class FishEyeStateRoutingModule : public ProtobufModule<meshtastic_FishEyeStateR
      */
     uint32_t getNextHopForID(uint32_t dest);
 
+    
 
   protected:
     /*
@@ -47,6 +48,11 @@ class FishEyeStateRoutingModule : public ProtobufModule<meshtastic_FishEyeStateR
       uint32_t nextHop;
       meshtastic_FishEyeStateRouting LSP;
     };
+
+    /*
+     * Comparing two LSP-Structs
+     */
+    bool isequal(const meshtastic_FishEyeStateRouting &s1, const meshtastic_FishEyeStateRouting &s2);
 
     /*
      * Database for the received LSP-Packages and their Next-Hop

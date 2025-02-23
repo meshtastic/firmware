@@ -29,7 +29,8 @@ FishEyeStateRoutingModule::FishEyeStateRoutingModule()
  */
 bool FishEyeStateRoutingModule::addNeighborInfo(meshtastic_NeighborInfo Ninfo){
   auto it = LSPDB.find(Ninfo.node_id);
-  if(it != LSPDB.end()){ //Node already in LSPDB
+  if(it != LSPDB.end()){    //Node already in LSPDB
+
     if(it->second.LSP.creation < Ninfo.creation){
       bool diff = false;
       for(int i = 0; i < min(Ninfo.neighbors_count,it->second.LSP.neighbors_count); i++){
@@ -38,22 +39,21 @@ bool FishEyeStateRoutingModule::addNeighborInfo(meshtastic_NeighborInfo Ninfo){
           break;
         }
       }
-      if(diff || (it->second.LSP.traveledHops != 1) || (it->second.LSP.neighbors_count != Ninfo.neighbors_count)){
-        LSPDBEntry entry;
-        NinfoToLSPDBEntry(&Ninfo,&entry);
-        if(it->second.forwarded == false){
-          entry.timeout = min(it->second.timeout,entry.timeout);
-        }
-        entry.nextHop = it->second.nextHop;
-        it->second = entry;
+      diff = diff || (it->second.LSP.traveledHops != 1) || (it->second.LSP.neighbors_count != Ninfo.neighbors_count);
+      LSPDBEntry entry;
+      NinfoToLSPDBEntry(&Ninfo,&entry);
+      if(it->second.forwarded == false){
+        entry.timeout = min(it->second.timeout,entry.timeout);
+      }
+      entry.nextHop = it->second.nextHop;
+      it->second = entry;
+
+      if(diff){
         calcNextHop();
         return 1;
-      }else{
-        it->second.forwarded = false;
-        it->second.timeout = getTime() + moduleConfig.neighbor_info.update_interval * std::pow(it->second.LSP.traveledHops, alpha);
       }
     }
-  }else{ //Node not in LSPDB
+  }else{                  //Node not in LSPDB
     LSPDBEntry entry; //new entry
     NinfoToLSPDBEntry(&Ninfo,&entry);
     LSPDB.insert(std::make_pair(entry.LSP.node_id,entry)); //insert into DB
@@ -72,9 +72,24 @@ void FishEyeStateRoutingModule::NinfoToLSPDBEntry(meshtastic_NeighborInfo *Ninfo
     fsr->LSP.neighbors[i] = Ninfo->neighbors[i];
   }
   fsr->LSP.creation = Ninfo->creation;
-  fsr->timeout = getTime() + moduleConfig.neighbor_info.update_interval * std::pow(fsr->LSP.traveledHops, alpha);
+  fsr->timeout = (uint32_t) (getTime() + moduleConfig.neighbor_info.update_interval * std::pow(fsr->LSP.traveledHops, alpha));
   fsr->forwarded = false;
 }
+
+bool FishEyeStateRoutingModule::isequal(const meshtastic_FishEyeStateRouting &s1, const meshtastic_FishEyeStateRouting &s2){
+  if((s1.neighbors_count == s2.neighbors_count) && (s1.node_id == s2.node_id)){
+    bool diff = false;
+    for(int i = 0; i < s1.neighbors_count; i++){
+      if(s1.neighbors[i].node_id != s2.neighbors[i].node_id){
+        diff = true;
+        break;
+      }
+    }
+    return !diff;
+  }
+  return false;
+}
+
 
 /*
  * returns next-Hop for a Message to a given NodeID
@@ -93,20 +108,60 @@ uint32_t FishEyeStateRoutingModule::getNextHopForID(uint32_t dest){
  */
 bool FishEyeStateRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_FishEyeStateRouting *lsp)
 {
-
+  auto it = LSPDB.find(lsp->node_id);
+  if(it != LSPDB.end()){    //Node already in LSPDB
+    if(it->second.LSP.creation < lsp->creation){
+      bool diff = isequal(it->second.LSP,*lsp);
+      it->second.LSP = *lsp;
+      it->second.LSP.traveledHops += 1;
+      if(it->second.forwarded){
+        it->second.forwarded = false;
+        it->second.timeout = (uint32_t) (getTime() + moduleConfig.neighbor_info.update_interval * pow(it->second.LSP.traveledHops,alpha));
+      }else{
+        it->second.timeout = min(it->second.timeout, (uint32_t) (getTime() + moduleConfig.neighbor_info.update_interval * pow(it->second.LSP.traveledHops,alpha)));
+      }
+      if(diff){calcNextHop();}
+    }
+  }else{                  //Node not in LSPDB
+    LSPDBEntry entry;
+    entry.forwarded = false;
+    entry.LSP = *lsp;
+    entry.LSP.traveledHops += 1;
+    entry.nextHop = NODENUM_BROADCAST;
+    entry.timeout = (uint32_t) (getTime() + moduleConfig.neighbor_info.update_interval * pow(entry.LSP.traveledHops,alpha));
+    LSPDB.insert(std::make_pair(entry.LSP.node_id,entry));
+    calcNextHop();
+  }
+  return true;
 }
 
 /*
- * 
+ * broadcast all Packages, that weren't broadcastet and whose timeout is expired
  */
 int32_t FishEyeStateRoutingModule::runOnce(){
-
+  auto it = LSPDB.begin();
+  uint32_t min = UINT32_MAX;
+  while (it != LSPDB.end())
+  {
+    if((getTime() > it->second.timeout) && (!it->second.forwarded )){
+      meshtastic_MeshPacket *p = allocDataProtobuf(it->second.LSP);
+      p->to = NODENUM_BROADCAST;
+      p->decoded.want_response = false;
+      p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
+      service->sendToMesh(p,RX_SRC_LOCAL,true);
+      it->second.forwarded = true;
+    }else if((getTime() < it->second.timeout) && (!it->second.forwarded) && (it->second.timeout < min)){
+      min = it->second.timeout;
+    }
+    ++it;
+  }
+  return min;
 }
 
 /*
  * Calculates Distances and Next-Hops
  */
 bool FishEyeStateRoutingModule::calcNextHop(){
-  //sofortigen run once Check calen
+  //TODO: runOnce-Intervall aufs neue Minimum setzen!!
 
 }
