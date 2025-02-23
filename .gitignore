@@ -1,4 +1,8 @@
 .pio
+pio
+pio.tar
+web
+web.tar
 
 # ignore vscode IDE settings files
 .vscode/*
@@ -8,6 +12,9 @@
 *.code-workspace
 
 .idea
+.platformio
+.local
+.cache
 
 .DS_Store
 Thumbs.db

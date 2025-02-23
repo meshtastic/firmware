@@ -62,7 +62,8 @@ class MeshService
             return true;
         }
         return p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP ||
-               p->decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP;
+               p->decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP ||
+               p->decoded.portnum == meshtastic_PortNum_ALERT_APP;
     }
     /// Called when some new packets have arrived from one of the radios
     Observable<uint32_t> fromNumChanged;
@@ -140,7 +141,7 @@ class MeshService
     void sendToPhone(meshtastic_MeshPacket *p);
 
     /// Send an MQTT message to the phone for client proxying
-    void sendMqttMessageToClientProxy(meshtastic_MqttClientProxyMessage *m);
+    virtual void sendMqttMessageToClientProxy(meshtastic_MqttClientProxyMessage *m);
 
     /// Send a ClientNotification to the phone
     void sendClientNotification(meshtastic_ClientNotification *cn);
