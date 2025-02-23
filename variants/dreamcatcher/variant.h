@@ -70,7 +70,7 @@
 #endif
 
 #define HAS_SDCARD // Have SPI interface SD card slot
-#define SDCARD_USE_SPI1
+#define SDCARD_USE_HSPI
 
 #define LORA_RESET 3
 #define LORA_SCK 12
