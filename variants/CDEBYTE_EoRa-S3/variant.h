@@ -6,7 +6,7 @@
 
 // SD card - TODO: test, currently untested, copied from T3S3 variant
 #define HAS_SDCARD
-#define SDCARD_USE_HSPI
+#define SDCARD_USE_SPI1
 // TODO: rename this to make this SD-card specific
 #define SPI_CS 13
 #define SPI_SCK 14

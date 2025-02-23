@@ -58,7 +58,7 @@
 #define GPS_1PPS_PIN 6
 
 #define HAS_SDCARD // Have SPI interface SD card slot
-#define SDCARD_USE_HSPI
+#define SDCARD_USE_SPI1
 
 // PCF8563 RTC Module
 // #define PCF8563_RTC 0x51         //Putting definitions in variant. h does not compile correctly

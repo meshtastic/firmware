@@ -1,5 +1,5 @@
 #define HAS_SDCARD
-#define SDCARD_USE_HSPI
+#define SDCARD_USE_SPI1
 
 // Display (E-Ink)
 #define USE_EINK

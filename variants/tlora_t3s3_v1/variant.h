@@ -1,5 +1,5 @@
 #define HAS_SDCARD
-#define SDCARD_USE_HSPI
+#define SDCARD_USE_SPI1
 
 #define USE_SSD1306
 
@@ -74,3 +74,6 @@
 #define LR11X0_DIO3_TCXO_VOLTAGE 3.0
 #define LR11X0_DIO_AS_RF_SWITCH
 #endif
+
+#define HAS_SDCARD // Have SPI interface SD card slot
+#define SDCARD_USE_SPI1
