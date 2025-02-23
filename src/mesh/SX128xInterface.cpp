@@ -131,7 +131,9 @@ template <typename T> bool SX128xInterface<T>::reconfigure()
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
     err = lora.setSyncWord(syncWord);
-    if (err != RADIOLIB_ERR_NONE)
+    if (err == RADIOLIB_ERR_WRONG_MODEM)
+        LOG_ERROR("SX128X setSyncWord: WRONG MODEM error %s%d", radioLi/bErr, err);
+    else if (err != RADIOLIB_ERR_NONE)
         LOG_ERROR("SX128X setSyncWord %s%d", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
 
@@ -148,7 +150,11 @@ template <typename T> bool SX128xInterface<T>::reconfigure()
         power = SX128X_MAX_POWER;
 
     err = lora.setOutputPower(power);
-    if (err != RADIOLIB_ERR_NONE)
+    if (err == RADIOLIB_ERR_INVALID_OUTPUT_POWER)
+        LOG_ERROR("SX128X setOutputPower invalid power level %d, error: %s%d", power, radioLibErr, err);
+    else if (err == RADIOLIB_ERR_SPI_CMD_TIMEOUT)
+        LOG_ERROR("SX128X setOutputPower SPI timeout, error: %s%d", radioLibErr, err);
+    else if (err != RADIOLIB_ERR_NONE)
         LOG_ERROR("SX128X setOutputPower %s%d", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
 
