@@ -55,7 +55,7 @@ extern "C" {
 #define BUTTON_PIN (0 + 6) // P0.06
 #define BUTTON_ACTIVE_LOW false
 #define BUTTON_ACTIVE_PULLUP false
-#define BUTTON_SENSE_TYPE 0x5 // enable input pull-down
+#define BUTTON_SENSE_TYPE 0x6
 
 #define HAS_WIRE 1
 
@@ -111,7 +111,6 @@ extern "C" {
 #define GPS_TX_PIN PIN_SERIAL1_TX
 
 #define GPS_BAUDRATE 115200
-#define GPS_PROBETRIES 5
 
 #define PIN_GPS_EN (32 + 11) // P1.11
 #define GPS_EN_ACTIVE HIGH

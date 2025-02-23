@@ -20,16 +20,19 @@ runs:
       shell: bash
       run: |
         sudo apt-get -y update --fix-missing
-        sudo apt-get install -y cppcheck libbluetooth-dev libgpiod-dev libyaml-cpp-dev lsb-release
+        sudo apt-get install -y cppcheck libbluetooth-dev libgpiod-dev libyaml-cpp-dev
 
     - name: Setup Python
       uses: actions/setup-python@v5
       with:
         python-version: 3.x
-        cache: pip
-        cache-dependency-path: |
-          .github/actions/**
-          **.ini
+
+    # - name: Cache python libs
+    #   uses: actions/cache@v4
+    #   id: cache-pip # needed in if test
+    #   with:
+    #     path: ~/.cache/pip
+    #     key: ${{ runner.os }}-pip
 
     - name: Upgrade python tools
       shell: bash

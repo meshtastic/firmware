@@ -81,7 +81,7 @@ int32_t DetectionSensorModule::runOnce()
         }
         LOG_INFO("Detection Sensor Module: init");
 
-        return setStartDelay();
+        return DELAYED_INTERVAL;
     }
 
     // LOG_DEBUG("Detection Sensor Module: Current pin state: %i", digitalRead(moduleConfig.detection_sensor.monitor_pin));

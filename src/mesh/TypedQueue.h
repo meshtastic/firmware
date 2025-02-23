@@ -74,17 +74,11 @@ template <class T> class TypedQueue
 {
     std::queue<T> q;
     concurrency::OSThread *reader = NULL;
-    int maxElements;
 
   public:
-    explicit TypedQueue(int _maxElements) : maxElements(_maxElements) {}
+    explicit TypedQueue(int maxElements) {}
 
-    int numFree()
-    {
-        if (maxElements <= 0)
-            return 1; // Always claim 1 free, because we can grow to any size
-        return maxElements - numUsed();
-    }
+    int numFree() { return 1; } // Always claim 1 free, because we can grow to any size
 
     bool isEmpty() { return q.empty(); }
 
@@ -92,9 +86,6 @@ template <class T> class TypedQueue
 
     bool enqueue(T x, TickType_t maxWait = portMAX_DELAY)
     {
-        if (numFree() <= 0)
-            return false;
-
         if (reader) {
             reader->setInterval(0);
             concurrency::mainDelay.interrupt();

@@ -65,9 +65,6 @@ mail:   marchammermann@googlemail.com
 #define DEFAULT_REALM "default_realm"
 #define PREFIX ""
 
-#define KEY_PATH settingsStrings[websslkeypath].c_str()
-#define CERT_PATH settingsStrings[websslcertpath].c_str()
-
 struct _file_config configWeb;
 
 // We need to specify some content-type mapping, so the resources get delivered with the
@@ -84,6 +81,8 @@ char contentTypes[][2][32] = {{".txt", "text/plain"},      {".html", "text/html"
 
 volatile bool isWebServerReady;
 volatile bool isCertReady;
+
+HttpAPI webAPI;
 
 PiWebServerThread *piwebServerThread;
 
@@ -248,7 +247,7 @@ int handleAPIv1ToRadio(const struct _u_request *req, struct _u_response *res, vo
     portduinoVFS->mountpoint(configWeb.rootPath);
 
     LOG_DEBUG("Received %d bytes from PUT request", s);
-    static_cast<HttpAPI *>(user_data)->handleToRadio(buffer, s);
+    webAPI.handleToRadio(buffer, s);
     LOG_DEBUG("end web->radio  ");
     return U_CALLBACK_COMPLETE;
 }
@@ -280,7 +279,7 @@ int handleAPIv1FromRadio(const struct _u_request *req, struct _u_response *res, 
 
     if (valueAll == "true") {
         while (len) {
-            len = static_cast<HttpAPI *>(user_data)->getFromRadio(txBuf);
+            len = webAPI.getFromRadio(txBuf);
             ulfius_set_response_properties(res, U_OPT_STATUS, 200, U_OPT_BINARY_BODY, txBuf, len);
             const char *tmpa = (const char *)txBuf;
             ulfius_set_string_body_response(res, 200, tmpa);
@@ -290,7 +289,7 @@ int handleAPIv1FromRadio(const struct _u_request *req, struct _u_response *res, 
         }
         // Otherwise, just return one protobuf
     } else {
-        len = static_cast<HttpAPI *>(user_data)->getFromRadio(txBuf);
+        len = webAPI.getFromRadio(txBuf);
         const char *tmpa = (const char *)txBuf;
         ulfius_set_binary_body_response(res, 200, tmpa, len);
         // LOG_DEBUG("\n----webAPI response:");
@@ -387,13 +386,13 @@ char *read_file_into_string(const char *filename)
 int PiWebServerThread::CheckSSLandLoad()
 {
     // read certificate
-    cert_pem = read_file_into_string(CERT_PATH);
+    cert_pem = read_file_into_string("certificate.pem");
     if (cert_pem == NULL) {
         LOG_ERROR("ERROR SSL Certificate File can't be loaded or is missing");
         return 1;
     }
     // read private key
-    key_pem = read_file_into_string(KEY_PATH);
+    key_pem = read_file_into_string("private_key.pem");
     if (key_pem == NULL) {
         LOG_ERROR("ERROR file private_key can't be loaded or is missing");
         return 2;
@@ -418,8 +417,8 @@ int PiWebServerThread::CreateSSLCertificate()
         return 2;
     }
 
-    // Open file to write private key file
-    FILE *pkey_file = fopen(KEY_PATH, "wb");
+    // Ope file to write private key file
+    FILE *pkey_file = fopen("private_key.pem", "wb");
     if (!pkey_file) {
         LOG_ERROR("Error opening private key file");
         return 3;
@@ -429,19 +428,18 @@ int PiWebServerThread::CreateSSLCertificate()
     fclose(pkey_file);
 
     // open Certificate file
-    FILE *x509_file = fopen(CERT_PATH, "wb");
+    FILE *x509_file = fopen("certificate.pem", "wb");
     if (!x509_file) {
         LOG_ERROR("Error opening cert");
         return 4;
     }
-    // write certificate
+    // write cirtificate
     PEM_write_X509(x509_file, x509);
     fclose(x509_file);
 
     EVP_PKEY_free(pkey);
-    LOG_INFO("Create SSL Key %s successful", KEY_PATH);
     X509_free(x509);
-    LOG_INFO("Create SSL Cert %s successful", CERT_PATH);
+    LOG_INFO("Create SSL Cert -certificate.pem- succesfull ");
     return 0;
 }
 
@@ -499,10 +497,10 @@ PiWebServerThread::PiWebServerThread()
         u_map_put(instanceWeb.default_headers, "Access-Control-Allow-Origin", "*");
         // Maximum body size sent by the client is 1 Kb
         instanceWeb.max_post_body_size = 1024;
-        ulfius_add_endpoint_by_val(&instanceWeb, "GET", PREFIX, "/api/v1/fromradio/*", 1, &handleAPIv1FromRadio, &webAPI);
-        ulfius_add_endpoint_by_val(&instanceWeb, "OPTIONS", PREFIX, "/api/v1/fromradio/*", 1, &handleAPIv1FromRadio, &webAPI);
-        ulfius_add_endpoint_by_val(&instanceWeb, "PUT", PREFIX, "/api/v1/toradio/*", 1, &handleAPIv1ToRadio, &webAPI);
-        ulfius_add_endpoint_by_val(&instanceWeb, "OPTIONS", PREFIX, "/api/v1/toradio/*", 1, &handleAPIv1ToRadio, &webAPI);
+        ulfius_add_endpoint_by_val(&instanceWeb, "GET", PREFIX, "/api/v1/fromradio/*", 1, &handleAPIv1FromRadio, NULL);
+        ulfius_add_endpoint_by_val(&instanceWeb, "OPTIONS", PREFIX, "/api/v1/fromradio/*", 1, &handleAPIv1FromRadio, NULL);
+        ulfius_add_endpoint_by_val(&instanceWeb, "PUT", PREFIX, "/api/v1/toradio/*", 1, &handleAPIv1ToRadio, configWeb.rootPath);
+        ulfius_add_endpoint_by_val(&instanceWeb, "OPTIONS", PREFIX, "/api/v1/toradio/*", 1, &handleAPIv1ToRadio, NULL);
 
         // Add callback function to all endpoints for the Web Server
         ulfius_add_endpoint_by_val(&instanceWeb, "GET", NULL, "/*", 2, &callback_static_file, &configWeb);
@@ -527,9 +525,10 @@ PiWebServerThread::~PiWebServerThread()
     u_map_clean(&configWeb.mime_types);
 
     ulfius_stop_framework(&instanceWeb);
-    ulfius_clean_instance(&instanceWeb);
+    ulfius_stop_framework(&instanceWeb);
     free(configWeb.rootPath);
-    free(key_pem);
+    ulfius_clean_instance(&instanceService);
+    ulfius_clean_instance(&instanceService);
     free(cert_pem);
     LOG_INFO("End framework");
 }

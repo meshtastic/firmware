@@ -2,11 +2,14 @@
 #include "hardware/xosc.h"
 #include <hardware/clocks.h>
 #include <hardware/pll.h>
+#include <pico/sleep.h>
 #include <pico/stdlib.h>
 #include <pico/unique_id.h>
 
-#ifdef __PLAT_RP2040__
-#include <pico/sleep.h>
+void setBluetoothEnable(bool enable)
+{
+    // not needed
+}
 
 static bool awake;
 
@@ -63,20 +66,7 @@ void cpuDeepSleep(uint32_t msecs)
     rp2040.reboot();
 
     /* Set RP2040 in dormant mode. Will not wake up. */
-    // xosc_dormant();
-}
-
-#else
-void cpuDeepSleep(uint32_t msecs)
-{
-    /* Set RP2040 in dormant mode. Will not wake up. */
-    xosc_dormant();
-}
-#endif
-
-void setBluetoothEnable(bool enable)
-{
-    // not needed
+    //  xosc_dormant();
 }
 
 void updateBatteryLevel(uint8_t level)

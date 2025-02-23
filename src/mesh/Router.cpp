@@ -187,7 +187,7 @@ ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
         }
 
         // don't override if a channel was requested and no need to set it when PKI is enforced
-        if (!p->channel && !p->pki_encrypted && !isBroadcast(p->to)) {
+        if (!p->channel && !p->pki_encrypted) {
             meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->to);
             if (node) {
                 p->channel = node->channel;

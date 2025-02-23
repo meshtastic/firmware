@@ -10,7 +10,6 @@
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
 #include "Led.h"
-#include "SPILock.h"
 #include "power.h"
 #include "serialization/JSON.h"
 #include <FSCommon.h>
@@ -237,7 +236,6 @@ void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
 
 void htmlDeleteDir(const char *dirname)
 {
-
     File root = FSCom.open(dirname);
     if (!root) {
         return;
@@ -320,7 +318,6 @@ void handleFsBrowseStatic(HTTPRequest *req, HTTPResponse *res)
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "GET");
 
-    concurrency::LockGuard g(spiLock);
     auto fileList = htmlListDir("/static", 10);
 
     // create json output structure
@@ -352,12 +349,9 @@ void handleFsDeleteStatic(HTTPRequest *req, HTTPResponse *res)
     res->setHeader("Content-Type", "application/json");
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "DELETE");
-
     if (params->getQueryParameter("delete", paramValDelete)) {
         std::string pathDelete = "/" + paramValDelete;
-        concurrency::LockGuard g(spiLock);
         if (FSCom.remove(pathDelete.c_str())) {
-
             LOG_INFO("%s", pathDelete.c_str());
             JSONObject jsonObjOuter;
             jsonObjOuter["status"] = new JSONValue("ok");
@@ -366,7 +360,6 @@ void handleFsDeleteStatic(HTTPRequest *req, HTTPResponse *res)
             delete value;
             return;
         } else {
-
             LOG_INFO("%s", pathDelete.c_str());
             JSONObject jsonObjOuter;
             jsonObjOuter["status"] = new JSONValue("Error");
@@ -400,8 +393,6 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
             filenameGzip = "/static/index.html.gz";
         }
 
-        concurrency::LockGuard g(spiLock);
-
         if (FSCom.exists(filename.c_str())) {
             file = FSCom.open(filename.c_str());
             if (!file.available()) {
@@ -419,7 +410,6 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
             file = FSCom.open(filenameGzip.c_str());
             res->setHeader("Content-Type", "text/html");
             if (!file.available()) {
-
                 LOG_WARN("File not available - %s", filenameGzip.c_str());
                 res->println("Web server is running.<br><br>The content you are looking for can't be found. Please see: <a "
                              "href=https://meshtastic.org/docs/software/web-client/>FAQ</a>.<br><br><a "
@@ -545,7 +535,6 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
         // concepts of the body parser functionality easier to understand.
         std::string pathname = "/static/" + filename;
 
-        concurrency::LockGuard g(spiLock);
         // Create a new file to stream the data into
         File file = FSCom.open(pathname.c_str(), FILE_O_WRITE);
         size_t fileLength = 0;
@@ -582,7 +571,6 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
 
         file.flush();
         file.close();
-
         res->printf("<p>Saved %d bytes to %s</p>", (int)fileLength, pathname.c_str());
     }
     if (!didwrite) {
@@ -654,11 +642,9 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
     jsonObjMemory["heap_free"] = new JSONValue((int)memGet.getFreeHeap());
     jsonObjMemory["psram_total"] = new JSONValue((int)memGet.getPsramSize());
     jsonObjMemory["psram_free"] = new JSONValue((int)memGet.getFreePsram());
-    spiLock->lock();
     jsonObjMemory["fs_total"] = new JSONValue((int)FSCom.totalBytes());
     jsonObjMemory["fs_used"] = new JSONValue((int)FSCom.usedBytes());
     jsonObjMemory["fs_free"] = new JSONValue(int(FSCom.totalBytes() - FSCom.usedBytes()));
-    spiLock->unlock();
 
     // data->power
     JSONObject jsonObjPower;
@@ -800,7 +786,6 @@ void handleDeleteFsContent(HTTPRequest *req, HTTPResponse *res)
 
     LOG_INFO("Delete files from /static/* : ");
 
-    concurrency::LockGuard g(spiLock);
     htmlDeleteDir("/static");
 
     res->println("<p><hr><p><a href=/admin>Back to admin</a>");

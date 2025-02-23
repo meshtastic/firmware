@@ -29,8 +29,7 @@ typedef enum {
     GNSS_MODEL_MTK_L76B,
     GNSS_MODEL_MTK_PA1616S,
     GNSS_MODEL_AG3335,
-    GNSS_MODEL_AG3352,
-    GNSS_MODEL_LS20031
+    GNSS_MODEL_AG3352
 } GnssModel_t;
 
 typedef enum {
@@ -100,6 +99,8 @@ class GPS : private concurrency::OSThread
 
     // Empty the input buffer as quickly as possible
     void clearBuffer();
+
+    virtual bool factoryReset();
 
     // Creates an instance of the GPS class.
     // Returns the new instance or null if the GPS is not present.

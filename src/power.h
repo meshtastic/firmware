@@ -1,4 +1,5 @@
 #pragma once
+#include "../variants/rak2560/RAK9154Sensor.h"
 #include "PowerStatus.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
@@ -24,8 +25,6 @@
 #define OCV_ARRAY 1400, 1300, 1280, 1270, 1260, 1250, 1240, 1230, 1210, 1150, 1000
 #elif defined(CELL_TYPE_LTO)
 #define OCV_ARRAY 2700, 2560, 2540, 2520, 2500, 2460, 2420, 2400, 2380, 2320, 1500
-#elif defined(TRACKER_T1000_E)
-#define OCV_ARRAY 4190, 4078, 4017, 3969, 3887, 3818, 3798, 3791, 3766, 3712, 3100
 #else // LiIon
 #define OCV_ARRAY 4190, 4050, 3990, 3890, 3800, 3720, 3630, 3530, 3420, 3300, 3100
 #endif
@@ -57,8 +56,8 @@ extern INA3221Sensor ina3221Sensor;
 extern MAX17048Sensor max17048Sensor;
 #endif
 
-#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && HAS_RAKPROT && !defined(ARCH_PORTDUINO)
-#include "modules/Telemetry/Sensor/RAK9154Sensor.h"
+#if HAS_RAKPROT && !defined(ARCH_PORTDUINO)
+#include "../variants/rak2560/RAK9154Sensor.h"
 extern RAK9154Sensor rak9154Sensor;
 #endif
 

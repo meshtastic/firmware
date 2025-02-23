@@ -278,10 +278,6 @@ class Screen : public concurrency::OSThread
     bool hasHeading() { return hasCompass; }
 
     long getHeading() { return compassHeading; }
-
-    void setEndCalibration(uint32_t _endCalibrationAt) { endCalibrationAt = _endCalibrationAt; }
-    uint32_t getEndCalibration() { return endCalibrationAt; }
-
     // functions for display brightness
     void increaseBrightness();
     void decreaseBrightness();
@@ -677,8 +673,6 @@ class Screen : public concurrency::OSThread
 
     bool hasCompass = false;
     float compassHeading;
-    uint32_t endCalibrationAt;
-
     /// Holds state for debug information
     DebugInfo debugInfo;
 
