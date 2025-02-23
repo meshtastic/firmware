@@ -24,7 +24,7 @@ SPIClass SDHandler = SPIClass(VSPI);
 #endif
 #elif defined(ARCH_NRF52)
 #if defined(SDCARD_USE_SPI1)
-#define SDHandler SPI1  // only used for esp32
+#define SDHandler SPI1  // only used for esp32, SPI selection for NRF52 happens in variant.h (for now)
 #elif defined(SDCARD_USE_SPI)
 #define SDHandler SPI   // only used for esp32
 #endif                  //NRF52 SPI or SPI1
