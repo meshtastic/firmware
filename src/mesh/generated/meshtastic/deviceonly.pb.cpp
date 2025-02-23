@@ -24,4 +24,7 @@ PB_BIND(meshtastic_NodeDatabase, meshtastic_NodeDatabase, AUTO)
 PB_BIND(meshtastic_ChannelFile, meshtastic_ChannelFile, 2)
 
 
+PB_BIND(meshtastic_BackupPreferences, meshtastic_BackupPreferences, 2)
+
+
 
