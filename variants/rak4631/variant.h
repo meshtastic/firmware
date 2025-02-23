@@ -128,7 +128,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define SDCARD_USE_SPI1 1
 
 #if defined(SDCARD_USE_SPI1)
-#define SDCARD_SPI SPI1 //SDCARD_SPI is used in SD library for NRF52
+#define SDCARD_SPI SPI1 // SDCARD_SPI is used in SD library for NRF52
 #else
 #define SDCARD_SPI SPI
 #endif
