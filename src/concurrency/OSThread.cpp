@@ -139,4 +139,4 @@ void assertIsSetup()
     assert(hasBeenSetup);
 }
 
-} // namespace concurrency
+}

@@ -78,6 +78,9 @@ uint32_t NeighborInfoModule::collectNeighborInfo(meshtastic_NeighborInfo *neighb
         }
     }
     printNodeDBNeighbors();
+    if(config.network.routingAlgorithm == meshtastic_Config_RoutingConfig_FishEyeState && moduleConfig.fish_eye_state_routing.enabled == true){
+        fishEyeStateRoutingModule->setOwnNeighborhood(*neighborInfo);
+    }
     return neighborInfo->neighbors_count;
 }
 
@@ -217,6 +220,9 @@ meshtastic_Neighbor *NeighborInfoModule::getOrCreateNeighbor(NodeNum originalSen
         LOG_WARN("Neighbor DB is full, replace oldest neighbor");
         neighbors.erase(neighbors.begin());
         neighbors.push_back(new_nbr);
+    }
+    if(config.network.routingAlgorithm == meshtastic_Config_RoutingConfig_FishEyeState && moduleConfig.fish_eye_state_routing.enabled == true){
+        fishEyeStateRoutingModule->setOwnNeighborhood(neighbors);
     }
     return &neighbors.back();
 }
