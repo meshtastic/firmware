@@ -5,7 +5,7 @@
 # trunk-ignore-all(hadolint/DL3008): Do not pin apt package versions
 # trunk-ignore-all(hadolint/DL3013): Do not pin pip package versions
 
-FROM python:3.12-bookworm AS builder
+FROM python:3.13-bookworm AS builder
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Etc/UTC
 
