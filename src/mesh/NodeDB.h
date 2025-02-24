@@ -48,6 +48,7 @@ static constexpr const char *configFileName = "/prefs/config.proto";
 static constexpr const char *uiconfigFileName = "/prefs/uiconfig.proto";
 static constexpr const char *moduleConfigFileName = "/prefs/module.proto";
 static constexpr const char *channelFileName = "/prefs/channels.proto";
+static constexpr const char *backupFileName = "/backups/backup.proto";
 
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
 uint32_t sinceLastSeen(const meshtastic_NodeInfoLite *n);
@@ -199,6 +200,9 @@ class NodeDB
     }
 
     bool hasValidPosition(const meshtastic_NodeInfoLite *n);
+
+    bool backupPreferences(meshtastic_AdminMessage_BackupLocation location);
+    bool restorePreferences(meshtastic_AdminMessage_BackupLocation location);
 
   private:
     uint32_t lastNodeDbSave = 0; // when we last saved our db to flash
