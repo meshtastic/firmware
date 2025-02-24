@@ -611,8 +611,7 @@ void setup()
     i2cScanner.reset();
 #endif
 
-    // Init our SPI controller (must be before screen and lora)
-    initSPI();
+    // initSPI() must have called at this point (must be before screen and lora)
 
 #ifdef HAS_SDCARD
     setupSDCard();
