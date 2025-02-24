@@ -326,9 +326,6 @@ NodeDB::NodeDB()
         config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
         config.position.gps_enabled = 0;
     }
-#ifdef USERPREFS_CONFIG_MODULES_TELEMETRY_POWER_METRICS_MODULE_ENABLED
-    moduleConfig.telemetry.power_measurement_enabled = USERPREFS_CONFIG_MODULES_TELEMETRY_POWER_METRICS_MODULE_ENABLED;
-#endif
 #ifdef USERPREFS_FIXED_GPS
     if (myNodeInfo.reboot_count == 1) { // Check if First boot ever or after Factory Reset.
         meshtastic_Position fixedGPS = meshtastic_Position_init_default;
@@ -776,18 +773,10 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
 void NodeDB::initModuleConfigIntervals()
 {
     // Zero out telemetry intervals so that they coalesce to defaults in Default.h
-#ifdef USERPREFS_CONFIG_MODULES_TELEMETRY_DEVICE_METRICS_UPDATE
-    moduleConfig.telemetry.device_update_interval = USERPREFS_CONFIG_MODULES_TELEMETRY_DEVICE_METRICS_UPDATE;
-#else
     moduleConfig.telemetry.device_update_interval = 0;
-#endif
     moduleConfig.telemetry.environment_update_interval = 0;
     moduleConfig.telemetry.air_quality_interval = 0;
-#ifdef USERPREFS_CONFIG_MODULES_TELEMETRY_POWER_METRICS_UPDATE
-    moduleConfig.telemetry.power_update_interval = USERPREFS_CONFIG_MODULES_TELEMETRY_POWER_METRICS_UPDATE;
-#else
     moduleConfig.telemetry.power_update_interval = 0;
-#endif
     moduleConfig.telemetry.health_update_interval = 0;
     moduleConfig.neighbor_info.update_interval = 0;
     moduleConfig.paxcounter.paxcounter_update_interval = 0;
