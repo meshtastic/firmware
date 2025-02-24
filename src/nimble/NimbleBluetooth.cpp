@@ -26,7 +26,7 @@ class BluetoothPhoneAPI : public PhoneAPI
     {
         PhoneAPI::onNowHasData(fromRadioNum);
 
-        LOG_INFO("BLE notify fromNum");
+        LOG_DEBUG("BLE notify fromNum");
 
         uint8_t val[4];
         put_le32(val, fromRadioNum);
@@ -51,7 +51,7 @@ class NimbleBluetoothToRadioCallback : public NimBLECharacteristicCallbacks
 {
     virtual void onWrite(NimBLECharacteristic *pCharacteristic)
     {
-        LOG_INFO("To Radio onwrite");
+        LOG_DEBUG("To Radio onwrite");
         auto val = pCharacteristic->getValue();
 
         if (memcmp(lastToRadio, val.data(), val.length()) != 0) {

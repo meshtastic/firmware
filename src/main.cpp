@@ -976,6 +976,7 @@ void setup()
         if (!sxIf->init()) {
             LOG_WARN("No SX1262 radio");
             delete sxIf;
+            rIf = NULL;
         } else {
             LOG_INFO("SX1262 init success");
             rIf = sxIf;
@@ -992,6 +993,7 @@ void setup()
         if (!sxIf->init()) {
             LOG_WARN("No SX1262 radio with TCXO, Vref %fV", SX126X_DIO3_TCXO_VOLTAGE);
             delete sxIf;
+            rIf = NULL;
         } else {
             LOG_INFO("SX1262 init success, TCXO, Vref %fV", SX126X_DIO3_TCXO_VOLTAGE);
             rIf = sxIf;

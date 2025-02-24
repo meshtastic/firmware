@@ -123,23 +123,23 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
      * Getters
      */
     case meshtastic_AdminMessage_get_owner_request_tag:
-        LOG_INFO("Client got owner");
+        LOG_DEBUG("Client got owner");
         handleGetOwner(mp);
         break;
 
     case meshtastic_AdminMessage_get_config_request_tag:
-        LOG_INFO("Client got config");
+        LOG_DEBUG("Client got config");
         handleGetConfig(mp, r->get_config_request);
         break;
 
     case meshtastic_AdminMessage_get_module_config_request_tag:
-        LOG_INFO("Client got module config");
+        LOG_DEBUG("Client got module config");
         handleGetModuleConfig(mp, r->get_module_config_request);
         break;
 
     case meshtastic_AdminMessage_get_channel_request_tag: {
         uint32_t i = r->get_channel_request - 1;
-        LOG_INFO("Client got channel %u", i);
+        LOG_DEBUG("Client got channel %u", i);
         if (i >= MAX_NUM_CHANNELS)
             myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
         else
@@ -151,35 +151,35 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
      * Setters
      */
     case meshtastic_AdminMessage_set_owner_tag:
-        LOG_INFO("Client set owner");
+        LOG_DEBUG("Client set owner");
         handleSetOwner(r->set_owner);
         break;
 
     case meshtastic_AdminMessage_set_config_tag:
-        LOG_INFO("Client set config");
+        LOG_DEBUG("Client set config");
         handleSetConfig(r->set_config);
         break;
 
     case meshtastic_AdminMessage_set_module_config_tag:
-        LOG_INFO("Client set module config");
+        LOG_DEBUG("Client set module config");
         if (!handleSetModuleConfig(r->set_module_config)) {
             myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
         }
         break;
 
     case meshtastic_AdminMessage_set_channel_tag:
-        LOG_INFO("Client set channel %d", r->set_channel.index);
+        LOG_DEBUG("Client set channel %d", r->set_channel.index);
         if (r->set_channel.index < 0 || r->set_channel.index >= (int)MAX_NUM_CHANNELS)
             myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
         else
             handleSetChannel(r->set_channel);
         break;
     case meshtastic_AdminMessage_set_ham_mode_tag:
-        LOG_INFO("Client set ham mode");
+        LOG_DEBUG("Client set ham mode");
         handleSetHamMode(r->set_ham_mode);
         break;
     case meshtastic_AdminMessage_get_ui_config_request_tag: {
-        LOG_INFO("Client is getting device-ui config");
+        LOG_DEBUG("Client is getting device-ui config");
         handleGetDeviceUIConfig(mp);
         handled = true;
         break;
@@ -391,7 +391,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             LOG_DEBUG("Did not responded to a request that wanted a respond. req.variant=%d", r->which_payload_variant);
         } else if (handleResult != AdminMessageHandleResult::HANDLED) {
             // Probably a message sent by us or sent to our local node.  FIXME, we should avoid scanning these messages
-            LOG_INFO("Ignore irrelevant admin %d", r->which_payload_variant);
+            LOG_DEBUG("Ignore irrelevant admin %d", r->which_payload_variant);
         }
         break;
     }
