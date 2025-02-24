@@ -326,6 +326,9 @@ NodeDB::NodeDB()
         config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
         config.position.gps_enabled = 0;
     }
+#ifdef USERPREFS_CONFIG_MODULES_TELEMETRY_POWER_METRICS_MODULE_ENABLED
+    moduleConfig.telemetry.power_measurement_enabled = USERPREFS_CONFIG_MODULES_TELEMETRY_POWER_METRICS_MODULE_ENABLED;
+#endif
 #ifdef USERPREFS_FIXED_GPS
     if (myNodeInfo.reboot_count == 1) { // Check if First boot ever or after Factory Reset.
         meshtastic_Position fixedGPS = meshtastic_Position_init_default;
