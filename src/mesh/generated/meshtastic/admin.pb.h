@@ -156,6 +156,8 @@ typedef struct _meshtastic_AdminMessage {
         meshtastic_AdminMessage_BackupLocation backup_preferences;
         /* Restore the node's preferences */
         meshtastic_AdminMessage_BackupLocation restore_preferences;
+        /* Remove backups of the node's preferences */
+        meshtastic_AdminMessage_BackupLocation remove_backup_preferences;
         /* Set the owner for this node */
         meshtastic_User set_owner;
         /* Set channels (using the new API).
@@ -245,6 +247,7 @@ extern "C" {
 #define meshtastic_AdminMessage_payload_variant_get_module_config_request_ENUMTYPE meshtastic_AdminMessage_ModuleConfigType
 #define meshtastic_AdminMessage_payload_variant_backup_preferences_ENUMTYPE meshtastic_AdminMessage_BackupLocation
 #define meshtastic_AdminMessage_payload_variant_restore_preferences_ENUMTYPE meshtastic_AdminMessage_BackupLocation
+#define meshtastic_AdminMessage_payload_variant_remove_backup_preferences_ENUMTYPE meshtastic_AdminMessage_BackupLocation
 
 
 
@@ -287,6 +290,7 @@ extern "C" {
 #define meshtastic_AdminMessage_set_scale_tag    23
 #define meshtastic_AdminMessage_backup_preferences_tag 24
 #define meshtastic_AdminMessage_restore_preferences_tag 25
+#define meshtastic_AdminMessage_remove_backup_preferences_tag 26
 #define meshtastic_AdminMessage_set_owner_tag    32
 #define meshtastic_AdminMessage_set_channel_tag  33
 #define meshtastic_AdminMessage_set_config_tag   34
@@ -341,6 +345,7 @@ X(a, STATIC,   ONEOF,    STRING,   (payload_variant,delete_file_request,delete_f
 X(a, STATIC,   ONEOF,    UINT32,   (payload_variant,set_scale,set_scale),  23) \
 X(a, STATIC,   ONEOF,    UENUM,    (payload_variant,backup_preferences,backup_preferences),  24) \
 X(a, STATIC,   ONEOF,    UENUM,    (payload_variant,restore_preferences,restore_preferences),  25) \
+X(a, STATIC,   ONEOF,    UENUM,    (payload_variant,remove_backup_preferences,remove_backup_preferences),  26) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_owner,set_owner),  32) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_channel,set_channel),  33) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_config,set_config),  34) \
