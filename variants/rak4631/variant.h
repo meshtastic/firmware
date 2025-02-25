@@ -107,11 +107,18 @@ static const uint8_t AREF = PIN_AREF;
 /*
  * SPI Interfaces
  */
-#define SPI_INTERFACES_COUNT 1
+#define SPI_INTERFACES_COUNT 2
+#define SPI_32MHZ_INTERFACE 0 // 0: use SPIM3 for SPI and SPIM2 for SPI1; 1: the opposite
 
-#define PIN_SPI_MISO (29)
-#define PIN_SPI_MOSI (30)
-#define PIN_SPI_SCK (3)
+// SPI pins for SX1262
+#define PIN_SPI_MISO (45)
+#define PIN_SPI_MOSI (44)
+#define PIN_SPI_SCK (43)
+
+// SPI1 pins for external(rak4630) spi (incl. SDCard)
+#define PIN_SPI1_MISO (29) // (0 + 29)
+#define PIN_SPI1_MOSI (30) // (0 + 30)
+#define PIN_SPI1_SCK (3)   // (0 + 3)
 
 static const uint8_t SS = 42;
 static const uint8_t MOSI = PIN_SPI_MOSI;
@@ -121,9 +128,14 @@ static const uint8_t SCK = PIN_SPI_SCK;
 // SD card SPI pin definitions
 
 #define HAS_SDCARD 1
-#define SPI_MOSI PIN_SPI_MOSI
-#define SPI_SCK PIN_SPI_SCK
-#define SPI_MISO PIN_SPI_MISO
+#define SDCARD_USE_SPI1 1
+
+#ifdef SDCARD_USE_SPI1
+#define SDCARD_SPI SPI1
+#endif
+#define SPI_MOSI PIN_SPI1_MOSI
+#define SPI_SCK PIN_SPI1_SCK
+#define SPI_MISO PIN_SPI1_MISO
 #define SDCARD_CS (26)
 
 /*
@@ -134,8 +146,8 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define PIN_EINK_BUSY (0 + 4)
 #define PIN_EINK_DC (0 + 17)
 #define PIN_EINK_RES (-1)
-#define PIN_EINK_SCLK PIN_SPI_SCK
-#define PIN_EINK_MOSI PIN_SPI_MOSI // also called SDI
+#define PIN_EINK_SCLK (0 + 3)
+#define PIN_EINK_MOSI (0 + 30) // also called SDI
 
 // #define USE_EINK
 
@@ -263,7 +275,7 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 
 #define PIN_ETHERNET_RESET 21
 #define PIN_ETHERNET_SS PIN_EINK_CS
-#define ETH_SPI_PORT SPI
+#define ETH_SPI_PORT SPI1
 #define AQ_SET_PIN 10
 
 #ifdef __cplusplus
