@@ -384,7 +384,8 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
     case meshtastic_AdminMessage_restore_preferences_tag: {
         LOG_INFO("Client requesting to restore preferences");
-        if (nodeDB->restorePreferences(r->backup_preferences)) {
+        if (nodeDB->restorePreferences(r->backup_preferences,
+                                       SEGMENT_DEVICESTATE | SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_CHANNELS)) {
             myReply = allocErrorResponse(meshtastic_Routing_Error_NONE, &mp);
             disableBluetooth();
         } else {

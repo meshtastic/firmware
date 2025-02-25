@@ -97,12 +97,9 @@ class NodeDB
                                    SEGMENT_NODEDATABASE);
 
     /** Reinit radio config if needed, because either:
-     * a) sometimes a buggy android app might send us bogus settings or
-     * b) the client set factory_reset
-     *
-     * @return true if the config was completely reset, in that case, we should send it back to the client
+     * sometimes a buggy android app might send us bogus settings
      */
-    bool resetRadioConfig(bool factory_reset = false);
+    void resetRadioConfig();
 
     /// given a subpacket sniffed from the network, update our DB state
     /// we updateGUI and updateGUIforNode if we think our this change is big enough for a redraw
@@ -201,11 +198,14 @@ class NodeDB
 
     bool hasValidPosition(const meshtastic_NodeInfoLite *n);
 
+    // bool shouldAutoPerformBackup();
     bool backupPreferences(meshtastic_AdminMessage_BackupLocation location);
-    bool restorePreferences(meshtastic_AdminMessage_BackupLocation location);
+    bool restorePreferences(meshtastic_AdminMessage_BackupLocation location,
+                            int restoreWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
 
   private:
-    uint32_t lastNodeDbSave = 0; // when we last saved our db to flash
+    uint32_t lastNodeDbSave = 0;    // when we last saved our db to flash
+    uint32_t lastBackupAttempt = 0; // when we last tried a backup automatically or manually
     /// Find a node in our DB, create an empty NodeInfoLite if missing
     meshtastic_NodeInfoLite *getOrCreateMeshNode(NodeNum n);
 
