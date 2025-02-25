@@ -108,11 +108,14 @@ static const uint8_t AREF = PIN_AREF;
  * SPI Interfaces
  */
 #define SPI_INTERFACES_COUNT 2
+#define SPI_32MHZ_INTERFACE 0   //0: use SPIM3 for SPI and SPIM2 for SPI1; 1: the opposite
 
+//SPI pins for SX1262
 #define PIN_SPI_MISO (45)
 #define PIN_SPI_MOSI (44)
 #define PIN_SPI_SCK (43)
 
+//SPI1 pins for external(rak4630) spi (incl. SDCard)
 #define PIN_SPI1_MISO (29) // (0 + 29)
 #define PIN_SPI1_MOSI (30) // (0 + 30)
 #define PIN_SPI1_SCK (3)   // (0 + 3)
