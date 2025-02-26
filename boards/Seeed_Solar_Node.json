@@ -7,14 +7,10 @@
     "cpu": "cortex-m4",
     "extra_flags": "-DARDUINO_MDBT50Q_RX -DNRF52840_XXAA",
     "f_cpu": "64000000L",
-    "hwids": [
-      ["0x239A", "0x810B"],
-      ["0x239A", "0x010B"],
-      ["0x239A", "0x810C"]
-    ],
+    "hwids": [["0x2886", "0x0059"]],
     "usb_product": "XIAO-BOOT",
     "mcu": "nrf52840",
-    "variant": "Seeed_XIAO_nRF52840_Sense",
+    "variant": "Seeed_Solar_Node",
     "bsp": {
       "name": "adafruit"
     },
@@ -25,7 +21,7 @@
       "sd_fwid": "0x0123"
     },
     "bootloader": {
-      "settings_addr": "0xFF000"  
+      "settings_addr": "0xFF000"
     }
   },
   "connectivity": ["bluetooth"],
@@ -35,7 +31,7 @@
     "openocd_target": "nrf52840-mdk-rs"
   },
   "frameworks": ["arduino"],
-  "name": "Seeed Xiao BLE Sense",
+  "name": "Seeed_Solar_Node",
   "upload": {
     "maximum_ram_size": 248832,
     "maximum_size": 815104,

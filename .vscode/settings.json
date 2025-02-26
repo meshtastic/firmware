@@ -7,5 +7,7 @@
   "cmake.configureOnOpen": false,
   "[cpp]": {
     "editor.defaultFormatter": "trunk.io"
-  }
+  },
+  "idf.pythonInstallPath": "/usr/bin/python3",
+  "C_Cpp.errorSquiggles": "disabled"
 }
