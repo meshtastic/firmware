@@ -222,12 +222,16 @@ bool RF95Interface::reconfigure()
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
     err = lora->setSyncWord(syncWord);
-    if (err != RADIOLIB_ERR_NONE)
+    if (err == RADIOLIB_ERR_WRONG_MODEM)
+        LOG_ERROR("RF95 setSyncWord: WRONG MODEM error %s%d", radioLibErr, err);
+    else if (err != RADIOLIB_ERR_NONE)
         LOG_ERROR("RF95 setSyncWord %s%d", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
 
     err = lora->setCurrentLimit(currentLimit);
-    if (err != RADIOLIB_ERR_NONE)
+    if (err == RADIOLIB_ERR_INVALID_CURRENT_LIMIT)
+        LOG_ERROR("RF95 setCurrentLimit: INVALID CURRENT LIMIT error %s%d", radioLibErr, err);
+    else if (err != RADIOLIB_ERR_NONE)
         LOG_ERROR("RF95 setCurrentLimit %s%d", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
 
@@ -237,6 +241,10 @@ bool RF95Interface::reconfigure()
     assert(err == RADIOLIB_ERR_NONE);
 
     err = lora->setFrequency(getFreq());
+    if (err == RADIOLIB_ERR_INVALID_FREQUENCY)
+        LOG_ERROR("RF95 setFrequency: INVALID FREQUENCY error %s%d", radioLibErr, err);
+    else if (err == RADIOLIB_ERR_INVALID_BIT_RANGE)
+        LOG_ERROR("RF95 setFrequency: INVALID BIT RANGE error %s%d", radioLibErr, err);
     if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
