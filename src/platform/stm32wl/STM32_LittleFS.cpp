@@ -42,7 +42,6 @@ STM32_LittleFS::STM32_LittleFS(struct lfs_config *cfg)
     varclr(&_lfs);
     _lfs_cfg = cfg;
     _mounted = false;
-    _mutex = xSemaphoreCreateMutexStatic(&this->_MutexStorageSpace);
 }
 
 STM32_LittleFS::~STM32_LittleFS() {}
