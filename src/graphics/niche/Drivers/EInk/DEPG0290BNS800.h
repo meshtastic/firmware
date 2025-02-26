@@ -36,7 +36,6 @@ class DEPG0290BNS800 : public SSD16XX
     void configUpdateSequence() override;
     void detachFromUpdate() override;
     void finalizeUpdate() override; // Only overriden for a slight optimization
-    void update(uint8_t *imageData, UpdateTypes type) override { SSD16XX::update(imageData, FULL); }
 };
 
 } // namespace NicheGraphics::Drivers
