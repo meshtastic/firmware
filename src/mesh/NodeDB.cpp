@@ -1675,11 +1675,10 @@ bool NodeDB::restorePreferences(meshtastic_AdminMessage_BackupLocation location,
             }
 
             success = saveToDisk(restoreWhat);
-            if (!success) {
-                LOG_ERROR("Failed to save restored preferences to flash");
+            if (success) {
+                LOG_INFO("Restored preferences from backup");
             } else {
-                LOG_INFO("Restored preferences from backup... Rebooting");
-                rebootAtMsec = millis() + 1000;
+                LOG_ERROR("Failed to save restored preferences to flash");
             }
         } else {
             LOG_ERROR("Failed to restore preferences from backup file");
