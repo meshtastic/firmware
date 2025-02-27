@@ -1032,7 +1032,6 @@ void NodeDB::loadFromDisk()
         if (config.version < DEVICESTATE_MIN_VER) {
             LOG_WARN("config %d is old, discard", config.version);
             installDefaultConfig(true);
-            restorePreferences(meshtastic_AdminMessage_BackupLocation_FLASH, SEGMENT_CONFIG);
         } else {
             LOG_INFO("Loaded saved config version %d", config.version);
         }
@@ -1648,7 +1647,7 @@ bool NodeDB::restorePreferences(meshtastic_AdminMessage_BackupLocation location,
         spiLock->lock();
         if (!FSCom.exists(backupFileName)) {
             spiLock->unlock();
-            LOG_ERROR("Could not restore. No backup file found");
+            LOG_WARN("Could not restore. No backup file found");
             return false;
         } else {
             spiLock->unlock();
