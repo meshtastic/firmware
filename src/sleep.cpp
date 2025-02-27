@@ -245,6 +245,9 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
 #ifdef PIN_3V3_EN
     digitalWrite(PIN_3V3_EN, LOW);
 #endif
+#ifdef PIN_WD_EN
+    digitalWrite(PIN_WD_EN, LOW);
+#endif
 #endif
     ledBlink.set(false);
 

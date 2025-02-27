@@ -122,7 +122,8 @@ typedef struct _meshtastic_DeviceState {
  Indicates developer is testing and changes should never be saved to flash.
  Deprecated in 2.3.1 */
     bool no_save;
-    /* Some GPS receivers seem to have bogus settings from the factory, so we always do one factory reset. */
+    /* Previously used to manage GPS factory resets.
+ Deprecated in 2.5.23 */
     bool did_gps_reset;
     /* We keep the last received waypoint stored in the device flash,
  so we can show it on the screen.

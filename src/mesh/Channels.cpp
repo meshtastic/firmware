@@ -119,7 +119,7 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
         channelSettings.psk.size = sizeof(defaultpsk0);
 #endif
 #ifdef USERPREFS_CHANNEL_0_NAME
-        strcpy(channelSettings.name, USERPREFS_CHANNEL_0_NAME);
+        strcpy(channelSettings.name, (const char *)USERPREFS_CHANNEL_0_NAME);
 #endif
 #ifdef USERPREFS_CHANNEL_0_PRECISION
         channelSettings.module_settings.position_precision = USERPREFS_CHANNEL_0_PRECISION;
@@ -138,7 +138,7 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
         channelSettings.psk.size = sizeof(defaultpsk1);
 #endif
 #ifdef USERPREFS_CHANNEL_1_NAME
-        strcpy(channelSettings.name, USERPREFS_CHANNEL_1_NAME);
+        strcpy(channelSettings.name, (const char *)USERPREFS_CHANNEL_1_NAME);
 #endif
 #ifdef USERPREFS_CHANNEL_1_PRECISION
         channelSettings.module_settings.position_precision = USERPREFS_CHANNEL_1_PRECISION;
@@ -157,7 +157,7 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
         channelSettings.psk.size = sizeof(defaultpsk2);
 #endif
 #ifdef USERPREFS_CHANNEL_2_NAME
-        strcpy(channelSettings.name, USERPREFS_CHANNEL_2_NAME);
+        strcpy(channelSettings.name, (const char *)USERPREFS_CHANNEL_2_NAME);
 #endif
 #ifdef USERPREFS_CHANNEL_2_PRECISION
         channelSettings.module_settings.position_precision = USERPREFS_CHANNEL_2_PRECISION;
