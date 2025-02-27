@@ -1,5 +1,6 @@
 #include "RTC.h"
 #include "configuration.h"
+#include <stdarg.h>
 #include <stm32wle5xx.h>
 #include <stm32wlxx_hal.h>
 
@@ -54,3 +55,101 @@ extern "C" void __wrap__tzset_unlocked_r(struct _reent *reent_ptr)
     return;
 }
 #endif
+
+// Taken from https://interrupt.memfault.com/blog/cortex-m-hardfault-debug
+typedef struct __attribute__((packed)) ContextStateFrame {
+    uint32_t r0;
+    uint32_t r1;
+    uint32_t r2;
+    uint32_t r3;
+    uint32_t r12;
+    uint32_t lr;
+    uint32_t return_address;
+    uint32_t xpsr;
+} sContextStateFrame;
+
+// NOTE: If you are using CMSIS, the registers can also be
+// accessed through CoreDebug->DHCSR & CoreDebug_DHCSR_C_DEBUGEN_Msk
+#define HALT_IF_DEBUGGING()                                                                                                      \
+    do {                                                                                                                         \
+        if ((*(volatile uint32_t *)0xE000EDF0) & (1 << 0)) {                                                                     \
+            __asm("bkpt 1");                                                                                                     \
+        }                                                                                                                        \
+    } while (0)
+
+char hardfault_message_buffer[256];
+
+// printf directly using srcwrapper's debug UART function.
+void debug_printf(const char *format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    size_t length = vsprintf(hardfault_message_buffer, format, args);
+    uart_debug_write((uint8_t *)hardfault_message_buffer, length);
+    va_end(args);
+}
+
+// N picked by guessing
+#define DOT_TIME 1200000
+void dot()
+{
+    digitalWrite(LED_POWER, LED_STATE_ON);
+    for (volatile int i = 0; i < DOT_TIME; i++) { /* busy wait */
+    }
+    digitalWrite(LED_POWER, LED_STATE_OFF);
+    for (volatile int i = 0; i < DOT_TIME; i++) { /* busy wait */
+    }
+}
+void dash()
+{
+    digitalWrite(LED_POWER, LED_STATE_ON);
+    for (volatile int i = 0; i < (DOT_TIME); i++) { /* busy wait */
+    }
+    digitalWrite(LED_POWER, LED_STATE_OFF);
+    for (volatile int i = 0; i < DOT_TIME; i++) { /* busy wait */
+    }
+}
+void space()
+{
+    for (volatile int i = 0; i < (DOT_TIME * 3); i++) { /* busy wait */
+    }
+}
+
+// Disable optimizations for this function so "frame" argument
+// does not get optimized away
+extern "C" __attribute__((optimize("O0"))) void HardFault_Handler_C(sContextStateFrame *frame)
+{
+    uint32_t r0;
+    uint32_t r1;
+    uint32_t r2;
+    uint32_t r3;
+    uint32_t r12;
+    uint32_t lr;
+    uint32_t return_address;
+    uint32_t xpsr;
+    debug_printf("HardFault!\r\n");
+    debug_printf("r0: %08x\r\n", frame->r0);
+    debug_printf("r1: %08x\r\n", frame->r1);
+    debug_printf("r2: %08x\r\n", frame->r2);
+    debug_printf("r3: %08x\r\n", frame->r3);
+    debug_printf("r12: %08x\r\n", frame->r12);
+    debug_printf("lr: %08x\r\n", frame->lr);
+    debug_printf("pc[return address]: %08x\r\n", frame->return_address);
+    debug_printf("xpsr: %08x\r\n", frame->xpsr);
+
+    HALT_IF_DEBUGGING();
+
+    // blink SOS forever
+    while (1) {
+        dot();
+        dot();
+        dot();
+        dash();
+        dash();
+        dash();
+        dot();
+        dot();
+        dot();
+        space();
+    }
+}
