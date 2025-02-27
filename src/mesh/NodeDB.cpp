@@ -1587,20 +1587,6 @@ UserLicenseStatus NodeDB::getLicenseStatus(uint32_t nodeNum)
     return info->user.is_licensed ? UserLicenseStatus::Licensed : UserLicenseStatus::NotLicensed;
 }
 
-// bool NodeDB::shouldAutoPerformBackup()
-// {
-//     // Already backed up
-//     if (lastBackupAttempt > 0)
-//         return false;
-//     // Not enough time has passed
-//     if (millis() - lastBackupAttempt < AUTOMATIC_BACKUP_MS) {
-//         return false;
-//     }
-
-//     // If a LoRa region is set, assume the device is setup
-//     return config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET;
-// }
-
 bool NodeDB::backupPreferences(meshtastic_AdminMessage_BackupLocation location)
 {
     bool success = false;
