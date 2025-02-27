@@ -20,12 +20,12 @@
 #define LORA_SCK 18
 #define LORA_MISO 19
 #define LORA_MOSI 23
-#define LORA_CS 5   //NSS
+#define LORA_CS 5 // NSS
 
 #define USE_RF95
 #define RF95_MAX_POWER 17
-#define LORA_DIO0 35  // IRQ 
-#define LORA_RESET 13 // RST
+#define LORA_DIO0 35          // IRQ
+#define LORA_RESET 13         // RST
 #define LORA_DIO1 RADIOLIB_NC // Not really used
 #define LORA_DIO2 RADIOLIB_NC // Not really used
 
@@ -35,10 +35,9 @@
 #define GPS_RX_PIN 16
 #define GPS_TX_PIN 17
 
-
-//Note: If you use corebasic version 2.7 or later, 
-//you need to go to the src>graphics>TFTDisplay.cpp file to change the value of cfg.invert, 
-//this one is to set the color inversion
+// Note: If you use corebasic version 2.7 or later,
+// you need to go to the src>graphics>TFTDisplay.cpp file to change the value of cfg.invert,
+// this one is to set the color inversion
 #define TFT_HEIGHT 240
 #define TFT_WIDTH 320
 #define TFT_OFFSET_X 0

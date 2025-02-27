@@ -310,9 +310,9 @@ class LGFX : public lgfx::LGFX_Device
             cfg.dummy_read_bits = 1;       // Number of bits for dummy read before non-pixel data read
             cfg.readable = true;           // Set to true if data can be read
 #if defined(M5STACK_COREBASIC)
-            cfg.invert = true;            // Set to true if the light/darkness of the panel is reversed
+            cfg.invert = true;             // Set to true if the light/darkness of the panel is reversed
 #else
-            cfg.invert = false;            // Set to true if the light/darkness of the panel is reversed
+            cfg.invert = false;              // Set to true if the light/darkness of the panel is reversed
 #endif
             cfg.rgb_order = false;         // Set to true if the panel's red and blue are swapped
             cfg.dlen_16bit =
@@ -332,9 +332,9 @@ class LGFX : public lgfx::LGFX_Device
             auto cfg = _light_instance.config(); // Gets a structure for backlight settings.
 
 #if !defined(M5STACK_CORE2)
-            cfg.pin_bl = TFT_BL; // Pin number to which the backlight is connected
+            cfg.pin_bl = TFT_BL;                 // Pin number to which the backlight is connected
 #endif
-            cfg.invert = false;  // true to invert the brightness of the backlight
+            cfg.invert = false;                  // true to invert the brightness of the backlight
             // cfg.freq = 44100;    // PWM frequency of backlight
             // cfg.pwm_channel = 1; // PWM channel number to use
 
@@ -747,7 +747,8 @@ void TFTDisplay::sendCommand(uint8_t com)
         unphone.backlight(true); // using unPhone library
 #endif
 #ifdef RAK14014
-#elif !defined(M5STACK) && !defined(ST7789_CS) && !defined(M5STACK_COREBASIC) && !defined(M5STACK_CORE2)// T-Deck gets brightness set in Screen.cpp in the handleSetOn function
+#elif !defined(M5STACK) && !defined(ST7789_CS) && !defined(M5STACK_COREBASIC) &&                                                 \
+    !defined(M5STACK_CORE2) // T-Deck gets brightness set in Screen.cpp in the handleSetOn function
         tft->setBrightness(172);
 #endif
         break;
@@ -857,7 +858,7 @@ bool TFTDisplay::connect()
     tft->init();
 #endif
 
-#if defined(M5STACK) || defined(M5STACK_COREBASIC)  || defined(M5STACK_CORE2)
+#if defined(M5STACK) || defined(M5STACK_COREBASIC) || defined(M5STACK_CORE2)
     tft->setRotation(0);
 #elif defined(RAK14014)
     tft->setRotation(1);

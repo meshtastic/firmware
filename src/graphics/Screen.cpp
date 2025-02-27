@@ -64,15 +64,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "modules/StoreForwardModule.h"
 #include "platform/portduino/PortduinoGlue.h"
 #endif
-#if  defined(M5STACK_CORE2)
+#if defined(M5STACK_CORE2)
 #include "M5Unified.h"
 #define OLED_BLACK OLEDDISPLAY_COLOR::BLACK
 #define OLED_WHITE OLEDDISPLAY_COLOR::WHITE
 #else
-    #define OLED_BLACK BLACK
-    #define OLED_WHITE WHITE
+#define OLED_BLACK BLACK
+#define OLED_WHITE WHITE
 #endif
-extern  DataInfo DataRegion;
+extern DataInfo DataRegion;
 using namespace meshtastic; /** @todo remove */
 
 namespace graphics
@@ -956,21 +956,22 @@ bool deltaToTimestamp(uint32_t secondsAgo, uint8_t *hours, uint8_t *minutes, int
     validCached = true;
     return validCached;
 }
-static void drawLoraMessage(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y){
+static void drawLoraMessage(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
     display->drawString(x + 0, y + 0, myRegion->name);
     display->setFont(FONT_MEDIUM);
-    display->drawString(x + 10, y + 30,"channel: "+String(DataRegion.lora_channel_num+1));
-    display->drawString(x + 10, y + 60,"bw: "+ String(DataRegion.lora_bw));
-    display->drawString(x + SCREEN_WIDTH/2+10, y+30,"freq: "+String(DataRegion.lora_freq));
-    display->drawString(x + SCREEN_WIDTH/2+10, y+60,"power: "+ String(DataRegion.lora_power_output));
-    display->drawString(x + 10, y + 90,"sf: "+String(DataRegion.lora_sf));
-     display->drawString(x + SCREEN_WIDTH/2+10, y+90,"cr: 4/:"+ String(DataRegion.lora_cr));
+    display->drawString(x + 10, y + 30, "channel: " + String(DataRegion.lora_channel_num + 1));
+    display->drawString(x + 10, y + 60, "bw: " + String(DataRegion.lora_bw));
+    display->drawString(x + SCREEN_WIDTH / 2 + 10, y + 30, "freq: " + String(DataRegion.lora_freq));
+    display->drawString(x + SCREEN_WIDTH / 2 + 10, y + 60, "power: " + String(DataRegion.lora_power_output));
+    display->drawString(x + 10, y + 90, "sf: " + String(DataRegion.lora_sf));
+    display->drawString(x + SCREEN_WIDTH / 2 + 10, y + 90, "cr: 4/:" + String(DataRegion.lora_cr));
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     const char *title = "LoRa";
-    display->drawString(x + SCREEN_WIDTH/2-20, y +0, title);
+    display->drawString(x + SCREEN_WIDTH / 2 - 20, y + 0, title);
     display->setFont(FONT_SMALL);
     display->setTextAlignment(TEXT_ALIGN_RIGHT);
-    display->drawString(x + SCREEN_WIDTH, y,String(DataRegion.lora_channel_name));
+    display->drawString(x + SCREEN_WIDTH, y, String(DataRegion.lora_channel_name));
     display->setTextAlignment(TEXT_ALIGN_LEFT); // Restore left align, just to be kind to any other unsuspecting code
 }
 /// Draw the last text message we received
@@ -991,7 +992,7 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
     display->setFont(FONT_SMALL);
     if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
         display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
-    display->setColor(OLED_BLACK);
+        display->setColor(OLED_BLACK);
     }
 
     // For time delta
@@ -1659,9 +1660,9 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             pinMode(TFT_BL, OUTPUT);
             digitalWrite(TFT_BL, HIGH);
 #endif
-#if  defined(M5STACK_CORE2) 
+#if defined(M5STACK_CORE2)
             M5.Power.Axp192.setDCDC3(1000);
-            M5.Display.setBrightness(130); 
+            M5.Display.setBrightness(130);
 #endif
             enabled = true;
             setInterval(0); // Draw ASAP
@@ -1678,7 +1679,7 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             pinMode(TFT_BL, OUTPUT);
             digitalWrite(TFT_BL, LOW);
 #endif
-#if defined(M5STACK_CORE2) 
+#if defined(M5STACK_CORE2)
             M5.Power.Axp192.setDCDC3(0);
 #endif
 #ifdef USE_ST7789
@@ -2512,7 +2513,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         }
     }
 #endif
-        display->setColor(OLED_WHITE);
+    display->setColor(OLED_WHITE);
     // Draw the channel name
     display->drawString(x, y + FONT_HEIGHT_SMALL, channelStr);
     // Draw our hardware ID to assist with bluetooth pairing. Either prefix with Info or S&F Logo
@@ -2605,7 +2606,7 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
         }
     }
 
-        display->setColor(OLED_WHITE);
+    display->setColor(OLED_WHITE);
 
     /*
     - WL_CONNECTED: assigned when connected to a WiFi network;

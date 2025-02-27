@@ -115,11 +115,10 @@ AccelerometerThread *accelerometerThread = nullptr;
 AudioThread *audioThread = nullptr;
 #endif
 
-
 #if defined(TCXO_OPTIONAL)
 float tcxoVoltage = SX126X_DIO3_TCXO_VOLTAGE; // if TCXO is optional, put this here so it can be changed further down.
 #endif
-#if defined(M5STACK_COREBASIC)  || defined(M5STACK_CORE2)
+#if defined(M5STACK_COREBASIC) || defined(M5STACK_CORE2)
 #include <M5Unified.h>
 #endif
 
@@ -1234,6 +1233,5 @@ void loop()
 #if defined(M5STACK_CORE2)
     ScreenTouch();
 #endif
-
 }
 #endif

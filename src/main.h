@@ -39,14 +39,13 @@ extern bool pmu_found;
 extern bool isCharging;
 extern bool isUSBPowered;
 
-
 struct DataInfo {
     int lora_channel_num;
     double lora_freq;
-    const char* lora_channel_name;
-    int  lora_power_output;
+    const char *lora_channel_name;
+    int lora_power_output;
     float lora_bw;
-    int  lora_sf;
+    int lora_sf;
     int lora_cr;
 };
 
