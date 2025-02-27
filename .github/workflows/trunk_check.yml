@@ -9,7 +9,7 @@ permissions: read-all
 jobs:
   trunk_check:
     name: Trunk Check Runner
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       checks: write # For trunk to post annotations
       contents: read # For repo checkout
