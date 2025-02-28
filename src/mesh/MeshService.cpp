@@ -19,6 +19,7 @@
 #include "power.h"
 #include <assert.h>
 #include <string>
+#include "modules/FishEyeStateRoutingModule.h"
 
 #if ARCH_PORTDUINO
 #include "PortduinoGlue.h"
@@ -232,6 +233,10 @@ ErrorCode MeshService::sendQueueStatusToPhone(const meshtastic_QueueStatus &qs, 
 
 void MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPhone)
 {
+    if(config.network.routingAlgorithm == meshtastic_Config_RoutingConfig_FishEyeState && moduleConfig.fish_eye_state_routing.enabled && p->decoded.dest != 0 && p->decoded.dest != NODENUM_BROADCAST){
+        p->to = fishEyeStateRoutingModule->getNextHopForID(p->decoded.dest);
+    }
+
     uint32_t mesh_packet_id = p->id;
     nodeDB->updateFrom(*p); // update our local DB for this packet (because phone might have sent position packets etc...)
 

@@ -104,6 +104,7 @@ bool FishEyeStateRoutingModule::isequal(const meshtastic_FishEyeStateRouting &s1
  * returns next-Hop for a Message to a given NodeID, if Node is unknwon BroadcastID is returned
  */
 uint32_t FishEyeStateRoutingModule::getNextHopForID(uint32_t dest){
+  if (dest == nodeDB->getNodeNum()){return dest;}
   auto it = NextHopTable.find(dest);
   if(it == NextHopTable.end()){
     return NODENUM_BROADCAST;
