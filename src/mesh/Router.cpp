@@ -655,7 +655,7 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
 
         if(config.network.routingAlgorithm == meshtastic_Config_RoutingConfig_FishEyeState && moduleConfig.fish_eye_state_routing.enabled == true && ((isToUs(p) || isBroadcast(p->to)) && p->decoded.dest != 0 && !isBroadcast(p->decoded.dest))){
             meshtastic_MeshPacket *copy = allocForSending();
-            copy = p;
+            copy->decoded = p->decoded;
             copy->to = fishEyeStateRoutingModule->getNextHopForID(copy->decoded.dest);
             copy->from = nodeDB->getNodeNum();
             service->sendToMesh(copy);
