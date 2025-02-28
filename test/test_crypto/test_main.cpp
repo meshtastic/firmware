@@ -1,3 +1,4 @@
+// trunk-ignore-all(gitleaks): These are dummy values. Not real secrets.
 #include "CryptoEngine.h"
 
 #include "TestUtil.h"

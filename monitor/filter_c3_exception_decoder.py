@@ -1,3 +1,6 @@
+# trunk-ignore-all(bandit/B404): subprocess is used to call addr2line
+# trunk-ignore-all(bandit/B603): subprocess is used to call addr2line
+
 # Copyright (c) 2014-present PlatformIO <contact@platformio.org>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");

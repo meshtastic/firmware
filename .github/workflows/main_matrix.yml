@@ -352,6 +352,12 @@ jobs:
         run: >-
           bin/bump_version.py
 
+      - name: Ensure debian deps are installed
+        shell: bash
+        run: |
+          sudo apt-get update -y --fix-missing
+          sudo apt-get install -y devscripts
+
       - name: Update debian changelog
         run: >-
           debian/ci_changelog.sh

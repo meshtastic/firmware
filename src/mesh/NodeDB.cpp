@@ -555,7 +555,11 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #else
     config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
 #endif
+#ifdef USERPREFS_CONFIG_SMART_POSITION_ENABLED
+    config.position.position_broadcast_smart_enabled = USERPREFS_CONFIG_SMART_POSITION_ENABLED;
+#else
     config.position.position_broadcast_smart_enabled = true;
+#endif
     config.position.broadcast_smart_minimum_distance = 100;
     config.position.broadcast_smart_minimum_interval_secs = 30;
     if (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER)
@@ -618,8 +622,16 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 
 void NodeDB::initConfigIntervals()
 {
+#ifdef USERPREFS_CONFIG_GPS_UPDATE_INTERVAL
+    config.position.gps_update_interval = USERPREFS_CONFIG_GPS_UPDATE_INTERVAL;
+#else
     config.position.gps_update_interval = default_gps_update_interval;
+#endif
+#ifdef USERPREFS_CONFIG_POSITION_BROADCAST_INTERVAL
+    config.position.position_broadcast_secs = USERPREFS_CONFIG_POSITION_BROADCAST_INTERVAL;
+#else
     config.position.position_broadcast_secs = default_broadcast_interval_secs;
+#endif
 
     config.power.ls_secs = default_ls_secs;
     config.power.min_wake_secs = default_min_wake_secs;
@@ -859,12 +871,12 @@ void NodeDB::installDefaultDeviceState()
     // Set default owner name
     pickNewNodeNum(); // based on macaddr now
 #ifdef USERPREFS_CONFIG_OWNER_LONG_NAME
-    snprintf(owner.long_name, sizeof(owner.long_name), USERPREFS_CONFIG_OWNER_LONG_NAME);
+    snprintf(owner.long_name, sizeof(owner.long_name), (const char *)USERPREFS_CONFIG_OWNER_LONG_NAME);
 #else
     snprintf(owner.long_name, sizeof(owner.long_name), "Meshtastic %04x", getNodeNum() & 0x0ffff);
 #endif
 #ifdef USERPREFS_CONFIG_OWNER_SHORT_NAME
-    snprintf(owner.short_name, sizeof(owner.short_name), USERPREFS_CONFIG_OWNER_SHORT_NAME);
+    snprintf(owner.short_name, sizeof(owner.short_name), (const char *)USERPREFS_CONFIG_OWNER_SHORT_NAME);
 #else
     snprintf(owner.short_name, sizeof(owner.short_name), "%04x", getNodeNum() & 0x0ffff);
 #endif
