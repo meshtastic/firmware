@@ -77,4 +77,14 @@
     pinMode(VBAT_ENABLE, OUTPUT);
     digitalWrite(VBAT_ENABLE, LOW);
     
+    pinMode(PIN_LED1, OUTPUT);
+    digitalWrite(PIN_LED1, LOW);
+    pinMode(PIN_LED2, OUTPUT);
+    digitalWrite(PIN_LED2, LOW);
+    pinMode(PIN_LED2, OUTPUT);
+    digitalWrite(LED_PIN, LOW);
+
+    // pinMode(D5, OUTPUT);
+    // digitalWrite(D5, LOW);
+
 }

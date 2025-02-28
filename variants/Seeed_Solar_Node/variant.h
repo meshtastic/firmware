@@ -11,8 +11,8 @@
  * License: MIT
  */
 
- #ifndef _SEEED_XIAO_NRF52840_SENSE_H_
- #define _SEEED_XIAO_NRF52840_SENSE_H_
+ #ifndef _SEEED_SOLAR_NODE_H_
+ #define  _SEEED_SOLAR_NODE_H_
  #include "WVariant.h"
  //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  // Clock Configuration
@@ -31,21 +31,24 @@
  //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  // LED Configuration
  //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- #define LED_RED     15      // P0.11 Red LED
- #define LED_BLUE    19      // P0.12 Blue LED
- #define LED_GREEN   15     // P0.13 Green LED
- 
- #define PIN_LED1    LED_GREEN  // Default user LED
- #define PIN_LED2    LED_BLUE   // Secondary indicator
- #define PIN_LED3    LED_RED    // Status LED
- #define LED_BUILTIN PIN_LED1
- #define LED_STATE_ON 1         // Active-high LEDs
- 
+
+// LEDs
+// LEDs
+#define PIN_LED1 (11) // LED        P1.15
+#define PIN_LED2 (12)      //
+
+#define LED_BUILTIN PIN_LED1
+#define LED_CONN PIN_LED2
+
+#define LED_GREEN PIN_LED1
+#define LED_BLUE PIN_LED2
+#define LED_PIN PIN_LED2
+#define LED_STATE_ON 1 // State when LED is litted
  //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  // Button Configuration
  //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- #define PIN_BUTTON1         5       // P0.05 User button
- #define BUTTON_NEED_PULLUP          // Requires  pull-up
+ #define PIN_BUTTON1         (31+7)       // P0.05 User button
+ //#define BUTTON_NEED_PULLUP          // Requires  pull-up
  
  //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  // Digital Pin Mapping (D0-D10)
@@ -78,7 +81,7 @@
  // Communication Interfaces
  //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  // I2C Configuration
- #define HAS_WIRE 1
+ #define HAS_WIRE 0
  #define PIN_WIRE_SDA  (9)   // P1.11 (D6)
  #define PIN_WIRE_SCL  (10)   // P1.12 (D7)
  #define WIRE_INTERFACES_COUNT 1
@@ -101,7 +104,8 @@ static const uint8_t SCL = PIN_WIRE_SCL;
  #define SX126X_RESET   D2     // Reset control
  #define SX126X_DIO3_TCXO_VOLTAGE 1.8  // TCXO supply voltage
  #define SX126X_RXEN    D5     // RX enable control
- 
+ #define SX126X_TXEN RADIOLIB_NC
+ #define SX126X_DIO2_AS_RF_SWITCH     // This Line is really necessary for SX1262  to work with RF switch or will loss TX power
  //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  // Power Management
  //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -152,4 +156,4 @@ static const uint8_t SCL = PIN_WIRE_SCL;
  }
  #endif
  
- #endif // _SEEED_XIAO_NRF52840_SENSE_H_
+ #endif //  _SEEED_SOLAR_NODE_H_
