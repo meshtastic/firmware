@@ -380,11 +380,13 @@ bool isBroadcast(uint32_t dest)
     return dest == NODENUM_BROADCAST || dest == NODENUM_BROADCAST_NO_LORA;
 }
 
-bool NodeDB::resetRadioConfig(bool factory_reset)
+bool NodeDB::resetRadioConfig(bool factory_reset, bool is_fresh_install)
 {
     bool didFactoryReset = false;
 
-    radioGeneration++;
+    if (is_fresh_install) {
+        radioGeneration++;
+    }
 
     if (factory_reset) {
         didFactoryReset = factoryReset();
@@ -566,7 +568,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
         config.device.node_info_broadcast_secs = default_node_info_broadcast_secs;
     config.security.serial_enabled = true;
     config.security.admin_channel_enabled = false;
-    resetRadioConfig();
+    resetRadioConfig(false, true); // This also triggers NodeInfo/Position requests since we're fresh
     strncpy(config.network.ntp_server, "meshtastic.pool.ntp.org", 32);
     // FIXME: Default to bluetooth capability of platform as default
     config.bluetooth.enabled = true;
