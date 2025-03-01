@@ -23,7 +23,7 @@ ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
         }
 
         auto copy = packetPool.allocCopy(*p);
-        startRetransmission(copy);
+        startRetransmission(copy, NUM_RELIABLE_RETX);
     }
 
     /* If we have pending retransmissions, add the airtime of this packet to it, because during that time we cannot receive an
@@ -35,7 +35,7 @@ ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
         }
     }
 
-    return FloodingRouter::send(p);
+    return isBroadcast(p->to) ? FloodingRouter::send(p) : NextHopRouter::send(p);
 }
 
 bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
@@ -73,7 +73,7 @@ bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
         i->second.nextTxMsec += iface->getPacketTime(p);
     }
 
-    return FloodingRouter::shouldFilterReceived(p);
+    return isBroadcast(p->to) ? FloodingRouter::shouldFilterReceived(p) : NextHopRouter::shouldFilterReceived(p);
 }
 
 /**
@@ -138,126 +138,5 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
     }
 
     // handle the packet as normal
-    FloodingRouter::sniffReceived(p, c);
-}
-
-#define NUM_RETRANSMISSIONS 3
-
-PendingPacket::PendingPacket(meshtastic_MeshPacket *p)
-{
-    packet = p;
-    numRetransmissions = NUM_RETRANSMISSIONS - 1; // We subtract one, because we assume the user just did the first send
-}
-
-PendingPacket *ReliableRouter::findPendingPacket(GlobalPacketId key)
-{
-    auto old = pending.find(key); // If we have an old record, someone messed up because id got reused
-    if (old != pending.end()) {
-        return &old->second;
-    } else
-        return NULL;
-}
-/**
- * Stop any retransmissions we are doing of the specified node/packet ID pair
- */
-bool ReliableRouter::stopRetransmission(NodeNum from, PacketId id)
-{
-    auto key = GlobalPacketId(from, id);
-    return stopRetransmission(key);
-}
-
-bool ReliableRouter::stopRetransmission(GlobalPacketId key)
-{
-    auto old = findPendingPacket(key);
-    if (old) {
-        auto p = old->packet;
-        /* Only when we already transmitted a packet via LoRa, we will cancel the packet in the Tx queue
-          to avoid canceling a transmission if it was ACKed super fast via MQTT */
-        if (old->numRetransmissions < NUM_RETRANSMISSIONS - 1) {
-            // remove the 'original' (identified by originator and packet->id) from the txqueue and free it
-            cancelSending(getFrom(p), p->id);
-        }
-        // now free the pooled copy for retransmission too
-        packetPool.release(p);
-        auto numErased = pending.erase(key);
-        assert(numErased == 1);
-        return true;
-    } else
-        return false;
-}
-
-/**
- * Add p to the list of packets to retransmit occasionally.  We will free it once we stop retransmitting.
- */
-PendingPacket *ReliableRouter::startRetransmission(meshtastic_MeshPacket *p)
-{
-    auto id = GlobalPacketId(p);
-    auto rec = PendingPacket(p);
-
-    stopRetransmission(getFrom(p), p->id);
-
-    setNextTx(&rec);
-    pending[id] = rec;
-
-    return &pending[id];
-}
-
-/**
- * Do any retransmissions that are scheduled (FIXME - for the time being called from loop)
- */
-int32_t ReliableRouter::doRetransmissions()
-{
-    uint32_t now = millis();
-    int32_t d = INT32_MAX;
-
-    // FIXME, we should use a better datastructure rather than walking through this map.
-    // for(auto el: pending) {
-    for (auto it = pending.begin(), nextIt = it; it != pending.end(); it = nextIt) {
-        ++nextIt; // we use this odd pattern because we might be deleting it...
-        auto &p = it->second;
-
-        bool stillValid = true; // assume we'll keep this record around
-
-        // FIXME, handle 51 day rollover here!!!
-        if (p.nextTxMsec <= now) {
-            if (p.numRetransmissions == 0) {
-                LOG_DEBUG("Reliable send failed, return a nak for fr=0x%x,to=0x%x,id=0x%x", p.packet->from, p.packet->to,
-                          p.packet->id);
-                sendAckNak(meshtastic_Routing_Error_MAX_RETRANSMIT, getFrom(p.packet), p.packet->id, p.packet->channel);
-                // Note: we don't stop retransmission here, instead the Nak packet gets processed in sniffReceived
-                stopRetransmission(it->first);
-                stillValid = false; // just deleted it
-            } else {
-                LOG_DEBUG("Send reliable retransmission fr=0x%x,to=0x%x,id=0x%x, tries left=%d", p.packet->from, p.packet->to,
-                          p.packet->id, p.numRetransmissions);
-
-                // Note: we call the superclass version because we don't want to have our version of send() add a new
-                // retransmission record
-                FloodingRouter::send(packetPool.allocCopy(*p.packet));
-
-                // Queue again
-                --p.numRetransmissions;
-                setNextTx(&p);
-            }
-        }
-
-        if (stillValid) {
-            // Update our desired sleep delay
-            int32_t t = p.nextTxMsec - now;
-
-            d = min(t, d);
-        }
-    }
-
-    return d;
-}
-
-void ReliableRouter::setNextTx(PendingPacket *pending)
-{
-    assert(iface);
-    auto d = iface->getRetransmissionMsec(pending->packet);
-    pending->nextTxMsec = millis() + d;
-    LOG_DEBUG("Set next retransmission in %u msecs: ", d);
-    printPacket("", pending->packet);
-    setReceivedMessage(); // Run ASAP, so we can figure out our correct sleep time
+    isBroadcast(p->to) ? FloodingRouter::sniffReceived(p, c) : NextHopRouter::sniffReceived(p, c);
 }
