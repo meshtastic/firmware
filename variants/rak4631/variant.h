@@ -122,6 +122,14 @@ static const uint8_t MOSI = PIN_SPI_MOSI;
 static const uint8_t MISO = PIN_SPI_MISO;
 static const uint8_t SCK = PIN_SPI_SCK;
 
+// SD card SPI pin definitions
+
+#define HAS_SDCARD 1
+#define SPI_MOSI PIN_SPI_MOSI
+#define SPI_SCK PIN_SPI_SCK
+#define SPI_MISO PIN_SPI_MISO
+#define SDCARD_CS (26)
+
 /*
  * eink display pins
  */

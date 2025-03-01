@@ -188,7 +188,7 @@ bool RF95Interface::init()
 #endif
 
     if (res == RADIOLIB_ERR_NONE)
-        res = lora->setCRC(RADIOLIB_SX126X_LORA_CRC_ON);
+        res = lora->setCRC(true);
 
     if (res == RADIOLIB_ERR_NONE)
         startReceive(); // start receiving
