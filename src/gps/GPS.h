@@ -48,6 +48,11 @@ enum GPSPowerState : uint8_t {
     GPS_OFF        // Powered off indefinitely
 };
 
+struct ChipInfo {
+    String chipName;        // The name of the chip (for logging)
+    String detectionString; // The string to match in the response
+    GnssModel_t driver;     // The driver to use
+};
 /**
  * A gps class that only reads from the GPS periodically and keeps the gps powered down except when reading
  *
@@ -229,6 +234,8 @@ class GPS : private concurrency::OSThread
     void publishUpdate();
 
     virtual int32_t runOnce() override;
+
+    GnssModel_t getProbeResponse(unsigned long timeout, const std::vector<ChipInfo> &responseMap);
 
     // Get GNSS model
     GnssModel_t probe(int serialSpeed);
