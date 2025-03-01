@@ -49,7 +49,7 @@ static uint8_t lastToRadio[MAX_TO_FROM_RADIO_SIZE];
 
 class NimbleBluetoothToRadioCallback : public NimBLECharacteristicCallbacks
 {
-    virtual void onWrite(NimBLECharacteristic *pCharacteristic)
+    virtual void onWrite(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo)
     {
         LOG_DEBUG("To Radio onwrite");
         auto val = pCharacteristic->getValue();
@@ -66,7 +66,7 @@ class NimbleBluetoothToRadioCallback : public NimBLECharacteristicCallbacks
 
 class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
 {
-    virtual void onRead(NimBLECharacteristic *pCharacteristic)
+    virtual void onRead(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo)
     {
         uint8_t fromRadioBytes[meshtastic_FromRadio_size];
         size_t numBytes = bluetoothPhoneAPI->getFromRadio(fromRadioBytes);
@@ -79,7 +79,7 @@ class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
 
 class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
 {
-    virtual uint32_t onPassKeyRequest()
+    virtual void onPassKeyEntry(NimBLEConnInfo &connInfo)
     {
         uint32_t passkey = config.bluetooth.fixed_pin;
 
@@ -120,10 +120,10 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
 #endif
         passkeyShowing = true;
 
-        return passkey;
+        NimBLEDevice::injectPassKey(connInfo, passkey);
     }
 
-    virtual void onAuthenticationComplete(ble_gap_conn_desc *desc)
+    virtual void onAuthenticationComplete(NimBLEConnInfo &connInfo)
     {
         LOG_INFO("BLE authentication complete");
 
@@ -133,9 +133,9 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
         }
     }
 
-    virtual void onDisconnect(NimBLEServer *pServer, ble_gap_conn_desc *desc)
+    virtual void onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo, int reason)
     {
-        LOG_INFO("BLE disconnect");
+        LOG_INFO("BLE disconnect. Reason %i", reason);
 
         if (bluetoothPhoneAPI) {
             bluetoothPhoneAPI->close();
@@ -183,7 +183,7 @@ int NimbleBluetooth::getRssi()
     if (bleServer && isConnected()) {
         auto service = bleServer->getServiceByUUID(MESH_SERVICE_UUID);
         uint16_t handle = service->getHandle();
-        return NimBLEDevice::getClientByID(handle)->getRssi();
+        return NimBLEDevice::getClientByHandle(handle)->getRssi();
     }
     return 0; // FIXME figure out where to source this
 }
@@ -208,6 +208,7 @@ void NimbleBluetooth::setup()
 
     NimbleBluetoothServerCallback *serverCallbacks = new NimbleBluetoothServerCallback();
     bleServer->setCallbacks(serverCallbacks, true);
+    bleServer->advertiseOnDisconnect(true);
     setupService();
     startAdvertising();
 }

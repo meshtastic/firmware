@@ -109,9 +109,14 @@ void esp32Setup()
     LOG_DEBUG("Free heap: %d", ESP.getFreeHeap());
     LOG_DEBUG("Total PSRAM: %d", ESP.getPsramSize());
     LOG_DEBUG("Free PSRAM: %d", ESP.getFreePsram());
+    esp_log_level_set("gpio", ESP_LOG_WARN);
+
+    auto res = nvs_flash_init();
+    assert(res == ESP_OK);
 
     nvs_stats_t nvs_stats;
-    auto res = nvs_get_stats(NULL, &nvs_stats);
+    res = nvs_get_stats(NULL, &nvs_stats);
+
     assert(res == ESP_OK);
     LOG_DEBUG("NVS: UsedEntries %d, FreeEntries %d, AllEntries %d, NameSpaces %d", nvs_stats.used_entries, nvs_stats.free_entries,
               nvs_stats.total_entries, nvs_stats.namespace_count);
@@ -155,8 +160,9 @@ void esp32Setup()
 #ifdef CONFIG_IDF_TARGET_ESP32C6
     esp_task_wdt_config_t *wdt_config = (esp_task_wdt_config_t *)malloc(sizeof(esp_task_wdt_config_t));
     wdt_config->timeout_ms = APP_WATCHDOG_SECS * 1000;
+    wdt_config->idle_core_mask = 0;
     wdt_config->trigger_panic = true;
-    res = esp_task_wdt_init(wdt_config);
+    res = esp_task_wdt_reconfigure(wdt_config);
     assert(res == ESP_OK);
 #else
     res = esp_task_wdt_init(APP_WATCHDOG_SECS, true);
@@ -167,6 +173,17 @@ void esp32Setup()
 
 #ifdef HAS_32768HZ
     enableSlowCLK();
+#endif
+
+#ifdef USE_XIAO_ESP32C6_EXTERNAL_ANTENNA
+#warning "Connect an external antenna to your XIAO ESP32C6; otherwise, it may be damaged!"
+    gpio_reset_pin(GPIO_NUM_3);
+    gpio_set_direction(GPIO_NUM_3, GPIO_MODE_OUTPUT);
+    gpio_set_level(GPIO_NUM_3, LOW);
+
+    gpio_reset_pin(GPIO_NUM_14);
+    gpio_set_direction(GPIO_NUM_14, GPIO_MODE_OUTPUT);
+    gpio_set_level(GPIO_NUM_14, HIGH);
 #endif
 }
 
