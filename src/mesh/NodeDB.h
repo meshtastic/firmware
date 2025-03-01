@@ -99,9 +99,11 @@ class NodeDB
      * a) sometimes a buggy android app might send us bogus settings or
      * b) the client set factory_reset
      *
+     * @param factory_reset if true, reset all settings to factory defaults
+     * @param is_fresh_install set to true after a fresh install, to trigger NodeInfo/Position requests
      * @return true if the config was completely reset, in that case, we should send it back to the client
      */
-    bool resetRadioConfig(bool factory_reset = false);
+    bool resetRadioConfig(bool factory_reset = false, bool is_fresh_install = false);
 
     /// given a subpacket sniffed from the network, update our DB state
     /// we updateGUI and updateGUIforNode if we think our this change is big enough for a redraw
