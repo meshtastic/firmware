@@ -93,6 +93,35 @@ void Channels::initDefaultLoraConfig()
 #endif
 }
 
+bool Channels::ensureLicensedOperation()
+{
+    if (!owner.is_licensed) {
+        return false;
+    }
+    bool hasEncryptionOrAdmin = false;
+    for (uint8_t i = 0; i < MAX_NUM_CHANNELS; i++) {
+        auto channel = channels.getByIndex(i);
+        if (!channel.has_settings) {
+            continue;
+        }
+        auto &channelSettings = channel.settings;
+        if (strcasecmp(channelSettings.name, Channels::adminChannel) == 0) {
+            channel.role = meshtastic_Channel_Role_DISABLED;
+            channelSettings.psk.bytes[0] = 0;
+            channelSettings.psk.size = 0;
+            hasEncryptionOrAdmin = true;
+            channels.setChannel(channel);
+
+        } else if (channelSettings.psk.size > 0) {
+            channelSettings.psk.bytes[0] = 0;
+            channelSettings.psk.size = 0;
+            hasEncryptionOrAdmin = true;
+            channels.setChannel(channel);
+        }
+    }
+    return hasEncryptionOrAdmin;
+}
+
 /**
  * Write a default channel to the specified channel index
  */

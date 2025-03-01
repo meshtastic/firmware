@@ -11,6 +11,7 @@
 #include "main.h"
 #include "modules/ExternalNotificationModule.h"
 #include "power.h"
+#include "sleep.h"
 #ifdef ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
 #endif
@@ -97,6 +98,13 @@ ButtonThread::ButtonThread() : OSThread("Button")
     userButtonTouch = OneButton(BUTTON_PIN_TOUCH, true, true);
     userButtonTouch.setPressMs(BUTTON_TOUCH_MS);
     userButtonTouch.attachLongPressStart(touchPressedLongStart); // Better handling with longpress than click?
+#endif
+
+#ifdef ARCH_ESP32
+    // Register callbacks for before and after lightsleep
+    // Used to detach and reattach interrupts
+    lsObserver.observe(&notifyLightSleep);
+    lsEndObserver.observe(&notifyLightSleepEnd);
 #endif
 
     attachButtonInterrupts();
@@ -319,6 +327,26 @@ void ButtonThread::detachButtonInterrupts()
     detachInterrupt(BUTTON_PIN_TOUCH);
 #endif
 }
+
+#ifdef ARCH_ESP32
+
+// Detach our class' interrupts before lightsleep
+// Allows sleep.cpp to configure its own interrupts, which wake the device on user-button press
+int ButtonThread::beforeLightSleep(void *unused)
+{
+    detachButtonInterrupts();
+    return 0; // Indicates success
+}
+
+// Reconfigure our interrupts
+// Our class' interrupts were disconnected during sleep, to allow the user button to wake the device from sleep
+int ButtonThread::afterLightSleep(esp_sleep_wakeup_cause_t cause)
+{
+    attachButtonInterrupts();
+    return 0; // Indicates success
+}
+
+#endif
 
 /**
  * Watch a GPIO and if we get an IRQ, wake the main thread.
