@@ -222,6 +222,12 @@ bool RadioLibInterface::cancelSending(NodeNum from, PacketId id)
     return result;
 }
 
+/** Attempt to find a packet in the TxQueue. Returns true if the packet was found. */
+bool RadioLibInterface::findInTxQueue(NodeNum from, PacketId id)
+{
+    return txQueue.find(from, id);
+}
+
 /** radio helper thread callback.
 We never immediately transmit after any operation (either Rx or Tx). Instead we should wait a random multiple of
 'slotTimes' (see definition in RadioInterface.h) taken from a contention window (CW) to lower the chance of collision.
@@ -445,6 +451,9 @@ void RadioLibInterface::handleReceiveInterrupt()
             mp->hop_start = (radioBuffer.header.flags & PACKET_FLAGS_HOP_START_MASK) >> PACKET_FLAGS_HOP_START_SHIFT;
             mp->want_ack = !!(radioBuffer.header.flags & PACKET_FLAGS_WANT_ACK_MASK);
             mp->via_mqtt = !!(radioBuffer.header.flags & PACKET_FLAGS_VIA_MQTT_MASK);
+            // If hop_start is not set, next_hop and relay_node are invalid (firmware <2.3)
+            mp->next_hop = mp->hop_start == 0 ? NO_NEXT_HOP_PREFERENCE : radioBuffer.header.next_hop;
+            mp->relay_node = mp->hop_start == 0 ? NO_RELAY_NODE : radioBuffer.header.relay_node;
 
             addReceiveMetadata(mp);
 

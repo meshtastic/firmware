@@ -48,8 +48,6 @@ HardwareSerial *GPS::_serial_gps = nullptr;
 
 GPS *gps = nullptr;
 
-static const char *ACK_SUCCESS_MESSAGE = "Get ack success!";
-
 static GPSUpdateScheduling scheduling;
 
 /// Multiple GPS instances might use the same serial port (in sequence), but we can
@@ -437,6 +435,10 @@ static const int serialSpeeds[3] = {9600, 115200, 38400};
 static const int rareSerialSpeeds[3] = {4800, 57600, GPS_BAUDRATE};
 #endif
 
+#ifndef GPS_PROBETRIES
+#define GPS_PROBETRIES 2
+#endif
+
 /**
  * @brief  Setup the GPS based on the model detected.
  *  We detect the GPS by cycling through a set of baud rates, first common then rare.
@@ -460,11 +462,7 @@ bool GPS::setup()
             digitalWrite(PIN_GPS_EN, HIGH);
             delay(1000);
 #endif
-#ifdef TRACKER_T1000_E
-            if (probeTries < 5) {
-#else
-            if (probeTries < 2) {
-#endif
+            if (probeTries < GPS_PROBETRIES) {
                 LOG_DEBUG("Probe for GPS at %d", serialSpeeds[speedSelect]);
                 gnssModel = probe(serialSpeeds[speedSelect]);
                 if (gnssModel == GNSS_MODEL_UNKNOWN) {
@@ -475,11 +473,7 @@ bool GPS::setup()
                 }
             }
             // Rare Serial Speeds
-#ifdef TRACKER_T1000_E
-            if (probeTries == 5) {
-#else
-            if (probeTries == 2) {
-#endif
+            if (probeTries == GPS_PROBETRIES) {
                 LOG_DEBUG("Probe for GPS at %d", rareSerialSpeeds[speedSelect]);
                 gnssModel = probe(rareSerialSpeeds[speedSelect]);
                 if (gnssModel == GNSS_MODEL_UNKNOWN) {
@@ -1043,14 +1037,6 @@ int32_t GPS::runOnce()
         if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
             return disable();
         }
-        // ONCE we will factory reset the GPS for bug #327
-        if (!devicestate.did_gps_reset) {
-            LOG_WARN("GPS FactoryReset requested");
-            if (gps->factoryReset()) { // If we don't succeed try again next time
-                devicestate.did_gps_reset = true;
-                nodeDB->saveToDisk(SEGMENT_DEVICESTATE);
-            }
-        }
         GPSInitFinished = true;
         publishUpdate();
     }
@@ -1063,24 +1049,6 @@ int32_t GPS::runOnce()
     if (whileActive()) {
         // if we have received valid NMEA claim we are connected
         setConnected();
-    } else {
-        if ((config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) &&
-            IS_ONE_OF(gnssModel, GNSS_MODEL_UBLOX6, GNSS_MODEL_UBLOX7, GNSS_MODEL_UBLOX8, GNSS_MODEL_UBLOX9,
-                      GNSS_MODEL_UBLOX10)) {
-            // reset the GPS on next bootup
-            if (devicestate.did_gps_reset && scheduling.elapsedSearchMs() > 60 * 1000UL && !hasFlow()) {
-                LOG_DEBUG("GPS is not found, try factory reset on next boot");
-                devicestate.did_gps_reset = false;
-                nodeDB->saveToDisk(SEGMENT_DEVICESTATE);
-                return disable(); // Stop the GPS thread as it can do nothing useful until next reboot.
-            }
-        }
-    }
-    // At least one GPS has a bad habit of losing its mind from time to time
-    if (rebootsSeen > 2) {
-        rebootsSeen = 0;
-        LOG_DEBUG("Would normally factoryReset()");
-        // gps->factoryReset();
     }
 
     // If we're due for an update, wake the GPS
@@ -1413,62 +1381,6 @@ static int32_t toDegInt(RawDegrees d)
     if (d.negative)
         r *= -1;
     return r;
-}
-
-bool GPS::factoryReset()
-{
-#ifdef PIN_GPS_REINIT
-    // The L76K GNSS on the T-Echo requires the RESET pin to be pulled LOW
-    pinMode(PIN_GPS_REINIT, OUTPUT);
-    digitalWrite(PIN_GPS_REINIT, 0);
-    delay(150); // The L76K datasheet calls for at least 100MS delay
-    digitalWrite(PIN_GPS_REINIT, 1);
-#endif
-
-    if (HW_VENDOR == meshtastic_HardwareModel_TBEAM) {
-        byte _message_reset1[] = {0xB5, 0x62, 0x06, 0x09, 0x0D, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x00,
-                                  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x1C, 0xA2};
-        _serial_gps->write(_message_reset1, sizeof(_message_reset1));
-        if (getACK(0x05, 0x01, 10000)) {
-            LOG_DEBUG(ACK_SUCCESS_MESSAGE);
-        }
-        delay(100);
-        byte _message_reset2[] = {0xB5, 0x62, 0x06, 0x09, 0x0D, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x00,
-                                  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x1B, 0xA1};
-        _serial_gps->write(_message_reset2, sizeof(_message_reset2));
-        if (getACK(0x05, 0x01, 10000)) {
-            LOG_DEBUG(ACK_SUCCESS_MESSAGE);
-        }
-        delay(100);
-        byte _message_reset3[] = {0xB5, 0x62, 0x06, 0x09, 0x0D, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                                  0x00, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x03, 0x1D, 0xB3};
-        _serial_gps->write(_message_reset3, sizeof(_message_reset3));
-        if (getACK(0x05, 0x01, 10000)) {
-            LOG_DEBUG(ACK_SUCCESS_MESSAGE);
-        }
-    } else if (gnssModel == GNSS_MODEL_MTK) {
-        // send the CAS10 to perform a factory restart of the device (and other device that support PCAS statements)
-        LOG_INFO("GNSS Factory Reset via PCAS10,3");
-        _serial_gps->write("$PCAS10,3*1F\r\n");
-        delay(100);
-    } else if (gnssModel == GNSS_MODEL_ATGM336H) {
-        LOG_INFO("Factory Reset via CAS-CFG-RST");
-        uint8_t msglen = makeCASPacket(0x06, 0x02, sizeof(_message_CAS_CFG_RST_FACTORY), _message_CAS_CFG_RST_FACTORY);
-        _serial_gps->write(UBXscratch, msglen);
-        delay(100);
-    } else {
-        // fire this for good measure, if we have an L76B - won't harm other devices.
-        _serial_gps->write("$PMTK104*37\r\n");
-        // No PMTK_ACK for this command.
-        delay(100);
-        // send the UBLOX Factory Reset Command regardless of detect state, something is very wrong, just assume it's
-        // UBLOX. Factory Reset
-        byte _message_reset[] = {0xB5, 0x62, 0x06, 0x09, 0x0D, 0x00, 0xFF, 0xFB, 0x00, 0x00, 0x00,
-                                 0x00, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x17, 0x2B, 0x7E};
-        _serial_gps->write(_message_reset, sizeof(_message_reset));
-    }
-    delay(1000);
-    return true;
 }
 
 /**
