@@ -29,7 +29,11 @@ SPIClass SDHandler = SPIClass(VSPI);
 #define SDHandler SPI // only used for esp32
 #endif                // NRF52 SPI or SPI1
 #endif                // ESP32/NRF52
+#ifndef SD_SPI_FREQUENCY
+#define SD_SPI_FREQUENCY 4000000U
+#endif
 #endif                // HAS_SDCARD
+
 
 #if defined(ARCH_STM32WL)
 
@@ -370,7 +374,8 @@ void setupSDCard()
 #if (defined(ARCH_ESP32))
     SDHandler.begin(SPI_SCK, SPI_MISO, SPI_MOSI);
 #endif
-    if (!SD.begin(SDCARD_CS, SDHandler)) { // param SDHandler only used for esp32
+    if (!SD.begin(SDCARD_CS, SDHandlerr, SD_SPI_FREQUENCY)) { // param SDHandler only used for esp32
+
         LOG_DEBUG("No SD_MMC card detected");
         return;
     }
