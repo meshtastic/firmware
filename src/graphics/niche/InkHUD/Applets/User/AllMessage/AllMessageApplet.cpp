@@ -41,8 +41,6 @@ int InkHUD::AllMessageApplet::onReceiveTextMessage(const meshtastic_MeshPacket *
 
 void InkHUD::AllMessageApplet::onRender()
 {
-    setFont(fontSmall);
-
     // Find newest message, regardless of whether DM or broadcast
     MessageStore::Message *message;
     if (latestMessage->wasBroadcast)

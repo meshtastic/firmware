@@ -23,8 +23,6 @@ InkHUD::ThreadedMessageApplet::ThreadedMessageApplet(uint8_t channelIndex) : cha
 
 void InkHUD::ThreadedMessageApplet::onRender()
 {
-    setFont(fontSmall);
-
     // =============
     // Draw a header
     // =============

@@ -44,8 +44,6 @@ int InkHUD::DMApplet::onReceiveTextMessage(const meshtastic_MeshPacket *p)
 
 void InkHUD::DMApplet::onRender()
 {
-    setFont(fontSmall);
-
     // Abort if no text message
     if (!latestMessage->dm.sender) {
         printAt(X(0.5), Y(0.5), "No DMs", CENTER, MIDDLE);

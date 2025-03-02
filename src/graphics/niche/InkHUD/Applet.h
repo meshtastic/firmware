@@ -70,8 +70,9 @@ class Applet : public GFX
 
     virtual bool approveNotification(Notification &n); // Allow an applet to veto a notification
 
-    static void setDefaultFonts(AppletFont large, AppletFont small); // Set the "common" fonts
-    static uint16_t getHeaderHeight();                               // How tall the "standard" applet header is
+    static uint16_t getHeaderHeight(); // How tall the "standard" applet header is
+
+    static AppletFont fontSmall, fontLarge; // The general purpose fonts, used by all applets
 
     const char *name = nullptr; // Shown in applet selection menu. Also used as an identifier by InkHUD::getSystemApplet
 
@@ -114,8 +115,6 @@ class Applet : public GFX
     std::string getTimeString();                             // Current time, human readable
     uint16_t getActiveNodeCount();                           // Duration determined by user, in onscreen menu
     std::string localizeDistance(uint32_t meters);           // Human readable distance, imperial or metric
-
-    static AppletFont fontSmall, fontLarge; // The general purpose fonts, used by all applets
 
     // Convenient references
 

@@ -60,14 +60,13 @@ void setupNicheGraphics()
     inkhud->setDisplayResilience(20, 1.5);
 
     // Prepare fonts
-    InkHUD::AppletFont largeFont(FreeSans9pt7b);
-    InkHUD::AppletFont smallFont(FreeSans6pt7b);
+    InkHUD::Applet::fontLarge = InkHUD::AppletFont(FreeSans9pt7b);
+    InkHUD::Applet::fontSmall = InkHUD::AppletFont(FreeSans6pt7b);
     /*
     // Font localization demo: Cyrillic
-    InkHUD::AppletFont smallFont(FreeSans6pt8bCyrillic);
-    smallFont.addSubstitutionsWin1251();
+    InkHUD::Applet::fontSmall = InkHUD::AppletFont(FreeSans6pt8bCyrillic);
+    InkHUD::Applet::fontSmall.addSubstitutionsWin1251();
     */
-    InkHUD::Applet::setDefaultFonts(largeFont, smallFont);
 
     // Init settings, and customize defaults
     // Values ignored individually if found saved to flash

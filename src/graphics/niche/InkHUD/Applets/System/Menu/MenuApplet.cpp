@@ -319,9 +319,6 @@ void InkHUD::MenuApplet::onRender()
     if (items.size() == 0)
         LOG_ERROR("Empty Menu");
 
-    // Testing only
-    setFont(fontSmall);
-
     // Dimensions for the slots where we will draw menuItems
     const float padding = 0.05;
     const uint16_t itemH = fontSmall.lineHeight() * 2;

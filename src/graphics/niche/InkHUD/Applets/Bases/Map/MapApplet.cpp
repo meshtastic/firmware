@@ -6,8 +6,6 @@ using namespace NicheGraphics;
 
 void InkHUD::MapApplet::onRender()
 {
-    setFont(fontSmall);
-
     // Abort if no markers to render
     if (!enoughMarkers()) {
         printAt(X(0.5), Y(0.5) - (getFont().lineHeight() / 2), "Node positions", CENTER, MIDDLE);

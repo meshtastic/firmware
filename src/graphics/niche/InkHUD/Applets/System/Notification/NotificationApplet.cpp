@@ -77,8 +77,6 @@ void InkHUD::NotificationApplet::onRender()
     // We do need to do this with the battery though, as it is an "overlay"
     fillRect(0, 0, width(), height(), WHITE);
 
-    setFont(fontSmall);
-
     // Padding (horizontal)
     const uint16_t padW = 4;
 

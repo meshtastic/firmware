@@ -329,14 +329,6 @@ InkHUD::AppletFont InkHUD::Applet::getFont()
     return currentFont;
 }
 
-// Set two general-purpose fonts, which are reused by many applets
-// Applets are also permitted to use other fonts, if they can justify the flash usage
-void InkHUD::Applet::setDefaultFonts(AppletFont large, AppletFont small)
-{
-    Applet::fontSmall = small;
-    Applet::fontLarge = large;
-}
-
 // Gets rendered width of a string
 // Wrapper for getTextBounds
 uint16_t InkHUD::Applet::getTextWidth(const char *text)
@@ -760,8 +752,6 @@ bool InkHUD::Applet::approveNotification(NicheGraphics::InkHUD::Notification &n)
 */
 void InkHUD::Applet::drawHeader(std::string text)
 {
-    setFont(fontSmall);
-
     // Y position for divider
     // - between header text and messages
     constexpr int16_t padDivH = 2;
