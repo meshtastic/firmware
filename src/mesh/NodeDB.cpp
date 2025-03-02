@@ -400,7 +400,7 @@ bool isBroadcast(uint32_t dest)
     return dest == NODENUM_BROADCAST || dest == NODENUM_BROADCAST_NO_LORA;
 }
 
-void NodeDB::resetRadioConfig(bool is_fresh_install)
+void NodeDB::resetRadioConfig(bool is_fresh_install = false)
 {
     bool didFactoryReset = false;
 
@@ -418,13 +418,6 @@ void NodeDB::resetRadioConfig(bool is_fresh_install)
     channels.onConfigChanged();
     // Update the global myRegion
     initRegion();
-
-#if (defined(T_DECK) || defined(T_WATCH_S3) || defined(UNPHONE) || defined(PICOMPUTER_S3)) && HAS_TFT
-    // as long as PhoneAPI shares BT and TFT app switch BT off
-    config.bluetooth.enabled = false;
-    if (moduleConfig.external_notification.nag_timeout == 60)
-        moduleConfig.external_notification.nag_timeout = 0;
-#endif
 }
 
 bool NodeDB::factoryReset(bool eraseBleBonds)
@@ -586,7 +579,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
         config.device.node_info_broadcast_secs = default_node_info_broadcast_secs;
     config.security.serial_enabled = true;
     config.security.admin_channel_enabled = false;
-    resetRadioConfig(false, true); // This also triggers NodeInfo/Position requests since we're fresh
+    resetRadioConfig(true); // This also triggers NodeInfo/Position requests since we're fresh
     strncpy(config.network.ntp_server, "meshtastic.pool.ntp.org", 32);
 
 #if (defined(T_DECK) || defined(T_WATCH_S3) || defined(UNPHONE) || defined(PICOMPUTER_S3) || defined(SENSECAP_INDICATOR)) &&     \
