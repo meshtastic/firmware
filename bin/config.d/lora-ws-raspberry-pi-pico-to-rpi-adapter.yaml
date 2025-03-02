@@ -1,0 +1,10 @@
+# https://www.waveshare.com/pico-lora-sx1262-868m.htm
+# https://github.com/markbirss/lora-ws-raspberry-pi-pico-to-rpi-adapter
+Lora:
+  Module: sx1262  # Waveshare Raspberry Pi Pico to Raspberry Pi HAT Adapter
+  DIO2_AS_RF_SWITCH: true
+  DIO3_TCXO_VOLTAGE: true
+  CS: 21
+  IRQ: 16
+  Busy: 20
+  Reset: 18
