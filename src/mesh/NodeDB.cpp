@@ -404,8 +404,6 @@ void NodeDB::resetRadioConfig(bool is_fresh_install = false)
 {
     bool didFactoryReset = false;
 
-    radioGeneration++;
-
     if (is_fresh_install) {
         radioGeneration++;
     }
