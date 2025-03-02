@@ -139,6 +139,12 @@ bool SimRadio::cancelSending(NodeNum from, PacketId id)
     return result;
 }
 
+/** Attempt to find a packet in the TxQueue. Returns true if the packet was found. */
+bool SimRadio::findInTxQueue(NodeNum from, PacketId id)
+{
+    return txQueue.find(from, id);
+}
+
 void SimRadio::onNotify(uint32_t notification)
 {
     switch (notification) {

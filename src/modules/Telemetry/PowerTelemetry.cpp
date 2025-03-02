@@ -31,7 +31,6 @@ int32_t PowerTelemetryModule::runOnce()
         doDeepSleep(nightyNightMs, true, false);
     }
 
-    uint32_t result = UINT32_MAX;
     /*
         Uncomment the preferences below if you want to use the module
         without having to configure it from the PythonAPI or WebUI.
@@ -46,25 +45,33 @@ int32_t PowerTelemetryModule::runOnce()
         return disable();
     }
 
+    uint32_t sendToMeshIntervalMs = Default::getConfiguredOrDefaultMsScaled(
+        moduleConfig.telemetry.power_update_interval, default_telemetry_broadcast_interval_secs, numOnlineNodes);
+
     if (firstTime) {
         // This is the first time the OSThread library has called this function, so do some setup
         firstTime = 0;
+        uint32_t result = UINT32_MAX;
+
 #if HAS_TELEMETRY && !defined(ARCH_PORTDUINO)
         if (moduleConfig.telemetry.power_measurement_enabled) {
             LOG_INFO("Power Telemetry: init");
-            // it's possible to have this module enabled, only for displaying values on the screen.
-            // therefore, we should only enable the sensor loop if measurement is also enabled
-            if (ina219Sensor.hasSensor() && !ina219Sensor.isInitialized())
-                result = ina219Sensor.runOnce();
-            if (ina226Sensor.hasSensor() && !ina226Sensor.isInitialized())
-                result = ina226Sensor.runOnce();
-            if (ina260Sensor.hasSensor() && !ina260Sensor.isInitialized())
-                result = ina260Sensor.runOnce();
-            if (ina3221Sensor.hasSensor() && !ina3221Sensor.isInitialized())
-                result = ina3221Sensor.runOnce();
-            if (max17048Sensor.hasSensor() && !max17048Sensor.isInitialized())
-                result = max17048Sensor.runOnce();
+            // If sensor is already initialized by EnvironmentTelemetryModule, then we don't need to initialize it again,
+            // but we need to set the result to != UINT32_MAX to avoid it being disabled
+            if (ina219Sensor.hasSensor())
+                result = ina219Sensor.isInitialized() ? 0 : ina219Sensor.runOnce();
+            if (ina226Sensor.hasSensor())
+                result = ina226Sensor.isInitialized() ? 0 : ina226Sensor.runOnce();
+            if (ina260Sensor.hasSensor())
+                result = ina260Sensor.isInitialized() ? 0 : ina260Sensor.runOnce();
+            if (ina3221Sensor.hasSensor())
+                result = ina3221Sensor.isInitialized() ? 0 : ina3221Sensor.runOnce();
+            if (max17048Sensor.hasSensor())
+                result = max17048Sensor.isInitialized() ? 0 : max17048Sensor.runOnce();
         }
+
+        // it's possible to have this module enabled, only for displaying values on the screen.
+        // therefore, we should only enable the sensor loop if measurement is also enabled
         return result == UINT32_MAX ? disable() : setStartDelay();
 #else
         return disable();
@@ -74,10 +81,7 @@ int32_t PowerTelemetryModule::runOnce()
         if (!moduleConfig.telemetry.power_measurement_enabled)
             return disable();
 
-        if (((lastSentToMesh == 0) ||
-             !Throttle::isWithinTimespanMs(lastSentToMesh, Default::getConfiguredOrDefaultMsScaled(
-                                                               moduleConfig.telemetry.power_update_interval,
-                                                               default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
+        if (((lastSentToMesh == 0) || !Throttle::isWithinTimespanMs(lastSentToMesh, sendToMeshIntervalMs)) &&
             airTime->isTxAllowedAirUtil()) {
             sendTelemetry();
             lastSentToMesh = millis();
@@ -89,8 +93,9 @@ int32_t PowerTelemetryModule::runOnce()
             lastSentToPhone = millis();
         }
     }
-    return min(sendToPhoneIntervalMs, result);
+    return min(sendToPhoneIntervalMs, sendToMeshIntervalMs);
 }
+
 bool PowerTelemetryModule::wantUIFrame()
 {
     return moduleConfig.telemetry.power_screen_enabled;

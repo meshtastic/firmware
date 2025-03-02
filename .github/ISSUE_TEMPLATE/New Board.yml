@@ -1,7 +1,7 @@
 name: New Board
 description: Request us to support new hardware
 title: "[Board]: "
-labels: ["enhancement", "triage"]
+labels: [enhancement, triage]
 body:
   - type: markdown
     attributes:
