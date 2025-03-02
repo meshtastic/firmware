@@ -3,7 +3,7 @@
 /*
 
 Pop-up notification bar, on screen top edge
-Displays information we feel is important, but which is not shown on currently focussed applet(s)
+Displays information we feel is important, but which is not shown on currently focused applet(s)
 E.g.: messages, while viewing map, etc
 
 Feature should be optional; enable disable via on-screen menu
@@ -16,17 +16,21 @@ Feature should be optional; enable disable via on-screen menu
 
 #include "concurrency/OSThread.h"
 
-#include "graphics/niche/InkHUD/Applet.h"
+#include "graphics/niche/InkHUD/SystemApplet.h"
 
 namespace NicheGraphics::InkHUD
 {
 
-class NotificationApplet : public Applet
+class NotificationApplet : public SystemApplet
 {
   public:
+    NotificationApplet();
+
     void onRender() override;
-    void onActivate() override;
-    void onDeactivate() override;
+    void onForeground() override;
+    void onBackground() override;
+    void onButtonShortPress() override;
+    void onButtonLongPress() override;
 
     int onReceiveTextMessage(const meshtastic_MeshPacket *p);
 

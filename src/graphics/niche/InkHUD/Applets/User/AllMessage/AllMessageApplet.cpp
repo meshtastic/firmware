@@ -45,10 +45,10 @@ void InkHUD::AllMessageApplet::onRender()
 
     // Find newest message, regardless of whether DM or broadcast
     MessageStore::Message *message;
-    if (latestMessage.wasBroadcast)
-        message = &latestMessage.broadcast;
+    if (latestMessage->wasBroadcast)
+        message = &latestMessage->broadcast;
     else
-        message = &latestMessage.dm;
+        message = &latestMessage->dm;
 
     // Short circuit: no text message
     if (!message->sender) {

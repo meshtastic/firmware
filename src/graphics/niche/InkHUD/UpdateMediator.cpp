@@ -2,8 +2,6 @@
 
 #include "./UpdateMediator.h"
 
-#include "./WindowManager.h"
-
 using namespace NicheGraphics;
 
 // Timing for "maintenance"
@@ -78,10 +76,8 @@ Drivers::EInk::UpdateTypes InkHUD::UpdateMediator::evaluate(Drivers::EInk::Updat
         // When maintenance begins, the first refresh happens shortly after user interaction ceases (a minute or so)
         // If we *are* given an opportunity to refresh before that, we'll skip that initial maintenance refresh
         // We were intending to use that initial refresh to redraw the screen as FULL, but we're doing that now, organically
-        if (OSThread::enabled && OSThread::interval == MAINTENANCE_MS_INITIAL) {
-            LOG_DEBUG("Initial maintenance skipped");
+        if (OSThread::enabled && OSThread::interval == MAINTENANCE_MS_INITIAL)
             OSThread::setInterval(MAINTENANCE_MS); // Note: not intervalFromNow
-        }
 
         return UpdateTypes::FULL;
     }
@@ -121,7 +117,7 @@ int32_t InkHUD::UpdateMediator::runOnce()
 
         // Ask WindowManager to redraw everything, purely for the refresh
         // Todo: optimize? Could update without re-rendering
-        WindowManager::getInstance()->forceUpdate(EInk::UpdateTypes::FULL);
+        InkHUD::getInstance()->forceUpdate(Drivers::EInk::UpdateTypes::FULL);
 
         // Record that we have paid back (some of) the FULL refresh debt
         debt = max(debt - 1.0, 0.0);
@@ -140,7 +136,6 @@ int32_t InkHUD::UpdateMediator::runOnce()
 // This gives the display a chance to heal by evaluating UNSPECIFIED as FULL, which is preferable
 void InkHUD::UpdateMediator::beginMaintenance()
 {
-    LOG_DEBUG("Maintenance enabled");
     OSThread::setIntervalFromNow(MAINTENANCE_MS_INITIAL);
     OSThread::enabled = true;
 }
@@ -148,7 +143,6 @@ void InkHUD::UpdateMediator::beginMaintenance()
 // FULL-refresh debt is low enough that we no longer need to pay it back with periodic updates
 int32_t InkHUD::UpdateMediator::endMaintenance()
 {
-    LOG_DEBUG("Maintenance disabled");
     return OSThread::disable();
 }
 

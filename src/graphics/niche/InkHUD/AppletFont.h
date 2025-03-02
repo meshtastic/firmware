@@ -15,7 +15,7 @@
 
 #include "configuration.h"
 
-#include <GFX.h>
+#include <GFX.h> // GFXRoot drawing lib
 
 namespace NicheGraphics::InkHUD
 {

@@ -13,6 +13,8 @@ Responsible for display health
 
 #include "configuration.h"
 
+#include "InkHUD.h"
+
 #include "graphics/niche/Drivers/EInk/EInk.h"
 
 namespace NicheGraphics::InkHUD

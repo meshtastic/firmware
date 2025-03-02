@@ -23,6 +23,8 @@ Used by the "Recents" and "Heard" applets. Possibly more in future?
 
 #include "graphics/niche/InkHUD/Applet.h"
 
+#include "main.h"
+
 namespace NicheGraphics::InkHUD
 {
 

@@ -13,13 +13,16 @@
 
 #include "configuration.h"
 
-#include <GFX.h>
+#include <GFX.h> // GFXRoot drawing lib
+
+#include "mesh/MeshTypes.h"
 
 #include "./AppletFont.h"
-#include "./Applets/System/Notification/Notification.h"
+#include "./Applets/System/Notification/Notification.h" // The notification object, not the applet
+#include "./InkHUD.h"
+#include "./Persistence.h"
 #include "./Tile.h"
 #include "./Types.h"
-#include "./WindowManager.h"
 #include "graphics/niche/Drivers/EInk/EInk.h"
 
 namespace NicheGraphics::InkHUD
@@ -27,9 +30,6 @@ namespace NicheGraphics::InkHUD
 
 using NicheGraphics::Drivers::EInk;
 using std::to_string;
-
-class Tile;
-class WindowManager;
 
 class Applet : public GFX
 {
@@ -39,6 +39,8 @@ class Applet : public GFX
     void setTile(Tile *t); // Should only be called via Tile::setApplet
     Tile *getTile();       // Tile with which this applet is linked
 
+    // Rendering
+
     void render();                                // Draw the applet
     bool wantsToRender();                         // Check whether applet wants to render
     bool wantsToAutoshow();                       // Check whether applet wants to become foreground
@@ -46,12 +48,16 @@ class Applet : public GFX
     void updateDimensions();                      // Get current size from tile
     void resetDrawingSpace();                     // Makes sure every render starts with same parameters
 
+    // State of the applet
+
     void activate();          // Begin running
     void deactivate();        // Stop running
     void bringToForeground(); // Show
     void sendToBackground();  // Hide
     bool isActive();
     bool isForeground();
+
+    // Event handlers
 
     virtual void onRender() = 0; // All drawing happens here
     virtual void onActivate() {}
@@ -61,14 +67,13 @@ class Applet : public GFX
     virtual void onShutdown() {}
     virtual void onButtonShortPress() {} // (System Applets only)
     virtual void onButtonLongPress() {}  // (System Applets only)
-    virtual void onLockAvailable() {}    // (System Applets only) Another applet has released WindowManager lock
 
     virtual bool approveNotification(Notification &n); // Allow an applet to veto a notification
 
     static void setDefaultFonts(AppletFont large, AppletFont small); // Set the "common" fonts
     static uint16_t getHeaderHeight();                               // How tall the "standard" applet header is
 
-    const char *name = nullptr; // Shown in applet selection menu
+    const char *name = nullptr; // Shown in applet selection menu. Also used as an identifier by InkHUD::getSystemApplet
 
   protected:
     void drawPixel(int16_t x, int16_t y, uint16_t color) override; // Place a single pixel. All drawing output passes through here
@@ -81,13 +86,13 @@ class Applet : public GFX
     void setCrop(int16_t left, int16_t top, uint16_t width, uint16_t height); // Ignore pixels drawn outside a certain region
     void resetCrop();                                                         // Removes setCrop()
 
+    // Text
+
     void setFont(AppletFont f);
     AppletFont getFont();
-
     uint16_t getTextWidth(std::string text);
     uint16_t getTextWidth(const char *text);
     uint32_t getWrappedTextHeight(int16_t left, uint16_t width, std::string text); // Result of printWrapped
-
     void printAt(int16_t x, int16_t y, const char *text, HorizontalAlignment ha = LEFT, VerticalAlignment va = TOP);
     void printAt(int16_t x, int16_t y, std::string text, HorizontalAlignment ha = LEFT, VerticalAlignment va = TOP);
     void printThick(int16_t xCenter, int16_t yCenter, std::string text, uint8_t thicknessX, uint8_t thicknessY); // Faux bold
@@ -95,6 +100,8 @@ class Applet : public GFX
 
     void hatchRegion(int16_t x, int16_t y, uint16_t w, uint16_t h, uint8_t spacing, Color color); // Fill with sparse lines
     void drawHeader(std::string text); // Draw the standard applet header
+
+    // Meshtastic Logo
 
     static constexpr float LOGO_ASPECT_RATIO = 1.9;                    // Width:Height for drawing the Meshtastic logo
     uint16_t getLogoWidth(uint16_t limitWidth, uint16_t limitHeight);  // Size Meshtastic logo to fit within region
@@ -109,6 +116,12 @@ class Applet : public GFX
     std::string localizeDistance(uint32_t meters);           // Human readable distance, imperial or metric
 
     static AppletFont fontSmall, fontLarge; // The general purpose fonts, used by all applets
+
+    // Convenient references
+
+    InkHUD *inkhud = nullptr;
+    Persistence::Settings *settings = nullptr;
+    Persistence::LatestMessage *latestMessage = nullptr;
 
   private:
     Tile *assignedTile = nullptr; // Rendered pixels are fed into a Tile object, which translates them, then passes to WM
