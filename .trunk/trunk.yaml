@@ -30,6 +30,7 @@ lint:
     - git-diff-check
     - gitleaks@8.24.0
     - clang-format@16.0.3
+    - clang-tidy@16.0.3
   ignore:
     - linters: [ALL]
       paths:
