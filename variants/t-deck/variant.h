@@ -43,7 +43,6 @@
 
 // Have SPI interface SD card slot
 #define HAS_SDCARD 1
-#define SDCARD_USE_HSPI
 #define SPI_MOSI (41)
 #define SPI_SCK (40)
 #define SPI_MISO (38)
