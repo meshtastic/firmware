@@ -285,7 +285,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->set_favorite_node);
         if (node != NULL) {
             node->is_favorite = true;
-            saveChanges(SEGMENT_DEVICESTATE, false);
+            saveChanges(SEGMENT_NODEDATABASE, false);
         }
         break;
     }
@@ -294,7 +294,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->remove_favorite_node);
         if (node != NULL) {
             node->is_favorite = false;
-            saveChanges(SEGMENT_DEVICESTATE, false);
+            saveChanges(SEGMENT_NODEDATABASE, false);
         }
         break;
     }
@@ -307,7 +307,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             node->has_position = false;
             node->user.public_key.size = 0;
             node->user.public_key.bytes[0] = 0;
-            saveChanges(SEGMENT_DEVICESTATE, false);
+            saveChanges(SEGMENT_NODEDATABASE, false);
         }
         break;
     }
@@ -316,7 +316,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->remove_ignored_node);
         if (node != NULL) {
             node->is_ignored = false;
-            saveChanges(SEGMENT_DEVICESTATE, false);
+            saveChanges(SEGMENT_NODEDATABASE, false);
         }
         break;
     }
@@ -327,7 +327,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         node->position = TypeConversions::ConvertToPositionLite(r->set_fixed_position);
         nodeDB->setLocalPosition(r->set_fixed_position);
         config.position.fixed_position = true;
-        saveChanges(SEGMENT_DEVICESTATE | SEGMENT_CONFIG, false);
+        saveChanges(SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE | SEGMENT_CONFIG, false);
 #if !MESHTASTIC_EXCLUDE_GPS
         if (gps != nullptr)
             gps->enable();
@@ -340,7 +340,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         LOG_INFO("Client received remove_fixed_position command");
         nodeDB->clearLocalPosition();
         config.position.fixed_position = false;
-        saveChanges(SEGMENT_DEVICESTATE | SEGMENT_CONFIG, false);
+        saveChanges(SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE | SEGMENT_CONFIG, false);
         break;
     }
     case meshtastic_AdminMessage_set_time_only_tag: {
@@ -450,11 +450,14 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
     if (owner.is_licensed != o.is_licensed) {
         changed = 1;
         owner.is_licensed = o.is_licensed;
+        if (channels.ensureLicensedOperation()) {
+            sendWarning(licensedModeMessage);
+        }
     }
 
     if (changed) { // If nothing really changed, don't broadcast on the network or write to flash
         service->reloadOwner(!hasOpenEditTransaction);
-        saveChanges(SEGMENT_DEVICESTATE);
+        saveChanges(SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE);
     }
 }
 
@@ -740,6 +743,9 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
 void AdminModule::handleSetChannel(const meshtastic_Channel &cc)
 {
     channels.setChannel(cc);
+    if (channels.ensureLicensedOperation()) {
+        sendWarning(licensedModeMessage);
+    }
     channels.onConfigChanged(); // tell the radios about this change
     saveChanges(SEGMENT_CHANNELS, false);
 }
@@ -1077,15 +1083,14 @@ void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
 
     config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY;
     // Remove PSK of primary channel for plaintext amateur usage
-    auto primaryChannel = channels.getByIndex(channels.getPrimaryIndex());
-    auto &channelSettings = primaryChannel.settings;
-    channelSettings.psk.bytes[0] = 0;
-    channelSettings.psk.size = 0;
-    channels.setChannel(primaryChannel);
+
+    if (channels.ensureLicensedOperation()) {
+        sendWarning(licensedModeMessage);
+    }
     channels.onConfigChanged();
 
     service->reloadOwner(false);
-    saveChanges(SEGMENT_CONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
+    saveChanges(SEGMENT_CONFIG | SEGMENT_NODEDATABASE | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
 }
 
 AdminModule::AdminModule() : ProtobufModule("Admin", meshtastic_PortNum_ADMIN_APP, &meshtastic_AdminMessage_msg)

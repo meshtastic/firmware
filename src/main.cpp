@@ -115,6 +115,24 @@ AccelerometerThread *accelerometerThread = nullptr;
 AudioThread *audioThread = nullptr;
 #endif
 
+#if HAS_TFT
+extern void tftSetup(void);
+#endif
+
+#ifdef HAS_UDP_MULTICAST
+#include "mesh/udp/UdpMulticastThread.h"
+UdpMulticastThread *udpThread = nullptr;
+#endif
+
+#if defined(TCXO_OPTIONAL)
+float tcxoVoltage = SX126X_DIO3_TCXO_VOLTAGE; // if TCXO is optional, put this here so it can be changed further down.
+#endif
+
+#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+void setupNicheGraphics();
+#include "nicheGraphics.h"
+#endif
+
 using namespace concurrency;
 
 volatile static const char slipstreamTZString[] = {USERPREFS_TZ_STRING};
@@ -130,6 +148,9 @@ meshtastic::GPSStatus *gpsStatus = new meshtastic::GPSStatus();
 
 // Global Node status
 meshtastic::NodeStatus *nodeStatus = new meshtastic::NodeStatus();
+
+// Global Bluetooth status
+meshtastic::BluetoothStatus *bluetoothStatus = new meshtastic::BluetoothStatus();
 
 // Scan for I2C Devices
 
@@ -249,6 +270,15 @@ void setup()
     // TF Card , Display backlight(AW9364DNR) , AN48841B(Trackball) , ES7210(Decoder)
     pinMode(KB_POWERON, OUTPUT);
     digitalWrite(KB_POWERON, HIGH);
+    // T-Deck has all three SPI peripherals (TFT, SD, LoRa) attached to the same SPI bus
+    // We need to initialize all CS pins in advance otherwise there will be SPI communication issues
+    // e.g. when detecting the SD card
+    pinMode(LORA_CS, OUTPUT);
+    digitalWrite(LORA_CS, HIGH);
+    pinMode(SDCARD_CS, OUTPUT);
+    digitalWrite(SDCARD_CS, HIGH);
+    pinMode(TFT_CS, OUTPUT);
+    digitalWrite(TFT_CS, HIGH);
     delay(100);
 #endif
 
@@ -424,6 +454,10 @@ void setup()
     // RAK-12039 set pin for Air quality sensor. Detectable on I2C after ~3 seconds, so we need to rescan later
     pinMode(AQ_SET_PIN, OUTPUT);
     digitalWrite(AQ_SET_PIN, HIGH);
+#endif
+
+#if HAS_TFT
+    tftSetup();
 #endif
 
     // Currently only the tbeam has a PMU
@@ -644,9 +678,9 @@ void setup()
     // but we need to do this after main cpu init (esp32setup), because we need the random seed set
     nodeDB = new NodeDB;
 
-    // If we're taking on the repeater role, use flood router and turn off 3V3_S rail because peripherals are not needed
+    // If we're taking on the repeater role, use NextHopRouter and turn off 3V3_S rail because peripherals are not needed
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
-        router = new FloodingRouter();
+        router = new NextHopRouter();
 #ifdef PIN_3V3_EN
         digitalWrite(PIN_3V3_EN, LOW);
 #endif
@@ -731,8 +765,9 @@ void setup()
 #endif
 
     // Initialize the screen first so we can show the logo while we start up everything else.
+#if HAS_SCREEN
     screen = new graphics::Screen(screen_found, screen_model, screen_geometry);
-
+#endif
     // setup TZ prior to time actions.
 #if !MESHTASTIC_EXCLUDE_TZ
     LOG_DEBUG("Use compiled/slipstreamed %s", slipstreamTZString); // important, removing this clobbers our magic string
@@ -781,11 +816,21 @@ void setup()
     LOG_DEBUG("Start audio thread");
     audioThread = new AudioThread();
 #endif
+
+#ifdef HAS_UDP_MULTICAST
+    LOG_DEBUG("Start multicast thread");
+    udpThread = new UdpMulticastThread();
+#endif
     service = new MeshService();
     service->init();
 
     // Now that the mesh service is created, create any modules
     setupModules();
+
+#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+    // After modules are setup, so we can observe modules
+    setupNicheGraphics();
+#endif
 
 #ifdef LED_PIN
     // Turn LED off after boot, if heartbeat by config
@@ -1124,7 +1169,15 @@ void setup()
     // This must be _after_ service.init because we need our preferences loaded from flash to have proper timeout values
     PowerFSM_setup(); // we will transition to ON in a couple of seconds, FIXME, only do this for cold boots, not waking from SDS
     powerFSMthread = new PowerFSMThread();
+
+#if !HAS_TFT
     setCPUFast(false); // 80MHz is fine for our slow peripherals
+#endif
+
+#ifdef ARDUINO_ARCH_ESP32
+    LOG_DEBUG("Free heap  : %7d bytes", ESP.getFreeHeap());
+    LOG_DEBUG("Free PSRAM : %7d bytes", ESP.getFreePsram());
+#endif
 }
 #endif
 uint32_t rebootAtMsec;   // If not zero we will reboot at this time (used to reboot shortly after the update completes)
@@ -1221,4 +1274,5 @@ void loop()
         mainDelay.delay(delayMsec);
     }
 }
+
 #endif
