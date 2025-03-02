@@ -46,10 +46,10 @@ class Tile
   private:
     InkHUD *inkhud = nullptr;
 
-    int16_t left;
-    int16_t top;
-    uint16_t width;
-    uint16_t height;
+    int16_t left = 0;
+    int16_t top = 0;
+    uint16_t width = 0;
+    uint16_t height = 0;
 
     Applet *assignedApplet = nullptr; // Pointer to the applet which is currently linked with the tile
 };

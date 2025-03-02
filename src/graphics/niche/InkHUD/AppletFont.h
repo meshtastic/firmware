@@ -25,7 +25,7 @@ class AppletFont
 {
   public:
     AppletFont();
-    AppletFont(const GFXfont &adafruitGFXFont);
+    explicit AppletFont(const GFXfont &adafruitGFXFont);
 
     uint8_t lineHeight();
     uint8_t heightAboveCursor();

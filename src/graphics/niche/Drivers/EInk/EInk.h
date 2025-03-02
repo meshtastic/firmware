@@ -47,8 +47,8 @@ class EInk : private concurrency::OSThread
 
     const UpdateTypes supportedUpdateTypes; // Capabilities of a derived display class
     bool updateRunning = false;             // see EInk::busy()
-    uint32_t updateBegunAt;                 // For initial pause before polling for update completion
-    uint32_t pollingInterval;               // How often to check if update complete (ms)
+    uint32_t updateBegunAt = 0;             // For initial pause before polling for update completion
+    uint32_t pollingInterval = 0;           // How often to check if update complete (ms)
 };
 
 } // namespace NicheGraphics::Drivers

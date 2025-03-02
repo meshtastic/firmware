@@ -75,17 +75,17 @@ class Renderer : protected concurrency::OSThread
     Drivers::EInk *driver = nullptr; // Interacts with your variants display hardware
     UpdateMediator mediator;         // Manages display health by controlling type of update
 
-    uint8_t *imageBuffer; // Fed into driver
-    uint16_t imageBufferHeight;
-    uint16_t imageBufferWidth;
-    uint32_t imageBufferSize; // Bytes
+    uint8_t *imageBuffer = nullptr; // Fed into driver
+    uint16_t imageBufferHeight = 0;
+    uint16_t imageBufferWidth = 0;
+    uint32_t imageBufferSize = 0; // Bytes
 
     SystemApplet *lockRendering = nullptr; // Render this applet *only*
     SystemApplet *lockRequests = nullptr;  // Honor update requests from this applet *only*
 
-    bool requested;
-    bool forced;
-    Drivers::EInk::UpdateTypes desiredType;
+    bool requested = false;
+    bool forced = false;
+    Drivers::EInk::UpdateTypes desiredType = Drivers::EInk::UpdateTypes::UNSPECIFIED;
 
     // For convenience
     InkHUD *inkhud = nullptr;

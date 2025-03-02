@@ -18,6 +18,10 @@ TwoButton::TwoButton() : concurrency::OSThread("TwoButton")
     lsObserver.observe(&notifyLightSleep);
     lsEndObserver.observe(&notifyLightSleepEnd);
 #endif
+
+    // Explicitly initialize these, just to keep cppcheck quiet..
+    buttons[0] = Button();
+    buttons[1] = Button();
 }
 
 // Get access to (or create) the singleton instance of this class

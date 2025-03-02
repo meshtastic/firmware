@@ -139,10 +139,10 @@ class Applet : public GFX
     AppletFont currentFont; // As passed to setFont
 
     // As set by setCrop
-    int16_t cropLeft;
-    int16_t cropTop;
-    uint16_t cropWidth;
-    uint16_t cropHeight;
+    int16_t cropLeft = 0;
+    int16_t cropTop = 0;
+    uint16_t cropWidth = 0;
+    uint16_t cropHeight = 0;
 };
 
 }; // namespace NicheGraphics::InkHUD

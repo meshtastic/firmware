@@ -44,7 +44,7 @@ class MenuApplet : public SystemApplet, public concurrency::OSThread
     void drawSystemInfoPanel(int16_t left, int16_t top, uint16_t width,
                              uint16_t *height = nullptr); // Info panel at top of root menu
 
-    MenuPage currentPage;
+    MenuPage currentPage = MenuPage::ROOT;
     uint8_t cursor = 0;       // Which menu item is currently highlighted
     bool cursorShown = false; // Is *any* item highlighted? (Root menu: no initial selection)
 

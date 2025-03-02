@@ -44,8 +44,8 @@ class NotificationApplet : public SystemApplet
 
     std::string getNotificationText(uint16_t widthAvailable); // Get text for notification, to suit screen width
 
-    bool hasNotification = false;     // Only used for assert. Todo: remove?
-    Notification currentNotification; // Set when something notification-worthy happens. Used by render()
+    bool hasNotification = false;                      // Only used for assert. Todo: remove?
+    Notification currentNotification = Notification(); // Set when something notification-worthy happens. Used by render()
 };
 
 } // namespace NicheGraphics::InkHUD

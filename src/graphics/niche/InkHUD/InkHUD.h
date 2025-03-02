@@ -89,14 +89,14 @@ class InkHUD
     void drawPixel(int16_t x, int16_t y, Color c);
 
     // Shared data which persists between boots
-    Persistence *persistence;
+    Persistence *persistence = nullptr;
 
   private:
     InkHUD() {} // Constructor made private to force use of InkHUD::getInstance
 
-    Events *events;               // Handle non-specific firmware events
-    Renderer *renderer;           // Co-ordinate display updates
-    WindowManager *windowManager; // Multiplexing of applets
+    Events *events = nullptr;               // Handle non-specific firmware events
+    Renderer *renderer = nullptr;           // Co-ordinate display updates
+    WindowManager *windowManager = nullptr; // Multiplexing of applets
 };
 
 } // namespace NicheGraphics::InkHUD

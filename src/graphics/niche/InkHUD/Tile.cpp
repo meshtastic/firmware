@@ -44,8 +44,6 @@ InkHUD::Tile::Tile(int16_t left, int16_t top, uint16_t width, uint16_t height)
 {
     assert(width > 0 && height > 0);
 
-    Tile();
-
     this->left = left;
     this->top = top;
     this->width = width;
@@ -134,11 +132,6 @@ void InkHUD::Tile::setRegion(uint8_t userTileCount, uint8_t tileIndex)
     }
 
     assert(width > 0 && height > 0);
-
-    this->left = left;
-    this->top = top;
-    this->width = width;
-    this->height = height;
 }
 
 // Manually set the region for a tile
