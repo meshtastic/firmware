@@ -6,7 +6,6 @@
 #define I2C_SCL SCL
 
 // Display (E-Ink)
-#define USE_EINK
 #define PIN_EINK_CS 4
 #define PIN_EINK_BUSY 7
 #define PIN_EINK_DC 5

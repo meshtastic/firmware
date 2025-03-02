@@ -40,6 +40,11 @@ enum RxSource {
 /// We normally just use max 3 hops for sending reliable messages
 #define HOP_RELIABLE 3
 
+// For old firmware or when falling back to flooding, there is no next-hop preference
+#define NO_NEXT_HOP_PREFERENCE 0
+// For old firmware there is no relay node set
+#define NO_RELAY_NODE 0
+
 typedef int ErrorCode;
 
 /// Alloc and free packets to our global, ISR safe pool

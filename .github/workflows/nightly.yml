@@ -9,7 +9,7 @@ permissions: read-all
 jobs:
   trunk_check:
     name: Trunk Check and Upload
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout
@@ -23,7 +23,7 @@ jobs:
   trunk_upgrade:
     # See: https://github.com/trunk-io/trunk-action/blob/v1/readme.md#automatic-upgrades
     name: Trunk Upgrade (PR)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write # For trunk to create PRs
       pull-requests: write # For trunk to create PRs

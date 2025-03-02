@@ -37,6 +37,12 @@ class ButtonThread : public concurrency::OSThread
     void detachButtonInterrupts();
     void storeClickCount();
 
+    // Disconnect and reconnect interrupts for light sleep
+#ifdef ARCH_ESP32
+    int beforeLightSleep(void *unused);
+    int afterLightSleep(esp_sleep_wakeup_cause_t cause);
+#endif
+
   private:
 #if defined(BUTTON_PIN) || defined(ARCH_PORTDUINO) || defined(USERPREFS_BUTTON_PIN)
     static OneButton userButton; // Static - accessed from an interrupt
@@ -46,6 +52,14 @@ class ButtonThread : public concurrency::OSThread
 #endif
 #ifdef BUTTON_PIN_TOUCH
     OneButton userButtonTouch;
+#endif
+
+#ifdef ARCH_ESP32
+    // Get notified when lightsleep begins and ends
+    CallbackObserver<ButtonThread, void *> lsObserver =
+        CallbackObserver<ButtonThread, void *>(this, &ButtonThread::beforeLightSleep);
+    CallbackObserver<ButtonThread, esp_sleep_wakeup_cause_t> lsEndObserver =
+        CallbackObserver<ButtonThread, esp_sleep_wakeup_cause_t>(this, &ButtonThread::afterLightSleep);
 #endif
 
     // set during IRQ

@@ -23,6 +23,10 @@ SPIClass SPI1(HSPI);
 #define SDHandler SPI
 #endif
 
+#ifndef SD_SPI_FREQUENCY
+#define SD_SPI_FREQUENCY 4000000U
+#endif
+
 #endif // HAS_SDCARD
 
 #if defined(ARCH_STM32WL)
@@ -361,8 +365,7 @@ void setupSDCard()
 #ifdef HAS_SDCARD
     concurrency::LockGuard g(spiLock);
     SDHandler.begin(SPI_SCK, SPI_MISO, SPI_MOSI);
-
-    if (!SD.begin(SDCARD_CS, SDHandler)) {
+    if (!SD.begin(SDCARD_CS, SDHandler, SD_SPI_FREQUENCY)) {
         LOG_DEBUG("No SD_MMC card detected");
         return;
     }

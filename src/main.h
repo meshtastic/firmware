@@ -1,5 +1,6 @@
 #pragma once
 
+#include "BluetoothStatus.h"
 #include "GPSStatus.h"
 #include "NodeStatus.h"
 #include "PowerStatus.h"
@@ -47,6 +48,11 @@ extern Adafruit_DRV2605 drv;
 #ifdef HAS_I2S
 #include "AudioThread.h"
 extern AudioThread *audioThread;
+#endif
+
+#ifdef HAS_UDP_MULTICAST
+#include "mesh/udp/UdpMulticastThread.h"
+extern UdpMulticastThread *udpThread;
 #endif
 
 // Global Screen singleton.

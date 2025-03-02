@@ -249,6 +249,7 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     // the lora we need to make sure we have replaced it with our local address
     p->from = getFrom(p);
 
+    p->relay_node = nodeDB->getLastByteOfNodeNum(getNodeNum()); // set the relayer to us
     // If we are the original transmitter, set the hop limit with which we start
     if (isFromUs(p))
         p->hop_start = p->hop_limit;
@@ -274,6 +275,11 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
             abortSendAndNak(encodeResult, p);
             return encodeResult; // FIXME - this isn't a valid ErrorCode
         }
+#if HAS_UDP_MULTICAST
+        if (udpThread && config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST) {
+            udpThread->onSend(const_cast<meshtastic_MeshPacket *>(p));
+        }
+#endif
 #if !MESHTASTIC_EXCLUDE_MQTT
         // Only publish to MQTT if we're the original transmitter of the packet
         if (moduleConfig.mqtt.enabled && isFromUs(p) && mqtt) {
@@ -290,7 +296,18 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
 /** Attempt to cancel a previously sent packet.  Returns true if a packet was found we could cancel */
 bool Router::cancelSending(NodeNum from, PacketId id)
 {
-    return iface ? iface->cancelSending(from, id) : false;
+    if (iface && iface->cancelSending(from, id)) {
+        // We are not a relayer of this packet anymore
+        removeRelayer(nodeDB->getLastByteOfNodeNum(nodeDB->getNodeNum()), id, from);
+        return true;
+    }
+    return false;
+}
+
+/** Attempt to find a packet in the TxQueue. Returns true if the packet was found. */
+bool Router::findInTxQueue(NodeNum from, PacketId id)
+{
+    return iface->findInTxQueue(from, id);
 }
 
 /**

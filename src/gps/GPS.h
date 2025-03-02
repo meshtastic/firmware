@@ -101,8 +101,6 @@ class GPS : private concurrency::OSThread
     // Empty the input buffer as quickly as possible
     void clearBuffer();
 
-    virtual bool factoryReset();
-
     // Creates an instance of the GPS class.
     // Returns the new instance or null if the GPS is not present.
     static GPS *createGps();

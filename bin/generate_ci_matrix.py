@@ -35,6 +35,11 @@ for subdir, dirs, files in os.walk(rootdir):
                                     outlist.append(section)
                             else:
                                 outlist.append(section)
+                        # Add the TFT variants if the base variant is selected
+                        elif section.replace("-tft", "") in outlist and config[config[c].name].get("board_level") != "extra":
+                            outlist.append(section)
+                        elif section.replace("-inkhud", "") in outlist and config[config[c].name].get("board_level") != "extra":
+                            outlist.append(section)
                     if "board_check" in config[config[c].name]:
                         if (config[config[c].name]["board_check"] == "true") & (
                             "check" in options

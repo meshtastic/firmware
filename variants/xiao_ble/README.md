@@ -116,24 +116,26 @@ The default pin mapping in `variant.h` uses 'automatic Tx/Rx switching' mode. If
 &nbsp;
 
 <strong>MCU -> E22 connections</strong>
-| Xiao BLE pin | variant.h definition | E22 pin | Notes |
-| :------------ | :---------------------------- | :-----------------| :------------------------------------------------------------------------------------------------------------------- |
-| D0 | SX126X_CS | 19 (NSS) | |
-| D1 | SX126X_DIO1 | 13 (DIO1) | |
-| D2 | SX126X_BUSY | 14 (BUSY) | |
-| D3 | SX126X_RESET | 15 (NRST) | |
-| D7 | SX126X_RXEN | 6 (RXEN) | These pins must still be connected, and `SX126X_RXEN` defined in `variant.h`, otherwise Rx sensitivity will be poor. |
-| D8 | PIN_SPI_SCK | 18 (SCK) | |
-| D9 | PIN_SPI_MISO | 16 (MISO) | |
-| D10 | PIN_SPI_MOSI | 17 (MOSI) | |
+
+| Xiao BLE pin | variant.h definition | E22 pin   | Notes                                                                                                                |
+| :----------- | :------------------- | :-------- | :------------------------------------------------------------------------------------------------------------------- |
+| D0           | SX126X_CS            | 19 (NSS)  |                                                                                                                      |
+| D1           | SX126X_DIO1          | 13 (DIO1) |                                                                                                                      |
+| D2           | SX126X_BUSY          | 14 (BUSY) |                                                                                                                      |
+| D3           | SX126X_RESET         | 15 (NRST) |                                                                                                                      |
+| D7           | SX126X_RXEN          | 6 (RXEN)  | These pins must still be connected, and `SX126X_RXEN` defined in `variant.h`, otherwise Rx sensitivity will be poor. |
+| D8           | PIN_SPI_SCK          | 18 (SCK)  |                                                                                                                      |
+| D9           | PIN_SPI_MISO         | 16 (MISO) |                                                                                                                      |
+| D10          | PIN_SPI_MOSI         | 17 (MOSI) |                                                                                                                      |
 
 &nbsp;
 &nbsp;
 
 <strong>E22 -> E22 connections:</strong>
-| E22 pin | E22 pin | Notes |
-| :------------ | :---------------------------- | :------------------------------------------------------------------------ |
-| TXEN | DIO2 | These must be physically connected for automatic Tx/Rx switching to work. |
+
+| E22 pin | E22 pin | Notes                                                                     |
+| :------ | :------ | :------------------------------------------------------------------------ |
+| TXEN    | DIO2    | These must be physically connected for automatic Tx/Rx switching to work. |
 
 <h3>Note</h3>
 
@@ -148,17 +150,18 @@ The schematic (`xiao-ble-e22-schematic.png`) in the `eagle-project` directory us
 <h3>Example wiring for "Manual Tx/Rx switching" mode:</h3>
 
 <strong>MCU -> E22 connections</strong>
-| Xiao BLE pin | variant.h definition | E22 pin | Notes |
-| :------------ | :---------------------------- | :-----------------| :--------------------------- |
-| D0 | SX126X_CS | 19 (NSS) | |
-| D1 | SX126X_DIO1 | 13 (DIO1) | |
-| D2 | SX126X_BUSY | 14 (BUSY) | |
-| D3 | SX126X_RESET | 15 (NRST) | |
-| D6 | SX126X_TXEN | 7 (TXEN) | |
-| D7 | SX126X_RXEN | 6 (RXEN) | |
-| D8 | PIN_SPI_SCK | 18 (SCK) | |
-| D9 | PIN_SPI_MISO | 16 (MISO) | |
-| D10 | PIN_SPI_MOSI | 17 (MOSI) | |
+
+| Xiao BLE pin | variant.h definition | E22 pin   | Notes |
+| :----------- | :------------------- | :-------- | :---- |
+| D0           | SX126X_CS            | 19 (NSS)  |       |
+| D1           | SX126X_DIO1          | 13 (DIO1) |       |
+| D2           | SX126X_BUSY          | 14 (BUSY) |       |
+| D3           | SX126X_RESET         | 15 (NRST) |       |
+| D6           | SX126X_TXEN          | 7 (TXEN)  |       |
+| D7           | SX126X_RXEN          | 6 (RXEN)  |       |
+| D8           | PIN_SPI_SCK          | 18 (SCK)  |       |
+| D9           | PIN_SPI_MISO         | 16 (MISO) |       |
+| D10          | PIN_SPI_MOSI         | 17 (MOSI) |       |
 
 <strong>E22 -> E22 connections:</strong> (none)
 

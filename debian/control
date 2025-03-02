@@ -3,6 +3,7 @@ Section: misc
 Priority: optional
 Maintainer: Austin Lane <vidplace7@gmail.com>
 Build-Depends: debhelper-compat (= 13),
+               lsb-release,
                tar,
                gzip,
                platformio,
