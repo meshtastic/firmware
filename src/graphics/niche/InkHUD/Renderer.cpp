@@ -50,8 +50,8 @@ void InkHUD::Renderer::setDriver(Drivers::EInk *driver)
 // subsequent FULL updates will be performed, in an attempt to restore the display's health
 void InkHUD::Renderer::setDisplayResilience(uint8_t fastPerFull, float stressMultiplier)
 {
-    mediator.fastPerFull = fastPerFull;
-    mediator.stressMultiplier = stressMultiplier;
+    displayHealth.fastPerFull = fastPerFull;
+    displayHealth.stressMultiplier = stressMultiplier;
 }
 
 void InkHUD::Renderer::begin()
@@ -83,7 +83,7 @@ void InkHUD::Renderer::forceUpdate(Drivers::EInk::UpdateTypes type, bool async)
 {
     requested = true;
     forced = true;
-    desiredType = type;
+    displayHealth.forceUpdateType(type);
 
     // Normally, we need to start the timer, in case the display is busy and we briefly defer the update
     if (async) {
@@ -215,7 +215,8 @@ void InkHUD::Renderer::render(bool async)
     if (shouldUpdate()) {
 
         // Decide which technique the display will use to change image
-        EInk::UpdateTypes updateType = selectUpdateType();
+        // Done early, as rendering resets the Applets' requested types
+        Drivers::EInk::UpdateTypes updateType = decideUpdateType();
 
         // Render the new image
         clearBuffer();
@@ -239,7 +240,6 @@ void InkHUD::Renderer::render(bool async)
     // Tidy up, ready for a new request
     requested = false;
     forced = false;
-    desiredType = EInk::UpdateTypes::UNSPECIFIED;
 }
 
 // Manually fill the image buffer with WHITE
@@ -307,32 +307,26 @@ bool InkHUD::Renderer::shouldUpdate()
 // Determine which type of E-Ink update the display will perform, to change the image.
 // Considers the needs of the various applets, then weighs against display health.
 // An update type specified by forceUpdate will be granted with no further questioning.
-Drivers::EInk::UpdateTypes InkHUD::Renderer::selectUpdateType()
+Drivers::EInk::UpdateTypes InkHUD::Renderer::decideUpdateType()
 {
     // Ask applets which update type they would prefer
     // Some update types take priority over others
-    EInk::UpdateTypes type = EInk::UpdateTypes::UNSPECIFIED;
-    if (forced) {
-        // Update type was manually specified via forceUpdate
-        type = desiredType;
-    } else {
+
+    // No need to consider the "requests" if somebody already forced an update
+    if (!forced) {
         // User applets
         for (Applet *ua : inkhud->userApplets) {
             if (ua && ua->isForeground())
-                type = mediator.prioritize(type, ua->wantsUpdateType());
+                displayHealth.requestUpdateType(ua->wantsUpdateType());
         }
         // System Applets
         for (SystemApplet *sa : inkhud->systemApplets) {
             if (sa && sa->isForeground())
-                type = mediator.prioritize(type, sa->wantsUpdateType());
+                displayHealth.requestUpdateType(sa->wantsUpdateType());
         }
     }
 
-    // Tell the mediator which update type the applets decided on,
-    // find out what update type the mediator will actually allow us to have
-    type = mediator.evaluate(type);
-
-    return type;
+    return displayHealth.decideUpdateType();
 }
 
 // Run the drawing operations of any user applets which are currently displayed

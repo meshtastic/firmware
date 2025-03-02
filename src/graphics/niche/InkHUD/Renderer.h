@@ -14,9 +14,9 @@ Orchestrates updating of the display image
 
 #include "configuration.h"
 
+#include "./DisplayHealth.h"
 #include "./InkHUD.h"
 #include "./Persistence.h"
-#include "./UpdateMediator.h"
 #include "graphics/niche/Drivers/EInk/EInk.h"
 
 namespace NicheGraphics::InkHUD
@@ -67,13 +67,13 @@ class Renderer : protected concurrency::OSThread
     void clearBuffer();
     void checkLocks();
     bool shouldUpdate();
-    Drivers::EInk::UpdateTypes selectUpdateType();
+    Drivers::EInk::UpdateTypes decideUpdateType();
     void renderUserApplets();
     void renderSystemApplets();
     void renderPlaceholders();
 
     Drivers::EInk *driver = nullptr; // Interacts with your variants display hardware
-    UpdateMediator mediator;         // Manages display health by controlling type of update
+    DisplayHealth displayHealth;     // Manages display health by controlling type of update
 
     uint8_t *imageBuffer = nullptr; // Fed into driver
     uint16_t imageBufferHeight = 0;
@@ -85,7 +85,6 @@ class Renderer : protected concurrency::OSThread
 
     bool requested = false;
     bool forced = false;
-    Drivers::EInk::UpdateTypes desiredType = Drivers::EInk::UpdateTypes::UNSPECIFIED;
 
     // For convenience
     InkHUD *inkhud = nullptr;
