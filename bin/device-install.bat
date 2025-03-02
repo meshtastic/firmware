@@ -47,6 +47,7 @@ IF "__%FILENAME%__" == "____" (
 
 :: Check if FILENAME contains "-tft-" and either TFT8 or TFT16 is 1 (--tft, -tft-16mb)
 IF NOT "%FILENAME:-tft-=%"=="%FILENAME%" (
+    SET TFT_BUILD=1
     IF NOT "%TFT8%"=="1" IF NOT "%TFT16%"=="1" (
         echo Error: Either --tft or --tft-16mb must be set to use a TFT build.
         goto EOF
@@ -55,6 +56,8 @@ IF NOT "%FILENAME:-tft-=%"=="%FILENAME%" (
         echo Error: Both --tft and --tft-16mb must NOT be set at the same time.
         goto EOF
     )
+) else (
+    SET TFT_BUILD=0
 )
 
 :: Extract BASENAME from %FILENAME% for later use.
@@ -68,15 +71,19 @@ IF EXIST %FILENAME% IF x%FILENAME:update=%==x%FILENAME% (
     SET "OTA_OFFSET=0x260000"
 
     @REM littlefs* offset for MUI 8mb (--tft) and OTA OFFSET.
-    IF "%TFT8%"=="1" (
+    IF "%TFT8%"=="1" IF "%TFT_BUILD%"=="1" (
         SET "OFFSET=0x670000"
    		SET "OTA_OFFSET=0x340000"
+    ) else (
+        echo Ignoring --tft, not a TFT Build.
     )
 
     @REM littlefs* offset for MUI 16mb (--tft-16mb) and OTA OFFSET.
-    IF "%TFT16%"=="1" (
+    IF "%TFT16%"=="1" IF "%TFT_BUILD%"=="1" (
         SET "OFFSET=0xc90000"
 		SET "OTA_OFFSET=0x650000"
+    ) else (
+        echo Ignoring --tft-16mb, not a TFT Build.
     )
 
     echo Trying to flash update %FILENAME%, but first erasing and writing system information"
@@ -91,7 +98,7 @@ IF EXIST %FILENAME% IF x%FILENAME:update=%==x%FILENAME% (
             %ESPTOOL_CMD% --baud 115200 write_flash !OTA_OFFSET! bleota-c3.bin
         )
     ) else (
-        echo %ESPTOOL_CMD% --baud 115200 write_flash !OTA_OFFSET! bleota-s3.bin
+        %ESPTOOL_CMD% --baud 115200 write_flash !OTA_OFFSET! bleota-s3.bin
     )
 
     @REM Check if WEB_APP (--web) is enabled and add "littlefswebui-" to BASENAME else "littlefs-".
@@ -99,11 +106,17 @@ IF EXIST %FILENAME% IF x%FILENAME:update=%==x%FILENAME% (
         @REM Check it the file exist before trying to write it.
         IF EXIST "littlefswebui-%BASENAME%" (
             %ESPTOOL_CMD% --baud 115200 write_flash !OFFSET! "littlefswebui-%BASENAME%"
+        ) else (
+            echo Error: file "littlefswebui-%BASENAME%" wasn't found, littlefs not written.
+            goto EOF
         )
     ) else (
         @REM Check it the file exist before trying to write it.
         IF EXIST "littlefs-%BASENAME%" (
             %ESPTOOL_CMD% --baud 115200 write_flash !OFFSET! "littlefs-%BASENAME%"
+        ) else (
+            echo Error: file "littlefs-%BASENAME%" wasn't found, littlefs not written.
+            goto EOF
         )
     )
 ) else (

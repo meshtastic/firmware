@@ -4,6 +4,7 @@ PYTHON=${PYTHON:-$(which python3 python | head -n 1)}
 WEB_APP=false
 TFT8=false
 TFT16=false
+TFT_BUILD=false
 
 # Determine the correct esptool command to use
 if "$PYTHON" -m esptool version >/dev/null 2>&1; then
@@ -82,6 +83,7 @@ done
 
 # Check if FILENAME contains "-tft-" and either TFT8 or TFT16 is 1 (--tft, -tft-16mb)
 if [[ "${FILENAME//-tft-/}" != "$FILENAME" ]]; then
+    SET TFT_BUILD=true
     if [[ "$TFT8" != true && "$TFT16" != true ]]; then
         echo "Error: Either --tft or --tft-16mb must be set to use a TFT build."
         exit 1
@@ -103,15 +105,19 @@ if [ -f "${FILENAME}" ] && [ -n "${FILENAME##*"update"*}" ]; then
 	OTA_OFFSET=0x260000
 
     # littlefs* offset for MUI 8mb (--tft) and OTA OFFSET.
-    if [ "$TFT8" = true ]; then
+    if [ "$TFT8" = true ] && [ "$TFT_BUILD" = true ]; then
         OFFSET=0x670000
 		OTA_OFFSET=0x340000
+    else
+        echo "Ignoring --tft, not a TFT Build."
     fi
 
     # littlefs* offset for MUI 16mb (--tft-16mb) and OTA OFFSET.
-    if [ "$TFT16" = true ]; then
+    if [ "$TFT16" = true ] && [ "$TFT_BUILD" = true ]; then
         OFFSET=0xc90000
 		OTA_OFFSET=0x650000
+    else
+        echo "Ignoring --tft-16mb, not a TFT Build."
     fi
 
 	echo "Trying to flash ${FILENAME}, but first erasing and writing system information"
@@ -133,11 +139,17 @@ if [ -f "${FILENAME}" ] && [ -n "${FILENAME##*"update"*}" ]; then
 		# Check it the file exist before trying to write it.
         if [ -f "littlefswebui-${BASENAME}" ]; then
             $ESPTOOL_CMD write_flash $OFFSET "littlefswebui-${BASENAME}"
+        else
+            echo "Error: file "littlefswebui-${BASENAME}" wasn't found, littlefs not written."
+            exit 1
         fi
 	else
 		# Check it the file exist before trying to write it.
         if [ -f "littlefs-${BASENAME}" ]; then
             $ESPTOOL_CMD write_flash $OFFSET "littlefs-${BASENAME}"
+        else
+            echo "Error: file "littlefs-${BASENAME}" wasn't found, littlefs not written."
+            exit 1
         fi
 	fi
 
