@@ -189,7 +189,12 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
     }
     if ((event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_BACK)) ||
         (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) ||
-        (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT))) {
+        (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT)) 
+        #ifdef T_DECK
+        || (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP)) 
+        || (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN))
+        #endif
+        ){
 
 #if defined(USE_VIRTUAL_KEYBOARD)
         if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {
@@ -198,12 +203,18 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
             this->payload = INPUT_BROKER_MSG_RIGHT;
         }
 #else
-        // tweak for left/right events generated via trackball/touch with empty kbchar
+        // tweak for directional events generated via trackball/touch with empty kbchar
         if (!event->kbchar) {
             if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {
                 this->payload = INPUT_BROKER_MSG_LEFT;
             } else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT)) {
                 this->payload = INPUT_BROKER_MSG_RIGHT;
+            #ifdef T_DECK
+            } else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP)) {
+                this->payload = INPUT_BROKER_MSG_UP;
+            } else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN)) {
+                this->payload = INPUT_BROKER_MSG_DOWN;
+            #endif
             }
         } else {
             // pass the pressed key
@@ -624,6 +635,22 @@ int32_t CannedMessageModule::runOnce()
                     this->cursor--;
                 }
                 break;
+            #ifdef T_DECK
+            case 0xb5: // up
+                if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NONE) {
+                    this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
+                } else if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NODE) {
+                    this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_CHANNEL;
+                }
+                break;
+            case 0xb6: // down
+                if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_CHANNEL) {
+                    this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
+                } else if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NODE) {
+                    this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
+                }
+                break;
+            #endif
             case 0x09: // tab
                 if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_CHANNEL) {
                     this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
@@ -1098,9 +1125,17 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
             display->drawString(x + display->getWidth() - display->getStringWidth(buffer), y + 0, buffer);
         }
         display->setColor(WHITE);
-        display->drawStringMaxWidth(
-            0 + x, 0 + y + FONT_HEIGHT_SMALL, x + display->getWidth(),
-            cannedMessageModule->drawWithCursor(cannedMessageModule->freetext, cannedMessageModule->cursor));
+        #if defined(T_DECK) || defined(CHATTER_2)
+            display->setFont(FONT_MEDIUM);
+            display->drawStringMaxWidth(
+                0 + x, 0 + y + FONT_HEIGHT_MEDIUM, x + display->getWidth(),
+                cannedMessageModule->drawWithCursor(cannedMessageModule->freetext, cannedMessageModule->cursor));
+        #else
+            display->setFont(FONT_SMALL);
+            display->drawStringMaxWidth(
+                0 + x, 0 + y + FONT_HEIGHT_SMALL, x + display->getWidth(),
+                cannedMessageModule->drawWithCursor(cannedMessageModule->freetext, cannedMessageModule->cursor));
+        #endif
 #endif
     } else {
         if (this->messagesCount > 0) {
