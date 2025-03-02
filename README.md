@@ -1,39 +1,32 @@
-<div align="center" markdown="1">
+# Phantom + Meshtastic = Phantastic
 
-<img src=".github/meshtastic_logo.png" alt="Meshtastic Logo" width="80"/>
-<h1>Meshtastic Firmware</h1>
-
-![GitHub release downloads](https://img.shields.io/github/downloads/meshtastic/firmware/total)
-[![CI](https://img.shields.io/github/actions/workflow/status/meshtastic/firmware/main_matrix.yml?branch=master&label=actions&logo=github&color=yellow)](https://github.com/meshtastic/firmware/actions/workflows/ci.yml)
-[![CLA assistant](https://cla-assistant.io/readme/badge/meshtastic/firmware)](https://cla-assistant.io/meshtastic/firmware)
-[![Fiscal Contributors](https://opencollective.com/meshtastic/tiers/badge.svg?label=Fiscal%20Contributors&color=deeppink)](https://opencollective.com/meshtastic/)
-[![Vercel](https://img.shields.io/static/v1?label=Powered%20by&message=Vercel&style=flat&logo=vercel&color=000000)](https://vercel.com?utm_source=meshtastic&utm_campaign=oss)
-
-<a href="https://trendshift.io/repositories/5524" target="_blank"><img src="https://trendshift.io/api/badge/repositories/5524" alt="meshtastic%2Ffirmware | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
-
-</div>
-
-</div>
-
-<div align="center">
-	<a href="https://meshtastic.org">Website</a>
-	-
-	<a href="https://meshtastic.org/docs/">Documentation</a>
-</div>
 
 ## Overview
 
-This repository contains the official device firmware for Meshtastic, an open-source LoRa mesh networking project designed for long-range, low-power communication without relying on internet or cellular infrastructure. The firmware supports various hardware platforms, including ESP32, nRF52, RP2040/RP2350, and Linux-based devices.
+Meshtastic's been catching fire lately, especially with the privacy-conscious crowd looking for secure off-grid comms. It’s got encryption built in, keeping your convos locked down tight. But here's the thing—anonymity wasn’t really baked into the original design. And that opens the door to track people through their nodes, no consent needed.
 
-Meshtastic enables text messaging, location sharing, and telemetry over a decentralized mesh network, making it ideal for outdoor adventures, emergency preparedness, and remote operations.
+Now, let’s say you're out at a protest, or maybe a hacker con, and you need to keep your identity as fluid as your connections. You'd want a system that can shed your traces. That’s where Phantastic comes in.
+
+Phantastic’s a fork of Meshtastic, designed with a single purpose in mind: making profiling and tracking a hell of a lot harder. Every time you reset the firmware, it wipes out any identifying info, leaving no breadcrumb trail. Users can swap out their ID on the fly, whenever it’s time to disappear into the crowd.
+
+
+## What are the changes
+- [x] Generate a random NodeID on firmware reset 
+- [ ] Add Mac address randomization to ble 
+- [ ] Add Mac address randomization to wifi
+- [ ] Add random delay before sending message to avoid visual profiling of a user
+- [ ] Add build job to release .bin files so users can flash with web flasher
+- [ ] Other ideas? Submit them as an issue or PR!
+
+## How can we trust you?
+Trust me? You shouldn't. Look at the code changes. It's pretty straightforward stuff. If you have the skill, compile and flash from source. Don't trust some random .bin uploaded by some random cyberpunk.
+
 
 ### Get Started
+
+Follow the normal Meshtastic building and flashing instructions, just with this repo instead of the official one
 
 - 🔧 **[Building Instructions](https://meshtastic.org/docs/development/firmware/build)** – Learn how to compile the firmware from source.
 - ⚡ **[Flashing Instructions](https://meshtastic.org/docs/getting-started/flashing-firmware/)** – Install or update the firmware on your device.
 
-Join our community and help improve Meshtastic! 🚀
 
-## Stats
-
-![Alt](https://repobeats.axiom.co/api/embed/8025e56c482ec63541593cc5bd322c19d5c0bdcf.svg "Repobeats analytics image")
