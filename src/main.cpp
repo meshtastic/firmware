@@ -135,7 +135,7 @@ void setupNicheGraphics();
 
 using namespace concurrency;
 
-volatile static const char slipstreamTZString[] = USERPREFS_TZ_STRING;
+volatile static const char slipstreamTZString[] = {USERPREFS_TZ_STRING};
 
 // We always create a screen object, but we only init it if we find the hardware
 graphics::Screen *screen = nullptr;
