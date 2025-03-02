@@ -108,6 +108,12 @@ static void onNetworkConnected()
 #endif
         APStartupComplete = true;
     }
+
+#if HAS_UDP_MULTICAST
+    if (udpThread) {
+        udpThread->start();
+    }
+#endif
 }
 
 static int32_t reconnectWiFi()

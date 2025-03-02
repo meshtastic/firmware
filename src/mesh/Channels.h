@@ -92,6 +92,8 @@ class Channels
     // Returns true if any of our channels have enabled MQTT uplink or downlink
     bool anyMqttEnabled();
 
+    bool ensureLicensedOperation();
+
   private:
     /** Given a channel index, change to use the crypto key specified by that index
      *

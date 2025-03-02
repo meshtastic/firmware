@@ -1,10 +1,14 @@
 name: Update protobufs and regenerate classes
 on: workflow_dispatch
 
+permissions: read-all
+
 jobs:
   update-protobufs:
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

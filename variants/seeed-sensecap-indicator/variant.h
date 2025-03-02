@@ -7,7 +7,9 @@
 #define SENSOR_PORT_NUM 2
 #define SENSOR_BAUD_RATE 115200
 
+#if !HAS_TFT
 #define BUTTON_PIN 38
+#endif
 // #define BUTTON_NEED_PULLUP
 
 // #define BATTERY_PIN 27 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
