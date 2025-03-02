@@ -28,6 +28,13 @@
 #define LR1121_SPI_MOSI_PIN LORA_MOSI
 #define LR1121_SPI_MISO_PIN LORA_MISO
 
+// this is correct and sets the cap for the Sub-GHz part
+#define LR1110_MAX_POWER 5
+// 2.4G Part
+#define LR1120_MAX_POWER 5
+
+#define POWER_SHIFT -20
+
 // not yet implemented
 #define JANUS_RADIO
 #define LR1121_IRQ2_PIN 34
@@ -35,6 +42,7 @@
 #define LR1121_BUSY2_PIN 39
 #define LR1121_SPI_NSS2_PIN 13
 
+// TODO: check if this is correct
 // #define LR11X0_DIO3_TCXO_VOLTAGE 1.6
 #define LR11X0_DIO_AS_RF_SWITCH
 
@@ -49,11 +57,4 @@
 
 #undef EXT_NOTIFY_OUT
 
-// #define BAT_MEASURE_ADC_UNIT
-// #define BATTERY_PIN 26
-// #define ADC_CHANNEL ADC2_GPIO26_CHANNEL
-// #define BATTERY_SENSE_SAMPLES 30
-
 #define RADIO_FAN_EN 2
-// this board does need PWM on the FAN PIN
-#define RADIO_FAN_PWM
