@@ -564,6 +564,9 @@ void setup()
             // assign an arbitrary value to distinguish from other models
             kb_model = 0x11;
             break;
+        case ScanI2C::DeviceType::PCF8574A:
+            kb_model = 0x12;
+            break;
         case ScanI2C::DeviceType::MPR121KB:
             // assign an arbitrary value to distinguish from other models
             kb_model = 0x37;
