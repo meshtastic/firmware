@@ -262,10 +262,17 @@ template <typename T> void LR11x0Interface<T>::startReceive()
 template <typename T> bool LR11x0Interface<T>::isChannelActive()
 {
     // check if we can detect a LoRa preamble on the current channel
+    ChannelScanConfig_t cfg = {.cad = {.symNum = NUM_SYM_CAD,
+                                       .detPeak = RADIOLIB_LR11X0_CAD_PARAM_DEFAULT,
+                                       .detMin = RADIOLIB_LR11X0_CAD_PARAM_DEFAULT,
+                                       .exitMode = RADIOLIB_LR11X0_CAD_PARAM_DEFAULT,
+                                       .timeout = 0,
+                                       .irqFlags = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS,
+                                       .irqMask = RADIOLIB_IRQ_CAD_DEFAULT_MASK}};
     int16_t result;
 
     setStandby();
-    result = lora.scanChannel();
+    result = lora.scanChannel(cfg);
     if (result == RADIOLIB_LORA_DETECTED)
         return true;
 
