@@ -1,3 +1,6 @@
+# trunk-ignore-all(ruff/F821)
+# trunk-ignore-all(flake8/F821): For SConstruct imports
+
 Import("env")
 # Custom HEX from ELF
 env.AddPostAction(

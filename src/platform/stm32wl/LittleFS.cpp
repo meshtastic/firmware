@@ -31,7 +31,7 @@
 /** This macro is used to suppress compiler messages about a parameter not being used in a function. */
 #define LFS_UNUSED(p) (void)((p))
 
-#define STM32WL_PAGE_SIZE  (FLASH_PAGE_SIZE)
+#define STM32WL_PAGE_SIZE (FLASH_PAGE_SIZE)
 #define STM32WL_PAGE_COUNT (FLASH_PAGE_NB)
 #define STM32WL_FLASH_BASE (FLASH_BASE)
 
@@ -79,18 +79,16 @@ static int _internal_flash_prog(const struct lfs_config *c, lfs_block_t block, l
     lfs_block_t address = LFS_FLASH_ADDR_BASE + (block * STM32WL_PAGE_SIZE + off);
     HAL_StatusTypeDef hal_rc = HAL_OK;
     uint32_t dw_count = size / 8;
-    uint64_t *bufp = (uint64_t *) buffer;
+    uint64_t *bufp = (uint64_t *)buffer;
 
     LFS_UNUSED(c);
 
     _LFS_DBG("Programming %d bytes/%d doublewords at address 0x%08x/block %d, offset %d.", size, dw_count, address, block, off);
-    if (HAL_FLASH_Unlock() != HAL_OK)
-    {
+    if (HAL_FLASH_Unlock() != HAL_OK) {
         return LFS_ERR_IO;
     }
     for (uint32_t i = 0; i < dw_count; i++) {
-        if((address < LFS_FLASH_ADDR_BASE) || (address > LFS_FLASH_ADDR_END))
-        {
+        if ((address < LFS_FLASH_ADDR_BASE) || (address > LFS_FLASH_ADDR_END)) {
             _LFS_DBG("Wanted to program out of bound of FLASH: 0x%08x.\n", address);
             HAL_FLASH_Lock();
             return LFS_ERR_INVAL;
@@ -105,8 +103,7 @@ static int _internal_flash_prog(const struct lfs_config *c, lfs_block_t block, l
         address += 8;
         bufp += 1;
     }
-    if(HAL_FLASH_Lock() != HAL_OK)
-    {
+    if (HAL_FLASH_Lock() != HAL_OK) {
         return LFS_ERR_IO;
     }
 
@@ -121,17 +118,12 @@ static int _internal_flash_erase(const struct lfs_config *c, lfs_block_t block)
 {
     lfs_block_t address = LFS_FLASH_ADDR_BASE + (block * STM32WL_PAGE_SIZE);
     HAL_StatusTypeDef hal_rc;
-    FLASH_EraseInitTypeDef EraseInitStruct = {
-        .TypeErase = FLASH_TYPEERASE_PAGES,
-        .Page = 0,
-        .NbPages = 1
-    };
+    FLASH_EraseInitTypeDef EraseInitStruct = {.TypeErase = FLASH_TYPEERASE_PAGES, .Page = 0, .NbPages = 1};
     uint32_t PAGEError = 0;
 
     LFS_UNUSED(c);
 
-    if((address < LFS_FLASH_ADDR_BASE) || (address > LFS_FLASH_ADDR_END))
-    {
+    if ((address < LFS_FLASH_ADDR_BASE) || (address > LFS_FLASH_ADDR_END)) {
         _LFS_DBG("Wanted to erase out of bound of FLASH: 0x%08x.\n", address);
         return LFS_ERR_INVAL;
     }
@@ -139,7 +131,7 @@ static int _internal_flash_erase(const struct lfs_config *c, lfs_block_t block)
     EraseInitStruct.Page = (address - STM32WL_FLASH_BASE) / STM32WL_PAGE_SIZE;
     _LFS_DBG("Erasing block %d at 0x%08x... ", block, address);
     HAL_FLASH_Unlock();
-    hal_rc =  HAL_FLASHEx_Erase(&EraseInitStruct, &PAGEError);
+    hal_rc = HAL_FLASHEx_Erase(&EraseInitStruct, &PAGEError);
     HAL_FLASH_Lock();
 
     return hal_rc == HAL_OK ? LFS_ERR_OK : LFS_ERR_IO; // If HAL_OK, return LFS_ERR_OK, else return LFS_ERR_IO
@@ -155,25 +147,23 @@ static int _internal_flash_sync(const struct lfs_config *c)
     return LFS_ERR_OK;
 }
 
-static struct lfs_config _InternalFSConfig = {
-    .context = NULL,
+static struct lfs_config _InternalFSConfig = {.context = NULL,
 
-    .read = _internal_flash_read,
-    .prog = _internal_flash_prog,
-    .erase = _internal_flash_erase,
-    .sync = _internal_flash_sync,
+                                              .read = _internal_flash_read,
+                                              .prog = _internal_flash_prog,
+                                              .erase = _internal_flash_erase,
+                                              .sync = _internal_flash_sync,
 
-    .read_size = LFS_BLOCK_SIZE,
-    .prog_size = LFS_BLOCK_SIZE,
-    .block_size = LFS_BLOCK_SIZE,
-    .block_count = LFS_FLASH_TOTAL_SIZE / LFS_BLOCK_SIZE,
-    .lookahead = 128,
+                                              .read_size = LFS_BLOCK_SIZE,
+                                              .prog_size = LFS_BLOCK_SIZE,
+                                              .block_size = LFS_BLOCK_SIZE,
+                                              .block_count = LFS_FLASH_TOTAL_SIZE / LFS_BLOCK_SIZE,
+                                              .lookahead = 128,
 
-    .read_buffer = NULL,
-    .prog_buffer = NULL,
-    .lookahead_buffer = NULL,
-    .file_buffer = NULL
-};
+                                              .read_buffer = NULL,
+                                              .prog_buffer = NULL,
+                                              .lookahead_buffer = NULL,
+                                              .file_buffer = NULL};
 
 LittleFS InternalFS;
 
@@ -185,8 +175,7 @@ LittleFS::LittleFS(void) : STM32_LittleFS(&_InternalFSConfig) {}
 
 bool LittleFS::begin(void)
 {
-    if(FLASH_BASE >= LFS_FLASH_ADDR_BASE)
-    {
+    if (FLASH_BASE >= LFS_FLASH_ADDR_BASE) {
         /* There is not enough space on this device for a filesystem. */
         return false;
     }

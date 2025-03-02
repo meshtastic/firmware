@@ -76,8 +76,12 @@ class STM32_LittleFS
      * code. User should not call these directly
      *------------------------------------------------------------------*/
     lfs_t *_getFS(void) { return &_lfs; }
-    void _lockFS(void) { /* no-op */ }
-    void _unlockFS(void) { /* no-op */ }
+    void _lockFS(void)
+    { /* no-op */
+    }
+    void _unlockFS(void)
+    { /* no-op */
+    }
 
   protected:
     bool _mounted;
