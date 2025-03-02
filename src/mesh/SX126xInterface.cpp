@@ -195,17 +195,23 @@ template <typename T> bool SX126xInterface<T>::reconfigure()
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
     err = lora.setSyncWord(syncWord);
-    if (err != RADIOLIB_ERR_NONE)
-        LOG_ERROR("SX126X setSyncWord %s%d", radioLibErr, err);
+    if (err == RADIOLIB_ERR_WRONG_MODEM)
+        LOG_ERROR("SX128X setSyncWord: WRONG MODEM error %s%d", radioLibErr, err);
+    else if (err != RADIOLIB_ERR_NONE)
+        LOG_ERROR("SX128X setSyncWord %s%d", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
 
     err = lora.setCurrentLimit(currentLimit);
-    if (err != RADIOLIB_ERR_NONE)
+    if (err == RADIOLIB_ERR_INVALID_CURRENT_LIMIT)
+        LOG_ERROR("SX126X setCurrentLimit: INVALID CURRENT LIMIT error %s%d", radioLibErr, err);
+    else if (err != RADIOLIB_ERR_NONE)
         LOG_ERROR("SX126X setCurrentLimit %s%d", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
 
     err = lora.setPreambleLength(preambleLength);
-    if (err != RADIOLIB_ERR_NONE)
+    if (err == RADIOLIB_ERR_INVALID_BIT_RANGE)
+        LOG_ERROR("SX126X setPreambleLength: INVALID BIT RANGE error %s%d", radioLibErr, err);
+    else if (err != RADIOLIB_ERR_NONE)
         LOG_ERROR("SX126X setPreambleLength %s%d", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
 
@@ -217,7 +223,9 @@ template <typename T> bool SX126xInterface<T>::reconfigure()
         power = SX126X_MAX_POWER;
 
     err = lora.setOutputPower(power);
-    if (err != RADIOLIB_ERR_NONE)
+    if (err == RADIOLIB_ERR_INVALID_OUTPUT_POWER)
+        LOG_ERROR("SX126X setOutputPower: INVALID OUTPUT POWER error %s%d", radioLibErr, err);
+    else if (err != RADIOLIB_ERR_NONE)
         LOG_ERROR("SX126X setOutputPower %s%d", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
 
