@@ -556,35 +556,17 @@ std::string InkHUD::Applet::getTimeString(uint32_t epochSeconds)
 
     // Times are invalid: rtc is much older than when code was built
     // Don't give any human readable string
-    if (epochNow <= validAfterEpoch) {
-        static bool logged = false;
-        if (!logged) {
-            logged = true;
-            LOG_DEBUG("RTC prior to buildtime");
-        }
+    if (epochNow <= validAfterEpoch)
         return "";
-    }
 
     // Times are invalid: argument time is significantly ahead of RTC
     // Don't give any human readable string
-    if (daysAgo < -2) {
-        static bool logged = false;
-        if (!logged) {
-            logged = true;
-            LOG_DEBUG("RTC in future");
-        }
+    if (daysAgo < -2)
         return "";
-    }
 
     // Times are probably invalid: more than 6 months ago
-    if (daysAgo > 6 * 30) {
-        static bool logged = false;
-        if (!logged) {
-            logged = true;
-            LOG_DEBUG("RTC val > 6 months old");
-        }
+    if (daysAgo > 6 * 30)
         return "";
-    }
 
     if (daysAgo > 1)
         return to_string(daysAgo) + " days ago";
