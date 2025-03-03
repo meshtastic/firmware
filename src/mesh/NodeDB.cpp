@@ -400,10 +400,8 @@ bool isBroadcast(uint32_t dest)
     return dest == NODENUM_BROADCAST || dest == NODENUM_BROADCAST_NO_LORA;
 }
 
-void NodeDB::resetRadioConfig(bool is_fresh_install = false)
+void NodeDB::resetRadioConfig(bool is_fresh_install)
 {
-    bool didFactoryReset = false;
-
     if (is_fresh_install) {
         radioGeneration++;
     }
