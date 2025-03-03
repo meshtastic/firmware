@@ -5,6 +5,8 @@
 // ratio of voltage divider = 2.0 (R42=100k, R43=100k)
 #define ADC_MULTIPLIER 2
 
+#define BUTTON_PIN 12 //maybe?
+
 #define I2C_SDA 21 // I2C pins for this board
 #define I2C_SCL 22
 
