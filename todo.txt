@@ -22,6 +22,7 @@ Improvements
 []      Applet to display critical faults
 []      OEM Bootscreen
 []      Aux button: exit menu without switching tile focus,
+[]      InkHUD::Inputs::TwoButton should support INPUT_PULLUP
 
 Known Bugs
 =====================
@@ -39,3 +40,5 @@ Chores
 []      Remove parentheses from methods mentioned in comments, to make code search easier
 []      Decouple the original Screen class from bluetooth code: observe "BluetoothStatus" instead
 []      Honor userprefs / config gpio overrides
+[]      Make rotation default to 0 instead of 1, if not specified
+[]      Use class enums?

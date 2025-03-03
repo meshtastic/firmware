@@ -14,8 +14,8 @@
 #include "configuration.h"
 
 #include "./Applet.h"
+
 #include "./InkHUD.h"
-#include "./Types.h"
 
 namespace NicheGraphics::InkHUD
 {

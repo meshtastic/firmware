@@ -12,7 +12,6 @@
 
 #include "configuration.h"
 
-#include "./Types.h"
 #include "graphics/niche/Drivers/EInk/EInk.h"
 
 #include "./AppletFont.h"
@@ -21,6 +20,13 @@
 
 namespace NicheGraphics::InkHUD
 {
+
+// Color, understood by display controller IC (as bit values)
+// Also suitable for use as AdafruitGFX colors
+enum Color : uint8_t {
+    BLACK = 0,
+    WHITE = 1,
+};
 
 class Applet;
 class Events;

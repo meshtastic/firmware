@@ -295,8 +295,7 @@ void InkHUD::Applet::printAt(int16_t x, int16_t y, std::string text, HorizontalA
         break;
     }
 
-    // We're using a fixed line height (getFontDimensions), rather than sizing to text (getTextBounds)
-    // Note: the FontDimensions values for this are unsigned
+    // We're using a fixed line height, rather than sizing to text (getTextBounds)
 
     switch (va) {
     case TOP:
@@ -354,7 +353,7 @@ uint16_t InkHUD::Applet::getTextWidth(std::string text)
 // Evaluate SNR and RSSI to qualify signal strength at one of four discrete levels
 // Roughly comparable to values used by the iOS app;
 // I didn't actually go look up the code, just fit to a sample graphic I have of the iOS signal indicator
-InkHUD::SignalStrength InkHUD::Applet::getSignalStrength(float snr, float rssi)
+InkHUD::Applet::SignalStrength InkHUD::Applet::getSignalStrength(float snr, float rssi)
 {
     uint8_t score = 0;
 

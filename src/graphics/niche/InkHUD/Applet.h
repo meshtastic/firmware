@@ -22,7 +22,6 @@
 #include "./InkHUD.h"
 #include "./Persistence.h"
 #include "./Tile.h"
-#include "./Types.h"
 #include "graphics/niche/Drivers/EInk/EInk.h"
 
 namespace NicheGraphics::InkHUD
@@ -34,6 +33,30 @@ using std::to_string;
 class Applet : public GFX
 {
   public:
+    // Which edge Applet::printAt will place on the Y parameter
+    enum VerticalAlignment : uint8_t {
+        TOP,
+        MIDDLE,
+        BOTTOM,
+    };
+
+    // Which edge Applet::printAt will place on the X parameter
+    enum HorizontalAlignment : uint8_t {
+        LEFT,
+        RIGHT,
+        CENTER,
+    };
+
+    // An easy-to-understand interpretation of SNR and RSSI
+    // Calculate with Applet::getSignalStrength
+    enum SignalStrength : int8_t {
+        SIGNAL_UNKNOWN = -1,
+        SIGNAL_NONE,
+        SIGNAL_BAD,
+        SIGNAL_FAIR,
+        SIGNAL_GOOD,
+    };
+
     Applet();
 
     void setTile(Tile *t); // Should only be called via Tile::setApplet
