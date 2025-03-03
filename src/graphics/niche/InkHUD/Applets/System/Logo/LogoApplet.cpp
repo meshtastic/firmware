@@ -17,7 +17,7 @@ InkHUD::LogoApplet::LogoApplet() : concurrency::OSThread("LogoApplet")
     fontTitle = fontSmall;
 
     bringToForeground();
-    requestUpdate(Drivers::EInk::UpdateTypes::FULL); // Already requested, just upgrading to FULL
+    // This is then drawn with a FULL refresh by Renderer::begin
 }
 
 void InkHUD::LogoApplet::onRender()

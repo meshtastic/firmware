@@ -34,6 +34,8 @@ void InkHUD::DisplayHealth::forceUpdateType(Drivers::EInk::UpdateTypes type)
         workingDecision = type;
     else
         workingDecision = prioritize(workingDecision, type);
+
+    forced = true;
 }
 
 // Find out which update type the DisplayHealth has chosen for us
