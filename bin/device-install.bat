@@ -73,7 +73,7 @@ IF EXIST %FILENAME% IF x%FILENAME:update=%==x%FILENAME% (
     @REM littlefs* offset for MUI 8mb (--tft) and OTA OFFSET.
     IF "%TFT8%"=="1" IF "%TFT_BUILD%"=="1" (
         SET "OFFSET=0x670000"
-   		SET "OTA_OFFSET=0x340000"
+        SET "OTA_OFFSET=0x340000"
     ) else (
         echo Ignoring --tft, not a TFT Build.
     )
@@ -81,7 +81,7 @@ IF EXIST %FILENAME% IF x%FILENAME:update=%==x%FILENAME% (
     @REM littlefs* offset for MUI 16mb (--tft-16mb) and OTA OFFSET.
     IF "%TFT16%"=="1" IF "%TFT_BUILD%"=="1" (
         SET "OFFSET=0xc90000"
-		SET "OTA_OFFSET=0x650000"
+        SET "OTA_OFFSET=0x650000"
     ) else (
         echo Ignoring --tft-16mb, not a TFT Build.
     )
