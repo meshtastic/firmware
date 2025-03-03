@@ -229,7 +229,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         // items.push_back(MenuItem("Send", MenuPage::SEND)); // TODO
         items.push_back(MenuItem("Options", MenuPage::OPTIONS));
         // items.push_back(MenuItem("Display Off", MenuPage::EXIT)); // TODO
-        items.push_back(MenuItem("Save & Shutdown", MenuAction::SHUTDOWN));
+        items.push_back(MenuItem("Save & Shut Down", MenuAction::SHUTDOWN));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
 

@@ -90,7 +90,7 @@ class Persistence
             // Once tutorial has been completed, it is no longer shown
             bool firstBoot = true;
 
-            // User is advised to shutdown before removing device power
+            // User is advised to shut down before removing device power
             // Once user executes a shutdown (either via menu or client app),
             // this tip is no longer shown
             bool safeShutdownSeen = false;

@@ -85,7 +85,7 @@ void InkHUD::TipsApplet::onRender()
 
         setFont(fontSmall);
         std::string shutdown;
-        shutdown += "Before removing power, please shutdown from InkHUD menu, or a client app. \n";
+        shutdown += "Before removing power, please shut down from InkHUD menu, or a client app. \n";
         shutdown += "\n";
         shutdown += "This ensures data is saved.";
         printWrapped(0, fontLarge.lineHeight() * 1.5, width(), shutdown);
