@@ -122,9 +122,6 @@ IF EXIST %FILENAME% IF x%FILENAME:update=%==x%FILENAME% (
 ) else (
     echo "Invalid file: %FILENAME%"
     goto HELP
-) else (
-    echo "Invalid file: %FILENAME%"
-    goto HELP
 )
 
 :EOF
