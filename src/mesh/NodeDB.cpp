@@ -728,10 +728,10 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.mqtt.encryption_enabled = true;
 
     moduleConfig.has_neighbor_info = true;
-    moduleConfig.neighbor_info.enabled = false;
+    moduleConfig.neighbor_info.enabled = true;
 
     moduleConfig.has_fish_eye_state_routing = true;
-    moduleConfig.fish_eye_state_routing.enabled = false;
+    moduleConfig.fish_eye_state_routing.enabled = true;
 
     moduleConfig.has_detection_sensor = true;
     moduleConfig.detection_sensor.enabled = false;
@@ -789,6 +789,7 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
         config.position.position_broadcast_smart_enabled = false;
         config.position.position_broadcast_secs = UINT32_MAX;
         moduleConfig.neighbor_info.update_interval = UINT32_MAX;
+        moduleConfig.fish_eye_state_routing.enabled = false;
         moduleConfig.telemetry.device_update_interval = UINT32_MAX;
         moduleConfig.telemetry.environment_update_interval = UINT32_MAX;
         moduleConfig.telemetry.air_quality_interval = UINT32_MAX;

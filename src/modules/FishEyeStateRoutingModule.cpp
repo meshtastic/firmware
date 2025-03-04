@@ -50,7 +50,7 @@ bool FishEyeStateRoutingModule::addNeighborInfo(meshtastic_NeighborInfo Ninfo){
       }
       it->second = entry;
 
-      if(diff){
+      if(diff && moduleConfig.fish_eye_state_routing.enabled){
         calcNextHop();
         return 1;
       }
@@ -60,7 +60,9 @@ bool FishEyeStateRoutingModule::addNeighborInfo(meshtastic_NeighborInfo Ninfo){
     LSPDBEntry entry; //new entry
     NinfoToLSPDBEntry(&Ninfo,&entry);
     LSPDB.insert(std::make_pair(entry.LSP.node_id,entry)); //insert into DB
+    if(moduleConfig.fish_eye_state_routing.enabled){
     calcNextHop();
+    }
     return 1;
   }
   return 0;
@@ -131,7 +133,7 @@ bool FishEyeStateRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPack
       }else{
         it->second.timeout = min(it->second.timeout, (uint32_t) (getTime() + moduleConfig.neighbor_info.update_interval * pow(it->second.LSP.traveledHops,alpha)));
       }
-      if(!diff){calcNextHop();}
+      if(!diff && moduleConfig.fish_eye_state_routing.enabled){calcNextHop();}
     }
 
   }else{                  //Node not in LSPDB
@@ -142,7 +144,7 @@ bool FishEyeStateRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPack
     entry.LSP.traveledHops += 1;
     entry.timeout = (uint32_t) (getTime() + moduleConfig.neighbor_info.update_interval * pow(entry.LSP.traveledHops,alpha));
     LSPDB.insert(std::make_pair(entry.LSP.node_id,entry));
-    calcNextHop();
+    if(moduleConfig.fish_eye_state_routing.enabled){calcNextHop();}
   }
   return true;
 }
@@ -183,7 +185,7 @@ bool FishEyeStateRoutingModule::setOwnNeighborhood(meshtastic_NeighborInfo Ninfo
   for(int i = 0; i< Ninfo.neighbors_count; i++){
     neighborhood.push_back(Ninfo.neighbors[i]);
   }
-  if(diff){
+  if(diff && moduleConfig.fish_eye_state_routing.enabled){
     calcNextHop();
   }
   return diff;
@@ -199,7 +201,7 @@ bool FishEyeStateRoutingModule::setOwnNeighborhood(std::vector<meshtastic_Neighb
   for(int i = 0; i< n.size(); i++){
     neighborhood.push_back(n[i]);
   }
-  if(diff){
+  if(diff && moduleConfig.fish_eye_state_routing.enabled){
     calcNextHop();
   }
   return diff;
