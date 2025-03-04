@@ -1243,7 +1243,12 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
         config.has_bluetooth = true;
         config.has_security = true;
 
-        success &= saveProto(configFileName, meshtastic_LocalConfig_size, &meshtastic_LocalConfig_msg, &config);
+        size_t configSize;
+        pb_get_encoded_size(&configSize, meshtastic_LocalConfig_fields, &config);
+        LOG_DEBUG("Saving config version %d", config.version);
+        spiLock->lock();
+        success &= saveProto(configFileName, configSize, &meshtastic_LocalConfig_msg, &config);
+        spiLock->unlock();
     }
 
     if (saveWhat & SEGMENT_MODULECONFIG) {
@@ -1259,9 +1264,13 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
         moduleConfig.has_ambient_lighting = true;
         moduleConfig.has_audio = true;
         moduleConfig.has_paxcounter = true;
+        LOG_DEBUG("Saving moduleConfig version %d", moduleConfig.version);
 
-        success &=
-            saveProto(moduleConfigFileName, meshtastic_LocalModuleConfig_size, &meshtastic_LocalModuleConfig_msg, &moduleConfig);
+        size_t moduleConfigSize;
+        pb_get_encoded_size(&moduleConfigSize, meshtastic_LocalModuleConfig_fields, &moduleConfig);
+        spiLock->lock();
+        success &= saveProto(moduleConfigFileName, moduleConfigSize, &meshtastic_LocalModuleConfig_msg, &moduleConfig);
+        spiLock->unlock();
     }
 
     if (saveWhat & SEGMENT_CHANNELS) {
