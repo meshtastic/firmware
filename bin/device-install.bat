@@ -1,10 +1,12 @@
 @ECHO OFF
 SETLOCAL EnableDelayedExpansion
-
-set PYTHON=python
-set WEB_APP=0
-set TFT8=0
-set TFT16=0
+set "SCRIPTNAME=%~nx0"
+set "PYTHON=python"
+set "WEB_APP=0"
+set "TFT8=0"
+set "TFT16=0"
+SET "TFT_BUILD=0"
+SET "DO_SPECIAL_OTA=0"
 
 :: Determine the correct esptool command to use
 where esptool >nul 2>&1
@@ -16,7 +18,7 @@ if %ERRORLEVEL% EQU 0 (
 
 goto GETOPTS
 :HELP
-echo Usage: %~nx0 [-h] [-p ESPTOOL_PORT] [-P PYTHON] [-f FILENAME^|FILENAME] [--web] [--tft] [--tft-16mb]
+echo Usage: %SCRIPTNAME% [-h] [-p ESPTOOL_PORT] [-P PYTHON] [-f FILENAME] [--web] [--tft] [--tft-16mb]
 echo Flash image file to device, but first erasing and writing system information
 echo.
 echo     -h               Display this help and exit
@@ -29,16 +31,16 @@ echo     --tft-16mb       Flash MUI 16mb
 goto EOF
 
 :GETOPTS
-if /I "%1"=="-h" goto HELP
-if /I "%1"=="--help" goto HELP
-if /I "%1"=="-F" set "FILENAME=%2" & SHIFT
-if /I "%1"=="-p" set ESPTOOL_PORT=%2 & SHIFT
-if /I "%1"=="-P" set PYTHON=%2 & SHIFT
-if /I "%1"=="--web" set "WEB_APP=1" & SHIFT
-if /I "%1"=="--tft" set "TFT8=1" & SHIFT
-if /I "%1"=="--tft-16mb" set "TFT16=1" & SHIFT
+if /I "%~1"=="-h" goto HELP & exit /b
+if /I "%~1"=="--help" goto HELP & exit /b
+if "%~1"=="-p" set "ESPTOOL_PORT=%~2" & SHIFT & SHIFT & goto GETOPTS
+if "%~1"=="-P" set "PYTHON=%~2" & SHIFT & SHIFT & goto GETOPTS
+if /I "%~1"=="-f" set "FILENAME=%~2" & SHIFT & SHIFT & goto GETOPTS
+if /I "%~1"=="--web" set "WEB_APP=1" & SHIFT & goto GETOPTS
+if /I "%~1"=="--tft" set "TFT8=1" & SHIFT & goto GETOPTS
+if /I "%~1"=="--tft-16mb" set "TFT16=1" & SHIFT & goto GETOPTS
 SHIFT
-IF NOT "__%1__"=="____" goto GETOPTS
+IF NOT "%~1"=="" goto GETOPTS
 
 IF "__%FILENAME%__" == "____" (
     echo "Missing FILENAME"
@@ -47,7 +49,7 @@ IF "__%FILENAME%__" == "____" (
 
 :: Check if FILENAME contains "-tft-" and either TFT8 or TFT16 is 1 (--tft, -tft-16mb)
 IF NOT "%FILENAME:-tft-=%"=="%FILENAME%" (
-    SET TFT_BUILD=1
+    SET "TFT_BUILD=1"
     IF NOT "%TFT8%"=="1" IF NOT "%TFT16%"=="1" (
         echo Error: Either --tft or --tft-16mb must be set to use a TFT build.
         goto EOF
@@ -56,8 +58,6 @@ IF NOT "%FILENAME:-tft-=%"=="%FILENAME%" (
         echo Error: Both --tft and --tft-16mb must NOT be set at the same time.
         goto EOF
     )
-) else (
-    SET TFT_BUILD=0
 )
 
 :: Extract BASENAME from %FILENAME% for later use.
@@ -91,14 +91,23 @@ IF EXIST %FILENAME% IF x%FILENAME:update=%==x%FILENAME% (
     %ESPTOOL_CMD% --baud 115200 write_flash 0x00 "%FILENAME%"
 
     @REM Account for S3 and C3 board's different OTA partition
-    IF x%FILENAME:s3=%==x%FILENAME% IF x%FILENAME:v3=%==x%FILENAME% IF x%FILENAME:t-deck=%==x%FILENAME% IF x%FILENAME:wireless-paper=%==x%FILENAME% IF x%FILENAME:wireless-tracker=%==x%FILENAME% IF x%FILENAME:station-g2=%==x%FILENAME% IF x%FILENAME:unphone=%==x%FILENAME% (
-        IF x%FILENAME:esp32c3=%==x%FILENAME% (
-            %ESPTOOL_CMD% --baud 115200 write_flash !OTA_OFFSET! bleota.bin
-        ) else (
+    IF NOT "%FILENAME%"=="%FILENAME:s3=%" SET "DO_SPECIAL_OTA=1"
+    IF NOT "%FILENAME%"=="%FILENAME:v3=%" SET "DO_SPECIAL_OTA=1"
+    IF NOT "%FILENAME%"=="%FILENAME:t-deck=%" SET "DO_SPECIAL_OTA=1"
+    IF NOT "%FILENAME%"=="%FILENAME:wireless-paper=%" SET "DO_SPECIAL_OTA=1"
+    IF NOT "%FILENAME%"=="%FILENAME:wireless-tracker=%" SET "DO_SPECIAL_OTA=1"
+    IF NOT "%FILENAME%"=="%FILENAME:station-g2=%" SET "DO_SPECIAL_OTA=1"
+    IF NOT "%FILENAME%"=="%FILENAME:unphone=%" SET "DO_SPECIAL_OTA=1"
+    IF NOT "%FILENAME%"=="%FILENAME:esp32c3=%" SET "DO_SPECIAL_OTA=1"
+
+    IF "!DO_SPECIAL_OTA!"=="1" (
+        IF NOT "%FILENAME%"=="%FILENAME:esp32c3=%" (
             %ESPTOOL_CMD% --baud 115200 write_flash !OTA_OFFSET! bleota-c3.bin
+        ) ELSE (
+            %ESPTOOL_CMD% --baud 115200 write_flash !OTA_OFFSET! bleota-s3.bin
         )
-    ) else (
-        %ESPTOOL_CMD% --baud 115200 write_flash !OTA_OFFSET! bleota-s3.bin
+    ) ELSE (
+        %ESPTOOL_CMD% --baud 115200 write_flash !OTA_OFFSET! bleota.bin
     )
 
     @REM Check if WEB_APP (--web) is enabled and add "littlefswebui-" to BASENAME else "littlefs-".
@@ -107,7 +116,7 @@ IF EXIST %FILENAME% IF x%FILENAME:update=%==x%FILENAME% (
         IF EXIST "littlefswebui-%BASENAME%" (
             %ESPTOOL_CMD% --baud 115200 write_flash !OFFSET! "littlefswebui-%BASENAME%"
         ) else (
-            echo Error: file "littlefswebui-%BASENAME%" wasn't found, littlefs not written.
+            echo Error: file "littlefswebui-%BASENAME%" wasn't found, littlefswebui not written.
             goto EOF
         )
     ) else (
@@ -125,5 +134,16 @@ IF EXIST %FILENAME% IF x%FILENAME:update=%==x%FILENAME% (
 )
 
 :EOF
+@REM Cleanup vars.
+SET "SCRIPTNAME="
+SET "PYTHON="
+SET "WEB_APP="
+SET "TFT8="
+Set "TFT16="
+SET "OFFSET="
+SET "OTA_OFFSET="
+SET "DO_SPECIAL_OTA="
+SET "FILENAME="
+SET "BASENAME="
 endlocal
 exit /b 0
