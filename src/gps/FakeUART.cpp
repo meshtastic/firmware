@@ -1,5 +1,7 @@
 #include "FakeUART.h"
 
+#ifdef SENSECAP_INDICATOR
+
 FakeUART::FakeUART() {}
 
 void FakeUART::begin(unsigned long baud, uint32_t config, int8_t rxPin, int8_t txPin, bool invert, unsigned long timeout_ms,
@@ -88,3 +90,5 @@ size_t FakeUART::stuff_buffer(const char *buffer, size_t size)
 }
 
 FakeUART *FakeSerial;
+
+#endif

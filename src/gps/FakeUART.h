@@ -3,6 +3,8 @@
 #ifndef FAKEUART_H
 #define FAKEUART_H
 
+#ifdef SENSECAP_INDICATOR
+
 #include "../IndicatorSerial.h"
 #include <RingBuf.h>
 #include <Stream.h>
@@ -36,5 +38,7 @@ class FakeUART : public Stream
 };
 
 extern FakeUART *FakeSerial;
+
+#endif // SENSECAP_INDICATOR
 
 #endif // FAKEUART_H
