@@ -84,7 +84,7 @@
     pinMode(PIN_LED2, OUTPUT);
     digitalWrite(LED_PIN, LOW);
 
-    // pinMode(D5, OUTPUT);
-    // digitalWrite(D5, LOW);
+    // pinMode(PIN_WIRE_SDA, INPUT_PULLUP);
+    // pinMode(PIN_WIRE_SCL, INPUT_PULLUP);
 
 }

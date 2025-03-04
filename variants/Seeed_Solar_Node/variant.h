@@ -81,9 +81,9 @@
  // Communication Interfaces
  //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  // I2C Configuration
- #define HAS_WIRE 0
- #define PIN_WIRE_SDA  (9)   // P1.11 (D6)
- #define PIN_WIRE_SCL  (10)   // P1.12 (D7)
+ //#define HAS_WIRE 1
+ #define PIN_WIRE_SDA  14   // P0.09
+ #define PIN_WIRE_SCL  15   // P0.10
  #define WIRE_INTERFACES_COUNT 1
  #define I2C_NO_RESCAN  
 
@@ -114,32 +114,6 @@ static const uint8_t SCL = PIN_WIRE_SCL;
  #define ADC_MULTIPLIER 3.0f   // Voltage divider ratio (1M+510K)
  #define CHARGE_LED     23     // P0.17 Charging indicator
  #define HICHG          22     // P0.13 Charge current select (High=100mA)
- 
- //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- // Peripheral Configuration
- //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- // QSPI Flash (MX25R6435F)
- #define PIN_QSPI_SCK   24  // P0.24
- #define PIN_QSPI_CS    25  // P0.25
- #define PIN_QSPI_IO0   26  // P0.26
- #define PIN_QSPI_IO1   27  // P0.27
- #define PIN_QSPI_IO2   28  // P0.28
- #define PIN_QSPI_IO3   29  // P0.29
- 
-//  // NFC Interface
-//  #define PIN_NFC1      30     // P0.09 NFC antenna 1
-//  #define PIN_NFC2      31     // P0.10 NFC antenna 2
- 
- //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- // Sensor Configuration (Sense Variant)
- //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- #ifdef XIAO_SENSE
-   #define PIN_LSM6DS3TR_C_POWER 15  // IMU power control
-   #define PIN_LSM6DS3TR_C_INT1  18  // IMU interrupt
-   #define PIN_PDM_PWR           19  // Microphone power
-   #define PIN_PDM_CLK           20  // PDM clock
-   #define PIN_PDM_DIN           21  // PDM data
- #endif
  
  //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  // Compatibility Definitions
