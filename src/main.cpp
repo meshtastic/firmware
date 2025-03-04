@@ -22,6 +22,10 @@
 #include "error.h"
 #include "power.h"
 
+#ifdef SENSECAP_INDICATOR // on the indicator run the additional serial port for the RP2040
+#include "IndicatorSerial.h"
+#endif
+
 #if !MESHTASTIC_EXCLUDE_I2C
 #include "detect/ScanI2CTwoWire.h"
 #include <Wire.h>
@@ -690,6 +694,11 @@ void setup()
 #if HAS_BUTTON || defined(ARCH_PORTDUINO)
     // Buttons. Moved here cause we need NodeDB to be initialized
     buttonThread = new ButtonThread();
+#endif
+
+// If we have an indicator, start process to service secondary port
+#ifdef SENSECAP_INDICATOR
+    sensecapIndicator.begin(Serial2);
 #endif
 
     // only play start melody when role is not tracker or sensor
