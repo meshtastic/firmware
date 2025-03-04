@@ -8,15 +8,15 @@ plugins:
       uri: https://github.com/trunk-io/plugins
 lint:
   enabled:
-    - prettier@3.5.2
+    - prettier@3.5.3
     - trufflehog@3.88.14
     - yamllint@1.35.1
     - bandit@1.8.3
-    - checkov@3.2.378
+    - checkov@3.2.379
     - terrascan@1.19.9
     - trivy@0.59.1
     - taplo@0.9.3
-    - ruff@0.9.7
+    - ruff@0.9.9
     - isort@6.0.1
     - markdownlint@0.44.0
     - oxipng@9.1.4
