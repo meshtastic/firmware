@@ -1242,13 +1242,18 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
         config.has_network = true;
         config.has_bluetooth = true;
         config.has_security = true;
+        LOG_DEBUG("Saving config version %d", config.version);
 
+#ifndef ARCH_NRF52
+        // First, remove the temp file if it exists
+        spiLock->lock();
+        std::string tempFileName = std::string(configFileName) + ".tmp";
+        FSCom.remove(tempFileName.c_str());
+        spiLock->unlock();
+#endif
         size_t configSize;
         pb_get_encoded_size(&configSize, meshtastic_LocalConfig_fields, &config);
-        LOG_DEBUG("Saving config version %d", config.version);
-        spiLock->lock();
         success &= saveProto(configFileName, configSize, &meshtastic_LocalConfig_msg, &config);
-        spiLock->unlock();
     }
 
     if (saveWhat & SEGMENT_MODULECONFIG) {
@@ -1266,11 +1271,16 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
         moduleConfig.has_paxcounter = true;
         LOG_DEBUG("Saving moduleConfig version %d", moduleConfig.version);
 
+#ifndef ARCH_NRF52
+        // First, remove the temp file if it exists
+        spiLock->lock();
+        std::string tempFileName = std::string(configFileName) + ".tmp";
+        FSCom.remove(tempFileName.c_str());
+        spiLock->unlock();
+#endif
         size_t moduleConfigSize;
         pb_get_encoded_size(&moduleConfigSize, meshtastic_LocalModuleConfig_fields, &moduleConfig);
-        spiLock->lock();
         success &= saveProto(moduleConfigFileName, moduleConfigSize, &meshtastic_LocalModuleConfig_msg, &moduleConfig);
-        spiLock->unlock();
     }
 
     if (saveWhat & SEGMENT_CHANNELS) {
