@@ -282,6 +282,14 @@ void setup()
     delay(100);
 #endif
 
+#if defined(CROWPANEL_ESP32S3_5_EPAPER)
+    pinMode(PIN_TF_EN, OUTPUT);
+    digitalWrite(PIN_TF_EN, HIGH); // Enable Power to SD/TF Card
+    pinMode(PIN_EINK_EN_IN, OUTPUT);
+    digitalWrite(PIN_EINK_EN_IN, HIGH); // Enable Power to EInk
+    delay(10);
+#endif
+
     concurrency::hasBeenSetup = true;
 #if ARCH_PORTDUINO
     SPISettings spiSettings(settingsMap[spiSpeed], MSBFIRST, SPI_MODE0);
