@@ -1,0 +1,56 @@
+{
+  "build": {
+    "arduino": {
+      "ldscript": "nrf52840_s140_v7.ld"
+    },
+    "core": "nRF5",
+    "cpu": "cortex-m4",
+    "extra_flags": "-DARDUINO_MDBT50Q_RX -DNRF52840_XXAA",
+    "f_cpu": "64000000L",
+    "hwids": [
+      ["0x2886", "0x0166"]
+    ],
+    "usb_product": "XIAO-BOOT",
+    "mcu": "nrf52840",
+    "variant": "seeed_xiao_nrf52840_kit",
+    "bsp": {
+      "name": "adafruit"
+    },
+    "softdevice": {
+      "sd_flags": "-DS140",
+      "sd_name": "s140",
+      "sd_version": "7.3.0",
+      "sd_fwid": "0x0123"
+    },
+    "bootloader": {
+      "settings_addr": "0xFF000"
+    }
+  },
+  "connectivity": ["bluetooth"],
+  "debug": {
+    "jlink_device": "nRF52840_xxAA",
+    "svd_path": "nrf52840.svd",
+    "openocd_target": "nrf52840-mdk-rs"
+  },
+  "frameworks": ["arduino"],
+  "name": "seeed_xiao_nrf52840_kit",
+  "upload": {
+    "maximum_ram_size": 248832,
+    "maximum_size": 815104,
+    "speed": 115200,
+    "protocol": "nrfutil",
+    "protocols": [
+      "jlink",
+      "nrfjprog",
+      "nrfutil",
+      "stlink",
+      "cmsis-dap",
+      "blackmagic"
+    ],
+    "use_1200bps_touch": true,
+    "require_upload_port": true,
+    "wait_for_upload_port": true
+  },
+  "url": "https://www.seeedstudio.com/XIAO-nRF52840-Wio-SX1262-Kit-for-Meshtastic-p-6400.html",
+  "vendor": "seeed"
+}
