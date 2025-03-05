@@ -182,11 +182,8 @@ bool EInkDisplay::connect()
         // Init GxEPD2
         adafruitDisplay->init();
         adafruitDisplay->setRotation(3);
-        
-    #ifdef CROWPANEL_ESP32S3_5_EPAPER
-        // This display needs 0 rotation
-        adafruitDisplay->setRotation(0);
-    #endif
+        if (CROWPANEL_ESP32S3_5_EPAPER)
+            adafruitDisplay->setRotation(0);
     }
 #elif defined(PCA10059) || defined(ME25LS01)
     {
