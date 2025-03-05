@@ -1,8 +1,8 @@
 #include "StreamAPI.h"
 #include "PowerFSM.h"
-#include "RTC.h"
 #include "Throttle.h"
 #include "configuration.h"
+#include "gps/RTC.h"
 
 #define START1 0x94
 #define START2 0xc3

@@ -4,8 +4,8 @@
 #include "FSCommon.h"
 #include "MeshService.h"
 #include "NodeDB.h"
-#include "RTC.h"
 #include "Router.h"
+#include "gps/RTC.h"
 
 /*
     AudioModule

@@ -1,7 +1,7 @@
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "NMEAWPL.h"
 #include "GeoCoord.h"
-#include "RTC.h"
+#include "gps/RTC.h"
 #include <time.h>
 
 /* -------------------------------------------

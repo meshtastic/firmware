@@ -86,11 +86,20 @@ if platform.name == "nordicnrf52":
                       env.VerboseAction(f"{sys.executable} ./bin/uf2conv.py $BUILD_DIR/firmware.hex -c -f 0xADA52840 -o $BUILD_DIR/firmware.uf2",
                                         "Generating UF2 file"))
 
-Import("projenv")
+verPropFile = "version.properties"
 
-prefsLoc = projenv["PROJECT_DIR"] + "/version.properties"
+try:
+    # See: https://github.com/platformio/platform-espressif32/issues/953
+    Import("projenv")
+    prefsLoc = projenv["PROJECT_DIR"] + "/" + verPropFile
+except Exception as e:
+    print(f"Warning: Unable to import 'projenv'. Falling back. Error: {e}")
+    projenv = None
+    prefsLoc = "./" + verPropFile  # Fallback location
+
 verObj = readProps(prefsLoc)
-print("Using meshtastic platformio-custom.py, firmware version " + verObj["long"] + " on " + env.get("PIOENV"))
+
+appEnv = env.get("PIOENV")
 
 jsonLoc = env["PROJECT_DIR"] + "/userPrefs.jsonc"
 with open(jsonLoc) as f:
@@ -122,7 +131,8 @@ flags = [
 print ("Using flags:")
 for flag in flags:
     print(flag)
-    
-projenv.Append(
-    CCFLAGS=flags,
-)
+
+if projenv:
+    projenv.Append(CCFLAGS=flags)
+
+env.Append(CCFLAGS=flags)

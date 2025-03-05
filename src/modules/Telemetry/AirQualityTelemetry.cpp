@@ -8,9 +8,9 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
-#include "RTC.h"
 #include "Router.h"
 #include "detect/ScanI2CTwoWire.h"
+#include "gps/RTC.h"
 #include "main.h"
 #include <Throttle.h>
 

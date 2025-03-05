@@ -4,10 +4,10 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
-#include "RTC.h"
 #include "RadioLibInterface.h"
 #include "Router.h"
 #include "configuration.h"
+#include "gps/RTC.h"
 #include "main.h"
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
