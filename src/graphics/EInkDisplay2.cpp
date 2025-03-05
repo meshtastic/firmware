@@ -29,18 +29,18 @@
 */
 
 // Constructor
-EInkDisplay::EInkDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY geometry, HW_I2C i2cBus) {
+EInkDisplay::EInkDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY geometry, HW_I2C i2cBus)
+{
     // Set dimensions in OLEDDisplay base class
     this->geometry = GEOMETRY_RAWMODE;
     this->displayWidth = EINK_WIDTH;
     this->displayHeight = EINK_HEIGHT;
 
-    // Round shortest side up to nearest byte to prevent truncation causing an undersized buffer
+    // Round shortest side up to nearest byte, to prevent truncation causing an undersized buffer
     uint16_t shortSide = min(EINK_WIDTH, EINK_HEIGHT);
     uint16_t longSide = max(EINK_WIDTH, EINK_HEIGHT);
-    if (shortSide % 8 != 0) {
+    if (shortSide % 8 != 0)
         shortSide = (shortSide | 7) + 1;
-    }
 
     this->displayBufferSize = longSide * (shortSide / 8);
 }
@@ -48,18 +48,18 @@ EInkDisplay::EInkDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY
 /**
  * Force a display update if we haven't drawn within the specified msecLimit
  */
-bool EInkDisplay::forceDisplay(uint32_t msecLimit) {
+bool EInkDisplay::forceDisplay(uint32_t msecLimit)
+{
     // No need to grab this lock because we are on our own SPI bus
     // concurrency::LockGuard g(spiLock);
 
     uint32_t now = millis();
     uint32_t sinceLast = now - lastDrawMsec;
 
-    if (adafruitDisplay && (sinceLast > msecLimit || lastDrawMsec == 0)) {
+    if (adafruitDisplay && (sinceLast > msecLimit || lastDrawMsec == 0))
         lastDrawMsec = now;
-    } else {
+    else
         return false;
-    }
 
     // FIXME - only draw bits have changed (use backbuf similar to the other displays)
     const bool flipped = config.display.flip_screen;
@@ -71,14 +71,10 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit) {
 
             // Handle flip here, rather than with setRotation(),
             // Avoids issues when display width is not a multiple of 8
-            if (flipped) {
-                adafruitDisplay->drawPixel(
-                    (displayWidth - 1) - x,
-                    (displayHeight - 1) - y,
-                    isset ? GxEPD_BLACK : GxEPD_WHITE);
-            } else {
+            if (flipped)
+                adafruitDisplay->drawPixel((displayWidth - 1) - x, (displayHeight - 1) - y, isset ? GxEPD_BLACK : GxEPD_WHITE);
+            else
                 adafruitDisplay->drawPixel(x, y, isset ? GxEPD_BLACK : GxEPD_WHITE);
-            }
         }
     }
 
@@ -93,17 +89,19 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit) {
     return true;
 }
 
-// End the update process - virtual method, overridden in derived class
-void EInkDisplay::endUpdate() {
+// End the update process - virtual method, overriden in derived class
+void EInkDisplay::endUpdate()
+{
     // Power off display hardware, then deep-sleep (Except Wireless Paper V1.1, no deep-sleep)
     adafruitDisplay->hibernate();
 }
 
 // Write the buffer to the display memory
-void EInkDisplay::display(void) {
+void EInkDisplay::display(void)
+{
     // We don't allow regular 'dumb' display() calls to draw on eink until we've shown
-    // at least one forceDisplay() keyframe. This prevents flashing when we should show
-    // the critical bootscreen (that we want to look nice)
+    // at least one forceDisplay() keyframe.  This prevents flashing when we should the critical
+    // bootscreen (that we want to look nice)
 
     if (lastDrawMsec) {
         forceDisplay(slowUpdateMsec); // Show the first screen a few seconds after boot, then slower
@@ -111,17 +109,20 @@ void EInkDisplay::display(void) {
 }
 
 // Send a command to the display (low level function)
-void EInkDisplay::sendCommand(uint8_t com) {
+void EInkDisplay::sendCommand(uint8_t com)
+{
     (void)com;
     // Drop all commands to device (we just update the buffer)
 }
 
-void EInkDisplay::setDetected(uint8_t detected) {
+void EInkDisplay::setDetected(uint8_t detected)
+{
     (void)detected;
 }
 
 // Connect to the display - variant specific
-bool EInkDisplay::connect() {
+bool EInkDisplay::connect()
+{
     LOG_INFO("Do EInk init");
 
 #ifdef PIN_EINK_EN
@@ -133,6 +134,7 @@ bool EInkDisplay::connect() {
 #if defined(TTGO_T_ECHO)
     {
         auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY, SPI1);
+
         adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(*lowLevel);
         adafruitDisplay->init();
         adafruitDisplay->setRotation(3);
@@ -141,6 +143,7 @@ bool EInkDisplay::connect() {
 #elif defined(MESHLINK)
     {
         auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY, SPI1);
+
         adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(*lowLevel);
         adafruitDisplay->init();
         adafruitDisplay->setRotation(3);
@@ -151,18 +154,18 @@ bool EInkDisplay::connect() {
         if (eink_found) {
             auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY);
             adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(*lowLevel);
-            adafruitDisplay->init(
-                115200, true, 10, false, SPI1, SPISettings(4000000, MSBFIRST, SPI_MODE0));
+            adafruitDisplay->init(115200, true, 10, false, SPI1, SPISettings(4000000, MSBFIRST, SPI_MODE0));
             // RAK14000 2.13 inch b/w 250x122 does actually now support fast refresh
             adafruitDisplay->setRotation(3);
-            // Fast refresh support for 1.54, 2.13 RAK14000 b/w, 2.9 and 4.2
+            // Fast refresh support for  1.54, 2.13 RAK14000 b/w , 2.9 and 4.2
             // adafruitDisplay->setRotation(1);
             adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
         } else {
             (void)adafruitDisplay;
         }
     }
-#elif defined(HELTEC_WIRELESS_PAPER_V1_0) || defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_VISION_MASTER_E213) || \
+
+#elif defined(HELTEC_WIRELESS_PAPER_V1_0) || defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_VISION_MASTER_E213) ||             \
     defined(HELTEC_VISION_MASTER_E290) || defined(TLORA_T3S3_EPAPER) || defined(CROWPANEL_ESP32S3_5_EPAPER)
     {
         // Start HSPI
@@ -179,7 +182,6 @@ bool EInkDisplay::connect() {
         // Init GxEPD2
         adafruitDisplay->init();
         adafruitDisplay->setRotation(3);
-
 #if defined(CROWPANEL_ESP32S3_5_EPAPER)
         adafruitDisplay->setRotation(0);
 #endif
@@ -188,24 +190,21 @@ bool EInkDisplay::connect() {
     {
         auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY);
         adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(*lowLevel);
-        adafruitDisplay->init(
-            115200, true, 40, false, SPI1, SPISettings(4000000, MSBFIRST, SPI_MODE0));
+        adafruitDisplay->init(115200, true, 40, false, SPI1, SPISettings(4000000, MSBFIRST, SPI_MODE0));
         adafruitDisplay->setRotation(0);
         adafruitDisplay->setPartialWindow(0, 0, EINK_WIDTH, EINK_HEIGHT);
     }
 #elif defined(M5_COREINK)
     auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY);
     adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(*lowLevel);
-    adafruitDisplay->init(
-        115200, true, 40, false, SPI, SPISettings(4000000, MSBFIRST, SPI_MODE0));
+    adafruitDisplay->init(115200, true, 40, false, SPI, SPISettings(4000000, MSBFIRST, SPI_MODE0));
     adafruitDisplay->setRotation(0);
     adafruitDisplay->setPartialWindow(0, 0, EINK_WIDTH, EINK_HEIGHT);
 #elif defined(my) || defined(ESP32_S3_PICO)
     {
         auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY);
         adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(*lowLevel);
-        adafruitDisplay->init(
-            115200, true, 40, false, SPI, SPISettings(4000000, MSBFIRST, SPI_MODE0));
+        adafruitDisplay->init(115200, true, 40, false, SPI, SPISettings(4000000, MSBFIRST, SPI_MODE0));
         adafruitDisplay->setRotation(1);
         adafruitDisplay->setPartialWindow(0, 0, EINK_WIDTH, EINK_HEIGHT);
     }
@@ -214,4 +213,4 @@ bool EInkDisplay::connect() {
     return true;
 }
 
-#endif // USE_EINK
+#endif
