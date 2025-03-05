@@ -186,6 +186,7 @@ bool EInkDisplay::connect()
             adafruitDisplay->setRotation(0);
         else
             adafruitDisplay->setRotation(3);
+
     }
 #elif defined(PCA10059) || defined(ME25LS01)
     {
