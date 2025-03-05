@@ -55,7 +55,7 @@ bool FishEyeStateRoutingModule::addNeighborInfo(meshtastic_NeighborInfo Ninfo){
         return 1;
       }
     }
-    
+
   }else{                  //Node not in LSPDB
     LSPDBEntry entry; //new entry
     NinfoToLSPDBEntry(&Ninfo,&entry);
@@ -172,7 +172,7 @@ int32_t FishEyeStateRoutingModule::runOnce(){
     ++it;
 
   }
-  return min;
+  return min + 1;
 }
 
 bool FishEyeStateRoutingModule::setOwnNeighborhood(meshtastic_NeighborInfo Ninfo){
