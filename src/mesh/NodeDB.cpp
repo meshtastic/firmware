@@ -732,6 +732,7 @@ void NodeDB::installDefaultModuleConfig()
 
     moduleConfig.has_fish_eye_state_routing = true;
     moduleConfig.fish_eye_state_routing.enabled = true;
+    config.network.routingAlgorithm = meshtastic_Config_RoutingConfig_FishEyeState;
 
     moduleConfig.has_detection_sensor = true;
     moduleConfig.detection_sensor.enabled = false;
