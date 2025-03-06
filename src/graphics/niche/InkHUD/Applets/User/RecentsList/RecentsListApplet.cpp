@@ -122,7 +122,7 @@ bool InkHUD::RecentsListApplet::isActive(uint32_t seenAtMs)
     uint32_t now = millis();
     uint32_t secsAgo = (now - seenAtMs) / 1000UL; // millis() overflow safe
 
-    return (secsAgo < settings.recentlyActiveSeconds);
+    return (secsAgo < settings->recentlyActiveSeconds);
 }
 
 // Text to be shown at top of applet
@@ -134,7 +134,7 @@ std::string InkHUD::RecentsListApplet::getHeaderText()
 
     // Print the length of our "Recents" time-window
     text += "Last ";
-    text += to_string(settings.recentlyActiveSeconds / 60);
+    text += to_string(settings->recentlyActiveSeconds / 60);
     text += " mins";
 
     // Print the node count
