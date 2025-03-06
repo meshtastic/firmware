@@ -49,7 +49,7 @@ IF %DEBUG% EQU 1 SET "UF2CONV_CMD=REM python3 .\bin\uf2conv.py"
 
 SET "NRFTARGETS=t-echo rak4631 nano-g2-ultra wio-tracker-wm1110 canaryone heltec-mesh-node-t114 tracker-t1000-e rak_wismeshtap rak2560 nrf52_promicro_diy_tcxo"
 FOR %%a IN (%NRFTARGETS%) DO (
-    IF /i "%%a"=="!TARGETNAME!" (
+    IF /I "%%a"=="!TARGETNAME!" (
         @REM We are working with any of %NRFTARGETS%.
         SET "NRF=1"
         GOTO end_loop_nrf
