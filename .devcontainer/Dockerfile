@@ -34,6 +34,8 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
 
 RUN pipx install platformio
 
+RUN pip install --no-cache-dir setuptools && pipx install esptool
+
 COPY 99-platformio-udev.rules /etc/udev/rules.d/99-platformio-udev.rules
 
 USER vscode
