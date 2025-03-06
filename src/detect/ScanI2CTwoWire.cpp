@@ -237,6 +237,16 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     logFoundDevice("BMP085/BMP180", (uint8_t)addr.address);
                     type = BMP_085;
                     break;
+                case 0x00:
+                    // do we have a DPS310 instead?
+                    registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0D), 1);
+                    switch (registerValue) {
+                    case 0x10:
+                        logFoundDevice("DPS310", (uint8_t)addr.address);
+                        type = DPS310;
+                        break;
+                    }
+                    break;
                 default:
                     registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 1); // GET_ID
                     switch (registerValue) {
