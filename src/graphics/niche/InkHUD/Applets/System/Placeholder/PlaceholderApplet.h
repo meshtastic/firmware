@@ -9,20 +9,19 @@ Fills the area with diagonal lines
 
 #include "configuration.h"
 
-#include "graphics/niche/InkHUD/Applet.h"
+#include "graphics/niche/InkHUD/SystemApplet.h"
 
 namespace NicheGraphics::InkHUD
 {
 
-class PlaceholderApplet : public Applet
+class PlaceholderApplet : public SystemApplet
 {
   public:
-    PlaceholderApplet();
     void onRender() override;
 
     // Note: onForeground, onBackground, and wantsToRender are not meaningful for this applet.
     // The window manager decides when and where it should be rendered
-    // It may be drawn to several different tiles during on WindowManager::render call
+    // It may be drawn to several different tiles during an Renderer::render call
 };
 
 } // namespace NicheGraphics::InkHUD

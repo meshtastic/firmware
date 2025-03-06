@@ -2,12 +2,44 @@
 
 #include "./TipsApplet.h"
 
+#include "graphics/niche/InkHUD/Persistence.h"
+
+#include "main.h"
+
 using namespace NicheGraphics;
 
 InkHUD::TipsApplet::TipsApplet()
 {
-    // Grab the window manager singleton, for convenience
-    windowManager = WindowManager::getInstance();
+    // Decide which tips (if any) should be shown to user after the boot screen
+
+    // Welcome screen
+    if (settings->tips.firstBoot)
+        tipQueue.push_back(Tip::WELCOME);
+
+    // Antenna, region, timezone
+    // Shown at boot if region not yet set
+    if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET)
+        tipQueue.push_back(Tip::FINISH_SETUP);
+
+    // Shutdown info
+    // Shown until user performs one valid shutdown
+    if (!settings->tips.safeShutdownSeen)
+        tipQueue.push_back(Tip::SAFE_SHUTDOWN);
+
+    // Using the UI
+    if (settings->tips.firstBoot) {
+        tipQueue.push_back(Tip::CUSTOMIZATION);
+        tipQueue.push_back(Tip::BUTTONS);
+    }
+
+    // Catch an incorrect attempt at rotating display
+    if (config.display.flip_screen)
+        tipQueue.push_back(Tip::ROTATION);
+
+    // Applet is foreground immediately at boot, but is obscured by LogoApplet, which is also foreground
+    // LogoApplet can be considered to have a higher Z-index, because it is placed before TipsApplet in the systemApplets vector
+    if (!tipQueue.empty())
+        bringToForeground();
 }
 
 void InkHUD::TipsApplet::onRender()
@@ -53,7 +85,7 @@ void InkHUD::TipsApplet::onRender()
 
         setFont(fontSmall);
         std::string shutdown;
-        shutdown += "Before removing power, please shutdown from InkHUD menu, or a client app. \n";
+        shutdown += "Before removing power, please shut down from InkHUD menu, or a client app. \n";
         shutdown += "\n";
         shutdown += "This ensures data is saved.";
         printWrapped(0, fontLarge.lineHeight() * 1.5, width(), shutdown);
@@ -153,51 +185,31 @@ void InkHUD::TipsApplet::renderWelcome()
     printAt(X(0.5), Y(1), "Press button to continue", CENTER, BOTTOM);
 }
 
-// Grab fullscreen tile, and lock the window manager, when applet is shown
 void InkHUD::TipsApplet::onForeground()
 {
-    windowManager->lock(this);
-    windowManager->claimFullscreen(this);
+    // Prevent most other applets from requesting update, and skip their rendering entirely
+    // Another system applet with a higher precedence can potentially ignore this
+    SystemApplet::lockRendering = true;
+    SystemApplet::lockRequests = true;
+
+    SystemApplet::handleInput = true; // Our applet should handle button input (unless another system applet grabs it first)
 }
 
 void InkHUD::TipsApplet::onBackground()
 {
-    windowManager->releaseFullscreen();
-    windowManager->unlock(this);
+    // Allow normal update behavior to resume
+    SystemApplet::lockRendering = false;
+    SystemApplet::lockRequests = false;
+    SystemApplet::handleInput = false;
+
+    // Need to force an update, as a polite request wouldn't be honored, seeing how we are now in the background
+    // Usually, onBackground is followed by another applet's onForeground (which requests update), but not in this case
+    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
-void InkHUD::TipsApplet::onActivate()
-{
-    // Decide which tips (if any) should be shown to user after the boot screen
+void InkHUD::TipsApplet::onActivate() {}
 
-    // Welcome screen
-    if (settings.tips.firstBoot)
-        tipQueue.push_back(Tip::WELCOME);
-
-    // Antenna, region, timezone
-    // Shown at boot if region not yet set
-    if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET)
-        tipQueue.push_back(Tip::FINISH_SETUP);
-
-    // Shutdown info
-    // Shown until user performs one valid shutdown
-    if (!settings.tips.safeShutdownSeen)
-        tipQueue.push_back(Tip::SAFE_SHUTDOWN);
-
-    // Using the UI
-    if (settings.tips.firstBoot) {
-        tipQueue.push_back(Tip::CUSTOMIZATION);
-        tipQueue.push_back(Tip::BUTTONS);
-    }
-
-    // Catch an incorrect attempt at rotating display
-    if (config.display.flip_screen)
-        tipQueue.push_back(Tip::ROTATION);
-
-    // Applet will be brought to foreground when boot screen closes, via TipsApplet::onLockAvailable
-}
-
-// While our applet has the window manager locked, we will receive the button input
+// While our SystemApplet::handleInput flag is true
 void InkHUD::TipsApplet::onButtonShortPress()
 {
     tipQueue.pop_front();
@@ -206,29 +218,20 @@ void InkHUD::TipsApplet::onButtonShortPress()
     if (tipQueue.empty()) {
         // Record that user has now seen the "tutorial" set of tips
         // Don't show them on subsequent boots
-        if (settings.tips.firstBoot) {
-            settings.tips.firstBoot = false;
-            saveDataToFlash();
+        if (settings->tips.firstBoot) {
+            settings->tips.firstBoot = false;
+            inkhud->persistence->saveSettings();
         }
 
         // Close applet, and full refresh to clean the screen
         // Need to force update, because our request would be ignored otherwise, as we are now background
         sendToBackground();
-        windowManager->forceUpdate(EInk::UpdateTypes::FULL);
+        inkhud->forceUpdate(EInk::UpdateTypes::FULL);
     }
 
     // More tips left
     else
         requestUpdate();
-}
-
-// If the wm lock has just become availale (rendering, input), and we've still got tips, grab it!
-// This situation would arise if bluetooth pairing occurs while TipsApplet was already shown (after pairing)
-// Note: this event is only raised when *other* applets unlock the window manager
-void InkHUD::TipsApplet::onLockAvailable()
-{
-    if (!tipQueue.empty())
-        bringToForeground();
 }
 
 #endif
