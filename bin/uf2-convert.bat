@@ -21,7 +21,7 @@ ECHO Example: %SCRIPT_NAME% -t rak4631
 GOTO eof
 
 :version
-ECHO %SCRIPT_NAME% [Version 2.0.0]
+ECHO %SCRIPT_NAME% [Version 2.6.0]
 ECHO Meshtastic
 GOTO eof
 

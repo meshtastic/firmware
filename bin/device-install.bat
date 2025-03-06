@@ -34,7 +34,7 @@ ECHO Example: %SCRIPT_NAME% -f littlefs-unphone-2.6.0.0b106d4.bin -p COM11 --web
 GOTO eof
 
 :version
-ECHO %SCRIPT_NAME% [Version 2.0.0]
+ECHO %SCRIPT_NAME% [Version 2.6.0]
 ECHO Meshtastic
 GOTO eof
 

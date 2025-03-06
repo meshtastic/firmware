@@ -28,7 +28,7 @@ ECHO Example: %SCRIPT_NAME% -f firmware-t-deck-tft-2.6.0.0b106d4-update.bin -p C
 GOTO eof
 
 :version
-ECHO %SCRIPT_NAME% [Version 2.0.0]
+ECHO %SCRIPT_NAME% [Version 2.6.0]
 ECHO Meshtastic
 GOTO eof
 
