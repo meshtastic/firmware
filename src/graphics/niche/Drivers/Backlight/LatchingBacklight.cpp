@@ -40,13 +40,11 @@ void LatchingBacklight::setPin(uint8_t pin, bool activeWhen)
 // Ensures the backlight is off
 int LatchingBacklight::beforeDeepSleep(void *unused)
 {
-    // We shouldn't need to guard the block like this
-    // Contingency for:
-    // - settings corruption: settings.optionalMenuItems.backlight guards backlight code in MenuApplet
-    // - improper use in the future
+    // Contingency only
+    // - pin wasn't set
     if (pin != (uint8_t)-1) {
         off();
-        pinMode(pin, INPUT); // High impedence - unnecessary?
+        pinMode(pin, INPUT); // High impedance - unnecessary?
     } else
         LOG_WARN("LatchingBacklight instantiated, but pin not set");
     return 0; // Continue with deep sleep

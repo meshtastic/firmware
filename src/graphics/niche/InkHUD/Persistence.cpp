@@ -5,17 +5,21 @@
 using namespace NicheGraphics;
 
 // Load settings and latestMessage data
-void InkHUD::loadDataFromFlash()
+void InkHUD::Persistence::loadSettings()
 {
     // Load the InkHUD settings from flash, and check version number
     // We should only consider the version number if the InkHUD flashdata component reports that we *did* actually load flash data
-    InkHUD::Settings loadedSettings;
+    Settings loadedSettings;
     bool loadSucceeded = FlashData<Settings>::load(&loadedSettings, "settings");
     if (loadSucceeded && loadedSettings.meta.version == SETTINGS_VERSION && loadedSettings.meta.version != 0)
         settings = loadedSettings; // Version matched, replace the defaults with the loaded values
     else
         LOG_WARN("Settings version changed. Using defaults");
+}
 
+// Load settings and latestMessage data
+void InkHUD::Persistence::loadLatestMessage()
+{
     // Load previous "latestMessages" data from flash
     MessageStore store("latest");
     store.loadFromFlash();
@@ -32,12 +36,15 @@ void InkHUD::loadDataFromFlash()
     }
 }
 
-// Save settings and latestMessage data
-void InkHUD::saveDataToFlash()
+// Save the InkHUD settings to flash
+void InkHUD::Persistence::saveSettings()
 {
-    // Save the InkHUD settings to flash
     FlashData<Settings>::save(&settings, "settings");
+}
 
+// Save latestMessage data to flash
+void InkHUD::Persistence::saveLatestMessage()
+{
     // Number of strings saved determines whether last message was broadcast or dm
     MessageStore store("latest");
     store.messages.push_back(latestMessage.dm);
@@ -46,14 +53,31 @@ void InkHUD::saveDataToFlash()
     store.saveToFlash();
 }
 
-// Holds InkHUD settings while running
-// Saved back to Flash at shutdown
-// Accessed by including persistence.h
-InkHUD::Settings InkHUD::settings;
+/*
+void InkHUD::Persistence::printSettings(Settings *settings)
+{
+    if (SETTINGS_VERSION != 2)
+        LOG_WARN("Persistence::printSettings was written for SETTINGS_VERSION=2, current is %d", SETTINGS_VERSION);
 
-// Holds copies of the most recent broadcast and DM messages while running
-// Saved to Flash at shutdown
-// Accessed by including persistence.h
-InkHUD::LatestMessage InkHUD::latestMessage;
+    LOG_DEBUG("meta.version=%d", settings->meta.version);
+    LOG_DEBUG("userTiles.count=%d", settings->userTiles.count);
+    LOG_DEBUG("userTiles.maxCount=%d", settings->userTiles.maxCount);
+    LOG_DEBUG("userTiles.focused=%d", settings->userTiles.focused);
+    for (uint8_t i = 0; i < MAX_TILES_GLOBAL; i++)
+        LOG_DEBUG("userTiles.displayedUserApplet[%d]=%d", i, settings->userTiles.displayedUserApplet[i]);
+    for (uint8_t i = 0; i < MAX_USERAPPLETS_GLOBAL; i++)
+        LOG_DEBUG("userApplets.active[%d]=%d", i, settings->userApplets.active[i]);
+    for (uint8_t i = 0; i < MAX_USERAPPLETS_GLOBAL; i++)
+        LOG_DEBUG("userApplets.autoshow[%d]=%d", i, settings->userApplets.autoshow[i]);
+    LOG_DEBUG("optionalFeatures.notifications=%d", settings->optionalFeatures.notifications);
+    LOG_DEBUG("optionalFeatures.batteryIcon=%d", settings->optionalFeatures.batteryIcon);
+    LOG_DEBUG("optionalMenuItems.nextTile=%d", settings->optionalMenuItems.nextTile);
+    LOG_DEBUG("optionalMenuItems.backlight=%d", settings->optionalMenuItems.backlight);
+    LOG_DEBUG("tips.firstBoot=%d", settings->tips.firstBoot);
+    LOG_DEBUG("tips.safeShutdownSeen=%d", settings->tips.safeShutdownSeen);
+    LOG_DEBUG("rotation=%d", settings->rotation);
+    LOG_DEBUG("recentlyActiveSeconds=%d", settings->recentlyActiveSeconds);
+}
+*/
 
 #endif

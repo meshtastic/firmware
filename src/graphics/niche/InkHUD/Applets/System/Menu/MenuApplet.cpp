@@ -2,8 +2,10 @@
 
 #include "./MenuApplet.h"
 
-#include "PowerStatus.h"
 #include "RTC.h"
+
+#include "airtime.h"
+#include "power.h"
 
 using namespace NicheGraphics;
 
@@ -17,22 +19,15 @@ InkHUD::MenuApplet::MenuApplet() : concurrency::OSThread("MenuApplet")
 {
     // No timer tasks at boot
     OSThread::disable();
-}
-
-void InkHUD::MenuApplet::onActivate()
-{
-    // Grab pointers to some singleton components which the menu interacts with
-    // We could do this every time we needed them, in place,
-    // but this just makes the code tidier
-
-    this->windowManager = WindowManager::getInstance();
 
     // Note: don't get instance if we're not actually using the backlight,
     // or else you will unintentionally instantiate it
-    if (settings.optionalMenuItems.backlight) {
+    if (settings->optionalMenuItems.backlight) {
         backlight = Drivers::LatchingBacklight::getInstance();
     }
 }
+
+void InkHUD::MenuApplet::onActivate() {}
 
 void InkHUD::MenuApplet::onForeground()
 {
@@ -45,21 +40,23 @@ void InkHUD::MenuApplet::onForeground()
     // If device has a backlight which isn't controlled by aux button:
     // backlight on always when menu opens.
     // Courtesy to T-Echo users who removed the capacitive touch button
-    if (settings.optionalMenuItems.backlight) {
+    if (settings->optionalMenuItems.backlight) {
         assert(backlight);
         if (!backlight->isOn())
             backlight->peek();
     }
 
-    // Prevent user applets requested update while menu is open
-    windowManager->lock(this);
+    // Prevent user applets requesting update while menu is open
+    // Handle button input with this applet
+    SystemApplet::lockRequests = true;
+    SystemApplet::handleInput = true;
 
     // Begin the auto-close timeout
     OSThread::setIntervalFromNow(MENU_TIMEOUT_SEC * 1000UL);
     OSThread::enabled = true;
 
     // Upgrade the refresh to FAST, for guaranteed responsiveness
-    windowManager->forceUpdate(EInk::UpdateTypes::FAST);
+    inkhud->forceUpdate(EInk::UpdateTypes::FAST);
 }
 
 void InkHUD::MenuApplet::onBackground()
@@ -67,7 +64,7 @@ void InkHUD::MenuApplet::onBackground()
     // If device has a backlight which isn't controlled by aux button:
     // Item in options submenu allows keeping backlight on after menu is closed
     // If this item is deselected we will turn backlight off again, now that menu is closing
-    if (settings.optionalMenuItems.backlight) {
+    if (settings->optionalMenuItems.backlight) {
         assert(backlight);
         if (!backlight->isLatched())
             backlight->off();
@@ -77,7 +74,8 @@ void InkHUD::MenuApplet::onBackground()
     OSThread::disable();
 
     // Resume normal rendering and button behavior of user applets
-    windowManager->unlock(this);
+    SystemApplet::lockRequests = false;
+    SystemApplet::handleInput = false;
 
     // Restore the user applet whose tile we borrowed
     if (borrowedTileOwner)
@@ -87,8 +85,8 @@ void InkHUD::MenuApplet::onBackground()
     borrowedTileOwner = nullptr;
 
     // Need to force an update, as a polite request wouldn't be honored, seeing how we are now in the background
-    // We're only updating here to ugrade from UNSPECIFIED to FAST, to ensure responsiveness when exiting menu
-    windowManager->forceUpdate(EInk::UpdateTypes::FAST);
+    // We're only updating here to upgrade from UNSPECIFIED to FAST, to ensure responsiveness when exiting menu
+    inkhud->forceUpdate(EInk::UpdateTypes::FAST);
 }
 
 // Open the menu
@@ -140,43 +138,35 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         break;
 
     case NEXT_TILE:
-        // Note performed manually;
-        // WindowManager::nextTile is raised by aux button press only, and will interact poorly with the menu
-        settings.userTiles.focused = (settings.userTiles.focused + 1) % settings.userTiles.count;
-        windowManager->changeLayout();
-        cursor = 0; // No menu item selected, for quick exit after tile swap
-        cursorShown = false;
+        inkhud->nextTile();
         break;
 
     case ROTATE:
-        settings.rotation = (settings.rotation + 1) % 4;
-        windowManager->changeLayout();
-        // requestUpdate(Drivers::EInk::UpdateTypes::FULL); // Would update regardless; just selecting FULL
+        inkhud->rotate();
         break;
 
     case LAYOUT:
         // Todo: smarter incrementing of tile count
-        settings.userTiles.count++;
+        settings->userTiles.count++;
 
-        if (settings.userTiles.count == 3) // Skip 3 tiles: not done yet
-            settings.userTiles.count++;
+        if (settings->userTiles.count == 3) // Skip 3 tiles: not done yet
+            settings->userTiles.count++;
 
-        if (settings.userTiles.count > settings.userTiles.maxCount) // Loop around if tile count now too high
-            settings.userTiles.count = 1;
+        if (settings->userTiles.count > settings->userTiles.maxCount) // Loop around if tile count now too high
+            settings->userTiles.count = 1;
 
-        windowManager->changeLayout();
-        // requestUpdate(Drivers::EInk::UpdateTypes::FULL); // Would update regardless; just selecting FULL
+        inkhud->updateLayout();
         break;
 
     case TOGGLE_APPLET:
-        settings.userApplets.active[cursor] = !settings.userApplets.active[cursor];
-        windowManager->changeActivatedApplets();
+        settings->userApplets.active[cursor] = !settings->userApplets.active[cursor];
+        inkhud->updateAppletSelection();
         // requestUpdate(Drivers::EInk::UpdateTypes::FULL); // Select FULL, seeing how this action doesn't auto exit
         break;
 
     case ACTIVATE_APPLETS:
         // Todo: remove this action? Already handled by TOGGLE_APPLET?
-        windowManager->changeActivatedApplets();
+        inkhud->updateAppletSelection();
         break;
 
     case TOGGLE_AUTOSHOW_APPLET:
@@ -185,14 +175,14 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         break;
 
     case TOGGLE_NOTIFICATIONS:
-        settings.optionalFeatures.notifications = !settings.optionalFeatures.notifications;
+        settings->optionalFeatures.notifications = !settings->optionalFeatures.notifications;
         break;
 
     case SET_RECENTS:
         // Set value of settings.recentlyActiveSeconds
         // Uses menu cursor to read RECENTS_OPTIONS_MINUTES array (defined at top of this file)
         assert(cursor < sizeof(RECENTS_OPTIONS_MINUTES) / sizeof(RECENTS_OPTIONS_MINUTES[0]));
-        settings.recentlyActiveSeconds = RECENTS_OPTIONS_MINUTES[cursor] * 60; // Menu items are in minutes
+        settings->recentlyActiveSeconds = RECENTS_OPTIONS_MINUTES[cursor] * 60; // Menu items are in minutes
         break;
 
     case SHUTDOWN:
@@ -202,7 +192,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         break;
 
     case TOGGLE_BATTERY_ICON:
-        windowManager->toggleBatteryIcon();
+        inkhud->toggleBatteryIcon();
         break;
 
     case TOGGLE_BACKLIGHT:
@@ -233,13 +223,13 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
     switch (page) {
     case ROOT:
         // Optional: next applet
-        if (settings.optionalMenuItems.nextTile && settings.userTiles.count > 1)
+        if (settings->optionalMenuItems.nextTile && settings->userTiles.count > 1)
             items.push_back(MenuItem("Next Tile", MenuAction::NEXT_TILE, MenuPage::ROOT)); // Only if multiple applets shown
 
         // items.push_back(MenuItem("Send", MenuPage::SEND)); // TODO
         items.push_back(MenuItem("Options", MenuPage::OPTIONS));
         // items.push_back(MenuItem("Display Off", MenuPage::EXIT)); // TODO
-        items.push_back(MenuItem("Save & Shutdown", MenuAction::SHUTDOWN));
+        items.push_back(MenuItem("Save & Shut Down", MenuAction::SHUTDOWN));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
 
@@ -252,7 +242,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
 
     case OPTIONS:
         // Optional: backlight
-        if (settings.optionalMenuItems.backlight) {
+        if (settings->optionalMenuItems.backlight) {
             assert(backlight);
             items.push_back(MenuItem(backlight->isLatched() ? "Backlight Off" : "Keep Backlight On", // Label
                                      MenuAction::TOGGLE_BACKLIGHT,                                   // Action
@@ -263,13 +253,13 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         items.push_back(MenuItem("Applets", MenuPage::APPLETS));
         items.push_back(MenuItem("Auto-show", MenuPage::AUTOSHOW));
         items.push_back(MenuItem("Recents Duration", MenuPage::RECENTS));
-        if (settings.userTiles.maxCount > 1)
+        if (settings->userTiles.maxCount > 1)
             items.push_back(MenuItem("Layout", MenuAction::LAYOUT, MenuPage::OPTIONS));
         items.push_back(MenuItem("Rotate", MenuAction::ROTATE, MenuPage::OPTIONS));
         items.push_back(MenuItem("Notifications", MenuAction::TOGGLE_NOTIFICATIONS, MenuPage::OPTIONS,
-                                 &settings.optionalFeatures.notifications));
-        items.push_back(
-            MenuItem("Battery Icon", MenuAction::TOGGLE_BATTERY_ICON, MenuPage::OPTIONS, &settings.optionalFeatures.batteryIcon));
+                                 &settings->optionalFeatures.notifications));
+        items.push_back(MenuItem("Battery Icon", MenuAction::TOGGLE_BATTERY_ICON, MenuPage::OPTIONS,
+                                 &settings->optionalFeatures.batteryIcon));
 
         // TODO - GPS and Wifi switches
         /*
@@ -328,9 +318,6 @@ void InkHUD::MenuApplet::onRender()
 {
     if (items.size() == 0)
         LOG_ERROR("Empty Menu");
-
-    // Testing only
-    setFont(fontSmall);
 
     // Dimensions for the slots where we will draw menuItems
     const float padding = 0.05;
@@ -397,7 +384,7 @@ void InkHUD::MenuApplet::onRender()
 
         // Testing only: circle instead of check box
         if (item.checkState) {
-            const uint16_t cbWH = fontSmall.lineHeight();  // Checbox: width / height
+            const uint16_t cbWH = fontSmall.lineHeight();  // Checkbox: width / height
             const int16_t cbL = itemR - X(padding) - cbWH; // Checkbox: left
             const int16_t cbT = center - (cbWH / 2);       // Checkbox : top
             // Checkbox ticked
@@ -463,9 +450,9 @@ void InkHUD::MenuApplet::populateAppletPage()
 {
     assert(items.size() == 0);
 
-    for (uint8_t i = 0; i < windowManager->getAppletCount(); i++) {
-        const char *name = windowManager->getAppletName(i);
-        bool *isActive = &(settings.userApplets.active[i]);
+    for (uint8_t i = 0; i < inkhud->userApplets.size(); i++) {
+        const char *name = inkhud->userApplets.at(i)->name;
+        bool *isActive = &(settings->userApplets.active[i]);
         items.push_back(MenuItem(name, MenuAction::TOGGLE_APPLET, MenuPage::APPLETS, isActive));
     }
 }
@@ -477,11 +464,11 @@ void InkHUD::MenuApplet::populateAutoshowPage()
 {
     assert(items.size() == 0);
 
-    for (uint8_t i = 0; i < windowManager->getAppletCount(); i++) {
+    for (uint8_t i = 0; i < inkhud->userApplets.size(); i++) {
         // Only add a menu item if applet is active
-        if (settings.userApplets.active[i]) {
-            const char *name = windowManager->getAppletName(i);
-            bool *isActive = &(settings.userApplets.autoshow[i]);
+        if (settings->userApplets.active[i]) {
+            const char *name = inkhud->userApplets.at(i)->name;
+            bool *isActive = &(settings->userApplets.autoshow[i]);
             items.push_back(MenuItem(name, MenuAction::TOGGLE_AUTOSHOW_APPLET, MenuPage::AUTOSHOW, isActive));
         }
     }
@@ -599,10 +586,10 @@ void InkHUD::MenuApplet::drawSystemInfoPanel(int16_t left, int16_t top, uint16_t
 
 // Get the height of the the panel drawn at the top of the menu
 // This is inefficient, as we do actually have to render the panel to determine the height
-// It solves a catch-22 situtation, where slotCount needs to know panel height, and panel height needs to know slotCount
+// It solves a catch-22 situation, where slotCount needs to know panel height, and panel height needs to know slotCount
 uint16_t InkHUD::MenuApplet::getSystemInfoPanelHeight()
 {
-    // Render *waay* off screen
+    // Render *far* off screen
     uint16_t height = 0;
     drawSystemInfoPanel(INT16_MIN, INT16_MIN, 1, &height);
 
