@@ -9,7 +9,7 @@
 #define PIN_EINK_RES 47
 #define PIN_EINK_SCLK 12
 #define PIN_EINK_MOSI 11
-#define VEXT_ENABLE 7  // e-ink power enable pin
+#define VEXT_ENABLE 7 // e-ink power enable pin
 #define VEXT_ON_VALUE HIGH
 
 #define PIN_POWER_EN 42 // TF/SD Card Power Enable Pin
