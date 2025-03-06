@@ -9,9 +9,10 @@
 #define PIN_EINK_RES 47
 #define PIN_EINK_SCLK 12
 #define PIN_EINK_MOSI 11
-#define PIN_EINK_EN_IN 7 // EINK enable power pin but inverted
+#define VEXT_ENABLE 7  // e-ink power enable pin
+#define VEXT_ON_VALUE HIGH
 
-#define PIN_TF_EN 42 // TF/SD Card Power Enable Pin
+#define PIN_POWER_EN 42 // TF/SD Card Power Enable Pin
 
 // #define BATTERY_PIN 1 // A battery voltage measurement pin, voltage divider connected here to
 //  measure battery voltage ratio of voltage divider = 2.0 (assumption)
