@@ -83,7 +83,9 @@ typedef enum _meshtastic_TelemetrySensorType {
     /* High accuracy current and voltage */
     meshtastic_TelemetrySensorType_INA226 = 34,
     /* DFRobot Gravity tipping bucket rain gauge */
-    meshtastic_TelemetrySensorType_DFROBOT_RAIN = 35
+    meshtastic_TelemetrySensorType_DFROBOT_RAIN = 35,
+    /* Infineon DPS310 High accuracy pressure and temperature */
+    meshtastic_TelemetrySensorType_DPS310 = 36
 } meshtastic_TelemetrySensorType;
 
 /* Struct definitions */
@@ -314,8 +316,8 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _meshtastic_TelemetrySensorType_MIN meshtastic_TelemetrySensorType_SENSOR_UNSET
-#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_DFROBOT_RAIN
-#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_DFROBOT_RAIN+1))
+#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_DPS310
+#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_DPS310+1))
 
 
 
