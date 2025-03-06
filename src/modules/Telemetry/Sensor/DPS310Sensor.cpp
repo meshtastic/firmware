@@ -6,7 +6,6 @@
 #include "DPS310Sensor.h"
 #include "TelemetrySensor.h"
 #include <Adafruit_DPS310.h>
-#include <typeinfo>
 
 DPS310Sensor::DPS310Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_DPS310, "DPS310") {}
 
