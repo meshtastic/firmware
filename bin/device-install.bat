@@ -1,149 +1,292 @@
 @ECHO OFF
 SETLOCAL EnableDelayedExpansion
-set "SCRIPTNAME=%~nx0"
-set "PYTHON=python"
-set "WEB_APP=0"
-set "TFT8=0"
-set "TFT16=0"
-SET "TFT_BUILD=0"
-SET "DO_SPECIAL_OTA=0"
+TITLE Meshtastic device-install
 
-:: Determine the correct esptool command to use
-where esptool >nul 2>&1
-if %ERRORLEVEL% EQU 0 (
-    set "ESPTOOL_CMD=esptool"
-) else (
-    set "ESPTOOL_CMD=%PYTHON% -m esptool"
-)
-
-goto GETOPTS
-:HELP
-echo Usage: %SCRIPTNAME% [-h] [-p ESPTOOL_PORT] [-P PYTHON] [-f FILENAME] [--web] [--tft] [--tft-16mb]
-echo Flash image file to device, but first erasing and writing system information
-echo.
-echo     -h               Display this help and exit
-echo     -p ESPTOOL_PORT  Set the environment variable for ESPTOOL_PORT.  If not set, ESPTOOL iterates all ports (Dangerrous).
-echo     -P PYTHON        Specify alternate python interpreter to use to invoke esptool. (Default: %PYTHON%)
-echo     -f FILENAME      The .bin file to flash.  Custom to your device type and region.
-echo     --web            Flash WEB APP.
-echo     --tft            Flash MUI 8mb
-echo     --tft-16mb       Flash MUI 16mb
-goto EOF
-
-:GETOPTS
-if /I "%~1"=="-h" goto HELP & exit /b
-if /I "%~1"=="--help" goto HELP & exit /b
-if "%~1"=="-p" set "ESPTOOL_PORT=%~2" & SHIFT & SHIFT & goto GETOPTS
-if "%~1"=="-P" set "PYTHON=%~2" & SHIFT & SHIFT & goto GETOPTS
-if /I "%~1"=="-f" set "FILENAME=%~2" & SHIFT & SHIFT & goto GETOPTS
-if /I "%~1"=="--web" set "WEB_APP=1" & SHIFT & goto GETOPTS
-if /I "%~1"=="--tft" set "TFT8=1" & SHIFT & goto GETOPTS
-if /I "%~1"=="--tft-16mb" set "TFT16=1" & SHIFT & goto GETOPTS
-SHIFT
-IF NOT "%~1"=="" goto GETOPTS
-
-IF "__%FILENAME%__" == "____" (
-    echo "Missing FILENAME"
-    goto HELP
-)
-
-:: Check if FILENAME contains "-tft-" and either TFT8 or TFT16 is 1 (--tft, -tft-16mb)
-IF NOT "%FILENAME:-tft-=%"=="%FILENAME%" (
-    SET "TFT_BUILD=1"
-    IF NOT "%TFT8%"=="1" IF NOT "%TFT16%"=="1" (
-        echo Error: Either --tft or --tft-16mb must be set to use a TFT build.
-        goto EOF
-    )
-    IF "%TFT8%"=="1" IF "%TFT16%"=="1" (
-        echo Error: Both --tft and --tft-16mb must NOT be set at the same time.
-        goto EOF
-    )
-)
-
-:: Extract BASENAME from %FILENAME% for later use.
-SET BASENAME=%FILENAME:firmware-=%
-
-IF EXIST %FILENAME% IF x%FILENAME:update=%==x%FILENAME% (
-    @REM Default littlefs* offset (--web).
-    SET "OFFSET=0x300000"
-
-    @REM Default OTA Offset
-    SET "OTA_OFFSET=0x260000"
-
-    @REM littlefs* offset for MUI 8mb (--tft) and OTA OFFSET.
-    IF "%TFT8%"=="1" IF "%TFT_BUILD%"=="1" (
-        SET "OFFSET=0x670000"
-        SET "OTA_OFFSET=0x340000"
-    ) else (
-        echo Ignoring --tft, not a TFT Build.
-    )
-
-    @REM littlefs* offset for MUI 16mb (--tft-16mb) and OTA OFFSET.
-    IF "%TFT16%"=="1" IF "%TFT_BUILD%"=="1" (
-        SET "OFFSET=0xc90000"
-        SET "OTA_OFFSET=0x650000"
-    ) else (
-        echo Ignoring --tft-16mb, not a TFT Build.
-    )
-
-    echo Trying to flash update %FILENAME%, but first erasing and writing system information"
-    %ESPTOOL_CMD% --baud 115200 erase_flash
-    %ESPTOOL_CMD% --baud 115200 write_flash 0x00 "%FILENAME%"
-
-    @REM Account for S3 and C3 board's different OTA partition
-    IF NOT "%FILENAME%"=="%FILENAME:s3=%" SET "DO_SPECIAL_OTA=1"
-    IF NOT "%FILENAME%"=="%FILENAME:v3=%" SET "DO_SPECIAL_OTA=1"
-    IF NOT "%FILENAME%"=="%FILENAME:t-deck=%" SET "DO_SPECIAL_OTA=1"
-    IF NOT "%FILENAME%"=="%FILENAME:wireless-paper=%" SET "DO_SPECIAL_OTA=1"
-    IF NOT "%FILENAME%"=="%FILENAME:wireless-tracker=%" SET "DO_SPECIAL_OTA=1"
-    IF NOT "%FILENAME%"=="%FILENAME:station-g2=%" SET "DO_SPECIAL_OTA=1"
-    IF NOT "%FILENAME%"=="%FILENAME:unphone=%" SET "DO_SPECIAL_OTA=1"
-    IF NOT "%FILENAME%"=="%FILENAME:esp32c3=%" SET "DO_SPECIAL_OTA=1"
-
-    IF "!DO_SPECIAL_OTA!"=="1" (
-        IF NOT "%FILENAME%"=="%FILENAME:esp32c3=%" (
-            %ESPTOOL_CMD% --baud 115200 write_flash !OTA_OFFSET! bleota-c3.bin
-        ) ELSE (
-            %ESPTOOL_CMD% --baud 115200 write_flash !OTA_OFFSET! bleota-s3.bin
-        )
-    ) ELSE (
-        %ESPTOOL_CMD% --baud 115200 write_flash !OTA_OFFSET! bleota.bin
-    )
-
-    @REM Check if WEB_APP (--web) is enabled and add "littlefswebui-" to BASENAME else "littlefs-".
-    IF "%WEB_APP%"=="1" (
-        @REM Check it the file exist before trying to write it.
-        IF EXIST "littlefswebui-%BASENAME%" (
-            %ESPTOOL_CMD% --baud 115200 write_flash !OFFSET! "littlefswebui-%BASENAME%"
-        ) else (
-            echo Error: file "littlefswebui-%BASENAME%" wasn't found, littlefswebui not written.
-            goto EOF
-        )
-    ) else (
-        @REM Check it the file exist before trying to write it.
-        IF EXIST "littlefs-%BASENAME%" (
-            %ESPTOOL_CMD% --baud 115200 write_flash !OFFSET! "littlefs-%BASENAME%"
-        ) else (
-            echo Error: file "littlefs-%BASENAME%" wasn't found, littlefs not written.
-            goto EOF
-        )
-    )
-) else (
-    echo "Invalid file: %FILENAME%"
-    goto HELP
-)
-
-:EOF
-@REM Cleanup vars.
-SET "SCRIPTNAME="
+SET "SCRIPT_NAME=%~nx0"
+SET "DEBUG=0"
 SET "PYTHON="
-SET "WEB_APP="
-SET "TFT8="
-Set "TFT16="
-SET "OFFSET="
-SET "OTA_OFFSET="
-SET "DO_SPECIAL_OTA="
-SET "FILENAME="
-SET "BASENAME="
-endlocal
-exit /b 0
+SET "WEB_APP=0"
+SET "TFT_BUILD=0"
+SET "TFT8=0"
+SET "TFT16=0"
+SET "ESPTOOL_BAUD=115200"
+SET "ESPTOOL_CMD="
+SET "LOGCOUNTER=0"
+
+GOTO getopts
+:help
+ECHO Flash image file to device, but first erasing and writing system information.
+ECHO.
+ECHO Usage: %SCRIPT_NAME% -f filename [-p PORT] [-P python] (--web)
+ECHO.
+ECHO Options:
+ECHO     -f filename      The .bin file to flash.  Custom to your device type and region. (required)
+ECHO                      The file must be located in this current directory.
+ECHO     -p PORT          Set the environment variable for ESPTOOL_PORT.
+ECHO                      If not set, ESPTOOL iterates all ports (Dangerous).
+ECHO     -P python        Specify alternate python interpreter to use to invoke esptool. (default: python)
+ECHO                      If supplied the script will use python.
+ECHO                      If not supplied the script will try to find esptool in Path.
+ECHO     --web            Enable WebUI. (default: false)
+ECHO.
+ECHO Example: %SCRIPT_NAME% -f firmware-t-deck-tft-2.6.0.0b106d4.bin -p COM11
+ECHO Example: %SCRIPT_NAME% -f littlefs-unphone-2.6.0.0b106d4.bin -p COM11 --web
+GOTO eof
+
+:version
+ECHO %SCRIPT_NAME% [Version 2.6.0]
+ECHO Meshtastic
+GOTO eof
+
+:getopts
+IF "%~1"=="" GOTO endopts
+IF /I "%~1"=="-?" GOTO help
+IF /I "%~1"=="-h" GOTO help
+IF /I "%~1"=="--help" GOTO help
+IF /I "%~1"=="-v" GOTO version
+IF /I "%~1"=="--version" GOTO version
+IF /I "%~1"=="--debug" SET "DEBUG=1" & CALL :LOG_MESSAGE DEBUG "DEBUG mode: enabled."
+IF /I "%~1"=="-f" SET "FILENAME=%~2" & SHIFT
+IF "%~1"=="-p" SET "ESPTOOL_PORT=%~2" & SHIFT
+IF /I "%~1"=="--port" SET "ESPTOOL_PORT=%~2" & SHIFT
+IF "%~1"=="-P" SET "PYTHON=%~2" & SHIFT
+IF /I "%~1"=="--web" SET "WEB_APP=1"
+SHIFT
+GOTO getopts
+:endopts
+
+CALL :LOG_MESSAGE DEBUG "Checking FILENAME parameter..."
+IF "__!FILENAME!__"=="____" (
+    CALL :LOG_MESSAGE DEBUG "Missing -f filename input."
+    GOTO help
+) ELSE (
+    IF NOT "__!FILENAME: =!__"=="__!FILENAME!__" (
+        CALL :LOG_MESSAGE ERROR "Filename containing spaces are not supported."
+        GOTO help
+    )
+    @REM Remove ".\" or "./" file prefix if present.
+    SET "FILENAME=!FILENAME:.\=!"
+    SET "FILENAME=!FILENAME:./=!"
+)
+
+CALL :LOG_MESSAGE DEBUG "Filename: !FILENAME!"
+CALL :LOG_MESSAGE DEBUG "Checking if !FILENAME! exists..."
+IF NOT EXIST !FILENAME! (
+    CALL :LOG_MESSAGE ERROR "File does not exist: !FILENAME!. Terminating."
+    GOTO eof
+)
+
+IF NOT "!FILENAME:update=!"=="!FILENAME!" (
+    CALL :LOG_MESSAGE DEBUG "We are working with a *update* file. !FILENAME!"
+    CALL :LOG_MESSAGE INFO "Use script device-update.bat to flash update !FILENAME!."
+    GOTO eof
+) ELSE (
+    CALL :LOG_MESSAGE DEBUG "We are NOT working with a *update* file. !FILENAME!"
+)
+
+CALL :LOG_MESSAGE DEBUG "Determine the correct esptool command to use..."
+IF NOT "__%PYTHON%__"=="____" (
+    SET "ESPTOOL_CMD=!PYTHON! -m esptool"
+    CALL :LOG_MESSAGE DEBUG "Python interpreter supplied."
+) ELSE (
+    CALL :LOG_MESSAGE DEBUG "Python interpreter NOT supplied. Looking for esptool...
+    WHERE esptool >nul 2>&1
+    IF %ERRORLEVEL% EQU 0 (
+        @REM WHERE exits with code 0 if esptool is found.
+        SET "ESPTOOL_CMD=esptool"
+    ) ELSE (
+        SET "ESPTOOL_CMD=python -m esptool"
+        CALL :RESET_ERROR
+    )
+)
+
+CALL :LOG_MESSAGE DEBUG "Checking esptool command !ESPTOOL_CMD!..."
+!ESPTOOL_CMD! >nul 2>&1
+IF %ERRORLEVEL% GTR 2 (
+    @REM esptool exits with code 1 if help is displayed.
+    CALL :LOG_MESSAGE ERROR "esptool not found: !ESPTOOL_CMD!"
+    EXIT /B 1
+    GOTO eof
+)
+IF %DEBUG% EQU 1 (
+    CALL :LOG_MESSAGE DEBUG "Skipping ESPTOOL_CMD steps."
+    SET "ESPTOOL_CMD=REM !ESPTOOL_CMD!"
+)
+
+CALL :LOG_MESSAGE DEBUG "Using esptool command: !ESPTOOL_CMD!"
+IF "__!ESPTOOL_PORT!__" == "____" (
+    CALL :LOG_MESSAGE WARN "Using esptool port: UNSET."
+) ELSE (
+    CALL :LOG_MESSAGE INFO "Using esptool port: !ESPTOOL_PORT!."
+)
+CALL :LOG_MESSAGE INFO "Using esptool baud: !ESPTOOL_BAUD!."
+
+@REM Check if FILENAME contains "-tft-" and set target partitionScheme accordingly.
+@REM https://github.com/meshtastic/web-flasher/blob/main/types/resources.ts#L3
+IF NOT "!FILENAME:-tft-=!"=="!FILENAME!" (
+    CALL :LOG_MESSAGE DEBUG "We are working with a *-tft-* file. !FILENAME!"
+    IF %WEB_APP% EQU 1 (
+        CALL :LOG_MESSAGE ERROR "Cannot enable WebUI (--web) and MUI." & GOTO eof
+    )
+    SET "TFT_BUILD=1"
+    GOTO tft
+) ELSE (
+    CALL :LOG_MESSAGE DEBUG "We are NOT working with a *-tft-* file. !FILENAME!"
+    GOTO no_tft
+)
+
+:tft
+SET "TFT8MB=picomputer-s3 unphone seeed-sensecap-indicator"
+FOR %%a IN (%TFT8MB%) DO (
+    IF NOT "!FILENAME:%%a=!"=="!FILENAME!" (
+        @REM We are working with any of %TFT8MB%.
+        SET "TFT8=1"
+        GOTO end_loop_tft8mb
+    )
+)
+:end_loop_tft8mb
+
+SET "TFT16MB=t-deck"
+FOR %%a IN (%TFT16MB%) DO (
+    IF NOT "!FILENAME:%%a=!"=="!FILENAME!" (
+        @REM We are working with any of %TFT16MB%.
+        SET "TFT16=1"
+        GOTO end_loop_tft16mb
+    )
+)
+:end_loop_tft16mb
+
+IF %TFT8% EQU 1 CALL :LOG_MESSAGE INFO "tft and MUI 8mb selected."
+IF %TFT16% EQU 1 CALL :LOG_MESSAGE INFO "tft and MUI 16mb selected."
+
+:no_tft
+
+@REM Extract BASENAME from %FILENAME% for later use.
+SET "BASENAME=!FILENAME:firmware-=!"
+CALL :LOG_MESSAGE DEBUG "Computed firmware basename: !BASENAME!"
+
+@REM Account for S3 and C3 board's different OTA partition.
+SET "S3=s3 v3 t-deck wireless-paper wireless-tracker station-g2 unphone"
+FOR %%a IN (%S3%) DO (
+    IF NOT "!FILENAME:%%a=!"=="!FILENAME!" (
+        @REM We are working with any of %S3%.
+        SET "OTA_FILENAME=bleota-s3.bin"
+        GOTO :end_loop_s3
+    )
+)
+
+SET "C3=esp32c3"
+FOR %%a IN (%C3%) DO (
+    IF NOT "!FILENAME:%%a=!"=="!FILENAME!" (
+        @REM We are working with any of %C3%.
+        SET "OTA_FILENAME=bleota-c3.bin"
+        GOTO :end_loop_c3
+    )
+)
+
+@REM Everything else
+SET "OTA_FILENAME=bleota.bin"
+:end_loop_s3
+:end_loop_c3
+CALL :LOG_MESSAGE DEBUG "Set OTA_FILENAME to: !OTA_FILENAME!"
+
+@REM Check if (--web) is enabled and prefix BASENAME with "littlefswebui-" else "littlefs-".
+IF %WEB_APP% EQU 1 (
+    CALL :LOG_MESSAGE INFO "WebUI selected."
+    SET "SPIFFS_FILENAME=littlefswebui-%BASENAME%"
+) ELSE (
+    SET "SPIFFS_FILENAME=littlefs-%BASENAME%"
+)
+CALL :LOG_MESSAGE DEBUG "Set SPIFFS_FILENAME to: !SPIFFS_FILENAME!"
+
+@REM Default offsets.
+@REM https://github.com/meshtastic/web-flasher/blob/main/stores/firmwareStore.ts#L202
+SET "OTA_OFFSET=0x260000"
+SET "SPIFFS_OFFSET=0x300000"
+
+@REM Offsets for MUI 8mb.
+IF %TFT8% EQU 1 IF %TFT_BUILD% EQU 1 (
+    SET "OTA_OFFSET=0x340000"
+    SET "SPIFFS_OFFSET=0x670000"
+)
+
+@REM Offsets for MUI 16mb.
+IF %TFT16% EQU 1 IF %TFT_BUILD% EQU 1 (
+    SET "OTA_OFFSET=0x650000"
+    SET "SPIFFS_OFFSET=0xc90000"
+)
+
+CALL :LOG_MESSAGE DEBUG "Set OTA_OFFSET to: !OTA_OFFSET!"
+CALL :LOG_MESSAGE DEBUG "Set SPIFFS_OFFSET to: !SPIFFS_OFFSET!"
+
+@REM Ensure target files exist before flashing operations.
+IF NOT EXIST !FILENAME! CALL :LOG_MESSAGE ERROR "File does not exist: "!FILENAME!". Terminating." & EXIT /B 2 & GOTO eof
+IF NOT EXIST !OTA_FILENAME! CALL :LOG_MESSAGE ERROR "File does not exist: "!OTA_FILENAME!". Terminating." & EXIT /B 2 & GOTO eof
+IF NOT EXIST !SPIFFS_FILENAME! CALL :LOG_MESSAGE ERROR "File does not exist: "!SPIFFS_FILENAME!". Terminating." & EXIT /B 2 & GOTO eof
+
+@REM Flashing operations.
+CALL :LOG_MESSAGE INFO "Trying to flash "!FILENAME!", but first erasing and writing system information..."
+CALL :RUN_ESPTOOL !ESPTOOL_BAUD! erase_flash || GOTO eof
+CALL :RUN_ESPTOOL !ESPTOOL_BAUD! write_flash 0x00 "!FILENAME!" || GOTO eof
+
+CALL :LOG_MESSAGE INFO "Trying to flash BLEOTA "!OTA_FILENAME!" at OTA_OFFSET !OTA_OFFSET!..."
+CALL :RUN_ESPTOOL !ESPTOOL_BAUD! write_flash !OTA_OFFSET! "!OTA_FILENAME!" || GOTO eof
+
+CALL :LOG_MESSAGE INFO "Trying to flash SPIFFS "!SPIFFS_FILENAME!" at SPIFFS_OFFSET !SPIFFS_OFFSET!..."
+CALL :RUN_ESPTOOL !ESPTOOL_BAUD! write_flash !SPIFFS_OFFSET! "!SPIFFS_FILENAME!" || GOTO eof
+
+CALL :LOG_MESSAGE INFO "Script complete!."
+
+:eof
+ENDLOCAL
+EXIT /B %ERRORLEVEL%
+
+
+:RUN_ESPTOOL
+@REM Subroutine used to run ESPTOOL_CMD with arguments.
+@REM Also handles %ERRORLEVEL%.
+@REM CALL :RUN_ESPTOOL [Baud] [erase_flash|write_flash] [OFFSET] [Filename]
+@REM.
+@REM Example:: CALL :RUN_ESPTOOL 115200 write_flash 0x10000 "firmwarefile.bin"
+IF %DEBUG% EQU 1 CALL :LOG_MESSAGE DEBUG "About to run command: !ESPTOOL_CMD! --baud %~1 %~2 %~3 %~4"
+CALL :RESET_ERROR
+!ESPTOOL_CMD! --baud %~1 %~2 %~3 %~4
+IF %ERRORLEVEL% NEQ 0 (
+    CALL :LOG_MESSAGE ERROR "Error running command: !ESPTOOL_CMD! --baud %~1 %~2 %~3 %~4"
+    EXIT /B %ERRORLEVEL%
+)
+GOTO :eof
+
+:LOG_MESSAGE
+@REM Subroutine used to print log messages in four different levels.
+@REM DEBUG messages only get printed if [-d] flag is passed to script.
+@REM CALL :LOG_MESSAGE [ERROR|INFO|WARN|DEBUG] "Message"
+@REM.
+@REM Example:: CALL :LOG_MESSAGE INFO "Message."
+SET /A LOGCOUNTER=LOGCOUNTER+1
+IF "%1" == "ERROR" CALL :GET_TIMESTAMP & ECHO [91m%1 [0m[37m^| !TIMESTAMP! !LOGCOUNTER! [0m[91m%~2[0m
+IF "%1" == "INFO" CALL :GET_TIMESTAMP & ECHO [32m%1  [0m[37m^| !TIMESTAMP! !LOGCOUNTER! [0m[32m%~2[0m
+IF "%1" == "WARN" CALL :GET_TIMESTAMP & ECHO [33m%1  [0m[37m^| !TIMESTAMP! !LOGCOUNTER! [0m[33m%~2[0m
+IF "%1" == "DEBUG" IF %DEBUG% EQU 1 CALL :GET_TIMESTAMP & ECHO [34m%1 [0m[37m^| !TIMESTAMP! !LOGCOUNTER! [0m[34m%~2[0m
+GOTO :eof
+
+:GET_TIMESTAMP
+@REM Subroutine used to set !TIMESTAMP! to HH:MM:ss.
+@REM CALL :GET_TIMESTAMP
+@REM.
+@REM Updates: !TIMESTAMP!
+FOR /F "tokens=1,2,3 delims=:,." %%a IN ("%TIME%") DO (
+    SET "HH=%%a"
+    SET "MM=%%b"
+    SET "ss=%%c"
+)
+SET "TIMESTAMP=!HH!:!MM!:!ss!"
+GOTO :eof
+
+:RESET_ERROR
+@REM Subroutine to reset %ERRORLEVEL% to 0.
+@REM CALL :RESET_ERROR
+@REM.
+@REM Updates: %ERRORLEVEL%
+EXIT /B 0
+GOTO :eof
