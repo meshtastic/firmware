@@ -76,7 +76,7 @@ done
 # Check if FILENAME contains "-tft-" and set target partitionScheme accordingly.
 if [[ ${FILENAME//-tft-/} != "$FILENAME" ]]; then
 	TFT_BUILD=true
-	if [ "$WEB_APP" = true ] && [ "$TFT_BUILD" = true ]; then
+	if [[ $WEB_APP == true ]] && [[ $TFT_BUILD == true ]]; then
 		echo "Cannot enable WebUI (--web) and MUI."
 		exit 1
 	fi
@@ -130,25 +130,25 @@ if [ -f "${FILENAME}" ] && [ -n "${FILENAME##*"update"*}" ]; then
 		SPIFFSFILE=littlefs-${BASENAME}
 	fi
 
-	if [ ! -f "$FILENAME" ]; then
-		echo "Error: file "$FILENAME" wasn't found. Terminating."
+	if [[ ! -f $FILENAME ]]; then
+		echo "Error: file ${FILENAME} wasn't found. Terminating."
 		exit 1
 	fi
-	if [ ! -f "$OTAFILE" ]; then
-		echo "Error: file "$OTAFILE" wasn't found. Terminating."
+	if [[ ! -f $OTAFILE ]]; then
+		echo "Error: file ${OTAFILE} wasn't found. Terminating."
 		exit 1
 	fi
-	if [ ! -f "$SPIFFSFILE" ]; then
-		echo "Error: file "$SPIFFSFILE" wasn't found. Terminating."
+	if [[ ! -f $SPIFFSFILE ]]; then
+		echo "Error: file ${SPIFFSFILE} wasn't found. Terminating."
 		exit 1
 	fi
 
 	echo "Trying to flash ${FILENAME}, but first erasing and writing system information"
 	$ESPTOOL_CMD erase_flash
 	$ESPTOOL_CMD write_flash 0x00 "${FILENAME}"
-	echo "Trying to flash "$OTAFILE" at offset "$OTA_OFFSET""
+	echo "Trying to flash ${OTAFILE} at offset ${OTA_OFFSET}"
 	$ESPTOOL_CMD write_flash $OTA_OFFSET "${OTAFILE}"
-	echo "Trying to flash "$SPIFFSFILE", at offset "$OFFSET""
+	echo "Trying to flash ${SPIFFSFILE}, at offset ${OFFSET}"
 	$ESPTOOL_CMD write_flash $OFFSET "${SPIFFSFILE}"
 
 else
