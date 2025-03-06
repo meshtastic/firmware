@@ -29,13 +29,13 @@ class PositionsApplet : public MapApplet, public SinglePortModule
   protected:
     ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
 
-    NodeNum lastFrom; // Sender of most recent (non-local) position packet
-    float lastLat;
-    float lastLng;
-    float lastHopsAway;
+    NodeNum lastFrom = 0; // Sender of most recent (non-local) position packet
+    float lastLat = 0.0;
+    float lastLng = 0.0;
+    float lastHopsAway = 0;
 
-    float ourLastLat; // Info about the most recent (non-local) position packet
-    float ourLastLng; // Info about most recent *local* position
+    float ourLastLat = 0.0; // Info about the most recent (non-local) position packet
+    float ourLastLng = 0.0; // Info about most recent *local* position
 };
 
 } // namespace NicheGraphics::InkHUD

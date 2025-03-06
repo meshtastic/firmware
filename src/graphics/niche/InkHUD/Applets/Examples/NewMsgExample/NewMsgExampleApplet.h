@@ -53,7 +53,7 @@ class NewMsgExampleApplet : public Applet, public SinglePortModule
 
     // Store info from handleReceived
     bool haveMessage = false;
-    NodeNum fromWho;
+    NodeNum fromWho = 0;
 };
 
 } // namespace NicheGraphics::InkHUD

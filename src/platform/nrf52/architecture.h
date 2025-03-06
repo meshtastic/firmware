@@ -75,6 +75,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 #elif defined(HELTEC_T114)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_NODE_T114
+#elif defined(SEEED_XIAO_NRF52840_KIT)
+#define HW_VENDOR meshtastic_HardwareModel_SEEED_XIAO_NRF52840_KIT
 #else
 #define HW_VENDOR meshtastic_HardwareModel_NRF52_UNKNOWN
 #endif

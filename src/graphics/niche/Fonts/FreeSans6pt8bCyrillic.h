@@ -4,7 +4,7 @@ Uses Windows-1251 encoding to map translingual Cyrillic characters to range betw
 https://en.wikipedia.org/wiki/Windows-1251
 
 Cyrillic characters present to the firmware as UTF8.
-A Niche Graphics implementation needs to identify these, and subsitute the appropriate Windows-1251 char value.
+A NicheGraphics implementation needs to identify these, and substitute the appropriate Windows-1251 char value.
 
 */
 

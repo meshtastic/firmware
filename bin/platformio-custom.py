@@ -98,7 +98,7 @@ except Exception as e:
     prefsLoc = "./" + verPropFile  # Fallback location
 
 verObj = readProps(prefsLoc)
-
+print("Using meshtastic platformio-custom.py, firmware version " + verObj["long"] + " on " + env.get("PIOENV"))
 appEnv = env.get("PIOENV")
 
 jsonLoc = env["PROJECT_DIR"] + "/userPrefs.jsonc"
@@ -136,3 +136,8 @@ if projenv:
     projenv.Append(CCFLAGS=flags)
 
 env.Append(CCFLAGS=flags)
+
+for lb in env.GetLibBuilders():
+    if lb.name == "meshtastic-device-ui":
+        lb.env.Append(CPPDEFINES=[("APP_VERSION", verObj["long"])])
+        break
