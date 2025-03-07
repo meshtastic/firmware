@@ -18,7 +18,7 @@ static int32_t runtaskHighlight()
     LOG_DEBUG("Dismissing Highlight");
     InkHUD::Tile::highlightShown = false;
     InkHUD::Tile::highlightTarget = nullptr;
-    InkHUD::WindowManager::getInstance()->forceUpdate(Drivers::EInk::UpdateTypes::FAST); // Re-render, clearing the highlighting
+    InkHUD::InkHUD::getInstance()->forceUpdate(Drivers::EInk::UpdateTypes::FAST); // Re-render, clearing the highlighting
     return taskHighlight->disable();
 }
 static void inittaskHighlight()
@@ -33,21 +33,30 @@ static void inittaskHighlight()
 
 InkHUD::Tile::Tile()
 {
-    // For convenince
-    windowManager = InkHUD::WindowManager::getInstance();
+    inkhud = InkHUD::getInstance();
 
     inittaskHighlight();
     Tile::highlightTarget = nullptr;
     Tile::highlightShown = false;
 }
 
+InkHUD::Tile::Tile(int16_t left, int16_t top, uint16_t width, uint16_t height)
+{
+    assert(width > 0 && height > 0);
+
+    this->left = left;
+    this->top = top;
+    this->width = width;
+    this->height = height;
+}
+
 // Set the region of the tile automatically, based on the user's chosen layout
 // This method places tiles which will host user applets
 // The WindowManager multiplexes the applets to these tiles automatically
-void InkHUD::Tile::placeUserTile(uint8_t userTileCount, uint8_t tileIndex)
+void InkHUD::Tile::setRegion(uint8_t userTileCount, uint8_t tileIndex)
 {
-    uint16_t displayWidth = windowManager->getWidth();
-    uint16_t displayHeight = windowManager->getHeight();
+    uint16_t displayWidth = inkhud->width();
+    uint16_t displayHeight = inkhud->height();
 
     bool landscape = displayWidth > displayHeight;
 
@@ -62,10 +71,9 @@ void InkHUD::Tile::placeUserTile(uint8_t userTileCount, uint8_t tileIndex)
         return;
     }
 
-    // Todo: special handling for the notification area
     // Todo: special handling for 3 tile layout
 
-    // Gap between tiles
+    // Gutters between tiles
     const uint16_t spacing = 4;
 
     switch (userTileCount) {
@@ -124,17 +132,12 @@ void InkHUD::Tile::placeUserTile(uint8_t userTileCount, uint8_t tileIndex)
     }
 
     assert(width > 0 && height > 0);
-
-    this->left = left;
-    this->top = top;
-    this->width = width;
-    this->height = height;
 }
 
 // Manually set the region for a tile
 // This is only done for tiles which will host certain "System Applets", which have unique position / sizes:
 // Things like the NotificationApplet, BatteryIconApplet, etc
-void InkHUD::Tile::placeSystemTile(int16_t left, int16_t top, uint16_t width, uint16_t height)
+void InkHUD::Tile::setRegion(int16_t left, int16_t top, uint16_t width, uint16_t height)
 {
     assert(width > 0 && height > 0);
 
@@ -182,31 +185,32 @@ void InkHUD::Tile::handleAppletPixel(int16_t x, int16_t y, Color c)
 
     // Crop to tile borders
     if (x >= left && x < (left + width) && y >= top && y < (top + height)) {
-        // Pass to the window manager
-        windowManager->handleTilePixel(x, y, c);
+        // Pass to the renderer
+        inkhud->drawPixel(x, y, c);
     }
 }
 
-// Called by Applet base class, when learning of its dimensions
+// Called by Applet base class, when setting applet dimensions, immediately before render
 uint16_t InkHUD::Tile::getWidth()
 {
     return width;
 }
 
-// Called by Applet base class, when learning of its dimensions
+// Called by Applet base class, when setting applet dimensions, immediately before render
 uint16_t InkHUD::Tile::getHeight()
 {
     return height;
 }
 
 // Longest edge of the display, in pixels
+// A 296px x 250px display will return 296, for example
 // Maximum possible size of any tile's width / height
-// Used by some components to allocate resources for the "worst possible situtation"
+// Used by some components to allocate resources for the "worst possible situation"
 // "Sizing the cathedral for christmas eve"
 uint16_t InkHUD::Tile::maxDisplayDimension()
 {
-    WindowManager *wm = WindowManager::getInstance();
-    return max(wm->getHeight(), wm->getWidth());
+    InkHUD *inkhud = InkHUD::getInstance();
+    return max(inkhud->height(), inkhud->width());
 }
 
 // Ask for this tile to be highlighted
@@ -216,7 +220,7 @@ void InkHUD::Tile::requestHighlight()
 {
     Tile::highlightTarget = this;
     Tile::highlightShown = false;
-    windowManager->forceUpdate(Drivers::EInk::UpdateTypes::FAST);
+    inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FAST);
 }
 
 // Starts the timer which will automatically dismiss the highlighting, if the tile doesn't organically redraw first

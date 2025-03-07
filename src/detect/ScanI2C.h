@@ -68,6 +68,7 @@ class ScanI2C
         NXP_SE050,
         DFROBOT_RAIN,
         LTR390UV,
+        DPS310,
     } DeviceType;
 
     // typedef uint8_t DeviceAddress;

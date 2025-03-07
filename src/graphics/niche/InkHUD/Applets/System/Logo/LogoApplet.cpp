@@ -2,15 +2,22 @@
 
 #include "./LogoApplet.h"
 
+#include "mesh/NodeDB.h"
+
 using namespace NicheGraphics;
 
 InkHUD::LogoApplet::LogoApplet() : concurrency::OSThread("LogoApplet")
 {
-    // Don't autostart the runOnce() timer
-    OSThread::disable();
+    OSThread::setIntervalFromNow(8 * 1000UL);
+    OSThread::enabled = true;
 
-    // Grab the WindowManager singleton, for convenience
-    windowManager = WindowManager::getInstance();
+    textLeft = "";
+    textRight = "";
+    textTitle = xstr(APP_VERSION_SHORT);
+    fontTitle = fontSmall;
+
+    bringToForeground();
+    // This is then drawn with a FULL refresh by Renderer::begin
 }
 
 void InkHUD::LogoApplet::onRender()
@@ -48,53 +55,24 @@ void InkHUD::LogoApplet::onRender()
 
 void InkHUD::LogoApplet::onForeground()
 {
-    // If another applet has locked the display, ask it to exit
-    Applet *other = windowManager->whoLocked();
-    if (other != nullptr)
-        other->sendToBackground();
-
-    windowManager->claimFullscreen(this); // Take ownership of fullscreen tile
-    windowManager->lock(this);            // Prevent other applets from requesting updates
+    SystemApplet::lockRendering = true;
+    SystemApplet::lockRequests = true;
+    SystemApplet::handleInput = true; // We don't actually use this input. Just blocking other applets from using it.
 }
 
 void InkHUD::LogoApplet::onBackground()
 {
-    OSThread::disable(); // Disable auto-dismiss timer, in case applet was dismissed early (sendToBackground from outside class)
-
-    windowManager->releaseFullscreen(); // Relinquish ownership of fullscreen tile
-    windowManager->unlock(this);        // Allow normal user applet update requests to resume
+    SystemApplet::lockRendering = false;
+    SystemApplet::lockRequests = false;
+    SystemApplet::handleInput = false;
 
     // Need to force an update, as a polite request wouldn't be honored, seeing how we are now in the background
     // Usually, onBackground is followed by another applet's onForeground (which requests update), but not in this case
-    windowManager->forceUpdate(EInk::UpdateTypes::FULL);
-}
-
-int32_t InkHUD::LogoApplet::runOnce()
-{
-    LOG_DEBUG("Sent to background by timer");
-    sendToBackground();
-    return OSThread::disable();
-}
-
-// Begin displaying the screen which is shown at startup
-// Suggest EInk::await after calling this method
-void InkHUD::LogoApplet::showBootScreen()
-{
-    OSThread::setIntervalFromNow(8 * 1000UL);
-    OSThread::enabled = true;
-
-    textLeft = "";
-    textRight = "";
-    textTitle = xstr(APP_VERSION_SHORT);
-    fontTitle = fontSmall;
-
-    bringToForeground();
-    requestUpdate(Drivers::EInk::UpdateTypes::FULL); // Already requested, just upgrading to FULL
+    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 // Begin displaying the screen which is shown at shutdown
-// Needs EInk::await after calling this method, to ensure display updates before shutdown
-void InkHUD::LogoApplet::showShutdownScreen()
+void InkHUD::LogoApplet::onShutdown()
 {
     textLeft = "";
     textRight = "";
@@ -102,7 +80,13 @@ void InkHUD::LogoApplet::showShutdownScreen()
     fontTitle = fontLarge;
 
     bringToForeground();
-    requestUpdate(Drivers::EInk::UpdateTypes::FULL); // Already requested, just upgrading to FULL
+    // This is then drawn by InkHUD::Events::onShutdown, with a blocking FULL update
+}
+
+int32_t InkHUD::LogoApplet::runOnce()
+{
+    sendToBackground();
+    return OSThread::disable();
 }
 
 #endif

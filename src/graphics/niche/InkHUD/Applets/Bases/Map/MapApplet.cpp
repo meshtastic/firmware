@@ -6,8 +6,6 @@ using namespace NicheGraphics;
 
 void InkHUD::MapApplet::onRender()
 {
-    setFont(fontSmall);
-
     // Abort if no markers to render
     if (!enoughMarkers()) {
         printAt(X(0.5), Y(0.5) - (getFont().lineHeight() / 2), "Node positions", CENTER, MIDDLE);
@@ -27,6 +25,7 @@ void InkHUD::MapApplet::onRender()
     // Set the region shown on the map
     // - default: fit all nodes, plus padding
     // - maybe overriden by derived applet
+    // - getMapSize *sets* passed parameters (C-style)
     getMapSize(&widthMeters, &heightMeters);
 
     // Set the metersToPx conversion value
@@ -71,7 +70,7 @@ void InkHUD::MapApplet::getMapCenter(float *lat, float *lng)
     // - uses tan to find angles for lat / long degrees
     //   - longitude: triangle formed by x and y (on plane of the equator)
     //   - latitude: triangle formed by z (north south),
-    //     and the line along plane of equator which stetches from earth's axis to where point xyz intersects planet's surface
+    //     and the line along plane of equator which stretches from earth's axis to where point xyz intersects planet's surface
 
     // Working totals, averaged after nodeDB processed
     uint32_t positionCount = 0;
@@ -134,7 +133,7 @@ void InkHUD::MapApplet::getMapCenter(float *lat, float *lng)
 
     *lng = atan2(yAvg, xAvg) * RAD_TO_DEG;
 
-    // Latitude from cartesian cooods
+    // Latitude from cartesian coords
     // (Angle from 3D coords describing a point on the globe's surface)
     // As latitude increases, distance from the Earth's north-south axis out to our surface point decreases.
     // Means we need to first find the hypotenuse which becomes base of our triangle in the second step
@@ -191,8 +190,8 @@ void InkHUD::MapApplet::getMapCenter(float *lat, float *lng)
 
         // Longitude is trickier
         float lng = node->position.longitude_i * 1e-7;
-        float degEastward = fmod(((lng - lngCenter) + 360), 360);      // Degrees travelled east from lngCenter to reach node
-        float degWestward = abs(fmod(((lng - lngCenter) - 360), 360)); // Degrees travelled west from lngCenter to reach node
+        float degEastward = fmod(((lng - lngCenter) + 360), 360);      // Degrees traveled east from lngCenter to reach node
+        float degWestward = abs(fmod(((lng - lngCenter) - 360), 360)); // Degrees traveled west from lngCenter to reach node
         if (degEastward < degWestward)
             easternmost = max(easternmost, lngCenter + degEastward);
         else
@@ -258,7 +257,7 @@ void InkHUD::MapApplet::drawLabeledMarker(meshtastic_NodeInfoLite *node)
     // Find x and y position based on node's position in nodeDB
     assert(nodeDB->hasValidPosition(node));
     Marker m = calculateMarker(node->position.latitude_i * 1e-7,  // Lat, converted from Meshtastic's internal int32 style
-                               node->position.longitude_i * 1e-7, // Long, convered from Meshtastic's internal int32 style
+                               node->position.longitude_i * 1e-7, // Long, converted from Meshtastic's internal int32 style
                                node->has_hops_away,               // Is the hopsAway number valid
                                node->hops_away                    // Hops away
     );
@@ -288,7 +287,7 @@ void InkHUD::MapApplet::drawLabeledMarker(meshtastic_NodeInfoLite *node)
     bool unknownHops = !node->has_hops_away && !isOurNode;
 
     // We will draw a left or right hand variant, to place text towards screen center
-    // Hopfully avoid text spilling off screen
+    // Hopefully avoid text spilling off screen
     // Most values are the same, regardless of left-right handedness
 
     // Pick emblem style
@@ -388,7 +387,7 @@ void InkHUD::MapApplet::calculateAllMarkers()
         // Calculate marker and store it
         markers.push_back(
             calculateMarker(node->position.latitude_i * 1e-7,  // Lat, converted from Meshtastic's internal int32 style
-                            node->position.longitude_i * 1e-7, // Long, convered from Meshtastic's internal int32 style
+                            node->position.longitude_i * 1e-7, // Long, converted from Meshtastic's internal int32 style
                             node->has_hops_away,               // Is the hopsAway number valid
                             node->hops_away                    // Hops away
                             ));

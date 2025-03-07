@@ -98,6 +98,7 @@ void LCMEN213EFC1::begin(SPIClass *spi, uint8_t pin_dc, uint8_t pin_cs, uint8_t 
     reset();
 }
 
+// Display an image on the display
 void LCMEN213EFC1::update(uint8_t *imageData, UpdateTypes type)
 {
     this->updateType = type;
@@ -161,13 +162,6 @@ void LCMEN213EFC1::sendCommand(const uint8_t command)
 
 void LCMEN213EFC1::sendData(uint8_t data)
 {
-    // spi->beginTransaction(spiSettings);
-    // digitalWrite(pin_dc, HIGH); // DC pin HIGH indicates data, instead of command
-    // digitalWrite(pin_cs, LOW);
-    // spi->transfer(data);
-    // digitalWrite(pin_cs, HIGH);
-    // digitalWrite(pin_dc, HIGH);
-    // spi->endTransaction();
     sendData(&data, 1);
 }
 

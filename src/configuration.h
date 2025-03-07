@@ -135,6 +135,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define LPS22HB_ADDR 0x5C
 #define LPS22HB_ADDR_ALT 0x5D
 #define SHT31_4x_ADDR 0x44
+#define SHT31_4x_ADDR_ALT 0x45
 #define PMSA0031_ADDR 0x12
 #define QMA6100P_ADDR 0x12
 #define AHT10_ADDR 0x38

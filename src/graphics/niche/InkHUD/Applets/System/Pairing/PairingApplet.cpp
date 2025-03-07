@@ -6,8 +6,7 @@ using namespace NicheGraphics;
 
 InkHUD::PairingApplet::PairingApplet()
 {
-    // Grab the window manager singleton, for convenience
-    windowManager = WindowManager::getInstance();
+    bluetoothStatusObserver.observe(&bluetoothStatus->onNewStatus);
 }
 
 void InkHUD::PairingApplet::onRender()
@@ -31,34 +30,22 @@ void InkHUD::PairingApplet::onRender()
         printAt(X(0.5), Y(0.75), name, CENTER, MIDDLE);
 }
 
-void InkHUD::PairingApplet::onActivate()
-{
-    bluetoothStatusObserver.observe(&bluetoothStatus->onNewStatus);
-}
-
-void InkHUD::PairingApplet::onDeactivate()
-{
-    bluetoothStatusObserver.unobserve(&bluetoothStatus->onNewStatus);
-}
-
 void InkHUD::PairingApplet::onForeground()
 {
-    // If another applet has locked the display, ask it to exit
-    Applet *other = windowManager->whoLocked();
-    if (other != nullptr)
-        other->sendToBackground();
-
-    windowManager->claimFullscreen(this); // Take ownership of the fullscreen tile
-    windowManager->lock(this);            // Prevent user applets from requesting update
+    // Prevent most other applets from requesting update, and skip their rendering entirely
+    // Another system applet with a higher precedence can potentially ignore this
+    SystemApplet::lockRendering = true;
+    SystemApplet::lockRequests = true;
 }
 void InkHUD::PairingApplet::onBackground()
 {
-    windowManager->releaseFullscreen(); // Relinquish ownership of the fullscreen tile
-    windowManager->unlock(this);        // Allow normal user applet update requests to resume
+    // Allow normal update behavior to resume
+    SystemApplet::lockRendering = false;
+    SystemApplet::lockRequests = false;
 
     // Need to force an update, as a polite request wouldn't be honored, seeing how we are now in the background
     // Usually, onBackground is followed by another applet's onForeground (which requests update), but not in this case
-    windowManager->forceUpdate(EInk::UpdateTypes::FULL);
+    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 int InkHUD::PairingApplet::onBluetoothStatusUpdate(const meshtastic::Status *status)
@@ -74,12 +61,6 @@ int InkHUD::PairingApplet::onBluetoothStatusUpdate(const meshtastic::Status *sta
     if (bluetoothStatus->getConnectionState() == meshtastic::BluetoothStatus::ConnectionState::PAIRING) {
         // Store the passkey for rendering
         passkey = bluetoothStatus->getPasskey();
-
-        // Make sure no other system applets have a lock on the display
-        // Boot screen, menu, etc
-        Applet *lockOwner = windowManager->whoLocked();
-        if (lockOwner)
-            lockOwner->sendToBackground();
 
         // Show pairing screen
         bringToForeground();

@@ -39,21 +39,24 @@ class SSD16XX : public EInk
     virtual void configUpdateSequence(); // Tell controller IC which operations to run
 
     virtual void writeNewImage();
-    virtual void writeOldImage();
+    virtual void writeOldImage(); // Image which can be used at *next* update for "differential refresh"
 
     virtual void detachFromUpdate();
     virtual bool isUpdateDone() override;
     virtual void finalizeUpdate() override;
 
   protected:
-    uint8_t bufferOffsetX; // In bytes. Panel x=0 does not always align with controller x=0. Quirky internal wiring?
-    uint8_t bufferRowSize; // In bytes. Rows store 8 pixels per byte. Rounded up to fit (e.g. 122px would require 16 bytes)
-    uint32_t bufferSize;   // In bytes. Rows * Columns
-    uint8_t *buffer;
-    UpdateTypes updateType;
+    uint8_t bufferOffsetX = 0; // In bytes. Panel x=0 does not always align with controller x=0. Quirky internal wiring?
+    uint8_t bufferRowSize = 0; // In bytes. Rows store 8 pixels per byte. Rounded up to fit (e.g. 122px would require 16 bytes)
+    uint32_t bufferSize = 0;   // In bytes. Rows * Columns
+    uint8_t *buffer = nullptr;
+    UpdateTypes updateType = UpdateTypes::UNSPECIFIED;
 
-    uint8_t pin_dc, pin_cs, pin_busy, pin_rst;
-    SPIClass *spi;
+    uint8_t pin_dc = -1;
+    uint8_t pin_cs = -1;
+    uint8_t pin_busy = -1;
+    uint8_t pin_rst = -1;
+    SPIClass *spi = nullptr;
     SPISettings spiSettings = SPISettings(4000000, MSBFIRST, SPI_MODE0);
 };
 
