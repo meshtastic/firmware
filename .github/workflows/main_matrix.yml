@@ -136,6 +136,7 @@ jobs:
     secrets: inherit
 
   package-pio-deps-native-tft:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     uses: ./.github/workflows/package_pio_deps.yml
     with:
       pio_env: native-tft
@@ -329,13 +330,13 @@ jobs:
         with:
           pattern: platformio-deps-native-tft-${{ steps.version.outputs.long }}
           merge-multiple: true
-          path: ./output/pio-deps-native
+          path: ./output/pio-deps-native-tft
 
       - name: Zip linux sources
         working-directory: output
         run: |
           zip -j -9 -r ./meshtasticd-${{ steps.version.outputs.deb }}-src.zip ./debian-src
-          zip -9 -r ./platformio-deps-native-${{ steps.version.outputs.long }}.zip ./pio-deps-native
+          zip -9 -r ./platformio-deps-native-tft-${{ steps.version.outputs.long }}.zip ./pio-deps-native-tft
 
       # For diagnostics
       - name: Display structure of downloaded files
@@ -344,31 +345,9 @@ jobs:
       - name: Add linux sources to release
         run: |
           gh release upload v${{ steps.version.outputs.long }} ./output/meshtasticd-${{ steps.version.outputs.deb }}-src.zip
-          gh release upload v${{ steps.version.outputs.long }} ./output/platformio-deps-native-${{ steps.version.outputs.long }}.zip
+          gh release upload v${{ steps.version.outputs.long }} ./output/platformio-deps-native-tft-${{ steps.version.outputs.long }}.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Bump version.properties
-        run: >-
-          bin/bump_version.py
-
-      - name: Ensure debian deps are installed
-        shell: bash
-        run: |
-          sudo apt-get update -y --fix-missing
-          sudo apt-get install -y devscripts
-
-      - name: Update debian changelog
-        run: >-
-          debian/ci_changelog.sh
-
-      - name: Create version.properties pull request
-        uses: peter-evans/create-pull-request@v7
-        with:
-          title: Bump version.properties
-          add-paths: |
-            version.properties
-            debian/changelog
 
   release-firmware:
     strategy:
