@@ -7,9 +7,6 @@
 
 #include "main.h"
 #include "mesh/api/WiFiServerAPI.h"
-#if !MESHTASTIC_EXCLUDE_MQTT
-#include "mqtt/MQTT.h"
-#endif
 #include "target_specific.h"
 #include <WiFi.h>
 #include <WiFiUdp.h>
@@ -112,10 +109,10 @@ static void onNetworkConnected()
         APStartupComplete = true;
     }
 
-    // FIXME this is kinda yucky, instead we should just have an observable for 'wifireconnected'
-#ifndef MESHTASTIC_EXCLUDE_MQTT
-    if (mqtt)
-        mqtt->reconnect();
+#if HAS_UDP_MULTICAST
+    if (udpThread) {
+        udpThread->start();
+    }
 #endif
 }
 

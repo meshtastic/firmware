@@ -126,7 +126,7 @@ typedef struct _meshtastic_ModuleConfig_MQTTConfig {
     /* MQTT password to use (most useful for a custom MQTT server).
  If using a custom server, this will be honoured even if empty.
  If using the default server, this will only be honoured if set, otherwise the device will use the default password */
-    char password[64];
+    char password[32];
     /* Whether to send encrypted or decrypted packets to MQTT.
  This parameter is only honoured if you also set server
  (the default official mqtt.meshtastic.org server can handle encrypted packets)
@@ -347,7 +347,7 @@ typedef struct _meshtastic_ModuleConfig_TelemetryConfig {
     bool health_screen_enabled;
 } meshtastic_ModuleConfig_TelemetryConfig;
 
-/* TODO: REPLACE */
+/* Canned Messages Module Config */
 typedef struct _meshtastic_ModuleConfig_CannedMessageConfig {
     /* Enable the rotary encoder #1. This is a 'dumb' encoder sending pulses on both A and B pins while rotating. */
     bool rotary1_enabled;
@@ -887,7 +887,7 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_ModuleConfig_CannedMessageConfig_size 49
 #define meshtastic_ModuleConfig_DetectionSensorConfig_size 44
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_size 42
-#define meshtastic_ModuleConfig_MQTTConfig_size  254
+#define meshtastic_ModuleConfig_MQTTConfig_size  222
 #define meshtastic_ModuleConfig_MapReportSettings_size 12
 #define meshtastic_ModuleConfig_NeighborInfoConfig_size 10
 #define meshtastic_ModuleConfig_PaxcounterConfig_size 30
@@ -896,7 +896,7 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_ModuleConfig_SerialConfig_size 28
 #define meshtastic_ModuleConfig_StoreForwardConfig_size 24
 #define meshtastic_ModuleConfig_TelemetryConfig_size 46
-#define meshtastic_ModuleConfig_size             257
+#define meshtastic_ModuleConfig_size             225
 #define meshtastic_RemoteHardwarePin_size        21
 
 #ifdef __cplusplus

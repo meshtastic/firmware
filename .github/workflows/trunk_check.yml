@@ -1,0 +1,24 @@
+name: Pull Request
+on: [pull_request]
+concurrency:
+  group: ${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+permissions: read-all
+
+jobs:
+  trunk_check:
+    name: Trunk Check Runner
+    runs-on: ubuntu-24.04
+    permissions:
+      checks: write # For trunk to post annotations
+      contents: read # For repo checkout
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Trunk Check
+        uses: trunk-io/trunk-action@v1
+        with:
+          save-annotations: true

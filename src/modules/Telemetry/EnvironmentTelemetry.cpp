@@ -29,6 +29,7 @@
 #include "Sensor/CGRadSensSensor.h"
 #include "Sensor/DFRobotGravitySensor.h"
 #include "Sensor/DFRobotLarkSensor.h"
+#include "Sensor/DPS310Sensor.h"
 #include "Sensor/LPS22HBSensor.h"
 #include "Sensor/MCP9808Sensor.h"
 #include "Sensor/MLX90632Sensor.h"
@@ -45,6 +46,7 @@ BMP085Sensor bmp085Sensor;
 BMP280Sensor bmp280Sensor;
 BME280Sensor bme280Sensor;
 BME680Sensor bme680Sensor;
+DPS310Sensor dps310Sensor;
 MCP9808Sensor mcp9808Sensor;
 SHTC3Sensor shtc3Sensor;
 LPS22HBSensor lps22hbSensor;
@@ -107,8 +109,6 @@ int32_t EnvironmentTelemetryModule::runOnce()
 
         if (moduleConfig.telemetry.environment_measurement_enabled) {
             LOG_INFO("Environment Telemetry: init");
-            // it's possible to have this module enabled, only for displaying values on the screen.
-            // therefore, we should only enable the sensor loop if measurement is also enabled
 #ifdef SENSECAP_INDICATOR
             result = indicatorSensor.runOnce();
 #endif
@@ -129,6 +129,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = bmp3xxSensor.runOnce();
             if (bme680Sensor.hasSensor())
                 result = bme680Sensor.runOnce();
+            if (dps310Sensor.hasSensor())
+                result = dps310Sensor.runOnce();
             if (mcp9808Sensor.hasSensor())
                 result = mcp9808Sensor.runOnce();
             if (shtc3Sensor.hasSensor())
@@ -171,7 +173,9 @@ int32_t EnvironmentTelemetryModule::runOnce()
 #endif
 #endif
         }
-        return result;
+        // it's possible to have this module enabled, only for displaying values on the screen.
+        // therefore, we should only enable the sensor loop if measurement is also enabled
+        return result == UINT32_MAX ? disable() : setStartDelay();
     } else {
         // if we somehow got to a second run of this module with measurement disabled, then just wait forever
         if (!moduleConfig.telemetry.environment_measurement_enabled) {
@@ -418,6 +422,10 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
         valid = valid && bme680Sensor.getMetrics(m);
         hasSensor = true;
     }
+    if (dps310Sensor.hasSensor()) {
+        valid = valid && dps310Sensor.getMetrics(m);
+        hasSensor = true;
+    }
     if (mcp9808Sensor.hasSensor()) {
         valid = valid && mcp9808Sensor.getMetrics(m);
         hasSensor = true;
@@ -629,6 +637,11 @@ AdminMessageHandleResult EnvironmentTelemetryModule::handleAdminMessageForModule
     }
     if (bme680Sensor.hasSensor()) {
         result = bme680Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (dps310Sensor.hasSensor()) {
+        result = dps310Sensor.handleAdminMessage(mp, request, response);
         if (result != AdminMessageHandleResult::NOT_HANDLED)
             return result;
     }

@@ -50,7 +50,7 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     void handleSetOwner(const meshtastic_User &o);
     void handleSetChannel(const meshtastic_Channel &cc);
     void handleSetConfig(const meshtastic_Config &c);
-    void handleSetModuleConfig(const meshtastic_ModuleConfig &c);
+    bool handleSetModuleConfig(const meshtastic_ModuleConfig &c);
     void handleSetChannel();
     void handleSetHamMode(const meshtastic_HamParameters &req);
     void handleStoreDeviceUIConfig(const meshtastic_DeviceUIConfig &uicfg);
@@ -63,6 +63,9 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     bool messageIsRequest(const meshtastic_AdminMessage *r);
     void sendWarning(const char *message);
 };
+
+static constexpr const char *licensedModeMessage =
+    "Licensed mode activated, removing admin channel and encryption from all channels";
 
 extern AdminModule *adminModule;
 

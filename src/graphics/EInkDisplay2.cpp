@@ -140,6 +140,15 @@ bool EInkDisplay::connect()
         adafruitDisplay->setRotation(3);
         adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
     }
+#elif defined(MESHLINK)
+    {
+        auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY, SPI1);
+
+        adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(*lowLevel);
+        adafruitDisplay->init();
+        adafruitDisplay->setRotation(3);
+        adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
+    }
 #elif defined(RAK4630) || defined(MAKERPYTHON)
     {
         if (eink_found) {
@@ -157,7 +166,7 @@ bool EInkDisplay::connect()
     }
 
 #elif defined(HELTEC_WIRELESS_PAPER_V1_0) || defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_VISION_MASTER_E213) ||             \
-    defined(HELTEC_VISION_MASTER_E290) || defined(TLORA_T3S3_EPAPER)
+    defined(HELTEC_VISION_MASTER_E290) || defined(TLORA_T3S3_EPAPER) || defined(CROWPANEL_ESP32S3_5_EPAPER)
     {
         // Start HSPI
         hspi = new SPIClass(HSPI);
@@ -173,6 +182,9 @@ bool EInkDisplay::connect()
         // Init GxEPD2
         adafruitDisplay->init();
         adafruitDisplay->setRotation(3);
+#if defined(CROWPANEL_ESP32S3_5_EPAPER)
+        adafruitDisplay->setRotation(0);
+#endif
     }
 #elif defined(PCA10059) || defined(ME25LS01)
     {

@@ -135,20 +135,6 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
             myHeading = screen->estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
         screen->drawCompassNorth(display, compassX, compassY, myHeading);
 
-        // Distance to Waypoint
-        float d = GeoCoord::latLongToMeter(DegD(wp.latitude_i), DegD(wp.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
-        if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
-            if (d < (2 * MILES_TO_FEET))
-                snprintf(distStr, sizeof(distStr), "%.0f ft", d * METERS_TO_FEET);
-            else
-                snprintf(distStr, sizeof(distStr), "%.1f mi", d * METERS_TO_FEET / MILES_TO_FEET);
-        } else {
-            if (d < 2000)
-                snprintf(distStr, sizeof(distStr), "%.0f m", d);
-            else
-                snprintf(distStr, sizeof(distStr), "%.1f km", d / 1000);
-        }
-
         // Compass bearing to waypoint
         float bearingToOther =
             GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(wp.latitude_i), DegD(wp.longitude_i));
@@ -157,6 +143,24 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
         if (!config.display.compass_north_top)
             bearingToOther -= myHeading;
         screen->drawNodeHeading(display, compassX, compassY, compassDiam, bearingToOther);
+
+        float bearingToOtherDegrees = (bearingToOther < 0) ? bearingToOther + 2 * PI : bearingToOther;
+        bearingToOtherDegrees = bearingToOtherDegrees * 180 / PI;
+
+        // Distance to Waypoint
+        float d = GeoCoord::latLongToMeter(DegD(wp.latitude_i), DegD(wp.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
+        if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
+            if (d < (2 * MILES_TO_FEET))
+                snprintf(distStr, sizeof(distStr), "%.0fft   %.0f°", d * METERS_TO_FEET, bearingToOtherDegrees);
+            else
+                snprintf(distStr, sizeof(distStr), "%.1fmi   %.0f°", d * METERS_TO_FEET / MILES_TO_FEET, bearingToOtherDegrees);
+        } else {
+            if (d < 2000)
+                snprintf(distStr, sizeof(distStr), "%.0fm   %.0f°", d, bearingToOtherDegrees);
+            else
+                snprintf(distStr, sizeof(distStr), "%.1fkm   %.0f°", d / 1000, bearingToOtherDegrees);
+        }
+
     }
 
     // If our node doesn't have position
@@ -166,9 +170,9 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
 
         // ? in the distance field
         if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL)
-            strncpy(distStr, "? mi", sizeof(distStr));
+            strncpy(distStr, "? mi ?°", sizeof(distStr));
         else
-            strncpy(distStr, "? km", sizeof(distStr));
+            strncpy(distStr, "? km ?°", sizeof(distStr));
     }
 
     // Draw compass circle

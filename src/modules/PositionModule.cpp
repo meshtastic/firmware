@@ -28,8 +28,9 @@ PositionModule::PositionModule()
     nodeStatusObserver.observe(&nodeStatus->onNewStatus);
 
     if (config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER &&
-        config.device.role != meshtastic_Config_DeviceConfig_Role_TAK_TRACKER)
-        setIntervalFromNow(60 * 1000);
+        config.device.role != meshtastic_Config_DeviceConfig_Role_TAK_TRACKER) {
+        setIntervalFromNow(setStartDelay());
+    }
 
     // Power saving trackers should clear their position on startup to avoid waking up and sending a stale position
     if ((config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER ||
@@ -275,7 +276,8 @@ meshtastic_MeshPacket *PositionModule::allocPositionPacket()
 
 meshtastic_MeshPacket *PositionModule::allocReply()
 {
-    if (lastSentToMesh && Throttle::isWithinTimespanMs(lastSentToMesh, 3 * 60 * 1000)) {
+    if (config.device.role != meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND && lastSentToMesh &&
+        Throttle::isWithinTimespanMs(lastSentToMesh, 3 * 60 * 1000)) {
         LOG_DEBUG("Skip Position reply since we sent it <3min ago");
         ignoreRequest = true; // Mark it as ignored for MeshModule
         return nullptr;

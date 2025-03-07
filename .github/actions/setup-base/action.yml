@@ -1,13 +1,13 @@
-name: "Setup Build Base Composite Action"
-description: "Base build actions for Meshtastic Platform IO steps"
+name: Setup Build Base Composite Action
+description: Base build actions for Meshtastic Platform IO steps
 
 runs:
-  using: "composite"
+  using: composite
   steps:
     - name: Checkout code
       uses: actions/checkout@v4
       with:
-        submodules: "recursive"
+        submodules: recursive
         ref: ${{github.event.pull_request.head.ref}}
         repository: ${{github.event.pull_request.head.repo.full_name}}
 
