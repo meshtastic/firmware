@@ -30,7 +30,7 @@ ECHO                      If not supplied the script will try to find esptool in
 ECHO     --web            Enable WebUI. (default: false)
 ECHO.
 ECHO Example: %SCRIPT_NAME% -f firmware-t-deck-tft-2.6.0.0b106d4.bin -p COM11
-ECHO Example: %SCRIPT_NAME% -f littlefs-unphone-2.6.0.0b106d4.bin -p COM11 --web
+ECHO Example: %SCRIPT_NAME% -f firmware-unphone-2.6.0.0b106d4.bin -p COM11 --web
 GOTO eof
 
 :version
