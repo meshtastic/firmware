@@ -25,10 +25,10 @@ param()
 function New-EmptyFile() {
     [CmdletBinding()]
     param (
-        [Parameter(Position=0,Mandatory=$true)]
+        [Parameter(Position = 0, Mandatory = $true)]
         # Specifies the file name.
         [string]$FileName,
-        [Parameter(Position=1)]
+        [Parameter(Position = 1)]
         # Specifies the target path. (Get-Location).Path is the default.
         [string]$Directory = (Get-Location).Path
     )
@@ -42,10 +42,10 @@ function New-EmptyFile() {
 function Remove-EmptyFile() {
     [CmdletBinding()]
     param (
-        [Parameter(Position=0,Mandatory=$true)]
+        [Parameter(Position = 0, Mandatory = $true)]
         # Specifies the file name.
         [string]$FileName,
-        [Parameter(Position=1)]
+        [Parameter(Position = 1)]
         # Specifies the target path. (Get-Location).Path is the default.
         [string]$Directory = (Get-Location).Path
     )
@@ -60,14 +60,14 @@ function Remove-EmptyFile() {
 $TestCases = New-Object -TypeName PSObject -Property @{
     # Use this PSObject to define testcases according to this syntax:
     # "testname" = @("firmware-testname","bleota","littlefs-testname","args")
-    "t-deck" = @("firmware-t-deck-2.6.0.0b106d4.bin", "bleota-s3.bin", "littlefs-t-deck-2.6.0.0b106d4.bin","")
-    "t-deck_web" = @("firmware-t-deck-2.6.0.0b106d4.bin", "bleota-s3.bin", "littlefswebui-t-deck-2.6.0.0b106d4.bin","--web")
-    "t-deck-tft" = @("firmware-t-deck-tft-2.6.0.0b106d4.bin", "bleota-s3.bin", "littlefs-t-deck-tft-2.6.0.0b106d4.bin","")
-    "heltec-ht62-esp32c3" = @("firmware-heltec-ht62-esp32c3-sx1262-2.6.0.0b106d4.bin", "bleota-c3.bin", "littlefs-heltec-ht62-esp32c3-sx1262-2.6.0.0b106d4.bin","")
-    "tlora-c6" = @("firmware-tlora-c6-2.6.0.0b106d4.bin", "bleota.bin", "littlefs-tlora-c6-2.6.0.0b106d4.bin","")
-    "heltec-v3_web" = @("firmware-heltec-v3-2.6.0.0b106d4.bin", "bleota-s3.bin", "littlefswebui-heltec-v3-2.6.0.0b106d4.bin","--web")
-    "seeed-sensecap-indicator-tft" = @("firmware-seeed-sensecap-indicator-tft-2.6.0.0b106d4.bin", "bleota.bin", "littlefs-seeed-sensecap-indicator-tft-2.6.0.0b106d4.bin","")
-    "picomputer-s3-tft" = @("firmware-picomputer-s3-tft-2.6.0.0b106d4.bin", "bleota-s3.bin", "littlefs-picomputer-s3-tft-2.6.0.0b106d4.bin","")
+    "t-deck"                       = @("firmware-t-deck-2.6.0.0b106d4.bin", "bleota-s3.bin", "littlefs-t-deck-2.6.0.0b106d4.bin", "")
+    "t-deck_web"                   = @("firmware-t-deck-2.6.0.0b106d4.bin", "bleota-s3.bin", "littlefswebui-t-deck-2.6.0.0b106d4.bin", "--web")
+    "t-deck-tft"                   = @("firmware-t-deck-tft-2.6.0.0b106d4.bin", "bleota-s3.bin", "littlefs-t-deck-tft-2.6.0.0b106d4.bin", "")
+    "heltec-ht62-esp32c3"          = @("firmware-heltec-ht62-esp32c3-sx1262-2.6.0.0b106d4.bin", "bleota-c3.bin", "littlefs-heltec-ht62-esp32c3-sx1262-2.6.0.0b106d4.bin", "")
+    "tlora-c6"                     = @("firmware-tlora-c6-2.6.0.0b106d4.bin", "bleota.bin", "littlefs-tlora-c6-2.6.0.0b106d4.bin", "")
+    "heltec-v3_web"                = @("firmware-heltec-v3-2.6.0.0b106d4.bin", "bleota-s3.bin", "littlefswebui-heltec-v3-2.6.0.0b106d4.bin", "--web")
+    "seeed-sensecap-indicator-tft" = @("firmware-seeed-sensecap-indicator-tft-2.6.0.0b106d4.bin", "bleota.bin", "littlefs-seeed-sensecap-indicator-tft-2.6.0.0b106d4.bin", "")
+    "picomputer-s3-tft"            = @("firmware-picomputer-s3-tft-2.6.0.0b106d4.bin", "bleota-s3.bin", "littlefs-picomputer-s3-tft-2.6.0.0b106d4.bin", "")
 }
 
 foreach ($TestCase in $TestCases.PSObject.Properties) {
@@ -88,9 +88,10 @@ foreach ($TestCase in $TestCases.PSObject.Properties) {
 
     foreach ($Line in $Test) {
         if ($Line -match "Set OTA_OFFSET to" -or `
-            $Line -match "Set SPIFFS_OFFSET to") {
+                $Line -match "Set SPIFFS_OFFSET to") {
             Write-Host -Object "$($Line -replace "^.*?Set","Set")" -ForegroundColor Blue
-        } elseif ($VerbosePreference -eq "Continue") {
+        }
+        elseif ($VerbosePreference -eq "Continue") {
             Write-Host -Object $Line
         }
         if ($Line -match "ERROR") {
@@ -100,7 +101,7 @@ foreach ($TestCase in $TestCases.PSObject.Properties) {
     }
     if ($null -ne $Errors) {
         Write-Host -Object "$Counter ERROR(s) detected!" -ForegroundColor Red
-        if (-not ($VerbosePreference -eq "Continue")) {Write-Host -Object $Errors}
+        if (-not ($VerbosePreference -eq "Continue")) { Write-Host -Object $Errors }
     }
 
     foreach ($File in $Files) {
