@@ -126,3 +126,8 @@ for flag in flags:
 projenv.Append(
     CCFLAGS=flags,
 )
+
+for lb in env.GetLibBuilders():
+    if lb.name == "meshtastic-device-ui":
+        lb.env.Append(CPPDEFINES=[("APP_VERSION", verObj["long"])])
+        break

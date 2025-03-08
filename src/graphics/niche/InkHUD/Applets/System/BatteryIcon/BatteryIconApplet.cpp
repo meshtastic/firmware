@@ -4,21 +4,15 @@
 
 using namespace NicheGraphics;
 
-void InkHUD::BatteryIconApplet::onActivate()
+InkHUD::BatteryIconApplet::BatteryIconApplet()
 {
     // Show at boot, if user has previously enabled the feature
-    if (settings.optionalFeatures.batteryIcon)
+    if (settings->optionalFeatures.batteryIcon)
         bringToForeground();
 
     // Register to our have BatteryIconApplet::onPowerStatusUpdate method called when new power info is available
     // This happens whether or not the battery icon feature is enabled
     powerStatusObserver.observe(&powerStatus->onNewStatus);
-}
-
-void InkHUD::BatteryIconApplet::onDeactivate()
-{
-    // Stop having onPowerStatusUpdate called
-    powerStatusObserver.unobserve(&powerStatus->onNewStatus);
 }
 
 // We handle power status' even when the feature is disabled,
@@ -41,7 +35,7 @@ int InkHUD::BatteryIconApplet::onPowerStatusUpdate(const meshtastic::Status *sta
     // If rounded value has changed, trigger a display update
     // It's okay to requestUpdate before we store the new value, as the update won't run until next loop()
     // Don't trigger an update if the feature is disabled
-    if (this->socRounded != newSocRounded && settings.optionalFeatures.batteryIcon)
+    if (this->socRounded != newSocRounded && settings->optionalFeatures.batteryIcon)
         requestUpdate();
 
     // Store the new value

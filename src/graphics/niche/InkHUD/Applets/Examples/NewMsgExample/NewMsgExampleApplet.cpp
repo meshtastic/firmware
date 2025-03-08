@@ -36,8 +36,6 @@ ProcessMessage InkHUD::NewMsgExampleApplet::handleReceived(const meshtastic_Mesh
 // We should always be ready to draw
 void InkHUD::NewMsgExampleApplet::onRender()
 {
-    setFont(fontSmall);
-
     printAt(0, 0, "Example: NewMsg", LEFT, TOP); // Print top-left corner of text at (0,0)
 
     int16_t centerX = X(0.5); // Same as width() / 2

@@ -12,7 +12,7 @@ EInk::EInk(uint16_t width, uint16_t height, UpdateTypes supported)
 }
 
 // Used by NicheGraphics implementations to check if a display supports a specific refresh operation.
-// Whether or the update type is supported is specified in the constructor
+// Whether or not the update type is supported is specified in the constructor
 bool EInk::supports(UpdateTypes type)
 {
     // The EInkUpdateTypes enum assigns each type a unique bit. We are checking if that bit is set.

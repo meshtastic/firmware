@@ -73,6 +73,16 @@
 #define FONT_LARGE FONT_LARGE_LOCAL   // Height: 28
 #endif
 
+#if defined(CROWPANEL_ESP32S3_5_EPAPER)
+#include "graphics/fonts/EinkDisplayFonts.h"
+#undef FONT_SMALL
+#undef FONT_MEDIUM
+#undef FONT_LARGE
+#define FONT_SMALL FONT_LARGE_LOCAL  // Height: 30
+#define FONT_MEDIUM FONT_LARGE_LOCAL // Height: 30
+#define FONT_LARGE FONT_LARGE_LOCAL  // Height: 30
+#endif
+
 #define _fontHeight(font) ((font)[1] + 1) // height is position 1
 
 #define FONT_HEIGHT_SMALL _fontHeight(FONT_SMALL)

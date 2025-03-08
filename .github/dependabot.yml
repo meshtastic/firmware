@@ -19,6 +19,8 @@ updates:
       interval: daily
       time: "05:00"
       timezone: US/Pacific
+    ignore:
+      - dependency-name: protobufs
   - package-ecosystem: github-actions
     directory: /.github/workflows
     schedule:
