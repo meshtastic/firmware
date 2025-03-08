@@ -128,6 +128,9 @@ typedef enum _meshtastic_PortNum {
     meshtastic_PortNum_MAP_REPORT_APP = 73,
     /* PowerStress based monitoring support (for automated power consumption testing) */
     meshtastic_PortNum_POWERSTRESS_APP = 74,
+    /* Reticulum Network Stack Tunnel App
+ ENCODING: Fragmented RNS Packet. Handled by Meshtastic RNS interface */
+    meshtastic_PortNum_RETICULUM_TUNNEL_APP = 76,
     /* Private applications should use portnums >= 256.
  To simplify initial development and testing you can use "PRIVATE_APP"
  in your code without needing to rebuild protobuf files (via [regen-protos.sh](https://github.com/meshtastic/firmware/blob/master/bin/regen-protos.sh)) */
