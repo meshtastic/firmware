@@ -20,7 +20,7 @@ ECHO.
 ECHO Usage: %SCRIPT_NAME% -f filename [-p PORT] [-P python] (--web)
 ECHO.
 ECHO Options:
-ECHO     -f filename      The .bin file to flash.  Custom to your device type and region. (required)
+ECHO     -f filename      The firmware .bin file to flash.  Custom to your device type and region. (required)
 ECHO                      The file must be located in this current directory.
 ECHO     -p PORT          Set the environment variable for ESPTOOL_PORT.
 ECHO                      If not set, ESPTOOL iterates all ports (Dangerous).
@@ -30,7 +30,7 @@ ECHO                      If not supplied the script will try to find esptool in
 ECHO     --web            Enable WebUI. (default: false)
 ECHO.
 ECHO Example: %SCRIPT_NAME% -f firmware-t-deck-tft-2.6.0.0b106d4.bin -p COM11
-ECHO Example: %SCRIPT_NAME% -f littlefs-unphone-2.6.0.0b106d4.bin -p COM11 --web
+ECHO Example: %SCRIPT_NAME% -f firmware-unphone-2.6.0.0b106d4.bin -p COM11 --web
 GOTO eof
 
 :version
@@ -60,8 +60,13 @@ IF "__!FILENAME!__"=="____" (
     CALL :LOG_MESSAGE DEBUG "Missing -f filename input."
     GOTO help
 ) ELSE (
+    CALL :LOG_MESSAGE DEBUG "Filename: !FILENAME!"
     IF NOT "__!FILENAME: =!__"=="__!FILENAME!__" (
         CALL :LOG_MESSAGE ERROR "Filename containing spaces are not supported."
+        GOTO help
+    )
+    IF "__!FILENAME:firmware-=!__"=="__!FILENAME!__" (
+        CALL :LOG_MESSAGE ERROR "Filename must be a firmware-* file."
         GOTO help
     )
     @REM Remove ".\" or "./" file prefix if present.
@@ -69,7 +74,6 @@ IF "__!FILENAME!__"=="____" (
     SET "FILENAME=!FILENAME:./=!"
 )
 
-CALL :LOG_MESSAGE DEBUG "Filename: !FILENAME!"
 CALL :LOG_MESSAGE DEBUG "Checking if !FILENAME! exists..."
 IF NOT EXIST !FILENAME! (
     CALL :LOG_MESSAGE ERROR "File does not exist: !FILENAME!. Terminating."
