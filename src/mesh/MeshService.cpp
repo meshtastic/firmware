@@ -285,7 +285,6 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
 {
     perhapsDecode(p);
 
-#ifdef ARCH_ESP32
 #if !MESHTASTIC_EXCLUDE_STOREFORWARD
     if (moduleConfig.store_forward.enabled && storeForwardModule->isServer() &&
         p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP) {
@@ -293,7 +292,6 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
         fromNum++;        // Notify observers for packet from radio
         return;
     }
-#endif
 #endif
 
     if (toPhoneQueue.numFree() == 0) {
