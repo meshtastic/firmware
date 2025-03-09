@@ -3,8 +3,9 @@
 #include "configuration.h"
 
 #include "graphics/niche/Drivers/Backlight/LatchingBacklight.h"
-#include "graphics/niche/InkHUD/Applet.h"
-#include "graphics/niche/InkHUD/WindowManager.h"
+#include "graphics/niche/InkHUD/InkHUD.h"
+#include "graphics/niche/InkHUD/Persistence.h"
+#include "graphics/niche/InkHUD/SystemApplet.h"
 
 #include "./MenuItem.h"
 #include "./MenuPage.h"
@@ -16,7 +17,7 @@ namespace NicheGraphics::InkHUD
 
 class Applet;
 
-class MenuApplet : public Applet, public concurrency::OSThread
+class MenuApplet : public SystemApplet, public concurrency::OSThread
 {
   public:
     MenuApplet();
@@ -30,6 +31,8 @@ class MenuApplet : public Applet, public concurrency::OSThread
     void show(Tile *t); // Open the menu, onto a user tile
 
   protected:
+    Drivers::LatchingBacklight *backlight = nullptr; // Convenient access to the backlight singleton
+
     int32_t runOnce() override;
 
     void execute(MenuItem item);  // Perform the MenuAction associated with a MenuItem, if any
@@ -41,7 +44,7 @@ class MenuApplet : public Applet, public concurrency::OSThread
     void drawSystemInfoPanel(int16_t left, int16_t top, uint16_t width,
                              uint16_t *height = nullptr); // Info panel at top of root menu
 
-    MenuPage currentPage;
+    MenuPage currentPage = MenuPage::ROOT;
     uint8_t cursor = 0;       // Which menu item is currently highlighted
     bool cursorShown = false; // Is *any* item highlighted? (Root menu: no initial selection)
 
@@ -50,9 +53,6 @@ class MenuApplet : public Applet, public concurrency::OSThread
     std::vector<MenuItem> items; // MenuItems for the current page. Filled by ShowPage
 
     Applet *borrowedTileOwner = nullptr; // Which applet we have temporarily replaced while displaying menu
-
-    WindowManager *windowManager = nullptr;          // Convenient access to the InkHUD::WindowManager singleton
-    Drivers::LatchingBacklight *backlight = nullptr; // Convenient access to the backlight singleton
 };
 
 } // namespace NicheGraphics::InkHUD

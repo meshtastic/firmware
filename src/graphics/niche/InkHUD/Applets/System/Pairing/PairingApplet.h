@@ -10,19 +10,19 @@
 
 #include "configuration.h"
 
-#include "graphics/niche/InkHUD/Applet.h"
+#include "graphics/niche/InkHUD/SystemApplet.h"
+
+#include "main.h"
 
 namespace NicheGraphics::InkHUD
 {
 
-class PairingApplet : public Applet
+class PairingApplet : public SystemApplet
 {
   public:
     PairingApplet();
 
     void onRender() override;
-    void onActivate() override;
-    void onDeactivate() override;
     void onForeground() override;
     void onBackground() override;
 
@@ -34,8 +34,6 @@ class PairingApplet : public Applet
         CallbackObserver<PairingApplet, const meshtastic::Status *>(this, &PairingApplet::onBluetoothStatusUpdate);
 
     std::string passkey = ""; // Passkey. Six digits, possibly with leading zeros
-
-    WindowManager *windowManager = nullptr; // For convenience. Set in constructor.
 };
 
 } // namespace NicheGraphics::InkHUD
