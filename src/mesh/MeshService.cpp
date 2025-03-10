@@ -88,8 +88,16 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
     } else if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !nodeDB->getMeshNode(mp->from)->has_user &&
                nodeInfoModule && !isPreferredRebroadcaster && !nodeDB->isFull()) {
         if (airTime->isTxAllowedChannelUtil(true)) {
-            LOG_INFO("Heard new node on ch. %d, send NodeInfo and ask for response", mp->channel);
-            nodeInfoModule->sendOurNodeInfo(mp->from, true, mp->channel);
+            // Hops used by the request. If somebody in between running modified firmware modified it, ignore it
+            auto hopStart = mp->hop_start;
+            auto hopLimit = mp->hop_limit;
+            uint8_t hopsUsed = hopStart < hopLimit ? config.lora.hop_limit : hopStart - hopLimit;
+            if (hopsUsed > config.lora.hop_limit + 2) {
+                LOG_DEBUG("Skip send NodeInfo: %d hops away is too far away", hopsUsed);
+            } else {
+                LOG_INFO("Heard new node on ch. %d, send NodeInfo and ask for response", mp->channel);
+                nodeInfoModule->sendOurNodeInfo(mp->from, true, mp->channel);
+            }
         } else {
             LOG_DEBUG("Skip sending NodeInfo > 25%% ch. util");
         }
