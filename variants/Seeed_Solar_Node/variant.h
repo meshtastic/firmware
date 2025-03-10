@@ -47,8 +47,10 @@
  //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  // Button Configuration
  //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- #define PIN_BUTTON1         (31+7)       // P0.05 User button
- //#define BUTTON_NEED_PULLUP          // Requires  pull-up
+ #define BUTTON_PIN D13 // This is the Program Button
+ // #define BUTTON_NEED_PULLUP   1
+ #define BUTTON_ACTIVE_LOW true
+ #define BUTTON_ACTIVE_PULLUP false
  
  //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  // Digital Pin Mapping (D0-D10)
@@ -64,7 +66,7 @@
  #define D8  8   // P1.13 SPI_SCK
  #define D9  9   // P1.14 SPI_MISO
  #define D10 10  // P1.15 SPI_MOSI
- 
+ #define D13 13  // P1.01 User Button
  //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  // Analog Pin Definitions
  //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -116,14 +118,31 @@ static const uint8_t SCL = PIN_WIRE_SCL;
  #define HICHG          22     // P0.13 Charge current select (High=100mA)
  
  //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ // GPS L76KB 
+ //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#define GPS_L76K
+#ifdef GPS_L76K
+#define PIN_GPS_RX D6 // 44
+#define PIN_GPS_TX D7// 43
+#define HAS_GPS 1
+#define GPS_BAUDRATE 9600
+#define GPS_THREAD_INTERVAL 50
+#define PIN_SERIAL1_RX PIN_GPS_TX
+#define PIN_SERIAL1_TX PIN_GPS_RX
+// #define GPS_SLEEP_INT D0
+//#define GPS_DEBUG
+#define PIN_GPS_STANDBY D0
+#endif
+
+
+ //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  // Compatibility Definitions
  //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  #ifdef __cplusplus
  extern "C" {
  #endif
  // Serial port placeholders
- #define PIN_SERIAL1_RX (-1)
- #define PIN_SERIAL1_TX (-1)
+
  #define PIN_SERIAL2_RX (-1)
  #define PIN_SERIAL2_TX (-1)
  #ifdef __cplusplus

@@ -84,7 +84,10 @@
     pinMode(PIN_LED2, OUTPUT);
     digitalWrite(LED_PIN, LOW);
 
-    // pinMode(PIN_WIRE_SDA, INPUT_PULLUP);
+    // pinMode(GPS_SLEEP_INT, OUTPUT);
+    // digitalWrite(GPS_SLEEP_INT, HIGH);
+
+    //pinMode(BUTTON_PIN, INPUT_PULLUP);
     // pinMode(PIN_WIRE_SCL, INPUT_PULLUP);
 
 }
