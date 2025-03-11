@@ -29,7 +29,7 @@ Flash image file to device, but first erasing and writing system information.
     -h               Display this help and exit.
     -p ESPTOOL_PORT  Set the environment variable for ESPTOOL_PORT.  If not set, ESPTOOL iterates all ports (Dangerous).
     -P PYTHON        Specify alternate python interpreter to use to invoke esptool. (Default: "$PYTHON")
-    -f FILENAME      The .bin file to flash.  Custom to your device type and region.
+    -f FILENAME      The firmware .bin file to flash.  Custom to your device type and region.
     --web            Enable WebUI. (Default: false)
 
 EOF
@@ -72,6 +72,11 @@ done
 	FILENAME=$1
 	shift
 }
+
+if [[ $FILENAME != firmware-* ]]; then
+  echo "Filename must be a firmware-* file."
+  exit 1
+fi
 
 # Check if FILENAME contains "-tft-" and set target partitionScheme accordingly.
 if [[ ${FILENAME//-tft-/} != "$FILENAME" ]]; then
