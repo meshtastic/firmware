@@ -16,7 +16,7 @@ lint:
     - terrascan@1.19.9
     - trivy@0.60.0
     - taplo@0.9.3
-    - ruff@0.9.9
+    - ruff@0.9.10
     - isort@6.0.1
     - markdownlint@0.44.0
     - oxipng@9.1.4
