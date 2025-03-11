@@ -4,7 +4,7 @@ on:
   workflow_call:
     secrets:
       PPA_GPG_PRIVATE_KEY:
-        required: true
+        required: false
     inputs:
       series:
         description: Ubuntu/Debian series to target

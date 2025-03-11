@@ -435,6 +435,10 @@ void SerialModule::processWXSerial()
     static float batVoltageF = 0;
     static float capVoltageF = 0;
     static float temperatureF = 0;
+
+    static char rainStr[] = "5780860000";
+    static int rainSum = 0;
+    static float rain = 0;
     bool gotwind = false;
 
     while (Serial2.available()) {
@@ -448,6 +452,9 @@ void SerialModule::processWXSerial()
         // WindSpeed    = 0.5
         // WindGust     = 0.6
         // GXTS04Temp   = 24.4
+
+        // RainIntSum     = 0
+        // Rain           = 0.0
         if (serialPayloadSize > 0) {
             // Define variables for line processing
             int lineStart = 0;
@@ -462,7 +469,6 @@ void SerialModule::processWXSerial()
                     char line[meshtastic_Constants_DATA_PAYLOAD_LEN];
                     memset(line, '\0', sizeof(line));
                     memcpy(line, &serialBytes[lineStart], lineEnd - lineStart);
-
                     if (strstr(line, "Wind") != NULL) // we have a wind line
                     {
                         gotwind = true;
@@ -515,6 +521,24 @@ void SerialModule::processWXSerial()
                             strcpy(temperature, tempPos + 15); // 15 spaces for ws85
                             temperatureF = strtof(temperature, nullptr);
                         }
+
+                    } else if (strstr(line, "RainIntSum") != NULL) { // we have a rainsum line
+                        // LOG_INFO(line);
+                        char *pos = strstr(line, "RainIntSum     = ");
+                        if (pos != NULL) {
+                            strcpy(rainStr, pos + 17); // 17 spaces for ws85
+                            rainSum = int(strtof(rainStr, nullptr));
+                        }
+
+                    } else if (strstr(line, "Rain") != NULL) {  // we have a rain line
+                        if (strstr(line, "WaveRain") == NULL) { // skip WaveRain lines though.
+                            // LOG_INFO(line);
+                            char *pos = strstr(line, "Rain           = ");
+                            if (pos != NULL) {
+                                strcpy(rainStr, pos + 17); // 17 spaces for ws85
+                                rain = strtof(rainStr, nullptr);
+                            }
+                        }
                     }
 
                     // Update lineStart for the next line
@@ -530,8 +554,8 @@ void SerialModule::processWXSerial()
     }
     if (gotwind) {
 
-        LOG_INFO("WS85 : %i %.1fg%.1f %.1fv %.1fv %.1fC", atoi(windDir), strtof(windVel, nullptr), strtof(windGust, nullptr),
-                 batVoltageF, capVoltageF, temperatureF);
+        LOG_INFO("WS85 : %i %.1fg%.1f %.1fv %.1fv %.1fC rain: %.1f, %i sum", atoi(windDir), strtof(windVel, nullptr),
+                 strtof(windGust, nullptr), batVoltageF, capVoltageF, temperatureF, rain, rainSum);
     }
     if (gotwind && !Throttle::isWithinTimespanMs(lastAveraged, averageIntervalMillis)) {
         // calculate averages and send to the mesh
@@ -567,6 +591,13 @@ void SerialModule::processWXSerial()
 
         m.variant.environment_metrics.wind_gust = gust;
         m.variant.environment_metrics.has_wind_gust = true;
+
+        m.variant.environment_metrics.rainfall_24h = rainSum;
+        m.variant.environment_metrics.has_rainfall_24h = true;
+
+        // not sure if this value is actually the 1hr sum so needs to do some testing
+        m.variant.environment_metrics.rainfall_1h = rain;
+        m.variant.environment_metrics.has_rainfall_1h = true;
 
         if (lull == -1)
             lull = 0;

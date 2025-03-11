@@ -38,10 +38,10 @@ typedef struct {
     /** The channel hash - used as a hint for the decoder to limit which channels we consider */
     uint8_t channel;
 
-    // ***For future use*** Last byte of the NodeNum of the next-hop for this packet
+    // Last byte of the NodeNum of the next-hop for this packet
     uint8_t next_hop;
 
-    // ***For future use*** Last byte of the NodeNum of the node that will relay/relayed this packet
+    // Last byte of the NodeNum of the node that will relay/relayed this packet
     uint8_t relay_node;
 } PacketHeader;
 
@@ -83,24 +83,22 @@ class RadioInterface
     float bw = 125;
     uint8_t sf = 9;
     uint8_t cr = 5;
-    /** Slottime is the minimum time to wait, consisting of:
-      - CAD duration (maximum of SX126x and SX127x);
-      - roundtrip air propagation time (assuming max. 30km between nodes);
-      - Tx/Rx turnaround time (maximum of SX126x and SX127x);
-      - MAC processing time (measured on T-beam) */
-    uint32_t slotTimeMsec = computeSlotTimeMsec(bw, sf);
+
+    const uint8_t NUM_SYM_CAD = 2;       // Number of symbols used for CAD, 2 is the default since RadioLib 6.3.0 as per AN1200.48
+    const uint8_t NUM_SYM_CAD_24GHZ = 4; // Number of symbols used for CAD in 2.4 GHz, 4 is recommended in AN1200.22 of SX1280
+    uint32_t slotTimeMsec = computeSlotTimeMsec();
     uint16_t preambleLength = 16;      // 8 is default, but we use longer to increase the amount of sleep time when receiving
     uint32_t preambleTimeMsec = 165;   // calculated on startup, this is the default for LongFast
     uint32_t maxPacketTimeMsec = 3246; // calculated on startup, this is the default for LongFast
     const uint32_t PROCESSING_TIME_MSEC =
         4500;                // time to construct, process and construct a packet again (empirically determined)
-    const uint8_t CWmin = 2; // minimum CWsize
-    const uint8_t CWmax = 7; // maximum CWsize
+    const uint8_t CWmin = 3; // minimum CWsize
+    const uint8_t CWmax = 8; // maximum CWsize
 
     meshtastic_MeshPacket *sendingPacket = NULL; // The packet we are currently sending
     uint32_t lastTxStart = 0L;
 
-    uint32_t computeSlotTimeMsec(float bw, float sf) { return 8.5 * pow(2, sf) / bw + 0.2 + 0.4 + 7; }
+    uint32_t computeSlotTimeMsec();
 
     /**
      * A temporary buffer used for sending/receiving packets, sized to hold the biggest buffer we might need
@@ -154,6 +152,9 @@ class RadioInterface
 
     /** Attempt to cancel a previously sent packet.  Returns true if a packet was found we could cancel */
     virtual bool cancelSending(NodeNum from, PacketId id) { return false; }
+
+    /** Attempt to find a packet in the TxQueue. Returns true if the packet was found. */
+    virtual bool findInTxQueue(NodeNum from, PacketId id) { return false; }
 
     // methods from radiohead
 
