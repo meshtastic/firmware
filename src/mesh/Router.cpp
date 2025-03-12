@@ -653,14 +653,6 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
     if (!skipHandle) {
         MeshModule::callModules(*p, src);
 
-        if(config.network.routingAlgorithm == meshtastic_Config_RoutingConfig_FishEyeState && moduleConfig.fish_eye_state_routing.enabled == true && ((isToUs(p) || isBroadcast(p->to)) && p->decoded.dest != 0 && !isBroadcast(p->decoded.dest))){
-            meshtastic_MeshPacket *copy = allocForSending();
-            copy->decoded = p->decoded;
-            copy->to = fishEyeStateRoutingModule->getNextHopForID(copy->decoded.dest);
-            copy->from = nodeDB->getNodeNum();
-            service->sendToMesh(copy);
-        }
-
 #if !MESHTASTIC_EXCLUDE_MQTT
         // Mark as pki_encrypted if it is not yet decoded and MQTT encryption is also enabled, hash matches and it's a DM not to
         // us (because we would be able to decrypt it)

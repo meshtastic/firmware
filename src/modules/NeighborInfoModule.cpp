@@ -151,6 +151,7 @@ bool NeighborInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
         // If the hopLimit is the same as hopStart, then it is a neighbor
         getOrCreateNeighbor(mp.from, mp.from, 0, mp.rx_snr); // Set the broadcast interval to 0, as we don't know it
     }
+    // Note: np can be a Nullptr at this point
     if(np && moduleConfig.has_fish_eye_state_routing && moduleConfig.fish_eye_state_routing.enabled && (config.network.routingAlgorithm == meshtastic_Config_RoutingConfig_FishEyeState)){
         //meshtastic_NeighborInfo help = *np;
         LOG_DEBUG("FSR: go IN");
