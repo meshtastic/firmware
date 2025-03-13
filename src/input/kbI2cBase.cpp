@@ -43,6 +43,9 @@ int32_t KbI2cBase::runOnce()
             if (cardkb_found.address == MPR121_KB_ADDR) {
                 MPRkeyboard.begin(MPR121_KB_ADDR, &Wire1);
             }
+            if (cardkb_found.address == TCA8418_KB_ADDR) {
+                TCAKeyboard.begin(TCA8418_KB_ADDR, &Wire1);
+            }
             break;
 #endif
         case ScanI2C::WIRE:
@@ -54,6 +57,9 @@ int32_t KbI2cBase::runOnce()
             }
             if (cardkb_found.address == MPR121_KB_ADDR) {
                 MPRkeyboard.begin(MPR121_KB_ADDR, &Wire);
+            }
+            if (cardkb_found.address == TCA8418_KB_ADDR) {
+                TCAKeyboard.begin(TCA8418_KB_ADDR, &Wire);
             }
             break;
         case ScanI2C::NO_I2C:
@@ -163,6 +169,31 @@ int32_t KbI2cBase::runOnce()
         }
         break;
     }
+    
+    case 0x84: { // Adafruit TCA8418
+        int keyCount = TCAKeyboard.keyCount();
+        while (keyCount--) {
+            const TCA8418Keyboard::KeyEvent key = TCAKeyboard.keyEvent();
+            if ((key.key != 0x00) && (key.state == TCA8418Keyboard::Release)) {
+                InputEvent e;
+                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
+                e.source = this->_originName;
+                switch (key.key) {
+                default: // all other keys
+                    e.inputEvent = ANYKEY;
+                    e.kbchar = key.key;
+                    is_sym = false; // reset sym state after second keypress
+                    break;
+                }
+                if (e.inputEvent != meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE) {
+                    LOG_DEBUG("TCA8418 Notifying: %i Char: %i", e.inputEvent, e.kbchar);
+                    this->notifyObservers(&e);
+                }
+            }
+        }
+        break;
+    }
+        
     case 0x37: { // MPR121
         MPRkeyboard.trigger();
         InputEvent e;
