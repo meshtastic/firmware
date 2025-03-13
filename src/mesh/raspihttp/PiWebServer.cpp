@@ -46,11 +46,23 @@ mail:   marchammermann@googlemail.com
 #include "main.h"
 #include "mesh/wifi/WiFiAPClient.h"
 #include "sleep.h"
+
+#ifdef USE_WOLFSSL
+#include <wolfssl/options.h>
+
+#include <wolfssl/openssl/bn.h>
+#include <wolfssl/openssl/evp.h>
+#include <wolfssl/openssl/pem.h>
+#include <wolfssl/openssl/rsa.h>
+#include <wolfssl/openssl/x509.h>
+#else
 #include <openssl/bn.h>
 #include <openssl/evp.h>
 #include <openssl/pem.h>
 #include <openssl/rsa.h>
 #include <openssl/x509.h>
+#endif
+
 #include <orcania.h>
 #include <string.h>
 #include <ulfius.h>
