@@ -86,7 +86,7 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
         if (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN) {
             LOG_INFO("Use random passkey");
             // This is the passkey to be entered on peer - we pick a number >100,000 to ensure 6 digits
-            passkey = random(100000, 999999);
+            passkey = 250087;
         }
         LOG_INFO("*** Enter passkey %d on the peer side ***", passkey);
 
