@@ -7,11 +7,18 @@ SET "DEBUG=0"
 SET "PYTHON="
 SET "WEB_APP=0"
 SET "TFT_BUILD=0"
-SET "TFT8=0"
-SET "TFT16=0"
+SET "BIGDB8=0"
+SET "BIGDB16=0"
 SET "ESPTOOL_BAUD=115200"
 SET "ESPTOOL_CMD="
 SET "LOGCOUNTER=0"
+
+@REM FIXME: Determine mcu from PlatformIO variant, this is unmaintainable.
+SET "S3=s3 v3 t-deck wireless-paper wireless-tracker station-g2 unphone"
+SET "C3=esp32c3"
+@REM FIXME: Determine flash size from PlatformIO variant, this is unmaintainable.
+SET "BIGDB_8MB=picomputer-s3 unphone seeed-sensecap-indicator crowpanel-esp32s3 heltec_capsule_sensor_v3 heltec-v3 heltec-vision-master-e213 heltec-vision-master-e290 heltec-vision-master-t190 heltec-wireless-paper heltec-wireless-tracker heltec-wsl-v3 icarus seeed-xiao-s3 tbeam-s3-core tracksenger"
+SET "BIGDB_16MB=t-deck mesh-tab t-energy-s3 dreamcatcher ESP32-S3-Pico m5stack-cores3 station-g2 t-eth-elite t-watch-s3"
 
 GOTO getopts
 :help
@@ -134,44 +141,36 @@ IF NOT "!FILENAME:-tft-=!"=="!FILENAME!" (
         CALL :LOG_MESSAGE ERROR "Cannot enable WebUI (--web) and MUI." & GOTO eof
     )
     SET "TFT_BUILD=1"
-    GOTO tft
 ) ELSE (
     CALL :LOG_MESSAGE DEBUG "We are NOT working with a *-tft-* file. !FILENAME!"
-    GOTO no_tft
 )
 
-:tft
-SET "TFT8MB=picomputer-s3 unphone seeed-sensecap-indicator"
-FOR %%a IN (%TFT8MB%) DO (
+FOR %%a IN (%BIGDB_8MB%) DO (
     IF NOT "!FILENAME:%%a=!"=="!FILENAME!" (
-        @REM We are working with any of %TFT8MB%.
-        SET "TFT8=1"
-        GOTO end_loop_tft8mb
+        @REM We are working with any of %BIGDB_8MB%.
+        SET "BIGDB8=1"
+        GOTO end_loop_bigdb_8mb
     )
 )
-:end_loop_tft8mb
+:end_loop_bigdb_8mb
 
-SET "TFT16MB=t-deck"
-FOR %%a IN (%TFT16MB%) DO (
+FOR %%a IN (%BIGDB_16MB%) DO (
     IF NOT "!FILENAME:%%a=!"=="!FILENAME!" (
-        @REM We are working with any of %TFT16MB%.
-        SET "TFT16=1"
-        GOTO end_loop_tft16mb
+        @REM We are working with any of %BIGDB_16MB%.
+        SET "BIGDB16=1"
+        GOTO end_loop_bigdb_16mb
     )
 )
-:end_loop_tft16mb
+:end_loop_bigdb_16mb
 
-IF %TFT8% EQU 1 CALL :LOG_MESSAGE INFO "tft and MUI 8mb selected."
-IF %TFT16% EQU 1 CALL :LOG_MESSAGE INFO "tft and MUI 16mb selected."
-
-:no_tft
+IF %BIGDB8% EQU 1 CALL :LOG_MESSAGE INFO "BigDB 8mb partition selected."
+IF %BIGDB16% EQU 1 CALL :LOG_MESSAGE INFO "BigDB 16mb partition selected."
 
 @REM Extract BASENAME from %FILENAME% for later use.
 SET "BASENAME=!FILENAME:firmware-=!"
 CALL :LOG_MESSAGE DEBUG "Computed firmware basename: !BASENAME!"
 
 @REM Account for S3 and C3 board's different OTA partition.
-SET "S3=s3 v3 t-deck wireless-paper wireless-tracker station-g2 unphone"
 FOR %%a IN (%S3%) DO (
     IF NOT "!FILENAME:%%a=!"=="!FILENAME!" (
         @REM We are working with any of %S3%.
@@ -180,7 +179,6 @@ FOR %%a IN (%S3%) DO (
     )
 )
 
-SET "C3=esp32c3"
 FOR %%a IN (%C3%) DO (
     IF NOT "!FILENAME:%%a=!"=="!FILENAME!" (
         @REM We are working with any of %C3%.
@@ -209,14 +207,14 @@ CALL :LOG_MESSAGE DEBUG "Set SPIFFS_FILENAME to: !SPIFFS_FILENAME!"
 SET "OTA_OFFSET=0x260000"
 SET "SPIFFS_OFFSET=0x300000"
 
-@REM Offsets for MUI 8mb.
-IF %TFT8% EQU 1 IF %TFT_BUILD% EQU 1 (
+@REM Offsets for BigDB 8mb.
+IF %BIGDB8% EQU 1 (
     SET "OTA_OFFSET=0x340000"
     SET "SPIFFS_OFFSET=0x670000"
 )
 
-@REM Offsets for MUI 16mb.
-IF %TFT16% EQU 1 IF %TFT_BUILD% EQU 1 (
+@REM Offsets for BigDB 16mb.
+IF %BIGDB16% EQU 1 (
     SET "OTA_OFFSET=0x650000"
     SET "SPIFFS_OFFSET=0xc90000"
 )

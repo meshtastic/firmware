@@ -2,9 +2,48 @@
 
 PYTHON=${PYTHON:-$(which python3 python | head -n 1)}
 WEB_APP=false
-TFT8=false
-TFT16=false
 TFT_BUILD=false
+MCU=""
+
+# Variant groups
+BIGDB_8MB=(
+	"picomputer-s3"
+	"unphone"
+	"seeed-sensecap-indicator"
+	"crowpanel-esp32s3"
+	"heltec_capsule_sensor_v3"
+	"heltec-v3"
+	"heltec-vision-master-e213"
+	"heltec-vision-master-e290"
+	"heltec-vision-master-t190"
+	"heltec-wireless-paper"
+	"heltec-wireless-tracker"
+	"heltec-wsl-v3"
+	"icarus"
+	"seeed-xiao-s3"
+	"tbeam-s3-core"
+	"tracksenger"
+)
+BIGDB_16MB=(
+	"t-deck"
+	"mesh-tab"
+	"t-energy-s3"
+	"dreamcatcher"
+	"ESP32-S3-Pico"
+	"m5stack-cores3"
+	"station-g2"
+	"t-eth-elite"
+	"t-watch-s3"
+)
+S3_VARIANTS=(
+	"s3"
+	"-v3"
+	"t-deck"
+	"wireless-paper"
+	"wireless-tracker"
+	"station-g2"
+	"unphone"
+)
 
 # Determine the correct esptool command to use
 if "$PYTHON" -m esptool version >/dev/null 2>&1; then
@@ -78,20 +117,12 @@ if [[ $FILENAME != firmware-* ]]; then
   exit 1
 fi
 
-# Check if FILENAME contains "-tft-" and set target partitionScheme accordingly.
+# Check if FILENAME contains "-tft-" and prevent web/mui comingling.
 if [[ ${FILENAME//-tft-/} != "$FILENAME" ]]; then
 	TFT_BUILD=true
 	if [[ $WEB_APP == true ]] && [[ $TFT_BUILD == true ]]; then
 		echo "Cannot enable WebUI (--web) and MUI."
 		exit 1
-	fi
-
-	if [[ $FILENAME == *"picomputer-s3"* || $FILENAME == *"unphone"* || $FILENAME == *"seeed-sensecap-indicator"* ]]; then
-		TFT8=true
-	fi
-
-	if [[ $FILENAME == *"t-deck"* ]]; then
-		TFT16=true
 	fi
 fi
 
@@ -105,20 +136,31 @@ if [ -f "${FILENAME}" ] && [ -n "${FILENAME##*"update"*}" ]; then
 	# Default OTA Offset
 	OTA_OFFSET=0x260000
 
-	# littlefs* offset for MUI 8mb and OTA OFFSET.
-	if [ "$TFT8" = true ] && [ "$TFT_BUILD" = true ]; then
-		OFFSET=0x670000
-		OTA_OFFSET=0x340000
-	fi
+	# littlefs* offset for BigDB 8mb and OTA OFFSET.
+	for variant in "${BIGDB_8MB[@]}"; do
+		if [ -n "${FILENAME##*"$variant"*}" ]; then
+			OFFSET=0x670000
+			OTA_OFFSET=0x340000
+		fi
+	done
 
-	# littlefs* offset for MUI 16mb and OTA OFFSET.
-	if [ "$TFT16" = true ] && [ "$TFT_BUILD" = true ]; then
-		OFFSET=0xc90000
-		OTA_OFFSET=0x650000
-	fi
+	# littlefs* offset for BigDB 16mb and OTA OFFSET.
+	for variant in "${BIGDB_16MB[@]}"; do
+		if [ -n "${FILENAME##*"$variant"*}" ]; then
+			OFFSET=0xc90000
+			OTA_OFFSET=0x650000
+		fi
+	done
 
 	# Account for S3 board's different OTA partition
-	if [ -n "${FILENAME##*"s3"*}" ] && [ -n "${FILENAME##*"-v3"*}" ] && [ -n "${FILENAME##*"t-deck"*}" ] && [ -n "${FILENAME##*"wireless-paper"*}" ] && [ -n "${FILENAME##*"wireless-tracker"*}" ] && [ -n "${FILENAME##*"station-g2"*}" ] && [ -n "${FILENAME##*"unphone"*}" ]; then
+	# FIXME: Use PlatformIO info to determine MCU type, this is unmaintainable
+	for variant in "${S3_VARIANTS[@]}"; do
+		if [ -n "${FILENAME##*"$variant"*}" ]; then
+			MCU="esp32s3"
+		fi
+	done
+
+	if [ "$MCU" != "esp32s3" ]; then
 		if [ -n "${FILENAME##*"esp32c3"*}" ]; then
 			OTAFILE=bleota.bin
 		else
