@@ -4,16 +4,34 @@ on:
     - cron: 0 8 * * 1-5
   workflow_dispatch: {}
 
+permissions: read-all
+
 jobs:
   trunk_check:
-    name: Trunk Check Upload
-    runs-on: ubuntu-latest
+    name: Trunk Check and Upload
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Trunk Check
-        uses: trunk-io/trunk-action@782e83f803ca6e369f035d64c6ba2768174ba61b
+        uses: trunk-io/trunk-action@v1
         with:
           trunk-token: ${{ secrets.TRUNK_TOKEN }}
+
+  trunk_upgrade:
+    # See: https://github.com/trunk-io/trunk-action/blob/v1/readme.md#automatic-upgrades
+    name: Trunk Upgrade (PR)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write # For trunk to create PRs
+      pull-requests: write # For trunk to create PRs
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Trunk Upgrade
+        uses: trunk-io/trunk-action/upgrade@v1
+        with:
+          base: master
