@@ -1,4 +1,4 @@
-// Based on the BBQ10 Keyboard and Adafruit TCA8418 library
+// Based on the MPR121 Keyboard and Adafruit TCA8418 library
 
 #include "TCA8418Keyboard.h"
 #include "configuration.h"
@@ -103,10 +103,61 @@ enum {
     _TCA8418_COL9  // Pin ID for column 9
 };
 
-#define _TCA8418_ROWS 8
-#define _TCA8418_COLS 10
+// Nokia 5130 keyboard size
+#define _TCA8418_ROWS 5
+#define _TCA8418_COLS 5
+#define _TCA8418_NUM_KEYS 16
 
-TCA8418Keyboard::TCA8418Keyboard() : m_wire(nullptr), m_addr(0), readCallback(nullptr), writeCallback(nullptr) {}
+#define _TCA8418_LONG_PRESS_THRESHOLD 2000
+#define _TCA8418_MULTI_TAP_THRESHOLD 750
+
+uint8_t TCA8418TapMod[16] = {1, 1, 1, 1, 13, 7, 9, 2,
+                             7, 7, 7, 2, 7,  7, 9, 2}; // Num chars per key, Modulus for rotating through characters
+
+unsigned char TCA8418TapMap[16][13] = {{_TCA8418_BSP},                                                     // C
+                                       {_TCA8418_SELECT},                                                  // Navi
+                                       {_TCA8418_UP},                                                      // Up
+                                       {_TCA8418_DOWN},                                                    // Down
+                                       {'1', '.', ',', '?', '!', ':', ';', '-', '_', '\\', '/', '(', ')'}, // 1
+                                       {'4', 'g', 'h', 'i', 'G', 'H', 'I'},                                // 4
+                                       {'7', 'p', 'q', 'r', 's', 'P', 'Q', 'R', 'S'},                      // 7
+                                       {'*', '+'},                                                         // *
+                                       {'2', 'a', 'b', 'c', 'A', 'B', 'C'},                                // 2
+                                       {'5', 'j', 'k', 'l', 'J', 'K', 'L'},                                // 5
+                                       {'8', 't', 'u', 'v', 'T', 'U', 'V'},                                // 8
+                                       {'0', ' '},                                                         // 0
+                                       {'3', 'd', 'e', 'f', 'D', 'E', 'F'},                                // 3
+                                       {'6', 'm', 'n', 'o', 'M', 'N', 'O'},                                // 6
+                                       {'9', 'w', 'x', 'y', 'z', 'W', 'X', 'Y', 'Z'},                      // 9
+                                       {'#', '@'}};                                                        // #
+
+unsigned char TCA8418LongPressMap[16] = {
+    _TCA8418_ESC,    // C
+    _TCA8418_NONE,   // Navi
+    _TCA8418_NONE,   // Up
+    _TCA8418_NONE,   // Down
+    _TCA8418_NONE,   // 1
+    _TCA8418_LEFT,   // 4
+    _TCA8418_NONE,   // 7
+    _TCA8418_NONE,   // *
+    _TCA8418_UP,     // 2
+    _TCA8418_NONE,   // 5
+    _TCA8418_DOWN,   // 8
+    _TCA8418_NONE,   // 0
+    _TCA8418_NONE,   // 3
+    _TCA8418_RIGHT,  // 6
+    _TCA8418_NONE,   // 9
+    _TCA8418_REBOOT, // #
+};
+
+TCA8418Keyboard::TCA8418Keyboard() : m_wire(nullptr), m_addr(0), readCallback(nullptr), writeCallback(nullptr)
+{
+    state = Init;
+    last_key = -1;
+    last_tap = 0L;
+    char_idx = 0;
+    queue = "";
+}
 
 void TCA8418Keyboard::begin(uint8_t addr, TwoWire *wire)
 {
@@ -134,7 +185,10 @@ void TCA8418Keyboard::reset()
     //  set default all GIO pins to INPUT
     writeRegister(_TCA8418_REG_GPIO_DIR_1, 0x00);
     writeRegister(_TCA8418_REG_GPIO_DIR_2, 0x00);
-    writeRegister(_TCA8418_REG_GPIO_DIR_3, 0x00);
+    // Set COL9 as GPIO output
+    writeRegister(_TCA8418_REG_GPIO_DIR_3, 0x02);
+    // Switch off keyboard backlight (COL9 = LOW)
+    writeRegister(_TCA8418_REG_GPIO_DAT_OUT_3, 0x00);
 
     //  add all pins to key events
     writeRegister(_TCA8418_REG_GPI_EM_1, 0xFF);
@@ -151,9 +205,11 @@ void TCA8418Keyboard::reset()
     writeRegister(_TCA8418_REG_GPIO_INT_EN_2, 0xFF);
     writeRegister(_TCA8418_REG_GPIO_INT_EN_3, 0xFF);
 
+    // Set keyboard matrix size
     matrix(_TCA8418_ROWS, _TCA8418_COLS);
     enableDebounce();
     flush();
+    state = Idle;
 }
 
 bool TCA8418Keyboard::matrix(uint8_t rows, uint8_t columns)
@@ -197,33 +253,133 @@ uint8_t TCA8418Keyboard::keyCount() const
     return eventCount;
 }
 
-TCA8418Keyboard::KeyEvent TCA8418Keyboard::keyEvent() const
+bool TCA8418Keyboard::hasEvent()
 {
-    KeyEvent event = {.key = '\0', .state = Idle};
-    if (keyCount() == 0)
-        return event;
+    return queue.length() > 0;
+}
 
-    uint8_t k = readRegister(_TCA8418_REG_KEY_EVENT_A);
-    event.key = k & 0x7F;
-    if (k & 0x80) {
-        event.state = TCA8418Keyboard::Press;
-    } else {
-        event.state = TCA8418Keyboard::Release;
+void TCA8418Keyboard::queueEvent(char next)
+{
+    if (next == _TCA8418_NONE) {
+        return;
     }
-    return event;
+    queue.concat(next);
+}
+
+char TCA8418Keyboard::dequeueEvent()
+{
+    if (queue.length() < 1) {
+        return _TCA8418_NONE;
+    }
+    char next = queue.charAt(0);
+    queue.remove(0, 1);
+    return next;
+}
+
+void TCA8418Keyboard::trigger()
+{
+    if (keyCount() == 0) {
+        return;
+    }
+    if (state != Init) {
+        // Read the key register
+        uint8_t k = readRegister(_TCA8418_REG_KEY_EVENT_A);
+        uint8_t key = k & 0x7F;
+        if (k & 0x80) {
+            if (state == Idle)
+                pressed(key);
+            return;
+        } else {
+            if (state == Held) {
+                released();
+            }
+            state = Idle;
+            return;
+        }
+    } else {
+        reset();
+    }
+}
+
+void TCA8418Keyboard::pressed(uint8_t key)
+{
+    if (state == Init || state == Busy) {
+        return;
+    }
+    uint8_t next_key = 0;
+    if (key > 40) {          // 3, 6, 9, #
+        next_key = key - 30; // TCA8418_TapMap[12...15]
+    } else if (key > 30) {   // 2, 5, 8, 0
+        next_key = key - 24; // TCA8418_TapMap[8...11]
+    } else if (key > 20) {   // 1, 4, 7, *
+        next_key = key - 18; // TCA8418_TapMap[4..7]
+    } else if (key == 12) {  // Clear
+        next_key = 0;        // TCA8418_TapMap[0]
+    } else if (key == 13) {  // Navi
+        next_key = 1;        // TCA8418_TapMap[1]
+    } else if (key == 15) {  // Up
+        next_key = 2;        // TCA8418_TapMap[2]
+    } else if (key == 4) {   // Down
+        next_key = 3;        // TCA8418_TapMap[3]
+    }
+
+    // LOG_DEBUG("TCA8418: %u %u", key, next_key);
+    state = Held;
+    uint32_t now = millis();
+    tap_interval = now - last_tap;
+    if (tap_interval < 0) {
+        // long running, millis has overflowed.
+        last_tap = 0;
+        state = Busy;
+        return;
+    }
+    if (next_key != last_key || tap_interval > _TCA8418_MULTI_TAP_THRESHOLD) {
+        char_idx = 0;
+    } else {
+        char_idx += 1;
+    }
+    last_key = next_key;
+    last_tap = now;
+}
+
+void TCA8418Keyboard::released()
+{
+    if (state != Held) {
+        return;
+    }
+
+    if (last_key < 0 || last_key > _TCA8418_NUM_KEYS) { // reset to idle if last_key out of bounds
+        last_key = -1;
+        state = Idle;
+        return;
+    }
+    uint32_t now = millis();
+    int32_t held_interval = now - last_tap;
+    last_tap = now;
+    if (tap_interval < _TCA8418_MULTI_TAP_THRESHOLD) {
+        queueEvent(_TCA8418_BSP);
+    }
+    if (held_interval > _TCA8418_LONG_PRESS_THRESHOLD) {
+        queueEvent(TCA8418LongPressMap[last_key]);
+        // LOG_DEBUG("Long Press Key: %i Map: %i", last_key, TCA8418LongPressMap[last_key]);
+    } else {
+        queueEvent(TCA8418TapMap[last_key][(char_idx % TCA8418TapMod[last_key])]);
+        // LOG_DEBUG("Key Press: %i Index:%i if %i Map: %c", last_key, char_idx, TCA8418TapMod[last_key],
+        //           TCA8418TapMap[last_key][(char_idx % TCA8418TapMod[last_key])]);
+    }
 }
 
 uint8_t TCA8418Keyboard::flush()
 {
-    //  Flush key events
+    // Flush key events
     uint8_t count = 0;
     while (readRegister(_TCA8418_REG_KEY_EVENT_A) != 0)
         count++;
-    //  Flush gpio events
+    // Flush gpio events
     readRegister(_TCA8418_REG_GPIO_INT_STAT_1);
     readRegister(_TCA8418_REG_GPIO_INT_STAT_2);
     readRegister(_TCA8418_REG_GPIO_INT_STAT_3);
-    //  Clear INT_STAT register
+    // Clear INT_STAT register
     writeRegister(_TCA8418_REG_INT_STAT, 3);
     return count;
 }
@@ -265,7 +421,6 @@ bool TCA8418Keyboard::pinMode(uint8_t pinnum, uint8_t mode)
 {
     if (pinnum > _TCA8418_COL9)
         return false;
-    // if (mode > INPUT_PULLUP) return false; ?s
 
     uint8_t idx = pinnum / 8;
     uint8_t reg = _TCA8418_REG_GPIO_DIR_1 + idx;
@@ -361,6 +516,15 @@ void TCA8418Keyboard::disableDebounce()
     writeRegister(_TCA8418_REG_DEBOUNCE_DIS_3, 0xFF);
 }
 
+void TCA8418Keyboard::setBacklight(bool on)
+{
+    if (on) {
+        digitalWrite(_TCA8418_COL9, HIGH);
+    } else {
+        digitalWrite(_TCA8418_COL9, LOW);
+    }
+}
+
 uint8_t TCA8418Keyboard::readRegister(uint8_t reg) const
 {
     if (m_wire) {
@@ -396,4 +560,4 @@ void TCA8418Keyboard::writeRegister(uint8_t reg, uint8_t value)
     if (writeCallback) {
         writeCallback(m_addr, data[0], &(data[1]), 1);
     }
-}
+} 
