@@ -637,6 +637,14 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
 #if !MESHTASTIC_EXCLUDE_PKI
         crypto->setDHPrivateKey(config.security.private_key.bytes);
 #endif
+        if (config.security.is_managed && !(config.security.admin_key[0].size == 32 || config.security.admin_key[1].size == 32 ||
+                                            config.security.admin_key[2].size == 32)) {
+            config.security.is_managed = false;
+            const char *warning = "You must provide at least one admin public key to enable managed mode";
+            LOG_WARN(warning);
+            sendWarning(warning);
+        }
+
         if (config.security.debug_log_api_enabled == c.payload_variant.security.debug_log_api_enabled &&
             config.security.serial_enabled == c.payload_variant.security.serial_enabled)
             requiresReboot = false;
