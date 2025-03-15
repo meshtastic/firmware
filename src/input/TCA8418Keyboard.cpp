@@ -1,7 +1,6 @@
 // Based on the MPR121 Keyboard and Adafruit TCA8418 library
 
 #include "TCA8418Keyboard.h"
-#include "TCA8418Layouts.h"
 #include "configuration.h"
 
 #include <Arduino.h>
