@@ -55,7 +55,7 @@
   uint8_t TCA8418TapMod[_TCA8418_NUM_KEYS] = {13, 7, 7, 7, 7, 7, 9, 7, 9, 2, 2, 2}; // Num chars per key, Modulus for rotating through characters
 
   unsigned char TCA8418TapMap[_TCA8418_NUM_KEYS][13] = {
-    {'1', '.', ',', '?', '!', ':', ';', '-', '_', '\', '/', '(', ')'},  // 1
+    {'1', '.', ',', '?', '!', ':', ';', '-', '_', '\\', '/', '(', ')'},  // 1
     {'2', 'a', 'b', 'c', 'A', 'B', 'C'},                                // 2
     {'3', 'd', 'e', 'f', 'D', 'E', 'F'},                                // 3
     {'4', 'g', 'h', 'i', 'G', 'H', 'I'},                                // 4
