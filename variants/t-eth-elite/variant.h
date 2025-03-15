@@ -1,8 +1,11 @@
 #define HAS_SDCARD
 #define SDCARD_USE_SPI1
 
+#define HAS_GPS 1
 #define GPS_RX_PIN 39
 #define GPS_TX_PIN 42
+#define GPS_BAUDRATE_FIXED 1
+#define GPS_BAUDRATE 9600
 
 #define I2C_SDA 17 // I2C pins for this board
 #define I2C_SCL 18
