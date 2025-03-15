@@ -415,17 +415,20 @@ static void WiFiEvent(WiFiEvent_t event)
         LOG_INFO("Ethernet disconnected");
         break;
     case ARDUINO_EVENT_ETH_GOT_IP:
+#ifdef USE_WS5500
         LOG_INFO("Obtained IP address: %s, %u Mbps, %s", ETH.localIP().toString().c_str(), ETH.linkSpeed(),
                  ETH.fullDuplex() ? "FULL_DUPLEX" : "HALF_DUPLEX");
         onNetworkConnected();
-
+#endif
         break;
     case ARDUINO_EVENT_ETH_GOT_IP6:
+#ifdef USE_WS5500
 #if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
         LOG_INFO("Obtained Local IP6 address: %s", ETH.linkLocalIPv6().toString().c_str());
         LOG_INFO("Obtained GlobalIP6 address: %s", ETH.globalIPv6().toString().c_str());
 #else
         LOG_INFO("Obtained IP6 address: %s", ETH.localIPv6().toString().c_str());
+#endif
 #endif
         break;
     case ARDUINO_EVENT_SC_SCAN_DONE:

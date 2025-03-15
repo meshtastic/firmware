@@ -67,8 +67,7 @@
 #endif
 
 #define HAS_ETHERNET 1
-#define USE_WS5500                                                                                                               \
-    1 // this driver uses the same stack as the ESP32 Wifi driver, so it will not require the ethernet routiens of WS5100.
+#define USE_WS5500 1 // this driver uses the same stack as the ESP32 Wifi driver
 
 #define ETH_MISO_PIN 47
 #define ETH_MOSI_PIN 21
