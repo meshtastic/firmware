@@ -18,9 +18,23 @@
 #define MAX_RX_TOPHONE 32
 #endif
 
-/// max number of nodes allowed in the mesh
+/// max number of nodes allowed in the nodeDB
 #ifndef MAX_NUM_NODES
+#if defined(ARCH_STM32WL)
+#define MAX_NUM_NODES 10
+#elif defined(ARCH_NRF52)
+#define MAX_NUM_NODES 80
+#elif defined(ARCH_ESP32_S3)
+#if FLASH_MB == 8
+#define MAX_NUM_NODES 200
+#elif FLASH_MB >= 16
+#define MAX_NUM_NODES 250
+#else
 #define MAX_NUM_NODES 100
+#endif
+#else
+#define MAX_NUM_NODES 100
+#endif
 #endif
 
 /// Max number of channels allowed

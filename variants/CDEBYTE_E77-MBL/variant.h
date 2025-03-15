@@ -14,7 +14,6 @@ Do not expect a working Meshtastic device with this target.
 #define _VARIANT_EBYTE_E77_
 
 #define USE_STM32WLx
-#define MAX_NUM_NODES 10
 
 #define LED_PIN PB4 // LED1
 // #define LED_PIN PB3 // LED2
