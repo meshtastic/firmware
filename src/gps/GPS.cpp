@@ -1107,7 +1107,13 @@ int32_t GPS::runOnce()
 // clear the GPS rx/tx buffer as quickly as possible
 void GPS::clearBuffer()
 {
+#ifdef ARCH_ESP32
     _serial_gps->flush(false);
+#else
+    int x = _serial_gps->available();
+    while (x--)
+        _serial_gps->read();
+#endif
 }
 
 /// Prepare the GPS for the cpu entering deep or light sleep, expect to be gone for at least 100s of msecs
