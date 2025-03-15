@@ -159,7 +159,7 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_TD_LORAC = 60,
     /* CDEBYTE EoRa-S3 board using their own MM modules, clone of LILYGO T3S3 */
     meshtastic_HardwareModel_CDEBYTE_EORA_S3 = 61,
-    /* TWC_MESH_V4 
+    /* TWC_MESH_V4
  Adafruit NRF52840 feather express with SX1262, SSD1306 OLED and NEO6M GPS */
     meshtastic_HardwareModel_TWC_MESH_V4 = 62,
     /* NRF52_PROMICRO_DIY
@@ -228,6 +228,13 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_MESHLINK = 87,
     /* Seeed XIAO nRF52840 + Wio SX1262 kit */
     meshtastic_HardwareModel_XIAO_NRF52_KIT = 88,
+    /* Elecrow ThinkNode M1 & M2
+ https://www.elecrow.com/wiki/ThinkNode-M1_Transceiver_Device(Meshtastic)_Power_By_nRF52840.html
+ https://www.elecrow.com/wiki/ThinkNode-M2_Transceiver_Device(Meshtastic)_Power_By_NRF52840.html (this actually uses ESP32-S3) */
+    meshtastic_HardwareModel_THINKNODE_M1 = 89,
+    meshtastic_HardwareModel_THINKNODE_M2 = 90,
+    /* Lilygo T-ETH-Elite */
+    meshtastic_HardwareModel_T_ETH_ELITE = 91,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
@@ -769,7 +776,7 @@ typedef struct _meshtastic_MeshPacket {
     meshtastic_MeshPacket_public_key_t public_key;
     /* Indicates whether the packet was en/decrypted using PKI */
     bool pki_encrypted;
-    /* Last byte of the node number of the node that should be used as the next hop in routing. 
+    /* Last byte of the node number of the node that should be used as the next hop in routing.
  Set by the firmware internally, clients are not supposed to set this. */
     uint8_t next_hop;
     /* Last byte of the node number of the node that will relay/relayed this packet.
