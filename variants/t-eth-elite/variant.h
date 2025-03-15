@@ -10,6 +10,8 @@
 #define I2C_SDA 17 // I2C pins for this board
 #define I2C_SCL 18
 
+#define HAS_SCREEN 1 // Allow for OLED Screens on I2C Header of shield
+
 #define LED_PIN 38   // If defined we will blink this LED
 #define BUTTON_PIN 0 // If defined, this will be used for user button presses,
 
