@@ -83,3 +83,4 @@
     _TCA8418_NONE,   // 0
     _TCA8418_NONE,   // #
   };
+#endif
