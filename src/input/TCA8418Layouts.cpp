@@ -1,3 +1,5 @@
+#include "TCA8418Layouts.h"
+
 
 #if LAYOUT == NOKIA_5130    // Nokia 5130 keyboard size
   #define _TCA8418_COLS 5
