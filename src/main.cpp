@@ -115,6 +115,10 @@ AccelerometerThread *accelerometerThread = nullptr;
 AudioThread *audioThread = nullptr;
 #endif
 
+#if defined(M5STACK_COREBASIC) || defined(M5STACK_CORE2)
+#include <M5Unified.h>
+#endif
+
 #if HAS_TFT
 extern void tftSetup(void);
 #endif
@@ -737,7 +741,6 @@ void setup()
     // I2C trigger by sending 'go' command
     drv.setMode(DRV2605_MODE_INTTRIG);
 #endif
-
     // Init our SPI controller (must be before screen and lora)
 #ifdef ARCH_RP2040
 #ifdef HW_SPI1_DEVICE
@@ -845,7 +848,9 @@ void setup()
     if (!pmu_found)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_NO_AXP192); // Record a hardware fault for missing hardware
 #endif
-
+#if defined(M5STACK_COREBASIC) || defined(M5STACK_CORE2)
+    M5.begin();
+#endif
 #if !MESHTASTIC_EXCLUDE_I2C
 // Don't call screen setup until after nodedb is setup (because we need
 // the current region name)
@@ -1295,6 +1300,11 @@ void loop()
     if (!runASAP && loopCanSleep()) {
         mainDelay.delay(delayMsec);
     }
+
+    // if (didWake) LOG_DEBUG("wake!\n");
+#if defined(M5STACK_CORE2)
+    ScreenTouch();
+#endif
 }
 
 #endif

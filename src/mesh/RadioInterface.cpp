@@ -12,6 +12,7 @@
 #include <pb_decode.h>
 #include <pb_encode.h>
 
+DataInfo DataRegion;
 #define RDEF(name, freq_start, freq_end, duty_cycle, spacing, power_limit, audio_permitted, frequency_switching, wide_lora)      \
     {                                                                                                                            \
         meshtastic_Config_LoRaConfig_RegionCode_##name, freq_start, freq_end, duty_cycle, spacing, power_limit, audio_permitted, \
@@ -213,7 +214,10 @@ uint32_t RadioInterface::getPacketTime(uint32_t pl)
     float tPacket = tPreamble + tPayload;
 
     uint32_t msecs = tPacket * 1000;
-
+    DataRegion.lora_sf = sf;
+    DataRegion.lora_cr = cr;
+    LOG_DEBUG("(bw=%d, sf=%d, cr=4/%d) packet symLen=%d ms, payloadSize=%u, time %d ms\n", (int)bw, sf, cr, (int)(tSym * 1000),
+              pl, msecs);
     return msecs;
 }
 
@@ -575,8 +579,13 @@ void RadioInterface::applyModemConfig()
     preambleTimeMsec = getPacketTime((uint32_t)0);
     maxPacketTimeMsec = getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader));
 
-    LOG_INFO("Radio freq=%.3f, config.lora.frequency_offset=%.3f", freq, loraConfig.frequency_offset);
-    LOG_INFO("Set radio: region=%s, name=%s, config=%u, ch=%d, power=%d", myRegion->name, channelName, loraConfig.modem_preset,
+    DataRegion.lora_channel_num = channel_num;
+    DataRegion.lora_freq = getFreq();
+    DataRegion.lora_channel_name = channelName;
+    DataRegion.lora_power_output = power;
+    DataRegion.lora_bw = bw;
+    LOG_INFO("Radio freq=%.3f, config.lora.frequency_offset=%.3f\n", freq, loraConfig.frequency_offset);
+    LOG_INFO("Set radio: region=%s, name=%s, config=%u, ch=%d, power=%d\n", myRegion->name, channelName, loraConfig.modem_preset,
              channel_num, power);
     LOG_INFO("myRegion->freqStart -> myRegion->freqEnd: %f -> %f (%f MHz)", myRegion->freqStart, myRegion->freqEnd,
              myRegion->freqEnd - myRegion->freqStart);
