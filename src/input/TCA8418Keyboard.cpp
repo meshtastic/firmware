@@ -103,11 +103,46 @@ enum {
     _TCA8418_COL9  // Pin ID for column 9
 };
 
+#define _TCA8418_COLS 3
+#define _TCA8418_ROWS 4
+#define _TCA8418_NUM_KEYS 12
+
+uint8_t TCA8418TapMod[_TCA8418_NUM_KEYS] = {13, 7, 7, 7, 7, 7, 9, 7, 9, 2, 2, 2}; // Num chars per key, Modulus for rotating through characters
+
+unsigned char TCA8418TapMap[_TCA8418_NUM_KEYS][13] = {
+  {'1', '.', ',', '?', '!', ':', ';', '-', '_', '\\', '/', '(', ')'}, // 1
+  {'2', 'a', 'b', 'c', 'A', 'B', 'C'},                                // 2
+  {'3', 'd', 'e', 'f', 'D', 'E', 'F'},                                // 3
+  {'4', 'g', 'h', 'i', 'G', 'H', 'I'},                                // 4
+  {'5', 'j', 'k', 'l', 'J', 'K', 'L'},                                // 5
+  {'6', 'm', 'n', 'o', 'M', 'N', 'O'},                                // 6
+  {'7', 'p', 'q', 'r', 's', 'P', 'Q', 'R', 'S'},                      // 7
+  {'8', 't', 'u', 'v', 'T', 'U', 'V'},                                // 8
+  {'9', 'w', 'x', 'y', 'z', 'W', 'X', 'Y', 'Z'},                      // 9
+  {'*', '+'},                                                         // *
+  {'0', ' '},                                                         // 0
+  {'#', '@'},                                                         // #
+};
+
+unsigned char TCA8418LongPressMap[_TCA8418_NUM_KEYS] = {
+  _TCA8418_ESC,    // 1
+  _TCA8418_UP,     // 2
+  _TCA8418_NONE,   // 3
+  _TCA8418_LEFT,   // 4
+  _TCA8418_NONE,   // 5
+  _TCA8418_RIGHT,  // 6
+  _TCA8418_NONE,   // 7
+  _TCA8418_DOWN,   // 8
+  _TCA8418_NONE,   // 9
+  _TCA8418_NONE,   // *
+  _TCA8418_NONE,   // 0
+  _TCA8418_NONE,   // #
+};
 
 #define _TCA8418_LONG_PRESS_THRESHOLD 2000
 #define _TCA8418_MULTI_TAP_THRESHOLD 750
 
-#define LAYOUT 3x4
+// #define LAYOUT Adafruit3x4
 
 
 
@@ -271,12 +306,12 @@ void TCA8418Keyboard::pressed(uint8_t key)
     int row = (key - 1) / 10;
     int col = (key - 1) % 10;
     
-    if (row >= MATRIX_ROWS || col >= MATRIX_COLS) {
+    if (row >= _TCA8418_ROWS || col >= _TCA8418_COLS) {
         return;  // Invalid key
     }
 
     // Compute key index based on dynamic row/column
-    next_key = row * MATRIX_COLS + col;
+    next_key = row * _TCA8418_COLS + col;
 
     // LOG_DEBUG("TCA8418: Key %u -> Next Key %u", key, next_key);
 
@@ -522,3 +557,4 @@ void TCA8418Keyboard::writeRegister(uint8_t reg, uint8_t value)
         writeCallback(m_addr, data[0], &(data[1]), 1);
     }
 } 
+
