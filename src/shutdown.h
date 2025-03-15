@@ -32,6 +32,8 @@ void powerCommandsCheck()
             delete screen;
         LOG_DEBUG("final reboot!");
         reboot();
+#elif defined(ARCH_STM32WL)
+        HAL_NVIC_SystemReset();
 #else
         rebootAtMsec = -1;
         LOG_WARN("FIXME implement reboot for this platform. Note that some settings require a restart to be applied");

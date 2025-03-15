@@ -29,30 +29,6 @@ SPIClass SPI1(HSPI);
 
 #endif // HAS_SDCARD
 
-#if defined(ARCH_STM32WL)
-
-uint16_t OSFS::startOfEEPROM = 1;
-uint16_t OSFS::endOfEEPROM = 2048;
-
-// 3) How do I read from the medium?
-void OSFS::readNBytes(uint16_t address, unsigned int num, byte *output)
-{
-    for (uint16_t i = address; i < address + num; i++) {
-        *output = EEPROM.read(i);
-        output++;
-    }
-}
-
-// 4) How to I write to the medium?
-void OSFS::writeNBytes(uint16_t address, unsigned int num, const byte *input)
-{
-    for (uint16_t i = address; i < address + num; i++) {
-        EEPROM.update(i, *input);
-        input++;
-    }
-}
-#endif
-
 /**
  * @brief Copies a file from one location to another.
  *
@@ -62,33 +38,7 @@ void OSFS::writeNBytes(uint16_t address, unsigned int num, const byte *input)
  */
 bool copyFile(const char *from, const char *to)
 {
-#ifdef ARCH_STM32WL
-    unsigned char cbuffer[2048];
-
-    // Var to hold the result of actions
-    OSFS::result r;
-
-    r = OSFS::getFile(from, cbuffer);
-
-    if (r == notfound) {
-        LOG_ERROR("Failed to open source file %s", from);
-        return false;
-    } else if (r == noerr) {
-        r = OSFS::newFile(to, cbuffer, true);
-        if (r == noerr) {
-            return true;
-        } else {
-            LOG_ERROR("OSFS Error %d", r);
-            return false;
-        }
-
-    } else {
-        LOG_ERROR("OSFS Error %d", r);
-        return false;
-    }
-    return true;
-
-#elif defined(FSCom)
+#ifdef FSCom
     // take SPI Lock
     concurrency::LockGuard g(spiLock);
     unsigned char cbuffer[16];
@@ -127,13 +77,7 @@ bool copyFile(const char *from, const char *to)
  */
 bool renameFile(const char *pathFrom, const char *pathTo)
 {
-#ifdef ARCH_STM32WL
-    if (copyFile(pathFrom, pathTo) && (OSFS::deleteFile(pathFrom) == OSFS::result::NO_ERROR)) {
-        return true;
-    } else {
-        return false;
-    }
-#elif defined(FSCom)
+#ifdef FSCom
 
 #ifdef ARCH_ESP32
     // take SPI Lock
