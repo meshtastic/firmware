@@ -211,17 +211,28 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 }
                 break;
 
+            case XPOWERS_AXP192_AXP2101_ADDRESS:
+                // Do we have the TCA8418 instead?
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x02), 1);
+                if ((registerValue & 0b11100000) == 0) {
+                    logFoundDevice("TCA8418", (uint8_t)addr.address);
+                    type = TCA8418KB;
+                } else {
+                    logFoundDevice("AXP192/AXP2101", (uint8_t)addr.address);
+                    type = PMU_AXP192_AXP2101;
+                }
+                break;
+
                 SCAN_SIMPLE_CASE(TDECK_KB_ADDR, TDECKKB, "T-Deck keyboard", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(BBQ10_KB_ADDR, BBQ10KB, "BB Q10", (uint8_t)addr.address);
-                SCAN_SIMPLE_CASE(TCA8418_KB_ADDR, TCA8418KB, "TCA8418 keyboard", (uint8_t)addr.address);
 
                 SCAN_SIMPLE_CASE(ST7567_ADDRESS, SCREEN_ST7567, "ST7567", (uint8_t)addr.address);
 #ifdef HAS_NCP5623
                 SCAN_SIMPLE_CASE(NCP5623_ADDR, NCP5623, "NCP5623", (uint8_t)addr.address);
 #endif
-#ifdef HAS_PMU
-                SCAN_SIMPLE_CASE(XPOWERS_AXP192_AXP2101_ADDRESS, PMU_AXP192_AXP2101, "AXP192/AXP2101", (uint8_t)addr.address)
-#endif
+//#ifdef HAS_PMU
+//                SCAN_SIMPLE_CASE(XPOWERS_AXP192_AXP2101_ADDRESS, PMU_AXP192_AXP2101, "AXP192/AXP2101", (uint8_t)addr.address)
+//#endif
             case BME_ADDR:
             case BME_ADDR_ALTERNATE:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xD0), 1); // GET_ID
