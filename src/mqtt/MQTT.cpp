@@ -19,6 +19,10 @@
 #include "mesh/wifi/WiFiAPClient.h"
 #include <WiFi.h>
 #endif
+#if HAS_ETHERNET && defined(USE_WS5500)
+#include <ETHClass2.h>
+#define ETH ETH2
+#endif // HAS_ETHERNET
 #include "Default.h"
 #if !defined(ARCH_NRF52) || NRF52_USE_JSON
 #include "serialization/JSON.h"
@@ -295,6 +299,11 @@ bool connectPubSub(const PubSubConfig &config, PubSubClient &pubSub, Client &cli
 
 inline bool isConnectedToNetwork()
 {
+#ifdef USE_WS5500
+    if (ETH.connected())
+        return true;
+#endif
+
 #if HAS_WIFI
     return WiFi.isConnected();
 #elif HAS_ETHERNET
