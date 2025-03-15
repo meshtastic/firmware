@@ -15,11 +15,6 @@ class FishEyeStateRoutingModule : public ProtobufModule<meshtastic_FishEyeStateR
     FishEyeStateRoutingModule();
 
     /*
-     * Get Information of direct Neighbors from the NeighborInfoModule and process it
-     */
-    bool addNeighborInfo(meshtastic_NeighborInfo Ninfo);
-
-    /*
      * Get Next-Hop for Package to dest
      */
     uint32_t getNextHopForID(uint32_t dest);
@@ -46,7 +41,8 @@ class FishEyeStateRoutingModule : public ProtobufModule<meshtastic_FishEyeStateR
 
   private:
 
-    float alpha = 2; // Factor that determins the strenght of blurring towards far nodes
+    float alpha = 1.4; // Factor that determines the strenght of blurring towards outer nodes 
+    uint32_t nextLSPPckg = 0;
     std::vector<meshtastic_Neighbor> neighborhood; // own Neighborhood as Basis for NextHop Calculation
     std::unordered_map<uint32_t,uint32_t> NextHopTable; // saves for every reachable known Node the optimal (SSSP) NextHop
 
@@ -72,9 +68,14 @@ class FishEyeStateRoutingModule : public ProtobufModule<meshtastic_FishEyeStateR
     bool calcNextHop();
 
     /*
-     * converts NeighborInfo Struct into LSPDBEntry-Struct
+     * Send own NeighborInfo to 0-Hop Neighborhood
      */
-    void NinfoToLSPDBEntry(meshtastic_NeighborInfo *Ninfo, LSPDBEntry *fsr);
+    void sendInitialLSP();
+
+    /*
+     * prints the Contents of the LSP-Database
+     */
+    void printLSPDB();
 
 };
 extern FishEyeStateRoutingModule *fishEyeStateRoutingModule;

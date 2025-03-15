@@ -236,7 +236,7 @@ void MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPh
     if(config.network.routingAlgorithm == meshtastic_Config_RoutingConfig_FishEyeState && moduleConfig.fish_eye_state_routing.enabled){
         if(p->decoded.dest != 0 && p->decoded.dest != NODENUM_BROADCAST){
             p->to = fishEyeStateRoutingModule->getNextHopForID(p->decoded.dest);
-        }else if ((p->decoded.dest == p->to && p->decoded.dest != 0 && p->decoded.dest != NODENUM_BROADCAST) || (p->decoded.dest == 0 && p->to != 0 && p->to != NODENUM_BROADCAST ))
+        }else if ((p->decoded.dest == 0) && (p->to != 0) && (p->to != NODENUM_BROADCAST ))
         {
             p->decoded.dest = p->to;
             p->to = fishEyeStateRoutingModule->getNextHopForID(p->decoded.dest);

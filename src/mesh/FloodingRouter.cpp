@@ -66,6 +66,9 @@ bool FloodingRouter::isRebroadcaster()
 void FloodingRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
 {
     if (!isToUs(p) && (p->hop_limit > 0) && !isFromUs(p)) {
+        if((moduleConfig.has_fish_eye_state_routing && moduleConfig.fish_eye_state_routing.enabled && (config.network.routingAlgorithm == meshtastic_Config_RoutingConfig_FishEyeState)) && (p->decoded.portnum == meshtastic_PortNum_FISHEYESTATEROUTING_APP)){
+            return false; // Don't want to rebroadcast LSP-Packages beyond 0-Hop-Neighborhood
+        }
         if (p->id != 0) {
             if (isRebroadcaster()) {
                 meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it

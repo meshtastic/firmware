@@ -17,89 +17,14 @@ FishEyeStateRoutingModule::FishEyeStateRoutingModule()
     : ProtobufModule("fishEyeStateRouting", meshtastic_PortNum_FISHEYESTATEROUTING_APP, &meshtastic_FishEyeStateRouting_msg),
       concurrency::OSThread("FishEyeStateRoutingModule")
 {
-  LOG_DEBUG("start FSR");
-  std::fflush(NULL);
-  if(moduleConfig.fish_eye_state_routing.enabled && config.network.routingAlgorithm == meshtastic_Config_RoutingConfig_FishEyeState && moduleConfig.has_neighbor_info == true && moduleConfig.neighbor_info.enabled == true){
-    setIntervalFromNow(Default::getConfiguredOrDefaultMs(moduleConfig.neighbor_info.update_interval,
-      default_telemetry_broadcast_interval_secs));
-  }else{
+  
+  if(!(moduleConfig.fish_eye_state_routing.enabled && config.network.routingAlgorithm == meshtastic_Config_RoutingConfig_FishEyeState && moduleConfig.has_neighbor_info && moduleConfig.neighbor_info.enabled)){
     LOG_DEBUG("FishEyeStateRouting Module is disabled");
-    std::fflush(NULL);
     disable();
+    nextLSPPckg = UINT32_MAX;
+  }else {
+    nextLSPPckg = getTime() + moduleConfig.neighbor_info.update_interval;
   }
-  LOG_DEBUG("End FSR");
-  std::fflush(NULL); 
-}
-
-/*
- * gets called from the NeighborInfo-Module if a new NeighborInfo Package arrives
- */
-bool FishEyeStateRoutingModule::addNeighborInfo(meshtastic_NeighborInfo Ninfo){
-  LOG_DEBUG("FSR: addNeighborInfoStart");
-  std::fflush(NULL);
-  auto it = LSPDB.find(Ninfo.node_id);
-  if(it != LSPDB.end()){    //Node already in LSPDB
-
-    if(it->second.LSP.creation < Ninfo.creation){ // Package newer that our Version?
-      bool diff = false;  // check if it's any different
-      for(int i = 0; i < min(Ninfo.neighbors_count,it->second.LSP.neighbors_count); i++){
-        if((Ninfo.neighbors[i].node_id) != (it->second.LSP.neighbors[i].node_id)){
-          diff = true;
-          break;
-        }
-      }
-      diff = diff || (it->second.LSP.traveledHops != 1) || (it->second.LSP.neighbors_count != Ninfo.neighbors_count);
-
-      LSPDBEntry entry;   //Copy it into Database
-      NinfoToLSPDBEntry(&Ninfo,&entry);
-      if(it->second.forwarded == false){
-        entry.timeout = min(it->second.timeout,entry.timeout);
-      }
-      it->second = entry;
-
-      if(diff && moduleConfig.fish_eye_state_routing.enabled){
-        calcNextHop();
-        LOG_DEBUG("FSR: addNeighborInfoEnd");
-        std::fflush(NULL);
-        return 1;
-      }
-    }
-
-  }else{                  //Node not in LSPDB
-    LSPDBEntry entry; //new entry
-    NinfoToLSPDBEntry(&Ninfo,&entry);
-    LSPDB.insert(std::make_pair(entry.LSP.node_id,entry)); //insert into DB
-    if(moduleConfig.fish_eye_state_routing.enabled){
-    calcNextHop();
-    }
-    LOG_DEBUG("FSR: addNeighborInfoEnd");
-    std::fflush(NULL);
-    return 1;
-  }
-  LOG_DEBUG("FSR: addNeighborInfoEnd");
-  std::fflush(NULL);
-  return 0;
-}
-
-/*
- * convert a meshtastic_NeighborInfo Struct into an LSPDBEntry Struct
- */
-void FishEyeStateRoutingModule::NinfoToLSPDBEntry(meshtastic_NeighborInfo *Ninfo, LSPDBEntry *fsr){
-  LOG_DEBUG("FSR: NinfoToLSPDBEntryStart");
-  std::fflush(NULL);
-
-  fsr->LSP.node_id = Ninfo->node_id;
-  fsr->LSP.traveledHops = 1;
-  fsr->LSP.neighbors_count = Ninfo->neighbors_count;
-  for(int i = 0; i < Ninfo->neighbors_count; i++){
-    fsr->LSP.neighbors[i] = Ninfo->neighbors[i];
-  }
-  fsr->LSP.creation = Ninfo->creation;
-  fsr->timeout = (uint32_t) (getTime() + moduleConfig.neighbor_info.update_interval * std::pow(fsr->LSP.traveledHops, alpha));
-  fsr->forwarded = false;
-  LOG_DEBUG("FSR: NinfoToLSPDBEntryEnd");
-  std::fflush(NULL);
-
 }
 
 /*
@@ -107,8 +32,6 @@ void FishEyeStateRoutingModule::NinfoToLSPDBEntry(meshtastic_NeighborInfo *Ninfo
  * Criteria: Neighbor cout, Node ID, neighbors list (only by ID)
  */
 bool FishEyeStateRoutingModule::isequal(const meshtastic_FishEyeStateRouting &s1, const meshtastic_FishEyeStateRouting &s2){
-  LOG_DEBUG("FSR: isequalStart");
-  std::fflush(NULL);
   if((s1.neighbors_count == s2.neighbors_count) && (s1.node_id == s2.node_id)){
     bool diff = false;
     for(int i = 0; i < s1.neighbors_count; i++){
@@ -117,12 +40,8 @@ bool FishEyeStateRoutingModule::isequal(const meshtastic_FishEyeStateRouting &s1
         break;
       }
     }
-    LOG_DEBUG("FSR: isequalEnd");
-    std::fflush(NULL);
     return !diff;
   }
-  LOG_DEBUG("FSR: isequalEnd");
-  std::fflush(NULL);
   return false;
 }
 
@@ -131,20 +50,12 @@ bool FishEyeStateRoutingModule::isequal(const meshtastic_FishEyeStateRouting &s1
  * returns next-Hop for a Message to a given NodeID, if Node is unknwon BroadcastID is returned
  */
 uint32_t FishEyeStateRoutingModule::getNextHopForID(uint32_t dest){
-  LOG_DEBUG("FSR: getNextHopForIDStart");
-  std::fflush(NULL);
   if (dest == nodeDB->getNodeNum()){
-    LOG_DEBUG("FSR: getNextHopForIDEnd");
-    std::fflush(NULL);
     return dest;}
   auto it = NextHopTable.find(dest);
   if(it == NextHopTable.end()){
-    LOG_DEBUG("FSR: getNextHopForIDEnd");
-    std::fflush(NULL);
     return NODENUM_BROADCAST;
   }else{
-    LOG_DEBUG("FSR: getNextHopForIDEnd");
-    std::fflush(NULL);
     return it->second;
   }
 }
@@ -154,8 +65,7 @@ uint32_t FishEyeStateRoutingModule::getNextHopForID(uint32_t dest){
  */
 bool FishEyeStateRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_FishEyeStateRouting *lsp)
 {
-  LOG_DEBUG("FSR: handleReceivedStart");
-  std::fflush(NULL);
+  if(lsp->node_id == nodeDB->getNodeNum()){return true;} // Don't calculate Path to us
   auto it = LSPDB.find(lsp->node_id);
   if(it != LSPDB.end()){    //Node already in LSPDB
     if(it->second.LSP.creation < lsp->creation){
@@ -165,9 +75,9 @@ bool FishEyeStateRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPack
       it->second.LSP.traveledHops += 1;
       if(it->second.forwarded){ //calculate Timeout
         it->second.forwarded = false;
-        it->second.timeout = (uint32_t) (getTime() + moduleConfig.neighbor_info.update_interval * pow(it->second.LSP.traveledHops,alpha));
+        it->second.timeout = (uint32_t) (((int64_t) getTime()) + (((int64_t) moduleConfig.neighbor_info.update_interval) *((int64_t) std::pow((int64_t) it->second.LSP.traveledHops, alpha))));
       }else{
-        it->second.timeout = min(it->second.timeout, (uint32_t) (getTime() + moduleConfig.neighbor_info.update_interval * pow(it->second.LSP.traveledHops,alpha)));
+        it->second.timeout = min(it->second.timeout, (uint32_t) (((int64_t) getTime()) + (((int64_t) moduleConfig.neighbor_info.update_interval) *((int64_t) std::pow((int64_t) it->second.LSP.traveledHops, alpha)))));
       }
       if(!diff && moduleConfig.fish_eye_state_routing.enabled){calcNextHop();}
     }
@@ -178,48 +88,97 @@ bool FishEyeStateRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPack
     entry.forwarded = false;
     entry.LSP = *lsp;
     entry.LSP.traveledHops += 1;
-    entry.timeout = (uint32_t) (getTime() + moduleConfig.neighbor_info.update_interval * pow(entry.LSP.traveledHops,alpha));
+    entry.timeout = (uint32_t) (((int64_t) getTime()) + (((int64_t) moduleConfig.neighbor_info.update_interval) *((int64_t) std::pow((int64_t) entry.LSP.traveledHops, alpha))));
     LSPDB.insert(std::make_pair(entry.LSP.node_id,entry));
     if(moduleConfig.fish_eye_state_routing.enabled){calcNextHop();}
   }
-  LOG_DEBUG("FSR: handleReceivedEnd");
-  std::fflush(NULL);
+  char * logout;
+  sprintf(logout, "Received LSP-Pckg of Node %u: ",lsp->node_id);
+  for(int i = 0; i< lsp->neighbors_count; i++){
+    sprintf(logout,"%u, ", lsp->neighbors[i].node_id);
+  }
+  LOG_DEBUG(logout);
   return true;
+}
+
+/*
+ * sends the initial LSP-Package
+ */
+void FishEyeStateRoutingModule::sendInitialLSP(){
+  LOG_DEBUG("Sending own Neighborhood ...");
+  meshtastic_FishEyeStateRouting LSPInfo;
+  LSPInfo.creation = getTime();
+  LSPInfo.node_id = nodeDB->getNodeNum();
+  LSPInfo.traveledHops = 0;
+  LSPInfo.neighbors_count = neighborhood.size();
+  for(int i = 0; i < neighborhood.size(); i++){
+    meshtastic_Neighbor entry;
+    entry.node_id = neighborhood[i].node_id;
+    LSPInfo.neighbors[i] = entry;
+  }
+  meshtastic_MeshPacket *p = allocDataProtobuf(LSPInfo);
+  p->to = NODENUM_BROADCAST;
+  p->decoded.want_response = false;
+  p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
+  p->decoded.portnum = meshtastic_PortNum_FISHEYESTATEROUTING_APP;
+  service->sendToMesh(p,RX_SRC_LOCAL,true);
+  nextLSPPckg = getTime() + moduleConfig.neighbor_info.update_interval;
+}
+
+/*
+ * Prints the Entrys of the LSP-Database
+ */
+void FishEyeStateRoutingModule::printLSPDB(){
+  printf("LSPDB:\n");
+  for(auto etr : LSPDB){
+    printf("Node: %u, Neighbors: %u: ", etr.first -16,etr.second.LSP.neighbors_count);
+    for(int i = 0; i< etr.second.LSP.neighbors_count;i++){
+      printf("%u, ", etr.second.LSP.neighbors[i].node_id -16);
+    }
+    printf(" Timeout: %u, forwarded: %u\n",((int64_t) etr.second.timeout) - ((int64_t) getTime()),etr.second.forwarded);
+  }
+  printf("Total: %i\n",LSPDB.size());
 }
 
 /*
  * broadcast all Packages, that weren't broadcastet and whose timeout is expired
  */
 int32_t FishEyeStateRoutingModule::runOnce(){
-  LOG_DEBUG("FSR: runOnceStart");
-  std::fflush(NULL);
+  if(((int64_t) getTime()) > ((int64_t) nextLSPPckg)){
+    sendInitialLSP();
+  }
+  //printLSPDB();
+
   auto it = LSPDB.begin();
   uint32_t min = UINT32_MAX;
   while (it != LSPDB.end()) //iterate over every Entry
   {
-
-    if((getTime() > it->second.timeout) && (!it->second.forwarded )){ //Timeout expired?
+    if(((((int64_t) getTime())-((int64_t) it->second.timeout)) >= 0) && (!(it->second.forwarded))){ //Timeout expired?
       meshtastic_MeshPacket *p = allocDataProtobuf(it->second.LSP);
       p->to = NODENUM_BROADCAST;
       p->decoded.want_response = false;
       p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
+      p->decoded.portnum = meshtastic_PortNum_FISHEYESTATEROUTING_APP;
       service->sendToMesh(p,RX_SRC_LOCAL,true);
       it->second.forwarded = true;
+      char * logout;
+      sprintf(logout,"Forwarded LSP-Package of Node %u", it->second.LSP.node_id);
+      LOG_DEBUG(logout);
 
-    }else if((getTime() < it->second.timeout) && (!it->second.forwarded) && (it->second.timeout < min)){
+    }else if((getTime() < it->second.timeout) && (!(it->second.forwarded)) && (it->second.timeout < min)){
       min = it->second.timeout;
     }
     ++it;
 
   }
-  LOG_DEBUG("FSR: runOnceEnd");
-  std::fflush(NULL);
-  return min + 1;
+
+  if (min != UINT32_MAX){
+    return ((int32_t) (((int64_t) min) - ((int64_t) getTime()))) * 1000; // We need seconds here
+  }
+  return{300000};
 }
 
 bool FishEyeStateRoutingModule::setOwnNeighborhood(meshtastic_NeighborInfo Ninfo){
-  LOG_DEBUG("FSR: setOwnNeighborhoodStart");
-  std::fflush(NULL);
   bool diff = false;
   for(int i = 0; i<min((uint32_t) Ninfo.neighbors_count,(uint32_t) neighborhood.size()); i++){
     if(neighborhood[i].node_id != Ninfo.neighbors[i].node_id){diff = true;}
@@ -232,14 +191,10 @@ bool FishEyeStateRoutingModule::setOwnNeighborhood(meshtastic_NeighborInfo Ninfo
   if(diff && moduleConfig.fish_eye_state_routing.enabled){
     calcNextHop();
   }
-  LOG_DEBUG("FSR: setOwnNeighborhoodEnd");
-  std::fflush(NULL);
   return diff;
 }
 
 bool FishEyeStateRoutingModule::setOwnNeighborhood(std::vector<meshtastic_Neighbor> n){
-  LOG_DEBUG("FSR: setOwnNeighborhood2Start");
-  std::fflush(NULL);
   bool diff = false;
   for(int i = 0; i<min((uint32_t) n.size(), (uint32_t) neighborhood.size()); i++){
     if(neighborhood[i].node_id != n[i].node_id){diff = true;}
@@ -252,18 +207,14 @@ bool FishEyeStateRoutingModule::setOwnNeighborhood(std::vector<meshtastic_Neighb
   if(diff && moduleConfig.fish_eye_state_routing.enabled){
     calcNextHop();
   }
-  LOG_DEBUG("FSR: setOwnNeighborhood2End");
-  std::fflush(NULL);
   return diff;
 }
 
-
 /*
- * Calculates and Next-Hops
+ * Calculates the Next-Hops
  */
 bool FishEyeStateRoutingModule::calcNextHop(){
-  LOG_DEBUG("FSR: calcNextHopStart");
-  std::fflush(NULL);
+
   struct nodeIDwithPrev{
     uint32_t nodeID;
     uint32_t prev;
@@ -280,43 +231,46 @@ bool FishEyeStateRoutingModule::calcNextHop(){
   }
   alreadyProcessed.insert(ownID);
 
+
   while(waitingqueue.size() != 0){
 
     nodeIDwithPrev n = waitingqueue.front();
-    uint32_t nextHopForN;       //calculate NextHop
-    if(n.prev == ownID){
-      nextHopForN = n.nodeID;
-    }else{
-      auto it = NextHopTable.find(n.prev);
-      if(it == NextHopTable.end()){
-        nextHopForN = NODENUM_BROADCAST;
+    if(alreadyProcessed.find(n.nodeID) == alreadyProcessed.end()){
+      uint32_t nextHopForN;       //calculate NextHop
+      if(n.prev == ownID){
+        nextHopForN = n.nodeID;
       }else{
-        nextHopForN = it->second;
+        auto it = NextHopTable.find(n.prev);
+        if(it == NextHopTable.end()){
+          nextHopForN = NODENUM_BROADCAST;
+        }else{
+          nextHopForN = it->second;
+        }
       }
-    }
-    alreadyProcessed.insert(n.nodeID); //Node we just Handeled ist now Porcessed
+      alreadyProcessed.insert(n.nodeID); //Node we just Handeled ist now Porcessed
 
-    if(NextHopTable.find(n.nodeID) == NextHopTable.end()){      //insert NextHop in Storage
-      NextHopTable.insert(std::make_pair(n.nodeID,nextHopForN));
-    }else{
-      NextHopTable.find(n.nodeID)->second = nextHopForN;
-    }
+      if(NextHopTable.find(n.nodeID) == NextHopTable.end()){      //insert NextHop in Storage
+        NextHopTable.insert(std::make_pair(n.nodeID,nextHopForN));
+      }else{
+        NextHopTable.find(n.nodeID)->second = nextHopForN;
+      }
 
-    auto it = LSPDB.find(n.nodeID);    //discover new Nodes and push them in waitingqueue, if we haven't processed them yet (e.g. they aren't in the alreadyProcessed-Set)
-    if(it != LSPDB.end()){
-      for(int i = 0; i < (it->second.LSP.neighbors_count); i++){
-        if(alreadyProcessed.find(it->second.LSP.neighbors[i].node_id) == alreadyProcessed.end()){
-          nodeIDwithPrev entry;
-          entry.nodeID = it->second.LSP.neighbors[i].node_id;
-          entry.prev = n.nodeID;
-          waitingqueue.push(entry);
+
+      auto it = LSPDB.find(n.nodeID);    //discover new Nodes and push them in waitingqueue, if we haven't processed them yet (e.g. they aren't in the alreadyProcessed-Set)
+      if(it != LSPDB.end()){
+        for(int i = 0; i < (it->second.LSP.neighbors_count); i++){
+          if(alreadyProcessed.find(it->second.LSP.neighbors[i].node_id) == alreadyProcessed.end()){
+            nodeIDwithPrev entry;
+            entry.nodeID = it->second.LSP.neighbors[i].node_id;
+            entry.prev = n.nodeID;
+            waitingqueue.push(entry);
+          }
         }
       }
     }
     waitingqueue.pop();
 
   }
-  LOG_DEBUG("FSR: calcNextHopEnd");
-  std::fflush(NULL);
+
   return true;
 }

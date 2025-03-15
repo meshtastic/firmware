@@ -79,9 +79,7 @@ uint32_t NeighborInfoModule::collectNeighborInfo(meshtastic_NeighborInfo *neighb
     }
     printNodeDBNeighbors();
     if(config.network.routingAlgorithm == meshtastic_Config_RoutingConfig_FishEyeState && moduleConfig.fish_eye_state_routing.enabled == true){
-        LOG_DEBUG("FSR: IN");
         fishEyeStateRoutingModule->setOwnNeighborhood(*neighborInfo);
-        LOG_DEBUG("FSR: OUT");
     }
     return neighborInfo->neighbors_count;
 }
@@ -151,17 +149,8 @@ bool NeighborInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
         // If the hopLimit is the same as hopStart, then it is a neighbor
         getOrCreateNeighbor(mp.from, mp.from, 0, mp.rx_snr); // Set the broadcast interval to 0, as we don't know it
     }
-    // Note: np can be a Nullptr at this point
-    if(np && moduleConfig.has_fish_eye_state_routing && moduleConfig.fish_eye_state_routing.enabled && (config.network.routingAlgorithm == meshtastic_Config_RoutingConfig_FishEyeState)){
-        //meshtastic_NeighborInfo help = *np;
-        LOG_DEBUG("FSR: go IN");
-        std::fflush(NULL);
-        fishEyeStateRoutingModule->addNeighborInfo(*np); 
-        LOG_DEBUG("FSR: return");
-        std::fflush(NULL);
-    }
     // Allow others to handle this packet
-    return false;
+    return true;
 }
 
 /*
@@ -229,7 +218,7 @@ meshtastic_Neighbor *NeighborInfoModule::getOrCreateNeighbor(NodeNum originalSen
         neighbors.erase(neighbors.begin());
         neighbors.push_back(new_nbr);
     }
-    if(config.network.routingAlgorithm == meshtastic_Config_RoutingConfig_FishEyeState && moduleConfig.fish_eye_state_routing.enabled == true){
+    if(config.network.routingAlgorithm == meshtastic_Config_RoutingConfig_FishEyeState && moduleConfig.fish_eye_state_routing.enabled){
         fishEyeStateRoutingModule->setOwnNeighborhood(neighbors);
     }
     return &neighbors.back();

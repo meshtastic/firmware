@@ -658,6 +658,9 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
             copy->decoded = p->decoded;
             copy->to = fishEyeStateRoutingModule->getNextHopForID(copy->decoded.dest);
             copy->from = nodeDB->getNodeNum();
+            char * logout;
+            sprintf(logout, "Forwarding Package to Node %u to Next-Hop %u",p->decoded.dest,copy->to);
+            LOG_DEBUG(logout);
             service->sendToMesh(copy);
         }
 

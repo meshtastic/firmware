@@ -11,7 +11,6 @@ class NeighborInfoModule : public ProtobufModule<meshtastic_NeighborInfo>, priva
         CallbackObserver<NeighborInfoModule, const meshtastic::Status *>(this, &NeighborInfoModule::handleStatusUpdate);
 
     std::vector<meshtastic_Neighbor> neighbors;
-
   public:
     /*
      * Expose the constructor
