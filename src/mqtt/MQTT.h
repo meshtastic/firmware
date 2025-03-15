@@ -14,7 +14,7 @@
 #include <WiFiClientSecure.h>
 #endif
 #endif
-#if HAS_ETHERNET
+#if HAS_ETHERNET && !defined(USE_WS5500)
 #include <EthernetClient.h>
 #endif
 

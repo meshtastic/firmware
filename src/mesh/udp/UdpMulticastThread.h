@@ -7,6 +7,11 @@
 #include <AsyncUDP.h>
 #include <WiFi.h>
 
+#if HAS_ETHERNET && defined(USE_WS5500)
+#include <ETHClass2.h>
+#define ETH ETH2
+#endif // HAS_ETHERNET
+
 #define UDP_MULTICAST_DEFAUL_PORT 4403 // Default port for UDP multicast is same as TCP api server
 #define UDP_MULTICAST_THREAD_INTERVAL_MS 15000
 

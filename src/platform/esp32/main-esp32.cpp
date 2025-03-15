@@ -26,7 +26,9 @@
 #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH
 void setBluetoothEnable(bool enable)
 {
-#if HAS_WIFI
+#ifdef USE_WS5500
+    if ((config.bluetooth.enabled == true) && (config.network.wifi_enabled == false))
+#elif HAS_WIFI
     if (!isWifiAvailable() && config.bluetooth.enabled == true)
 #else
     if (config.bluetooth.enabled == true)

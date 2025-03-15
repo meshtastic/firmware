@@ -34,7 +34,7 @@ typedef enum _meshtastic_AdminMessage_ConfigType {
     meshtastic_AdminMessage_ConfigType_BLUETOOTH_CONFIG = 6,
     /* TODO: REPLACE */
     meshtastic_AdminMessage_ConfigType_SECURITY_CONFIG = 7,
-    /*  */
+    /* Session key config */
     meshtastic_AdminMessage_ConfigType_SESSIONKEY_CONFIG = 8,
     /* device-ui config */
     meshtastic_AdminMessage_ConfigType_DEVICEUI_CONFIG = 9
