@@ -1,6 +1,7 @@
 // Based on the MPR121 Keyboard and Adafruit TCA8418 library
 
 #include "TCA8418Keyboard.h"
+#include "TCA8418-layouts.cpp"
 #include "configuration.h"
 
 #include <Arduino.h>
@@ -103,52 +104,13 @@ enum {
     _TCA8418_COL9  // Pin ID for column 9
 };
 
-// Nokia 5130 keyboard size
-#define _TCA8418_ROWS 5
-#define _TCA8418_COLS 5
-#define _TCA8418_NUM_KEYS 16
 
 #define _TCA8418_LONG_PRESS_THRESHOLD 2000
 #define _TCA8418_MULTI_TAP_THRESHOLD 750
 
-uint8_t TCA8418TapMod[16] = {1, 1, 1, 1, 13, 7, 9, 2,
-                             7, 7, 7, 2, 7,  7, 9, 2}; // Num chars per key, Modulus for rotating through characters
+#define LAYOUT 3x4
 
-unsigned char TCA8418TapMap[16][13] = {{_TCA8418_BSP},                                                     // C
-                                       {_TCA8418_SELECT},                                                  // Navi
-                                       {_TCA8418_UP},                                                      // Up
-                                       {_TCA8418_DOWN},                                                    // Down
-                                       {'1', '.', ',', '?', '!', ':', ';', '-', '_', '\\', '/', '(', ')'}, // 1
-                                       {'4', 'g', 'h', 'i', 'G', 'H', 'I'},                                // 4
-                                       {'7', 'p', 'q', 'r', 's', 'P', 'Q', 'R', 'S'},                      // 7
-                                       {'*', '+'},                                                         // *
-                                       {'2', 'a', 'b', 'c', 'A', 'B', 'C'},                                // 2
-                                       {'5', 'j', 'k', 'l', 'J', 'K', 'L'},                                // 5
-                                       {'8', 't', 'u', 'v', 'T', 'U', 'V'},                                // 8
-                                       {'0', ' '},                                                         // 0
-                                       {'3', 'd', 'e', 'f', 'D', 'E', 'F'},                                // 3
-                                       {'6', 'm', 'n', 'o', 'M', 'N', 'O'},                                // 6
-                                       {'9', 'w', 'x', 'y', 'z', 'W', 'X', 'Y', 'Z'},                      // 9
-                                       {'#', '@'}};                                                        // #
 
-unsigned char TCA8418LongPressMap[16] = {
-    _TCA8418_ESC,    // C
-    _TCA8418_NONE,   // Navi
-    _TCA8418_NONE,   // Up
-    _TCA8418_NONE,   // Down
-    _TCA8418_NONE,   // 1
-    _TCA8418_LEFT,   // 4
-    _TCA8418_NONE,   // 7
-    _TCA8418_NONE,   // *
-    _TCA8418_UP,     // 2
-    _TCA8418_NONE,   // 5
-    _TCA8418_DOWN,   // 8
-    _TCA8418_NONE,   // 0
-    _TCA8418_NONE,   // 3
-    _TCA8418_RIGHT,  // 6
-    _TCA8418_NONE,   // 9
-    _TCA8418_REBOOT, // #
-};
 
 TCA8418Keyboard::TCA8418Keyboard() : m_wire(nullptr), m_addr(0), readCallback(nullptr), writeCallback(nullptr), tap_interval(0), backlight_on(true)
 {
@@ -307,39 +269,39 @@ void TCA8418Keyboard::pressed(uint8_t key)
         return;
     }
     uint8_t next_key = 0;
-    if (key > 40) {          // 3, 6, 9, #
-        next_key = key - 30; // TCA8418_TapMap[12...15]
-    } else if (key > 30) {   // 2, 5, 8, 0
-        next_key = key - 24; // TCA8418_TapMap[8...11]
-    } else if (key > 20) {   // 1, 4, 7, *
-        next_key = key - 18; // TCA8418_TapMap[4..7]
-    } else if (key == 12) {  // Clear
-        next_key = 0;        // TCA8418_TapMap[0]
-    } else if (key == 13) {  // Navi
-        next_key = 1;        // TCA8418_TapMap[1]
-    } else if (key == 15) {  // Up
-        next_key = 2;        // TCA8418_TapMap[2]
-    } else if (key == 4) {   // Down
-        next_key = 3;        // TCA8418_TapMap[3]
+    int row = (key - 1) / 10;
+    int col = (key - 1) % 10;
+    
+    if (row >= MATRIX_ROWS || col >= MATRIX_COLS) {
+        return;  // Invalid key
     }
 
-    // LOG_DEBUG("TCA8418: %u %u", key, next_key);
+    // Compute key index based on dynamic row/column
+    next_key = row * MATRIX_COLS + col;
+
+    // LOG_DEBUG("TCA8418: Key %u -> Next Key %u", key, next_key);
+
     state = Held;
     uint32_t now = millis();
     tap_interval = now - last_tap;
     if (tap_interval < 0) {
-        // long running, millis has overflowed.
+        // Long running, millis has overflowed.
         last_tap = 0;
         state = Busy;
         return;
     }
+
+    // Check if the key is the same as the last one or if the time interval has passed
     if (next_key != last_key || tap_interval > _TCA8418_MULTI_TAP_THRESHOLD) {
-        char_idx = 0;
+        char_idx = 0;  // Reset char index if new key or long press
     } else {
-        char_idx += 1;
+        char_idx += 1;  // Cycle through characters if same key pressed
     }
+
+    // Store the current key as the last key
     last_key = next_key;
     last_tap = now;
+
 }
 
 void TCA8418Keyboard::released()
