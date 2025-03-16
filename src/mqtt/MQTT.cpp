@@ -117,7 +117,8 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
         // likely they discovered each other via a channel we have downlink enabled for
         if (isToUs(p.get()) || (tx && tx->has_user && rx && rx->has_user))
             router->enqueueReceivedMessage(p.release());
-    } else if (router && perhapsDecode(p.get())) // ignore messages if we don't have the channel key
+    } else if (router &&
+               perhapsDecode(p.get()) == DecodeState::DECODE_SUCCESS) // ignore messages if we don't have the channel key
         router->enqueueReceivedMessage(p.release());
 }
 
