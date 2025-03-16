@@ -331,7 +331,7 @@ void EInkDynamicDisplay::checkConsecutiveFastRefreshes()
         LOG_DEBUG("refresh=FAST, reason=UNLIMITED_FAST_MODE_ACTIVE, frameFlags=0x%x", frameFlags);
         return;
     }
-    
+
     // If too many FAST refreshes consecutively - force a FULL refresh
     if (fastRefreshCount >= EINK_LIMIT_FASTREFRESH) {
         refresh = FULL;
