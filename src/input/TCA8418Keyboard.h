@@ -30,8 +30,8 @@ class TCA8418Keyboard
 
     TCA8418Keyboard();
 
-    void begin(uint8_t addr = TCA8418_KB_ADDR, TwoWire *wire = &Wire);
-    void begin(i2c_com_fptr_t r, i2c_com_fptr_t w, uint8_t addr = TCA8418_KB_ADDR);
+    void begin(uint8_t addr = XPOWERS_AXP192_AXP2101_ADDRESS, TwoWire *wire = &Wire);
+    void begin(i2c_com_fptr_t r, i2c_com_fptr_t w, uint8_t addr = XPOWERS_AXP192_AXP2101_ADDRESS);
 
     void reset(void);
     // Configure the size of the keypad.

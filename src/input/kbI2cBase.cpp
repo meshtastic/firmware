@@ -43,8 +43,8 @@ int32_t KbI2cBase::runOnce()
             if (cardkb_found.address == MPR121_KB_ADDR) {
                 MPRkeyboard.begin(MPR121_KB_ADDR, &Wire1);
             }
-            if (cardkb_found.address == TCA8418_KB_ADDR) {
-                TCAKeyboard.begin(TCA8418_KB_ADDR, &Wire1);
+            if (cardkb_found.address == XPOWERS_AXP192_AXP2101_ADDRESS) {
+                TCAKeyboard.begin(XPOWERS_AXP192_AXP2101_ADDRESS, &Wire1);
             }
             break;
 #endif
@@ -58,8 +58,8 @@ int32_t KbI2cBase::runOnce()
             if (cardkb_found.address == MPR121_KB_ADDR) {
                 MPRkeyboard.begin(MPR121_KB_ADDR, &Wire);
             }
-            if (cardkb_found.address == TCA8418_KB_ADDR) {
-                TCAKeyboard.begin(TCA8418_KB_ADDR, &Wire);
+            if (cardkb_found.address == XPOWERS_AXP192_AXP2101_ADDRESS) {
+                TCAKeyboard.begin(XPOWERS_AXP192_AXP2101_ADDRESS, &Wire);
             }
             break;
         case ScanI2C::NO_I2C:

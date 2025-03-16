@@ -11,9 +11,9 @@
 #endif
 
 // AXP192 and AXP2101 have the same device address, we just need to identify it in Power.cpp
-#ifndef XPOWERS_AXP192_AXP2101_ADDRESS
-#define XPOWERS_AXP192_AXP2101_ADDRESS 0x34
-#endif
+//#ifndef XPOWERS_AXP192_AXP2101_ADDRESS
+//#define XPOWERS_AXP192_AXP2101_ADDRESS 0x34
+//#endif
 
 bool in_array(uint8_t *array, int size, uint8_t lookfor)
 {
