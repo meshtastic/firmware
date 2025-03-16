@@ -338,6 +338,8 @@ void StoreForwardModule::sendErrorTextMessage(NodeNum dest, bool want_response)
     const char *str;
     if (this->busy) {
         str = "S&F - Busy. Try again shortly.";
+    } else {
+        str = "S&F - Error. Channel not available.";
     }
     LOG_WARN("%s", str);
     memcpy(pr->decoded.payload.bytes, str, strlen(str));
