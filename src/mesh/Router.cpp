@@ -198,6 +198,14 @@ ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
         return send(p);
     }
 }
+/**
+ * Send a packet on a suitable interface.
+ */
+ErrorCode Router::rawSend(meshtastic_MeshPacket *p)
+{
+    assert(iface); // This should have been detected already in sendLocal (or we just received a packet from outside)
+    return iface->send(p);
+}
 
 /**
  * Send a packet on a suitable interface.  This routine will
@@ -319,27 +327,27 @@ void Router::sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Rout
     // FIXME, update nodedb here for any packet that passes through us
 }
 
-bool perhapsDecode(meshtastic_MeshPacket *p)
+DecodeState perhapsDecode(meshtastic_MeshPacket *p)
 {
     concurrency::LockGuard g(cryptLock);
 
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER &&
         config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_ALL_SKIP_DECODING)
-        return false;
+        return DecodeState::DECODE_FAILURE;
 
     if (config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY &&
         (nodeDB->getMeshNode(p->from) == NULL || !nodeDB->getMeshNode(p->from)->has_user)) {
         LOG_DEBUG("Node 0x%x not in nodeDB-> Rebroadcast mode KNOWN_ONLY will ignore packet", p->from);
-        return false;
+        return DecodeState::DECODE_FAILURE;
     }
 
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag)
-        return true; // If packet was already decoded just return
+        return DecodeState::DECODE_SUCCESS; // If packet was already decoded just return
 
     size_t rawSize = p->encrypted.size;
     if (rawSize > sizeof(bytes)) {
         LOG_ERROR("Packet too large to attempt decryption! (rawSize=%d > 256)", rawSize);
-        return false;
+        return DecodeState::DECODE_FATAL;
     }
     bool decrypted = false;
     ChannelIndex chIndex = 0;
@@ -353,18 +361,22 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
         if (crypto->decryptCurve25519(p->from, nodeDB->getMeshNode(p->from)->user.public_key, p->id, rawSize, p->encrypted.bytes,
                                       bytes)) {
             LOG_INFO("PKI Decryption worked!");
-            memset(&p->decoded, 0, sizeof(p->decoded));
+
+            meshtastic_Data decodedtmp;
+            memset(&decodedtmp, 0, sizeof(decodedtmp));
             rawSize -= MESHTASTIC_PKC_OVERHEAD;
-            if (pb_decode_from_bytes(bytes, rawSize, &meshtastic_Data_msg, &p->decoded) &&
-                p->decoded.portnum != meshtastic_PortNum_UNKNOWN_APP) {
+            if (pb_decode_from_bytes(bytes, rawSize, &meshtastic_Data_msg, &decodedtmp) &&
+                decodedtmp.portnum != meshtastic_PortNum_UNKNOWN_APP) {
                 decrypted = true;
                 LOG_INFO("Packet decrypted using PKI!");
                 p->pki_encrypted = true;
                 memcpy(&p->public_key.bytes, nodeDB->getMeshNode(p->from)->user.public_key.bytes, 32);
                 p->public_key.size = 32;
+                memcpy(&p->decoded, &decodedtmp, sizeof(meshtastic_Data_msg));
+                p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // change type to decoded
             } else {
                 LOG_ERROR("PKC Decrypted, but pb_decode failed!");
-                return false;
+                return DecodeState::DECODE_FAILURE;
             }
         } else {
             LOG_WARN("PKC decrypt attempted but failed!");
@@ -387,12 +399,15 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
                 // printBytes("plaintext", bytes, p->encrypted.size);
 
                 // Take those raw bytes and convert them back into a well structured protobuf we can understand
-                memset(&p->decoded, 0, sizeof(p->decoded));
-                if (!pb_decode_from_bytes(bytes, rawSize, &meshtastic_Data_msg, &p->decoded)) {
+                meshtastic_Data decodedtmp;
+                memset(&decodedtmp, 0, sizeof(decodedtmp));
+                if (!pb_decode_from_bytes(bytes, rawSize, &meshtastic_Data_msg, &decodedtmp)) {
                     LOG_ERROR("Invalid protobufs in received mesh packet id=0x%08x (bad psk?)!", p->id);
-                } else if (p->decoded.portnum == meshtastic_PortNum_UNKNOWN_APP) {
+                } else if (decodedtmp.portnum == meshtastic_PortNum_UNKNOWN_APP) {
                     LOG_ERROR("Invalid portnum (bad psk?)!");
                 } else {
+                    p->decoded = decodedtmp;
+                    p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // change type to decoded
                     decrypted = true;
                     break;
                 }
@@ -401,8 +416,7 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
     }
     if (decrypted) {
         // parsing was successful
-        p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // change type to decoded
-        p->channel = chIndex;                                         // change to store the index instead of the hash
+        p->channel = chIndex; // change to store the index instead of the hash
         if (p->decoded.has_bitfield)
             p->decoded.want_response |= p->decoded.bitfield & BITFIELD_WANT_RESPONSE_MASK;
 
@@ -434,10 +448,10 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
             LOG_TRACE("%s", MeshPacketSerializer::JsonSerialize(p, false).c_str());
         }
 #endif
-        return true;
+        return DecodeState::DECODE_SUCCESS;
     } else {
         LOG_WARN("No suitable channel found for decoding, hash was 0x%x!", p->channel);
-        return false;
+        return DecodeState::DECODE_FAILURE;
     }
 }
 
@@ -592,8 +606,13 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
     meshtastic_MeshPacket *p_encrypted = packetPool.allocCopy(*p);
 
     // Take those raw bytes and convert them back into a well structured protobuf we can understand
-    bool decoded = perhapsDecode(p);
-    if (decoded) {
+    auto decodedState = perhapsDecode(p);
+    if (decodedState == DecodeState::DECODE_FATAL) {
+        // Fatal decoding error, we can't do anything with this packet
+        LOG_WARN("Fatal decode error, dropping packet");
+        cancelSending(p->from, p->id);
+        skipHandle = true;
+    } else if (decodedState == DecodeState::DECODE_SUCCESS) {
         // parsing was successful, queue for our recipient
         if (src == RX_SRC_LOCAL)
             printPacket("handleReceived(LOCAL)", p);
@@ -636,10 +655,12 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
 #if !MESHTASTIC_EXCLUDE_MQTT
         // Mark as pki_encrypted if it is not yet decoded and MQTT encryption is also enabled, hash matches and it's a DM not to
         // us (because we would be able to decrypt it)
-        if (!decoded && moduleConfig.mqtt.encryption_enabled && p->channel == 0x00 && !isBroadcast(p->to) && !isToUs(p))
+        if (decodedState == DecodeState::DECODE_FAILURE && moduleConfig.mqtt.encryption_enabled && p->channel == 0x00 &&
+            !isBroadcast(p->to) && !isToUs(p))
             p_encrypted->pki_encrypted = true;
         // After potentially altering it, publish received message to MQTT if we're not the original transmitter of the packet
-        if ((decoded || p_encrypted->pki_encrypted) && moduleConfig.mqtt.enabled && !isFromUs(p) && mqtt)
+        if ((decodedState == DecodeState::DECODE_SUCCESS || p_encrypted->pki_encrypted) && moduleConfig.mqtt.enabled &&
+            !isFromUs(p) && mqtt)
             mqtt->onSend(*p_encrypted, *p, p->channel);
 #endif
     }
