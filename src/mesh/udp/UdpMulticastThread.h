@@ -35,10 +35,8 @@ class UdpMulticastThread : public concurrency::OSThread
         size_t packetLength = packet.length();
         LOG_DEBUG("UDP broadcast from: %s, len=%u", packet.remoteIP().toString().c_str(), packetLength);
         meshtastic_MeshPacket mp;
-        uint8_t bytes[meshtastic_MeshPacket_size]; // Allocate buffer for the data
-        size_t packetSize = packet.readBytes(bytes, packet.length());
-        LOG_DEBUG("Decoding MeshPacket from UDP len=%u", packetSize);
-        bool isPacketDecoded = pb_decode_from_bytes(bytes, packetLength, &meshtastic_MeshPacket_msg, &mp);
+        LOG_DEBUG("Decoding MeshPacket from UDP len=%u", packetLength);
+        bool isPacketDecoded = pb_decode_from_bytes(packet.data(), packetLength, &meshtastic_MeshPacket_msg, &mp);
         if (isPacketDecoded && router) {
             UniquePacketPoolPacket p = packetPool.allocUniqueCopy(mp);
             // Unset received SNR/RSSI
