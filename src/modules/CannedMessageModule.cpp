@@ -1058,8 +1058,8 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
     } else if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
         requestFocus(); // Tell Screen::setFrames to move to our module's frame
 #if defined(USE_EINK) && defined(USE_EINK_DYNAMICDISPLAY)
-        EInkDynamicDisplay* einkDisplay = static_cast<EInkDynamicDisplay*>(display);
-        einkDisplay->enableUnlimitedFastMode();  // Enable unlimited fast refresh while typing
+        EInkDynamicDisplay *einkDisplay = static_cast<EInkDynamicDisplay *>(display);
+        einkDisplay->enableUnlimitedFastMode(); // Enable unlimited fast refresh while typing
 #endif
 
 #if defined(USE_VIRTUAL_KEYBOARD)
