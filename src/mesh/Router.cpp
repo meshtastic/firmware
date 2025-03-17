@@ -653,7 +653,7 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
     if (!skipHandle) {
         MeshModule::callModules(*p, src);
 
-        if(config.network.routingAlgorithm == meshtastic_Config_RoutingConfig_FishEyeState && moduleConfig.fish_eye_state_routing.enabled && (isToUs(p) && (p->decoded.dest != nodeDB->getNodeNum()) && (p->decoded.dest != 0) && (p->decoded.dest != NODENUM_BROADCAST))){
+        if(config.network.routingAlgorithm == meshtastic_Config_RoutingConfig_FishEyeState && moduleConfig.fish_eye_state_routing.enabled == true && (isToUs(p) && (p->decoded.dest != nodeDB->getNodeNum()) && (p->decoded.dest != 0) && (p->decoded.dest != NODENUM_BROADCAST))){
             meshtastic_MeshPacket *copy = allocForSending();
             copy->decoded = p->decoded;
             copy->to = fishEyeStateRoutingModule->getNextHopForID(copy->decoded.dest);
@@ -676,6 +676,8 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
             mqtt->onSend(*p_encrypted, *p, p->channel);
 #endif
     }
+
+
 
     packetPool.release(p_encrypted); // Release the encrypted packet
 }
