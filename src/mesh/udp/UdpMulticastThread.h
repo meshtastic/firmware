@@ -22,7 +22,7 @@ class UdpMulticastThread : public concurrency::OSThread
 
     void start()
     {
-        if (udp.listenMulticast(udpIpAddress, UDP_MULTICAST_DEFAUL_PORT)) {
+        if (udp.listenMulticast(udpIpAddress, UDP_MULTICAST_DEFAUL_PORT, 64)) {
             LOG_DEBUG("UDP Listening on IP: %s", WiFi.localIP().toString().c_str());
             udp.onPacket([this](AsyncUDPPacket packet) { onReceive(packet); });
         } else {
