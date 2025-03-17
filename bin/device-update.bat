@@ -16,7 +16,7 @@ ECHO.
 ECHO Usage: %SCRIPT_NAME% -f filename [-p PORT] [-P python]
 ECHO.
 ECHO Options:
-ECHO     -f filename      The .bin file to flash.  Custom to your device type and region. (required)
+ECHO     -f filename      The update .bin file to flash.  Custom to your device type and region. (required)
 ECHO                      The file must be located in this current directory.
 ECHO     -p PORT          Set the environment variable for ESPTOOL_PORT.
 ECHO                      If not set, ESPTOOL iterates all ports (Dangerous).
@@ -28,7 +28,7 @@ ECHO Example: %SCRIPT_NAME% -f firmware-t-deck-tft-2.6.0.0b106d4-update.bin -p C
 GOTO eof
 
 :version
-ECHO %SCRIPT_NAME% [Version 2.6.0]
+ECHO %SCRIPT_NAME% [Version 2.6.1]
 ECHO Meshtastic
 GOTO eof
 
@@ -53,6 +53,7 @@ IF "__!FILENAME!__"=="____" (
     CALL :LOG_MESSAGE DEBUG "Missing -f filename input."
     GOTO help
 ) ELSE (
+    CALL :LOG_MESSAGE DEBUG "Filename: !FILENAME!"
     IF NOT "__!FILENAME: =!__"=="__!FILENAME!__" (
         CALL :LOG_MESSAGE ERROR "Filename containing spaces are not supported."
         GOTO help
@@ -62,7 +63,6 @@ IF "__!FILENAME!__"=="____" (
     SET "FILENAME=!FILENAME:./=!"
 )
 
-CALL :LOG_MESSAGE DEBUG "Filename: !FILENAME!"
 CALL :LOG_MESSAGE DEBUG "Checking if !FILENAME! exists..."
 IF NOT EXIST !FILENAME! (
     CALL :LOG_MESSAGE ERROR "File does not exist: !FILENAME!. Terminating."
