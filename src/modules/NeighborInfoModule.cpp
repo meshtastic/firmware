@@ -78,7 +78,7 @@ uint32_t NeighborInfoModule::collectNeighborInfo(meshtastic_NeighborInfo *neighb
         }
     }
     printNodeDBNeighbors();
-    if(config.network.routingAlgorithm == meshtastic_Config_RoutingConfig_FishEyeState && moduleConfig.fish_eye_state_routing.enabled == true){
+    if(config.network.routingAlgorithm == meshtastic_Config_RoutingConfig_FishEyeState && moduleConfig.fish_eye_state_routing.enabled){
         fishEyeStateRoutingModule->setOwnNeighborhood(*neighborInfo);
     }
     return neighborInfo->neighbors_count;
@@ -150,7 +150,7 @@ bool NeighborInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
         getOrCreateNeighbor(mp.from, mp.from, 0, mp.rx_snr); // Set the broadcast interval to 0, as we don't know it
     }
     // Allow others to handle this packet
-    return true;
+    return false;
 }
 
 /*

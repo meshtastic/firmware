@@ -728,10 +728,10 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.mqtt.encryption_enabled = true;
 
     moduleConfig.has_neighbor_info = true;
-    moduleConfig.neighbor_info.enabled = true;
+    moduleConfig.neighbor_info.enabled = false;
 
     moduleConfig.has_fish_eye_state_routing = true;
-    moduleConfig.fish_eye_state_routing.enabled = true;
+    moduleConfig.fish_eye_state_routing.enabled = false; // Works only in Combination with Neighbor info Module
     config.network.routingAlgorithm = meshtastic_Config_RoutingConfig_FishEyeState;
 
     moduleConfig.has_detection_sensor = true;
