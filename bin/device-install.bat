@@ -121,6 +121,7 @@ CALL :LOG_MESSAGE DEBUG "Using esptool command: !ESPTOOL_CMD!"
 IF "__!ESPTOOL_PORT!__" == "____" (
     CALL :LOG_MESSAGE WARN "Using esptool port: UNSET."
 ) ELSE (
+    SET "ESPTOOL_CMD=!ESPTOOL_CMD! --port !ESPTOOL_PORT!"
     CALL :LOG_MESSAGE INFO "Using esptool port: !ESPTOOL_PORT!."
 )
 CALL :LOG_MESSAGE INFO "Using esptool baud: !ESPTOOL_BAUD!."
