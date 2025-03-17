@@ -36,6 +36,7 @@ BuildRequires: pkgconfig(libgpiod)
 BuildRequires: pkgconfig(bluez)
 BuildRequires: pkgconfig(libusb-1.0)
 BuildRequires: libi2c-devel
+BuildRequires: pkgconfig(libuv)
 # Web components:
 BuildRequires: pkgconfig(openssl)
 BuildRequires: pkgconfig(liborcania)
