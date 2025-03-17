@@ -146,12 +146,14 @@ unsigned char TCA8418LongPressMap[_TCA8418_NUM_KEYS] = {
 
 
 
-TCA8418Keyboard::TCA8418Keyboard() : m_wire(nullptr), m_addr(0), readCallback(nullptr), writeCallback(nullptr), tap_interval(0), backlight_on(true)
+TCA8418Keyboard::TCA8418Keyboard() : m_wire(nullptr), m_addr(0), readCallback(nullptr), writeCallback(nullptr)
 {
     state = Init;
     last_key = -1;
     last_tap = 0L;
     char_idx = 0;
+    tap_interval = 0;
+    backlight_on = true;
     queue = "";
 }
 
