@@ -175,7 +175,7 @@ int32_t FishEyeStateRoutingModule::runOnce(){
   if (min != UINT32_MAX){
     return ((int32_t) (((int64_t) min) - ((int64_t) getTime()))) * 1000; // We need seconds here
   }
-  return{300000};
+  return{300000}; 
 }
 
 bool FishEyeStateRoutingModule::setOwnNeighborhood(meshtastic_NeighborInfo Ninfo){
