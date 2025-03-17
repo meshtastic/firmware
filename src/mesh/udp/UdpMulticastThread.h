@@ -12,7 +12,7 @@
 #define ETH ETH2
 #endif // HAS_ETHERNET
 
-#define UDP_MULTICAST_DEFAUL_PORT 4403 // Default port for UDP multicast is same as TCP api server
+#define UDP_MULTICAST_DEFAULT_PORT 4403 // Default port for UDP multicast is same as TCP api server
 #define UDP_MULTICAST_THREAD_INTERVAL_MS 15000
 
 class UdpMulticastThread : public concurrency::OSThread
@@ -22,7 +22,7 @@ class UdpMulticastThread : public concurrency::OSThread
 
     void start()
     {
-        if (udp.listenMulticast(udpIpAddress, UDP_MULTICAST_DEFAUL_PORT)) {
+        if (udp.listenMulticast(udpIpAddress, UDP_MULTICAST_DEFAULT_PORT)) {
             LOG_DEBUG("UDP Listening on IP: %s", WiFi.localIP().toString().c_str());
             udp.onPacket([this](AsyncUDPPacket packet) { onReceive(packet); });
         } else {
@@ -54,7 +54,7 @@ class UdpMulticastThread : public concurrency::OSThread
         LOG_DEBUG("Broadcasting packet over UDP (id=%u)", mp->id);
         uint8_t buffer[meshtastic_MeshPacket_size];
         size_t encodedLength = pb_encode_to_bytes(buffer, sizeof(buffer), &meshtastic_MeshPacket_msg, mp);
-        udp.writeTo(buffer, encodedLength, udpIpAddress, UDP_MULTICAST_DEFAUL_PORT);
+        udp.writeTo(buffer, encodedLength, udpIpAddress, UDP_MULTICAST_DEFAULT_PORT);
         return true;
     }
 
