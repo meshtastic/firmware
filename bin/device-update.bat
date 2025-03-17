@@ -71,7 +71,7 @@ IF NOT EXIST !FILENAME! (
 
 IF "!FILENAME:update=!"=="!FILENAME!" (
     CALL :LOG_MESSAGE DEBUG "We are NOT working with a *update* file. !FILENAME!"
-    CALL :LOG_MESSAGE INFO "Use script device-install.bat to flash update !FILENAME!."
+    CALL :LOG_MESSAGE INFO "Use script device-install.bat to flash !FILENAME!."
     GOTO eof
 ) ELSE (
     CALL :LOG_MESSAGE DEBUG "We are working with a *update* file. !FILENAME!"
