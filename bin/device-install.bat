@@ -34,7 +34,7 @@ ECHO Example: %SCRIPT_NAME% -f firmware-unphone-2.6.0.0b106d4.bin -p COM11 --web
 GOTO eof
 
 :version
-ECHO %SCRIPT_NAME% [Version 2.6.0]
+ECHO %SCRIPT_NAME% [Version 2.6.1]
 ECHO Meshtastic
 GOTO eof
 
@@ -106,7 +106,7 @@ IF NOT "__%PYTHON%__"=="____" (
 
 CALL :LOG_MESSAGE DEBUG "Checking esptool command !ESPTOOL_CMD!..."
 !ESPTOOL_CMD! >nul 2>&1
-IF %ERRORLEVEL% GTR 2 (
+IF %ERRORLEVEL% GEQ 2 (
     @REM esptool exits with code 1 if help is displayed.
     CALL :LOG_MESSAGE ERROR "esptool not found: !ESPTOOL_CMD!"
     EXIT /B 1
@@ -121,6 +121,7 @@ CALL :LOG_MESSAGE DEBUG "Using esptool command: !ESPTOOL_CMD!"
 IF "__!ESPTOOL_PORT!__" == "____" (
     CALL :LOG_MESSAGE WARN "Using esptool port: UNSET."
 ) ELSE (
+    SET "ESPTOOL_CMD=!ESPTOOL_CMD! --port !ESPTOOL_PORT!"
     CALL :LOG_MESSAGE INFO "Using esptool port: !ESPTOOL_PORT!."
 )
 CALL :LOG_MESSAGE INFO "Using esptool baud: !ESPTOOL_BAUD!."

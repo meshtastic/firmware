@@ -42,8 +42,8 @@ while [ $# -gt 0 ]; do
 		exit 0
 		;;
 	-p)
-		ESPTOOL_PORT="$2"
-		shift # Shift past the option argument
+		ESPTOOL_CMD="$ESPTOOL_CMD --port $2"
+		shift
 		;;
 	-P)
 		PYTHON="$2"
