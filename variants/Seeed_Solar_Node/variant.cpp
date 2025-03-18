@@ -69,6 +69,14 @@
  
      // D17 - GNSS control
      35  // D17 P1.03 GNSS_RESET
+
+     //
+     21, // D18 is P0.21 (QSPI_SCK)
+     25, // D19 is P0.25 (QSPI_CSN)
+     20, // D20 is P0.20 (QSPI_SIO_0 DI)
+     24, // D21 is P0.24 (QSPI_SIO_1 DO)
+     22, // D22 is P0.22 (QSPI_SIO_2 WP)
+     23, // D23 is P0.23 (QSPI_SIO_3 HOLD)
  };
 }
  void initVariant()
@@ -90,4 +98,7 @@
     //pinMode(BUTTON_PIN, INPUT_PULLUP);
     // pinMode(PIN_WIRE_SCL, INPUT_PULLUP);
 
+    // Pull qspi_cs pin to stable level
+    pinMode(PIN_QSPI_CS, OUTPUT);
+    digitalWrite(PIN_QSPI_CS, HIGH);
 }

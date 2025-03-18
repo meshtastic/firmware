@@ -134,6 +134,16 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 #define PIN_GPS_STANDBY D0
 #endif
 
+// On-board QSPI Flash
+#define PIN_QSPI_SCK (18)
+#define PIN_QSPI_CS  (19)
+#define PIN_QSPI_IO0 (20)
+#define PIN_QSPI_IO1 (21)
+#define PIN_QSPI_IO2 (22)
+#define PIN_QSPI_IO3 (23)
+
+#define EXTERNAL_FLASH_DEVICES P25Q16H
+#define EXTERNAL_FLASH_USE_QSPI
 
  //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  // Compatibility Definitions
