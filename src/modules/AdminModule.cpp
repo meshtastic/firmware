@@ -373,6 +373,42 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 #endif
         break;
     }
+    case meshtastic_AdminMessage_backup_preferences_tag: {
+        LOG_INFO("Client requesting to backup preferences");
+        if (nodeDB->backupPreferences(r->backup_preferences)) {
+            myReply = allocErrorResponse(meshtastic_Routing_Error_NONE, &mp);
+        } else {
+            myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
+        }
+        break;
+    }
+    case meshtastic_AdminMessage_restore_preferences_tag: {
+        LOG_INFO("Client requesting to restore preferences");
+        if (nodeDB->restorePreferences(r->backup_preferences,
+                                       SEGMENT_DEVICESTATE | SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_CHANNELS)) {
+            myReply = allocErrorResponse(meshtastic_Routing_Error_NONE, &mp);
+            LOG_DEBUG("Rebooting after successful restore of preferences");
+            reboot(1000);
+            disableBluetooth();
+        } else {
+            myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
+        }
+        break;
+    }
+    case meshtastic_AdminMessage_remove_backup_preferences_tag: {
+        LOG_INFO("Client requesting to remove backup preferences");
+#ifdef FSCom
+        if (r->remove_backup_preferences == meshtastic_AdminMessage_BackupLocation_FLASH) {
+            spiLock->lock();
+            FSCom.remove(backupFileName);
+            spiLock->unlock();
+        } else if (r->remove_backup_preferences == meshtastic_AdminMessage_BackupLocation_SD) {
+            // TODO: After more mainline SD card support
+            LOG_ERROR("SD backup removal not implemented yet");
+        }
+#endif
+        break;
+    }
 #ifdef ARCH_PORTDUINO
     case meshtastic_AdminMessage_exit_simulator_tag:
         LOG_INFO("Exiting simulator");

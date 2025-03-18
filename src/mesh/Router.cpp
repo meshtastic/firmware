@@ -372,7 +372,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
                 p->pki_encrypted = true;
                 memcpy(&p->public_key.bytes, nodeDB->getMeshNode(p->from)->user.public_key.bytes, 32);
                 p->public_key.size = 32;
-                memcpy(&p->decoded, &decodedtmp, sizeof(meshtastic_Data_msg));
+                p->decoded = decodedtmp;
                 p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // change type to decoded
             } else {
                 LOG_ERROR("PKC Decrypted, but pb_decode failed!");
