@@ -30,7 +30,7 @@ void SSD16XX::begin(SPIClass *spi, uint8_t pin_dc, uint8_t pin_cs, uint8_t pin_b
     pinMode(pin_busy, INPUT);
 
     // If using a reset pin, hold high
-    // Reset is active low for solmon systech ICs
+    // Reset is active low for Solomon Systech ICs
     if (pin_rst != 0xFF)
         pinMode(pin_rst, INPUT_PULLUP);
 
@@ -72,13 +72,6 @@ void SSD16XX::sendCommand(const uint8_t command)
 
 void SSD16XX::sendData(uint8_t data)
 {
-    // spi->beginTransaction(spiSettings);
-    // digitalWrite(pin_dc, HIGH); // DC pin HIGH indicates data, instead of command
-    // digitalWrite(pin_cs, LOW);
-    // spi->transfer(data);
-    // digitalWrite(pin_cs, HIGH);
-    // digitalWrite(pin_dc, HIGH);
-    // spi->endTransaction();
     sendData(&data, 1);
 }
 

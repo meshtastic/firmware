@@ -11,24 +11,22 @@ It should be optional, enabled by the on-screen menu
 
 #include "configuration.h"
 
-#include "graphics/niche/InkHUD/Applet.h"
+#include "graphics/niche/InkHUD/SystemApplet.h"
 
 #include "PowerStatus.h"
 
 namespace NicheGraphics::InkHUD
 {
 
-class BatteryIconApplet : public Applet
+class BatteryIconApplet : public SystemApplet
 {
   public:
+    BatteryIconApplet();
+
     void onRender() override;
-
-    void onActivate() override;
-    void onDeactivate() override;
-
     int onPowerStatusUpdate(const meshtastic::Status *status); // Called when new info about battery is available
 
-  protected:
+  private:
     // Get informed when new information about the battery is available (via onPowerStatusUpdate method)
     CallbackObserver<BatteryIconApplet, const meshtastic::Status *> powerStatusObserver =
         CallbackObserver<BatteryIconApplet, const meshtastic::Status *>(this, &BatteryIconApplet::onPowerStatusUpdate);
