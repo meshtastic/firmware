@@ -51,6 +51,10 @@
 #include <utility/bonding.h>
 #endif
 
+#if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WIFI
+#include <WiFiOTA.h>
+#endif
+
 NodeDB *nodeDB = nullptr;
 
 // we have plenty of ram so statically alloc this tempbuf (for now)
@@ -633,6 +637,12 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #if defined(T_WATCH_S3) || defined(SENSECAP_INDICATOR)
     config.display.screen_on_secs = 30;
     config.display.wake_on_tap_or_motion = true;
+#endif
+
+#if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WIFI
+    if (WiFiOTA::isUpdated()) {
+        WiFiOTA::recoverConfig(&config.network);
+    }
 #endif
 
     initConfigIntervals();

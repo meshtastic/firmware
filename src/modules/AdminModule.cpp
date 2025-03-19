@@ -10,6 +10,9 @@
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH
 #include "BleOta.h"
 #endif
+#if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WIFI
+#include "WiFiOTA.h"
+#endif
 #include "Router.h"
 #include "configuration.h"
 #include "main.h"
@@ -194,19 +197,23 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
     case meshtastic_AdminMessage_reboot_ota_seconds_tag: {
         int32_t s = r->reboot_ota_seconds;
-#if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH
-        if (BleOta::getOtaAppVersion().isEmpty()) {
-            LOG_INFO("No OTA firmware available, scheduling regular reboot in %d seconds", s);
-            screen->startAlert("Rebooting...");
-        } else {
+#if defined(ARCH_ESP32)
+#if !MESHTASTIC_EXCLUDE_BLUETOOTH
+        if (!BleOta::getOtaAppVersion().isEmpty()) {
             screen->startFirmwareUpdateScreen();
             BleOta::switchToOtaApp();
-            LOG_INFO("Reboot to OTA in %d seconds", s);
+            LOG_INFO("Rebooting to BLE OTA");
         }
-#else
-        LOG_INFO("Not on ESP32, scheduling regular reboot in %d seconds", s);
-        screen->startAlert("Rebooting...");
 #endif
+#if !MESHTASTIC_EXCLUDE_WIFI
+        if (WiFiOTA::trySwitchToOTA()) {
+            screen->startFirmwareUpdateScreen();
+            WiFiOTA::saveConfig(&config.network);
+            LOG_INFO("Rebooting to WiFi OTA");
+        }
+#endif
+#endif
+        LOG_INFO("Reboot in %d seconds", s);
         rebootAtMsec = (s < 0) ? 0 : (millis() + s * 1000);
         break;
     }
