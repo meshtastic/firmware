@@ -11,11 +11,17 @@ static File openFile(const char *filename, bool fullAtomic)
     FSCom.remove(filename);
     return FSCom.open(filename, FILE_O_WRITE);
 #endif
-    if (!fullAtomic)
+    if (!fullAtomic) {
         FSCom.remove(filename); // Nuke the old file to make space (ignore if it !exists)
+    }
 
     String filenameTmp = filename;
     filenameTmp += ".tmp";
+
+    // FIXME: If we are doing a full atomic write, we may need to remove the old tmp file now
+    // if (fullAtomic) {
+    //     FSCom.remove(filename);
+    // }
 
     // clear any previous LFS errors
     return FSCom.open(filenameTmp.c_str(), FILE_O_WRITE);

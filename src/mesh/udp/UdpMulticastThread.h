@@ -7,6 +7,11 @@
 #include <AsyncUDP.h>
 #include <WiFi.h>
 
+#if HAS_ETHERNET && defined(USE_WS5500)
+#include <ETHClass2.h>
+#define ETH ETH2
+#endif // HAS_ETHERNET
+
 #define UDP_MULTICAST_DEFAUL_PORT 4403 // Default port for UDP multicast is same as TCP api server
 #define UDP_MULTICAST_THREAD_INTERVAL_MS 15000
 
@@ -30,10 +35,8 @@ class UdpMulticastThread : public concurrency::OSThread
         size_t packetLength = packet.length();
         LOG_DEBUG("UDP broadcast from: %s, len=%u", packet.remoteIP().toString().c_str(), packetLength);
         meshtastic_MeshPacket mp;
-        uint8_t bytes[meshtastic_MeshPacket_size]; // Allocate buffer for the data
-        size_t packetSize = packet.readBytes(bytes, packet.length());
-        LOG_DEBUG("Decoding MeshPacket from UDP len=%u", packetSize);
-        bool isPacketDecoded = pb_decode_from_bytes(bytes, packetLength, &meshtastic_MeshPacket_msg, &mp);
+        LOG_DEBUG("Decoding MeshPacket from UDP len=%u", packetLength);
+        bool isPacketDecoded = pb_decode_from_bytes(packet.data(), packetLength, &meshtastic_MeshPacket_msg, &mp);
         if (isPacketDecoded && router) {
             UniquePacketPoolPacket p = packetPool.allocUniqueCopy(mp);
             // Unset received SNR/RSSI
@@ -51,7 +54,7 @@ class UdpMulticastThread : public concurrency::OSThread
         LOG_DEBUG("Broadcasting packet over UDP (id=%u)", mp->id);
         uint8_t buffer[meshtastic_MeshPacket_size];
         size_t encodedLength = pb_encode_to_bytes(buffer, sizeof(buffer), &meshtastic_MeshPacket_msg, mp);
-        udp.broadcastTo(buffer, encodedLength, UDP_MULTICAST_DEFAUL_PORT);
+        udp.writeTo(buffer, encodedLength, udpIpAddress, UDP_MULTICAST_DEFAUL_PORT);
         return true;
     }
 
