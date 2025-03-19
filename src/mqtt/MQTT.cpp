@@ -19,6 +19,10 @@
 #include "mesh/wifi/WiFiAPClient.h"
 #include <WiFi.h>
 #endif
+#if HAS_ETHERNET && defined(USE_WS5500)
+#include <ETHClass2.h>
+#define ETH ETH2
+#endif // HAS_ETHERNET
 #include "Default.h"
 #if !defined(ARCH_NRF52) || NRF52_USE_JSON
 #include "serialization/JSON.h"
@@ -113,7 +117,8 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
         // likely they discovered each other via a channel we have downlink enabled for
         if (isToUs(p.get()) || (tx && tx->has_user && rx && rx->has_user))
             router->enqueueReceivedMessage(p.release());
-    } else if (router && perhapsDecode(p.get())) // ignore messages if we don't have the channel key
+    } else if (router &&
+               perhapsDecode(p.get()) == DecodeState::DECODE_SUCCESS) // ignore messages if we don't have the channel key
         router->enqueueReceivedMessage(p.release());
 }
 
@@ -295,6 +300,11 @@ bool connectPubSub(const PubSubConfig &config, PubSubClient &pubSub, Client &cli
 
 inline bool isConnectedToNetwork()
 {
+#ifdef USE_WS5500
+    if (ETH.connected())
+        return true;
+#endif
+
 #if HAS_WIFI
     return WiFi.isConnected();
 #elif HAS_ETHERNET

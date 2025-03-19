@@ -656,7 +656,7 @@ size_t RadioInterface::beginSending(meshtastic_MeshPacket *p)
 
     // if the sender nodenum is zero, that means uninitialized
     assert(radioBuffer.header.from);
-
+    assert(p->encrypted.size <= sizeof(radioBuffer.payload));
     memcpy(radioBuffer.payload, p->encrypted.bytes, p->encrypted.size);
 
     sendingPacket = p;
