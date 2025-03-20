@@ -10,7 +10,7 @@
 #define POWER_CHRG 6
 #define POWER_FULL 42
 
-#define M2_buzzer 5
+#define PIN_BUZZER 5
 
 #define I2C_SCL 15
 #define I2C_SDA 16
