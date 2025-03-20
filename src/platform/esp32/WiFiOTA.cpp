@@ -1,6 +1,6 @@
-#include <WiFiOTA.h>
-#include <Preferences.h>
+#include "WiFiOTA.h"
 #include "configuration.h"
+#include <Preferences.h>
 #include <esp_ota_ops.h>
 
 namespace WiFiOTA
@@ -58,8 +58,7 @@ void saveConfig(meshtastic_Config_NetworkConfig *network)
 bool trySwitchToOTA()
 {
     esp_app_desc_t app_desc;
-    const esp_partition_t *part = esp_partition_find_first(
-        ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_1, NULL);
+    const esp_partition_t *part = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_1, NULL);
     if (!part)
         return false;
     if (ESP_ERROR_CHECK_WITHOUT_ABORT(esp_ota_get_partition_description(part, &app_desc)) != ESP_OK)
@@ -75,8 +74,7 @@ String getVersion()
 {
     String version;
     esp_app_desc_t app_desc;
-    const esp_partition_t *part = esp_partition_find_first(
-        ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_1, NULL);
+    const esp_partition_t *part = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_1, NULL);
     if (!part)
         return version;
     if (ESP_ERROR_CHECK_WITHOUT_ABORT(esp_ota_get_partition_description(part, &app_desc)) != ESP_OK)
@@ -85,4 +83,4 @@ String getVersion()
     return version;
 }
 
-}
+} // namespace WiFiOTA

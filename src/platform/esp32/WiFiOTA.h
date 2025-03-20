@@ -1,8 +1,8 @@
 #ifndef WIFIOTA_H
 #define WIFIOTA_H
 
-#include <Arduino.h>
 #include "mesh-pb-constants.h"
+#include <Arduino.h>
 
 namespace WiFiOTA
 {
@@ -13,6 +13,6 @@ void recoverConfig(meshtastic_Config_NetworkConfig *network);
 void saveConfig(meshtastic_Config_NetworkConfig *network);
 bool trySwitchToOTA();
 String getVersion();
-}
+} // namespace WiFiOTA
 
 #endif // WIFIOTA_H
