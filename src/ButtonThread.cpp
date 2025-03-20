@@ -117,6 +117,40 @@ int32_t ButtonThread::runOnce()
     canSleep = true; // Assume we should not keep the board awake
 
 #if defined(BUTTON_PIN) || defined(USERPREFS_BUTTON_PIN)
+    // #if defined(ELECROW_ThinkNode_M1) || defined(ELECROW_ThinkNode_M2)
+    //     buzzer_updata();
+    //     if (buttonPressed) {
+    //         buttonPressed = false;            // 清除标志
+    //         LOG_INFO("PIN_BUTTON2 pressed!"); // 串口打印信息
+    //         // off_currentTime = millis();
+    //         while (digitalRead(PIN_BUTTON2) == HIGH) {
+    //             if (cont < 40) {
+    //                 //     unsigned long currentTime = millis(); // 获取当前时间
+    //                 //     if (currentTime - off_currentTime >= 1000) {
+    //                 cont++;
+    //                 //         off_currentTime = currentTime;
+    //                 //     }
+    //                 delay(100);
+    //             } else {
+
+    //                 currentState = OFF;
+    //                 isBuzzing = false;
+    //                 cont = 0;
+    //                 BEEP_STATE = false;
+    //                 analogWrite(M2_buzzer, 0);
+    //                 pinMode(M2_buzzer, INPUT);
+    //                 screen->setOn(false);
+    //                 cont = 0;
+    //                 LOG_INFO("GGGGGGGGGGGGGGGGGGGGGGGGG");
+    //                 pinMode(1, OUTPUT);
+    //                 digitalWrite(1, LOW);
+    //                 pinMode(6, OUTPUT);
+    //                 digitalWrite(6, LOW);
+    //             }
+    //         }
+    //     }
+
+    // #endif
     userButton.tick();
     canSleep &= userButton.isIdle();
 #elif defined(ARCH_PORTDUINO)
@@ -166,6 +200,9 @@ int32_t ButtonThread::runOnce()
             break;
         }
 
+        case BUTTON_EVENT_PRESSED1: {
+        }
+
         case BUTTON_EVENT_DOUBLE_PRESSED: {
             LOG_BUTTON("Double press!");
             service->refreshLocalMeshNode();
@@ -177,6 +214,10 @@ int32_t ButtonThread::runOnce()
                     screen->print("Sent ad-hoc nodeinfo\n");
                 screen->forceDisplay(true); // Force a new UI frame, then force an EInk update
             }
+            break;
+        }
+
+        case BUTTON_EVENT_DOUBLE_PRESSED1: {
             break;
         }
 
@@ -192,7 +233,26 @@ int32_t ButtonThread::runOnce()
                         screen->forceDisplay(true); // Force a new UI frame, then force an EInk update
                 }
                 break;
+#elif defined(ELECROW_ThinkNode_M2)
+            case 3:
+                LOG_INFO("3 clicks: toggle buzzer");
+                pinMode(M2_buzzer, OUTPUT);
+
+                if (!buzzer_flag) {
+                    buzzer_test();
+                    BEEP_STATE = true;
+
+                    analogWriteFrequency(4000);
+                } else {
+                    currentState = OFF;
+                    isBuzzing = false;
+                    cont = 0;
+                    BEEP_STATE = false;
+                }
+                buzzer_flag = !buzzer_flag;
+                break;
 #endif
+
 #if defined(USE_EINK) && defined(PIN_EINK_EN) // i.e. T-Echo
             // 4 clicks: toggle backlight
             case 4:
@@ -241,6 +301,22 @@ int32_t ButtonThread::runOnce()
             break;
         }
 
+        case BUTTON_EVENT_LONG_PRESSED1: {
+            currentState = OFF;
+            isBuzzing = false;
+            cont = 0;
+            BEEP_STATE = false;
+            pinMode(18, INPUT);
+            screen->setOn(false);
+            delay(1000);
+            pinMode(1, OUTPUT);
+            digitalWrite(1, LOW);
+            pinMode(6, OUTPUT);
+            digitalWrite(6, LOW);
+
+            break;
+        }
+
 #ifdef BUTTON_PIN_TOUCH
         case BUTTON_EVENT_TOUCH_LONG_PRESSED: {
             LOG_BUTTON("Touch press!");
@@ -263,6 +339,113 @@ int32_t ButtonThread::runOnce()
     }
 
     return 50;
+}
+
+void ButtonThread::buzzer_test()
+{
+    currentState = SHORT_BEEP; // 初始化状态
+    stateStartTime = millis(); // 获取当前时间
+}
+
+void ButtonThread::buzzer_updata()
+{
+    unsigned long currentTime = millis(); // 获取当前时间
+    switch (currentState) {
+    case SHORT_BEEP:
+        if (isBuzzing) {
+            // 如果正在响，检查时间
+            if (currentTime - stateStartTime >= beepDuration) {
+                // 停止蜂鸣器
+                analogWriteFrequency(4000);
+                analogWrite(M2_buzzer, 0);
+                stateStartTime = currentTime; // 记录停的时间
+                isBuzzing = false;            // 更新状态
+            }
+        } else {
+            // 如果未响，检查时间
+            if (currentTime - stateStartTime >= 200) {
+                // 启动蜂鸣器
+                if (cont == 3) {
+                    currentState = LONG_BEEP;
+                    cont = 0;
+                    isBuzzing = false;
+                } else {
+                    analogWriteFrequency(4000);
+                    analogWrite(M2_buzzer, 127);
+                    isBuzzing = true; // 更新状态
+                    cont = cont + 1;
+                }
+                stateStartTime = currentTime; // 记录响的时间
+            }
+        }
+        break;
+    case LONG_BEEP:
+        if (isBuzzing) {
+            // 如果正在响，检查时间
+            if (currentTime - stateStartTime >= longBeepDuration) {
+                // 停止蜂鸣器
+                analogWriteFrequency(4000);
+                analogWrite(M2_buzzer, 0);
+                stateStartTime = currentTime; // 记录停的时间
+                isBuzzing = false;            // 更新状态
+            }
+        } else {
+            // 如果未响，检查时间
+            if (currentTime - stateStartTime >= 200) {
+                // 启动蜂鸣器
+                if (cont == 3) {
+                    currentState = SHORT_BEEP1;
+                    cont = 0;
+                    isBuzzing = false;
+                } else {
+                    analogWriteFrequency(4000);
+                    analogWrite(M2_buzzer, 127);
+                    isBuzzing = true; // 更新状态
+                    cont = cont + 1;
+                }
+                stateStartTime = currentTime; // 记录响的时间
+            }
+        }
+        break;
+    case SHORT_BEEP1:
+        if (isBuzzing) {
+            // 如果正在响，检查时间
+            if (currentTime - stateStartTime >= beepDuration) {
+                // 停止蜂鸣器
+                analogWriteFrequency(4000);
+                analogWrite(M2_buzzer, 0);
+                stateStartTime = currentTime; // 记录停的时间
+                isBuzzing = false;            // 更新状态
+            }
+        } else {
+            // 如果未响，检查时间
+            if (currentTime - stateStartTime >= 200) {
+                // 启动蜂鸣器
+                if (cont == 3) {
+                    currentState = WAIT;
+                    cont = 0;
+                    isBuzzing = false;
+                } else {
+                    analogWriteFrequency(4000);
+                    analogWrite(M2_buzzer, 127);
+                    isBuzzing = true; // 更新状态
+                    cont = cont + 1;
+                }
+                stateStartTime = currentTime; // 记录响的时间
+            }
+        }
+        break;
+    case WAIT:
+        if (currentTime - stateStartTime >= pauseDuration) {
+            buzzer_test();
+        }
+        break;
+    case OFF:
+        break;
+    default:
+        // 其他状态处理
+        break;
+    }
 }
 
 /*
@@ -387,6 +570,13 @@ void ButtonThread::userButtonPressedLongStart()
 {
     if (millis() > c_holdOffTime) {
         btnEvent = BUTTON_EVENT_LONG_PRESSED;
+    }
+}
+
+void ButtonThread::userButtonPressedLongStart1()
+{
+    if (millis() > c_holdOffTime) {
+        btnEvent = BUTTON_EVENT_LONG_PRESSED1;
     }
 }
 
