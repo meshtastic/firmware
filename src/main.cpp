@@ -823,7 +823,8 @@ void setup()
     LOG_DEBUG("Start multicast thread");
     udpThread = new UdpMulticastThread();
 #ifdef ARCH_PORTDUINO
-    // FIXME: portduino does not ever call onNetworkConnected so call it here because I don't know what happen if I call onNetworkConnected there
+    // FIXME: portduino does not ever call onNetworkConnected so call it here because I don't know what happen if I call
+    // onNetworkConnected there
     udpThread->start();
 #endif
 #endif
