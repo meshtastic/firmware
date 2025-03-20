@@ -85,6 +85,7 @@ class Router : protected concurrency::OSThread, protected PacketHistory
      * NOTE: This method will free the provided packet (even if we return an error code)
      */
     virtual ErrorCode send(meshtastic_MeshPacket *p);
+    virtual ErrorCode rawSend(meshtastic_MeshPacket *p);
 
     /* Statistics for the amount of duplicate received packets and the amount of times we cancel a relay because someone did it
         before us */
@@ -139,12 +140,14 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     void abortSendAndNak(meshtastic_Routing_Error err, meshtastic_MeshPacket *p);
 };
 
+enum DecodeState { DECODE_SUCCESS, DECODE_FAILURE, DECODE_FATAL };
+
 /** FIXME - move this into a mesh packet class
  * Remove any encryption and decode the protobufs inside this packet (if necessary).
  *
  * @return true for success, false for corrupt packet.
  */
-bool perhapsDecode(meshtastic_MeshPacket *p);
+DecodeState perhapsDecode(meshtastic_MeshPacket *p);
 
 /** Return 0 for success or a Routing_Error code for failure
  */

@@ -22,8 +22,13 @@ class UdpMulticastThread : public concurrency::OSThread
 
     void start()
     {
-        if (udp.listenMulticast(udpIpAddress, UDP_MULTICAST_DEFAUL_PORT)) {
+        if (udp.listenMulticast(udpIpAddress, UDP_MULTICAST_DEFAUL_PORT, 64)) {
+#if !defined(ARCH_PORTDUINO)
+            // FIXME(PORTDUINO): arduino lacks IPAddress::toString()
             LOG_DEBUG("UDP Listening on IP: %s", WiFi.localIP().toString().c_str());
+#else
+            LOG_DEBUG("UDP Listening");
+#endif
             udp.onPacket([this](AsyncUDPPacket packet) { onReceive(packet); });
         } else {
             LOG_DEBUG("Failed to listen on UDP");
@@ -33,12 +38,13 @@ class UdpMulticastThread : public concurrency::OSThread
     void onReceive(AsyncUDPPacket packet)
     {
         size_t packetLength = packet.length();
+#ifndef ARCH_PORTDUINO
+        // FIXME(PORTDUINO): arduino lacks IPAddress::toString()
         LOG_DEBUG("UDP broadcast from: %s, len=%u", packet.remoteIP().toString().c_str(), packetLength);
+#endif
         meshtastic_MeshPacket mp;
-        uint8_t bytes[meshtastic_MeshPacket_size]; // Allocate buffer for the data
-        size_t packetSize = packet.readBytes(bytes, packet.length());
-        LOG_DEBUG("Decoding MeshPacket from UDP len=%u", packetSize);
-        bool isPacketDecoded = pb_decode_from_bytes(bytes, packetLength, &meshtastic_MeshPacket_msg, &mp);
+        LOG_DEBUG("Decoding MeshPacket from UDP len=%u", packetLength);
+        bool isPacketDecoded = pb_decode_from_bytes(packet.data(), packetLength, &meshtastic_MeshPacket_msg, &mp);
         if (isPacketDecoded && router) {
             UniquePacketPoolPacket p = packetPool.allocUniqueCopy(mp);
             // Unset received SNR/RSSI
@@ -50,13 +56,18 @@ class UdpMulticastThread : public concurrency::OSThread
 
     bool onSend(const meshtastic_MeshPacket *mp)
     {
-        if (!mp || WiFi.status() != WL_CONNECTED) {
+        if (!mp || !udp) {
             return false;
         }
+#if !defined(ARCH_PORTDUINO)
+        if (WiFi.status() != WL_CONNECTED) {
+            return false;
+        }
+#endif
         LOG_DEBUG("Broadcasting packet over UDP (id=%u)", mp->id);
         uint8_t buffer[meshtastic_MeshPacket_size];
         size_t encodedLength = pb_encode_to_bytes(buffer, sizeof(buffer), &meshtastic_MeshPacket_msg, mp);
-        udp.broadcastTo(buffer, encodedLength, UDP_MULTICAST_DEFAUL_PORT);
+        udp.writeTo(buffer, encodedLength, udpIpAddress, UDP_MULTICAST_DEFAUL_PORT);
         return true;
     }
 
@@ -72,4 +83,4 @@ class UdpMulticastThread : public concurrency::OSThread
     IPAddress udpIpAddress;
     AsyncUDP udp;
 };
-#endif // ARCH_ESP32
+#endif // HAS_UDP_MULTICAST
