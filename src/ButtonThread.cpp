@@ -73,7 +73,9 @@ ButtonThread::ButtonThread() : OSThread("Button")
     userButton.setDebounceMs(1);
     userButton.attachDoubleClick(userButtonDoublePressed);
     userButton.attachMultiClick(userButtonMultiPressed, this); // Reference to instance: get click count from non-static OneButton
-#ifndef T_DECK // T-Deck immediately wakes up after shutdown, so disable this function
+#if !defined(T_DECK) &&                                                                                                          \
+    !defined(                                                                                                                    \
+        ELECROW_ThinkNode_M2) // T-Deck immediately wakes up after shutdown, Thinknode M2 has this on the smaller ALT button
     userButton.attachLongPressStart(userButtonPressedLongStart);
     userButton.attachLongPressStop(userButtonPressedLongStop);
 #endif
@@ -85,11 +87,10 @@ ButtonThread::ButtonThread() : OSThread("Button")
     // Some platforms (nrf52) have a SENSE variant which allows wake from sleep - override what OneButton did
     pinMode(BUTTON_PIN_ALT, INPUT_PULLUP_SENSE);
 #endif
-    userButtonAlt.attachClick(userButtonPressed);
+    userButtonAlt.attachClick(userButtonPressedScreen);
     userButtonAlt.setClickMs(BUTTON_CLICK_MS);
     userButtonAlt.setPressMs(BUTTON_LONGPRESS_MS);
     userButtonAlt.setDebounceMs(1);
-    userButtonAlt.attachDoubleClick(userButtonDoublePressed);
     userButtonAlt.attachLongPressStart(userButtonPressedLongStart);
     userButtonAlt.attachLongPressStop(userButtonPressedLongStop);
 #endif
@@ -200,7 +201,12 @@ int32_t ButtonThread::runOnce()
             break;
         }
 
-        case BUTTON_EVENT_PRESSED1: {
+        case BUTTON_EVENT_PRESSED_SCREEN: {
+            // turn screen on or off
+            screen_flag = !screen_flag;
+            if (screen)
+                screen->setOn(screen_flag);
+            break;
         }
 
         case BUTTON_EVENT_DOUBLE_PRESSED: {
@@ -214,10 +220,6 @@ int32_t ButtonThread::runOnce()
                     screen->print("Sent ad-hoc nodeinfo\n");
                 screen->forceDisplay(true); // Force a new UI frame, then force an EInk update
             }
-            break;
-        }
-
-        case BUTTON_EVENT_DOUBLE_PRESSED1: {
             break;
         }
 
@@ -236,20 +238,10 @@ int32_t ButtonThread::runOnce()
 #elif defined(ELECROW_ThinkNode_M2)
             case 3:
                 LOG_INFO("3 clicks: toggle buzzer");
-                pinMode(M2_buzzer, OUTPUT);
-
-                if (!buzzer_flag) {
-                    buzzer_test();
-                    BEEP_STATE = true;
-
-                    analogWriteFrequency(4000);
-                } else {
-                    currentState = OFF;
-                    isBuzzing = false;
-                    cont = 0;
-                    BEEP_STATE = false;
-                }
                 buzzer_flag = !buzzer_flag;
+                if (buzzer_flag) {
+                    playBeep();
+                }
                 break;
 #endif
 
@@ -301,22 +293,6 @@ int32_t ButtonThread::runOnce()
             break;
         }
 
-        case BUTTON_EVENT_LONG_PRESSED1: {
-            currentState = OFF;
-            isBuzzing = false;
-            cont = 0;
-            BEEP_STATE = false;
-            pinMode(18, INPUT);
-            screen->setOn(false);
-            delay(1000);
-            pinMode(1, OUTPUT);
-            digitalWrite(1, LOW);
-            pinMode(6, OUTPUT);
-            digitalWrite(6, LOW);
-
-            break;
-        }
-
 #ifdef BUTTON_PIN_TOUCH
         case BUTTON_EVENT_TOUCH_LONG_PRESSED: {
             LOG_BUTTON("Touch press!");
@@ -339,113 +315,6 @@ int32_t ButtonThread::runOnce()
     }
 
     return 50;
-}
-
-void ButtonThread::buzzer_test()
-{
-    currentState = SHORT_BEEP; // 初始化状态
-    stateStartTime = millis(); // 获取当前时间
-}
-
-void ButtonThread::buzzer_updata()
-{
-    unsigned long currentTime = millis(); // 获取当前时间
-    switch (currentState) {
-    case SHORT_BEEP:
-        if (isBuzzing) {
-            // 如果正在响，检查时间
-            if (currentTime - stateStartTime >= beepDuration) {
-                // 停止蜂鸣器
-                analogWriteFrequency(4000);
-                analogWrite(M2_buzzer, 0);
-                stateStartTime = currentTime; // 记录停的时间
-                isBuzzing = false;            // 更新状态
-            }
-        } else {
-            // 如果未响，检查时间
-            if (currentTime - stateStartTime >= 200) {
-                // 启动蜂鸣器
-                if (cont == 3) {
-                    currentState = LONG_BEEP;
-                    cont = 0;
-                    isBuzzing = false;
-                } else {
-                    analogWriteFrequency(4000);
-                    analogWrite(M2_buzzer, 127);
-                    isBuzzing = true; // 更新状态
-                    cont = cont + 1;
-                }
-                stateStartTime = currentTime; // 记录响的时间
-            }
-        }
-        break;
-    case LONG_BEEP:
-        if (isBuzzing) {
-            // 如果正在响，检查时间
-            if (currentTime - stateStartTime >= longBeepDuration) {
-                // 停止蜂鸣器
-                analogWriteFrequency(4000);
-                analogWrite(M2_buzzer, 0);
-                stateStartTime = currentTime; // 记录停的时间
-                isBuzzing = false;            // 更新状态
-            }
-        } else {
-            // 如果未响，检查时间
-            if (currentTime - stateStartTime >= 200) {
-                // 启动蜂鸣器
-                if (cont == 3) {
-                    currentState = SHORT_BEEP1;
-                    cont = 0;
-                    isBuzzing = false;
-                } else {
-                    analogWriteFrequency(4000);
-                    analogWrite(M2_buzzer, 127);
-                    isBuzzing = true; // 更新状态
-                    cont = cont + 1;
-                }
-                stateStartTime = currentTime; // 记录响的时间
-            }
-        }
-        break;
-    case SHORT_BEEP1:
-        if (isBuzzing) {
-            // 如果正在响，检查时间
-            if (currentTime - stateStartTime >= beepDuration) {
-                // 停止蜂鸣器
-                analogWriteFrequency(4000);
-                analogWrite(M2_buzzer, 0);
-                stateStartTime = currentTime; // 记录停的时间
-                isBuzzing = false;            // 更新状态
-            }
-        } else {
-            // 如果未响，检查时间
-            if (currentTime - stateStartTime >= 200) {
-                // 启动蜂鸣器
-                if (cont == 3) {
-                    currentState = WAIT;
-                    cont = 0;
-                    isBuzzing = false;
-                } else {
-                    analogWriteFrequency(4000);
-                    analogWrite(M2_buzzer, 127);
-                    isBuzzing = true; // 更新状态
-                    cont = cont + 1;
-                }
-                stateStartTime = currentTime; // 记录响的时间
-            }
-        }
-        break;
-    case WAIT:
-        if (currentTime - stateStartTime >= pauseDuration) {
-            buzzer_test();
-        }
-        break;
-    case OFF:
-        break;
-    default:
-        // 其他状态处理
-        break;
-    }
 }
 
 /*
@@ -570,13 +439,6 @@ void ButtonThread::userButtonPressedLongStart()
 {
     if (millis() > c_holdOffTime) {
         btnEvent = BUTTON_EVENT_LONG_PRESSED;
-    }
-}
-
-void ButtonThread::userButtonPressedLongStart1()
-{
-    if (millis() > c_holdOffTime) {
-        btnEvent = BUTTON_EVENT_LONG_PRESSED1;
     }
 }
 
