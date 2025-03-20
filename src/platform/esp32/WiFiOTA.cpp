@@ -55,32 +55,38 @@ void saveConfig(meshtastic_Config_NetworkConfig *network)
     prefs.end();
 }
 
+const esp_partition_t *getAppPartition()
+{
+    return esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_1, NULL);
+}
+
+bool getAppDesc(const esp_partition_t *part, esp_app_desc_t *app_desc)
+{
+    if (esp_ota_get_partition_description(part, app_desc) != ESP_OK)
+        return false;
+    if (strcmp(app_desc->project_name, appProjectName) != 0)
+        return false;
+    return true;
+}
+
 bool trySwitchToOTA()
 {
+    const esp_partition_t *part = getAppPartition();
     esp_app_desc_t app_desc;
-    const esp_partition_t *part = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_1, NULL);
-    if (!part)
+    if (!getAppDesc(part, &app_desc))
         return false;
-    if (ESP_ERROR_CHECK_WITHOUT_ABORT(esp_ota_get_partition_description(part, &app_desc)) != ESP_OK)
-        return false;
-    if (strcmp(app_desc.project_name, appProjectName) != 0)
-        return false;
-    if (ESP_ERROR_CHECK_WITHOUT_ABORT(esp_ota_set_boot_partition(part)) != ESP_OK)
+    if (esp_ota_set_boot_partition(part) != ESP_OK)
         return false;
     return true;
 }
 
 String getVersion()
 {
-    String version;
+    const esp_partition_t *part = getAppPartition();
     esp_app_desc_t app_desc;
-    const esp_partition_t *part = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_1, NULL);
-    if (!part)
-        return version;
-    if (ESP_ERROR_CHECK_WITHOUT_ABORT(esp_ota_get_partition_description(part, &app_desc)) != ESP_OK)
-        return version;
-    version = app_desc.version;
-    return version;
+    if (!getAppDesc(part, &app_desc))
+        return String();
+    return String(app_desc.version);
 }
 
 } // namespace WiFiOTA
