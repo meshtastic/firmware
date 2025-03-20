@@ -83,4 +83,4 @@ class UdpMulticastThread : public concurrency::OSThread
     IPAddress udpIpAddress;
     AsyncUDP udp;
 };
-#endif // ARCH_ESP32
+#endif // HAS_UDP_MULTICAST
