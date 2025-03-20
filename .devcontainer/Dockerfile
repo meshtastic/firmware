@@ -1,9 +1,10 @@
+# trunk-ignore-all(terrascan/AC_DOCKER_0002): Known terrascan issue
+# trunk-ignore-all(hadolint/DL3008): Do not pin apt package versions
+# trunk-ignore-all(hadolint/DL3013): Do not pin pip package versions
 FROM mcr.microsoft.com/devcontainers/cpp:1-debian-12
 
 USER root
 
-# trunk-ignore(terrascan/AC_DOCKER_0002): Known terrascan issue
-# trunk-ignore(hadolint/DL3008): Use latest version of packages
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     && apt-get -y install --no-install-recommends \
     ca-certificates \
@@ -27,9 +28,15 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     hwdata \
     gpg \
     gnupg2 \
+    libusb-1.0-0-dev \
+    libuv1-dev \
+    libi2c-dev \
+    libxcb-xkb-dev \
+    libxkbcommon-dev \
+    libinput-dev \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-RUN pipx install platformio==6.1.15
+RUN pipx install platformio
 
 COPY 99-platformio-udev.rules /etc/udev/rules.d/99-platformio-udev.rules
 

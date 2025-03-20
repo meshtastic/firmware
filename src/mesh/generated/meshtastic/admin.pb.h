@@ -34,7 +34,7 @@ typedef enum _meshtastic_AdminMessage_ConfigType {
     meshtastic_AdminMessage_ConfigType_BLUETOOTH_CONFIG = 6,
     /* TODO: REPLACE */
     meshtastic_AdminMessage_ConfigType_SECURITY_CONFIG = 7,
-    /*  */
+    /* Session key config */
     meshtastic_AdminMessage_ConfigType_SESSIONKEY_CONFIG = 8,
     /* device-ui config */
     meshtastic_AdminMessage_ConfigType_DEVICEUI_CONFIG = 9
@@ -69,6 +69,13 @@ typedef enum _meshtastic_AdminMessage_ModuleConfigType {
     /* TODO: REPLACE */
     meshtastic_AdminMessage_ModuleConfigType_PAXCOUNTER_CONFIG = 12
 } meshtastic_AdminMessage_ModuleConfigType;
+
+typedef enum _meshtastic_AdminMessage_BackupLocation {
+    /* Backup to the internal flash */
+    meshtastic_AdminMessage_BackupLocation_FLASH = 0,
+    /* Backup to the SD card */
+    meshtastic_AdminMessage_BackupLocation_SD = 1
+} meshtastic_AdminMessage_BackupLocation;
 
 /* Struct definitions */
 /* Parameters for setting up Meshtastic for ameteur radio usage */
@@ -145,6 +152,12 @@ typedef struct _meshtastic_AdminMessage {
         char delete_file_request[201];
         /* Set zero and offset for scale chips */
         uint32_t set_scale;
+        /* Backup the node's preferences */
+        meshtastic_AdminMessage_BackupLocation backup_preferences;
+        /* Restore the node's preferences */
+        meshtastic_AdminMessage_BackupLocation restore_preferences;
+        /* Remove backups of the node's preferences */
+        meshtastic_AdminMessage_BackupLocation remove_backup_preferences;
         /* Set the owner for this node */
         meshtastic_User set_owner;
         /* Set channels (using the new API).
@@ -226,8 +239,15 @@ extern "C" {
 #define _meshtastic_AdminMessage_ModuleConfigType_MAX meshtastic_AdminMessage_ModuleConfigType_PAXCOUNTER_CONFIG
 #define _meshtastic_AdminMessage_ModuleConfigType_ARRAYSIZE ((meshtastic_AdminMessage_ModuleConfigType)(meshtastic_AdminMessage_ModuleConfigType_PAXCOUNTER_CONFIG+1))
 
+#define _meshtastic_AdminMessage_BackupLocation_MIN meshtastic_AdminMessage_BackupLocation_FLASH
+#define _meshtastic_AdminMessage_BackupLocation_MAX meshtastic_AdminMessage_BackupLocation_SD
+#define _meshtastic_AdminMessage_BackupLocation_ARRAYSIZE ((meshtastic_AdminMessage_BackupLocation)(meshtastic_AdminMessage_BackupLocation_SD+1))
+
 #define meshtastic_AdminMessage_payload_variant_get_config_request_ENUMTYPE meshtastic_AdminMessage_ConfigType
 #define meshtastic_AdminMessage_payload_variant_get_module_config_request_ENUMTYPE meshtastic_AdminMessage_ModuleConfigType
+#define meshtastic_AdminMessage_payload_variant_backup_preferences_ENUMTYPE meshtastic_AdminMessage_BackupLocation
+#define meshtastic_AdminMessage_payload_variant_restore_preferences_ENUMTYPE meshtastic_AdminMessage_BackupLocation
+#define meshtastic_AdminMessage_payload_variant_remove_backup_preferences_ENUMTYPE meshtastic_AdminMessage_BackupLocation
 
 
 
@@ -268,6 +288,9 @@ extern "C" {
 #define meshtastic_AdminMessage_enter_dfu_mode_request_tag 21
 #define meshtastic_AdminMessage_delete_file_request_tag 22
 #define meshtastic_AdminMessage_set_scale_tag    23
+#define meshtastic_AdminMessage_backup_preferences_tag 24
+#define meshtastic_AdminMessage_restore_preferences_tag 25
+#define meshtastic_AdminMessage_remove_backup_preferences_tag 26
 #define meshtastic_AdminMessage_set_owner_tag    32
 #define meshtastic_AdminMessage_set_channel_tag  33
 #define meshtastic_AdminMessage_set_config_tag   34
@@ -320,6 +343,9 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,get_node_remote_hardware_pin
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,enter_dfu_mode_request,enter_dfu_mode_request),  21) \
 X(a, STATIC,   ONEOF,    STRING,   (payload_variant,delete_file_request,delete_file_request),  22) \
 X(a, STATIC,   ONEOF,    UINT32,   (payload_variant,set_scale,set_scale),  23) \
+X(a, STATIC,   ONEOF,    UENUM,    (payload_variant,backup_preferences,backup_preferences),  24) \
+X(a, STATIC,   ONEOF,    UENUM,    (payload_variant,restore_preferences,restore_preferences),  25) \
+X(a, STATIC,   ONEOF,    UENUM,    (payload_variant,remove_backup_preferences,remove_backup_preferences),  26) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_owner,set_owner),  32) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_channel,set_channel),  33) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_config,set_config),  34) \

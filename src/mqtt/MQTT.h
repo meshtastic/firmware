@@ -10,13 +10,11 @@
 #endif
 #if HAS_WIFI
 #include <WiFiClient.h>
-#if !defined(ARCH_PORTDUINO)
-#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR < 3
+#if __has_include(<WiFiClientSecure.h>)
 #include <WiFiClientSecure.h>
 #endif
 #endif
-#endif
-#if HAS_ETHERNET
+#if HAS_ETHERNET && !defined(USE_WS5500)
 #include <EthernetClient.h>
 #endif
 
@@ -61,6 +59,9 @@ class MQTT : private concurrency::OSThread
 
     bool isUsingDefaultServer() { return isConfiguredForDefaultServer; }
 
+    /// Validate the meshtastic_ModuleConfig_MQTTConfig.
+    static bool isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config) { return isValidConfig(config, nullptr); }
+
   protected:
     struct QueueEntry {
         std::string topic;
@@ -76,22 +77,23 @@ class MQTT : private concurrency::OSThread
 #ifndef PIO_UNIT_TESTING
   private:
 #endif
-    // supposedly the current version is busted:
-    // http://www.iotsharing.com/2017/08/how-to-use-esp32-mqtts-with-mqtts-mosquitto-broker-tls-ssl.html
 #if HAS_WIFI
     using MQTTClient = WiFiClient;
-#if !defined(ARCH_PORTDUINO)
-#if (defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR < 3) || defined(RPI_PICO)
-    WiFiClientSecure wifiSecureClient;
+#if __has_include(<WiFiClientSecure.h>)
+    using MQTTClientTLS = WiFiClientSecure;
+#define MQTT_SUPPORTS_TLS 1
 #endif
-#endif
-#endif
-#if HAS_ETHERNET
+#elif HAS_ETHERNET
     using MQTTClient = EthernetClient;
+#else
+    using MQTTClient = void;
 #endif
 
 #if HAS_NETWORKING
     std::unique_ptr<MQTTClient> mqttClient;
+#if MQTT_SUPPORTS_TLS
+    MQTTClientTLS mqttClientTLS;
+#endif
     PubSubClient pubSub;
     explicit MQTT(std::unique_ptr<MQTTClient> mqttClient);
 #endif
@@ -107,10 +109,6 @@ class MQTT : private concurrency::OSThread
     uint32_t map_position_precision = default_map_position_precision;
     uint32_t map_publish_interval_msecs = default_map_publish_interval_secs * 1000;
 
-    /** return true if we have a channel that wants uplink/downlink or map reporting is enabled
-     */
-    bool wantsLink() const;
-
     /** Attempt to connect to server if necessary
      */
     void reconnect();
@@ -121,6 +119,8 @@ class MQTT : private concurrency::OSThread
 
     /// Callback for direct mqtt subscription messages
     static void mqttCallback(char *topic, byte *payload, unsigned int length);
+
+    static bool isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTClient *client);
 
     /// Called when a new publish arrives from the MQTT server
     void onReceive(char *topic, byte *payload, size_t length);
