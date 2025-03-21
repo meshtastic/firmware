@@ -41,10 +41,8 @@ class AudioThread : public concurrency::OSThread
             delete i2sRtttl;
             i2sRtttl = nullptr;
         }
-        if (rtttlFile != nullptr) {
-            delete rtttlFile;
-            rtttlFile = nullptr;
-        }
+        delete rtttlFile;
+        rtttlFile = nullptr;
 
         setCPUFast(false);
     }

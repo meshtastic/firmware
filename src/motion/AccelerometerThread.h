@@ -160,10 +160,8 @@ class AccelerometerThread : public concurrency::OSThread
     void clean()
     {
         isInitialised = false;
-        if (sensor != nullptr) {
-            delete sensor;
-            sensor = nullptr;
-        }
+        delete sensor;
+        sensor = nullptr;
     }
 };
 
