@@ -391,7 +391,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
     virtual bool isVbusIn() override
     {
 #ifdef EXT_PWR_DETECT
-#ifdef HELTEC_CAPSULE_SENSOR_V3
+#if defined(HELTEC_CAPSULE_SENSOR_V3) || defined(HELTEC_SENSOR_HUB)
         // if external powered that pin will be pulled down
         if (digitalRead(EXT_PWR_DETECT) == LOW) {
             return true;
@@ -541,7 +541,7 @@ Power::Power() : OSThread("Power")
 bool Power::analogInit()
 {
 #ifdef EXT_PWR_DETECT
-#ifdef HELTEC_CAPSULE_SENSOR_V3
+#if defined(HELTEC_CAPSULE_SENSOR_V3) || defined(HELTEC_SENSOR_HUB)
     pinMode(EXT_PWR_DETECT, INPUT_PULLUP);
 #else
     pinMode(EXT_PWR_DETECT, INPUT);
