@@ -161,10 +161,8 @@ void CryptoEngine::hash(uint8_t *bytes, size_t numBytes)
 
 void CryptoEngine::aesSetKey(const uint8_t *key_bytes, size_t key_len)
 {
-    if (aes) {
-        delete aes;
-        aes = nullptr;
-    }
+    delete aes;
+    aes = nullptr;
     if (key_len != 0) {
         aes = new AESSmall256();
         aes->setKey(key_bytes, key_len);
