@@ -312,9 +312,9 @@ void EInkDynamicDisplay::checkFrameMatchesPrevious()
 #endif
 
     // Not redrawn, not COSMETIC, not DEMAND_FAST
-#if defined(RAK_4631_D)
-            refresh = SKIPPED;
-#endif
+    #if defined(RAK_4631_D)
+         refresh = SKIPPED;
+    #endif
     reason = FRAME_MATCHED_PREVIOUS;
     LOG_DEBUG("refresh=SKIPPED, reason=FRAME_MATCHED_PREVIOUS, frameFlags=0x%x", frameFlags);
 }
