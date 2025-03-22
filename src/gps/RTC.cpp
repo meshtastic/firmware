@@ -1,4 +1,4 @@
-#include "RTC.h"
+#include "gps/RTC.h"
 #include "configuration.h"
 #include "detect/ScanI2C.h"
 #include "main.h"
