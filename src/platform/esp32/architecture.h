@@ -53,6 +53,8 @@
 #ifdef PIN_BUTTON_TOUCH
 #define BUTTON_PIN_TOUCH PIN_BUTTON_TOUCH
 #endif
+
+#define BUTTON_PIN (-1)
 //
 // set HW_VENDOR
 //
