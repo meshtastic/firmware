@@ -27,8 +27,6 @@ InkHUD::MenuApplet::MenuApplet() : concurrency::OSThread("MenuApplet")
     }
 }
 
-void InkHUD::MenuApplet::onActivate() {}
-
 void InkHUD::MenuApplet::onForeground()
 {
     // We do need this before we render, but we can optimize by just calculating it once now
