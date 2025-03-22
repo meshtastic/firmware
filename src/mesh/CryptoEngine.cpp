@@ -223,10 +223,8 @@ void CryptoEngine::decrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes
 // Generic implementation of AES-CTR encryption.
 void CryptoEngine::encryptAESCtr(CryptoKey _key, uint8_t *_nonce, size_t numBytes, uint8_t *bytes)
 {
-    if (ctr) {
-        delete ctr;
-        ctr = nullptr;
-    }
+    delete ctr;
+    ctr = nullptr;
     if (_key.length == 16)
         ctr = new CTR<AES128>();
     else
