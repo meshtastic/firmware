@@ -262,6 +262,11 @@ void printInfo()
 #ifndef PIO_UNIT_TESTING
 void setup()
 {
+#ifdef POWER_CHRG
+    pinMode(POWER_CHRG, OUTPUT);
+    digitalWrite(POWER_CHRG, HIGH);
+#endif
+
 #if defined(T_DECK)
     // GPIO10 manages all peripheral power supplies
     // Turn on peripheral power immediately after MUC starts.
