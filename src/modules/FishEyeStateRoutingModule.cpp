@@ -92,7 +92,7 @@ bool FishEyeStateRoutingModule::handleReceivedProtobuf(const meshtastic_MeshPack
     LSPDB.insert(std::make_pair(entry.LSP.node_id,entry));
     if(moduleConfig.fish_eye_state_routing.enabled){calcNextHop();}
   }
-  char * logout;
+  char * logout = "";
   sprintf(logout, "Received LSP-Pckg of Node %u: ",lsp->node_id);
   for(int i = 0; i< lsp->neighbors_count; i++){
     sprintf(logout,"%u, ", lsp->neighbors[i].node_id);
@@ -113,6 +113,9 @@ void FishEyeStateRoutingModule::sendInitialLSP(){
   LSPInfo.neighbors_count = neighborhood.size();
   for(int i = 0; i < neighborhood.size(); i++){
     meshtastic_Neighbor entry;
+    entry.last_rx_time = 0;
+    entry.node_broadcast_interval_secs = 0;
+    entry.snr = 0;
     entry.node_id = neighborhood[i].node_id;
     LSPInfo.neighbors[i] = entry;
   }
@@ -161,7 +164,7 @@ int32_t FishEyeStateRoutingModule::runOnce(){
       p->decoded.portnum = meshtastic_PortNum_FISHEYESTATEROUTING_APP;
       service->sendToMesh(p,RX_SRC_LOCAL,true);
       it->second.forwarded = true;
-      char * logout;
+      char * logout = "";
       sprintf(logout,"Forwarded LSP-Package of Node %u", it->second.LSP.node_id);
       LOG_DEBUG(logout);
 
