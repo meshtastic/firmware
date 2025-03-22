@@ -68,8 +68,7 @@ void setupNicheGraphics()
     InkHUD::Applet::fontSmall.addSubstitutionsWin1251();
     */
 
-    // Init settings, and customize defaults
-    // Values ignored individually if found saved to flash
+    // Customize default settings
     inkhud->persistence->settings.userTiles.maxCount = 2;              // Two applets side-by-side
     inkhud->persistence->settings.rotation = 3;                        // 270 degrees clockwise
     inkhud->persistence->settings.optionalFeatures.batteryIcon = true; // Device definitely has a battery
