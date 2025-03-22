@@ -235,6 +235,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_THINKNODE_M2 = 90,
     /* Lilygo T-ETH-Elite */
     meshtastic_HardwareModel_T_ETH_ELITE = 91,
+    /* Heltec HRI-3621 industrial probe */
+    meshtastic_HardwareModel_HELTEC_SENSOR_HUB = 92,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */

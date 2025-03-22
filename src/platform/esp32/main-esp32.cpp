@@ -9,6 +9,8 @@
 #include "nimble/NimbleBluetooth.h"
 #endif
 
+#include <WiFiOTA.h>
+
 #if HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
@@ -139,12 +141,19 @@ void esp32Setup()
 #if !MESHTASTIC_EXCLUDE_BLUETOOTH
     String BLEOTA = BleOta::getOtaAppVersion();
     if (BLEOTA.isEmpty()) {
-        LOG_INFO("No OTA firmware available");
+        LOG_INFO("No BLE OTA firmware available");
     } else {
-        LOG_INFO("OTA firmware version %s", BLEOTA.c_str());
+        LOG_INFO("BLE OTA firmware version %s", BLEOTA.c_str());
     }
-#else
-    LOG_INFO("No OTA firmware available");
+#endif
+#if !MESHTASTIC_EXCLUDE_WIFI
+    String version = WiFiOTA::getVersion();
+    if (version.isEmpty()) {
+        LOG_INFO("No WiFi OTA firmware available");
+    } else {
+        LOG_INFO("WiFi OTA firmware version %s", version.c_str());
+    }
+    WiFiOTA::initialize();
 #endif
 
     // enableModemSleep();
