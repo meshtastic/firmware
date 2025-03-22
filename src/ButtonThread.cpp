@@ -47,7 +47,7 @@ ButtonThread::ButtonThread() : OSThread("Button")
 #ifdef USERPREFS_BUTTON_PIN
     int pin = config.device.button_gpio ? config.device.button_gpio : USERPREFS_BUTTON_PIN; // Resolved button pin
 #endif
-#if defined(HELTEC_CAPSULE_SENSOR_V3)
+#if defined(HELTEC_CAPSULE_SENSOR_V3) || defined(HELTEC_SENSOR_HUB)
     this->userButton = OneButton(pin, false, false);
 #elif defined(BUTTON_ACTIVE_LOW)
     this->userButton = OneButton(pin, BUTTON_ACTIVE_LOW, BUTTON_ACTIVE_PULLUP);
