@@ -138,7 +138,7 @@ void FishEyeStateRoutingModule::printLSPDB(){
     for(int i = 0; i< etr.second.LSP.neighbors_count;i++){
       printf("%u, ", etr.second.LSP.neighbors[i].node_id -16);
     }
-    printf(" Timeout: %u, forwarded: %d\n",(uint32_t) ( etr.second.timeout) - ((int64_t) getTime()),etr.second.forwarded);
+    printf(" Timeout: %u, forwarded: %d\n",(uint32_t) (((int64_t) etr.second.timeout) - ((int64_t) getTime())),etr.second.forwarded);
   }
   printf("Total: %lu\n",LSPDB.size());
 }
