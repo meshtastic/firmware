@@ -366,6 +366,11 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_neighbor_info_tag;
             fromRadioScratch.moduleConfig.payload_variant.neighbor_info = moduleConfig.neighbor_info;
             break;
+        case meshtastic_ModuleConfig_fish_eye_state_routing_tag:
+            LOG_DEBUG("Send module config: FishEyeStateRouting");
+            fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_fish_eye_state_routing_tag;
+            fromRadioScratch.moduleConfig.payload_variant.fish_eye_state_routing = moduleConfig.fish_eye_state_routing;
+            break;
         case meshtastic_ModuleConfig_detection_sensor_tag:
             LOG_DEBUG("Send module config: detection sensor");
             fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_detection_sensor_tag;

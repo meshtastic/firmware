@@ -4,6 +4,7 @@
 #include "NodeDB.h"
 #include "RTC.h"
 #include <Throttle.h>
+#include "FishEyeStateRoutingModule.h"
 
 NeighborInfoModule *neighborInfoModule;
 
@@ -77,6 +78,9 @@ uint32_t NeighborInfoModule::collectNeighborInfo(meshtastic_NeighborInfo *neighb
         }
     }
     printNodeDBNeighbors();
+    if(config.network.routingAlgorithm == meshtastic_Config_RoutingConfig_FishEyeState && moduleConfig.fish_eye_state_routing.enabled){
+        fishEyeStateRoutingModule->setOwnNeighborhood(*neighborInfo);
+    }
     return neighborInfo->neighbors_count;
 }
 
@@ -105,6 +109,7 @@ void NeighborInfoModule::sendNeighborInfo(NodeNum dest, bool wantReplies)
 {
     meshtastic_NeighborInfo neighborInfo = meshtastic_NeighborInfo_init_zero;
     collectNeighborInfo(&neighborInfo);
+    neighborInfo.creation = getTime();
     meshtastic_MeshPacket *p = allocDataProtobuf(neighborInfo);
     // send regardless of whether or not we have neighbors in our DB,
     // because we want to get neighbors for the next cycle
@@ -212,6 +217,9 @@ meshtastic_Neighbor *NeighborInfoModule::getOrCreateNeighbor(NodeNum originalSen
         LOG_WARN("Neighbor DB is full, replace oldest neighbor");
         neighbors.erase(neighbors.begin());
         neighbors.push_back(new_nbr);
+    }
+    if(config.network.routingAlgorithm == meshtastic_Config_RoutingConfig_FishEyeState && moduleConfig.fish_eye_state_routing.enabled){
+        fishEyeStateRoutingModule->setOwnNeighborhood(neighbors);
     }
     return &neighbors.back();
 }

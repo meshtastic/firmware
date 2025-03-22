@@ -19,6 +19,7 @@
 #include "power.h"
 #include <assert.h>
 #include <string>
+#include "modules/FishEyeStateRoutingModule.h"
 
 #if ARCH_PORTDUINO
 #include "PortduinoGlue.h"
@@ -86,7 +87,8 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
         LOG_DEBUG("Received telemetry response. Skip sending our NodeInfo"); //  because this potentially a Repeater which will
                                                                              //  ignore our request for its NodeInfo
     } else if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !nodeDB->getMeshNode(mp->from)->has_user &&
-               nodeInfoModule && !isPreferredRebroadcaster && !nodeDB->isFull()) {
+               nodeInfoModule && !isPreferredRebroadcaster && !nodeDB->isFull() && !(moduleConfig.fish_eye_state_routing.enabled) &&
+               !(config.network.routingAlgorithm == meshtastic_Config_RoutingConfig_FishEyeState)) {
         if (airTime->isTxAllowedChannelUtil(true)) {
             // Hops used by the request. If somebody in between running modified firmware modified it, ignore it
             auto hopStart = mp->hop_start;
@@ -232,6 +234,16 @@ ErrorCode MeshService::sendQueueStatusToPhone(const meshtastic_QueueStatus &qs, 
 
 void MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPhone)
 {
+    if(config.network.routingAlgorithm == meshtastic_Config_RoutingConfig_FishEyeState && moduleConfig.fish_eye_state_routing.enabled){
+        if(p->decoded.dest != 0 && p->decoded.dest != NODENUM_BROADCAST){
+            p->to = fishEyeStateRoutingModule->getNextHopForID(p->decoded.dest);
+        }else if ((p->decoded.dest == 0) && (p->to != 0) && (p->to != NODENUM_BROADCAST ))
+        {
+            p->decoded.dest = p->to;
+            p->to = fishEyeStateRoutingModule->getNextHopForID(p->decoded.dest);
+        }
+    }
+
     uint32_t mesh_packet_id = p->id;
     nodeDB->updateFrom(*p); // update our local DB for this packet (because phone might have sent position packets etc...)
 

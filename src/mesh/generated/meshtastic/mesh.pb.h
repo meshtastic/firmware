@@ -11,6 +11,7 @@
 #include "meshtastic/telemetry.pb.h"
 #include "meshtastic/xmodem.pb.h"
 #include "meshtastic/device_ui.pb.h"
+#include <ctime>
 
 #if PB_PROTO_HEADER_VERSION != 40
 #error Regenerate this file with the current version of nanopb generator.
@@ -326,7 +327,9 @@ typedef enum _meshtastic_ExcludedModules {
     /* Detection Sensor module */
     meshtastic_ExcludedModules_DETECTIONSENSOR_CONFIG = 2048,
     /* Paxcounter module */
-    meshtastic_ExcludedModules_PAXCOUNTER_CONFIG = 4096
+    meshtastic_ExcludedModules_PAXCOUNTER_CONFIG = 4096,
+    /* Fisheye StateRouting Module */
+    meshtastic_ExcludedModules_FISHEYESTATEROUTING_CONFIG = 8192
 } meshtastic_ExcludedModules;
 
 /* How the location was acquired: manual, onboard GPS, external (EUD) GPS */
@@ -944,7 +947,22 @@ typedef struct _meshtastic_NeighborInfo {
     /* The list of out edges from this node */
     pb_size_t neighbors_count;
     meshtastic_Neighbor neighbors[10];
+    /* UNIX-Timestamp of Creation*/
+    uint32_t creation;
 } meshtastic_NeighborInfo;
+
+/* Struct for an FishEyeState/ Link-State-Package */
+typedef struct _meshtastic_FishEyeStateRouting {
+   /* The node ID of the node of origin */
+   uint32_t node_id;
+   /* Number of Hops, this LSP-Package alredy traveled */
+   uint32_t traveledHops;
+   /* The list of out edges from this node */
+   pb_size_t neighbors_count;
+   meshtastic_Neighbor neighbors[10];
+   /* UNIX-Timestamp of Creation*/
+   uint32_t creation;
+} meshtastic_FishEyeStateRouting;
 
 /* Device metadata response */
 typedef struct _meshtastic_DeviceMetadata {
@@ -1206,7 +1224,8 @@ extern "C" {
 #define meshtastic_FileInfo_init_default         {"", 0}
 #define meshtastic_ToRadio_init_default          {0, {meshtastic_MeshPacket_init_default}}
 #define meshtastic_Compressed_init_default       {_meshtastic_PortNum_MIN, {0, {0}}}
-#define meshtastic_NeighborInfo_init_default     {0, 0, 0, 0, {meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default}}
+#define meshtastic_NeighborInfo_init_default     {0, 0, 0, 0, {meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default},0}
+#define meshtastic_FishEyeStateRouting_init_default           {0, 0, 0, {meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default},0}
 #define meshtastic_Neighbor_init_default         {0, 0, 0, 0}
 #define meshtastic_DeviceMetadata_init_default   {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0, 0, 0}
 #define meshtastic_Heartbeat_init_default        {0}
@@ -1231,7 +1250,8 @@ extern "C" {
 #define meshtastic_FileInfo_init_zero            {"", 0}
 #define meshtastic_ToRadio_init_zero             {0, {meshtastic_MeshPacket_init_zero}}
 #define meshtastic_Compressed_init_zero          {_meshtastic_PortNum_MIN, {0, {0}}}
-#define meshtastic_NeighborInfo_init_zero        {0, 0, 0, 0, {meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero}}
+#define meshtastic_NeighborInfo_init_zero        {0, 0, 0, 0, {meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero},0}
+#define meshtastic_FishEyeStateRouting_init_zero              {0, 0, 0, {meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero},0}
 #define meshtastic_Neighbor_init_zero            {0, 0, 0, 0}
 #define meshtastic_DeviceMetadata_init_zero      {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0, 0, 0}
 #define meshtastic_Heartbeat_init_zero           {0}
@@ -1360,6 +1380,11 @@ extern "C" {
 #define meshtastic_NeighborInfo_last_sent_by_id_tag 2
 #define meshtastic_NeighborInfo_node_broadcast_interval_secs_tag 3
 #define meshtastic_NeighborInfo_neighbors_tag    4
+#define meshtastic_NeighborInfo_creation_tag 5
+#define meshtastic_FishEyeStateRouting_node_tag 1
+#define meshtastic_FishEyeStateRouting_traveledHops_tag 2
+#define meshtastic_FishEyeStateRouting_neighbors_tag 3
+#define meshtastic_FishEyeStateRouting_creation_tag 4
 #define meshtastic_DeviceMetadata_firmware_version_tag 1
 #define meshtastic_DeviceMetadata_device_state_version_tag 2
 #define meshtastic_DeviceMetadata_canShutdown_tag 3
@@ -1638,10 +1663,20 @@ X(a, STATIC,   SINGULAR, BYTES,    data,              2)
 X(a, STATIC,   SINGULAR, UINT32,   node_id,           1) \
 X(a, STATIC,   SINGULAR, UINT32,   last_sent_by_id,   2) \
 X(a, STATIC,   SINGULAR, UINT32,   node_broadcast_interval_secs,   3) \
-X(a, STATIC,   REPEATED, MESSAGE,  neighbors,         4)
+X(a, STATIC,   REPEATED, MESSAGE,  neighbors,         4)\
+X(a, STATIC,   SINGULAR, UINT32,   creation,          5)
 #define meshtastic_NeighborInfo_CALLBACK NULL
 #define meshtastic_NeighborInfo_DEFAULT NULL
 #define meshtastic_NeighborInfo_neighbors_MSGTYPE meshtastic_Neighbor
+
+#define meshtastic_FishEyeStateRouting_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   node_id,           1) \
+X(a, STATIC,   SINGULAR, UINT32,   traveledHops,   2) \
+X(a, STATIC,   REPEATED, MESSAGE,  neighbors,         3)\
+X(a, STATIC,   SINGULAR, UINT32,   creation,          4)
+#define meshtastic_FishEyeStateRouting_CALLBACK NULL
+#define meshtastic_FishEyeStateRouting_DEFAULT NULL
+#define meshtastic_FishEyeStateRouting_neighbors_MSGTYPE meshtastic_Neighbor
 
 #define meshtastic_Neighbor_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   node_id,           1) \
@@ -1719,6 +1754,7 @@ extern const pb_msgdesc_t meshtastic_FileInfo_msg;
 extern const pb_msgdesc_t meshtastic_ToRadio_msg;
 extern const pb_msgdesc_t meshtastic_Compressed_msg;
 extern const pb_msgdesc_t meshtastic_NeighborInfo_msg;
+extern const pb_msgdesc_t meshtastic_FishEyeStateRouting_msg;
 extern const pb_msgdesc_t meshtastic_Neighbor_msg;
 extern const pb_msgdesc_t meshtastic_DeviceMetadata_msg;
 extern const pb_msgdesc_t meshtastic_Heartbeat_msg;
@@ -1746,6 +1782,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_ToRadio_fields &meshtastic_ToRadio_msg
 #define meshtastic_Compressed_fields &meshtastic_Compressed_msg
 #define meshtastic_NeighborInfo_fields &meshtastic_NeighborInfo_msg
+#define meshtastic_FishEyeStateRouting_fields &meshtastic_FishEyeStateRouting_msg
 #define meshtastic_Neighbor_fields &meshtastic_Neighbor_msg
 #define meshtastic_DeviceMetadata_fields &meshtastic_DeviceMetadata_msg
 #define meshtastic_Heartbeat_fields &meshtastic_Heartbeat_msg
@@ -1770,7 +1807,8 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_MeshPacket_size               378
 #define meshtastic_MqttClientProxyMessage_size   501
 #define meshtastic_MyNodeInfo_size               77
-#define meshtastic_NeighborInfo_size             258
+#define meshtastic_NeighborInfo_size             262
+#define meshtastic_FishEyeStateRouting_size      258
 #define meshtastic_Neighbor_size                 22
 #define meshtastic_NodeInfo_size                 319
 #define meshtastic_NodeRemoteHardwarePin_size    29
