@@ -46,11 +46,6 @@ meshtastic_MeshPacket *RoutingModule::allocReply()
         return NULL;
     assert(currentRequest);
 
-    // We only consider making replies if the request was a legit routing packet (not just something we were sniffing)
-    if (currentRequest->decoded.portnum == meshtastic_PortNum_ROUTING_APP) {
-        assert(0); // 1.2 refactoring fixme, Not sure if anything needs this yet?
-        // return allocDataProtobuf(u);
-    }
     return NULL;
 }
 

@@ -13,7 +13,7 @@ ENV TZ=Etc/UTC
 ENV PIP_ROOT_USER_ACTION=ignore
 RUN apt-get update && apt-get install --no-install-recommends -y \
         wget g++ zip git ca-certificates \
-        libgpiod-dev libyaml-cpp-dev libbluetooth-dev libi2c-dev \
+        libgpiod-dev libyaml-cpp-dev libbluetooth-dev libi2c-dev libuv1-dev \
         libusb-1.0-0-dev libulfius-dev liborcania-dev libssl-dev pkg-config \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && pip install --no-cache-dir -U platformio \
@@ -38,7 +38,7 @@ ENV TZ=Etc/UTC
 USER root
 
 RUN apt-get update && apt-get --no-install-recommends -y install \
-        libc-bin libc6 libgpiod2 libyaml-cpp0.7 libi2c0 libulfius2.7 libusb-1.0-0-dev liborcania2.3 libssl3 \
+        libc-bin libc6 libgpiod2 libyaml-cpp0.7 libi2c0 libuv1 libusb-1.0-0-dev liborcania2.3 libulfius2.7 libssl3 \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /var/lib/meshtasticd \
     && mkdir -p /etc/meshtasticd/config.d \

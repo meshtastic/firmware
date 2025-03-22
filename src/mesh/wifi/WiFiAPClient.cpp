@@ -9,6 +9,12 @@
 #include "mesh/api/WiFiServerAPI.h"
 #include "target_specific.h"
 #include <WiFi.h>
+
+#if HAS_ETHERNET && defined(USE_WS5500)
+#include <ETHClass2.h>
+#define ETH ETH2
+#endif // HAS_ETHERNET
+
 #include <WiFiUdp.h>
 #ifdef ARCH_ESP32
 #if !MESHTASTIC_EXCLUDE_WEBSERVER
@@ -52,11 +58,28 @@ Syslog syslog(syslogClient);
 
 Periodic *wifiReconnect;
 
+#ifdef USE_WS5500
+// Startup Ethernet
+bool initEthernet()
+{
+    if ((config.network.eth_enabled) && (ETH.begin(ETH_PHY_W5500, 1, ETH_CS_PIN, ETH_INT_PIN, ETH_RST_PIN, SPI3_HOST,
+                                                   ETH_SCLK_PIN, ETH_MISO_PIN, ETH_MOSI_PIN))) {
+        WiFi.onEvent(WiFiEvent);
+#if !MESHTASTIC_EXCLUDE_WEBSERVER
+        createSSLCert(); // For WebServer
+#endif
+        return true;
+    }
+
+    return false;
+}
+#endif
+
 static void onNetworkConnected()
 {
     if (!APStartupComplete) {
         // Start web server
-        LOG_INFO("Start WiFi network services");
+        LOG_INFO("Start network services");
 
         // start mdns
         if (!MDNS.begin("Meshtastic")) {
@@ -188,6 +211,10 @@ bool isWifiAvailable()
 
     if (config.network.wifi_enabled && (config.network.wifi_ssid[0])) {
         return true;
+#ifdef USE_WS5500
+    } else if (config.network.eth_enabled) {
+        return true;
+#endif
     } else {
         return false;
     }
@@ -282,7 +309,7 @@ bool initWifi()
 // Called by the Espressif SDK to
 static void WiFiEvent(WiFiEvent_t event)
 {
-    LOG_DEBUG("WiFi-Event %d: ", event);
+    LOG_DEBUG("Network-Event %d: ", event);
 
     switch (event) {
     case ARDUINO_EVENT_WIFI_READY:
@@ -377,19 +404,32 @@ static void WiFiEvent(WiFiEvent_t event)
         LOG_INFO("Ethernet started");
         break;
     case ARDUINO_EVENT_ETH_STOP:
+        syslog.disable();
         LOG_INFO("Ethernet stopped");
         break;
     case ARDUINO_EVENT_ETH_CONNECTED:
         LOG_INFO("Ethernet connected");
         break;
     case ARDUINO_EVENT_ETH_DISCONNECTED:
+        syslog.disable();
         LOG_INFO("Ethernet disconnected");
         break;
     case ARDUINO_EVENT_ETH_GOT_IP:
-        LOG_INFO("Obtained IP address (ARDUINO_EVENT_ETH_GOT_IP)");
+#ifdef USE_WS5500
+        LOG_INFO("Obtained IP address: %s, %u Mbps, %s", ETH.localIP().toString().c_str(), ETH.linkSpeed(),
+                 ETH.fullDuplex() ? "FULL_DUPLEX" : "HALF_DUPLEX");
+        onNetworkConnected();
+#endif
         break;
     case ARDUINO_EVENT_ETH_GOT_IP6:
-        LOG_INFO("Obtained IP6 address (ARDUINO_EVENT_ETH_GOT_IP6)");
+#ifdef USE_WS5500
+#if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
+        LOG_INFO("Obtained Local IP6 address: %s", ETH.linkLocalIPv6().toString().c_str());
+        LOG_INFO("Obtained GlobalIP6 address: %s", ETH.globalIPv6().toString().c_str());
+#else
+        LOG_INFO("Obtained IP6 address: %s", ETH.localIPv6().toString().c_str());
+#endif
+#endif
         break;
     case ARDUINO_EVENT_SC_SCAN_DONE:
         LOG_INFO("SmartConfig: Scan done");
