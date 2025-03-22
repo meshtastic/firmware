@@ -1437,13 +1437,14 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
 #if !(MESHTASTIC_EXCLUDE_PKI)
     if (p.public_key.size > 0) {
         printBytes("Incoming Pubkey: ", p.public_key.bytes, 32);
-        if (info->user.public_key.size > 0) { // if we have a key for this user already, don't overwrite with a new one
-            LOG_INFO("Public Key set for node, not updating!");
-            // we copy the key into the incoming packet, to prevent overwrite
-            memcpy(p.public_key.bytes, info->user.public_key.bytes, 32);
-        } else {
-            LOG_INFO("Update Node Pubkey!");
-        }
+    }
+    if (info->user.public_key.size > 0) { // if we have a key for this user already, don't overwrite with a new one
+        LOG_INFO("Public Key set for node, not updating!");
+        // we copy the key into the incoming packet, to prevent overwrite
+        p.public_key.size = 32;
+        memcpy(p.public_key.bytes, info->user.public_key.bytes, 32);
+    } else if (p.public_key.size > 0) {
+        LOG_INFO("Update Node Pubkey!");
     }
 #endif
 
