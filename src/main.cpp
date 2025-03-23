@@ -583,9 +583,12 @@ void setup()
  * "found".
  */
 
-// Only one supported RGB LED currently
+// Two supported RGB LED currently
 #ifdef HAS_NCP5623
     rgb_found = i2cScanner->find(ScanI2C::DeviceType::NCP5623);
+#endif
+#ifdef HAS_LP5562
+    rgb_found = i2cScanner->find(ScanI2C::DeviceType::LP5562);
 #endif
 
 #ifdef HAS_TPS65233
@@ -724,7 +727,7 @@ void setup()
 
 #if defined(HAS_NEOPIXEL) || defined(UNPHONE) || defined(RGBLED_RED)
     ambientLightingThread = new AmbientLightingThread(ScanI2C::DeviceType::NONE);
-#elif !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+#elif !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL )
     if (rgb_found.type != ScanI2C::DeviceType::NONE) {
         ambientLightingThread = new AmbientLightingThread(rgb_found.type);
     }
@@ -1249,7 +1252,7 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 #ifndef ARCH_ESP32
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_PAXCOUNTER_CONFIG;
 #endif
-#if !defined(HAS_NCP5623) && !defined(RGBLED_RED) && !defined(HAS_NEOPIXEL) && !defined(UNPHONE) && !RAK_4631
+#if !defined(HAS_NCP5623) && !defined(HAS_LP5562) && !defined(RGBLED_RED) && !defined(HAS_NEOPIXEL) && !defined(UNPHONE) && !RAK_4631
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_AMBIENTLIGHTING_CONFIG;
 #endif
 
