@@ -138,6 +138,12 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define SPI_MISO PIN_SPI1_MISO
 #define SDCARD_CS (26)
 
+// Some settings for the SdFat library to optimize flash usage
+#define SDFAT_FILE_TYPE 1 // only support FAT16/FAT32, not exFAT
+#define CHECK_FLASH_PROGRAMMING                                                                                                  \
+    0 // this reduces flash usage but may cause higher power usage when sd card is idle TODO:Check if power usage is higher
+#define MAINTAIN_FREE_CLUSTER_COUNT 1 // maintain free cluster count
+
 /*
  * eink display pins
  */
