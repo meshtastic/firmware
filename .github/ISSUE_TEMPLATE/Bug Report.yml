@@ -72,6 +72,15 @@ body:
     validations:
       required: true
 
+  - type: checkboxes
+    id: mui
+    attributes:
+      label: Is this bug report about any UI component firmware like InkHUD or Meshtatic UI (MUI)?
+      options:
+        - label: Meshtastic UI aka MUI colorTFT
+        - label: InkHUD ePaper
+        - label: OLED slide UI on any display
+
   - type: input
     id: version
     attributes:
