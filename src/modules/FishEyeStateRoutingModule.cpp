@@ -175,7 +175,7 @@ int32_t FishEyeStateRoutingModule::runOnce(){
 
   }
 
-  if (min != UINT32_MAX){
+  if ((min != UINT32_MAX) && ((((int64_t) min) - ((int64_t) getTime())) < 300000)){
     return ((int32_t) (((int64_t) min) - ((int64_t) getTime()))) * 1000; // We need seconds here
   }
   return{300000}; 
