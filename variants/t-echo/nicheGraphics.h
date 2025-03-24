@@ -105,6 +105,7 @@ void setupNicheGraphics()
 
     // Setup the main user button
     buttons->setWiring(MAIN_BUTTON, BUTTON_PIN, LOW);
+    buttons->setTiming(MAIN_BUTTON, 75, 500);
     buttons->setHandlerShortPress(MAIN_BUTTON, []() { InkHUD::InkHUD::getInstance()->shortpress(); });
     buttons->setHandlerLongPress(MAIN_BUTTON, []() { InkHUD::InkHUD::getInstance()->longpress(); });
 
