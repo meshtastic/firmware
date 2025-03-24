@@ -70,6 +70,9 @@ void InkHUD::Events::onButtonLong()
 // Returns 0 to signal that we agree to sleep now
 int InkHUD::Events::beforeDeepSleep(void *unused)
 {
+    // If a previous display update is in progress, wait for it to complete.
+    inkhud->awaitUpdate();
+
     // Notify all applets that we're shutting down
     for (Applet *ua : inkhud->userApplets) {
         ua->onDeactivate();
@@ -87,8 +90,10 @@ int InkHUD::Events::beforeDeepSleep(void *unused)
     inkhud->persistence->saveSettings();
     inkhud->persistence->saveLatestMessage();
 
-    // LogoApplet::onShutdown will have requested an update, to draw the shutdown screen
-    // Draw that now, and wait here until the update is complete
+    // LogoApplet::onShutdown attempted to heal the display by drawing a "shutting down" screen twice,
+    // then prepared a final powered-off screen for us, which shows device shortname.
+    // We're updating to show that one now.
+
     inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FULL, false);
 
     return 0; // We agree: deep sleep now
