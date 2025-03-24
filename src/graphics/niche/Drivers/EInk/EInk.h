@@ -50,7 +50,6 @@ class EInk : private concurrency::OSThread
     bool updateRunning = false;             // see EInk::busy()
     uint32_t pollingInterval = 0;           // How often to check if update complete (ms)
     uint32_t pollingBegunAt = 0;            // To timeout during polling
-    uint32_t pollingExpectedDuration = 0;   // To timeout during polling
 };
 
 } // namespace NicheGraphics::Drivers
