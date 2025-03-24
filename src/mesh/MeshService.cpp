@@ -309,7 +309,7 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
         }
     }
 
-    if(toPhoneQueue.enqueue(p, 0) == false) {
+    if (toPhoneQueue.enqueue(p, 0) == false) {
         LOG_CRIT("Failed to queue a packet into toPhoneQueue!");
         abort();
     }
@@ -326,7 +326,7 @@ void MeshService::sendMqttMessageToClientProxy(meshtastic_MqttClientProxyMessage
             releaseMqttClientProxyMessageToPool(d);
     }
 
-    if(toPhoneMqttProxyQueue.enqueue(m, 0) == false) {
+    if (toPhoneMqttProxyQueue.enqueue(m, 0) == false) {
         LOG_CRIT("Failed to queue a packet into toPhoneMqttProxyQueue!");
         abort();
     }
@@ -343,7 +343,7 @@ void MeshService::sendClientNotification(meshtastic_ClientNotification *n)
             releaseClientNotificationToPool(d);
     }
 
-    if(toPhoneClientNotificationQueue.enqueue(n, 0) == false) {
+    if (toPhoneClientNotificationQueue.enqueue(n, 0) == false) {
         LOG_CRIT("Failed to queue a notification into toPhoneClientNotificationQueue!");
         abort();
     }
