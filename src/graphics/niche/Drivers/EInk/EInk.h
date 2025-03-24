@@ -41,14 +41,16 @@ class EInk : private concurrency::OSThread
     void beginPolling(uint32_t interval, uint32_t expectedDuration); // Begin checking repeatedly if update finished
     virtual bool isUpdateDone() = 0;                                 // Check once if update finished
     virtual void finalizeUpdate() {}                                 // Run any post-update code
+    bool failed = false;                                             // If an error occurred during update
 
   private:
     int32_t runOnce() override; // Repeated checking if update finished
 
     const UpdateTypes supportedUpdateTypes; // Capabilities of a derived display class
     bool updateRunning = false;             // see EInk::busy()
-    uint32_t updateBegunAt = 0;             // For initial pause before polling for update completion
     uint32_t pollingInterval = 0;           // How often to check if update complete (ms)
+    uint32_t pollingBegunAt = 0;            // To timeout during polling
+    uint32_t pollingExpectedDuration = 0;   // To timeout during polling
 };
 
 } // namespace NicheGraphics::Drivers
