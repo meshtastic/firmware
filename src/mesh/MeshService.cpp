@@ -234,12 +234,12 @@ ErrorCode MeshService::sendQueueStatusToPhone(const meshtastic_QueueStatus &qs, 
 void MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPhone)
 {
     if(config.network.routingAlgorithm == meshtastic_Config_RoutingConfig_FishEyeState && moduleConfig.fish_eye_state_routing.enabled){
-        if(p->decoded.dest != 0 && p->decoded.dest != NODENUM_BROADCAST){
-            p->to = fishEyeStateRoutingModule->getNextHopForID(p->decoded.dest);
-        }else if ((p->decoded.dest == 0) && (p->to != 0) && (p->to != NODENUM_BROADCAST ))
+        if(p->to != 0 && p->to != NODENUM_BROADCAST && !isToUs(p)){
+            p->decoded.dest = fishEyeStateRoutingModule->getNextHopForID(p->to);
+        }else if ((p->to == 0) && (p->decoded.dest != 0) && (p->decoded.dest != NODENUM_BROADCAST ) && (p->decoded.dest != nodeDB->getNodeNum()))
         {
-            p->decoded.dest = p->to;
-            p->to = fishEyeStateRoutingModule->getNextHopForID(p->decoded.dest);
+            p->to = p->decoded.dest;
+            p->decoded.dest = fishEyeStateRoutingModule->getNextHopForID(p->to);
         }
     }
 

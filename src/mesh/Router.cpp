@@ -653,13 +653,14 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
     if (!skipHandle) {
         MeshModule::callModules(*p, src);
 
-        if(config.network.routingAlgorithm == meshtastic_Config_RoutingConfig_FishEyeState && moduleConfig.fish_eye_state_routing.enabled && (isToUs(p) && (p->decoded.dest != nodeDB->getNodeNum()) && (p->decoded.dest != 0) && (p->decoded.dest != NODENUM_BROADCAST))){
+        if(config.network.routingAlgorithm == meshtastic_Config_RoutingConfig_FishEyeState && moduleConfig.fish_eye_state_routing.enabled && (!isToUs(p) && (p->decoded.dest == nodeDB->getNodeNum()) && (p->to != 0) && (p->to != NODENUM_BROADCAST))){
             meshtastic_MeshPacket *copy = allocForSending();
             copy->decoded = p->decoded;
-            copy->to = fishEyeStateRoutingModule->getNextHopForID(copy->decoded.dest);
+            copy->to = p->to; 
+            copy->decoded.dest = fishEyeStateRoutingModule->getNextHopForID(copy->to);
             copy->from = nodeDB->getNodeNum();
             char * logout = "";
-            sprintf(logout, "Forwarding Package to Node %u to Next-Hop %u",p->decoded.dest,copy->to);
+            sprintf(logout, "Forwarding Package to Node %u to Next-Hop %u",copy->to,copy->decoded.dest);
             LOG_DEBUG(logout);
             service->sendToMesh(copy);
         }
