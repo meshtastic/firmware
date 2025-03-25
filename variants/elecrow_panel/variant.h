@@ -3,7 +3,7 @@
 
 #define PIN_BUZZER 8
 
-#if TFT_HEIGHT == 320 //2.4 and 2.8 TFT
+#if TFT_HEIGHT == 320 && not defined(HAS_TFT) // 2.4 and 2.8 TFT
 // ST7789 TFT LCD
 #define ST7789_CS 40
 #define ST7789_RS 41  // DC
@@ -15,7 +15,7 @@
 #define ST7789_BL 38
 #define ST7789_SPI_HOST SPI2_HOST
 #define TFT_BL 38
-#define SPI_FREQUENCY 40000000
+#define SPI_FREQUENCY 60000000
 #define SPI_READ_FREQUENCY 16000000
 #define TFT_OFFSET_ROTATION 0
 #define SCREEN_ROTATE
@@ -27,10 +27,10 @@
 #define SCREEN_TOUCH_INT 47
 #define SCREEN_TOUCH_RST 48
 #define TOUCH_I2C_PORT 0
-#define TOUCH_SLAVE_ADDRESS 0x5D // GT911
+#define TOUCH_SLAVE_ADDRESS 0x38 // FT5x06
 #endif
 
-#if TFT_HEIGHT == 480 // 3.5 TFT
+#if TFT_HEIGHT == 480 && not defined(HAS_TFT) // 3.5 TFT
 // ILI9488 TFT LCD
 #define ILI9488_CS 40
 #define ILI9488_RS 41  // DC
@@ -120,27 +120,31 @@
 #define SC7277_PCLK_ACTIVE_NEG 0
 #endif
 
+#if TFT_HEIGHT == 320
 // dac / amp
-// #define HAS_I2S // cannot use LoRa / I2S / SDCard together
-// #define DAC_I2S_BCK 5
-// #define DAC_I2S_WS 6
-// #define DAC_I2S_DOUT 4
-// #define DAC_I2S_MCLK 0 // GPIO lrck mic
-
+#define HAS_I2S
+#define DAC_I2S_BCK 13
+#define DAC_I2S_WS 11
+#define DAC_I2S_DOUT 12
+#define DAC_I2S_MCLK 0
+#endif
 
 // GPS via UART1 connector
 #define HAS_GPS 1
-//#define GPS_DEFAULT_NOT_PRESENT 1
+// #define GPS_DEFAULT_NOT_PRESENT 1
 #define GPS_RX_PIN 18
 #define GPS_TX_PIN 17
 
-#if TFT_HEIGHT == 320 || TFT_HEIGHT == 480 //2.4 - 3.5 TFT
-// SDCard (from 4.3 only if LoRa is disabled)
-#define HAS_SDCARD
+#if TFT_HEIGHT == 320 || TFT_HEIGHT == 480
+// SDCard 2.4 - 3.5 TFT
+// #define HAS_SDCARD -> must be defined in platformio.ini
 #define SPI_SCK 5
 #define SPI_MISO 4
 #define SPI_MOSI 6
 #define SDCARD_CS 7 // SD does not support -1
+#else
+// SDCard (from 4.3 only if LoRa is disabled)
+
 #endif
 
 // Extension Slot Layout, viewed from above (2.4-3.5)
@@ -167,13 +171,13 @@
 #define USE_SX1262
 #define LORA_CS 0 // GND
 
-#if TFT_HEIGHT == 320 || TFT_HEIGHT == 480 //2.4 - 3.5 TFT
+#if TFT_HEIGHT == 320 || TFT_HEIGHT == 480 // 2.4 - 3.5 TFT
 #define LORA_SCK 10
 #define LORA_MISO 9
 #define LORA_MOSI 3
 
 #define LORA_RESET 2
-#define LORA_DIO1 1 // SX1262 IRQ
+#define LORA_DIO1 1  // SX1262 IRQ
 #define LORA_DIO2 46 // SX1262 BUSY
 
 // need to pull IO45 low to enable LORA and disable Microphone on 24 28 35
@@ -186,7 +190,7 @@
 
 #define LORA_RESET 19
 #define LORA_DIO1 20 // SX1262 IRQ
-#define LORA_DIO2 2 // SX1262 BUSY
+#define LORA_DIO2 2  // SX1262 BUSY
 #endif
 
 #define SX126X_CS LORA_CS
