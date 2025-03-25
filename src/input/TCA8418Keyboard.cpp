@@ -107,41 +107,41 @@ enum {
 #define _TCA8418_ROWS 4
 #define _TCA8418_NUM_KEYS 12
 
-uint8_t TCA8418TapMod[_TCA8418_NUM_KEYS] = {13, 7, 7, 7, 7, 7, 9, 7, 9, 2, 2, 2}; // Num chars per key, Modulus for rotating through characters
+uint8_t TCA8418TapMod[_TCA8418_NUM_KEYS] = {13, 7, 7, 7, 7, 7,
+                                            9,  7, 9, 2, 2, 2}; // Num chars per key, Modulus for rotating through characters
 
 unsigned char TCA8418TapMap[_TCA8418_NUM_KEYS][13] = {
-  {'1', '.', ',', '?', '!', ':', ';', '-', '_', '\\', '/', '(', ')'}, // 1
-  {'2', 'a', 'b', 'c', 'A', 'B', 'C'},                                // 2
-  {'3', 'd', 'e', 'f', 'D', 'E', 'F'},                                // 3
-  {'4', 'g', 'h', 'i', 'G', 'H', 'I'},                                // 4
-  {'5', 'j', 'k', 'l', 'J', 'K', 'L'},                                // 5
-  {'6', 'm', 'n', 'o', 'M', 'N', 'O'},                                // 6
-  {'7', 'p', 'q', 'r', 's', 'P', 'Q', 'R', 'S'},                      // 7
-  {'8', 't', 'u', 'v', 'T', 'U', 'V'},                                // 8
-  {'9', 'w', 'x', 'y', 'z', 'W', 'X', 'Y', 'Z'},                      // 9
-  {'*', '+'},                                                         // *
-  {'0', ' '},                                                         // 0
-  {'#', '@'},                                                         // #
+    {'1', '.', ',', '?', '!', ':', ';', '-', '_', '\\', '/', '(', ')'}, // 1
+    {'2', 'a', 'b', 'c', 'A', 'B', 'C'},                                // 2
+    {'3', 'd', 'e', 'f', 'D', 'E', 'F'},                                // 3
+    {'4', 'g', 'h', 'i', 'G', 'H', 'I'},                                // 4
+    {'5', 'j', 'k', 'l', 'J', 'K', 'L'},                                // 5
+    {'6', 'm', 'n', 'o', 'M', 'N', 'O'},                                // 6
+    {'7', 'p', 'q', 'r', 's', 'P', 'Q', 'R', 'S'},                      // 7
+    {'8', 't', 'u', 'v', 'T', 'U', 'V'},                                // 8
+    {'9', 'w', 'x', 'y', 'z', 'W', 'X', 'Y', 'Z'},                      // 9
+    {'*', '+'},                                                         // *
+    {'0', ' '},                                                         // 0
+    {'#', '@'},                                                         // #
 };
 
 unsigned char TCA8418LongPressMap[_TCA8418_NUM_KEYS] = {
-  _TCA8418_ESC,    // 1
-  _TCA8418_UP,     // 2
-  _TCA8418_NONE,   // 3
-  _TCA8418_LEFT,   // 4
-  _TCA8418_NONE,   // 5
-  _TCA8418_RIGHT,  // 6
-  _TCA8418_NONE,   // 7
-  _TCA8418_DOWN,   // 8
-  _TCA8418_NONE,   // 9
-  _TCA8418_BSP,    // *
-  _TCA8418_NONE,   // 0
-  _TCA8418_NONE,   // #
+    _TCA8418_ESC,   // 1
+    _TCA8418_UP,    // 2
+    _TCA8418_NONE,  // 3
+    _TCA8418_LEFT,  // 4
+    _TCA8418_NONE,  // 5
+    _TCA8418_RIGHT, // 6
+    _TCA8418_NONE,  // 7
+    _TCA8418_DOWN,  // 8
+    _TCA8418_NONE,  // 9
+    _TCA8418_BSP,   // *
+    _TCA8418_NONE,  // 0
+    _TCA8418_NONE,  // #
 };
 
 #define _TCA8418_LONG_PRESS_THRESHOLD 2000
 #define _TCA8418_MULTI_TAP_THRESHOLD 750
-
 
 TCA8418Keyboard::TCA8418Keyboard() : m_wire(nullptr), m_addr(0), readCallback(nullptr), writeCallback(nullptr)
 {
@@ -306,9 +306,9 @@ void TCA8418Keyboard::pressed(uint8_t key)
     uint8_t next_key = 0;
     int row = (key - 1) / 10;
     int col = (key - 1) % 10;
-    
+
     if (row >= _TCA8418_ROWS || col >= _TCA8418_COLS) {
-        return;  // Invalid key
+        return; // Invalid key
     }
 
     // Compute key index based on dynamic row/column
@@ -328,17 +328,16 @@ void TCA8418Keyboard::pressed(uint8_t key)
 
     // Check if the key is the same as the last one or if the time interval has passed
     if (next_key != last_key || tap_interval > _TCA8418_MULTI_TAP_THRESHOLD) {
-        char_idx = 0;  // Reset char index if new key or long press
+        char_idx = 0;             // Reset char index if new key or long press
         should_backspace = false; // dont backspace on new key
     } else {
-        char_idx += 1;  // Cycle through characters if same key pressed
+        char_idx += 1;           // Cycle through characters if same key pressed
         should_backspace = true; // allow backspace on same key
     }
 
     // Store the current key as the last key
     last_key = next_key;
     last_tap = now;
-
 }
 
 void TCA8418Keyboard::released()
@@ -559,5 +558,4 @@ void TCA8418Keyboard::writeRegister(uint8_t reg, uint8_t value)
     if (writeCallback) {
         writeCallback(m_addr, data[0], &(data[1]), 1);
     }
-} 
-
+}

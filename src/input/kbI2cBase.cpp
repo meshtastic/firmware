@@ -169,8 +169,8 @@ int32_t KbI2cBase::runOnce()
         }
         break;
     }
-    
-        case 0x84: { // Adafruit TCA8418
+
+    case 0x84: { // Adafruit TCA8418
         TCAKeyboard.trigger();
         InputEvent e;
         while (TCAKeyboard.hasEvent()) {
@@ -232,7 +232,7 @@ int32_t KbI2cBase::runOnce()
         }
         break;
     }
-        
+
     case 0x37: { // MPR121
         MPRkeyboard.trigger();
         InputEvent e;

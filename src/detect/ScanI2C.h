@@ -17,7 +17,7 @@ class ScanI2C
         CARDKB,
         TDECKKB,
         BBQ10KB,
-        RAK14004, 
+        RAK14004,
         PMU_AXP192_AXP2101, // has the same address as the TCA8418KB
         BME_680,
         BME_280,
