@@ -628,8 +628,13 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
          meshtastic_Config_PositionConfig_PositionFlags_SPEED | meshtastic_Config_PositionConfig_PositionFlags_HEADING |
          meshtastic_Config_PositionConfig_PositionFlags_DOP | meshtastic_Config_PositionConfig_PositionFlags_SATINVIEW);
 
+// Set default value for 'Mesh via UDP'
+#if HAS_UDP_MULTICAST
 #ifdef USERPREFS_NETWORK_ENABLED_PROTOCOLS
     config.network.enabled_protocols = USERPREFS_NETWORK_ENABLED_PROTOCOLS;
+#else
+    config.network.enabled_protocols = 1;
+#endif
 #endif
 
 #ifdef USERPREFS_NETWORK_WIFI_ENABLED
