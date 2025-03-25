@@ -10,11 +10,6 @@
 #include "meshUtils.h" // vformat
 #endif
 
-// AXP192 and AXP2101 have the same device address, we just need to identify it in Power.cpp
-//#ifndef XPOWERS_AXP192_AXP2101_ADDRESS
-//#define XPOWERS_AXP192_AXP2101_ADDRESS 0x34
-//#endif
-
 bool in_array(uint8_t *array, int size, uint8_t lookfor)
 {
     int i;
@@ -230,9 +225,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 #ifdef HAS_NCP5623
                 SCAN_SIMPLE_CASE(NCP5623_ADDR, NCP5623, "NCP5623", (uint8_t)addr.address);
 #endif
-//#ifdef HAS_PMU
-//                SCAN_SIMPLE_CASE(XPOWERS_AXP192_AXP2101_ADDRESS, PMU_AXP192_AXP2101, "AXP192/AXP2101", (uint8_t)addr.address)
-//#endif
+
             case BME_ADDR:
             case BME_ADDR_ALTERNATE:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xD0), 1); // GET_ID

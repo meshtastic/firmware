@@ -134,7 +134,7 @@ unsigned char TCA8418LongPressMap[_TCA8418_NUM_KEYS] = {
   _TCA8418_NONE,   // 7
   _TCA8418_DOWN,   // 8
   _TCA8418_NONE,   // 9
-  _TCA8418_NONE,   // *
+  _TCA8418_BSP,    // *
   _TCA8418_NONE,   // 0
   _TCA8418_NONE,   // #
 };
@@ -142,14 +142,13 @@ unsigned char TCA8418LongPressMap[_TCA8418_NUM_KEYS] = {
 #define _TCA8418_LONG_PRESS_THRESHOLD 2000
 #define _TCA8418_MULTI_TAP_THRESHOLD 750
 
-// #define LAYOUT Adafruit3x4
-
-
 
 TCA8418Keyboard::TCA8418Keyboard() : m_wire(nullptr), m_addr(0), readCallback(nullptr), writeCallback(nullptr)
 {
     state = Init;
     last_key = -1;
+    next_key = -1;
+    should_backspace = false;
     last_tap = 0L;
     char_idx = 0;
     tap_interval = 0;
@@ -330,8 +329,10 @@ void TCA8418Keyboard::pressed(uint8_t key)
     // Check if the key is the same as the last one or if the time interval has passed
     if (next_key != last_key || tap_interval > _TCA8418_MULTI_TAP_THRESHOLD) {
         char_idx = 0;  // Reset char index if new key or long press
+        should_backspace = false; // dont backspace on new key
     } else {
         char_idx += 1;  // Cycle through characters if same key pressed
+        should_backspace = true; // allow backspace on same key
     }
 
     // Store the current key as the last key
@@ -354,7 +355,7 @@ void TCA8418Keyboard::released()
     uint32_t now = millis();
     int32_t held_interval = now - last_tap;
     last_tap = now;
-    if (tap_interval < _TCA8418_MULTI_TAP_THRESHOLD) {
+    if (tap_interval < _TCA8418_MULTI_TAP_THRESHOLD && should_backspace) {
         queueEvent(_TCA8418_BSP);
     }
     if (held_interval > _TCA8418_LONG_PRESS_THRESHOLD) {
