@@ -628,6 +628,22 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
          meshtastic_Config_PositionConfig_PositionFlags_SPEED | meshtastic_Config_PositionConfig_PositionFlags_HEADING |
          meshtastic_Config_PositionConfig_PositionFlags_DOP | meshtastic_Config_PositionConfig_PositionFlags_SATINVIEW);
 
+#ifdef USERPREFS_NETWORK_ENABLED_PROTOCOLS
+    config.network.enabled_protocols = USERPREFS_NETWORK_ENABLED_PROTOCOLS;
+#endif
+
+#ifdef USERPREFS_NETWORK_WIFI_ENABLED
+    config.network.wifi_enabled = USERPREFS_NETWORK_WIFI_ENABLED;
+#endif
+
+#ifdef USERPREFS_NETWORK_WIFI_SSID
+    strncpy(config.network.wifi_ssid, USERPREFS_NETWORK_WIFI_SSID, sizeof(config.network.wifi_ssid));
+#endif
+
+#ifdef USERPREFS_NETWORK_WIFI_PSK
+    strncpy(config.network.wifi_psk, USERPREFS_NETWORK_WIFI_PSK, sizeof(config.network.wifi_psk));
+#endif
+
 #ifdef DISPLAY_FLIP_SCREEN
     config.display.flip_screen = true;
 #endif
