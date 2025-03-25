@@ -115,7 +115,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define BUTTON_PIN (-1)
 #endif
 
-// I2C Keyboards (M5Stack, RAK14004, T-Deck, TCA8418)
+// I2C Keyboards (M5Stack, RAK14004, T-Deck)
 #define CARDKB_ADDR 0x5F
 #define TDECK_KB_ADDR 0x55
 #define BBQ10_KB_ADDR 0x1F
