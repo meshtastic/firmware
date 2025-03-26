@@ -137,6 +137,10 @@ void setupNicheGraphics();
 #include "nicheGraphics.h"
 #endif
 
+#if defined(HW_SPI1_DEVICE) && defined(ELECROW)
+SPIClass SPI1(HSPI);
+#endif
+
 using namespace concurrency;
 
 volatile static const char slipstreamTZString[] = {USERPREFS_TZ_STRING};
@@ -789,10 +793,16 @@ void setup()
 #elif !defined(ARCH_ESP32) // ARCH_RP2040
     SPI.begin();
 #else
-    // ESP32
+        // ESP32
+#if defined(HW_SPI1_DEVICE) && defined(ELECROW)
+    SPI1.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
+    LOG_DEBUG("SPI1.begin(SCK=%d, MISO=%d, MOSI=%d, NSS=%d)", LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
+    SPI1.setFrequency(4000000);
+#else
     SPI.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
     LOG_DEBUG("SPI.begin(SCK=%d, MISO=%d, MOSI=%d, NSS=%d)", LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
     SPI.setFrequency(4000000);
+#endif
 #endif
 
     // Initialize the screen first so we can show the logo while we start up everything else.
