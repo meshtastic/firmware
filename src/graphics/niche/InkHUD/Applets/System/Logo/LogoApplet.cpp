@@ -95,8 +95,10 @@ void InkHUD::LogoApplet::onShutdown()
 
     inverted = true;
     inkhud->forceUpdate(Drivers::EInk::FULL, false);
+    delay(1000); // Cooldown. Back to back updates aren't great for health.
     inverted = false;
     inkhud->forceUpdate(Drivers::EInk::FULL, false);
+    delay(1000); // Cooldown
 
     // Prepare for the powered-off screen now
     // We can change these values because the initial "shutting down" screen has already rendered at this point

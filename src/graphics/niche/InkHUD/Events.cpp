@@ -95,6 +95,7 @@ int InkHUD::Events::beforeDeepSleep(void *unused)
     // We're updating to show that one now.
 
     inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FULL, false);
+    delay(1000); // Cooldown, before potentially yanking display power
 
     return 0; // We agree: deep sleep now
 }
