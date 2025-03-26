@@ -25,6 +25,7 @@ class LogoApplet : public SystemApplet, public concurrency::OSThread
     void onForeground() override;
     void onBackground() override;
     void onShutdown() override;
+    void onReboot() override;
 
   protected:
     int32_t runOnce() override;

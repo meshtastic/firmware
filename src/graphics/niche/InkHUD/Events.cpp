@@ -111,16 +111,16 @@ int InkHUD::Events::beforeReboot(void *unused)
         a->onDeactivate();
         a->onShutdown();
     }
-    for (Applet *sa : inkhud->systemApplets) {
+    for (SystemApplet *sa : inkhud->systemApplets) {
         // Note: no onDeactivate. System applets are always active.
-        sa->onShutdown();
+        sa->onReboot();
     }
 
     inkhud->persistence->saveSettings();
     inkhud->persistence->saveLatestMessage();
 
     // Note: no forceUpdate call here
-    // Because OSThread will not be given another chance to run before reboot, this means that no display update will occur
+    // We don't have any final screen to draw, although LogoApplet::onReboot did already display a "rebooting" screen
 
     return 0; // No special status to report. Ignored anyway by this Observable
 }

@@ -108,6 +108,19 @@ void InkHUD::LogoApplet::onShutdown()
     // This is then drawn by InkHUD::Events::onShutdown, with a blocking FULL update, after InkHUD's flash write is complete
 }
 
+void InkHUD::LogoApplet::onReboot()
+{
+    bringToForeground();
+
+    textLeft = "";
+    textRight = "";
+    textTitle = "Rebooting...";
+    fontTitle = fontSmall;
+
+    inkhud->forceUpdate(Drivers::EInk::FULL, false);
+    // Perform the update right now, waiting here until complete
+}
+
 int32_t InkHUD::LogoApplet::runOnce()
 {
     sendToBackground();
