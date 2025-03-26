@@ -198,11 +198,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 /* Step #1: offer chance for variant-specific defines */
 #include "variant.h"
 
-// Define BUTTON_PIN to ensure button setup is always done
-#ifndef BUTTON_PIN
-#define BUTTON_PIN (-1)
-#endif
-
 #if defined(VEXT_ENABLE) && !defined(VEXT_ON_VALUE)
 // Older variant.h files might not be defining this value, so stay with the old default
 #define VEXT_ON_VALUE LOW
