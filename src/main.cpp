@@ -319,9 +319,11 @@ void setup()
     SPISettings spiSettings(4000000, MSBFIRST, SPI_MODE0);
 #endif
 
+#if !HAS_TFT
     meshtastic_Config_DisplayConfig_OledType screen_model =
         meshtastic_Config_DisplayConfig_OledType::meshtastic_Config_DisplayConfig_OledType_OLED_AUTO;
     OLEDDISPLAY_GEOMETRY screen_geometry = GEOMETRY_128_64;
+#endif
 
 #ifdef USE_SEGGER
     auto mode = false ? SEGGER_RTT_MODE_BLOCK_IF_FIFO_FULL : SEGGER_RTT_MODE_NO_BLOCK_TRIM;
@@ -545,6 +547,7 @@ void setup()
     }
 #endif
 
+#if !HAS_TFT
     auto screenInfo = i2cScanner->firstScreen();
     screen_found = screenInfo.type != ScanI2C::DeviceType::NONE ? screenInfo.address : ScanI2C::ADDRESS_NONE;
 
@@ -562,6 +565,7 @@ void setup()
             screen_model = meshtastic_Config_DisplayConfig_OledType::meshtastic_Config_DisplayConfig_OledType_OLED_AUTO;
         }
     }
+#endif
 
 #define UPDATE_FROM_SCANNER(FIND_FN)
 
@@ -725,9 +729,11 @@ void setup()
     else
         playStartMelody();
 
+#if !HAS_TFT
     // fixed screen override?
     if (config.display.oled != meshtastic_Config_DisplayConfig_OledType_OLED_AUTO)
         screen_model = config.display.oled;
+#endif
 
 #if defined(USE_SH1107)
     screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // set dimension of 128x128
