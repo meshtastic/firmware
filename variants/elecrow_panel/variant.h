@@ -131,7 +131,7 @@
 
 // GPS via UART1 connector
 #define HAS_GPS 1
-// #define GPS_DEFAULT_NOT_PRESENT 1
+#define GPS_DEFAULT_NOT_PRESENT 1
 #define GPS_RX_PIN 18
 #define GPS_TX_PIN 17
 
