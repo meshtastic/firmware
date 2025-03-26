@@ -133,7 +133,7 @@ static void onNetworkConnected()
     }
 
 #if HAS_UDP_MULTICAST
-    if (udpThread) {
+    if (udpThread && config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST) {
         udpThread->start();
     }
 #endif

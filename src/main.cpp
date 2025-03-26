@@ -568,6 +568,10 @@ void setup()
             // assign an arbitrary value to distinguish from other models
             kb_model = 0x37;
             break;
+        case ScanI2C::DeviceType::TCA8418KB:
+            // assign an arbitrary value to distinguish from other models
+            kb_model = 0x84;
+            break;
         default:
             // use this as default since it's also just zero
             LOG_WARN("kb_info.type is unknown(0x%02x), setting kb_model=0x00", kb_info.type);
@@ -825,7 +829,9 @@ void setup()
 #ifdef ARCH_PORTDUINO
     // FIXME: portduino does not ever call onNetworkConnected so call it here because I don't know what happen if I call
     // onNetworkConnected there
-    udpThread->start();
+    if (config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST) {
+        udpThread->start();
+    }
 #endif
 #endif
     service = new MeshService();
