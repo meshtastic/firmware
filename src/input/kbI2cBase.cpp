@@ -44,7 +44,7 @@ int32_t KbI2cBase::runOnce()
                 MPRkeyboard.begin(MPR121_KB_ADDR, &Wire1);
             }
             if (cardkb_found.address == XPOWERS_AXP192_AXP2101_ADDRESS) {
-                TCAkeyboard.begin(XPOWERS_AXP192_AXP2101_ADDRESS, &Wire1);
+                TCAKeyboard.begin(XPOWERS_AXP192_AXP2101_ADDRESS, &Wire1);
             }
             break;
 #endif
