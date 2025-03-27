@@ -10,6 +10,11 @@
 #include "meshUtils.h" // vformat
 #endif
 
+// AXP192 and AXP2101 have the same device address, we just need to identify it in Power.cpp
+#ifndef XPOWERS_AXP192_AXP2101_ADDRESS
+#define XPOWERS_AXP192_AXP2101_ADDRESS 0x34
+#endif
+
 bool in_array(uint8_t *array, int size, uint8_t lookfor)
 {
     int i;
@@ -206,18 +211,6 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 }
                 break;
 
-            case XPOWERS_AXP192_AXP2101_ADDRESS:
-                // Do we have the TCA8418 instead?
-                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x02), 1);
-                if ((registerValue & 0b11100000) == 0) {
-                    logFoundDevice("TCA8418", (uint8_t)addr.address);
-                    type = TCA8418KB;
-                } else {
-                    logFoundDevice("AXP192/AXP2101", (uint8_t)addr.address);
-                    type = PMU_AXP192_AXP2101;
-                }
-                break;
-
                 SCAN_SIMPLE_CASE(TDECK_KB_ADDR, TDECKKB, "T-Deck keyboard", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(BBQ10_KB_ADDR, BBQ10KB, "BB Q10", (uint8_t)addr.address);
 
@@ -225,7 +218,9 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 #ifdef HAS_NCP5623
                 SCAN_SIMPLE_CASE(NCP5623_ADDR, NCP5623, "NCP5623", (uint8_t)addr.address);
 #endif
-
+#ifdef HAS_PMU
+                SCAN_SIMPLE_CASE(XPOWERS_AXP192_AXP2101_ADDRESS, PMU_AXP192_AXP2101, "AXP192/AXP2101", (uint8_t)addr.address)
+#endif
             case BME_ADDR:
             case BME_ADDR_ALTERNATE:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xD0), 1); // GET_ID
