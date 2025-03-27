@@ -1,0 +1,12 @@
+diff --git a/iostream/ostream.h b/iostream/ostream.h
+index e313ccf..9ac8c24 100644
+--- a/iostream/ostream.h
++++ b/iostream/ostream.h
+@@ -290,6 +290,7 @@ class ostream : public virtual ios {
+   void putNum(int64_t n);
+   void putNum(uint32_t n) { putNum(n, false); }
+   void putNum(uint64_t n) { putNum(n, false); }
++  void putNum(uintptr_t n) { putNum(n, false); }
+   void putPgm(const char *str);
+   void putStr(const char *str);
+ 

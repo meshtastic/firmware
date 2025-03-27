@@ -83,13 +83,6 @@ if platform.name == "espressif32":
         # For newer ESP32 targets, using newlib nano works better.
         env.Append(LINKFLAGS=["--specs=nano.specs", "-u", "_printf_float"])
 
-    # XXX
-    for lb in env.GetLibBuilders():
-        if lb.name == "NonBlockingRTTTL":
-            lb.env.Append(CPPDEFINES=[("QUIRK_RTTTL", 1)])
-        elif lb.name == "LovyanGFX":
-            lb.env.Append(CPPDEFINES=[("QUIRK_LOVYAN", 1)])
-
 if platform.name == "nordicnrf52":
     env.AddPostAction("$BUILD_DIR/${PROGNAME}.hex",
                       env.VerboseAction(f"\"{sys.executable}\" ./bin/uf2conv.py $BUILD_DIR/firmware.hex -c -f 0xADA52840 -o $BUILD_DIR/firmware.uf2",
@@ -140,3 +133,29 @@ for lb in env.GetLibBuilders():
     if lb.name == "meshtastic-device-ui":
         lb.env.Append(CPPDEFINES=[("APP_VERSION", verObj["long"])])
         break
+
+############################# Libraries Patching #############################
+
+env.Execute("$PYTHONEXE -m pip install patch")
+
+import pathlib
+import glob
+import os
+import patch
+
+libsToPatch = {}
+for entry in glob.glob("patches/*.patch"):
+    p = pathlib.Path(entry).stem
+    libsToPatch[p] = entry
+
+for lb in env.GetLibBuilders():
+    if lb.name in libsToPatch:
+        marker_path = os.path.join(pathlib.Path(lb.src_dir), ".patched")
+        if not os.path.exists(marker_path):
+            patch_path = libsToPatch[lb.name]
+            ps = patch.fromfile(patch_path)
+            if not ps.apply(0, lb.src_dir):
+                print(f"Failed to apply patch {patch_path}")
+                exit(1)
+            print(f"Patched {lb.name}")
+            open(marker_path, "w").close()

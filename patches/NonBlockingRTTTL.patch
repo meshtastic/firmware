@@ -1,0 +1,15 @@
+diff --git a/NonBlockingRtttl.cpp b/NonBlockingRtttl.cpp
+index 76dea43..ba8c4e5 100644
+--- a/NonBlockingRtttl.cpp
++++ b/NonBlockingRtttl.cpp
+@@ -69,8 +69,8 @@ void begin(byte iPin, const char * iSongBuffer)
+   //init values
+   pin = iPin;
+   #if defined(ESP32)
+-  ledcSetup(0, 1000, 10); // resolution always seems to be 10bit, no matter what is given
+-  ledcAttachPin(pin, 0);
++  // resolution always seems to be 10bit, no matter what is given
++  ledcAttachChannel(pin, 1000, 10, 0);
+   #endif
+   buffer = iSongBuffer;
+   bufferIndex = 0;
