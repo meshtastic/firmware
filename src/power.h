@@ -9,7 +9,7 @@
 #include <esp_adc/adc_oneshot.h>
 #include <soc/adc_channel.h>
 #include <soc/soc.h>
-#ifndef CONFIG_IDF_TARGET_ESP32C3
+#if !defined(CONFIG_IDF_TARGET_ESP32C3) && !defined(CONFIG_IDF_TARGET_ESP32C6)
 #include <soc/sens_reg.h>
 #endif
 #endif
