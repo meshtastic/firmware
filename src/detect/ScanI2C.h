@@ -18,7 +18,7 @@ class ScanI2C
         TDECKKB,
         BBQ10KB,
         RAK14004,
-        PMU_AXP192_AXP2101, // has the same address as the TCA8418KB
+        PMU_AXP192_AXP2101,
         BME_680,
         BME_280,
         BMP_280,
@@ -69,7 +69,6 @@ class ScanI2C
         DFROBOT_RAIN,
         DPS310,
         LTR390UV,
-        TCA8418KB,
     } DeviceType;
 
     // typedef uint8_t DeviceAddress;
