@@ -326,6 +326,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
         uint8_t raw_c = 0; // raw reading counter
 
 #ifndef BAT_MEASURE_ADC_UNIT // ADC1
+        int val_;
         for (int i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
             esp_err_t res = adc_oneshot_read(adc_unit_handle, adc_channel, &val_);
             if (res == ESP_OK) { // save only valid readings
@@ -609,9 +610,9 @@ bool Power::analogInit()
     adc_cali_line_fitting_efuse_val_t val_type;
     adc_cali_scheme_line_fitting_check_efuse(&val_type);
     // show ADC characterization base
-    if (val_type == ESP_ADC_CAL_VAL_EFUSE_TP) {
+    if (val_type == ADC_CALI_LINE_FITTING_EFUSE_VAL_EFUSE_TP) {
         LOG_INFO("ADC config based on Two Point values stored in eFuse");
-    } else if (val_type == ESP_ADC_CAL_VAL_EFUSE_VREF) {
+    } else if (val_type == ADC_CALI_LINE_FITTING_EFUSE_VAL_EFUSE_VREF) {
         LOG_INFO("ADC config based on reference voltage stored in eFuse");
     }
 #ifdef CONFIG_IDF_TARGET_ESP32S3
