@@ -2664,13 +2664,18 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     // minutes %= 60;
     // hours %= 24;
 
+    // Show uptime as days, hours, minutes OR seconds
+    std::string uptime = screen->drawTimeDelta(days, hours, minutes, seconds);
+
+    // Line 1 (Still)
+    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(uptime.c_str()), y, uptime.c_str());
+    if (config.display.heading_bold)
+        display->drawString(x - 1 + SCREEN_WIDTH - display->getStringWidth(uptime.c_str()), y, uptime.c_str());
+
     display->setColor(WHITE);
 
     // Setup string to assemble analogClock string
     std::string analogClock = "";
-
-    // Show uptime as days, hours, minutes OR seconds
-    std::string uptime = screen->drawTimeDelta(days, hours, minutes, seconds);
 
     uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true); // Display local timezone
     if (rtc_sec > 0) {
@@ -2704,9 +2709,6 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
         analogClock += timebuf;
     }
 
-    // Line 1
-    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(uptime.c_str()), y, uptime.c_str());
-
     // Line 2
     display->drawString(x, y + FONT_HEIGHT_SMALL * 1, analogClock.c_str());
 
@@ -2728,7 +2730,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
         drawGPSpowerstat(display, x, y + FONT_HEIGHT_SMALL * 2, gpsStatus);
     }
 #endif
-    /* Display a heartbeat pixel that blinks every time the frame is redrawn */
+/* Display a heartbeat pixel that blinks every time the frame is redrawn */
 #ifdef SHOW_REDRAWS
     if (heartbeat)
         display->setPixel(0, 0);
