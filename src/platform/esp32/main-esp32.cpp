@@ -1,6 +1,7 @@
 #include "PowerFSM.h"
 #include "PowerMon.h"
 #include "configuration.h"
+#include "esp_mac.h"
 #include "esp_task_wdt.h"
 #include "main.h"
 
@@ -163,16 +164,12 @@ void esp32Setup()
 // #define APP_WATCHDOG_SECS 45
 #define APP_WATCHDOG_SECS 90
 
-#ifdef CONFIG_IDF_TARGET_ESP32C6
     esp_task_wdt_config_t *wdt_config = (esp_task_wdt_config_t *)malloc(sizeof(esp_task_wdt_config_t));
     wdt_config->timeout_ms = APP_WATCHDOG_SECS * 1000;
     wdt_config->trigger_panic = true;
     res = esp_task_wdt_init(wdt_config);
     assert(res == ESP_OK);
-#else
-    res = esp_task_wdt_init(APP_WATCHDOG_SECS, true);
-    assert(res == ESP_OK);
-#endif
+
     res = esp_task_wdt_add(NULL);
     assert(res == ESP_OK);
 
@@ -253,8 +250,10 @@ void cpuDeepSleep(uint32_t msecToWake)
 #endif // #end ESP32S3_WAKE_TYPE
 #endif
 
+#if SOC_PM_SUPPORT_RTC_PERIPH_PD
     // We want RTC peripherals to stay on
     esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
+#endif
 
     esp_sleep_enable_timer_wakeup(msecToWake * 1000ULL); // call expects usecs
     esp_deep_sleep_start();                              // TBD mA sleep current (battery)

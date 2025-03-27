@@ -22,8 +22,6 @@
 // https://www.waveshare.com/img/devkit/ESP32-S3-Pico/ESP32-S3-Pico-details-inter-1.jpg
 // digram is incorrect labeled as battery pin is getting readings on GPIO7_CH1?
 #define BATTERY_PIN 7
-#define ADC_CHANNEL ADC1_GPIO7_CHANNEL
-// #define ADC_CHANNEL ADC1_GPIO6_CHANNEL
 //   ratio of voltage divider = 3.0 (R17=200k, R18=100k)
 #define ADC_MULTIPLIER 3.1 // 3.0 + a bit for being optimistic
 

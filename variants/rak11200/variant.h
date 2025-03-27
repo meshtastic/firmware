@@ -49,7 +49,6 @@ static const uint8_t SCK = 33;
 
 #define PIN_VBAT WB_A0
 #define BATTERY_PIN PIN_VBAT
-#define ADC_CHANNEL ADC1_GPIO36_CHANNEL
 
 // https://docs.rakwireless.com/Product-Categories/WisBlock/RAK13300/
 

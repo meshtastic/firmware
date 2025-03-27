@@ -25,7 +25,6 @@
 #define VEXT_ON_VALUE LOW
 #define ADC_CTRL 19
 #define BATTERY_PIN 20
-#define ADC_CHANNEL ADC2_GPIO20_CHANNEL
 #define ADC_MULTIPLIER 2                // Voltage divider is roughly 1:1
 #define BAT_MEASURE_ADC_UNIT 2          // Use ADC2
 #define ADC_ATTENUATION ADC_ATTEN_DB_12 // Voltage divider output is quite high

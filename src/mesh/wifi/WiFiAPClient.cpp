@@ -345,12 +345,8 @@ static void WiFiEvent(WiFiEvent_t event)
         onNetworkConnected();
         break;
     case ARDUINO_EVENT_WIFI_STA_GOT_IP6:
-#if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
         LOG_INFO("Obtained Local IP6 address: %s", WiFi.linkLocalIPv6().toString().c_str());
         LOG_INFO("Obtained GlobalIP6 address: %s", WiFi.globalIPv6().toString().c_str());
-#else
-        LOG_INFO("Obtained IP6 address: %s", WiFi.localIPv6().toString().c_str());
-#endif
         break;
     case ARDUINO_EVENT_WIFI_STA_LOST_IP:
         LOG_INFO("Lost IP address and IP address is reset to 0");

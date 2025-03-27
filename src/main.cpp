@@ -40,6 +40,7 @@
 #include <utility>
 
 #ifdef ARCH_ESP32
+#include "driver/gpio.h"
 #include "freertosinc.h"
 #if !MESHTASTIC_EXCLUDE_WEBSERVER
 #include "mesh/http/WebServer.h"

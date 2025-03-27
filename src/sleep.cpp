@@ -17,8 +17,6 @@
 #include "target_specific.h"
 
 #ifdef ARCH_ESP32
-// "esp_pm_config_esp32_t is deprecated, please include esp_pm.h and use esp_pm_config_t instead"
-#include "esp32/pm.h"
 #include "esp_pm.h"
 #if HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
@@ -364,7 +362,9 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     // NOTE! ESP docs say we must disable bluetooth and wifi before light sleep
 
     // We want RTC peripherals to stay on
+#if SOC_PM_SUPPORT_RTC_PERIPH_PD
     esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
+#endif
 
 #if defined(BUTTON_PIN) && defined(BUTTON_NEED_PULLUP)
     gpio_pullup_en((gpio_num_t)BUTTON_PIN);
