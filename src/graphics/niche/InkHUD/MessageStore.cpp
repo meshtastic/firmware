@@ -10,7 +10,7 @@ using namespace NicheGraphics;
 // Avoid filling the storage if something goes wrong
 // Normal usage should be well below this size
 constexpr uint8_t MAX_MESSAGES_SAVED = 10;
-constexpr uint32_t MAX_MESSAGE_SIZE = 250;
+constexpr size_t MAX_MESSAGE_SIZE = 250;
 
 InkHUD::MessageStore::MessageStore(std::string label)
 {

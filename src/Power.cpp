@@ -439,6 +439,8 @@ class AnalogBatteryLevel : public HasBatteryLevel
         return isBatteryConnect() && isVbusIn();
 #endif
 #endif
+        // XXX #defines above eat all the code on seeed-sensecap-indicator-tft
+        return false;
     }
 
   private:

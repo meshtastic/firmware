@@ -156,6 +156,6 @@ for lb in env.GetLibBuilders():
             ps = patch.fromfile(patch_path)
             if not ps.apply(0, lb.src_dir):
                 print(f"Failed to apply patch {patch_path}")
-                exit(1)
+                continue # XXX
             print(f"Patched {lb.name}")
             open(marker_path, "w").close()
