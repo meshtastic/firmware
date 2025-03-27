@@ -31,7 +31,7 @@
 #define BUTTON_NEED_PULLUP
 
 // Buzzer - noisy ?
-//#define PIN_BUZZER (0 + 18)
+#define PIN_BUZZER (0 + 18)
 
 // Wheel
 //  Up         6
@@ -55,6 +55,7 @@
 #define LORA_DIO1 16
 #define LORA_DIO2 17
 
+// per SX1262_Receive_Interrupt/utilities.h
 #ifdef USE_SX1262
 #define SX126X_CS LORA_CS
 #define SX126X_DIO1 LORA_DIO1
@@ -64,6 +65,7 @@
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 #endif
 
+// per SX128x_Receive_Interrupt/utilities.h
 #ifdef USE_SX1280
 #define SX128X_CS LORA_CS
 #define SX128X_DIO1 LORA_DIO1
