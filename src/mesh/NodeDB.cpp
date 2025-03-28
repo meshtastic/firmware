@@ -51,6 +51,10 @@
 #include <utility/bonding.h>
 #endif
 
+#if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WIFI
+#include <WiFiOTA.h>
+#endif
+
 NodeDB *nodeDB = nullptr;
 
 // we have plenty of ram so statically alloc this tempbuf (for now)
@@ -624,6 +628,27 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
          meshtastic_Config_PositionConfig_PositionFlags_SPEED | meshtastic_Config_PositionConfig_PositionFlags_HEADING |
          meshtastic_Config_PositionConfig_PositionFlags_DOP | meshtastic_Config_PositionConfig_PositionFlags_SATINVIEW);
 
+// Set default value for 'Mesh via UDP'
+#if HAS_UDP_MULTICAST
+#ifdef USERPREFS_NETWORK_ENABLED_PROTOCOLS
+    config.network.enabled_protocols = USERPREFS_NETWORK_ENABLED_PROTOCOLS;
+#else
+    config.network.enabled_protocols = 1;
+#endif
+#endif
+
+#ifdef USERPREFS_NETWORK_WIFI_ENABLED
+    config.network.wifi_enabled = USERPREFS_NETWORK_WIFI_ENABLED;
+#endif
+
+#ifdef USERPREFS_NETWORK_WIFI_SSID
+    strncpy(config.network.wifi_ssid, USERPREFS_NETWORK_WIFI_SSID, sizeof(config.network.wifi_ssid));
+#endif
+
+#ifdef USERPREFS_NETWORK_WIFI_PSK
+    strncpy(config.network.wifi_psk, USERPREFS_NETWORK_WIFI_PSK, sizeof(config.network.wifi_psk));
+#endif
+
 #ifdef DISPLAY_FLIP_SCREEN
     config.display.flip_screen = true;
 #endif
@@ -633,6 +658,12 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #if defined(T_WATCH_S3) || defined(SENSECAP_INDICATOR)
     config.display.screen_on_secs = 30;
     config.display.wake_on_tap_or_motion = true;
+#endif
+
+#if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WIFI
+    if (WiFiOTA::isUpdated()) {
+        WiFiOTA::recoverConfig(&config.network);
+    }
 #endif
 
     initConfigIntervals();
@@ -1427,13 +1458,14 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
 #if !(MESHTASTIC_EXCLUDE_PKI)
     if (p.public_key.size > 0) {
         printBytes("Incoming Pubkey: ", p.public_key.bytes, 32);
-        if (info->user.public_key.size > 0) { // if we have a key for this user already, don't overwrite with a new one
-            LOG_INFO("Public Key set for node, not updating!");
-            // we copy the key into the incoming packet, to prevent overwrite
-            memcpy(p.public_key.bytes, info->user.public_key.bytes, 32);
-        } else {
-            LOG_INFO("Update Node Pubkey!");
-        }
+    }
+    if (info->user.public_key.size > 0) { // if we have a key for this user already, don't overwrite with a new one
+        LOG_INFO("Public Key set for node, not updating!");
+        // we copy the key into the incoming packet, to prevent overwrite
+        p.public_key.size = 32;
+        memcpy(p.public_key.bytes, info->user.public_key.bytes, 32);
+    } else if (p.public_key.size > 0) {
+        LOG_INFO("Update Node Pubkey!");
     }
 #endif
 

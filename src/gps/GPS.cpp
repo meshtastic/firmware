@@ -1200,12 +1200,12 @@ GnssModel_t GPS::probe(int serialSpeed)
     PROBE_SIMPLE("LC86", "$PQTMVERNO*58", "$PQTMVERNO,LC86", GNSS_MODEL_AG3352, 500);
     PROBE_SIMPLE("L76K", "$PCAS06,0*1B", "$GPTXT,01,01,02,SW=", GNSS_MODEL_MTK, 500);
 
-    // Close all NMEA sentences, valid for L76B MTK platform (Waveshare Pico GPS)
+    // Close all NMEA sentences, valid for MTK3333 and MTK3339 platforms
     _serial_gps->write("$PMTK514,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*2E\r\n");
     delay(20);
     std::vector<ChipInfo> mtk = {{"L76B", "Quectel-L76B", GNSS_MODEL_MTK_L76B},
                                  {"PA1616S", "1616S", GNSS_MODEL_MTK_PA1616S},
-                                 {"LS20031", "MC-1513", GNSS_MODEL_LS20031}};
+                                 {"LS20031", "MC-1513", GNSS_MODEL_MTK_L76B}};
     PROBE_FAMILY("MTK Family", "$PMTK605*31", mtk, 500);
 
     uint8_t cfg_rate[] = {0xB5, 0x62, 0x06, 0x08, 0x00, 0x00, 0x00, 0x00};
