@@ -1,0 +1,52 @@
+diff --git a/libpax_api.h b/libpax_api.h
+index 0cafbd7..096332e 100644
+--- a/libpax_api.h
++++ b/libpax_api.h
+@@ -8,20 +8,20 @@
+ // #define LIBPAX_WIFI // enables WiFi sniffing features in build 
+ // #define LIBPAX_BLE  // enables BLE sniffing features in build
+ 
+-#define WIFI_CHANNEL_ALL    0b1111111111111
+-#define WIFI_CHANNEL_1      0b0000000000001
+-#define WIFI_CHANNEL_2      0b0000000000010
+-#define WIFI_CHANNEL_3      0b0000000000100
+-#define WIFI_CHANNEL_4      0b0000000001000
+-#define WIFI_CHANNEL_5      0b0000000010000
+-#define WIFI_CHANNEL_6      0b0000000100000
+-#define WIFI_CHANNEL_7      0b0000001000000
+-#define WIFI_CHANNEL_8      0b0000010000000
+-#define WIFI_CHANNEL_9      0b0000100000000
+-#define WIFI_CHANNEL_10     0b0001000000000
+-#define WIFI_CHANNEL_11     0b0010000000000
+-#define WIFI_CHANNEL_12     0b0100000000000
+-#define WIFI_CHANNEL_13     0b1000000000000
++#define _WIFI_CHANNEL_ALL    0b1111111111111
++#define _WIFI_CHANNEL_1      0b0000000000001
++#define _WIFI_CHANNEL_2      0b0000000000010
++#define _WIFI_CHANNEL_3      0b0000000000100
++#define _WIFI_CHANNEL_4      0b0000000001000
++#define _WIFI_CHANNEL_5      0b0000000010000
++#define _WIFI_CHANNEL_6      0b0000000100000
++#define _WIFI_CHANNEL_7      0b0000001000000
++#define _WIFI_CHANNEL_8      0b0000010000000
++#define _WIFI_CHANNEL_9      0b0000100000000
++#define _WIFI_CHANNEL_10     0b0001000000000
++#define _WIFI_CHANNEL_11     0b0010000000000
++#define _WIFI_CHANNEL_12     0b0100000000000
++#define _WIFI_CHANNEL_13     0b1000000000000
+ 
+ #define LIBPAX_ERROR_WIFI_NOT_AVAILABLE 0b00000001
+ #define LIBPAX_ERROR_BLE_NOT_AVAILABLE  0b00000010
+diff --git a/wifiscan.cpp b/wifiscan.cpp
+index 1035ba9..bdf283e 100644
+--- a/wifiscan.cpp
++++ b/wifiscan.cpp
+@@ -36,7 +36,7 @@ Which in turn is based of Łukasz Marcin Podkalicki's ESP32/016 WiFi Sniffer
+ TimerHandle_t WifiChanTimer;
+ int initialized_wifi = 0;
+ int wifi_rssi_threshold = 0;
+-uint16_t channels_map = WIFI_CHANNEL_ALL;
++uint16_t channels_map = _WIFI_CHANNEL_ALL;
+ static wifi_country_t country;
+ 
+ void wifi_noop_sniffer(void* buff, wifi_promiscuous_pkt_type_t type) {}

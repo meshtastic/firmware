@@ -8,3 +8,4 @@ patches:
   #      - seeed-sensecap-indicator-tft
   - name: NonBlockingRTTTL
   - name: SdFat
+  - name: libpax
