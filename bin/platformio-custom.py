@@ -136,26 +136,41 @@ for lb in env.GetLibBuilders():
 
 ############################# Libraries Patching #############################
 
-env.Execute("$PYTHONEXE -m pip install patch")
+env.Execute("$PYTHONEXE -m pip install patch pyyaml")
 
-import pathlib
-import glob
 import os
 import patch
+import yaml
 
-libsToPatch = {}
-for entry in glob.glob("patches/*.patch"):
-    p = pathlib.Path(entry).stem
-    libsToPatch[p] = entry
+patches = {}
+config_path = os.path.join(env["PROJECT_DIR"], "patches/config.yaml")
+with open(config_path, "r") as file:
+    y = yaml.safe_load(file)
+    for p in y["patches"]:
+        name = p["name"]
+        p.pop("name", None)
+        patches[name] = p
 
 for lb in env.GetLibBuilders():
-    if lb.name in libsToPatch:
-        marker_path = os.path.join(pathlib.Path(lb.src_dir), ".patched")
-        if not os.path.exists(marker_path):
-            patch_path = libsToPatch[lb.name]
-            ps = patch.fromfile(patch_path)
-            if not ps.apply(0, lb.src_dir):
-                print(f"Failed to apply patch {patch_path}")
-                continue # XXX
-            print(f"Patched {lb.name}")
-            open(marker_path, "w").close()
+    if not lb.name in patches:
+        continue
+    p = patches[lb.name]
+    if "version" in p and not (lb.version == p["version"]):
+        print(f"Skipping {lb.name}.patch: version doesn't match")
+        continue
+    if "targets" in p and not (env.get("PIOENV") in p["targets"]):
+        print(f"Skipping {lb.name}.patch: target doesn't match")
+        continue
+
+    marker_path = os.path.join(lb.src_dir, ".patched")
+    if os.path.exists(marker_path):
+        print(f"Skipping {lb.name}.patch: already patched")
+        continue
+
+    patch_path = env["PROJECT_DIR"] + "/patches/" + lb.name + ".patch"
+    ps = patch.fromfile(patch_path)
+    if not ps.apply(0, lb.src_dir):
+        print(f"Failed to apply patch {patch_path}")
+        exit(1)
+    print(f"Patched {lb.name}")
+    open(marker_path, "w").close()

@@ -1,0 +1,10 @@
+patches:
+  - name: ESP8266 and ESP32 OLED driver for SSD1306 displays
+  - name: ETHClass2
+  - name: INA3221
+  - name: LovyanGFX
+    version: 1.1.16
+  #    targets:
+  #      - seeed-sensecap-indicator-tft
+  - name: NonBlockingRTTTL
+  - name: SdFat

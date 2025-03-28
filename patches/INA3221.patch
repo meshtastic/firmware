@@ -1,0 +1,24 @@
+Fix compiler warning
+
+diff --git a/INA3221.h b/INA3221.h
+index bf09c8e..3fc7ad7 100644
+--- a/INA3221.h
++++ b/INA3221.h
+@@ -109,7 +109,7 @@ class INA3221 {
+         uint16_t ch2_en : 1;
+         uint16_t ch1_en : 1;
+         uint16_t reset : 1;
+-    } __attribute__((packed)) conf_reg_t;
++    } __attribute__((packed, aligned(sizeof(uint16_t)))) conf_reg_t;
+ 
+     // Mask/Enable register
+     typedef struct {
+@@ -129,7 +129,7 @@ class INA3221 {
+         uint16_t shunt_sum_en_ch2 : 1;
+         uint16_t shunt_sum_en_ch1 : 1;
+         uint16_t reserved : 1;
+-    } __attribute__((packed)) masken_reg_t;
++    } __attribute__((packed, aligned(sizeof(uint16_t)))) masken_reg_t;
+ 
+     // Arduino's I2C library
+     TwoWire *_i2c;
