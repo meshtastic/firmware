@@ -84,7 +84,7 @@ class Power : private concurrency::OSThread
     void setStatusHandler(meshtastic::PowerStatus *handler) { statusHandler = handler; }
     const uint16_t OCV[11] = {OCV_ARRAY};
 
-#if defined(ELECROW_ThinkNode_M1) || defined (POWER_CFG)
+#if defined(ELECROW_ThinkNode_M1) || defined(POWER_CFG)
     uint8_t low_voltage_counter_led3;
     int power_num = 0;
 #endif

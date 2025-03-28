@@ -713,7 +713,7 @@ void Power::readPowerStatus()
     const PowerStatus powerStatus2 = PowerStatus(hasBattery, usbPowered, isCharging, batteryVoltageMv, batteryChargePercent);
     LOG_DEBUG("Battery: usbPower=%d, isCharging=%d, batMv=%d, batPct=%d", powerStatus2.getHasUSB(), powerStatus2.getIsCharging(),
               powerStatus2.getBatteryVoltageMv(), powerStatus2.getBatteryChargePercent());
-#if defined(ELECROW_ThinkNode_M1) || defined (POWER_CFG)
+#if defined(ELECROW_ThinkNode_M1) || defined(POWER_CFG)
     power_num = powerStatus2.getBatteryVoltageMv();
 #endif
     newStatus.notifyObservers(&powerStatus2);
