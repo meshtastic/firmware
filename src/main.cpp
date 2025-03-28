@@ -41,6 +41,7 @@
 
 #ifdef ARCH_ESP32
 #include "driver/gpio.h"
+#include "esp_task_wdt.h"
 #include "freertosinc.h"
 #if !MESHTASTIC_EXCLUDE_WEBSERVER
 #include "mesh/http/WebServer.h"
@@ -263,6 +264,12 @@ void printInfo()
 #ifndef PIO_UNIT_TESTING
 void setup()
 {
+#if defined(ARCH_ESP32) && defined(CONFIG_ESP_TASK_WDT_INIT)
+    // For now, turn off automatically initialized watchdog. It's going to be re-intitialized
+    // later in esp32Setup(). Otherwise, fsInit() below may trigger TWDT timeout.
+    esp_task_wdt_deinit();
+#endif
+
 #if defined(T_DECK)
     // GPIO10 manages all peripheral power supplies
     // Turn on peripheral power immediately after MUC starts.
