@@ -1370,7 +1370,7 @@ GPS *GPS::createGps()
 
     GpioVirtPin *virtPin = new GpioVirtPin();
     new_gps->enablePin = virtPin; // Always at least populate a virtual pin
-    if (_en_gpio) {
+    #if defined(PIN_GPS_EN)
         GpioPin *p = new GpioHwPin(_en_gpio);
 
         if (!GPS_EN_ACTIVE) { // Need to invert the pin before hardware
@@ -1382,7 +1382,7 @@ GPS *GPS::createGps()
                 virtPin,
                 p); // We just leave this created object on the heap so it can stay watching virtPin and driving en_gpio
         }
-    }
+    #endif
 
 #ifdef PIN_GPS_PPS
     // pulse per second
