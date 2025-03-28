@@ -293,7 +293,7 @@ const meshtastic_MeshPacket decoded = {
     .from = 1,
     .to = 2,
     .which_payload_variant = meshtastic_MeshPacket_decoded_tag,
-    .decoded = {.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP, .has_bitfield = true, .bitfield = BITFIELD_OK_TO_MQTT_MASK},
+    .decoded = {.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP, .has_bitfield = true, .bitfield = DataBitfield::OK_TO_MQTT},
     .id = 4,
 };
 const meshtastic_MeshPacket encrypted = {
