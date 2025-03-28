@@ -228,6 +228,7 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
     }
 
 #ifdef PIN_POWER_EN
+    digitalWrite(PIN_POWER_EN, LOW);
     pinMode(PIN_POWER_EN, INPUT); // power off peripherals
     // pinMode(PIN_POWER_EN1, INPUT_PULLDOWN);
 #endif
