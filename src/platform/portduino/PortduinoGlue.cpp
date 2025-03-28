@@ -210,7 +210,10 @@ void portduinoSetup()
         }
         char serial[9] = {0};
         ch341Hal->getSerialString(serial, 8);
-        std::cout << "Serial " << serial << std::endl;
+        std::cout << "CH341 Serial " << serial << std::endl;
+        char product_string[96] = {0};
+        ch341Hal->getProductString(product_string, 95);
+        std::cout << "CH341 Product " << product_string << std::endl;
         if (strlen(serial) == 8 && settingsStrings[mac_address].length() < 12) {
             uint8_t hash[32] = {0};
             memcpy(hash, serial, 8);
