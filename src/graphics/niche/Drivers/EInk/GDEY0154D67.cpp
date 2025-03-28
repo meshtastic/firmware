@@ -4,7 +4,7 @@
 
 using namespace NicheGraphics::Drivers;
 
-// Map the display controller IC's output to the conected panel
+// Map the display controller IC's output to the connected panel
 void GDEY0154D67::configScanning()
 {
     // "Driver output control"

@@ -12,7 +12,7 @@ InkHUD::AppletFont::AppletFont()
 InkHUD::AppletFont::AppletFont(const GFXfont &adafruitGFXFont) : gfxFont(&adafruitGFXFont)
 {
     // AdafruitGFX fonts are drawn relative to a "cursor line";
-    // they print as if the glyphs resting on the line of piece of ruled paper.
+    // they print as if the glyphs are resting on the line of piece of ruled paper.
     // The glyphs also each have a different height.
 
     // To simplify drawing, we will scan the entire font now, and determine an appropriate height for a line of text
@@ -41,6 +41,19 @@ InkHUD::AppletFont::AppletFont(const GFXfont &adafruitGFXFont) : gfxFont(&adafru
     // Find how far the cursor advances when we "print" a space character
     spaceCharWidth = gfxFont->glyph[(uint8_t)' ' - gfxFont->first].xAdvance;
 }
+
+/*
+
+             ▲    #####  #         ▲
+             │    #      #         │
+  lineHeight │    ###    #         │
+             │    #      #  #   #  │ heightAboveCursor
+             │    #      #  #   #  │
+             │    #      #   ####  │
+             │ -----------------#----
+             │                 #   │ heightBelowCursor
+             ▼               ###   ▼
+*/
 
 uint8_t InkHUD::AppletFont::lineHeight()
 {
@@ -78,7 +91,7 @@ void InkHUD::AppletFont::addSubstitution(const char *from, const char *to)
     substitutions.push_back({.from = from, .to = to});
 }
 
-// Run all registered subtitutions on a string
+// Run all registered substitutions on a string
 // Used to swap out UTF8 special chars
 void InkHUD::AppletFont::applySubstitutions(std::string *text)
 {
@@ -87,7 +100,7 @@ void InkHUD::AppletFont::applySubstitutions(std::string *text)
 
         // Find and replace
         // - search for Substitution::from
-        // - replace with Subsitution::to
+        // - replace with Substitution::to
         size_t i = text->find(s.from);
         while (i != std::string::npos) {
             text->replace(i, strlen(s.from), s.to);
@@ -97,7 +110,7 @@ void InkHUD::AppletFont::applySubstitutions(std::string *text)
 }
 
 // Apply a set of substitutions which remap UTF8 for a Windows-1251 font
-// Windows-1251 is an 8-bit character encoding, designed to cover languages that use the Cyrillic script
+// Windows-1251 is an 8-bit character encoding, suitable for several languages which use the Cyrillic script
 void InkHUD::AppletFont::addSubstitutionsWin1251()
 {
     addSubstitution("Ђ", "\x80");

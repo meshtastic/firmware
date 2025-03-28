@@ -29,7 +29,11 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     gpg \
     gnupg2 \
     libusb-1.0-0-dev \
+    libuv1-dev \
     libi2c-dev \
+    libxcb-xkb-dev \
+    libxkbcommon-dev \
+    libinput-dev \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 RUN pipx install platformio

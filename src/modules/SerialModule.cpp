@@ -435,6 +435,10 @@ void SerialModule::processWXSerial()
     static float batVoltageF = 0;
     static float capVoltageF = 0;
     static float temperatureF = 0;
+
+    static char rainStr[] = "5780860000";
+    static int rainSum = 0;
+    static float rain = 0;
     bool gotwind = false;
 
     while (Serial2.available()) {
@@ -448,6 +452,9 @@ void SerialModule::processWXSerial()
         // WindSpeed    = 0.5
         // WindGust     = 0.6
         // GXTS04Temp   = 24.4
+
+        // RainIntSum     = 0
+        // Rain           = 0.0
         if (serialPayloadSize > 0) {
             // Define variables for line processing
             int lineStart = 0;
@@ -461,64 +468,83 @@ void SerialModule::processWXSerial()
                     // Extract the current line
                     char line[meshtastic_Constants_DATA_PAYLOAD_LEN];
                     memset(line, '\0', sizeof(line));
-                    memcpy(line, &serialBytes[lineStart], lineEnd - lineStart);
+                    if (lineEnd - lineStart < sizeof(line) - 1) {
+                        memcpy(line, &serialBytes[lineStart], lineEnd - lineStart);
+                        if (strstr(line, "Wind") != NULL) // we have a wind line
+                        {
+                            gotwind = true;
+                            // Find the positions of "=" signs in the line
+                            char *windDirPos = strstr(line, "WindDir      = ");
+                            char *windSpeedPos = strstr(line, "WindSpeed    = ");
+                            char *windGustPos = strstr(line, "WindGust     = ");
 
-                    if (strstr(line, "Wind") != NULL) // we have a wind line
-                    {
-                        gotwind = true;
-                        // Find the positions of "=" signs in the line
-                        char *windDirPos = strstr(line, "WindDir      = ");
-                        char *windSpeedPos = strstr(line, "WindSpeed    = ");
-                        char *windGustPos = strstr(line, "WindGust     = ");
+                            if (windDirPos != NULL) {
+                                // Extract data after "=" for WindDir
+                                strlcpy(windDir, windDirPos + 15, sizeof(windDir)); // Add 15 to skip "WindDir = "
+                                double radians = GeoCoord::toRadians(strtof(windDir, nullptr));
+                                dir_sum_sin += sin(radians);
+                                dir_sum_cos += cos(radians);
+                                dirCount++;
+                            } else if (windSpeedPos != NULL) {
+                                // Extract data after "=" for WindSpeed
+                                strlcpy(windVel, windSpeedPos + 15, sizeof(windVel)); // Add 15 to skip "WindSpeed = "
+                                float newv = strtof(windVel, nullptr);
+                                velSum += newv;
+                                velCount++;
+                                if (newv < lull || lull == -1)
+                                    lull = newv;
 
-                        if (windDirPos != NULL) {
-                            // Extract data after "=" for WindDir
-                            strcpy(windDir, windDirPos + 15); // Add 15 to skip "WindDir = "
-                            double radians = GeoCoord::toRadians(strtof(windDir, nullptr));
-                            dir_sum_sin += sin(radians);
-                            dir_sum_cos += cos(radians);
-                            dirCount++;
-                        } else if (windSpeedPos != NULL) {
-                            // Extract data after "=" for WindSpeed
-                            strcpy(windVel, windSpeedPos + 15); // Add 15 to skip "WindSpeed = "
-                            float newv = strtof(windVel, nullptr);
-                            velSum += newv;
-                            velCount++;
-                            if (newv < lull || lull == -1)
-                                lull = newv;
+                            } else if (windGustPos != NULL) {
+                                strlcpy(windGust, windGustPos + 15, sizeof(windGust)); // Add 15 to skip "WindSpeed = "
+                                float newg = strtof(windGust, nullptr);
+                                if (newg > gust)
+                                    gust = newg;
+                            }
 
-                        } else if (windGustPos != NULL) {
-                            strcpy(windGust, windGustPos + 15); // Add 15 to skip "WindSpeed = "
-                            float newg = strtof(windGust, nullptr);
-                            if (newg > gust)
-                                gust = newg;
+                            // these are also voltage data we care about possibly
+                        } else if (strstr(line, "BatVoltage") != NULL) { // we have a battVoltage line
+                            char *batVoltagePos = strstr(line, "BatVoltage     = ");
+                            if (batVoltagePos != NULL) {
+                                strlcpy(batVoltage, batVoltagePos + 17, sizeof(batVoltage)); // 18 for ws 80, 17 for ws85
+                                batVoltageF = strtof(batVoltage, nullptr);
+                                break; // last possible data we want so break
+                            }
+                        } else if (strstr(line, "CapVoltage") != NULL) { // we have a cappVoltage line
+                            char *capVoltagePos = strstr(line, "CapVoltage     = ");
+                            if (capVoltagePos != NULL) {
+                                strlcpy(capVoltage, capVoltagePos + 17, sizeof(capVoltage)); // 18 for ws 80, 17 for ws85
+                                capVoltageF = strtof(capVoltage, nullptr);
+                            }
+                            // GXTS04Temp   = 24.4
+                        } else if (strstr(line, "GXTS04Temp") != NULL) { // we have a temperature line
+                            char *tempPos = strstr(line, "GXTS04Temp   = ");
+                            if (tempPos != NULL) {
+                                strlcpy(temperature, tempPos + 15, sizeof(temperature)); // 15 spaces for ws85
+                                temperatureF = strtof(temperature, nullptr);
+                            }
+
+                        } else if (strstr(line, "RainIntSum") != NULL) { // we have a rainsum line
+                            // LOG_INFO(line);
+                            char *pos = strstr(line, "RainIntSum     = ");
+                            if (pos != NULL) {
+                                strlcpy(rainStr, pos + 17, sizeof(rainStr)); // 17 spaces for ws85
+                                rainSum = int(strtof(rainStr, nullptr));
+                            }
+
+                        } else if (strstr(line, "Rain") != NULL) {  // we have a rain line
+                            if (strstr(line, "WaveRain") == NULL) { // skip WaveRain lines though.
+                                // LOG_INFO(line);
+                                char *pos = strstr(line, "Rain           = ");
+                                if (pos != NULL) {
+                                    strlcpy(rainStr, pos + 17, sizeof(rainStr)); // 17 spaces for ws85
+                                    rain = strtof(rainStr, nullptr);
+                                }
+                            }
                         }
 
-                        // these are also voltage data we care about possibly
-                    } else if (strstr(line, "BatVoltage") != NULL) { // we have a battVoltage line
-                        char *batVoltagePos = strstr(line, "BatVoltage     = ");
-                        if (batVoltagePos != NULL) {
-                            strcpy(batVoltage, batVoltagePos + 17); // 18 for ws 80, 17 for ws85
-                            batVoltageF = strtof(batVoltage, nullptr);
-                            break; // last possible data we want so break
-                        }
-                    } else if (strstr(line, "CapVoltage") != NULL) { // we have a cappVoltage line
-                        char *capVoltagePos = strstr(line, "CapVoltage     = ");
-                        if (capVoltagePos != NULL) {
-                            strcpy(capVoltage, capVoltagePos + 17); // 18 for ws 80, 17 for ws85
-                            capVoltageF = strtof(capVoltage, nullptr);
-                        }
-                        // GXTS04Temp   = 24.4
-                    } else if (strstr(line, "GXTS04Temp") != NULL) { // we have a temperature line
-                        char *tempPos = strstr(line, "GXTS04Temp   = ");
-                        if (tempPos != NULL) {
-                            strcpy(temperature, tempPos + 15); // 15 spaces for ws85
-                            temperatureF = strtof(temperature, nullptr);
-                        }
+                        // Update lineStart for the next line
+                        lineStart = lineEnd + 1;
                     }
-
-                    // Update lineStart for the next line
-                    lineStart = lineEnd + 1;
                 }
             }
             break;
@@ -530,8 +556,8 @@ void SerialModule::processWXSerial()
     }
     if (gotwind) {
 
-        LOG_INFO("WS85 : %i %.1fg%.1f %.1fv %.1fv %.1fC", atoi(windDir), strtof(windVel, nullptr), strtof(windGust, nullptr),
-                 batVoltageF, capVoltageF, temperatureF);
+        LOG_INFO("WS85 : %i %.1fg%.1f %.1fv %.1fv %.1fC rain: %.1f, %i sum", atoi(windDir), strtof(windVel, nullptr),
+                 strtof(windGust, nullptr), batVoltageF, capVoltageF, temperatureF, rain, rainSum);
     }
     if (gotwind && !Throttle::isWithinTimespanMs(lastAveraged, averageIntervalMillis)) {
         // calculate averages and send to the mesh
@@ -567,6 +593,13 @@ void SerialModule::processWXSerial()
 
         m.variant.environment_metrics.wind_gust = gust;
         m.variant.environment_metrics.has_wind_gust = true;
+
+        m.variant.environment_metrics.rainfall_24h = rainSum;
+        m.variant.environment_metrics.has_rainfall_24h = true;
+
+        // not sure if this value is actually the 1hr sum so needs to do some testing
+        m.variant.environment_metrics.rainfall_1h = rain;
+        m.variant.environment_metrics.has_rainfall_1h = true;
 
         if (lull == -1)
             lull = 0;

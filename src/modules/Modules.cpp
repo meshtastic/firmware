@@ -7,7 +7,9 @@
 #include "input/SerialKeyboardImpl.h"
 #include "input/TrackballInterruptImpl1.h"
 #include "input/UpDownInterruptImpl1.h"
+#if !MESHTASTIC_EXCLUDE_I2C
 #include "input/cardKbI2cImpl.h"
+#endif
 #include "input/kbMatrixImpl.h"
 #endif
 #if !MESHTASTIC_EXCLUDE_ADMIN

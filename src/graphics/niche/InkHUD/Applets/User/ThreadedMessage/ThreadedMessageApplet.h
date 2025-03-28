@@ -33,7 +33,7 @@ class Applet;
 class ThreadedMessageApplet : public Applet
 {
   public:
-    ThreadedMessageApplet(uint8_t channelIndex);
+    explicit ThreadedMessageApplet(uint8_t channelIndex);
     ThreadedMessageApplet() = delete;
 
     void onRender() override;
