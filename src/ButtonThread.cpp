@@ -82,7 +82,11 @@ ButtonThread::ButtonThread() : OSThread("Button")
 #endif
 
 #ifdef BUTTON_PIN_ALT
-    userButtonAlt = OneButton(BUTTON_PIN_ALT, true, true);
+#if defined(ELECROW_ThinkNode_M2)
+    this->userButtonAlt = OneButton(BUTTON_PIN_ALT, false, false);
+#else
+    this->userButtonAlt = OneButton(BUTTON_PIN_ALT, true, true);
+#endif
 #ifdef INPUT_PULLUP_SENSE
     // Some platforms (nrf52) have a SENSE variant which allows wake from sleep - override what OneButton did
     pinMode(BUTTON_PIN_ALT, INPUT_PULLUP_SENSE);
