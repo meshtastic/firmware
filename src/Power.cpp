@@ -713,6 +713,9 @@ void Power::readPowerStatus()
     const PowerStatus powerStatus2 = PowerStatus(hasBattery, usbPowered, isCharging, batteryVoltageMv, batteryChargePercent);
     LOG_DEBUG("Battery: usbPower=%d, isCharging=%d, batMv=%d, batPct=%d", powerStatus2.getHasUSB(), powerStatus2.getIsCharging(),
               powerStatus2.getBatteryVoltageMv(), powerStatus2.getBatteryChargePercent());
+#if defined(ELECROW_ThinkNode_M1)
+    power_num = powerStatus2.getBatteryVoltageMv();
+#endif
     newStatus.notifyObservers(&powerStatus2);
 #ifdef DEBUG_HEAP
     if (lastheap != memGet.getFreeHeap()) {
@@ -759,6 +762,9 @@ void Power::readPowerStatus()
     if (batteryLevel && powerStatus2.getHasBattery() && !powerStatus2.getHasUSB()) {
         if (batteryLevel->getBattVoltage() < OCV[NUM_OCV_POINTS - 1]) {
             low_voltage_counter++;
+#if defined(ELECROW_ThinkNode_M1)
+            low_voltage_counter_led3 = low_voltage_counter;
+#endif
             LOG_DEBUG("Low voltage counter: %d/10", low_voltage_counter);
             if (low_voltage_counter > 10) {
 #ifdef ARCH_NRF52
@@ -771,6 +777,9 @@ void Power::readPowerStatus()
             }
         } else {
             low_voltage_counter = 0;
+#if defined(ELECROW_ThinkNode_M1)
+            low_voltage_counter_led3 = low_voltage_counter;
+#endif
         }
     }
 }
