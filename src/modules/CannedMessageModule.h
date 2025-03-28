@@ -14,6 +14,7 @@ enum cannedMessageModuleRunState {
     CANNED_MESSAGE_RUN_STATE_ACTION_SELECT,
     CANNED_MESSAGE_RUN_STATE_ACTION_UP,
     CANNED_MESSAGE_RUN_STATE_ACTION_DOWN,
+    CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION
 };
 
 enum cannedMessageDestinationType {
@@ -43,10 +44,23 @@ struct Letter {
 #define CANNED_MESSAGE_MODULE_ENABLE 0
 #endif
 
+struct NodeEntry {
+    meshtastic_NodeInfoLite *node;
+    uint32_t lastHeard;
+};
+
 class CannedMessageModule : public SinglePortModule, public Observable<const UIFrameEvent *>, private concurrency::OSThread
 {
     CallbackObserver<CannedMessageModule, const InputEvent *> inputObserver =
         CallbackObserver<CannedMessageModule, const InputEvent *>(this, &CannedMessageModule::handleInputEvent);
+  private:
+    int displayHeight = 64;  // Default to a common value, update dynamically
+    int destIndex = 0; // Tracks currently selected node/channel in selection mode
+    int scrollIndex = 0; // Tracks scrolling position in node selection grid
+    int visibleRows = 0;
+    bool needsUpdate = true;
+    String searchQuery;
+    std::vector<uint8_t> activeChannelIndices;
 
   public:
     CannedMessageModule();
@@ -65,7 +79,10 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     void handleSetCannedMessageModuleMessages(const char *from_msg);
 
     void showTemporaryMessage(const String &message);
-
+    void resetSearch(); 
+    void updateFilteredNodes();
+    std::vector<NodeEntry> filteredNodes; 
+    String nodeSelectionInput;
     String drawWithCursor(String text, int cursor);
 
 #ifdef RAK14014

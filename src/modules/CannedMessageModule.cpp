@@ -121,6 +121,73 @@ int CannedMessageModule::splitConfiguredMessages()
 
     return this->messagesCount;
 }
+void CannedMessageModule::resetSearch() {
+    LOG_INFO("Resetting search, restoring full destination list");
+    updateFilteredNodes();  // Reload all nodes and channels
+    requestFocus();
+}
+void CannedMessageModule::updateFilteredNodes() {
+    static size_t lastNumMeshNodes = 0; // Track the last known node count
+    static String lastSearchQuery = ""; // Track last search query
+
+    size_t numMeshNodes = nodeDB->getNumMeshNodes();
+
+    // If the number of nodes has changed, force an update
+    bool nodesChanged = (numMeshNodes != lastNumMeshNodes);
+    lastNumMeshNodes = numMeshNodes;
+
+    // Also check if search query changed
+    if (searchQuery == lastSearchQuery && !nodesChanged) return;
+    
+    lastSearchQuery = searchQuery;
+    needsUpdate = false;
+
+    this->filteredNodes.clear();
+    this->activeChannelIndices.clear();
+
+    NodeNum myNodeNum = nodeDB->getNodeNum();
+
+    for (size_t i = 0; i < numMeshNodes; i++) {
+        meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
+        if (!node || node->num == myNodeNum) continue;
+
+        String nodeName = node->user.long_name;
+        String lowerNodeName = nodeName;
+        String lowerSearchQuery = searchQuery;
+
+        lowerNodeName.toLowerCase();
+        lowerSearchQuery.toLowerCase();
+
+        if (searchQuery.length() == 0 || lowerNodeName.indexOf(lowerSearchQuery) != -1) {
+            this->filteredNodes.push_back({node, sinceLastSeen(node)});
+        }
+    }
+
+    // Populate active channels
+    this->activeChannelIndices.clear();
+    std::vector<String> seenChannels;
+    for (uint8_t i = 0; i < channels.getNumChannels(); i++) {
+        String channelName = channels.getName(i);
+        if (channelName.length() > 0 && std::find(seenChannels.begin(), seenChannels.end(), channelName) == seenChannels.end()) {
+            this->activeChannelIndices.push_back(i);
+            seenChannels.push_back(channelName);
+        }
+    }
+
+    // Sort nodes by favorite status and last seen time
+    std::sort(this->filteredNodes.begin(), this->filteredNodes.end(), [](const NodeEntry &a, const NodeEntry &b) {
+        if (a.node->is_favorite != b.node->is_favorite) {
+            return a.node->is_favorite > b.node->is_favorite; // Favorited nodes first
+        }
+        return a.lastHeard < b.lastHeard; // Otherwise, sort by last heard (oldest first)
+    });
+
+    // 🔹 If nodes have changed, refresh the screen
+    if (nodesChanged) {
+        LOG_INFO("Nodes changed, forcing UI refresh.");
+        screen->forceDisplay();
+    }
+}
 
 int CannedMessageModule::handleInputEvent(const InputEvent *event)
 {
@@ -136,17 +203,157 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
     if (this->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) {
         return 0; // Ignore input while sending
     }
-    bool validEvent = false;
-    if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP)) {
-        if (this->messagesCount > 0) {
-            this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_UP;
-            validEvent = true;
+    static int lastDestIndex = -1; // Cache the last index
+    bool selectionChanged = false; // Track if UI needs redrawing
+
+    bool isUp = event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP);
+    bool isDown = event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN);
+
+    if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NODE) {
+        if (event->kbchar >= 32 && event->kbchar <= 126) {
+            this->searchQuery += event->kbchar;
+            return 0;
         }
+
+        size_t numMeshNodes = this->filteredNodes.size();
+        int totalEntries = numMeshNodes + this->activeChannelIndices.size();
+        int columns = 2;
+        int totalRows = (totalEntries + columns - 1) / columns;
+        int maxScrollIndex = std::max(0, totalRows - this->visibleRows);
+        scrollIndex = std::max(0, std::min(scrollIndex, maxScrollIndex));
+
+        if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_BACK)) {
+            if (this->searchQuery.length() > 0) {
+                this->searchQuery.remove(this->searchQuery.length() - 1);
+            }
+            if (this->searchQuery.length() == 0) {
+                resetSearch();  // Function to restore all destinations
+            }
+            return 0;
+        }
+
+        bool needsRedraw = false;
+
+        // 🔼 UP Navigation in Node Selection
+        if (isUp) {
+            if ((this->destIndex / columns) <= scrollIndex) {
+                if (scrollIndex > 0) {
+                    scrollIndex--;
+                    needsRedraw = true;
+                }
+            } else if (this->destIndex >= columns) {
+                this->destIndex -= columns;
+            }
+        }
+
+        // 🔽 DOWN Navigation in Node Selection
+        if (isDown) {
+            if ((this->destIndex / columns) >= (scrollIndex + this->visibleRows - 1)) {
+                if (scrollIndex < maxScrollIndex) {
+                    scrollIndex++;
+                    needsRedraw = true;
+                }
+            } else if (this->destIndex + columns < totalEntries) {
+                this->destIndex += columns;
+            }
+        }
+
+        
+        // ◀ LEFT Navigation (Wrap to previous row OR last row)
+        if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {
+            if (this->destIndex % columns == 0) { 
+                if (this->destIndex >= columns) { 
+                    this->destIndex = this->destIndex - columns + (columns - 1);
+                } else { 
+                    int lastRowStart = ((totalEntries - 1) / columns) * columns;
+                    this->destIndex = std::min(lastRowStart + (columns - 1), totalEntries - 1);
+                }
+            } else { 
+                this->destIndex--;
+            }
+        }
+        
+        // ▶ RIGHT Navigation (Wrap to next row OR first row)
+        if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT)) {
+            int nextIndex = this->destIndex + 1;
+            if ((this->destIndex + 1) % columns == 0 || nextIndex >= totalEntries) { 
+                if (this->destIndex + columns < totalEntries) { 
+                    this->destIndex = this->destIndex + columns - (columns - 1);
+                } else { 
+                    this->destIndex = 0;
+                }
+            } else { 
+                this->destIndex++;
+            }
+        }
+        
+        if (this->destSelect != CANNED_MESSAGE_DESTINATION_TYPE_NODE) {
+            if (isUp && this->messagesCount > 0) {
+                this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_UP;
+                return 0;
+            }
+            if (isDown && this->messagesCount > 0) {
+                this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_DOWN;
+                return 0;
+            }
+        }
+        // Only refresh UI when needed
+        if (needsRedraw) {
+            screen->forceDisplay();
+        }
+        if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT)) {
+            if (this->destIndex < static_cast<int>(this->activeChannelIndices.size())) {
+                this->dest = NODENUM_BROADCAST;
+                this->channel = this->activeChannelIndices[this->destIndex];
+            } else {
+                int nodeIndex = this->destIndex - static_cast<int>(this->activeChannelIndices.size());
+                if (nodeIndex >= 0 && nodeIndex < static_cast<int>(this->filteredNodes.size())) {
+                    meshtastic_NodeInfoLite *selectedNode = this->filteredNodes[nodeIndex].node;
+                    if (selectedNode) {
+                        this->dest = selectedNode->num;
+                        this->channel = selectedNode->channel;
+                    }
+                }
+            }
+        
+            // ✅ Now correctly switches to FreeText screen with selected node/channel
+            this->runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
+            this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
+            screen->forceDisplay();
+            return 0;
+        }
+    
+        // Handle Cancel (ESC)
+        if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL)) {
+            this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
+            this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE; // Ensure return to main screen
+            this->searchQuery = ""; 
+            
+            UIFrameEvent e;
+            e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+            this->notifyObservers(&e);
+        
+            screen->forceDisplay();
+            return 0; // 🚀 Prevents input from affecting canned messages
+        }
+    
+        return 0; // 🚀 FINAL EARLY EXIT: Stops the function from continuing into canned message handling
     }
-    if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN)) {
-        if (this->messagesCount > 0) {
-            this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_DOWN;
-            validEvent = true;
+    // If we reach here, we are NOT in Select Destination mode. 
+    // The remaining logic is for canned message handling.
+    bool validEvent = false;
+    if (this->destSelect != CANNED_MESSAGE_DESTINATION_TYPE_NODE) {
+        if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP)) {
+            if (this->messagesCount > 0) {
+                this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_UP;
+                validEvent = true;
+            }
+        }
+        if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN)) {
+            if (this->messagesCount > 0) {
+                this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_DOWN;
+                validEvent = true;
+            }
         }
     }
     if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT)) {
@@ -174,6 +381,15 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         }
     }
     if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL)) {
+        // If in Node Selection Mode, exit and return to FreeText Mode
+        if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NODE) {
+            updateFilteredNodes();  // Ensure the filtered node list is refreshed before selecting
+            this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
+            this->runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
+            return 0;
+        }
+    
+        // Default behavior for Cancel in other modes
         UIFrameEvent e;
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
         this->currentMessageIndex = -1;
@@ -186,6 +402,8 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
 
         this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         this->notifyObservers(&e);
+        screen->forceDisplay(); // Ensure the UI updates properly
+        return 0;
     }
     if ((event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_BACK)) ||
         (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) ||
@@ -430,6 +648,7 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
 
 int32_t CannedMessageModule::runOnce()
 {
+    updateFilteredNodes(); 
     if (((!moduleConfig.canned_message.enabled) && !CANNED_MESSAGE_MODULE_ENABLE) ||
         (this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED) || (this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE)) {
         temporaryMessage = "";
@@ -469,7 +688,7 @@ int32_t CannedMessageModule::runOnce()
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_SELECT) {
         if (this->payload == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
             if (this->freetext.length() > 0) {
-                sendText(this->dest, indexChannels[this->channel], this->freetext.c_str(), true);
+                sendText(this->dest, this->channel, this->freetext.c_str(), true);
                 this->runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
             } else {
                 this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
@@ -483,7 +702,7 @@ int32_t CannedMessageModule::runOnce()
 #if defined(USE_VIRTUAL_KEYBOARD)
                     sendText(this->dest, indexChannels[this->channel], this->messages[this->currentMessageIndex], true);
 #else
-                    sendText(NODENUM_BROADCAST, channels.getPrimaryIndex(), this->messages[this->currentMessageIndex], true);
+                    sendText(this->dest, this->channel, this->messages[this->currentMessageIndex], true);
 #endif
                 }
                 this->runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
@@ -624,13 +843,23 @@ int32_t CannedMessageModule::runOnce()
                     this->cursor--;
                 }
                 break;
-            case 0x09: // tab
-                if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_CHANNEL) {
-                    this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
-                } else if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NODE) {
-                    this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_CHANNEL;
-                } else {
-                    this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
+            case 0x09: // Tab key (Switch to Destination Selection Mode)
+                {
+                    if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NONE) {
+                        // Enter selection screen
+                        this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
+                        this->destIndex = 0;  // Reset to first node/channel
+                        this->scrollIndex = 0;  // Reset scrolling
+                        this->runState = CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION;
+                
+                        // Ensure UI updates correctly
+                        UIFrameEvent e;
+                        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+                        this->notifyObservers(&e);
+                    }
+                
+                    // If already inside the selection screen, do nothing (prevent exiting)
+                    return 0;
                 }
                 break;
             case INPUT_BROKER_MSG_LEFT:
@@ -986,7 +1215,10 @@ bool CannedMessageModule::interceptingKeyboardInput()
 #if !HAS_TFT
 void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+    this->displayHeight = display->getHeight();  // Store display height for later use
     char buffer[50];
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
 
     if (temporaryMessage.length() != 0) {
         requestFocus(); // Tell Screen::setFrames to move to our module's frame
@@ -997,6 +1229,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
     } else if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED) {
         requestFocus();                        // Tell Screen::setFrames to move to our module's frame
         EINK_ADD_FRAMEFLAG(display, COSMETIC); // Clean after this popup. Layout makes ghosting particularly obvious
+        display->setTextAlignment(TEXT_ALIGN_CENTER);
 
 #ifdef USE_EINK
         display->setFont(FONT_SMALL); // No chunky text
@@ -1055,11 +1288,83 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         display->setTextAlignment(TEXT_ALIGN_LEFT);
         display->setFont(FONT_SMALL);
         display->drawString(10 + x, 0 + y + FONT_HEIGHT_SMALL, "Canned Message\nModule disabled.");
+    } else if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NODE) {
+        requestFocus();
+        updateFilteredNodes();
+        display->clear(); 
+        display->setTextAlignment(TEXT_ALIGN_LEFT);
+        display->setFont(FONT_SMALL);
+
+        int titleY = 2;
+        String titleText = "Select Destination";
+        titleText += searchQuery.length() > 0 ? " [" + searchQuery + "]" : " [ ]";
+        display->drawString(display->getWidth() / 2 - display->getStringWidth(titleText) / 2, titleY, titleText);
+
+        int rowYOffset = titleY + FONT_HEIGHT_SMALL; // Adjusted for search box spacing
+        int numActiveChannels = this->activeChannelIndices.size();
+        int totalEntries = numActiveChannels + this->filteredNodes.size();
+        int columns = 2;
+        this->visibleRows = (display->getHeight() - (titleY + FONT_HEIGHT_SMALL)) / FONT_HEIGHT_SMALL;
+        if (this->visibleRows < 1) this->visibleRows = 1;
+
+        // Ensure scrolling within bounds
+        if (scrollIndex > totalEntries / columns) scrollIndex = totalEntries / columns;
+        if (scrollIndex < 0) scrollIndex = 0;
+
+        for (int row = 0; row < visibleRows; row++) {
+            int itemIndex = (scrollIndex + row) * columns;
+            for (int col = 0; col < columns; col++) {
+                if (itemIndex >= totalEntries) break;
+
+                int xOffset = col * (display->getWidth() / columns);
+                int yOffset = row * FONT_HEIGHT_SMALL + rowYOffset;
+                String entryText;
+
+                // Draw Channels First
+                if (itemIndex < numActiveChannels) {
+                    uint8_t channelIndex = this->activeChannelIndices[itemIndex];
+                    entryText = String("@") + String(channels.getName(channelIndex));
+                }
+                // Then Draw Nodes
+                else {
+                    int nodeIndex = itemIndex - numActiveChannels;
+                    if (nodeIndex >= 0 && nodeIndex < static_cast<int>(this->filteredNodes.size())) {
+                        meshtastic_NodeInfoLite *node = this->filteredNodes[nodeIndex].node;
+                        entryText = node ? (node->is_favorite ? "* " + String(node->user.long_name) : String(node->user.long_name)) : "?";
+                    }
+                }
+
+                // Prevent Empty Names
+                if (entryText.length() == 0 || entryText == "Unknown") entryText = "?";
+
+                // Trim if Too Long
+                while (display->getStringWidth(entryText + "-") > (display->getWidth() / columns - 4)) {
+                    entryText = entryText.substring(0, entryText.length() - 1);
+                }
+
+                // Highlight Selection
+                if (itemIndex == destIndex) {
+                    display->fillRect(xOffset, yOffset, display->getStringWidth(entryText) + 4, FONT_HEIGHT_SMALL + 2);
+                    display->setColor(BLACK);
+                }
+                display->drawString(xOffset + 2, yOffset, entryText);
+                display->setColor(WHITE);
+                itemIndex++;
+            }
+        }
+        if (totalEntries > visibleRows * columns) {
+            display->drawRect(display->getWidth() - 6, rowYOffset, 4, visibleRows * FONT_HEIGHT_SMALL);
+            int totalPages = (totalEntries + columns - 1) / columns;
+            int scrollHeight = (visibleRows * FONT_HEIGHT_SMALL * visibleRows) / (totalPages);
+            int scrollPos = rowYOffset + ((visibleRows * FONT_HEIGHT_SMALL) * scrollIndex) / totalPages;
+            display->fillRect(display->getWidth() - 6, scrollPos, 4, scrollHeight);
+        }
+        screen->forceDisplay();
     } else if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
         requestFocus(); // Tell Screen::setFrames to move to our module's frame
 #if defined(USE_EINK) && defined(USE_EINK_DYNAMICDISPLAY)
-        EInkDynamicDisplay *einkDisplay = static_cast<EInkDynamicDisplay *>(display);
-        einkDisplay->enableUnlimitedFastMode(); // Enable unlimited fast refresh while typing
+        EInkDynamicDisplay* einkDisplay = static_cast<EInkDynamicDisplay*>(display);
+        einkDisplay->enableUnlimitedFastMode();  // Enable unlimited fast refresh while typing
 #endif
 
 #if defined(USE_VIRTUAL_KEYBOARD)
@@ -1075,23 +1380,24 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         switch (this->destSelect) {
         case CANNED_MESSAGE_DESTINATION_TYPE_NODE:
             display->drawStringf(1 + x, 0 + y, buffer, "To: >%s<@%s", cannedMessageModule->getNodeName(this->dest),
-                                 channels.getName(indexChannels[this->channel]));
+                                 channels.getName(this->channel));
+            LOG_INFO("Displaying recipient: Node=%s (ID=%d)", cannedMessageModule->getNodeName(this->dest), this->dest);
             display->drawStringf(0 + x, 0 + y, buffer, "To: >%s<@%s", cannedMessageModule->getNodeName(this->dest),
-                                 channels.getName(indexChannels[this->channel]));
+                                 channels.getName(this->channel));
             break;
         case CANNED_MESSAGE_DESTINATION_TYPE_CHANNEL:
             display->drawStringf(1 + x, 0 + y, buffer, "To: %s@>%s<", cannedMessageModule->getNodeName(this->dest),
-                                 channels.getName(indexChannels[this->channel]));
+                                 channels.getName(this->channel));
             display->drawStringf(0 + x, 0 + y, buffer, "To: %s@>%s<", cannedMessageModule->getNodeName(this->dest),
-                                 channels.getName(indexChannels[this->channel]));
+                                 channels.getName(this->channel));
             break;
         default:
             if (display->getWidth() > 128) {
                 display->drawStringf(0 + x, 0 + y, buffer, "To: %s@%s", cannedMessageModule->getNodeName(this->dest),
-                                     channels.getName(indexChannels[this->channel]));
+                                     channels.getName(this->channel));
             } else {
                 display->drawStringf(0 + x, 0 + y, buffer, "To: %.5s@%.5s", cannedMessageModule->getNodeName(this->dest),
-                                     channels.getName(indexChannels[this->channel]));
+                                     channels.getName(this->channel));
             }
             break;
         }
