@@ -35,7 +35,7 @@ extern "C" {
 #endif // __cplusplus
 
 // Number of pins defined in PinDescription array
-//在PinDescription数组中定义的引脚数
+// 在PinDescription数组中定义的引脚数
 #define PINS_COUNT (48)
 #define NUM_DIGITAL_PINS (48)
 #define NUM_ANALOG_INPUTS (1)
@@ -46,12 +46,12 @@ extern "C" {
 #define PIN_LED3 -1
 
 // LED
-#define POWER_LED (32 + 6)  //red
+#define POWER_LED (32 + 6) // red
 #define LED_POWER (32 + 4)
-#define USER_LED (0 + 13)  //green
-//USB_CHECK
-#define USB_CHECK (32 + 3)  
-#define ADC_V (0 + 8)  
+#define USER_LED (0 + 13) // green
+// USB_CHECK
+#define USB_CHECK (32 + 3)
+#define ADC_V (0 + 8)
 
 #define LED_RED PIN_LED3
 #define LED_BLUE PIN_LED1
@@ -63,11 +63,11 @@ extern "C" {
 /*
  * Buttons
  */
-#define PIN_BUTTON2 (32 + 10)                                      
-#define PIN_BUTTON1 (32 + 7) 
+#define PIN_BUTTON2 (32 + 10)
+#define PIN_BUTTON1 (32 + 7)
 
-// #define PIN_BUTTON1 (0 + 11) 
-// #define PIN_BUTTON1 (32 + 7) 
+// #define PIN_BUTTON1 (0 + 11)
+// #define PIN_BUTTON1 (32 + 7)
 
 // #define BUTTON_CLICK_MS 400
 // #define BUTTON_TOUCH_MS 200
@@ -75,7 +75,7 @@ extern "C" {
 /*
  * Analog pins
  */
-#define PIN_A0 (4) // Battery ADC  
+#define PIN_A0 (4) // Battery ADC
 
 #define BATTERY_PIN PIN_A0
 
@@ -85,7 +85,6 @@ static const uint8_t A0 = PIN_A0;
 
 #define PIN_NFC1 (9)
 #define PIN_NFC2 (10)
-
 
 /*Wire Interfaces*/
 #define WIRE_INTERFACES_COUNT 1
@@ -123,7 +122,8 @@ External serial flash WP25R1635FZUIL0
 #define SX126X_CS (0 + 24) // FIXME - we really should define LORA_CS instead
 #define SX126X_DIO1 (0 + 20)
 // Note DIO2 is attached internally to the module to an analog switch for TX/RX switching
-// #define SX1262_DIO3 (0 + 21) // This is used as an *output* from the sx1262 and connected internally to power the tcxo, do not drive from the main
+// #define SX1262_DIO3 (0 + 21) // This is used as an *output* from the sx1262 and connected internally to power the tcxo, do not
+// drive from the main
 #define SX126X_BUSY (0 + 17)
 #define SX126X_RESET (0 + 25)
 #define SX126X_DIO2_AS_RF_SWITCH
@@ -142,7 +142,7 @@ External serial flash WP25R1635FZUIL0
 
 #define USE_EINK
 
-#define PIN_SPI1_MISO  (32 + 7)
+#define PIN_SPI1_MISO (32 + 7)
 #define PIN_SPI1_MOSI PIN_EINK_MOSI
 #define PIN_SPI1_SCK PIN_EINK_SCLK
 
@@ -152,7 +152,7 @@ External serial flash WP25R1635FZUIL0
 // #define HAS_GPS 1
 #define GPS_L76K
 #define GPS_BAUDRATE 9600
-#define PIN_GPS_REINIT (32 + 5) // An output to reset L76K GPS. As per datasheet, low for > 100ms will reset the L76K
+#define PIN_GPS_REINIT (32 + 5)  // An output to reset L76K GPS. As per datasheet, low for > 100ms will reset the L76K
 #define PIN_GPS_STANDBY (32 + 2) // An output to wake GPS, low means allow sleep, high means force wake
 // Seems to be missing on this new board
 // #define PIN_GPS_PPS (32 + 4)  // Pulse per second input from the GPS
@@ -161,7 +161,7 @@ External serial flash WP25R1635FZUIL0
 
 #define GPS_THREAD_INTERVAL 50
 
-#define PIN_GPS_PPS (32 + 1) //GPS开关判断
+#define PIN_GPS_PPS (32 + 1) // GPS开关判断
 
 #define PIN_SERIAL1_RX GPS_TX_PIN
 #define PIN_SERIAL1_TX GPS_RX_PIN
@@ -195,10 +195,8 @@ External serial flash WP25R1635FZUIL0
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
 #define ADC_MULTIPLIER (2.02F)
 
-
 // #define HAS_RTC 0
 // #define HAS_SCREEN 0
-
 
 #ifdef __cplusplus
 }

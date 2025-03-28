@@ -264,23 +264,23 @@ void setup()
 {
 // power on peripherals
 #if defined(PIN_POWER_EN)
-pinMode(PIN_POWER_EN, OUTPUT);
-digitalWrite(PIN_POWER_EN, HIGH);
+    pinMode(PIN_POWER_EN, OUTPUT);
+    digitalWrite(PIN_POWER_EN, HIGH);
 #endif
 
 #ifdef LED_POWER
-pinMode(LED_POWER, OUTPUT);
-digitalWrite(LED_POWER, HIGH);
+    pinMode(LED_POWER, OUTPUT);
+    digitalWrite(LED_POWER, HIGH);
 #endif
 
 #ifdef POWER_LED
-pinMode(POWER_LED, OUTPUT);
-digitalWrite(POWER_LED, HIGH);
+    pinMode(POWER_LED, OUTPUT);
+    digitalWrite(POWER_LED, HIGH);
 #endif
 
 #ifdef USER_LED
-pinMode(USER_LED, OUTPUT);
-digitalWrite(USER_LED, LOW);
+    pinMode(USER_LED, OUTPUT);
+    digitalWrite(USER_LED, LOW);
 #endif
 
 #if defined(T_DECK)
