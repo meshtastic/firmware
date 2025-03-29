@@ -1598,6 +1598,31 @@ float calculateBearing(double lat1, double lon1, double lat2, double lon2) {
     return fmod((initialBearing * RAD_TO_DEG + 360), 360);  // Normalize to 0-360°
 }
 
+// Shared scroll index state for node screens
+static int scrollIndex = 0;
+
+// Helper: Calculates max scroll index based on total entries
+int calculateMaxScroll(int totalEntries, int visibleRows) {
+    int totalRows = (totalEntries + 1) / 2;
+    return std::max(0, totalRows - visibleRows);
+}
+
+// Helper: Draw vertical scrollbar matching CannedMessageModule style
+void drawScrollbar(OLEDDisplay *display, int visibleNodeRows, int totalEntries, int scrollIndex, int columns, int rowYOffset) {
+    int totalPages = (totalEntries + columns - 1) / columns;
+    if (totalPages <= visibleNodeRows) return;  // no scrollbar needed
+
+    int scrollAreaHeight = visibleNodeRows * (FONT_HEIGHT_SMALL - 3); // true pixel height used per row
+    int scrollbarX = display->getWidth() - 6;
+    int scrollbarWidth = 4;
+
+    int scrollBarHeight = (scrollAreaHeight * visibleNodeRows) / totalPages;
+    int scrollBarY = rowYOffset + (scrollAreaHeight * scrollIndex) / totalPages;
+
+    display->drawRect(scrollbarX, rowYOffset, scrollbarWidth, scrollAreaHeight);
+    display->fillRect(scrollbarX, scrollBarY, scrollbarWidth, scrollBarHeight);
+}
+
 // Grabs all nodes from the DB and sorts them (favorites and most recently heard first)
 void retrieveAndSortNodes(std::vector<NodeEntry> &nodeList) {
     size_t numNodes = nodeDB->getNumMeshNodes();
@@ -1756,8 +1781,9 @@ typedef void (*EntryRenderer)(OLEDDisplay*, meshtastic_NodeInfoLite*, int16_t, i
 // Shared function that renders all node screens (LastHeard, Hop/Signal)
 void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *title, EntryRenderer renderer) {
     int columnWidth = display->getWidth() / 2;
-    int yOffset = FONT_HEIGHT_SMALL - 3;
-    int col = 0, lastNodeY = y;
+    int totalRowsAvailable = (display->getHeight() - y - FONT_HEIGHT_SMALL) / (FONT_HEIGHT_SMALL - 3);
+    int visibleNodeRows = std::min(6, totalRowsAvailable);
+    int rowYOffset = FONT_HEIGHT_SMALL - 3;
 
     display->clear();
     drawScreenHeader(display, title, x, y);
@@ -1765,20 +1791,35 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     std::vector<NodeEntry> nodeList;
     retrieveAndSortNodes(nodeList);
 
-    for (const auto &entry : nodeList) {
+    int totalEntries = nodeList.size();
+    int maxScroll = calculateMaxScroll(totalEntries, visibleNodeRows);
+    scrollIndex = std::min(scrollIndex, maxScroll);
+
+    int startIndex = scrollIndex * visibleNodeRows * 2;
+    int endIndex = std::min(startIndex + visibleNodeRows * 2, totalEntries);
+
+    int yOffset = rowYOffset;
+    int col = 0;
+    int lastNodeY = y;
+    int shownCount = 0;
+
+    for (int i = startIndex; i < endIndex; ++i) {
         int xPos = x + (col * columnWidth);
-        renderer(display, entry.node, xPos, y + yOffset, columnWidth);
+        int yPos = y + yOffset;
+        renderer(display, nodeList[i].node, xPos, yPos, columnWidth);
         lastNodeY = std::max(lastNodeY, y + yOffset + FONT_HEIGHT_SMALL);
         yOffset += FONT_HEIGHT_SMALL - 3;
+        shownCount++;
 
         if (y + yOffset > display->getHeight() - FONT_HEIGHT_SMALL) {
-            yOffset = FONT_HEIGHT_SMALL - 3; 
+            yOffset = rowYOffset;
             col++;
             if (col > 1) break;
         }
     }
-    // Draw separator between columns
+
     drawColumnSeparator(display, x, y + FONT_HEIGHT_SMALL - 2, lastNodeY);
+    drawScrollbar(display, visibleNodeRows, totalEntries, scrollIndex, 2, rowYOffset);
 }
 
 // Public screen function: shows how recently nodes were heard
@@ -1845,14 +1886,19 @@ void drawCompassArrow(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
 void drawNodeListWithExtrasScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *title,
                                   EntryRenderer renderer, CompassExtraRenderer extras) {
     int columnWidth = display->getWidth() / 2;
-    int yOffset = FONT_HEIGHT_SMALL - 3;
-    int col = 0, lastNodeY = y;
+    int totalRowsAvailable = (display->getHeight() - y - FONT_HEIGHT_SMALL) / (FONT_HEIGHT_SMALL - 3);
+    int visibleNodeRows = std::min(6, totalRowsAvailable);
+    int rowYOffset = FONT_HEIGHT_SMALL - 3;
 
     display->clear();
     drawScreenHeader(display, title, x, y);
 
     std::vector<NodeEntry> nodeList;
     retrieveAndSortNodes(nodeList);
+
+    int totalEntries = nodeList.size();
+    int maxScroll = calculateMaxScroll(totalEntries, visibleNodeRows);
+    scrollIndex = std::min(scrollIndex, maxScroll);
 
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     double userLat = 0.0, userLon = 0.0;
@@ -1864,26 +1910,39 @@ void drawNodeListWithExtrasScreen(OLEDDisplay *display, OLEDDisplayUiState *stat
 
     float myHeading = screen->hasHeading() ? screen->getHeading() : 0.0f;
 
-    for (const auto &entry : nodeList) {
+    int startIndex = scrollIndex * visibleNodeRows * 2;
+    int endIndex = std::min(startIndex + visibleNodeRows * 2, totalEntries);
+
+    int yOffset = rowYOffset;
+    int col = 0;
+    int lastNodeY = y;
+    int shownCount = 0;
+
+    for (int i = startIndex; i < endIndex; ++i) {
         int xPos = x + (col * columnWidth);
-        renderer(display, entry.node, xPos, y + yOffset, columnWidth);
+        int yPos = y + yOffset;
+
+        renderer(display, nodeList[i].node, xPos, yPos, columnWidth);
 
         if (hasUserPosition && extras) {
-            extras(display, entry.node, xPos, y + yOffset, columnWidth, myHeading, userLat, userLon);
+            extras(display, nodeList[i].node, xPos, yPos, columnWidth, myHeading, userLat, userLon);
         }
 
         lastNodeY = std::max(lastNodeY, y + yOffset + FONT_HEIGHT_SMALL);
         yOffset += FONT_HEIGHT_SMALL - 3;
+        shownCount++;
 
         if (y + yOffset > display->getHeight() - FONT_HEIGHT_SMALL) {
-            yOffset = FONT_HEIGHT_SMALL - 3;
+            yOffset = rowYOffset;
             col++;
             if (col > 1) break;
         }
     }
 
     drawColumnSeparator(display, x, y + FONT_HEIGHT_SMALL - 2, lastNodeY);
+    drawScrollbar(display, visibleNodeRows, totalEntries, scrollIndex, 2, rowYOffset);
 }
+
 
 // Public screen entry for compass
 static void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) {
@@ -2046,7 +2105,6 @@ static void drawDefaultScreen(OLEDDisplay *display, OLEDDisplayUiState *state, i
     int uptimeX = (SCREEN_WIDTH - display->getStringWidth(uptimeStr)) / 2;
     display->drawString(uptimeX, uptimeY, uptimeStr);
 }
-
 
 
 #if defined(ESP_PLATFORM) && defined(USE_ST7789)
