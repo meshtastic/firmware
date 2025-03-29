@@ -13,13 +13,13 @@
 
 #include "FSCommon.h"
 #include "Led.h"
-#include "RTC.h"
 #include "SPILock.h"
 #include "Throttle.h"
 #include "concurrency/OSThread.h"
 #include "concurrency/Periodic.h"
 #include "detect/ScanI2C.h"
 #include "error.h"
+#include "gps/RTC.h"
 #include "power.h"
 
 #if !MESHTASTIC_EXCLUDE_I2C
@@ -1320,6 +1320,18 @@ void loop()
     // We want to sleep as long as possible here - because it saves power
     if (!runASAP && loopCanSleep()) {
         mainDelay.delay(delayMsec);
+    }
+}
+#endif
+
+#if !defined(CONFIG_AUTOSTART_ARDUINO) && (ESP_IDF_VERSION_MAJOR * 100 + ESP_IDF_VERSION_MINOR * 10 + ESP_IDF_VERSION_PATCH) > 514
+// Define app_main to bridge Arduino and ESP-IDF
+extern "C" void app_main(void)
+{
+    setup();
+    while (1) {
+        loop();
+        vTaskDelay(1); // Allows FreeRTOS to manage tasks
     }
 }
 #endif
