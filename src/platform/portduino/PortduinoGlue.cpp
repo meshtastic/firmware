@@ -197,6 +197,56 @@ void portduinoSetup()
             }
         }
     }
+
+    // If LoRa `Module: auto` (default in config.yaml),
+    // attempt to auto config based on Product Strings
+    if (settingsMap[use_autoconf] == true) {
+        char autoconf_product[96] = {0};
+        // Try CH341
+        try {
+            std::cout << "autoconf: Looking for CH341 device..." << std::endl;
+            ch341Hal =
+                new Ch341Hal(0, settingsStrings[lora_usb_serial_num], settingsMap[lora_usb_vid], settingsMap[lora_usb_pid]);
+            ch341Hal->getProductString(autoconf_product, 95);
+            delete ch341Hal;
+            std::cout << "autoconf: Found CH341 device " << autoconf_product << std::endl;
+        } catch (...) {
+            std::cout << "autoconf: Could not locate CH341 device" << std::endl;
+        }
+        // Try Pi HAT+
+        std::cout << "autoconf: Looking for Pi HAT+..." << std::endl;
+        if (access("/proc/device-tree/hat/product", R_OK) == 0) {
+            std::ifstream hatProductFile("/proc/device-tree/hat/product");
+            if (hatProductFile.is_open()) {
+                hatProductFile.read(autoconf_product, 95);
+                hatProductFile.close();
+            }
+            std::cout << "autoconf: Found Pi HAT+ " << autoconf_product << " at /proc/device-tree/hat/product" << std::endl;
+        } else {
+            std::cout << "autoconf: Could not locate Pi HAT+ at /proc/device-tree/hat/product" << std::endl;
+        }
+        // Load the config file based on the product string
+        if (strlen(autoconf_product) > 0) {
+            // From configProducts map in PortduinoGlue.h
+            std::string product_config = "";
+            try {
+                product_config = configProducts.at(autoconf_product);
+            } catch (std::out_of_range &e) {
+                std::cerr << "autoconf: Unable to find config for " << autoconf_product << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            if (loadConfig(("/etc/meshtasticd/available.d/" + product_config).c_str())) {
+                std::cout << "autoconf: Using " << product_config << " as config file for " << autoconf_product << std::endl;
+            } else {
+                std::cerr << "autoconf: Unable to use " << product_config << " as config file for " << autoconf_product
+                          << std::endl;
+                exit(EXIT_FAILURE);
+            }
+        } else {
+            std::cerr << "autoconf: Could not locate any devices" << std::endl;
+        }
+    }
+
     // if we're using a usermode driver, we need to initialize it here, to get a serial number back for mac address
     uint8_t dmac[6] = {0};
     if (settingsStrings[spidev] == "ch341") {
@@ -358,8 +408,9 @@ bool loadConfig(const char *configPath)
             const struct {
                 configNames cfgName;
                 std::string strName;
-            } loraModules[] = {{use_rf95, "RF95"},     {use_sx1262, "sx1262"}, {use_sx1268, "sx1268"}, {use_sx1280, "sx1280"},
-                               {use_lr1110, "lr1110"}, {use_lr1120, "lr1120"}, {use_lr1121, "lr1121"}, {use_llcc68, "LLCC68"}};
+            } loraModules[] = {{use_autoconf, "auto"}, {use_rf95, "RF95"},     {use_sx1262, "sx1262"},
+                               {use_sx1268, "sx1268"}, {use_sx1280, "sx1280"}, {use_lr1110, "lr1110"},
+                               {use_lr1120, "lr1120"}, {use_lr1121, "lr1121"}, {use_llcc68, "LLCC68"}};
             for (auto &loraModule : loraModules) {
                 settingsMap[loraModule.cfgName] = false;
             }
