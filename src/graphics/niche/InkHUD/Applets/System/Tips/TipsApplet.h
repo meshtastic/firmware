@@ -33,7 +33,6 @@ class TipsApplet : public SystemApplet
     TipsApplet();
 
     void onRender() override;
-    void onActivate() override;
     void onForeground() override;
     void onBackground() override;
     void onButtonShortPress() override;
