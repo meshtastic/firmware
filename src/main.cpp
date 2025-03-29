@@ -262,7 +262,12 @@ void printInfo()
 #ifndef PIO_UNIT_TESTING
 void setup()
 {
-// power on peripherals
+
+#ifdef POWER_CHRG
+    pinMode(POWER_CHRG, OUTPUT);
+    digitalWrite(POWER_CHRG, HIGH);
+#endif
+
 #if defined(PIN_POWER_EN)
     pinMode(PIN_POWER_EN, OUTPUT);
     digitalWrite(PIN_POWER_EN, HIGH);
