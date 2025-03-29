@@ -1057,12 +1057,6 @@ int lfs_dir_seek(lfs_t *lfs, lfs_dir_t *dir, lfs_off_t off)
     return 0;
 }
 
-lfs_soff_t lfs_dir_tell(lfs_t *lfs, lfs_dir_t const *dir)
-{
-    (void)lfs;
-    return dir->pos;
-}
-
 int lfs_dir_rewind(lfs_t *lfs, lfs_dir_t *dir)
 {
     // reload the head dir
@@ -1676,7 +1670,7 @@ lfs_ssize_t lfs_file_write(lfs_t *lfs, lfs_file_t *file, const void *buffer, lfs
     return size;
 }
 
-lfs_soff_t lfs_file_seek(lfs_t *lfs, lfs_file_t *file, lfs_soff_t off, int whence)
+lfs_off_t lfs_file_seek(lfs_t *lfs, lfs_file_t *file, lfs_off_t off, int whence)
 {
     // write out everything beforehand, may be noop if rdonly
     int err = lfs_file_flush(lfs, file);
@@ -1755,7 +1749,7 @@ int lfs_file_truncate(lfs_t *lfs, lfs_file_t *file, lfs_off_t size)
     return 0;
 }
 
-lfs_soff_t lfs_file_tell(lfs_t *lfs, lfs_file_t const *file)
+lfs_off_t lfs_file_tell(lfs_t *lfs, lfs_file_t const *file)
 {
     (void)lfs;
     return file->pos;
