@@ -44,7 +44,7 @@ class AmbientLightingThread : public concurrency::OSThread
         // moduleConfig.ambient_lighting.green = (myNodeInfo.my_node_num & 0x00FF00) >> 8;
         // moduleConfig.ambient_lighting.blue = myNodeInfo.my_node_num & 0x0000FF;
 
-#ifdef HAS_NCP5623
+#if defined(HAS_NCP5623) || defined(HAS_LP5562)
         _type = type;
         if (_type == ScanI2C::DeviceType::NONE) {
             LOG_DEBUG("AmbientLighting Disable due to no RGB leds found on I2C bus");
@@ -59,7 +59,7 @@ class AmbientLightingThread : public concurrency::OSThread
             return;
         }
         LOG_DEBUG("AmbientLighting init");
-#ifdef HAS_NCP5623 || HAS_LP5562
+#if defined(HAS_NCP5623) || defined(HAS_LP5562)
         if (_type == ScanI2C::NCP5623) {
             rgb.begin();
 #endif
@@ -79,7 +79,7 @@ class AmbientLightingThread : public concurrency::OSThread
 #endif
             setLighting();
 #endif
-#ifdef HAS_NCP5623 || HAS_LP5562
+#if defined(HAS_NCP5623) || defined(HAS_LP5562)
         }
 #endif
     }
@@ -162,7 +162,7 @@ class AmbientLightingThread : public concurrency::OSThread
         rgbw.setRed(moduleConfig.ambient_lighting.red);
         rgbw.setGreen(moduleConfig.ambient_lighting.green);
         rgbw.setBlue(moduleConfig.ambient_lighting.blue);
-        LOG_DEBUG("Init NCP5623 Ambient light w/ current=%d, red=%d, green=%d, blue=%d", moduleConfig.ambient_lighting.current,
+        LOG_DEBUG("Init LP5562 Ambient light w/ current=%d, red=%d, green=%d, blue=%d", moduleConfig.ambient_lighting.current,
                 moduleConfig.ambient_lighting.red, moduleConfig.ambient_lighting.green, moduleConfig.ambient_lighting.blue);
 #endif
 #ifdef HAS_NEOPIXEL
