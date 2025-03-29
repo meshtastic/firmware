@@ -66,23 +66,6 @@ if platform.name == "espressif32":
 
     env.AddPostAction("$BUILD_DIR/${PROGNAME}.bin", esp32_create_combined_bin)
 
-    esp32_kind = env.GetProjectOption("custom_esp32_kind")
-    if esp32_kind == "esp32":
-        # Free up some IRAM by removing auxiliary SPI flash chip drivers.
-        # Wrapped stub symbols are defined in src/platform/esp32/iram-quirk.c.
-        env.Append(
-            LINKFLAGS=[
-                "-Wl,--wrap=esp_flash_chip_gd",
-                "-Wl,--wrap=esp_flash_chip_issi",
-                "-Wl,--wrap=esp_flash_chip_winbond",
-                # For IDF5 build
-                "-Wl,--wrap=abort",
-            ]
-        )
-    else:
-        # For newer ESP32 targets, using newlib nano works better.
-        env.Append(LINKFLAGS=["--specs=nano.specs", "-u", "_printf_float"])
-
 if platform.name == "nordicnrf52":
     env.AddPostAction("$BUILD_DIR/${PROGNAME}.hex",
                       env.VerboseAction(f"\"{sys.executable}\" ./bin/uf2conv.py $BUILD_DIR/firmware.hex -c -f 0xADA52840 -o $BUILD_DIR/firmware.uf2",
