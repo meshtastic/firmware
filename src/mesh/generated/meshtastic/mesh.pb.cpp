@@ -63,6 +63,9 @@ PB_BIND(meshtastic_NeighborInfo, meshtastic_NeighborInfo, AUTO)
 PB_BIND(meshtastic_Neighbor, meshtastic_Neighbor, AUTO)
 
 
+PB_BIND(meshtastic_FishEyeStateRouting, meshtastic_FishEyeStateRouting, AUTO)
+
+
 PB_BIND(meshtastic_DeviceMetadata, meshtastic_DeviceMetadata, AUTO)
 
 

@@ -67,7 +67,9 @@ typedef enum _meshtastic_AdminMessage_ModuleConfigType {
     /* TODO: REPLACE */
     meshtastic_AdminMessage_ModuleConfigType_DETECTIONSENSOR_CONFIG = 11,
     /* TODO: REPLACE */
-    meshtastic_AdminMessage_ModuleConfigType_PAXCOUNTER_CONFIG = 12
+    meshtastic_AdminMessage_ModuleConfigType_PAXCOUNTER_CONFIG = 12,
+    /* TODO: REPLACE */
+    meshtastic_AdminMessage_ModuleConfigType_FISHEYESTATEROUTING_CONFIG = 13
 } meshtastic_AdminMessage_ModuleConfigType;
 
 typedef enum _meshtastic_AdminMessage_BackupLocation {
