@@ -389,7 +389,7 @@ int lfs_file_truncate(lfs_t *lfs, lfs_file_t *file, lfs_off_t size);
 //
 // Equivalent to lfs_file_seek(lfs, file, 0, LFS_SEEK_CUR)
 // Returns the position of the file, or a negative error code on failure.
-lfs_off_t lfs_file_tell(lfs_t *lfs, lfs_file_t const *file);
+lfs_soff_t lfs_file_tell(lfs_t *lfs, const lfs_file_t *file);
 
 // Change the position of the file to the beginning of the file
 //
