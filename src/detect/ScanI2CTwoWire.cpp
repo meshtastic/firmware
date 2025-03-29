@@ -213,13 +213,17 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 #ifdef HAS_NCP5623
                 SCAN_SIMPLE_CASE(NCP5623_ADDR, NCP5623, "NCP5623", (uint8_t)addr.address);
 #endif
-#if defined(HAS_AXP192) || defined(HAS_AXP2101)
-                SCAN_SIMPLE_CASE(XPOWERS_AXP192_AXP2101_ADDRESS, PMU_AXP192_AXP2101, "AXP192/AXP2101", (uint8_t)addr.address)
-#endif
-#if !defined(HAS_AXP192) && !defined(HAS_AXP2101)
-                SCAN_SIMPLE_CASE(XPOWERS_AXP192_AXP2101_ADDRESS, TCA8418KB, "TCA8418", (uint8_t)addr.address)
-#endif
-
+            case XPOWERS_AXP192_AXP2101_ADDRESS:
+                // Do we have the axp2101/192 or the TCA8418
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x90), 1);
+                if (registerValue == 0x0) {
+                    logFoundDevice("TCA8418", (uint8_t)addr.address);
+                    type = TCA8418KB;
+                } else {
+                    logFoundDevice("AXP192/AXP2101", (uint8_t)addr.address);
+                    type = PMU_AXP192_AXP2101;
+                }
+                break;
             case BME_ADDR:
             case BME_ADDR_ALTERNATE:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xD0), 1); // GET_ID
