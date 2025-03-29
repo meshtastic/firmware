@@ -13,21 +13,52 @@
 #include "configuration.h"
 
 #ifdef HAS_SDCARD
+#include "SPILock.h"
 #include <SD.h>
 #include <SPI.h>
-
-#ifdef SDCARD_USE_SPI1
-SPIClass SPI1(HSPI);
-#define SDHandler SPI1
-#else
-#define SDHandler SPI
+#if defined(ARCH_ESP32)
+#if defined(SDCARD_USE_HSPI)
+SPIClass SDHandler = SPIClass(HSPI);
+#elif defined(SDCARD_USE_VSPI)
+SPIClass SDHandler = SPIClass(VSPI);
 #endif
-
+#elif defined(ARCH_NRF52)
+#if defined(SDCARD_USE_SPI1)
+#define SDHandler SPI1 // only used for esp32, SPI selection for NRF52 happens in variant.h (for now)
+#elif defined(SDCARD_USE_SPI)
+#define SDHandler SPI // only used for esp32
+#endif                // NRF52 SPI or SPI1
+#endif                // ESP32/NRF52
 #ifndef SD_SPI_FREQUENCY
 #define SD_SPI_FREQUENCY 4000000U
 #endif
+#endif                // HAS_SDCARD
 
-#endif // HAS_SDCARD
+
+
+#if defined(ARCH_STM32WL)
+
+uint16_t OSFS::startOfEEPROM = 1;
+uint16_t OSFS::endOfEEPROM = 2048;
+
+// 3) How do I read from the medium?
+void OSFS::readNBytes(uint16_t address, unsigned int num, byte *output)
+{
+    for (uint16_t i = address; i < address + num; i++) {
+        *output = EEPROM.read(i);
+        output++;
+    }
+}
+
+// 4) How to I write to the medium?
+void OSFS::writeNBytes(uint16_t address, unsigned int num, const byte *input)
+{
+    for (uint16_t i = address; i < address + num; i++) {
+        EEPROM.update(i, *input);
+        input++;
+    }
+}
+#endif // ARCH_STM32WL
 
 /**
  * @brief Copies a file from one location to another.
@@ -308,8 +339,12 @@ void setupSDCard()
 {
 #ifdef HAS_SDCARD
     concurrency::LockGuard g(spiLock);
+#if (defined(ARCH_ESP32) || defined(ARCH_NRF52))
+#if (defined(ARCH_ESP32))
     SDHandler.begin(SPI_SCK, SPI_MISO, SPI_MOSI);
-    if (!SD.begin(SDCARD_CS, SDHandler, SD_SPI_FREQUENCY)) {
+#endif
+    if (!SD.begin(SDCARD_CS, SDHandlerr, SD_SPI_FREQUENCY)) { // param SDHandler only used for esp32
+
         LOG_DEBUG("No SD_MMC card detected");
         return;
     }
@@ -332,6 +367,9 @@ void setupSDCard()
     uint64_t cardSize = SD.cardSize() / (1024 * 1024);
     LOG_DEBUG("SD Card Size: %lu MB", (uint32_t)cardSize);
     LOG_DEBUG("Total space: %lu MB", (uint32_t)(SD.totalBytes() / (1024 * 1024)));
+#if (defined(ARCH_ESP32)) // not implemented in arduino sd library
     LOG_DEBUG("Used space: %lu MB", (uint32_t)(SD.usedBytes() / (1024 * 1024)));
+#endif
+#endif
 #endif
 }
