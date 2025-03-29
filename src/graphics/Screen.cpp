@@ -2101,9 +2101,11 @@ static void drawDefaultScreen(OLEDDisplay *display, OLEDDisplayUiState *state, i
                  days ? 'd' : hours ? 'h' : minutes ? 'm' : 's');
     }
 
+    char uptimeFullStr[16];
+    snprintf(uptimeFullStr, sizeof(uptimeFullStr), "Uptime: %s", uptimeStr);
+    int uptimeX = (SCREEN_WIDTH - display->getStringWidth(uptimeFullStr)) / 2;
     int uptimeY = y + (FONT_HEIGHT_SMALL + 1) * 3;
-    int uptimeX = (SCREEN_WIDTH - display->getStringWidth(uptimeStr)) / 2;
-    display->drawString(uptimeX, uptimeY, uptimeStr);
+    display->drawString(uptimeX, uptimeY, uptimeFullStr);
 }
 
 
