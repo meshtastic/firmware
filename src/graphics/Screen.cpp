@@ -1565,6 +1565,8 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     // Must be after distStr is populated
     screen->drawColumns(display, x, y, fields);
 }
+
+// h! Makes header invert rounder
 void drawRoundedHighlight(OLEDDisplay *display, int16_t x, int16_t y, int16_t w, int16_t h, int16_t r) {
     // Center rectangles
     display->fillRect(x + r, y, w - 2 * r, h);
@@ -1577,13 +1579,13 @@ void drawRoundedHighlight(OLEDDisplay *display, int16_t x, int16_t y, int16_t w,
     display->fillCircle(x + r, y + h - r - 1, r);           // Bottom-left
     display->fillCircle(x + w - r - 1, y + h - r - 1, r);   // Bottom-right
 }
-// Each node entry holds a reference to its info and how long ago it was heard from
+// h! Each node entry holds a reference to its info and how long ago it was heard from
 struct NodeEntry {
     meshtastic_NodeInfoLite *node;
     uint32_t lastHeard;
 };
 
-// Calculates bearing between two lat/lon points (used for compass)
+// h! Calculates bearing between two lat/lon points (used for compass)
 float calculateBearing(double lat1, double lon1, double lat2, double lon2) {
     double dLon = (lon2 - lon1) * DEG_TO_RAD;
     lat1 = lat1 * DEG_TO_RAD;
@@ -1656,15 +1658,22 @@ void drawScreenHeader(OLEDDisplay *display, const char *title, int16_t x, int16_
 
     int screenWidth = display->getWidth();
     int textWidth = display->getStringWidth(title);
-    int titleX = (screenWidth - textWidth) / 2;  // Centered X position
+    int titleX = (screenWidth - textWidth) / 2;
+
+    // Height of highlight row
+    const int highlightHeight = FONT_HEIGHT_SMALL - 1;
+
+    // Y offset to vertically center text in rounded bar
+    int textY = y + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
 
     if (isInverted) {
-        drawRoundedHighlight(display, 0, y, screenWidth, FONT_HEIGHT_SMALL - 2, 2);  // Full width from 0
+        drawRoundedHighlight(display, 0, y, screenWidth, highlightHeight, 2);
         display->setColor(BLACK);
     }
-    // Fake bold by drawing again with slight offset
-    display->drawString(titleX, y, title);
-    if (isBold) display->drawString(titleX + 1, y, title);
+
+    // Draw text centered vertically and horizontally
+    display->drawString(titleX, textY, title);
+    if (isBold) display->drawString(titleX + 1, textY, title);
 
     display->setColor(WHITE);
 }
@@ -1950,46 +1959,49 @@ static void drawDefaultScreen(OLEDDisplay *display, OLEDDisplayUiState *state, i
     bool isInverted = (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED);
     bool isBold = config.display.heading_bold;
 
-    const int xOffset = 3; // Padding for top row edges
+    const int xOffset = 3;
+    const int highlightHeight = FONT_HEIGHT_SMALL - 1;
 
-    // Top row highlight (like drawScreenHeader)
+    // Draw header background highlight
     if (isInverted) {
-        drawRoundedHighlight(display, 0, y, SCREEN_WIDTH, FONT_HEIGHT_SMALL - 1, 2);
+        drawRoundedHighlight(display, 0, y, SCREEN_WIDTH, highlightHeight, 2);
         display->setColor(BLACK);
     }
 
-    // Top row: Battery icon, %, Voltage
-    int batteryYOffset = 2;  // Adjust for vertical alignment
-    int textYOffset = 2;     // Match text with battery height
-    drawBattery(display, x + xOffset, y + batteryYOffset, imgBattery, powerStatus);
+    // === TOP ROW: Battery, %, Voltage ===
+    int screenWidth = display->getWidth();
+
+    // Draw battery icon slightly inset from top
+    drawBattery(display, x + xOffset, y + 2, imgBattery, powerStatus);
+
+    // Calculate vertical center for text (centered in header row)
+    int textY = y + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
 
     char percentStr[8];
     snprintf(percentStr, sizeof(percentStr), "%d%%", powerStatus->getBatteryChargePercent());
-    int screenWidth = display->getWidth();
+
     int batteryOffset = screenWidth > 128 ? 34 : 18;
     int percentX = x + xOffset + batteryOffset;
-    display->drawString(percentX, y + textYOffset, percentStr);
+    display->drawString(percentX, textY, percentStr);
 
     char voltStr[10];
     int batV = powerStatus->getBatteryVoltageMv() / 1000;
     int batCv = (powerStatus->getBatteryVoltageMv() % 1000) / 10;
     snprintf(voltStr, sizeof(voltStr), "%d.%02dV", batV, batCv);
     int voltX = SCREEN_WIDTH - xOffset - display->getStringWidth(voltStr);
-    display->drawString(voltX, y + textYOffset, voltStr);
+    display->drawString(voltX, textY, voltStr);
 
-    // Bold only for header row
     if (isBold) {
-        display->drawString(percentX + 1, y + textYOffset, percentStr);
-        display->drawString(voltX + 1, y + textYOffset, voltStr);
+        display->drawString(percentX + 1, textY, percentStr);
+        display->drawString(voltX + 1, textY, voltStr);
     }
 
     display->setColor(WHITE);
 
-    // === Temporarily disable bold for second row ===
+    // === Second Row: Node and GPS ===
     bool origBold = config.display.heading_bold;
     config.display.heading_bold = false;
 
-    // Second row: Node count and satellite info
     int secondRowY = y + FONT_HEIGHT_SMALL + 1;
     drawNodes(display, x, secondRowY, nodeStatus);
 
@@ -1997,7 +2009,6 @@ static void drawDefaultScreen(OLEDDisplay *display, OLEDDisplayUiState *state, i
     if (config.position.fixed_position) {
         drawGPS(display, SCREEN_WIDTH - 44, secondRowY, gpsStatus);
     } else if (!gpsStatus || !gpsStatus->getIsConnected()) {
-        // Show fallback: either "GPS off" or "No GPS"
         String displayLine = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "No GPS" : "GPS off";
         int posX = SCREEN_WIDTH - display->getStringWidth(displayLine) - 2;
         display->drawString(posX, secondRowY, displayLine);
@@ -2006,10 +2017,9 @@ static void drawDefaultScreen(OLEDDisplay *display, OLEDDisplayUiState *state, i
     }
 #endif
 
-    // Restore original bold setting
     config.display.heading_bold = origBold;
 
-    // Third row: Centered LongName
+    // === Third Row: LongName Centered ===
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     if (ourNode && ourNode->has_user && strlen(ourNode->user.long_name) > 0) {
         const char* longName = ourNode->user.long_name;
@@ -2019,12 +2029,10 @@ static void drawDefaultScreen(OLEDDisplay *display, OLEDDisplayUiState *state, i
         display->drawString(nameX, nameY, longName);
     }
 
-    // Fourth row: Centered uptime string (e.g. 1m, 2h, 3d)
+    // === Fourth Row: Uptime ===
     uint32_t uptime = millis() / 1000;
     char uptimeStr[6];
-    uint32_t minutes = uptime / 60;
-    uint32_t hours = minutes / 60;
-    uint32_t days = hours / 24;
+    uint32_t minutes = uptime / 60, hours = minutes / 60, days = hours / 24;
 
     if (days > 365) {
         snprintf(uptimeStr, sizeof(uptimeStr), "?");
@@ -2038,6 +2046,7 @@ static void drawDefaultScreen(OLEDDisplay *display, OLEDDisplayUiState *state, i
     int uptimeX = (SCREEN_WIDTH - display->getStringWidth(uptimeStr)) / 2;
     display->drawString(uptimeX, uptimeY, uptimeStr);
 }
+
 
 
 #if defined(ESP_PLATFORM) && defined(USE_ST7789)
