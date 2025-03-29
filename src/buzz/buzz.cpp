@@ -30,8 +30,11 @@ struct ToneDuration {
 #define NOTE_B3 247
 #define NOTE_CS4 277
 
-const int DURATION_1_8 = 125; // 1/8 note
-const int DURATION_1_4 = 250; // 1/4 note
+const int DURATION_1_8 = 125;  // 1/8 note
+const int DURATION_1_4 = 250;  // 1/4 note
+const int DURATION_1_2 = 500;  // 1/2 note
+const int DURATION_3_4 = 750;  // 1/4 note
+const int DURATION_1_1 = 1000; // 1/1 note
 
 void playTones(const ToneDuration *tone_durations, int size)
 {
@@ -52,6 +55,12 @@ void playTones(const ToneDuration *tone_durations, int size)
 void playBeep()
 {
     ToneDuration melody[] = {{NOTE_B3, DURATION_1_4}};
+    playTones(melody, sizeof(melody) / sizeof(ToneDuration));
+}
+
+void playLongBeep()
+{
+    ToneDuration melody[] = {{NOTE_B3, DURATION_1_1}};
     playTones(melody, sizeof(melody) / sizeof(ToneDuration));
 }
 
