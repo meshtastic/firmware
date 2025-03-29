@@ -119,7 +119,7 @@ void tftSetup(void)
 #ifdef ARCH_ESP32
     tftSleepObserver.observe(&notifyLightSleep);
     endSleepObserver.observe(&notifyLightSleepEnd);
-    xTaskCreatePinnedToCore(tft_task_handler, "tft", 8192, NULL, 1, NULL, 0);
+    xTaskCreatePinnedToCore(tft_task_handler, "tft", 10240, NULL, 1, NULL, 0);
 #endif
 }
 

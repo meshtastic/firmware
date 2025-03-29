@@ -22,6 +22,7 @@ BIGDB_8MB=(
 	"icarus"
 	"seeed-xiao-s3"
 	"tbeam-s3-core"
+	"t-watch-s3"
 	"tracksenger"
 )
 BIGDB_16MB=(
@@ -33,7 +34,6 @@ BIGDB_16MB=(
 	"m5stack-cores3"
 	"station-g2"
 	"t-eth-elite"
-	"t-watch-s3"
 )
 S3_VARIANTS=(
 	"s3"
