@@ -1641,6 +1641,11 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             setScreensaverFrames(einkScreensaver);
 #endif
             LOG_INFO("Turn off screen");
+#ifdef ELECROW_ThinkNode_M1
+            if (digitalRead(PIN_EINK_EN) == HIGH) {
+                digitalWrite(PIN_EINK_EN, LOW);
+            }
+#endif
             dispdev->displayOff();
 #ifdef USE_ST7789
             SPI1.end();

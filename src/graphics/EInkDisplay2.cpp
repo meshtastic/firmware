@@ -128,16 +128,24 @@ bool EInkDisplay::connect()
 #ifdef PIN_EINK_EN
     // backlight power, HIGH is backlight on, LOW is off
     pinMode(PIN_EINK_EN, OUTPUT);
+#ifdef ELECROW_ThinkNode_M1
     digitalWrite(PIN_EINK_EN, LOW);
+#else
+    digitalWrite(PIN_EINK_EN, HIGH);
+#endif
 #endif
 
-#if defined(TTGO_T_ECHO)
+#if defined(TTGO_T_ECHO) || defined(ELECROW_ThinkNode_M1)
     {
         auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY, SPI1);
 
         adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(*lowLevel);
         adafruitDisplay->init();
+#ifdef ELECROW_ThinkNode_M1
+        adafruitDisplay->setRotation(4);
+#else
         adafruitDisplay->setRotation(3);
+#endif
         adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
     }
 #elif defined(MESHLINK)

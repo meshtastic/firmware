@@ -235,6 +235,14 @@ void nrf52InitSemiHosting()
 
 void nrf52Setup()
 {
+#ifdef USB_CHECK
+    pinMode(USB_CHECK, INPUT);
+#endif
+
+#ifdef ADC_V
+    pinMode(ADC_V, INPUT);
+#endif
+
     uint32_t why = NRF_POWER->RESETREAS;
     // per
     // https://infocenter.nordicsemi.com/index.jsp?topic=%2Fcom.nordic.infocenter.nrf52832.ps.v1.1%2Fpower.html
@@ -275,9 +283,11 @@ void cpuDeepSleep(uint32_t msecToWake)
     Wire.end();
 #endif
     SPI.end();
+#if SPI_INTERFACES_COUNT > 1
+    SPI1.end();
+#endif
     // This may cause crashes as debug messages continue to flow.
     Serial.end();
-
 #ifdef PIN_SERIAL_RX1
     Serial1.end();
 #endif
@@ -315,6 +325,31 @@ void cpuDeepSleep(uint32_t msecToWake)
     detachInterrupt(PIN_GPS_PPS);
     detachInterrupt(PIN_BUTTON1);
 #endif
+
+#ifdef ELECROW_ThinkNode_M1
+    for (int pin = 0; pin < 48; pin++) {
+        if (pin == 17 || pin == 19 || pin == 20 || pin == 22 || pin == 23 || pin == 24 || pin == 25 || pin == 9 || pin == 10 ||
+            pin == PIN_BUTTON1 || pin == PIN_BUTTON2) {
+            continue;
+        }
+        pinMode(pin, OUTPUT);
+    }
+    for (int pin = 0; pin < 48; pin++) {
+        if (pin == 17 || pin == 19 || pin == 20 || pin == 22 || pin == 23 || pin == 24 || pin == 25 || pin == 9 || pin == 10 ||
+            pin == PIN_BUTTON1 || pin == PIN_BUTTON2) {
+            continue;
+        }
+        digitalWrite(pin, LOW);
+    }
+    for (int pin = 0; pin < 48; pin++) {
+        if (pin == 17 || pin == 19 || pin == 20 || pin == 22 || pin == 23 || pin == 24 || pin == 25 || pin == 9 || pin == 10 ||
+            pin == PIN_BUTTON1 || pin == PIN_BUTTON2) {
+            continue;
+        }
+        NRF_GPIO->DIRCLR = (1 << pin);
+    }
+#endif
+
     // Sleepy trackers or sensors can low power "sleep"
     // Don't enter this if we're sleeping portMAX_DELAY, since that's a shutdown event
     if (msecToWake != portMAX_DELAY &&
@@ -333,6 +368,17 @@ void cpuDeepSleep(uint32_t msecToWake)
         // FIXME, use system off mode with ram retention for key state?
         // FIXME, use non-init RAM per
         // https://devzone.nordicsemi.com/f/nordic-q-a/48919/ram-retention-settings-with-softdevice-enabled
+
+#ifdef ELECROW_ThinkNode_M1
+        nrf_gpio_cfg_input(PIN_BUTTON1, NRF_GPIO_PIN_PULLUP); // Configure the pin to be woken up as an input
+        nrf_gpio_pin_sense_t sense = NRF_GPIO_PIN_SENSE_LOW;
+        nrf_gpio_cfg_sense_set(PIN_BUTTON1, sense);
+
+        nrf_gpio_cfg_input(PIN_BUTTON2, NRF_GPIO_PIN_PULLUP);
+        nrf_gpio_pin_sense_t sense1 = NRF_GPIO_PIN_SENSE_LOW;
+        nrf_gpio_cfg_sense_set(PIN_BUTTON2, sense1);
+#endif
+
         auto ok = sd_power_system_off();
         if (ok != NRF_SUCCESS) {
             LOG_ERROR("FIXME: Ignoring soft device (EasyDMA pending?) and forcing system-off!");
