@@ -533,7 +533,9 @@ Power::Power() : OSThread("Power")
 {
     statusHandler = {};
     low_voltage_counter = 0;
+#if defined(ELECROW_ThinkNode_M1) || defined(POWER_CFG)
     low_voltage_counter_led3 = 0;
+#endif
 #ifdef DEBUG_HEAP
     lastheap = memGet.getFreeHeap();
 #endif
