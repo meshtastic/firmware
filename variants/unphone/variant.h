@@ -67,5 +67,4 @@
 // #define ADC_MULTIPLIER 3.2
 
 // #define BATTERY_PIN 13 // battery V measurement pin; vbat divider is here
-// #define ADC_CHANNEL ADC2_GPIO13_CHANNEL
 // #define BAT_MEASURE_ADC_UNIT 2

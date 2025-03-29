@@ -1,0 +1,34 @@
+Fix compiler warning
+
+diff --git a/OLEDDisplay.cpp b/OLEDDisplay.cpp
+index dca2ad1..35eb456 100644
+--- a/OLEDDisplay.cpp
++++ b/OLEDDisplay.cpp
+@@ -941,15 +941,6 @@ size_t OLEDDisplay::write(uint8_t c) {
+   return 1;
+ }
+ 
+-size_t OLEDDisplay::write(const char* str) {
+-  if (str == NULL) return 0;
+-  size_t length = strlen(str);
+-  for (size_t i = 0; i < length; i++) {
+-    write(str[i]);
+-  }
+-  return length;
+-}
+-
+ #ifdef __MBED__
+ int OLEDDisplay::_putc(int c) {
+ 
+diff --git a/OLEDDisplay.h b/OLEDDisplay.h
+index 23e6845..07cb9a2 100644
+--- a/OLEDDisplay.h
++++ b/OLEDDisplay.h
+@@ -330,7 +330,6 @@ class OLEDDisplay : public Stream {
+ 
+     // Implement needed function to be compatible with Print class
+     size_t write(uint8_t c);
+-    size_t write(const char* s);
+ 
+     // Implement needed function to be compatible with Stream class
+ #ifdef __MBED__

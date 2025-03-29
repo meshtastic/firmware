@@ -22,7 +22,7 @@ class BluetoothPhoneAPI : public PhoneAPI
     /**
      * Subclasses can use this as a hook to provide custom notifications for their transport (i.e. bluetooth notifies)
      */
-    virtual void onNowHasData(uint32_t fromRadioNum)
+    void onNowHasData(uint32_t fromRadioNum) override
     {
         PhoneAPI::onNowHasData(fromRadioNum);
 
@@ -36,7 +36,7 @@ class BluetoothPhoneAPI : public PhoneAPI
     }
 
     /// Check the current underlying physical link to see if the client is currently connected
-    virtual bool checkIsConnected() { return bleServer && bleServer->getConnectedCount() > 0; }
+    bool checkIsConnected() override { return bleServer && bleServer->getConnectedCount() > 0; }
 };
 
 static BluetoothPhoneAPI *bluetoothPhoneAPI;
@@ -49,7 +49,7 @@ static uint8_t lastToRadio[MAX_TO_FROM_RADIO_SIZE];
 
 class NimbleBluetoothToRadioCallback : public NimBLECharacteristicCallbacks
 {
-    virtual void onWrite(NimBLECharacteristic *pCharacteristic)
+    void onWrite(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo) override
     {
         LOG_DEBUG("To Radio onwrite");
         auto val = pCharacteristic->getValue();
@@ -66,7 +66,7 @@ class NimbleBluetoothToRadioCallback : public NimBLECharacteristicCallbacks
 
 class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
 {
-    virtual void onRead(NimBLECharacteristic *pCharacteristic)
+    void onRead(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo) override
     {
         uint8_t fromRadioBytes[meshtastic_FromRadio_size];
         size_t numBytes = bluetoothPhoneAPI->getFromRadio(fromRadioBytes);
@@ -79,7 +79,7 @@ class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
 
 class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
 {
-    virtual uint32_t onPassKeyRequest()
+    uint32_t onPassKeyDisplay() override
     {
         uint32_t passkey = config.bluetooth.fixed_pin;
 
@@ -125,7 +125,7 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
         return passkey;
     }
 
-    virtual void onAuthenticationComplete(ble_gap_conn_desc *desc)
+    void onAuthenticationComplete(NimBLEConnInfo &connInfo) override
     {
         LOG_INFO("BLE authentication complete");
 
@@ -138,7 +138,7 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
         }
     }
 
-    virtual void onDisconnect(NimBLEServer *pServer, ble_gap_conn_desc *desc)
+    void onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo, int reason) override
     {
         LOG_INFO("BLE disconnect");
 
@@ -148,6 +148,8 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
         if (bluetoothPhoneAPI) {
             bluetoothPhoneAPI->close();
         }
+
+        NimBLEDevice::startAdvertising();
     }
 };
 
@@ -191,7 +193,7 @@ int NimbleBluetooth::getRssi()
     if (bleServer && isConnected()) {
         auto service = bleServer->getServiceByUUID(MESH_SERVICE_UUID);
         uint16_t handle = service->getHandle();
-        return NimBLEDevice::getClientByID(handle)->getRssi();
+        return NimBLEDevice::getClientByHandle(handle)->getRssi();
     }
     return 0; // FIXME figure out where to source this
 }
@@ -259,7 +261,7 @@ void NimbleBluetooth::setupService()
     BatteryCharacteristic = batteryService->createCharacteristic( // 0x2A19 is the Battery Level characteristic)
         (uint16_t)0x2a19, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY, 1);
 
-    NimBLE2904 *batteryLevelDescriptor = (NimBLE2904 *)BatteryCharacteristic->createDescriptor((uint16_t)0x2904);
+    NimBLE2904 *batteryLevelDescriptor = BatteryCharacteristic->create2904();
     batteryLevelDescriptor->setFormat(NimBLE2904::FORMAT_UINT8);
     batteryLevelDescriptor->setNamespace(1);
     batteryLevelDescriptor->setUnit(0x27ad);
@@ -273,7 +275,7 @@ void NimbleBluetooth::startAdvertising()
     pAdvertising->reset();
     pAdvertising->addServiceUUID(MESH_SERVICE_UUID);
     pAdvertising->addServiceUUID(NimBLEUUID((uint16_t)0x180f)); // 0x180F is the Battery Service
-    pAdvertising->start(0);
+    pAdvertising->start();
 }
 
 /// Given a level between 0-100, update the BLE attribute
