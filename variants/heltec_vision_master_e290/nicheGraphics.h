@@ -19,7 +19,7 @@ Different NicheGraphics UIs and different hardware variants will each have their
 
 // InkHUD-specific components
 // ---------------------------
-#include "graphics/niche/InkHUD/WindowManager.h"
+#include "graphics/niche/InkHUD/InkHUD.h"
 
 // Applets
 #include "graphics/niche/InkHUD/Applets/User/AllMessage/AllMessageApplet.h"
@@ -111,7 +111,7 @@ void setupNicheGraphics()
     Inputs::TwoButton *buttons = Inputs::TwoButton::getInstance(); // A shared NicheGraphics component
 
     // Setup the main user button (0)
-    buttons->setWiring(0, BUTTON_PIN);
+    buttons->setWiring(0, Inputs::TwoButton::getUserButtonPin());
     buttons->setHandlerShortPress(0, []() { InkHUD::InkHUD::getInstance()->shortpress(); });
     buttons->setHandlerLongPress(0, []() { InkHUD::InkHUD::getInstance()->longpress(); });
 

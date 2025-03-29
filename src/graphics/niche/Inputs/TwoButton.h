@@ -30,6 +30,8 @@ class TwoButton : protected concurrency::OSThread
   public:
     typedef std::function<void()> Callback;
 
+    static uint8_t getUserButtonPin(); // Resolve the GPIO, considering the various possible source of definition
+
     static TwoButton *getInstance(); // Create or get the singleton instance
     void start();                    // Start handling button input
     void stop();                     // Stop handling button input (disconnect ISRs for sleep)
@@ -62,7 +64,7 @@ class TwoButton : protected concurrency::OSThread
       public:
         // Per-button config
         uint8_t pin = 0xFF;                 // 0xFF: unset
-        bool activeLogic = LOW;             // Active LOW by default. Todo: remove, unused
+        bool activeLogic = LOW;             // Active LOW by default. Currently unimplemented.
         uint8_t mode = INPUT;               // Whether to use internal pull up / pull down resistors
         uint32_t debounceLength = 50;       // Minimum length for shortpress, in ms
         uint32_t longpressLength = 500;     // How long after button down to fire longpress, in ms

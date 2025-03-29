@@ -105,7 +105,7 @@ void setupNicheGraphics()
     constexpr uint8_t TOUCH_BUTTON = 1;
 
     // Setup the main user button
-    buttons->setWiring(MAIN_BUTTON, BUTTON_PIN, LOW);
+    buttons->setWiring(MAIN_BUTTON, Inputs::TwoButton::getUserButtonPin());
     buttons->setHandlerShortPress(MAIN_BUTTON, []() { InkHUD::InkHUD::getInstance()->shortpress(); });
     buttons->setHandlerLongPress(MAIN_BUTTON, []() { InkHUD::InkHUD::getInstance()->longpress(); });
 
