@@ -424,21 +424,38 @@ static void drawBattery(OLEDDisplay *display, int16_t x, int16_t y, uint8_t *img
 {
     static const uint8_t powerBar[3] = {0x81, 0xBD, 0xBD};
     static const uint8_t lightning[8] = {0xA1, 0xA1, 0xA5, 0xAD, 0xB5, 0xA5, 0x85, 0x85};
-    // Clear the bar area on the battery image
+
+    // Clear the bar area inside the battery image
     for (int i = 1; i < 14; i++) {
         imgBuffer[i] = 0x81;
     }
-    // If charging, draw a charging indicator
+
+    // Fill with lightning or power bars
     if (powerStatus->getIsCharging()) {
         memcpy(imgBuffer + 3, lightning, 8);
-        // If not charging, Draw power bars
     } else {
         for (int i = 0; i < 4; i++) {
             if (powerStatus->getBatteryChargePercent() >= 25 * i)
                 memcpy(imgBuffer + 1 + (i * 3), powerBar, 3);
         }
     }
-    display->drawFastImage(x, y, 16, 8, imgBuffer);
+
+    // Slightly more conservative scaling based on screen width
+    int screenWidth = display->getWidth();
+    int scale = 1;
+
+    if (screenWidth >= 200) scale = 2;
+    if (screenWidth >= 300) scale = 3;
+
+    // Draw scaled battery image (16 columns × 8 rows)
+    for (int col = 0; col < 16; col++) {
+        uint8_t colBits = imgBuffer[col];
+        for (int row = 0; row < 8; row++) {
+            if (colBits & (1 << row)) {
+                display->fillRect(x + col * scale, y + row * scale, scale, scale);
+            }
+        }
+    }
 }
 
 #if defined(DISPLAY_CLOCK_FRAME)
@@ -1937,29 +1954,33 @@ static void drawDefaultScreen(OLEDDisplay *display, OLEDDisplayUiState *state, i
 
     // Top row highlight (like drawScreenHeader)
     if (isInverted) {
-        drawRoundedHighlight(display, 0, y, SCREEN_WIDTH, FONT_HEIGHT_SMALL - 2, 2);
+        drawRoundedHighlight(display, 0, y, SCREEN_WIDTH, FONT_HEIGHT_SMALL - 1, 2);
         display->setColor(BLACK);
     }
 
     // Top row: Battery icon, %, Voltage
-    drawBattery(display, x + xOffset, y + 1, imgBattery, powerStatus);
+    int batteryYOffset = 2;  // Adjust for vertical alignment
+    int textYOffset = 2;     // Match text with battery height
+    drawBattery(display, x + xOffset, y + batteryYOffset, imgBattery, powerStatus);
 
     char percentStr[8];
     snprintf(percentStr, sizeof(percentStr), "%d%%", powerStatus->getBatteryChargePercent());
-    int percentX = x + xOffset + 18;
-    display->drawString(percentX, y, percentStr);
+    int screenWidth = display->getWidth();
+    int batteryOffset = screenWidth > 128 ? 34 : 18;
+    int percentX = x + xOffset + batteryOffset;
+    display->drawString(percentX, y + textYOffset, percentStr);
 
     char voltStr[10];
     int batV = powerStatus->getBatteryVoltageMv() / 1000;
     int batCv = (powerStatus->getBatteryVoltageMv() % 1000) / 10;
     snprintf(voltStr, sizeof(voltStr), "%d.%02dV", batV, batCv);
     int voltX = SCREEN_WIDTH - xOffset - display->getStringWidth(voltStr);
-    display->drawString(voltX, y, voltStr);
+    display->drawString(voltX, y + textYOffset, voltStr);
 
     // Bold only for header row
     if (isBold) {
-        display->drawString(percentX + 1, y, percentStr);
-        display->drawString(voltX + 1, y, voltStr);
+        display->drawString(percentX + 1, y + textYOffset, percentStr);
+        display->drawString(voltX + 1, y + textYOffset, voltStr);
     }
 
     display->setColor(WHITE);
