@@ -436,14 +436,6 @@ int lfs_dir_read(lfs_t *lfs, lfs_dir_t *dir, struct lfs_info *info);
 // Returns a negative error code on failure.
 int lfs_dir_seek(lfs_t *lfs, lfs_dir_t *dir, lfs_off_t off);
 
-// Return the position of the directory
-//
-// The returned offset is only meant to be consumed by seek and may not make
-// sense, but does indicate the current position in the directory iteration.
-//
-// Returns the position of the directory, or a negative error code on failure.
-lfs_soff_t lfs_dir_tell(lfs_t *lfs, lfs_dir_t const *dir);
-
 // Change the position of the directory to the beginning of the directory
 //
 // Returns a negative error code on failure.
