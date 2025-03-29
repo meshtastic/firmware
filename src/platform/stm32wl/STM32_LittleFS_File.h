@@ -42,7 +42,7 @@ enum {
 class File : public Stream
 {
   public:
-    File(STM32_LittleFS &fs);
+    explicit File(STM32_LittleFS &fs);
     File(char const *filename, uint8_t mode, STM32_LittleFS &fs);
 
   public:

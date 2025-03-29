@@ -53,6 +53,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_RAK4631
 #elif defined(TTGO_T_ECHO)
 #define HW_VENDOR meshtastic_HardwareModel_T_ECHO
+#elif defined(ELECROW_ThinkNode_M1)
+#define HW_VENDOR meshtastic_HardwareModel_THINKNODE_M1
 #elif defined(NANO_G2_ULTRA)
 #define HW_VENDOR meshtastic_HardwareModel_NANO_G2_ULTRA
 #elif defined(CANARYONE)
@@ -75,6 +77,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 #elif defined(HELTEC_T114)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_NODE_T114
+#elif defined(MESHLINK)
+#define HW_VENDOR meshtastic_HardwareModel_MESHLINK
 #elif defined(SEEED_XIAO_NRF52840_KIT)
 #define HW_VENDOR meshtastic_HardwareModel_XIAO_NRF52_KIT
 #else

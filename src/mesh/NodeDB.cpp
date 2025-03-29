@@ -1061,8 +1061,8 @@ void NodeDB::loadFromDisk()
     // if (state != LoadFileResult::LOAD_SUCCESS) {
     //    installDefaultDeviceState(); // Our in RAM copy might now be corrupt
     //} else {
-    if (devicestate.version < DEVICESTATE_MIN_VER) {
-        LOG_WARN("Devicestate %d is old, discard", devicestate.version);
+    if ((state != LoadFileResult::LOAD_SUCCESS) || (devicestate.version < DEVICESTATE_MIN_VER)) {
+        LOG_WARN("Devicestate %d is old or invalid, discard", devicestate.version);
         installDefaultDeviceState();
     } else {
         LOG_INFO("Loaded saved devicestate version %d", devicestate.version);

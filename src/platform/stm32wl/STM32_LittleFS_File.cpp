@@ -217,9 +217,9 @@ int File::available(void)
     _fs->_lockFS();
 
     if (!this->_is_dir) {
-        uint32_t size = lfs_file_size(_fs->_getFS(), _file);
+        uint32_t file_size = lfs_file_size(_fs->_getFS(), _file);
         uint32_t pos = lfs_file_tell(_fs->_getFS(), _file);
-        ret = size - pos;
+        ret = file_size - pos;
     }
 
     _fs->_unlockFS();
@@ -279,10 +279,9 @@ bool File::truncate(uint32_t pos)
 bool File::truncate(void)
 {
     int32_t ret = LFS_ERR_ISDIR;
-    uint32_t pos;
     _fs->_lockFS();
     if (!this->_is_dir) {
-        pos = lfs_file_tell(_fs->_getFS(), _file);
+        uint32_t pos = lfs_file_tell(_fs->_getFS(), _file);
         ret = lfs_file_truncate(_fs->_getFS(), _file, pos);
     }
     _fs->_unlockFS();
