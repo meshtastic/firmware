@@ -533,6 +533,7 @@ Power::Power() : OSThread("Power")
 {
     statusHandler = {};
     low_voltage_counter = 0;
+    low_voltage_counter_led3 = 0;
 #ifdef DEBUG_HEAP
     lastheap = memGet.getFreeHeap();
 #endif
@@ -668,12 +669,12 @@ void Power::readPowerStatus()
     int8_t batteryChargePercent = -1;
     OptionalBool usbPowered = OptUnknown;
     OptionalBool hasBattery = OptUnknown; // These must be static because NRF_APM code doesn't run every time
-    OptionalBool isCharging = OptUnknown;
+    OptionalBool isChargingNow = OptUnknown;
 
     if (batteryLevel) {
         hasBattery = batteryLevel->isBatteryConnect() ? OptTrue : OptFalse;
         usbPowered = batteryLevel->isVbusIn() ? OptTrue : OptFalse;
-        isCharging = batteryLevel->isCharging() ? OptTrue : OptFalse;
+        isChargingNow = batteryLevel->isCharging() ? OptTrue : OptFalse;
         if (hasBattery) {
             batteryVoltageMv = batteryLevel->getBattVoltage();
             // If the AXP192 returns a valid battery percentage, use it
@@ -702,15 +703,15 @@ void Power::readPowerStatus()
 
     // If changed to DISCONNECTED
     if (nrf_usb_state == NRFX_POWER_USB_STATE_DISCONNECTED)
-        isCharging = usbPowered = OptFalse;
+        isChargingNow = usbPowered = OptFalse;
     // If changed to CONNECTED / READY
     else
-        isCharging = usbPowered = OptTrue;
+        isChargingNow = usbPowered = OptTrue;
 
 #endif
 
     // Notify any status instances that are observing us
-    const PowerStatus powerStatus2 = PowerStatus(hasBattery, usbPowered, isCharging, batteryVoltageMv, batteryChargePercent);
+    const PowerStatus powerStatus2 = PowerStatus(hasBattery, usbPowered, isChargingNow, batteryVoltageMv, batteryChargePercent);
     LOG_DEBUG("Battery: usbPower=%d, isCharging=%d, batMv=%d, batPct=%d", powerStatus2.getHasUSB(), powerStatus2.getIsCharging(),
               powerStatus2.getBatteryVoltageMv(), powerStatus2.getBatteryChargePercent());
 #if defined(ELECROW_ThinkNode_M1) || defined(POWER_CFG)
