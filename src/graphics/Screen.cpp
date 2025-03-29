@@ -445,7 +445,7 @@ static void drawBattery(OLEDDisplay *display, int16_t x, int16_t y, uint8_t *img
     int scale = 1;
 
     if (screenWidth >= 200) scale = 2;
-    if (screenWidth >= 300) scale = 3;
+    if (screenWidth >= 300) scale = 2; // Do NOT go higher than 2
 
     // Draw scaled battery image (16 columns × 8 rows)
     for (int col = 0; col < 16; col++) {
