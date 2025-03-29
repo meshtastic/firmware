@@ -107,6 +107,7 @@ void StoreForwardModule::populateSDCard()
         }
         this->storageType = StorageType::ST_SDCARD;
         uint32_t numberOfPackets = (this->records ? this->records : (((SD.totalBytes() / 3) * 2) / sizeof(PacketHistoryStruct)));
+        this->records = numberOfPackets;
         // only allocate space for one temp copy
         this->packetHistory = (PacketHistoryStruct *)malloc(sizeof(PacketHistoryStruct));
         LOG_DEBUG("numberOfPackets for packetHistory - %u", numberOfPackets);
@@ -174,9 +175,13 @@ uint32_t StoreForwardModule::getNumAvailablePackets(NodeNum dest, uint32_t last_
             spiLock->lock();
             auto handler = SD.open("/storeforward/" + String(i), FILE_READ);
             if (handler) {
-                handler.read((uint8_t *)&this->packetHistory[0], sizeof(PacketHistoryStruct));
+                if (handler.read((uint8_t *)&this->packetHistory[0], sizeof(PacketHistoryStruct)) !=
+                    sizeof(PacketHistoryStruct)) {
+                    LOG_ERROR("SD card reading error");
+                }
                 handler.close();
                 if (this->packetHistory[0].time && (this->packetHistory[0].time > last_time)) {
+
                     // Client is only interested in packets not from itself and only in broadcast packets or packets towards it.
                     if (this->packetHistory[0].from != dest &&
                         (this->packetHistory[0].to == NODENUM_BROADCAST || this->packetHistory[0].to == dest)) {
@@ -191,6 +196,7 @@ uint32_t StoreForwardModule::getNumAvailablePackets(NodeNum dest, uint32_t last_
             LOG_ERROR("S&F: Unknown storage type");
         }
     }
+
     return count;
 }
 
@@ -267,8 +273,8 @@ void StoreForwardModule::historyAdd(const meshtastic_MeshPacket &mp)
         this->packetHistory[0].payload_size = p.payload.size;
         memcpy(this->packetHistory[0].payload, p.payload.bytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
         spiLock->lock();
-        auto handler = SD.open("/storeforward/" + String(this->packetHistoryTotalCount), FILE_WRITE);
-        handler.write((uint8_t *)&this->packetHistory, sizeof(PacketHistoryStruct));
+        auto handler = SD.open("/storeforward/" + String(this->packetHistoryTotalCount), FILE_WRITE, true);
+        handler.write((uint8_t *)&this->packetHistory[0], sizeof(PacketHistoryStruct));
         handler.close();
         spiLock->unlock();
 #endif

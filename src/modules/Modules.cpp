@@ -219,7 +219,7 @@ void setupModules()
         paxcounterModule = new PaxcounterModule();
 #endif
 #endif
-#if defined(ARCH_ESP32) || defined(ARCH_PORTDUINO)
+#if defined(ARCH_ESP32) || defined(ARCH_PORTDUINO) || defined(HAS_SDCARD)
 #if !MESHTASTIC_EXCLUDE_STOREFORWARD
         storeForwardModule = new StoreForwardModule();
 #endif
