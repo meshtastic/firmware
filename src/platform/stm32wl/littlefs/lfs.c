@@ -1057,12 +1057,6 @@ int lfs_dir_seek(lfs_t *lfs, lfs_dir_t *dir, lfs_off_t off)
     return 0;
 }
 
-lfs_soff_t lfs_dir_tell(lfs_t *lfs, lfs_dir_t const *dir)
-{
-    (void)lfs;
-    return dir->pos;
-}
-
 int lfs_dir_rewind(lfs_t *lfs, lfs_dir_t *dir)
 {
     // reload the head dir
