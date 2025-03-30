@@ -2340,27 +2340,28 @@ static void drawMemoryScreen(OLEDDisplay *display, OLEDDisplayUiState *state, in
     // === Draw title ===
     const int highlightHeight = FONT_HEIGHT_SMALL - 1;
     const int textY = y + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
+    const int screenWidth = display->getWidth();
+    const char* titleStr = (screenWidth > 128) ? "Memory" : "Mem";
+    const int centerX = x + SCREEN_WIDTH / 2;
+
     if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
         display->setColor(BLACK);
     }
 
     display->setTextAlignment(TEXT_ALIGN_CENTER);
-    const int centerX = x + SCREEN_WIDTH / 2;
-    display->drawString(centerX, textY, "Memory");
+    display->drawString(centerX, textY, titleStr);
     if (config.display.heading_bold) {
-        display->drawString(centerX + 1, textY, "Memory");
+        display->drawString(centerX + 1, textY, titleStr);
     }
     display->setColor(WHITE);
 
     // === Layout ===
-    const int screenWidth = display->getWidth();
     const int rowYOffset = FONT_HEIGHT_SMALL - 3;
     const int barHeight = 6;
 
     const int labelX = x;
     const int barsOffset = (screenWidth > 128) ? 24 : 0;
     const int barX = x + 40 + barsOffset;
-    const int barWidth = SCREEN_WIDTH - barX - 35;
     const int textRightX = x + SCREEN_WIDTH - 2;
 
     int rowY = y + rowYOffset;
@@ -2369,23 +2370,36 @@ static void drawMemoryScreen(OLEDDisplay *display, OLEDDisplayUiState *state, in
         if (total == 0) return;
 
         int percent = (used * 100) / total;
-        int fillWidth = (used * barWidth) / total;
 
+        char combinedStr[24];
+        if (screenWidth > 128) {
+            snprintf(combinedStr, sizeof(combinedStr), "%3d%%  %lu/%luKB", percent, used / 1024, total / 1024);
+        } else {
+            snprintf(combinedStr, sizeof(combinedStr), "%3d%%", percent);
+        }
+
+        int textWidth = display->getStringWidth(combinedStr);
+        int adjustedBarWidth = SCREEN_WIDTH - barX - textWidth - 6;
+        if (adjustedBarWidth < 10) adjustedBarWidth = 10; // prevent weird bar if display is too small
+
+        int fillWidth = (used * adjustedBarWidth) / total;
+
+        // Label
         display->setTextAlignment(TEXT_ALIGN_LEFT);
         display->drawString(labelX, rowY, label);
 
+        // Bar
         int barY = rowY + (FONT_HEIGHT_SMALL - barHeight) / 2;
         display->setColor(WHITE);
-        display->drawRect(barX, barY, barWidth, barHeight);
+        display->drawRect(barX, barY, adjustedBarWidth, barHeight);
 
         if (percent >= 80) display->setColor(BLACK);
         display->fillRect(barX, barY, fillWidth, barHeight);
         display->setColor(WHITE);
 
-        char percentStr[6];
-        snprintf(percentStr, sizeof(percentStr), "%3d%%", percent);
+        // Value string
         display->setTextAlignment(TEXT_ALIGN_RIGHT);
-        display->drawString(textRightX, rowY, percentStr);
+        display->drawString(SCREEN_WIDTH - 2, rowY, combinedStr);
 
         rowY += rowYOffset;
     };
@@ -2398,30 +2412,27 @@ static void drawMemoryScreen(OLEDDisplay *display, OLEDDisplayUiState *state, in
     uint32_t psramTotal = memGet.getPsramSize();
 
     uint32_t flashUsed = 0, flashTotal = 0;
-
     #ifdef ESP32
         flashUsed = FSCom.usedBytes();
         flashTotal = FSCom.totalBytes();
     #endif
 
-#ifdef HAS_SDCARD
     uint32_t sdUsed = 0, sdTotal = 0;
-    bool hasSD = SD.cardType() != CARD_NONE;
-    if (hasSD) {
-        sdUsed = SD.usedBytes();
-        sdTotal = SD.totalBytes();
-    }
-#else
     bool hasSD = false;
-    uint32_t sdUsed = 0, sdTotal = 0;
-#endif
+    #ifdef HAS_SDCARD
+        hasSD = SD.cardType() != CARD_NONE;
+        if (hasSD) {
+            sdUsed = SD.usedBytes();
+            sdTotal = SD.totalBytes();
+        }
+    #endif
 
     // === Draw memory rows
     drawUsageRow("Heap:", heapUsed, heapTotal);
     drawUsageRow("PSRAM:", psramUsed, psramTotal);
-#ifdef ESP32
+    #ifdef ESP32
     if (flashTotal > 0) drawUsageRow("Flash:", flashUsed, flashTotal);
-#endif
+    #endif
     if (hasSD && sdTotal > 0) drawUsageRow("SD:", sdUsed, sdTotal);
 }
 
