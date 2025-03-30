@@ -2221,13 +2221,9 @@ static void drawActivity(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     drawCommonHeader(display, x, y, "Log");
 
     // === Second Row: Draw any log messages ===
-    bool origBold = config.display.heading_bold;
-    config.display.heading_bold = false;
-
     int secondRowY = y + FONT_HEIGHT_SMALL + 1;
     display->drawLogBuffer(x, secondRowY);
 }
-
 // ****************************
 // * My Position Screen       *
 // ****************************
