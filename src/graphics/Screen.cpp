@@ -50,6 +50,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "modules/WaypointModule.h"
 #include "sleep.h"
 #include "target_specific.h"
+#include "FSCommon.h"
 
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
 #include "mesh/wifi/WiFiAPClient.h"
@@ -2010,42 +2011,40 @@ static void drawDistanceScreen(OLEDDisplay *display, OLEDDisplayUiState *state, 
 }
 
 
-void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char* title = nullptr) {
-    bool isInverted = (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED);
-    bool isBold = config.display.heading_bold;
+void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y) {
+    const bool isInverted = (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED);
+    const bool isBold = config.display.heading_bold;
     const int xOffset = 3;
     const int highlightHeight = FONT_HEIGHT_SMALL - 1;
-    int screenWidth = display->getWidth();
+    const int screenWidth = display->getWidth();
 
     display->setFont(FONT_SMALL);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
+    // Draw background highlight
     if (isInverted) {
-        drawRoundedHighlight(display, 0, y, SCREEN_WIDTH, highlightHeight, 2);
+        drawRoundedHighlight(display, x, y, screenWidth, highlightHeight, 2);
         display->setColor(BLACK);
     }
 
     // Battery icon
     drawBattery(display, x + xOffset - 2, y + 2, imgBattery, powerStatus);
 
-    // Centered text Y
-    int textY = y + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
+    // Text baseline
+    const int textY = y + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
 
     // Battery %
     char percentStr[8];
     snprintf(percentStr, sizeof(percentStr), "%d%%", powerStatus->getBatteryChargePercent());
-    int batteryOffset = screenWidth > 128 ? 34 : 16;
-    int percentX = x + xOffset + batteryOffset;
+    const int batteryOffset = screenWidth > 128 ? 34 : 16;
+    const int percentX = x + xOffset + batteryOffset;
     display->drawString(percentX, textY, percentStr);
     if (isBold) display->drawString(percentX + 1, textY, percentStr);
 
-    // Optional: Local time
+    // Time (right side)
     uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true);
-    int timeX = screenWidth;
     if (rtc_sec > 0) {
-        long hms = rtc_sec % SEC_PER_DAY;
-        hms = (hms + SEC_PER_DAY) % SEC_PER_DAY;
-
+        long hms = (rtc_sec % SEC_PER_DAY + SEC_PER_DAY) % SEC_PER_DAY;
         int hour = hms / SEC_PER_HOUR;
         int minute = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
 
@@ -2056,21 +2055,14 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char* ti
         char timeStr[10];
         snprintf(timeStr, sizeof(timeStr), "%d:%02d%s", hour, minute, isPM ? "PM" : "AM");
 
-        timeX = SCREEN_WIDTH - xOffset - display->getStringWidth(timeStr);
+        int timeX = x + screenWidth - xOffset - display->getStringWidth(timeStr);
         display->drawString(timeX, textY, timeStr);
         if (isBold) display->drawString(timeX + 1, textY, timeStr);
     }
 
-    // === Centered Title (between battery % and time) ===
-    if (title) {
-        display->setTextAlignment(TEXT_ALIGN_CENTER);
-        int centerX = SCREEN_WIDTH / 2;
-        display->drawString(centerX, textY, title);
-        if (isBold) display->drawString(centerX + 1, textY, title);
-    }
-
     display->setColor(WHITE);
 }
+
 
 static void drawDefaultScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) {
     display->clear();
@@ -2218,7 +2210,27 @@ static void drawActivity(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     display->setFont(FONT_SMALL);
 
     // === Header ===
-    drawCommonHeader(display, x, y, "Log");
+    drawCommonHeader(display, x, y);
+
+    // === Draw title ===
+    const int highlightHeight = FONT_HEIGHT_SMALL - 1;
+    const int textY = y + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
+
+    // Use black text if display is inverted
+    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
+        display->setColor(BLACK);
+    }
+
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    const int centerX = x + SCREEN_WIDTH / 2;
+    display->drawString(centerX, textY, "Log");
+
+    if (config.display.heading_bold) {
+        display->drawString(centerX + 1, textY, "Log");
+    }
+
+    // Restore default color after drawing
+    display->setColor(WHITE);
 
     // === Second Row: Draw any log messages ===
     int secondRowY = y + FONT_HEIGHT_SMALL + 1;
@@ -2314,6 +2326,104 @@ static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiStat
 #endif
 }
 
+// ****************************
+// *      Memory Screen       *
+// ****************************
+static void drawMemoryScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) {
+    display->clear();
+    display->setFont(FONT_SMALL);
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+    // === Header ===
+    drawCommonHeader(display, x, y);
+
+    // === Draw title ===
+    const int highlightHeight = FONT_HEIGHT_SMALL - 1;
+    const int textY = y + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
+    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
+        display->setColor(BLACK);
+    }
+
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    const int centerX = x + SCREEN_WIDTH / 2;
+    display->drawString(centerX, textY, "Memory");
+    if (config.display.heading_bold) {
+        display->drawString(centerX + 1, textY, "Memory");
+    }
+    display->setColor(WHITE);
+
+    // === Layout ===
+    const int screenWidth = display->getWidth();
+    const int rowYOffset = FONT_HEIGHT_SMALL - 3;
+    const int barHeight = 6;
+
+    const int labelX = x;
+    const int barsOffset = (screenWidth > 128) ? 24 : 0;
+    const int barX = x + 40 + barsOffset;
+    const int barWidth = SCREEN_WIDTH - barX - 35;
+    const int textRightX = x + SCREEN_WIDTH - 2;
+
+    int rowY = y + rowYOffset;
+
+    auto drawUsageRow = [&](const char* label, uint32_t used, uint32_t total) {
+        if (total == 0) return;
+
+        int percent = (used * 100) / total;
+        int fillWidth = (used * barWidth) / total;
+
+        display->setTextAlignment(TEXT_ALIGN_LEFT);
+        display->drawString(labelX, rowY, label);
+
+        int barY = rowY + (FONT_HEIGHT_SMALL - barHeight) / 2;
+        display->setColor(WHITE);
+        display->drawRect(barX, barY, barWidth, barHeight);
+
+        if (percent >= 80) display->setColor(BLACK);
+        display->fillRect(barX, barY, fillWidth, barHeight);
+        display->setColor(WHITE);
+
+        char percentStr[6];
+        snprintf(percentStr, sizeof(percentStr), "%3d%%", percent);
+        display->setTextAlignment(TEXT_ALIGN_RIGHT);
+        display->drawString(textRightX, rowY, percentStr);
+
+        rowY += rowYOffset;
+    };
+
+    // === Memory values ===
+    uint32_t heapUsed = memGet.getHeapSize() - memGet.getFreeHeap();
+    uint32_t heapTotal = memGet.getHeapSize();
+
+    uint32_t psramUsed = memGet.getPsramSize() - memGet.getFreePsram();
+    uint32_t psramTotal = memGet.getPsramSize();
+
+    uint32_t flashUsed = 0, flashTotal = 0;
+
+    #ifdef ESP32
+        flashUsed = FSCom.usedBytes();
+        flashTotal = FSCom.totalBytes();
+    #endif
+
+#ifdef HAS_SDCARD
+    uint32_t sdUsed = 0, sdTotal = 0;
+    bool hasSD = SD.cardType() != CARD_NONE;
+    if (hasSD) {
+        sdUsed = SD.usedBytes();
+        sdTotal = SD.totalBytes();
+    }
+#else
+    bool hasSD = false;
+    uint32_t sdUsed = 0, sdTotal = 0;
+#endif
+
+    // === Draw memory rows
+    drawUsageRow("Heap:", heapUsed, heapTotal);
+    drawUsageRow("PSRAM:", psramUsed, psramTotal);
+#ifdef ESP32
+    if (flashTotal > 0) drawUsageRow("Flash:", flashUsed, flashTotal);
+#endif
+    if (hasSD && sdTotal > 0) drawUsageRow("SD:", sdUsed, sdTotal);
+}
 
 
 #if defined(ESP_PLATFORM) && defined(USE_ST7789)
@@ -2942,6 +3052,7 @@ void Screen::setFrames(FrameFocus focus)
         normalFrames[numframes++] = drawTextMessageFrame;
     }
 
+    normalFrames[numframes++] = drawMemoryScreen;
     normalFrames[numframes++] = drawDefaultScreen;
     normalFrames[numframes++] = drawLastHeardScreen;
     normalFrames[numframes++] = drawDistanceScreen;
