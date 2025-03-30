@@ -2010,7 +2010,7 @@ static void drawDistanceScreen(OLEDDisplay *display, OLEDDisplayUiState *state, 
 }
 
 
-void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y) {
+void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char* title = nullptr) {
     bool isInverted = (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED);
     bool isBold = config.display.heading_bold;
     const int xOffset = 3;
@@ -2026,7 +2026,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y) {
     }
 
     // Battery icon
-    drawBattery(display, x + xOffset, y + 2, imgBattery, powerStatus);
+    drawBattery(display, x + xOffset - 2, y + 2, imgBattery, powerStatus);
 
     // Centered text Y
     int textY = y + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
@@ -2034,13 +2034,14 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y) {
     // Battery %
     char percentStr[8];
     snprintf(percentStr, sizeof(percentStr), "%d%%", powerStatus->getBatteryChargePercent());
-    int batteryOffset = screenWidth > 128 ? 34 : 18;
+    int batteryOffset = screenWidth > 128 ? 34 : 16;
     int percentX = x + xOffset + batteryOffset;
     display->drawString(percentX, textY, percentStr);
     if (isBold) display->drawString(percentX + 1, textY, percentStr);
 
     // Optional: Local time
     uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true);
+    int timeX = screenWidth;
     if (rtc_sec > 0) {
         long hms = rtc_sec % SEC_PER_DAY;
         hms = (hms + SEC_PER_DAY) % SEC_PER_DAY;
@@ -2055,13 +2056,22 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y) {
         char timeStr[10];
         snprintf(timeStr, sizeof(timeStr), "%d:%02d%s", hour, minute, isPM ? "PM" : "AM");
 
-        int timeX = SCREEN_WIDTH - xOffset - display->getStringWidth(timeStr);
+        timeX = SCREEN_WIDTH - xOffset - display->getStringWidth(timeStr);
         display->drawString(timeX, textY, timeStr);
         if (isBold) display->drawString(timeX + 1, textY, timeStr);
     }
 
+    // === Centered Title (between battery % and time) ===
+    if (title) {
+        display->setTextAlignment(TEXT_ALIGN_CENTER);
+        int centerX = SCREEN_WIDTH / 2;
+        display->drawString(centerX, textY, title);
+        if (isBold) display->drawString(centerX + 1, textY, title);
+    }
+
     display->setColor(WHITE);
 }
+
 static void drawDefaultScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) {
     display->clear();
     display->setTextAlignment(TEXT_ALIGN_LEFT);
@@ -2208,7 +2218,7 @@ static void drawActivity(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     display->setFont(FONT_SMALL);
 
     // === Header ===
-    drawCommonHeader(display, x, y);
+    drawCommonHeader(display, x, y, "Log");
 
     // === Second Row: Draw any log messages ===
     bool origBold = config.display.heading_bold;
@@ -2219,7 +2229,7 @@ static void drawActivity(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 }
 
 // ****************************
-// * Activity Screen          *
+// * My Position Screen       *
 // ****************************
 static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) {
     display->clear();
@@ -2233,9 +2243,9 @@ static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiStat
     int rowYOffset = FONT_HEIGHT_SMALL - 3;
     int rowY = y + rowYOffset;
 
-    // === Second Row: My Location (centered) ===
-    display->setTextAlignment(TEXT_ALIGN_CENTER);
-    display->drawString(display->getWidth() / 2, rowY, "My Location");
+    // === Second Row: My Location ===
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->drawString(x + 2, rowY, "My Location:");
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
 #if HAS_GPS
@@ -2246,13 +2256,17 @@ static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiStat
         int32_t(gpsStatus->getAltitude())
     );
 
-    // === Compass Heading ===
-    float heading = 0;
-#ifdef HAS_MAG_COMPASS
-    heading = radians(magCompass->getHeadingDegrees());
-#else
-    heading = screen->estimatedHeading(geoCoord.getLatitude() * 1e-7, geoCoord.getLongitude() * 1e-7);
-#endif
+    // === Determine Compass Heading ===
+    float heading;
+    bool validHeading = false;
+
+    if (screen->hasHeading()) {
+        heading = radians(screen->getHeading());
+        validHeading = true;
+    } else {
+        heading = screen->estimatedHeading(geoCoord.getLatitude() * 1e-7, geoCoord.getLongitude() * 1e-7);
+        validHeading = !isnan(heading);
+    }
 
     // === Third Row: Altitude ===
     rowY += rowYOffset;
@@ -2277,8 +2291,7 @@ static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiStat
     display->drawString(x + 2, rowY, lonStr);
 
     // === Draw Compass if heading is valid ===
-    if (screen->hasHeading()) {
-        // === Draw Compass on Right Side (One Row Down, 3px left) ===
+    if (validHeading) {
         uint16_t compassDiam = Screen::getCompassDiam(SCREEN_WIDTH, SCREEN_HEIGHT);
         int16_t compassX = x + SCREEN_WIDTH - compassDiam / 2 - 8;
         int16_t compassY = y + SCREEN_HEIGHT / 2 + rowYOffset;
@@ -2290,12 +2303,12 @@ static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiStat
         // === Draw moving "N" label slightly inside edge of circle ===
         float northAngle = -heading;
         float radius = compassDiam / 2;
-        int16_t nX = compassX + (radius - 1) * sin(northAngle); // nudged 1px inward
-        int16_t nY = compassY - (radius - 1) * cos(northAngle); // nudged 1px inward
+        int16_t nX = compassX + (radius - 1) * sin(northAngle);
+        int16_t nY = compassY - (radius - 1) * cos(northAngle);
 
         int16_t nLabelWidth = display->getStringWidth("N") + 2;
         int16_t nLabelHeight = FONT_HEIGHT_SMALL + 1;
-        display->setColor(BLACK); // erase circle behind N
+        display->setColor(BLACK);
         display->fillRect(nX - nLabelWidth / 2, nY - nLabelHeight / 2, nLabelWidth, nLabelHeight);
         display->setColor(WHITE);
         display->setFont(FONT_SMALL);
