@@ -11,6 +11,7 @@
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
 #include "modules/RoutingModule.h"
+#include "modules/FishEyeStateRoutingModule.h"
 #if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
 #endif
@@ -651,6 +652,18 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
     // call modules here
     if (!skipHandle) {
         MeshModule::callModules(*p, src);
+
+        if(config.network.routingAlgorithm == meshtastic_Config_RoutingConfig_FishEyeState && moduleConfig.fish_eye_state_routing.enabled && (!isToUs(p) && (p->decoded.dest == nodeDB->getNodeNum()) && (p->to != 0) && (p->to != NODENUM_BROADCAST))){
+            meshtastic_MeshPacket *copy = allocForSending();
+            copy->decoded = p->decoded;
+            copy->to = p->to; 
+            copy->decoded.dest = fishEyeStateRoutingModule->getNextHopForID(copy->to);
+            copy->from = nodeDB->getNodeNum();
+            char * logout = "";
+            sprintf(logout, "Forwarding Package to Node %u to Next-Hop %u",copy->to,copy->decoded.dest);
+            LOG_DEBUG(logout);
+            service->sendToMesh(copy);
+        }
 
 #if !MESHTASTIC_EXCLUDE_MQTT
         // Mark as pki_encrypted if it is not yet decoded and MQTT encryption is also enabled, hash matches and it's a DM not to

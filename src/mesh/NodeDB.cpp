@@ -761,6 +761,10 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.has_neighbor_info = true;
     moduleConfig.neighbor_info.enabled = false;
 
+    moduleConfig.has_fish_eye_state_routing = true;
+    moduleConfig.fish_eye_state_routing.enabled = false; // Works only in Combination with Neighbor info Module
+    config.network.routingAlgorithm = meshtastic_Config_RoutingConfig_FishEyeState;
+
     moduleConfig.has_detection_sensor = true;
     moduleConfig.detection_sensor.enabled = false;
     moduleConfig.detection_sensor.detection_trigger_type = meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_LOGIC_HIGH;
@@ -817,6 +821,7 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
         config.position.position_broadcast_smart_enabled = false;
         config.position.position_broadcast_secs = UINT32_MAX;
         moduleConfig.neighbor_info.update_interval = UINT32_MAX;
+        moduleConfig.fish_eye_state_routing.enabled = false;
         moduleConfig.telemetry.device_update_interval = UINT32_MAX;
         moduleConfig.telemetry.environment_update_interval = UINT32_MAX;
         moduleConfig.telemetry.air_quality_interval = UINT32_MAX;
@@ -1286,6 +1291,7 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
         moduleConfig.has_ambient_lighting = true;
         moduleConfig.has_audio = true;
         moduleConfig.has_paxcounter = true;
+        moduleConfig.has_fish_eye_state_routing = true;
 
         success &=
             saveProto(moduleConfigFileName, meshtastic_LocalModuleConfig_size, &meshtastic_LocalModuleConfig_msg, &moduleConfig);

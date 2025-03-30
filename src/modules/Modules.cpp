@@ -30,6 +30,9 @@
 #if !MESHTASTIC_EXCLUDE_NODEINFO
 #include "modules/NodeInfoModule.h"
 #endif
+#if !MESHTASTIC_EXCLUDE_FISHEYESTATEROUTING
+#include "modules/FishEyeStateRoutingModule.h"
+#endif
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "modules/PositionModule.h"
 #endif
@@ -106,6 +109,9 @@ void setupModules()
 #endif
 #if !MESHTASTIC_EXCLUDE_NODEINFO
         nodeInfoModule = new NodeInfoModule();
+#endif
+#if !MESHTASTIC_EXCLUDE_FISHEYESTATEROUTING
+        fishEyeStateRoutingModule = new FishEyeStateRoutingModule();
 #endif
 #if !MESHTASTIC_EXCLUDE_GPS
         positionModule = new PositionModule();
