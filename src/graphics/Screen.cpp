@@ -2027,7 +2027,7 @@ static void drawDefaultScreen(OLEDDisplay *display, OLEDDisplayUiState *state, i
         display->setColor(BLACK);
     }
 
-    // === TOP ROW: Battery, %, Voltage ===
+    // === TOP ROW: Battery, %, Time ===
     int screenWidth = display->getWidth();
 
     // Draw battery icon slightly inset from top
@@ -2036,23 +2036,45 @@ static void drawDefaultScreen(OLEDDisplay *display, OLEDDisplayUiState *state, i
     // Calculate vertical center for text (centered in header row)
     int textY = y + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
 
+    // Battery Percentage
     char percentStr[8];
     snprintf(percentStr, sizeof(percentStr), "%d%%", powerStatus->getBatteryChargePercent());
 
     int batteryOffset = screenWidth > 128 ? 34 : 18;
     int percentX = x + xOffset + batteryOffset;
     display->drawString(percentX, textY, percentStr);
+    if (isBold) display->drawString(percentX + 1, textY, percentStr);
 
+    // --- Voltage (Commented out) ---
+    /*
     char voltStr[10];
     int batV = powerStatus->getBatteryVoltageMv() / 1000;
     int batCv = (powerStatus->getBatteryVoltageMv() % 1000) / 10;
     snprintf(voltStr, sizeof(voltStr), "%d.%02dV", batV, batCv);
     int voltX = SCREEN_WIDTH - xOffset - display->getStringWidth(voltStr);
     display->drawString(voltX, textY, voltStr);
+    if (isBold) display->drawString(voltX + 1, textY, voltStr);
+    */
 
-    if (isBold) {
-        display->drawString(percentX + 1, textY, percentStr);
-        display->drawString(voltX + 1, textY, voltStr);
+    // --- Local Time ---
+    uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true); // local time
+    if (rtc_sec > 0) {
+        long hms = rtc_sec % SEC_PER_DAY;
+        hms = (hms + SEC_PER_DAY) % SEC_PER_DAY;
+
+        int hour = hms / SEC_PER_HOUR;
+        int minute = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
+
+        bool isPM = hour >= 12;
+        hour = hour % 12;
+        if (hour == 0) hour = 12;
+
+        char timeStr[10];
+        snprintf(timeStr, sizeof(timeStr), "%d:%02d%s", hour, minute, isPM ? "PM" : "AM");
+
+        int timeX = SCREEN_WIDTH - xOffset - display->getStringWidth(timeStr);
+        display->drawString(timeX, textY, timeStr);
+        if (isBold) display->drawString(timeX + 1, textY, timeStr);
     }
 
     display->setColor(WHITE);
@@ -2107,7 +2129,6 @@ static void drawDefaultScreen(OLEDDisplay *display, OLEDDisplayUiState *state, i
     int uptimeY = y + (FONT_HEIGHT_SMALL + 1) * 3;
     display->drawString(uptimeX, uptimeY, uptimeFullStr);
 }
-
 
 #if defined(ESP_PLATFORM) && defined(USE_ST7789)
 SPIClass SPI1(HSPI);
