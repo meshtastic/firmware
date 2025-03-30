@@ -2010,54 +2010,37 @@ static void drawDistanceScreen(OLEDDisplay *display, OLEDDisplayUiState *state, 
 }
 
 
-static void drawDefaultScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) {
-    display->clear();
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-    display->setFont(FONT_SMALL);
-
+void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y) {
     bool isInverted = (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED);
     bool isBold = config.display.heading_bold;
-
     const int xOffset = 3;
     const int highlightHeight = FONT_HEIGHT_SMALL - 1;
+    int screenWidth = display->getWidth();
 
-    // Draw header background highlight
+    display->setFont(FONT_SMALL);
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+
     if (isInverted) {
         drawRoundedHighlight(display, 0, y, SCREEN_WIDTH, highlightHeight, 2);
         display->setColor(BLACK);
     }
 
-    // === TOP ROW: Battery, %, Time ===
-    int screenWidth = display->getWidth();
-
-    // Draw battery icon slightly inset from top
+    // Battery icon
     drawBattery(display, x + xOffset, y + 2, imgBattery, powerStatus);
 
-    // Calculate vertical center for text (centered in header row)
+    // Centered text Y
     int textY = y + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
 
-    // Battery Percentage
+    // Battery %
     char percentStr[8];
     snprintf(percentStr, sizeof(percentStr), "%d%%", powerStatus->getBatteryChargePercent());
-
     int batteryOffset = screenWidth > 128 ? 34 : 18;
     int percentX = x + xOffset + batteryOffset;
     display->drawString(percentX, textY, percentStr);
     if (isBold) display->drawString(percentX + 1, textY, percentStr);
 
-    // --- Voltage (Commented out) ---
-    /*
-    char voltStr[10];
-    int batV = powerStatus->getBatteryVoltageMv() / 1000;
-    int batCv = (powerStatus->getBatteryVoltageMv() % 1000) / 10;
-    snprintf(voltStr, sizeof(voltStr), "%d.%02dV", batV, batCv);
-    int voltX = SCREEN_WIDTH - xOffset - display->getStringWidth(voltStr);
-    display->drawString(voltX, textY, voltStr);
-    if (isBold) display->drawString(voltX + 1, textY, voltStr);
-    */
-
-    // --- Local Time ---
-    uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true); // local time
+    // Optional: Local time
+    uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true);
     if (rtc_sec > 0) {
         long hms = rtc_sec % SEC_PER_DAY;
         hms = (hms + SEC_PER_DAY) % SEC_PER_DAY;
@@ -2078,6 +2061,14 @@ static void drawDefaultScreen(OLEDDisplay *display, OLEDDisplayUiState *state, i
     }
 
     display->setColor(WHITE);
+}
+static void drawDefaultScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) {
+    display->clear();
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
+
+    // === Header ===
+    drawCommonHeader(display, x, y);
 
     // === Second Row: Node and GPS ===
     bool origBold = config.display.heading_bold;
@@ -2129,6 +2120,7 @@ static void drawDefaultScreen(OLEDDisplay *display, OLEDDisplayUiState *state, i
     int uptimeY = y + (FONT_HEIGHT_SMALL + 1) * 3;
     display->drawString(uptimeX, uptimeY, uptimeFullStr);
 }
+
 
 #if defined(ESP_PLATFORM) && defined(USE_ST7789)
 SPIClass SPI1(HSPI);
