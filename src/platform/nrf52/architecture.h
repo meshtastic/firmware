@@ -54,7 +54,7 @@
 #elif defined(TTGO_T_ECHO)
 #define HW_VENDOR meshtastic_HardwareModel_T_ECHO
 #elif defined(ELECROW_ThinkNode_M1)
-#define HW_VENDOR meshtastic_HardwareModel_ThinkNode_M1
+#define HW_VENDOR meshtastic_HardwareModel_THINKNODE_M1
 #elif defined(NANO_G2_ULTRA)
 #define HW_VENDOR meshtastic_HardwareModel_NANO_G2_ULTRA
 #elif defined(CANARYONE)
