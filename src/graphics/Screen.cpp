@@ -3052,7 +3052,6 @@ void Screen::setFrames(FrameFocus focus)
         normalFrames[numframes++] = drawTextMessageFrame;
     }
 
-    normalFrames[numframes++] = drawMemoryScreen;
     normalFrames[numframes++] = drawDefaultScreen;
     normalFrames[numframes++] = drawLastHeardScreen;
     normalFrames[numframes++] = drawDistanceScreen;
@@ -3060,6 +3059,7 @@ void Screen::setFrames(FrameFocus focus)
     normalFrames[numframes++] = drawHopSignalScreen;
     normalFrames[numframes++] = drawBatteryDeviceLoRa;
     normalFrames[numframes++] = drawCompassAndLocationScreen;
+    normalFrames[numframes++] = drawMemoryScreen;
     normalFrames[numframes++] = drawActivity;
 
     // then all the nodes
