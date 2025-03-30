@@ -301,6 +301,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #error HW_VENDOR must be defined
 #endif
 
+// Support multiple RGB LED configuration
+#if defined(HAS_NCP5623) || defined(HAS_LP5562) || defined(RGBLED_RED) || defined(HAS_NEOPIXEL) || defined(UNPHONE)
+#define HAS_RGB_LED
+#endif
+
 // -----------------------------------------------------------------------------
 // Global switches to turn off features for a minimized build
 // -----------------------------------------------------------------------------

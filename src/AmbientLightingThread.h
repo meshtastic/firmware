@@ -31,7 +31,7 @@ class AmbientLightingThread : public concurrency::OSThread
         notifyDeepSleepObserver.observe(&notifyDeepSleep); // Let us know when shutdown() is issued.
 
 // Enables Ambient Lighting by default if conditions are meet.
-#if defined(HAS_NCP5623) || defined(HAS_LP5562) || defined(RGBLED_RED) || defined(HAS_NEOPIXEL) || defined(UNPHONE)
+#ifdef HAS_RGB_LED
 #ifdef ENABLE_AMBIENTLIGHTING
         moduleConfig.ambient_lighting.led_state = true;
 #endif
@@ -52,7 +52,7 @@ class AmbientLightingThread : public concurrency::OSThread
             return;
         }
 #endif
-#if defined(HAS_NCP5623) || defined(HAS_LP5562) || defined(RGBLED_RED) || defined(HAS_NEOPIXEL) || defined(UNPHONE)
+#ifdef HAS_RGB_LED
         if (!moduleConfig.ambient_lighting.led_state) {
             LOG_DEBUG("AmbientLighting Disable due to moduleConfig.ambient_lighting.led_state OFF");
             disable();
@@ -87,7 +87,7 @@ class AmbientLightingThread : public concurrency::OSThread
   protected:
     int32_t runOnce() override
     {
-#if defined(HAS_NCP5623) || defined(HAS_LP5562) || defined(RGBLED_RED) || defined(HAS_NEOPIXEL) || defined(UNPHONE)
+#ifdef HAS_RGB_LED
 #if defined(HAS_NCP5623) || defined(HAS_LP5562)
         if ((_type == ScanI2C::NCP5623 || _type == ScanI2C::LP5562) && moduleConfig.ambient_lighting.led_state) {
 #endif

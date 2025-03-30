@@ -727,7 +727,7 @@ void setup()
 
 #if defined(HAS_NEOPIXEL) || defined(UNPHONE) || defined(RGBLED_RED)
     ambientLightingThread = new AmbientLightingThread(ScanI2C::DeviceType::NONE);
-#elif !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL )
+#elif !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
     if (rgb_found.type != ScanI2C::DeviceType::NONE) {
         ambientLightingThread = new AmbientLightingThread(rgb_found.type);
     }
@@ -1252,7 +1252,7 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 #ifndef ARCH_ESP32
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_PAXCOUNTER_CONFIG;
 #endif
-#if !defined(HAS_NCP5623) && !defined(HAS_LP5562) && !defined(RGBLED_RED) && !defined(HAS_NEOPIXEL) && !defined(UNPHONE) && !RAK_4631
+#if !defined(HAS_RGB_LED) && !RAK_4631
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_AMBIENTLIGHTING_CONFIG;
 #endif
 

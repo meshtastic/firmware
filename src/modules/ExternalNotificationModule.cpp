@@ -41,7 +41,7 @@
 extern unPhone unphone;
 #endif
 
-#if defined(HAS_NCP5623) || defined(HAS_LP5562) ||defined(RGBLED_RED) || defined(HAS_NEOPIXEL) || defined(UNPHONE)
+#if defined(HAS_RGB_LED)
 uint8_t red = 0;
 uint8_t green = 0;
 uint8_t blue = 0;
@@ -133,7 +133,7 @@ int32_t ExternalNotificationModule::runOnce()
                           millis());
                 setExternalState(2, !getExternal(2));
             }
-#if defined(HAS_NCP5623) || defined(HAS_LP5562) || defined(RGBLED_RED) || defined(HAS_NEOPIXEL) || defined(UNPHONE)
+#if defined(HAS_RGB_LED)
             red = (colorState & 4) ? brightnessValues[brightnessIndex] : 0;          // Red enabled on colorState = 4,5,6,7
             green = (colorState & 2) ? brightnessValues[brightnessIndex] : 0;        // Green enabled on colorState = 2,3,6,7
             blue = (colorState & 1) ? (brightnessValues[brightnessIndex] * 1.5) : 0; // Blue enabled on colorState = 1,3,5,7
@@ -244,7 +244,7 @@ void ExternalNotificationModule::setExternalState(uint8_t index, bool on)
         break;
     }
 
-#if defined(HAS_NCP5623) || defined(HAS_LP5562) || defined(RGBLED_RED) || defined(HAS_NEOPIXEL) || defined(UNPHONE)
+#if defined(HAS_RGB_LED)
     if (!on) {
         red = 0;
         green = 0;
