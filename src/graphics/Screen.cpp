@@ -2121,6 +2121,91 @@ static void drawDefaultScreen(OLEDDisplay *display, OLEDDisplayUiState *state, i
     display->drawString(uptimeX, uptimeY, uptimeFullStr);
 }
 
+static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) {
+    display->clear();
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
+
+    // === Header ===
+    drawCommonHeader(display, x, y);
+
+    // Row Y offset just like drawNodeListScreen
+    int rowYOffset = FONT_HEIGHT_SMALL - 3;
+    int rowY = y + rowYOffset;
+
+    // === Second Row: My Location (centered) ===
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->drawString(display->getWidth() / 2, rowY, "My Location");
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+#if HAS_GPS
+    // === Update GeoCoord ===
+    geoCoord.updateCoords(
+        int32_t(gpsStatus->getLatitude()),
+        int32_t(gpsStatus->getLongitude()),
+        int32_t(gpsStatus->getAltitude())
+    );
+
+    // === Compass Heading ===
+    float heading = 0;
+#ifdef HAS_MAG_COMPASS
+    heading = radians(magCompass->getHeadingDegrees());
+#else
+    heading = screen->estimatedHeading(geoCoord.getLatitude() * 1e-7, geoCoord.getLongitude() * 1e-7);
+#endif
+
+    // === Third Row: Altitude ===
+    rowY += rowYOffset;
+    char altStr[32];
+    if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
+        snprintf(altStr, sizeof(altStr), "Alt: %.1fft", geoCoord.getAltitude() * METERS_TO_FEET);
+    } else {
+        snprintf(altStr, sizeof(altStr), "Alt: %.1fm", geoCoord.getAltitude());
+    }
+    display->drawString(x + 2, rowY, altStr);
+
+    // === Fourth Row: Latitude ===
+    rowY += rowYOffset;
+    char latStr[32];
+    snprintf(latStr, sizeof(latStr), "Lat: %.5f", geoCoord.getLatitude() * 1e-7);
+    display->drawString(x + 2, rowY, latStr);
+
+    // === Fifth Row: Longitude ===
+    rowY += rowYOffset;
+    char lonStr[32];
+    snprintf(lonStr, sizeof(lonStr), "Lon: %.5f", geoCoord.getLongitude() * 1e-7);
+    display->drawString(x + 2, rowY, lonStr);
+
+    // === Draw Compass if heading is valid ===
+    if (screen->hasHeading()) {
+        // === Draw Compass on Right Side (One Row Down, 3px left) ===
+        uint16_t compassDiam = Screen::getCompassDiam(SCREEN_WIDTH, SCREEN_HEIGHT);
+        int16_t compassX = x + SCREEN_WIDTH - compassDiam / 2 - 8;
+        int16_t compassY = y + SCREEN_HEIGHT / 2 + rowYOffset;
+
+        screen->drawCompassNorth(display, compassX, compassY, heading);
+        screen->drawNodeHeading(display, compassX, compassY, compassDiam, -heading);
+        display->drawCircle(compassX, compassY, compassDiam / 2);
+
+        // === Draw moving "N" label slightly inside edge of circle ===
+        float northAngle = -heading;
+        float radius = compassDiam / 2;
+        int16_t nX = compassX + (radius - 1) * sin(northAngle); // nudged 1px inward
+        int16_t nY = compassY - (radius - 1) * cos(northAngle); // nudged 1px inward
+
+        int16_t nLabelWidth = display->getStringWidth("N") + 2;
+        int16_t nLabelHeight = FONT_HEIGHT_SMALL + 1;
+        display->setColor(BLACK); // erase circle behind N
+        display->fillRect(nX - nLabelWidth / 2, nY - nLabelHeight / 2, nLabelWidth, nLabelHeight);
+        display->setColor(WHITE);
+        display->setFont(FONT_SMALL);
+        display->setTextAlignment(TEXT_ALIGN_CENTER);
+        display->drawString(nX, nY - FONT_HEIGHT_SMALL / 2, "N");
+    }
+#endif
+}
+
+
 
 #if defined(ESP_PLATFORM) && defined(USE_ST7789)
 SPIClass SPI1(HSPI);
@@ -2753,6 +2838,7 @@ void Screen::setFrames(FrameFocus focus)
     normalFrames[numframes++] = drawDistanceScreen;
     normalFrames[numframes++] = drawNodeListWithCompasses; 
     normalFrames[numframes++] = drawHopSignalScreen;
+    normalFrames[numframes++] = drawCompassAndLocationScreen;
 
     // then all the nodes
     // We only show a few nodes in our scrolling list - because meshes with many nodes would have too many screens
