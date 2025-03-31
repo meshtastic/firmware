@@ -1274,6 +1274,19 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_AMBIENTLIGHTING_CONFIG;
 #endif
 
+// No bluetooth on these targets (yet):
+// Pico W / 2W may get it at some point
+// Portduino and ESP32-C6 are excluded because we don't have a working bluetooth stacks integrated yet.
+#if defined(ARCH_RP2040) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32WL) || defined(CONFIG_IDF_TARGET_ESP32C6)
+    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_BLUETOOTH_CONFIG;
+#endif
+
+#if defined(ARCH_NRF52) && !HAS_ETHERNET // nrf52 doesn't have network unless it's a RAK ethernet gateway currently
+    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_NETWORK_CONFIG; // No network on nRF52
+#elif defined(ARCH_RP2040) && !HAS_WIFI && !HAS_ETHERNET
+    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_NETWORK_CONFIG; // No network on RP2040
+#endif
+
 #if !(MESHTASTIC_EXCLUDE_PKI)
     deviceMetadata.hasPKC = true;
 #endif
