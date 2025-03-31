@@ -1,13 +1,13 @@
-name: "Setup Build Base Composite Action"
-description: "Base build actions for Meshtastic Platform IO steps"
+name: Setup Build Base Composite Action
+description: Base build actions for Meshtastic Platform IO steps
 
 runs:
-  using: "composite"
+  using: composite
   steps:
     - name: Checkout code
       uses: actions/checkout@v4
       with:
-        submodules: "recursive"
+        submodules: recursive
         ref: ${{github.event.pull_request.head.ref}}
         repository: ${{github.event.pull_request.head.repo.full_name}}
 
@@ -20,19 +20,16 @@ runs:
       shell: bash
       run: |
         sudo apt-get -y update --fix-missing
-        sudo apt-get install -y cppcheck libbluetooth-dev libgpiod-dev libyaml-cpp-dev
+        sudo apt-get install -y cppcheck libbluetooth-dev libgpiod-dev libyaml-cpp-dev lsb-release
 
     - name: Setup Python
       uses: actions/setup-python@v5
       with:
         python-version: 3.x
-
-    # - name: Cache python libs
-    #   uses: actions/cache@v4
-    #   id: cache-pip # needed in if test
-    #   with:
-    #     path: ~/.cache/pip
-    #     key: ${{ runner.os }}-pip
+        cache: pip
+        cache-dependency-path: |
+          .github/actions/**
+          **.ini
 
     - name: Upgrade python tools
       shell: bash

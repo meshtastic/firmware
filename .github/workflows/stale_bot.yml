@@ -1,0 +1,23 @@
+name: process stale Issues and PR's
+on:
+  schedule:
+    - cron: 0 6 * * *
+  workflow_dispatch: {}
+
+permissions:
+  issues: write
+  pull-requests: write
+  actions: write
+
+jobs:
+  stale_issues:
+    name: Close Stale Issues
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Stale PR+Issues
+        uses: actions/stale@v9.1.0
+        with:
+          days-before-stale: 45
+          exempt-issue-labels: pinned,3.0
+          exempt-pr-labels: pinned,3.0

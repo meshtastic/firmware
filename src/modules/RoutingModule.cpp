@@ -20,6 +20,11 @@ bool RoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mesh
         if ((nodeDB->getMeshNode(mp.from) == NULL || !nodeDB->getMeshNode(mp.from)->has_user) &&
             (nodeDB->getMeshNode(mp.to) == NULL || !nodeDB->getMeshNode(mp.to)->has_user))
             return false;
+    } else if (owner.is_licensed && nodeDB->getLicenseStatus(mp.from) == UserLicenseStatus::NotLicensed) {
+        // Don't let licensed users to rebroadcast packets from unlicensed users
+        // If we know they are in-fact unlicensed
+        LOG_DEBUG("Packet from unlicensed user, ignoring packet");
+        return false;
     }
 
     printPacket("Routing sniffing", &mp);
@@ -41,18 +46,12 @@ meshtastic_MeshPacket *RoutingModule::allocReply()
         return NULL;
     assert(currentRequest);
 
-    // We only consider making replies if the request was a legit routing packet (not just something we were sniffing)
-    if (currentRequest->decoded.portnum == meshtastic_PortNum_ROUTING_APP) {
-        assert(0); // 1.2 refactoring fixme, Not sure if anything needs this yet?
-        // return allocDataProtobuf(u);
-    }
     return NULL;
 }
 
-void RoutingModule::sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopStart,
-                               uint8_t hopLimit)
+void RoutingModule::sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopLimit)
 {
-    auto p = allocAckNak(err, to, idFrom, chIndex, hopStart, hopLimit);
+    auto p = allocAckNak(err, to, idFrom, chIndex, hopLimit);
 
     router->sendLocal(p); // we sometimes send directly to the local node
 }
@@ -78,7 +77,7 @@ RoutingModule::RoutingModule() : ProtobufModule("routing", meshtastic_PortNum_RO
 {
     isPromiscuous = true;
 
-    // moved the ReboradcastMode logic into handleReceivedProtobuf
+    // moved the RebroadcastMode logic into handleReceivedProtobuf
     // LocalOnly requires either the from or to to be a known node
     // knownOnly specifically requires the from to be a known node.
     encryptedOk = true;

@@ -3,6 +3,11 @@
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 
 #pragma once
+
+#ifndef ENVIRONMENTAL_TELEMETRY_MODULE_ENABLE
+#define ENVIRONMENTAL_TELEMETRY_MODULE_ENABLE 0
+#endif
+
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "NodeDB.h"
 #include "ProtobufModule.h"
@@ -17,7 +22,7 @@ class EnvironmentTelemetryModule : private concurrency::OSThread, public Protobu
 
   public:
     EnvironmentTelemetryModule()
-        : concurrency::OSThread("EnvironmentTelemetryModule"),
+        : concurrency::OSThread("EnvironmentTelemetry"),
           ProtobufModule("EnvironmentTelemetry", meshtastic_PortNum_TELEMETRY_APP, &meshtastic_Telemetry_msg)
     {
         lastMeasurementPacket = nullptr;

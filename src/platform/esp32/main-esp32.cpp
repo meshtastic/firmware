@@ -9,6 +9,8 @@
 #include "nimble/NimbleBluetooth.h"
 #endif
 
+#include <WiFiOTA.h>
+
 #if HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
@@ -26,7 +28,9 @@
 #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH
 void setBluetoothEnable(bool enable)
 {
-#if HAS_WIFI
+#ifdef USE_WS5500
+    if ((config.bluetooth.enabled == true) && (config.network.wifi_enabled == false))
+#elif HAS_WIFI
     if (!isWifiAvailable() && config.bluetooth.enabled == true)
 #else
     if (config.bluetooth.enabled == true)
@@ -51,7 +55,11 @@ void updateBatteryLevel(uint8_t level) {}
 
 void getMacAddr(uint8_t *dmac)
 {
+#if defined(CONFIG_IDF_TARGET_ESP32C6) && defined(CONFIG_SOC_IEEE802154_SUPPORTED)
+    assert(esp_base_mac_addr_get(dmac) == ESP_OK);
+#else
     assert(esp_efuse_mac_get_default(dmac) == ESP_OK);
+#endif
 }
 
 #ifdef HAS_32768HZ
@@ -79,7 +87,7 @@ void enableSlowCLK()
         LOG_DEBUG("32K XTAL OSC has not started up");
     } else {
         rtc_clk_slow_freq_set(RTC_SLOW_FREQ_32K_XTAL);
-        LOG_DEBUG("Switching RTC Source to 32.768Khz succeeded, using 32K XTAL");
+        LOG_DEBUG("Switch RTC Source to 32.768Khz succeeded, using 32K XTAL");
         CALIBRATE_ONE(RTC_CAL_RTC_MUX);
         CALIBRATE_ONE(RTC_CAL_32K_XTAL);
     }
@@ -97,9 +105,14 @@ void esp32Setup()
     /* We explicitly don't want to do call randomSeed,
     // as that triggers the esp32 core to use a less secure pseudorandom function.
     uint32_t seed = esp_random();
-    LOG_DEBUG("Setting random seed %u", seed);
+    LOG_DEBUG("Set random seed %u", seed);
     randomSeed(seed);
     */
+
+#ifdef POWER_FULL
+    pinMode(POWER_FULL, INPUT);
+    pinMode(7, INPUT);
+#endif
 
     LOG_DEBUG("Total heap: %d", ESP.getHeapSize());
     LOG_DEBUG("Free heap: %d", ESP.getFreeHeap());
@@ -133,12 +146,19 @@ void esp32Setup()
 #if !MESHTASTIC_EXCLUDE_BLUETOOTH
     String BLEOTA = BleOta::getOtaAppVersion();
     if (BLEOTA.isEmpty()) {
-        LOG_INFO("No OTA firmware available");
+        LOG_INFO("No BLE OTA firmware available");
     } else {
-        LOG_INFO("OTA firmware version %s", BLEOTA.c_str());
+        LOG_INFO("BLE OTA firmware version %s", BLEOTA.c_str());
     }
-#else
-    LOG_INFO("No OTA firmware available");
+#endif
+#if !MESHTASTIC_EXCLUDE_WIFI
+    String version = WiFiOTA::getVersion();
+    if (version.isEmpty()) {
+        LOG_INFO("No WiFi OTA firmware available");
+    } else {
+        LOG_INFO("WiFi OTA firmware version %s", version.c_str());
+    }
+    WiFiOTA::initialize();
 #endif
 
     // enableModemSleep();

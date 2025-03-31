@@ -5,6 +5,7 @@
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "FSCommon.h"
 #include "NAU7802Sensor.h"
+#include "SPILock.h"
 #include "SafeFile.h"
 #include "TelemetrySensor.h"
 #include <Throttle.h>
@@ -35,7 +36,7 @@ void NAU7802Sensor::setup() {}
 
 bool NAU7802Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
-    LOG_DEBUG("NAU7802Sensor::getMetrics");
+    LOG_DEBUG("NAU7802 getMetrics");
     nau7802.powerUp();
     // Wait for the sensor to become ready for one second max
     uint32_t start = millis();
@@ -103,7 +104,7 @@ bool NAU7802Sensor::saveCalibrationData()
     nau7802config.calibrationFactor = nau7802.getCalibrationFactor();
     bool okay = false;
 
-    LOG_INFO("%s state write to %s.", sensorName, nau7802ConfigFileName);
+    LOG_INFO("%s state write to %s", sensorName, nau7802ConfigFileName);
     pb_ostream_t stream = {&writecb, static_cast<Print *>(&file), meshtastic_Nau7802Config_size};
 
     if (!pb_encode(&stream, &meshtastic_Nau7802Config_msg, &nau7802config)) {
@@ -111,17 +112,20 @@ bool NAU7802Sensor::saveCalibrationData()
     } else {
         okay = true;
     }
+    spiLock->lock();
     okay &= file.close();
+    spiLock->unlock();
 
     return okay;
 }
 
 bool NAU7802Sensor::loadCalibrationData()
 {
+    spiLock->lock();
     auto file = FSCom.open(nau7802ConfigFileName, FILE_O_READ);
     bool okay = false;
     if (file) {
-        LOG_INFO("%s state read from %s.", sensorName, nau7802ConfigFileName);
+        LOG_INFO("%s state read from %s", sensorName, nau7802ConfigFileName);
         pb_istream_t stream = {&readcb, &file, meshtastic_Nau7802Config_size};
         if (!pb_decode(&stream, &meshtastic_Nau7802Config_msg, &nau7802config)) {
             LOG_ERROR("Error: can't decode protobuf %s", PB_GET_ERROR(&stream));
@@ -132,8 +136,9 @@ bool NAU7802Sensor::loadCalibrationData()
         }
         file.close();
     } else {
-        LOG_INFO("No %s state found (File: %s).", sensorName, nau7802ConfigFileName);
+        LOG_INFO("No %s state found (File: %s)", sensorName, nau7802ConfigFileName);
     }
+    spiLock->unlock();
     return okay;
 }
 

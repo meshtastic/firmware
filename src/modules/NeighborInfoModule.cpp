@@ -37,7 +37,7 @@ void NeighborInfoModule::printNodeDBNeighbors()
 /* Send our initial owner announcement 35 seconds after we start (to give network time to setup) */
 NeighborInfoModule::NeighborInfoModule()
     : ProtobufModule("neighborinfo", meshtastic_PortNum_NEIGHBORINFO_APP, &meshtastic_NeighborInfo_msg),
-      concurrency::OSThread("NeighborInfoModule")
+      concurrency::OSThread("NeighborInfo")
 {
     ourPortNum = meshtastic_PortNum_NEIGHBORINFO_APP;
     nodeStatusObserver.observe(&nodeStatus->onNewStatus);
@@ -91,7 +91,7 @@ void NeighborInfoModule::cleanUpNeighbors()
         // We will remove a neighbor if we haven't heard from them in twice the broadcast interval
         // cannot use isWithinTimespanMs() as it->last_rx_time is seconds since 1970
         if ((now - it->last_rx_time > it->node_broadcast_interval_secs * 2) && (it->node_id != my_node_id)) {
-            LOG_DEBUG("Removing neighbor with node ID 0x%x", it->node_id);
+            LOG_DEBUG("Remove neighbor with node ID 0x%x", it->node_id);
             it = std::vector<meshtastic_Neighbor>::reverse_iterator(
                 neighbors.erase(std::next(it).base())); // Erase the element and update the iterator
         } else {
@@ -121,14 +121,18 @@ Will be used for broadcast.
 */
 int32_t NeighborInfoModule::runOnce()
 {
-    if (airTime->isTxAllowedChannelUtil(true) && airTime->isTxAllowedAirUtil()) {
+    if (moduleConfig.neighbor_info.transmit_over_lora &&
+        (!channels.isDefaultChannel(channels.getPrimaryIndex()) || !RadioInterface::uses_default_frequency_slot) &&
+        airTime->isTxAllowedChannelUtil(true) && airTime->isTxAllowedAirUtil()) {
+        sendNeighborInfo(NODENUM_BROADCAST, false);
+    } else {
         sendNeighborInfo(NODENUM_BROADCAST_NO_LORA, false);
     }
     return Default::getConfiguredOrDefaultMs(moduleConfig.neighbor_info.update_interval, default_neighbor_info_broadcast_secs);
 }
 
 /*
-Collect a recieved neighbor info packet from another node
+Collect a received neighbor info packet from another node
 Pass it to an upper client; do not persist this data on the mesh
 */
 bool NeighborInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_NeighborInfo *np)
@@ -205,7 +209,7 @@ meshtastic_Neighbor *NeighborInfoModule::getOrCreateNeighbor(NodeNum originalSen
         neighbors.push_back(new_nbr);
     } else {
         // If we have too many neighbors, replace the oldest one
-        LOG_WARN("Neighbor DB is full, replacing oldest neighbor");
+        LOG_WARN("Neighbor DB is full, replace oldest neighbor");
         neighbors.erase(neighbors.begin());
         neighbors.push_back(new_nbr);
     }

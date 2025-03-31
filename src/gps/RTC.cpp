@@ -112,7 +112,7 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpdate)
     uint32_t printableEpoch = tv->tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
 #ifdef BUILD_EPOCH
     if (tv->tv_sec < BUILD_EPOCH) {
-        LOG_WARN("Ignoring time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
+        LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
         return false;
     }
 #endif
@@ -120,21 +120,21 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpdate)
     bool shouldSet;
     if (forceUpdate) {
         shouldSet = true;
-        LOG_DEBUG("Overriding current RTC quality (%s) with incoming time of RTC quality of %s", RtcName(currentQuality),
+        LOG_DEBUG("Override current RTC quality (%s) with incoming time of RTC quality of %s", RtcName(currentQuality),
                   RtcName(q));
     } else if (q > currentQuality) {
         shouldSet = true;
-        LOG_DEBUG("Upgrading time to quality %s", RtcName(q));
+        LOG_DEBUG("Upgrade time to quality %s", RtcName(q));
     } else if (q == RTCQualityGPS) {
         shouldSet = true;
-        LOG_DEBUG("Reapplying GPS time: %ld secs", printableEpoch);
+        LOG_DEBUG("Reapply GPS time: %ld secs", printableEpoch);
     } else if (q == RTCQualityNTP && !Throttle::isWithinTimespanMs(lastSetMsec, (12 * 60 * 60 * 1000UL))) {
         // Every 12 hrs we will slam in a new NTP or Phone GPS / NTP time, to correct for local RTC clock drift
         shouldSet = true;
-        LOG_DEBUG("Reapplying external time to correct clock drift %ld secs", printableEpoch);
+        LOG_DEBUG("Reapply external time to correct clock drift %ld secs", printableEpoch);
     } else {
         shouldSet = false;
-        LOG_DEBUG("Current RTC quality: %s. Ignoring time of RTC quality of %s", RtcName(currentQuality), RtcName(q));
+        LOG_DEBUG("Current RTC quality: %s. Ignore time of RTC quality of %s", RtcName(currentQuality), RtcName(q));
     }
 
     if (shouldSet) {
@@ -230,7 +230,7 @@ bool perhapsSetRTC(RTCQuality q, struct tm &t)
 
     // LOG_DEBUG("Got time from GPS month=%d, year=%d, unixtime=%ld", t.tm_mon, t.tm_year, tv.tv_sec);
     if (t.tm_year < 0 || t.tm_year >= 300) {
-        // LOG_DEBUG("Ignoring invalid GPS month=%d, year=%d, unixtime=%ld", t.tm_mon, t.tm_year, tv.tv_sec);
+        // LOG_DEBUG("Ignore invalid GPS month=%d, year=%d, unixtime=%ld", t.tm_mon, t.tm_year, tv.tv_sec);
         return false;
     } else {
         return perhapsSetRTC(q, &tv);

@@ -5,6 +5,7 @@
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "BME680Sensor.h"
 #include "FSCommon.h"
+#include "SPILock.h"
 #include "TelemetrySensor.h"
 
 BME680Sensor::BME680Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_BME680, "BME680") {}
@@ -75,15 +76,17 @@ bool BME680Sensor::getMetrics(meshtastic_Telemetry *measurement)
 void BME680Sensor::loadState()
 {
 #ifdef FSCom
+    spiLock->lock();
     auto file = FSCom.open(bsecConfigFileName, FILE_O_READ);
     if (file) {
         file.read((uint8_t *)&bsecState, BSEC_MAX_STATE_BLOB_SIZE);
         file.close();
         bme680.setState(bsecState);
-        LOG_INFO("%s state read from %s.", sensorName, bsecConfigFileName);
+        LOG_INFO("%s state read from %s", sensorName, bsecConfigFileName);
     } else {
-        LOG_INFO("No %s state found (File: %s).", sensorName, bsecConfigFileName);
+        LOG_INFO("No %s state found (File: %s)", sensorName, bsecConfigFileName);
     }
+    spiLock->unlock();
 #else
     LOG_ERROR("ERROR: Filesystem not implemented");
 #endif
@@ -92,6 +95,7 @@ void BME680Sensor::loadState()
 void BME680Sensor::updateState()
 {
 #ifdef FSCom
+    spiLock->lock();
     bool update = false;
     if (stateUpdateCounter == 0) {
         /* First state update when IAQ accuracy is >= 3 */
@@ -119,14 +123,15 @@ void BME680Sensor::updateState()
         }
         auto file = FSCom.open(bsecConfigFileName, FILE_O_WRITE);
         if (file) {
-            LOG_INFO("%s state write to %s.", sensorName, bsecConfigFileName);
+            LOG_INFO("%s state write to %s", sensorName, bsecConfigFileName);
             file.write((uint8_t *)&bsecState, BSEC_MAX_STATE_BLOB_SIZE);
             file.flush();
             file.close();
         } else {
-            LOG_INFO("Can't write %s state (File: %s).", sensorName, bsecConfigFileName);
+            LOG_INFO("Can't write %s state (File: %s)", sensorName, bsecConfigFileName);
         }
     }
+    spiLock->unlock();
 #else
     LOG_ERROR("ERROR: Filesystem not implemented");
 #endif

@@ -144,6 +144,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_HT62
 #elif defined(EBYTE_ESP32_S3)
 #define HW_VENDOR meshtastic_HardwareModel_EBYTE_ESP32_S3
+#elif defined(ELECROW_ThinkNode_M2)
+#define HW_VENDOR meshtastic_HardwareModel_THINKNODE_M2
 #elif defined(ESP32_S3_PICO)
 #define HW_VENDOR meshtastic_HardwareModel_ESP32_S3_PICO
 #elif defined(SENSELORA_S3)
@@ -170,12 +172,16 @@
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_VISION_MASTER_E213
 #elif defined(HELTEC_VISION_MASTER_E290)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_VISION_MASTER_E290
-#elif defined(HELTEC_MESH_NODE_T114)
-#define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_NODE_T114
 #elif defined(SENSECAP_INDICATOR)
 #define HW_VENDOR meshtastic_HardwareModel_SENSECAP_INDICATOR
 #elif defined(SEEED_XIAO_S3)
 #define HW_VENDOR meshtastic_HardwareModel_SEEED_XIAO_S3
+#elif defined(MESH_TAB)
+#define HW_VENDOR meshtastic_HardwareModel_MESH_TAB
+#elif defined(T_ETH_ELITE)
+#define HW_VENDOR meshtastic_HardwareModel_T_ETH_ELITE
+#elif defined(HELTEC_SENSOR_HUB)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_SENSOR_HUB
 #endif
 
 // -----------------------------------------------------------------------------

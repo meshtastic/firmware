@@ -15,6 +15,7 @@
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "Router.h"
+#include "SPILock.h"
 #include "airtime.h"
 #include "configuration.h"
 #include "gps/GeoCoord.h"
@@ -24,13 +25,13 @@
 RangeTestModule *rangeTestModule;
 RangeTestModuleRadio *rangeTestModuleRadio;
 
-RangeTestModule::RangeTestModule() : concurrency::OSThread("RangeTestModule") {}
+RangeTestModule::RangeTestModule() : concurrency::OSThread("RangeTest") {}
 
 uint32_t packetSequence = 0;
 
 int32_t RangeTestModule::runOnce()
 {
-#if defined(ARCH_ESP32) || defined(ARCH_NRF52)
+#if defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_PORTDUINO)
 
     /*
         Uncomment the preferences below if you want to use the module
@@ -54,11 +55,11 @@ int32_t RangeTestModule::runOnce()
             firstTime = 0;
 
             if (moduleConfig.range_test.sender) {
-                LOG_INFO("Initializing Range Test Module -- Sender");
+                LOG_INFO("Init Range Test Module -- Sender");
                 started = millis(); // make a note of when we started
                 return (5000);      // Sending first message 5 seconds after initialization.
             } else {
-                LOG_INFO("Initializing Range Test Module -- Receiver");
+                LOG_INFO("Init Range Test Module -- Receiver");
                 return disable();
                 // This thread does not need to run as a receiver
             }
@@ -81,7 +82,7 @@ int32_t RangeTestModule::runOnce()
 
                 // If we have been running for more than 8 hours, turn module back off
                 if (!Throttle::isWithinTimespanMs(started, 28800000)) {
-                    LOG_INFO("Range Test Module - Disabling after 8 hours");
+                    LOG_INFO("Range Test Module - Disable after 8 hours");
                     return disable();
                 } else {
                     return (senderHeartbeat);
@@ -129,7 +130,7 @@ void RangeTestModuleRadio::sendPayload(NodeNum dest, bool wantReplies)
 
 ProcessMessage RangeTestModuleRadio::handleReceived(const meshtastic_MeshPacket &mp)
 {
-#if defined(ARCH_ESP32) || defined(ARCH_NRF52)
+#if defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_PORTDUINO)
 
     if (moduleConfig.range_test.enabled) {
 
@@ -155,8 +156,6 @@ ProcessMessage RangeTestModuleRadio::handleReceived(const meshtastic_MeshPacket 
             LOG_DEBUG("mp.from          %d", mp.from);
             LOG_DEBUG("mp.rx_snr        %f", mp.rx_snr);
             LOG_DEBUG("mp.hop_limit     %d", mp.hop_limit);
-            // LOG_DEBUG("mp.decoded.position.latitude_i     %d", mp.decoded.position.latitude_i); // Deprecated
-            // LOG_DEBUG("mp.decoded.position.longitude_i    %d", mp.decoded.position.longitude_i); // Deprecated
             LOG_DEBUG("---- Node Information of Received Packet (mp.from):");
             LOG_DEBUG("n->user.long_name         %s", n->user.long_name);
             LOG_DEBUG("n->user.short_name        %s", n->user.short_name);
@@ -194,8 +193,6 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
         LOG_DEBUG("mp.from          %d", mp.from);
         LOG_DEBUG("mp.rx_snr        %f", mp.rx_snr);
         LOG_DEBUG("mp.hop_limit     %d", mp.hop_limit);
-        // LOG_DEBUG("mp.decoded.position.latitude_i     %d", mp.decoded.position.latitude_i);  // Deprecated
-        // LOG_DEBUG("mp.decoded.position.longitude_i    %d", mp.decoded.position.longitude_i); // Deprecated
         LOG_DEBUG("---- Node Information of Received Packet (mp.from):");
         LOG_DEBUG("n->user.long_name         %s", n->user.long_name);
         LOG_DEBUG("n->user.short_name        %s", n->user.short_name);
@@ -209,13 +206,14 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
         LOG_DEBUG("gpsStatus->getDOP()          %d", gpsStatus->getDOP());
         LOG_DEBUG("-----------------------------------------");
     */
+    concurrency::LockGuard g(spiLock);
     if (!FSBegin()) {
         LOG_DEBUG("An Error has occurred while mounting the filesystem");
         return 0;
     }
 
     if (FSCom.totalBytes() - FSCom.usedBytes() < 51200) {
-        LOG_DEBUG("Filesystem doesn't have enough free space. Aborting write.");
+        LOG_DEBUG("Filesystem doesn't have enough free space. Aborting write");
         return 0;
     }
 
@@ -265,13 +263,21 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
         fileToAppend.printf("??:??:??,"); // Time
     }
 
-    fileToAppend.printf("%d,", getFrom(&mp));                     // From
-    fileToAppend.printf("%s,", n->user.long_name);                // Long Name
-    fileToAppend.printf("%f,", n->position.latitude_i * 1e-7);    // Sender Lat
-    fileToAppend.printf("%f,", n->position.longitude_i * 1e-7);   // Sender Long
-    fileToAppend.printf("%f,", gpsStatus->getLatitude() * 1e-7);  // RX Lat
-    fileToAppend.printf("%f,", gpsStatus->getLongitude() * 1e-7); // RX Long
-    fileToAppend.printf("%d,", gpsStatus->getAltitude());         // RX Altitude
+    fileToAppend.printf("%d,", getFrom(&mp));                   // From
+    fileToAppend.printf("%s,", n->user.long_name);              // Long Name
+    fileToAppend.printf("%f,", n->position.latitude_i * 1e-7);  // Sender Lat
+    fileToAppend.printf("%f,", n->position.longitude_i * 1e-7); // Sender Long
+    if (gpsStatus->getIsConnected() || config.position.fixed_position) {
+        fileToAppend.printf("%f,", gpsStatus->getLatitude() * 1e-7);  // RX Lat
+        fileToAppend.printf("%f,", gpsStatus->getLongitude() * 1e-7); // RX Long
+        fileToAppend.printf("%d,", gpsStatus->getAltitude());         // RX Altitude
+    } else {
+        // When the phone API is in use, the node info will be updated with position
+        meshtastic_NodeInfoLite *us = nodeDB->getMeshNode(nodeDB->getNodeNum());
+        fileToAppend.printf("%f,", us->position.latitude_i * 1e-7);  // RX Lat
+        fileToAppend.printf("%f,", us->position.longitude_i * 1e-7); // RX Long
+        fileToAppend.printf("%d,", us->position.altitude);           // RX Altitude
+    }
 
     fileToAppend.printf("%f,", mp.rx_snr); // RX SNR
 

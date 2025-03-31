@@ -13,6 +13,7 @@
 #include "TypeConversions.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
+#include "meshUtils.h"
 #include "modules/NodeInfoModule.h"
 #include "modules/PositionModule.h"
 #include "power.h"
@@ -78,17 +79,27 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
     powerFSM.trigger(EVENT_PACKET_FOR_PHONE); // Possibly keep the node from sleeping
 
     nodeDB->updateFrom(*mp); // update our DB state based off sniffing every RX packet from the radio
+    bool isPreferredRebroadcaster =
+        IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_ROUTER, meshtastic_Config_DeviceConfig_Role_REPEATER);
     if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
         mp->decoded.portnum == meshtastic_PortNum_TELEMETRY_APP && mp->decoded.request_id > 0) {
-        LOG_DEBUG("Received telemetry response. Skip sending our NodeInfo."); //  because this potentially a Repeater which will
-                                                                              //  ignore our request for its NodeInfo
+        LOG_DEBUG("Received telemetry response. Skip sending our NodeInfo"); //  because this potentially a Repeater which will
+                                                                             //  ignore our request for its NodeInfo
     } else if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !nodeDB->getMeshNode(mp->from)->has_user &&
-               nodeInfoModule) {
-        LOG_INFO("Heard new node on channel %d, sending NodeInfo and asking for a response.", mp->channel);
+               nodeInfoModule && !isPreferredRebroadcaster && !nodeDB->isFull()) {
         if (airTime->isTxAllowedChannelUtil(true)) {
-            nodeInfoModule->sendOurNodeInfo(mp->from, true, mp->channel);
+            // Hops used by the request. If somebody in between running modified firmware modified it, ignore it
+            auto hopStart = mp->hop_start;
+            auto hopLimit = mp->hop_limit;
+            uint8_t hopsUsed = hopStart < hopLimit ? config.lora.hop_limit : hopStart - hopLimit;
+            if (hopsUsed > config.lora.hop_limit + 2) {
+                LOG_DEBUG("Skip send NodeInfo: %d hops away is too far away", hopsUsed);
+            } else {
+                LOG_INFO("Heard new node on ch. %d, send NodeInfo and ask for response", mp->channel);
+                nodeInfoModule->sendOurNodeInfo(mp->from, true, mp->channel);
+            }
         } else {
-            LOG_DEBUG("Skip sending NodeInfo due to > 25 percent channel util.");
+            LOG_DEBUG("Skip sending NodeInfo > 25%% ch. util");
         }
     }
 
@@ -114,17 +125,15 @@ void MeshService::loop()
 }
 
 /// The radioConfig object just changed, call this to force the hw to change to the new settings
-bool MeshService::reloadConfig(int saveWhat)
+void MeshService::reloadConfig(int saveWhat)
 {
     // If we can successfully set this radio to these settings, save them to disk
 
     // This will also update the region as needed
-    bool didReset = nodeDB->resetRadioConfig(); // Don't let the phone send us fatally bad settings
+    nodeDB->resetRadioConfig(); // Don't let the phone send us fatally bad settings
 
     configChanged.notifyObservers(NULL); // This will cause radio hardware to change freqs etc
     nodeDB->saveToDisk(saveWhat);
-
-    return didReset;
 }
 
 /// The owner User record just got updated, update our node DB and broadcast the info into the mesh
@@ -163,31 +172,16 @@ NodeNum MeshService::getNodenumFromRequestId(uint32_t request_id)
  */
 void MeshService::handleToRadio(meshtastic_MeshPacket &p)
 {
-#if defined(ARCH_PORTDUINO) && !HAS_RADIO
-    // Simulates device is receiving a packet via the LoRa chip
-    if (p.decoded.portnum == meshtastic_PortNum_SIMULATOR_APP) {
-        // Simulator packet (=Compressed packet) is encapsulated in a MeshPacket, so need to unwrap first
-        meshtastic_Compressed scratch;
-        meshtastic_Compressed *decoded = NULL;
-        if (p.which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
-            memset(&scratch, 0, sizeof(scratch));
-            p.decoded.payload.size =
-                pb_decode_from_bytes(p.decoded.payload.bytes, p.decoded.payload.size, &meshtastic_Compressed_msg, &scratch);
-            if (p.decoded.payload.size) {
-                decoded = &scratch;
-                // Extract the original payload and replace
-                memcpy(&p.decoded.payload, &decoded->data, sizeof(decoded->data));
-                // Switch the port from PortNum_SIMULATOR_APP back to the original PortNum
-                p.decoded.portnum = decoded->portnum;
-            } else
-                LOG_ERROR("Error decoding protobuf for simulator message!");
-        }
-        // Let SimRadio receive as if it did via its LoRa chip
-        SimRadio::instance->startReceive(&p);
+#if defined(ARCH_PORTDUINO)
+    if (SimRadio::instance && p.decoded.portnum == meshtastic_PortNum_SIMULATOR_APP) {
+        // Simulates device received a packet via the LoRa chip
+        SimRadio::instance->unpackAndReceive(p);
         return;
     }
 #endif
-    p.from = 0; // We don't let phones assign nodenums to their sent messages
+    p.from = 0;                          // We don't let clients assign nodenums to their sent messages
+    p.next_hop = NO_NEXT_HOP_PREFERENCE; // We don't let clients assign next_hop to their sent messages
+    p.relay_node = NO_RELAY_NODE;        // We don't let clients assign relay_node to their sent messages
 
     if (p.id == 0)
         p.id = generatePacketId(); // If the phone didn't supply one, then pick one
@@ -222,7 +216,7 @@ ErrorCode MeshService::sendQueueStatusToPhone(const meshtastic_QueueStatus &qs, 
     copied->mesh_packet_id = mesh_packet_id;
 
     if (toPhoneQueueStatusQueue.numFree() == 0) {
-        LOG_INFO("tophone queue status queue is full, discarding oldest");
+        LOG_INFO("tophone queue status queue is full, discard oldest");
         meshtastic_QueueStatus *d = toPhoneQueueStatusQueue.dequeuePtr(0);
         if (d)
             releaseQueueStatusToPool(d);
@@ -252,8 +246,13 @@ void MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPh
         LOG_DEBUG("Can't send status to phone");
     }
 
-    if (res == ERRNO_OK && ccToPhone) { // Check if p is not released in case it couldn't be sent
+    if ((res == ERRNO_OK || res == ERRNO_SHOULD_RELEASE) && ccToPhone) { // Check if p is not released in case it couldn't be sent
         sendToPhone(packetPool.allocCopy(*p));
+    }
+
+    // Router may ask us to release the packet if it wasn't sent
+    if (res == ERRNO_SHOULD_RELEASE) {
+        releaseToPool(p);
     }
 }
 
@@ -263,17 +262,17 @@ bool MeshService::trySendPosition(NodeNum dest, bool wantReplies)
 
     assert(node);
 
-    if (hasValidPosition(node)) {
+    if (nodeDB->hasValidPosition(node)) {
 #if HAS_GPS && !MESHTASTIC_EXCLUDE_GPS
         if (positionModule) {
-            LOG_INFO("Sending position ping to 0x%x, wantReplies=%d, channel=%d", dest, wantReplies, node->channel);
+            LOG_INFO("Send position ping to 0x%x, wantReplies=%d, channel=%d", dest, wantReplies, node->channel);
             positionModule->sendOurPosition(dest, wantReplies, node->channel);
             return true;
         }
     } else {
 #endif
         if (nodeInfoModule) {
-            LOG_INFO("Sending nodeinfo ping to 0x%x, wantReplies=%d, channel=%d", dest, wantReplies, node->channel);
+            LOG_INFO("Send nodeinfo ping to 0x%x, wantReplies=%d, channel=%d", dest, wantReplies, node->channel);
             nodeInfoModule->sendOurNodeInfo(dest, wantReplies, node->channel);
         }
     }
@@ -298,47 +297,56 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
     if (toPhoneQueue.numFree() == 0) {
         if (p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP ||
             p->decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP) {
-            LOG_WARN("ToPhone queue is full, discarding oldest");
+            LOG_WARN("ToPhone queue is full, discard oldest");
             meshtastic_MeshPacket *d = toPhoneQueue.dequeuePtr(0);
             if (d)
                 releaseToPool(d);
         } else {
-            LOG_WARN("ToPhone queue is full, dropping packet.");
+            LOG_WARN("ToPhone queue is full, drop packet");
             releaseToPool(p);
             fromNum++; // Make sure to notify observers in case they are reconnected so they can get the packets
             return;
         }
     }
 
-    assert(toPhoneQueue.enqueue(p, 0));
+    if (toPhoneQueue.enqueue(p, 0) == false) {
+        LOG_CRIT("Failed to queue a packet into toPhoneQueue!");
+        abort();
+    }
     fromNum++;
 }
 
 void MeshService::sendMqttMessageToClientProxy(meshtastic_MqttClientProxyMessage *m)
 {
-    LOG_DEBUG("Sending mqtt message on topic '%s' to client for proxy", m->topic);
+    LOG_DEBUG("Send mqtt message on topic '%s' to client for proxy", m->topic);
     if (toPhoneMqttProxyQueue.numFree() == 0) {
-        LOG_WARN("MqttClientProxyMessagePool queue is full, discarding oldest");
+        LOG_WARN("MqttClientProxyMessagePool queue is full, discard oldest");
         meshtastic_MqttClientProxyMessage *d = toPhoneMqttProxyQueue.dequeuePtr(0);
         if (d)
             releaseMqttClientProxyMessageToPool(d);
     }
 
-    assert(toPhoneMqttProxyQueue.enqueue(m, 0));
+    if (toPhoneMqttProxyQueue.enqueue(m, 0) == false) {
+        LOG_CRIT("Failed to queue a packet into toPhoneMqttProxyQueue!");
+        abort();
+    }
     fromNum++;
 }
 
 void MeshService::sendClientNotification(meshtastic_ClientNotification *n)
 {
-    LOG_DEBUG("Sending client notification to phone");
+    LOG_DEBUG("Send client notification to phone");
     if (toPhoneClientNotificationQueue.numFree() == 0) {
-        LOG_WARN("ClientNotification queue is full, discarding oldest");
+        LOG_WARN("ClientNotification queue is full, discard oldest");
         meshtastic_ClientNotification *d = toPhoneClientNotificationQueue.dequeuePtr(0);
         if (d)
             releaseClientNotificationToPool(d);
     }
 
-    assert(toPhoneClientNotificationQueue.enqueue(n, 0));
+    if (toPhoneClientNotificationQueue.enqueue(n, 0) == false) {
+        LOG_CRIT("Failed to queue a notification into toPhoneClientNotificationQueue!");
+        abort();
+    }
     fromNum++;
 }
 
@@ -380,13 +388,13 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
         pos = gps->p;
     } else {
         // The GPS has lost lock
-#ifdef GPS_EXTRAVERBOSE
+#ifdef GPS_DEBUG
         LOG_DEBUG("onGPSchanged() - lost validLocation");
 #endif
     }
     // Used fixed position if configured regardless of GPS lock
     if (config.position.fixed_position) {
-        LOG_WARN("Using fixed position");
+        LOG_WARN("Use fixed position");
         pos = TypeConversions::ConvertToPosition(node->position);
     }
 

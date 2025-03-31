@@ -73,9 +73,10 @@ const RegionInfo regions[] = {
     RDEF(RU, 868.7f, 869.2f, 100, 0, 20, true, false, false),
 
     /*
-        ???
+        https://www.law.go.kr/LSW/admRulLsInfoP.do?admRulId=53943&efYd=0
+        https://resources.lora-alliance.org/technical-specifications/rp002-1-0-4-regional-parameters
      */
-    RDEF(KR, 920.0f, 923.0f, 100, 0, 0, true, false, false),
+    RDEF(KR, 920.0f, 923.0f, 100, 0, 23, true, false, false),
 
     /*
         Taiwan, 920-925Mhz, limited to 0.5W indoor or coastal, 1.0W outdoor.
@@ -140,7 +141,7 @@ const RegionInfo regions[] = {
         Philippines
                 433 - 434.7 MHz <10 mW erp, NTC approved device required
                 868 - 869.4 MHz <25 mW erp, NTC approved device required
-                915 - 918 MHz <250 mW EIRP, no external antennna allowed
+                915 - 918 MHz <250 mW EIRP, no external antenna allowed
                 https://github.com/meshtastic/firmware/issues/4948#issuecomment-2394926135
     */
 
@@ -254,24 +255,38 @@ uint32_t RadioInterface::getTxDelayMsec()
     return random(0, pow(2, CWsize)) * slotTimeMsec;
 }
 
-/** The delay to use when we want to flood a message */
-uint32_t RadioInterface::getTxDelayMsecWeighted(float snr)
+/** The CW size to use when calculating SNR_based delays */
+uint8_t RadioInterface::getCWsize(float snr)
 {
     // The minimum value for a LoRa SNR
     const uint32_t SNR_MIN = -20;
 
     // The maximum value for a LoRa SNR
-    const uint32_t SNR_MAX = 15;
+    const uint32_t SNR_MAX = 10;
 
+    return map(snr, SNR_MIN, SNR_MAX, CWmin, CWmax);
+}
+
+/** The worst-case SNR_based packet delay */
+uint32_t RadioInterface::getTxDelayMsecWeightedWorst(float snr)
+{
+    uint8_t CWsize = getCWsize(snr);
+    // offset the maximum delay for routers: (2 * CWmax * slotTimeMsec)
+    return (2 * CWmax * slotTimeMsec) + pow(2, CWsize) * slotTimeMsec;
+}
+
+/** The delay to use when we want to flood a message */
+uint32_t RadioInterface::getTxDelayMsecWeighted(float snr)
+{
     //  high SNR = large CW size (Long Delay)
     //  low SNR = small CW size (Short Delay)
     uint32_t delay = 0;
-    uint8_t CWsize = map(snr, SNR_MIN, SNR_MAX, CWmin, CWmax);
+    uint8_t CWsize = getCWsize(snr);
     // LOG_DEBUG("rx_snr of %f so setting CWsize to:%d", snr, CWsize);
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
         config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
         delay = random(0, 2 * CWsize) * slotTimeMsec;
-        LOG_DEBUG("rx_snr found in packet. As a router, setting tx delay:%d", delay);
+        LOG_DEBUG("rx_snr found in packet. Router: setting tx delay:%d", delay);
     } else {
         // offset the maximum delay for routers: (2 * CWmax * slotTimeMsec)
         delay = (2 * CWmax * slotTimeMsec) + random(0, pow(2, CWsize)) * slotTimeMsec;
@@ -283,9 +298,9 @@ uint32_t RadioInterface::getTxDelayMsecWeighted(float snr)
 
 void printPacket(const char *prefix, const meshtastic_MeshPacket *p)
 {
-#ifdef DEBUG_PORT
-    std::string out = DEBUG_PORT.mt_sprintf("%s (id=0x%08x fr=0x%02x to=0x%02x, WantAck=%d, HopLim=%d Ch=0x%x", prefix, p->id,
-                                            p->from & 0xff, p->to & 0xff, p->want_ack, p->hop_limit, p->channel);
+#if defined(DEBUG_PORT) && !defined(DEBUG_MUTE)
+    std::string out = DEBUG_PORT.mt_sprintf("%s (id=0x%08x fr=0x%08x to=0x%08x, WantAck=%d, HopLim=%d Ch=0x%x", prefix, p->id,
+                                            p->from, p->to, p->want_ack, p->hop_limit, p->channel);
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         auto &s = p->decoded;
 
@@ -313,6 +328,7 @@ void printPacket(const char *prefix, const meshtastic_MeshPacket *p)
             out += DEBUG_PORT.mt_sprintf(" failId=%08x", s.ackVariant.fail_id); */
     } else {
         out += " encrypted";
+        out += DEBUG_PORT.mt_sprintf(" len=%d", p->encrypted.size + sizeof(PacketHeader));
     }
 
     if (p->rx_time != 0)
@@ -325,6 +341,10 @@ void printPacket(const char *prefix, const meshtastic_MeshPacket *p)
         out += DEBUG_PORT.mt_sprintf(" via MQTT");
     if (p->hop_start != 0)
         out += DEBUG_PORT.mt_sprintf(" hopStart=%d", p->hop_start);
+    if (p->next_hop != 0)
+        out += DEBUG_PORT.mt_sprintf(" nextHop=0x%x", p->next_hop);
+    if (p->relay_node != 0)
+        out += DEBUG_PORT.mt_sprintf(" relay=0x%x", p->relay_node);
     if (p->priority != 0)
         out += DEBUG_PORT.mt_sprintf(" priority=%d", p->priority);
 
@@ -346,7 +366,7 @@ bool RadioInterface::reconfigure()
 
 bool RadioInterface::init()
 {
-    LOG_INFO("Starting meshradio init...");
+    LOG_INFO("Start meshradio init");
 
     configChangedObserver.observe(&service->configChanged);
     preflightSleepObserver.observe(&preflightSleep);
@@ -494,7 +514,7 @@ void RadioInterface::applyModemConfig()
         }
 
         if ((myRegion->freqEnd - myRegion->freqStart) < bw / 1000) {
-            static const char *err_string = "Regional frequency range is smaller than bandwidth. Falling back to default preset.";
+            static const char *err_string = "Regional frequency range is smaller than bandwidth. Fall back to default preset";
             LOG_ERROR(err_string);
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
@@ -551,7 +571,7 @@ void RadioInterface::applyModemConfig()
     saveChannelNum(channel_num);
     saveFreq(freq + loraConfig.frequency_offset);
 
-    slotTimeMsec = computeSlotTimeMsec(bw, sf);
+    slotTimeMsec = computeSlotTimeMsec();
     preambleTimeMsec = getPacketTime((uint32_t)0);
     maxPacketTimeMsec = getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader));
 
@@ -566,6 +586,25 @@ void RadioInterface::applyModemConfig()
     LOG_INFO("Slot time: %u msec", slotTimeMsec);
 }
 
+/** Slottime is the time to detect a transmission has started, consisting of:
+  - CAD duration;
+  - roundtrip air propagation time (assuming max. 30km between nodes);
+  - Tx/Rx turnaround time (maximum of SX126x and SX127x);
+  - MAC processing time (measured on T-beam) */
+uint32_t RadioInterface::computeSlotTimeMsec()
+{
+    float sumPropagationTurnaroundMACTime = 0.2 + 0.4 + 7; // in milliseconds
+    float symbolTime = pow(2, sf) / bw;                    // in milliseconds
+
+    if (myRegion->wideLora) {
+        // CAD duration derived from AN1200.22 of SX1280
+        return (NUM_SYM_CAD_24GHZ + (2 * sf + 3) / 32) * symbolTime + sumPropagationTurnaroundMACTime;
+    } else {
+        // CAD duration for SX127x is max. 2.25 symbols, for SX126x it is number of symbols + 0.5 symbol
+        return max(2.25, NUM_SYM_CAD + 0.5) * symbolTime + sumPropagationTurnaroundMACTime;
+    }
+}
+
 /**
  * Some regulatory regions limit xmit power.
  * This function should be called by subclasses after setting their desired power.  It might lower it
@@ -578,7 +617,7 @@ void RadioInterface::limitPower()
         maxPower = myRegion->powerLimit;
 
     if ((power > maxPower) && !devicestate.owner.is_licensed) {
-        LOG_INFO("Lowering transmit power because of regulatory limits");
+        LOG_INFO("Lower transmit power because of regulatory limits");
         power = maxPower;
     }
 
@@ -598,17 +637,15 @@ size_t RadioInterface::beginSending(meshtastic_MeshPacket *p)
 {
     assert(!sendingPacket);
 
-    // LOG_DEBUG("sending queued packet on mesh (txGood=%d,rxGood=%d,rxBad=%d)", rf95.txGood(), rf95.rxGood(), rf95.rxBad());
+    // LOG_DEBUG("Send queued packet on mesh (txGood=%d,rxGood=%d,rxBad=%d)", rf95.txGood(), rf95.rxGood(), rf95.rxBad());
     assert(p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag); // It should have already been encoded by now
-
-    lastTxStart = millis();
 
     radioBuffer.header.from = p->from;
     radioBuffer.header.to = p->to;
     radioBuffer.header.id = p->id;
     radioBuffer.header.channel = p->channel;
-    radioBuffer.header.next_hop = 0;   // *** For future use ***
-    radioBuffer.header.relay_node = 0; // *** For future use ***
+    radioBuffer.header.next_hop = p->next_hop;
+    radioBuffer.header.relay_node = p->relay_node;
     if (p->hop_limit > HOP_MAX) {
         LOG_WARN("hop limit %d is too high, setting to %d", p->hop_limit, HOP_RELIABLE);
         p->hop_limit = HOP_RELIABLE;
@@ -619,7 +656,7 @@ size_t RadioInterface::beginSending(meshtastic_MeshPacket *p)
 
     // if the sender nodenum is zero, that means uninitialized
     assert(radioBuffer.header.from);
-
+    assert(p->encrypted.size <= sizeof(radioBuffer.payload));
     memcpy(radioBuffer.payload, p->encrypted.bytes, p->encrypted.size);
 
     sendingPacket = p;

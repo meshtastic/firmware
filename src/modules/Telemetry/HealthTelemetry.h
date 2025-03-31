@@ -1,6 +1,6 @@
 #include "configuration.h"
 
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(ARCH_PORTDUINO)
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !MESHTASTIC_EXCLUDE_HEALTH_TELEMETRY && !defined(ARCH_PORTDUINO)
 
 #pragma once
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
@@ -16,7 +16,7 @@ class HealthTelemetryModule : private concurrency::OSThread, public ProtobufModu
 
   public:
     HealthTelemetryModule()
-        : concurrency::OSThread("HealthTelemetryModule"),
+        : concurrency::OSThread("HealthTelemetry"),
           ProtobufModule("HealthTelemetry", meshtastic_PortNum_TELEMETRY_APP, &meshtastic_Telemetry_msg)
     {
         lastMeasurementPacket = nullptr;

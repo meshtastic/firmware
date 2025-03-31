@@ -5,6 +5,7 @@
 #include "concurrency/NotifiedWorkerThread.h"
 
 #include <RadioLib.h>
+#include <sys/types.h>
 
 // ESP32 has special rules about ISR code
 #ifdef ARDUINO_ARCH_ESP32
@@ -21,18 +22,11 @@
 class LockingArduinoHal : public ArduinoHal
 {
   public:
-    LockingArduinoHal(SPIClass &spi, SPISettings spiSettings, RADIOLIB_PIN_TYPE _busy = RADIOLIB_NC)
-        : ArduinoHal(spi, spiSettings)
-    {
-#if ARCH_PORTDUINO
-        busy = _busy;
-#endif
-    };
+    LockingArduinoHal(SPIClass &spi, SPISettings spiSettings) : ArduinoHal(spi, spiSettings){};
 
     void spiBeginTransaction() override;
     void spiEndTransaction() override;
 #if ARCH_PORTDUINO
-    RADIOLIB_PIN_TYPE busy;
     void spiTransfer(uint8_t *out, size_t len, uint8_t *in) override;
 
 #endif
@@ -141,15 +135,24 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /** Attempt to cancel a previously sent packet.  Returns true if a packet was found we could cancel */
     virtual bool cancelSending(NodeNum from, PacketId id) override;
 
+    /** Attempt to find a packet in the TxQueue. Returns true if the packet was found. */
+    virtual bool findInTxQueue(NodeNum from, PacketId id) override;
+
   private:
     /** if we have something waiting to send, start a short (random) timer so we can come check for collision before actually
      * doing the transmit */
     void setTransmitDelay();
 
-    /** random timer with certain min. and max. settings */
+    /**
+     * random timer with certain min. and max. settings
+     * @return Timestamp after which the packet may be sent
+     */
     void startTransmitTimer(bool withDelay = true);
 
-    /** timer scaled to SNR of to be flooded packet */
+    /**
+     * timer scaled to SNR of to be flooded packet
+     * @return Timestamp after which the packet may be sent
+     */
     void startTransmitTimerSNR(float snr);
 
     void handleTransmitInterrupt();
@@ -161,8 +164,9 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     /** start an immediate transmit
      *  This method is virtual so subclasses can hook as needed, subclasses should not call directly
+     *  @return true if packet was sent
      */
-    virtual void startSend(meshtastic_MeshPacket *txp);
+    virtual bool startSend(meshtastic_MeshPacket *txp);
 
     meshtastic_QueueStatus getQueueStatus();
 
@@ -198,4 +202,9 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     virtual void setStandby();
 
     const char *radioLibErr = "RadioLib err=";
+
+    /**
+     * If the packet is not already in the late rebroadcast window, move it there
+     */
+    void clampToLateRebroadcastWindow(NodeNum from, PacketId id);
 };

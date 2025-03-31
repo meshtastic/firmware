@@ -6,7 +6,6 @@
 #define I2C_SCL SCL
 
 // Display (E-Ink)
-#define USE_EINK
 #define PIN_EINK_CS 4
 #define PIN_EINK_BUSY 7
 #define PIN_EINK_DC 5
@@ -31,6 +30,9 @@
 #define ADC_ATTENUATION ADC_ATTEN_DB_12 // Voltage divider output is quite high
 #define HAS_32768HZ
 #define ADC_CTRL_ENABLED LOW
+
+#define NO_EXT_GPIO 1
+#define NO_GPS 1
 
 // LoRa
 #define USE_SX1262

@@ -18,6 +18,11 @@ bool STM32WLE5JCInterface::init()
 {
     RadioLibInterface::init();
 
+// https://github.com/Seeed-Studio/LoRaWan-E5-Node/blob/main/Middlewares/Third_Party/SubGHz_Phy/stm32_radio_driver/radio_driver.c
+#if (!defined(_VARIANT_RAK3172_))
+    setTCXOVoltage(1.7);
+#endif
+
     lora.setRfSwitchTable(rfswitch_pins, rfswitch_table);
 
     if (power > STM32WLx_MAX_POWER) // This chip has lower power limits than some

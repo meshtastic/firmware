@@ -109,7 +109,7 @@ void TraceRouteModule::appendMyIDandSNR(meshtastic_RouteDiscovery *updated, floa
 void TraceRouteModule::printRoute(meshtastic_RouteDiscovery *r, uint32_t origin, uint32_t dest, bool isTowardsDestination)
 {
 #ifdef DEBUG_PORT
-    std::string route = "Route traced:";
+    std::string route = "Route traced:\n";
     route += vformat("0x%x --> ", origin);
     for (uint8_t i = 0; i < r->route_count; i++) {
         if (i < r->snr_towards_count && r->snr_towards[i] != INT8_MIN)
@@ -129,6 +129,7 @@ void TraceRouteModule::printRoute(meshtastic_RouteDiscovery *r, uint32_t origin,
 
     // If there's a route back (or we are the destination as then the route is complete), print it
     if (r->route_back_count > 0 || origin == nodeDB->getNodeNum()) {
+        route += "\n";
         if (r->snr_towards_count > 0 && origin == nodeDB->getNodeNum())
             route += vformat("(%.2fdB) 0x%x <-- ", (float)r->snr_back[r->snr_back_count - 1] / 4, origin);
         else
@@ -149,6 +150,12 @@ void TraceRouteModule::printRoute(meshtastic_RouteDiscovery *r, uint32_t origin,
 meshtastic_MeshPacket *TraceRouteModule::allocReply()
 {
     assert(currentRequest);
+
+    // Ignore multi-hop broadcast requests
+    if (isBroadcast(currentRequest->to) && currentRequest->hop_limit < currentRequest->hop_start) {
+        ignoreRequest = true;
+        return NULL;
+    }
 
     // Copy the payload of the current request
     auto req = *currentRequest;

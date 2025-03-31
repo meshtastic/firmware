@@ -79,7 +79,7 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
     }
 
     // Trigger the refresh in GxEPD2
-    LOG_DEBUG("Updating E-Paper");
+    LOG_DEBUG("Update E-Paper");
     adafruitDisplay->nextPage();
 
     // End the update process
@@ -123,15 +123,32 @@ void EInkDisplay::setDetected(uint8_t detected)
 // Connect to the display - variant specific
 bool EInkDisplay::connect()
 {
-    LOG_INFO("Doing EInk init");
+    LOG_INFO("Do EInk init");
 
 #ifdef PIN_EINK_EN
     // backlight power, HIGH is backlight on, LOW is off
     pinMode(PIN_EINK_EN, OUTPUT);
+#ifdef ELECROW_ThinkNode_M1
     digitalWrite(PIN_EINK_EN, LOW);
+#else
+    digitalWrite(PIN_EINK_EN, HIGH);
+#endif
 #endif
 
-#if defined(TTGO_T_ECHO)
+#if defined(TTGO_T_ECHO) || defined(ELECROW_ThinkNode_M1)
+    {
+        auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY, SPI1);
+
+        adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(*lowLevel);
+        adafruitDisplay->init();
+#ifdef ELECROW_ThinkNode_M1
+        adafruitDisplay->setRotation(4);
+#else
+        adafruitDisplay->setRotation(3);
+#endif
+        adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
+    }
+#elif defined(MESHLINK)
     {
         auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY, SPI1);
 
@@ -157,7 +174,8 @@ bool EInkDisplay::connect()
     }
 
 #elif defined(HELTEC_WIRELESS_PAPER_V1_0) || defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_VISION_MASTER_E213) ||             \
-    defined(HELTEC_VISION_MASTER_E290) || defined(TLORA_T3S3_EPAPER)
+    defined(HELTEC_VISION_MASTER_E290) || defined(TLORA_T3S3_EPAPER) || defined(CROWPANEL_ESP32S3_5_EPAPER) ||                   \
+    defined(CROWPANEL_ESP32S3_4_EPAPER) || defined(CROWPANEL_ESP32S3_2_EPAPER)
     {
         // Start HSPI
         hspi = new SPIClass(HSPI);
@@ -173,6 +191,9 @@ bool EInkDisplay::connect()
         // Init GxEPD2
         adafruitDisplay->init();
         adafruitDisplay->setRotation(3);
+#if defined(CROWPANEL_ESP32S3_5_EPAPER) || defined(CROWPANEL_ESP32S3_4_EPAPER)
+        adafruitDisplay->setRotation(0);
+#endif
     }
 #elif defined(PCA10059) || defined(ME25LS01)
     {

@@ -1,0 +1,51 @@
+name: Run Trunk Fmt on PR Comment
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions: read-all
+
+jobs:
+  trunk-fmt:
+    if: github.event.issue.pull_request != null && contains(github.event.comment.body, 'trunk fmt')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{github.event.pull_request.head.ref}}
+          repository: ${{github.event.pull_request.head.repo.full_name}}
+
+      - name: Install trunk
+        run: curl https://get.trunk.io -fsSL | bash
+
+      - name: Run Trunk Fmt
+        run: trunk fmt
+
+      - name: Get release version string
+        run: echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+        id: version
+
+      - name: Commit and push changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "Add firmware version ${{ steps.version.outputs.long }}"
+          git push
+
+      - name: Comment on PR
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            github.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '`trunk fmt` has been run on this PR.'
+            })

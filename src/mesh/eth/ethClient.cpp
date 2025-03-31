@@ -5,9 +5,6 @@
 #include "configuration.h"
 #include "main.h"
 #include "mesh/api/ethServerAPI.h"
-#if !MESHTASTIC_EXCLUDE_MQTT
-#include "mqtt/MQTT.h"
-#endif
 #include "target_specific.h"
 #include <RAK13800_W5100S.h>
 #include <SPI.h>
@@ -38,16 +35,16 @@ static int32_t reconnectETH()
         Ethernet.maintain();
         if (!ethStartupComplete) {
             // Start web server
-            LOG_INFO("Starting Ethernet network services");
+            LOG_INFO("Start Ethernet network services");
 
 #ifndef DISABLE_NTP
-            LOG_INFO("Starting NTP time client");
+            LOG_INFO("Start NTP time client");
             timeClient.begin();
             timeClient.setUpdateInterval(60 * 60); // Update once an hour
 #endif
 
             if (config.network.rsyslog_server[0]) {
-                LOG_INFO("Starting Syslog client");
+                LOG_INFO("Start Syslog client");
                 // Defaults
                 int serverPort = 514;
                 const char *serverAddr = config.network.rsyslog_server;
@@ -66,25 +63,20 @@ static int32_t reconnectETH()
                 syslog.enable();
             }
 
-            // initWebServer();
+#if !MESHTASTIC_EXCLUDE_SOCKETAPI
             initApiServer();
+#endif
 
             ethStartupComplete = true;
         }
-#if !MESHTASTIC_EXCLUDE_MQTT
-        // FIXME this is kinda yucky, instead we should just have an observable for 'wifireconnected'
-        if (mqtt && !moduleConfig.mqtt.proxy_to_client_enabled && !mqtt->isConnectedDirectly()) {
-            mqtt->reconnect();
-        }
-#endif
     }
 
 #ifndef DISABLE_NTP
     if (isEthernetAvailable() && (ntp_renew < millis())) {
 
-        LOG_INFO("Updating NTP time from %s", config.network.ntp_server);
+        LOG_INFO("Update NTP time from %s", config.network.ntp_server);
         if (timeClient.update()) {
-            LOG_DEBUG("NTP Request Success - Setting RTCQualityNTP if needed");
+            LOG_DEBUG("NTP Request Success - Set RTCQualityNTP if needed");
 
             struct timeval tv;
             tv.tv_sec = timeClient.getEpochTime();
@@ -107,6 +99,11 @@ static int32_t reconnectETH()
 bool initEthernet()
 {
     if (config.network.eth_enabled) {
+#ifdef PIN_ETH_POWER_EN
+        pinMode(PIN_ETH_POWER_EN, OUTPUT);
+        digitalWrite(PIN_ETH_POWER_EN, HIGH); // Power up.
+        delay(100);
+#endif
 
 #ifdef PIN_ETHERNET_RESET
         pinMode(PIN_ETHERNET_RESET, OUTPUT);
@@ -115,6 +112,12 @@ bool initEthernet()
         digitalWrite(PIN_ETHERNET_RESET, HIGH); // Reset Time.
 #endif
 
+#ifdef RAK11310 // Initialize the SPI port
+        ETH_SPI_PORT.setSCK(PIN_SPI0_SCK);
+        ETH_SPI_PORT.setTX(PIN_SPI0_MOSI);
+        ETH_SPI_PORT.setRX(PIN_SPI0_MISO);
+        ETH_SPI_PORT.begin();
+#endif
         Ethernet.init(ETH_SPI_PORT, PIN_ETHERNET_SS);
 
         uint8_t mac[6];
@@ -127,10 +130,10 @@ bool initEthernet()
         mac[0] &= 0xfe;  // Make sure this is not a multicast MAC
 
         if (config.network.address_mode == meshtastic_Config_NetworkConfig_AddressMode_DHCP) {
-            LOG_INFO("starting Ethernet DHCP");
+            LOG_INFO("Start Ethernet DHCP");
             status = Ethernet.begin(mac);
         } else if (config.network.address_mode == meshtastic_Config_NetworkConfig_AddressMode_STATIC) {
-            LOG_INFO("starting Ethernet Static");
+            LOG_INFO("Start Ethernet Static");
             Ethernet.begin(mac, config.network.ipv4_config.ip, config.network.ipv4_config.dns, config.network.ipv4_config.gateway,
                            config.network.ipv4_config.subnet);
             status = 1;
@@ -141,13 +144,13 @@ bool initEthernet()
 
         if (status == 0) {
             if (Ethernet.hardwareStatus() == EthernetNoHardware) {
-                LOG_ERROR("Ethernet shield was not found.");
+                LOG_ERROR("Ethernet shield was not found");
                 return false;
             } else if (Ethernet.linkStatus() == LinkOFF) {
-                LOG_ERROR("Ethernet cable is not connected.");
+                LOG_ERROR("Ethernet cable is not connected");
                 return false;
             } else {
-                LOG_ERROR("Unknown Ethernet error.");
+                LOG_ERROR("Unknown Ethernet error");
                 return false;
             }
         } else {

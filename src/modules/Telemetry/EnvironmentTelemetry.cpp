@@ -18,6 +18,7 @@
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR_EXTERNAL
 // Sensors
 #include "Sensor/AHT10.h"
 #include "Sensor/BME280Sensor.h"
@@ -25,7 +26,10 @@
 #include "Sensor/BMP085Sensor.h"
 #include "Sensor/BMP280Sensor.h"
 #include "Sensor/BMP3XXSensor.h"
+#include "Sensor/CGRadSensSensor.h"
+#include "Sensor/DFRobotGravitySensor.h"
 #include "Sensor/DFRobotLarkSensor.h"
+#include "Sensor/DPS310Sensor.h"
 #include "Sensor/LPS22HBSensor.h"
 #include "Sensor/MCP9808Sensor.h"
 #include "Sensor/MLX90632Sensor.h"
@@ -35,7 +39,6 @@
 #include "Sensor/SHT31Sensor.h"
 #include "Sensor/SHT4XSensor.h"
 #include "Sensor/SHTC3Sensor.h"
-#include "Sensor/T1000xSensor.h"
 #include "Sensor/TSL2591Sensor.h"
 #include "Sensor/VEML7700Sensor.h"
 
@@ -43,6 +46,7 @@ BMP085Sensor bmp085Sensor;
 BMP280Sensor bmp280Sensor;
 BME280Sensor bme280Sensor;
 BME680Sensor bme680Sensor;
+DPS310Sensor dps310Sensor;
 MCP9808Sensor mcp9808Sensor;
 SHTC3Sensor shtc3Sensor;
 LPS22HBSensor lps22hbSensor;
@@ -55,12 +59,19 @@ RCWL9620Sensor rcwl9620Sensor;
 AHT10Sensor aht10Sensor;
 MLX90632Sensor mlx90632Sensor;
 DFRobotLarkSensor dfRobotLarkSensor;
+DFRobotGravitySensor dfRobotGravitySensor;
 NAU7802Sensor nau7802Sensor;
 BMP3XXSensor bmp3xxSensor;
+CGRadSensSensor cgRadSens;
+#endif
 #ifdef T1000X_SENSOR_EN
+#include "Sensor/T1000xSensor.h"
 T1000xSensor t1000xSensor;
 #endif
-
+#ifdef SENSECAP_INDICATOR
+#include "Sensor/IndicatorSensor.h"
+IndicatorSensor indicatorSensor;
+#endif
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
 
@@ -73,8 +84,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
         sleepOnNextExecution = false;
         uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval,
                                                                    default_telemetry_broadcast_interval_secs);
-        LOG_DEBUG("Sleeping for %ims, then awaking to send metrics again.", nightyNightMs);
-        doDeepSleep(nightyNightMs, true);
+        LOG_DEBUG("Sleep for %ims, then awake to send metrics again", nightyNightMs);
+        doDeepSleep(nightyNightMs, true, false);
     }
 
     uint32_t result = UINT32_MAX;
@@ -87,7 +98,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
     // moduleConfig.telemetry.environment_screen_enabled = 1;
     // moduleConfig.telemetry.environment_update_interval = 15;
 
-    if (!(moduleConfig.telemetry.environment_measurement_enabled || moduleConfig.telemetry.environment_screen_enabled)) {
+    if (!(moduleConfig.telemetry.environment_measurement_enabled || moduleConfig.telemetry.environment_screen_enabled ||
+          ENVIRONMENTAL_TELEMETRY_MODULE_ENABLE)) {
         // If this module is not enabled, and the user doesn't want the display screen don't waste any OSThread time on it
         return disable();
     }
@@ -96,15 +108,18 @@ int32_t EnvironmentTelemetryModule::runOnce()
         // This is the first time the OSThread library has called this function, so do some setup
         firstTime = 0;
 
-        if (moduleConfig.telemetry.environment_measurement_enabled) {
-            LOG_INFO("Environment Telemetry: Initializing");
-            // it's possible to have this module enabled, only for displaying values on the screen.
-            // therefore, we should only enable the sensor loop if measurement is also enabled
+        if (moduleConfig.telemetry.environment_measurement_enabled || ENVIRONMENTAL_TELEMETRY_MODULE_ENABLE) {
+            LOG_INFO("Environment Telemetry: init");
+#ifdef SENSECAP_INDICATOR
+            result = indicatorSensor.runOnce();
+#endif
 #ifdef T1000X_SENSOR_EN
             result = t1000xSensor.runOnce();
-#else
+#elif !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR_EXTERNAL
             if (dfRobotLarkSensor.hasSensor())
                 result = dfRobotLarkSensor.runOnce();
+            if (dfRobotGravitySensor.hasSensor())
+                result = dfRobotGravitySensor.runOnce();
             if (bmp085Sensor.hasSensor())
                 result = bmp085Sensor.runOnce();
             if (bmp280Sensor.hasSensor())
@@ -115,6 +130,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = bmp3xxSensor.runOnce();
             if (bme680Sensor.hasSensor())
                 result = bme680Sensor.runOnce();
+            if (dps310Sensor.hasSensor())
+                result = dps310Sensor.runOnce();
             if (mcp9808Sensor.hasSensor())
                 result = mcp9808Sensor.runOnce();
             if (shtc3Sensor.hasSensor())
@@ -147,16 +164,28 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = nau7802Sensor.runOnce();
             if (max17048Sensor.hasSensor())
                 result = max17048Sensor.runOnce();
+            if (cgRadSens.hasSensor())
+                result = cgRadSens.runOnce();
+                // this only works on the wismesh hub with the solar option. This is not an I2C sensor, so we don't need the
+                // sensormap here.
+#ifdef HAS_RAKPROT
+
+            result = rak9154Sensor.runOnce();
+#endif
 #endif
         }
-        return result;
+        // it's possible to have this module enabled, only for displaying values on the screen.
+        // therefore, we should only enable the sensor loop if measurement is also enabled
+        return result == UINT32_MAX ? disable() : setStartDelay();
     } else {
         // if we somehow got to a second run of this module with measurement disabled, then just wait forever
-        if (!moduleConfig.telemetry.environment_measurement_enabled) {
+        if (!moduleConfig.telemetry.environment_measurement_enabled && !ENVIRONMENTAL_TELEMETRY_MODULE_ENABLE) {
             return disable();
         } else {
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR_EXTERNAL
             if (bme680Sensor.hasSensor())
                 result = bme680Sensor.runTrigger();
+#endif
         }
 
         if (((lastSentToMesh == 0) ||
@@ -208,41 +237,97 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
     }
 
     // Display "Env. From: ..." on its own
-    display->drawString(x, y, "Env. From: " + String(lastSender) + "(" + String(agoSecs) + "s)");
+    display->drawString(x, y, "Env. From: " + String(lastSender) + " (" + String(agoSecs) + "s)");
 
-    String last_temp = String(lastMeasurement.variant.environment_metrics.temperature, 0) + "°C";
-    if (moduleConfig.telemetry.environment_display_fahrenheit) {
-        last_temp =
-            String(UnitConversions::CelsiusToFahrenheit(lastMeasurement.variant.environment_metrics.temperature), 0) + "°F";
+    // Prepare sensor data strings
+    String sensorData[10];
+    int sensorCount = 0;
+
+    if (lastMeasurement.variant.environment_metrics.has_temperature ||
+        lastMeasurement.variant.environment_metrics.has_relative_humidity) {
+        String last_temp = String(lastMeasurement.variant.environment_metrics.temperature, 0) + "°C";
+        if (moduleConfig.telemetry.environment_display_fahrenheit) {
+            last_temp =
+                String(UnitConversions::CelsiusToFahrenheit(lastMeasurement.variant.environment_metrics.temperature), 0) + "°F";
+        }
+
+        sensorData[sensorCount++] =
+            "Temp/Hum: " + last_temp + " / " + String(lastMeasurement.variant.environment_metrics.relative_humidity, 0) + "%";
     }
 
-    // Continue with the remaining details
-    display->drawString(x, y += _fontHeight(FONT_SMALL),
-                        "Temp/Hum: " + last_temp + " / " +
-                            String(lastMeasurement.variant.environment_metrics.relative_humidity, 0) + "%");
-
     if (lastMeasurement.variant.environment_metrics.barometric_pressure != 0) {
-        display->drawString(x, y += _fontHeight(FONT_SMALL),
-                            "Press: " + String(lastMeasurement.variant.environment_metrics.barometric_pressure, 0) + "hPA");
+        sensorData[sensorCount++] =
+            "Press: " + String(lastMeasurement.variant.environment_metrics.barometric_pressure, 0) + "hPA";
     }
 
     if (lastMeasurement.variant.environment_metrics.voltage != 0) {
-        display->drawString(x, y += _fontHeight(FONT_SMALL),
-                            "Volt/Cur: " + String(lastMeasurement.variant.environment_metrics.voltage, 0) + "V / " +
-                                String(lastMeasurement.variant.environment_metrics.current, 0) + "mA");
+        sensorData[sensorCount++] = "Volt/Cur: " + String(lastMeasurement.variant.environment_metrics.voltage, 0) + "V / " +
+                                    String(lastMeasurement.variant.environment_metrics.current, 0) + "mA";
     }
 
     if (lastMeasurement.variant.environment_metrics.iaq != 0) {
-        display->drawString(x, y += _fontHeight(FONT_SMALL), "IAQ: " + String(lastMeasurement.variant.environment_metrics.iaq));
+        sensorData[sensorCount++] = "IAQ: " + String(lastMeasurement.variant.environment_metrics.iaq);
     }
 
-    if (lastMeasurement.variant.environment_metrics.distance != 0)
-        display->drawString(x, y += _fontHeight(FONT_SMALL),
-                            "Water Level: " + String(lastMeasurement.variant.environment_metrics.distance, 0) + "mm");
+    if (lastMeasurement.variant.environment_metrics.distance != 0) {
+        sensorData[sensorCount++] = "Water Level: " + String(lastMeasurement.variant.environment_metrics.distance, 0) + "mm";
+    }
 
-    if (lastMeasurement.variant.environment_metrics.weight != 0)
-        display->drawString(x, y += _fontHeight(FONT_SMALL),
-                            "Weight: " + String(lastMeasurement.variant.environment_metrics.weight, 0) + "kg");
+    if (lastMeasurement.variant.environment_metrics.weight != 0) {
+        sensorData[sensorCount++] = "Weight: " + String(lastMeasurement.variant.environment_metrics.weight, 0) + "kg";
+    }
+
+    if (lastMeasurement.variant.environment_metrics.radiation != 0) {
+        sensorData[sensorCount++] = "Rad: " + String(lastMeasurement.variant.environment_metrics.radiation, 2) + "µR/h";
+    }
+
+    if (lastMeasurement.variant.environment_metrics.lux != 0) {
+        sensorData[sensorCount++] = "Illuminance: " + String(lastMeasurement.variant.environment_metrics.lux, 2) + "lx";
+    }
+
+    if (lastMeasurement.variant.environment_metrics.white_lux != 0) {
+        sensorData[sensorCount++] = "W_Lux: " + String(lastMeasurement.variant.environment_metrics.white_lux, 2) + "lx";
+    }
+
+    static int scrollOffset = 0;
+    static bool scrollingDown = true;
+    static uint32_t lastScrollTime = millis();
+
+    // Determine how many lines we can fit on display
+    // Calculated once only: display dimensions don't change during runtime.
+    static int maxLines = 0;
+    if (!maxLines) {
+        const int16_t paddingTop = _fontHeight(FONT_SMALL); // Heading text
+        const int16_t paddingBottom = 8;                    // Indicator dots
+        maxLines = (display->getHeight() - paddingTop - paddingBottom) / _fontHeight(FONT_SMALL);
+        assert(maxLines > 0);
+    }
+
+    // Draw as many lines of data as we can fit
+    int linesToShow = min(maxLines, sensorCount);
+    for (int i = 0; i < linesToShow; i++) {
+        int index = (scrollOffset + i) % sensorCount;
+        display->drawString(x, y += _fontHeight(FONT_SMALL), sensorData[index]);
+    }
+
+    // Only scroll if there are more than 3 sensor data lines
+    if (sensorCount > 3) {
+        // Update scroll offset every 5 seconds
+        if (millis() - lastScrollTime > 5000) {
+            if (scrollingDown) {
+                scrollOffset++;
+                if (scrollOffset + linesToShow >= sensorCount) {
+                    scrollingDown = false;
+                }
+            } else {
+                scrollOffset--;
+                if (scrollOffset <= 0) {
+                    scrollingDown = true;
+                }
+            }
+            lastScrollTime = millis();
+        }
+    }
 }
 
 bool EnvironmentTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *t)
@@ -256,12 +341,16 @@ bool EnvironmentTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPac
                  sender, t->variant.environment_metrics.barometric_pressure, t->variant.environment_metrics.current,
                  t->variant.environment_metrics.gas_resistance, t->variant.environment_metrics.relative_humidity,
                  t->variant.environment_metrics.temperature);
-        LOG_INFO("(Received from %s): voltage=%f, IAQ=%d, distance=%f, lux=%f", sender, t->variant.environment_metrics.voltage,
-                 t->variant.environment_metrics.iaq, t->variant.environment_metrics.distance, t->variant.environment_metrics.lux);
+        LOG_INFO("(Received from %s): voltage=%f, IAQ=%d, distance=%f, lux=%f, white_lux=%f", sender,
+                 t->variant.environment_metrics.voltage, t->variant.environment_metrics.iaq,
+                 t->variant.environment_metrics.distance, t->variant.environment_metrics.lux,
+                 t->variant.environment_metrics.white_lux);
 
         LOG_INFO("(Received from %s): wind speed=%fm/s, direction=%d degrees, weight=%fkg", sender,
                  t->variant.environment_metrics.wind_speed, t->variant.environment_metrics.wind_direction,
                  t->variant.environment_metrics.weight);
+
+        LOG_INFO("(Received from %s): radiation=%fµR/h", sender, t->variant.environment_metrics.radiation);
 
 #endif
         // release previous packet before occupying a new spot
@@ -282,12 +371,20 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
     m->which_variant = meshtastic_Telemetry_environment_metrics_tag;
     m->variant.environment_metrics = meshtastic_EnvironmentMetrics_init_zero;
 
+#ifdef SENSECAP_INDICATOR
+    valid = valid && indicatorSensor.getMetrics(m);
+    hasSensor = true;
+#endif
 #ifdef T1000X_SENSOR_EN // add by WayenWeng
     valid = valid && t1000xSensor.getMetrics(m);
     hasSensor = true;
 #else
     if (dfRobotLarkSensor.hasSensor()) {
         valid = valid && dfRobotLarkSensor.getMetrics(m);
+        hasSensor = true;
+    }
+    if (dfRobotGravitySensor.hasSensor()) {
+        valid = valid && dfRobotGravitySensor.getMetrics(m);
         hasSensor = true;
     }
     if (sht31Sensor.hasSensor()) {
@@ -324,6 +421,10 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
     }
     if (bme680Sensor.hasSensor()) {
         valid = valid && bme680Sensor.getMetrics(m);
+        hasSensor = true;
+    }
+    if (dps310Sensor.hasSensor()) {
+        valid = valid && dps310Sensor.getMetrics(m);
         hasSensor = true;
     }
     if (mcp9808Sensor.hasSensor()) {
@@ -376,19 +477,28 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
             LOG_INFO("AHTX0+BMP280 module detected: using temp from BMP280 and humy from AHTX0");
             aht10Sensor.getMetrics(&m_ahtx);
             m->variant.environment_metrics.relative_humidity = m_ahtx.variant.environment_metrics.relative_humidity;
+            m->variant.environment_metrics.has_relative_humidity = m_ahtx.variant.environment_metrics.has_relative_humidity;
         } else {
             // prefer bmp3xx temp if both sensors are present, fetch only humidity
             meshtastic_Telemetry m_ahtx = meshtastic_Telemetry_init_zero;
             LOG_INFO("AHTX0+BMP3XX module detected: using temp from BMP3XX and humy from AHTX0");
             aht10Sensor.getMetrics(&m_ahtx);
             m->variant.environment_metrics.relative_humidity = m_ahtx.variant.environment_metrics.relative_humidity;
+            m->variant.environment_metrics.has_relative_humidity = m_ahtx.variant.environment_metrics.has_relative_humidity;
         }
     }
     if (max17048Sensor.hasSensor()) {
         valid = valid && max17048Sensor.getMetrics(m);
         hasSensor = true;
     }
-
+    if (cgRadSens.hasSensor()) {
+        valid = valid && cgRadSens.getMetrics(m);
+        hasSensor = true;
+    }
+#ifdef HAS_RAKPROT
+    valid = valid && rak9154Sensor.getMetrics(m);
+    hasSensor = true;
+#endif
 #endif
     return valid && hasSensor;
 }
@@ -411,7 +521,7 @@ meshtastic_MeshPacket *EnvironmentTelemetryModule::allocReply()
         if (decoded->which_variant == meshtastic_Telemetry_environment_metrics_tag) {
             meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
             if (getEnvironmentTelemetry(&m)) {
-                LOG_INFO("Environment telemetry replying to request");
+                LOG_INFO("Environment telemetry reply to request");
                 return allocDataProtobuf(m);
             } else {
                 return NULL;
@@ -431,15 +541,17 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 #else
     if (getEnvironmentTelemetry(&m)) {
 #endif
-        LOG_INFO("(Sending): barometric_pressure=%f, current=%f, gas_resistance=%f, relative_humidity=%f, temperature=%f",
+        LOG_INFO("Send: barometric_pressure=%f, current=%f, gas_resistance=%f, relative_humidity=%f, temperature=%f",
                  m.variant.environment_metrics.barometric_pressure, m.variant.environment_metrics.current,
                  m.variant.environment_metrics.gas_resistance, m.variant.environment_metrics.relative_humidity,
                  m.variant.environment_metrics.temperature);
-        LOG_INFO("(Sending): voltage=%f, IAQ=%d, distance=%f, lux=%f", m.variant.environment_metrics.voltage,
+        LOG_INFO("Send: voltage=%f, IAQ=%d, distance=%f, lux=%f", m.variant.environment_metrics.voltage,
                  m.variant.environment_metrics.iaq, m.variant.environment_metrics.distance, m.variant.environment_metrics.lux);
 
-        LOG_INFO("(Sending): wind speed=%fm/s, direction=%d degrees, weight=%fkg", m.variant.environment_metrics.wind_speed,
+        LOG_INFO("Send: wind speed=%fm/s, direction=%d degrees, weight=%fkg", m.variant.environment_metrics.wind_speed,
                  m.variant.environment_metrics.wind_direction, m.variant.environment_metrics.weight);
+
+        LOG_INFO("Send: radiation=%fµR/h", m.variant.environment_metrics.radiation);
 
         sensor_read_error_count = 0;
 
@@ -456,14 +568,14 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 
         lastMeasurementPacket = packetPool.allocCopy(*p);
         if (phoneOnly) {
-            LOG_INFO("Sending packet to phone");
+            LOG_INFO("Send packet to phone");
             service->sendToPhone(p);
         } else {
-            LOG_INFO("Sending packet to mesh");
+            LOG_INFO("Send packet to mesh");
             service->sendToMesh(p, RX_SRC_LOCAL, true);
 
             if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving) {
-                LOG_DEBUG("Starting next execution in 5 seconds and then going to sleep.");
+                LOG_DEBUG("Start next execution in 5s, then sleep");
                 sleepOnNextExecution = true;
                 setIntervalFromNow(5000);
             }
@@ -478,8 +590,14 @@ AdminMessageHandleResult EnvironmentTelemetryModule::handleAdminMessageForModule
                                                                                  meshtastic_AdminMessage *response)
 {
     AdminMessageHandleResult result = AdminMessageHandleResult::NOT_HANDLED;
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR_EXTERNAL
     if (dfRobotLarkSensor.hasSensor()) {
         result = dfRobotLarkSensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (dfRobotGravitySensor.hasSensor()) {
+        result = dfRobotGravitySensor.handleAdminMessage(mp, request, response);
         if (result != AdminMessageHandleResult::NOT_HANDLED)
             return result;
     }
@@ -520,6 +638,11 @@ AdminMessageHandleResult EnvironmentTelemetryModule::handleAdminMessageForModule
     }
     if (bme680Sensor.hasSensor()) {
         result = bme680Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (dps310Sensor.hasSensor()) {
+        result = dps310Sensor.handleAdminMessage(mp, request, response);
         if (result != AdminMessageHandleResult::NOT_HANDLED)
             return result;
     }
@@ -583,6 +706,12 @@ AdminMessageHandleResult EnvironmentTelemetryModule::handleAdminMessageForModule
         if (result != AdminMessageHandleResult::NOT_HANDLED)
             return result;
     }
+    if (cgRadSens.hasSensor()) {
+        result = cgRadSens.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+#endif
     return result;
 }
 
