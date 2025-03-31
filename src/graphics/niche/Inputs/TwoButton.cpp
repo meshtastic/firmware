@@ -2,6 +2,7 @@
 
 #include "./TwoButton.h"
 
+#include "NodeDB.h" // For the helper function TwoButton::getUserButtonPin
 #include "PowerFSM.h"
 #include "sleep.h"
 
@@ -57,14 +58,47 @@ void TwoButton::stop()
         detachInterrupt(buttons[1].pin);
 }
 
+// Attempt to resolve a GPIO pin for the user button, honoring userPrefs.jsonc and device settings
+// This helper method isn't used by the TweButton class itself, it could be moved elsewhere.
+// Intention is to pass this value to TwoButton::setWiring in the setupNicheGraphics method.
+uint8_t TwoButton::getUserButtonPin()
+{
+    uint8_t pin = 0xFF; // Unset
+
+    // Use default pin for variant, if no better source
+#ifdef BUTTON_PIN
+    pin = BUTTON_PIN;
+#endif
+
+    // From userPrefs.jsonc, if set
+#ifdef USERPREFS_BUTTON_PIN
+    pin = USERPREFS_BUTTON_PIN;
+#endif
+
+    // From user's override in device settings, if set
+    if (config.device.button_gpio)
+        pin = config.device.button_gpio;
+
+    return pin;
+}
+
 // Configures the wiring and logic of either button
 // Called when outlining your NicheGraphics implementation, in variant/nicheGraphics.cpp
 void TwoButton::setWiring(uint8_t whichButton, uint8_t pin, bool internalPullup)
 {
+    // Prevent the same GPIO being assigned to multiple buttons
+    // Allows an edge case when the user remaps hardware buttons using device settings, due to a broken user button
+    for (uint8_t i = 0; i < whichButton; i++) {
+        if (buttons[i].pin == pin) {
+            LOG_WARN("Attempted reuse of GPIO %d. Ignoring assignment whichButton=%d", pin, whichButton);
+            return;
+        }
+    }
+
     assert(whichButton < 2);
     buttons[whichButton].pin = pin;
-    buttons[whichButton].activeLogic = LOW;
-    buttons[whichButton].mode = internalPullup ? INPUT_PULLUP : INPUT; // fix me
+    buttons[whichButton].activeLogic = LOW; // Unimplemented
+    buttons[whichButton].mode = internalPullup ? INPUT_PULLUP : INPUT;
 
     pinMode(buttons[whichButton].pin, buttons[whichButton].mode);
 }

@@ -68,8 +68,7 @@ void setupNicheGraphics()
     InkHUD::Applet::fontSmall.addSubstitutionsWin1251();
     */
 
-    // Init settings, and customize defaults
-    // Values ignored individually if found saved to flash
+    // Customize default settings
     inkhud->persistence->settings.userTiles.maxCount = 2;              // Two applets side-by-side
     inkhud->persistence->settings.rotation = 3;                        // 270 degrees clockwise
     inkhud->persistence->settings.optionalFeatures.batteryIcon = true; // Device definitely has a battery
@@ -105,7 +104,8 @@ void setupNicheGraphics()
     constexpr uint8_t TOUCH_BUTTON = 1;
 
     // Setup the main user button
-    buttons->setWiring(MAIN_BUTTON, BUTTON_PIN, LOW);
+    buttons->setWiring(MAIN_BUTTON, Inputs::TwoButton::getUserButtonPin());
+    buttons->setTiming(MAIN_BUTTON, 75, 500);
     buttons->setHandlerShortPress(MAIN_BUTTON, []() { InkHUD::InkHUD::getInstance()->shortpress(); });
     buttons->setHandlerLongPress(MAIN_BUTTON, []() { InkHUD::InkHUD::getInstance()->longpress(); });
 
