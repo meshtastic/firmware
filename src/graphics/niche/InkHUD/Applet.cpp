@@ -582,9 +582,12 @@ std::string InkHUD::Applet::getTimeString(uint32_t epochSeconds)
         uint32_t hour = hms / SEC_PER_HOUR;
         uint32_t min = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
 
-        // Format the clock string
+        // Format the clock string, either 12 hour or 24 hour
         char clockStr[11];
-        sprintf(clockStr, "%u:%02u %s", (hour % 12 == 0 ? 12 : hour % 12), min, hour > 11 ? "PM" : "AM");
+        if (config.display.use_12h_clock)
+            sprintf(clockStr, "%u:%02u %s", (hour % 12 == 0 ? 12 : hour % 12), min, hour > 11 ? "PM" : "AM");
+        else
+            sprintf(clockStr, "%02u:%02u", hour, min);
 
         return clockStr;
     }
