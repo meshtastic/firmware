@@ -981,15 +981,16 @@ void GPS::down()
         setPowerState(GPS_IDLE);
 
     else {
-        // Check whether the GPS hardware is capable of GPS_SOFTSLEEP
-        // If not, fallback to GPS_HARDSLEEP instead
+// Check whether the GPS hardware is capable of GPS_SOFTSLEEP
+// If not, fallback to GPS_HARDSLEEP instead
+#ifdef PIN_GPS_STANDBY // L76B, L76K and clones have a standby pin
+        bool softsleepSupported = true;
+#else
         bool softsleepSupported = false;
+#endif
         // U-blox is supported via PMREQ
         if (IS_ONE_OF(gnssModel, GNSS_MODEL_UBLOX6, GNSS_MODEL_UBLOX7, GNSS_MODEL_UBLOX8, GNSS_MODEL_UBLOX9, GNSS_MODEL_UBLOX10))
             softsleepSupported = true;
-#ifdef PIN_GPS_STANDBY // L76B, L76K and clones have a standby pin
-        softsleepSupported = true;
-#endif
 
         if (softsleepSupported) {
             // How long does gps_update_interval need to be, for GPS_HARDSLEEP to become more efficient than

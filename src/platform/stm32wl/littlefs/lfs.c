@@ -863,7 +863,7 @@ static int lfs_dir_find(lfs_t *lfs, lfs_dir_t *dir, lfs_entry_t *entry, const ch
         // check that entry has not been moved
         if (entry->d.type & 0x80) {
             int moved = lfs_moved(lfs, &entry->d.u);
-            if (moved < 0 || moved) {
+            if (moved) {
                 return (moved < 0) ? moved : LFS_ERR_NOENT;
             }
 
@@ -1055,12 +1055,6 @@ int lfs_dir_seek(lfs_t *lfs, lfs_dir_t *dir, lfs_off_t off)
 
     dir->off = off;
     return 0;
-}
-
-lfs_soff_t lfs_dir_tell(lfs_t *lfs, lfs_dir_t *dir)
-{
-    (void)lfs;
-    return dir->pos;
 }
 
 int lfs_dir_rewind(lfs_t *lfs, lfs_dir_t *dir)
@@ -1755,7 +1749,7 @@ int lfs_file_truncate(lfs_t *lfs, lfs_file_t *file, lfs_off_t size)
     return 0;
 }
 
-lfs_soff_t lfs_file_tell(lfs_t *lfs, lfs_file_t *file)
+lfs_soff_t lfs_file_tell(lfs_t *lfs, lfs_file_t const *file)
 {
     (void)lfs;
     return file->pos;
