@@ -10,6 +10,9 @@
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH
 #include "BleOta.h"
 #endif
+#if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WIFI
+#include "WiFiOTA.h"
+#endif
 #include "Router.h"
 #include "configuration.h"
 #include "main.h"
@@ -194,19 +197,23 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
     case meshtastic_AdminMessage_reboot_ota_seconds_tag: {
         int32_t s = r->reboot_ota_seconds;
-#if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH
-        if (BleOta::getOtaAppVersion().isEmpty()) {
-            LOG_INFO("No OTA firmware available, scheduling regular reboot in %d seconds", s);
-            screen->startAlert("Rebooting...");
-        } else {
+#if defined(ARCH_ESP32)
+#if !MESHTASTIC_EXCLUDE_BLUETOOTH
+        if (!BleOta::getOtaAppVersion().isEmpty()) {
             screen->startFirmwareUpdateScreen();
             BleOta::switchToOtaApp();
-            LOG_INFO("Reboot to OTA in %d seconds", s);
+            LOG_INFO("Rebooting to BLE OTA");
         }
-#else
-        LOG_INFO("Not on ESP32, scheduling regular reboot in %d seconds", s);
-        screen->startAlert("Rebooting...");
 #endif
+#if !MESHTASTIC_EXCLUDE_WIFI
+        if (WiFiOTA::trySwitchToOTA()) {
+            screen->startFirmwareUpdateScreen();
+            WiFiOTA::saveConfig(&config.network);
+            LOG_INFO("Rebooting to WiFi OTA");
+        }
+#endif
+#endif
+        LOG_INFO("Reboot in %d seconds", s);
         rebootAtMsec = (s < 0) ? 0 : (millis() + s * 1000);
         break;
     }
@@ -258,7 +265,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         disableBluetooth();
         LOG_INFO("Commit transaction for edited settings");
         hasOpenEditTransaction = false;
-        saveChanges(SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
+        saveChanges(SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS | SEGMENT_NODEDATABASE);
         break;
     }
     case meshtastic_AdminMessage_get_device_connection_status_request_tag: {
@@ -327,7 +334,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         node->position = TypeConversions::ConvertToPositionLite(r->set_fixed_position);
         nodeDB->setLocalPosition(r->set_fixed_position);
         config.position.fixed_position = true;
-        saveChanges(SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE | SEGMENT_CONFIG, false);
+        saveChanges(SEGMENT_NODEDATABASE | SEGMENT_CONFIG, false);
 #if !MESHTASTIC_EXCLUDE_GPS
         if (gps != nullptr)
             gps->enable();
@@ -340,7 +347,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         LOG_INFO("Client received remove_fixed_position command");
         nodeDB->clearLocalPosition();
         config.position.fixed_position = false;
-        saveChanges(SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE | SEGMENT_CONFIG, false);
+        saveChanges(SEGMENT_NODEDATABASE | SEGMENT_CONFIG, false);
         break;
     }
     case meshtastic_AdminMessage_set_time_only_tag: {
@@ -370,6 +377,42 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             LOG_DEBUG("Failed to delete file");
         }
         spiLock->unlock();
+#endif
+        break;
+    }
+    case meshtastic_AdminMessage_backup_preferences_tag: {
+        LOG_INFO("Client requesting to backup preferences");
+        if (nodeDB->backupPreferences(r->backup_preferences)) {
+            myReply = allocErrorResponse(meshtastic_Routing_Error_NONE, &mp);
+        } else {
+            myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
+        }
+        break;
+    }
+    case meshtastic_AdminMessage_restore_preferences_tag: {
+        LOG_INFO("Client requesting to restore preferences");
+        if (nodeDB->restorePreferences(r->backup_preferences,
+                                       SEGMENT_DEVICESTATE | SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_CHANNELS)) {
+            myReply = allocErrorResponse(meshtastic_Routing_Error_NONE, &mp);
+            LOG_DEBUG("Rebooting after successful restore of preferences");
+            reboot(1000);
+            disableBluetooth();
+        } else {
+            myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
+        }
+        break;
+    }
+    case meshtastic_AdminMessage_remove_backup_preferences_tag: {
+        LOG_INFO("Client requesting to remove backup preferences");
+#ifdef FSCom
+        if (r->remove_backup_preferences == meshtastic_AdminMessage_BackupLocation_FLASH) {
+            spiLock->lock();
+            FSCom.remove(backupFileName);
+            spiLock->unlock();
+        } else if (r->remove_backup_preferences == meshtastic_AdminMessage_BackupLocation_SD) {
+            // TODO: After more mainline SD card support
+            LOG_ERROR("SD backup removal not implemented yet");
+        }
 #endif
         break;
     }
@@ -531,7 +574,6 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         config.has_position = true;
         config.position = c.payload_variant.position;
         // Save nodedb as well in case we got a fixed position packet
-        saveChanges(SEGMENT_DEVICESTATE, false);
         break;
     case meshtastic_Config_power_tag:
         LOG_INFO("Set config: Power");
@@ -637,6 +679,14 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
 #if !MESHTASTIC_EXCLUDE_PKI
         crypto->setDHPrivateKey(config.security.private_key.bytes);
 #endif
+        if (config.security.is_managed && !(config.security.admin_key[0].size == 32 || config.security.admin_key[1].size == 32 ||
+                                            config.security.admin_key[2].size == 32)) {
+            config.security.is_managed = false;
+            const char *warning = "You must provide at least one admin public key to enable managed mode";
+            LOG_WARN(warning);
+            sendWarning(warning);
+        }
+
         if (config.security.debug_log_api_enabled == c.payload_variant.security.debug_log_api_enabled &&
             config.security.serial_enabled == c.payload_variant.security.serial_enabled)
             requiresReboot = false;
@@ -980,7 +1030,7 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
     }
 #endif
 
-#if HAS_ETHERNET
+#if HAS_ETHERNET && !defined(USE_WS5500)
     conn.has_ethernet = true;
     conn.ethernet.has_status = true;
     if (Ethernet.linkStatus() == LinkON) {

@@ -32,6 +32,11 @@
 #include <WiFi.h>
 #endif
 
+#if HAS_ETHERNET && defined(USE_WS5500)
+#include <ETHClass2.h>
+#define ETH ETH2
+#endif // HAS_ETHERNET
+
 #endif
 
 #ifndef DELAY_FOREVER
@@ -386,7 +391,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
     virtual bool isVbusIn() override
     {
 #ifdef EXT_PWR_DETECT
-#ifdef HELTEC_CAPSULE_SENSOR_V3
+#if defined(HELTEC_CAPSULE_SENSOR_V3) || defined(HELTEC_SENSOR_HUB)
         // if external powered that pin will be pulled down
         if (digitalRead(EXT_PWR_DETECT) == LOW) {
             return true;
@@ -528,6 +533,9 @@ Power::Power() : OSThread("Power")
 {
     statusHandler = {};
     low_voltage_counter = 0;
+#if defined(ELECROW_ThinkNode_M1) || defined(POWER_CFG)
+    low_voltage_counter_led3 = 0;
+#endif
 #ifdef DEBUG_HEAP
     lastheap = memGet.getFreeHeap();
 #endif
@@ -536,7 +544,7 @@ Power::Power() : OSThread("Power")
 bool Power::analogInit()
 {
 #ifdef EXT_PWR_DETECT
-#ifdef HELTEC_CAPSULE_SENSOR_V3
+#if defined(HELTEC_CAPSULE_SENSOR_V3) || defined(HELTEC_SENSOR_HUB)
     pinMode(EXT_PWR_DETECT, INPUT_PULLUP);
 #else
     pinMode(EXT_PWR_DETECT, INPUT);
@@ -663,12 +671,12 @@ void Power::readPowerStatus()
     int8_t batteryChargePercent = -1;
     OptionalBool usbPowered = OptUnknown;
     OptionalBool hasBattery = OptUnknown; // These must be static because NRF_APM code doesn't run every time
-    OptionalBool isCharging = OptUnknown;
+    OptionalBool isChargingNow = OptUnknown;
 
     if (batteryLevel) {
         hasBattery = batteryLevel->isBatteryConnect() ? OptTrue : OptFalse;
         usbPowered = batteryLevel->isVbusIn() ? OptTrue : OptFalse;
-        isCharging = batteryLevel->isCharging() ? OptTrue : OptFalse;
+        isChargingNow = batteryLevel->isCharging() ? OptTrue : OptFalse;
         if (hasBattery) {
             batteryVoltageMv = batteryLevel->getBattVoltage();
             // If the AXP192 returns a valid battery percentage, use it
@@ -697,17 +705,20 @@ void Power::readPowerStatus()
 
     // If changed to DISCONNECTED
     if (nrf_usb_state == NRFX_POWER_USB_STATE_DISCONNECTED)
-        isCharging = usbPowered = OptFalse;
+        isChargingNow = usbPowered = OptFalse;
     // If changed to CONNECTED / READY
     else
-        isCharging = usbPowered = OptTrue;
+        isChargingNow = usbPowered = OptTrue;
 
 #endif
 
     // Notify any status instances that are observing us
-    const PowerStatus powerStatus2 = PowerStatus(hasBattery, usbPowered, isCharging, batteryVoltageMv, batteryChargePercent);
+    const PowerStatus powerStatus2 = PowerStatus(hasBattery, usbPowered, isChargingNow, batteryVoltageMv, batteryChargePercent);
     LOG_DEBUG("Battery: usbPower=%d, isCharging=%d, batMv=%d, batPct=%d", powerStatus2.getHasUSB(), powerStatus2.getIsCharging(),
               powerStatus2.getBatteryVoltageMv(), powerStatus2.getBatteryChargePercent());
+#if defined(ELECROW_ThinkNode_M1) || defined(POWER_CFG)
+    power_num = powerStatus2.getBatteryVoltageMv();
+#endif
     newStatus.notifyObservers(&powerStatus2);
 #ifdef DEBUG_HEAP
     if (lastheap != memGet.getFreeHeap()) {
@@ -751,9 +762,13 @@ void Power::readPowerStatus()
     // If we have a battery at all and it is less than 0%, force deep sleep if we have more than 10 low readings in
     // a row. NOTE: min LiIon/LiPo voltage is 2.0 to 2.5V, current OCV min is set to 3100 that is large enough.
     //
+
     if (batteryLevel && powerStatus2.getHasBattery() && !powerStatus2.getHasUSB()) {
         if (batteryLevel->getBattVoltage() < OCV[NUM_OCV_POINTS - 1]) {
             low_voltage_counter++;
+#if defined(ELECROW_ThinkNode_M1)
+            low_voltage_counter_led3 = low_voltage_counter;
+#endif
             LOG_DEBUG("Low voltage counter: %d/10", low_voltage_counter);
             if (low_voltage_counter > 10) {
 #ifdef ARCH_NRF52
@@ -766,7 +781,13 @@ void Power::readPowerStatus()
             }
         } else {
             low_voltage_counter = 0;
+#if defined(ELECROW_ThinkNode_M1)
+            low_voltage_counter_led3 = low_voltage_counter;
+#endif
         }
+#ifdef POWER_CFG
+        low_voltage_counter_led3 = low_voltage_counter;
+#endif
     }
 }
 
