@@ -30,6 +30,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
 #endif
+#include "FSCommon.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "error.h"
@@ -50,7 +51,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "modules/WaypointModule.h"
 #include "sleep.h"
 #include "target_specific.h"
-#include "FSCommon.h"
 
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
 #include "mesh/wifi/WiFiAPClient.h"
@@ -118,6 +118,18 @@ static bool heartbeat = false;
 // DEPRECATED. To-do: move static functions inside Screen class
 #define SCREEN_WIDTH display->getWidth()
 #define SCREEN_HEIGHT display->getHeight()
+
+// Pre-defined lines; this is intended to be used AFTER the common header
+#define compactFirstLine (FONT_HEIGHT_SMALL - 3) * 1
+#define compactSecondLine (FONT_HEIGHT_SMALL - 3) * 2
+#define compactThirdLine (FONT_HEIGHT_SMALL - 3) * 3
+#define compactFourthLine (FONT_HEIGHT_SMALL - 3) * 4
+#define compactFifthLine (FONT_HEIGHT_SMALL - 3) * 5
+
+#define standardFirstLine (FONT_HEIGHT_SMALL + 1) * 1
+#define standardSecondLine (FONT_HEIGHT_SMALL + 1) * 2
+#define standardThirdLine (FONT_HEIGHT_SMALL + 1) * 3
+#define standardFourthLine (FONT_HEIGHT_SMALL + 1) * 4
 
 #include "graphics/ScreenFonts.h"
 #include <Throttle.h>
@@ -445,8 +457,10 @@ static void drawBattery(OLEDDisplay *display, int16_t x, int16_t y, uint8_t *img
     int screenWidth = display->getWidth();
     int scale = 1;
 
-    if (screenWidth >= 200) scale = 2;
-    if (screenWidth >= 300) scale = 2; // Do NOT go higher than 2
+    if (screenWidth >= 200)
+        scale = 2;
+    if (screenWidth >= 300)
+        scale = 2; // Do NOT go higher than 2
 
     // Draw scaled battery image (16 columns × 8 rows)
     for (int col = 0; col < 16; col++) {
@@ -1152,20 +1166,21 @@ static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus 
     int maxDrawWidth = 6; // Position icon
 
     if (!gps->getHasLock()) {
-        maxDrawWidth += display->getStringWidth("No sats") + 2;  // icon + text + buffer
+        maxDrawWidth += display->getStringWidth("No sats") + 2; // icon + text + buffer
     } else {
         maxDrawWidth += (5 * 2) + 8 + display->getStringWidth("99") + 2; // bars + sat icon + text + buffer
     }
 
     if (x + maxDrawWidth > SCREEN_WIDTH) {
         x = SCREEN_WIDTH - maxDrawWidth;
-        if (x < 0) x = 0; // Clamp to screen
+        if (x < 0)
+            x = 0; // Clamp to screen
     }
 
     display->drawFastImage(x, y, 6, 8, gps->getHasLock() ? imgPositionSolid : imgPositionEmpty);
     if (!gps->getHasLock()) {
         // Draw "No sats" to the right of the icon with slightly more gap
-        int textX = x + 9;  // 6 (icon) + 3px spacing
+        int textX = x + 9; // 6 (icon) + 3px spacing
         display->drawString(textX, y - 2, "No sats");
         if (config.display.heading_bold)
             display->drawString(textX + 1, y - 2, "No sats");
@@ -1195,7 +1210,6 @@ static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus 
             display->drawString(textX + 1, y - 2, satsString);
     }
 }
-
 
 // Draw status when GPS is disabled or not present
 static void drawGPSpowerstat(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
@@ -1334,7 +1348,7 @@ void Screen::drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t com
     Serial.print(headingRadian);
     Serial.print(" | (deg): ");
     Serial.println(headingRadian * RAD_TO_DEG);
-    
+
     Point tip(0.0f, 0.5f), tail(0.0f, -0.35f); // pointing up initially
     float arrowOffsetX = 0.14f, arrowOffsetY = 1.0f;
     Point leftArrow(tip.x - arrowOffsetX, tip.y - arrowOffsetY), rightArrow(tip.x + arrowOffsetX, tip.y - arrowOffsetY);
@@ -1353,10 +1367,14 @@ void Screen::drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t com
     display->drawLine(leftArrow.x, leftArrow.y, tail.x, tail.y);
     display->drawLine(rightArrow.x, rightArrow.y, tail.x, tail.y);
     */
-   Serial.print("🔥 Arrow Tail X: "); Serial.print(tail.x);
-   Serial.print(" | Y: "); Serial.print(tail.y);
-   Serial.print(" | Tip X: "); Serial.print(tip.x);
-   Serial.print(" | Tip Y: "); Serial.println(tip.y);
+    Serial.print("🔥 Arrow Tail X: ");
+    Serial.print(tail.x);
+    Serial.print(" | Y: ");
+    Serial.print(tail.y);
+    Serial.print(" | Tip X: ");
+    Serial.print(tip.x);
+    Serial.print(" | Tip Y: ");
+    Serial.println(tip.y);
 #ifdef USE_EINK
     display->drawTriangle(tip.x, tip.y, rightArrow.x, rightArrow.y, tail.x, tail.y);
 #else
@@ -1418,9 +1436,10 @@ void Screen::drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t co
         rosePoints[i]->translate(compassX, compassY);
     }
     display->drawCircle(NC1.x, NC1.y, 4); // North sign circle, 4px radius is sufficient for all displays.
-    Serial.print("🔥 North Marker X: "); Serial.print(NC1.x);
-    Serial.print(" | Y: "); Serial.println(NC1.y);
-
+    Serial.print("🔥 North Marker X: ");
+    Serial.print(NC1.x);
+    Serial.print(" | Y: ");
+    Serial.println(NC1.y);
 }
 
 uint16_t Screen::getCompassDiam(uint32_t displayWidth, uint32_t displayHeight)
@@ -1568,17 +1587,18 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 }
 
 // h! Makes header invert rounder
-void drawRoundedHighlight(OLEDDisplay *display, int16_t x, int16_t y, int16_t w, int16_t h, int16_t r) {
+void drawRoundedHighlight(OLEDDisplay *display, int16_t x, int16_t y, int16_t w, int16_t h, int16_t r)
+{
     // Center rectangles
     display->fillRect(x + r, y, w - 2 * r, h);
     display->fillRect(x, y + r, r, h - 2 * r);
     display->fillRect(x + w - r, y + r, r, h - 2 * r);
 
     // Rounded corners
-    display->fillCircle(x + r, y + r, r);                   // Top-left
-    display->fillCircle(x + w - r - 1, y + r, r);           // Top-right
-    display->fillCircle(x + r, y + h - r - 1, r);           // Bottom-left
-    display->fillCircle(x + w - r - 1, y + h - r - 1, r);   // Bottom-right
+    display->fillCircle(x + r, y + r, r);                 // Top-left
+    display->fillCircle(x + w - r - 1, y + r, r);         // Top-right
+    display->fillCircle(x + r, y + h - r - 1, r);         // Bottom-left
+    display->fillCircle(x + w - r - 1, y + h - r - 1, r); // Bottom-right
 }
 // h! Each node entry holds a reference to its info and how long ago it was heard from
 struct NodeEntry {
@@ -1587,7 +1607,8 @@ struct NodeEntry {
 };
 
 // h! Calculates bearing between two lat/lon points (used for compass)
-float calculateBearing(double lat1, double lon1, double lat2, double lon2) {
+float calculateBearing(double lat1, double lon1, double lat2, double lon2)
+{
     double dLon = (lon2 - lon1) * DEG_TO_RAD;
     lat1 = lat1 * DEG_TO_RAD;
     lat2 = lat2 * DEG_TO_RAD;
@@ -1596,22 +1617,25 @@ float calculateBearing(double lat1, double lon1, double lat2, double lon2) {
     double x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dLon);
     double initialBearing = atan2(y, x);
 
-    return fmod((initialBearing * RAD_TO_DEG + 360), 360);  // Normalize to 0-360°
+    return fmod((initialBearing * RAD_TO_DEG + 360), 360); // Normalize to 0-360°
 }
 
 // Shared scroll index state for node screens
 static int scrollIndex = 0;
 
 // Helper: Calculates max scroll index based on total entries
-int calculateMaxScroll(int totalEntries, int visibleRows) {
+int calculateMaxScroll(int totalEntries, int visibleRows)
+{
     int totalRows = (totalEntries + 1) / 2;
     return std::max(0, totalRows - visibleRows);
 }
 
 // Helper: Draw vertical scrollbar matching CannedMessageModule style
-void drawScrollbar(OLEDDisplay *display, int visibleNodeRows, int totalEntries, int scrollIndex, int columns, int rowYOffset) {
+void drawScrollbar(OLEDDisplay *display, int visibleNodeRows, int totalEntries, int scrollIndex, int columns, int rowYOffset)
+{
     int totalPages = (totalEntries + columns - 1) / columns;
-    if (totalPages <= visibleNodeRows) return;  // no scrollbar needed
+    if (totalPages <= visibleNodeRows)
+        return; // no scrollbar needed
 
     int scrollAreaHeight = visibleNodeRows * (FONT_HEIGHT_SMALL - 3); // true pixel height used per row
     int scrollbarX = display->getWidth() - 6;
@@ -1625,32 +1649,38 @@ void drawScrollbar(OLEDDisplay *display, int visibleNodeRows, int totalEntries, 
 }
 
 // Grabs all nodes from the DB and sorts them (favorites and most recently heard first)
-void retrieveAndSortNodes(std::vector<NodeEntry> &nodeList) {
+void retrieveAndSortNodes(std::vector<NodeEntry> &nodeList)
+{
     size_t numNodes = nodeDB->getNumMeshNodes();
 
     for (size_t i = 0; i < numNodes; i++) {
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
-        if (!node || node->num == nodeDB->getNodeNum()) continue;  // Skip self
+        if (!node || node->num == nodeDB->getNodeNum())
+            continue; // Skip self
         nodeList.push_back({node, sinceLastSeen(node)});
     }
 
     std::sort(nodeList.begin(), nodeList.end(), [](const NodeEntry &a, const NodeEntry &b) {
         bool aFav = a.node->is_favorite;
         bool bFav = b.node->is_favorite;
-        if (aFav != bFav) return aFav > bFav;
-        if (a.lastHeard == 0 || a.lastHeard == UINT32_MAX) return false;
-        if (b.lastHeard == 0 || b.lastHeard == UINT32_MAX) return true;
+        if (aFav != bFav)
+            return aFav > bFav;
+        if (a.lastHeard == 0 || a.lastHeard == UINT32_MAX)
+            return false;
+        if (b.lastHeard == 0 || b.lastHeard == UINT32_MAX)
+            return true;
         return a.lastHeard < b.lastHeard;
     });
 }
 
 // Helper: Fallback-NodeID if emote is on ShortName for display purposes
-String getSafeNodeName(meshtastic_NodeInfoLite *node) {
+String getSafeNodeName(meshtastic_NodeInfoLite *node)
+{
     String nodeName = "?";
 
     if (node->has_user && strlen(node->user.short_name) > 0) {
         bool valid = true;
-        const char* name = node->user.short_name;
+        const char *name = node->user.short_name;
 
         for (size_t i = 0; i < strlen(name); i++) {
             uint8_t c = (uint8_t)name[i];
@@ -1670,12 +1700,14 @@ String getSafeNodeName(meshtastic_NodeInfoLite *node) {
         }
     }
 
-    if (node->is_favorite) nodeName = "*" + nodeName;
+    if (node->is_favorite)
+        nodeName = "*" + nodeName;
     return nodeName;
 }
 
 // Draws the top header bar (optionally inverted or bold)
-void drawScreenHeader(OLEDDisplay *display, const char *title, int16_t x, int16_t y) {
+void drawScreenHeader(OLEDDisplay *display, const char *title, int16_t x, int16_t y)
+{
     bool isInverted = (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED);
     bool isBold = config.display.heading_bold;
 
@@ -1699,25 +1731,31 @@ void drawScreenHeader(OLEDDisplay *display, const char *title, int16_t x, int16_
 
     // Draw text centered vertically and horizontally
     display->drawString(titleX, textY, title);
-    if (isBold) display->drawString(titleX + 1, textY, title);
+    if (isBold)
+        display->drawString(titleX + 1, textY, title);
 
     display->setColor(WHITE);
 }
 
 // Draws separator line
-void drawColumnSeparator(OLEDDisplay *display, int16_t x, int16_t yStart, int16_t yEnd) {
+void drawColumnSeparator(OLEDDisplay *display, int16_t x, int16_t yStart, int16_t yEnd)
+{
     int columnWidth = display->getWidth() / 2;
     int separatorX = x + columnWidth - 2;
     display->drawLine(separatorX, yStart, separatorX, yEnd - 3);
 }
 
 // Draws node name with how long ago it was last heard from
-void drawEntryLastHeard(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth) {
+void drawEntryLastHeard(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth)
+{
     int screenWidth = display->getWidth();
     bool isLeftCol = (x < screenWidth / 2);
 
     // Adjust offset based on column and screen width
-    int timeOffset = (screenWidth > 128) ? (isLeftCol ? 41 : 45) : (isLeftCol ? 24 : 30);//offset large screen (?Left:Right column), offset small screen (?Left:Right column)
+    int timeOffset =
+        (screenWidth > 128)
+            ? (isLeftCol ? 41 : 45)
+            : (isLeftCol ? 24 : 30); // offset large screen (?Left:Right column), offset small screen (?Left:Right column)
 
     String nodeName = getSafeNodeName(node);
 
@@ -1728,7 +1766,12 @@ void drawEntryLastHeard(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
     } else {
         uint32_t minutes = seconds / 60, hours = minutes / 60, days = hours / 24;
         snprintf(timeStr, sizeof(timeStr), (days > 365 ? "?" : "%d%c"),
-                 (days ? days : hours ? hours : minutes), (days ? 'd' : hours ? 'h' : 'm'));
+                 (days    ? days
+                  : hours ? hours
+                          : minutes),
+                 (days    ? 'd'
+                  : hours ? 'h'
+                          : 'm'));
     }
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
@@ -1737,13 +1780,20 @@ void drawEntryLastHeard(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
     display->drawString(x + columnWidth - timeOffset, y, timeStr);
 }
 // Draws each node's name, hop count, and signal bars
-void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth) {
+void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth)
+{
     int screenWidth = display->getWidth();
     bool isLeftCol = (x < screenWidth / 2);
 
     int nameMaxWidth = columnWidth - 25;
-    int barsOffset = (screenWidth > 128) ? (isLeftCol ? 26 : 30) : (isLeftCol ? 17 : 19);//offset large screen (?Left:Right column), offset small screen (?Left:Right column)
-    int hopOffset  = (screenWidth > 128) ? (isLeftCol ? 32 : 38) : (isLeftCol ? 18 : 20);//offset large screen (?Left:Right column), offset small screen (?Left:Right column)
+    int barsOffset =
+        (screenWidth > 128)
+            ? (isLeftCol ? 26 : 30)
+            : (isLeftCol ? 17 : 19); // offset large screen (?Left:Right column), offset small screen (?Left:Right column)
+    int hopOffset =
+        (screenWidth > 128)
+            ? (isLeftCol ? 32 : 38)
+            : (isLeftCol ? 18 : 20); // offset large screen (?Left:Right column), offset small screen (?Left:Right column)
 
     int barsXOffset = columnWidth - barsOffset;
 
@@ -1777,10 +1827,12 @@ void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
 }
 
 // Typedef for passing different render functions into one reusable screen function
-typedef void (*EntryRenderer)(OLEDDisplay*, meshtastic_NodeInfoLite*, int16_t, int16_t, int);
+typedef void (*EntryRenderer)(OLEDDisplay *, meshtastic_NodeInfoLite *, int16_t, int16_t, int);
 
 // Shared function that renders all node screens (LastHeard, Hop/Signal)
-void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *title, EntryRenderer renderer) {
+void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *title,
+                        EntryRenderer renderer)
+{
     int columnWidth = display->getWidth() / 2;
     int totalRowsAvailable = (display->getHeight() - y - FONT_HEIGHT_SMALL) / (FONT_HEIGHT_SMALL - 3);
     int visibleNodeRows = std::min(6, totalRowsAvailable);
@@ -1815,7 +1867,8 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
         if (y + yOffset > display->getHeight() - FONT_HEIGHT_SMALL) {
             yOffset = rowYOffset;
             col++;
-            if (col > 1) break;
+            if (col > 1)
+                break;
         }
     }
 
@@ -1824,21 +1877,20 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
 }
 
 // Public screen function: shows how recently nodes were heard
-static void drawLastHeardScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) {
+static void drawLastHeardScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
     drawNodeListScreen(display, state, x, y, "Node List", drawEntryLastHeard);
 }
 
 // Public screen function: shows hop count + signal strength
-static void drawHopSignalScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) {
+static void drawHopSignalScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
     drawNodeListScreen(display, state, x, y, "Hops/Signal", drawEntryHopSignal);
 }
 
-
-
-
-
 // Helper function: Draw a single node entry for Node List (Modified for Compass Screen)
-void drawEntryCompass(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth) {
+void drawEntryCompass(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth)
+{
     int screenWidth = display->getWidth();
     bool isLeftCol = (x < screenWidth / 2);
 
@@ -1853,10 +1905,14 @@ void drawEntryCompass(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
 }
 
 // Extra compass element drawer (injects compass arrows)
-typedef void (*CompassExtraRenderer)(OLEDDisplay*, meshtastic_NodeInfoLite*, int16_t, int16_t, int columnWidth, float myHeading, double userLat, double userLon);
+typedef void (*CompassExtraRenderer)(OLEDDisplay *, meshtastic_NodeInfoLite *, int16_t, int16_t, int columnWidth, float myHeading,
+                                     double userLat, double userLon);
 
-void drawCompassArrow(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth, float myHeading, double userLat, double userLon) {
-    if (!nodeDB->hasValidPosition(node)) return;
+void drawCompassArrow(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth, float myHeading,
+                      double userLat, double userLon)
+{
+    if (!nodeDB->hasValidPosition(node))
+        return;
 
     int screenWidth = display->getWidth();
     bool isLeftCol = (x < screenWidth / 2);
@@ -1885,7 +1941,8 @@ void drawCompassArrow(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
 
 // Generic node+compass renderer (like drawNodeListScreen but with compass support)
 void drawNodeListWithExtrasScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *title,
-                                  EntryRenderer renderer, CompassExtraRenderer extras) {
+                                  EntryRenderer renderer, CompassExtraRenderer extras)
+{
     int columnWidth = display->getWidth() / 2;
     int totalRowsAvailable = (display->getHeight() - y - FONT_HEIGHT_SMALL) / (FONT_HEIGHT_SMALL - 3);
     int visibleNodeRows = std::min(6, totalRowsAvailable);
@@ -1936,7 +1993,8 @@ void drawNodeListWithExtrasScreen(OLEDDisplay *display, OLEDDisplayUiState *stat
         if (y + yOffset > display->getHeight() - FONT_HEIGHT_SMALL) {
             yOffset = rowYOffset;
             col++;
-            if (col > 1) break;
+            if (col > 1)
+                break;
         }
     }
 
@@ -1944,13 +2002,14 @@ void drawNodeListWithExtrasScreen(OLEDDisplay *display, OLEDDisplayUiState *stat
     drawScrollbar(display, visibleNodeRows, totalEntries, scrollIndex, 2, rowYOffset);
 }
 
-
 // Public screen entry for compass
-static void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) {
+static void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
     drawNodeListWithExtrasScreen(display, state, x, y, "Bearings", drawEntryCompass, drawCompassArrow);
 }
 
-void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth) {
+void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth)
+{
     int screenWidth = display->getWidth();
     bool isLeftCol = (x < screenWidth / 2);
     int nameMaxWidth = columnWidth - (screenWidth > 128 ? (isLeftCol ? 25 : 28) : (isLeftCol ? 20 : 22));
@@ -1970,28 +2029,27 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
         double dLat = (lat2 - lat1) * DEG_TO_RAD;
         double dLon = (lon2 - lon1) * DEG_TO_RAD;
 
-        double a = sin(dLat / 2) * sin(dLat / 2) +
-                   cos(lat1 * DEG_TO_RAD) * cos(lat2 * DEG_TO_RAD) *
-                   sin(dLon / 2) * sin(dLon / 2);
+        double a =
+            sin(dLat / 2) * sin(dLat / 2) + cos(lat1 * DEG_TO_RAD) * cos(lat2 * DEG_TO_RAD) * sin(dLon / 2) * sin(dLon / 2);
         double c = 2 * atan2(sqrt(a), sqrt(1 - a));
         double distanceKm = earthRadiusKm * c;
 
         if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
             double miles = distanceKm * 0.621371;
             if (miles < 0.1) {
-                snprintf(distStr, sizeof(distStr), "%dft", (int)(miles * 5280));  // show feet
+                snprintf(distStr, sizeof(distStr), "%dft", (int)(miles * 5280)); // show feet
             } else if (miles < 10.0) {
-                snprintf(distStr, sizeof(distStr), "%.1fmi", miles);  // 1 decimal
+                snprintf(distStr, sizeof(distStr), "%.1fmi", miles); // 1 decimal
             } else {
-                snprintf(distStr, sizeof(distStr), "%dmi", (int)miles);  // no decimal
+                snprintf(distStr, sizeof(distStr), "%dmi", (int)miles); // no decimal
             }
         } else {
             if (distanceKm < 1.0) {
-                snprintf(distStr, sizeof(distStr), "%dm", (int)(distanceKm * 1000));  // show meters
+                snprintf(distStr, sizeof(distStr), "%dm", (int)(distanceKm * 1000)); // show meters
             } else if (distanceKm < 10.0) {
-                snprintf(distStr, sizeof(distStr), "%.1fkm", distanceKm);  // 1 decimal
+                snprintf(distStr, sizeof(distStr), "%.1fkm", distanceKm); // 1 decimal
             } else {
-                snprintf(distStr, sizeof(distStr), "%dkm", (int)distanceKm);  // no decimal
+                snprintf(distStr, sizeof(distStr), "%dkm", (int)distanceKm); // no decimal
             }
         }
     }
@@ -2006,12 +2064,13 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     }
 }
 
-static void drawDistanceScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) {
+static void drawDistanceScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
     drawNodeListScreen(display, state, x, y, "Distances", drawNodeDistance);
 }
 
-
-void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y) {
+void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
+{
     const bool isInverted = (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED);
     const bool isBold = config.display.heading_bold;
     const int xOffset = 3;
@@ -2039,7 +2098,8 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y) {
     const int batteryOffset = screenWidth > 128 ? 34 : 16;
     const int percentX = x + xOffset + batteryOffset;
     display->drawString(percentX, textY, percentStr);
-    if (isBold) display->drawString(percentX + 1, textY, percentStr);
+    if (isBold)
+        display->drawString(percentX + 1, textY, percentStr);
 
     // Time (right side)
     uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true);
@@ -2050,21 +2110,23 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y) {
 
         bool isPM = hour >= 12;
         hour = hour % 12;
-        if (hour == 0) hour = 12;
+        if (hour == 0)
+            hour = 12;
 
         char timeStr[10];
         snprintf(timeStr, sizeof(timeStr), "%d:%02d%s", hour, minute, isPM ? "PM" : "AM");
 
         int timeX = x + screenWidth - xOffset - display->getStringWidth(timeStr);
         display->drawString(timeX, textY, timeStr);
-        if (isBold) display->drawString(timeX + 1, textY, timeStr);
+        if (isBold)
+            display->drawString(timeX + 1, textY, timeStr);
     }
 
     display->setColor(WHITE);
 }
 
-
-static void drawDefaultScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) {
+static void drawDefaultScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
     display->clear();
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
@@ -2083,7 +2145,8 @@ static void drawDefaultScreen(OLEDDisplay *display, OLEDDisplayUiState *state, i
     if (config.position.fixed_position) {
         drawGPS(display, SCREEN_WIDTH - 44, secondRowY, gpsStatus);
     } else if (!gpsStatus || !gpsStatus->getIsConnected()) {
-        String displayLine = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "No GPS" : "GPS off";
+        String displayLine =
+            config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "No GPS" : "GPS off";
         int posX = SCREEN_WIDTH - display->getStringWidth(displayLine) - 2;
         display->drawString(posX, secondRowY, displayLine);
     } else {
@@ -2096,7 +2159,7 @@ static void drawDefaultScreen(OLEDDisplay *display, OLEDDisplayUiState *state, i
     // === Third Row: LongName Centered ===
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     if (ourNode && ourNode->has_user && strlen(ourNode->user.long_name) > 0) {
-        const char* longName = ourNode->user.long_name;
+        const char *longName = ourNode->user.long_name;
         int textWidth = display->getStringWidth(longName);
         int nameX = (SCREEN_WIDTH - textWidth) / 2;
         int nameY = y + (FONT_HEIGHT_SMALL + 1) * 2;
@@ -2112,8 +2175,14 @@ static void drawDefaultScreen(OLEDDisplay *display, OLEDDisplayUiState *state, i
         snprintf(uptimeStr, sizeof(uptimeStr), "?");
     } else {
         snprintf(uptimeStr, sizeof(uptimeStr), "%d%c",
-                 days ? days : hours ? hours : minutes ? minutes : (int)uptime,
-                 days ? 'd' : hours ? 'h' : minutes ? 'm' : 's');
+                 days      ? days
+                 : hours   ? hours
+                 : minutes ? minutes
+                           : (int)uptime,
+                 days      ? 'd'
+                 : hours   ? 'h'
+                 : minutes ? 'm'
+                           : 's');
     }
 
     char uptimeFullStr[16];
@@ -2122,6 +2191,155 @@ static void drawDefaultScreen(OLEDDisplay *display, OLEDDisplayUiState *state, i
     int uptimeY = y + (FONT_HEIGHT_SMALL + 1) * 3;
     display->drawString(uptimeX, uptimeY, uptimeFullStr);
 }
+
+// ****************************
+// * Device Focused Screen    *
+// ****************************
+static void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    display->clear();
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
+
+    // === Header ===
+    drawCommonHeader(display, x, y);
+
+    // === First Row: Node and GPS ===
+    bool origBold = config.display.heading_bold;
+    config.display.heading_bold = false;
+
+    drawNodes(display, x, compactFirstLine + 3, nodeStatus);
+
+#if HAS_GPS
+    if (config.position.fixed_position) {
+        drawGPS(display, SCREEN_WIDTH - 44, compactFirstLine + 3, gpsStatus);
+    } else if (!gpsStatus || !gpsStatus->getIsConnected()) {
+        String displayLine =
+            config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "No GPS" : "GPS off";
+        int posX = SCREEN_WIDTH - display->getStringWidth(displayLine) - 2;
+        display->drawString(posX, compactFirstLine + 3, displayLine);
+    } else {
+        drawGPS(display, SCREEN_WIDTH - 44, compactFirstLine + 3, gpsStatus);
+    }
+#endif
+
+    config.display.heading_bold = origBold;
+
+    // === Second Row: MAC ID and Channel Utilization ===
+
+    // Get our hardware ID
+    uint8_t dmac[6];
+    getMacAddr(dmac);
+    snprintf(ourId, sizeof(ourId), "%02x%02x", dmac[4], dmac[5]);
+
+#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) ||      \
+     defined(ST7789_CS) || defined(USE_ST7789) || defined(HX8357_CS) || ARCH_PORTDUINO) &&                                       \
+    !defined(DISPLAY_FORCE_SMALL_FONTS)
+    display->drawFastImage(x, compactSecondLine + 3, 12, 8, imgInfoL1);
+    display->drawFastImage(x, compactSecondLine + 11, 12, 8, imgInfoL2);
+#else
+    display->drawFastImage(x, compactSecondLine + 2, 8, 8, imgInfo);
+#endif
+
+    display->drawString(x + 14, compactSecondLine, ourId);
+
+    // Display Channel Utilization
+    char chUtil[13];
+    snprintf(chUtil, sizeof(chUtil), "ChUtil %2.0f%%", airTime->channelUtilizationPercent());
+    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(chUtil), compactSecondLine, chUtil);
+
+    // === Third Row: LongName Centered ===
+    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    if (ourNode && ourNode->has_user && strlen(ourNode->user.long_name) > 0) {
+        const char *longName = ourNode->user.long_name;
+        int textWidth = display->getStringWidth(longName);
+        int nameX = (SCREEN_WIDTH - textWidth) / 2;
+        int nameY = y + (FONT_HEIGHT_SMALL + 1) * 3;
+        display->drawString(nameX, compactThirdLine, longName);
+    }
+
+    // === Fourth Row: Uptime ===
+    uint32_t uptime = millis() / 1000;
+    char uptimeStr[6];
+    uint32_t minutes = uptime / 60, hours = minutes / 60, days = hours / 24;
+
+    if (days > 365) {
+        snprintf(uptimeStr, sizeof(uptimeStr), "?");
+    } else {
+        snprintf(uptimeStr, sizeof(uptimeStr), "%d%c",
+                 days      ? days
+                 : hours   ? hours
+                 : minutes ? minutes
+                           : (int)uptime,
+                 days      ? 'd'
+                 : hours   ? 'h'
+                 : minutes ? 'm'
+                           : 's');
+    }
+
+    char uptimeFullStr[16];
+    snprintf(uptimeFullStr, sizeof(uptimeFullStr), "Uptime: %s", uptimeStr);
+    int uptimeX = (SCREEN_WIDTH - display->getStringWidth(uptimeFullStr)) / 2;
+    display->drawString(uptimeX, compactFourthLine, uptimeFullStr);
+}
+
+// ****************************
+// * LoRa Focused Screen      *
+// ****************************
+static void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    display->clear();
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
+
+    // === Header ===
+    drawCommonHeader(display, x, y);
+
+    // === First Row: MAC ID and Region ===
+    bool origBold = config.display.heading_bold;
+    config.display.heading_bold = false;
+
+    // Get our hardware ID
+    uint8_t dmac[6];
+    getMacAddr(dmac);
+    snprintf(ourId, sizeof(ourId), "%02x%02x", dmac[4], dmac[5]);
+
+#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) ||      \
+     defined(ST7789_CS) || defined(USE_ST7789) || defined(HX8357_CS) || ARCH_PORTDUINO) &&                                       \
+    !defined(DISPLAY_FORCE_SMALL_FONTS)
+    display->drawFastImage(x, compactFirstLine + 5, 12, 8, imgInfoL1);
+    display->drawFastImage(x, compactFirstLine + 12, 12, 8, imgInfoL2);
+#else
+    display->drawFastImage(x, compactFirstLine + 3, 8, 8, imgInfo);
+#endif
+
+    display->drawString(x + 14, compactFirstLine, ourId);
+
+    const char *region = myRegion ? myRegion->name : NULL;
+    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(region), compactFirstLine, region);
+
+    config.display.heading_bold = origBold;
+
+    // === Second Row: Channel and Channel Utilization ===
+    char chUtil[13];
+    snprintf(chUtil, sizeof(chUtil), "ChUtil %2.0f%%", airTime->channelUtilizationPercent());
+    display->drawString(x, compactSecondLine, chUtil);
+
+    char channelStr[20];
+    {
+        snprintf(channelStr, sizeof(channelStr), "#%s", channels.getName(channels.getPrimaryIndex()));
+    }
+    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(channelStr), compactSecondLine, channelStr);
+
+    // === Third Row: Node Name ===
+    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    if (ourNode && ourNode->has_user && strlen(ourNode->user.long_name) > 0) {
+        const char *longName = ourNode->user.long_name;
+        int uptimeX = (SCREEN_WIDTH - display->getStringWidth(longName)) / 2;
+        display->drawString(uptimeX, compactThirdLine, longName);
+    }
+}
+
 // ****************************
 // * BatteryDeviceLoRa Screen *
 // ****************************
@@ -2239,7 +2457,8 @@ static void drawActivity(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 // ****************************
 // * My Position Screen       *
 // ****************************
-static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) {
+static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
     display->clear();
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
@@ -2258,11 +2477,8 @@ static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiStat
 
 #if HAS_GPS
     // === Update GeoCoord ===
-    geoCoord.updateCoords(
-        int32_t(gpsStatus->getLatitude()),
-        int32_t(gpsStatus->getLongitude()),
-        int32_t(gpsStatus->getAltitude())
-    );
+    geoCoord.updateCoords(int32_t(gpsStatus->getLatitude()), int32_t(gpsStatus->getLongitude()),
+                          int32_t(gpsStatus->getAltitude()));
 
     // === Determine Compass Heading ===
     float heading;
@@ -2329,7 +2545,8 @@ static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiStat
 // ****************************
 // *      Memory Screen       *
 // ****************************
-static void drawMemoryScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) {
+static void drawMemoryScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
     display->clear();
     display->setFont(FONT_SMALL);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
@@ -2341,7 +2558,7 @@ static void drawMemoryScreen(OLEDDisplay *display, OLEDDisplayUiState *state, in
     const int highlightHeight = FONT_HEIGHT_SMALL - 1;
     const int textY = y + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
     const int screenWidth = display->getWidth();
-    const char* titleStr = (screenWidth > 128) ? "Memory" : "Mem";
+    const char *titleStr = (screenWidth > 128) ? "Memory" : "Mem";
     const int centerX = x + SCREEN_WIDTH / 2;
 
     if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
@@ -2366,8 +2583,9 @@ static void drawMemoryScreen(OLEDDisplay *display, OLEDDisplayUiState *state, in
 
     int rowY = y + rowYOffset;
 
-    auto drawUsageRow = [&](const char* label, uint32_t used, uint32_t total) {
-        if (total == 0) return;
+    auto drawUsageRow = [&](const char *label, uint32_t used, uint32_t total) {
+        if (total == 0)
+            return;
 
         int percent = (used * 100) / total;
 
@@ -2380,7 +2598,8 @@ static void drawMemoryScreen(OLEDDisplay *display, OLEDDisplayUiState *state, in
 
         int textWidth = display->getStringWidth(combinedStr);
         int adjustedBarWidth = SCREEN_WIDTH - barX - textWidth - 6;
-        if (adjustedBarWidth < 10) adjustedBarWidth = 10; // prevent weird bar if display is too small
+        if (adjustedBarWidth < 10)
+            adjustedBarWidth = 10; // prevent weird bar if display is too small
 
         int fillWidth = (used * adjustedBarWidth) / total;
 
@@ -2393,7 +2612,8 @@ static void drawMemoryScreen(OLEDDisplay *display, OLEDDisplayUiState *state, in
         display->setColor(WHITE);
         display->drawRect(barX, barY, adjustedBarWidth, barHeight);
 
-        if (percent >= 80) display->setColor(BLACK);
+        if (percent >= 80)
+            display->setColor(BLACK);
         display->fillRect(barX, barY, fillWidth, barHeight);
         display->setColor(WHITE);
 
@@ -2412,30 +2632,31 @@ static void drawMemoryScreen(OLEDDisplay *display, OLEDDisplayUiState *state, in
     uint32_t psramTotal = memGet.getPsramSize();
 
     uint32_t flashUsed = 0, flashTotal = 0;
-    #ifdef ESP32
-        flashUsed = FSCom.usedBytes();
-        flashTotal = FSCom.totalBytes();
-    #endif
+#ifdef ESP32
+    flashUsed = FSCom.usedBytes();
+    flashTotal = FSCom.totalBytes();
+#endif
 
     uint32_t sdUsed = 0, sdTotal = 0;
     bool hasSD = false;
-    #ifdef HAS_SDCARD
-        hasSD = SD.cardType() != CARD_NONE;
-        if (hasSD) {
-            sdUsed = SD.usedBytes();
-            sdTotal = SD.totalBytes();
-        }
-    #endif
+#ifdef HAS_SDCARD
+    hasSD = SD.cardType() != CARD_NONE;
+    if (hasSD) {
+        sdUsed = SD.usedBytes();
+        sdTotal = SD.totalBytes();
+    }
+#endif
 
     // === Draw memory rows
     drawUsageRow("Heap:", heapUsed, heapTotal);
     drawUsageRow("PSRAM:", psramUsed, psramTotal);
-    #ifdef ESP32
-    if (flashTotal > 0) drawUsageRow("Flash:", flashUsed, flashTotal);
-    #endif
-    if (hasSD && sdTotal > 0) drawUsageRow("SD:", sdUsed, sdTotal);
+#ifdef ESP32
+    if (flashTotal > 0)
+        drawUsageRow("Flash:", flashUsed, flashTotal);
+#endif
+    if (hasSD && sdTotal > 0)
+        drawUsageRow("SD:", sdUsed, sdTotal);
 }
-
 
 #if defined(ESP_PLATFORM) && defined(USE_ST7789)
 SPIClass SPI1(HSPI);
@@ -3063,32 +3284,34 @@ void Screen::setFrames(FrameFocus focus)
         normalFrames[numframes++] = drawTextMessageFrame;
     }
 
-    normalFrames[numframes++] = drawDefaultScreen;
+    // normalFrames[numframes++] = drawDefaultScreen;
+    normalFrames[numframes++] = drawDeviceFocused;
     normalFrames[numframes++] = drawLastHeardScreen;
     normalFrames[numframes++] = drawDistanceScreen;
-    normalFrames[numframes++] = drawNodeListWithCompasses; 
+    normalFrames[numframes++] = drawNodeListWithCompasses;
     normalFrames[numframes++] = drawHopSignalScreen;
-    normalFrames[numframes++] = drawBatteryDeviceLoRa;
+    // normalFrames[numframes++] = drawBatteryDeviceLoRa;
+    normalFrames[numframes++] = drawLoRaFocused;
     normalFrames[numframes++] = drawCompassAndLocationScreen;
     normalFrames[numframes++] = drawMemoryScreen;
     normalFrames[numframes++] = drawActivity;
 
     // then all the nodes
     // We only show a few nodes in our scrolling list - because meshes with many nodes would have too many screens
-    size_t numToShow = min(numMeshNodes, 4U);
-    for (size_t i = 0; i < numToShow; i++)
-        normalFrames[numframes++] = drawNodeInfo;
+    // size_t numToShow = min(numMeshNodes, 4U);
+    // for (size_t i = 0; i < numToShow; i++)
+    //    normalFrames[numframes++] = drawNodeInfo;
 
     // then the debug info
     //
     // Since frames are basic function pointers, we have to use a helper to
     // call a method on debugInfo object.
-    fsi.positions.log = numframes;
-    normalFrames[numframes++] = &Screen::drawDebugInfoTrampoline;
+    // fsi.positions.log = numframes;
+    // normalFrames[numframes++] = &Screen::drawDebugInfoTrampoline;
 
     // call a method on debugInfoScreen object (for more details)
-    fsi.positions.settings = numframes;
-    normalFrames[numframes++] = &Screen::drawDebugInfoSettingsTrampoline;
+    // fsi.positions.settings = numframes;
+    // normalFrames[numframes++] = &Screen::drawDebugInfoSettingsTrampoline;
 
     fsi.positions.wifi = numframes;
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
