@@ -8,7 +8,7 @@ using namespace NicheGraphics;
 // Our basic example doesn't do anything useful. It just passively prints some text.
 void InkHUD::BasicExampleApplet::onRender()
 {
-    print("Hello, World!");
+    printAt(0, 0, "Hello, World!");
 }
 
 #endif
