@@ -7,11 +7,14 @@
 
 #include "main.h"
 #include "mesh/api/WiFiServerAPI.h"
-#if !MESHTASTIC_EXCLUDE_MQTT
-#include "mqtt/MQTT.h"
-#endif
 #include "target_specific.h"
 #include <WiFi.h>
+
+#if HAS_ETHERNET && defined(USE_WS5500)
+#include <ETHClass2.h>
+#define ETH ETH2
+#endif // HAS_ETHERNET
+
 #include <WiFiUdp.h>
 #ifdef ARCH_ESP32
 #if !MESHTASTIC_EXCLUDE_WEBSERVER
@@ -55,24 +58,41 @@ Syslog syslog(syslogClient);
 
 Periodic *wifiReconnect;
 
+#ifdef USE_WS5500
+// Startup Ethernet
+bool initEthernet()
+{
+    if ((config.network.eth_enabled) && (ETH.begin(ETH_PHY_W5500, 1, ETH_CS_PIN, ETH_INT_PIN, ETH_RST_PIN, SPI3_HOST,
+                                                   ETH_SCLK_PIN, ETH_MISO_PIN, ETH_MOSI_PIN))) {
+        WiFi.onEvent(WiFiEvent);
+#if !MESHTASTIC_EXCLUDE_WEBSERVER
+        createSSLCert(); // For WebServer
+#endif
+        return true;
+    }
+
+    return false;
+}
+#endif
+
 static void onNetworkConnected()
 {
     if (!APStartupComplete) {
         // Start web server
-        LOG_INFO("Start WiFi network services");
+        LOG_INFO("Start network services");
 
         // start mdns
         if (!MDNS.begin("Meshtastic")) {
             LOG_ERROR("Error setting up MDNS responder!");
         } else {
             LOG_INFO("mDNS Host: Meshtastic.local");
+            MDNS.addService("meshtastic", "tcp", SERVER_API_DEFAULT_PORT);
 #ifdef ARCH_ESP32
             MDNS.addService("http", "tcp", 80);
             MDNS.addService("https", "tcp", 443);
+            // ESP32 prints obtained IP address in WiFiEvent
 #elif defined(ARCH_RP2040)
-            // ARCH_RP2040 does not support HTTPS, create a "meshtastic" service
-            MDNS.addService("meshtastic", "tcp", 4403);
-            // ESP32 handles this in WiFiEvent
+            // ARCH_RP2040 does not support HTTPS
             LOG_INFO("Obtained IP address: %s", WiFi.localIP().toString().c_str());
 #endif
         }
@@ -106,14 +126,16 @@ static void onNetworkConnected()
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WEBSERVER
         initWebServer();
 #endif
+#if !MESHTASTIC_EXCLUDE_SOCKETAPI
         initApiServer();
+#endif
         APStartupComplete = true;
     }
 
-    // FIXME this is kinda yucky, instead we should just have an observable for 'wifireconnected'
-#ifndef MESHTASTIC_EXCLUDE_MQTT
-    if (mqtt)
-        mqtt->reconnect();
+#if HAS_UDP_MULTICAST
+    if (udpThread && config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST) {
+        udpThread->start();
+    }
 #endif
 }
 
@@ -141,6 +163,11 @@ static int32_t reconnectWiFi()
         delay(5000);
 
         if (!WiFi.isConnected()) {
+#ifdef ARCH_ESP32
+            WiFi.mode(WIFI_MODE_NULL);
+            WiFi.useStaticBuffers(true);
+            WiFi.mode(WIFI_STA);
+#endif
             WiFi.begin(wifiName, wifiPsw);
         }
         isReconnecting = false;
@@ -184,6 +211,10 @@ bool isWifiAvailable()
 
     if (config.network.wifi_enabled && (config.network.wifi_ssid[0])) {
         return true;
+#ifdef USE_WS5500
+    } else if (config.network.eth_enabled) {
+        return true;
+#endif
     } else {
         return false;
     }
@@ -218,7 +249,7 @@ bool initWifi()
 #if !MESHTASTIC_EXCLUDE_WEBSERVER
         createSSLCert(); // For WebServer
 #endif
-        esp_wifi_set_storage(WIFI_STORAGE_RAM); // Disable flash storage for WiFi credentials
+        WiFi.persistent(false); // Disable flash storage for WiFi credentials
 #endif
         if (!*wifiPsw) // Treat empty password as no password
             wifiPsw = NULL;
@@ -278,7 +309,7 @@ bool initWifi()
 // Called by the Espressif SDK to
 static void WiFiEvent(WiFiEvent_t event)
 {
-    LOG_DEBUG("WiFi-Event %d: ", event);
+    LOG_DEBUG("Network-Event %d: ", event);
 
     switch (event) {
     case ARDUINO_EVENT_WIFI_READY:
@@ -373,19 +404,32 @@ static void WiFiEvent(WiFiEvent_t event)
         LOG_INFO("Ethernet started");
         break;
     case ARDUINO_EVENT_ETH_STOP:
+        syslog.disable();
         LOG_INFO("Ethernet stopped");
         break;
     case ARDUINO_EVENT_ETH_CONNECTED:
         LOG_INFO("Ethernet connected");
         break;
     case ARDUINO_EVENT_ETH_DISCONNECTED:
+        syslog.disable();
         LOG_INFO("Ethernet disconnected");
         break;
     case ARDUINO_EVENT_ETH_GOT_IP:
-        LOG_INFO("Obtained IP address (ARDUINO_EVENT_ETH_GOT_IP)");
+#ifdef USE_WS5500
+        LOG_INFO("Obtained IP address: %s, %u Mbps, %s", ETH.localIP().toString().c_str(), ETH.linkSpeed(),
+                 ETH.fullDuplex() ? "FULL_DUPLEX" : "HALF_DUPLEX");
+        onNetworkConnected();
+#endif
         break;
     case ARDUINO_EVENT_ETH_GOT_IP6:
-        LOG_INFO("Obtained IP6 address (ARDUINO_EVENT_ETH_GOT_IP6)");
+#ifdef USE_WS5500
+#if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
+        LOG_INFO("Obtained Local IP6 address: %s", ETH.linkLocalIPv6().toString().c_str());
+        LOG_INFO("Obtained GlobalIP6 address: %s", ETH.globalIPv6().toString().c_str());
+#else
+        LOG_INFO("Obtained IP6 address: %s", ETH.localIPv6().toString().c_str());
+#endif
+#endif
         break;
     case ARDUINO_EVENT_SC_SCAN_DONE:
         LOG_INFO("SmartConfig: Scan done");

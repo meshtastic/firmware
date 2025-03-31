@@ -35,8 +35,8 @@ while getopts ":hp:P:f:" opt; do
             show_help
             exit 0
             ;;
-        p)  export ESPTOOL_PORT=${OPTARG}
-	    ;;
+        p)  ESPTOOL_CMD="$ESPTOOL_CMD --port ${OPTARG}"
+	        ;;
         P)  PYTHON=${OPTARG}
             ;;
         f)  FILENAME=${OPTARG}

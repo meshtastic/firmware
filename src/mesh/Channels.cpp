@@ -1,5 +1,5 @@
 #include "Channels.h"
-#include "../userPrefs.h"
+
 #include "CryptoEngine.h"
 #include "Default.h"
 #include "DisplayFormatters.h"
@@ -93,6 +93,35 @@ void Channels::initDefaultLoraConfig()
 #endif
 }
 
+bool Channels::ensureLicensedOperation()
+{
+    if (!owner.is_licensed) {
+        return false;
+    }
+    bool hasEncryptionOrAdmin = false;
+    for (uint8_t i = 0; i < MAX_NUM_CHANNELS; i++) {
+        auto channel = channels.getByIndex(i);
+        if (!channel.has_settings) {
+            continue;
+        }
+        auto &channelSettings = channel.settings;
+        if (strcasecmp(channelSettings.name, Channels::adminChannel) == 0) {
+            channel.role = meshtastic_Channel_Role_DISABLED;
+            channelSettings.psk.bytes[0] = 0;
+            channelSettings.psk.size = 0;
+            hasEncryptionOrAdmin = true;
+            channels.setChannel(channel);
+
+        } else if (channelSettings.psk.size > 0) {
+            channelSettings.psk.bytes[0] = 0;
+            channelSettings.psk.size = 0;
+            hasEncryptionOrAdmin = true;
+            channels.setChannel(channel);
+        }
+    }
+    return hasEncryptionOrAdmin;
+}
+
 /**
  * Write a default channel to the specified channel index
  */
@@ -119,7 +148,7 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
         channelSettings.psk.size = sizeof(defaultpsk0);
 #endif
 #ifdef USERPREFS_CHANNEL_0_NAME
-        strcpy(channelSettings.name, USERPREFS_CHANNEL_0_NAME);
+        strcpy(channelSettings.name, (const char *)USERPREFS_CHANNEL_0_NAME);
 #endif
 #ifdef USERPREFS_CHANNEL_0_PRECISION
         channelSettings.module_settings.position_precision = USERPREFS_CHANNEL_0_PRECISION;
@@ -138,7 +167,7 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
         channelSettings.psk.size = sizeof(defaultpsk1);
 #endif
 #ifdef USERPREFS_CHANNEL_1_NAME
-        strcpy(channelSettings.name, USERPREFS_CHANNEL_1_NAME);
+        strcpy(channelSettings.name, (const char *)USERPREFS_CHANNEL_1_NAME);
 #endif
 #ifdef USERPREFS_CHANNEL_1_PRECISION
         channelSettings.module_settings.position_precision = USERPREFS_CHANNEL_1_PRECISION;
@@ -157,7 +186,7 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
         channelSettings.psk.size = sizeof(defaultpsk2);
 #endif
 #ifdef USERPREFS_CHANNEL_2_NAME
-        strcpy(channelSettings.name, USERPREFS_CHANNEL_2_NAME);
+        strcpy(channelSettings.name, (const char *)USERPREFS_CHANNEL_2_NAME);
 #endif
 #ifdef USERPREFS_CHANNEL_2_PRECISION
         channelSettings.module_settings.position_precision = USERPREFS_CHANNEL_2_PRECISION;
@@ -178,12 +207,11 @@ CryptoKey Channels::getKey(ChannelIndex chIndex)
 {
     meshtastic_Channel &ch = getByIndex(chIndex);
     const meshtastic_ChannelSettings &channelSettings = ch.settings;
-    assert(ch.has_settings);
 
     CryptoKey k;
     memset(k.bytes, 0, sizeof(k.bytes)); // In case the user provided a short key, we want to pad the rest with zeros
 
-    if (ch.role == meshtastic_Channel_Role_DISABLED) {
+    if (!ch.has_settings || ch.role == meshtastic_Channel_Role_DISABLED) {
         k.length = -1; // invalid
     } else {
         memcpy(k.bytes, channelSettings.psk.bytes, channelSettings.psk.size);
@@ -319,7 +347,7 @@ bool Channels::anyMqttEnabled()
 {
 #if USERPREFS_EVENT_MODE
     // Don't publish messages on the public MQTT broker if we are in event mode
-    if (strcmp(moduleConfig.mqtt.address, default_mqtt_address) == 0) {
+    if (mqtt && mqtt->isUsingDefaultServer()) {
         return false;
     }
 #endif

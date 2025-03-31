@@ -103,6 +103,11 @@ extern "C" {
 
 #define LR1110_GNSS_ANT_PIN (32 + 5) // P1.05 37
 
+#define GPS_RX_PIN PIN_SERIAL1_RX
+#define GPS_TX_PIN PIN_SERIAL1_TX
+
+#define HAS_GPS 1
+
 #ifdef __cplusplus
 }
 #endif

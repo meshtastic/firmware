@@ -3,6 +3,8 @@
 # trunk-ignore-all(flake8/F821): For SConstruct imports
 import sys
 from os.path import join
+import json
+import re
 
 from readprops import readProps
 
@@ -81,7 +83,7 @@ if platform.name == "espressif32":
 
 if platform.name == "nordicnrf52":
     env.AddPostAction("$BUILD_DIR/${PROGNAME}.hex",
-                      env.VerboseAction(f"{sys.executable} ./bin/uf2conv.py $BUILD_DIR/firmware.hex -c -f 0xADA52840 -o $BUILD_DIR/firmware.uf2",
+                      env.VerboseAction(f"\"{sys.executable}\" ./bin/uf2conv.py $BUILD_DIR/firmware.hex -c -f 0xADA52840 -o $BUILD_DIR/firmware.uf2",
                                         "Generating UF2 file"))
 
 Import("projenv")
@@ -90,11 +92,42 @@ prefsLoc = projenv["PROJECT_DIR"] + "/version.properties"
 verObj = readProps(prefsLoc)
 print("Using meshtastic platformio-custom.py, firmware version " + verObj["long"] + " on " + env.get("PIOENV"))
 
+jsonLoc = env["PROJECT_DIR"] + "/userPrefs.jsonc"
+with open(jsonLoc) as f:
+    jsonStr = re.sub("//.*","", f.read(), flags=re.MULTILINE)
+    userPrefs = json.loads(jsonStr)
+
+pref_flags = []
+# Pre-process the userPrefs
+for pref in userPrefs:
+    if userPrefs[pref].startswith("{"):
+        pref_flags.append("-D" + pref + "=" + userPrefs[pref])
+    elif userPrefs[pref].lstrip("-").replace(".", "").isdigit():
+        pref_flags.append("-D" + pref + "=" + userPrefs[pref])
+    elif userPrefs[pref] == "true" or userPrefs[pref] == "false":
+        pref_flags.append("-D" + pref + "=" + userPrefs[pref])
+    elif userPrefs[pref].startswith("meshtastic_"):
+        pref_flags.append("-D" + pref + "=" + userPrefs[pref])
+    # If the value is a string, we need to wrap it in quotes
+    else:
+        pref_flags.append("-D" + pref + "=" + env.StringifyMacro(userPrefs[pref]) + "")
+
 # General options that are passed to the C and C++ compilers
-projenv.Append(
-    CCFLAGS=[
+flags = [
         "-DAPP_VERSION=" + verObj["long"],
         "-DAPP_VERSION_SHORT=" + verObj["short"],
         "-DAPP_ENV=" + env.get("PIOENV"),
-    ]
+    ] + pref_flags
+
+print ("Using flags:")
+for flag in flags:
+    print(flag)
+    
+projenv.Append(
+    CCFLAGS=flags,
 )
+
+for lb in env.GetLibBuilders():
+    if lb.name == "meshtastic-device-ui":
+        lb.env.Append(CPPDEFINES=[("APP_VERSION", verObj["long"])])
+        break

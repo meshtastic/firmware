@@ -13,6 +13,8 @@
 #include "mesh/generated/meshtastic/remote_hardware.pb.h"
 #include <sys/types.h>
 
+static const char *errStr = "Error decoding proto for %s message!";
+
 std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp, bool shouldLog)
 {
     // the created jsonObj is immutable after creation, so
@@ -78,6 +80,7 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
                     msgPayload["wind_direction"] = new JSONValue((uint)decoded->variant.environment_metrics.wind_direction);
                     msgPayload["wind_gust"] = new JSONValue(decoded->variant.environment_metrics.wind_gust);
                     msgPayload["wind_lull"] = new JSONValue(decoded->variant.environment_metrics.wind_lull);
+                    msgPayload["radiation"] = new JSONValue(decoded->variant.environment_metrics.radiation);
                 } else if (decoded->which_variant == meshtastic_Telemetry_air_quality_metrics_tag) {
                     msgPayload["pm10"] = new JSONValue((unsigned int)decoded->variant.air_quality_metrics.pm10_standard);
                     msgPayload["pm25"] = new JSONValue((unsigned int)decoded->variant.air_quality_metrics.pm25_standard);
@@ -217,7 +220,11 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
                 if (pb_decode_from_bytes(mp->decoded.payload.bytes, mp->decoded.payload.size, &meshtastic_RouteDiscovery_msg,
                                          &scratch)) {
                     decoded = &scratch;
-                    JSONArray route; // Route this message took
+                    JSONArray route;      // Route this message took
+                    JSONArray routeBack;  // Route this message took back
+                    JSONArray snrTowards; // Snr for forward route
+                    JSONArray snrBack;    // Snr for reverse route
+
                     // Lambda function for adding a long name to the route
                     auto addToRoute = [](JSONArray *route, NodeNum num) {
                         char long_name[40] = "Unknown";
@@ -233,7 +240,24 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
                     }
                     addToRoute(&route, mp->from); // Ended at the original destination (source of response)
 
+                    addToRoute(&routeBack, mp->from); // Started at the original destination (source of response)
+                    for (uint8_t i = 0; i < decoded->route_back_count; i++) {
+                        addToRoute(&routeBack, decoded->route_back[i]);
+                    }
+                    addToRoute(&routeBack, mp->to); // Ended at the original transmitter (destination of response)
+
+                    for (uint8_t i = 0; i < decoded->snr_back_count; i++) {
+                        snrBack.push_back(new JSONValue((float)decoded->snr_back[i] / 4));
+                    }
+
+                    for (uint8_t i = 0; i < decoded->snr_towards_count; i++) {
+                        snrTowards.push_back(new JSONValue((float)decoded->snr_towards[i] / 4));
+                    }
+
                     msgPayload["route"] = new JSONValue(route);
+                    msgPayload["route_back"] = new JSONValue(routeBack);
+                    msgPayload["snr_back"] = new JSONValue(snrBack);
+                    msgPayload["snr_towards"] = new JSONValue(snrTowards);
                     jsonObj["payload"] = new JSONValue(msgPayload);
                 } else if (shouldLog) {
                     LOG_ERROR(errStr, msgType.c_str());

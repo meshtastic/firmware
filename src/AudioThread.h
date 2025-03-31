@@ -41,10 +41,8 @@ class AudioThread : public concurrency::OSThread
             delete i2sRtttl;
             i2sRtttl = nullptr;
         }
-        if (rtttlFile != nullptr) {
-            delete rtttlFile;
-            rtttlFile = nullptr;
-        }
+        delete rtttlFile;
+        rtttlFile = nullptr;
 
         setCPUFast(false);
     }
@@ -64,7 +62,7 @@ class AudioThread : public concurrency::OSThread
     void initOutput()
     {
         audioOut = new AudioOutputI2S(1, AudioOutputI2S::EXTERNAL_I2S);
-        audioOut->SetPinout(DAC_I2S_BCK, DAC_I2S_WS, DAC_I2S_DOUT);
+        audioOut->SetPinout(DAC_I2S_BCK, DAC_I2S_WS, DAC_I2S_DOUT, DAC_I2S_MCLK);
         audioOut->SetGain(0.2);
     };
 

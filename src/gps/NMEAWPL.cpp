@@ -23,7 +23,7 @@ uint32_t printWPL(char *buf, size_t bufsz, const meshtastic_PositionLite &pos, c
 {
     GeoCoord geoCoord(pos.latitude_i, pos.longitude_i, pos.altitude);
     char type = isCaltopoMode ? 'P' : 'N';
-    uint32_t len = snprintf(buf, bufsz, "$G%cWPL,%02d%07.4f,%c,%03d%07.4f,%c,%s", type, geoCoord.getDMSLatDeg(),
+    uint32_t len = snprintf(buf, bufsz, "\r\n$G%cWPL,%02d%07.4f,%c,%03d%07.4f,%c,%s", type, geoCoord.getDMSLatDeg(),
                             (abs(geoCoord.getLatitude()) - geoCoord.getDMSLatDeg() * 1e+7) * 6e-6, geoCoord.getDMSLatCP(),
                             geoCoord.getDMSLonDeg(), (abs(geoCoord.getLongitude()) - geoCoord.getDMSLonDeg() * 1e+7) * 6e-6,
                             geoCoord.getDMSLonCP(), name);

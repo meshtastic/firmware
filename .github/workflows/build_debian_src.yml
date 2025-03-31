@@ -1,0 +1,72 @@
+name: Build Debian Source Package
+
+on:
+  workflow_call:
+    secrets:
+      PPA_GPG_PRIVATE_KEY:
+        required: false
+    inputs:
+      series:
+        description: Ubuntu/Debian series to target
+        required: true
+        type: string
+      build_location:
+        description: Location where build will execute
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build-debian-src:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          path: meshtasticd
+          ref: ${{github.event.pull_request.head.ref}}
+          repository: ${{github.event.pull_request.head.repo.full_name}}
+
+      - name: Install deps
+        shell: bash
+        working-directory: meshtasticd
+        run: |
+          sudo apt-get update -y --fix-missing
+          sudo apt-get install -y software-properties-common build-essential devscripts equivs
+          sudo add-apt-repository ppa:meshtastic/build-tools -y
+          sudo apt-get update -y --fix-missing
+          sudo mk-build-deps --install --remove --tool='apt-get -o Debug::pkgProblemResolver=yes --no-install-recommends --yes' debian/control
+
+      - name: Import GPG key
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ secrets.PPA_GPG_PRIVATE_KEY }}
+        id: gpg
+
+      - name: Get release version string
+        working-directory: meshtasticd
+        run: |
+          echo "deb=$(./bin/buildinfo.py deb)" >> $GITHUB_OUTPUT
+        env:
+          BUILD_LOCATION: ${{ inputs.build_location }}
+        id: version
+
+      - name: Fetch libdeps, package debian source
+        working-directory: meshtasticd
+        run: debian/ci_pack_sdeb.sh
+        env:
+          SERIES: ${{ inputs.series }}
+          GPG_KEY_ID: ${{ steps.gpg.outputs.keyid }}
+          PKG_VERSION: ${{ steps.version.outputs.deb }}
+
+      - name: Store binaries as an artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-debian-${{ steps.version.outputs.deb }}~${{ inputs.series }}-src
+          overwrite: true
+          path: |
+            meshtasticd_${{ steps.version.outputs.deb }}*

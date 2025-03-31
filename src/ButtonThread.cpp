@@ -1,5 +1,5 @@
 #include "ButtonThread.h"
-#include "../userPrefs.h"
+
 #include "configuration.h"
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
@@ -11,6 +11,7 @@
 #include "main.h"
 #include "modules/ExternalNotificationModule.h"
 #include "power.h"
+#include "sleep.h"
 #ifdef ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
 #endif
@@ -46,7 +47,7 @@ ButtonThread::ButtonThread() : OSThread("Button")
 #ifdef USERPREFS_BUTTON_PIN
     int pin = config.device.button_gpio ? config.device.button_gpio : USERPREFS_BUTTON_PIN; // Resolved button pin
 #endif
-#if defined(HELTEC_CAPSULE_SENSOR_V3)
+#if defined(HELTEC_CAPSULE_SENSOR_V3) || defined(HELTEC_SENSOR_HUB)
     this->userButton = OneButton(pin, false, false);
 #elif defined(BUTTON_ACTIVE_LOW)
     this->userButton = OneButton(pin, BUTTON_ACTIVE_LOW, BUTTON_ACTIVE_PULLUP);
@@ -72,23 +73,28 @@ ButtonThread::ButtonThread() : OSThread("Button")
     userButton.setDebounceMs(1);
     userButton.attachDoubleClick(userButtonDoublePressed);
     userButton.attachMultiClick(userButtonMultiPressed, this); // Reference to instance: get click count from non-static OneButton
-#ifndef T_DECK // T-Deck immediately wakes up after shutdown, so disable this function
+#if !defined(T_DECK) &&                                                                                                          \
+    !defined(                                                                                                                    \
+        ELECROW_ThinkNode_M2) // T-Deck immediately wakes up after shutdown, Thinknode M2 has this on the smaller ALT button
     userButton.attachLongPressStart(userButtonPressedLongStart);
     userButton.attachLongPressStop(userButtonPressedLongStop);
 #endif
 #endif
 
 #ifdef BUTTON_PIN_ALT
-    userButtonAlt = OneButton(BUTTON_PIN_ALT, true, true);
+#if defined(ELECROW_ThinkNode_M2)
+    this->userButtonAlt = OneButton(BUTTON_PIN_ALT, false, false);
+#else
+    this->userButtonAlt = OneButton(BUTTON_PIN_ALT, true, true);
+#endif
 #ifdef INPUT_PULLUP_SENSE
     // Some platforms (nrf52) have a SENSE variant which allows wake from sleep - override what OneButton did
     pinMode(BUTTON_PIN_ALT, INPUT_PULLUP_SENSE);
 #endif
-    userButtonAlt.attachClick(userButtonPressed);
+    userButtonAlt.attachClick(userButtonPressedScreen);
     userButtonAlt.setClickMs(BUTTON_CLICK_MS);
     userButtonAlt.setPressMs(BUTTON_LONGPRESS_MS);
     userButtonAlt.setDebounceMs(1);
-    userButtonAlt.attachDoubleClick(userButtonDoublePressed);
     userButtonAlt.attachLongPressStart(userButtonPressedLongStart);
     userButtonAlt.attachLongPressStop(userButtonPressedLongStop);
 #endif
@@ -97,6 +103,13 @@ ButtonThread::ButtonThread() : OSThread("Button")
     userButtonTouch = OneButton(BUTTON_PIN_TOUCH, true, true);
     userButtonTouch.setPressMs(BUTTON_TOUCH_MS);
     userButtonTouch.attachLongPressStart(touchPressedLongStart); // Better handling with longpress than click?
+#endif
+
+#ifdef ARCH_ESP32
+    // Register callbacks for before and after lightsleep
+    // Used to detach and reattach interrupts
+    lsObserver.observe(&notifyLightSleep);
+    lsEndObserver.observe(&notifyLightSleepEnd);
 #endif
 
     attachButtonInterrupts();
@@ -109,6 +122,40 @@ int32_t ButtonThread::runOnce()
     canSleep = true; // Assume we should not keep the board awake
 
 #if defined(BUTTON_PIN) || defined(USERPREFS_BUTTON_PIN)
+    // #if defined(ELECROW_ThinkNode_M1) || defined(ELECROW_ThinkNode_M2)
+    //     buzzer_updata();
+    //     if (buttonPressed) {
+    //         buttonPressed = false;            // 清除标志
+    //         LOG_INFO("PIN_BUTTON2 pressed!"); // 串口打印信息
+    //         // off_currentTime = millis();
+    //         while (digitalRead(PIN_BUTTON2) == HIGH) {
+    //             if (cont < 40) {
+    //                 //     unsigned long currentTime = millis(); // 获取当前时间
+    //                 //     if (currentTime - off_currentTime >= 1000) {
+    //                 cont++;
+    //                 //         off_currentTime = currentTime;
+    //                 //     }
+    //                 delay(100);
+    //             } else {
+
+    //                 currentState = OFF;
+    //                 isBuzzing = false;
+    //                 cont = 0;
+    //                 BEEP_STATE = false;
+    //                 analogWrite(M2_buzzer, 0);
+    //                 pinMode(M2_buzzer, INPUT);
+    //                 screen->setOn(false);
+    //                 cont = 0;
+    //                 LOG_INFO("GGGGGGGGGGGGGGGGGGGGGGGGG");
+    //                 pinMode(1, OUTPUT);
+    //                 digitalWrite(1, LOW);
+    //                 pinMode(6, OUTPUT);
+    //                 digitalWrite(6, LOW);
+    //             }
+    //         }
+    //     }
+
+    // #endif
     userButton.tick();
     canSleep &= userButton.isIdle();
 #elif defined(ARCH_PORTDUINO)
@@ -158,6 +205,14 @@ int32_t ButtonThread::runOnce()
             break;
         }
 
+        case BUTTON_EVENT_PRESSED_SCREEN: {
+            // turn screen on or off
+            screen_flag = !screen_flag;
+            if (screen)
+                screen->setOn(screen_flag);
+            break;
+        }
+
         case BUTTON_EVENT_DOUBLE_PRESSED: {
             LOG_BUTTON("Double press!");
             service->refreshLocalMeshNode();
@@ -184,11 +239,34 @@ int32_t ButtonThread::runOnce()
                         screen->forceDisplay(true); // Force a new UI frame, then force an EInk update
                 }
                 break;
+#elif defined(ELECROW_ThinkNode_M2)
+            case 3:
+                LOG_INFO("3 clicks: toggle buzzer");
+                buzzer_flag = !buzzer_flag;
+                if (buzzer_flag) {
+                    playBeep();
+                }
+                break;
 #endif
+
 #if defined(USE_EINK) && defined(PIN_EINK_EN) // i.e. T-Echo
             // 4 clicks: toggle backlight
             case 4:
                 digitalWrite(PIN_EINK_EN, digitalRead(PIN_EINK_EN) == LOW);
+                break;
+#endif
+#if defined(RAK_4631)
+            // 5 clicks: start accelerometer/magenetometer calibration for 30 seconds
+            case 5:
+                if (accelerometerThread) {
+                    accelerometerThread->calibrate(30);
+                }
+                break;
+            // 6 clicks: start accelerometer/magenetometer calibration for 60 seconds
+            case 6:
+                if (accelerometerThread) {
+                    accelerometerThread->calibrate(60);
+                }
                 break;
 #endif
             // No valid multipress action
@@ -305,6 +383,26 @@ void ButtonThread::detachButtonInterrupts()
     detachInterrupt(BUTTON_PIN_TOUCH);
 #endif
 }
+
+#ifdef ARCH_ESP32
+
+// Detach our class' interrupts before lightsleep
+// Allows sleep.cpp to configure its own interrupts, which wake the device on user-button press
+int ButtonThread::beforeLightSleep(void *unused)
+{
+    detachButtonInterrupts();
+    return 0; // Indicates success
+}
+
+// Reconfigure our interrupts
+// Our class' interrupts were disconnected during sleep, to allow the user button to wake the device from sleep
+int ButtonThread::afterLightSleep(esp_sleep_wakeup_cause_t cause)
+{
+    attachButtonInterrupts();
+    return 0; // Indicates success
+}
+
+#endif
 
 /**
  * Watch a GPIO and if we get an IRQ, wake the main thread.

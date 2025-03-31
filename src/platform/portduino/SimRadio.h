@@ -11,11 +11,6 @@ class SimRadio : public RadioInterface, protected concurrency::NotifiedWorkerThr
 {
     enum PendingISR { ISR_NONE = 0, ISR_RX, ISR_TX, TRANSMIT_DELAY_COMPLETED };
 
-    /**
-     * Debugging counts
-     */
-    uint32_t rxBad = 0, rxGood = 0, txGood = 0;
-
     MeshPacketQueue txQueue = MeshPacketQueue(MAX_TX_QUEUE);
 
   public:
@@ -38,6 +33,9 @@ class SimRadio : public RadioInterface, protected concurrency::NotifiedWorkerThr
     /** Attempt to cancel a previously sent packet.  Returns true if a packet was found we could cancel */
     virtual bool cancelSending(NodeNum from, PacketId id) override;
 
+    /** Attempt to find a packet in the TxQueue. Returns true if the packet was found. */
+    virtual bool findInTxQueue(NodeNum from, PacketId id) override;
+
     /**
      * Start waiting to receive a message
      *
@@ -47,9 +45,17 @@ class SimRadio : public RadioInterface, protected concurrency::NotifiedWorkerThr
 
     meshtastic_QueueStatus getQueueStatus() override;
 
+    // Convert Compressed_msg to normal msg and receive it
+    void unpackAndReceive(meshtastic_MeshPacket &p);
+
+    /**
+     * Debugging counts
+     */
+    uint32_t rxBad = 0, rxGood = 0, txGood = 0, txRelay = 0;
+
   protected:
     /// are _trying_ to receive a packet currently (note - we might just be waiting for one)
-    bool isReceiving = false;
+    bool isReceiving = true;
 
   private:
     void setTransmitDelay();
@@ -61,7 +67,7 @@ class SimRadio : public RadioInterface, protected concurrency::NotifiedWorkerThr
     void startTransmitTimerSNR(float snr);
 
     void handleTransmitInterrupt();
-    void handleReceiveInterrupt(meshtastic_MeshPacket *p);
+    void handleReceiveInterrupt();
 
     void onNotify(uint32_t notification);
 
@@ -72,6 +78,8 @@ class SimRadio : public RadioInterface, protected concurrency::NotifiedWorkerThr
     size_t getPacketLength(meshtastic_MeshPacket *p);
 
     int16_t readData(uint8_t *str, size_t len);
+
+    meshtastic_MeshPacket *receivingPacket = nullptr; // The packet we are currently receiving
 
   protected:
     /** Could we send right now (i.e. either not actively receiving or transmitting)? */

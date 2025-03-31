@@ -9,6 +9,7 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h" // needed for button bypass
+#include "SPILock.h"
 #include "detect/ScanI2C.h"
 #include "input/ScanAndSelect.h"
 #include "mesh/generated/meshtastic/cannedmessages.pb.h"
@@ -55,7 +56,7 @@ CannedMessageModule::CannedMessageModule()
             LOG_INFO("CannedMessageModule is enabled");
 
             // T-Watch interface currently has no way to select destination type, so default to 'node'
-#if defined(T_WATCH_S3) || defined(RAK14014)
+#if defined(USE_VIRTUAL_KEYBOARD)
             this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
 #endif
 
@@ -81,7 +82,7 @@ int CannedMessageModule::splitConfiguredMessages()
 
     String canned_messages = cannedMessageModuleConfig.messages;
 
-#if defined(T_WATCH_S3) || defined(RAK14014)
+#if defined(USE_VIRTUAL_KEYBOARD)
     String separator = canned_messages.length() ? "|" : "";
 
     canned_messages = "[---- Free Text ----]" + separator + canned_messages;
@@ -150,7 +151,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
     }
     if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT)) {
 
-#if defined(T_WATCH_S3) || defined(RAK14014)
+#if defined(USE_VIRTUAL_KEYBOARD)
         if (this->currentMessageIndex == 0) {
             this->runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
 
@@ -177,7 +178,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
         this->currentMessageIndex = -1;
 
-#if !defined(T_WATCH_S3) && !defined(RAK14014)
+#if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(USE_VIRTUAL_KEYBOARD)
         this->freetext = ""; // clear freetext
         this->cursor = 0;
         this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
@@ -190,7 +191,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) ||
         (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT))) {
 
-#if defined(T_WATCH_S3) || defined(RAK14014)
+#if defined(USE_VIRTUAL_KEYBOARD)
         if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {
             this->payload = INPUT_BROKER_MSG_LEFT;
         } else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT)) {
@@ -234,13 +235,13 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
                 screen->decreaseBrightness();
             LOG_DEBUG("Decrease Screen Brightness");
             break;
-        case INPUT_BROKER_MSG_FN_SYMBOL_ON: // draw modifier (function) symbal
+        case INPUT_BROKER_MSG_FN_SYMBOL_ON: // draw modifier (function) symbol
             if (screen)
-                screen->setFunctionSymbal("Fn");
+                screen->setFunctionSymbol("Fn");
             break;
-        case INPUT_BROKER_MSG_FN_SYMBOL_OFF: // remove modifier (function) symbal
+        case INPUT_BROKER_MSG_FN_SYMBOL_OFF: // remove modifier (function) symbol
             if (screen)
-                screen->removeFunctionSymbal("Fn");
+                screen->removeFunctionSymbol("Fn");
             break;
         // mute (switch off/toggle) external notifications on fn+m
         case INPUT_BROKER_MSG_MUTE_TOGGLE:
@@ -249,13 +250,13 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
                     externalNotificationModule->setMute(false);
                     showTemporaryMessage("Notifications \nEnabled");
                     if (screen)
-                        screen->removeFunctionSymbal("M"); // remove the mute symbol from the bottom right corner
+                        screen->removeFunctionSymbol("M"); // remove the mute symbol from the bottom right corner
                 } else {
                     externalNotificationModule->stopNow(); // this will turn off all GPIO and sounds and idle the loop
                     externalNotificationModule->setMute(true);
                     showTemporaryMessage("Notifications \nDisabled");
                     if (screen)
-                        screen->setFunctionSymbal("M"); // add the mute symbol to the bottom right corner
+                        screen->setFunctionSymbol("M"); // add the mute symbol to the bottom right corner
                 }
             }
             break;
@@ -308,11 +309,11 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
             break;
         }
         if (screen && (event->kbchar != INPUT_BROKER_MSG_FN_SYMBOL_ON)) {
-            screen->removeFunctionSymbal("Fn"); // remove modifier (function) symbal
+            screen->removeFunctionSymbol("Fn"); // remove modifier (function) symbol
         }
     }
 
-#if defined(T_WATCH_S3) || defined(RAK14014)
+#if defined(USE_VIRTUAL_KEYBOARD)
     if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
         String keyTapped = keyForCoordinates(event->touchX, event->touchY);
 
@@ -446,7 +447,7 @@ int32_t CannedMessageModule::runOnce()
         this->freetext = ""; // clear freetext
         this->cursor = 0;
 
-#if !defined(T_WATCH_S3) && !defined(RAK14014)
+#if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(SENSECAP_INDICATOR)
         this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
 #endif
 
@@ -459,7 +460,7 @@ int32_t CannedMessageModule::runOnce()
         this->freetext = ""; // clear freetext
         this->cursor = 0;
 
-#if !defined(T_WATCH_S3) && !defined(RAK14014)
+#if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(USE_VIRTUAL_KEYBOARD)
         this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
 #endif
 
@@ -479,7 +480,7 @@ int32_t CannedMessageModule::runOnce()
                     powerFSM.trigger(EVENT_PRESS);
                     return INT32_MAX;
                 } else {
-#if defined(T_WATCH_S3) || defined(RAK14014)
+#if defined(USE_VIRTUAL_KEYBOARD)
                     sendText(this->dest, indexChannels[this->channel], this->messages[this->currentMessageIndex], true);
 #else
                     sendText(NODENUM_BROADCAST, channels.getPrimaryIndex(), this->messages[this->currentMessageIndex], true);
@@ -496,7 +497,7 @@ int32_t CannedMessageModule::runOnce()
         this->freetext = ""; // clear freetext
         this->cursor = 0;
 
-#if !defined(T_WATCH_S3) && !defined(RAK14014)
+#if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(USE_VIRTUAL_KEYBOARD)
         this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
 #endif
 
@@ -513,7 +514,7 @@ int32_t CannedMessageModule::runOnce()
             this->freetext = ""; // clear freetext
             this->cursor = 0;
 
-#if !defined(T_WATCH_S3) && !defined(RAK14014)
+#if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(USE_VIRTUAL_KEYBOARD)
             this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
 #endif
 
@@ -526,7 +527,7 @@ int32_t CannedMessageModule::runOnce()
             this->freetext = ""; // clear freetext
             this->cursor = 0;
 
-#if !defined(T_WATCH_S3) && !defined(RAK14014)
+#if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(USE_VIRTUAL_KEYBOARD)
             this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
 #endif
 
@@ -672,7 +673,7 @@ int32_t CannedMessageModule::runOnce()
                 break;
             }
             if (screen)
-                screen->removeFunctionSymbal("Fn");
+                screen->removeFunctionSymbol("Fn");
         }
 
         this->lastTouchMillis = millis();
@@ -769,7 +770,7 @@ void CannedMessageModule::showTemporaryMessage(const String &message)
     setIntervalFromNow(2000);
 }
 
-#if defined(T_WATCH_S3) || defined(RAK14014)
+#if defined(USE_VIRTUAL_KEYBOARD)
 
 String CannedMessageModule::keyForCoordinates(uint x, uint y)
 {
@@ -982,6 +983,7 @@ bool CannedMessageModule::interceptingKeyboardInput()
     }
 }
 
+#if !HAS_TFT
 void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     char buffer[50];
@@ -1055,7 +1057,12 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         display->drawString(10 + x, 0 + y + FONT_HEIGHT_SMALL, "Canned Message\nModule disabled.");
     } else if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
         requestFocus(); // Tell Screen::setFrames to move to our module's frame
-#if defined(T_WATCH_S3) || defined(RAK14014)
+#if defined(USE_EINK) && defined(USE_EINK_DYNAMICDISPLAY)
+        EInkDynamicDisplay *einkDisplay = static_cast<EInkDynamicDisplay *>(display);
+        einkDisplay->enableUnlimitedFastMode(); // Enable unlimited fast refresh while typing
+#endif
+
+#if defined(USE_VIRTUAL_KEYBOARD)
         drawKeyboard(display, state, 0, 0);
 #else
 
@@ -1140,6 +1147,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         }
     }
 }
+#endif //! HAS_TFT
 
 ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
@@ -1182,8 +1190,10 @@ bool CannedMessageModule::saveProtoForModule()
 {
     bool okay = true;
 
-#ifdef FS
-    FS.mkdir("/prefs");
+#ifdef FSCom
+    spiLock->lock();
+    FSCom.mkdir("/prefs");
+    spiLock->unlock();
 #endif
 
     okay &= nodeDB->saveProto(cannedMessagesConfigFile, meshtastic_CannedMessageModuleConfig_size,

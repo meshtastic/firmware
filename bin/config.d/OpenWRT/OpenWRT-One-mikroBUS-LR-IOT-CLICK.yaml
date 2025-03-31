@@ -1,0 +1,9 @@
+##  https://www.mikroe.com/lr-iot-click
+Lora:
+  Module: lr1110  # OpenWRT ONE mikroBUS with LR-IOT-CLICK
+#  CS: 25
+  IRQ: 10
+  Busy: 12
+#  Reset: 2
+  spidev: spidev2.0
+  DIO3_TCXO_VOLTAGE: 1.6

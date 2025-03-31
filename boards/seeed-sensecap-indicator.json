@@ -15,10 +15,12 @@
     ],
     "f_cpu": "240000000L",
     "f_flash": "80000000L",
+    "f_boot": "120000000L",
+    "boot": "qio",
     "flash_mode": "qio",
     "hwids": [["0x1A86", "0x7523"]],
     "mcu": "esp32s3",
-    "variant": "esp32s3r8"
+    "variant": "esp32s3"
   },
   "connectivity": ["wifi", "bluetooth", "lora"],
   "debug": {
@@ -32,9 +34,9 @@
     "flash_size": "8MB",
     "maximum_ram_size": 327680,
     "maximum_size": 8388608,
-    "require_upload_port": true,
+    "require_upload_port": false,
     "use_1200bps_touch": true,
-    "wait_for_upload_port": true,
+    "wait_for_upload_port": false,
     "speed": 921600
   },
   "url": "https://www.seeedstudio.com/Indicator-for-Meshtastic.html",

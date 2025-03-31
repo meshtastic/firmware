@@ -10,7 +10,7 @@
 #include "aes-ccm.h"
 #if !MESHTASTIC_EXCLUDE_PKI
 
-static inline void WPA_PUT_BE16(uint8_t *a, uint16_t val)
+static void WPA_PUT_BE16(uint8_t *a, uint16_t val)
 {
     a[0] = val >> 8;
     a[1] = val & 0xff;
@@ -18,12 +18,9 @@ static inline void WPA_PUT_BE16(uint8_t *a, uint16_t val)
 
 static void xor_aes_block(uint8_t *dst, const uint8_t *src)
 {
-    uint32_t *d = (uint32_t *)dst;
-    uint32_t *s = (uint32_t *)src;
-    *d++ ^= *s++;
-    *d++ ^= *s++;
-    *d++ ^= *s++;
-    *d++ ^= *s++;
+    for (uint8_t i = 0; i < AES_BLOCK_SIZE; i++) {
+        dst[i] ^= src[i];
+    }
 }
 static void aes_ccm_auth_start(size_t M, size_t L, const uint8_t *nonce, const uint8_t *aad, size_t aad_len, size_t plain_len,
                                uint8_t *x)
