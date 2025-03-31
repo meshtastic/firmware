@@ -44,10 +44,8 @@ int InkHUD::DMApplet::onReceiveTextMessage(const meshtastic_MeshPacket *p)
 
 void InkHUD::DMApplet::onRender()
 {
-    setFont(fontSmall);
-
     // Abort if no text message
-    if (!latestMessage.dm.sender) {
+    if (!latestMessage->dm.sender) {
         printAt(X(0.5), Y(0.5), "No DMs", CENTER, MIDDLE);
         return;
     }
@@ -63,7 +61,7 @@ void InkHUD::DMApplet::onRender()
 
     // RX Time
     // - if valid
-    std::string timeString = getTimeString(latestMessage.dm.timestamp);
+    std::string timeString = getTimeString(latestMessage->dm.timestamp);
     if (timeString.length() > 0) {
         header += timeString;
         header += ": ";
@@ -72,14 +70,14 @@ void InkHUD::DMApplet::onRender()
     // Sender's id
     // - shortname, if available, or
     // - node id
-    meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(latestMessage.dm.sender);
+    meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(latestMessage->dm.sender);
     if (sender && sender->has_user) {
         header += sender->user.short_name;
         header += " (";
         header += sender->user.long_name;
         header += ")";
     } else
-        header += hexifyNodeNum(latestMessage.dm.sender);
+        header += hexifyNodeNum(latestMessage->dm.sender);
 
     // Draw a "standard" applet header
     drawHeader(header);
@@ -103,14 +101,14 @@ void InkHUD::DMApplet::onRender()
 
     // Determine size if printed large
     setFont(fontLarge);
-    uint32_t textHeight = getWrappedTextHeight(0, width(), latestMessage.dm.text);
+    uint32_t textHeight = getWrappedTextHeight(0, width(), latestMessage->dm.text);
 
     // If too large, swap to small font
     if (textHeight + textTop > (uint32_t)height()) // (compare signed and unsigned)
         setFont(fontSmall);
 
     // Print text
-    printWrapped(0, textTop, width(), latestMessage.dm.text);
+    printWrapped(0, textTop, width(), latestMessage->dm.text);
 }
 
 // Don't show notifications for direct messages when our applet is displayed

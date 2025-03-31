@@ -22,15 +22,17 @@ enum MenuAction {
     SEND_POSITION,
     SHUTDOWN,
     NEXT_TILE,
+    TOGGLE_BACKLIGHT,
+    TOGGLE_GPS,
+    ENABLE_BLUETOOTH,
     TOGGLE_APPLET,
-    ACTIVATE_APPLETS, // Todo: remove? Possible redundant, handled by TOGGLE_APPLET?
     TOGGLE_AUTOSHOW_APPLET,
     SET_RECENTS,
     ROTATE,
     LAYOUT,
     TOGGLE_BATTERY_ICON,
     TOGGLE_NOTIFICATIONS,
-    TOGGLE_BACKLIGHT,
+    TOGGLE_12H_CLOCK,
 };
 
 } // namespace NicheGraphics::InkHUD

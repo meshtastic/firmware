@@ -12,7 +12,7 @@ using namespace NicheGraphics;
 InkHUD::NodeListApplet::NodeListApplet(const char *name) : MeshModule(name)
 {
     // We only need to be promiscuous in order to hear NodeInfo, apparently. See NodeInfoModule
-    // For all other packets, we manually reimplement isPromiscuous=false in wantPacket
+    // For all other packets, we manually act as if isPromiscuous=false, in wantPacket
     MeshModule::isPromiscuous = true;
 }
 
@@ -25,17 +25,17 @@ bool InkHUD::NodeListApplet::wantPacket(const meshtastic_MeshPacket *p)
            && (isToUs(p) || isBroadcast(p->to) ||                      // Either: intended for us,
                p->decoded.portnum == meshtastic_PortNum_NODEINFO_APP); // or nodeinfo
 
-    // Note: special handling of NodeInfo is to match NodeInfoModule
     // To match the behavior seen in the client apps:
     // - NodeInfoModule's ProtoBufModule base is "promiscuous"
     // - All other activity is *not* promiscuous
-    // To achieve this, our MeshModule *is* promiscious, and we're manually reimplementing non-promiscuous behavior here,
+
+    // To achieve this, our MeshModule *is* promiscuous, and we're manually reimplementing non-promiscuous behavior here,
     // to match the code in MeshModule::callModules
 }
 
 // MeshModule packets arrive here
 // Extract the info and pass it to the derived applet
-// Derived applet will store the CardInfo and perform any required sorting of the CardInfo collection
+// Derived applet will store the CardInfo, and perform any required sorting of the CardInfo collection
 // Derived applet might also need to keep other tallies (active nodes count?)
 ProcessMessage InkHUD::NodeListApplet::handleReceived(const meshtastic_MeshPacket &mp)
 {
@@ -76,8 +76,8 @@ ProcessMessage InkHUD::NodeListApplet::handleReceived(const meshtastic_MeshPacke
     return ProcessMessage::CONTINUE; // Let others look at this message also if they want
 }
 
-// Maximum number of cards we may ever need to render, in our tallest layout config
-// May be slightly in excess of the true value: header not accounted for
+// Calculate maximum number of cards we may ever need to render, in our tallest layout config
+// Number might be slightly in excess of the true value: applet header text not accounted for
 uint8_t InkHUD::NodeListApplet::maxCards()
 {
     // Cache result. Shouldn't change during execution
@@ -87,7 +87,7 @@ uint8_t InkHUD::NodeListApplet::maxCards()
         const uint16_t height = Tile::maxDisplayDimension();
 
         // Use a loop instead of arithmetic, because it's easier for my brain to follow
-        // Add cards one by one, until the latest card (without margin) extends below screen
+        // Add cards one by one, until the latest card extends below screen
 
         uint16_t y = cardH; // First card: no margin above
         cards = 1;
@@ -102,7 +102,7 @@ uint8_t InkHUD::NodeListApplet::maxCards()
     return cards;
 }
 
-// Draw using info which derived applet placed into NodeListApplet::cards for us
+// Draw, using info which derived applet placed into NodeListApplet::cards for us
 void InkHUD::NodeListApplet::onRender()
 {
 
@@ -119,9 +119,6 @@ void InkHUD::NodeListApplet::onRender()
     // ========================
     // Draw the main node list
     // ========================
-
-    // const uint8_t cardMarginH = fontSmall.lineHeight() / 2; // Gap between cards
-    // const uint16_t cardH = fontLarge.lineHeight() + fontSmall.lineHeight() + cardMarginH;
 
     // Imaginary vertical line dividing left-side and right-side info
     // Long-name will crop here
@@ -215,9 +212,8 @@ void InkHUD::NodeListApplet::onRender()
 
         // Once we've run out of screen, stop drawing cards
         // Depending on tiles / rotation, this may be before we hit maxCards
-        if (cardTopY > height()) {
+        if (cardTopY > height())
             break;
-        }
     }
 }
 
@@ -246,20 +242,20 @@ void InkHUD::NodeListApplet::drawSignalIndicator(int16_t x, int16_t y, uint16_t 
 
     constexpr float paddingW = 0.1; // Either side
     constexpr float paddingH = 0.1; // Above and below
-    constexpr float gutterX = 0.1;  // Between bars
+    constexpr float gutterW = 0.1;  // Between bars
 
-    constexpr float barHRel[] = {0.3, 0.5, 0.7, 1.0}; // Heights of the signal bars, relative to the talleest
+    constexpr float barHRel[] = {0.3, 0.5, 0.7, 1.0}; // Heights of the signal bars, relative to the tallest
     constexpr uint8_t barCount = 4; // How many bars we draw. Reference only: changing value won't change the count.
 
     // Dynamically calculate the width of the bars, and height of the rightmost, relative to other dimensions
-    float barW = (1.0 - (paddingW + ((barCount - 1) * gutterX) + paddingW)) / barCount;
+    float barW = (1.0 - (paddingW + ((barCount - 1) * gutterW) + paddingW)) / barCount;
     float barHMax = 1.0 - (paddingH + paddingH);
 
     // Draw signal bar rectangles, then placeholder lines once strength reached
     for (uint8_t i = 0; i < barCount; i++) {
-        // Co-ords for this specific bar
+        // Coords for this specific bar
         float barH = barHMax * barHRel[i];
-        float barX = paddingW + (i * (gutterX + barW));
+        float barX = paddingW + (i * (gutterW + barW));
         float barY = paddingH + (barHMax - barH);
 
         // Rasterize to px coords at the last moment
