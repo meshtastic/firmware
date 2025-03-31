@@ -122,7 +122,8 @@ class AmbientLightingThread : public concurrency::OSThread
         rgbw.setRed(0);
         rgbw.setGreen(0);
         rgbw.setBlue(0);
-        LOG_INFO("OFF: NCP5623 Ambient lighting");
+        rgbw.setWhite(0);
+        LOG_INFO("OFF: LP5562 Ambient lighting");
 #endif
 #ifdef HAS_NEOPIXEL
         pixels.clear();
@@ -163,7 +164,7 @@ class AmbientLightingThread : public concurrency::OSThread
         rgbw.setGreen(moduleConfig.ambient_lighting.green);
         rgbw.setBlue(moduleConfig.ambient_lighting.blue);
         LOG_DEBUG("Init LP5562 Ambient light w/ current=%d, red=%d, green=%d, blue=%d", moduleConfig.ambient_lighting.current,
-                moduleConfig.ambient_lighting.red, moduleConfig.ambient_lighting.green, moduleConfig.ambient_lighting.blue);
+                  moduleConfig.ambient_lighting.red, moduleConfig.ambient_lighting.green, moduleConfig.ambient_lighting.blue);
 #endif
 #ifdef HAS_NEOPIXEL
         pixels.fill(pixels.Color(moduleConfig.ambient_lighting.red, moduleConfig.ambient_lighting.green,

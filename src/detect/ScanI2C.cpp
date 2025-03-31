@@ -41,6 +41,12 @@ ScanI2C::FoundDevice ScanI2C::firstAccelerometer() const
     return firstOfOrNONE(8, types);
 }
 
+ScanI2C::FoundDevice ScanI2C::firstRGBLED() const
+{
+    ScanI2C::DeviceType types[] = {NCP5623, LP5562};
+    return firstOfOrNONE(2, types);
+}
+
 ScanI2C::FoundDevice ScanI2C::find(ScanI2C::DeviceType) const
 {
     return DEVICE_NONE;

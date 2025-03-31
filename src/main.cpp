@@ -584,11 +584,8 @@ void setup()
  */
 
 // Two supported RGB LED currently
-#ifdef HAS_NCP5623
-    rgb_found = i2cScanner->find(ScanI2C::DeviceType::NCP5623);
-#endif
-#ifdef HAS_LP5562
-    rgb_found = i2cScanner->find(ScanI2C::DeviceType::LP5562);
+#ifdef HAS_RGB_LED
+    rgb_found = i2cScanner->firstRGBLED();
 #endif
 
 #ifdef HAS_TPS65233
