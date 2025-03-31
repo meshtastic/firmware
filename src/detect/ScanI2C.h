@@ -119,6 +119,8 @@ class ScanI2C
     FoundDevice firstKeyboard() const;
 
     FoundDevice firstAccelerometer() const;
+    
+    FoundDevice firstINA() const;
 
     virtual FoundDevice find(DeviceType) const;
 

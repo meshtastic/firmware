@@ -72,6 +72,7 @@ static const uint8_t ext_chrg_detect_value = EXT_CHRG_DETECT_VALUE;
 #endif
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(ARCH_PORTDUINO)
+#include "main.h";
 uint8_t INA_ADDR_LOCAL;
 INA219Sensor ina219Sensor;
 INA226Sensor ina226Sensor;
@@ -470,14 +471,21 @@ class AnalogBatteryLevel : public HasBatteryLevel
     uint16_t getINAVoltage()
     {
         if (!config.power.device_battery_ina_address) {
-            if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA219].first > 0) {
-                return ina219Sensor.getBusVoltageMv();
-            } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA226].first > 0) {
-                return ina226Sensor.getBusVoltageMv();
-            } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA260].first > 0) {
-                return ina260Sensor.getBusVoltageMv();
-            } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA3221].first > 0) {
-                return ina3221Sensor.getBusVoltageMv();
+            if (ina_found.type != ScanI2C::DeviceType::NONE) {
+                switch (ina_found.type) {
+                    case ScanI2C::DeviceType::INA219:
+                        return ina219Sensor.getBusVoltageMv();
+                        break;
+                    case ScanI2C::DeviceType::INA226:
+                        return ina226Sensor.getBusVoltageMv();
+                        break;
+                    case ScanI2C::DeviceType::INA260:
+                        return ina260Sensor.getBusVoltageMv();
+                        break;
+                    case ScanI2C::DeviceType::INA3221:
+                        return ina3221Sensor.getBusVoltageMv();
+                        break;
+                }
             }
         } else if (config.power.device_battery_ina_address) {
             if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA219].first == config.power.device_battery_ina_address) {
@@ -502,12 +510,17 @@ class AnalogBatteryLevel : public HasBatteryLevel
     int16_t getINACurrent()
     {
         if (!config.power.device_battery_ina_address) {
-            if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA219].first > 0) {
-                return ina219Sensor.getCurrentMa();
-            } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA226].first > 0) {
-                return ina226Sensor.getCurrentMa();
-            } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA3221].first > 0) {
-                return ina3221Sensor.getCurrentMa();
+            if (ina_found.type != ScanI2C::DeviceType::NONE) {
+                switch (ina_found.type) {
+                    case ScanI2C::DeviceType::INA219:
+                        return ina219Sensor.getCurrentMa();
+
+                    case ScanI2C::DeviceType::INA226:
+                        return ina226Sensor.getCurrentMa();
+
+                    case ScanI2C::DeviceType::INA3221:
+                        return ina3221Sensor.getCurrentMa();
+                }
             }
         } else if (config.power.device_battery_ina_address) {
             if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA219].first == config.power.device_battery_ina_address) {
@@ -530,25 +543,29 @@ class AnalogBatteryLevel : public HasBatteryLevel
     */
     {
         if (!config.power.device_battery_ina_address) {
-            if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA219].first > 0) {
-                INA_ADDR_LOCAL = nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA219].first;
-                if (!ina219Sensor.isInitialized())
-                    return ina219Sensor.runOnce() > 0;
-                return ina219Sensor.isRunning();
-            } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA226].first > 0) {
-                INA_ADDR_LOCAL = nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA226].first;
-                if (!ina226Sensor.isInitialized())
-                    return ina226Sensor.runOnce() > 0;
-            } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA260].first > 0) {
-                INA_ADDR_LOCAL = nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA260].first;
-                if (!ina260Sensor.isInitialized())
-                    return ina260Sensor.runOnce() > 0;
-                return ina260Sensor.isRunning();
-            } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA3221].first > 0) {
-                INA_ADDR_LOCAL = nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA3221].first;
-                if (!ina3221Sensor.isInitialized())
-                    return ina3221Sensor.runOnce() > 0;
-                return ina3221Sensor.isRunning();
+            if (ina_found.type != ScanI2C::DeviceType::NONE) {
+                INA_ADDR_LOCAL = ina_found.address.address;
+                switch (ina_found.type) {
+                    case ScanI2C::DeviceType::INA219:
+                        if (!ina219Sensor.isInitialized())
+                            return ina219Sensor.runOnce() > 0;
+                        return ina219Sensor.isRunning();
+
+                    case ScanI2C::DeviceType::INA226:
+                        if (!ina226Sensor.isInitialized())
+                            return ina226Sensor.runOnce() > 0;
+                        return ina226Sensor.isRunning();
+
+                    case ScanI2C::DeviceType::INA260:
+                        if (!ina260Sensor.isInitialized())
+                            return ina260Sensor.runOnce() > 0;
+                        return ina260Sensor.isRunning();
+
+                    case ScanI2C::DeviceType::INA3221:
+                        if (!ina3221Sensor.isInitialized())
+                            return ina3221Sensor.runOnce() > 0;
+                        return ina3221Sensor.isRunning();
+                }
             }
         } else if (config.power.device_battery_ina_address) {
             INA_ADDR_LOCAL = config.power.device_battery_ina_address;
