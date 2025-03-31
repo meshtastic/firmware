@@ -9,7 +9,7 @@ FROM python:3.13-alpine3.21 AS builder
 ENV PIP_ROOT_USER_ACTION=ignore
 RUN apk --no-cache add \
         bash g++ libstdc++-dev linux-headers zip git ca-certificates libgpiod-dev yaml-cpp-dev bluez-dev \
-        libusb-dev i2c-tools-dev openssl-dev pkgconf argp-standalone \
+        libusb-dev i2c-tools-dev libuv-dev openssl-dev pkgconf argp-standalone \
     && rm -rf /var/cache/apk/* \
     && pip install --no-cache-dir -U platformio \
     && mkdir /tmp/firmware
@@ -32,7 +32,7 @@ FROM alpine:3.21
 USER root
 
 RUN apk --no-cache add \
-        libstdc++ libgpiod yaml-cpp libusb i2c-tools \
+        libstdc++ libgpiod yaml-cpp libusb i2c-tools libuv \
     && rm -rf /var/cache/apk/* \
     && mkdir -p /var/lib/meshtasticd \
     && mkdir -p /etc/meshtasticd/config.d \

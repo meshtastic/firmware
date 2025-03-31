@@ -3,20 +3,18 @@
 #include "./NotificationApplet.h"
 
 #include "./Notification.h"
+#include "graphics/niche/InkHUD/Persistence.h"
+
+#include "meshUtils.h"
+#include "modules/TextMessageModule.h"
 
 #include "RTC.h"
 
 using namespace NicheGraphics;
 
-void InkHUD::NotificationApplet::onActivate()
+InkHUD::NotificationApplet::NotificationApplet()
 {
     textMessageObserver.observe(textMessageModule);
-}
-
-// Note: This applet probably won't ever be deactivated
-void InkHUD::NotificationApplet::onDeactivate()
-{
-    textMessageObserver.unobserve(textMessageModule);
 }
 
 // Collect meta-info about the text message, and ask for approval for the notification
@@ -28,7 +26,7 @@ int InkHUD::NotificationApplet::onReceiveTextMessage(const meshtastic_MeshPacket
 
     // Abort if feature disabled
     // This is a bit clumsy, but avoids complicated handling when the feature is enabled / disabled
-    if (!settings.optionalFeatures.notifications)
+    if (!settings->optionalFeatures.notifications)
         return 0;
 
     // Abort if this is an outgoing message
@@ -36,7 +34,7 @@ int InkHUD::NotificationApplet::onReceiveTextMessage(const meshtastic_MeshPacket
         return 0;
 
     // Abort if message was only an "emoji reaction"
-    // Possibly some implemetation of this in future?
+    // Possibly some implementation of this in future?
     if (p->decoded.emoji)
         return 0;
 
@@ -55,13 +53,16 @@ int InkHUD::NotificationApplet::onReceiveTextMessage(const meshtastic_MeshPacket
         n.sender = p->from;
     }
 
+    // Close an old notification, if shown
+    dismiss();
+
     // Check if we should display the notification
     // A foreground applet might already be displaying this info
     hasNotification = true;
     currentNotification = n;
     if (isApproved()) {
         bringToForeground();
-        WindowManager::getInstance()->forceUpdate();
+        inkhud->forceUpdate();
     } else
         hasNotification = false; // Clear the pending notification: it was rejected
 
@@ -75,8 +76,6 @@ void InkHUD::NotificationApplet::onRender()
     // Most applets are drawing onto an empty frame buffer and don't need to do this
     // We do need to do this with the battery though, as it is an "overlay"
     fillRect(0, 0, width(), height(), WHITE);
-
-    setFont(fontSmall);
 
     // Padding (horizontal)
     const uint16_t padW = 4;
@@ -137,6 +136,28 @@ void InkHUD::NotificationApplet::onRender()
     printThick(textM, height() / 2, text, 2, 1);
 }
 
+void InkHUD::NotificationApplet::onForeground()
+{
+    handleInput = true; // Intercept the button input for our applet, so we can dismiss the notification
+}
+
+void InkHUD::NotificationApplet::onBackground()
+{
+    handleInput = false;
+}
+
+void InkHUD::NotificationApplet::onButtonShortPress()
+{
+    dismiss();
+    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
+}
+
+void InkHUD::NotificationApplet::onButtonLongPress()
+{
+    dismiss();
+    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
+}
+
 // Ask the WindowManager to check whether any displayed applets are already displaying the info from this notification
 // Called internally when we first get a "notifiable event", and then again before render,
 // in case autoshow swapped which applet was displayed
@@ -148,7 +169,13 @@ bool InkHUD::NotificationApplet::isApproved()
         return false;
     }
 
-    return WindowManager::getInstance()->approveNotification(currentNotification);
+    // Ask all visible user applets for approval
+    for (Applet *ua : inkhud->userApplets) {
+        if (ua->isForeground() && !ua->approveNotification(currentNotification))
+            return false;
+    }
+
+    return true;
 }
 
 // Mark that the notification should no-longer be rendered
@@ -180,7 +207,8 @@ std::string InkHUD::NotificationApplet::getNotificationText(uint16_t widthAvaila
         bool isBroadcast = currentNotification.type == Notification::Type::NOTIFICATION_MESSAGE_BROADCAST;
 
         // Pick source of message
-        MessageStore::Message *message = isBroadcast ? &latestMessage.broadcast : &latestMessage.dm;
+        MessageStore::Message *message =
+            isBroadcast ? &inkhud->persistence->latestMessage.broadcast : &inkhud->persistence->latestMessage.dm;
 
         // Find info about the sender
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(message->sender);

@@ -43,3 +43,49 @@ jobs:
       copr_project: |-
         ${{ contains(github.event.release.name, 'Beta') && 'beta' || contains(github.event.release.name, 'Alpha') && 'alpha' }}
     secrets: inherit
+
+  # Create a PR to bump version when a release is Published
+  bump-version:
+    if: ${{ github.event.release.published }}
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.x
+
+      - name: Get release version string
+        run: |
+          echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+          echo "deb=$(./bin/buildinfo.py deb)" >> $GITHUB_OUTPUT
+        id: version
+        env:
+          BUILD_LOCATION: local
+
+      - name: Bump version.properties
+        run: >-
+          bin/bump_version.py
+
+      - name: Ensure debian deps are installed
+        shell: bash
+        run: |
+          sudo apt-get update -y --fix-missing
+          sudo apt-get install -y devscripts
+
+      - name: Update debian changelog
+        run: >-
+          debian/ci_changelog.sh
+
+      - name: Create version.properties pull request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          title: Bump version.properties
+          add-paths: |
+            version.properties
+            debian/changelog

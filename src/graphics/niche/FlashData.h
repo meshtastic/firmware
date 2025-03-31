@@ -119,7 +119,7 @@ template <typename T> class FlashData
         // Calculate a hash of the data
         uint32_t hash = getHash(data);
 
-        f.write((uint8_t *)data, sizeof(T));     // Write the actualy data
+        f.write((uint8_t *)data, sizeof(T));     // Write the actual data
         f.write((uint8_t *)&hash, sizeof(hash)); // Append the hash
 
         // f.flush();

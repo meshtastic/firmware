@@ -6,13 +6,13 @@ using namespace NicheGraphics::Drivers;
 
 // Separate from EInk::begin method, as derived class constructors can probably supply these parameters as constants
 EInk::EInk(uint16_t width, uint16_t height, UpdateTypes supported)
-    : concurrency::OSThread("E-Ink Driver"), width(width), height(height), supportedUpdateTypes(supported)
+    : concurrency::OSThread("EInkDriver"), width(width), height(height), supportedUpdateTypes(supported)
 {
     OSThread::disable();
 }
 
 // Used by NicheGraphics implementations to check if a display supports a specific refresh operation.
-// Whether or the update type is supported is specified in the constructor
+// Whether or not the update type is supported is specified in the constructor
 bool EInk::supports(UpdateTypes type)
 {
     // The EInkUpdateTypes enum assigns each type a unique bit. We are checking if that bit is set.
@@ -31,8 +31,8 @@ bool EInk::supports(UpdateTypes type)
 void EInk::beginPolling(uint32_t interval, uint32_t expectedDuration)
 {
     updateRunning = true;
-    updateBegunAt = millis();
     pollingInterval = interval;
+    pollingBegunAt = millis();
 
     // To minimize load, we can choose to delay polling for a few seconds, if we know roughly how long the update will take
     // By default, expectedDuration is 0, and we'll start polling immediately
@@ -45,10 +45,26 @@ void EInk::beginPolling(uint32_t interval, uint32_t expectedDuration)
 // This is what allows us to update the display asynchronously
 int32_t EInk::runOnce()
 {
+    // Check for polling timeout
+    // Manually set at 10 seconds, in case some big task holds up the firmware's cooperative multitasking
+    if (millis() - pollingBegunAt > 10000)
+        failed = true;
+
+    // Handle failure
+    // - polling timeout
+    // - other error (derived classes)
+    if (failed) {
+        LOG_WARN("Display update failed. Check wiring & power supply.");
+        updateRunning = false;
+        failed = false;
+        return disable();
+    }
+
+    // If update not yet done
     if (!isUpdateDone())
         return pollingInterval; // Poll again in a few ms
 
-    // If update done:
+    // If update done
     finalizeUpdate();      // Any post-update code: power down panel hardware, hibernate, etc
     updateRunning = false; // Change what we report via EInk::busy()
     return disable();      // Stop polling

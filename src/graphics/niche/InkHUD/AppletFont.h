@@ -15,7 +15,7 @@
 
 #include "configuration.h"
 
-#include <GFX.h>
+#include <GFX.h> // GFXRoot drawing lib
 
 namespace NicheGraphics::InkHUD
 {
@@ -25,11 +25,12 @@ class AppletFont
 {
   public:
     AppletFont();
-    AppletFont(const GFXfont &adafruitGFXFont);
+    explicit AppletFont(const GFXfont &adafruitGFXFont);
+
     uint8_t lineHeight();
     uint8_t heightAboveCursor();
     uint8_t heightBelowCursor();
-    uint8_t widthBetweenWords();
+    uint8_t widthBetweenWords(); // Width of the space character
 
     void applySubstitutions(std::string *text);             // Run all char-substitution operations, prior to printing
     void addSubstitution(const char *from, const char *to); // Register a find-replace action, for remapping UTF8 chars
@@ -50,8 +51,7 @@ class AppletFont
         const char *to;
     };
 
-    // List of all character substitutions to run, prior to printing a string
-    std::vector<Substitution> substitutions;
+    std::vector<Substitution> substitutions; // List of all character substitutions to run, prior to printing a string
 };
 
 } // namespace NicheGraphics::InkHUD
