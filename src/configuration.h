@@ -110,11 +110,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Define if screen should be mirrored left to right
 // #define SCREEN_MIRROR
 
-// Define BUTTON_PIN to ensure button setup is always done
-#ifndef BUTTON_PIN
-#define BUTTON_PIN (-1)
-#endif
-
 // I2C Keyboards (M5Stack, RAK14004, T-Deck)
 #define CARDKB_ADDR 0x5F
 #define TDECK_KB_ADDR 0x55
