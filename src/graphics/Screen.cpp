@@ -2340,16 +2340,55 @@ static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiStat
     // === Header ===
     drawCommonHeader(display, x, y);
 
+    // === Draw title ===
+    const int highlightHeight = FONT_HEIGHT_SMALL - 1;
+    const int textY = y + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
+    const int screenWidth = display->getWidth();
+    const char *titleStr = "GPS";
+    const int centerX = x + SCREEN_WIDTH / 2;
+
+    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
+        display->setColor(BLACK);
+    }
+
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->drawString(centerX, textY, titleStr);
+    if (config.display.heading_bold) {
+        display->drawString(centerX + 1, textY, titleStr);
+    }
+    display->setColor(WHITE);
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+
     // Row Y offset just like drawNodeListScreen
     int rowYOffset = FONT_HEIGHT_SMALL - 3;
     int rowY = y + rowYOffset;
 
-    // === Second Row: My Location ===
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-    display->drawString(x + 2, rowY, "My Location:");
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-
+// === Second Row: My Location ===
 #if HAS_GPS
+    if (config.position.fixed_position) {
+        display->drawString(x + 2, compactFirstLine, "Sat:");
+        if (screenWidth > 128) {
+            drawGPS(display, x + 32, compactFirstLine + 3, gpsStatus);
+        } else {
+            drawGPS(display, x + 23, compactFirstLine + 3, gpsStatus);
+        }
+    } else if (!gpsStatus || !gpsStatus->getIsConnected()) {
+        String displayLine =
+            config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "No GPS" : "GPS off";
+        display->drawString(x + 2, compactFirstLine, "Sat:");
+        if (screenWidth > 128) {
+            display->drawString(x + 32, compactFirstLine + 3, displayLine);
+        } else {
+            display->drawString(x + 23, compactFirstLine + 3, displayLine);
+        }
+    } else {
+        display->drawString(x + 2, compactFirstLine, "Sat:");
+        if (screenWidth > 128) {
+            drawGPS(display, x + 32, compactFirstLine + 3, gpsStatus);
+        } else {
+            drawGPS(display, x + 23, compactFirstLine + 3, gpsStatus);
+        }
+    }
     // === Update GeoCoord ===
     geoCoord.updateCoords(int32_t(gpsStatus->getLatitude()), int32_t(gpsStatus->getLongitude()),
                           int32_t(gpsStatus->getAltitude()));
