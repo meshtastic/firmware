@@ -12,12 +12,12 @@
 
 #include "configuration.h"
 
-#include "graphics/niche/InkHUD/Applet.h"
+#include "graphics/niche/InkHUD/SystemApplet.h"
 
 namespace NicheGraphics::InkHUD
 {
 
-class TipsApplet : public Applet
+class TipsApplet : public SystemApplet
 {
   protected:
     enum class Tip {
@@ -33,11 +33,9 @@ class TipsApplet : public Applet
     TipsApplet();
 
     void onRender() override;
-    void onActivate() override;
     void onForeground() override;
     void onBackground() override;
     void onButtonShortPress() override;
-    void onLockAvailable() override; // Reopen if interrupted by bluetooth pairing
 
   protected:
     void renderWelcome(); // Very first screen of tutorial

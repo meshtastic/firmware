@@ -30,7 +30,7 @@ class BluetoothStatus : public Status
     BluetoothStatus() { statusType = STATUS_TYPE_BLUETOOTH; }
 
     // New BluetoothStatus: connected or disconnected
-    BluetoothStatus(ConnectionState state)
+    explicit BluetoothStatus(ConnectionState state)
     {
         assert(state != ConnectionState::PAIRING); // If pairing, use constructor which specifies passkey
         statusType = STATUS_TYPE_BLUETOOTH;
@@ -38,7 +38,7 @@ class BluetoothStatus : public Status
     }
 
     // New BluetoothStatus: pairing, with passkey
-    BluetoothStatus(std::string passkey) : Status()
+    explicit BluetoothStatus(const std::string &passkey) : Status()
     {
         statusType = STATUS_TYPE_BLUETOOTH;
         this->state = ConnectionState::PAIRING;
