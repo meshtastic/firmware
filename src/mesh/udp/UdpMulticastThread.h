@@ -23,7 +23,7 @@ class UdpMulticastThread : public concurrency::OSThread
     void start()
     {
         if (udp.listenMulticast(udpIpAddress, UDP_MULTICAST_DEFAUL_PORT, 64)) {
-#if !defined(ARCH_PORTDUINO)
+#ifndef ARCH_PORTDUINO
             // FIXME(PORTDUINO): arduino lacks IPAddress::toString()
             LOG_DEBUG("UDP Listening on IP: %s", WiFi.localIP().toString().c_str());
 #else
@@ -59,7 +59,7 @@ class UdpMulticastThread : public concurrency::OSThread
         if (!mp || !udp) {
             return false;
         }
-#if !defined(ARCH_PORTDUINO)
+#ifndef ARCH_PORTDUINO
         if (WiFi.status() != WL_CONNECTED) {
             return false;
         }

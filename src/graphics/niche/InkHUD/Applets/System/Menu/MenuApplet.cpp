@@ -5,7 +5,12 @@
 #include "RTC.h"
 
 #include "airtime.h"
+#include "main.h"
 #include "power.h"
+
+#if !MESHTASTIC_EXCLUDE_GPS
+#include "GPS.h"
+#endif
 
 using namespace NicheGraphics;
 
@@ -26,8 +31,6 @@ InkHUD::MenuApplet::MenuApplet() : concurrency::OSThread("MenuApplet")
         backlight = Drivers::LatchingBacklight::getInstance();
     }
 }
-
-void InkHUD::MenuApplet::onActivate() {}
 
 void InkHUD::MenuApplet::onForeground()
 {
@@ -161,12 +164,6 @@ void InkHUD::MenuApplet::execute(MenuItem item)
     case TOGGLE_APPLET:
         settings->userApplets.active[cursor] = !settings->userApplets.active[cursor];
         inkhud->updateAppletSelection();
-        // requestUpdate(Drivers::EInk::UpdateTypes::FULL); // Select FULL, seeing how this action doesn't auto exit
-        break;
-
-    case ACTIVATE_APPLETS:
-        // Todo: remove this action? Already handled by TOGGLE_APPLET?
-        inkhud->updateAppletSelection();
         break;
 
     case TOGGLE_AUTOSHOW_APPLET:
@@ -203,6 +200,25 @@ void InkHUD::MenuApplet::execute(MenuItem item)
             backlight->off();
         else
             backlight->latch();
+        break;
+
+    case TOGGLE_12H_CLOCK:
+        config.display.use_12h_clock = !config.display.use_12h_clock;
+        nodeDB->saveToDisk(SEGMENT_CONFIG);
+        break;
+
+    case TOGGLE_GPS:
+        gps->toggleGpsMode();
+        nodeDB->saveToDisk(SEGMENT_CONFIG);
+        break;
+
+    case ENABLE_BLUETOOTH:
+        // This helps users recover from a bad wifi config
+        LOG_INFO("Enabling Bluetooth");
+        config.network.wifi_enabled = false;
+        config.bluetooth.enabled = true;
+        nodeDB->saveToDisk();
+        rebootAtMsec = millis() + 2000;
         break;
 
     default:
@@ -242,13 +258,21 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
 
     case OPTIONS:
         // Optional: backlight
-        if (settings->optionalMenuItems.backlight) {
-            assert(backlight);
+        if (settings->optionalMenuItems.backlight)
             items.push_back(MenuItem(backlight->isLatched() ? "Backlight Off" : "Keep Backlight On", // Label
                                      MenuAction::TOGGLE_BACKLIGHT,                                   // Action
                                      MenuPage::EXIT                                                  // Exit once complete
                                      ));
-        }
+
+        // Optional: GPS
+        if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_DISABLED)
+            items.push_back(MenuItem("Enable GPS", MenuAction::TOGGLE_GPS, MenuPage::EXIT));
+        if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED)
+            items.push_back(MenuItem("Disable GPS", MenuAction::TOGGLE_GPS, MenuPage::EXIT));
+
+        // Optional: Enable Bluetooth, in case of lost wifi connection
+        if (!config.bluetooth.enabled || config.network.wifi_enabled)
+            items.push_back(MenuItem("Enable Bluetooth", MenuAction::ENABLE_BLUETOOTH, MenuPage::EXIT));
 
         items.push_back(MenuItem("Applets", MenuPage::APPLETS));
         items.push_back(MenuItem("Auto-show", MenuPage::AUTOSHOW));
@@ -260,26 +284,14 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
                                  &settings->optionalFeatures.notifications));
         items.push_back(MenuItem("Battery Icon", MenuAction::TOGGLE_BATTERY_ICON, MenuPage::OPTIONS,
                                  &settings->optionalFeatures.batteryIcon));
-
-        // TODO - GPS and Wifi switches
-        /*
-        // Optional: has GPS
-        if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_DISABLED)
-            items.push_back(MenuItem("Enable GPS", MenuPage::EXIT)); // TODO
-        if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED)
-            items.push_back(MenuItem("Disable GPS", MenuPage::EXIT)); // TODO
-
-        // Optional: using wifi
-        if (!config.bluetooth.enabled)
-            items.push_back(MenuItem("Enable Bluetooth", MenuPage::EXIT)); // TODO: escape hatch if wifi configured wrong
-        */
-
+        items.push_back(
+            MenuItem("12-Hour Clock", MenuAction::TOGGLE_12H_CLOCK, MenuPage::OPTIONS, &config.display.use_12h_clock));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
 
     case APPLETS:
         populateAppletPage();
-        items.push_back(MenuItem("Exit", MenuAction::ACTIVATE_APPLETS));
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
 
     case AUTOSHOW:
@@ -293,7 +305,6 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
 
     case EXIT:
         sendToBackground(); // Menu applet dismissed, allow normal behavior to resume
-        // requestUpdate(Drivers::EInk::UpdateTypes::FULL);
         break;
 
     default:

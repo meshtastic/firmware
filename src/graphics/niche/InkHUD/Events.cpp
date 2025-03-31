@@ -70,6 +70,9 @@ void InkHUD::Events::onButtonLong()
 // Returns 0 to signal that we agree to sleep now
 int InkHUD::Events::beforeDeepSleep(void *unused)
 {
+    // If a previous display update is in progress, wait for it to complete.
+    inkhud->awaitUpdate();
+
     // Notify all applets that we're shutting down
     for (Applet *ua : inkhud->userApplets) {
         ua->onDeactivate();
@@ -87,9 +90,12 @@ int InkHUD::Events::beforeDeepSleep(void *unused)
     inkhud->persistence->saveSettings();
     inkhud->persistence->saveLatestMessage();
 
-    // LogoApplet::onShutdown will have requested an update, to draw the shutdown screen
-    // Draw that now, and wait here until the update is complete
+    // LogoApplet::onShutdown attempted to heal the display by drawing a "shutting down" screen twice,
+    // then prepared a final powered-off screen for us, which shows device shortname.
+    // We're updating to show that one now.
+
     inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FULL, false);
+    delay(1000); // Cooldown, before potentially yanking display power
 
     return 0; // We agree: deep sleep now
 }
@@ -106,16 +112,16 @@ int InkHUD::Events::beforeReboot(void *unused)
         a->onDeactivate();
         a->onShutdown();
     }
-    for (Applet *sa : inkhud->systemApplets) {
+    for (SystemApplet *sa : inkhud->systemApplets) {
         // Note: no onDeactivate. System applets are always active.
-        sa->onShutdown();
+        sa->onReboot();
     }
 
     inkhud->persistence->saveSettings();
     inkhud->persistence->saveLatestMessage();
 
     // Note: no forceUpdate call here
-    // Because OSThread will not be given another chance to run before reboot, this means that no display update will occur
+    // We don't have any final screen to draw, although LogoApplet::onReboot did already display a "rebooting" screen
 
     return 0; // No special status to report. Ignored anyway by this Observable
 }

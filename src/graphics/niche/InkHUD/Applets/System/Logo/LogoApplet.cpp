@@ -34,7 +34,15 @@ void InkHUD::LogoApplet::onRender()
     int16_t logoCX = X(0.5);
     int16_t logoCY = Y(0.5 - 0.05);
 
-    drawLogo(logoCX, logoCY, logoW, logoH);
+    // Invert colors if black-on-white
+    // Used during shutdown, to resport display health
+    // Todo: handle this in InkHUD::Renderer instead
+    if (inverted) {
+        fillScreen(BLACK);
+        setTextColor(WHITE);
+    }
+
+    drawLogo(logoCX, logoCY, logoW, logoH, inverted ? WHITE : BLACK);
 
     if (!textLeft.empty()) {
         setFont(fontSmall);
@@ -74,13 +82,45 @@ void InkHUD::LogoApplet::onBackground()
 // Begin displaying the screen which is shown at shutdown
 void InkHUD::LogoApplet::onShutdown()
 {
+    bringToForeground();
+
+    textLeft = "";
+    textRight = "";
+    textTitle = "Shutting Down...";
+    fontTitle = fontSmall;
+
+    // Draw a shutting down screen, twice.
+    // Once white on black, once black on white.
+    // Intention is to restore display health.
+
+    inverted = true;
+    inkhud->forceUpdate(Drivers::EInk::FULL, false);
+    delay(1000); // Cooldown. Back to back updates aren't great for health.
+    inverted = false;
+    inkhud->forceUpdate(Drivers::EInk::FULL, false);
+    delay(1000); // Cooldown
+
+    // Prepare for the powered-off screen now
+    // We can change these values because the initial "shutting down" screen has already rendered at this point
     textLeft = "";
     textRight = "";
     textTitle = owner.short_name;
     fontTitle = fontLarge;
 
+    // This is then drawn by InkHUD::Events::onShutdown, with a blocking FULL update, after InkHUD's flash write is complete
+}
+
+void InkHUD::LogoApplet::onReboot()
+{
     bringToForeground();
-    // This is then drawn by InkHUD::Events::onShutdown, with a blocking FULL update
+
+    textLeft = "";
+    textRight = "";
+    textTitle = "Rebooting...";
+    fontTitle = fontSmall;
+
+    inkhud->forceUpdate(Drivers::EInk::FULL, false);
+    // Perform the update right now, waiting here until complete
 }
 
 int32_t InkHUD::LogoApplet::runOnce()
