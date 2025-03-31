@@ -326,7 +326,9 @@ typedef enum _meshtastic_ExcludedModules {
     /* Detection Sensor module */
     meshtastic_ExcludedModules_DETECTIONSENSOR_CONFIG = 2048,
     /* Paxcounter module */
-    meshtastic_ExcludedModules_PAXCOUNTER_CONFIG = 4096
+    meshtastic_ExcludedModules_PAXCOUNTER_CONFIG = 4096,
+    /* Bluetooth module */
+    meshtastic_ExcludedModules_BLUETOOTH_CONFIG = 8192
 } meshtastic_ExcludedModules;
 
 /* How the location was acquired: manual, onboard GPS, external (EUD) GPS */
@@ -1122,8 +1124,8 @@ extern "C" {
 #define _meshtastic_CriticalErrorCode_ARRAYSIZE ((meshtastic_CriticalErrorCode)(meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE+1))
 
 #define _meshtastic_ExcludedModules_MIN meshtastic_ExcludedModules_EXCLUDED_NONE
-#define _meshtastic_ExcludedModules_MAX meshtastic_ExcludedModules_PAXCOUNTER_CONFIG
-#define _meshtastic_ExcludedModules_ARRAYSIZE ((meshtastic_ExcludedModules)(meshtastic_ExcludedModules_PAXCOUNTER_CONFIG+1))
+#define _meshtastic_ExcludedModules_MAX meshtastic_ExcludedModules_BLUETOOTH_CONFIG
+#define _meshtastic_ExcludedModules_ARRAYSIZE ((meshtastic_ExcludedModules)(meshtastic_ExcludedModules_BLUETOOTH_CONFIG+1))
 
 #define _meshtastic_Position_LocSource_MIN meshtastic_Position_LocSource_LOC_UNSET
 #define _meshtastic_Position_LocSource_MAX meshtastic_Position_LocSource_LOC_EXTERNAL
