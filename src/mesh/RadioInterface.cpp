@@ -73,9 +73,10 @@ const RegionInfo regions[] = {
     RDEF(RU, 868.7f, 869.2f, 100, 0, 20, true, false, false),
 
     /*
-        ???
+        https://www.law.go.kr/LSW/admRulLsInfoP.do?admRulId=53943&efYd=0
+        https://resources.lora-alliance.org/technical-specifications/rp002-1-0-4-regional-parameters
      */
-    RDEF(KR, 920.0f, 923.0f, 100, 0, 0, true, false, false),
+    RDEF(KR, 920.0f, 923.0f, 100, 0, 23, true, false, false),
 
     /*
         Taiwan, 920-925Mhz, limited to 0.5W indoor or coastal, 1.0W outdoor.
@@ -655,7 +656,7 @@ size_t RadioInterface::beginSending(meshtastic_MeshPacket *p)
 
     // if the sender nodenum is zero, that means uninitialized
     assert(radioBuffer.header.from);
-
+    assert(p->encrypted.size <= sizeof(radioBuffer.payload));
     memcpy(radioBuffer.payload, p->encrypted.bytes, p->encrypted.size);
 
     sendingPacket = p;

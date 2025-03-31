@@ -55,12 +55,12 @@ NimbleBluetooth *nimbleBluetooth = nullptr;
 NRF52Bluetooth *nrf52Bluetooth = nullptr;
 #endif
 
-#if HAS_WIFI
+#if HAS_WIFI || defined(USE_WS5500)
 #include "mesh/api/WiFiServerAPI.h"
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
 
-#if HAS_ETHERNET
+#if HAS_ETHERNET && !defined(USE_WS5500)
 #include "mesh/api/ethServerAPI.h"
 #include "mesh/eth/ethClient.h"
 #endif
@@ -266,6 +266,32 @@ void printInfo()
 #ifndef PIO_UNIT_TESTING
 void setup()
 {
+
+#ifdef POWER_CHRG
+    pinMode(POWER_CHRG, OUTPUT);
+    digitalWrite(POWER_CHRG, HIGH);
+#endif
+
+#if defined(PIN_POWER_EN)
+    pinMode(PIN_POWER_EN, OUTPUT);
+    digitalWrite(PIN_POWER_EN, HIGH);
+#endif
+
+#ifdef LED_POWER
+    pinMode(LED_POWER, OUTPUT);
+    digitalWrite(LED_POWER, HIGH);
+#endif
+
+#ifdef POWER_LED
+    pinMode(POWER_LED, OUTPUT);
+    digitalWrite(POWER_LED, HIGH);
+#endif
+
+#ifdef USER_LED
+    pinMode(USER_LED, OUTPUT);
+    digitalWrite(USER_LED, LOW);
+#endif
+
 #if defined(T_DECK)
     // GPIO10 manages all peripheral power supplies
     // Turn on peripheral power immediately after MUC starts.
@@ -328,13 +354,6 @@ void setup()
     LOG_INFO("\n\n//\\ E S H T /\\ S T / C\n");
 
     initDeepSleep();
-
-    // power on peripherals
-#if defined(PIN_POWER_EN)
-    pinMode(PIN_POWER_EN, OUTPUT);
-    digitalWrite(PIN_POWER_EN, HIGH);
-    // digitalWrite(PIN_POWER_EN1, INPUT);
-#endif
 
 #if defined(LORA_TCXO_GPIO)
     pinMode(LORA_TCXO_GPIO, OUTPUT);
@@ -651,6 +670,7 @@ void setup()
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MAX30102, meshtastic_TelemetrySensorType_MAX30102);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::CGRADSENS, meshtastic_TelemetrySensorType_RADSENS);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::DFROBOT_RAIN, meshtastic_TelemetrySensorType_DFROBOT_RAIN);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::LTR390UV, meshtastic_TelemetrySensorType_LTR390UV);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::DPS310, meshtastic_TelemetrySensorType_DPS310);
 
     i2cScanner.reset();
@@ -831,6 +851,13 @@ void setup()
 #ifdef HAS_UDP_MULTICAST
     LOG_DEBUG("Start multicast thread");
     udpThread = new UdpMulticastThread();
+#ifdef ARCH_PORTDUINO
+    // FIXME: portduino does not ever call onNetworkConnected so call it here because I don't know what happen if I call
+    // onNetworkConnected there
+    if (config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST) {
+        udpThread->start();
+    }
+#endif
 #endif
     service = new MeshService();
     service->init();
@@ -1234,8 +1261,12 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 #if MESHTASTIC_EXCLUDE_AUDIO
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_AUDIO_CONFIG;
 #endif
-#if !HAS_SCREEN || NO_EXT_GPIO
-    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_CANNEDMSG_CONFIG | meshtastic_ExcludedModules_EXTNOTIF_CONFIG;
+// Option to explicitly include canned messages for edge cases, e.g. niche graphics
+#if (!HAS_SCREEN && NO_EXT_GPIO) && !MESHTASTIC_INCLUDE_CANNEDMSG
+    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_CANNEDMSG_CONFIG;
+#endif
+#if NO_EXT_GPIO
+    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_EXTNOTIF_CONFIG;
 #endif
 // Only edge case here is if we apply this a device with built in Accelerometer and want to detect interrupts
 // We'll have to macro guard against those targets potentially
@@ -1251,6 +1282,19 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 #endif
 #if !defined(HAS_NCP5623) && !defined(RGBLED_RED) && !defined(HAS_NEOPIXEL) && !defined(UNPHONE) && !RAK_4631
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_AMBIENTLIGHTING_CONFIG;
+#endif
+
+// No bluetooth on these targets (yet):
+// Pico W / 2W may get it at some point
+// Portduino and ESP32-C6 are excluded because we don't have a working bluetooth stacks integrated yet.
+#if defined(ARCH_RP2040) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32WL) || defined(CONFIG_IDF_TARGET_ESP32C6)
+    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_BLUETOOTH_CONFIG;
+#endif
+
+#if defined(ARCH_NRF52) && !HAS_ETHERNET // nrf52 doesn't have network unless it's a RAK ethernet gateway currently
+    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_NETWORK_CONFIG; // No network on nRF52
+#elif defined(ARCH_RP2040) && !HAS_WIFI && !HAS_ETHERNET
+    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_NETWORK_CONFIG; // No network on RP2040
 #endif
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
@@ -1301,5 +1345,4 @@ void loop()
         mainDelay.delay(delayMsec);
     }
 }
-
 #endif

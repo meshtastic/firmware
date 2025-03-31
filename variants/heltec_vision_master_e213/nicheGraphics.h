@@ -67,25 +67,20 @@ void setupNicheGraphics()
     InkHUD::Applet::fontSmall.addSubstitutionsWin1251();
     */
 
-    // Init settings, and customize defaults
+    // Customize default settings
     inkhud->persistence->settings.userTiles.maxCount = 2; // How many tiles can the display handle?
     inkhud->persistence->settings.rotation = 3;           // 270 degrees clockwise
     inkhud->persistence->settings.userTiles.count = 1;    // One tile only by default, keep things simple for new users
     inkhud->persistence->settings.optionalMenuItems.nextTile = false; // Behavior handled by aux button instead
 
     // Pick applets
-    // Note: order of applets determines priority of "auto-show" feature
-    // Optional arguments for defaults:
-    // - is activated?
-    // - is autoshown?
-    // - is foreground on a specific tile (index)?
     inkhud->addApplet("All Messages", new InkHUD::AllMessageApplet, true, true); // Activated, autoshown
-    inkhud->addApplet("DMs", new InkHUD::DMApplet);
-    inkhud->addApplet("Channel 0", new InkHUD::ThreadedMessageApplet(0));
-    inkhud->addApplet("Channel 1", new InkHUD::ThreadedMessageApplet(1));
-    inkhud->addApplet("Positions", new InkHUD::PositionsApplet, true); // Activated
-    inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet);
-    inkhud->addApplet("Heard", new InkHUD::HeardApplet, true, false, 0); // Activated, not autoshown, default on tile 0
+    inkhud->addApplet("DMs", new InkHUD::DMApplet);                              // Inactive
+    inkhud->addApplet("Channel 0", new InkHUD::ThreadedMessageApplet(0));        // Inactive
+    inkhud->addApplet("Channel 1", new InkHUD::ThreadedMessageApplet(1));        // Inactive
+    inkhud->addApplet("Positions", new InkHUD::PositionsApplet, true);           // Activated
+    inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet);            // Inactive
+    inkhud->addApplet("Heard", new InkHUD::HeardApplet, true, false, 0);         // Activated, not autoshown, default on tile 0
     // inkhud->addApplet("Basic", new InkHUD::BasicExampleApplet);
     // inkhud->addApplet("NewMsg", new InkHUD::NewMsgExampleApplet);
 
@@ -100,7 +95,7 @@ void setupNicheGraphics()
     constexpr uint8_t AUX_BUTTON = 1;
 
     // Setup the main user button
-    buttons->setWiring(MAIN_BUTTON, BUTTON_PIN);
+    buttons->setWiring(MAIN_BUTTON, Inputs::TwoButton::getUserButtonPin());
     buttons->setHandlerShortPress(MAIN_BUTTON, []() { InkHUD::InkHUD::getInstance()->shortpress(); });
     buttons->setHandlerLongPress(MAIN_BUTTON, []() { InkHUD::InkHUD::getInstance()->longpress(); });
 
