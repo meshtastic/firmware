@@ -5,6 +5,7 @@
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 #include <Arduino.h>
+#include <unordered_map>
 
 extern concurrency::Lock *cryptLock;
 
@@ -15,6 +16,11 @@ struct CryptoKey {
     int8_t length;
 };
 
+struct CachedSharedSecret {
+    uint8_t shared_secret[32];
+    uint8_t last_used;
+};
+
 /**
  * see docs/software/crypto.md for details.
  *
@@ -22,6 +28,7 @@ struct CryptoKey {
 
 #define MAX_BLOCKSIZE 256
 #define TEST_CURVE25519_FIELD_OPS // Exposes Curve25519::isWeakPoint() for testing keys
+#define MAX_CACHED_SHARED_SECRETS 64
 
 class CryptoEngine
 {
@@ -92,6 +99,16 @@ class CryptoEngine
      * a 32 bit block counter (starts at zero)
      */
     void initNonce(uint32_t fromNode, uint64_t packetId, uint32_t extraNonce = 0);
+
+    /**
+     * Cache mapping peers' public keys -> {shared_secret, last_used}
+     */
+    std::unordered_map<uint32_t, CachedSharedSecret> sharedSecretCache;
+
+    /**
+     * Set cryptographic (hashed) shared_key calculated from the given pubkey
+     */
+    bool setCryptoSharedSecret(meshtastic_UserLite_public_key_t pubkey);
 };
 
 extern CryptoEngine *crypto;

@@ -253,6 +253,65 @@ void CryptoEngine::initNonce(uint32_t fromNode, uint64_t packetId, uint32_t extr
     if (extraNonce)
         memcpy(nonce + sizeof(uint32_t), &extraNonce, sizeof(uint32_t));
 }
+
+bool CryptoEngine::setCryptoSharedSecret(meshtastic_UserLite_public_key_t pubkey)
+{
+    // The last used timestamp is in units of ~1.165 hours, which gives us
+    // ~12.3 days before the timestamps roll over. This is ok since a periodic
+    // misfire on evicting the oldest secret has very little impact.
+    const uint8_t now = (millis() >> 22) & 0xff;
+
+    // Get a short lookup key from the pubkey
+    uint32_t lookupKey;
+    memcpy(&lookupKey, pubkey.bytes, sizeof(lookupKey));
+
+    // See if we cached the secret already
+    auto iter = sharedSecretCache.find(lookupKey);
+    if (iter != sharedSecretCache.end()) {
+        // Cache hit! Copy it into shared_key.
+        CachedSharedSecret &entry = iter->second;
+        memcpy(shared_key, entry.shared_secret, 32);
+        // Update the last used timestamp
+        entry.last_used = now;
+        return true;
+    }
+
+    // Cache miss. Generate the shared secret.
+    if (!setDHPublicKey(pubkey.bytes)) {
+        return false;
+    }
+    hash(shared_key, 32);
+
+    // If the cache will grow too large, remove the oldest entry first
+    if (sharedSecretCache.size() >= MAX_CACHED_SHARED_SECRETS) {
+        uint16_t oldestDelta = 0;
+        uint32_t oldestKey = sharedSecretCache.begin()->first;
+        for (const auto &p : sharedSecretCache) {
+            const uint32_t key = p.first;
+            const CachedSharedSecret &entry = p.second;
+
+            uint16_t delta = 0;
+            if (now >= entry.last_used) {
+                delta = now - entry.last_used;
+            } else {
+                // Assume a larger last used timestamp is further in the past
+                delta = uint16_t(0x100) + now - entry.last_used;
+            }
+            if (delta > oldestDelta) {
+                oldestKey = key;
+            }
+        }
+        sharedSecretCache.erase(oldestKey);
+    }
+
+    // Now insert the calculated shared secret
+    CachedSharedSecret entry;
+    entry.last_used = now;
+    memcpy(entry.shared_secret, shared_key, 32);
+    sharedSecretCache.insert({lookupKey, entry});
+    return true;
+}
+
 #ifndef HAS_CUSTOM_CRYPTO_ENGINE
 CryptoEngine *crypto = new CryptoEngine;
 #endif
