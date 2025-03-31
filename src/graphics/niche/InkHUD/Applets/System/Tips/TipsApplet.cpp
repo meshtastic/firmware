@@ -207,8 +207,6 @@ void InkHUD::TipsApplet::onBackground()
     inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
-void InkHUD::TipsApplet::onActivate() {}
-
 // While our SystemApplet::handleInput flag is true
 void InkHUD::TipsApplet::onButtonShortPress()
 {

@@ -582,9 +582,12 @@ std::string InkHUD::Applet::getTimeString(uint32_t epochSeconds)
         uint32_t hour = hms / SEC_PER_HOUR;
         uint32_t min = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
 
-        // Format the clock string
+        // Format the clock string, either 12 hour or 24 hour
         char clockStr[11];
-        sprintf(clockStr, "%u:%02u %s", (hour % 12 == 0 ? 12 : hour % 12), min, hour > 11 ? "PM" : "AM");
+        if (config.display.use_12h_clock)
+            sprintf(clockStr, "%u:%02u %s", (hour % 12 == 0 ? 12 : hour % 12), min, hour > 11 ? "PM" : "AM");
+        else
+            sprintf(clockStr, "%02u:%02u", hour, min);
 
         return clockStr;
     }
@@ -799,7 +802,7 @@ uint16_t InkHUD::Applet::getLogoHeight(uint16_t limitWidth, uint16_t limitHeight
    //       //       \\
 
 */
-void InkHUD::Applet::drawLogo(int16_t centerX, int16_t centerY, uint16_t width, uint16_t height)
+void InkHUD::Applet::drawLogo(int16_t centerX, int16_t centerY, uint16_t width, uint16_t height, Color color)
 {
     struct Point {
         int x;
@@ -905,24 +908,24 @@ void InkHUD::Applet::drawLogo(int16_t centerX, int16_t centerY, uint16_t width, 
     Point aq2{a2.x - fromPath.x, a2.y - fromPath.y};
     Point aq3{a2.x + fromPath.x, a2.y + fromPath.y};
     Point aq4{a1.x + fromPath.x, a1.y + fromPath.y};
-    fillTriangle(aq1.x, aq1.y, aq2.x, aq2.y, aq3.x, aq3.y, BLACK);
-    fillTriangle(aq1.x, aq1.y, aq3.x, aq3.y, aq4.x, aq4.y, BLACK);
+    fillTriangle(aq1.x, aq1.y, aq2.x, aq2.y, aq3.x, aq3.y, color);
+    fillTriangle(aq1.x, aq1.y, aq3.x, aq3.y, aq4.x, aq4.y, color);
 
     // Make the path thick: path b becomes quad b
     Point bq1{b1.x - fromPath.x, b1.y - fromPath.y};
     Point bq2{b2.x - fromPath.x, b2.y - fromPath.y};
     Point bq3{b2.x + fromPath.x, b2.y + fromPath.y};
     Point bq4{b1.x + fromPath.x, b1.y + fromPath.y};
-    fillTriangle(bq1.x, bq1.y, bq2.x, bq2.y, bq3.x, bq3.y, BLACK);
-    fillTriangle(bq1.x, bq1.y, bq3.x, bq3.y, bq4.x, bq4.y, BLACK);
+    fillTriangle(bq1.x, bq1.y, bq2.x, bq2.y, bq3.x, bq3.y, color);
+    fillTriangle(bq1.x, bq1.y, bq3.x, bq3.y, bq4.x, bq4.y, color);
 
     // Make the path thick: path c becomes quad c
     Point cq1{c1.x - fromPath.x, c1.y + fromPath.y};
     Point cq2{c2.x - fromPath.x, c2.y + fromPath.y};
     Point cq3{c2.x + fromPath.x, c2.y - fromPath.y};
     Point cq4{c1.x + fromPath.x, c1.y - fromPath.y};
-    fillTriangle(cq1.x, cq1.y, cq2.x, cq2.y, cq3.x, cq3.y, BLACK);
-    fillTriangle(cq1.x, cq1.y, cq3.x, cq3.y, cq4.x, cq4.y, BLACK);
+    fillTriangle(cq1.x, cq1.y, cq2.x, cq2.y, cq3.x, cq3.y, color);
+    fillTriangle(cq1.x, cq1.y, cq3.x, cq3.y, cq4.x, cq4.y, color);
 
     // Radius the intersection of quad b and quad c
     /*
@@ -941,7 +944,7 @@ void InkHUD::Applet::drawLogo(int16_t centerX, int16_t centerY, uint16_t width, 
         // The radius for the cap *should* be the same as logoTh, but it's not, due to accumulated rounding
         // We get better results just re-deriving it
         int16_t capRad = sqrt(pow(fromPath.x, 2) + pow(fromPath.y, 2));
-        fillCircle(b2.x, b2.y, capRad, BLACK);
+        fillCircle(b2.x, b2.y, capRad, color);
     }
 }
 
