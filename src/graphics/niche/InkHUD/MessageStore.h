@@ -31,7 +31,7 @@ class MessageStore
     };
 
     MessageStore() = delete;
-    MessageStore(std::string label); // Label determines filename in flash
+    explicit MessageStore(std::string label); // Label determines filename in flash
 
     void saveToFlash();
     void loadFromFlash();

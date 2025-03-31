@@ -2,15 +2,22 @@
 
 #include "./LogoApplet.h"
 
+#include "mesh/NodeDB.h"
+
 using namespace NicheGraphics;
 
 InkHUD::LogoApplet::LogoApplet() : concurrency::OSThread("LogoApplet")
 {
-    // Don't autostart the runOnce() timer
-    OSThread::disable();
+    OSThread::setIntervalFromNow(8 * 1000UL);
+    OSThread::enabled = true;
 
-    // Grab the WindowManager singleton, for convenience
-    windowManager = WindowManager::getInstance();
+    textLeft = "";
+    textRight = "";
+    textTitle = xstr(APP_VERSION_SHORT);
+    fontTitle = fontSmall;
+
+    bringToForeground();
+    // This is then drawn with a FULL refresh by Renderer::begin
 }
 
 void InkHUD::LogoApplet::onRender()
@@ -27,7 +34,15 @@ void InkHUD::LogoApplet::onRender()
     int16_t logoCX = X(0.5);
     int16_t logoCY = Y(0.5 - 0.05);
 
-    drawLogo(logoCX, logoCY, logoW, logoH);
+    // Invert colors if black-on-white
+    // Used during shutdown, to resport display health
+    // Todo: handle this in InkHUD::Renderer instead
+    if (inverted) {
+        fillScreen(BLACK);
+        setTextColor(WHITE);
+    }
+
+    drawLogo(logoCX, logoCY, logoW, logoH, inverted ? WHITE : BLACK);
 
     if (!textLeft.empty()) {
         setFont(fontSmall);
@@ -48,61 +63,70 @@ void InkHUD::LogoApplet::onRender()
 
 void InkHUD::LogoApplet::onForeground()
 {
-    // If another applet has locked the display, ask it to exit
-    Applet *other = windowManager->whoLocked();
-    if (other != nullptr)
-        other->sendToBackground();
-
-    windowManager->claimFullscreen(this); // Take ownership of fullscreen tile
-    windowManager->lock(this);            // Prevent other applets from requesting updates
+    SystemApplet::lockRendering = true;
+    SystemApplet::lockRequests = true;
+    SystemApplet::handleInput = true; // We don't actually use this input. Just blocking other applets from using it.
 }
 
 void InkHUD::LogoApplet::onBackground()
 {
-    OSThread::disable(); // Disable auto-dismiss timer, in case applet was dismissed early (sendToBackground from outside class)
-
-    windowManager->releaseFullscreen(); // Relinquish ownership of fullscreen tile
-    windowManager->unlock(this);        // Allow normal user applet update requests to resume
+    SystemApplet::lockRendering = false;
+    SystemApplet::lockRequests = false;
+    SystemApplet::handleInput = false;
 
     // Need to force an update, as a polite request wouldn't be honored, seeing how we are now in the background
     // Usually, onBackground is followed by another applet's onForeground (which requests update), but not in this case
-    windowManager->forceUpdate(EInk::UpdateTypes::FULL);
-}
-
-int32_t InkHUD::LogoApplet::runOnce()
-{
-    LOG_DEBUG("Sent to background by timer");
-    sendToBackground();
-    return OSThread::disable();
-}
-
-// Begin displaying the screen which is shown at startup
-// Suggest EInk::await after calling this method
-void InkHUD::LogoApplet::showBootScreen()
-{
-    OSThread::setIntervalFromNow(8 * 1000UL);
-    OSThread::enabled = true;
-
-    textLeft = "";
-    textRight = "";
-    textTitle = xstr(APP_VERSION_SHORT);
-    fontTitle = fontSmall;
-
-    bringToForeground();
-    requestUpdate(Drivers::EInk::UpdateTypes::FULL); // Already requested, just upgrading to FULL
+    inkhud->forceUpdate(EInk::UpdateTypes::FULL);
 }
 
 // Begin displaying the screen which is shown at shutdown
-// Needs EInk::await after calling this method, to ensure display updates before shutdown
-void InkHUD::LogoApplet::showShutdownScreen()
+void InkHUD::LogoApplet::onShutdown()
 {
+    bringToForeground();
+
+    textLeft = "";
+    textRight = "";
+    textTitle = "Shutting Down...";
+    fontTitle = fontSmall;
+
+    // Draw a shutting down screen, twice.
+    // Once white on black, once black on white.
+    // Intention is to restore display health.
+
+    inverted = true;
+    inkhud->forceUpdate(Drivers::EInk::FULL, false);
+    delay(1000); // Cooldown. Back to back updates aren't great for health.
+    inverted = false;
+    inkhud->forceUpdate(Drivers::EInk::FULL, false);
+    delay(1000); // Cooldown
+
+    // Prepare for the powered-off screen now
+    // We can change these values because the initial "shutting down" screen has already rendered at this point
     textLeft = "";
     textRight = "";
     textTitle = owner.short_name;
     fontTitle = fontLarge;
 
+    // This is then drawn by InkHUD::Events::onShutdown, with a blocking FULL update, after InkHUD's flash write is complete
+}
+
+void InkHUD::LogoApplet::onReboot()
+{
     bringToForeground();
-    requestUpdate(Drivers::EInk::UpdateTypes::FULL); // Already requested, just upgrading to FULL
+
+    textLeft = "";
+    textRight = "";
+    textTitle = "Rebooting...";
+    fontTitle = fontSmall;
+
+    inkhud->forceUpdate(Drivers::EInk::FULL, false);
+    // Perform the update right now, waiting here until complete
+}
+
+int32_t InkHUD::LogoApplet::runOnce()
+{
+    sendToBackground();
+    return OSThread::disable();
 }
 
 #endif

@@ -18,6 +18,10 @@ TwoButton::TwoButton() : concurrency::OSThread("TwoButton")
     lsObserver.observe(&notifyLightSleep);
     lsEndObserver.observe(&notifyLightSleepEnd);
 #endif
+
+    // Explicitly initialize these, just to keep cppcheck quiet..
+    buttons[0] = Button();
+    buttons[1] = Button();
 }
 
 // Get access to (or create) the singleton instance of this class
@@ -185,7 +189,7 @@ int32_t TwoButton::runOnce()
         // New press detected by interrupt
         case IRQ:
             powerFSM.trigger(EVENT_PRESS);             // Tell PowerFSM that press occurred (resets sleep timer)
-            buttons[i].onDown();                       // Inform that press has begun (possible hold behavior)
+            buttons[i].onDown();                       // Run callback: press has begun (possible hold behavior)
             buttons[i].state = State::POLLING_UNFIRED; // Mark that button-down has been handled
             awaitingRelease = true;                    // Mark that polling-for-release should continue
             break;
@@ -197,17 +201,17 @@ int32_t TwoButton::runOnce()
 
             // If button released since last thread tick,
             if (digitalRead(buttons[i].pin) != buttons[i].activeLogic) {
-                buttons[i].onUp();              // Inform that press has ended (possible release of a hold)
+                buttons[i].onUp();              // Run callback: press has ended (possible release of a hold)
                 buttons[i].state = State::REST; // Mark that the button has reset
-                if (length > buttons[i].debounceLength && length < buttons[i].longpressLength)
-                    buttons[i].onShortPress();
+                if (length > buttons[i].debounceLength && length < buttons[i].longpressLength) // If too short for longpress,
+                    buttons[i].onShortPress();                                                 // Run callback: short press
             }
 
             // If button not yet released
             else {
                 awaitingRelease = true; // Mark that polling-for-release should continue
                 if (length >= buttons[i].longpressLength) {
-                    // Raise a long press event, once
+                    // Run callback: long press (once)
                     // Then continue waiting for release, to rearm
                     buttons[i].state = State::POLLING_FIRED;
                     buttons[i].onLongPress();
@@ -222,7 +226,7 @@ int32_t TwoButton::runOnce()
             // Release detected
             if (digitalRead(buttons[i].pin) != buttons[i].activeLogic) {
                 buttons[i].state = State::REST;
-                buttons[i].onUp(); // Possible release of hold (in this case: *after* longpress has fired)
+                buttons[i].onUp(); // Callback: release of hold (in this case: *after* longpress has fired)
             }
             // Not yet released, keep polling
             else

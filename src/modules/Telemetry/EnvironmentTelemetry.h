@@ -3,6 +3,11 @@
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 
 #pragma once
+
+#ifndef ENVIRONMENTAL_TELEMETRY_MODULE_ENABLE
+#define ENVIRONMENTAL_TELEMETRY_MODULE_ENABLE 0
+#endif
+
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "NodeDB.h"
 #include "ProtobufModule.h"
