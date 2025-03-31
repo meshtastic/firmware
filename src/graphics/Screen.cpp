@@ -2125,73 +2125,6 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
     display->setColor(WHITE);
 }
 
-static void drawDefaultScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    display->clear();
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-    display->setFont(FONT_SMALL);
-
-    // === Header ===
-    drawCommonHeader(display, x, y);
-
-    // === Second Row: Node and GPS ===
-    bool origBold = config.display.heading_bold;
-    config.display.heading_bold = false;
-
-    int secondRowY = y + FONT_HEIGHT_SMALL + 1;
-    drawNodes(display, x, secondRowY, nodeStatus);
-
-#if HAS_GPS
-    if (config.position.fixed_position) {
-        drawGPS(display, SCREEN_WIDTH - 44, secondRowY, gpsStatus);
-    } else if (!gpsStatus || !gpsStatus->getIsConnected()) {
-        String displayLine =
-            config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "No GPS" : "GPS off";
-        int posX = SCREEN_WIDTH - display->getStringWidth(displayLine) - 2;
-        display->drawString(posX, secondRowY, displayLine);
-    } else {
-        drawGPS(display, SCREEN_WIDTH - 44, secondRowY, gpsStatus);
-    }
-#endif
-
-    config.display.heading_bold = origBold;
-
-    // === Third Row: LongName Centered ===
-    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
-    if (ourNode && ourNode->has_user && strlen(ourNode->user.long_name) > 0) {
-        const char *longName = ourNode->user.long_name;
-        int textWidth = display->getStringWidth(longName);
-        int nameX = (SCREEN_WIDTH - textWidth) / 2;
-        int nameY = y + (FONT_HEIGHT_SMALL + 1) * 2;
-        display->drawString(nameX, nameY, longName);
-    }
-
-    // === Fourth Row: Uptime ===
-    uint32_t uptime = millis() / 1000;
-    char uptimeStr[6];
-    uint32_t minutes = uptime / 60, hours = minutes / 60, days = hours / 24;
-
-    if (days > 365) {
-        snprintf(uptimeStr, sizeof(uptimeStr), "?");
-    } else {
-        snprintf(uptimeStr, sizeof(uptimeStr), "%d%c",
-                 days      ? days
-                 : hours   ? hours
-                 : minutes ? minutes
-                           : (int)uptime,
-                 days      ? 'd'
-                 : hours   ? 'h'
-                 : minutes ? 'm'
-                           : 's');
-    }
-
-    char uptimeFullStr[16];
-    snprintf(uptimeFullStr, sizeof(uptimeFullStr), "Uptime: %s", uptimeStr);
-    int uptimeX = (SCREEN_WIDTH - display->getStringWidth(uptimeFullStr)) / 2;
-    int uptimeY = y + (FONT_HEIGHT_SMALL + 1) * 3;
-    display->drawString(uptimeX, uptimeY, uptimeFullStr);
-}
-
 // ****************************
 // * Device Focused Screen    *
 // ****************************
@@ -2295,6 +2228,25 @@ static void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int
     // === Header ===
     drawCommonHeader(display, x, y);
 
+    // === Draw title ===
+    const int highlightHeight = FONT_HEIGHT_SMALL - 1;
+    const int textY = y + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
+    const int screenWidth = display->getWidth();
+    const char *titleStr = (screenWidth > 128) ? "LoRa Info" : "LoRa";
+    const int centerX = x + SCREEN_WIDTH / 2;
+
+    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
+        display->setColor(BLACK);
+    }
+
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->drawString(centerX, textY, titleStr);
+    if (config.display.heading_bold) {
+        display->drawString(centerX + 1, textY, titleStr);
+    }
+    display->setColor(WHITE);
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+
     // === First Row: MAC ID and Region ===
     bool origBold = config.display.heading_bold;
     config.display.heading_bold = false;
@@ -2338,84 +2290,6 @@ static void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int
         int uptimeX = (SCREEN_WIDTH - display->getStringWidth(longName)) / 2;
         display->drawString(uptimeX, compactThirdLine, longName);
     }
-}
-
-// ****************************
-// * BatteryDeviceLoRa Screen *
-// ****************************
-static void drawBatteryDeviceLoRa(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    display->clear();
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-    display->setFont(FONT_SMALL);
-
-    // === Header ===
-    drawCommonHeader(display, x, y);
-
-    // === Second Row: MAC ID and Region ===
-    bool origBold = config.display.heading_bold;
-    config.display.heading_bold = false;
-
-    int secondRowY = y + FONT_HEIGHT_SMALL + 1;
-
-    // Get our hardware ID
-    uint8_t dmac[6];
-    getMacAddr(dmac);
-    snprintf(ourId, sizeof(ourId), "%02x%02x", dmac[4], dmac[5]);
-
-#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) ||      \
-     defined(ST7789_CS) || defined(USE_ST7789) || defined(HX8357_CS) || ARCH_PORTDUINO) &&                                       \
-    !defined(DISPLAY_FORCE_SMALL_FONTS)
-    display->drawFastImage(x, y + 3 + FONT_HEIGHT_SMALL, 12, 8, imgInfoL1);
-    display->drawFastImage(x, y + 11 + FONT_HEIGHT_SMALL, 12, 8, imgInfoL2);
-#else
-    display->drawFastImage(x, y + 2 + FONT_HEIGHT_SMALL, 8, 8, imgInfo);
-#endif
-
-    display->drawString(x + 14, secondRowY, ourId);
-
-    const char *region = myRegion ? myRegion->name : NULL;
-    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(region), secondRowY, region);
-
-    config.display.heading_bold = origBold;
-
-    // === Third Row: Channel and Channel Utilization ===
-    int thirdRowY = y + (FONT_HEIGHT_SMALL * 2) + 1;
-    char channelStr[20];
-    {
-        snprintf(channelStr, sizeof(channelStr), "#%s", channels.getName(channels.getPrimaryIndex()));
-    }
-    display->drawString(x, thirdRowY, channelStr);
-
-    // Display Channel Utilization
-    char chUtil[13];
-    snprintf(chUtil, sizeof(chUtil), "ChUtil %2.0f%%", airTime->channelUtilizationPercent());
-    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(chUtil), thirdRowY, chUtil);
-
-    // === Fourth Row: Uptime ===
-    uint32_t uptime = millis() / 1000;
-    char uptimeStr[6];
-    uint32_t minutes = uptime / 60, hours = minutes / 60, days = hours / 24;
-
-    if (days > 365) {
-        snprintf(uptimeStr, sizeof(uptimeStr), "?");
-    } else {
-        snprintf(uptimeStr, sizeof(uptimeStr), "%d%c",
-                 days      ? days
-                 : hours   ? hours
-                 : minutes ? minutes
-                           : (int)uptime,
-                 days      ? 'd'
-                 : hours   ? 'h'
-                 : minutes ? 'm'
-                           : 's');
-    }
-
-    char uptimeFullStr[16];
-    snprintf(uptimeFullStr, sizeof(uptimeFullStr), "Uptime: %s", uptimeStr);
-    int uptimeX = (SCREEN_WIDTH - display->getStringWidth(uptimeFullStr)) / 2;
-    int uptimeY = y + (FONT_HEIGHT_SMALL + 1) * 3;
-    display->drawString(uptimeX, uptimeY, uptimeFullStr);
 }
 
 // ****************************
@@ -3284,13 +3158,11 @@ void Screen::setFrames(FrameFocus focus)
         normalFrames[numframes++] = drawTextMessageFrame;
     }
 
-    // normalFrames[numframes++] = drawDefaultScreen;
     normalFrames[numframes++] = drawDeviceFocused;
     normalFrames[numframes++] = drawLastHeardScreen;
     normalFrames[numframes++] = drawDistanceScreen;
     normalFrames[numframes++] = drawNodeListWithCompasses;
     normalFrames[numframes++] = drawHopSignalScreen;
-    // normalFrames[numframes++] = drawBatteryDeviceLoRa;
     normalFrames[numframes++] = drawLoRaFocused;
     normalFrames[numframes++] = drawCompassAndLocationScreen;
     normalFrames[numframes++] = drawMemoryScreen;
