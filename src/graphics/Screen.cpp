@@ -1586,7 +1586,9 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     screen->drawColumns(display, x, y, fields);
 }
 
-// h! Makes header invert rounder
+// *********************************
+// *Rounding Header when inverted  *
+// *********************************
 void drawRoundedHighlight(OLEDDisplay *display, int16_t x, int16_t y, int16_t w, int16_t h, int16_t r)
 {
     // Center rectangles
@@ -1594,7 +1596,7 @@ void drawRoundedHighlight(OLEDDisplay *display, int16_t x, int16_t y, int16_t w,
     display->fillRect(x, y + r, r, h - 2 * r);
     display->fillRect(x + w - r, y + r, r, h - 2 * r);
 
-    // Rounded corners — visually balanced
+    // Rounded corners — visually balanced and centered
     display->fillCircle(x + r + 1, y + r, r);             // Top-left
     display->fillCircle(x + w - r - 1, y + r, r);         // Top-right
     display->fillCircle(x + r + 1, y + h - r - 1, r);     // Bottom-left
@@ -2078,7 +2080,8 @@ static void drawDistanceScreen(OLEDDisplay *display, OLEDDisplayUiState *state, 
 // ***********************
 void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
 {
-    constexpr int HEADER_OFFSET_Y = 1;
+    // Shift header down to avoid clipping on high-DPI screens
+    constexpr int HEADER_OFFSET_Y = 2;
     y += HEADER_OFFSET_Y;
 
     const bool isInverted = (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED);
@@ -2102,11 +2105,15 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
     // === Battery icon (scale-aware vertical centering) ===
     int batteryScale = 1;
     if (screenWidth >= 200) batteryScale = 2;
-    if (screenWidth >= 300) batteryScale = 2; // Just in case
 
     int batteryHeight = 8 * batteryScale;
-    int batteryY = y + (highlightHeight - batteryHeight) / 2;
-    drawBattery(display, x + xOffset - 2, batteryY, imgBattery, powerStatus);
+    int batteryY = y + (highlightHeight / 2) - (batteryHeight / 2);
+
+    // Only shift right 3px if screen is wider than 128
+    int batteryX = x + xOffset - 2;
+    if (screenWidth > 128) batteryX += 2;
+
+    drawBattery(display, batteryX, batteryY, imgBattery, powerStatus);
 
     // === Battery % text ===
     char percentStr[8];
@@ -2127,8 +2134,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
 
         bool isPM = hour >= 12;
         hour = hour % 12;
-        if (hour == 0)
-            hour = 12;
+        if (hour == 0) hour = 12;
 
         char timeStr[10];
         snprintf(timeStr, sizeof(timeStr), "%d:%02d%s", hour, minute, isPM ? "PM" : "AM");
@@ -2141,7 +2147,6 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
 
     display->setColor(WHITE);
 }
-
 
 // ****************************
 // * Device Focused Screen    *
