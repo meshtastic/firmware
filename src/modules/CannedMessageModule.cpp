@@ -483,7 +483,7 @@ int32_t CannedMessageModule::runOnce()
 #if defined(USE_VIRTUAL_KEYBOARD)
                     sendText(this->dest, indexChannels[this->channel], this->messages[this->currentMessageIndex], true);
 #else
-                    sendText(this->dest, channels.getPrimaryIndex(), this->messages[this->currentMessageIndex], true);
+                    sendText(this->dest, indexChannels[this->channel], this->messages[this->currentMessageIndex], true);
 #endif
                 }
                 this->runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
