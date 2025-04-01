@@ -2153,14 +2153,22 @@ static void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, i
 
 #if HAS_GPS
     if (config.position.fixed_position) {
-        drawGPS(display, SCREEN_WIDTH - 44, compactFirstLine + 3, gpsStatus);
+        if (SCREEN_WIDTH > 128) {
+            drawGPS(display, SCREEN_WIDTH - 53, compactFirstLine + 3, gpsStatus);
+        } else {
+            drawGPS(display, SCREEN_WIDTH - 47, compactFirstLine + 3, gpsStatus);
+        }
     } else if (!gpsStatus || !gpsStatus->getIsConnected()) {
         String displayLine =
             config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "No GPS" : "GPS off";
         int posX = SCREEN_WIDTH - display->getStringWidth(displayLine) - 2;
         display->drawString(posX, compactFirstLine + 3, displayLine);
     } else {
-        drawGPS(display, SCREEN_WIDTH - 44, compactFirstLine + 3, gpsStatus);
+        if (SCREEN_WIDTH > 128) {
+            drawGPS(display, SCREEN_WIDTH - 53, compactFirstLine + 3, gpsStatus);
+        } else {
+            drawGPS(display, SCREEN_WIDTH - 47, compactFirstLine + 3, gpsStatus);
+        }
     }
 #endif
 
@@ -2291,12 +2299,20 @@ static void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int
     }
     display->drawString(x + SCREEN_WIDTH - display->getStringWidth(channelStr), compactSecondLine, channelStr);
 
-    // === Third Row: Node Name ===
+    // === Third Row: Node longName ===
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     if (ourNode && ourNode->has_user && strlen(ourNode->user.long_name) > 0) {
         const char *longName = ourNode->user.long_name;
         int uptimeX = (SCREEN_WIDTH - display->getStringWidth(longName)) / 2;
         display->drawString(uptimeX, compactThirdLine, longName);
+    }
+
+    // === Fourth Row: Node shortName ===
+    char buf[25];
+    snprintf(buf, sizeof(buf), "%s\n%s", xstr(APP_VERSION_SHORT), haveGlyphs(owner.short_name) ? owner.short_name : "");
+    if (ourNode && ourNode->has_user && strlen(ourNode->user.long_name) > 0) {
+        int uptimeX = (SCREEN_WIDTH - display->getStringWidth(owner.short_name)) / 2;
+        display->drawString(uptimeX, compactFourthLine, owner.short_name);
     }
 }
 
@@ -2332,9 +2348,8 @@ static void drawActivity(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     // Restore default color after drawing
     display->setColor(WHITE);
 
-    // === Second Row: Draw any log messages ===
-    int secondRowY = y + FONT_HEIGHT_SMALL + 1;
-    display->drawLogBuffer(x, secondRowY);
+    // === First Line: Draw any log messages ===
+    display->drawLogBuffer(x, compactFirstLine);
 }
 // ****************************
 // * My Position Screen       *
@@ -2373,6 +2388,8 @@ static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiStat
 
 // === Second Row: My Location ===
 #if HAS_GPS
+    bool origBold = config.display.heading_bold;
+    config.display.heading_bold = false;
     if (config.position.fixed_position) {
         display->drawString(x + 2, compactFirstLine, "Sat:");
         if (screenWidth > 128) {
@@ -2397,6 +2414,7 @@ static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiStat
             drawGPS(display, x + 23, compactFirstLine + 3, gpsStatus);
         }
     }
+    config.display.heading_bold = origBold;
     // === Update GeoCoord ===
     geoCoord.updateCoords(int32_t(gpsStatus->getLatitude()), int32_t(gpsStatus->getLongitude()),
                           int32_t(gpsStatus->getAltitude()));
