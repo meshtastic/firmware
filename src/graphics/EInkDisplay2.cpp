@@ -128,11 +128,7 @@ bool EInkDisplay::connect()
 #ifdef PIN_EINK_EN
     // backlight power, HIGH is backlight on, LOW is off
     pinMode(PIN_EINK_EN, OUTPUT);
-#ifdef ELECROW_ThinkNode_M1
     digitalWrite(PIN_EINK_EN, LOW);
-#else
-    digitalWrite(PIN_EINK_EN, HIGH);
-#endif
 #endif
 
 #if defined(TTGO_T_ECHO) || defined(ELECROW_ThinkNode_M1)
