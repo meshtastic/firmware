@@ -2008,6 +2008,10 @@ static void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *
     drawNodeListWithExtrasScreen(display, state, x, y, "Bearings", drawEntryCompass, drawCompassArrow);
 }
 
+// ********************************
+// * Node List Distance Screen    *
+// ********************************
+
 void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth)
 {
     int screenWidth = display->getWidth();
@@ -2068,6 +2072,10 @@ static void drawDistanceScreen(OLEDDisplay *display, OLEDDisplayUiState *state, 
 {
     drawNodeListScreen(display, state, x, y, "Distances", drawNodeDistance);
 }
+
+// ***********************
+// * Common Header       *
+// ***********************
 
 void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
 {
