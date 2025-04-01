@@ -2076,9 +2076,11 @@ static void drawDistanceScreen(OLEDDisplay *display, OLEDDisplayUiState *state, 
 // ***********************
 // * Common Header       *
 // ***********************
-
 void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
 {
+    constexpr int HEADER_OFFSET_Y = 1;
+    y += HEADER_OFFSET_Y;
+
     const bool isInverted = (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED);
     const bool isBold = config.display.heading_bold;
     const int xOffset = 3;
@@ -2088,28 +2090,35 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
     display->setFont(FONT_SMALL);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
-    // Draw background highlight
+    // === Background highlight ===
     if (isInverted) {
         drawRoundedHighlight(display, x, y, screenWidth, highlightHeight, 2);
         display->setColor(BLACK);
     }
 
-    // Battery icon
-    drawBattery(display, x + xOffset - 2, y + 2, imgBattery, powerStatus);
-
-    // Text baseline
+    // === Text baseline ===
     const int textY = y + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
 
-    // Battery %
+    // === Battery icon (scale-aware vertical centering) ===
+    int batteryScale = 1;
+    if (screenWidth >= 200) batteryScale = 2;
+    if (screenWidth >= 300) batteryScale = 2; // Just in case
+
+    int batteryHeight = 8 * batteryScale;
+    int batteryY = y + (highlightHeight - batteryHeight) / 2;
+    drawBattery(display, x + xOffset - 2, batteryY, imgBattery, powerStatus);
+
+    // === Battery % text ===
     char percentStr[8];
     snprintf(percentStr, sizeof(percentStr), "%d%%", powerStatus->getBatteryChargePercent());
+
     const int batteryOffset = screenWidth > 128 ? 34 : 16;
     const int percentX = x + xOffset + batteryOffset;
     display->drawString(percentX, textY, percentStr);
     if (isBold)
         display->drawString(percentX + 1, textY, percentStr);
 
-    // Time (right side)
+    // === Time string (right-aligned) ===
     uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true);
     if (rtc_sec > 0) {
         long hms = (rtc_sec % SEC_PER_DAY + SEC_PER_DAY) % SEC_PER_DAY;
@@ -2124,7 +2133,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
         char timeStr[10];
         snprintf(timeStr, sizeof(timeStr), "%d:%02d%s", hour, minute, isPM ? "PM" : "AM");
 
-        int timeX = x + screenWidth - xOffset - display->getStringWidth(timeStr);
+        int timeX = screenWidth - xOffset - display->getStringWidth(timeStr) - 1;
         display->drawString(timeX, textY, timeStr);
         if (isBold)
             display->drawString(timeX + 1, textY, timeStr);
@@ -2132,6 +2141,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
 
     display->setColor(WHITE);
 }
+
 
 // ****************************
 // * Device Focused Screen    *
@@ -2145,29 +2155,32 @@ static void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, i
     // === Header ===
     drawCommonHeader(display, x, y);
 
+    // === Content below header ===
+    const int layoutYOffset = 1;
+
     // === First Row: Node and GPS ===
     bool origBold = config.display.heading_bold;
     config.display.heading_bold = false;
 
-    drawNodes(display, x, compactFirstLine + 3, nodeStatus);
+    drawNodes(display, x, compactFirstLine + 3 + layoutYOffset, nodeStatus);
 
 #if HAS_GPS
     if (config.position.fixed_position) {
         if (SCREEN_WIDTH > 128) {
-            drawGPS(display, SCREEN_WIDTH - 53, compactFirstLine + 3, gpsStatus);
+            drawGPS(display, SCREEN_WIDTH - 53, compactFirstLine + 3 + layoutYOffset, gpsStatus);
         } else {
-            drawGPS(display, SCREEN_WIDTH - 47, compactFirstLine + 3, gpsStatus);
+            drawGPS(display, SCREEN_WIDTH - 47, compactFirstLine + 3 + layoutYOffset, gpsStatus);
         }
     } else if (!gpsStatus || !gpsStatus->getIsConnected()) {
         String displayLine =
             config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "No GPS" : "GPS off";
         int posX = SCREEN_WIDTH - display->getStringWidth(displayLine) - 2;
-        display->drawString(posX, compactFirstLine + 3, displayLine);
+        display->drawString(posX, compactFirstLine + 3 + layoutYOffset, displayLine);
     } else {
         if (SCREEN_WIDTH > 128) {
-            drawGPS(display, SCREEN_WIDTH - 53, compactFirstLine + 3, gpsStatus);
+            drawGPS(display, SCREEN_WIDTH - 53, compactFirstLine + 3 + layoutYOffset, gpsStatus);
         } else {
-            drawGPS(display, SCREEN_WIDTH - 47, compactFirstLine + 3, gpsStatus);
+            drawGPS(display, SCREEN_WIDTH - 47, compactFirstLine + 3 + layoutYOffset, gpsStatus);
         }
     }
 #endif
@@ -2184,18 +2197,18 @@ static void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, i
 #if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) ||      \
      defined(ST7789_CS) || defined(USE_ST7789) || defined(HX8357_CS) || ARCH_PORTDUINO) &&                                       \
     !defined(DISPLAY_FORCE_SMALL_FONTS)
-    display->drawFastImage(x, compactSecondLine + 3, 12, 8, imgInfoL1);
-    display->drawFastImage(x, compactSecondLine + 11, 12, 8, imgInfoL2);
+    display->drawFastImage(x, compactSecondLine + 3 + layoutYOffset, 12, 8, imgInfoL1);
+    display->drawFastImage(x, compactSecondLine + 11 + layoutYOffset, 12, 8, imgInfoL2);
 #else
-    display->drawFastImage(x, compactSecondLine + 2, 8, 8, imgInfo);
+    display->drawFastImage(x, compactSecondLine + 2 + layoutYOffset, 8, 8, imgInfo);
 #endif
 
-    display->drawString(x + 14, compactSecondLine, ourId);
+    display->drawString(x + 14, compactSecondLine + layoutYOffset, ourId);
 
     // Display Channel Utilization
     char chUtil[13];
     snprintf(chUtil, sizeof(chUtil), "ChUtil %2.0f%%", airTime->channelUtilizationPercent());
-    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(chUtil), compactSecondLine, chUtil);
+    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(chUtil), compactSecondLine + layoutYOffset, chUtil);
 
     // === Third Row: LongName Centered ===
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
@@ -2203,8 +2216,7 @@ static void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, i
         const char *longName = ourNode->user.long_name;
         int textWidth = display->getStringWidth(longName);
         int nameX = (SCREEN_WIDTH - textWidth) / 2;
-        int nameY = y + (FONT_HEIGHT_SMALL + 1) * 3;
-        display->drawString(nameX, compactThirdLine, longName);
+        display->drawString(nameX, compactThirdLine + layoutYOffset, longName);
     }
 
     // === Fourth Row: Uptime ===
@@ -2229,7 +2241,7 @@ static void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, i
     char uptimeFullStr[16];
     snprintf(uptimeFullStr, sizeof(uptimeFullStr), "Uptime: %s", uptimeStr);
     int uptimeX = (SCREEN_WIDTH - display->getStringWidth(uptimeFullStr)) / 2;
-    display->drawString(uptimeX, compactFourthLine, uptimeFullStr);
+    display->drawString(uptimeX, compactFourthLine + layoutYOffset, uptimeFullStr);
 }
 
 // ****************************
@@ -2244,9 +2256,12 @@ static void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int
     // === Header ===
     drawCommonHeader(display, x, y);
 
-    // === Draw title ===
+    // === Adjust layout to match shifted header ===
+    const int layoutYOffset = 1;
+
+    // === Draw title (aligned with header baseline) ===
     const int highlightHeight = FONT_HEIGHT_SMALL - 1;
-    const int textY = y + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
+    const int textY = y + layoutYOffset + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
     const int screenWidth = display->getWidth();
     const char *titleStr = (screenWidth > 128) ? "LoRa Info" : "LoRa";
     const int centerX = x + SCREEN_WIDTH / 2;
@@ -2275,44 +2290,42 @@ static void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int
 #if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) ||      \
      defined(ST7789_CS) || defined(USE_ST7789) || defined(HX8357_CS) || ARCH_PORTDUINO) &&                                       \
     !defined(DISPLAY_FORCE_SMALL_FONTS)
-    display->drawFastImage(x, compactFirstLine + 5, 12, 8, imgInfoL1);
-    display->drawFastImage(x, compactFirstLine + 12, 12, 8, imgInfoL2);
+    display->drawFastImage(x, compactFirstLine + 5 + layoutYOffset, 12, 8, imgInfoL1);
+    display->drawFastImage(x, compactFirstLine + 12 + layoutYOffset, 12, 8, imgInfoL2);
 #else
-    display->drawFastImage(x, compactFirstLine + 3, 8, 8, imgInfo);
+    display->drawFastImage(x, compactFirstLine + 3 + layoutYOffset, 8, 8, imgInfo);
 #endif
 
-    display->drawString(x + 14, compactFirstLine, ourId);
+    display->drawString(x + 14, compactFirstLine + layoutYOffset, ourId);
 
     const char *region = myRegion ? myRegion->name : NULL;
-    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(region), compactFirstLine, region);
+    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(region), compactFirstLine + layoutYOffset, region);
 
     config.display.heading_bold = origBold;
 
     // === Second Row: Channel and Channel Utilization ===
     char chUtil[13];
     snprintf(chUtil, sizeof(chUtil), "ChUtil %2.0f%%", airTime->channelUtilizationPercent());
-    display->drawString(x, compactSecondLine, chUtil);
+    display->drawString(x, compactSecondLine + layoutYOffset, chUtil);
 
     char channelStr[20];
-    {
-        snprintf(channelStr, sizeof(channelStr), "#%s", channels.getName(channels.getPrimaryIndex()));
-    }
-    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(channelStr), compactSecondLine, channelStr);
+    snprintf(channelStr, sizeof(channelStr), "#%s", channels.getName(channels.getPrimaryIndex()));
+    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(channelStr), compactSecondLine + layoutYOffset, channelStr);
 
     // === Third Row: Node longName ===
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     if (ourNode && ourNode->has_user && strlen(ourNode->user.long_name) > 0) {
         const char *longName = ourNode->user.long_name;
-        int uptimeX = (SCREEN_WIDTH - display->getStringWidth(longName)) / 2;
-        display->drawString(uptimeX, compactThirdLine, longName);
+        int nameX = (SCREEN_WIDTH - display->getStringWidth(longName)) / 2;
+        display->drawString(nameX, compactThirdLine + layoutYOffset, longName);
     }
 
     // === Fourth Row: Node shortName ===
     char buf[25];
     snprintf(buf, sizeof(buf), "%s\n%s", xstr(APP_VERSION_SHORT), haveGlyphs(owner.short_name) ? owner.short_name : "");
     if (ourNode && ourNode->has_user && strlen(ourNode->user.long_name) > 0) {
-        int uptimeX = (SCREEN_WIDTH - display->getStringWidth(owner.short_name)) / 2;
-        display->drawString(uptimeX, compactFourthLine, owner.short_name);
+        int shortNameX = (SCREEN_WIDTH - display->getStringWidth(owner.short_name)) / 2;
+        display->drawString(shortNameX, compactFourthLine + layoutYOffset, owner.short_name);
     }
 }
 
@@ -2329,8 +2342,9 @@ static void drawActivity(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     drawCommonHeader(display, x, y);
 
     // === Draw title ===
+    const int layoutYOffset = 1;
     const int highlightHeight = FONT_HEIGHT_SMALL - 1;
-    const int textY = y + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
+    const int textY = y + layoutYOffset + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
 
     // Use black text if display is inverted
     if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
@@ -2349,8 +2363,9 @@ static void drawActivity(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     display->setColor(WHITE);
 
     // === First Line: Draw any log messages ===
-    display->drawLogBuffer(x, compactFirstLine);
+    display->drawLogBuffer(x, compactFirstLine + layoutYOffset);
 }
+
 // ****************************
 // * My Position Screen       *
 // ****************************
@@ -2363,9 +2378,12 @@ static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiStat
     // === Header ===
     drawCommonHeader(display, x, y);
 
+    // === Adjust layout to match shifted header ===
+    const int layoutYOffset = 1;
+
     // === Draw title ===
     const int highlightHeight = FONT_HEIGHT_SMALL - 1;
-    const int textY = y + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
+    const int textY = y + layoutYOffset + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
     const int screenWidth = display->getWidth();
     const char *titleStr = "GPS";
     const int centerX = x + SCREEN_WIDTH / 2;
@@ -2384,37 +2402,38 @@ static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiStat
 
     // Row Y offset just like drawNodeListScreen
     int rowYOffset = FONT_HEIGHT_SMALL - 3;
-    int rowY = y + rowYOffset;
+    int rowY = y + rowYOffset + layoutYOffset;
 
-// === Second Row: My Location ===
+    // === Second Row: My Location ===
 #if HAS_GPS
     bool origBold = config.display.heading_bold;
     config.display.heading_bold = false;
     if (config.position.fixed_position) {
-        display->drawString(x + 2, compactFirstLine, "Sat:");
+        display->drawString(x + 2, compactFirstLine + layoutYOffset, "Sat:");
         if (screenWidth > 128) {
-            drawGPS(display, x + 32, compactFirstLine + 3, gpsStatus);
+            drawGPS(display, x + 32, compactFirstLine + 3 + layoutYOffset, gpsStatus);
         } else {
-            drawGPS(display, x + 23, compactFirstLine + 3, gpsStatus);
+            drawGPS(display, x + 23, compactFirstLine + 3 + layoutYOffset, gpsStatus);
         }
     } else if (!gpsStatus || !gpsStatus->getIsConnected()) {
         String displayLine =
             config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "No GPS" : "GPS off";
-        display->drawString(x + 2, compactFirstLine, "Sat:");
+        display->drawString(x + 2, compactFirstLine + layoutYOffset, "Sat:");
         if (screenWidth > 128) {
-            display->drawString(x + 32, compactFirstLine + 3, displayLine);
+            display->drawString(x + 32, compactFirstLine + 3 + layoutYOffset, displayLine);
         } else {
-            display->drawString(x + 23, compactFirstLine + 3, displayLine);
+            display->drawString(x + 23, compactFirstLine + 3 + layoutYOffset, displayLine);
         }
     } else {
-        display->drawString(x + 2, compactFirstLine, "Sat:");
+        display->drawString(x + 2, compactFirstLine + layoutYOffset, "Sat:");
         if (screenWidth > 128) {
-            drawGPS(display, x + 32, compactFirstLine + 3, gpsStatus);
+            drawGPS(display, x + 32, compactFirstLine + 3 + layoutYOffset, gpsStatus);
         } else {
-            drawGPS(display, x + 23, compactFirstLine + 3, gpsStatus);
+            drawGPS(display, x + 23, compactFirstLine + 3 + layoutYOffset, gpsStatus);
         }
     }
     config.display.heading_bold = origBold;
+
     // === Update GeoCoord ===
     geoCoord.updateCoords(int32_t(gpsStatus->getLatitude()), int32_t(gpsStatus->getLongitude()),
                           int32_t(gpsStatus->getAltitude()));
@@ -2494,8 +2513,9 @@ static void drawMemoryScreen(OLEDDisplay *display, OLEDDisplayUiState *state, in
     drawCommonHeader(display, x, y);
 
     // === Draw title ===
+    const int layoutYOffset = 1;
     const int highlightHeight = FONT_HEIGHT_SMALL - 1;
-    const int textY = y + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
+    const int textY = y + layoutYOffset + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
     const int screenWidth = display->getWidth();
     const char *titleStr = (screenWidth > 128) ? "Memory" : "Mem";
     const int centerX = x + SCREEN_WIDTH / 2;
@@ -2519,7 +2539,7 @@ static void drawMemoryScreen(OLEDDisplay *display, OLEDDisplayUiState *state, in
     const int barX = x + 40 + barsOffset;
     const int textRightX = x + SCREEN_WIDTH - 2;
 
-    int rowY = y + rowYOffset;
+    int rowY = y + rowYOffset + layoutYOffset;
 
     // === Heap delta tracking ===
     static uint32_t previousHeapFree = 0;
@@ -2652,6 +2672,7 @@ static void drawMemoryScreen(OLEDDisplay *display, OLEDDisplayUiState *state, in
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->drawString(triX + 10, rowY + 2, summaryStr);
 }
+
 
 #if defined(ESP_PLATFORM) && defined(USE_ST7789)
 SPIClass SPI1(HSPI);
