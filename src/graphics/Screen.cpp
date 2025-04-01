@@ -2080,7 +2080,6 @@ static void drawDistanceScreen(OLEDDisplay *display, OLEDDisplayUiState *state, 
 // ***********************
 void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
 {
-    // Shift header down to avoid clipping on high-DPI screens
     constexpr int HEADER_OFFSET_Y = 2;
     y += HEADER_OFFSET_Y;
 
