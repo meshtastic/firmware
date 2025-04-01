@@ -690,7 +690,7 @@ void NodeDB::initConfigIntervals()
 
     config.display.screen_on_secs = default_screen_on_secs;
 
-#if defined(T_WATCH_S3) || defined(T_DECK) || defined(MESH_TAB) || defined(RAK14014) || defined(ELECROW)
+#if defined(T_WATCH_S3) || defined(T_DECK) || defined(UNPHONE) || defined(MESH_TAB) || defined(RAK14014) || defined(ELECROW)
     config.power.is_power_saving = true;
     config.display.screen_on_secs = 30;
     config.power.wait_bluetooth_secs = 30;
