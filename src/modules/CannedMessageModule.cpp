@@ -1107,34 +1107,25 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
             0 + x, 0 + y + FONT_HEIGHT_SMALL, x + display->getWidth(),
             cannedMessageModule->drawWithCursor(cannedMessageModule->freetext, cannedMessageModule->cursor));
 #endif
-    }
-    else
-    {
-        if (this->messagesCount > 0)
-        {
+    } else {
+        if (this->messagesCount > 0) {
             display->setTextAlignment(TEXT_ALIGN_LEFT);
             display->setFont(FONT_SMALL);
             display->drawStringf(0 + x, 0 + y, buffer, "To: %s", cannedMessageModule->getNodeName(this->dest));
             int lines = (display->getHeight() / FONT_HEIGHT_SMALL) - 1;
-            if (lines == 3)
-            {
+            if (lines == 3) {
                 display->fillRect(0 + x, 0 + y + FONT_HEIGHT_SMALL * 2, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
                 display->setColor(BLACK);
                 display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * 2, cannedMessageModule->getCurrentMessage());
                 display->setColor(WHITE);
-                if (this->messagesCount > 1)
-                {
+                if (this->messagesCount > 1) {
                     display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL, cannedMessageModule->getPrevMessage());
                     display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * 3, cannedMessageModule->getNextMessage());
                 }
-            }
-            else
-            {
+            } else {
                 int topMsg = (messagesCount > lines && currentMessageIndex >= lines - 1) ? currentMessageIndex - lines + 2 : 0;
-                for (int i = 0; i < std::min(messagesCount, lines); i++)
-                {
-                    if (i == currentMessageIndex - topMsg)
-                    {
+                for (int i = 0; i < std::min(messagesCount, lines); i++) {
+                    if (i == currentMessageIndex - topMsg) {
 #ifdef USE_EINK
                         display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * (i + 1), ">");
                         display->drawString(12 + x, 0 + y + FONT_HEIGHT_SMALL * (i + 1),
@@ -1146,9 +1137,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
                         display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * (i + 1), cannedMessageModule->getCurrentMessage());
                         display->setColor(WHITE);
 #endif
-                    }
-                    else if (messagesCount > 1)
-                    { // Only draw others if there are multiple messages
+                    } else if (messagesCount > 1) { // Only draw others if there are multiple messages
                         display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * (i + 1),
                                             cannedMessageModule->getMessageByIndex(topMsg + i));
                     }
