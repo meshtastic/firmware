@@ -1594,10 +1594,10 @@ void drawRoundedHighlight(OLEDDisplay *display, int16_t x, int16_t y, int16_t w,
     display->fillRect(x, y + r, r, h - 2 * r);
     display->fillRect(x + w - r, y + r, r, h - 2 * r);
 
-    // Rounded corners
-    display->fillCircle(x + r, y + r, r);                 // Top-left
+    // Rounded corners — visually balanced
+    display->fillCircle(x + r + 1, y + r, r);             // Top-left
     display->fillCircle(x + w - r - 1, y + r, r);         // Top-right
-    display->fillCircle(x + r, y + h - r - 1, r);         // Bottom-left
+    display->fillCircle(x + r + 1, y + h - r - 1, r);     // Bottom-left
     display->fillCircle(x + w - r - 1, y + h - r - 1, r); // Bottom-right
 }
 // h! Each node entry holds a reference to its info and how long ago it was heard from
