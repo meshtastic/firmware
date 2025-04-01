@@ -41,6 +41,12 @@ ScanI2C::FoundDevice ScanI2C::firstAccelerometer() const
     return firstOfOrNONE(8, types);
 }
 
+ScanI2C::FoundDevice ScanI2C::firstINA() const
+{
+    ScanI2C::DeviceType types[] = {INA219, INA226, INA260, INA3221};
+    return firstOfOrNONE(4, types);
+}
+
 ScanI2C::FoundDevice ScanI2C::find(ScanI2C::DeviceType) const
 {
     return DEVICE_NONE;
