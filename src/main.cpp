@@ -602,9 +602,9 @@ void setup()
  * "found".
  */
 
-// Only one supported RGB LED currently
-#ifdef HAS_NCP5623
-    rgb_found = i2cScanner->find(ScanI2C::DeviceType::NCP5623);
+// Two supported RGB LED currently
+#ifdef HAS_RGB_LED
+    rgb_found = i2cScanner->firstRGBLED();
 #endif
 
 #ifdef HAS_TPS65233
@@ -1270,7 +1270,7 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 #ifndef ARCH_ESP32
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_PAXCOUNTER_CONFIG;
 #endif
-#if !defined(HAS_NCP5623) && !defined(RGBLED_RED) && !defined(HAS_NEOPIXEL) && !defined(UNPHONE) && !RAK_4631
+#if !defined(HAS_RGB_LED) && !RAK_4631
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_AMBIENTLIGHTING_CONFIG;
 #endif
 
