@@ -110,7 +110,7 @@ void test_DH25519(void)
     TEST_ASSERT_EQUAL_MEMORY(expected_shared, crypto->shared_key, 32);
 }
 
-void test_PKC_Decrypt(void)
+void test_PKC(void)
 {
     uint8_t private_key[32];
     meshtastic_UserLite_public_key_t public_key;
@@ -132,6 +132,21 @@ void test_PKC_Decrypt(void)
     crypto->setDHPrivateKey(private_key);
 
     TEST_ASSERT(crypto->decryptCurve25519(fromNode, public_key, packetNum, 22, radioBytes + 16, decrypted));
+    TEST_ASSERT_EQUAL_MEMORY(expected_shared, crypto->shared_key, 8);
+    TEST_ASSERT_EQUAL_MEMORY(expected_nonce, crypto->nonce, 13);
+    TEST_ASSERT_EQUAL_MEMORY(expected_decrypted, decrypted, 10);
+
+    uint32_t toNode = 0; // Only impacts logging
+    uint8_t encrypted[128] __attribute__((__aligned__));
+    TEST_ASSERT(crypto->encryptCurve25519(toNode, fromNode, public_key, packetNum, 10, decrypted, encrypted));
+    TEST_ASSERT_EQUAL_MEMORY(expected_shared, crypto->shared_key, 8);
+    // The extraNonce is random, so skip checking the nonce and encrypted output here
+
+    // Copy the nonce to check it after encryption
+    memcpy(expected_nonce, crypto->nonce, 16);
+
+    // Decrypt the re-encrypted bytes and check they are the same as what we expect
+    TEST_ASSERT(crypto->decryptCurve25519(fromNode, public_key, packetNum, 22, encrypted, decrypted));
     TEST_ASSERT_EQUAL_MEMORY(expected_shared, crypto->shared_key, 8);
     TEST_ASSERT_EQUAL_MEMORY(expected_nonce, crypto->nonce, 13);
     TEST_ASSERT_EQUAL_MEMORY(expected_decrypted, decrypted, 10);
@@ -176,7 +191,7 @@ void setup()
     RUN_TEST(test_ECB_AES256);
     RUN_TEST(test_DH25519);
     RUN_TEST(test_AES_CTR);
-    RUN_TEST(test_PKC_Decrypt);
+    RUN_TEST(test_PKC);
     exit(UNITY_END()); // stop unit testing
 }
 
