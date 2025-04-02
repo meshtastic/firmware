@@ -120,7 +120,8 @@ void test_PKC_Decrypt(void)
     uint8_t decrypted[128] __attribute__((__aligned__));
     uint8_t expected_nonce[16];
 
-    uint32_t fromNode;
+    uint32_t fromNode = 0x0929;
+    uint64_t packetNum = 0x13b2d662;
     HexToBytes(public_key.bytes, "db18fc50eea47f00251cb784819a3cf5fc361882597f589f0d7ff820e8064457");
     public_key.size = 32;
     HexToBytes(private_key, "a00330633e63522f8a4d81ec6d9d1e6617f6c8ffd3a4c698229537d44e522277");
@@ -128,14 +129,11 @@ void test_PKC_Decrypt(void)
     HexToBytes(expected_decrypted, "08011204746573744800");
     HexToBytes(radioBytes, "8c646d7a2909000062d6b2136b00000040df24abfcc30a17a3d9046726099e796a1c036a792b");
     HexToBytes(expected_nonce, "62d6b213036a792b2909000000");
-    fromNode = 0x0929;
     crypto->setDHPrivateKey(private_key);
-    // TEST_ASSERT(crypto->setDHPublicKey(public_key));
-    // crypto->hash(crypto->shared_key, 32);
-    crypto->decryptCurve25519(fromNode, public_key, 0x13b2d662, 22, radioBytes + 16, decrypted);
+
+    TEST_ASSERT(crypto->decryptCurve25519(fromNode, public_key, packetNum, 22, radioBytes + 16, decrypted));
     TEST_ASSERT_EQUAL_MEMORY(expected_shared, crypto->shared_key, 8);
     TEST_ASSERT_EQUAL_MEMORY(expected_nonce, crypto->nonce, 13);
-
     TEST_ASSERT_EQUAL_MEMORY(expected_decrypted, decrypted, 10);
 }
 
