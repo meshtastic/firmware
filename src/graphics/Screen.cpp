@@ -1710,8 +1710,12 @@ String getSafeNodeName(meshtastic_NodeInfoLite *node)
 // Draws the top header bar (optionally inverted or bold)
 void drawScreenHeader(OLEDDisplay *display, const char *title, int16_t x, int16_t y)
 {
-    bool isInverted = (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED);
-    bool isBold = config.display.heading_bold;
+    constexpr int HEADER_OFFSET_Y = 2;
+    y += HEADER_OFFSET_Y;
+
+    const bool isInverted = (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED);
+    const bool isBold = config.display.heading_bold;
+    const int highlightHeight = FONT_HEIGHT_SMALL - 1;
 
     display->setFont(FONT_SMALL);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
@@ -1720,18 +1724,15 @@ void drawScreenHeader(OLEDDisplay *display, const char *title, int16_t x, int16_
     int textWidth = display->getStringWidth(title);
     int titleX = (screenWidth - textWidth) / 2;
 
-    // Height of highlight row
-    const int highlightHeight = FONT_HEIGHT_SMALL - 1;
-
-    // Y offset to vertically center text in rounded bar
-    int textY = y + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
-
+    // === Background highlight ===
     if (isInverted) {
         drawRoundedHighlight(display, 0, y, screenWidth, highlightHeight, 2);
         display->setColor(BLACK);
     }
 
-    // Draw text centered vertically and horizontally
+    // === Text baseline ===
+    int textY = y + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
+
     display->drawString(titleX, textY, title);
     if (isBold)
         display->drawString(titleX + 1, textY, title);
@@ -1835,25 +1836,26 @@ typedef void (*EntryRenderer)(OLEDDisplay *, meshtastic_NodeInfoLite *, int16_t,
 void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *title,
                         EntryRenderer renderer)
 {
+    constexpr int headerOffsetY = 1;
+
     int columnWidth = display->getWidth() / 2;
-    int totalRowsAvailable = (display->getHeight() - y - FONT_HEIGHT_SMALL) / (FONT_HEIGHT_SMALL - 3);
-    int visibleNodeRows = std::min(6, totalRowsAvailable);
     int rowYOffset = FONT_HEIGHT_SMALL - 3;
 
     display->clear();
     drawScreenHeader(display, title, x, y);
+    y += headerOffsetY;
 
     std::vector<NodeEntry> nodeList;
     retrieveAndSortNodes(nodeList);
 
     int totalEntries = nodeList.size();
-    int maxScroll = calculateMaxScroll(totalEntries, visibleNodeRows);
-    scrollIndex = std::min(scrollIndex, maxScroll);
+    int totalRowsAvailable = (display->getHeight() - y - FONT_HEIGHT_SMALL) / (FONT_HEIGHT_SMALL - 3);
+    int visibleNodeRows = std::min(6, totalRowsAvailable);
 
     int startIndex = scrollIndex * visibleNodeRows * 2;
     int endIndex = std::min(startIndex + visibleNodeRows * 2, totalEntries);
 
-    int yOffset = rowYOffset;
+    int yOffset = rowYOffset + headerOffsetY;
     int col = 0;
     int lastNodeY = y;
     int shownCount = 0;
@@ -1867,16 +1869,17 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
         shownCount++;
 
         if (y + yOffset > display->getHeight() - FONT_HEIGHT_SMALL) {
-            yOffset = rowYOffset;
+            yOffset = rowYOffset + headerOffsetY;
             col++;
             if (col > 1)
                 break;
         }
     }
 
-    drawColumnSeparator(display, x, y + FONT_HEIGHT_SMALL - 2, lastNodeY);
+    drawColumnSeparator(display, x, y + FONT_HEIGHT_SMALL, lastNodeY + headerOffsetY);
     drawScrollbar(display, visibleNodeRows, totalEntries, scrollIndex, 2, rowYOffset);
 }
+
 
 // Public screen function: shows how recently nodes were heard
 static void drawLastHeardScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -1945,20 +1948,21 @@ void drawCompassArrow(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
 void drawNodeListWithExtrasScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *title,
                                   EntryRenderer renderer, CompassExtraRenderer extras)
 {
+    constexpr int headerOffsetY = 1;
+
     int columnWidth = display->getWidth() / 2;
-    int totalRowsAvailable = (display->getHeight() - y - FONT_HEIGHT_SMALL) / (FONT_HEIGHT_SMALL - 3);
-    int visibleNodeRows = std::min(6, totalRowsAvailable);
     int rowYOffset = FONT_HEIGHT_SMALL - 3;
 
     display->clear();
     drawScreenHeader(display, title, x, y);
+    y += headerOffsetY;
 
     std::vector<NodeEntry> nodeList;
     retrieveAndSortNodes(nodeList);
 
     int totalEntries = nodeList.size();
-    int maxScroll = calculateMaxScroll(totalEntries, visibleNodeRows);
-    scrollIndex = std::min(scrollIndex, maxScroll);
+    int totalRowsAvailable = (display->getHeight() - y - FONT_HEIGHT_SMALL) / (FONT_HEIGHT_SMALL - 3);
+    int visibleNodeRows = std::min(6, totalRowsAvailable);
 
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     double userLat = 0.0, userLon = 0.0;
@@ -1973,7 +1977,7 @@ void drawNodeListWithExtrasScreen(OLEDDisplay *display, OLEDDisplayUiState *stat
     int startIndex = scrollIndex * visibleNodeRows * 2;
     int endIndex = std::min(startIndex + visibleNodeRows * 2, totalEntries);
 
-    int yOffset = rowYOffset;
+    int yOffset = rowYOffset + headerOffsetY;
     int col = 0;
     int lastNodeY = y;
     int shownCount = 0;
@@ -1993,17 +1997,16 @@ void drawNodeListWithExtrasScreen(OLEDDisplay *display, OLEDDisplayUiState *stat
         shownCount++;
 
         if (y + yOffset > display->getHeight() - FONT_HEIGHT_SMALL) {
-            yOffset = rowYOffset;
+            yOffset = rowYOffset + headerOffsetY;
             col++;
             if (col > 1)
                 break;
         }
     }
 
-    drawColumnSeparator(display, x, y + FONT_HEIGHT_SMALL - 2, lastNodeY);
+    drawColumnSeparator(display, x, y + FONT_HEIGHT_SMALL, lastNodeY + headerOffsetY);
     drawScrollbar(display, visibleNodeRows, totalEntries, scrollIndex, 2, rowYOffset);
 }
-
 // Public screen entry for compass
 static void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
