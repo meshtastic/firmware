@@ -2480,7 +2480,7 @@ static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiStat
     if (validHeading) {
         uint16_t compassDiam = Screen::getCompassDiam(SCREEN_WIDTH, SCREEN_HEIGHT);
         int16_t compassX = x + SCREEN_WIDTH - compassDiam / 2 - 8;
-        int16_t compassY = y + SCREEN_HEIGHT / 2 + rowYOffset;
+        int16_t compassY = y + SCREEN_HEIGHT / 2 + (rowYOffset / 2);
 
         screen->drawCompassNorth(display, compassX, compassY, heading);
         screen->drawNodeHeading(display, compassX, compassY, compassDiam, -heading);
