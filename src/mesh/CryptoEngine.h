@@ -109,6 +109,9 @@ class CryptoEngine
      * Set cryptographic (hashed) shared_key calculated from the given pubkey
      */
     bool setCryptoSharedSecret(meshtastic_UserLite_public_key_t pubkey);
+
+    // Allow unit test harness to peer into private/protected members
+    friend struct TestCryptoEngine;
 };
 
 extern CryptoEngine *crypto;
