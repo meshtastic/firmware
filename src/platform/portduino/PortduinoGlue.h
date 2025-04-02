@@ -99,6 +99,7 @@ enum configNames {
     maxnodes,
     ascii_logs,
     config_directory,
+    available_directory,
     mac_address
 };
 enum { no_screen, x11, st7789, st7735, st7735s, st7796, ili9341, ili9342, ili9486, ili9488, hx8357d };
