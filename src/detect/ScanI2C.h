@@ -49,6 +49,7 @@ class ScanI2C
         VEML7700,
         RCWL9620,
         NCP5623,
+        LP5562,
         TSL2591,
         OPT3001,
         MLX90632,
@@ -120,6 +121,8 @@ class ScanI2C
     FoundDevice firstKeyboard() const;
 
     FoundDevice firstAccelerometer() const;
+
+    FoundDevice firstRGBLED() const;
 
     virtual FoundDevice find(DeviceType) const;
 
