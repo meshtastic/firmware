@@ -2535,9 +2535,7 @@ static void drawMemoryScreen(OLEDDisplay *display, OLEDDisplayUiState *state, in
     display->setColor(WHITE);
 
     // === Layout ===
-    // Offset the content start position without affecting title
     int contentY = y + FONT_HEIGHT_SMALL;
-
     const int rowYOffset = FONT_HEIGHT_SMALL - 3;
     const int barHeight = 6;
     const int labelX = x;
@@ -2546,10 +2544,12 @@ static void drawMemoryScreen(OLEDDisplay *display, OLEDDisplayUiState *state, in
 
     int rowY = contentY;
 
-    // === Heap delta tracking ===
+    // === Heap delta tracking (disabled) ===
+    /*
     static uint32_t previousHeapFree = 0;
     static int32_t totalHeapDelta = 0;
     static int deltaChangeCount = 0;
+    */
 
     auto drawUsageRow = [&](const char *label, uint32_t used, uint32_t total, bool isHeap = false) {
         if (total == 0)
@@ -2591,10 +2591,10 @@ static void drawMemoryScreen(OLEDDisplay *display, OLEDDisplayUiState *state, in
 
         rowY += rowYOffset;
 
-        // === Heap delta (inline with heap row only)
+        // === Heap delta display (disabled) ===
+        /*
         if (isHeap && previousHeapFree > 0) {
             int32_t delta = (int32_t)(memGet.getFreeHeap() - previousHeapFree);
-
             if (delta != 0) {
                 totalHeapDelta += delta;
                 deltaChangeCount++;
@@ -2625,6 +2625,7 @@ static void drawMemoryScreen(OLEDDisplay *display, OLEDDisplayUiState *state, in
         if (isHeap) {
             previousHeapFree = memGet.getFreeHeap();
         }
+        */
     };
 
     // === Memory values ===
@@ -2659,22 +2660,6 @@ static void drawMemoryScreen(OLEDDisplay *display, OLEDDisplayUiState *state, in
 #endif
     if (hasSD && sdTotal > 0)
         drawUsageRow("SD:", sdUsed, sdTotal);
-
-    // === Final summary (always visible)
-    char summaryStr[32];
-    snprintf(summaryStr, sizeof(summaryStr), "seen: %dx  total: %ldB", deltaChangeCount, totalHeapDelta);
-
-    // Draw triangle manually
-    int triY = rowY + 4;
-    int triX = centerX - display->getStringWidth(summaryStr) / 2 - 8;
-
-    display->drawLine(triX, triY + 6, triX + 3, triY);
-    display->drawLine(triX + 3, triY, triX + 6, triY + 6);
-    display->drawLine(triX, triY + 6, triX + 6, triY + 6);
-
-    // Draw the text to the right of the triangle
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-    display->drawString(triX + 10, rowY + 2, summaryStr);
 }
 
 #if defined(ESP_PLATFORM) && defined(USE_ST7789)
