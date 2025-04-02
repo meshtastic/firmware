@@ -2535,18 +2535,19 @@ static void drawMemoryScreen(OLEDDisplay *display, OLEDDisplayUiState *state, in
     display->setColor(WHITE);
 
     // === Layout ===
+    // Offset the content start position without affecting title
+    int contentY = y + FONT_HEIGHT_SMALL;
+
     const int rowYOffset = FONT_HEIGHT_SMALL - 3;
     const int barHeight = 6;
     const int labelX = x;
     const int barsOffset = (screenWidth > 128) ? 24 : 0;
     const int barX = x + 40 + barsOffset;
-    const int textRightX = x + SCREEN_WIDTH - 2;
 
-    int rowY = y + rowYOffset;
+    int rowY = contentY;
 
     // === Heap delta tracking ===
     static uint32_t previousHeapFree = 0;
-    static int32_t lastHeapDelta = 0;
     static int32_t totalHeapDelta = 0;
     static int deltaChangeCount = 0;
 
@@ -2566,7 +2567,7 @@ static void drawMemoryScreen(OLEDDisplay *display, OLEDDisplayUiState *state, in
         int textWidth = display->getStringWidth(combinedStr);
         int adjustedBarWidth = SCREEN_WIDTH - barX - textWidth - 6;
         if (adjustedBarWidth < 10)
-            adjustedBarWidth = 10; // prevent weird bar if display is too small
+            adjustedBarWidth = 10;
 
         int fillWidth = (used * adjustedBarWidth) / total;
 
@@ -2593,7 +2594,6 @@ static void drawMemoryScreen(OLEDDisplay *display, OLEDDisplayUiState *state, in
         // === Heap delta (inline with heap row only)
         if (isHeap && previousHeapFree > 0) {
             int32_t delta = (int32_t)(memGet.getFreeHeap() - previousHeapFree);
-            lastHeapDelta = delta;
 
             if (delta != 0) {
                 totalHeapDelta += delta;
