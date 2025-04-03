@@ -1,6 +1,6 @@
 version: 0.1
 cli:
-  version: 1.22.11
+  version: 1.22.12
 plugins:
   sources:
     - id: trunk
@@ -12,7 +12,7 @@ lint:
     - trufflehog@3.88.20
     - yamllint@1.37.0
     - bandit@1.8.3
-    - checkov@3.2.395
+    - checkov@3.2.396
     - terrascan@1.19.9
     - trivy@0.61.0
     - taplo@0.9.3
