@@ -1894,12 +1894,12 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
 
     if (shownCount > 0) {
         // yStart = top of first node = y (header start) + header height + spacing
-        const int headerOffsetYLocal = 1; // Matches earlier in this function
+        const int headerOffsetYLocal = 1;               // Matches earlier in this function
         const int headerHeight = FONT_HEIGHT_SMALL - 1; // from drawScreenHeader()
         int yStart = y + headerHeight + headerOffsetYLocal;
         drawColumnSeparator(display, x, yStart, lastNodeY + headerOffsetY);
     }
-    
+
     const int headerOffsetYLocal = 1;
     const int headerHeight = FONT_HEIGHT_SMALL - 1;
     int firstNodeY = y + headerHeight + headerOffsetYLocal;
@@ -2031,12 +2031,12 @@ void drawNodeListWithExtrasScreen(OLEDDisplay *display, OLEDDisplayUiState *stat
 
     if (shownCount > 0) {
         // yStart = top of first node = y (header start) + header height + spacing
-        const int headerOffsetYLocal = 1; // Matches earlier in this function
+        const int headerOffsetYLocal = 1;               // Matches earlier in this function
         const int headerHeight = FONT_HEIGHT_SMALL - 1; // from drawScreenHeader()
         int yStart = y + headerHeight + headerOffsetYLocal;
         drawColumnSeparator(display, x, yStart, lastNodeY + headerOffsetY);
     }
-    
+
     const int headerOffsetYLocal = 1;
     const int headerHeight = FONT_HEIGHT_SMALL - 1;
     int firstNodeY = y + headerHeight + headerOffsetYLocal;
@@ -2311,61 +2311,52 @@ static void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int
     display->setColor(WHITE);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
-    // === First Row: MAC ID and Region ===
-    bool origBold = config.display.heading_bold;
-    config.display.heading_bold = false;
+    // === First Row: Region / Radio Preset ===
 
+    auto mode = DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false);
+
+    // Display Region and Radio Preset
+    char regionradiopreset[25];
+    const char *region = myRegion ? myRegion->name : NULL;
+
+    const char *preset = (screenWidth > 128) ? "Preset" : "Prst";
+
+    snprintf(regionradiopreset, sizeof(regionradiopreset), "%s: %s/%s", preset, region, mode);
+    display->drawString(x, compactFirstLine, regionradiopreset);
+
+    // char channelStr[20];
+    // snprintf(channelStr, sizeof(channelStr), "#%s", channels.getName(channels.getPrimaryIndex()));
+    // display->drawString(x + SCREEN_WIDTH - display->getStringWidth(channelStr), compactFirstLine, channelStr);
+
+    // === Second Row: Channel Utilization ===
+    char chUtil[25];
+    snprintf(chUtil, sizeof(chUtil), "ChUtil: %2.0f%%", airTime->channelUtilizationPercent());
+    display->drawString(x, compactSecondLine, chUtil);
+
+    // === Third Row: Channel Utilization ===
     // Get our hardware ID
     uint8_t dmac[6];
     getMacAddr(dmac);
     snprintf(ourId, sizeof(ourId), "%02x%02x", dmac[4], dmac[5]);
 
-#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) ||      \
-     defined(ST7789_CS) || defined(USE_ST7789) || defined(HX8357_CS) || ARCH_PORTDUINO) &&                                       \
-    !defined(DISPLAY_FORCE_SMALL_FONTS)
-    display->drawFastImage(x, compactFirstLine + 5, 12, 8, imgInfoL1);
-    display->drawFastImage(x, compactFirstLine + 12, 12, 8, imgInfoL2);
-#else
-    display->drawFastImage(x, compactFirstLine + 3, 8, 8, imgInfo);
-#endif
+    char shortnameble[35];
+    snprintf(shortnameble, sizeof(shortnameble), "%s: %s/%s", "Short/BLE", haveGlyphs(owner.short_name) ? owner.short_name : "",
+             ourId);
+    display->drawString(x, compactThirdLine, shortnameble);
 
-    int i_xoffset = (SCREEN_WIDTH > 128) ? 14 : 10;
-    display->drawString(x + i_xoffset, compactFirstLine, ourId);
-
-    const char *region = myRegion ? myRegion->name : NULL;
-    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(region), compactFirstLine, region);
-
-    config.display.heading_bold = origBold;
-
-    // === Second Row: Channel and Channel Utilization ===
-    char chUtil[13];
-    snprintf(chUtil, sizeof(chUtil), "ChUtil %2.0f%%", airTime->channelUtilizationPercent());
-    display->drawString(x, compactSecondLine, chUtil);
-
-    char channelStr[20];
-    snprintf(channelStr, sizeof(channelStr), "#%s", channels.getName(channels.getPrimaryIndex()));
-    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(channelStr), compactSecondLine, channelStr);
-
-    // === Third Row: Node longName ===
+    // === Fourth Row: Node longName ===
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     if (ourNode && ourNode->has_user && strlen(ourNode->user.long_name) > 0) {
-        const char *longName = ourNode->user.long_name;
-        int nameX = (SCREEN_WIDTH - display->getStringWidth(longName)) / 2;
-        display->drawString(nameX, compactThirdLine, longName);
-    }
-
-    // === Fourth Row: Node shortName ===
-    char buf[25];
-    snprintf(buf, sizeof(buf), "%s\n%s", xstr(APP_VERSION_SHORT), haveGlyphs(owner.short_name) ? owner.short_name : "");
-    if (ourNode && ourNode->has_user && strlen(ourNode->user.long_name) > 0) {
-        int shortNameX = (SCREEN_WIDTH - display->getStringWidth(owner.short_name)) / 2;
-        display->drawString(shortNameX, compactFourthLine, owner.short_name);
+        char devicelongname[55];
+        snprintf(devicelongname, sizeof(devicelongname), "%s: %s", "Name", ourNode->user.long_name);
+        display->drawString(x, compactFourthLine, devicelongname);
     }
 }
 
 // ****************************
 // * Activity Screen          *
 // ****************************
+/*
 static void drawActivity(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     display->clear();
@@ -2398,6 +2389,7 @@ static void drawActivity(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     // === First Line: Draw any log messages ===
     display->drawLogBuffer(x, compactFirstLine);
 }
+*/
 
 // ****************************
 // * My Position Screen       *
@@ -2507,19 +2499,20 @@ static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiStat
         const int16_t topY = compactFirstLine;
         const int16_t bottomY = SCREEN_HEIGHT - (FONT_HEIGHT_SMALL - 1); // nav row height
         const int16_t usableHeight = bottomY - topY - 5;
-    
+
         int16_t compassRadius = usableHeight / 2;
-        if (compassRadius < 8) compassRadius = 8;
+        if (compassRadius < 8)
+            compassRadius = 8;
         const int16_t compassDiam = compassRadius * 2;
         const int16_t compassX = x + SCREEN_WIDTH - compassRadius - 8;
-    
+
         // Center vertically and nudge down slightly to keep "N" clear of header
         const int16_t compassY = topY + (usableHeight / 2) + ((FONT_HEIGHT_SMALL - 1) / 2) + 2;
-    
+
         // Draw compass
         screen->drawNodeHeading(display, compassX, compassY, compassDiam, -heading);
         display->drawCircle(compassX, compassY, compassRadius);
-    
+
         // "N" label
         float northAngle = -heading;
         float radius = compassRadius;
@@ -2527,7 +2520,7 @@ static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiStat
         int16_t nY = compassY - (radius - 1) * cos(northAngle);
         int16_t nLabelWidth = display->getStringWidth("N") + 2;
         int16_t nLabelHeightBox = FONT_HEIGHT_SMALL + 1;
-    
+
         display->setColor(BLACK);
         display->fillRect(nX - nLabelWidth / 2, nY - nLabelHeightBox / 2, nLabelWidth, nLabelHeightBox);
         display->setColor(WHITE);
@@ -3335,7 +3328,7 @@ void Screen::setFrames(FrameFocus focus)
     normalFrames[numframes++] = drawLoRaFocused;
     normalFrames[numframes++] = drawCompassAndLocationScreen;
     normalFrames[numframes++] = drawMemoryScreen;
-    normalFrames[numframes++] = drawActivity;
+    // normalFrames[numframes++] = drawActivity;
 
     // then all the nodes
     // We only show a few nodes in our scrolling list - because meshes with many nodes would have too many screens
