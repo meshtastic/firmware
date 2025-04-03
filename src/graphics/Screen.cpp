@@ -1892,8 +1892,18 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
         }
     }
 
-    drawColumnSeparator(display, x, y + FONT_HEIGHT_SMALL, lastNodeY + headerOffsetY);
-    drawScrollbar(display, visibleNodeRows, totalEntries, scrollIndex, 2, rowYOffset);
+    if (shownCount > 0) {
+        // yStart = top of first node = y (header start) + header height + spacing
+        const int headerOffsetYLocal = 1; // Matches earlier in this function
+        const int headerHeight = FONT_HEIGHT_SMALL - 1; // from drawScreenHeader()
+        int yStart = y + headerHeight + headerOffsetYLocal;
+        drawColumnSeparator(display, x, yStart, lastNodeY + headerOffsetY);
+    }
+    
+    const int headerOffsetYLocal = 1;
+    const int headerHeight = FONT_HEIGHT_SMALL - 1;
+    int firstNodeY = y + headerHeight + headerOffsetYLocal;
+    drawScrollbar(display, visibleNodeRows, totalEntries, scrollIndex, 2, firstNodeY);
 }
 
 // Public screen function: shows how recently nodes were heard
@@ -2019,8 +2029,18 @@ void drawNodeListWithExtrasScreen(OLEDDisplay *display, OLEDDisplayUiState *stat
         }
     }
 
-    drawColumnSeparator(display, x, y + FONT_HEIGHT_SMALL, lastNodeY + headerOffsetY);
-    drawScrollbar(display, visibleNodeRows, totalEntries, scrollIndex, 2, rowYOffset);
+    if (shownCount > 0) {
+        // yStart = top of first node = y (header start) + header height + spacing
+        const int headerOffsetYLocal = 1; // Matches earlier in this function
+        const int headerHeight = FONT_HEIGHT_SMALL - 1; // from drawScreenHeader()
+        int yStart = y + headerHeight + headerOffsetYLocal;
+        drawColumnSeparator(display, x, yStart, lastNodeY + headerOffsetY);
+    }
+    
+    const int headerOffsetYLocal = 1;
+    const int headerHeight = FONT_HEIGHT_SMALL - 1;
+    int firstNodeY = y + headerHeight + headerOffsetYLocal;
+    drawScrollbar(display, visibleNodeRows, totalEntries, scrollIndex, 2, firstNodeY);
 }
 // Public screen entry for compass
 static void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
