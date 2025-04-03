@@ -1012,21 +1012,38 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
     uint8_t timestampHours, timestampMinutes;
     int32_t daysAgo;
     bool useTimestamp = deltaToTimestamp(seconds, &timestampHours, &timestampMinutes, &daysAgo);
+    char from_string[75];
+
+    if (useTimestamp) {
+        std::string prefix = (daysAgo == 1 && display->width() >= 200) ? "Yesterday" : "At";
+
+        if (config.display.use_12h_clock) {
+            std::string meridiem = "AM";
+            if (timestampHours >= 12) {
+                meridiem = "PM";
+            }
+            if (timestampHours > 12) {
+                timestampHours -= 12;
+            }
+            if (timestampHours == 00) {
+                timestampHours = 12;
+            }
+
+            snprintf(from_string, sizeof(from_string), "%s %d:%02d%s from", prefix.c_str(), timestampHours, timestampMinutes,
+                     meridiem.c_str());
+        } else {
+            snprintf(from_string, sizeof(from_string), "%s %d:%02d from", prefix.c_str(), timestampHours, timestampMinutes);
+        }
+    }
 
     // If bold, draw twice, shifting right by one pixel
     for (uint8_t xOff = 0; xOff <= (config.display.heading_bold ? 1 : 0); xOff++) {
         // Show a timestamp if received today, but longer than 15 minutes ago
         if (useTimestamp && minutes >= 15 && daysAgo == 0) {
-            display->drawStringf(xOff + x, 0 + y, tempBuf, "At %02hu:%02hu from %s", timestampHours, timestampMinutes,
+            display->drawStringf(xOff + x, 0 + y, tempBuf, "%s %s", from_string,
                                  (node && node->has_user) ? node->user.short_name : "???");
-        }
-        // Timestamp yesterday (if display is wide enough)
-        else if (useTimestamp && daysAgo == 1 && display->width() >= 200) {
-            display->drawStringf(xOff + x, 0 + y, tempBuf, "Yesterday %02hu:%02hu from %s", timestampHours, timestampMinutes,
-                                 (node && node->has_user) ? node->user.short_name : "???");
-        }
-        // Otherwise, show a time delta
         else {
+        } else {
             display->drawStringf(xOff + x, 0 + y, tempBuf, "%s ago from %s",
                                  screen->drawTimeDelta(days, hours, minutes, seconds).c_str(),
                                  (node && node->has_user) ? node->user.short_name : "???");
@@ -1880,7 +1897,6 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     drawScrollbar(display, visibleNodeRows, totalEntries, scrollIndex, 2, rowYOffset);
 }
 
-
 // Public screen function: shows how recently nodes were heard
 static void drawLastHeardScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
@@ -2167,8 +2183,11 @@ static void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, i
 
     // === Content below header ===
 
-    // === First Row: Node and GPS ===
+    // === First Row: Region / Channel Utilization and GPS ===
     bool origBold = config.display.heading_bold;
+    config.display.heading_bold = false;
+
+    // Display Region and Channel Utilization
     config.display.heading_bold = false;
 
     drawNodes(display, x, compactFirstLine + 3, nodeStatus);
@@ -2196,40 +2215,7 @@ static void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, i
 
     config.display.heading_bold = origBold;
 
-    // === Second Row: MAC ID and Channel Utilization ===
-
-    // Get our hardware ID
-    uint8_t dmac[6];
-    getMacAddr(dmac);
-    snprintf(ourId, sizeof(ourId), "%02x%02x", dmac[4], dmac[5]);
-
-#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) ||      \
-     defined(ST7789_CS) || defined(USE_ST7789) || defined(HX8357_CS) || ARCH_PORTDUINO) &&                                       \
-    !defined(DISPLAY_FORCE_SMALL_FONTS)
-    display->drawFastImage(x, compactSecondLine + 3, 12, 8, imgInfoL1);
-    display->drawFastImage(x, compactSecondLine + 11, 12, 8, imgInfoL2);
-#else
-    display->drawFastImage(x, compactSecondLine + 2, 8, 8, imgInfo);
-#endif
-
-    int i_xoffset = (SCREEN_WIDTH > 128) ? 14 : 10;
-    display->drawString(x + i_xoffset, compactSecondLine, ourId);
-
-    // Display Channel Utilization
-    char chUtil[13];
-    snprintf(chUtil, sizeof(chUtil), "ChUtil %2.0f%%", airTime->channelUtilizationPercent());
-    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(chUtil), compactSecondLine, chUtil);
-
-    // === Third Row: LongName Centered ===
-    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
-    if (ourNode && ourNode->has_user && strlen(ourNode->user.long_name) > 0) {
-        const char *longName = ourNode->user.long_name;
-        int textWidth = display->getStringWidth(longName);
-        int nameX = (SCREEN_WIDTH - textWidth) / 2;
-        display->drawString(nameX, compactThirdLine, longName);
-    }
-
-    // === Fourth Row: Uptime ===
+    // === Second Row: Uptime and Voltage ===
     uint32_t uptime = millis() / 1000;
     char uptimeStr[6];
     uint32_t minutes = uptime / 60, hours = minutes / 60, days = hours / 24;
@@ -2250,8 +2236,29 @@ static void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, i
 
     char uptimeFullStr[16];
     snprintf(uptimeFullStr, sizeof(uptimeFullStr), "Uptime: %s", uptimeStr);
-    int uptimeX = (SCREEN_WIDTH - display->getStringWidth(uptimeFullStr)) / 2;
-    display->drawString(uptimeX, compactFourthLine, uptimeFullStr);
+    display->drawString(x, compactSecondLine, uptimeFullStr);
+
+    char batStr[20];
+    if (powerStatus->getHasBattery()) {
+        int batV = powerStatus->getBatteryVoltageMv() / 1000;
+        int batCv = (powerStatus->getBatteryVoltageMv() % 1000) / 10;
+        snprintf(batStr, sizeof(batStr), "%01d.%02dV", batV, batCv);
+        display->drawString(x + SCREEN_WIDTH - display->getStringWidth(batStr), compactSecondLine, batStr);
+    } else {
+        display->drawString(x + SCREEN_WIDTH - display->getStringWidth("USB"), compactSecondLine, String("USB"));
+    }
+
+    // === Third Row: LongName Centered ===
+    // Blank
+
+    // === Fourth Row: LongName Centered ===
+    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    if (ourNode && ourNode->has_user && strlen(ourNode->user.long_name) > 0) {
+        const char *longName = ourNode->user.long_name;
+        int textWidth = display->getStringWidth(longName);
+        int nameX = (SCREEN_WIDTH - textWidth) / 2;
+        display->drawString(nameX, compactFourthLine, longName);
+    }
 }
 
 // ****************************
