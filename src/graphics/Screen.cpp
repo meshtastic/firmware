@@ -1042,7 +1042,6 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
         if (useTimestamp && minutes >= 15 && daysAgo == 0) {
             display->drawStringf(xOff + x, 0 + y, tempBuf, "%s %s", from_string,
                                  (node && node->has_user) ? node->user.short_name : "???");
-        else {
         } else {
             display->drawStringf(xOff + x, 0 + y, tempBuf, "%s ago from %s",
                                  screen->drawTimeDelta(days, hours, minutes, seconds).c_str(),
