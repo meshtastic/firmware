@@ -2430,7 +2430,7 @@ static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiStat
     display->setColor(WHITE);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
-    // Row Y offset just like drawNodeListScreen
+    // Row Y offset
     int rowYOffset = FONT_HEIGHT_SMALL - 3;
     int rowY = y + rowYOffset;
 
@@ -2504,24 +2504,32 @@ static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiStat
 
     // === Draw Compass if heading is valid ===
     if (validHeading) {
-        uint16_t compassDiam = Screen::getCompassDiam(SCREEN_WIDTH, SCREEN_HEIGHT);
-        int16_t compassX = x + SCREEN_WIDTH - compassDiam / 2 - 8;
-        int16_t compassY = y + SCREEN_HEIGHT / 2 + (rowYOffset / 2);
-
-        screen->drawCompassNorth(display, compassX, compassY, heading);
+        const int16_t topY = compactFirstLine;
+        const int16_t bottomY = SCREEN_HEIGHT - (FONT_HEIGHT_SMALL - 1); // nav row height
+        const int16_t usableHeight = bottomY - topY - 5;
+    
+        int16_t compassRadius = usableHeight / 2;
+        if (compassRadius < 8) compassRadius = 8;
+        const int16_t compassDiam = compassRadius * 2;
+        const int16_t compassX = x + SCREEN_WIDTH - compassRadius - 8;
+    
+        // Center vertically and nudge down slightly to keep "N" clear of header
+        const int16_t compassY = topY + (usableHeight / 2) + ((FONT_HEIGHT_SMALL - 1) / 2) + 2;
+    
+        // Draw compass
         screen->drawNodeHeading(display, compassX, compassY, compassDiam, -heading);
-        display->drawCircle(compassX, compassY, compassDiam / 2);
-
-        // === Draw moving "N" label slightly inside edge of circle ===
+        display->drawCircle(compassX, compassY, compassRadius);
+    
+        // "N" label
         float northAngle = -heading;
-        float radius = compassDiam / 2;
+        float radius = compassRadius;
         int16_t nX = compassX + (radius - 1) * sin(northAngle);
         int16_t nY = compassY - (radius - 1) * cos(northAngle);
-
         int16_t nLabelWidth = display->getStringWidth("N") + 2;
-        int16_t nLabelHeight = FONT_HEIGHT_SMALL + 1;
+        int16_t nLabelHeightBox = FONT_HEIGHT_SMALL + 1;
+    
         display->setColor(BLACK);
-        display->fillRect(nX - nLabelWidth / 2, nY - nLabelHeight / 2, nLabelWidth, nLabelHeight);
+        display->fillRect(nX - nLabelWidth / 2, nY - nLabelHeightBox / 2, nLabelWidth, nLabelHeightBox);
         display->setColor(WHITE);
         display->setFont(FONT_SMALL);
         display->setTextAlignment(TEXT_ALIGN_CENTER);
