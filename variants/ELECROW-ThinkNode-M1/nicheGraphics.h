@@ -16,12 +16,10 @@
 #include "graphics/niche/InkHUD/Applets/User/RecentsList/RecentsListApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/ThreadedMessage/ThreadedMessageApplet.h"
 
-// #include "graphics/niche/InkHUD/Applets/Examples/BasicExample/BasicExampleApplet.h"
-// #include "graphics/niche/InkHUD/Applets/Examples/NewMsgExample/NewMsgExampleApplet.h"
-
 // Shared NicheGraphics components
 // --------------------------------
-#include "graphics/niche/Drivers/EInk/LCMEN2R13EFC1.h"
+#include "graphics/niche/Drivers/Backlight/LatchingBacklight.h"
+#include "graphics/niche/Drivers/EInk/GDEY0154D67.h"
 #include "graphics/niche/Inputs/TwoButton.h"
 
 #include "graphics/niche/Fonts/FreeSans6pt7b.h"
@@ -35,16 +33,15 @@ void setupNicheGraphics()
     // SPI
     // -----------------------------
 
-    // Display is connected to HSPI
-    SPIClass *hspi = new SPIClass(HSPI);
-    hspi->begin(PIN_EINK_SCLK, -1, PIN_EINK_MOSI, PIN_EINK_CS);
+    // For NRF52 platforms, SPI pins are defined in variant.h, not passed to begin()
+    SPI1.begin();
 
-    // E-Ink Driver
+    // Driver
     // -----------------------------
 
     // Use E-Ink driver
-    Drivers::EInk *driver = new Drivers::LCMEN213EFC1;
-    driver->begin(hspi, PIN_EINK_DC, PIN_EINK_CS, PIN_EINK_BUSY, PIN_EINK_RES);
+    Drivers::EInk *driver = new Drivers::GDEY0154D67; // Todo: confirm display model
+    driver->begin(&SPI1, PIN_EINK_DC, PIN_EINK_CS, PIN_EINK_BUSY, PIN_EINK_RES);
 
     // InkHUD
     // ----------------------------
@@ -56,6 +53,8 @@ void setupNicheGraphics()
 
     // Set how many FAST updates per FULL update
     // Set how unhealthy additional FAST updates beyond this number are
+    // Todo: observe the display's performance in-person and adjust accordingly.
+    // Currently set to the values given by Elecrow for EInkDynamicDisplay.
     inkhud->setDisplayResilience(10, 1.5);
 
     // Prepare fonts
@@ -68,20 +67,24 @@ void setupNicheGraphics()
     */
 
     // Customize default settings
-    inkhud->persistence->settings.userTiles.maxCount = 2; // How many tiles can the display handle?
-    inkhud->persistence->settings.rotation = 3;           // 270 degrees clockwise
-    inkhud->persistence->settings.userTiles.count = 1;    // One tile only by default, keep things simple for new users
+    inkhud->persistence->settings.userTiles.maxCount = 2;              // Two applets side-by-side
+    inkhud->persistence->settings.rotation = 0;                        // To be confirmed?
+    inkhud->persistence->settings.optionalFeatures.batteryIcon = true; // Device definitely has a battery
+
+    // Setup backlight
+    // Note: button mapping for this configured further down
+    Drivers::LatchingBacklight *backlight = Drivers::LatchingBacklight::getInstance();
+    backlight->setPin(PIN_EINK_EN);
 
     // Pick applets
+    // Note: order of applets determines priority of "auto-show" feature
     inkhud->addApplet("All Messages", new InkHUD::AllMessageApplet, true, true); // Activated, autoshown
     inkhud->addApplet("DMs", new InkHUD::DMApplet);                              // Inactive
     inkhud->addApplet("Channel 0", new InkHUD::ThreadedMessageApplet(0));        // Inactive
     inkhud->addApplet("Channel 1", new InkHUD::ThreadedMessageApplet(1));        // Inactive
     inkhud->addApplet("Positions", new InkHUD::PositionsApplet, true);           // Activated
     inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet);            // Inactive
-    inkhud->addApplet("Heard", new InkHUD::HeardApplet, true, false, 0);         // Activated, not autoshown, default on tile 0
-    // inkhud->addApplet("Basic", new InkHUD::BasicExampleApplet);
-    // inkhud->addApplet("NewMsg", new InkHUD::NewMsgExampleApplet);
+    inkhud->addApplet("Heard", new InkHUD::HeardApplet, true, false, 0);         // Activated, no autoshow, default on tile 0
 
     // Start running InkHUD
     inkhud->begin();
@@ -90,14 +93,25 @@ void setupNicheGraphics()
     // --------------------------
 
     Inputs::TwoButton *buttons = Inputs::TwoButton::getInstance(); // Shared NicheGraphics component
-    constexpr uint8_t MAIN_BUTTON = 0;
+
+    // As labeled on Elecrow diagram: https://www.elecrow.com/download/product/CIL12901M/ThinkNode-M1_User_Manual.pdf
+    constexpr uint8_t PAGE_TURN_BUTTON = 0;
+    constexpr uint8_t FUNCTION_BUTTON = 1;
 
     // Setup the main user button
-    buttons->setWiring(MAIN_BUTTON, Inputs::TwoButton::getUserButtonPin());
-    buttons->setHandlerShortPress(MAIN_BUTTON, []() { InkHUD::InkHUD::getInstance()->shortpress(); });
-    buttons->setHandlerLongPress(MAIN_BUTTON, []() { InkHUD::InkHUD::getInstance()->longpress(); });
+    buttons->setWiring(PAGE_TURN_BUTTON, PIN_BUTTON2);
+    buttons->setTiming(PAGE_TURN_BUTTON, 50, 500); // Todo: confirm 50ms is adequate debounce
+    buttons->setHandlerShortPress(PAGE_TURN_BUTTON, []() { InkHUD::InkHUD::getInstance()->shortpress(); });
+    buttons->setHandlerLongPress(PAGE_TURN_BUTTON, []() { InkHUD::InkHUD::getInstance()->longpress(); });
 
-    // No aux button on this board
+    // Setup the aux button
+    // Initial testing only: mapped to the backlight
+    // Todo: additional features
+    buttons->setWiring(FUNCTION_BUTTON, PIN_BUTTON1);
+    buttons->setTiming(FUNCTION_BUTTON, 50, 500); // 500ms before latch
+    buttons->setHandlerDown(FUNCTION_BUTTON, [backlight]() { backlight->peek(); });
+    buttons->setHandlerLongPress(FUNCTION_BUTTON, [backlight]() { backlight->latch(); });
+    buttons->setHandlerShortPress(FUNCTION_BUTTON, [backlight]() { backlight->off(); });
 
     buttons->start();
 }
