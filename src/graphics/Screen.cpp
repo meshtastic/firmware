@@ -980,146 +980,214 @@ bool deltaToTimestamp(uint32_t secondsAgo, uint8_t *hours, uint8_t *minutes, int
     validCached = true;
     return validCached;
 }
-
-/// Draw the last text message we received
-static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+void drawRoundedHighlight(OLEDDisplay *display, int16_t x, int16_t y, int16_t w, int16_t h, int16_t r)
 {
-    // the max length of this buffer is much longer than we can possibly print
-    static char tempBuf[237];
+    display->fillRect(x + r, y, w - 2 * r, h);
+    display->fillRect(x, y + r, r, h - 2 * r);
+    display->fillRect(x + w - r, y + r, r, h - 2 * r);
+    display->fillCircle(x + r + 1, y + r, r);
+    display->fillCircle(x + w - r - 1, y + r, r);
+    display->fillCircle(x + r + 1, y + h - r - 1, r);
+    display->fillCircle(x + w - r - 1, y + h - r - 1, r);
+}
 
+// ****************************
+// *   Tex Message Screen     *
+// ****************************
+void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
     const meshtastic_MeshPacket &mp = devicestate.rx_text_message;
-    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(getFrom(&mp));
-    // LOG_DEBUG("Draw text message from 0x%x: %s", mp.from,
-    // mp.decoded.variant.data.decoded.bytes);
+    const char *msg = reinterpret_cast<const char *>(mp.decoded.payload.bytes);
 
-    // Demo for drawStringMaxWidth:
-    // with the third parameter you can define the width after which words will
-    // be wrapped. Currently only spaces and "-" are allowed for wrapping
+    // === Setup display formatting ===
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
-    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
-        display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
-        display->setColor(BLACK);
-    }
 
-    // For time delta
-    uint32_t seconds = sinceReceived(&mp);
-    uint32_t minutes = seconds / 60;
-    uint32_t hours = minutes / 60;
-    uint32_t days = hours / 24;
+    const int screenWidth = display->getWidth();
+    const int screenHeight = display->getHeight();
+    const int navHeight = FONT_HEIGHT_SMALL; // space reserved at bottom
+    const int scrollBottom = screenHeight - navHeight;
+    const int usableHeight = scrollBottom;
+    const int textWidth = screenWidth;
+    const int cornerRadius = 2;
 
-    // For timestamp
+    bool isInverted = (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED);
+    bool isBold = config.display.heading_bold;
+
+    // === Construct Header String ===
+    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(getFrom(&mp));
+    char headerStr[80];
+    const char *sender = (node && node->has_user) ? node->user.short_name : "???";
+    uint32_t seconds = sinceReceived(&mp), minutes = seconds / 60, hours = minutes / 60, days = hours / 24;
     uint8_t timestampHours, timestampMinutes;
     int32_t daysAgo;
     bool useTimestamp = deltaToTimestamp(seconds, &timestampHours, &timestampMinutes, &daysAgo);
-    char from_string[75];
 
-    if (useTimestamp) {
-        std::string prefix = (daysAgo == 1 && display->width() >= 200) ? "Yesterday" : "At";
-
+    if (useTimestamp && minutes >= 15 && daysAgo == 0) {
+        std::string prefix = (daysAgo == 1 && screenWidth >= 200) ? "Yesterday" : "At";
+        std::string meridiem = "AM";
         if (config.display.use_12h_clock) {
-            std::string meridiem = "AM";
-            if (timestampHours >= 12) {
-                meridiem = "PM";
-            }
-            if (timestampHours > 12) {
-                timestampHours -= 12;
-            }
-            if (timestampHours == 00) {
-                timestampHours = 12;
-            }
-
-            snprintf(from_string, sizeof(from_string), "%s %d:%02d%s from", prefix.c_str(), timestampHours, timestampMinutes,
-                     meridiem.c_str());
+            if (timestampHours >= 12) meridiem = "PM";
+            if (timestampHours > 12) timestampHours -= 12;
+            if (timestampHours == 0) timestampHours = 12;
+            snprintf(headerStr, sizeof(headerStr), "%s %d:%02d%s from %s", prefix.c_str(), timestampHours, timestampMinutes, meridiem.c_str(), sender);
         } else {
-            snprintf(from_string, sizeof(from_string), "%s %d:%02d from", prefix.c_str(), timestampHours, timestampMinutes);
+            snprintf(headerStr, sizeof(headerStr), "%s %d:%02d from %s", prefix.c_str(), timestampHours, timestampMinutes, sender);
         }
-    }
-
-    // If bold, draw twice, shifting right by one pixel
-    for (uint8_t xOff = 0; xOff <= (config.display.heading_bold ? 1 : 0); xOff++) {
-        // Show a timestamp if received today, but longer than 15 minutes ago
-        if (useTimestamp && minutes >= 15 && daysAgo == 0) {
-            display->drawStringf(xOff + x, 0 + y, tempBuf, "%s %s", from_string,
-                                 (node && node->has_user) ? node->user.short_name : "???");
-        } else {
-            display->drawStringf(xOff + x, 0 + y, tempBuf, "%s ago from %s",
-                                 screen->drawTimeDelta(days, hours, minutes, seconds).c_str(),
-                                 (node && node->has_user) ? node->user.short_name : "???");
-        }
-    }
-
-    display->setColor(WHITE);
-#ifndef EXCLUDE_EMOJI
-    const char *msg = reinterpret_cast<const char *>(mp.decoded.payload.bytes);
-    if (strcmp(msg, "\U0001F44D") == 0) {
-        display->drawXbm(x + (SCREEN_WIDTH - thumbs_width) / 2,
-                         y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - thumbs_height) / 2 + 2 + 5, thumbs_width, thumbs_height,
-                         thumbup);
-    } else if (strcmp(msg, "\U0001F44E") == 0) {
-        display->drawXbm(x + (SCREEN_WIDTH - thumbs_width) / 2,
-                         y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - thumbs_height) / 2 + 2 + 5, thumbs_width, thumbs_height,
-                         thumbdown);
-    } else if (strcmp(msg, "\U0001F60A") == 0 || strcmp(msg, "\U0001F600") == 0 || strcmp(msg, "\U0001F642") == 0 ||
-               strcmp(msg, "\U0001F609") == 0 ||
-               strcmp(msg, "\U0001F601") == 0) { // matches 5 different common smileys, so that the phone user doesn't have to
-                                                 // remember which one is compatible
-        display->drawXbm(x + (SCREEN_WIDTH - smiley_width) / 2,
-                         y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - smiley_height) / 2 + 2 + 5, smiley_width, smiley_height,
-                         smiley);
-    } else if (strcmp(msg, "❓") == 0) {
-        display->drawXbm(x + (SCREEN_WIDTH - question_width) / 2,
-                         y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - question_height) / 2 + 2 + 5, question_width, question_height,
-                         question);
-    } else if (strcmp(msg, "‼️") == 0) {
-        display->drawXbm(x + (SCREEN_WIDTH - bang_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - bang_height) / 2 + 2 + 5,
-                         bang_width, bang_height, bang);
-    } else if (strcmp(msg, "\U0001F4A9") == 0) {
-        display->drawXbm(x + (SCREEN_WIDTH - poo_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - poo_height) / 2 + 2 + 5,
-                         poo_width, poo_height, poo);
-    } else if (strcmp(msg, "\U0001F923") == 0) {
-        display->drawXbm(x + (SCREEN_WIDTH - haha_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - haha_height) / 2 + 2 + 5,
-                         haha_width, haha_height, haha);
-    } else if (strcmp(msg, "\U0001F44B") == 0) {
-        display->drawXbm(x + (SCREEN_WIDTH - wave_icon_width) / 2,
-                         y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - wave_icon_height) / 2 + 2 + 5, wave_icon_width,
-                         wave_icon_height, wave_icon);
-    } else if (strcmp(msg, "\U0001F920") == 0) {
-        display->drawXbm(x + (SCREEN_WIDTH - cowboy_width) / 2,
-                         y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - cowboy_height) / 2 + 2 + 5, cowboy_width, cowboy_height,
-                         cowboy);
-    } else if (strcmp(msg, "\U0001F42D") == 0) {
-        display->drawXbm(x + (SCREEN_WIDTH - deadmau5_width) / 2,
-                         y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - deadmau5_height) / 2 + 2 + 5, deadmau5_width, deadmau5_height,
-                         deadmau5);
-    } else if (strcmp(msg, "\xE2\x98\x80\xEF\xB8\x8F") == 0) {
-        display->drawXbm(x + (SCREEN_WIDTH - sun_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - sun_height) / 2 + 2 + 5,
-                         sun_width, sun_height, sun);
-    } else if (strcmp(msg, "\u2614") == 0) {
-        display->drawXbm(x + (SCREEN_WIDTH - rain_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - rain_height) / 2 + 2 + 10,
-                         rain_width, rain_height, rain);
-    } else if (strcmp(msg, "☁️") == 0) {
-        display->drawXbm(x + (SCREEN_WIDTH - cloud_width) / 2,
-                         y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - cloud_height) / 2 + 2 + 5, cloud_width, cloud_height, cloud);
-    } else if (strcmp(msg, "🌫️") == 0) {
-        display->drawXbm(x + (SCREEN_WIDTH - fog_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - fog_height) / 2 + 2 + 5,
-                         fog_width, fog_height, fog);
-    } else if (strcmp(msg, "\U0001F608") == 0) {
-        display->drawXbm(x + (SCREEN_WIDTH - devil_width) / 2,
-                         y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - devil_height) / 2 + 2 + 5, devil_width, devil_height, devil);
-    } else if (strcmp(msg, "♥️") == 0 || strcmp(msg, "\U0001F9E1") == 0 || strcmp(msg, "\U00002763") == 0 ||
-               strcmp(msg, "\U00002764") == 0 || strcmp(msg, "\U0001F495") == 0 || strcmp(msg, "\U0001F496") == 0 ||
-               strcmp(msg, "\U0001F497") == 0 || strcmp(msg, "\U0001F498") == 0) {
-        display->drawXbm(x + (SCREEN_WIDTH - heart_width) / 2,
-                         y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - heart_height) / 2 + 2 + 5, heart_width, heart_height, heart);
     } else {
-        snprintf(tempBuf, sizeof(tempBuf), "%s", mp.decoded.payload.bytes);
-        display->drawStringMaxWidth(0 + x, 0 + y + FONT_HEIGHT_SMALL, x + display->getWidth(), tempBuf);
+        snprintf(headerStr, sizeof(headerStr), "%s ago from %s", screen->drawTimeDelta(days, hours, minutes, seconds).c_str(), sender);
     }
-#else
-    snprintf(tempBuf, sizeof(tempBuf), "%s", mp.decoded.payload.bytes);
-    display->drawStringMaxWidth(0 + x, 0 + y + FONT_HEIGHT_SMALL, x + display->getWidth(), tempBuf);
+
+#ifndef EXCLUDE_EMOJI
+    // === Check for Emote and Draw It ===
+    struct Emote {
+        const char *code;
+        const uint8_t *bitmap;
+        int width, height;
+    };
+
+    const Emote emotes[] = {
+        { "\U0001F44D", thumbup, thumbs_width, thumbs_height },
+        { "\U0001F44E", thumbdown, thumbs_width, thumbs_height },
+        { "\U0001F60A", smiley, smiley_width, smiley_height },
+        { "\U0001F600", smiley, smiley_width, smiley_height },
+        { "\U0001F642", smiley, smiley_width, smiley_height },
+        { "\U0001F609", smiley, smiley_width, smiley_height },
+        { "\U0001F601", smiley, smiley_width, smiley_height },
+        { "❓", question, question_width, question_height },
+        { "‼️", bang, bang_width, bang_height },
+        { "\U0001F4A9", poo, poo_width, poo_height },
+        { "\U0001F923", haha, haha_width, haha_height },
+        { "\U0001F44B", wave_icon, wave_icon_width, wave_icon_height },
+        { "\U0001F920", cowboy, cowboy_width, cowboy_height },
+        { "\U0001F42D", deadmau5, deadmau5_width, deadmau5_height },
+        { "☀️", sun, sun_width, sun_height },
+        { "\xE2\x98\x80\xEF\xB8\x8F", sun, sun_width, sun_height },
+        { "☔", rain, rain_width, rain_height },
+        { "\u2614", rain, rain_width, rain_height },
+        { "☁️", cloud, cloud_width, cloud_height },
+        { "🌫️", fog, fog_width, fog_height },
+        { "\U0001F608", devil, devil_width, devil_height },
+        { "♥️", heart, heart_width, heart_height },
+        { "\U0001F9E1", heart, heart_width, heart_height },
+        { "\U00002763", heart, heart_width, heart_height },
+        { "\U00002764", heart, heart_width, heart_height },
+        { "\U0001F495", heart, heart_width, heart_height },
+        { "\U0001F496", heart, heart_width, heart_height },
+        { "\U0001F497", heart, heart_width, heart_height },
+        { "\U0001F498", heart, heart_width, heart_height }
+    };
+
+    for (const Emote &e : emotes) {
+        if (strcmp(msg, e.code) == 0) {
+            // Draw header before showing emoji
+            if (isInverted) {
+                drawRoundedHighlight(display, x, 0, screenWidth, FONT_HEIGHT_SMALL - 1, cornerRadius);
+                display->setColor(BLACK);
+                display->drawString(x + 3, 0, headerStr);
+                if (isBold) display->drawString(x + 4, 0, headerStr);
+                display->setColor(WHITE);
+            } else {
+                display->drawString(x, 0, headerStr);
+            }
+
+            // Then draw emoji below header
+            display->drawXbm((screenWidth - e.width) / 2, (screenHeight - e.height) / 2 + FONT_HEIGHT_SMALL, e.width, e.height, e.bitmap);
+            return;
+        }
+    }
 #endif
+
+    // === Word-wrap and build line list ===
+    char messageBuf[237];
+    snprintf(messageBuf, sizeof(messageBuf), "%s", msg);
+
+    std::vector<std::string> lines;
+    lines.push_back(std::string(headerStr));  // Header line is always first
+
+    std::string word, line;
+    int msgLen = strlen(messageBuf);
+    for (int i = 0; i <= msgLen; ++i) {
+        char ch = messageBuf[i];
+        if (ch == ' ' || ch == '\0') {
+            if (!word.empty()) {
+                if (display->getStringWidth((line + word).c_str()) > textWidth) {
+                    lines.push_back(line);
+                    line = word + ' ';
+                } else {
+                    line += word + ' ';
+                }
+                word.clear();
+            }
+            if (ch == '\0' && !line.empty()) {
+                lines.push_back(line);
+            }
+        } else {
+            word += ch;
+        }
+    }
+
+    // === Scrolling logic ===
+    const float rowHeight = FONT_HEIGHT_SMALL - 1;
+    const int totalHeight = lines.size() * rowHeight;
+    const int scrollStop = std::max(0, totalHeight - usableHeight);
+
+    static float scrollY = 0.0f;
+    static uint32_t lastTime = 0, scrollStartDelay = 0, pauseStart = 0;
+    static bool waitingToReset = false, scrollStarted = false;
+
+    uint32_t now = millis();
+
+    // === Smooth scrolling adjustment ===
+    // You can tweak this divisor to change how smooth it scrolls.
+    // Lower = smoother, but can feel slow.
+    float delta = (now - lastTime) / 400.0f;
+    lastTime = now;
+
+    const float scrollSpeed = 2.0f; // pixels per second
+
+    // Delay scrolling start by 2 seconds
+    if (scrollStartDelay == 0) scrollStartDelay = now;
+    if (!scrollStarted && now - scrollStartDelay > 2000) scrollStarted = true;
+
+    if (totalHeight > usableHeight) {
+        if (scrollStarted) {
+            if (!waitingToReset) {
+                scrollY += delta * scrollSpeed;
+                if (scrollY >= scrollStop) {
+                    scrollY = scrollStop;
+                    waitingToReset = true;
+                    pauseStart = now;
+                }
+            } else if (now - pauseStart > 3000) {
+                scrollY = 0;
+                waitingToReset = false;
+                scrollStarted = false;
+                scrollStartDelay = now;
+            }
+        }
+    } else {
+        scrollY = 0;
+    }
+
+    int scrollOffset = static_cast<int>(scrollY);
+    int yOffset = -scrollOffset;
+
+    // === Render visible lines ===
+    for (size_t i = 0; i < lines.size(); ++i) {
+        int lineY = static_cast<int>(i * rowHeight + yOffset);
+        if (lineY > -rowHeight && lineY < scrollBottom) {
+            if (i == 0 && isInverted) {
+                drawRoundedHighlight(display, x, lineY, screenWidth, FONT_HEIGHT_SMALL - 1, cornerRadius);
+                display->setColor(BLACK);
+                display->drawString(x + 3, lineY, lines[i].c_str());
+                if (isBold) display->drawString(x + 4, lineY, lines[i].c_str());
+                display->setColor(WHITE);
+            } else {
+                display->drawString(x, lineY, lines[i].c_str());
+            }
+        }
+    }
 }
 
 /// Draw a series of fields in a column, wrapping to multiple columns if needed
@@ -1605,19 +1673,6 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 // *********************************
 // *Rounding Header when inverted  *
 // *********************************
-void drawRoundedHighlight(OLEDDisplay *display, int16_t x, int16_t y, int16_t w, int16_t h, int16_t r)
-{
-    // Center rectangles
-    display->fillRect(x + r, y, w - 2 * r, h);
-    display->fillRect(x, y + r, r, h - 2 * r);
-    display->fillRect(x + w - r, y + r, r, h - 2 * r);
-
-    // Rounded corners — visually balanced and centered
-    display->fillCircle(x + r + 1, y + r, r);             // Top-left
-    display->fillCircle(x + w - r - 1, y + r, r);         // Top-right
-    display->fillCircle(x + r + 1, y + h - r - 1, r);     // Bottom-left
-    display->fillCircle(x + w - r - 1, y + h - r - 1, r); // Bottom-right
-}
 // h! Each node entry holds a reference to its info and how long ago it was heard from
 struct NodeEntry {
     meshtastic_NodeInfoLite *node;
