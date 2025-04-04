@@ -2275,11 +2275,11 @@ static void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, i
     // Display Region and Channel Utilization
     config.display.heading_bold = false;
 
-    drawNodes(display, x, compactFirstLine + 3, nodeStatus);
+    drawNodes(display, x + 2, compactFirstLine + 3, nodeStatus);
 
 #if HAS_GPS
     auto number_of_satellites = gpsStatus->getNumSatellites();
-    int gps_rightchar_offset = (SCREEN_WIDTH > 128) ? -53 : -47;
+    int gps_rightchar_offset = (SCREEN_WIDTH > 128) ? -55 : -49;
     if (number_of_satellites < 10) {
         gps_rightchar_offset += (SCREEN_WIDTH > 128) ? 12 : 6;
     }
@@ -2327,16 +2327,16 @@ static void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, i
 
     char uptimeFullStr[16];
     snprintf(uptimeFullStr, sizeof(uptimeFullStr), "Uptime: %s", uptimeStr);
-    display->drawString(x, compactSecondLine, uptimeFullStr);
+    display->drawString(x + 2, compactSecondLine, uptimeFullStr);
 
     char batStr[20];
     if (powerStatus->getHasBattery()) {
         int batV = powerStatus->getBatteryVoltageMv() / 1000;
         int batCv = (powerStatus->getBatteryVoltageMv() % 1000) / 10;
         snprintf(batStr, sizeof(batStr), "%01d.%02dV", batV, batCv);
-        display->drawString(x + SCREEN_WIDTH - display->getStringWidth(batStr), compactSecondLine, batStr);
+        display->drawString(x - 2 + SCREEN_WIDTH - display->getStringWidth(batStr), compactSecondLine, batStr);
     } else {
-        display->drawString(x + SCREEN_WIDTH - display->getStringWidth("USB"), compactSecondLine, String("USB"));
+        display->drawString(x - 2 + SCREEN_WIDTH - display->getStringWidth("USB"), compactSecondLine, String("USB"));
     }
 
     // === Third Row: LongName Centered ===
@@ -2384,26 +2384,18 @@ static void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
     // === First Row: Region / Radio Preset ===
-
     auto mode = DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false);
-
     // Display Region and Radio Preset
     char regionradiopreset[25];
     const char *region = myRegion ? myRegion->name : NULL;
-
     const char *preset = (screenWidth > 128) ? "Preset" : "Prst";
-
     snprintf(regionradiopreset, sizeof(regionradiopreset), "%s: %s/%s", preset, region, mode);
-    display->drawString(x, compactFirstLine, regionradiopreset);
-
-    // char channelStr[20];
-    // snprintf(channelStr, sizeof(channelStr), "#%s", channels.getName(channels.getPrimaryIndex()));
-    // display->drawString(x + SCREEN_WIDTH - display->getStringWidth(channelStr), compactFirstLine, channelStr);
+    display->drawString(x + 2, compactFirstLine, regionradiopreset);
 
     // === Second Row: Channel Utilization ===
     char chUtil[25];
     snprintf(chUtil, sizeof(chUtil), "ChUtil: %2.0f%%", airTime->channelUtilizationPercent());
-    display->drawString(x, compactSecondLine, chUtil);
+    display->drawString(x + 2, compactSecondLine, chUtil);
 
     // === Third Row: Channel Utilization ===
     // Get our hardware ID
@@ -2414,54 +2406,16 @@ static void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int
     char shortnameble[35];
     snprintf(shortnameble, sizeof(shortnameble), "%s: %s/%s", "Short/BLE", haveGlyphs(owner.short_name) ? owner.short_name : "",
              ourId);
-    display->drawString(x, compactThirdLine, shortnameble);
+    display->drawString(x + 2, compactThirdLine, shortnameble);
 
     // === Fourth Row: Node longName ===
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     if (ourNode && ourNode->has_user && strlen(ourNode->user.long_name) > 0) {
         char devicelongname[55];
         snprintf(devicelongname, sizeof(devicelongname), "%s: %s", "Name", ourNode->user.long_name);
-        display->drawString(x, compactFourthLine, devicelongname);
+        display->drawString(x + 2, compactFourthLine, devicelongname);
     }
 }
-
-// ****************************
-// * Activity Screen          *
-// ****************************
-/*
-static void drawActivity(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    display->clear();
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-    display->setFont(FONT_SMALL);
-
-    // === Header ===
-    drawCommonHeader(display, x, y);
-
-    // === Draw title ===
-    const int highlightHeight = FONT_HEIGHT_SMALL - 1;
-    const int textY = y + 2 + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
-
-    // Use black text if display is inverted
-    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
-        display->setColor(BLACK);
-    }
-
-    display->setTextAlignment(TEXT_ALIGN_CENTER);
-    const int centerX = x + SCREEN_WIDTH / 2;
-    display->drawString(centerX, textY, "Log");
-
-    if (config.display.heading_bold) {
-        display->drawString(centerX + 1, textY, "Log");
-    }
-
-    // Restore default color after drawing
-    display->setColor(WHITE);
-
-    // === First Line: Draw any log messages ===
-    display->drawLogBuffer(x, compactFirstLine);
-}
-*/
 
 // ****************************
 // * My Position Screen       *
@@ -2737,6 +2691,7 @@ static void drawMemoryScreen(OLEDDisplay *display, OLEDDisplayUiState *state, in
 
     uint32_t sdUsed = 0, sdTotal = 0;
     bool hasSD = false;
+/*
 #ifdef HAS_SDCARD
     hasSD = SD.cardType() != CARD_NONE;
     if (hasSD) {
@@ -2744,7 +2699,7 @@ static void drawMemoryScreen(OLEDDisplay *display, OLEDDisplayUiState *state, in
         sdTotal = SD.totalBytes();
     }
 #endif
-
+*/
     // === Draw memory rows
     drawUsageRow("Heap:", heapUsed, heapTotal, true);
     drawUsageRow("PSRAM:", psramUsed, psramTotal);
@@ -3395,7 +3350,6 @@ void Screen::setFrames(FrameFocus focus)
     normalFrames[numframes++] = drawLoRaFocused;
     normalFrames[numframes++] = drawCompassAndLocationScreen;
     normalFrames[numframes++] = drawMemoryScreen;
-    // normalFrames[numframes++] = drawActivity;
 
     // then all the nodes
     // We only show a few nodes in our scrolling list - because meshes with many nodes would have too many screens
