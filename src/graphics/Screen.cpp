@@ -1092,7 +1092,10 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
             }
 
             // Then draw emoji below header
-            display->drawXbm((screenWidth - e.width) / 2, (screenHeight - e.height) / 2 + FONT_HEIGHT_SMALL, e.width, e.height, e.bitmap);
+            int remainingHeight = screenHeight - FONT_HEIGHT_SMALL - navHeight;
+            int emoteY = FONT_HEIGHT_SMALL + (remainingHeight - e.height) / 2;
+            
+            display->drawXbm((screenWidth - e.width) / 2, emoteY, e.width, e.height, e.bitmap);
             return;
         }
     }
