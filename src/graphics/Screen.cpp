@@ -2212,11 +2212,17 @@ static void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, i
     drawNodes(display, x, compactFirstLine + 3, nodeStatus);
 
 #if HAS_GPS
+    auto number_of_satellites = gpsStatus->getNumSatellites();
+    int gps_rightchar_offset = (SCREEN_WIDTH > 128) ? -53 : -47;
+    if (number_of_satellites < 10) {
+        gps_rightchar_offset += (SCREEN_WIDTH > 128) ? 12 : 6;
+    }
+
     if (config.position.fixed_position) {
         if (SCREEN_WIDTH > 128) {
-            drawGPS(display, SCREEN_WIDTH - 53, compactFirstLine + 3, gpsStatus);
+            drawGPS(display, SCREEN_WIDTH + gps_rightchar_offset, compactFirstLine + 3, gpsStatus);
         } else {
-            drawGPS(display, SCREEN_WIDTH - 47, compactFirstLine + 3, gpsStatus);
+            drawGPS(display, SCREEN_WIDTH + gps_rightchar_offset, compactFirstLine + 3, gpsStatus);
         }
     } else if (!gpsStatus || !gpsStatus->getIsConnected()) {
         String displayLine =
@@ -2225,9 +2231,9 @@ static void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, i
         display->drawString(posX, compactFirstLine, displayLine);
     } else {
         if (SCREEN_WIDTH > 128) {
-            drawGPS(display, SCREEN_WIDTH - 53, compactFirstLine + 3, gpsStatus);
+            drawGPS(display, SCREEN_WIDTH + gps_rightchar_offset, compactFirstLine + 3, gpsStatus);
         } else {
-            drawGPS(display, SCREEN_WIDTH - 47, compactFirstLine + 3, gpsStatus);
+            drawGPS(display, SCREEN_WIDTH + gps_rightchar_offset, compactFirstLine + 3, gpsStatus);
         }
     }
 #endif
@@ -2426,7 +2432,7 @@ static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiStat
     int rowYOffset = FONT_HEIGHT_SMALL - 3;
     int rowY = y + rowYOffset;
 
-    // === Second Row: My Location ===
+    // === First Row: My Location ===
 #if HAS_GPS
     bool origBold = config.display.heading_bold;
     config.display.heading_bold = false;
@@ -2472,27 +2478,22 @@ static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiStat
         validHeading = !isnan(heading);
     }
 
-    // === Third Row: Altitude ===
-    rowY += rowYOffset;
-    char altStr[32];
-    if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
-        snprintf(altStr, sizeof(altStr), "Alt: %.1fft", geoCoord.getAltitude() * METERS_TO_FEET);
-    } else {
-        snprintf(altStr, sizeof(altStr), "Alt: %.1fm", geoCoord.getAltitude());
-    }
-    display->drawString(x + 2, rowY, altStr);
+    // === Second Row: Altitude ===
+    String displayLine;
+    displayLine = "Alt: " + String(geoCoord.getAltitude()) + "m";
+    if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL)
+        displayLine = "Alt: " + String(geoCoord.getAltitude() * METERS_TO_FEET) + "ft";
+    display->drawString(x + 2, compactSecondLine, displayLine);
 
-    // === Fourth Row: Latitude ===
-    rowY += rowYOffset;
+    // === Third Row: Latitude ===
     char latStr[32];
     snprintf(latStr, sizeof(latStr), "Lat: %.5f", geoCoord.getLatitude() * 1e-7);
-    display->drawString(x + 2, rowY, latStr);
+    display->drawString(x + 2, compactThirdLine, latStr);
 
     // === Fifth Row: Longitude ===
-    rowY += rowYOffset;
     char lonStr[32];
     snprintf(lonStr, sizeof(lonStr), "Lon: %.5f", geoCoord.getLongitude() * 1e-7);
-    display->drawString(x + 2, rowY, lonStr);
+    display->drawString(x + 2, compactFourthLine, lonStr);
 
     // === Draw Compass if heading is valid ===
     if (validHeading) {
