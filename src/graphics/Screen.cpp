@@ -999,13 +999,12 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     const meshtastic_MeshPacket &mp = devicestate.rx_text_message;
     const char *msg = reinterpret_cast<const char *>(mp.decoded.payload.bytes);
 
-    // === Setup display formatting ===
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
 
     const int screenWidth = display->getWidth();
     const int screenHeight = display->getHeight();
-    const int navHeight = FONT_HEIGHT_SMALL; // space reserved at bottom
+    const int navHeight = FONT_HEIGHT_SMALL;
     const int scrollBottom = screenHeight - navHeight;
     const int usableHeight = scrollBottom;
     const int textWidth = screenWidth;
@@ -1014,7 +1013,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     bool isInverted = (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED);
     bool isBold = config.display.heading_bold;
 
-    // === Construct Header String ===
+    // === Header Construction ===
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(getFrom(&mp));
     char headerStr[80];
     const char *sender = (node && node->has_user) ? node->user.short_name : "???";
@@ -1039,7 +1038,19 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     }
 
 #ifndef EXCLUDE_EMOJI
-    // === Check for Emote and Draw It ===
+    // === Bounce animation setup ===
+    static uint32_t lastBounceTime = 0;
+    static int bounceY = 0;
+    const int bounceRange = 2; // Max pixels to bounce up/down
+    const int bounceInterval = 60; // How quickly to change bounce direction (ms)
+
+    uint32_t now = millis();
+    if (now - lastBounceTime >= bounceInterval) {
+        lastBounceTime = now;
+        bounceY = (bounceY + 1) % (bounceRange * 2);
+    }
+
+    // === Emote rendering ===
     struct Emote {
         const char *code;
         const uint8_t *bitmap;
@@ -1080,7 +1091,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
     for (const Emote &e : emotes) {
         if (strcmp(msg, e.code) == 0) {
-            // Draw header before showing emoji
+            // Draw the header
             if (isInverted) {
                 drawRoundedHighlight(display, x, 0, screenWidth, FONT_HEIGHT_SMALL - 1, cornerRadius);
                 display->setColor(BLACK);
@@ -1091,10 +1102,9 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 display->drawString(x, 0, headerStr);
             }
 
-            // Then draw emoji below header
+            // Center the emote below header + apply bounce
             int remainingHeight = screenHeight - FONT_HEIGHT_SMALL - navHeight;
-            int emoteY = FONT_HEIGHT_SMALL + (remainingHeight - e.height) / 2;
-            
+            int emoteY = FONT_HEIGHT_SMALL + (remainingHeight - e.height) / 2 + bounceY - bounceRange;
             display->drawXbm((screenWidth - e.width) / 2, emoteY, e.width, e.height, e.bitmap);
             return;
         }
@@ -1138,9 +1148,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     static float scrollY = 0.0f;
     static uint32_t lastTime = 0, scrollStartDelay = 0, pauseStart = 0;
     static bool waitingToReset = false, scrollStarted = false;
-
-    uint32_t now = millis();
-
+    
     // === Smooth scrolling adjustment ===
     // You can tweak this divisor to change how smooth it scrolls.
     // Lower = smoother, but can feel slow.
