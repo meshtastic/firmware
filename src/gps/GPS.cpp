@@ -1206,7 +1206,8 @@ GnssModel_t GPS::probe(int serialSpeed)
     delay(20);
     std::vector<ChipInfo> mtk = {{"L76B", "Quectel-L76B", GNSS_MODEL_MTK_L76B},
                                  {"PA1616S", "1616S", GNSS_MODEL_MTK_PA1616S},
-                                 {"LS20031", "MC-1513", GNSS_MODEL_MTK_L76B}};
+                                 {"LS20031", "MC-1513", GNSS_MODEL_MTK_L76B},
+                                 {"L96", "Quectel-L96", GNSS_MODEL_MTK_L76B}};
     PROBE_FAMILY("MTK Family", "$PMTK605*31", mtk, 500);
 
     uint8_t cfg_rate[] = {0xB5, 0x62, 0x06, 0x08, 0x00, 0x00, 0x00, 0x00};
