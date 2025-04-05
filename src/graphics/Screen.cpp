@@ -2191,7 +2191,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
 
     const bool isInverted = (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED);
     const bool isBold = config.display.heading_bold;
-    const int xOffset = 3;
+    const int xOffset = 4;
     const int highlightHeight = FONT_HEIGHT_SMALL - 1;
     const int screenWidth = display->getWidth();
 
@@ -2245,12 +2245,14 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
             hour = 12;
 
         char timeStr[10];
-        snprintf(timeStr, sizeof(timeStr), "%d:%02d%s", hour, minute, isPM ? "PM" : "AM");
+        snprintf(timeStr, sizeof(timeStr), "%d:%02d%s", hour, minute, isPM ? "p" : "a");
 
-        int timeX = screenWidth - xOffset - display->getStringWidth(timeStr) - 1;
+        int timeX = screenWidth + 3 - xOffset - display->getStringWidth(timeStr);
+        if (screenWidth > 128)
+            timeX -= 1;
         display->drawString(timeX, textY, timeStr);
         if (isBold)
-            display->drawString(timeX + 1, textY, timeStr);
+            display->drawString(timeX - 1, textY, timeStr);
     }
 
     display->setColor(WHITE);
