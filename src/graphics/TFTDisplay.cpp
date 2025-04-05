@@ -120,6 +120,303 @@ static void rak14014_tpIntHandle(void)
     _rak14014_touch_int = true;
 }
 
+#elif defined(ST72xx_DE)
+#include <LovyanGFX.hpp>
+#include <TCA9534.h>
+#include <lgfx/v1/platforms/esp32s3/Bus_RGB.hpp>
+#include <lgfx/v1/platforms/esp32s3/Panel_RGB.hpp>
+TCA9534 ioex;
+
+class LGFX : public lgfx::LGFX_Device
+{
+    lgfx::Bus_RGB _bus_instance;
+    lgfx::Panel_RGB _panel_instance;
+    lgfx::Touch_GT911 _touch_instance;
+
+  public:
+    const uint16_t screenWidth = TFT_WIDTH;
+    const uint16_t screenHeight = TFT_HEIGHT;
+
+    bool init_impl(bool use_reset, bool use_clear) override
+    {
+        ioex.attach(Wire);
+        ioex.setDeviceAddress(0x18);
+        ioex.config(1, TCA9534::Config::OUT);
+        ioex.config(2, TCA9534::Config::OUT);
+        ioex.config(3, TCA9534::Config::OUT);
+        ioex.config(4, TCA9534::Config::OUT);
+
+        ioex.output(1, TCA9534::Level::H);
+        ioex.output(3, TCA9534::Level::L);
+        ioex.output(4, TCA9534::Level::H);
+
+        pinMode(1, OUTPUT);
+        digitalWrite(1, LOW);
+        ioex.output(2, TCA9534::Level::L);
+        delay(20);
+        ioex.output(2, TCA9534::Level::H);
+        delay(100);
+        pinMode(1, INPUT);
+
+        return LGFX_Device::init_impl(use_reset, use_clear);
+    }
+
+    LGFX(void)
+    {
+        {
+            auto cfg = _panel_instance.config();
+
+            cfg.memory_width = screenWidth;
+            cfg.memory_height = screenHeight;
+            cfg.panel_width = screenWidth;
+            cfg.panel_height = screenHeight;
+            cfg.offset_x = 0;
+            cfg.offset_y = 0;
+            cfg.offset_rotation = 0;
+            _panel_instance.config(cfg);
+        }
+
+        {
+            auto cfg = _panel_instance.config_detail();
+            cfg.use_psram = 0;
+            _panel_instance.config_detail(cfg);
+        }
+
+        {
+            auto cfg = _bus_instance.config();
+            cfg.panel = &_panel_instance;
+            cfg.pin_d0 = ST72xx_B0;  // B0
+            cfg.pin_d1 = ST72xx_B1;  // B1
+            cfg.pin_d2 = ST72xx_B2;  // B2
+            cfg.pin_d3 = ST72xx_B3;  // B3
+            cfg.pin_d4 = ST72xx_B4;  // B4
+            cfg.pin_d5 = ST72xx_G0;  // G0
+            cfg.pin_d6 = ST72xx_G1;  // G1
+            cfg.pin_d7 = ST72xx_G2;  // G2
+            cfg.pin_d8 = ST72xx_G3;  // G3
+            cfg.pin_d9 = ST72xx_G4;  // G4
+            cfg.pin_d10 = ST72xx_G5; // G5
+            cfg.pin_d11 = ST72xx_R0; // R0
+            cfg.pin_d12 = ST72xx_R1; // R1
+            cfg.pin_d13 = ST72xx_R2; // R2
+            cfg.pin_d14 = ST72xx_R3; // R3
+            cfg.pin_d15 = ST72xx_R4; // R4
+
+            cfg.pin_henable = ST72xx_DE;
+            cfg.pin_vsync = ST72xx_VSYNC;
+            cfg.pin_hsync = ST72xx_HSYNC;
+            cfg.pin_pclk = ST72xx_PCLK;
+            cfg.freq_write = 13000000;
+
+#ifdef ST7265_HSYNC_POLARITY
+            cfg.hsync_polarity = ST7265_HSYNC_POLARITY;
+            cfg.hsync_front_porch = ST7265_HSYNC_FRONT_PORCH; // 8;
+            cfg.hsync_pulse_width = ST7265_HSYNC_PULSE_WIDTH; // 4;
+            cfg.hsync_back_porch = ST7265_HSYNC_BACK_PORCH;   // 8;
+
+            cfg.vsync_polarity = ST7265_VSYNC_POLARITY;       // 0;
+            cfg.vsync_front_porch = ST7265_VSYNC_FRONT_PORCH; // 8;
+            cfg.vsync_pulse_width = ST7265_VSYNC_PULSE_WIDTH; // 4;
+            cfg.vsync_back_porch = ST7265_VSYNC_BACK_PORCH;   // 8;
+
+            cfg.pclk_idle_high = 1;
+            cfg.pclk_active_neg = ST7265_PCLK_ACTIVE_NEG; // 0;
+            // cfg.pclk_idle_high = 0;
+            // cfg.de_idle_high = 1;
+#endif
+
+#ifdef ST7262_HSYNC_POLARITY
+            cfg.hsync_polarity = ST7262_HSYNC_POLARITY;
+            cfg.hsync_front_porch = ST7262_HSYNC_FRONT_PORCH; // 8;
+            cfg.hsync_pulse_width = ST7262_HSYNC_PULSE_WIDTH; // 4;
+            cfg.hsync_back_porch = ST7262_HSYNC_BACK_PORCH;   // 8;
+
+            cfg.vsync_polarity = ST7262_VSYNC_POLARITY;       // 0;
+            cfg.vsync_front_porch = ST7262_VSYNC_FRONT_PORCH; // 8;
+            cfg.vsync_pulse_width = ST7262_VSYNC_PULSE_WIDTH; // 4;
+            cfg.vsync_back_porch = ST7262_VSYNC_BACK_PORCH;   // 8;
+
+            cfg.pclk_idle_high = 1;
+            cfg.pclk_active_neg = ST7262_PCLK_ACTIVE_NEG; // 0;
+            // cfg.pclk_idle_high = 0;
+            // cfg.de_idle_high = 1;
+#endif
+
+#ifdef SC7277_HSYNC_POLARITY
+            cfg.hsync_polarity = SC7277_HSYNC_POLARITY;
+            cfg.hsync_front_porch = SC7277_HSYNC_FRONT_PORCH; // 8;
+            cfg.hsync_pulse_width = SC7277_HSYNC_PULSE_WIDTH; // 4;
+            cfg.hsync_back_porch = SC7277_HSYNC_BACK_PORCH;   // 8;
+
+            cfg.vsync_polarity = SC7277_VSYNC_POLARITY;       // 0;
+            cfg.vsync_front_porch = SC7277_VSYNC_FRONT_PORCH; // 8;
+            cfg.vsync_pulse_width = SC7277_VSYNC_PULSE_WIDTH; // 4;
+            cfg.vsync_back_porch = SC7277_VSYNC_BACK_PORCH;   // 8;
+
+            cfg.pclk_idle_high = 1;
+            cfg.pclk_active_neg = SC7277_PCLK_ACTIVE_NEG; // 0;
+            // cfg.pclk_idle_high = 0;
+            // cfg.de_idle_high = 1;
+#endif
+
+            _bus_instance.config(cfg);
+        }
+        _panel_instance.setBus(&_bus_instance);
+
+        {
+            auto cfg = _touch_instance.config();
+            cfg.x_min = 0;
+            cfg.x_max = TFT_WIDTH;
+            cfg.y_min = 0;
+            cfg.y_max = TFT_HEIGHT;
+            cfg.pin_int = -1;
+            cfg.pin_rst = -1;
+            cfg.bus_shared = true;
+            cfg.offset_rotation = 0;
+
+            cfg.i2c_port = 0;
+            cfg.i2c_addr = 0x5D;
+            cfg.pin_sda = I2C_SDA;
+            cfg.pin_scl = I2C_SCL;
+            cfg.freq = 400000;
+            _touch_instance.config(cfg);
+            _panel_instance.setTouch(&_touch_instance);
+        }
+
+        setPanel(&_panel_instance);
+    }
+};
+
+static LGFX *tft = nullptr;
+
+#elif defined(ILI9488_CS)
+#include <LovyanGFX.hpp> // Graphics and font library for ILI9488 driver chip
+
+class LGFX : public lgfx::LGFX_Device
+{
+    lgfx::Panel_ILI9488 _panel_instance;
+    lgfx::Bus_SPI _bus_instance;
+    lgfx::Light_PWM _light_instance;
+    lgfx::Touch_GT911 _touch_instance;
+
+  public:
+    LGFX(void)
+    {
+        {
+            auto cfg = _bus_instance.config();
+
+            // configure SPI
+            cfg.spi_host = ILI9488_SPI_HOST; // ESP32-S2,S3,C3 : SPI2_HOST or SPI3_HOST / ESP32 : VSPI_HOST or HSPI_HOST
+            cfg.spi_mode = 0;
+            cfg.freq_write = SPI_FREQUENCY; // SPI clock for transmission (up to 80MHz, rounded to the value obtained by dividing
+                                            // 80MHz by an integer)
+            cfg.freq_read = SPI_READ_FREQUENCY; // SPI clock when receiving
+            cfg.spi_3wire = false;              // Set to true if reception is done on the MOSI pin
+            cfg.use_lock = true;                // Set to true to use transaction locking
+            cfg.dma_channel = SPI_DMA_CH_AUTO;  // SPI_DMA_CH_AUTO; // Set DMA channel to use (0=not use DMA / 1=1ch / 2=ch /
+                                                // SPI_DMA_CH_AUTO=auto setting)
+            cfg.pin_sclk = ILI9488_SCK;         // Set SPI SCLK pin number
+            cfg.pin_mosi = ILI9488_SDA;         // Set SPI MOSI pin number
+            cfg.pin_miso = ILI9488_MISO;        // Set SPI MISO pin number (-1 = disable)
+            cfg.pin_dc = ILI9488_RS;            // Set SPI DC pin number (-1 = disable)
+
+            _bus_instance.config(cfg);              // applies the set value to the bus.
+            _panel_instance.setBus(&_bus_instance); // set the bus on the panel.
+        }
+
+        {                                        // Set the display panel control.
+            auto cfg = _panel_instance.config(); // Gets a structure for display panel settings.
+
+            cfg.pin_cs = ILI9488_CS; // Pin number where CS is connected (-1 = disable)
+            cfg.pin_rst = -1;        // Pin number where RST is connected  (-1 = disable)
+            cfg.pin_busy = -1;       // Pin number where BUSY is connected (-1 = disable)
+
+            // The following setting values ​​are general initial values ​​for each panel, so please comment out any
+            // unknown items and try them.
+
+            cfg.memory_width = TFT_WIDTH;                 // Maximum width supported by the driver IC
+            cfg.memory_height = TFT_HEIGHT;               // Maximum height supported by the driver IC
+            cfg.panel_width = TFT_WIDTH;                  // actual displayable width
+            cfg.panel_height = TFT_HEIGHT;                // actual displayable height
+            cfg.offset_x = TFT_OFFSET_X;                  // Panel offset amount in X direction
+            cfg.offset_y = TFT_OFFSET_Y;                  // Panel offset amount in Y direction
+            cfg.offset_rotation = TFT_OFFSET_ROTATION;    // Rotation direction value offset 0~7 (4~7 is mirrored)
+#ifdef TFT_DUMMY_READ_PIXELS
+            cfg.dummy_read_pixel = TFT_DUMMY_READ_PIXELS; // Number of bits for dummy read before pixel readout
+#else
+            cfg.dummy_read_pixel = 9; // Number of bits for dummy read before pixel readout
+#endif
+            cfg.dummy_read_bits = 1;                      // Number of bits for dummy read before non-pixel data read
+            cfg.readable = true;                          // Set to true if data can be read
+            cfg.invert = true;                            // Set to true if the light/darkness of the panel is reversed
+            cfg.rgb_order = false;                        // Set to true if the panel's red and blue are swapped
+            cfg.dlen_16bit =
+                false;             // Set to true for panels that transmit data length in 16-bit units with 16-bit parallel or SPI
+            cfg.bus_shared = true; // If the bus is shared with the SD card, set to true (bus control with drawJpgFile etc.)
+
+            // Set the following only when the display is shifted with a driver with a variable number of pixels, such as the
+            // ST7735 or ILI9163.
+            // cfg.memory_width = TFT_WIDTH;   // Maximum width supported by the driver IC
+            // cfg.memory_height = TFT_HEIGHT; // Maximum height supported by the driver IC
+            _panel_instance.config(cfg);
+        }
+
+#ifdef ILI9488_BL
+        // Set the backlight control
+        {
+            auto cfg = _light_instance.config(); // Gets a structure for backlight settings.
+
+            cfg.pin_bl = ILI9488_BL; // Pin number to which the backlight is connected
+            cfg.invert = false;      // true to invert the brightness of the backlight
+            // cfg.freq = 44100;    // PWM frequency of backlight
+            // cfg.pwm_channel = 1; // PWM channel number to use
+
+            _light_instance.config(cfg);
+            _panel_instance.setLight(&_light_instance); // Set the backlight on the panel.
+        }
+#endif
+
+#if HAS_TOUCHSCREEN
+        // Configure settings for touch screen control.
+        {
+            auto cfg = _touch_instance.config();
+
+            cfg.pin_cs = -1;
+            cfg.x_min = 0;
+            cfg.x_max = TFT_HEIGHT - 1;
+            cfg.y_min = 0;
+            cfg.y_max = TFT_WIDTH - 1;
+            cfg.pin_int = SCREEN_TOUCH_INT;
+#ifdef SCREEN_TOUCH_RST
+            cfg.pin_rst = SCREEN_TOUCH_RST;
+#endif
+            cfg.bus_shared = true;
+            cfg.offset_rotation = TFT_OFFSET_ROTATION;
+            // cfg.freq = 2500000;
+
+            // I2C
+            cfg.i2c_port = TOUCH_I2C_PORT;
+            cfg.i2c_addr = TOUCH_SLAVE_ADDRESS;
+#ifdef SCREEN_TOUCH_USE_I2C1
+            cfg.pin_sda = I2C_SDA1;
+            cfg.pin_scl = I2C_SCL1;
+#else
+            cfg.pin_sda = I2C_SDA;
+            cfg.pin_scl = I2C_SCL;
+#endif
+            // cfg.freq = 400000;
+
+            _touch_instance.config(cfg);
+            _panel_instance.setTouch(&_touch_instance);
+        }
+#endif
+
+        setPanel(&_panel_instance);
+    }
+};
+
+static LGFX *tft = nullptr;
+
 #elif defined(ST7789_CS)
 #include <LovyanGFX.hpp> // Graphics and font library for ST7735 driver chip
 
@@ -129,7 +426,7 @@ class LGFX : public lgfx::LGFX_Device
     lgfx::Bus_SPI _bus_instance;
     lgfx::Light_PWM _light_instance;
 #if HAS_TOUCHSCREEN
-#ifdef T_WATCH_S3
+#if defined(T_WATCH_S3) || defined(ELECROW)
     lgfx::Touch_FT5x06 _touch_instance;
 #else
     lgfx::Touch_GT911 _touch_instance;
@@ -171,16 +468,22 @@ class LGFX : public lgfx::LGFX_Device
             // The following setting values ​​are general initial values ​​for each panel, so please comment out any
             // unknown items and try them.
 
-            cfg.panel_width = TFT_WIDTH;               // actual displayable width
-            cfg.panel_height = TFT_HEIGHT;             // actual displayable height
-            cfg.offset_x = TFT_OFFSET_X;               // Panel offset amount in X direction
-            cfg.offset_y = TFT_OFFSET_Y;               // Panel offset amount in Y direction
-            cfg.offset_rotation = TFT_OFFSET_ROTATION; // Rotation direction value offset 0~7 (4~7 is mirrored)
-            cfg.dummy_read_pixel = 9;                  // Number of bits for dummy read before pixel readout
-            cfg.dummy_read_bits = 1;                   // Number of bits for dummy read before non-pixel data read
-            cfg.readable = true;                       // Set to true if data can be read
-            cfg.invert = true;                         // Set to true if the light/darkness of the panel is reversed
-            cfg.rgb_order = false;                     // Set to true if the panel's red and blue are swapped
+            cfg.memory_width = TFT_WIDTH;                 // Maximum width supported by the driver IC
+            cfg.memory_height = TFT_HEIGHT;               // Maximum height supported by the driver IC
+            cfg.panel_width = TFT_WIDTH;                  // actual displayable width
+            cfg.panel_height = TFT_HEIGHT;                // actual displayable height
+            cfg.offset_x = TFT_OFFSET_X;                  // Panel offset amount in X direction
+            cfg.offset_y = TFT_OFFSET_Y;                  // Panel offset amount in Y direction
+            cfg.offset_rotation = TFT_OFFSET_ROTATION;    // Rotation direction value offset 0~7 (4~7 is mirrored)
+#ifdef TFT_DUMMY_READ_PIXELS
+            cfg.dummy_read_pixel = TFT_DUMMY_READ_PIXELS; // Number of bits for dummy read before pixel readout
+#else
+            cfg.dummy_read_pixel = 9; // Number of bits for dummy read before pixel readout
+#endif
+            cfg.dummy_read_bits = 1;                      // Number of bits for dummy read before non-pixel data read
+            cfg.readable = true;                          // Set to true if data can be read
+            cfg.invert = true;                            // Set to true if the light/darkness of the panel is reversed
+            cfg.rgb_order = false;                        // Set to true if the panel's red and blue are swapped
             cfg.dlen_16bit =
                 false;             // Set to true for panels that transmit data length in 16-bit units with 16-bit parallel or SPI
             cfg.bus_shared = true; // If the bus is shared with the SD card, set to true (bus control with drawJpgFile etc.)
@@ -217,6 +520,9 @@ class LGFX : public lgfx::LGFX_Device
             cfg.y_min = 0;
             cfg.y_max = TFT_WIDTH - 1;
             cfg.pin_int = SCREEN_TOUCH_INT;
+#ifdef SCREEN_TOUCH_RST
+            cfg.pin_rst = SCREEN_TOUCH_RST;
+#endif
             cfg.bus_shared = true;
             cfg.offset_rotation = TFT_OFFSET_ROTATION;
             // cfg.freq = 2500000;
@@ -640,7 +946,7 @@ static LGFX *tft = nullptr;
 #endif
 
 #if defined(ST7701_CS) || defined(ST7735_CS) || defined(ST7789_CS) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) ||      \
-    defined(RAK14014) || defined(HX8357_CS) || (ARCH_PORTDUINO && HAS_SCREEN != 0)
+    defined(RAK14014) || defined(HX8357_CS) || defined(ILI9488_CS) || defined(ST72xx_DE) || (ARCH_PORTDUINO && HAS_SCREEN != 0)
 #include "SPILock.h"
 #include "TFTDisplay.h"
 #include <SPI.h>

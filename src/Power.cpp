@@ -436,6 +436,8 @@ class AnalogBatteryLevel : public HasBatteryLevel
         return isBatteryConnect() && isVbusIn();
 #endif
 #endif
+        // by default, we check the battery voltage only
+        return isVbusIn();
     }
 
   private:
