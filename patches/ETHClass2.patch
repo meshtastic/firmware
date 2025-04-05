@@ -1,0 +1,359 @@
+Based on https://github.com/espressif/arduino-esp32/blob/a3b6fe61ba39fccf8770a0bdf06243377c907702/libraries/Ethernet/src/ETH.cpp
+Not tested!
+
+diff --git a/ETHClass2.cpp b/ETHClass2.cpp
+index 7c263cf..d734d3d 100644
+--- a/ETHClass2.cpp
++++ b/ETHClass2.cpp
+@@ -416,7 +416,7 @@ bool ETHClass2::beginSPI(eth_phy_type_t type, uint8_t phy_addr, int cs, int irq,
+ #endif
+ 
+ 
+-    tcpipInit();
++    Network.begin();
+ 
+     // Install GPIO ISR handler to be able to service SPI Eth modules interrupts
+     ret = gpio_install_isr_service(0);
+@@ -434,7 +434,6 @@ bool ETHClass2::beginSPI(eth_phy_type_t type, uint8_t phy_addr, int cs, int irq,
+     phy_config.reset_gpio_num = _pin_rst;
+ 
+     // Init SPI bus
+-    spi_device_handle_t spi_handle = {0};
+     spi_bus_config_t buscfg  = {0};
+     buscfg.miso_io_num = _pin_miso;
+     buscfg.mosi_io_num = _pin_mosi;
+@@ -458,18 +457,12 @@ bool ETHClass2::beginSPI(eth_phy_type_t type, uint8_t phy_addr, int cs, int irq,
+     // Set SPI module Chip Select GPIO
+     spi_devcfg.spics_io_num = _pin_cs;
+ 
+-    ret = spi_bus_add_device(spi_host, &spi_devcfg, &spi_handle);
+-    if (ret != ESP_OK) {
+-        log_e("spi_bus_add_device failed");
+-        return false;
+-    }
+-
+     esp_eth_mac_t *mac = NULL;
+     esp_eth_phy_t *phy = NULL;
+ #if CONFIG_ETH_SPI_ETHERNET_W5500
+     if (type == ETH_PHY_W5500) {
+ 
+-        eth_w5500_config_t mac_config = ETH_W5500_DEFAULT_CONFIG(spi_handle);
++        eth_w5500_config_t mac_config = ETH_W5500_DEFAULT_CONFIG(spi_host, &spi_devcfg);
+ 
+         mac_config.int_gpio_num = _pin_irq;
+ #if ETH_SPI_SUPPORTS_CUSTOM
+@@ -591,8 +584,8 @@ bool ETHClass2::beginSPI(eth_phy_type_t type, uint8_t phy_addr, int cs, int irq,
+         return false;
+     }
+ 
+-    // attach to WiFiGeneric to receive events
+-    add_esp_interface_netif(ESP_IF_ETH, _esp_netif);
++    // attach to receive events
++    initNetif((Network_Interface_ID)ESP_IF_ETH);
+ 
+     // Start Ethernet driver state machine
+     ret = esp_eth_start(_eth_handle);
+@@ -784,7 +777,7 @@ bool ETHClass2::config(IPAddress local_ip, IPAddress gateway, IPAddress subnet,
+     return true;
+ }
+ 
+-IPAddress ETHClass2::localIP()
++IPAddress ETHClass2::localIP() const
+ {
+     if (_esp_netif == NULL) {
+         return IPAddress();
+@@ -796,7 +789,7 @@ IPAddress ETHClass2::localIP()
+     return IPAddress(ip.ip.addr);
+ }
+ 
+-IPAddress ETHClass2::subnetMask()
++IPAddress ETHClass2::subnetMask() const
+ {
+     if (_esp_netif == NULL) {
+         return IPAddress();
+@@ -808,7 +801,7 @@ IPAddress ETHClass2::subnetMask()
+     return IPAddress(ip.netmask.addr);
+ }
+ 
+-IPAddress ETHClass2::gatewayIP()
++IPAddress ETHClass2::gatewayIP() const
+ {
+     if (_esp_netif == NULL) {
+         return IPAddress();
+@@ -820,7 +813,7 @@ IPAddress ETHClass2::gatewayIP()
+     return IPAddress(ip.gw.addr);
+ }
+ 
+-IPAddress ETHClass2::dnsIP(uint8_t dns_no)
++IPAddress ETHClass2::dnsIP(uint8_t dns_no) const
+ {
+     if (_esp_netif == NULL) {
+         return IPAddress();
+@@ -832,7 +825,7 @@ IPAddress ETHClass2::dnsIP(uint8_t dns_no)
+     return IPAddress(d.ip.u_addr.ip4.addr);
+ }
+ 
+-IPAddress ETHClass2::broadcastIP()
++IPAddress ETHClass2::broadcastIP() const
+ {
+     if (_esp_netif == NULL) {
+         return IPAddress();
+@@ -896,16 +889,16 @@ bool ETHClass2::enableIpV6()
+     return esp_netif_create_ip6_linklocal(_esp_netif) == 0;
+ }
+ 
+-IPv6Address ETHClass2::localIPv6()
++IPAddress ETHClass2::localIPv6()
+ {
+     if (_esp_netif == NULL) {
+-        return IPv6Address();
++        return IPAddress(IPType::IPv6);
+     }
+     static esp_ip6_addr_t addr;
+     if (esp_netif_get_ip6_linklocal(_esp_netif, &addr)) {
+-        return IPv6Address();
++        return IPAddress(IPType::IPv6);
+     }
+-    return IPv6Address(addr.addr);
++    return IPAddress(IPType::IPv6, (const uint8_t *)addr.addr);
+ }
+ 
+ const char *ETHClass2::ifkey(void)
+@@ -916,7 +909,7 @@ const char *ETHClass2::ifkey(void)
+     return esp_netif_get_ifkey(_esp_netif);
+ }
+ 
+-const char *ETHClass2::desc(void)
++const char *ETHClass2::desc(void) const
+ {
+     if (_esp_netif == NULL) {
+         return "";
+@@ -940,15 +933,15 @@ String ETHClass2::impl_name(void)
+ 
+ bool ETHClass2::connected()
+ {
+-    return WiFiGenericClass::getStatusBits() & ETH_CONNECTED_BIT;
++    return NetworkInterface::getStatusBits() & ESP_NETIF_CONNECTED_BIT;
+ }
+ 
+ bool ETHClass2::hasIP()
+ {
+-    return WiFiGenericClass::getStatusBits() & ETH_HAS_IP_BIT;
++    return NetworkInterface::getStatusBits() & ESP_NETIF_HAS_IP_BIT;
+ }
+ 
+-bool ETHClass2::linkUp()
++bool ETHClass2::linkUp() const
+ {
+     if (_esp_netif == NULL) {
+         return false;
+@@ -956,7 +949,7 @@ bool ETHClass2::linkUp()
+     return esp_netif_is_netif_up(_esp_netif);
+ }
+ 
+-bool ETHClass2::fullDuplex()
++bool ETHClass2::fullDuplex() const
+ {
+     if (_eth_handle == NULL) {
+         return false;
+@@ -966,7 +959,7 @@ bool ETHClass2::fullDuplex()
+     return (link_duplex == ETH_DUPLEX_FULL);
+ }
+ 
+-bool ETHClass2::autoNegotiation()
++bool ETHClass2::autoNegotiation() const
+ {
+     if (_eth_handle == NULL) {
+         return false;
+@@ -976,7 +969,7 @@ bool ETHClass2::autoNegotiation()
+     return auto_nego;
+ }
+ 
+-uint32_t ETHClass2::phyAddr()
++uint32_t ETHClass2::phyAddr() const
+ {
+     if (_eth_handle == NULL) {
+         return 0;
+@@ -986,7 +979,7 @@ uint32_t ETHClass2::phyAddr()
+     return phy_addr;
+ }
+ 
+-uint8_t ETHClass2::linkSpeed()
++uint8_t ETHClass2::linkSpeed() const
+ {
+     if (_eth_handle == NULL) {
+         return 0;
+@@ -996,7 +989,7 @@ uint8_t ETHClass2::linkSpeed()
+     return (link_speed == ETH_SPEED_10M) ? 10 : 100;
+ }
+ 
+-uint8_t *ETHClass2::macAddress(uint8_t *mac)
++uint8_t *ETHClass2::macAddress(uint8_t *mac) const
+ {
+     if (_eth_handle == NULL) {
+         return NULL;
+@@ -1008,7 +1001,7 @@ uint8_t *ETHClass2::macAddress(uint8_t *mac)
+     return mac;
+ }
+ 
+-String ETHClass2::macAddress(void)
++String ETHClass2::macAddress(void) const
+ {
+     uint8_t mac[6] = {0, 0, 0, 0, 0, 0};
+     char macStr[18] = { 0 };
+@@ -1017,49 +1010,51 @@ String ETHClass2::macAddress(void)
+     return String(macStr);
+ }
+ 
+-void ETHClass2::printInfo(Print &out)
++size_t ETHClass2::printDriverInfo(Print &out) const
+ {
+-    out.print(desc());
+-    out.print(":");
++    size_t bytes = 0;
++    bytes += out.print(desc());
++    bytes += out.print(":");
+     if (linkUp()) {
+-        out.print(" <UP");
++        bytes += out.print(" <UP");
+     } else {
+-        out.print(" <DOWN");
++        bytes += out.print(" <DOWN");
+     }
+-    out.print(",");
+-    out.print(linkSpeed());
+-    out.print("M");
++    bytes += out.print(",");
++    bytes += out.print(linkSpeed());
++    bytes += out.print("M");
+     if (fullDuplex()) {
+-        out.print(",FULL_DUPLEX");
++        bytes += out.print(",FULL_DUPLEX");
+     }
+     if (autoNegotiation()) {
+-        out.print(",AUTO");
+-    }
+-    out.println(">");
+-
+-    out.print("      ");
+-    out.print("ether ");
+-    out.print(macAddress());
+-    out.printf(" phy 0x%lX", phyAddr());
+-    out.println();
+-
+-    out.print("      ");
+-    out.print("inet ");
+-    out.print(localIP());
+-    out.print(" netmask ");
+-    out.print(subnetMask());
+-    out.print(" broadcast ");
+-    out.print(broadcastIP());
+-    out.println();
+-
+-    out.print("      ");
+-    out.print("gateway ");
+-    out.print(gatewayIP());
+-    out.print(" dns ");
+-    out.print(dnsIP());
+-    out.println();
+-
+-    out.println();
++        bytes += out.print(",AUTO");
++    }
++    bytes += out.println(">");
++
++    bytes += out.print("      ");
++    bytes += out.print("ether ");
++    bytes += out.print(macAddress());
++    bytes += out.printf(" phy 0x%lX", phyAddr());
++    bytes += out.println();
++
++    bytes += out.print("      ");
++    bytes += out.print("inet ");
++    bytes += out.print(localIP());
++    bytes += out.print(" netmask ");
++    bytes += out.print(subnetMask());
++    bytes += out.print(" broadcast ");
++    bytes += out.print(broadcastIP());
++    bytes += out.println();
++
++    bytes += out.print("      ");
++    bytes += out.print("gateway ");
++    bytes += out.print(gatewayIP());
++    bytes += out.print(" dns ");
++    bytes += out.print(dnsIP());
++    bytes += out.println();
++
++    bytes += out.println();
++    return bytes;
+ }
+ 
+ ETHClass2 ETH2;
+diff --git a/ETHClass2.h b/ETHClass2.h
+index 8c4685f..d655fa7 100644
+--- a/ETHClass2.h
++++ b/ETHClass2.h
+@@ -103,7 +103,7 @@ typedef enum {
+     ETH_PHY_MAX 
+ } eth_phy_type_t;
+ 
+-class ETHClass2 {
++class ETHClass2 : public NetworkInterface {
+     public:
+         ETHClass2(uint8_t eth_index=0);
+         ~ETHClass2();
+@@ -138,17 +138,17 @@ class ETHClass2 {
+         bool config(IPAddress local_ip = (uint32_t)0x00000000, IPAddress gateway = (uint32_t)0x00000000, IPAddress subnet = (uint32_t)0x00000000, IPAddress dns1 = (uint32_t)0x00000000, IPAddress dns2 = (uint32_t)0x00000000);
+         const char * getHostname();
+         bool setHostname(const char * hostname);
+-        IPAddress localIP();
+-        IPAddress subnetMask();
+-        IPAddress gatewayIP();
+-        IPAddress dnsIP(uint8_t dns_no = 0);
+-        IPAddress broadcastIP();
++        IPAddress localIP() const;
++        IPAddress subnetMask() const;
++        IPAddress gatewayIP() const;
++        IPAddress dnsIP(uint8_t dns_no = 0) const;
++        IPAddress broadcastIP() const;
+         IPAddress networkID();
+         uint8_t subnetCIDR();
+         bool enableIpV6();
+-        IPv6Address localIPv6();
++        IPAddress localIPv6();
+         const char * ifkey(void);
+-        const char * desc(void);
++        const char * desc(void) const;
+         String impl_name(void);
+ 
+         // Event based getters
+@@ -156,19 +156,19 @@ class ETHClass2 {
+         bool hasIP();
+ 
+         // ETH Handle APIs
+-        uint8_t * macAddress(uint8_t* mac);
+-        String macAddress();
+-        bool fullDuplex();
+-        bool linkUp();
+-        uint8_t linkSpeed();
+-        bool autoNegotiation();
+-        uint32_t phyAddr();
++        uint8_t * macAddress(uint8_t* mac) const;
++        String macAddress() const;
++        bool fullDuplex() const;
++        bool linkUp() const;
++        uint8_t linkSpeed() const;
++        bool autoNegotiation() const;
++        uint32_t phyAddr() const;
+ 
+         // Info APIs
+-        void printInfo(Print & out);
++        size_t printDriverInfo(Print & out) const;
+ 
+-        friend class WiFiClient;
+-        friend class WiFiServer;
++        friend class NetworkClient;
++        friend class NetworkServer;
+ 
+ #if ETH_SPI_SUPPORTS_CUSTOM
+         static esp_err_t _eth_spi_read(void *ctx, uint32_t cmd, uint32_t addr, void *data, uint32_t data_len);

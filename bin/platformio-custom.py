@@ -66,21 +66,6 @@ if platform.name == "espressif32":
 
     env.AddPostAction("$BUILD_DIR/${PROGNAME}.bin", esp32_create_combined_bin)
 
-    esp32_kind = env.GetProjectOption("custom_esp32_kind")
-    if esp32_kind == "esp32":
-        # Free up some IRAM by removing auxiliary SPI flash chip drivers.
-        # Wrapped stub symbols are defined in src/platform/esp32/iram-quirk.c.
-        env.Append(
-            LINKFLAGS=[
-                "-Wl,--wrap=esp_flash_chip_gd",
-                "-Wl,--wrap=esp_flash_chip_issi",
-                "-Wl,--wrap=esp_flash_chip_winbond",
-            ]
-        )
-    else:
-        # For newer ESP32 targets, using newlib nano works better.
-        env.Append(LINKFLAGS=["--specs=nano.specs", "-u", "_printf_float"])
-
 if platform.name == "nordicnrf52":
     env.AddPostAction("$BUILD_DIR/${PROGNAME}.hex",
                       env.VerboseAction(f"\"{sys.executable}\" ./bin/uf2conv.py $BUILD_DIR/firmware.hex -c -f 0xADA52840 -o $BUILD_DIR/firmware.uf2",
@@ -131,3 +116,44 @@ for lb in env.GetLibBuilders():
     if lb.name == "meshtastic-device-ui":
         lb.env.Append(CPPDEFINES=[("APP_VERSION", verObj["long"])])
         break
+
+############################# Libraries Patching #############################
+
+env.Execute("$PYTHONEXE -m pip install patch pyyaml")
+
+import os
+import patch
+import yaml
+
+patches = {}
+config_path = os.path.join(env["PROJECT_DIR"], "patches/config.yaml")
+with open(config_path, "r") as file:
+    y = yaml.safe_load(file)
+    for p in y["patches"]:
+        name = p["name"]
+        p.pop("name", None)
+        patches[name] = p
+
+for lb in env.GetLibBuilders():
+    if not lb.name in patches:
+        continue
+    p = patches[lb.name]
+    if "version" in p and not (lb.version == p["version"]):
+        print(f"Skipping {lb.name}.patch: version doesn't match")
+        continue
+    if "targets" in p and not (env.get("PIOENV") in p["targets"]):
+        print(f"Skipping {lb.name}.patch: target doesn't match")
+        continue
+
+    marker_path = os.path.join(lb.src_dir, ".patched")
+    if os.path.exists(marker_path):
+        print(f"Skipping {lb.name}.patch: already patched")
+        continue
+
+    patch_path = env["PROJECT_DIR"] + "/patches/" + lb.name + ".patch"
+    ps = patch.fromfile(patch_path)
+    if not ps.apply(0, lb.src_dir):
+        print(f"Failed to apply patch {patch_path}")
+        exit(1)
+    print(f"Patched {lb.name}")
+    open(marker_path, "w").close()
