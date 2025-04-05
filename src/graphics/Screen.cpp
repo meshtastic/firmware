@@ -980,6 +980,9 @@ bool deltaToTimestamp(uint32_t secondsAgo, uint8_t *hours, uint8_t *minutes, int
     validCached = true;
     return validCached;
 }
+// *********************************
+// *Rounding Header when inverted  *
+// *********************************
 void drawRoundedHighlight(OLEDDisplay *display, int16_t x, int16_t y, int16_t w, int16_t h, int16_t r)
 {
     display->fillRect(x + r, y, w - 2 * r, h);
@@ -990,7 +993,144 @@ void drawRoundedHighlight(OLEDDisplay *display, int16_t x, int16_t y, int16_t w,
     display->fillCircle(x + r + 1, y + h - r - 1, r);
     display->fillCircle(x + w - r - 1, y + h - r - 1, r);
 }
+bool isBoltVisible = true;
+uint32_t lastBlink = 0;
+const uint32_t blinkInterval = 500;
+// ***********************
+// * Common Header       *
+// ***********************
+void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
+{
+    constexpr int HEADER_OFFSET_Y = 2;
+    y += HEADER_OFFSET_Y;
 
+    const bool isInverted = (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED);
+    const bool isBold = config.display.heading_bold;
+    const int xOffset = 4;
+    const int highlightHeight = FONT_HEIGHT_SMALL - 1;
+    const int screenWidth = display->getWidth();
+
+    display->setFont(FONT_SMALL);
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+    // === Background highlight ===
+    if (isInverted) {
+        drawRoundedHighlight(display, x, y, screenWidth, highlightHeight, 2);
+        display->setColor(BLACK);
+    }
+
+    // === Text baseline ===
+    const int textY = y + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
+
+    // === Battery dynamically scaled ===
+    const int nubSize = 2;
+    const int batteryLong = screenWidth > 200 ? 28 : 24;  // Wider on bigger TFTs
+    const int batteryShort = highlightHeight - nubSize - 2;
+
+    int batteryX = x + xOffset;
+    int batteryY = y + (highlightHeight - batteryShort) / 2 + nubSize;
+
+    int chargePercent = powerStatus->getBatteryChargePercent();
+
+    bool isCharging = powerStatus->getIsCharging() == OptionalBool::OptTrue;
+    uint32_t now = millis();
+    if (isCharging && now - lastBlink > blinkInterval) {
+        isBoltVisible = !isBoltVisible;
+        lastBlink = now;
+    }
+
+    if (screenWidth > 128) {
+        // === Horizontal battery  ===
+        batteryY = y + (highlightHeight - batteryShort) / 2;
+
+        // Battery outline
+        display->drawRect(batteryX, batteryY, batteryLong, batteryShort);
+
+        // Nub
+        display->fillRect(
+            batteryX + batteryLong,
+            batteryY + (batteryShort / 2) - 3,
+            nubSize + 2, 6
+        );
+
+        if (isCharging && isBoltVisible) {
+            // Lightning bolt
+            const int boltX = batteryX + batteryLong / 2 - 4;
+            const int boltY = batteryY + 2;  // Padding top
+
+            // Top fat bar (same)
+            display->fillRect(boltX, boltY, 6, 2);
+
+            // Middle slanted lines
+            display->drawLine(boltX + 0, boltY + 2, boltX + 3, boltY + 6);
+            display->drawLine(boltX + 1, boltY + 2, boltX + 4, boltY + 6);
+            display->drawLine(boltX + 2, boltY + 2, boltX + 5, boltY + 6);
+
+            // Tapered tail
+            display->drawLine(boltX + 3, boltY + 6, boltX + 0, batteryY + batteryShort - 3);
+            display->drawLine(boltX + 4, boltY + 6, boltX + 1, batteryY + batteryShort - 3);
+        } else if (!isCharging) {
+            int fillWidth = (batteryLong - 2) * chargePercent / 100;
+            int fillX = batteryX + 1;
+            display->fillRect(fillX, batteryY + 1, fillWidth, batteryShort - 2);
+        }
+    } else {
+        // === Vertical battery ===
+        const int batteryWidth = 8;
+        const int batteryHeight = batteryShort;
+        const int totalBatteryHeight = batteryHeight + nubSize;
+        batteryX += -2;
+        batteryY = y + (highlightHeight - totalBatteryHeight) / 2 + nubSize;
+
+        display->fillRect(batteryX + 2, batteryY - nubSize, 4, nubSize); // Nub
+        display->drawRect(batteryX, batteryY, batteryWidth, batteryHeight); // Body
+
+        if (isCharging && isBoltVisible) {
+            display->drawLine(batteryX + 4, batteryY + 1, batteryX + 2, batteryY + 4);
+            display->drawLine(batteryX + 2, batteryY + 4, batteryX + 4, batteryY + 4);
+            display->drawLine(batteryX + 4, batteryY + 4, batteryX + 3, batteryY + 7);
+        } else if (!isCharging) {
+            int fillHeight = (batteryHeight - 2) * chargePercent / 100;
+            int fillY = batteryY + batteryHeight - 1 - fillHeight;
+            display->fillRect(batteryX + 1, fillY, batteryWidth - 2, fillHeight);
+        }
+    }
+
+    // === Battery % Text ===
+    char percentStr[8];
+    snprintf(percentStr, sizeof(percentStr), "%d%%", chargePercent);
+
+    const int batteryOffset = screenWidth > 128 ? 34 : 9;
+    const int percentX = x + xOffset + batteryOffset;
+    display->drawString(percentX, textY, percentStr);
+    if (isBold)
+        display->drawString(percentX + 1, textY, percentStr);
+
+    // === Time string (right-aligned) ===
+    uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true);
+    if (rtc_sec > 0) {
+        long hms = (rtc_sec % SEC_PER_DAY + SEC_PER_DAY) % SEC_PER_DAY;
+        int hour = hms / SEC_PER_HOUR;
+        int minute = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
+
+        bool isPM = hour >= 12;
+        hour = hour % 12;
+        if (hour == 0)
+            hour = 12;
+
+        char timeStr[10];
+        snprintf(timeStr, sizeof(timeStr), "%d:%02d%s", hour, minute, isPM ? "p" : "a");
+
+        int timeX = screenWidth + 3 - xOffset - display->getStringWidth(timeStr);
+        if (screenWidth > 128)
+            timeX -= 1;
+        display->drawString(timeX, textY, timeStr);
+        if (isBold)
+            display->drawString(timeX - 1, textY, timeStr);
+    }
+
+    display->setColor(WHITE);
+}
 // ****************************
 // *   Tex Message Screen     *
 // ****************************
@@ -1683,9 +1823,6 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     screen->drawColumns(display, x, y, fields);
 }
 
-// *********************************
-// *Rounding Header when inverted  *
-// *********************************
 // h! Each node entry holds a reference to its info and how long ago it was heard from
 struct NodeEntry {
     meshtastic_NodeInfoLite *node;
@@ -1717,23 +1854,26 @@ int calculateMaxScroll(int totalEntries, int visibleRows)
 }
 
 // Helper: Draw vertical scrollbar matching CannedMessageModule style
-void drawScrollbar(OLEDDisplay *display, int visibleNodeRows, int totalEntries, int scrollIndex, int columns, int rowYOffset)
+void drawScrollbar(OLEDDisplay *display, int visibleNodeRows, int totalEntries, int scrollIndex, int columns, int scrollStartY)
 {
-    int totalPages = (totalEntries + columns - 1) / columns;
-    if (totalPages <= visibleNodeRows)
-        return; // no scrollbar needed
+    const int rowHeight = FONT_HEIGHT_SMALL - 3;
 
-    int scrollAreaHeight = visibleNodeRows * (FONT_HEIGHT_SMALL - 3); // true pixel height used per row
-    int scrollbarX = display->getWidth() - 6;
-    int scrollbarWidth = 4;
+    // Visual rows across both columns
+    const int totalVisualRows = (totalEntries + columns - 1) / columns;
 
-    int scrollBarHeight = (scrollAreaHeight * visibleNodeRows) / totalPages;
-    int scrollBarY = rowYOffset + (scrollAreaHeight * scrollIndex) / totalPages;
+    if (totalVisualRows <= visibleNodeRows)
+        return; // Don't draw scrollbar if everything fits
 
-    display->drawRect(scrollbarX, rowYOffset, scrollbarWidth, scrollAreaHeight);
+    const int scrollAreaHeight = visibleNodeRows * rowHeight;
+    const int scrollbarX = display->getWidth() - 6;
+    const int scrollbarWidth = 4;
+
+    const int scrollBarHeight = (scrollAreaHeight * visibleNodeRows) / totalVisualRows;
+    const int scrollBarY = scrollStartY + (scrollAreaHeight * scrollIndex) / totalVisualRows;
+
+    display->drawRect(scrollbarX, scrollStartY, scrollbarWidth, scrollAreaHeight);
     display->fillRect(scrollbarX, scrollBarY, scrollbarWidth, scrollBarHeight);
 }
-
 // Grabs all nodes from the DB and sorts them (favorites and most recently heard first)
 void retrieveAndSortNodes(std::vector<NodeEntry> &nodeList)
 {
@@ -1791,45 +1931,12 @@ String getSafeNodeName(meshtastic_NodeInfoLite *node)
     return nodeName;
 }
 
-// Draws the top header bar (optionally inverted or bold)
-void drawScreenHeader(OLEDDisplay *display, const char *title, int16_t x, int16_t y)
-{
-    constexpr int HEADER_OFFSET_Y = 2;
-    y += HEADER_OFFSET_Y;
-
-    const bool isInverted = (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED);
-    const bool isBold = config.display.heading_bold;
-    const int highlightHeight = FONT_HEIGHT_SMALL - 1;
-
-    display->setFont(FONT_SMALL);
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-
-    int screenWidth = display->getWidth();
-    int textWidth = display->getStringWidth(title);
-    int titleX = (screenWidth - textWidth) / 2;
-
-    // === Background highlight ===
-    if (isInverted) {
-        drawRoundedHighlight(display, 0, y, screenWidth, highlightHeight, 2);
-        display->setColor(BLACK);
-    }
-
-    // === Text baseline ===
-    int textY = y + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
-
-    display->drawString(titleX, textY, title);
-    if (isBold)
-        display->drawString(titleX + 1, textY, title);
-
-    display->setColor(WHITE);
-}
-
 // Draws separator line
 void drawColumnSeparator(OLEDDisplay *display, int16_t x, int16_t yStart, int16_t yEnd)
 {
     int columnWidth = display->getWidth() / 2;
     int separatorX = x + columnWidth - 2;
-    display->drawLine(separatorX, yStart, separatorX, yEnd - 3);
+    display->drawLine(separatorX, yStart, separatorX, yEnd);
 }
 
 // Draws node name with how long ago it was last heard from
@@ -1907,7 +2014,7 @@ void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
 
     for (int b = 0; b < 4; b++) {
         if (b < bars) {
-            int height = 2 + (b * 2);
+            int height = (b * 2); 
             display->fillRect(barStartX + (b * (barWidth + 1)), barStartY - height, barWidth, height);
         }
     }
@@ -1920,26 +2027,50 @@ typedef void (*EntryRenderer)(OLEDDisplay *, meshtastic_NodeInfoLite *, int16_t,
 void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *title,
                         EntryRenderer renderer)
 {
-    constexpr int headerOffsetY = 1;
+    const int COMMON_HEADER_HEIGHT = FONT_HEIGHT_SMALL - 1;
+    const int rowYOffset = FONT_HEIGHT_SMALL - 3;
 
     int columnWidth = display->getWidth() / 2;
-    int rowYOffset = FONT_HEIGHT_SMALL - 3;
+    int screenWidth = display->getWidth();
 
     display->clear();
-    drawScreenHeader(display, title, x, y);
-    y += headerOffsetY;
 
+    // === Draw the battery/time header ===
+    drawCommonHeader(display, x, y);
+
+    // === Manually draw the centered title within the header ===
+    const int highlightHeight = COMMON_HEADER_HEIGHT;
+    const int textY = y + 2 + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
+    const int centerX = x + screenWidth / 2;
+
+    display->setFont(FONT_SMALL);
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+
+    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED)
+        display->setColor(BLACK);
+
+    display->drawString(centerX, textY, title);
+    if (config.display.heading_bold)
+        display->drawString(centerX + 1, textY, title);
+
+    display->setColor(WHITE);
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+    // === Space below header ===
+    y += COMMON_HEADER_HEIGHT;
+
+    // === Fetch and display sorted node list ===
     std::vector<NodeEntry> nodeList;
     retrieveAndSortNodes(nodeList);
 
     int totalEntries = nodeList.size();
-    int totalRowsAvailable = (display->getHeight() - y - FONT_HEIGHT_SMALL) / (FONT_HEIGHT_SMALL - 3);
-    int visibleNodeRows = std::min(6, totalRowsAvailable);
+    int totalRowsAvailable = (display->getHeight() - y) / rowYOffset;
+    int visibleNodeRows = totalRowsAvailable;
 
     int startIndex = scrollIndex * visibleNodeRows * 2;
     int endIndex = std::min(startIndex + visibleNodeRows * 2, totalEntries);
 
-    int yOffset = rowYOffset + headerOffsetY;
+    int yOffset = 0;
     int col = 0;
     int lastNodeY = y;
     int shownCount = 0;
@@ -1948,31 +2079,28 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
         int xPos = x + (col * columnWidth);
         int yPos = y + yOffset;
         renderer(display, nodeList[i].node, xPos, yPos, columnWidth);
-        lastNodeY = std::max(lastNodeY, y + yOffset + FONT_HEIGHT_SMALL);
-        yOffset += FONT_HEIGHT_SMALL - 3;
+        lastNodeY = std::max(lastNodeY, yPos + FONT_HEIGHT_SMALL);
+        yOffset += rowYOffset;
         shownCount++;
 
         if (y + yOffset > display->getHeight() - FONT_HEIGHT_SMALL) {
-            yOffset = rowYOffset + headerOffsetY;
+            yOffset = 0;
             col++;
             if (col > 1)
                 break;
         }
     }
 
+    // === Draw column separator
     if (shownCount > 0) {
-        // yStart = top of first node = y (header start) + header height + spacing
-        const int headerOffsetYLocal = 1;               // Matches earlier in this function
-        const int headerHeight = FONT_HEIGHT_SMALL - 1; // from drawScreenHeader()
-        int yStart = y + headerHeight + headerOffsetYLocal;
-        drawColumnSeparator(display, x, yStart, lastNodeY + headerOffsetY);
+        const int firstNodeY = y + 3; // where the first node row starts
+        drawColumnSeparator(display, x, firstNodeY, lastNodeY);
     }
 
-    const int headerOffsetYLocal = 1;
-    const int headerHeight = FONT_HEIGHT_SMALL - 1;
-    int firstNodeY = y + headerHeight + headerOffsetYLocal;
-    drawScrollbar(display, visibleNodeRows, totalEntries, scrollIndex, 2, firstNodeY);
+    const int scrollStartY = y + 3;
+    drawScrollbar(display, visibleNodeRows, totalEntries, scrollIndex, 2, scrollStartY);
 }
+
 
 // Public screen function: shows how recently nodes were heard
 static void drawLastHeardScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -1983,7 +2111,7 @@ static void drawLastHeardScreen(OLEDDisplay *display, OLEDDisplayUiState *state,
 // Public screen function: shows hop count + signal strength
 static void drawHopSignalScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    drawNodeListScreen(display, state, x, y, "Hops/Signal", drawEntryHopSignal);
+    drawNodeListScreen(display, state, x, y, "Hop|Sig", drawEntryHopSignal);
 }
 
 // Helper function: Draw a single node entry for Node List (Modified for Compass Screen)
@@ -2041,21 +2169,43 @@ void drawCompassArrow(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
 void drawNodeListWithExtrasScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *title,
                                   EntryRenderer renderer, CompassExtraRenderer extras)
 {
-    constexpr int headerOffsetY = 1;
+    const int COMMON_HEADER_HEIGHT = FONT_HEIGHT_SMALL - 1;
+    const int rowYOffset = FONT_HEIGHT_SMALL - 3;
 
     int columnWidth = display->getWidth() / 2;
-    int rowYOffset = FONT_HEIGHT_SMALL - 3;
+    int screenWidth = display->getWidth();
 
     display->clear();
-    drawScreenHeader(display, title, x, y);
-    y += headerOffsetY;
+
+    // === Draw common header (battery + time)
+    drawCommonHeader(display, x, y);
+
+    // === Draw title inside header (centered)
+    const int highlightHeight = COMMON_HEADER_HEIGHT;
+    const int textY = y + 2 + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
+    const int centerX = x + screenWidth / 2;
+
+    display->setFont(FONT_SMALL);
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED)
+        display->setColor(BLACK);
+
+    display->drawString(centerX, textY, title);
+    if (config.display.heading_bold)
+        display->drawString(centerX + 1, textY, title);
+
+    display->setColor(WHITE);
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+    // === Space below header
+    y += COMMON_HEADER_HEIGHT;
 
     std::vector<NodeEntry> nodeList;
     retrieveAndSortNodes(nodeList);
 
     int totalEntries = nodeList.size();
-    int totalRowsAvailable = (display->getHeight() - y - FONT_HEIGHT_SMALL) / (FONT_HEIGHT_SMALL - 3);
-    int visibleNodeRows = std::min(6, totalRowsAvailable);
+    int totalRowsAvailable = (display->getHeight() - y) / rowYOffset;
+    int visibleNodeRows = totalRowsAvailable;
 
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     double userLat = 0.0, userLon = 0.0;
@@ -2070,7 +2220,7 @@ void drawNodeListWithExtrasScreen(OLEDDisplay *display, OLEDDisplayUiState *stat
     int startIndex = scrollIndex * visibleNodeRows * 2;
     int endIndex = std::min(startIndex + visibleNodeRows * 2, totalEntries);
 
-    int yOffset = rowYOffset + headerOffsetY;
+    int yOffset = 0;
     int col = 0;
     int lastNodeY = y;
     int shownCount = 0;
@@ -2085,30 +2235,26 @@ void drawNodeListWithExtrasScreen(OLEDDisplay *display, OLEDDisplayUiState *stat
             extras(display, nodeList[i].node, xPos, yPos, columnWidth, myHeading, userLat, userLon);
         }
 
-        lastNodeY = std::max(lastNodeY, y + yOffset + FONT_HEIGHT_SMALL);
-        yOffset += FONT_HEIGHT_SMALL - 3;
+        lastNodeY = std::max(lastNodeY, yPos + FONT_HEIGHT_SMALL);
+        yOffset += rowYOffset;
         shownCount++;
 
         if (y + yOffset > display->getHeight() - FONT_HEIGHT_SMALL) {
-            yOffset = rowYOffset + headerOffsetY;
+            yOffset = 0;
             col++;
             if (col > 1)
                 break;
         }
     }
 
+    // === Draw column separator
     if (shownCount > 0) {
-        // yStart = top of first node = y (header start) + header height + spacing
-        const int headerOffsetYLocal = 1;               // Matches earlier in this function
-        const int headerHeight = FONT_HEIGHT_SMALL - 1; // from drawScreenHeader()
-        int yStart = y + headerHeight + headerOffsetYLocal;
-        drawColumnSeparator(display, x, yStart, lastNodeY + headerOffsetY);
+        const int firstNodeY = y + 3; // where the first node row starts
+        drawColumnSeparator(display, x, firstNodeY, lastNodeY);
     }
 
-    const int headerOffsetYLocal = 1;
-    const int headerHeight = FONT_HEIGHT_SMALL - 1;
-    int firstNodeY = y + headerHeight + headerOffsetYLocal;
-    drawScrollbar(display, visibleNodeRows, totalEntries, scrollIndex, 2, firstNodeY);
+    const int scrollStartY = y + 3;
+    drawScrollbar(display, visibleNodeRows, totalEntries, scrollIndex, 2, scrollStartY);
 }
 // Public screen entry for compass
 static void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -2179,83 +2325,6 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
 static void drawDistanceScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     drawNodeListScreen(display, state, x, y, "Distances", drawNodeDistance);
-}
-
-// ***********************
-// * Common Header       *
-// ***********************
-void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
-{
-    constexpr int HEADER_OFFSET_Y = 2;
-    y += HEADER_OFFSET_Y;
-
-    const bool isInverted = (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED);
-    const bool isBold = config.display.heading_bold;
-    const int xOffset = 4;
-    const int highlightHeight = FONT_HEIGHT_SMALL - 1;
-    const int screenWidth = display->getWidth();
-
-    display->setFont(FONT_SMALL);
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-
-    // === Background highlight ===
-    if (isInverted) {
-        drawRoundedHighlight(display, x, y, screenWidth, highlightHeight, 2);
-        display->setColor(BLACK);
-    }
-
-    // === Text baseline ===
-    const int textY = y + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
-
-    // === Battery icon (scale-aware vertical centering) ===
-    int batteryScale = 1;
-    if (screenWidth >= 200)
-        batteryScale = 2;
-
-    int batteryHeight = 8 * batteryScale;
-    int batteryY = y + (highlightHeight / 2) - (batteryHeight / 2);
-
-    // Only shift right 3px if screen is wider than 128
-    int batteryX = x + xOffset - 2;
-    if (screenWidth > 128)
-        batteryX += 2;
-
-    drawBattery(display, batteryX, batteryY, imgBattery, powerStatus);
-
-    // === Battery % text ===
-    char percentStr[8];
-    snprintf(percentStr, sizeof(percentStr), "%d%%", powerStatus->getBatteryChargePercent());
-
-    const int batteryOffset = screenWidth > 128 ? 34 : 16;
-    const int percentX = x + xOffset + batteryOffset;
-    display->drawString(percentX, textY, percentStr);
-    if (isBold)
-        display->drawString(percentX + 1, textY, percentStr);
-
-    // === Time string (right-aligned) ===
-    uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true);
-    if (rtc_sec > 0) {
-        long hms = (rtc_sec % SEC_PER_DAY + SEC_PER_DAY) % SEC_PER_DAY;
-        int hour = hms / SEC_PER_HOUR;
-        int minute = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
-
-        bool isPM = hour >= 12;
-        hour = hour % 12;
-        if (hour == 0)
-            hour = 12;
-
-        char timeStr[10];
-        snprintf(timeStr, sizeof(timeStr), "%d:%02d%s", hour, minute, isPM ? "p" : "a");
-
-        int timeX = screenWidth + 3 - xOffset - display->getStringWidth(timeStr);
-        if (screenWidth > 128)
-            timeX -= 1;
-        display->drawString(timeX, textY, timeStr);
-        if (isBold)
-            display->drawString(timeX - 1, textY, timeStr);
-    }
-
-    display->setColor(WHITE);
 }
 
 // ****************************
@@ -2451,10 +2520,6 @@ static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiStat
     }
     display->setColor(WHITE);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
-
-    // Row Y offset
-    int rowYOffset = FONT_HEIGHT_SMALL - 3;
-    int rowY = y + rowYOffset;
 
     // === First Row: My Location ===
 #if HAS_GPS
