@@ -1118,27 +1118,29 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     std::vector<std::string> lines;
     lines.push_back(std::string(headerStr));  // Header line is always first
 
-    std::string word, line;
-    int msgLen = strlen(messageBuf);
-    for (int i = 0; i <= msgLen; ++i) {
+    std::string line, word;
+    for (int i = 0; messageBuf[i]; ++i) {
         char ch = messageBuf[i];
-        if (ch == ' ' || ch == '\0') {
-            if (!word.empty()) {
-                if (display->getStringWidth((line + word).c_str()) > textWidth) {
-                    lines.push_back(line);
-                    line = word + ' ';
-                } else {
-                    line += word + ' ';
-                }
-                word.clear();
-            }
-            if (ch == '\0' && !line.empty()) {
-                lines.push_back(line);
-            }
+        if (ch == '\n') {
+            if (!word.empty()) line += word;
+            if (!line.empty()) lines.push_back(line);
+            line.clear();
+            word.clear();
+        } else if (ch == ' ') {
+            line += word + ' ';
+            word.clear();
         } else {
             word += ch;
+            std::string test = line + word;
+            if (display->getStringWidth(test.c_str()) > textWidth + 4) {
+                if (!line.empty()) lines.push_back(line);
+                line = word;
+                word.clear();
+            }
         }
     }
+    if (!word.empty()) line += word;
+    if (!line.empty()) lines.push_back(line);
 
     // === Scrolling logic ===
     const float rowHeight = FONT_HEIGHT_SMALL - 1;
