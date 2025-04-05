@@ -1125,7 +1125,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
             display->drawString(x + display->getWidth() - display->getStringWidth(buffer), y + 0, buffer);
         }
         display->setColor(WHITE);
-        #if defined(T_DECK) || defined(CHATTER_2)
+        #ifdef USE_MSG_FONT_MEDIUM
             display->setFont(FONT_MEDIUM);
             display->drawStringMaxWidth(
                 0 + x, 0 + y + FONT_HEIGHT_MEDIUM, x + display->getWidth(),

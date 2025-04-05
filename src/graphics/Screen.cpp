@@ -1066,7 +1066,7 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
                          y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - heart_height) / 2 + 2 + 5, heart_width, heart_height, heart);
     } else {
         snprintf(tempBuf, sizeof(tempBuf), "%s", mp.decoded.payload.bytes);
-        #if defined(T_DECK) || defined(CHATTER_2)
+        #ifdef USE_MSG_FONT_MEDIUM
             display->setFont(FONT_MEDIUM);
             display->drawStringMaxWidth(0 + x, 0 + y + FONT_HEIGHT_MEDIUM, x + display->getWidth(), tempBuf);
         #else
