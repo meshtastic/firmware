@@ -1943,7 +1943,8 @@ typedef void (*EntryRenderer)(OLEDDisplay *, meshtastic_NodeInfoLite *, int16_t,
 typedef void (*NodeExtrasRenderer)(OLEDDisplay *, meshtastic_NodeInfoLite *, int16_t, int16_t, int columnWidth, float heading, double lat, double lon);
 
 void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y,
-    const char *title, EntryRenderer renderer, NodeExtrasRenderer extras = nullptr)
+    const char *title, EntryRenderer renderer, NodeExtrasRenderer extras = nullptr,
+    float heading = 0, double lat = 0, double lon = 0)
 {
     const int COMMON_HEADER_HEIGHT = FONT_HEIGHT_SMALL - 1;
     const int rowYOffset = FONT_HEIGHT_SMALL - 3;
@@ -1997,6 +1998,12 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
         int xPos = x + (col * columnWidth);
         int yPos = y + yOffset;
         renderer(display, nodeList[i].node, xPos, yPos, columnWidth);
+
+        // ✅ Actually render the compass arrow
+        if (extras) {
+            extras(display, nodeList[i].node, xPos, yPos, columnWidth, heading, lat, lon);
+        }
+
         lastNodeY = std::max(lastNodeY, yPos + FONT_HEIGHT_SMALL);
         yOffset += rowYOffset;
         shownCount++;
@@ -2011,7 +2018,7 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
 
     // === Draw column separator
     if (shownCount > 0) {
-        const int firstNodeY = y + 3; // where the first node row starts
+        const int firstNodeY = y + 3;
         drawColumnSeparator(display, x, firstNodeY, lastNodeY);
     }
 
@@ -2209,24 +2216,50 @@ void drawCompassArrow(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     float relativeBearing = fmod((bearingToNode - myHeading + 360), 360);
     float arrowAngle = relativeBearing * DEG_TO_RAD;
 
-    // Adaptive offset for compass icon based on screen width + column
+    // Compass position
     int arrowXOffset = (screenWidth > 128) ? (isLeftCol ? 22 : 24) : (isLeftCol ? 12 : 18);
-
     int compassX = x + columnWidth - arrowXOffset;
     int compassY = y + FONT_HEIGHT_SMALL / 2;
-    int size = FONT_HEIGHT_SMALL / 2 - 2;
-    int arrowLength = size - 2;
 
-    int xEnd = compassX + arrowLength * cos(arrowAngle);
-    int yEnd = compassY - arrowLength * sin(arrowAngle);
+    int radius = FONT_HEIGHT_SMALL / 2 - 3;
 
-    display->fillCircle(compassX, compassY, size);
-    display->drawCircle(compassX, compassY, size);
+    // Arrow should go from center to edge (not beyond)
+    int xEnd = compassX + radius * cos(arrowAngle);
+    int yEnd = compassY - radius * sin(arrowAngle);
+
+    // Draw circle outline
+    display->drawCircle(compassX, compassY, radius);
+
+    // Draw thin arrow line from center to circle edge
     display->drawLine(compassX, compassY, xEnd, yEnd);
 }
+
 // Public screen entry for compass
-static void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) {
-    drawNodeListScreen(display, state, x, y, "Bearings", drawEntryCompass, drawCompassArrow);
+static void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    float heading = 0;
+    bool validHeading = false;
+    double lat = 0;
+    double lon = 0;
+
+#if HAS_GPS
+    geoCoord.updateCoords(int32_t(gpsStatus->getLatitude()), int32_t(gpsStatus->getLongitude()),
+                          int32_t(gpsStatus->getAltitude()));
+    lat = geoCoord.getLatitude() * 1e-7;
+    lon = geoCoord.getLongitude() * 1e-7;
+
+    if (screen->hasHeading()) {
+        heading = screen->getHeading();  // degrees
+        validHeading = true;
+    } else {
+        heading = screen->estimatedHeading(lat, lon);
+        validHeading = !isnan(heading);
+    }
+#endif
+
+    if (!validHeading) return;
+
+    drawNodeListScreen(display, state, x, y, "Bearings", drawEntryCompass, drawCompassArrow, heading, lat, lon);
 }
 
 // ****************************
@@ -3314,30 +3347,30 @@ void Screen::setFrames(FrameFocus focus)
     }
 
     normalFrames[numframes++] = drawDeviceFocused;
+    normalFrames[numframes++] = drawLoRaFocused;
     normalFrames[numframes++] = drawLastHeardScreen;
     normalFrames[numframes++] = drawDistanceScreen;
-    normalFrames[numframes++] = drawNodeListWithCompasses;
     normalFrames[numframes++] = drawHopSignalScreen;
-    normalFrames[numframes++] = drawLoRaFocused;
+    normalFrames[numframes++] = drawNodeListWithCompasses;
     normalFrames[numframes++] = drawCompassAndLocationScreen;
     normalFrames[numframes++] = drawMemoryScreen;
 
 // then all the nodes
 // We only show a few nodes in our scrolling list - because meshes with many nodes would have too many screens
-size_t numToShow = min(numMeshNodes, 4U);
-for (size_t i = 0; i < numToShow; i++)
-normalFrames[numframes++] = drawNodeInfo;
+//size_t numToShow = min(numMeshNodes, 4U);
+//for (size_t i = 0; i < numToShow; i++)
+//normalFrames[numframes++] = drawNodeInfo;
 
 // then the debug info
 
 // Since frames are basic function pointers, we have to use a helper to
 // call a method on debugInfo object.
-fsi.positions.log = numframes;
-normalFrames[numframes++] = &Screen::drawDebugInfoTrampoline;
+//fsi.positions.log = numframes;
+//normalFrames[numframes++] = &Screen::drawDebugInfoTrampoline;
 
 // call a method on debugInfoScreen object (for more details)
-fsi.positions.settings = numframes;
-normalFrames[numframes++] = &Screen::drawDebugInfoSettingsTrampoline;
+//fsi.positions.settings = numframes;
+//normalFrames[numframes++] = &Screen::drawDebugInfoSettingsTrampoline;
 
     fsi.positions.wifi = numframes;
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
