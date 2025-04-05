@@ -23,3 +23,14 @@
 #endif
 
 #define LORA_DIO2 32 // Not really used
+
+/*
+ * Use SD Card for Store and Forward
+ */
+#define HAS_SDCARD
+#define SDCARD_USE_HSPI
+#define SPI_MOSI 15
+#define SPI_MISO 2
+#define SPI_SCK 14
+#define SPI_CS 13
+#define SDCARD_CS SPI_CS
