@@ -12,6 +12,7 @@
 #include "RTC.h"
 #include "Throttle.h"
 #include "buzz.h"
+#include "concurrency/Periodic.h"
 #include "meshUtils.h"
 
 #include "main.h" // pmu_found
@@ -88,6 +89,45 @@ static const char *getGPSPowerStateString(GPSPowerState state)
         return "FALSE"; // to make new ESP-IDF happy
     }
 }
+
+#ifdef PIN_GPS_SWITCH
+// If we have a hardware switch, define a periodic watcher outside of the GPS runOnce thread, since this can be sleeping
+// idefinitely
+
+int lastState = LOW;
+bool firstrun = true;
+
+static int32_t gpsSwitch()
+{
+    if (gps) {
+        int currentState = digitalRead(PIN_GPS_SWITCH);
+
+        // if the switch is set to zero, disable the GPS Thread
+        if (firstrun)
+            if (currentState == LOW)
+                lastState = HIGH;
+
+        if (currentState != lastState) {
+            if (currentState == LOW) {
+                config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_DISABLED;
+                if (!firstrun)
+                    playGPSDisableBeep();
+                gps->disable();
+            } else {
+                config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
+                if (!firstrun)
+                    playGPSEnableBeep();
+                gps->enable();
+            }
+            lastState = currentState;
+        }
+        firstrun = false;
+    }
+    return 1000;
+}
+
+static concurrency::Periodic *gpsPeriodic;
+#endif
 
 static void UBXChecksum(uint8_t *message, size_t length)
 {
@@ -1388,6 +1428,12 @@ GPS *GPS::createGps()
 #ifdef PIN_GPS_PPS
     // pulse per second
     pinMode(PIN_GPS_PPS, INPUT);
+#endif
+
+#ifdef PIN_GPS_SWITCH
+    // toggle GPS via external GPIO switch
+    pinMode(PIN_GPS_SWITCH, INPUT);
+    gpsPeriodic = new concurrency::Periodic("GPSSwitch", gpsSwitch);
 #endif
 
 // Currently disabled per issue #525 (TinyGPS++ crash bug)
