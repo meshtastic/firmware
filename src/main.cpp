@@ -460,7 +460,7 @@ void setup()
     OSThread::setup();
 
 #if defined(ELECROW_ThinkNode_M1) || defined(ELECROW_ThinkNode_M2)
-    // THe ThinkNodes have their own blink logic
+    // The ThinkNodes have their own blink logic
     ledPeriodic = new Periodic("Blink", elecrowLedBlinker);
 #else
     ledPeriodic = new Periodic("Blink", ledBlinker);
