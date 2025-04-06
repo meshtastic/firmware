@@ -1050,7 +1050,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
         display->fillRect(
             batteryX + batteryLong,
             batteryY + (batteryShort / 2) - 3,
-            nubSize + 1, 6
+            nubSize, 6
         );
 
         if (isCharging && isBoltVisible) {
