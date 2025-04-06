@@ -1024,7 +1024,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
 
     // === Battery dynamically scaled ===
     const int nubSize = 2;
-    const int batteryLong = screenWidth > 200 ? 28 : 24;  // Wider on bigger TFTs
+    const int batteryLong = screenWidth > 200 ? 29 : 25;  // Was 28/24
     const int batteryShort = highlightHeight - nubSize - 2;
 
     int batteryX = x + xOffset;
@@ -1050,7 +1050,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
         display->fillRect(
             batteryX + batteryLong,
             batteryY + (batteryShort / 2) - 3,
-            nubSize + 2, 6
+            nubSize + 1, 6
         );
 
         if (isCharging && isBoltVisible) {
@@ -1077,12 +1077,12 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
     } else {
         // === Vertical battery ===
         const int batteryWidth = 8;
-        const int batteryHeight = batteryShort;
+        const int batteryHeight = batteryShort + 1;
         const int totalBatteryHeight = batteryHeight + nubSize;
         batteryX += -2;
         batteryY = y + (highlightHeight - totalBatteryHeight) / 2 + nubSize;
 
-        display->fillRect(batteryX + 2, batteryY - nubSize, 4, nubSize); // Nub
+        display->fillRect(batteryX + 2, batteryY - (nubSize - 1), 4, nubSize - 1); // Nub
         display->drawRect(batteryX, batteryY, batteryWidth, batteryHeight); // Body
 
         if (isCharging && isBoltVisible) {
