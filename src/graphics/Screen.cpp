@@ -454,12 +454,11 @@ static void drawBattery(OLEDDisplay *display, int16_t x, int16_t y, uint8_t *img
     }
 
     // Slightly more conservative scaling based on screen width
-    int screenWidth = display->getWidth();
     int scale = 1;
 
-    if (screenWidth >= 200)
+    if (SCREEN_WIDTH >= 200)
         scale = 2;
-    if (screenWidth >= 300)
+    if (SCREEN_WIDTH >= 300)
         scale = 2; // Do NOT go higher than 2
 
     // Draw scaled battery image (16 columns × 8 rows)
@@ -1008,14 +1007,13 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
     const bool isBold = config.display.heading_bold;
     const int xOffset = 4;
     const int highlightHeight = FONT_HEIGHT_SMALL - 1;
-    const int screenWidth = display->getWidth();
 
     display->setFont(FONT_SMALL);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
     // === Background highlight ===
     if (isInverted) {
-        drawRoundedHighlight(display, x, y, screenWidth, highlightHeight, 2);
+        drawRoundedHighlight(display, x, y, SCREEN_WIDTH, highlightHeight, 2);
         display->setColor(BLACK);
     }
 
@@ -1024,7 +1022,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
 
     // === Battery dynamically scaled ===
     const int nubSize = 2;
-    const int batteryLong = screenWidth > 200 ? 29 : 25;  // Was 28/24
+    const int batteryLong = SCREEN_WIDTH > 200 ? 29 : 25;  // Was 28/24
     const int batteryShort = highlightHeight - nubSize - 2;
 
     int batteryX = x + xOffset;
@@ -1039,7 +1037,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
         lastBlink = now;
     }
 
-    if (screenWidth > 128) {
+    if (SCREEN_WIDTH > 128) {
         // === Horizontal battery  ===
         batteryY = y + (highlightHeight - batteryShort) / 2;
 
@@ -1100,7 +1098,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
     char percentStr[8];
     snprintf(percentStr, sizeof(percentStr), "%d%%", chargePercent);
 
-    const int batteryOffset = screenWidth > 128 ? 34 : 9;
+    const int batteryOffset = SCREEN_WIDTH > 128 ? 34 : 9;
     const int percentX = x + xOffset + batteryOffset;
     display->drawString(percentX, textY, percentStr);
     if (isBold)
@@ -1121,8 +1119,8 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
         char timeStr[10];
         snprintf(timeStr, sizeof(timeStr), "%d:%02d%s", hour, minute, isPM ? "p" : "a");
 
-        int timeX = screenWidth + 3 - xOffset - display->getStringWidth(timeStr);
-        if (screenWidth > 128)
+        int timeX = SCREEN_WIDTH + 3 - xOffset - display->getStringWidth(timeStr);
+        if (SCREEN_WIDTH > 128)
             timeX -= 1;
         display->drawString(timeX, textY, timeStr);
         if (isBold)
@@ -1142,12 +1140,11 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
 
-    const int screenWidth = display->getWidth();
     const int screenHeight = display->getHeight();
     const int navHeight = FONT_HEIGHT_SMALL;
     const int scrollBottom = screenHeight - navHeight;
     const int usableHeight = scrollBottom;
-    const int textWidth = screenWidth;
+    const int textWidth = SCREEN_WIDTH;
     const int cornerRadius = 2;
 
     bool isInverted = (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED);
@@ -1163,7 +1160,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     bool useTimestamp = deltaToTimestamp(seconds, &timestampHours, &timestampMinutes, &daysAgo);
 
     if (useTimestamp && minutes >= 15 && daysAgo == 0) {
-        std::string prefix = (daysAgo == 1 && screenWidth >= 200) ? "Yesterday" : "At";
+        std::string prefix = (daysAgo == 1 && SCREEN_WIDTH >= 200) ? "Yesterday" : "At";
         std::string meridiem = "AM";
         if (config.display.use_12h_clock) {
             if (timestampHours >= 12) meridiem = "PM";
@@ -1233,7 +1230,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         if (strcmp(msg, e.code) == 0) {
             // Draw the header
             if (isInverted) {
-                drawRoundedHighlight(display, x, 0, screenWidth, FONT_HEIGHT_SMALL - 1, cornerRadius);
+                drawRoundedHighlight(display, x, 0, SCREEN_WIDTH, FONT_HEIGHT_SMALL - 1, cornerRadius);
                 display->setColor(BLACK);
                 display->drawString(x + 3, 0, headerStr);
                 if (isBold) display->drawString(x + 4, 0, headerStr);
@@ -1245,7 +1242,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
             // Center the emote below header + apply bounce
             int remainingHeight = screenHeight - FONT_HEIGHT_SMALL - navHeight;
             int emoteY = FONT_HEIGHT_SMALL + (remainingHeight - e.height) / 2 + bounceY - bounceRange;
-            display->drawXbm((screenWidth - e.width) / 2, emoteY, e.width, e.height, e.bitmap);
+            display->drawXbm((SCREEN_WIDTH - e.width) / 2, emoteY, e.width, e.height, e.bitmap);
             return;
         }
     }
@@ -1331,7 +1328,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         int lineY = static_cast<int>(i * rowHeight + yOffset);
         if (lineY > -rowHeight && lineY < scrollBottom) {
             if (i == 0 && isInverted) {
-                drawRoundedHighlight(display, x, lineY, screenWidth, FONT_HEIGHT_SMALL - 1, cornerRadius);
+                drawRoundedHighlight(display, x, lineY, SCREEN_WIDTH, FONT_HEIGHT_SMALL - 1, cornerRadius);
                 display->setColor(BLACK);
                 display->drawString(x + 3, lineY, lines[i].c_str());
                 if (isBold) display->drawString(x + 4, lineY, lines[i].c_str());
@@ -1741,8 +1738,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
         titleStr = titleBuf;
     }
 
-    const int screenWidth = display->getWidth();
-    const int centerX = x + screenWidth / 2;
+    const int centerX = x + SCREEN_WIDTH / 2;
     const int highlightHeight = FONT_HEIGHT_SMALL - 1;
     const int headerOffsetY = 2;
     const int titleY = y + headerOffsetY + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
@@ -1972,7 +1968,6 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     const int rowYOffset = FONT_HEIGHT_SMALL - 3;
 
     int columnWidth = display->getWidth() / 2;
-    int screenWidth = display->getWidth();
 
     display->clear();
 
@@ -1982,7 +1977,7 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     // === Manually draw the centered title within the header ===
     const int highlightHeight = COMMON_HEADER_HEIGHT;
     const int textY = y + 2 + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
-    const int centerX = x + screenWidth / 2;
+    const int centerX = x + SCREEN_WIDTH / 2;
 
     display->setFont(FONT_SMALL);
     display->setTextAlignment(TEXT_ALIGN_CENTER);
@@ -2053,12 +2048,11 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
 // ****************************
 void drawEntryLastHeard(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth)
 {
-    int screenWidth = display->getWidth();
-    bool isLeftCol = (x < screenWidth / 2);
+    bool isLeftCol = (x < SCREEN_WIDTH / 2);
 
     // Adjust offset based on column and screen width
     int timeOffset =
-        (screenWidth > 128)
+        (SCREEN_WIDTH > 128)
             ? (isLeftCol ? 41 : 45)
             : (isLeftCol ? 24 : 30); // offset large screen (?Left:Right column), offset small screen (?Left:Right column)
 
@@ -2090,16 +2084,15 @@ void drawEntryLastHeard(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
 // ****************************
 void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth)
 {
-    int screenWidth = display->getWidth();
-    bool isLeftCol = (x < screenWidth / 2);
+    bool isLeftCol = (x < SCREEN_WIDTH / 2);
 
     int nameMaxWidth = columnWidth - 25;
     int barsOffset =
-        (screenWidth > 128)
+        (SCREEN_WIDTH > 128)
             ? (isLeftCol ? 26 : 30)
             : (isLeftCol ? 17 : 19); // offset large screen (?Left:Right column), offset small screen (?Left:Right column)
     int hopOffset =
-        (screenWidth > 128)
+        (SCREEN_WIDTH > 128)
             ? (isLeftCol ? 32 : 38)
             : (isLeftCol ? 18 : 20); // offset large screen (?Left:Right column), offset small screen (?Left:Right column)
 
@@ -2139,9 +2132,8 @@ void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
 // **************************
 void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth)
 {
-    int screenWidth = display->getWidth();
-    bool isLeftCol = (x < screenWidth / 2);
-    int nameMaxWidth = columnWidth - (screenWidth > 128 ? (isLeftCol ? 25 : 28) : (isLeftCol ? 20 : 22));
+    bool isLeftCol = (x < SCREEN_WIDTH / 2);
+    int nameMaxWidth = columnWidth - (SCREEN_WIDTH > 128 ? (isLeftCol ? 25 : 28) : (isLeftCol ? 20 : 22));
 
     String nodeName = getSafeNodeName(node);
     char distStr[10] = "";
@@ -2188,7 +2180,7 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     display->drawStringMaxWidth(x, y, nameMaxWidth, nodeName);
 
     if (strlen(distStr) > 0) {
-        int offset = (screenWidth > 128) ? (isLeftCol ? 55 : 63) : (isLeftCol ? 32 : 37);
+        int offset = (SCREEN_WIDTH > 128) ? (isLeftCol ? 55 : 63) : (isLeftCol ? 32 : 37);
         display->drawString(x + columnWidth - offset, y, distStr);
     }
 }
@@ -2213,11 +2205,10 @@ static void drawDistanceScreen(OLEDDisplay *display, OLEDDisplayUiState *state, 
 // Helper function: Draw a single node entry for Node List (Modified for Compass Screen)
 void drawEntryCompass(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth)
 {
-    int screenWidth = display->getWidth();
-    bool isLeftCol = (x < screenWidth / 2);
+    bool isLeftCol = (x < SCREEN_WIDTH / 2);
 
     // Adjust max text width depending on column and screen width
-    int nameMaxWidth = columnWidth - (screenWidth > 128 ? (isLeftCol ? 25 : 28) : (isLeftCol ? 20 : 22));
+    int nameMaxWidth = columnWidth - (SCREEN_WIDTH > 128 ? (isLeftCol ? 25 : 28) : (isLeftCol ? 20 : 22));
 
     String nodeName = getSafeNodeName(node);
 
@@ -2231,9 +2222,8 @@ void drawCompassArrow(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     if (!nodeDB->hasValidPosition(node))
         return;
 
-    int screenWidth = display->getWidth();
-    bool isLeftCol = (x < screenWidth / 2);
-    int arrowXOffset = (screenWidth > 128) ? (isLeftCol ? 22 : 24) : (isLeftCol ? 12 : 18);
+    bool isLeftCol = (x < SCREEN_WIDTH / 2);
+    int arrowXOffset = (SCREEN_WIDTH > 128) ? (isLeftCol ? 22 : 24) : (isLeftCol ? 12 : 18);
 
     int centerX = x + columnWidth - arrowXOffset;
     int centerY = y + FONT_HEIGHT_SMALL / 2;
@@ -2415,8 +2405,7 @@ static void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int
     // === Draw title (aligned with header baseline) ===
     const int highlightHeight = FONT_HEIGHT_SMALL - 1;
     const int textY = y + 2 + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
-    const int screenWidth = display->getWidth();
-    const char *titleStr = (screenWidth > 128) ? "LoRa Info" : "LoRa";
+    const char *titleStr = (SCREEN_WIDTH > 128) ? "LoRa Info" : "LoRa";
     const int centerX = x + SCREEN_WIDTH / 2;
 
     if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
@@ -2436,7 +2425,7 @@ static void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int
     // Display Region and Radio Preset
     char regionradiopreset[25];
     const char *region = myRegion ? myRegion->name : NULL;
-    const char *preset = (screenWidth > 128) ? "Preset" : "Prst";
+    const char *preset = (SCREEN_WIDTH > 128) ? "Preset" : "Prst";
     snprintf(regionradiopreset, sizeof(regionradiopreset), "%s: %s/%s", preset, region, mode);
     display->drawString(x, compactFirstLine, regionradiopreset);
 
@@ -2480,7 +2469,6 @@ static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiStat
     // === Draw title ===
     const int highlightHeight = FONT_HEIGHT_SMALL - 1;
     const int textY = y + 2 + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
-    const int screenWidth = display->getWidth();
     const char *titleStr = "GPS";
     const int centerX = x + SCREEN_WIDTH / 2;
 
@@ -2502,7 +2490,7 @@ static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiStat
     config.display.heading_bold = false;
     if (config.position.fixed_position) {
         display->drawString(x, compactFirstLine, "Sat:");
-        if (screenWidth > 128) {
+        if (SCREEN_WIDTH > 128) {
             drawGPS(display, x + 32, compactFirstLine + 3, gpsStatus);
         } else {
             drawGPS(display, x + 23, compactFirstLine + 3, gpsStatus);
@@ -2511,14 +2499,14 @@ static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiStat
         String displayLine =
             config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "No GPS" : "GPS off";
         display->drawString(x, compactFirstLine, "Sat:");
-        if (screenWidth > 128) {
+        if (SCREEN_WIDTH > 128) {
             display->drawString(x + 32, compactFirstLine, displayLine);
         } else {
             display->drawString(x + 23, compactFirstLine, displayLine);
         }
     } else {
         display->drawString(x, compactFirstLine, "Sat:");
-        if (screenWidth > 128) {
+        if (SCREEN_WIDTH > 128) {
             drawGPS(display, x + 32, compactFirstLine + 3, gpsStatus);
         } else {
             drawGPS(display, x + 23, compactFirstLine + 3, gpsStatus);
@@ -2611,8 +2599,7 @@ static void drawMemoryScreen(OLEDDisplay *display, OLEDDisplayUiState *state, in
     // === Draw title ===
     const int highlightHeight = FONT_HEIGHT_SMALL - 1;
     const int textY = y + 2 + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
-    const int screenWidth = display->getWidth();
-    const char *titleStr = (screenWidth > 128) ? "Memory" : "Mem";
+    const char *titleStr = (SCREEN_WIDTH > 128) ? "Memory" : "Mem";
     const int centerX = x + SCREEN_WIDTH / 2;
 
     if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
@@ -2631,7 +2618,7 @@ static void drawMemoryScreen(OLEDDisplay *display, OLEDDisplayUiState *state, in
     const int rowYOffset = FONT_HEIGHT_SMALL - 3;
     const int barHeight = 6;
     const int labelX = x;
-    const int barsOffset = (screenWidth > 128) ? 24 : 0;
+    const int barsOffset = (SCREEN_WIDTH > 128) ? 24 : 0;
     const int barX = x + 40 + barsOffset;
 
     int rowY = contentY;
@@ -2650,7 +2637,7 @@ static void drawMemoryScreen(OLEDDisplay *display, OLEDDisplayUiState *state, in
         int percent = (used * 100) / total;
 
         char combinedStr[24];
-        if (screenWidth > 128) {
+        if (SCREEN_WIDTH > 128) {
             snprintf(combinedStr, sizeof(combinedStr), "%3d%%  %lu/%luKB", percent, used / 1024, total / 1024);
         } else {
             snprintf(combinedStr, sizeof(combinedStr), "%3d%%", percent);
