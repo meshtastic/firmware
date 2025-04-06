@@ -1132,7 +1132,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
     display->setColor(WHITE);
 }
 // ****************************
-// *   Tex Message Screen     *
+// *   Text Message Screen    *
 // ****************************
 void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
@@ -1581,11 +1581,6 @@ static int8_t prevFrame = -1;
 // Draw the arrow pointing to a node's location
 void Screen::drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t compassY, uint16_t compassDiam, float headingRadian)
 {
-    Serial.print("🔄 [Node Heading] Raw Bearing (rad): ");
-    Serial.print(headingRadian);
-    Serial.print(" | (deg): ");
-    Serial.println(headingRadian * RAD_TO_DEG);
-
     Point tip(0.0f, 0.5f), tail(0.0f, -0.35f); // pointing up initially
     float arrowOffsetX = 0.14f, arrowOffsetY = 1.0f;
     Point leftArrow(tip.x - arrowOffsetX, tip.y - arrowOffsetY), rightArrow(tip.x + arrowOffsetX, tip.y - arrowOffsetY);
@@ -1604,14 +1599,6 @@ void Screen::drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t com
     display->drawLine(leftArrow.x, leftArrow.y, tail.x, tail.y);
     display->drawLine(rightArrow.x, rightArrow.y, tail.x, tail.y);
     */
-    Serial.print("🔥 Arrow Tail X: ");
-    Serial.print(tail.x);
-    Serial.print(" | Y: ");
-    Serial.print(tail.y);
-    Serial.print(" | Tip X: ");
-    Serial.print(tip.x);
-    Serial.print(" | Tip Y: ");
-    Serial.println(tip.y);
 #ifdef USE_EINK
     display->drawTriangle(tip.x, tip.y, rightArrow.x, rightArrow.y, tail.x, tail.y);
 #else
@@ -1672,11 +1659,6 @@ void Screen::drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t co
         rosePoints[i]->scale(compassDiam);
         rosePoints[i]->translate(compassX, compassY);
     }
-    display->drawCircle(NC1.x, NC1.y, 4); // North sign circle, 4px radius is sufficient for all displays.
-    Serial.print("🔥 North Marker X: ");
-    Serial.print(NC1.x);
-    Serial.print(" | Y: ");
-    Serial.println(NC1.y);
 }
 
 uint16_t Screen::getCompassDiam(uint32_t displayWidth, uint32_t displayHeight)
