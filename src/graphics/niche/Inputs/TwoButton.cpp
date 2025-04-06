@@ -98,9 +98,8 @@ void TwoButton::setWiring(uint8_t whichButton, uint8_t pin, bool internalPullup)
     assert(whichButton < 2);
     buttons[whichButton].pin = pin;
     buttons[whichButton].activeLogic = LOW; // Unimplemented
-    buttons[whichButton].mode = internalPullup ? INPUT_PULLUP : INPUT;
 
-    pinMode(buttons[whichButton].pin, buttons[whichButton].mode);
+    pinMode(buttons[whichButton].pin, internalPullup ? INPUT_PULLUP : INPUT);
 }
 
 void TwoButton::setTiming(uint8_t whichButton, uint32_t debounceMs, uint32_t longpressMs)
