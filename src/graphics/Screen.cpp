@@ -2172,16 +2172,19 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
 }
 
 // Public screen function: shows how recently nodes were heard
-static void drawLastHeardScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) {
+static void drawLastHeardScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
     drawNodeListScreen(display, state, x, y, "Node List", drawEntryLastHeard);
 }
 
 // Public screen function: shows hop count + signal strength
-static void drawHopSignalScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) {
+static void drawHopSignalScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
     drawNodeListScreen(display, state, x, y, "Hop|Sig", drawEntryHopSignal);
 }
 
-static void drawDistanceScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) {
+static void drawDistanceScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
     drawNodeListScreen(display, state, x, y, "Distances", drawNodeDistance);
 }
 
@@ -2283,13 +2286,13 @@ static void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, i
     // Display Region and Channel Utilization
     config.display.heading_bold = false;
 
-    drawNodes(display, x + 2, compactFirstLine + 3, nodeStatus);
+    drawNodes(display, x + 1, compactFirstLine + 3, nodeStatus);
 
 #if HAS_GPS
     auto number_of_satellites = gpsStatus->getNumSatellites();
-    int gps_rightchar_offset = (SCREEN_WIDTH > 128) ? -55 : -49;
+    int gps_rightchar_offset = (SCREEN_WIDTH > 128) ? -52 : -46;
     if (number_of_satellites < 10) {
-        gps_rightchar_offset += (SCREEN_WIDTH > 128) ? 12 : 6;
+        gps_rightchar_offset += (SCREEN_WIDTH > 128) ? 14 : 6;
     }
 
     if (config.position.fixed_position) {
@@ -2335,16 +2338,16 @@ static void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, i
 
     char uptimeFullStr[16];
     snprintf(uptimeFullStr, sizeof(uptimeFullStr), "Uptime: %s", uptimeStr);
-    display->drawString(x + 2, compactSecondLine, uptimeFullStr);
+    display->drawString(x, compactSecondLine, uptimeFullStr);
 
     char batStr[20];
     if (powerStatus->getHasBattery()) {
         int batV = powerStatus->getBatteryVoltageMv() / 1000;
         int batCv = (powerStatus->getBatteryVoltageMv() % 1000) / 10;
         snprintf(batStr, sizeof(batStr), "%01d.%02dV", batV, batCv);
-        display->drawString(x - 2 + SCREEN_WIDTH - display->getStringWidth(batStr), compactSecondLine, batStr);
+        display->drawString(x + SCREEN_WIDTH - display->getStringWidth(batStr), compactSecondLine, batStr);
     } else {
-        display->drawString(x - 2 + SCREEN_WIDTH - display->getStringWidth("USB"), compactSecondLine, String("USB"));
+        display->drawString(x + SCREEN_WIDTH - display->getStringWidth("USB"), compactSecondLine, String("USB"));
     }
 
     // === Third Row: LongName Centered ===
@@ -2356,7 +2359,8 @@ static void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, i
         const char *longName = ourNode->user.long_name;
         int textWidth = display->getStringWidth(longName);
         int nameX = (SCREEN_WIDTH - textWidth) / 2;
-        display->drawString(nameX, compactFourthLine, longName);
+        int yOffset = (SCREEN_WIDTH > 128) ? 0 : 7;
+        display->drawString(nameX, compactFourthLine - yOffset, longName);
     }
 }
 
@@ -2398,12 +2402,12 @@ static void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int
     const char *region = myRegion ? myRegion->name : NULL;
     const char *preset = (screenWidth > 128) ? "Preset" : "Prst";
     snprintf(regionradiopreset, sizeof(regionradiopreset), "%s: %s/%s", preset, region, mode);
-    display->drawString(x + 2, compactFirstLine, regionradiopreset);
+    display->drawString(x, compactFirstLine, regionradiopreset);
 
     // === Second Row: Channel Utilization ===
     char chUtil[25];
     snprintf(chUtil, sizeof(chUtil), "ChUtil: %2.0f%%", airTime->channelUtilizationPercent());
-    display->drawString(x + 2, compactSecondLine, chUtil);
+    display->drawString(x, compactSecondLine, chUtil);
 
     // === Third Row: Channel Utilization ===
     // Get our hardware ID
@@ -2414,14 +2418,14 @@ static void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int
     char shortnameble[35];
     snprintf(shortnameble, sizeof(shortnameble), "%s: %s/%s", "Short/BLE", haveGlyphs(owner.short_name) ? owner.short_name : "",
              ourId);
-    display->drawString(x + 2, compactThirdLine, shortnameble);
+    display->drawString(x, compactThirdLine, shortnameble);
 
     // === Fourth Row: Node longName ===
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     if (ourNode && ourNode->has_user && strlen(ourNode->user.long_name) > 0) {
         char devicelongname[55];
         snprintf(devicelongname, sizeof(devicelongname), "%s: %s", "Name", ourNode->user.long_name);
-        display->drawString(x + 2, compactFourthLine, devicelongname);
+        display->drawString(x, compactFourthLine, devicelongname);
     }
 }
 
@@ -2461,7 +2465,7 @@ static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiStat
     bool origBold = config.display.heading_bold;
     config.display.heading_bold = false;
     if (config.position.fixed_position) {
-        display->drawString(x + 2, compactFirstLine, "Sat:");
+        display->drawString(x, compactFirstLine, "Sat:");
         if (screenWidth > 128) {
             drawGPS(display, x + 32, compactFirstLine + 3, gpsStatus);
         } else {
@@ -2470,14 +2474,14 @@ static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiStat
     } else if (!gpsStatus || !gpsStatus->getIsConnected()) {
         String displayLine =
             config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "No GPS" : "GPS off";
-        display->drawString(x + 2, compactFirstLine, "Sat:");
+        display->drawString(x, compactFirstLine, "Sat:");
         if (screenWidth > 128) {
             display->drawString(x + 32, compactFirstLine, displayLine);
         } else {
             display->drawString(x + 23, compactFirstLine, displayLine);
         }
     } else {
-        display->drawString(x + 2, compactFirstLine, "Sat:");
+        display->drawString(x, compactFirstLine, "Sat:");
         if (screenWidth > 128) {
             drawGPS(display, x + 32, compactFirstLine + 3, gpsStatus);
         } else {
@@ -2507,17 +2511,17 @@ static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiStat
     displayLine = "Alt: " + String(geoCoord.getAltitude()) + "m";
     if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL)
         displayLine = "Alt: " + String(geoCoord.getAltitude() * METERS_TO_FEET) + "ft";
-    display->drawString(x + 2, compactSecondLine, displayLine);
+    display->drawString(x, compactSecondLine, displayLine);
 
     // === Third Row: Latitude ===
     char latStr[32];
     snprintf(latStr, sizeof(latStr), "Lat: %.5f", geoCoord.getLatitude() * 1e-7);
-    display->drawString(x + 2, compactThirdLine, latStr);
+    display->drawString(x, compactThirdLine, latStr);
 
     // === Fifth Row: Longitude ===
     char lonStr[32];
     snprintf(lonStr, sizeof(lonStr), "Lon: %.5f", geoCoord.getLongitude() * 1e-7);
-    display->drawString(x + 2, compactFourthLine, lonStr);
+    display->drawString(x, compactFourthLine, lonStr);
 
     // === Draw Compass if heading is valid ===
     if (validHeading) {
