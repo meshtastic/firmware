@@ -1,7 +1,5 @@
 // Status
 #define LED_PIN 1
-#define BIAS_T_ENABLE LED_PIN_POWER
-#define BIAS_T_VALUE HIGH
 
 #define PIN_BUTTON1 47 // 功能键
 #define PIN_BUTTON2 4  // 电源键
