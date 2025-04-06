@@ -2203,7 +2203,6 @@ void drawEntryCompass(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     display->setFont(FONT_SMALL);
     display->drawStringMaxWidth(x, y, nameMaxWidth, nodeName);
 }
-
 void drawCompassArrow(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth, float myHeading,
                       double userLat, double userLon)
 {
@@ -2212,30 +2211,45 @@ void drawCompassArrow(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
 
     int screenWidth = display->getWidth();
     bool isLeftCol = (x < screenWidth / 2);
+    int arrowXOffset = (screenWidth > 128) ? (isLeftCol ? 22 : 24) : (isLeftCol ? 12 : 18);
+
+    int centerX = x + columnWidth - arrowXOffset;
+    int centerY = y + FONT_HEIGHT_SMALL / 2;
 
     double nodeLat = node->position.latitude_i * 1e-7;
     double nodeLon = node->position.longitude_i * 1e-7;
     float bearingToNode = calculateBearing(userLat, userLon, nodeLat, nodeLon);
     float relativeBearing = fmod((bearingToNode - myHeading + 360), 360);
-    float arrowAngle = relativeBearing * DEG_TO_RAD;
+    float angle = relativeBearing * DEG_TO_RAD;
 
-    // Compass position
-    int arrowXOffset = (screenWidth > 128) ? (isLeftCol ? 22 : 24) : (isLeftCol ? 12 : 18);
-    int compassX = x + columnWidth - arrowXOffset;
-    int compassY = y + FONT_HEIGHT_SMALL / 2;
+    // Shrink size by 2px
+    int size = FONT_HEIGHT_SMALL - 5;
+    float halfSize = size / 2.0;
 
-    int radius = FONT_HEIGHT_SMALL / 2 - 3;
+    // Point of the arrow
+    int tipX = centerX + halfSize * cos(angle);
+    int tipY = centerY - halfSize * sin(angle);
 
-    // Arrow should go from center to edge (not beyond)
-    int xEnd = compassX + radius * cos(arrowAngle);
-    int yEnd = compassY - radius * sin(arrowAngle);
+    float baseAngle = radians(35);
+    float sideLen = halfSize * 0.95;
+    float notchInset = halfSize * 0.35;
 
-    // Draw circle outline
-    display->drawCircle(compassX, compassY, radius);
+    // Left and right corners
+    int leftX = centerX + sideLen * cos(angle + PI - baseAngle);
+    int leftY = centerY - sideLen * sin(angle + PI - baseAngle);
 
-    // Draw thin arrow line from center to circle edge
-    display->drawLine(compassX, compassY, xEnd, yEnd);
+    int rightX = centerX + sideLen * cos(angle + PI + baseAngle);
+    int rightY = centerY - sideLen * sin(angle + PI + baseAngle);
+
+    // Center notch (cut-in)
+    int notchX = centerX - notchInset * cos(angle);
+    int notchY = centerY + notchInset * sin(angle);
+
+    // Draw the chevron-style arrowhead
+    display->fillTriangle(tipX, tipY, leftX, leftY, notchX, notchY);
+    display->fillTriangle(tipX, tipY, notchX, notchY, rightX, rightY);
 }
+
 
 // Public screen entry for compass
 static void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
