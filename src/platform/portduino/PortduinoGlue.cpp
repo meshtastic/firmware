@@ -247,7 +247,7 @@ void portduinoSetup()
                 std::cerr << "autoconf: Unable to find config for " << autoconf_product << std::endl;
                 exit(EXIT_FAILURE);
             }
-            if (loadConfig(("/etc/meshtasticd/available.d/" + product_config).c_str())) {
+            if (loadConfig((settingsStrings[available_directory] + product_config).c_str())) {
                 std::cout << "autoconf: Using " << product_config << " as config file for " << autoconf_product << std::endl;
             } else {
                 std::cerr << "autoconf: Unable to use " << product_config << " as config file for " << autoconf_product
@@ -602,6 +602,8 @@ bool loadConfig(const char *configPath)
             settingsMap[maxnodes] = (yamlConfig["General"]["MaxNodes"]).as<int>(200);
             settingsMap[maxtophone] = (yamlConfig["General"]["MaxMessageQueue"]).as<int>(100);
             settingsStrings[config_directory] = (yamlConfig["General"]["ConfigDirectory"]).as<std::string>("");
+            settingsStrings[available_directory] =
+                (yamlConfig["General"]["AvailableDirectory"]).as<std::string>("/etc/meshtasticd/available.d/");
             if ((yamlConfig["General"]["MACAddress"]).as<std::string>("") != "" &&
                 (yamlConfig["General"]["MACAddressSource"]).as<std::string>("") != "") {
                 std::cout << "Cannot set both MACAddress and MACAddressSource!" << std::endl;
