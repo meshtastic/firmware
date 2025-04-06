@@ -1022,7 +1022,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
 
     // === Battery dynamically scaled ===
     const int nubSize = 2;
-    const int batteryLong = SCREEN_WIDTH > 200 ? 29 : 25;  // Was 28/24
+    const int batteryLong = SCREEN_WIDTH > 200 ? 29 : 25;
     const int batteryShort = highlightHeight - nubSize - 2;
 
     int batteryX = x + xOffset;
@@ -1037,7 +1037,10 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
         lastBlink = now;
     }
 
-    if (SCREEN_WIDTH > 128) {
+    // ✅ Hybrid condition: wide screen AND landscape layout
+    bool useHorizontalBattery = (SCREEN_WIDTH > 128 && SCREEN_WIDTH > SCREEN_HEIGHT);
+
+    if (useHorizontalBattery) {
         // === Horizontal battery  ===
         batteryY = y + (highlightHeight - batteryShort) / 2;
 
@@ -1098,7 +1101,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
     char percentStr[8];
     snprintf(percentStr, sizeof(percentStr), "%d%%", chargePercent);
 
-    const int batteryOffset = SCREEN_WIDTH > 128 ? 34 : 9;
+    const int batteryOffset = useHorizontalBattery ? 34 : 9;
     const int percentX = x + xOffset + batteryOffset;
     display->drawString(percentX, textY, percentStr);
     if (isBold)
