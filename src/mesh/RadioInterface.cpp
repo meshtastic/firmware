@@ -488,11 +488,6 @@ void RadioInterface::applyModemConfig()
                 cr = 8;
                 sf = 12;
                 break;
-            case meshtastic_Config_LoRaConfig_ModemPreset_VERY_LONG_SLOW:
-                bw = (myRegion->wideLora) ? 203.125 : 62.5;
-                cr = 8;
-                sf = 12;
-                break;
             }
         } else {
             sf = loraConfig.spread_factor;
@@ -656,7 +651,7 @@ size_t RadioInterface::beginSending(meshtastic_MeshPacket *p)
 
     // if the sender nodenum is zero, that means uninitialized
     assert(radioBuffer.header.from);
-
+    assert(p->encrypted.size <= sizeof(radioBuffer.payload));
     memcpy(radioBuffer.payload, p->encrypted.bytes, p->encrypted.size);
 
     sendingPacket = p;

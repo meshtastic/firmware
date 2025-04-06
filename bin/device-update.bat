@@ -16,7 +16,7 @@ ECHO.
 ECHO Usage: %SCRIPT_NAME% -f filename [-p PORT] [-P python]
 ECHO.
 ECHO Options:
-ECHO     -f filename      The .bin file to flash.  Custom to your device type and region. (required)
+ECHO     -f filename      The update .bin file to flash.  Custom to your device type and region. (required)
 ECHO                      The file must be located in this current directory.
 ECHO     -p PORT          Set the environment variable for ESPTOOL_PORT.
 ECHO                      If not set, ESPTOOL iterates all ports (Dangerous).
@@ -28,7 +28,7 @@ ECHO Example: %SCRIPT_NAME% -f firmware-t-deck-tft-2.6.0.0b106d4-update.bin -p C
 GOTO eof
 
 :version
-ECHO %SCRIPT_NAME% [Version 2.6.0]
+ECHO %SCRIPT_NAME% [Version 2.6.1]
 ECHO Meshtastic
 GOTO eof
 
@@ -53,6 +53,7 @@ IF "__!FILENAME!__"=="____" (
     CALL :LOG_MESSAGE DEBUG "Missing -f filename input."
     GOTO help
 ) ELSE (
+    CALL :LOG_MESSAGE DEBUG "Filename: !FILENAME!"
     IF NOT "__!FILENAME: =!__"=="__!FILENAME!__" (
         CALL :LOG_MESSAGE ERROR "Filename containing spaces are not supported."
         GOTO help
@@ -62,7 +63,6 @@ IF "__!FILENAME!__"=="____" (
     SET "FILENAME=!FILENAME:./=!"
 )
 
-CALL :LOG_MESSAGE DEBUG "Filename: !FILENAME!"
 CALL :LOG_MESSAGE DEBUG "Checking if !FILENAME! exists..."
 IF NOT EXIST !FILENAME! (
     CALL :LOG_MESSAGE ERROR "File does not exist: !FILENAME!. Terminating."
@@ -71,7 +71,7 @@ IF NOT EXIST !FILENAME! (
 
 IF "!FILENAME:update=!"=="!FILENAME!" (
     CALL :LOG_MESSAGE DEBUG "We are NOT working with a *update* file. !FILENAME!"
-    CALL :LOG_MESSAGE INFO "Use script device-install.bat to flash update !FILENAME!."
+    CALL :LOG_MESSAGE INFO "Use script device-install.bat to flash !FILENAME!."
     GOTO eof
 ) ELSE (
     CALL :LOG_MESSAGE DEBUG "We are working with a *update* file. !FILENAME!"
@@ -95,7 +95,7 @@ IF NOT "__%PYTHON%__"=="____" (
 
 CALL :LOG_MESSAGE DEBUG "Checking esptool command !ESPTOOL_CMD!..."
 !ESPTOOL_CMD! >nul 2>&1
-IF %ERRORLEVEL% GTR 2 (
+IF %ERRORLEVEL% GEQ 2 (
     @REM esptool exits with code 1 if help is displayed.
     CALL :LOG_MESSAGE ERROR "esptool not found: !ESPTOOL_CMD!"
     EXIT /B 1
@@ -110,6 +110,7 @@ CALL :LOG_MESSAGE DEBUG "Using esptool command: !ESPTOOL_CMD!"
 IF "__!ESPTOOL_PORT!__" == "____" (
     CALL :LOG_MESSAGE WARN "Using esptool port: UNSET."
 ) ELSE (
+    SET "ESPTOOL_CMD=!ESPTOOL_CMD! --port !ESPTOOL_PORT!"
     CALL :LOG_MESSAGE INFO "Using esptool port: !ESPTOOL_PORT!."
 )
 CALL :LOG_MESSAGE INFO "Using esptool baud: !ESPTOOL_BAUD!."

@@ -128,16 +128,25 @@ bool EInkDisplay::connect()
 #ifdef PIN_EINK_EN
     // backlight power, HIGH is backlight on, LOW is off
     pinMode(PIN_EINK_EN, OUTPUT);
+#ifdef ELECROW_ThinkNode_M1
+    // ThinkNode M1 has a hardware dimmable backlight. Start enabled
+    digitalWrite(PIN_EINK_EN, HIGH);
+#else
     digitalWrite(PIN_EINK_EN, LOW);
 #endif
+#endif
 
-#if defined(TTGO_T_ECHO)
+#if defined(TTGO_T_ECHO) || defined(ELECROW_ThinkNode_M1)
     {
         auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY, SPI1);
 
         adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(*lowLevel);
         adafruitDisplay->init();
+#ifdef ELECROW_ThinkNode_M1
+        adafruitDisplay->setRotation(4);
+#else
         adafruitDisplay->setRotation(3);
+#endif
         adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
     }
 #elif defined(MESHLINK)
@@ -166,7 +175,8 @@ bool EInkDisplay::connect()
     }
 
 #elif defined(HELTEC_WIRELESS_PAPER_V1_0) || defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_VISION_MASTER_E213) ||             \
-    defined(HELTEC_VISION_MASTER_E290) || defined(TLORA_T3S3_EPAPER) || defined(CROWPANEL_ESP32S3_5_EPAPER)
+    defined(HELTEC_VISION_MASTER_E290) || defined(TLORA_T3S3_EPAPER) || defined(CROWPANEL_ESP32S3_5_EPAPER) ||                   \
+    defined(CROWPANEL_ESP32S3_4_EPAPER) || defined(CROWPANEL_ESP32S3_2_EPAPER)
     {
         // Start HSPI
         hspi = new SPIClass(HSPI);
@@ -182,7 +192,7 @@ bool EInkDisplay::connect()
         // Init GxEPD2
         adafruitDisplay->init();
         adafruitDisplay->setRotation(3);
-#if defined(CROWPANEL_ESP32S3_5_EPAPER)
+#if defined(CROWPANEL_ESP32S3_5_EPAPER) || defined(CROWPANEL_ESP32S3_4_EPAPER)
         adafruitDisplay->setRotation(0);
 #endif
     }
