@@ -298,7 +298,9 @@ int TwoButton::afterLightSleep(esp_sleep_wakeup_cause_t cause)
     // Manually trigger the button-down ISR
     // - during light sleep, our ISR is disabled
     // - if light sleep ends by button press, pretend our own ISR caught it
-    if (cause == ESP_SLEEP_WAKEUP_GPIO)
+    // - need to manually confirm by reading pin ourselves, to avoid occasional false positives
+    //   (false positive only when using internal pullup resistors?)
+    if (cause == ESP_SLEEP_WAKEUP_GPIO && digitalRead(buttons[0].pin) == buttons[0].activeLogic)
         isrPrimary();
 
     return 0; // Indicates success
