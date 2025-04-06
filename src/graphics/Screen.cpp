@@ -3353,8 +3353,8 @@ void Screen::setFrames(FrameFocus focus)
     normalFrames[numframes++] = drawDeviceFocused;
     normalFrames[numframes++] = drawLoRaFocused;
     normalFrames[numframes++] = drawLastHeardScreen;
-    normalFrames[numframes++] = drawDistanceScreen;
     normalFrames[numframes++] = drawHopSignalScreen;
+    normalFrames[numframes++] = drawDistanceScreen;
     normalFrames[numframes++] = drawNodeListWithCompasses;
     normalFrames[numframes++] = drawCompassAndLocationScreen;
     normalFrames[numframes++] = drawMemoryScreen;
