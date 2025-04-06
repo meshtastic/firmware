@@ -1048,16 +1048,12 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
         display->drawRect(batteryX, batteryY, batteryLong, batteryShort);
 
         // Nub
-        display->fillRect(
-            batteryX + batteryLong,
-            batteryY + (batteryShort / 2) - 3,
-            nubSize, 6
-        );
+        display->fillRect(batteryX + batteryLong, batteryY + (batteryShort / 2) - 3, nubSize, 6);
 
         if (isCharging && isBoltVisible) {
             // Lightning bolt
             const int boltX = batteryX + batteryLong / 2 - 4;
-            const int boltY = batteryY + 2;  // Padding top
+            const int boltY = batteryY + 2; // Padding top
 
             // Top fat bar (same)
             display->fillRect(boltX, boltY, 6, 2);
@@ -1143,9 +1139,8 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
 
-    const int screenHeight = display->getHeight();
     const int navHeight = FONT_HEIGHT_SMALL;
-    const int scrollBottom = screenHeight - navHeight;
+    const int scrollBottom = SCREEN_HEIGHT - navHeight;
     const int usableHeight = scrollBottom;
     const int textWidth = SCREEN_WIDTH;
     const int cornerRadius = 2;
@@ -1166,22 +1161,28 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         std::string prefix = (daysAgo == 1 && SCREEN_WIDTH >= 200) ? "Yesterday" : "At";
         std::string meridiem = "AM";
         if (config.display.use_12h_clock) {
-            if (timestampHours >= 12) meridiem = "PM";
-            if (timestampHours > 12) timestampHours -= 12;
-            if (timestampHours == 0) timestampHours = 12;
-            snprintf(headerStr, sizeof(headerStr), "%s %d:%02d%s from %s", prefix.c_str(), timestampHours, timestampMinutes, meridiem.c_str(), sender);
+            if (timestampHours >= 12)
+                meridiem = "PM";
+            if (timestampHours > 12)
+                timestampHours -= 12;
+            if (timestampHours == 0)
+                timestampHours = 12;
+            snprintf(headerStr, sizeof(headerStr), "%s %d:%02d%s from %s", prefix.c_str(), timestampHours, timestampMinutes,
+                     meridiem.c_str(), sender);
         } else {
-            snprintf(headerStr, sizeof(headerStr), "%s %d:%02d from %s", prefix.c_str(), timestampHours, timestampMinutes, sender);
+            snprintf(headerStr, sizeof(headerStr), "%s %d:%02d from %s", prefix.c_str(), timestampHours, timestampMinutes,
+                     sender);
         }
     } else {
-        snprintf(headerStr, sizeof(headerStr), "%s ago from %s", screen->drawTimeDelta(days, hours, minutes, seconds).c_str(), sender);
+        snprintf(headerStr, sizeof(headerStr), "%s ago from %s", screen->drawTimeDelta(days, hours, minutes, seconds).c_str(),
+                 sender);
     }
 
 #ifndef EXCLUDE_EMOJI
     // === Bounce animation setup ===
     static uint32_t lastBounceTime = 0;
     static int bounceY = 0;
-    const int bounceRange = 2; // Max pixels to bounce up/down
+    const int bounceRange = 2;     // Max pixels to bounce up/down
     const int bounceInterval = 60; // How quickly to change bounce direction (ms)
 
     uint32_t now = millis();
@@ -1236,14 +1237,15 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 drawRoundedHighlight(display, x, 0, SCREEN_WIDTH, FONT_HEIGHT_SMALL - 1, cornerRadius);
                 display->setColor(BLACK);
                 display->drawString(x + 3, 0, headerStr);
-                if (isBold) display->drawString(x + 4, 0, headerStr);
+                if (isBold)
+                    display->drawString(x + 4, 0, headerStr);
                 display->setColor(WHITE);
             } else {
                 display->drawString(x, 0, headerStr);
             }
 
             // Center the emote below header + apply bounce
-            int remainingHeight = screenHeight - FONT_HEIGHT_SMALL - navHeight;
+            int remainingHeight = SCREEN_HEIGHT - FONT_HEIGHT_SMALL - navHeight;
             int emoteY = FONT_HEIGHT_SMALL + (remainingHeight - e.height) / 2 + bounceY - bounceRange;
             display->drawXbm((SCREEN_WIDTH - e.width) / 2, emoteY, e.width, e.height, e.bitmap);
             return;
@@ -1256,14 +1258,16 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     snprintf(messageBuf, sizeof(messageBuf), "%s", msg);
 
     std::vector<std::string> lines;
-    lines.push_back(std::string(headerStr));  // Header line is always first
+    lines.push_back(std::string(headerStr)); // Header line is always first
 
     std::string line, word;
     for (int i = 0; messageBuf[i]; ++i) {
         char ch = messageBuf[i];
         if (ch == '\n') {
-            if (!word.empty()) line += word;
-            if (!line.empty()) lines.push_back(line);
+            if (!word.empty())
+                line += word;
+            if (!line.empty())
+                lines.push_back(line);
             line.clear();
             word.clear();
         } else if (ch == ' ') {
@@ -1273,14 +1277,17 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
             word += ch;
             std::string test = line + word;
             if (display->getStringWidth(test.c_str()) > textWidth + 4) {
-                if (!line.empty()) lines.push_back(line);
+                if (!line.empty())
+                    lines.push_back(line);
                 line = word;
                 word.clear();
             }
         }
     }
-    if (!word.empty()) line += word;
-    if (!line.empty()) lines.push_back(line);
+    if (!word.empty())
+        line += word;
+    if (!line.empty())
+        lines.push_back(line);
 
     // === Scrolling logic ===
     const float rowHeight = FONT_HEIGHT_SMALL - 1;
@@ -1290,7 +1297,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     static float scrollY = 0.0f;
     static uint32_t lastTime = 0, scrollStartDelay = 0, pauseStart = 0;
     static bool waitingToReset = false, scrollStarted = false;
-    
+
     // === Smooth scrolling adjustment ===
     // You can tweak this divisor to change how smooth it scrolls.
     // Lower = smoother, but can feel slow.
@@ -1300,8 +1307,10 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     const float scrollSpeed = 2.0f; // pixels per second
 
     // Delay scrolling start by 2 seconds
-    if (scrollStartDelay == 0) scrollStartDelay = now;
-    if (!scrollStarted && now - scrollStartDelay > 2000) scrollStarted = true;
+    if (scrollStartDelay == 0)
+        scrollStartDelay = now;
+    if (!scrollStarted && now - scrollStartDelay > 2000)
+        scrollStarted = true;
 
     if (totalHeight > usableHeight) {
         if (scrollStarted) {
@@ -1334,7 +1343,8 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 drawRoundedHighlight(display, x, lineY, SCREEN_WIDTH, FONT_HEIGHT_SMALL - 1, cornerRadius);
                 display->setColor(BLACK);
                 display->drawString(x + 3, lineY, lines[i].c_str());
-                if (isBold) display->drawString(x + 4, lineY, lines[i].c_str());
+                if (isBold)
+                    display->drawString(x + 4, lineY, lines[i].c_str());
                 display->setColor(WHITE);
             } else {
                 display->drawString(x, lineY, lines[i].c_str());
@@ -1717,7 +1727,8 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     }
 
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(nodeIndex);
-    if (!node || !node->is_favorite || node->num == nodeDB->getNodeNum()) return;
+    if (!node || !node->is_favorite || node->num == nodeDB->getNodeNum())
+        return;
 
     // === Draw Title (centered safe short name or ID) ===
     static char titleBuf[20];
@@ -1786,7 +1797,8 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     const int16_t usableHeight = bottomY - topY - 5;
 
     int16_t compassRadius = usableHeight / 2;
-    if (compassRadius < 8) compassRadius = 8;
+    if (compassRadius < 8)
+        compassRadius = 8;
     const int16_t compassDiam = compassRadius * 2;
     const int16_t compassX = x + SCREEN_WIDTH - compassRadius - 8;
     const int16_t compassY = topY + (usableHeight / 2) + ((FONT_HEIGHT_SMALL - 1) / 2) + 2;
@@ -1794,9 +1806,8 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     bool hasNodeHeading = false;
     if (ourNode && (nodeDB->hasValidPosition(ourNode) || screen->hasHeading())) {
         const meshtastic_PositionLite &op = ourNode->position;
-        float myHeading = screen->hasHeading()
-                            ? radians(screen->getHeading())
-                            : screen->estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
+        float myHeading = screen->hasHeading() ? radians(screen->getHeading())
+                                               : screen->estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
 
         screen->drawCompassNorth(display, compassX, compassY, myHeading);
 
@@ -1804,11 +1815,11 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
             hasNodeHeading = true;
             const meshtastic_PositionLite &p = node->position;
 
-            float d = GeoCoord::latLongToMeter(DegD(p.latitude_i), DegD(p.longitude_i),
-                                                DegD(op.latitude_i), DegD(op.longitude_i));
+            float d =
+                GeoCoord::latLongToMeter(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
 
-            float bearingToOther = GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i),
-                                                      DegD(p.latitude_i), DegD(p.longitude_i));
+            float bearingToOther =
+                GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(p.latitude_i), DegD(p.longitude_i));
 
             if (!config.display.compass_north_top)
                 bearingToOther -= myHeading;
@@ -1822,7 +1833,8 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
                 if (d < (2 * MILES_TO_FEET))
                     snprintf(distStr, sizeof(distStr), "%.0fft   %.0f°", d * METERS_TO_FEET, bearingToOtherDegrees);
                 else
-                    snprintf(distStr, sizeof(distStr), "%.1fmi   %.0f°", d * METERS_TO_FEET / MILES_TO_FEET, bearingToOtherDegrees);
+                    snprintf(distStr, sizeof(distStr), "%.1fmi   %.0f°", d * METERS_TO_FEET / MILES_TO_FEET,
+                             bearingToOtherDegrees);
             } else {
                 if (d < 2000)
                     snprintf(distStr, sizeof(distStr), "%.0fm   %.0f°", d, bearingToOtherDegrees);
@@ -1961,11 +1973,12 @@ void drawColumnSeparator(OLEDDisplay *display, int16_t x, int16_t yStart, int16_
 }
 
 typedef void (*EntryRenderer)(OLEDDisplay *, meshtastic_NodeInfoLite *, int16_t, int16_t, int);
-typedef void (*NodeExtrasRenderer)(OLEDDisplay *, meshtastic_NodeInfoLite *, int16_t, int16_t, int columnWidth, float heading, double lat, double lon);
+typedef void (*NodeExtrasRenderer)(OLEDDisplay *, meshtastic_NodeInfoLite *, int16_t, int16_t, int columnWidth, float heading,
+                                   double lat, double lon);
 
-void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y,
-    const char *title, EntryRenderer renderer, NodeExtrasRenderer extras = nullptr,
-    float heading = 0, double lat = 0, double lon = 0)
+void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *title,
+                        EntryRenderer renderer, NodeExtrasRenderer extras = nullptr, float heading = 0, double lat = 0,
+                        double lon = 0)
 {
     const int COMMON_HEADER_HEIGHT = FONT_HEIGHT_SMALL - 1;
     const int rowYOffset = FONT_HEIGHT_SMALL - 3;
@@ -2124,7 +2137,7 @@ void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
 
     for (int b = 0; b < 4; b++) {
         if (b < bars) {
-            int height = (b * 2); 
+            int height = (b * 2);
             display->fillRect(barStartX + (b * (barWidth + 1)), barStartY - height, barWidth, height);
         }
     }
@@ -2265,7 +2278,6 @@ void drawCompassArrow(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     display->fillTriangle(tipX, tipY, notchX, notchY, rightX, rightY);
 }
 
-
 // Public screen entry for compass
 static void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
@@ -2281,7 +2293,7 @@ static void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *
     lon = geoCoord.getLongitude() * 1e-7;
 
     if (screen->hasHeading()) {
-        heading = screen->getHeading();  // degrees
+        heading = screen->getHeading(); // degrees
         validHeading = true;
     } else {
         heading = screen->estimatedHeading(lat, lon);
@@ -2289,7 +2301,8 @@ static void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *
     }
 #endif
 
-    if (!validHeading) return;
+    if (!validHeading)
+        return;
 
     drawNodeListScreen(display, state, x, y, "Bearings", drawEntryCompass, drawCompassArrow, heading, lat, lon);
 }
@@ -2725,15 +2738,15 @@ static void drawMemoryScreen(OLEDDisplay *display, OLEDDisplayUiState *state, in
 
     uint32_t sdUsed = 0, sdTotal = 0;
     bool hasSD = false;
-/*
-#ifdef HAS_SDCARD
-    hasSD = SD.cardType() != CARD_NONE;
-    if (hasSD) {
-        sdUsed = SD.usedBytes();
-        sdTotal = SD.totalBytes();
-    }
-#endif
-*/
+    /*
+    #ifdef HAS_SDCARD
+        hasSD = SD.cardType() != CARD_NONE;
+        if (hasSD) {
+            sdUsed = SD.usedBytes();
+            sdTotal = SD.totalBytes();
+        }
+    #endif
+    */
     // === Draw memory rows
     drawUsageRow("Heap:", heapUsed, heapTotal, true);
     drawUsageRow("PSRAM:", psramUsed, psramTotal);
@@ -3385,22 +3398,22 @@ void Screen::setFrames(FrameFocus focus)
     normalFrames[numframes++] = drawLoRaFocused;
     normalFrames[numframes++] = drawMemoryScreen;
 
-// then all the nodes
-// We only show a few nodes in our scrolling list - because meshes with many nodes would have too many screens
-//size_t numToShow = min(numMeshNodes, 4U);
-//for (size_t i = 0; i < numToShow; i++)
-//normalFrames[numframes++] = drawNodeInfo;
+    // then all the nodes
+    // We only show a few nodes in our scrolling list - because meshes with many nodes would have too many screens
+    // size_t numToShow = min(numMeshNodes, 4U);
+    // for (size_t i = 0; i < numToShow; i++)
+    // normalFrames[numframes++] = drawNodeInfo;
 
-// then the debug info
+    // then the debug info
 
-// Since frames are basic function pointers, we have to use a helper to
-// call a method on debugInfo object.
-//fsi.positions.log = numframes;
-//normalFrames[numframes++] = &Screen::drawDebugInfoTrampoline;
+    // Since frames are basic function pointers, we have to use a helper to
+    // call a method on debugInfo object.
+    // fsi.positions.log = numframes;
+    // normalFrames[numframes++] = &Screen::drawDebugInfoTrampoline;
 
-// call a method on debugInfoScreen object (for more details)
-//fsi.positions.settings = numframes;
-//normalFrames[numframes++] = &Screen::drawDebugInfoSettingsTrampoline;
+    // call a method on debugInfoScreen object (for more details)
+    // fsi.positions.settings = numframes;
+    // normalFrames[numframes++] = &Screen::drawDebugInfoSettingsTrampoline;
 
     fsi.positions.wifi = numframes;
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
