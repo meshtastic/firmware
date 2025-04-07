@@ -29,7 +29,7 @@
 #include "mqtt/MQTT.h"
 #endif
 #include "Throttle.h"
-#include <RTC.h>
+#include "gps/RTC.h"
 
 PhoneAPI::PhoneAPI()
 {

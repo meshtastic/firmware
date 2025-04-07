@@ -9,9 +9,9 @@
 #include "GpioLogic.h"
 #include "NodeDB.h"
 #include "PowerMon.h"
-#include "RTC.h"
 #include "Throttle.h"
 #include "buzz.h"
+#include "gps/RTC.h"
 #include "meshUtils.h"
 
 #include "main.h" // pmu_found
