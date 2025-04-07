@@ -74,7 +74,7 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtas
     auth = bytesOut + numBytes;
     memcpy((uint8_t *)(auth + 8), &extraNonceTmp,
            sizeof(uint32_t)); // do not use dereference on potential non aligned pointers : *extraNonce = extraNonceTmp;
-    LOG_INFO("Random nonce value: %d", extraNonceTmp);
+    LOG_DEBUG("Random nonce value: %d", extraNonceTmp);
     if (remotePublic.size == 0) {
         LOG_DEBUG("Node %d or their public_key not found", toNode);
         return false;
@@ -161,10 +161,8 @@ void CryptoEngine::hash(uint8_t *bytes, size_t numBytes)
 
 void CryptoEngine::aesSetKey(const uint8_t *key_bytes, size_t key_len)
 {
-    if (aes) {
-        delete aes;
-        aes = nullptr;
-    }
+    delete aes;
+    aes = nullptr;
     if (key_len != 0) {
         aes = new AESSmall256();
         aes->setKey(key_bytes, key_len);
@@ -225,10 +223,8 @@ void CryptoEngine::decrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes
 // Generic implementation of AES-CTR encryption.
 void CryptoEngine::encryptAESCtr(CryptoKey _key, uint8_t *_nonce, size_t numBytes, uint8_t *bytes)
 {
-    if (ctr) {
-        delete ctr;
-        ctr = nullptr;
-    }
+    delete ctr;
+    ctr = nullptr;
     if (_key.length == 16)
         ctr = new CTR<AES128>();
     else

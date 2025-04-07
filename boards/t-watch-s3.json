@@ -16,6 +16,7 @@
     "f_cpu": "240000000L",
     "f_flash": "80000000L",
     "flash_mode": "qio",
+    "psram_type": "opi",
     "hwids": [
       ["0x303A", "0x1001"],
       ["0x303A", "0x0002"]
@@ -23,7 +24,7 @@
     "mcu": "esp32s3",
     "variant": "t-watch-s3"
   },
-  "connectivity": ["wifi"],
+  "connectivity": ["wifi", "bluetooth"],
   "debug": {
     "openocd_target": "esp32s3.cfg"
   },

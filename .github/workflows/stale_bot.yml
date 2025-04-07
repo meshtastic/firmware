@@ -16,7 +16,8 @@ jobs:
 
     steps:
       - name: Stale PR+Issues
-        uses: actions/stale@v9.0.0
+        uses: actions/stale@v9.1.0
         with:
+          days-before-stale: 45
           exempt-issue-labels: pinned,3.0
           exempt-pr-labels: pinned,3.0

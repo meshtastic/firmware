@@ -48,6 +48,13 @@ class AccelerometerThread : public concurrency::OSThread
         setIntervalFromNow(0);
     };
 
+    void calibrate(uint16_t forSeconds)
+    {
+        if (sensor) {
+            sensor->calibrate(forSeconds);
+        }
+    }
+
   protected:
     int32_t runOnce() override
     {
@@ -153,10 +160,8 @@ class AccelerometerThread : public concurrency::OSThread
     void clean()
     {
         isInitialised = false;
-        if (sensor != nullptr) {
-            delete sensor;
-            sensor = nullptr;
-        }
+        delete sensor;
+        sensor = nullptr;
     }
 };
 

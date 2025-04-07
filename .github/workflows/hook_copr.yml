@@ -1,0 +1,38 @@
+name: Trigger COPR build
+
+on:
+  workflow_call:
+    secrets:
+      COPR_API_CONFIG:
+    inputs:
+      copr_project:
+        description: COPR project to target
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build-copr-hook:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ref: ${{ github.ref }}
+          repository: ${{ github.repository }}
+
+      - name: Trigger COPR build
+        uses: vidplace7/copr-build@main
+        id: copr_build
+        env:
+          COPR_API_TOKEN_CONFIG: ${{ secrets.COPR_API_CONFIG }}
+        with:
+          owner: "@meshtastic"
+          package-name: meshtasticd
+          project-name: ${{ inputs.copr_project }}
+          git-remote: "${{ github.server_url }}/${{ github.repository }}.git"
+          committish: ${{ github.sha }}

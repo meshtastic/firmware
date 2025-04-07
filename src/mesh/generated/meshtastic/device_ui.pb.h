@@ -51,6 +51,10 @@ typedef enum _meshtastic_Language {
     meshtastic_Language_GREEK = 13,
     /* Norwegian */
     meshtastic_Language_NORWEGIAN = 14,
+    /* Slovenian */
+    meshtastic_Language_SLOVENIAN = 15,
+    /* Ukrainian */
+    meshtastic_Language_UKRAINIAN = 16,
     /* Simplified Chinese (experimental) */
     meshtastic_Language_SIMPLIFIED_CHINESE = 30,
     /* Traditional Chinese (experimental) */
@@ -71,6 +75,8 @@ typedef struct _meshtastic_NodeFilter {
     bool position_switch;
     /* Filter nodes by matching name string */
     char node_name[16];
+    /* Filter based on channel */
+    int8_t channel;
 } meshtastic_NodeFilter;
 
 typedef struct _meshtastic_NodeHighlight {
@@ -85,6 +91,25 @@ typedef struct _meshtastic_NodeHighlight {
     /* Highlight nodes by matching name string */
     char node_name[16];
 } meshtastic_NodeHighlight;
+
+typedef struct _meshtastic_GeoPoint {
+    /* Zoom level */
+    int8_t zoom;
+    /* Coordinate: latitude */
+    int32_t latitude;
+    /* Coordinate: longitude */
+    int32_t longitude;
+} meshtastic_GeoPoint;
+
+typedef struct _meshtastic_Map {
+    /* Home coordinates */
+    bool has_home;
+    meshtastic_GeoPoint home;
+    /* Map tile style */
+    char style[20];
+    /* Map scroll follows GPS */
+    bool follow_gps;
+} meshtastic_Map;
 
 typedef PB_BYTES_ARRAY_T(16) meshtastic_DeviceUIConfig_calibration_data_t;
 typedef struct _meshtastic_DeviceUIConfig {
@@ -114,6 +139,9 @@ typedef struct _meshtastic_DeviceUIConfig {
     meshtastic_NodeHighlight node_highlight;
     /* 8 integers for screen calibration data */
     meshtastic_DeviceUIConfig_calibration_data_t calibration_data;
+    /* Map related data */
+    bool has_map_data;
+    meshtastic_Map map_data;
 } meshtastic_DeviceUIConfig;
 
 
@@ -136,13 +164,19 @@ extern "C" {
 
 
 
+
+
 /* Initializer values for message structs */
-#define meshtastic_DeviceUIConfig_init_default   {0, 0, 0, 0, 0, 0, _meshtastic_Theme_MIN, 0, 0, 0, _meshtastic_Language_MIN, false, meshtastic_NodeFilter_init_default, false, meshtastic_NodeHighlight_init_default, {0, {0}}}
-#define meshtastic_NodeFilter_init_default       {0, 0, 0, 0, 0, ""}
+#define meshtastic_DeviceUIConfig_init_default   {0, 0, 0, 0, 0, 0, _meshtastic_Theme_MIN, 0, 0, 0, _meshtastic_Language_MIN, false, meshtastic_NodeFilter_init_default, false, meshtastic_NodeHighlight_init_default, {0, {0}}, false, meshtastic_Map_init_default}
+#define meshtastic_NodeFilter_init_default       {0, 0, 0, 0, 0, "", 0}
 #define meshtastic_NodeHighlight_init_default    {0, 0, 0, 0, ""}
-#define meshtastic_DeviceUIConfig_init_zero      {0, 0, 0, 0, 0, 0, _meshtastic_Theme_MIN, 0, 0, 0, _meshtastic_Language_MIN, false, meshtastic_NodeFilter_init_zero, false, meshtastic_NodeHighlight_init_zero, {0, {0}}}
-#define meshtastic_NodeFilter_init_zero          {0, 0, 0, 0, 0, ""}
+#define meshtastic_GeoPoint_init_default         {0, 0, 0}
+#define meshtastic_Map_init_default              {false, meshtastic_GeoPoint_init_default, "", 0}
+#define meshtastic_DeviceUIConfig_init_zero      {0, 0, 0, 0, 0, 0, _meshtastic_Theme_MIN, 0, 0, 0, _meshtastic_Language_MIN, false, meshtastic_NodeFilter_init_zero, false, meshtastic_NodeHighlight_init_zero, {0, {0}}, false, meshtastic_Map_init_zero}
+#define meshtastic_NodeFilter_init_zero          {0, 0, 0, 0, 0, "", 0}
 #define meshtastic_NodeHighlight_init_zero       {0, 0, 0, 0, ""}
+#define meshtastic_GeoPoint_init_zero            {0, 0, 0}
+#define meshtastic_Map_init_zero                 {false, meshtastic_GeoPoint_init_zero, "", 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_NodeFilter_unknown_switch_tag 1
@@ -151,11 +185,18 @@ extern "C" {
 #define meshtastic_NodeFilter_hops_away_tag      4
 #define meshtastic_NodeFilter_position_switch_tag 5
 #define meshtastic_NodeFilter_node_name_tag      6
+#define meshtastic_NodeFilter_channel_tag        7
 #define meshtastic_NodeHighlight_chat_switch_tag 1
 #define meshtastic_NodeHighlight_position_switch_tag 2
 #define meshtastic_NodeHighlight_telemetry_switch_tag 3
 #define meshtastic_NodeHighlight_iaq_switch_tag  4
 #define meshtastic_NodeHighlight_node_name_tag   5
+#define meshtastic_GeoPoint_zoom_tag             1
+#define meshtastic_GeoPoint_latitude_tag         2
+#define meshtastic_GeoPoint_longitude_tag        3
+#define meshtastic_Map_home_tag                  1
+#define meshtastic_Map_style_tag                 2
+#define meshtastic_Map_follow_gps_tag            3
 #define meshtastic_DeviceUIConfig_version_tag    1
 #define meshtastic_DeviceUIConfig_screen_brightness_tag 2
 #define meshtastic_DeviceUIConfig_screen_timeout_tag 3
@@ -170,6 +211,7 @@ extern "C" {
 #define meshtastic_DeviceUIConfig_node_filter_tag 12
 #define meshtastic_DeviceUIConfig_node_highlight_tag 13
 #define meshtastic_DeviceUIConfig_calibration_data_tag 14
+#define meshtastic_DeviceUIConfig_map_data_tag   15
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_DeviceUIConfig_FIELDLIST(X, a) \
@@ -186,11 +228,13 @@ X(a, STATIC,   SINGULAR, UINT32,   ring_tone_id,     10) \
 X(a, STATIC,   SINGULAR, UENUM,    language,         11) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  node_filter,      12) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  node_highlight,   13) \
-X(a, STATIC,   SINGULAR, BYTES,    calibration_data,  14)
+X(a, STATIC,   SINGULAR, BYTES,    calibration_data,  14) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  map_data,         15)
 #define meshtastic_DeviceUIConfig_CALLBACK NULL
 #define meshtastic_DeviceUIConfig_DEFAULT NULL
 #define meshtastic_DeviceUIConfig_node_filter_MSGTYPE meshtastic_NodeFilter
 #define meshtastic_DeviceUIConfig_node_highlight_MSGTYPE meshtastic_NodeHighlight
+#define meshtastic_DeviceUIConfig_map_data_MSGTYPE meshtastic_Map
 
 #define meshtastic_NodeFilter_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, BOOL,     unknown_switch,    1) \
@@ -198,7 +242,8 @@ X(a, STATIC,   SINGULAR, BOOL,     offline_switch,    2) \
 X(a, STATIC,   SINGULAR, BOOL,     public_key_switch,   3) \
 X(a, STATIC,   SINGULAR, INT32,    hops_away,         4) \
 X(a, STATIC,   SINGULAR, BOOL,     position_switch,   5) \
-X(a, STATIC,   SINGULAR, STRING,   node_name,         6)
+X(a, STATIC,   SINGULAR, STRING,   node_name,         6) \
+X(a, STATIC,   SINGULAR, INT32,    channel,           7)
 #define meshtastic_NodeFilter_CALLBACK NULL
 #define meshtastic_NodeFilter_DEFAULT NULL
 
@@ -211,19 +256,40 @@ X(a, STATIC,   SINGULAR, STRING,   node_name,         5)
 #define meshtastic_NodeHighlight_CALLBACK NULL
 #define meshtastic_NodeHighlight_DEFAULT NULL
 
+#define meshtastic_GeoPoint_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, INT32,    zoom,              1) \
+X(a, STATIC,   SINGULAR, INT32,    latitude,          2) \
+X(a, STATIC,   SINGULAR, INT32,    longitude,         3)
+#define meshtastic_GeoPoint_CALLBACK NULL
+#define meshtastic_GeoPoint_DEFAULT NULL
+
+#define meshtastic_Map_FIELDLIST(X, a) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  home,              1) \
+X(a, STATIC,   SINGULAR, STRING,   style,             2) \
+X(a, STATIC,   SINGULAR, BOOL,     follow_gps,        3)
+#define meshtastic_Map_CALLBACK NULL
+#define meshtastic_Map_DEFAULT NULL
+#define meshtastic_Map_home_MSGTYPE meshtastic_GeoPoint
+
 extern const pb_msgdesc_t meshtastic_DeviceUIConfig_msg;
 extern const pb_msgdesc_t meshtastic_NodeFilter_msg;
 extern const pb_msgdesc_t meshtastic_NodeHighlight_msg;
+extern const pb_msgdesc_t meshtastic_GeoPoint_msg;
+extern const pb_msgdesc_t meshtastic_Map_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define meshtastic_DeviceUIConfig_fields &meshtastic_DeviceUIConfig_msg
 #define meshtastic_NodeFilter_fields &meshtastic_NodeFilter_msg
 #define meshtastic_NodeHighlight_fields &meshtastic_NodeHighlight_msg
+#define meshtastic_GeoPoint_fields &meshtastic_GeoPoint_msg
+#define meshtastic_Map_fields &meshtastic_Map_msg
 
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_DEVICE_UI_PB_H_MAX_SIZE meshtastic_DeviceUIConfig_size
-#define meshtastic_DeviceUIConfig_size           117
-#define meshtastic_NodeFilter_size               36
+#define meshtastic_DeviceUIConfig_size           188
+#define meshtastic_GeoPoint_size                 33
+#define meshtastic_Map_size                      58
+#define meshtastic_NodeFilter_size               47
 #define meshtastic_NodeHighlight_size            25
 
 #ifdef __cplusplus

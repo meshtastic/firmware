@@ -20,12 +20,18 @@ static const Module::RfSwitchMode_t rfswitch_table[] = {
 
 // Particular boards might define a different max power based on what their hardware can do, default to max power output if not
 // specified (may be dangerous if using external PA and LR11x0 power config forgotten)
+#if ARCH_PORTDUINO
+#define LR1110_MAX_POWER settingsMap[lr1110_max_power]
+#endif
 #ifndef LR1110_MAX_POWER
 #define LR1110_MAX_POWER 22
 #endif
 
 // the 2.4G part maxes at 13dBm
 
+#if ARCH_PORTDUINO
+#define LR1120_MAX_POWER settingsMap[lr1120_max_power]
+#endif
 #ifndef LR1120_MAX_POWER
 #define LR1120_MAX_POWER 13
 #endif
@@ -256,10 +262,17 @@ template <typename T> void LR11x0Interface<T>::startReceive()
 template <typename T> bool LR11x0Interface<T>::isChannelActive()
 {
     // check if we can detect a LoRa preamble on the current channel
+    ChannelScanConfig_t cfg = {.cad = {.symNum = NUM_SYM_CAD,
+                                       .detPeak = RADIOLIB_LR11X0_CAD_PARAM_DEFAULT,
+                                       .detMin = RADIOLIB_LR11X0_CAD_PARAM_DEFAULT,
+                                       .exitMode = RADIOLIB_LR11X0_CAD_PARAM_DEFAULT,
+                                       .timeout = 0,
+                                       .irqFlags = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS,
+                                       .irqMask = RADIOLIB_IRQ_CAD_DEFAULT_MASK}};
     int16_t result;
 
     setStandby();
-    result = lora.scanChannel();
+    result = lora.scanChannel(cfg);
     if (result == RADIOLIB_LORA_DETECTED)
         return true;
 

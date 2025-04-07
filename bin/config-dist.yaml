@@ -6,17 +6,17 @@
 ### Including the "Module:" line!
 ---
 Lora:
+  # Default to auto-detecting the module type
+  # This will be overridden by configs from config.d
+  Module: auto
+
+#  # Uncomment to enable Simulation mode, or use --sim
+#  Module: sim
 
 #  Module: sx1262  # Waveshare SX1302 LISTEN ONLY AT THIS TIME!
 #  CS: 7
 #  IRQ: 17
 #  Reset: 22
-
-#  Module: RF95  # Adafruit RFM9x
-#  Reset: 25
-#  CS: 7
-#  IRQ: 22
-#  Busy: 23
 
 #  Module: RF95  # Elecrow Lora RFM95 IOT https://www.elecrow.com/lora-rfm95-iot-board-for-rpi.html
 #  Reset: 22
@@ -28,6 +28,47 @@ Lora:
 #  IRQ: 16
 #  Busy: 20
 #  Reset: 18
+
+### The Radxa Zero 3E/W employs multiple gpio chips.
+### Each gpio pin must be unique, but can be assigned to a specific gpio chip and line.
+### In case solely a no. is given, the default gpio chip and pin == line will be employed.
+###
+#  Module: sx1262  # Radxa Zero 3E/W + Ebyte E22-900M30S
+#  DIO2_AS_RF_SWITCH: true
+#  DIO3_TCXO_VOLTAGE: 1.8
+#  CS:             # NSS     PIN_24 -> chip 4, line 22
+#    pin: 24
+#    gpiochip: 4
+#    line: 22
+#  SCK:            # SCK     PIN_23 -> chip 4, line 18
+#    pin: 23
+#    gpiochip: 4
+#    line: 18
+#  Busy:           # BUSY    PIN_29 -> chip 3!, line 11
+#    pin: 29
+#    gpiochip: 3
+#    line: 11
+#  MOSI:           # MOSI    PIN_19 -> chip 4, line 19
+#    pin: 19
+#    gpiochip: 4
+#    line: 19
+#  MISO:           # MISO    PIN_21 -> chip 4, line 21
+#    pin: 21
+#    gpiochip: 4
+#    line: 21
+#  Reset:          # NRST    PIN_27 -> chip 4, line 10
+#    pin: 27
+#    gpiochip: 4
+#    line: 10
+#  IRQ:            # DIO1    PIN_28 -> chip 4, line 11
+#    pin: 28
+#    gpiochip: 4
+#    line: 11
+#  RXen:           # RXEN    PIN_22 -> chip 3!, line 17
+#    pin: 22
+#    gpiochip: 3
+#    line: 17
+#  TXen: RADIOLIB_NC # TXEN   no PIN, no line, fallback to default gpio chip
 
 #  Module: sx1268  # SX1268-based modules, tested with Ebyte E22 400M33S
 #  CS: 21
@@ -43,9 +84,11 @@ Lora:
 #  TXen: x  # TX and RX enable pins
 #  RXen: x
 
+#  SX126X_MAX_POWER: 8  # Limit the output power to 8 dBm, useful for amped nodes
+
 #  spiSpeed: 2000000
 
-### Set gpio chip to use in /dev/. Defaults to 0.
+### Set default/fallback gpio chip to use in /dev/. Defaults to 0.
 ### Notably the Raspberry Pi 5 puts the GPIO header on gpiochip4
 #  gpiochip: 4
 
@@ -147,10 +190,13 @@ Logging:
 Webserver:
 #  Port: 443 # Port for Webserver & Webservices
 #  RootPath: /usr/share/meshtasticd/web # Root Dir of WebServer
+#  SSLKey: /etc/meshtasticd/ssl/private_key.pem # Path to SSL Key, generated if not present
+#  SSLCert: /etc/meshtasticd/ssl/certificate.pem # Path to SSL Certificate, generated if not present
 
 General:
   MaxNodes: 200
   MaxMessageQueue: 100
   ConfigDirectory: /etc/meshtasticd/config.d/
+  AvailableDirectory: /etc/meshtasticd/available.d/
 #  MACAddress: AA:BB:CC:DD:EE:FF
 #  MACAddressSource: eth0

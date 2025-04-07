@@ -15,6 +15,7 @@
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "Router.h"
+#include "SPILock.h"
 #include "airtime.h"
 #include "configuration.h"
 #include "gps/GeoCoord.h"
@@ -30,7 +31,7 @@ uint32_t packetSequence = 0;
 
 int32_t RangeTestModule::runOnce()
 {
-#if defined(ARCH_ESP32) || defined(ARCH_NRF52)
+#if defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_PORTDUINO)
 
     /*
         Uncomment the preferences below if you want to use the module
@@ -129,7 +130,7 @@ void RangeTestModuleRadio::sendPayload(NodeNum dest, bool wantReplies)
 
 ProcessMessage RangeTestModuleRadio::handleReceived(const meshtastic_MeshPacket &mp)
 {
-#if defined(ARCH_ESP32) || defined(ARCH_NRF52)
+#if defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_PORTDUINO)
 
     if (moduleConfig.range_test.enabled) {
 
@@ -205,6 +206,7 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
         LOG_DEBUG("gpsStatus->getDOP()          %d", gpsStatus->getDOP());
         LOG_DEBUG("-----------------------------------------");
     */
+    concurrency::LockGuard g(spiLock);
     if (!FSBegin()) {
         LOG_DEBUG("An Error has occurred while mounting the filesystem");
         return 0;
