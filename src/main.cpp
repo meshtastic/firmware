@@ -587,6 +587,10 @@ void setup()
             // assign an arbitrary value to distinguish from other models
             kb_model = 0x37;
             break;
+        case ScanI2C::DeviceType::TCA8418KB:
+            // assign an arbitrary value to distinguish from other models
+            kb_model = 0x84;
+            break;
         default:
             // use this as default since it's also just zero
             LOG_WARN("kb_info.type is unknown(0x%02x), setting kb_model=0x00", kb_info.type);
@@ -602,9 +606,9 @@ void setup()
  * "found".
  */
 
-// Only one supported RGB LED currently
-#ifdef HAS_NCP5623
-    rgb_found = i2cScanner->find(ScanI2C::DeviceType::NCP5623);
+// Two supported RGB LED currently
+#ifdef HAS_RGB_LED
+    rgb_found = i2cScanner->firstRGBLED();
 #endif
 
 #ifdef HAS_TPS65233
@@ -1270,8 +1274,15 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 #ifndef ARCH_ESP32
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_PAXCOUNTER_CONFIG;
 #endif
-#if !defined(HAS_NCP5623) && !defined(RGBLED_RED) && !defined(HAS_NEOPIXEL) && !defined(UNPHONE) && !RAK_4631
+#if !defined(HAS_RGB_LED) && !RAK_4631
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_AMBIENTLIGHTING_CONFIG;
+#endif
+
+// No bluetooth on these targets (yet):
+// Pico W / 2W may get it at some point
+// Portduino and ESP32-C6 are excluded because we don't have a working bluetooth stacks integrated yet.
+#if defined(ARCH_RP2040) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32WL) || defined(CONFIG_IDF_TARGET_ESP32C6)
+    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_BLUETOOTH_CONFIG;
 #endif
 
 #if defined(ARCH_NRF52) && !HAS_ETHERNET // nrf52 doesn't have network unless it's a RAK ethernet gateway currently
