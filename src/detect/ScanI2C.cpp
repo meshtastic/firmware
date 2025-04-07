@@ -31,8 +31,8 @@ ScanI2C::FoundDevice ScanI2C::firstRTC() const
 
 ScanI2C::FoundDevice ScanI2C::firstKeyboard() const
 {
-    ScanI2C::DeviceType types[] = {CARDKB, TDECKKB, BBQ10KB, RAK14004, MPR121KB};
-    return firstOfOrNONE(5, types);
+    ScanI2C::DeviceType types[] = {CARDKB, TDECKKB, BBQ10KB, RAK14004, MPR121KB, TCA8418KB};
+    return firstOfOrNONE(6, types);
 }
 
 ScanI2C::FoundDevice ScanI2C::firstAccelerometer() const
@@ -44,6 +44,12 @@ ScanI2C::FoundDevice ScanI2C::firstAccelerometer() const
 ScanI2C::FoundDevice ScanI2C::firstAQI() const
 {
     ScanI2C::DeviceType types[] = {PMSA0031, SCD4X};
+    return firstOfOrNONE(2, types);
+}
+
+ScanI2C::FoundDevice ScanI2C::firstRGBLED() const
+{
+    ScanI2C::DeviceType types[] = {NCP5623, LP5562};
     return firstOfOrNONE(2, types);
 }
 

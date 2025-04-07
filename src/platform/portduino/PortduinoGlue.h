@@ -11,6 +11,7 @@
 inline const std::unordered_map<std::string, std::string> configProducts = {{"MESHTOAD", "lora-usb-meshtoad-e22.yaml"},
                                                                             {"MESHSTICK", "lora-meshstick-1262.yaml"},
                                                                             {"MESHADV-PI", "lora-MeshAdv-900M30S.yaml"},
+                                                                            {"MESHADV-MINI", "lora-MeshAdv-Mini-900M22S.yaml"},
                                                                             {"POWERPI", "lora-MeshAdv-900M30S.yaml"}};
 
 enum configNames {
@@ -98,6 +99,7 @@ enum configNames {
     maxnodes,
     ascii_logs,
     config_directory,
+    available_directory,
     mac_address
 };
 enum { no_screen, x11, st7789, st7735, st7735s, st7796, ili9341, ili9342, ili9486, ili9488, hx8357d };
