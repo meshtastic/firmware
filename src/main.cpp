@@ -218,8 +218,8 @@ static int32_t ledBlinkCount = 0;
 static int32_t elecrowLedBlinker()
 {
     // are we in alert buzzer mode?
+#if HAS_BUTTON
     if (buttonThread->isBuzzing()) {
-
         // blink LED three times for 3 seconds, then 3 times for a second, with one second pause
         if (ledBlinkCount % 2) { // odd means LED OFF
             ledBlink.set(false);
@@ -242,6 +242,7 @@ static int32_t elecrowLedBlinker()
             }
         }
     } else {
+#endif
         ledBlinkCount = 0;
         if (config.device.led_heartbeat_disabled)
             return 1000;
@@ -262,7 +263,9 @@ static int32_t elecrowLedBlinker()
         if (!powerStatus->getIsCharging() && powerStatus->getBatteryChargePercent() < 10) {
             return 250;
         }
+#if HAS_BUTTON
     }
+#endif
     return 1000;
 }
 #else
