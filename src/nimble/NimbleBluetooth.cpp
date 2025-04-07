@@ -79,7 +79,7 @@ class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
 
 class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
 {
-    virtual void onPassKeyEntry(NimBLEConnInfo &connInfo)
+    virtual uint32_t onPassKeyDisplay(NimBLEConnInfo &connInfo)
     {
         uint32_t passkey = config.bluetooth.fixed_pin;
 
@@ -122,7 +122,7 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
 #endif
         passkeyShowing = true;
 
-        NimBLEDevice::injectPassKey(connInfo, passkey);
+        return passkey;
     }
 
     virtual void onAuthenticationComplete(NimBLEConnInfo &connInfo)
@@ -260,7 +260,7 @@ void NimbleBluetooth::setupService()
     BatteryCharacteristic = batteryService->createCharacteristic( // 0x2A19 is the Battery Level characteristic)
         (uint16_t)0x2a19, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY, 1);
 
-    NimBLE2904 *batteryLevelDescriptor = (NimBLE2904 *)BatteryCharacteristic->createDescriptor((uint16_t)0x2904);
+    NimBLE2904 *batteryLevelDescriptor = (NimBLE2904 *)BatteryCharacteristic->create2904();
     batteryLevelDescriptor->setFormat(NimBLE2904::FORMAT_UINT8);
     batteryLevelDescriptor->setNamespace(1);
     batteryLevelDescriptor->setUnit(0x27ad);
