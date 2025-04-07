@@ -21,6 +21,8 @@
 SPIClass SDHandler = SPIClass(HSPI);
 #elif defined(SDCARD_USE_VSPI)
 SPIClass SDHandler = SPIClass(VSPI);
+#else
+#define SDHandler SPI
 #endif
 #elif defined(ARCH_NRF52)
 #if defined(SDCARD_USE_SPI1)
@@ -33,31 +35,6 @@ SPIClass SDHandler = SPIClass(VSPI);
 #define SD_SPI_FREQUENCY 4000000U
 #endif
 #endif // HAS_SDCARD
-
-
-#if defined(ARCH_STM32WL)
-
-uint16_t OSFS::startOfEEPROM = 1;
-uint16_t OSFS::endOfEEPROM = 2048;
-
-// 3) How do I read from the medium?
-void OSFS::readNBytes(uint16_t address, unsigned int num, byte *output)
-{
-    for (uint16_t i = address; i < address + num; i++) {
-        *output = EEPROM.read(i);
-        output++;
-    }
-}
-
-// 4) How to I write to the medium?
-void OSFS::writeNBytes(uint16_t address, unsigned int num, const byte *input)
-{
-    for (uint16_t i = address; i < address + num; i++) {
-        EEPROM.update(i, *input);
-        input++;
-    }
-}
-#endif // ARCH_STM32WL
 
 /**
  * @brief Copies a file from one location to another.
