@@ -37,7 +37,7 @@ class STM32_LittleFS
 {
   public:
     STM32_LittleFS(void);
-    STM32_LittleFS(struct lfs_config *cfg);
+    explicit STM32_LittleFS(struct lfs_config *cfg);
     virtual ~STM32_LittleFS();
 
     bool begin(struct lfs_config *cfg = NULL);

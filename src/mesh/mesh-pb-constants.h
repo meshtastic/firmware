@@ -18,6 +18,10 @@
 #define MAX_RX_TOPHONE 32
 #endif
 
+/// Verify baseline assumption of node size. If it increases, we need to reevaluate
+/// the impact of its memory footprint, notably on MAX_NUM_NODES.
+static_assert(sizeof(meshtastic_NodeInfoLite) <= 192, "NodeInfoLite size increased. Reconsider impact on MAX_NUM_NODES.");
+
 /// max number of nodes allowed in the nodeDB
 #ifndef MAX_NUM_NODES
 #if defined(ARCH_STM32WL)

@@ -4,8 +4,14 @@
 
 #include "RTC.h"
 
+#include "MeshService.h"
 #include "airtime.h"
+#include "main.h"
 #include "power.h"
+
+#if !MESHTASTIC_EXCLUDE_GPS
+#include "GPS.h"
+#endif
 
 using namespace NicheGraphics;
 
@@ -26,8 +32,6 @@ InkHUD::MenuApplet::MenuApplet() : concurrency::OSThread("MenuApplet")
         backlight = Drivers::LatchingBacklight::getInstance();
     }
 }
-
-void InkHUD::MenuApplet::onActivate() {}
 
 void InkHUD::MenuApplet::onForeground()
 {
@@ -141,6 +145,14 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         inkhud->nextTile();
         break;
 
+    case SEND_PING:
+        service->refreshLocalMeshNode();
+        service->trySendPosition(NODENUM_BROADCAST, true);
+
+        // Force the next refresh to use FULL, to protect the display, as some users will probably spam this button
+        inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FULL);
+        break;
+
     case ROTATE:
         inkhud->rotate();
         break;
@@ -160,12 +172,6 @@ void InkHUD::MenuApplet::execute(MenuItem item)
 
     case TOGGLE_APPLET:
         settings->userApplets.active[cursor] = !settings->userApplets.active[cursor];
-        inkhud->updateAppletSelection();
-        // requestUpdate(Drivers::EInk::UpdateTypes::FULL); // Select FULL, seeing how this action doesn't auto exit
-        break;
-
-    case ACTIVATE_APPLETS:
-        // Todo: remove this action? Already handled by TOGGLE_APPLET?
         inkhud->updateAppletSelection();
         break;
 
@@ -205,6 +211,25 @@ void InkHUD::MenuApplet::execute(MenuItem item)
             backlight->latch();
         break;
 
+    case TOGGLE_12H_CLOCK:
+        config.display.use_12h_clock = !config.display.use_12h_clock;
+        nodeDB->saveToDisk(SEGMENT_CONFIG);
+        break;
+
+    case TOGGLE_GPS:
+        gps->toggleGpsMode();
+        nodeDB->saveToDisk(SEGMENT_CONFIG);
+        break;
+
+    case ENABLE_BLUETOOTH:
+        // This helps users recover from a bad wifi config
+        LOG_INFO("Enabling Bluetooth");
+        config.network.wifi_enabled = false;
+        config.bluetooth.enabled = true;
+        nodeDB->saveToDisk();
+        rebootAtMsec = millis() + 2000;
+        break;
+
     default:
         LOG_WARN("Action not implemented");
     }
@@ -226,7 +251,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         if (settings->optionalMenuItems.nextTile && settings->userTiles.count > 1)
             items.push_back(MenuItem("Next Tile", MenuAction::NEXT_TILE, MenuPage::ROOT)); // Only if multiple applets shown
 
-        // items.push_back(MenuItem("Send", MenuPage::SEND)); // TODO
+        items.push_back(MenuItem("Send", MenuPage::SEND));
         items.push_back(MenuItem("Options", MenuPage::OPTIONS));
         // items.push_back(MenuItem("Display Off", MenuPage::EXIT)); // TODO
         items.push_back(MenuItem("Save & Shut Down", MenuAction::SHUTDOWN));
@@ -234,21 +259,28 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         break;
 
     case SEND:
-        items.push_back(MenuItem("Send Message", MenuPage::EXIT));
-        items.push_back(MenuItem("Send NodeInfo", MenuAction::SEND_NODEINFO));
-        items.push_back(MenuItem("Send Position", MenuAction::SEND_POSITION));
+        items.push_back(MenuItem("Ping", MenuAction::SEND_PING, MenuPage::EXIT));
+        // Todo: canned messages
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
 
     case OPTIONS:
         // Optional: backlight
-        if (settings->optionalMenuItems.backlight) {
-            assert(backlight);
+        if (settings->optionalMenuItems.backlight)
             items.push_back(MenuItem(backlight->isLatched() ? "Backlight Off" : "Keep Backlight On", // Label
                                      MenuAction::TOGGLE_BACKLIGHT,                                   // Action
                                      MenuPage::EXIT                                                  // Exit once complete
                                      ));
-        }
+
+        // Optional: GPS
+        if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_DISABLED)
+            items.push_back(MenuItem("Enable GPS", MenuAction::TOGGLE_GPS, MenuPage::EXIT));
+        if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED)
+            items.push_back(MenuItem("Disable GPS", MenuAction::TOGGLE_GPS, MenuPage::EXIT));
+
+        // Optional: Enable Bluetooth, in case of lost wifi connection
+        if (!config.bluetooth.enabled || config.network.wifi_enabled)
+            items.push_back(MenuItem("Enable Bluetooth", MenuAction::ENABLE_BLUETOOTH, MenuPage::EXIT));
 
         items.push_back(MenuItem("Applets", MenuPage::APPLETS));
         items.push_back(MenuItem("Auto-show", MenuPage::AUTOSHOW));
@@ -260,26 +292,14 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
                                  &settings->optionalFeatures.notifications));
         items.push_back(MenuItem("Battery Icon", MenuAction::TOGGLE_BATTERY_ICON, MenuPage::OPTIONS,
                                  &settings->optionalFeatures.batteryIcon));
-
-        // TODO - GPS and Wifi switches
-        /*
-        // Optional: has GPS
-        if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_DISABLED)
-            items.push_back(MenuItem("Enable GPS", MenuPage::EXIT)); // TODO
-        if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED)
-            items.push_back(MenuItem("Disable GPS", MenuPage::EXIT)); // TODO
-
-        // Optional: using wifi
-        if (!config.bluetooth.enabled)
-            items.push_back(MenuItem("Enable Bluetooth", MenuPage::EXIT)); // TODO: escape hatch if wifi configured wrong
-        */
-
+        items.push_back(
+            MenuItem("12-Hour Clock", MenuAction::TOGGLE_12H_CLOCK, MenuPage::OPTIONS, &config.display.use_12h_clock));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
 
     case APPLETS:
         populateAppletPage();
-        items.push_back(MenuItem("Exit", MenuAction::ACTIVATE_APPLETS));
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
 
     case AUTOSHOW:
@@ -293,7 +313,6 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
 
     case EXIT:
         sendToBackground(); // Menu applet dismissed, allow normal behavior to resume
-        // requestUpdate(Drivers::EInk::UpdateTypes::FULL);
         break;
 
     default:
@@ -378,11 +397,14 @@ void InkHUD::MenuApplet::onRender()
         // Center-line for the text
         int16_t center = itemT + (itemH / 2);
 
+        // Box, if currently selected
         if (cursorShown && i == cursor)
             drawRect(itemL, itemT, itemW, itemH, BLACK);
+
+        // Item's text
         printAt(itemL + X(padding), center, item.label, LEFT, MIDDLE);
 
-        // Testing only: circle instead of check box
+        // Checkbox, if relevant
         if (item.checkState) {
             const uint16_t cbWH = fontSmall.lineHeight();  // Checkbox: width / height
             const int16_t cbL = itemR - X(padding) - cbWH; // Checkbox: left

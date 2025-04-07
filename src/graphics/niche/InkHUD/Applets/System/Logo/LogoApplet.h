@@ -25,6 +25,7 @@ class LogoApplet : public SystemApplet, public concurrency::OSThread
     void onForeground() override;
     void onBackground() override;
     void onShutdown() override;
+    void onReboot() override;
 
   protected:
     int32_t runOnce() override;
@@ -33,6 +34,7 @@ class LogoApplet : public SystemApplet, public concurrency::OSThread
     std::string textRight;
     std::string textTitle;
     AppletFont fontTitle;
+    bool inverted = false; // Invert colors. Used during shutdown, to restore display health.
 };
 
 } // namespace NicheGraphics::InkHUD

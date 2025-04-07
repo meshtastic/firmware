@@ -628,6 +628,27 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
          meshtastic_Config_PositionConfig_PositionFlags_SPEED | meshtastic_Config_PositionConfig_PositionFlags_HEADING |
          meshtastic_Config_PositionConfig_PositionFlags_DOP | meshtastic_Config_PositionConfig_PositionFlags_SATINVIEW);
 
+// Set default value for 'Mesh via UDP'
+#if HAS_UDP_MULTICAST
+#ifdef USERPREFS_NETWORK_ENABLED_PROTOCOLS
+    config.network.enabled_protocols = USERPREFS_NETWORK_ENABLED_PROTOCOLS;
+#else
+    config.network.enabled_protocols = 1;
+#endif
+#endif
+
+#ifdef USERPREFS_NETWORK_WIFI_ENABLED
+    config.network.wifi_enabled = USERPREFS_NETWORK_WIFI_ENABLED;
+#endif
+
+#ifdef USERPREFS_NETWORK_WIFI_SSID
+    strncpy(config.network.wifi_ssid, USERPREFS_NETWORK_WIFI_SSID, sizeof(config.network.wifi_ssid));
+#endif
+
+#ifdef USERPREFS_NETWORK_WIFI_PSK
+    strncpy(config.network.wifi_psk, USERPREFS_NETWORK_WIFI_PSK, sizeof(config.network.wifi_psk));
+#endif
+
 #ifdef DISPLAY_FLIP_SCREEN
     config.display.flip_screen = true;
 #endif
@@ -668,7 +689,7 @@ void NodeDB::initConfigIntervals()
 
     config.display.screen_on_secs = default_screen_on_secs;
 
-#if defined(T_WATCH_S3) || defined(T_DECK) || defined(MESH_TAB) || defined(RAK14014)
+#if defined(T_WATCH_S3) || defined(T_DECK) || defined(UNPHONE) || defined(MESH_TAB) || defined(RAK14014)
     config.power.is_power_saving = true;
     config.display.screen_on_secs = 30;
     config.power.wait_bluetooth_secs = 30;
@@ -1040,8 +1061,8 @@ void NodeDB::loadFromDisk()
     // if (state != LoadFileResult::LOAD_SUCCESS) {
     //    installDefaultDeviceState(); // Our in RAM copy might now be corrupt
     //} else {
-    if (devicestate.version < DEVICESTATE_MIN_VER) {
-        LOG_WARN("Devicestate %d is old, discard", devicestate.version);
+    if ((state != LoadFileResult::LOAD_SUCCESS) || (devicestate.version < DEVICESTATE_MIN_VER)) {
+        LOG_WARN("Devicestate %d is old or invalid, discard", devicestate.version);
         installDefaultDeviceState();
     } else {
         LOG_INFO("Loaded saved devicestate version %d", devicestate.version);
@@ -1437,13 +1458,14 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
 #if !(MESHTASTIC_EXCLUDE_PKI)
     if (p.public_key.size > 0) {
         printBytes("Incoming Pubkey: ", p.public_key.bytes, 32);
-        if (info->user.public_key.size > 0) { // if we have a key for this user already, don't overwrite with a new one
-            LOG_INFO("Public Key set for node, not updating!");
-            // we copy the key into the incoming packet, to prevent overwrite
-            memcpy(p.public_key.bytes, info->user.public_key.bytes, 32);
-        } else {
-            LOG_INFO("Update Node Pubkey!");
-        }
+    }
+    if (info->user.public_key.size > 0) { // if we have a key for this user already, don't overwrite with a new one
+        LOG_INFO("Public Key set for node, not updating!");
+        // we copy the key into the incoming packet, to prevent overwrite
+        p.public_key.size = 32;
+        memcpy(p.public_key.bytes, info->user.public_key.bytes, 32);
+    } else if (p.public_key.size > 0) {
+        LOG_INFO("Update Node Pubkey!");
     }
 #endif
 
