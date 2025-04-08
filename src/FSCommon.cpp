@@ -26,11 +26,11 @@ SPIClass SDHandler = SPIClass(VSPI);
 #endif
 #elif defined(ARCH_NRF52)
 #if defined(SDCARD_USE_SPI1)
-#define SDHandler SPI1 // only used for esp32, SPI selection for NRF52 happens in variant.h (for now)
+#define SDHandler SPI1
 #elif defined(SDCARD_USE_SPI)
-#define SDHandler SPI // only used for esp32
-#endif                // NRF52 SPI or SPI1
-#endif                // ESP32/NRF52
+#define SDHandler SPI
+#endif // NRF52 SPI or SPI1
+#endif // ESP32/NRF52
 #ifndef SD_SPI_FREQUENCY
 #define SD_SPI_FREQUENCY 4000000U
 #endif
@@ -344,9 +344,9 @@ void setupSDCard()
     uint64_t cardSize = SD.cardSize() / (1024 * 1024);
     LOG_DEBUG("SD Card Size: %lu MB", (uint32_t)cardSize);
     LOG_DEBUG("Total space: %lu MB", (uint32_t)(SD.totalBytes() / (1024 * 1024)));
-    LOG_INFO("Now scanning free clusters on SD card");
-    delay(100); // let serial print the above statement properly
-    LOG_DEBUG("Used space: %lu MB", (uint32_t)(SD.usedBytes() / (1024 * 1024)));
+    LOG_INFO("Now scanning free clusters on SD card, this may take some time...");
+    delay(100);                                                                  // let serial print the above statement properly
+    LOG_DEBUG("Used space: %lu MB", (uint32_t)(SD.usedBytes() / (1024 * 1024))); // This might take some time during boot
 
 #endif
 #endif

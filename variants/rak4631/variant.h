@@ -131,11 +131,11 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define SDCARD_USE_SPI1 1
 
 #ifdef SDCARD_USE_SPI1
-#define SDCARD_SPI SPI1
-#endif
 #define SPI_MOSI PIN_SPI1_MOSI
 #define SPI_SCK PIN_SPI1_SCK
 #define SPI_MISO PIN_SPI1_MISO
+#endif
+
 #define SDCARD_CS (26)
 
 // Some settings for the SdFat library to optimize flash usage
