@@ -23,7 +23,6 @@
 #undef BAT_MEASURE_ADC_UNIT
 #define BATTERY_PIN 35      // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 #define ADC_MULTIPLIER 1.34 //  tracked resistance divider is 100k+470k, so it can not fillfull well on esp32 adc
-#define ADC_CHANNEL ADC1_GPIO35_CHANNEL
 #define ADC_ATTENUATION ADC_ATTEN_DB_12 // lower dB for high resistance voltage divider
 
 #undef GPS_RX_PIN

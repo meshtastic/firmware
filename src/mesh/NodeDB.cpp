@@ -37,8 +37,8 @@
 #include <esp_efuse.h>
 #include <esp_efuse_table.h>
 #include <nvs_flash.h>
-#include <soc/efuse_reg.h>
-#include <soc/soc.h>
+#undef EXT_RAM_ATTR
+#define EXT_RAM_ATTR EXT_RAM_BSS_ATTR
 #endif
 
 #ifdef ARCH_PORTDUINO

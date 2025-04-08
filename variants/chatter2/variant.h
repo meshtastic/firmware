@@ -70,7 +70,6 @@
 // Battery
 
 #define BATTERY_PIN 34 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
-#define ADC_CHANNEL ADC1_GPIO34_CHANNEL
 #define ADC_ATTENUATION                                                                                                          \
     ADC_ATTEN_DB_2_5       // 2_5-> 100mv-1250mv, 11-> 150mv-3100mv for ESP32
                            // ESP32-S2/C3/S3 are different
