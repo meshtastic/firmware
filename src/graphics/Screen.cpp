@@ -3510,7 +3510,7 @@ void Screen::setFrames(FrameFocus focus)
         const FramesetInfo &oldFsi = this->framesetInfo;
 
         // ✅ Fix: Account for new message insertion shifting frame positions
-        if (willInsertTextMessage && fsi.positions.textMessage <= originalPosition) {
+        if (willInsertTextMessage && oldFsi.positions.textMessage == 0 && fsi.positions.textMessage <= originalPosition) {
             originalPosition++;
         }
 
