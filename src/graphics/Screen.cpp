@@ -1158,14 +1158,14 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
                     const int topY = iconY + 1;
                     const int bottomY = iconY + iconH - 2;
                     const int centerX = iconX + iconW / 2;
-                    const int peakY = bottomY - 1;  // Slightly raised peak for visual centering
+                    const int peakY = bottomY - 1;
         
                     // Draw "M" diagonals
                     display->drawLine(leftX, topY, centerX, peakY);
                     display->drawLine(rightX, topY, centerX, peakY);
                 } else {
                     // Small icon for non-wide screens
-                    const int iconX = timeX - mail_width + 2;//move mail icon by 2 closer to the time
+                    const int iconX = timeX - mail_width;
                     const int iconY = textY + (FONT_HEIGHT_SMALL - mail_height) / 2;
                     display->drawXbm(iconX, iconY, mail_width, mail_height, mail);
                 }
@@ -3412,11 +3412,8 @@ void Screen::setFrames(FrameFocus focus)
         // Check if the module being drawn has requested focus
         // We will honor this request later, if setFrames was triggered by a UIFrameEvent
         MeshModule *m = *i;
-        if (m->isRequestingFocus()) {
+        if (m->isRequestingFocus()) 
             fsi.positions.focusedModule = numframes;
-        }
-
-        // Identify the position of specific modules, if we need to know this later
         if (m == waypointModule)
             fsi.positions.waypoint = numframes;
 
@@ -3436,8 +3433,10 @@ void Screen::setFrames(FrameFocus focus)
     normalFrames[numframes++] = screen->digitalWatchFace ? &Screen::drawDigitalClockFrame : &Screen::drawAnalogClockFrame;
 #endif
 
-    // If we have a text message - show it next, unless it's a phone message and we aren't using any special modules
-    if (devicestate.has_rx_text_message && shouldDrawMessage(&devicestate.rx_text_message)) {
+    // ✅ Declare this early so it’s available in FOCUS_PRESERVE block
+    bool willInsertTextMessage = shouldDrawMessage(&devicestate.rx_text_message);
+
+    if (willInsertTextMessage) {
         fsi.positions.textMessage = numframes;
         normalFrames[numframes++] = drawTextMessageFrame;
     }
@@ -3484,8 +3483,7 @@ void Screen::setFrames(FrameFocus focus)
 
     // Add function overlay here. This can show when notifications muted, modifier key is active etc
     static OverlayCallback functionOverlay[] = {drawFunctionOverlay};
-    static const int functionOverlayCount = sizeof(functionOverlay) / sizeof(functionOverlay[0]);
-    ui->setOverlays(functionOverlay, functionOverlayCount);
+    ui->setOverlays(functionOverlay, sizeof(functionOverlay) / sizeof(functionOverlay[0]));
 
     prevFrame = -1; // Force drawNodeInfo to pick a new node (because our list
                     // just changed)
@@ -3508,14 +3506,19 @@ void Screen::setFrames(FrameFocus focus)
         ui->switchToFrame(fsi.positions.focusedModule);
         break;
 
-    case FOCUS_PRESERVE:
-        // If we can identify which type of frame "originalPosition" was, can move directly to it in the new frameset
+    case FOCUS_PRESERVE: {
         const FramesetInfo &oldFsi = this->framesetInfo;
-        if (originalPosition == oldFsi.positions.log)
+
+        // ✅ Fix: Account for new message insertion shifting frame positions
+        if (willInsertTextMessage && fsi.positions.textMessage <= originalPosition) {
+            originalPosition++;
+        }
+
+        if (originalPosition == oldFsi.positions.log && fsi.positions.log < fsi.frameCount)
             ui->switchToFrame(fsi.positions.log);
-        else if (originalPosition == oldFsi.positions.settings)
+        else if (originalPosition == oldFsi.positions.settings && fsi.positions.settings < fsi.frameCount)
             ui->switchToFrame(fsi.positions.settings);
-        else if (originalPosition == oldFsi.positions.wifi)
+        else if (originalPosition == oldFsi.positions.wifi && fsi.positions.wifi < fsi.frameCount)
             ui->switchToFrame(fsi.positions.wifi);
 
         // If frame count has decreased
@@ -3527,14 +3530,12 @@ void Screen::setFrames(FrameFocus focus)
             // Unless that would put us "out of bounds" (< 0)
             else
                 ui->switchToFrame(0);
-        }
-
-        // If we're not sure exactly which frame we were on, at least return to the same frame number
-        // (node frames; module frames)
-        else
+        } else if (originalPosition < fsi.frameCount)
             ui->switchToFrame(originalPosition);
-
+        else
+            ui->switchToFrame(fsi.frameCount - 1);
         break;
+    }
     }
 
     // Store the info about this frameset, for future setFrames calls
@@ -4063,15 +4064,18 @@ int Screen::handleStatusUpdate(const meshtastic::Status *arg)
 int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
 {
     if (showingNormalScreen) {
-        // Outgoing message
-        if (packet->from == 0)
-            setFrames(FOCUS_PRESERVE); // Return to same frame (quietly hiding the rx text message frame)
-
-        // Incoming message
-        else
-        //setFrames(FOCUS_TEXTMESSAGE); // Focus on the new message
-        hasUnreadMessage = true; //Tells the UI that there's a new message and tiggers header to draw Mail Icon
+        if (packet->from == 0) {
+            // Outgoing message
+            setFrames(FOCUS_PRESERVE); // Stay on same frame, silently add/remove frames
+        } else {
+            // Incoming message
+            //setFrames(FOCUS_TEXTMESSAGE);          // Focus on the new message
+            devicestate.has_rx_text_message = true;  // Needed to include the message frame
+            hasUnreadMessage = true;                 // Enables mail icon in the header
+            setFrames(FOCUS_PRESERVE);               // Refresh frame list without switching view
+            forceDisplay();                          // Forces screen redraw (this works in your codebase)
     }
+}
 
     return 0;
 }
