@@ -1884,6 +1884,10 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     display->setColor(WHITE);
 }
 
+typedef void (*EntryRenderer)(OLEDDisplay *, meshtastic_NodeInfoLite *, int16_t, int16_t, int);
+typedef void (*NodeExtrasRenderer)(OLEDDisplay *, meshtastic_NodeInfoLite *, int16_t, int16_t, int columnWidth, float heading,
+                                   double lat, double lon);
+                                   
 // h! Each node entry holds a reference to its info and how long ago it was heard from
 struct NodeEntry {
     meshtastic_NodeInfoLite *node;
@@ -2000,9 +2004,6 @@ void drawColumnSeparator(OLEDDisplay *display, int16_t x, int16_t yStart, int16_
     display->drawLine(separatorX, yStart, separatorX, yEnd);
 }
 
-typedef void (*EntryRenderer)(OLEDDisplay *, meshtastic_NodeInfoLite *, int16_t, int16_t, int);
-typedef void (*NodeExtrasRenderer)(OLEDDisplay *, meshtastic_NodeInfoLite *, int16_t, int16_t, int columnWidth, float heading,
-                                   double lat, double lon);
 
 void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *title,
                         EntryRenderer renderer, NodeExtrasRenderer extras = nullptr, float heading = 0, double lat = 0,
@@ -2229,6 +2230,7 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     }
 }
 
+
 // Public screen function: shows how recently nodes were heard
 static void drawLastHeardScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
@@ -2246,6 +2248,39 @@ static void drawDistanceScreen(OLEDDisplay *display, OLEDDisplayUiState *state, 
     drawNodeListScreen(display, state, x, y, "Distances", drawNodeDistance);
 }
 
+
+//Cycles Node list screens
+static EntryRenderer entryRenderers[] = {
+    drawEntryLastHeard,
+    drawEntryHopSignal
+};
+
+static const int NUM_RENDERERS = sizeof(entryRenderers) / sizeof(entryRenderers[0]);
+static unsigned long lastSwitchTime = 0;
+static int currentRendererIndex = 0;
+static const unsigned long RENDER_INTERVAL_MS = 2000;
+
+static void drawCyclingNodeScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    unsigned long now = millis();
+
+    // ✅ Reset to first view on initial entry to screen
+    if (state->ticksSinceLastStateSwitch == 0) {
+        currentRendererIndex = 0;
+        lastSwitchTime = now;
+    }
+
+    // ⏱️ Cycle content every interval
+    if (now - lastSwitchTime >= RENDER_INTERVAL_MS) {
+        lastSwitchTime = now;
+        currentRendererIndex = (currentRendererIndex + 1) % NUM_RENDERERS;
+    }
+
+    EntryRenderer currentRenderer = entryRenderers[currentRendererIndex];
+    const char *titles[] = {"Last Heard", "Hop|Sig"};
+
+    drawNodeListScreen(display, state, x, y, titles[currentRendererIndex], currentRenderer);
+}
 // Helper function: Draw a single node entry for Node List (Modified for Compass Screen)
 void drawEntryCompass(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth)
 {
@@ -3417,8 +3452,9 @@ void Screen::setFrames(FrameFocus focus)
     }
 
     normalFrames[numframes++] = drawDeviceFocused;
-    normalFrames[numframes++] = drawLastHeardScreen;
-    normalFrames[numframes++] = drawHopSignalScreen;
+    normalFrames[numframes++] = drawCyclingNodeScreen;
+    //normalFrames[numframes++] = drawLastHeardScreen;
+    //normalFrames[numframes++] = drawHopSignalScreen;
     normalFrames[numframes++] = drawDistanceScreen;
     normalFrames[numframes++] = drawNodeListWithCompasses;
     normalFrames[numframes++] = drawCompassAndLocationScreen;
