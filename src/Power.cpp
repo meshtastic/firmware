@@ -380,6 +380,20 @@ class AnalogBatteryLevel : public HasBatteryLevel
     // if we have a integrated device with a battery, we can assume that the battery is always connected
 #ifdef BATTERY_IMMUTABLE
     virtual bool isBatteryConnect() override { return true; }
+#elif defined(ADC_V)
+    virtual bool isBatteryConnect() override
+    {
+        int lastReading = digitalRead(ADC_V);
+        // 判断值是否变化
+        for (int i = 2; i < 500; i++) {
+            int reading = digitalRead(ADC_V);
+            if (reading != lastReading) {
+                return false; // 有变化，USB供电, 没接电池
+            }
+        }
+
+        return true;
+    }
 #else
     virtual bool isBatteryConnect() override { return getBatteryPercent() != -1; }
 #endif
@@ -533,9 +547,6 @@ Power::Power() : OSThread("Power")
 {
     statusHandler = {};
     low_voltage_counter = 0;
-#if defined(ELECROW_ThinkNode_M1) || defined(POWER_CFG)
-    low_voltage_counter_led3 = 0;
-#endif
 #ifdef DEBUG_HEAP
     lastheap = memGet.getFreeHeap();
 #endif
@@ -716,9 +727,6 @@ void Power::readPowerStatus()
     const PowerStatus powerStatus2 = PowerStatus(hasBattery, usbPowered, isChargingNow, batteryVoltageMv, batteryChargePercent);
     LOG_DEBUG("Battery: usbPower=%d, isCharging=%d, batMv=%d, batPct=%d", powerStatus2.getHasUSB(), powerStatus2.getIsCharging(),
               powerStatus2.getBatteryVoltageMv(), powerStatus2.getBatteryChargePercent());
-#if defined(ELECROW_ThinkNode_M1) || defined(POWER_CFG)
-    power_num = powerStatus2.getBatteryVoltageMv();
-#endif
     newStatus.notifyObservers(&powerStatus2);
 #ifdef DEBUG_HEAP
     if (lastheap != memGet.getFreeHeap()) {
@@ -766,9 +774,6 @@ void Power::readPowerStatus()
     if (batteryLevel && powerStatus2.getHasBattery() && !powerStatus2.getHasUSB()) {
         if (batteryLevel->getBattVoltage() < OCV[NUM_OCV_POINTS - 1]) {
             low_voltage_counter++;
-#if defined(ELECROW_ThinkNode_M1)
-            low_voltage_counter_led3 = low_voltage_counter;
-#endif
             LOG_DEBUG("Low voltage counter: %d/10", low_voltage_counter);
             if (low_voltage_counter > 10) {
 #ifdef ARCH_NRF52
@@ -781,13 +786,7 @@ void Power::readPowerStatus()
             }
         } else {
             low_voltage_counter = 0;
-#if defined(ELECROW_ThinkNode_M1)
-            low_voltage_counter_led3 = low_voltage_counter;
-#endif
         }
-#ifdef POWER_CFG
-        low_voltage_counter_led3 = low_voltage_counter;
-#endif
     }
 }
 
