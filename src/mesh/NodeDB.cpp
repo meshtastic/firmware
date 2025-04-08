@@ -743,6 +743,15 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.output_ms = 100;
     moduleConfig.external_notification.active = true;
 #endif
+#ifdef ELECROW_ThinkNode_M1
+    // Default to Elecrow USER_LED (blue)
+    moduleConfig.external_notification.enabled = true;
+    moduleConfig.external_notification.output = USER_LED;
+    moduleConfig.external_notification.active = true;
+    moduleConfig.external_notification.alert_message = true;
+    moduleConfig.external_notification.output_ms = 1000;
+    moduleConfig.external_notification.nag_timeout = 60;
+#endif
 #ifdef BUTTON_SECONDARY_CANNEDMESSAGES
     // Use a board's second built-in button as input source for canned messages
     moduleConfig.canned_message.enabled = true;
