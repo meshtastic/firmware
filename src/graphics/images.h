@@ -37,6 +37,37 @@ const uint8_t imgQuestion[] PROGMEM = {0xbf, 0x41, 0xc0, 0x8b, 0xdb, 0x70, 0xa1,
 const uint8_t imgSF[] PROGMEM = {0xd2, 0xb7, 0xad, 0xbb, 0x92, 0x01, 0xfd, 0xfd, 0x15, 0x85, 0xf5};
 #endif
 
+// === Horizontal battery  ===
+// Basic battery design and all related pieces
+const unsigned char batteryBitmap_h[] PROGMEM = {
+    0b11111110, 0b00000000, 0b11110000, 0b00000111, 0b00000001, 0b00000000, 0b00000000, 0b00001000, 0b00000001, 0b00000000,
+    0b00000000, 0b00001000, 0b00000001, 0b00000000, 0b00000000, 0b00001000, 0b00000001, 0b00000000, 0b00000000, 0b00001000,
+    0b00000001, 0b00000000, 0b00000000, 0b00011000, 0b00000001, 0b00000000, 0b00000000, 0b00011000, 0b00000001, 0b00000000,
+    0b00000000, 0b00011000, 0b00000001, 0b00000000, 0b00000000, 0b00011000, 0b00000001, 0b00000000, 0b00000000, 0b00011000,
+    0b00000001, 0b00000000, 0b00000000, 0b00001000, 0b00000001, 0b00000000, 0b00000000, 0b00001000, 0b00000001, 0b00000000,
+    0b00000000, 0b00001000, 0b00000001, 0b00000000, 0b00000000, 0b00001000, 0b11111110, 0b00000000, 0b11110000, 0b00000111};
+
+// This is the left and right bars for the fill in
+const unsigned char batteryBitmap_sidegaps_h[] PROGMEM = {
+    0b11111111, 0b00001111, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000,
+    0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000,
+    0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b11111111, 0b00001111};
+
+// Lightning Bolt
+const unsigned char lightning_bolt_h[] PROGMEM = {
+    0b11110000, 0b00000000, 0b11110000, 0b00000000, 0b01110000, 0b00000000, 0b00111000, 0b00000000, 0b00111100,
+    0b00000000, 0b11111100, 0b00000000, 0b01111110, 0b00000000, 0b00111000, 0b00000000, 0b00110000, 0b00000000,
+    0b00010000, 0b00000000, 0b00010000, 0b00000000, 0b00001000, 0b00000000, 0b00001000, 0b00000000};
+
+// === Vertical battery ===
+// Basic battery design and all related pieces
+const unsigned char batteryBitmap_v[] PROGMEM = {0b00011100, 0b00111110, 0b01000001, 0b01000001, 0b00000000, 0b00000000,
+                                                 0b00000000, 0b01000001, 0b01000001, 0b01000001, 0b00111110};
+// This is the left and right bars for the fill in
+const unsigned char batteryBitmap_sidegaps_v[] PROGMEM = {0b10000010, 0b10000010, 0b10000010};
+// Lightning Bolt
+const unsigned char lightning_bolt_v[] PROGMEM = {0b00000100, 0b00000110, 0b00011111, 0b00001100, 0b00000100};
+
 #ifndef EXCLUDE_EMOJI
 #define thumbs_height 25
 #define thumbs_width 25
@@ -216,13 +247,13 @@ static unsigned char poo[] PROGMEM = {
 #define mail_width 10
 #define mail_height 7
 static const unsigned char mail[] PROGMEM = {
-    0b11111111, 0b00,  // Top line
-    0b10000001, 0b00,  // Edges
-    0b11000011, 0b00,  // Diagonals start
-    0b10100101, 0b00,  // Inner M part
-    0b10011001, 0b00,  // Inner M part
-    0b10000001, 0b00,  // Edges
-    0b11111111, 0b00   // Bottom line
+    0b11111111, 0b00, // Top line
+    0b10000001, 0b00, // Edges
+    0b11000011, 0b00, // Diagonals start
+    0b10100101, 0b00, // Inner M part
+    0b10011001, 0b00, // Inner M part
+    0b10000001, 0b00, // Edges
+    0b11111111, 0b00  // Bottom line
 };
 
 #endif

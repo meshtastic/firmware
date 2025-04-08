@@ -1022,18 +1022,8 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
         display->setColor(BLACK);
     }
 
-    // === Text baseline ===
-    const int textY = y + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
-
     // === Battery Vertical and Horizontal ===
-    const int nubSize = 2;
-    const int batteryShort = highlightHeight - nubSize - 2;
-
-    int batteryX = x + xOffset;
-    int batteryY = y + (highlightHeight - batteryShort) / 2 + nubSize;
-
     int chargePercent = powerStatus->getBatteryChargePercent();
-
     bool isCharging = powerStatus->getIsCharging() == OptionalBool::OptTrue;
     uint32_t now = millis();
     if (isCharging && now - lastBlink > blinkInterval) {
@@ -1046,89 +1036,42 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
 
     if (useHorizontalBattery) {
         // === Horizontal battery  ===
-        batteryX = 2;
-        batteryY = 4;
-        // Basic battery design and all related pieces
-        const unsigned char batteryBitmap[] PROGMEM = {
-            0b11111110, 0b00000000, 0b11110000, 0b00000111, 0b00000001, 0b00000000, 0b00000000, 0b00001000, 0b00000001,
-            0b00000000, 0b00000000, 0b00001000, 0b00000001, 0b00000000, 0b00000000, 0b00001000, 0b00000001, 0b00000000,
-            0b00000000, 0b00001000, 0b00000001, 0b00000000, 0b00000000, 0b00011000, 0b00000001, 0b00000000, 0b00000000,
-            0b00011000, 0b00000001, 0b00000000, 0b00000000, 0b00011000, 0b00000001, 0b00000000, 0b00000000, 0b00011000,
-            0b00000001, 0b00000000, 0b00000000, 0b00011000, 0b00000001, 0b00000000, 0b00000000, 0b00001000, 0b00000001,
-            0b00000000, 0b00000000, 0b00001000, 0b00000001, 0b00000000, 0b00000000, 0b00001000, 0b00000001, 0b00000000,
-            0b00000000, 0b00001000, 0b11111110, 0b00000000, 0b11110000, 0b00000111};
+        int batteryX = 2;
+        int batteryY = 4;
 
-        // This is the left and right bars for the fill in
-        const unsigned char batteryBitmap_sidegaps[] PROGMEM = {
-            0b11111111, 0b00001111, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000,
-            0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000,
-            0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000,
-            0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b11111111, 0b00001111};
-
-        // Lightning Bolt
-        const unsigned char lightning_bolt[] PROGMEM = {
-            0b11110000, 0b00000000, 0b11110000, 0b00000000, 0b01110000, 0b00000000, 0b00111000, 0b00000000, 0b00111100,
-            0b00000000, 0b11111100, 0b00000000, 0b01111110, 0b00000000, 0b00111000, 0b00000000, 0b00110000, 0b00000000,
-            0b00010000, 0b00000000, 0b00010000, 0b00000000, 0b00001000, 0b00000000, 0b00001000, 0b00000000};
-
-        display->drawXbm(batteryX, batteryY, 29, 15, batteryBitmap);
+        display->drawXbm(batteryX, batteryY, 29, 15, batteryBitmap_h);
 
         if (isCharging && isBoltVisible) {
-            display->drawXbm(batteryX + 9, batteryY + 1, 9, 13, lightning_bolt);
+            display->drawXbm(batteryX + 9, batteryY + 1, 9, 13, lightning_bolt_h);
         } else if (isCharging && !isBoltVisible) {
-            display->drawXbm(batteryX + 8, batteryY, 12, 15, batteryBitmap_sidegaps);
-        } else if (!isCharging) {
-            display->drawXbm(batteryX + 8, batteryY, 12, 15, batteryBitmap_sidegaps);
+            display->drawXbm(batteryX + 8, batteryY, 12, 15, batteryBitmap_sidegaps_h);
+        } else {
+            display->drawXbm(batteryX + 8, batteryY, 12, 15, batteryBitmap_sidegaps_h);
             int fillWidth = 24 * chargePercent / 100;
             int fillX = batteryX + fillWidth;
             display->fillRect(batteryX + 1, batteryY + 1, fillX, 13);
         }
     } else {
         // === Vertical battery ===
-        batteryX = 1;
-        batteryY = 3;
-        // Basic battery design and all related pieces
-        const unsigned char batteryBitmap[] PROGMEM = {
-            0b00011100, // ..###..
-            0b00111110, // .#####.
-            0b01000001, // #.....#
-            0b01000001, // #.....#
-            0b00000000, // .......
-            0b00000000, // .......
-            0b00000000, // .......
-            0b01000001, // #.....#
-            0b01000001, // #.....#
-            0b01000001, // #.....#
-            0b00111110  // .#####.
-        };
-        // This is the left and right bars for the fill in
-        const unsigned char batteryBitmap_sidegaps[] PROGMEM = {
-            0b10000010, // #.....#
-            0b10000010, // #.....#
-            0b10000010, // #.....#
-        };
-        // Lightning Bolt
-        const unsigned char lightning_bolt[] PROGMEM = {
-            0b00000100, // Column 0
-            0b00000110, // Column 1
-            0b00011111, // Column 2
-            0b00001100, // Column 3
-            0b00000100  // Column 4
-        };
+        int batteryX = 1;
+        int batteryY = 3;
 
-        display->drawXbm(batteryX, batteryY, 7, 11, batteryBitmap);
+        display->drawXbm(batteryX, batteryY, 7, 11, batteryBitmap_v);
 
         if (isCharging && isBoltVisible) {
-            display->drawXbm(batteryX + 1, batteryY + 3, 5, 5, lightning_bolt);
+            display->drawXbm(batteryX + 1, batteryY + 3, 5, 5, lightning_bolt_v);
         } else if (isCharging && !isBoltVisible) {
-            display->drawXbm(batteryX - 1, batteryY + 4, 8, 3, batteryBitmap_sidegaps);
-        } else if (!isCharging) {
-            display->drawXbm(batteryX - 1, batteryY + 4, 8, 3, batteryBitmap_sidegaps);
+            display->drawXbm(batteryX - 1, batteryY + 4, 8, 3, batteryBitmap_sidegaps_v);
+        } else {
+            display->drawXbm(batteryX - 1, batteryY + 4, 8, 3, batteryBitmap_sidegaps_v);
             int fillHeight = 8 * chargePercent / 100;
             int fillY = batteryY - fillHeight;
             display->fillRect(batteryX + 1, fillY + 10, 5, fillHeight);
         }
     }
+
+    // === Text baseline ===
+    const int textY = y + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
 
     // === Battery % Text ===
     char chargeStr[4];
@@ -1161,7 +1104,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
         snprintf(timeStr, sizeof(timeStr), "%d:%02d%s", hour, minute, isPM ? "p" : "a");
 
         int timeStrWidth = display->getStringWidth(timeStr);
-        int timeX = SCREEN_WIDTH - xOffset - timeStrWidth + 4;// time to the right by 4
+        int timeX = SCREEN_WIDTH - xOffset - timeStrWidth + 4; // time to the right by 4
 
         // Mail icon next to time (drawn as 'M' in a tight square)
         if (hasUnreadMessage) {
@@ -1169,21 +1112,21 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
                 isMailIconVisible = !isMailIconVisible;
                 lastMailBlink = now;
             }
-        
+
             if (isMailIconVisible) {
                 const bool isWide = useHorizontalBattery;
-        
+
                 if (isWide) {
                     // Dimensions for the wide mail icon
                     const int iconW = 16;
                     const int iconH = 12;
-        
+
                     const int iconX = timeX - iconW - 3;
                     const int iconY = textY + (FONT_HEIGHT_SMALL - iconH) / 2 - 1;
-        
+
                     // Draw envelope rectangle
                     display->drawRect(iconX, iconY, iconW, iconH);
-        
+
                     // Define envelope corners and center
                     const int leftX = iconX + 1;
                     const int rightX = iconX + iconW - 2;
@@ -1191,7 +1134,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
                     const int bottomY = iconY + iconH - 2;
                     const int centerX = iconX + iconW / 2;
                     const int peakY = bottomY - 1;
-        
+
                     // Draw "M" diagonals
                     display->drawLine(leftX, topY, centerX, peakY);
                     display->drawLine(rightX, topY, centerX, peakY);
@@ -3444,7 +3387,7 @@ void Screen::setFrames(FrameFocus focus)
         // Check if the module being drawn has requested focus
         // We will honor this request later, if setFrames was triggered by a UIFrameEvent
         MeshModule *m = *i;
-        if (m->isRequestingFocus()) 
+        if (m->isRequestingFocus())
             fsi.positions.focusedModule = numframes;
         if (m == waypointModule)
             fsi.positions.waypoint = numframes;
@@ -3529,7 +3472,7 @@ void Screen::setFrames(FrameFocus focus)
         ui->switchToFrame(fsi.positions.fault);
         break;
     case FOCUS_TEXTMESSAGE:
-        hasUnreadMessage = false;  // ✅ Clear when message is *viewed*
+        hasUnreadMessage = false; // ✅ Clear when message is *viewed*
         ui->switchToFrame(fsi.positions.textMessage);
         break;
     case FOCUS_MODULE:
@@ -4091,8 +4034,7 @@ int Screen::handleStatusUpdate(const meshtastic::Status *arg)
     return 0;
 }
 
-
-//Handles when message is received would jump to text message frame.
+// Handles when message is received would jump to text message frame.
 int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
 {
     if (showingNormalScreen) {
@@ -4101,13 +4043,13 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
             setFrames(FOCUS_PRESERVE); // Stay on same frame, silently add/remove frames
         } else {
             // Incoming message
-            //setFrames(FOCUS_TEXTMESSAGE);          // Focus on the new message
-            devicestate.has_rx_text_message = true;  // Needed to include the message frame
-            hasUnreadMessage = true;                 // Enables mail icon in the header
-            setFrames(FOCUS_PRESERVE);               // Refresh frame list without switching view
-            forceDisplay();                          // Forces screen redraw (this works in your codebase)
+            // setFrames(FOCUS_TEXTMESSAGE);          // Focus on the new message
+            devicestate.has_rx_text_message = true; // Needed to include the message frame
+            hasUnreadMessage = true;                // Enables mail icon in the header
+            setFrames(FOCUS_PRESERVE);              // Refresh frame list without switching view
+            forceDisplay();                         // Forces screen redraw (this works in your codebase)
+        }
     }
-}
 
     return 0;
 }
