@@ -1025,9 +1025,8 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
     // === Text baseline ===
     const int textY = y + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
 
-    // === Battery dynamically scaled ===
+    // === Battery Vertical and Horizontal ===
     const int nubSize = 2;
-    const int batteryLong = SCREEN_WIDTH > 200 ? 29 : 25;
     const int batteryShort = highlightHeight - nubSize - 2;
 
     int batteryX = x + xOffset;
@@ -1047,54 +1046,87 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
 
     if (useHorizontalBattery) {
         // === Horizontal battery  ===
-        batteryY = y + (highlightHeight - batteryShort) / 2;
+        batteryX = 2;
+        batteryY = 4;
+        // Basic battery design and all related pieces
+        const unsigned char batteryBitmap[] PROGMEM = {
+            0b11111110, 0b00000000, 0b11110000, 0b00000111, 0b00000001, 0b00000000, 0b00000000, 0b00001000, 0b00000001,
+            0b00000000, 0b00000000, 0b00001000, 0b00000001, 0b00000000, 0b00000000, 0b00001000, 0b00000001, 0b00000000,
+            0b00000000, 0b00001000, 0b00000001, 0b00000000, 0b00000000, 0b00011000, 0b00000001, 0b00000000, 0b00000000,
+            0b00011000, 0b00000001, 0b00000000, 0b00000000, 0b00011000, 0b00000001, 0b00000000, 0b00000000, 0b00011000,
+            0b00000001, 0b00000000, 0b00000000, 0b00011000, 0b00000001, 0b00000000, 0b00000000, 0b00001000, 0b00000001,
+            0b00000000, 0b00000000, 0b00001000, 0b00000001, 0b00000000, 0b00000000, 0b00001000, 0b00000001, 0b00000000,
+            0b00000000, 0b00001000, 0b11111110, 0b00000000, 0b11110000, 0b00000111};
 
-        // Battery outline
-        display->drawRect(batteryX, batteryY, batteryLong, batteryShort);
+        // This is the left and right bars for the fill in
+        const unsigned char batteryBitmap_sidegaps[] PROGMEM = {
+            0b11111111, 0b00001111, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000,
+            0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000,
+            0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000,
+            0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b11111111, 0b00001111};
 
-        // Nub
-        display->fillRect(batteryX + batteryLong, batteryY + (batteryShort / 2) - 3, nubSize, 6);
+        // Lightning Bolt
+        const unsigned char lightning_bolt[] PROGMEM = {
+            0b11110000, 0b00000000, 0b11110000, 0b00000000, 0b01110000, 0b00000000, 0b00111000, 0b00000000, 0b00111100,
+            0b00000000, 0b11111100, 0b00000000, 0b01111110, 0b00000000, 0b00111000, 0b00000000, 0b00110000, 0b00000000,
+            0b00010000, 0b00000000, 0b00010000, 0b00000000, 0b00001000, 0b00000000, 0b00001000, 0b00000000};
+
+        display->drawXbm(batteryX, batteryY, 29, 15, batteryBitmap);
 
         if (isCharging && isBoltVisible) {
-            // Lightning bolt
-            const int boltX = batteryX + batteryLong / 2 - 4;
-            const int boltY = batteryY + 2; // Padding top
-
-            // Top fat bar (same)
-            display->fillRect(boltX, boltY, 6, 2);
-
-            // Middle slanted lines
-            display->drawLine(boltX + 0, boltY + 2, boltX + 3, boltY + 6);
-            display->drawLine(boltX + 1, boltY + 2, boltX + 4, boltY + 6);
-            display->drawLine(boltX + 2, boltY + 2, boltX + 5, boltY + 6);
-
-            // Tapered tail
-            display->drawLine(boltX + 3, boltY + 6, boltX + 0, batteryY + batteryShort - 3);
-            display->drawLine(boltX + 4, boltY + 6, boltX + 1, batteryY + batteryShort - 3);
+            display->drawXbm(batteryX + 9, batteryY + 1, 9, 13, lightning_bolt);
+        } else if (isCharging && !isBoltVisible) {
+            display->drawXbm(batteryX + 8, batteryY, 12, 15, batteryBitmap_sidegaps);
         } else if (!isCharging) {
-            int fillWidth = (batteryLong - 2) * chargePercent / 100;
-            int fillX = batteryX + 1;
-            display->fillRect(fillX, batteryY + 1, fillWidth, batteryShort - 2);
+            display->drawXbm(batteryX + 8, batteryY, 12, 15, batteryBitmap_sidegaps);
+            int fillWidth = 24 * chargePercent / 100;
+            int fillX = batteryX + fillWidth;
+            display->fillRect(batteryX + 1, batteryY + 1, fillX, 13);
         }
     } else {
         // === Vertical battery ===
-        const int batteryWidth = 8;
-        const int batteryHeight = batteryShort + 1;
-        const int totalBatteryHeight = batteryHeight + nubSize;
-        batteryX += -2;
-        batteryY = y + (highlightHeight - totalBatteryHeight) / 2 + nubSize;
+        batteryX = 1;
+        batteryY = 3;
+        // Basic battery design and all related pieces
+        const unsigned char batteryBitmap[] PROGMEM = {
+            0b00011100, // ..###..
+            0b00111110, // .#####.
+            0b01000001, // #.....#
+            0b01000001, // #.....#
+            0b00000000, // .......
+            0b00000000, // .......
+            0b00000000, // .......
+            0b01000001, // #.....#
+            0b01000001, // #.....#
+            0b01000001, // #.....#
+            0b00111110  // .#####.
+        };
+        // This is the left and right bars for the fill in
+        const unsigned char batteryBitmap_sidegaps[] PROGMEM = {
+            0b10000010, // #.....#
+            0b10000010, // #.....#
+            0b10000010, // #.....#
+        };
+        // Lightning Bolt
+        const unsigned char lightning_bolt[] PROGMEM = {
+            0b00000100, // Column 0
+            0b00000110, // Column 1
+            0b00011111, // Column 2
+            0b00001100, // Column 3
+            0b00000100  // Column 4
+        };
 
-        display->fillRect(batteryX + 2, batteryY - (nubSize - 1), 4, nubSize - 1); // Nub
-        display->drawRect(batteryX, batteryY, batteryWidth, batteryHeight); // Body
+        display->drawXbm(batteryX, batteryY, 7, 11, batteryBitmap);
 
         if (isCharging && isBoltVisible) {
-            display->drawLine(batteryX + 4, batteryY + 1, batteryX + 2, batteryY + 4);
-            display->drawLine(batteryX + 2, batteryY + 4, batteryX + 4, batteryY + 4);
-            display->drawLine(batteryX + 4, batteryY + 4, batteryX + 3, batteryY + 7);
+            display->drawXbm(batteryX + 1, batteryY + 3, 5, 5, lightning_bolt);
+        } else if (isCharging && !isBoltVisible) {
+            display->drawXbm(batteryX - 1, batteryY + 4, 8, 3, batteryBitmap_sidegaps);
         } else if (!isCharging) {
-            int fillHeight = (batteryHeight - 2) * chargePercent / 100;
-            int fillY = batteryY + batteryHeight - 1 - fillHeight;
-            display->fillRect(batteryX + 1, fillY, batteryWidth - 2, fillHeight);
+            display->drawXbm(batteryX - 1, batteryY + 4, 8, 3, batteryBitmap_sidegaps);
+            int fillHeight = 8 * chargePercent / 100;
+            int fillY = batteryY - fillHeight;
+            display->fillRect(batteryX + 1, fillY + 10, 5, fillHeight);
         }
     }
 
@@ -1103,7 +1135,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
     snprintf(chargeStr, sizeof(chargeStr), "%d", chargePercent);
 
     int chargeNumWidth = display->getStringWidth(chargeStr);
-    const int batteryOffset = useHorizontalBattery ? 34 : 9;
+    const int batteryOffset = useHorizontalBattery ? 28 : 6;
     const int percentX = x + xOffset + batteryOffset;
 
     display->drawString(percentX, textY, chargeStr);
