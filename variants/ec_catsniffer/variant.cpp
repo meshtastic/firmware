@@ -28,12 +28,12 @@
 
 void initVariant()
 {
-  // Config the LoRa Switch
-  pinMode(CTF1, OUTPUT);
-  pinMode(CTF2, OUTPUT);
-  pinMode(CTF3, OUTPUT);
+    // Config the LoRa Switch
+    pinMode(CTF1, OUTPUT);
+    pinMode(CTF2, OUTPUT);
+    pinMode(CTF3, OUTPUT);
 
-  digitalWrite(CTF1,  HIGH);
-  digitalWrite(CTF2,  LOW);
-  digitalWrite(CTF3,  LOW);
+    digitalWrite(CTF1, HIGH);
+    digitalWrite(CTF2, LOW);
+    digitalWrite(CTF3, LOW);
 }
