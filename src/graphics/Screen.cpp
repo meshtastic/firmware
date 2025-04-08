@@ -159,7 +159,7 @@ static bool haveGlyphs(const char *str)
     LOG_DEBUG("haveGlyphs=%d", have);
     return have;
 }
-
+bool hasUnreadMessage = false;
 /**
  * Draw the icon with extra info printed around the corners
  */
@@ -995,11 +995,16 @@ void drawRoundedHighlight(OLEDDisplay *display, int16_t x, int16_t y, int16_t w,
 bool isBoltVisible = true;
 uint32_t lastBlink = 0;
 const uint32_t blinkInterval = 500;
+static uint32_t lastMailBlink = 0;
+static bool isMailIconVisible = true;
+constexpr uint32_t mailBlinkInterval = 500;
+
 // ***********************
 // * Common Header       *
 // ***********************
 void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
 {
+    LOG_INFO("drawCommonHeader: hasUnreadMessage = %s", hasUnreadMessage ? "true" : "false");
     constexpr int HEADER_OFFSET_Y = 2;
     y += HEADER_OFFSET_Y;
 
@@ -1094,15 +1099,20 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
     }
 
     // === Battery % Text ===
-    char percentStr[8];
-    snprintf(percentStr, sizeof(percentStr), "%d%%", chargePercent);
+    char chargeStr[4];
+    snprintf(chargeStr, sizeof(chargeStr), "%d", chargePercent);
 
+    int chargeNumWidth = display->getStringWidth(chargeStr);
     const int batteryOffset = useHorizontalBattery ? 34 : 9;
     const int percentX = x + xOffset + batteryOffset;
-    display->drawString(percentX, textY, percentStr);
-    if (isBold)
-        display->drawString(percentX + 1, textY, percentStr);
 
+    display->drawString(percentX, textY, chargeStr);
+    display->drawString(percentX + chargeNumWidth - 1, textY, "%");
+
+    if (isBold) {
+        display->drawString(percentX + 1, textY, chargeStr);
+        display->drawString(percentX + chargeNumWidth, textY, "%");
+    }
     // === Time string (right-aligned) ===
     uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true);
     if (rtc_sec > 0) {
@@ -1118,9 +1128,49 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
         char timeStr[10];
         snprintf(timeStr, sizeof(timeStr), "%d:%02d%s", hour, minute, isPM ? "p" : "a");
 
-        int timeX = SCREEN_WIDTH + 3 - xOffset - display->getStringWidth(timeStr);
-        if (SCREEN_WIDTH > 128)
-            timeX -= 1;
+        int timeStrWidth = display->getStringWidth(timeStr);
+        int timeX = SCREEN_WIDTH - xOffset - timeStrWidth + 4;// time to the right by 4
+
+        // Mail icon next to time (drawn as 'M' in a tight square)
+        if (hasUnreadMessage) {
+            if (now - lastMailBlink > mailBlinkInterval) {
+                isMailIconVisible = !isMailIconVisible;
+                lastMailBlink = now;
+            }
+        
+            if (isMailIconVisible) {
+                const bool isWide = useHorizontalBattery;
+        
+                if (isWide) {
+                    // Dimensions for the wide mail icon
+                    const int iconW = 16;
+                    const int iconH = 12;
+        
+                    const int iconX = timeX - iconW - 3;
+                    const int iconY = textY + (FONT_HEIGHT_SMALL - iconH) / 2 - 1;
+        
+                    // Draw envelope rectangle
+                    display->drawRect(iconX, iconY, iconW, iconH);
+        
+                    // Define envelope corners and center
+                    const int leftX = iconX + 1;
+                    const int rightX = iconX + iconW - 2;
+                    const int topY = iconY + 1;
+                    const int bottomY = iconY + iconH - 2;
+                    const int centerX = iconX + iconW / 2;
+                    const int peakY = bottomY - 1;  // Slightly raised peak for visual centering
+        
+                    // Draw "M" diagonals
+                    display->drawLine(leftX, topY, centerX, peakY);
+                    display->drawLine(rightX, topY, centerX, peakY);
+                } else {
+                    // Small icon for non-wide screens
+                    const int iconX = timeX - mail_width + 2;//move mail icon by 2 closer to the time
+                    const int iconY = textY + (FONT_HEIGHT_SMALL - mail_height) / 2;
+                    display->drawXbm(iconX, iconY, mail_width, mail_height, mail);
+                }
+            }
+        }
         display->drawString(timeX, textY, timeStr);
         if (isBold)
             display->drawString(timeX - 1, textY, timeStr);
@@ -1133,6 +1183,9 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
 // ****************************
 void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+    // Clear the unread message indicator when viewing the message
+    hasUnreadMessage = false;
+
     const meshtastic_MeshPacket &mp = devicestate.rx_text_message;
     const char *msg = reinterpret_cast<const char *>(mp.decoded.payload.bytes);
 
@@ -1319,13 +1372,13 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 if (scrollY >= scrollStop) {
                     scrollY = scrollStop;
                     waitingToReset = true;
-                    pauseStart = now;
+                    pauseStart = lastTime;
                 }
-            } else if (now - pauseStart > 3000) {
+            } else if (lastTime - pauseStart > 3000) {
                 scrollY = 0;
                 waitingToReset = false;
                 scrollStarted = false;
-                scrollStartDelay = now;
+                scrollStartDelay = lastTime;
             }
         }
     } else {
@@ -3446,6 +3499,7 @@ void Screen::setFrames(FrameFocus focus)
         ui->switchToFrame(fsi.positions.fault);
         break;
     case FOCUS_TEXTMESSAGE:
+        hasUnreadMessage = false;  // ✅ Clear when message is *viewed*
         ui->switchToFrame(fsi.positions.textMessage);
         break;
     case FOCUS_MODULE:
@@ -4004,6 +4058,8 @@ int Screen::handleStatusUpdate(const meshtastic::Status *arg)
     return 0;
 }
 
+
+//Handles when message is received would jump to text message frame.
 int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
 {
     if (showingNormalScreen) {
@@ -4013,7 +4069,8 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
 
         // Incoming message
         else
-            setFrames(FOCUS_TEXTMESSAGE); // Focus on the new message
+        //setFrames(FOCUS_TEXTMESSAGE); // Focus on the new message
+        hasUnreadMessage = true; //Tells the UI that there's a new message and tiggers header to draw Mail Icon
     }
 
     return 0;
