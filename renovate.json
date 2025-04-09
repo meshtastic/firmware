@@ -21,7 +21,7 @@
       "defaultRegistryUrlTemplate": "https://api.registry.platformio.org/v3/packages/{{packageName}}",
       "format": "json",
       "transformTemplates": [
-        "{\"releases\": [$map($.versions, function($v) { { \"version\": $v.name, \"releaseTimestamp\": $v.released_at } })] }"
+        "{\"releases\": [$map($.versions, function($v) { { \"version\": $v.name, \"releaseTimestamp\": $v.released_at } })], \"homepage\": $encodeUrl($join([\"https://registry.platformio.org/\",$.type,\"/\",$.owner.username,\"/\",$.name])) }"
       ]
     }
   },
