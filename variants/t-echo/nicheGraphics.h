@@ -112,7 +112,7 @@ void setupNicheGraphics()
     // Setup the capacitive touch button
     // - short: momentary backlight
     // - long: latch backlight on
-    buttons->setWiring(TOUCH_BUTTON, PIN_BUTTON_TOUCH, LOW);
+    buttons->setWiring(TOUCH_BUTTON, PIN_BUTTON_TOUCH);
     buttons->setTiming(TOUCH_BUTTON, 50, 5000); // 5 seconds before latch - limited by T-Echo's capacitive touch IC
     buttons->setHandlerDown(TOUCH_BUTTON, [backlight]() {
         backlight->peek();

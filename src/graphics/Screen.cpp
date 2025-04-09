@@ -31,6 +31,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "GPS.h"
 #endif
 #include "FSCommon.h"
+#include "ButtonThread.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "error.h"
@@ -2924,6 +2925,7 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
     if (on != screenOn) {
         if (on) {
             LOG_INFO("Turn on screen");
+            buttonThread->setScreenFlag(true);
             powerMon->setState(meshtastic_PowerMon_State_Screen_On);
 #ifdef T_WATCH_S3
             PMU->enablePowerOutput(XPOWERS_ALDO2);
@@ -2959,6 +2961,7 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             setScreensaverFrames(einkScreensaver);
 #endif
             LOG_INFO("Turn off screen");
+            buttonThread->setScreenFlag(false);
 #ifdef ELECROW_ThinkNode_M1
             if (digitalRead(PIN_EINK_EN) == HIGH) {
                 digitalWrite(PIN_EINK_EN, LOW);
