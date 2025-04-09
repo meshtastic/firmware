@@ -1226,37 +1226,35 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         int width, height;
     };
 
-    const Emote emotes[] = {
-        { "\U0001F44D", thumbup, thumbs_width, thumbs_height },
-        { "\U0001F44E", thumbdown, thumbs_width, thumbs_height },
-        { "\U0001F60A", smiley, smiley_width, smiley_height },
-        { "\U0001F600", smiley, smiley_width, smiley_height },
-        { "\U0001F642", smiley, smiley_width, smiley_height },
-        { "\U0001F609", smiley, smiley_width, smiley_height },
-        { "\U0001F601", smiley, smiley_width, smiley_height },
-        { "❓", question, question_width, question_height },
-        { "‼️", bang, bang_width, bang_height },
-        { "\U0001F4A9", poo, poo_width, poo_height },
-        { "\U0001F923", haha, haha_width, haha_height },
-        { "\U0001F44B", wave_icon, wave_icon_width, wave_icon_height },
-        { "\U0001F920", cowboy, cowboy_width, cowboy_height },
-        { "\U0001F42D", deadmau5, deadmau5_width, deadmau5_height },
-        { "☀️", sun, sun_width, sun_height },
-        { "\xE2\x98\x80\xEF\xB8\x8F", sun, sun_width, sun_height },
-        { "☔", rain, rain_width, rain_height },
-        { "\u2614", rain, rain_width, rain_height },
-        { "☁️", cloud, cloud_width, cloud_height },
-        { "🌫️", fog, fog_width, fog_height },
-        { "\U0001F608", devil, devil_width, devil_height },
-        { "♥️", heart, heart_width, heart_height },
-        { "\U0001F9E1", heart, heart_width, heart_height },
-        { "\U00002763", heart, heart_width, heart_height },
-        { "\U00002764", heart, heart_width, heart_height },
-        { "\U0001F495", heart, heart_width, heart_height },
-        { "\U0001F496", heart, heart_width, heart_height },
-        { "\U0001F497", heart, heart_width, heart_height },
-        { "\U0001F498", heart, heart_width, heart_height }
-    };
+    const Emote emotes[] = {{"\U0001F44D", thumbup, thumbs_width, thumbs_height},
+                            {"\U0001F44E", thumbdown, thumbs_width, thumbs_height},
+                            {"\U0001F60A", smiley, smiley_width, smiley_height},
+                            {"\U0001F600", smiley, smiley_width, smiley_height},
+                            {"\U0001F642", smiley, smiley_width, smiley_height},
+                            {"\U0001F609", smiley, smiley_width, smiley_height},
+                            {"\U0001F601", smiley, smiley_width, smiley_height},
+                            {"❓", question, question_width, question_height},
+                            {"‼️", bang, bang_width, bang_height},
+                            {"\U0001F4A9", poo, poo_width, poo_height},
+                            {"\U0001F923", haha, haha_width, haha_height},
+                            {"\U0001F44B", wave_icon, wave_icon_width, wave_icon_height},
+                            {"\U0001F920", cowboy, cowboy_width, cowboy_height},
+                            {"\U0001F42D", deadmau5, deadmau5_width, deadmau5_height},
+                            {"☀️", sun, sun_width, sun_height},
+                            {"\xE2\x98\x80\xEF\xB8\x8F", sun, sun_width, sun_height},
+                            {"☔", rain, rain_width, rain_height},
+                            {"\u2614", rain, rain_width, rain_height},
+                            {"☁️", cloud, cloud_width, cloud_height},
+                            {"🌫️", fog, fog_width, fog_height},
+                            {"\U0001F608", devil, devil_width, devil_height},
+                            {"♥️", heart, heart_width, heart_height},
+                            {"\U0001F9E1", heart, heart_width, heart_height},
+                            {"\U00002763", heart, heart_width, heart_height},
+                            {"\U00002764", heart, heart_width, heart_height},
+                            {"\U0001F495", heart, heart_width, heart_height},
+                            {"\U0001F496", heart, heart_width, heart_height},
+                            {"\U0001F497", heart, heart_width, heart_height},
+                            {"\U0001F498", heart, heart_width, heart_height}};
 
     for (const Emote &e : emotes) {
         if (strcmp(msg, e.code) == 0) {
@@ -2499,33 +2497,58 @@ static void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int
     // Display Region and Radio Preset
     char regionradiopreset[25];
     const char *region = myRegion ? myRegion->name : NULL;
-    const char *preset = (SCREEN_WIDTH > 128) ? "Preset" : "Prst";
-    snprintf(regionradiopreset, sizeof(regionradiopreset), "%s: %s/%s", preset, region, mode);
-    display->drawString(x, compactFirstLine, regionradiopreset);
+    // const char *preset = (SCREEN_WIDTH > 128) ? "Preset" : "Prst";
+    // snprintf(regionradiopreset, sizeof(regionradiopreset), "%s: %s/%s", preset, region, mode);
+    snprintf(regionradiopreset, sizeof(regionradiopreset), "%s/%s", region, mode);
+    int textWidth = display->getStringWidth(regionradiopreset);
+    int nameX = (SCREEN_WIDTH - textWidth) / 2;
+    display->drawString(nameX, compactFirstLine, regionradiopreset);
 
     // === Second Row: Channel Utilization ===
-    char chUtil[25];
-    snprintf(chUtil, sizeof(chUtil), "ChUtil: %2.0f%%", airTime->channelUtilizationPercent());
-    display->drawString(x, compactSecondLine, chUtil);
-
-    // === Third Row: Channel Utilization ===
     // Get our hardware ID
     uint8_t dmac[6];
     getMacAddr(dmac);
     snprintf(ourId, sizeof(ourId), "%02x%02x", dmac[4], dmac[5]);
 
     char shortnameble[35];
-    snprintf(shortnameble, sizeof(shortnameble), "%s: %s/%s", "Short/BLE", haveGlyphs(owner.short_name) ? owner.short_name : "",
-             ourId);
-    display->drawString(x, compactThirdLine, shortnameble);
+    // snprintf(shortnameble, sizeof(shortnameble), "%s: %s/%s", "Short/BLE", haveGlyphs(owner.short_name) ? owner.short_name :
+    // "", ourId);
+    snprintf(shortnameble, sizeof(shortnameble), "%s_%s", haveGlyphs(owner.short_name) ? owner.short_name : "", ourId);
+    textWidth = display->getStringWidth(shortnameble);
+    nameX = (SCREEN_WIDTH - textWidth) / 2;
+    display->drawString(nameX, compactSecondLine, shortnameble);
 
-    // === Fourth Row: Node longName ===
+    // === Third Row: Node longName ===
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     if (ourNode && ourNode->has_user && strlen(ourNode->user.long_name) > 0) {
-        char devicelongname[55];
-        snprintf(devicelongname, sizeof(devicelongname), "%s: %s", "Name", ourNode->user.long_name);
-        display->drawString(x, compactFourthLine, devicelongname);
+        const char *longName = ourNode->user.long_name;
+        textWidth = display->getStringWidth(longName);
+        nameX = (SCREEN_WIDTH - textWidth) / 2;
+        display->drawString(nameX, compactThirdLine, longName);
     }
+
+    // === Fourth Row: Channel Utilization ===
+    const char *chUtil = "ChUtil:";
+    char chUtilPercentage[10];
+    int desperatecenteringattempt = SCREEN_WIDTH / 2;
+    snprintf(chUtilPercentage, sizeof(chUtilPercentage), "%2.0f%%", airTime->channelUtilizationPercent());
+    textWidth = display->getStringWidth(chUtil);
+
+    int chUtil_x = (SCREEN_WIDTH > 128) ? textWidth + 10 : textWidth + 5;
+    int chUtil_y = compactFourthLine + 3;
+
+    int width = (SCREEN_WIDTH > 128) ? 100 : 50;
+    int height = (SCREEN_WIDTH > 128) ? 12 : 7;
+    int percent = airTime->channelUtilizationPercent();
+    int fillWidth = (width * percent) / 100;
+
+    display->drawString(x, compactFourthLine, chUtil);
+    display->drawRect(chUtil_x, chUtil_y, width, height);
+    if (fillWidth > 0) {
+        display->fillRect(chUtil_x + 1, chUtil_y + 1, fillWidth - 1, height - 2);
+    }
+    int extraoffset = (SCREEN_WIDTH > 128) ? 6 : 3;
+    display->drawString(x + chUtil_x + width + extraoffset, compactFourthLine, chUtilPercentage);
 }
 
 // ****************************
