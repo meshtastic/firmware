@@ -12,7 +12,7 @@ lint:
     - trufflehog@3.88.23
     - yamllint@1.37.0
     - bandit@1.8.3
-    - checkov@3.2.398
+    - checkov@3.2.399
     - terrascan@1.19.9
     - trivy@0.61.0
     - taplo@0.9.3
