@@ -349,7 +349,11 @@ void ButtonThread::attachButtonInterrupts()
 #endif
 
 #ifdef BUTTON_PIN_ALT
+#ifdef ELECROW_ThinkNode_M2
+    wakeOnIrq(BUTTON_PIN_ALT, RISING);
+#else
     wakeOnIrq(BUTTON_PIN_ALT, FALLING);
+#endif
 #endif
 
 #ifdef BUTTON_PIN_TOUCH

@@ -248,8 +248,9 @@ static int32_t elecrowLedBlinker()
             return 1000;
 
         static bool ledOn;
-        // when fully charged, remain on!
-        if (powerStatus->getIsCharging() && powerStatus->getBatteryChargePercent() >= 100) {
+        // remain on when fully charged or discharging above 10%
+        if ((powerStatus->getIsCharging() && powerStatus->getBatteryChargePercent() >= 100) ||
+            (!powerStatus->getIsCharging() && powerStatus->getBatteryChargePercent() >= 10)) {
             ledOn = true;
         } else {
             ledOn ^= 1;
@@ -259,8 +260,8 @@ static int32_t elecrowLedBlinker()
         if (powerStatus->getIsCharging()) {
             return 500;
         }
-        // When almost empty, blink rapidly
-        if (!powerStatus->getIsCharging() && powerStatus->getBatteryChargePercent() < 10) {
+        // Blink rapidly when almost empty or if battery is not connected
+        if ((!powerStatus->getIsCharging() && powerStatus->getBatteryChargePercent() < 10) || !powerStatus->getHasBattery()) {
             return 250;
         }
 #if HAS_BUTTON
