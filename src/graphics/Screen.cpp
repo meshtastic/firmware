@@ -1095,13 +1095,16 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
         int hour = hms / SEC_PER_HOUR;
         int minute = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
 
-        bool isPM = hour >= 12;
-        hour = hour % 12;
-        if (hour == 0)
-            hour = 12;
-
         char timeStr[10];
-        snprintf(timeStr, sizeof(timeStr), "%d:%02d%s", hour, minute, isPM ? "p" : "a");
+
+        snprintf(timeStr, sizeof(timeStr), "%d:%02d", hour, minute);
+        if (config.display.use_12h_clock) {
+            bool isPM = hour >= 12;
+            hour = hour % 12;
+            if (hour == 0)
+                hour = 12;
+            snprintf(timeStr, sizeof(timeStr), "%d:%02d%s", hour, minute, isPM ? "p" : "a");
+        }
 
         int timeStrWidth = display->getStringWidth(timeStr);
         int timeX = SCREEN_WIDTH - xOffset - timeStrWidth + 4; // time to the right by 4
@@ -1187,16 +1190,13 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
     if (useTimestamp && minutes >= 15 && daysAgo == 0) {
         std::string prefix = (daysAgo == 1 && SCREEN_WIDTH >= 200) ? "Yesterday" : "At";
-        std::string meridiem = "AM";
         if (config.display.use_12h_clock) {
-            if (timestampHours >= 12)
-                meridiem = "PM";
-            if (timestampHours > 12)
-                timestampHours -= 12;
+            bool isPM = timestampHours >= 12;
+            timestampHours = timestampHours % 12;
             if (timestampHours == 0)
                 timestampHours = 12;
             snprintf(headerStr, sizeof(headerStr), "%s %d:%02d%s from %s", prefix.c_str(), timestampHours, timestampMinutes,
-                     meridiem.c_str(), sender);
+                     isPM ? "p" : "a", sender);
         } else {
             snprintf(headerStr, sizeof(headerStr), "%s %d:%02d from %s", prefix.c_str(), timestampHours, timestampMinutes,
                      sender);
@@ -1887,7 +1887,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 typedef void (*EntryRenderer)(OLEDDisplay *, meshtastic_NodeInfoLite *, int16_t, int16_t, int);
 typedef void (*NodeExtrasRenderer)(OLEDDisplay *, meshtastic_NodeInfoLite *, int16_t, int16_t, int columnWidth, float heading,
                                    double lat, double lon);
-                                   
+
 // h! Each node entry holds a reference to its info and how long ago it was heard from
 struct NodeEntry {
     meshtastic_NodeInfoLite *node;
@@ -2003,7 +2003,6 @@ void drawColumnSeparator(OLEDDisplay *display, int16_t x, int16_t yStart, int16_
     int separatorX = x + columnWidth - 2;
     display->drawLine(separatorX, yStart, separatorX, yEnd);
 }
-
 
 void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *title,
                         EntryRenderer renderer, NodeExtrasRenderer extras = nullptr, float heading = 0, double lat = 0,
@@ -2230,7 +2229,6 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     }
 }
 
-
 // Public screen function: shows how recently nodes were heard
 static void drawLastHeardScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
@@ -2248,12 +2246,8 @@ static void drawDistanceScreen(OLEDDisplay *display, OLEDDisplayUiState *state, 
     drawNodeListScreen(display, state, x, y, "Distances", drawNodeDistance);
 }
 
-
-//Cycles Node list screens
-static EntryRenderer entryRenderers[] = {
-    drawEntryLastHeard,
-    drawEntryHopSignal
-};
+// Cycles Node list screens
+static EntryRenderer entryRenderers[] = {drawEntryLastHeard, drawEntryHopSignal};
 
 static const int NUM_RENDERERS = sizeof(entryRenderers) / sizeof(entryRenderers[0]);
 static unsigned long lastSwitchTime = 0;
@@ -2501,6 +2495,7 @@ static void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int
 
     // === First Row: Region / Radio Preset ===
     auto mode = DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false);
+
     // Display Region and Radio Preset
     char regionradiopreset[25];
     const char *region = myRegion ? myRegion->name : NULL;
@@ -3453,8 +3448,8 @@ void Screen::setFrames(FrameFocus focus)
 
     normalFrames[numframes++] = drawDeviceFocused;
     normalFrames[numframes++] = drawCyclingNodeScreen;
-    //normalFrames[numframes++] = drawLastHeardScreen;
-    //normalFrames[numframes++] = drawHopSignalScreen;
+    // normalFrames[numframes++] = drawLastHeardScreen;
+    // normalFrames[numframes++] = drawHopSignalScreen;
     normalFrames[numframes++] = drawDistanceScreen;
     normalFrames[numframes++] = drawNodeListWithCompasses;
     normalFrames[numframes++] = drawCompassAndLocationScreen;
