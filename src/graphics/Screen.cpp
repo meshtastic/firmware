@@ -1923,7 +1923,8 @@ static int scrollIndex = 0;
 
 // Use dynamic timing based on mode
 unsigned long getModeCycleIntervalMs() {
-    return (currentMode == MODE_DISTANCE) ? 3000 : 2000;
+    //return (currentMode == MODE_DISTANCE) ? 3000 : 2000; 
+    return 2000;
 }
 
 // h! Calculates bearing between two lat/lon points (used for compass)
@@ -2267,13 +2268,17 @@ void drawEntryDynamic(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     }
 }
 
-const char* getCurrentModeTitle()
+const char* getCurrentModeTitle(int screenWidth)
 {
     switch (currentMode) {
-        case MODE_LAST_HEARD: return "Node List";
-        case MODE_HOP_SIGNAL: return "Hop|Sig";
-        case MODE_DISTANCE: return "Distances";
-        default: return "Nodes";
+        case MODE_LAST_HEARD:
+            return "Node List";
+        case MODE_HOP_SIGNAL:
+            return (screenWidth > 128) ? "Hops|Signals" : "Hop|Sig";
+        case MODE_DISTANCE:
+            return "Distances";
+        default:
+            return "Nodes";
     }
 }
 
@@ -2302,7 +2307,7 @@ static void drawDynamicNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *
     }
 
     // Render screen based on currentMode
-    const char* title = getCurrentModeTitle();
+    const char* title = getCurrentModeTitle(display->getWidth());
     drawNodeListScreen(display, state, x, y, title, drawEntryDynamic);
 
     // Track the last mode to avoid reinitializing modeStartTime
