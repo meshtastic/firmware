@@ -1,0 +1,26 @@
+name: Annotate PR with trunk issues
+# See: https://github.com/trunk-io/trunk-action/blob/v1/readme.md#getting-inline-annotations-for-fork-prs
+
+on:
+  workflow_run:
+    workflows: [Pull Request] # Name from `trunk_check.yml`
+    types: [completed]
+
+permissions: read-all
+
+jobs:
+  trunk_check:
+    name: Trunk Code Quality Annotate
+    runs-on: ubuntu-24.04
+    permissions:
+      checks: write # For trunk to post annotations
+      contents: read # For repo checkout
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Trunk Check
+        uses: trunk-io/trunk-action@v1
+        with:
+          post-annotations: true

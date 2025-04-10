@@ -11,6 +11,7 @@
 #include "main.h"
 #include "modules/ExternalNotificationModule.h"
 #include "power.h"
+#include "sleep.h"
 #ifdef ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
 #endif
@@ -46,7 +47,7 @@ ButtonThread::ButtonThread() : OSThread("Button")
 #ifdef USERPREFS_BUTTON_PIN
     int pin = config.device.button_gpio ? config.device.button_gpio : USERPREFS_BUTTON_PIN; // Resolved button pin
 #endif
-#if defined(HELTEC_CAPSULE_SENSOR_V3)
+#if defined(HELTEC_CAPSULE_SENSOR_V3) || defined(HELTEC_SENSOR_HUB)
     this->userButton = OneButton(pin, false, false);
 #elif defined(BUTTON_ACTIVE_LOW)
     this->userButton = OneButton(pin, BUTTON_ACTIVE_LOW, BUTTON_ACTIVE_PULLUP);
@@ -72,23 +73,28 @@ ButtonThread::ButtonThread() : OSThread("Button")
     userButton.setDebounceMs(1);
     userButton.attachDoubleClick(userButtonDoublePressed);
     userButton.attachMultiClick(userButtonMultiPressed, this); // Reference to instance: get click count from non-static OneButton
-#ifndef T_DECK // T-Deck immediately wakes up after shutdown, so disable this function
+#if !defined(T_DECK) &&                                                                                                          \
+    !defined(                                                                                                                    \
+        ELECROW_ThinkNode_M2) // T-Deck immediately wakes up after shutdown, Thinknode M2 has this on the smaller ALT button
     userButton.attachLongPressStart(userButtonPressedLongStart);
     userButton.attachLongPressStop(userButtonPressedLongStop);
 #endif
 #endif
 
 #ifdef BUTTON_PIN_ALT
-    userButtonAlt = OneButton(BUTTON_PIN_ALT, true, true);
+#if defined(ELECROW_ThinkNode_M2)
+    this->userButtonAlt = OneButton(BUTTON_PIN_ALT, false, false);
+#else
+    this->userButtonAlt = OneButton(BUTTON_PIN_ALT, true, true);
+#endif
 #ifdef INPUT_PULLUP_SENSE
     // Some platforms (nrf52) have a SENSE variant which allows wake from sleep - override what OneButton did
     pinMode(BUTTON_PIN_ALT, INPUT_PULLUP_SENSE);
 #endif
-    userButtonAlt.attachClick(userButtonPressed);
+    userButtonAlt.attachClick(userButtonPressedScreen);
     userButtonAlt.setClickMs(BUTTON_CLICK_MS);
     userButtonAlt.setPressMs(BUTTON_LONGPRESS_MS);
     userButtonAlt.setDebounceMs(1);
-    userButtonAlt.attachDoubleClick(userButtonDoublePressed);
     userButtonAlt.attachLongPressStart(userButtonPressedLongStart);
     userButtonAlt.attachLongPressStop(userButtonPressedLongStop);
 #endif
@@ -99,8 +105,58 @@ ButtonThread::ButtonThread() : OSThread("Button")
     userButtonTouch.attachLongPressStart(touchPressedLongStart); // Better handling with longpress than click?
 #endif
 
+#ifdef ARCH_ESP32
+    // Register callbacks for before and after lightsleep
+    // Used to detach and reattach interrupts
+    lsObserver.observe(&notifyLightSleep);
+    lsEndObserver.observe(&notifyLightSleepEnd);
+#endif
+
     attachButtonInterrupts();
 #endif
+}
+
+void ButtonThread::switchPage()
+{
+#ifdef BUTTON_PIN
+#if !defined(USERPREFS_BUTTON_PIN)
+    if (((config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN) !=
+         moduleConfig.canned_message.inputbroker_pin_press) ||
+        !(moduleConfig.canned_message.updown1_enabled || moduleConfig.canned_message.rotary1_enabled) ||
+        !moduleConfig.canned_message.enabled) {
+        powerFSM.trigger(EVENT_PRESS);
+    }
+#endif
+#if defined(USERPREFS_BUTTON_PIN)
+    if (((config.device.button_gpio ? config.device.button_gpio : USERPREFS_BUTTON_PIN) !=
+         moduleConfig.canned_message.inputbroker_pin_press) ||
+        !(moduleConfig.canned_message.updown1_enabled || moduleConfig.canned_message.rotary1_enabled) ||
+        !moduleConfig.canned_message.enabled) {
+        powerFSM.trigger(EVENT_PRESS);
+    }
+#endif
+
+#endif
+#if defined(ARCH_PORTDUINO)
+    if ((settingsMap.count(user) != 0 && settingsMap[user] != RADIOLIB_NC) &&
+            (settingsMap[user] != moduleConfig.canned_message.inputbroker_pin_press) ||
+        !moduleConfig.canned_message.enabled) {
+        powerFSM.trigger(EVENT_PRESS);
+    }
+#endif
+}
+
+void ButtonThread::sendAdHocPosition()
+{
+    service->refreshLocalMeshNode();
+    auto sentPosition = service->trySendPosition(NODENUM_BROADCAST, true);
+    if (screen) {
+        if (sentPosition)
+            screen->print("Sent ad-hoc position\n");
+        else
+            screen->print("Sent ad-hoc nodeinfo\n");
+        screen->forceDisplay(true); // Force a new UI frame, then force an EInk update
+    }
 }
 
 int32_t ButtonThread::runOnce()
@@ -133,49 +189,48 @@ int32_t ButtonThread::runOnce()
             // If a nag notification is running, stop it and prevent other actions
             if (moduleConfig.external_notification.enabled && (externalNotificationModule->nagCycleCutoff != UINT32_MAX)) {
                 externalNotificationModule->stopNow();
-                return 50;
+                break;
             }
-#ifdef BUTTON_PIN
-#if !defined(USERPREFS_BUTTON_PIN)
-            if (((config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN) !=
+#ifdef ELECROW_ThinkNode_M1
+            sendAdHocPosition();
+            break;
 #endif
-#if defined(USERPREFS_BUTTON_PIN)
-            if (((config.device.button_gpio ? config.device.button_gpio : USERPREFS_BUTTON_PIN) !=
-#endif
-                 moduleConfig.canned_message.inputbroker_pin_press) ||
-                !(moduleConfig.canned_message.updown1_enabled || moduleConfig.canned_message.rotary1_enabled) ||
-                !moduleConfig.canned_message.enabled) {
-                powerFSM.trigger(EVENT_PRESS);
+            switchPage();
+            break;
+        }
+
+        case BUTTON_EVENT_PRESSED_SCREEN: {
+            LOG_BUTTON("AltPress!");
+#ifdef ELECROW_ThinkNode_M1
+            // If a nag notification is running, stop it and prevent other actions
+            if (moduleConfig.external_notification.enabled && (externalNotificationModule->nagCycleCutoff != UINT32_MAX)) {
+                externalNotificationModule->stopNow();
+                break;
             }
+            switchPage();
+            break;
 #endif
-#if defined(ARCH_PORTDUINO)
-            if ((settingsMap.count(user) != 0 && settingsMap[user] != RADIOLIB_NC) &&
-                    (settingsMap[user] != moduleConfig.canned_message.inputbroker_pin_press) ||
-                !moduleConfig.canned_message.enabled) {
-                powerFSM.trigger(EVENT_PRESS);
-            }
-#endif
+            // turn screen on or off
+            screen_flag = !screen_flag;
+            if (screen)
+                screen->setOn(screen_flag);
             break;
         }
 
         case BUTTON_EVENT_DOUBLE_PRESSED: {
             LOG_BUTTON("Double press!");
-            service->refreshLocalMeshNode();
-            auto sentPosition = service->trySendPosition(NODENUM_BROADCAST, true);
-            if (screen) {
-                if (sentPosition)
-                    screen->print("Sent ad-hoc position\n");
-                else
-                    screen->print("Sent ad-hoc nodeinfo\n");
-                screen->forceDisplay(true); // Force a new UI frame, then force an EInk update
-            }
+#ifdef ELECROW_ThinkNode_M1
+            digitalWrite(PIN_EINK_EN, digitalRead(PIN_EINK_EN) == LOW);
+            break;
+#endif
+            sendAdHocPosition();
             break;
         }
 
         case BUTTON_EVENT_MULTI_PRESSED: {
             LOG_BUTTON("Mulitipress! %hux", multipressClickCount);
             switch (multipressClickCount) {
-#if HAS_GPS
+#if HAS_GPS && !defined(ELECROW_ThinkNode_M1)
             // 3 clicks: toggle GPS
             case 3:
                 if (!config.device.disable_triple_click && (gps != nullptr)) {
@@ -184,11 +239,34 @@ int32_t ButtonThread::runOnce()
                         screen->forceDisplay(true); // Force a new UI frame, then force an EInk update
                 }
                 break;
+#elif defined(ELECROW_ThinkNode_M1) || defined(ELECROW_ThinkNode_M2)
+            case 3:
+                LOG_INFO("3 clicks: toggle buzzer");
+                buzzer_flag = !buzzer_flag;
+                if (!buzzer_flag)
+                    noTone(PIN_BUZZER);
+                break;
+
 #endif
-#if defined(USE_EINK) && defined(PIN_EINK_EN) // i.e. T-Echo
+
+#if defined(USE_EINK) && defined(PIN_EINK_EN) && !defined(ELECROW_ThinkNode_M1) // i.e. T-Echo
             // 4 clicks: toggle backlight
             case 4:
                 digitalWrite(PIN_EINK_EN, digitalRead(PIN_EINK_EN) == LOW);
+                break;
+#endif
+#if defined(RAK_4631)
+            // 5 clicks: start accelerometer/magenetometer calibration for 30 seconds
+            case 5:
+                if (accelerometerThread) {
+                    accelerometerThread->calibrate(30);
+                }
+                break;
+            // 6 clicks: start accelerometer/magenetometer calibration for 60 seconds
+            case 6:
+                if (accelerometerThread) {
+                    accelerometerThread->calibrate(60);
+                }
                 break;
 #endif
             // No valid multipress action
@@ -271,7 +349,11 @@ void ButtonThread::attachButtonInterrupts()
 #endif
 
 #ifdef BUTTON_PIN_ALT
+#ifdef ELECROW_ThinkNode_M2
+    wakeOnIrq(BUTTON_PIN_ALT, RISING);
+#else
     wakeOnIrq(BUTTON_PIN_ALT, FALLING);
+#endif
 #endif
 
 #ifdef BUTTON_PIN_TOUCH
@@ -305,6 +387,26 @@ void ButtonThread::detachButtonInterrupts()
     detachInterrupt(BUTTON_PIN_TOUCH);
 #endif
 }
+
+#ifdef ARCH_ESP32
+
+// Detach our class' interrupts before lightsleep
+// Allows sleep.cpp to configure its own interrupts, which wake the device on user-button press
+int ButtonThread::beforeLightSleep(void *unused)
+{
+    detachButtonInterrupts();
+    return 0; // Indicates success
+}
+
+// Reconfigure our interrupts
+// Our class' interrupts were disconnected during sleep, to allow the user button to wake the device from sleep
+int ButtonThread::afterLightSleep(esp_sleep_wakeup_cause_t cause)
+{
+    attachButtonInterrupts();
+    return 0; // Indicates success
+}
+
+#endif
 
 /**
  * Watch a GPIO and if we get an IRQ, wake the main thread.

@@ -1,0 +1,16 @@
+function meshtastic_version {
+    meshtastic_version=$(python3 bin/buildinfo.py short)
+    echo -n "$meshtastic_version"
+}
+function web_version {
+    web_version=$(cat bin/web.version)
+    echo -n "$web_version"
+}
+function git_commits_num {
+    total_commits=$(git rev-list --all --count)
+    echo -n "$total_commits"
+}
+function git_commit_sha {
+    commit_sha=$(git rev-parse --short HEAD)
+    echo -n "$commit_sha"
+}

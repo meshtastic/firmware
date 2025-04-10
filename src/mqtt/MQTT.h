@@ -5,21 +5,22 @@
 #include "concurrency/OSThread.h"
 #include "mesh/Channels.h"
 #include "mesh/generated/meshtastic/mqtt.pb.h"
+#if !defined(ARCH_NRF52) || NRF52_USE_JSON
 #include "serialization/JSON.h"
+#endif
 #if HAS_WIFI
 #include <WiFiClient.h>
-#if !defined(ARCH_PORTDUINO)
-#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR < 3
+#if __has_include(<WiFiClientSecure.h>)
 #include <WiFiClientSecure.h>
 #endif
 #endif
-#endif
-#if HAS_ETHERNET
+#if HAS_ETHERNET && !defined(USE_WS5500)
 #include <EthernetClient.h>
 #endif
 
 #if HAS_NETWORKING
 #include <PubSubClient.h>
+#include <memory>
 #endif
 
 #define MAX_MQTT_QUEUE 16
@@ -30,24 +31,7 @@
  */
 class MQTT : private concurrency::OSThread
 {
-    // supposedly the current version is busted:
-    // http://www.iotsharing.com/2017/08/how-to-use-esp32-mqtts-with-mqtts-mosquitto-broker-tls-ssl.html
-#if HAS_WIFI
-    WiFiClient mqttClient;
-#if !defined(ARCH_PORTDUINO)
-#if (defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR < 3) || defined(RPI_PICO)
-    WiFiClientSecure wifiSecureClient;
-#endif
-#endif
-#endif
-#if HAS_ETHERNET
-    EthernetClient mqttClient;
-#endif
-
   public:
-#if HAS_NETWORKING
-    PubSubClient pubSub;
-#endif
     MQTT();
 
     /**
@@ -61,10 +45,6 @@ class MQTT : private concurrency::OSThread
      */
     void onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_MeshPacket &mp_decoded, ChannelIndex chIndex);
 
-    /** Attempt to connect to server if necessary
-     */
-    void reconnect();
-
     bool isConnectedDirectly();
 
     bool publish(const char *topic, const char *payload, bool retained);
@@ -77,14 +57,47 @@ class MQTT : private concurrency::OSThread
 
     void start() { setIntervalFromNow(0); };
 
+    bool isUsingDefaultServer() { return isConfiguredForDefaultServer; }
+
+    /// Validate the meshtastic_ModuleConfig_MQTTConfig.
+    static bool isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config) { return isValidConfig(config, nullptr); }
+
   protected:
-    PointerQueue<meshtastic_ServiceEnvelope> mqttQueue;
+    struct QueueEntry {
+        std::string topic;
+        std::basic_string<uint8_t> envBytes; // binary/pb_encode_to_bytes ServiceEnvelope
+    };
+    PointerQueue<QueueEntry> mqttQueue;
 
     int reconnectCount = 0;
+    bool isConfiguredForDefaultServer = true;
 
     virtual int32_t runOnce() override;
 
+#ifndef PIO_UNIT_TESTING
   private:
+#endif
+#if HAS_WIFI
+    using MQTTClient = WiFiClient;
+#if __has_include(<WiFiClientSecure.h>)
+    using MQTTClientTLS = WiFiClientSecure;
+#define MQTT_SUPPORTS_TLS 1
+#endif
+#elif HAS_ETHERNET
+    using MQTTClient = EthernetClient;
+#else
+    using MQTTClient = void;
+#endif
+
+#if HAS_NETWORKING
+    std::unique_ptr<MQTTClient> mqttClient;
+#if MQTT_SUPPORTS_TLS
+    MQTTClientTLS mqttClientTLS;
+#endif
+    PubSubClient pubSub;
+    explicit MQTT(std::unique_ptr<MQTTClient> mqttClient);
+#endif
+
     std::string cryptTopic = "/2/e/";   // msh/2/e/CHANNELID/NODEID
     std::string jsonTopic = "/2/json/"; // msh/2/json/CHANNELID/NODEID
     std::string mapTopic = "/2/map/";   // For protobuf-encoded MapReport messages
@@ -96,9 +109,9 @@ class MQTT : private concurrency::OSThread
     uint32_t map_position_precision = default_map_position_precision;
     uint32_t map_publish_interval_msecs = default_map_publish_interval_secs * 1000;
 
-    /** return true if we have a channel that wants uplink/downlink or map reporting is enabled
+    /** Attempt to connect to server if necessary
      */
-    bool wantsLink() const;
+    void reconnect();
 
     /** Tell the server what subscriptions we want (based on channels.downlink_enabled)
      */
@@ -106,6 +119,8 @@ class MQTT : private concurrency::OSThread
 
     /// Callback for direct mqtt subscription messages
     static void mqttCallback(char *topic, byte *payload, unsigned int length);
+
+    static bool isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTClient *client);
 
     /// Called when a new publish arrives from the MQTT server
     void onReceive(char *topic, byte *payload, size_t length);
@@ -116,13 +131,6 @@ class MQTT : private concurrency::OSThread
 
     // Check if we should report unencrypted information about our node for consumption by a map
     void perhapsReportToMap();
-
-    // returns true if this is a valid JSON envelope which we accept on downlink
-    bool isValidJsonEnvelope(JSONObject &json);
-
-    /// Determines if the given address is a private IPv4 address, i.e. not routable on the public internet.
-    /// These are the ranges: 127.0.0.1, 10.0.0.0-10.255.255.255, 172.16.0.0-172.31.255.255, 192.168.0.0-192.168.255.255.
-    bool isPrivateIpAddress(const char address[]);
 
     /// Return 0 if sleep is okay, veto sleep if we are connected to pubsub server
     // int preflightSleepCb(void *unused = NULL) { return pubSub.connected() ? 1 : 0; }

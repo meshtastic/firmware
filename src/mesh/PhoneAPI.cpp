@@ -12,6 +12,8 @@
 #include "PhoneAPI.h"
 #include "PowerFSM.h"
 #include "RadioInterface.h"
+#include "Router.h"
+#include "SPILock.h"
 #include "TypeConversions.h"
 #include "main.h"
 #include "xmodem.h"
@@ -54,7 +56,9 @@ void PhoneAPI::handleStartConfig()
     // even if we were already connected - restart our state machine
     state = STATE_SEND_MY_INFO;
     pauseBluetoothLogging = true;
+    spiLock->lock();
     filesManifest = getFiles("/", 10);
+    spiLock->unlock();
     LOG_DEBUG("Got %d files in manifest", filesManifest.size());
 
     LOG_INFO("Start API client config");
@@ -164,6 +168,7 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
  *
  * Our sending states progress in the following sequence (the client apps ASSUME THIS SEQUENCE, DO NOT CHANGE IT):
     STATE_SEND_MY_INFO, // send our my info record
+    STATE_SEND_UIDATA,
     STATE_SEND_OWN_NODEINFO,
     STATE_SEND_METADATA,
     STATE_SEND_CHANNELS
@@ -188,7 +193,6 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
     case STATE_SEND_NOTHING:
         LOG_DEBUG("FromRadio=STATE_SEND_NOTHING");
         break;
-
     case STATE_SEND_MY_INFO:
         LOG_DEBUG("FromRadio=STATE_SEND_MY_INFO");
         // If the user has specified they don't want our node to share its location, make sure to tell the phone
@@ -196,9 +200,16 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         fromRadioScratch.which_payload_variant = meshtastic_FromRadio_my_info_tag;
         strncpy(myNodeInfo.pio_env, optstr(APP_ENV), sizeof(myNodeInfo.pio_env));
         fromRadioScratch.my_info = myNodeInfo;
-        state = STATE_SEND_OWN_NODEINFO;
+        state = STATE_SEND_UIDATA;
 
         service->refreshLocalMeshNode(); // Update my NodeInfo because the client will be asking for it soon.
+        break;
+
+    case STATE_SEND_UIDATA:
+        LOG_INFO("getFromRadio=STATE_SEND_UIDATA");
+        fromRadioScratch.which_payload_variant = meshtastic_FromRadio_deviceuiConfig_tag;
+        fromRadioScratch.deviceuiConfig = uiconfig;
+        state = STATE_SEND_OWN_NODEINFO;
         break;
 
     case STATE_SEND_OWN_NODEINFO: {
@@ -283,6 +294,9 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         case meshtastic_Config_sessionkey_tag:
             LOG_DEBUG("Send config: sessionkey");
             fromRadioScratch.config.which_payload_variant = meshtastic_Config_sessionkey_tag;
+            break;
+        case meshtastic_Config_device_ui_tag: // NOOP!
+            fromRadioScratch.config.which_payload_variant = meshtastic_Config_device_ui_tag;
             break;
         default:
             LOG_ERROR("Unknown config type %d", config_state);
@@ -518,6 +532,7 @@ bool PhoneAPI::available()
     case STATE_SEND_NOTHING:
         return false;
     case STATE_SEND_MY_INFO:
+    case STATE_SEND_UIDATA:
     case STATE_SEND_CHANNELS:
     case STATE_SEND_CONFIG:
     case STATE_SEND_MODULECONFIG:
@@ -626,6 +641,11 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
         Throttle::isWithinTimespanMs(lastPortNumToRadio[p.decoded.portnum], THIRTY_SECONDS_MS)) {
         LOG_WARN("Rate limit portnum %d", p.decoded.portnum);
         sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "TraceRoute can only be sent once every 30 seconds");
+        meshtastic_QueueStatus qs = router->getQueueStatus();
+        service->sendQueueStatusToPhone(qs, 0, p.id);
+        return false;
+    } else if (p.decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP && isBroadcast(p.to) && p.hop_limit > 0) {
+        sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "Multi-hop traceroute to broadcast address is not allowed");
         meshtastic_QueueStatus qs = router->getQueueStatus();
         service->sendQueueStatusToPhone(qs, 0, p.id);
         return false;

@@ -32,6 +32,11 @@
 #include <WiFi.h>
 #endif
 
+#if HAS_ETHERNET && defined(USE_WS5500)
+#include <ETHClass2.h>
+#define ETH ETH2
+#endif // HAS_ETHERNET
+
 #endif
 
 #ifndef DELAY_FOREVER
@@ -72,8 +77,9 @@ static const uint8_t ext_chrg_detect_value = EXT_CHRG_DETECT_VALUE;
 #endif
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(ARCH_PORTDUINO)
-INA260Sensor ina260Sensor;
 INA219Sensor ina219Sensor;
+INA226Sensor ina226Sensor;
+INA260Sensor ina260Sensor;
 INA3221Sensor ina3221Sensor;
 #endif
 
@@ -86,7 +92,7 @@ MAX17048Sensor max17048Sensor;
 #endif
 #endif
 
-#if HAS_RAKPROT && !defined(ARCH_PORTDUINO)
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && HAS_RAKPROT && !defined(ARCH_PORTDUINO)
 RAK9154Sensor rak9154Sensor;
 #endif
 
@@ -242,7 +248,8 @@ class AnalogBatteryLevel : public HasBatteryLevel
     virtual uint16_t getBattVoltage() override
     {
 
-#if defined(HAS_RAKPROT) && !defined(ARCH_PORTDUINO) && !defined(HAS_PMU)
+#if HAS_TELEMETRY && defined(HAS_RAKPROT) && !defined(ARCH_PORTDUINO) && !defined(HAS_PMU) &&                                    \
+    !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
         if (hasRAK()) {
             return getRAKVoltage();
         }
@@ -373,6 +380,20 @@ class AnalogBatteryLevel : public HasBatteryLevel
     // if we have a integrated device with a battery, we can assume that the battery is always connected
 #ifdef BATTERY_IMMUTABLE
     virtual bool isBatteryConnect() override { return true; }
+#elif defined(ADC_V)
+    virtual bool isBatteryConnect() override
+    {
+        int lastReading = digitalRead(ADC_V);
+        // 判断值是否变化
+        for (int i = 2; i < 500; i++) {
+            int reading = digitalRead(ADC_V);
+            if (reading != lastReading) {
+                return false; // 有变化，USB供电, 没接电池
+            }
+        }
+
+        return true;
+    }
 #else
     virtual bool isBatteryConnect() override { return getBatteryPercent() != -1; }
 #endif
@@ -384,7 +405,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
     virtual bool isVbusIn() override
     {
 #ifdef EXT_PWR_DETECT
-#ifdef HELTEC_CAPSULE_SENSOR_V3
+#if defined(HELTEC_CAPSULE_SENSOR_V3) || defined(HELTEC_SENSOR_HUB)
         // if external powered that pin will be pulled down
         if (digitalRead(EXT_PWR_DETECT) == LOW) {
             return true;
@@ -405,7 +426,8 @@ class AnalogBatteryLevel : public HasBatteryLevel
     /// we can't be smart enough to say 'full'?
     virtual bool isCharging() override
     {
-#if defined(HAS_RAKPROT) && !defined(ARCH_PORTDUINO) && !defined(HAS_PMU)
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && defined(HAS_RAKPROT) && !defined(ARCH_PORTDUINO) &&             \
+    !defined(HAS_PMU)
         if (hasRAK()) {
             return (rak9154Sensor.isCharging()) ? OptTrue : OptFalse;
         }
@@ -413,7 +435,20 @@ class AnalogBatteryLevel : public HasBatteryLevel
 #ifdef EXT_CHRG_DETECT
         return digitalRead(EXT_CHRG_DETECT) == ext_chrg_detect_value;
 #else
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) &&           \
+    !defined(DISABLE_INA_CHARGING_DETECTION)
+        if (hasINA()) {
+            // get current flow from INA sensor - negative value means power flowing into the battery
+            // default assuming  BATTERY+  <--> INA_VIN+ <--> SHUNT RESISTOR <--> INA_VIN- <--> LOAD
+            LOG_DEBUG("Using INA on I2C addr 0x%x for charging detection", config.power.device_battery_ina_address);
+#if defined(INA_CHARGING_DETECTION_INVERT)
+            return getINACurrent() > 0;
+#else
+            return getINACurrent() < 0;
+#endif
+        }
         return isBatteryConnect() && isVbusIn();
+#endif
 #endif
     }
 
@@ -433,7 +468,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
     float last_read_value = (OCV[NUM_OCV_POINTS - 1] * NUM_CELLS);
     uint32_t last_read_time_ms = 0;
 
-#if defined(HAS_RAKPROT)
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && defined(HAS_RAKPROT)
 
     uint16_t getRAKVoltage() { return rak9154Sensor.getBusVoltageMv(); }
 
@@ -450,12 +485,29 @@ class AnalogBatteryLevel : public HasBatteryLevel
     {
         if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA219].first == config.power.device_battery_ina_address) {
             return ina219Sensor.getBusVoltageMv();
+        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA226].first ==
+                   config.power.device_battery_ina_address) {
+            return ina226Sensor.getBusVoltageMv();
         } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA260].first ==
                    config.power.device_battery_ina_address) {
             return ina260Sensor.getBusVoltageMv();
         } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA3221].first ==
                    config.power.device_battery_ina_address) {
             return ina3221Sensor.getBusVoltageMv();
+        }
+        return 0;
+    }
+
+    int16_t getINACurrent()
+    {
+        if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA219].first == config.power.device_battery_ina_address) {
+            return ina219Sensor.getCurrentMa();
+        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA226].first ==
+                   config.power.device_battery_ina_address) {
+            return ina226Sensor.getCurrentMa();
+        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA3221].first ==
+                   config.power.device_battery_ina_address) {
+            return ina3221Sensor.getCurrentMa();
         }
         return 0;
     }
@@ -469,6 +521,10 @@ class AnalogBatteryLevel : public HasBatteryLevel
             if (!ina219Sensor.isInitialized())
                 return ina219Sensor.runOnce() > 0;
             return ina219Sensor.isRunning();
+        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA226].first ==
+                   config.power.device_battery_ina_address) {
+            if (!ina226Sensor.isInitialized())
+                return ina226Sensor.runOnce() > 0;
         } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA260].first ==
                    config.power.device_battery_ina_address) {
             if (!ina260Sensor.isInitialized())
@@ -499,7 +555,7 @@ Power::Power() : OSThread("Power")
 bool Power::analogInit()
 {
 #ifdef EXT_PWR_DETECT
-#ifdef HELTEC_CAPSULE_SENSOR_V3
+#if defined(HELTEC_CAPSULE_SENSOR_V3) || defined(HELTEC_SENSOR_HUB)
     pinMode(EXT_PWR_DETECT, INPUT_PULLUP);
 #else
     pinMode(EXT_PWR_DETECT, INPUT);
@@ -626,12 +682,12 @@ void Power::readPowerStatus()
     int8_t batteryChargePercent = -1;
     OptionalBool usbPowered = OptUnknown;
     OptionalBool hasBattery = OptUnknown; // These must be static because NRF_APM code doesn't run every time
-    OptionalBool isCharging = OptUnknown;
+    OptionalBool isChargingNow = OptUnknown;
 
     if (batteryLevel) {
         hasBattery = batteryLevel->isBatteryConnect() ? OptTrue : OptFalse;
         usbPowered = batteryLevel->isVbusIn() ? OptTrue : OptFalse;
-        isCharging = batteryLevel->isCharging() ? OptTrue : OptFalse;
+        isChargingNow = batteryLevel->isCharging() ? OptTrue : OptFalse;
         if (hasBattery) {
             batteryVoltageMv = batteryLevel->getBattVoltage();
             // If the AXP192 returns a valid battery percentage, use it
@@ -660,15 +716,15 @@ void Power::readPowerStatus()
 
     // If changed to DISCONNECTED
     if (nrf_usb_state == NRFX_POWER_USB_STATE_DISCONNECTED)
-        isCharging = usbPowered = OptFalse;
+        isChargingNow = usbPowered = OptFalse;
     // If changed to CONNECTED / READY
     else
-        isCharging = usbPowered = OptTrue;
+        isChargingNow = usbPowered = OptTrue;
 
 #endif
 
     // Notify any status instances that are observing us
-    const PowerStatus powerStatus2 = PowerStatus(hasBattery, usbPowered, isCharging, batteryVoltageMv, batteryChargePercent);
+    const PowerStatus powerStatus2 = PowerStatus(hasBattery, usbPowered, isChargingNow, batteryVoltageMv, batteryChargePercent);
     LOG_DEBUG("Battery: usbPower=%d, isCharging=%d, batMv=%d, batPct=%d", powerStatus2.getHasUSB(), powerStatus2.getIsCharging(),
               powerStatus2.getBatteryVoltageMv(), powerStatus2.getBatteryChargePercent());
     newStatus.notifyObservers(&powerStatus2);
@@ -714,6 +770,7 @@ void Power::readPowerStatus()
     // If we have a battery at all and it is less than 0%, force deep sleep if we have more than 10 low readings in
     // a row. NOTE: min LiIon/LiPo voltage is 2.0 to 2.5V, current OCV min is set to 3100 that is large enough.
     //
+
     if (batteryLevel && powerStatus2.getHasBattery() && !powerStatus2.getHasUSB()) {
         if (batteryLevel->getBattVoltage() < OCV[NUM_OCV_POINTS - 1]) {
             low_voltage_counter++;

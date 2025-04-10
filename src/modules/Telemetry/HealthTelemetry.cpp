@@ -1,6 +1,6 @@
 #include "configuration.h"
 
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(ARCH_PORTDUINO)
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !MESHTASTIC_EXCLUDE_HEALTH_TELEMETRY && !defined(ARCH_PORTDUINO)
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "Default.h"
@@ -62,7 +62,7 @@ int32_t HealthTelemetryModule::runOnce()
             if (max30102Sensor.hasSensor())
                 result = max30102Sensor.runOnce();
         }
-        return result;
+        return result == UINT32_MAX ? disable() : setStartDelay();
     } else {
         // if we somehow got to a second run of this module with measurement disabled, then just wait forever
         if (!moduleConfig.telemetry.health_measurement_enabled) {

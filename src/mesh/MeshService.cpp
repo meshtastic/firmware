@@ -88,8 +88,16 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
     } else if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !nodeDB->getMeshNode(mp->from)->has_user &&
                nodeInfoModule && !isPreferredRebroadcaster && !nodeDB->isFull()) {
         if (airTime->isTxAllowedChannelUtil(true)) {
-            LOG_INFO("Heard new node on ch. %d, send NodeInfo and ask for response", mp->channel);
-            nodeInfoModule->sendOurNodeInfo(mp->from, true, mp->channel);
+            // Hops used by the request. If somebody in between running modified firmware modified it, ignore it
+            auto hopStart = mp->hop_start;
+            auto hopLimit = mp->hop_limit;
+            uint8_t hopsUsed = hopStart < hopLimit ? config.lora.hop_limit : hopStart - hopLimit;
+            if (hopsUsed > config.lora.hop_limit + 2) {
+                LOG_DEBUG("Skip send NodeInfo: %d hops away is too far away", hopsUsed);
+            } else {
+                LOG_INFO("Heard new node on ch. %d, send NodeInfo and ask for response", mp->channel);
+                nodeInfoModule->sendOurNodeInfo(mp->from, true, mp->channel);
+            }
         } else {
             LOG_DEBUG("Skip sending NodeInfo > 25%% ch. util");
         }
@@ -117,17 +125,15 @@ void MeshService::loop()
 }
 
 /// The radioConfig object just changed, call this to force the hw to change to the new settings
-bool MeshService::reloadConfig(int saveWhat)
+void MeshService::reloadConfig(int saveWhat)
 {
     // If we can successfully set this radio to these settings, save them to disk
 
     // This will also update the region as needed
-    bool didReset = nodeDB->resetRadioConfig(); // Don't let the phone send us fatally bad settings
+    nodeDB->resetRadioConfig(); // Don't let the phone send us fatally bad settings
 
     configChanged.notifyObservers(NULL); // This will cause radio hardware to change freqs etc
     nodeDB->saveToDisk(saveWhat);
-
-    return didReset;
 }
 
 /// The owner User record just got updated, update our node DB and broadcast the info into the mesh
@@ -173,7 +179,9 @@ void MeshService::handleToRadio(meshtastic_MeshPacket &p)
         return;
     }
 #endif
-    p.from = 0; // We don't let phones assign nodenums to their sent messages
+    p.from = 0;                          // We don't let clients assign nodenums to their sent messages
+    p.next_hop = NO_NEXT_HOP_PREFERENCE; // We don't let clients assign next_hop to their sent messages
+    p.relay_node = NO_RELAY_NODE;        // We don't let clients assign relay_node to their sent messages
 
     if (p.id == 0)
         p.id = generatePacketId(); // If the phone didn't supply one, then pick one
@@ -301,7 +309,10 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
         }
     }
 
-    assert(toPhoneQueue.enqueue(p, 0));
+    if (toPhoneQueue.enqueue(p, 0) == false) {
+        LOG_CRIT("Failed to queue a packet into toPhoneQueue!");
+        abort();
+    }
     fromNum++;
 }
 
@@ -315,7 +326,10 @@ void MeshService::sendMqttMessageToClientProxy(meshtastic_MqttClientProxyMessage
             releaseMqttClientProxyMessageToPool(d);
     }
 
-    assert(toPhoneMqttProxyQueue.enqueue(m, 0));
+    if (toPhoneMqttProxyQueue.enqueue(m, 0) == false) {
+        LOG_CRIT("Failed to queue a packet into toPhoneMqttProxyQueue!");
+        abort();
+    }
     fromNum++;
 }
 
@@ -329,7 +343,10 @@ void MeshService::sendClientNotification(meshtastic_ClientNotification *n)
             releaseClientNotificationToPool(d);
     }
 
-    assert(toPhoneClientNotificationQueue.enqueue(n, 0));
+    if (toPhoneClientNotificationQueue.enqueue(n, 0) == false) {
+        LOG_CRIT("Failed to queue a notification into toPhoneClientNotificationQueue!");
+        abort();
+    }
     fromNum++;
 }
 
