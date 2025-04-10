@@ -2,10 +2,10 @@
 
 E-Ink display driver
     - SSD1680
-    - Manufacturer: DKE
+    - Manufacturer: WISEVAST
     - Size: 2.13 inch
     - Resolution: 122px x 255px
-    - Flex connector marking: FPC-7519 rev.b
+    - Flex connector marking: Soldering connector, no connector is needed
 
 */
 
@@ -19,7 +19,7 @@ E-Ink display driver
 
 namespace NicheGraphics::Drivers
 {
-class MESHPOCKET_SSD1680 : public SSD16XX
+class LCMEN2R13ECC1 : public SSD16XX
 {
     // Display properties
   private:
@@ -28,7 +28,7 @@ class MESHPOCKET_SSD1680 : public SSD16XX
     static constexpr UpdateTypes supported = (UpdateTypes)(FULL | FAST);
 
   public:
-  MESHPOCKET_SSD1680() : SSD16XX(width, height, supported, 1) {} // Note: left edge of this display is offset by 1 byte
+  LCMEN2R13ECC1() : SSD16XX(width, height, supported, 1) {} // Note: left edge of this display is offset by 1 byte
 
   protected:
   virtual void update(uint8_t *imageData, UpdateTypes type) override;

@@ -176,16 +176,11 @@ bool EInkDisplay::connect()
 
 #elif defined(HELTEC_WIRELESS_PAPER_V1_0) || defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_VISION_MASTER_E213) ||             \
     defined(HELTEC_VISION_MASTER_E290) || defined(TLORA_T3S3_EPAPER) || defined(CROWPANEL_ESP32S3_5_EPAPER) ||                   \
-    defined(CROWPANEL_ESP32S3_4_EPAPER) || defined(CROWPANEL_ESP32S3_2_EPAPER) || defined(HELTEC_MESH_POCKET)
+    defined(CROWPANEL_ESP32S3_4_EPAPER) || defined(CROWPANEL_ESP32S3_2_EPAPER)
     {
-#if defined(HELTEC_MESH_POCKET)
-        hspi=&SPI1;
-        hspi->begin();
-#else
         // Start HSPI
         hspi = new SPIClass(HSPI);
         hspi->begin(PIN_EINK_SCLK, -1, PIN_EINK_MOSI, PIN_EINK_CS); // SCLK, MISO, MOSI, SS
-#endif
         // VExt already enabled in setup()
         // RTC GPIO hold disabled in setup()
 
@@ -221,6 +216,21 @@ bool EInkDisplay::connect()
         adafruitDisplay->init(115200, true, 40, false, SPI, SPISettings(4000000, MSBFIRST, SPI_MODE0));
         adafruitDisplay->setRotation(1);
         adafruitDisplay->setPartialWindow(0, 0, EINK_WIDTH, EINK_HEIGHT);
+    }
+#elif defined(HELTEC_MESH_POCKET)
+    {
+        spi1=&SPI1;
+        spi1->begin();
+        // VExt already enabled in setup()
+        // RTC GPIO hold disabled in setup()
+
+        // Create GxEPD2 objects
+        auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY, *spi1);
+        adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(*lowLevel);
+
+        // Init GxEPD2
+        adafruitDisplay->init();
+        adafruitDisplay->setRotation(3);
     }
 #endif
 

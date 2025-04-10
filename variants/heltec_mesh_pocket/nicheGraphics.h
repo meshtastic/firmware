@@ -21,7 +21,7 @@
 
 // Shared NicheGraphics components
 // --------------------------------
-#include "graphics/niche/Drivers/EInk/MESHPOCKET_SSD1680.h"
+#include "graphics/niche/Drivers/EInk/LCMEN2R13ECC1.h"
 #include "graphics/niche/Inputs/TwoButton.h"
 
 #include "graphics/niche/Fonts/FreeSans6pt7b.h"
@@ -34,15 +34,15 @@ void setupNicheGraphics()
 
     // SPI
     // -----------------------------
-    SPIClass *hspi=&SPI1;
-    hspi->begin();
-    // Display is connected to HSPI
+    SPIClass *spi1=&SPI1;
+    spi1->begin();
+    // Display is connected to SPI1
 
     // E-Ink Driver
     // -----------------------------
     // Use E-Ink driver
-    Drivers::EInk *driver = new Drivers::MESHPOCKET_SSD1680;
-    driver->begin(hspi, PIN_EINK_DC, PIN_EINK_CS, PIN_EINK_BUSY, PIN_EINK_RES);
+    Drivers::EInk *driver = new Drivers::LCMEN2R13ECC1;
+    driver->begin(spi1, PIN_EINK_DC, PIN_EINK_CS, PIN_EINK_BUSY, PIN_EINK_RES);
 
     // InkHUD
     // ----------------------------
@@ -69,7 +69,7 @@ void setupNicheGraphics()
     inkhud->persistence->settings.userTiles.maxCount = 2; // How many tiles can the display handle?
     inkhud->persistence->settings.rotation = 3;           // 270 degrees clockwise
     inkhud->persistence->settings.userTiles.count = 1;    // One tile only by default, keep things simple for new users
-    inkhud->persistence->settings.optionalMenuItems.nextTile = false; // Behavior handled by aux button instead
+    inkhud->persistence->settings.optionalMenuItems.nextTile = true;
 
     // Pick applets
     inkhud->addApplet("All Messages", new InkHUD::AllMessageApplet, true, true); // Activated, autoshown
