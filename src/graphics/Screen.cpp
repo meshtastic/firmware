@@ -1325,14 +1325,6 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     static uint32_t lastTime = 0, scrollStartDelay = 0, pauseStart = 0;
     static bool waitingToReset = false, scrollStarted = false;
 
-    // === Reset scroll state when entering screen ===
-    if (state->ticksSinceLastStateSwitch == 0) {
-        scrollY = 0;
-        scrollStartDelay = now;
-        lastTime = now;
-        waitingToReset = false;
-        scrollStarted = false;
-    }
     // === Smooth scrolling adjustment ===
     // You can tweak this divisor to change how smooth it scrolls.
     // Lower = smoother, but can feel slow.
