@@ -2189,6 +2189,7 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
         double lat2 = node->position.latitude_i * 1e-7;
         double lon2 = node->position.longitude_i * 1e-7;
 
+        // Haversine formula to calculate distance between two lat/lon points
         double earthRadiusKm = 6371.0;
         double dLat = (lat2 - lat1) * DEG_TO_RAD;
         double dLon = (lon2 - lon1) * DEG_TO_RAD;
@@ -2198,26 +2199,28 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
         double c = 2 * atan2(sqrt(a), sqrt(1 - a));
         double distanceKm = earthRadiusKm * c;
 
+        // Convert to imperial or metric string based on config
         if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
             double miles = distanceKm * 0.621371;
             if (miles < 0.1) {
-                snprintf(distStr, sizeof(distStr), "%dft", (int)(miles * 5280)); // show feet
+                snprintf(distStr, sizeof(distStr), "%dft", (int)(miles * 5280));
             } else if (miles < 10.0) {
-                snprintf(distStr, sizeof(distStr), "%.1fmi", miles); // 1 decimal
+                snprintf(distStr, sizeof(distStr), "%.1fmi", miles);
             } else {
-                snprintf(distStr, sizeof(distStr), "%dmi", (int)miles); // no decimal
+                snprintf(distStr, sizeof(distStr), "%dmi", (int)miles);
             }
         } else {
             if (distanceKm < 1.0) {
-                snprintf(distStr, sizeof(distStr), "%dm", (int)(distanceKm * 1000)); // show meters
+                snprintf(distStr, sizeof(distStr), "%dm", (int)(distanceKm * 1000));
             } else if (distanceKm < 10.0) {
-                snprintf(distStr, sizeof(distStr), "%.1fkm", distanceKm); // 1 decimal
+                snprintf(distStr, sizeof(distStr), "%.1fkm", distanceKm);
             } else {
-                snprintf(distStr, sizeof(distStr), "%dkm", (int)distanceKm); // no decimal
+                snprintf(distStr, sizeof(distStr), "%dkm", (int)distanceKm);
             }
         }
     }
 
+    // Render node name and distance
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
     display->drawStringMaxWidth(x, y, nameMaxWidth, nodeName);
@@ -2227,6 +2230,8 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
         display->drawString(x + columnWidth - offset, y, distStr);
     }
 }
+
+#ifdef USE_EINK
 
 // Public screen function: shows how recently nodes were heard
 static void drawLastHeardScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -2240,24 +2245,46 @@ static void drawHopSignalScreen(OLEDDisplay *display, OLEDDisplayUiState *state,
     drawNodeListScreen(display, state, x, y, "Hop|Sig", drawEntryHopSignal);
 }
 
+// Public screen function: shows distance to each node
 static void drawDistanceScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     drawNodeListScreen(display, state, x, y, "Distances", drawNodeDistance);
 }
 
-// Cycles Node list screens
-static EntryRenderer entryRenderers[] = {drawEntryLastHeard, drawEntryHopSignal};
+#endif // USE_EINK
 
+// Array of rendering functions to rotate through
+static EntryRenderer entryRenderers[] = {
+    drawEntryLastHeard,    // Shows time since last heard
+    drawEntryHopSignal,    // Shows hop count and signal bars
+    drawNodeDistance       // New: Shows physical distance
+};
+
+static const char *titles[] = {
+    "Last Heard",
+    "Hop|Sig",
+    "Distances"  // Corresponding title
+};
+
+// Count of total renderers (auto-sized)
 static const int NUM_RENDERERS = sizeof(entryRenderers) / sizeof(entryRenderers[0]);
+
+// Tracks last time a switch occurred
 static unsigned long lastSwitchTime = 0;
+
+// Index of the currently active renderer
 static int currentRendererIndex = 0;
+
+// How long to show each view (milliseconds)
 static const unsigned long RENDER_INTERVAL_MS = 2000;
 
+
+// Master function to draw the rotating node list screens
 static void drawCyclingNodeScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     unsigned long now = millis();
 
-    // ✅ Reset to first view on initial entry to screen
+    // Reset to first view on initial entry to screen
     if (state->ticksSinceLastStateSwitch == 0) {
         currentRendererIndex = 0;
         lastSwitchTime = now;
@@ -2269,11 +2296,13 @@ static void drawCyclingNodeScreen(OLEDDisplay *display, OLEDDisplayUiState *stat
         currentRendererIndex = (currentRendererIndex + 1) % NUM_RENDERERS;
     }
 
+    // Get the correct renderer and title for the current screen
     EntryRenderer currentRenderer = entryRenderers[currentRendererIndex];
-    const char *titles[] = {"Last Heard", "Hop|Sig"};
 
+    // Show the screen
     drawNodeListScreen(display, state, x, y, titles[currentRendererIndex], currentRenderer);
 }
+
 // Helper function: Draw a single node entry for Node List (Modified for Compass Screen)
 void drawEntryCompass(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth)
 {
@@ -3470,11 +3499,16 @@ void Screen::setFrames(FrameFocus focus)
         normalFrames[numframes++] = drawTextMessageFrame;
     }
 
+    
     normalFrames[numframes++] = drawDeviceFocused;
     normalFrames[numframes++] = drawCyclingNodeScreen;
-    // normalFrames[numframes++] = drawLastHeardScreen;
-    // normalFrames[numframes++] = drawHopSignalScreen;
+
+// Show detailed node views only on E-Ink builds
+#ifdef USE_EINK
+    normalFrames[numframes++] = drawLastHeardScreen;
+    normalFrames[numframes++] = drawHopSignalScreen;
     normalFrames[numframes++] = drawDistanceScreen;
+#endif
     normalFrames[numframes++] = drawNodeListWithCompasses;
     normalFrames[numframes++] = drawCompassAndLocationScreen;
     normalFrames[numframes++] = drawLoRaFocused;
