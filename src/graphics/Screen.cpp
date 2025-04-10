@@ -1923,7 +1923,7 @@ static int scrollIndex = 0;
 
 // Use dynamic timing based on mode
 unsigned long getModeCycleIntervalMs() {
-    return (currentMode == MODE_DISTANCE) ? 4000 : 2000;
+    return (currentMode == MODE_DISTANCE) ? 3000 : 2000;
 }
 
 // h! Calculates bearing between two lat/lon points (used for compass)
@@ -2283,21 +2283,30 @@ const char* getCurrentModeTitle()
 #ifndef USE_EINK
 static void drawDynamicNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+    // Static variables to track mode and duration
+    static NodeListMode lastRenderedMode = MODE_COUNT;
+    static unsigned long modeStartTime = 0;
+
     unsigned long now = millis();
 
-    // Always start with MODE_LAST_HEARD on screen entry
-    if (state->ticksSinceLastStateSwitch == 0) {
+    // On very first call (on boot or state enter)
+    if (lastRenderedMode == MODE_COUNT) {
         currentMode = MODE_LAST_HEARD;
-        lastModeSwitchTime = now;
+        modeStartTime = now;
     }
 
-    if (now - lastModeSwitchTime >= getModeCycleIntervalMs()) {
-        lastModeSwitchTime = now;
+    // Time to switch to next mode?
+    if (now - modeStartTime >= getModeCycleIntervalMs()) {
         currentMode = static_cast<NodeListMode>((currentMode + 1) % MODE_COUNT);
+        modeStartTime = now;
     }
 
+    // Render screen based on currentMode
     const char* title = getCurrentModeTitle();
     drawNodeListScreen(display, state, x, y, title, drawEntryDynamic);
+
+    // Track the last mode to avoid reinitializing modeStartTime
+    lastRenderedMode = currentMode;
 }
 #endif
 
