@@ -22,11 +22,17 @@ void LCMEN2R13ECC1::configScanning()
 //   the controller IC's OTP memory, when the update procedure begins.
 void LCMEN2R13ECC1::configWaveform()
 {
-    sendCommand(0x3C); // Border waveform:
-    sendData(0x85);
-
-    sendCommand(0x18); // Temperature sensor:
-    sendData(0x80);    // Use internal temperature sensor to select an appropriate refresh waveform
+    switch (updateType) {
+        case FAST:
+            sendCommand(0x3C); // Border waveform:
+            sendData(0x85);
+            break;
+    
+        case FULL:
+        default:
+            // From OTP memory
+            break;
+        }
 }
 
 void LCMEN2R13ECC1::configUpdateSequence()
@@ -57,35 +63,6 @@ void LCMEN2R13ECC1::detachFromUpdate()
     default:
         return beginPolling(100, 2500); // At least 2 seconds for full refresh
     }
-}
-
-void LCMEN2R13ECC1::update(uint8_t *imageData, UpdateTypes type)
-{
-    this->updateType = type;
-    this->buffer = imageData;
-
-    reset();
-
-    configFullscreen();
-    configScanning(); // Virtual, unused by base class
-    wait();
-
-    if (updateType == FULL) {
-        writeNewImage();
-        writeOldImage();
-    } else {
-        configVoltages(); // Virtual, unused by base class
-        configWaveform(); // Virtual, unused by base class
-        wait();
-        writeNewImage();
-    }
-
-    configUpdateSequence();
-    sendCommand(0x20); // Begin executing the update
-
-    // Let the update run async, on display hardware. Base class will poll completion, then finalize.
-    // For a blocking update, call await after update
-    detachFromUpdate();
 }
 
 #endif   // MESHTASTIC_INCLUDE_NICHE_GRAPHICS
