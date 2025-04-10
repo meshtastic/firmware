@@ -30,8 +30,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
 #endif
-#include "FSCommon.h"
 #include "ButtonThread.h"
+#include "FSCommon.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "error.h"
@@ -2498,8 +2498,6 @@ static void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int
     // Display Region and Radio Preset
     char regionradiopreset[25];
     const char *region = myRegion ? myRegion->name : NULL;
-    // const char *preset = (SCREEN_WIDTH > 128) ? "Preset" : "Prst";
-    // snprintf(regionradiopreset, sizeof(regionradiopreset), "%s: %s/%s", preset, region, mode);
     snprintf(regionradiopreset, sizeof(regionradiopreset), "%s/%s", region, mode);
     int textWidth = display->getStringWidth(regionradiopreset);
     int nameX = (SCREEN_WIDTH - textWidth) / 2;
@@ -2512,8 +2510,6 @@ static void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int
     snprintf(ourId, sizeof(ourId), "%02x%02x", dmac[4], dmac[5]);
 
     char shortnameble[35];
-    // snprintf(shortnameble, sizeof(shortnameble), "%s: %s/%s", "Short/BLE", haveGlyphs(owner.short_name) ? owner.short_name :
-    // "", ourId);
     snprintf(shortnameble, sizeof(shortnameble), "%s_%s", haveGlyphs(owner.short_name) ? owner.short_name : "", ourId);
     textWidth = display->getStringWidth(shortnameble);
     nameX = (SCREEN_WIDTH - textWidth) / 2;
@@ -2531,25 +2527,27 @@ static void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int
     // === Fourth Row: Channel Utilization ===
     const char *chUtil = "ChUtil:";
     char chUtilPercentage[10];
-    int desperatecenteringattempt = SCREEN_WIDTH / 2;
     snprintf(chUtilPercentage, sizeof(chUtilPercentage), "%2.0f%%", airTime->channelUtilizationPercent());
-    textWidth = display->getStringWidth(chUtil);
 
-    int chUtil_x = (SCREEN_WIDTH > 128) ? textWidth + 10 : textWidth + 5;
+    int chUtil_x = (SCREEN_WIDTH > 128) ? display->getStringWidth(chUtil) + 10 : display->getStringWidth(chUtil) + 5;
     int chUtil_y = compactFourthLine + 3;
 
-    int width = (SCREEN_WIDTH > 128) ? 100 : 50;
-    int height = (SCREEN_WIDTH > 128) ? 12 : 7;
-    int percent = airTime->channelUtilizationPercent();
-    int fillWidth = (width * percent) / 100;
-
-    display->drawString(x, compactFourthLine, chUtil);
-    display->drawRect(chUtil_x, chUtil_y, width, height);
-    if (fillWidth > 0) {
-        display->fillRect(chUtil_x + 1, chUtil_y + 1, fillWidth - 1, height - 2);
-    }
+    int chutil_bar_width = (SCREEN_WIDTH > 128) ? 100 : 50;
+    int chutil_bar_height = (SCREEN_WIDTH > 128) ? 12 : 7;
     int extraoffset = (SCREEN_WIDTH > 128) ? 6 : 3;
-    display->drawString(x + chUtil_x + width + extraoffset, compactFourthLine, chUtilPercentage);
+    int percent = airTime->channelUtilizationPercent();
+    int fillWidth = (chutil_bar_width * percent) / 100;
+
+    int centerofscreen = SCREEN_WIDTH / 2;
+    int total_line_content_width = (chUtil_x + chutil_bar_width + display->getStringWidth(chUtilPercentage) + extraoffset) / 2;
+    int starting_position = centerofscreen - total_line_content_width;
+
+    display->drawString(starting_position, compactFourthLine, chUtil);
+    display->drawRect(starting_position + chUtil_x, chUtil_y, chutil_bar_width, chutil_bar_height);
+    if (fillWidth > 0) {
+        display->fillRect(starting_position + chUtil_x + 1, chUtil_y + 1, fillWidth - 1, chutil_bar_height - 2);
+    }
+    display->drawString(starting_position + chUtil_x + chutil_bar_width + extraoffset, compactFourthLine, chUtilPercentage);
 }
 
 // ****************************
