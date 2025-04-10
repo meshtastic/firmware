@@ -297,6 +297,7 @@ bool CryptoEngine::setCryptoSharedSecret(meshtastic_UserLite_public_key_t pubkey
             }
             if (delta > oldestDelta) {
                 oldestKey = key;
+                oldestDelta = delta;
             }
         }
         sharedSecretCache.erase(oldestKey);
