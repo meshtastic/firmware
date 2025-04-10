@@ -65,8 +65,7 @@
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_POWER_TELEMETRY
 #include "modules/Telemetry/PowerTelemetry.h"
 #endif
-#if MESHTASTIC_INCLUDE_GENERIC_THREAD
-#warning INCLUDING GENERICTHREADMODULE
+#if !MESHTASTIC_EXCLUDE_GENERIC_THREAD_MODULE
 #include "modules/GenericThreadModule.h"
 #endif
 
