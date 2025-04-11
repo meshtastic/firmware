@@ -242,5 +242,18 @@ void SSD16XX::finalizeUpdate()
         sendCommand(0x7F); // Terminate image write without update
         wait();
     }
+
+    // Enter deep-sleep to save a few µA
+    // Waking from this requires that display's reset pin is broken out
+    if (pin_rst != 0xFF)
+        deepSleep();
+}
+
+// Enter a lower-power state
+// May only save a few µA..
+void SSD16XX::deepSleep()
+{
+    sendCommand(0x10); // Enter deep sleep
+    sendData(0x01);    // Mode 1: preserve image RAM
 }
 #endif // MESHTASTIC_INCLUDE_NICHE_GRAPHICS
