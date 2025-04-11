@@ -68,7 +68,7 @@
      31, // D16 P0.31 VBAT_ADC (Battery voltage)
  
      // D17 - GNSS control
-     35  // D17 P1.03 GNSS_RESET
+     35,  // D17 P1.03 GNSS_RESET
 
      //
      21, // D18 is P0.21 (QSPI_SCK)
