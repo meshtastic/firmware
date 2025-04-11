@@ -2137,14 +2137,16 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
 void drawEntryLastHeard(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth)
 {
     bool isLeftCol = (x < SCREEN_WIDTH / 2);
-    int timeOffset = (SCREEN_WIDTH > 128) ? (isLeftCol ? 41 : 45) : (isLeftCol ? 24 : 30);
+    int timeOffset = (SCREEN_WIDTH > 128) 
+        ? (isLeftCol ? 7 : 10)     // Offset for Wide Screens (Left Column:Right Column)
+        : (isLeftCol ? 3 : 7);    // Offset for Narrow Screens (Left Column:Right Column)
 
     String nodeName = getSafeNodeName(node);
 
     char timeStr[10];
     uint32_t seconds = sinceLastSeen(node);
     if (seconds == 0 || seconds == UINT32_MAX) {
-        snprintf(timeStr, sizeof(timeStr), "? ");
+        snprintf(timeStr, sizeof(timeStr), "?");
     } else {
         uint32_t minutes = seconds / 60, hours = minutes / 60, days = hours / 24;
         snprintf(timeStr, sizeof(timeStr), (days > 365 ? "?" : "%d%c"),
@@ -2159,7 +2161,10 @@ void drawEntryLastHeard(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
     display->drawString(x, y, nodeName);
-    display->drawString(x + columnWidth - timeOffset, y, timeStr);
+
+    int rightEdge = x + columnWidth - timeOffset;
+    int textWidth = display->getStringWidth(timeStr);
+    display->drawString(rightEdge - textWidth, y, timeStr);
 }
 
 // ****************************
@@ -2170,8 +2175,12 @@ void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
     bool isLeftCol = (x < SCREEN_WIDTH / 2);
 
     int nameMaxWidth = columnWidth - 25;
-    int barsOffset = (SCREEN_WIDTH > 128) ? (isLeftCol ? 26 : 30) : (isLeftCol ? 17 : 19);
-    int hopOffset = (SCREEN_WIDTH > 128) ? (isLeftCol ? 32 : 38) : (isLeftCol ? 18 : 20);
+    int barsOffset = (SCREEN_WIDTH > 128) 
+        ? (isLeftCol ? 16 : 20)     // Offset for Wide Screens (Left Column:Right Column)
+        : (isLeftCol ? 15 : 19);    // Offset for Narrow Screens (Left Column:Right Column)
+    int hopOffset = (SCREEN_WIDTH > 128) 
+        ? (isLeftCol ? 22 : 28)     // Offset for Wide Screens (Left Column:Right Column)
+        : (isLeftCol ? 18 : 20);    // Offset for Narrow Screens (Left Column:Right Column)
     int barsXOffset = columnWidth - barsOffset;
 
     String nodeName = getSafeNodeName(node);
@@ -2185,8 +2194,9 @@ void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
         snprintf(hopStr, sizeof(hopStr), "[%d]", node->hops_away);
 
     if (hopStr[0] != '\0') {
-        int hopX = x + columnWidth - hopOffset - display->getStringWidth(hopStr);
-        display->drawString(hopX, y, hopStr);
+        int rightEdge = x + columnWidth - hopOffset;
+        int textWidth = display->getStringWidth(hopStr);
+        display->drawString(rightEdge - textWidth, y, hopStr);
     }
 
     int bars = (node->snr > 5) ? 4 : (node->snr > 0) ? 3 : (node->snr > -5) ? 2 : (node->snr > -10) ? 1 : 0;
@@ -2231,19 +2241,33 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
 
         if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
             double miles = distanceKm * 0.621371;
-            if (miles < 0.1)
-                snprintf(distStr, sizeof(distStr), "%dft", (int)(miles * 5280));
-            else if (miles < 10.0)
-                snprintf(distStr, sizeof(distStr), "%.1fmi", miles);
-            else
-                snprintf(distStr, sizeof(distStr), "%dmi", (int)miles);
+            if (miles < 0.1) {
+                int feet = (int)(miles * 5280);
+                if (feet < 1000)
+                    snprintf(distStr, sizeof(distStr), "%dft", feet);
+                else
+                    snprintf(distStr, sizeof(distStr), "¼mi");  // 4-char max
+            } else {
+                int roundedMiles = (int)(miles + 0.5);
+                if (roundedMiles < 1000)
+                    snprintf(distStr, sizeof(distStr), "%dmi", roundedMiles);
+                else
+                    snprintf(distStr, sizeof(distStr), "999");  // Max display cap
+            }
         } else {
-            if (distanceKm < 1.0)
-                snprintf(distStr, sizeof(distStr), "%dm", (int)(distanceKm * 1000));
-            else if (distanceKm < 10.0)
-                snprintf(distStr, sizeof(distStr), "%.1fkm", distanceKm);
-            else
-                snprintf(distStr, sizeof(distStr), "%dkm", (int)distanceKm);
+            if (distanceKm < 1.0) {
+                int meters = (int)(distanceKm * 1000);
+                if (meters < 1000)
+                    snprintf(distStr, sizeof(distStr), "%dm", meters);
+                else
+                    snprintf(distStr, sizeof(distStr), "1k");
+            } else {
+                int km = (int)(distanceKm + 0.5);
+                if (km < 1000)
+                    snprintf(distStr, sizeof(distStr), "%dk", km);
+                else
+                    snprintf(distStr, sizeof(distStr), "999");
+            }
         }
     }
 
@@ -2252,8 +2276,13 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     display->drawStringMaxWidth(x, y, nameMaxWidth, nodeName);
 
     if (strlen(distStr) > 0) {
-        int offset = (SCREEN_WIDTH > 128) ? (isLeftCol ? 55 : 63) : (isLeftCol ? 32 : 37);
-        display->drawString(x + columnWidth - offset, y, distStr);
+        int offset = 
+            (SCREEN_WIDTH > 128) 
+                ? (isLeftCol ? 7 : 10) // Offset for Wide Screens (Left Column:Right Column)
+                : (isLeftCol ? 5 : 8);  // Offset for Narrow Screens (Left Column:Right Column)
+        int rightEdge = x + columnWidth - offset;
+        int textWidth = display->getStringWidth(distStr);
+        display->drawString(rightEdge - textWidth, y, distStr);
     }
 }
 
