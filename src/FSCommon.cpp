@@ -13,20 +13,27 @@
 #include "configuration.h"
 
 #ifdef HAS_SDCARD
+#include "SPILock.h"
 #include <SD.h>
 #include <SPI.h>
-
-#ifdef SDCARD_USE_SPI1
-SPIClass SPI1(HSPI);
-#define SDHandler SPI1
+#if defined(ARCH_ESP32)
+#if defined(SDCARD_USE_HSPI)
+SPIClass SDHandler = SPIClass(HSPI);
+#elif defined(SDCARD_USE_VSPI)
+SPIClass SDHandler = SPIClass(VSPI);
 #else
 #define SDHandler SPI
 #endif
-
+#elif defined(ARCH_NRF52)
+#if defined(SDCARD_USE_SPI1)
+#define SDHandler SPI1
+#elif defined(SDCARD_USE_SPI)
+#define SDHandler SPI
+#endif // NRF52 SPI or SPI1
+#endif // ESP32/NRF52
 #ifndef SD_SPI_FREQUENCY
 #define SD_SPI_FREQUENCY 4000000U
 #endif
-
 #endif // HAS_SDCARD
 
 /**
@@ -308,7 +315,13 @@ void setupSDCard()
 {
 #ifdef HAS_SDCARD
     concurrency::LockGuard g(spiLock);
+#if (defined(ARCH_ESP32) || defined(ARCH_NRF52))
+#if (defined(ARCH_ESP32))
     SDHandler.begin(SPI_SCK, SPI_MISO, SPI_MOSI);
+#elif (defined(ARCH_NRF52))
+    SDHandler.begin();
+#endif
+
     if (!SD.begin(SDCARD_CS, SDHandler, SD_SPI_FREQUENCY)) {
         LOG_DEBUG("No SD_MMC card detected");
         return;
@@ -318,20 +331,23 @@ void setupSDCard()
         LOG_DEBUG("No SD_MMC card attached");
         return;
     }
-    LOG_DEBUG("SD_MMC Card Type: ");
     if (cardType == CARD_MMC) {
-        LOG_DEBUG("MMC");
+        LOG_DEBUG("SD_MMC Card Type: MMC");
     } else if (cardType == CARD_SD) {
-        LOG_DEBUG("SDSC");
+        LOG_DEBUG("SD_MMC Card Type: SDSC");
     } else if (cardType == CARD_SDHC) {
-        LOG_DEBUG("SDHC");
+        LOG_DEBUG("SD_MMC Card Type: SDHC");
     } else {
-        LOG_DEBUG("UNKNOWN");
+        LOG_DEBUG("SD_MMC Card Type: UNKNOWN");
     }
 
     uint64_t cardSize = SD.cardSize() / (1024 * 1024);
     LOG_DEBUG("SD Card Size: %lu MB", (uint32_t)cardSize);
     LOG_DEBUG("Total space: %lu MB", (uint32_t)(SD.totalBytes() / (1024 * 1024)));
-    LOG_DEBUG("Used space: %lu MB", (uint32_t)(SD.usedBytes() / (1024 * 1024)));
+    LOG_INFO("Now scanning free clusters on SD card, this may take some time...");
+    delay(100);                                                                  // let serial print the above statement properly
+    LOG_DEBUG("Used space: %lu MB", (uint32_t)(SD.usedBytes() / (1024 * 1024))); // This might take some time during boot
+
+#endif
 #endif
 }
