@@ -8,6 +8,12 @@
   "[cpp]": {
     "editor.defaultFormatter": "trunk.io"
   },
+<<<<<<< HEAD
   "idf.pythonInstallPath": "/usr/bin/python3",
   "C_Cpp.errorSquiggles": "disabled"
+=======
+  "[powershell]": {
+    "editor.defaultFormatter": "ms-vscode.powershell"
+  }
+>>>>>>> master
 }

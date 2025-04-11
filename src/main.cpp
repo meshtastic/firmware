@@ -55,12 +55,12 @@ NimbleBluetooth *nimbleBluetooth = nullptr;
 NRF52Bluetooth *nrf52Bluetooth = nullptr;
 #endif
 
-#if HAS_WIFI
+#if HAS_WIFI || defined(USE_WS5500)
 #include "mesh/api/WiFiServerAPI.h"
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
 
-#if HAS_ETHERNET
+#if HAS_ETHERNET && !defined(USE_WS5500)
 #include "mesh/api/ethServerAPI.h"
 #include "mesh/eth/ethClient.h"
 #endif
@@ -212,6 +212,64 @@ const char *getDeviceName()
     return name;
 }
 
+#if defined(ELECROW_ThinkNode_M1) || defined(ELECROW_ThinkNode_M2)
+static int32_t ledBlinkCount = 0;
+
+static int32_t elecrowLedBlinker()
+{
+    // are we in alert buzzer mode?
+#if HAS_BUTTON
+    if (buttonThread->isBuzzing()) {
+        // blink LED three times for 3 seconds, then 3 times for a second, with one second pause
+        if (ledBlinkCount % 2) { // odd means LED OFF
+            ledBlink.set(false);
+            ledBlinkCount++;
+            if (ledBlinkCount >= 12)
+                ledBlinkCount = 0;
+            noTone(PIN_BUZZER);
+            return 1000;
+        } else {
+            if (ledBlinkCount < 6) {
+                ledBlink.set(true);
+                tone(PIN_BUZZER, 4000, 3000);
+                ledBlinkCount++;
+                return 3000;
+            } else {
+                ledBlink.set(true);
+                tone(PIN_BUZZER, 4000, 1000);
+                ledBlinkCount++;
+                return 1000;
+            }
+        }
+    } else {
+#endif
+        ledBlinkCount = 0;
+        if (config.device.led_heartbeat_disabled)
+            return 1000;
+
+        static bool ledOn;
+        // remain on when fully charged or discharging above 10%
+        if ((powerStatus->getIsCharging() && powerStatus->getBatteryChargePercent() >= 100) ||
+            (!powerStatus->getIsCharging() && powerStatus->getBatteryChargePercent() >= 10)) {
+            ledOn = true;
+        } else {
+            ledOn ^= 1;
+        }
+        ledBlink.set(ledOn);
+        // when charging, blink 0.5Hz square wave rate to indicate that
+        if (powerStatus->getIsCharging()) {
+            return 500;
+        }
+        // Blink rapidly when almost empty or if battery is not connected
+        if ((!powerStatus->getIsCharging() && powerStatus->getBatteryChargePercent() < 10) || !powerStatus->getHasBattery()) {
+            return 250;
+        }
+#if HAS_BUTTON
+    }
+#endif
+    return 1000;
+}
+#else
 static int32_t ledBlinker()
 {
     // Still set up the blinking (heartbeat) interval but skip code path below, so LED will blink if
@@ -227,6 +285,7 @@ static int32_t ledBlinker()
     // have a very sparse duty cycle of LED being on, unless charging, then blink 0.5Hz square wave rate to indicate that
     return powerStatus->getIsCharging() ? 1000 : (ledOn ? 1 : 1000);
 }
+#endif
 
 uint32_t timeLastPowered = 0;
 
@@ -262,6 +321,22 @@ void printInfo()
 #ifndef PIO_UNIT_TESTING
 void setup()
 {
+
+#if defined(PIN_POWER_EN)
+    pinMode(PIN_POWER_EN, OUTPUT);
+    digitalWrite(PIN_POWER_EN, HIGH);
+#endif
+
+#ifdef LED_POWER
+    pinMode(LED_POWER, OUTPUT);
+    digitalWrite(LED_POWER, HIGH);
+#endif
+
+#ifdef USER_LED
+    pinMode(USER_LED, OUTPUT);
+    digitalWrite(USER_LED, LOW);
+#endif
+
 #if defined(T_DECK)
     // GPIO10 manages all peripheral power supplies
     // Turn on peripheral power immediately after MUC starts.
@@ -324,13 +399,6 @@ void setup()
     LOG_INFO("\n\n//\\ E S H T /\\ S T / C\n");
 
     initDeepSleep();
-
-    // power on peripherals
-#if defined(PIN_POWER_EN)
-    pinMode(PIN_POWER_EN, OUTPUT);
-    digitalWrite(PIN_POWER_EN, HIGH);
-    // digitalWrite(PIN_POWER_EN1, INPUT);
-#endif
 
 #if defined(LORA_TCXO_GPIO)
     pinMode(LORA_TCXO_GPIO, OUTPUT);
@@ -395,7 +463,12 @@ void setup()
 
     OSThread::setup();
 
+#if defined(ELECROW_ThinkNode_M1) || defined(ELECROW_ThinkNode_M2)
+    // The ThinkNodes have their own blink logic
+    ledPeriodic = new Periodic("Blink", elecrowLedBlinker);
+#else
     ledPeriodic = new Periodic("Blink", ledBlinker);
+#endif
 
     fsInit();
 
@@ -568,6 +641,10 @@ void setup()
             // assign an arbitrary value to distinguish from other models
             kb_model = 0x37;
             break;
+        case ScanI2C::DeviceType::TCA8418KB:
+            // assign an arbitrary value to distinguish from other models
+            kb_model = 0x84;
+            break;
         default:
             // use this as default since it's also just zero
             LOG_WARN("kb_info.type is unknown(0x%02x), setting kb_model=0x00", kb_info.type);
@@ -583,9 +660,9 @@ void setup()
  * "found".
  */
 
-// Only one supported RGB LED currently
-#ifdef HAS_NCP5623
-    rgb_found = i2cScanner->find(ScanI2C::DeviceType::NCP5623);
+// Two supported RGB LED currently
+#ifdef HAS_RGB_LED
+    rgb_found = i2cScanner->firstRGBLED();
 #endif
 
 #ifdef HAS_TPS65233
@@ -641,6 +718,8 @@ void setup()
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::MAX30102, meshtastic_TelemetrySensorType_MAX30102);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::CGRADSENS, meshtastic_TelemetrySensorType_RADSENS);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::DFROBOT_RAIN, meshtastic_TelemetrySensorType_DFROBOT_RAIN);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::LTR390UV, meshtastic_TelemetrySensorType_LTR390UV);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::DPS310, meshtastic_TelemetrySensorType_DPS310);
 
     i2cScanner.reset();
 #endif
@@ -820,6 +899,13 @@ void setup()
 #ifdef HAS_UDP_MULTICAST
     LOG_DEBUG("Start multicast thread");
     udpThread = new UdpMulticastThread();
+#ifdef ARCH_PORTDUINO
+    // FIXME: portduino does not ever call onNetworkConnected so call it here because I don't know what happen if I call
+    // onNetworkConnected there
+    if (config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST) {
+        udpThread->start();
+    }
+#endif
 #endif
     service = new MeshService();
     service->init();
@@ -1016,6 +1102,22 @@ void setup()
 #endif
 
 #if defined(USE_SX1268)
+#if defined(SX126X_DIO3_TCXO_VOLTAGE) && defined(TCXO_OPTIONAL)
+    if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
+        // try using the specified TCXO voltage
+        auto *sxIf = new SX1268Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
+        sxIf->setTCXOVoltage(SX126X_DIO3_TCXO_VOLTAGE);
+        if (!sxIf->init()) {
+            LOG_WARN("No SX1268 radio with TCXO, Vref %fV", SX126X_DIO3_TCXO_VOLTAGE);
+            delete sxIf;
+            rIf = NULL;
+        } else {
+            LOG_INFO("SX1268 init success, TCXO, Vref %fV", SX126X_DIO3_TCXO_VOLTAGE);
+            rIf = sxIf;
+            radioType = SX1268_RADIO;
+        }
+    }
+#endif
     if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
         rIf = new SX1268Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
         if (!rIf->init()) {
@@ -1207,8 +1309,12 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 #if MESHTASTIC_EXCLUDE_AUDIO
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_AUDIO_CONFIG;
 #endif
-#if !HAS_SCREEN || NO_EXT_GPIO
-    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_CANNEDMSG_CONFIG | meshtastic_ExcludedModules_EXTNOTIF_CONFIG;
+// Option to explicitly include canned messages for edge cases, e.g. niche graphics
+#if (!HAS_SCREEN && NO_EXT_GPIO) && !MESHTASTIC_INCLUDE_CANNEDMSG
+    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_CANNEDMSG_CONFIG;
+#endif
+#if NO_EXT_GPIO
+    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_EXTNOTIF_CONFIG;
 #endif
 // Only edge case here is if we apply this a device with built in Accelerometer and want to detect interrupts
 // We'll have to macro guard against those targets potentially
@@ -1222,8 +1328,21 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 #ifndef ARCH_ESP32
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_PAXCOUNTER_CONFIG;
 #endif
-#if !defined(HAS_NCP5623) && !defined(RGBLED_RED) && !defined(HAS_NEOPIXEL) && !defined(UNPHONE) && !RAK_4631
+#if !defined(HAS_RGB_LED) && !RAK_4631
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_AMBIENTLIGHTING_CONFIG;
+#endif
+
+// No bluetooth on these targets (yet):
+// Pico W / 2W may get it at some point
+// Portduino and ESP32-C6 are excluded because we don't have a working bluetooth stacks integrated yet.
+#if defined(ARCH_RP2040) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32WL) || defined(CONFIG_IDF_TARGET_ESP32C6)
+    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_BLUETOOTH_CONFIG;
+#endif
+
+#if defined(ARCH_NRF52) && !HAS_ETHERNET // nrf52 doesn't have network unless it's a RAK ethernet gateway currently
+    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_NETWORK_CONFIG; // No network on nRF52
+#elif defined(ARCH_RP2040) && !HAS_WIFI && !HAS_ETHERNET
+    deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_NETWORK_CONFIG; // No network on RP2040
 #endif
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
@@ -1274,5 +1393,4 @@ void loop()
         mainDelay.delay(delayMsec);
     }
 }
-
 #endif

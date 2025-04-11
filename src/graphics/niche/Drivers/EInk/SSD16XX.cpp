@@ -30,18 +30,33 @@ void SSD16XX::begin(SPIClass *spi, uint8_t pin_dc, uint8_t pin_cs, uint8_t pin_b
     pinMode(pin_busy, INPUT);
 
     // If using a reset pin, hold high
-    // Reset is active low for solmon systech ICs
+    // Reset is active low for Solomon Systech ICs
     if (pin_rst != 0xFF)
         pinMode(pin_rst, INPUT_PULLUP);
 
     reset();
 }
 
-void SSD16XX::wait()
+// Poll the displays busy pin until an operation is complete
+// Timeout and set fail flag if something went wrong and the display got stuck
+void SSD16XX::wait(uint32_t timeout)
 {
+    // Don't bother waiting if part of the update sequence failed
+    // In that situation, we're now just failing-through the process, until we can try again with next update.
+    if (failed)
+        return;
+
+    uint32_t startMs = millis();
+
     // Busy when HIGH
-    while (digitalRead(pin_busy) == HIGH)
+    while (digitalRead(pin_busy) == HIGH) {
+        // Check for timeout
+        if (millis() - startMs > timeout) {
+            failed = true;
+            break;
+        }
         yield();
+    }
 }
 
 void SSD16XX::reset()
@@ -50,8 +65,9 @@ void SSD16XX::reset()
     if (pin_rst != 0xFF) {
         pinMode(pin_rst, OUTPUT);
         digitalWrite(pin_rst, LOW);
-        delay(50);
-        pinMode(pin_rst, INPUT_PULLUP);
+        delay(10);
+        digitalWrite(pin_rst, HIGH);
+        delay(10);
         wait();
     }
 
@@ -61,6 +77,11 @@ void SSD16XX::reset()
 
 void SSD16XX::sendCommand(const uint8_t command)
 {
+    // Abort if part of the update sequence failed
+    // This will unlock again once we have failed-through the entire process
+    if (failed)
+        return;
+
     spi->beginTransaction(spiSettings);
     digitalWrite(pin_dc, LOW); // DC pin low indicates command
     digitalWrite(pin_cs, LOW);
@@ -72,18 +93,16 @@ void SSD16XX::sendCommand(const uint8_t command)
 
 void SSD16XX::sendData(uint8_t data)
 {
-    // spi->beginTransaction(spiSettings);
-    // digitalWrite(pin_dc, HIGH); // DC pin HIGH indicates data, instead of command
-    // digitalWrite(pin_cs, LOW);
-    // spi->transfer(data);
-    // digitalWrite(pin_cs, HIGH);
-    // digitalWrite(pin_dc, HIGH);
-    // spi->endTransaction();
     sendData(&data, 1);
 }
 
 void SSD16XX::sendData(const uint8_t *data, uint32_t size)
 {
+    // Abort if part of the update sequence failed
+    // This will unlock again once we have failed-through the entire process
+    if (failed)
+        return;
+
     spi->beginTransaction(spiSettings);
     digitalWrite(pin_dc, HIGH); // DC pin HIGH indicates data, instead of command
     digitalWrite(pin_cs, LOW);
@@ -223,5 +242,18 @@ void SSD16XX::finalizeUpdate()
         sendCommand(0x7F); // Terminate image write without update
         wait();
     }
+
+    // Enter deep-sleep to save a few µA
+    // Waking from this requires that display's reset pin is broken out
+    if (pin_rst != 0xFF)
+        deepSleep();
+}
+
+// Enter a lower-power state
+// May only save a few µA..
+void SSD16XX::deepSleep()
+{
+    sendCommand(0x10); // Enter deep sleep
+    sendData(0x01);    // Mode 1: preserve image RAM
 }
 #endif // MESHTASTIC_INCLUDE_NICHE_GRAPHICS

@@ -19,7 +19,7 @@ Different NicheGraphics UIs and different hardware variants will each have their
 
 // InkHUD-specific components
 // ---------------------------
-#include "graphics/niche/InkHUD/WindowManager.h"
+#include "graphics/niche/InkHUD/InkHUD.h"
 
 // Applets
 #include "graphics/niche/InkHUD/Applets/User/AllMessage/AllMessageApplet.h"
@@ -62,66 +62,65 @@ void setupNicheGraphics()
     // InkHUD
     // ----------------------------
 
-    InkHUD::WindowManager *windowManager = InkHUD::WindowManager::getInstance();
+    InkHUD::InkHUD *inkhud = InkHUD::InkHUD::getInstance();
 
     // Set the driver
-    windowManager->setDriver(driver);
+    inkhud->setDriver(driver);
 
     // Set how many FAST updates per FULL update
     // Set how unhealthy additional FAST updates beyond this number are
-    windowManager->setDisplayResilience(7, 1.5);
+    inkhud->setDisplayResilience(7, 1.5);
 
     // Prepare fonts
-    InkHUD::AppletFont largeFont(FreeSans9pt7b);
-    InkHUD::AppletFont smallFont(FreeSans6pt7b);
+    InkHUD::Applet::fontLarge = InkHUD::AppletFont(FreeSans9pt7b);
+    InkHUD::Applet::fontSmall = InkHUD::AppletFont(FreeSans6pt7b);
     /*
     // Font localization demo: Cyrillic
-    InkHUD::AppletFont smallFont(FreeSans6pt8bCyrillic);
-    smallFont.addSubstitutionsWin1251();
+    InkHUD::Applet::fontSmall = InkHUD::AppletFont(FreeSans6pt8bCyrillic);
+    InkHUD::Applet::fontSmall.addSubstitutionsWin1251();
     */
-    InkHUD::Applet::setDefaultFonts(largeFont, smallFont);
 
-    // Init settings, and customize defaults
-    InkHUD::settings.userTiles.maxCount = 2;             // How many tiles can the display handle?
-    InkHUD::settings.rotation = 1;                       // 90 degrees clockwise
-    InkHUD::settings.userTiles.count = 1;                // One tile only by default, keep things simple for new users
-    InkHUD::settings.optionalMenuItems.nextTile = false; // Behavior handled by aux button instead
+    // Customize default settings
+    inkhud->persistence->settings.userTiles.maxCount = 2; // How many tiles can the display handle?
+    inkhud->persistence->settings.rotation = 1;           // 90 degrees clockwise
+    inkhud->persistence->settings.userTiles.count = 1;    // One tile only by default, keep things simple for new users
+    inkhud->persistence->settings.optionalMenuItems.nextTile = false; // Behavior handled by aux button instead
 
     // Pick applets
-    // Note: order of applets determines priority of "auto-show" feature
-    // Optional arguments for defaults:
-    // - is activated?
-    // - is autoshown?
-    // - is foreground on a specific tile (index)?
-    windowManager->addApplet("All Messages", new InkHUD::AllMessageApplet, true, true); // Activated, autoshown
-    windowManager->addApplet("DMs", new InkHUD::DMApplet);
-    windowManager->addApplet("Channel 0", new InkHUD::ThreadedMessageApplet(0));
-    windowManager->addApplet("Channel 1", new InkHUD::ThreadedMessageApplet(1));
-    windowManager->addApplet("Positions", new InkHUD::PositionsApplet, true); // Activated
-    windowManager->addApplet("Recents List", new InkHUD::RecentsListApplet);
-    windowManager->addApplet("Heard", new InkHUD::HeardApplet, true, false, 0); // Activated, not autoshown, default on tile 0
-    // windowManager->addApplet("Basic", new InkHUD::BasicExampleApplet);
-    // windowManager->addApplet("NewMsg", new InkHUD::NewMsgExampleApplet);
 
-    // Start running window manager
-    windowManager->begin();
+    // Order of applets determines priority of "auto-show" feature.
+    // Optional arguments for default state:
+    //   - is activated?
+    //   - is autoshown?
+    //   - is foreground on a specific tile (index)?
+
+    inkhud->addApplet("All Messages", new InkHUD::AllMessageApplet, true, true); // Activated, autoshown
+    inkhud->addApplet("DMs", new InkHUD::DMApplet);                              // Inactive
+    inkhud->addApplet("Channel 0", new InkHUD::ThreadedMessageApplet(0));        // Inactive
+    inkhud->addApplet("Channel 1", new InkHUD::ThreadedMessageApplet(1));        // Inactive
+    inkhud->addApplet("Positions", new InkHUD::PositionsApplet, true);           // Activated
+    inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet);            // Inactive
+    inkhud->addApplet("Heard", new InkHUD::HeardApplet, true, false, 0);         // Activated, not autoshown, default on tile 0
+    // inkhud->addApplet("Basic", new InkHUD::BasicExampleApplet);
+    // inkhud->addApplet("NewMsg", new InkHUD::NewMsgExampleApplet);
+
+    // Start running InkHUD
+    inkhud->begin();
 
     // Buttons
     // --------------------------
 
-    Inputs::TwoButton *buttons = Inputs::TwoButton::getInstance(); // Shared NicheGraphics component
-    constexpr uint8_t MAIN_BUTTON = 0;
-    constexpr uint8_t AUX_BUTTON = 1;
+    Inputs::TwoButton *buttons = Inputs::TwoButton::getInstance(); // A shared NicheGraphics component
 
-    // Setup the main user button
-    buttons->setWiring(MAIN_BUTTON, BUTTON_PIN);
-    buttons->setHandlerShortPress(MAIN_BUTTON, []() { InkHUD::WindowManager::getInstance()->handleButtonShort(); });
-    buttons->setHandlerLongPress(MAIN_BUTTON, []() { InkHUD::WindowManager::getInstance()->handleButtonLong(); });
+    // Setup the main user button (0)
+    buttons->setWiring(0, Inputs::TwoButton::getUserButtonPin());
+    buttons->setHandlerShortPress(0, []() { InkHUD::InkHUD::getInstance()->shortpress(); });
+    buttons->setHandlerLongPress(0, []() { InkHUD::InkHUD::getInstance()->longpress(); });
 
-    // Setup the aux button
+    // Setup the aux button (1)
     // Bonus feature of VME290
-    buttons->setWiring(AUX_BUTTON, BUTTON_PIN_SECONDARY);
-    buttons->setHandlerShortPress(AUX_BUTTON, []() { InkHUD::WindowManager::getInstance()->nextTile(); });
+    buttons->setWiring(1, BUTTON_PIN_SECONDARY);
+    buttons->setHandlerShortPress(1, []() { InkHUD::InkHUD::getInstance()->nextTile(); });
 
     buttons->start();
 }

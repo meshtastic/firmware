@@ -89,18 +89,20 @@ bool PacketAPI::receivePacket(void)
 
 bool PacketAPI::sendPacket(void)
 {
-    // fill dummy buffer; we don't use it, we directly send the fromRadio structure
-    uint32_t len = getFromRadio(txBuf);
-    if (len != 0) {
-        static uint32_t id = 0;
-        fromRadioScratch.id = ++id;
-        bool result = server->sendPacket(DataPacket<meshtastic_FromRadio>(id, fromRadioScratch));
-        if (!result) {
-            LOG_ERROR("send queue full");
+    if (server->available()) {
+        // fill dummy buffer; we don't use it, we directly send the fromRadio structure
+        uint32_t len = getFromRadio(txBuf);
+        if (len != 0) {
+            static uint32_t id = 0;
+            fromRadioScratch.id = ++id;
+            bool result = server->sendPacket(DataPacket<meshtastic_FromRadio>(id, fromRadioScratch));
+            if (!result) {
+                LOG_ERROR("send queue full");
+            }
+            return result;
         }
-        return result;
-    } else
-        return false;
+    }
+    return false;
 }
 
 bool PacketAPI::notifyProgrammingMode(void)

@@ -159,7 +159,7 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_TD_LORAC = 60,
     /* CDEBYTE EoRa-S3 board using their own MM modules, clone of LILYGO T3S3 */
     meshtastic_HardwareModel_CDEBYTE_EORA_S3 = 61,
-    /* TWC_MESH_V4 
+    /* TWC_MESH_V4
  Adafruit NRF52840 feather express with SX1262, SSD1306 OLED and NEO6M GPS */
     meshtastic_HardwareModel_TWC_MESH_V4 = 62,
     /* NRF52_PROMICRO_DIY
@@ -226,6 +226,19 @@ typedef enum _meshtastic_HardwareModel {
     /* MeshLink board developed by LoraItalia. NRF52840, eByte E22900M22S (Will also come with other frequencies), 25w MPPT solar charger (5v,12v,18v selectable), support for gps, buzzer, oled or e-ink display, 10 gpios, hardware watchdog
  https://www.loraitalia.it */
     meshtastic_HardwareModel_MESHLINK = 87,
+    /* Seeed XIAO nRF52840 + Wio SX1262 kit */
+    meshtastic_HardwareModel_XIAO_NRF52_KIT = 88,
+    /* Elecrow ThinkNode M1 & M2
+ https://www.elecrow.com/wiki/ThinkNode-M1_Transceiver_Device(Meshtastic)_Power_By_nRF52840.html
+ https://www.elecrow.com/wiki/ThinkNode-M2_Transceiver_Device(Meshtastic)_Power_By_NRF52840.html (this actually uses ESP32-S3) */
+    meshtastic_HardwareModel_THINKNODE_M1 = 89,
+    meshtastic_HardwareModel_THINKNODE_M2 = 90,
+    /* Lilygo T-ETH-Elite */
+    meshtastic_HardwareModel_T_ETH_ELITE = 91,
+    /* Heltec HRI-3621 industrial probe */
+    meshtastic_HardwareModel_HELTEC_SENSOR_HUB = 92,
+    /* Reserved Fried Chicken ID for future use */
+    meshtastic_HardwareModel_RESERVED_FRIED_CHICKEN = 93,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
@@ -315,7 +328,11 @@ typedef enum _meshtastic_ExcludedModules {
     /* Detection Sensor module */
     meshtastic_ExcludedModules_DETECTIONSENSOR_CONFIG = 2048,
     /* Paxcounter module */
-    meshtastic_ExcludedModules_PAXCOUNTER_CONFIG = 4096
+    meshtastic_ExcludedModules_PAXCOUNTER_CONFIG = 4096,
+    /* Bluetooth config (not technically a module, but used to indicate bluetooth capabilities) */
+    meshtastic_ExcludedModules_BLUETOOTH_CONFIG = 8192,
+    /* Network config (not technically a module, but used to indicate network capabilities) */
+    meshtastic_ExcludedModules_NETWORK_CONFIG = 16384
 } meshtastic_ExcludedModules;
 
 /* How the location was acquired: manual, onboard GPS, external (EUD) GPS */
@@ -767,7 +784,7 @@ typedef struct _meshtastic_MeshPacket {
     meshtastic_MeshPacket_public_key_t public_key;
     /* Indicates whether the packet was en/decrypted using PKI */
     bool pki_encrypted;
-    /* Last byte of the node number of the node that should be used as the next hop in routing. 
+    /* Last byte of the node number of the node that should be used as the next hop in routing.
  Set by the firmware internally, clients are not supposed to set this. */
     uint8_t next_hop;
     /* Last byte of the node number of the node that will relay/relayed this packet.
@@ -1111,8 +1128,8 @@ extern "C" {
 #define _meshtastic_CriticalErrorCode_ARRAYSIZE ((meshtastic_CriticalErrorCode)(meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE+1))
 
 #define _meshtastic_ExcludedModules_MIN meshtastic_ExcludedModules_EXCLUDED_NONE
-#define _meshtastic_ExcludedModules_MAX meshtastic_ExcludedModules_PAXCOUNTER_CONFIG
-#define _meshtastic_ExcludedModules_ARRAYSIZE ((meshtastic_ExcludedModules)(meshtastic_ExcludedModules_PAXCOUNTER_CONFIG+1))
+#define _meshtastic_ExcludedModules_MAX meshtastic_ExcludedModules_NETWORK_CONFIG
+#define _meshtastic_ExcludedModules_ARRAYSIZE ((meshtastic_ExcludedModules)(meshtastic_ExcludedModules_NETWORK_CONFIG+1))
 
 #define _meshtastic_Position_LocSource_MIN meshtastic_Position_LocSource_LOC_UNSET
 #define _meshtastic_Position_LocSource_MAX meshtastic_Position_LocSource_LOC_EXTERNAL

@@ -1,3 +1,7 @@
+#include <cstring> // Include for strstr
+#include <string>
+#include <vector>
+
 #include "configuration.h"
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "Default.h"
@@ -8,6 +12,7 @@
 #include "RTC.h"
 #include "Throttle.h"
 #include "buzz.h"
+#include "concurrency/Periodic.h"
 #include "meshUtils.h"
 
 #include "main.h" // pmu_found
@@ -84,6 +89,45 @@ static const char *getGPSPowerStateString(GPSPowerState state)
         return "FALSE"; // to make new ESP-IDF happy
     }
 }
+
+#ifdef PIN_GPS_SWITCH
+// If we have a hardware switch, define a periodic watcher outside of the GPS runOnce thread, since this can be sleeping
+// idefinitely
+
+int lastState = LOW;
+bool firstrun = true;
+
+static int32_t gpsSwitch()
+{
+    if (gps) {
+        int currentState = digitalRead(PIN_GPS_SWITCH);
+
+        // if the switch is set to zero, disable the GPS Thread
+        if (firstrun)
+            if (currentState == LOW)
+                lastState = HIGH;
+
+        if (currentState != lastState) {
+            if (currentState == LOW) {
+                config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_DISABLED;
+                if (!firstrun)
+                    playGPSDisableBeep();
+                gps->disable();
+            } else {
+                config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
+                if (!firstrun)
+                    playGPSEnableBeep();
+                gps->enable();
+            }
+            lastState = currentState;
+        }
+        firstrun = false;
+    }
+    return 1000;
+}
+
+static concurrency::Periodic *gpsPeriodic;
+#endif
 
 static void UBXChecksum(uint8_t *message, size_t length)
 {
@@ -766,13 +810,6 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
     powerState = newState;
     LOG_INFO("GPS power state move from %s to %s", getGPSPowerStateString(oldState), getGPSPowerStateString(newState));
 
-#ifdef HELTEC_MESH_NODE_T114
-    if ((oldState == GPS_OFF || oldState == GPS_HARDSLEEP) && (newState != GPS_OFF && newState != GPS_HARDSLEEP)) {
-        _serial_gps->begin(serialSpeeds[speedSelect]);
-    } else if ((newState == GPS_OFF || newState == GPS_HARDSLEEP) && (oldState != GPS_OFF && oldState != GPS_HARDSLEEP)) {
-        _serial_gps->end();
-    }
-#endif
     switch (newState) {
     case GPS_ACTIVE:
     case GPS_IDLE:
@@ -977,15 +1014,16 @@ void GPS::down()
         setPowerState(GPS_IDLE);
 
     else {
-        // Check whether the GPS hardware is capable of GPS_SOFTSLEEP
-        // If not, fallback to GPS_HARDSLEEP instead
+// Check whether the GPS hardware is capable of GPS_SOFTSLEEP
+// If not, fallback to GPS_HARDSLEEP instead
+#ifdef PIN_GPS_STANDBY // L76B, L76K and clones have a standby pin
+        bool softsleepSupported = true;
+#else
         bool softsleepSupported = false;
+#endif
         // U-blox is supported via PMREQ
         if (IS_ONE_OF(gnssModel, GNSS_MODEL_UBLOX6, GNSS_MODEL_UBLOX7, GNSS_MODEL_UBLOX8, GNSS_MODEL_UBLOX9, GNSS_MODEL_UBLOX10))
             softsleepSupported = true;
-#ifdef PIN_GPS_STANDBY // L76B, L76K and clones have a standby pin
-        softsleepSupported = true;
-#endif
 
         if (softsleepSupported) {
             // How long does gps_update_interval need to be, for GPS_HARDSLEEP to become more efficient than
@@ -1100,12 +1138,16 @@ int32_t GPS::runOnce()
     return (powerState == GPS_ACTIVE) ? GPS_THREAD_INTERVAL : 5000;
 }
 
-// clear the GPS rx buffer as quickly as possible
+// clear the GPS rx/tx buffer as quickly as possible
 void GPS::clearBuffer()
 {
+#ifdef ARCH_ESP32
+    _serial_gps->flush(false);
+#else
     int x = _serial_gps->available();
     while (x--)
         _serial_gps->read();
+#endif
 }
 
 /// Prepare the GPS for the cpu entering deep or light sleep, expect to be gone for at least 100s of msecs
@@ -1117,7 +1159,7 @@ int GPS::prepareDeepSleep(void *unused)
 }
 
 static const char *PROBE_MESSAGE = "Trying %s (%s)...";
-static const char *DETECTED_MESSAGE = "%s detected, using %s Module";
+static const char *DETECTED_MESSAGE = "%s detected";
 
 #define PROBE_SIMPLE(CHIP, TOWRITE, RESPONSE, DRIVER, TIMEOUT, ...)                                                              \
     do {                                                                                                                         \
@@ -1125,8 +1167,19 @@ static const char *DETECTED_MESSAGE = "%s detected, using %s Module";
         clearBuffer();                                                                                                           \
         _serial_gps->write(TOWRITE "\r\n");                                                                                      \
         if (getACK(RESPONSE, TIMEOUT) == GNSS_RESPONSE_OK) {                                                                     \
-            LOG_INFO(DETECTED_MESSAGE, CHIP, #DRIVER);                                                                           \
+            LOG_INFO(DETECTED_MESSAGE, CHIP);                                                                                    \
             return DRIVER;                                                                                                       \
+        }                                                                                                                        \
+    } while (0)
+
+#define PROBE_FAMILY(FAMILY_NAME, COMMAND, RESPONSE_MAP, TIMEOUT)                                                                \
+    do {                                                                                                                         \
+        LOG_DEBUG(PROBE_MESSAGE, COMMAND, FAMILY_NAME);                                                                          \
+        clearBuffer();                                                                                                           \
+        _serial_gps->write(COMMAND "\r\n");                                                                                      \
+        GnssModel_t detectedDriver = getProbeResponse(TIMEOUT, RESPONSE_MAP);                                                    \
+        if (detectedDriver != GNSS_MODEL_UNKNOWN) {                                                                              \
+            return detectedDriver;                                                                                               \
         }                                                                                                                        \
     } while (0)
 
@@ -1160,31 +1213,35 @@ GnssModel_t GPS::probe(int serialSpeed)
     delay(20);
 
     // Unicore UFirebirdII Series: UC6580, UM620, UM621, UM670A, UM680A, or UM681A
-    PROBE_SIMPLE("UC6580", "$PDTINFO", "UC6580", GNSS_MODEL_UC6580, 500);
-    PROBE_SIMPLE("UM600", "$PDTINFO", "UM600", GNSS_MODEL_UC6580, 500);
-    PROBE_SIMPLE("ATGM336H", "$PCAS06,1*1A", "$GPTXT,01,01,02,HW=ATGM336H", GNSS_MODEL_ATGM336H, 500);
-    /* ATGM332D series (-11(GPS), -21(BDS), -31(GPS+BDS), -51(GPS+GLONASS), -71-0(GPS+BDS+GLONASS))
-    based on AT6558 */
-    PROBE_SIMPLE("ATGM332D", "$PCAS06,1*1A", "$GPTXT,01,01,02,HW=ATGM332D", GNSS_MODEL_ATGM336H, 500);
+    std::vector<ChipInfo> unicore = {{"UC6580", "UC6580", GNSS_MODEL_UC6580}, {"UM600", "UM600", GNSS_MODEL_UC6580}};
+    PROBE_FAMILY("Unicore Family", "$PDTINFO", unicore, 500);
+
+    std::vector<ChipInfo> atgm = {
+        {"ATGM336H", "$GPTXT,01,01,02,HW=ATGM336H", GNSS_MODEL_ATGM336H},
+        /* ATGM332D series (-11(GPS), -21(BDS), -31(GPS+BDS), -51(GPS+GLONASS), -71-0(GPS+BDS+GLONASS)) based on AT6558 */
+        {"ATGM332D", "$GPTXT,01,01,02,HW=ATGM332D", GNSS_MODEL_ATGM336H}};
+    PROBE_FAMILY("ATGM33xx Family", "$PCAS06,1*1A", atgm, 500);
 
     /* Airoha (Mediatek) AG3335A/M/S, A3352Q, Quectel L89 2.0, SimCom SIM65M */
     _serial_gps->write("$PAIR062,2,0*3C\r\n"); // GSA OFF to reduce volume
     _serial_gps->write("$PAIR062,3,0*3D\r\n"); // GSV OFF to reduce volume
     _serial_gps->write("$PAIR513*3D\r\n");     // save configuration
-    PROBE_SIMPLE("AG3335", "$PAIR021*39", "$PAIR021,AG3335", GNSS_MODEL_AG3335, 500);
-    PROBE_SIMPLE("AG3352", "$PAIR021*39", "$PAIR021,AG3352", GNSS_MODEL_AG3352, 500);
-    PROBE_SIMPLE("LC86", "$PQTMVERNO*58", "$PQTMVERNO,LC86", GNSS_MODEL_AG3352, 500);
+    std::vector<ChipInfo> airoha = {{"AG3335", "$PAIR021,AG3335", GNSS_MODEL_AG3335},
+                                    {"AG3352", "$PAIR021,AG3352", GNSS_MODEL_AG3352},
+                                    {"RYS3520", "$PAIR021,REYAX_RYS3520_V2", GNSS_MODEL_AG3352}};
+    PROBE_FAMILY("Airoha Family", "$PAIR021*39", airoha, 1000);
 
+    PROBE_SIMPLE("LC86", "$PQTMVERNO*58", "$PQTMVERNO,LC86", GNSS_MODEL_AG3352, 500);
     PROBE_SIMPLE("L76K", "$PCAS06,0*1B", "$GPTXT,01,01,02,SW=", GNSS_MODEL_MTK, 500);
 
-    // Close all NMEA sentences, valid for L76B MTK platform (Waveshare Pico GPS)
+    // Close all NMEA sentences, valid for MTK3333 and MTK3339 platforms
     _serial_gps->write("$PMTK514,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*2E\r\n");
     delay(20);
-
-    PROBE_SIMPLE("L76B", "$PMTK605*31", "Quectel-L76B", GNSS_MODEL_MTK_L76B, 500);
-    PROBE_SIMPLE("PA1616S", "$PMTK605*31", "1616S", GNSS_MODEL_MTK_PA1616S, 500);
-
-    PROBE_SIMPLE("LS20031", "$PMTK605*31", "MC-1513", GNSS_MODEL_LS20031, 500);
+    std::vector<ChipInfo> mtk = {{"L76B", "Quectel-L76B", GNSS_MODEL_MTK_L76B},
+                                 {"PA1616S", "1616S", GNSS_MODEL_MTK_PA1616S},
+                                 {"LS20031", "MC-1513", GNSS_MODEL_MTK_L76B},
+                                 {"L96", "Quectel-L96", GNSS_MODEL_MTK_L76B}};
+    PROBE_FAMILY("MTK Family", "$PMTK605*31", mtk, 500);
 
     uint8_t cfg_rate[] = {0xB5, 0x62, 0x06, 0x08, 0x00, 0x00, 0x00, 0x00};
     UBXChecksum(cfg_rate, sizeof(cfg_rate));
@@ -1281,6 +1338,38 @@ GnssModel_t GPS::probe(int serialSpeed)
     return GNSS_MODEL_UNKNOWN;
 }
 
+GnssModel_t GPS::getProbeResponse(unsigned long timeout, const std::vector<ChipInfo> &responseMap)
+{
+    String response = "";
+    unsigned long start = millis();
+    while (millis() - start < timeout) {
+        if (_serial_gps->available()) {
+            response += (char)_serial_gps->read();
+
+            if (response.endsWith(",") || response.endsWith("\r\n")) {
+#ifdef GPS_DEBUG
+                LOG_DEBUG(response.c_str());
+#endif
+                // check if we can see our chips
+                for (const auto &chipInfo : responseMap) {
+                    if (strstr(response.c_str(), chipInfo.detectionString.c_str()) != nullptr) {
+                        LOG_INFO("%s detected", chipInfo.chipName.c_str());
+                        return chipInfo.driver;
+                    }
+                }
+            }
+            if (response.endsWith("\r\n")) {
+                response.trim();
+                response = ""; // Reset the response string for the next potential message
+            }
+        }
+    }
+#ifdef GPS_DEBUG
+    LOG_DEBUG(response.c_str());
+#endif
+    return GNSS_MODEL_UNKNOWN; // Return empty string on timeout
+}
+
 GPS *GPS::createGps()
 {
     int8_t _rx_gpio = config.position.rx_gpio;
@@ -1332,6 +1421,12 @@ GPS *GPS::createGps()
 #ifdef PIN_GPS_PPS
     // pulse per second
     pinMode(PIN_GPS_PPS, INPUT);
+#endif
+
+#ifdef PIN_GPS_SWITCH
+    // toggle GPS via external GPIO switch
+    pinMode(PIN_GPS_SWITCH, INPUT);
+    gpsPeriodic = new concurrency::Periodic("GPSSwitch", gpsSwitch);
 #endif
 
 // Currently disabled per issue #525 (TinyGPS++ crash bug)

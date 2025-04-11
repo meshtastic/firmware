@@ -4,11 +4,12 @@
 
 using namespace NicheGraphics;
 
-// We configured MeshModule API to call this method when we receive a new text message
+// We configured the Module API to call this method when we receive a new text message
 ProcessMessage InkHUD::NewMsgExampleApplet::handleReceived(const meshtastic_MeshPacket &mp)
 {
 
     // Abort if applet fully deactivated
+    // Don't waste time: we wouldn't be rendered anyway
     if (!isActive())
         return ProcessMessage::CONTINUE;
 
@@ -25,7 +26,7 @@ ProcessMessage InkHUD::NewMsgExampleApplet::handleReceived(const meshtastic_Mesh
         requestUpdate();
     }
 
-    // Tell MeshModule API to continue informing other firmware components about this message
+    // Tell Module API to continue informing other firmware components about this message
     // We're not the only component which is interested in new text messages
     return ProcessMessage::CONTINUE;
 }
@@ -36,8 +37,6 @@ ProcessMessage InkHUD::NewMsgExampleApplet::handleReceived(const meshtastic_Mesh
 // We should always be ready to draw
 void InkHUD::NewMsgExampleApplet::onRender()
 {
-    setFont(fontSmall);
-
     printAt(0, 0, "Example: NewMsg", LEFT, TOP); // Print top-left corner of text at (0,0)
 
     int16_t centerX = X(0.5); // Same as width() / 2

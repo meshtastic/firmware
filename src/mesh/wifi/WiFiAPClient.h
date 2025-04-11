@@ -9,6 +9,11 @@
 #include <WiFi.h>
 #endif
 
+#if HAS_ETHERNET && defined(USE_WS5500)
+#include <ETHClass2.h>
+#define ETH ETH2
+#endif // HAS_ETHERNET
+
 extern bool needReconnect;
 extern concurrency::Periodic *wifiReconnect;
 
@@ -20,3 +25,8 @@ void deinitWifi();
 bool isWifiAvailable();
 
 uint8_t getWifiDisconnectReason();
+
+#ifdef USE_WS5500
+// Startup Ethernet
+bool initEthernet();
+#endif

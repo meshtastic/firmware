@@ -42,7 +42,7 @@
 #define GPS_TX_PIN 43
 
 // Have SPI interface SD card slot
-#define HAS_SDCARD 1
+// #define HAS_SDCARD // --> needs to be in platform.ini for device-ui
 #define SPI_MOSI (41)
 #define SPI_SCK (40)
 #define SPI_MISO (38)

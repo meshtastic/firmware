@@ -48,7 +48,6 @@
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
 
-#define HAS_SDCARD 1
 #define SD_SPI_FREQUENCY 25000000
 #define SDCARD_CS 43
 

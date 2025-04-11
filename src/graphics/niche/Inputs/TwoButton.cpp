@@ -2,6 +2,7 @@
 
 #include "./TwoButton.h"
 
+#include "NodeDB.h" // For the helper function TwoButton::getUserButtonPin
 #include "PowerFSM.h"
 #include "sleep.h"
 
@@ -18,6 +19,10 @@ TwoButton::TwoButton() : concurrency::OSThread("TwoButton")
     lsObserver.observe(&notifyLightSleep);
     lsEndObserver.observe(&notifyLightSleepEnd);
 #endif
+
+    // Explicitly initialize these, just to keep cppcheck quiet..
+    buttons[0] = Button();
+    buttons[1] = Button();
 }
 
 // Get access to (or create) the singleton instance of this class
@@ -53,16 +58,48 @@ void TwoButton::stop()
         detachInterrupt(buttons[1].pin);
 }
 
+// Attempt to resolve a GPIO pin for the user button, honoring userPrefs.jsonc and device settings
+// This helper method isn't used by the TweButton class itself, it could be moved elsewhere.
+// Intention is to pass this value to TwoButton::setWiring in the setupNicheGraphics method.
+uint8_t TwoButton::getUserButtonPin()
+{
+    uint8_t pin = 0xFF; // Unset
+
+    // Use default pin for variant, if no better source
+#ifdef BUTTON_PIN
+    pin = BUTTON_PIN;
+#endif
+
+    // From userPrefs.jsonc, if set
+#ifdef USERPREFS_BUTTON_PIN
+    pin = USERPREFS_BUTTON_PIN;
+#endif
+
+    // From user's override in device settings, if set
+    if (config.device.button_gpio)
+        pin = config.device.button_gpio;
+
+    return pin;
+}
+
 // Configures the wiring and logic of either button
 // Called when outlining your NicheGraphics implementation, in variant/nicheGraphics.cpp
 void TwoButton::setWiring(uint8_t whichButton, uint8_t pin, bool internalPullup)
 {
+    // Prevent the same GPIO being assigned to multiple buttons
+    // Allows an edge case when the user remaps hardware buttons using device settings, due to a broken user button
+    for (uint8_t i = 0; i < whichButton; i++) {
+        if (buttons[i].pin == pin) {
+            LOG_WARN("Attempted reuse of GPIO %d. Ignoring assignment whichButton=%d", pin, whichButton);
+            return;
+        }
+    }
+
     assert(whichButton < 2);
     buttons[whichButton].pin = pin;
-    buttons[whichButton].activeLogic = LOW;
-    buttons[whichButton].mode = internalPullup ? INPUT_PULLUP : INPUT; // fix me
+    buttons[whichButton].activeLogic = LOW; // Unimplemented
 
-    pinMode(buttons[whichButton].pin, buttons[whichButton].mode);
+    pinMode(buttons[whichButton].pin, internalPullup ? INPUT_PULLUP : INPUT);
 }
 
 void TwoButton::setTiming(uint8_t whichButton, uint32_t debounceMs, uint32_t longpressMs)
@@ -185,7 +222,7 @@ int32_t TwoButton::runOnce()
         // New press detected by interrupt
         case IRQ:
             powerFSM.trigger(EVENT_PRESS);             // Tell PowerFSM that press occurred (resets sleep timer)
-            buttons[i].onDown();                       // Inform that press has begun (possible hold behavior)
+            buttons[i].onDown();                       // Run callback: press has begun (possible hold behavior)
             buttons[i].state = State::POLLING_UNFIRED; // Mark that button-down has been handled
             awaitingRelease = true;                    // Mark that polling-for-release should continue
             break;
@@ -197,17 +234,17 @@ int32_t TwoButton::runOnce()
 
             // If button released since last thread tick,
             if (digitalRead(buttons[i].pin) != buttons[i].activeLogic) {
-                buttons[i].onUp();              // Inform that press has ended (possible release of a hold)
+                buttons[i].onUp();              // Run callback: press has ended (possible release of a hold)
                 buttons[i].state = State::REST; // Mark that the button has reset
-                if (length > buttons[i].debounceLength && length < buttons[i].longpressLength)
-                    buttons[i].onShortPress();
+                if (length > buttons[i].debounceLength && length < buttons[i].longpressLength) // If too short for longpress,
+                    buttons[i].onShortPress();                                                 // Run callback: short press
             }
 
             // If button not yet released
             else {
                 awaitingRelease = true; // Mark that polling-for-release should continue
                 if (length >= buttons[i].longpressLength) {
-                    // Raise a long press event, once
+                    // Run callback: long press (once)
                     // Then continue waiting for release, to rearm
                     buttons[i].state = State::POLLING_FIRED;
                     buttons[i].onLongPress();
@@ -222,7 +259,7 @@ int32_t TwoButton::runOnce()
             // Release detected
             if (digitalRead(buttons[i].pin) != buttons[i].activeLogic) {
                 buttons[i].state = State::REST;
-                buttons[i].onUp(); // Possible release of hold (in this case: *after* longpress has fired)
+                buttons[i].onUp(); // Callback: release of hold (in this case: *after* longpress has fired)
             }
             // Not yet released, keep polling
             else
@@ -261,7 +298,9 @@ int TwoButton::afterLightSleep(esp_sleep_wakeup_cause_t cause)
     // Manually trigger the button-down ISR
     // - during light sleep, our ISR is disabled
     // - if light sleep ends by button press, pretend our own ISR caught it
-    if (cause == ESP_SLEEP_WAKEUP_GPIO)
+    // - need to manually confirm by reading pin ourselves, to avoid occasional false positives
+    //   (false positive only when using internal pullup resistors?)
+    if (cause == ESP_SLEEP_WAKEUP_GPIO && digitalRead(buttons[0].pin) == buttons[0].activeLogic)
         isrPrimary();
 
     return 0; // Indicates success

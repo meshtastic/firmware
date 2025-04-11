@@ -38,13 +38,12 @@ class MapApplet : public Applet
     void drawLabeledMarker(meshtastic_NodeInfoLite *node); // Highlight a specific marker
 
   private:
-    // Position of markers to be drawn, relative to map center
-    // HopsAway info used to determine marker size
+    // Position and size of a marker to be drawn
     struct Marker {
-        float eastMeters = 0;  // Meters east of mapCenter. Negative if west.
-        float northMeters = 0; // Meters north of mapCenter. Negative if south.
+        float eastMeters = 0;  // Meters east of map center. Negative if west.
+        float northMeters = 0; // Meters north of map center. Negative if south.
         bool hasHopsAway = false;
-        uint8_t hopsAway = 0;
+        uint8_t hopsAway = 0; // Determines marker size
     };
 
     Marker calculateMarker(float lat, float lng, bool hasHopsAway, uint8_t hopsAway);

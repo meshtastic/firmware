@@ -33,6 +33,7 @@ std::ofstream traceFile;
 Ch341Hal *ch341Hal = nullptr;
 char *configPath = nullptr;
 char *optionMac = nullptr;
+bool forceSimulated = false;
 
 // FIXME - move setBluetoothEnable into a HALPlatform class
 void setBluetoothEnable(bool enable)
@@ -61,6 +62,9 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
     case 'c':
         configPath = arg;
         break;
+    case 's':
+        forceSimulated = true;
+        break;
     case 'h':
         optionMac = arg;
         break;
@@ -78,6 +82,7 @@ void portduinoCustomInit()
     static struct argp_option options[] = {{"port", 'p', "PORT", 0, "The TCP port to use."},
                                            {"config", 'c', "CONFIG_PATH", 0, "Full path of the .yaml config file to use."},
                                            {"hwid", 'h', "HWID", 0, "The mac address to assign to this virtual machine"},
+                                           {"sim", 's', 0, 0, "Run in Simulated radio mode"},
                                            {0}};
     static void *childArguments;
     static char doc[] = "Meshtastic native build.";
@@ -157,7 +162,9 @@ void portduinoSetup()
 
     YAML::Node yamlConfig;
 
-    if (configPath != nullptr) {
+    if (forceSimulated == true) {
+        settingsMap[use_simradio] = true;
+    } else if (configPath != nullptr) {
         if (loadConfig(configPath)) {
             std::cout << "Using " << configPath << " as config file" << std::endl;
         } else {
@@ -179,7 +186,12 @@ void portduinoSetup()
             exit(EXIT_FAILURE);
         }
     } else {
-        std::cout << "No 'config.yaml' found, running simulated." << std::endl;
+        std::cout << "No 'config.yaml' found..." << std::endl;
+        settingsMap[use_simradio] = true;
+    }
+
+    if (settingsMap[use_simradio] == true) {
+        std::cout << "Running in simulated mode." << std::endl;
         settingsMap[maxnodes] = 200;               // Default to 200 nodes
         settingsMap[logoutputlevel] = level_debug; // Default to debug
         // Set the random seed equal to TCPPort to have a different seed per instance
@@ -197,6 +209,56 @@ void portduinoSetup()
             }
         }
     }
+
+    // If LoRa `Module: auto` (default in config.yaml),
+    // attempt to auto config based on Product Strings
+    if (settingsMap[use_autoconf] == true) {
+        char autoconf_product[96] = {0};
+        // Try CH341
+        try {
+            std::cout << "autoconf: Looking for CH341 device..." << std::endl;
+            ch341Hal =
+                new Ch341Hal(0, settingsStrings[lora_usb_serial_num], settingsMap[lora_usb_vid], settingsMap[lora_usb_pid]);
+            ch341Hal->getProductString(autoconf_product, 95);
+            delete ch341Hal;
+            std::cout << "autoconf: Found CH341 device " << autoconf_product << std::endl;
+        } catch (...) {
+            std::cout << "autoconf: Could not locate CH341 device" << std::endl;
+        }
+        // Try Pi HAT+
+        std::cout << "autoconf: Looking for Pi HAT+..." << std::endl;
+        if (access("/proc/device-tree/hat/product", R_OK) == 0) {
+            std::ifstream hatProductFile("/proc/device-tree/hat/product");
+            if (hatProductFile.is_open()) {
+                hatProductFile.read(autoconf_product, 95);
+                hatProductFile.close();
+            }
+            std::cout << "autoconf: Found Pi HAT+ " << autoconf_product << " at /proc/device-tree/hat/product" << std::endl;
+        } else {
+            std::cout << "autoconf: Could not locate Pi HAT+ at /proc/device-tree/hat/product" << std::endl;
+        }
+        // Load the config file based on the product string
+        if (strlen(autoconf_product) > 0) {
+            // From configProducts map in PortduinoGlue.h
+            std::string product_config = "";
+            try {
+                product_config = configProducts.at(autoconf_product);
+            } catch (std::out_of_range &e) {
+                std::cerr << "autoconf: Unable to find config for " << autoconf_product << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            if (loadConfig((settingsStrings[available_directory] + product_config).c_str())) {
+                std::cout << "autoconf: Using " << product_config << " as config file for " << autoconf_product << std::endl;
+            } else {
+                std::cerr << "autoconf: Unable to use " << product_config << " as config file for " << autoconf_product
+                          << std::endl;
+                exit(EXIT_FAILURE);
+            }
+        } else {
+            std::cerr << "autoconf: Could not locate any devices" << std::endl;
+        }
+    }
+
     // if we're using a usermode driver, we need to initialize it here, to get a serial number back for mac address
     uint8_t dmac[6] = {0};
     if (settingsStrings[spidev] == "ch341") {
@@ -210,7 +272,10 @@ void portduinoSetup()
         }
         char serial[9] = {0};
         ch341Hal->getSerialString(serial, 8);
-        std::cout << "Serial " << serial << std::endl;
+        std::cout << "CH341 Serial " << serial << std::endl;
+        char product_string[96] = {0};
+        ch341Hal->getProductString(product_string, 95);
+        std::cout << "CH341 Product " << product_string << std::endl;
         if (strlen(serial) == 8 && settingsStrings[mac_address].length() < 12) {
             uint8_t hash[32] = {0};
             memcpy(hash, serial, 8);
@@ -355,8 +420,9 @@ bool loadConfig(const char *configPath)
             const struct {
                 configNames cfgName;
                 std::string strName;
-            } loraModules[] = {{use_rf95, "RF95"},     {use_sx1262, "sx1262"}, {use_sx1268, "sx1268"}, {use_sx1280, "sx1280"},
-                               {use_lr1110, "lr1110"}, {use_lr1120, "lr1120"}, {use_lr1121, "lr1121"}, {use_llcc68, "LLCC68"}};
+            } loraModules[] = {{use_simradio, "sim"},  {use_autoconf, "auto"}, {use_rf95, "RF95"},     {use_sx1262, "sx1262"},
+                               {use_sx1268, "sx1268"}, {use_sx1280, "sx1280"}, {use_lr1110, "lr1110"}, {use_lr1120, "lr1120"},
+                               {use_lr1121, "lr1121"}, {use_llcc68, "LLCC68"}};
             for (auto &loraModule : loraModules) {
                 settingsMap[loraModule.cfgName] = false;
             }
@@ -536,6 +602,8 @@ bool loadConfig(const char *configPath)
             settingsMap[maxnodes] = (yamlConfig["General"]["MaxNodes"]).as<int>(200);
             settingsMap[maxtophone] = (yamlConfig["General"]["MaxMessageQueue"]).as<int>(100);
             settingsStrings[config_directory] = (yamlConfig["General"]["ConfigDirectory"]).as<std::string>("");
+            settingsStrings[available_directory] =
+                (yamlConfig["General"]["AvailableDirectory"]).as<std::string>("/etc/meshtasticd/available.d/");
             if ((yamlConfig["General"]["MACAddress"]).as<std::string>("") != "" &&
                 (yamlConfig["General"]["MACAddressSource"]).as<std::string>("") != "") {
                 std::cout << "Cannot set both MACAddress and MACAddressSource!" << std::endl;
