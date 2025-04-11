@@ -15,6 +15,9 @@
 #include <Throttle.h>
 
 #ifndef PMSA003I_WARMUP_MS
+// from the PMSA003I datasheet:
+// "Stable data should be got at least 30 seconds after the sensor wakeup
+// from the sleep mode because of the fan’s performance."
 #define PMSA003I_WARMUP_MS 30000
 #endif
 
