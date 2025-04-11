@@ -17,8 +17,8 @@ SET "LOGCOUNTER=0"
 SET "S3=s3 v3 t-deck wireless-paper wireless-tracker station-g2 unphone"
 SET "C3=esp32c3"
 @REM FIXME: Determine flash size from PlatformIO variant, this is unmaintainable.
-SET "BIGDB_8MB=picomputer-s3 unphone seeed-sensecap-indicator crowpanel-esp32s3 heltec_capsule_sensor_v3 heltec-v3 heltec-vision-master-e213 heltec-vision-master-e290 heltec-vision-master-t190 heltec-wireless-paper heltec-wireless-tracker heltec-wsl-v3 icarus seeed-xiao-s3 tbeam-s3-core t-watch-s3 tracksenger"
-SET "BIGDB_16MB=t-deck mesh-tab t-energy-s3 dreamcatcher ESP32-S3-Pico m5stack-cores3 station-g2 t-eth-elite"
+SET "BIGDB_8MB=picomputer-s3 unphone seeed-sensecap-indicator crowpanel-esp32s3 heltec_capsule_sensor_v3 heltec-v3 heltec-vision-master-e213 heltec-vision-master-e290 heltec-vision-master-t190 heltec-wireless-paper heltec-wireless-tracker heltec-wsl-v3 icarus seeed-xiao-s3 tbeam-s3-core tracksenger"
+SET "BIGDB_16MB=t-deck mesh-tab t-energy-s3 dreamcatcher ESP32-S3-Pico m5stack-cores3 station-g2 t-eth-elite t-watch-s3"
 
 GOTO getopts
 :help
