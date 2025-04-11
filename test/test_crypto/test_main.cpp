@@ -4,6 +4,18 @@
 #include "TestUtil.h"
 #include <unity.h>
 
+struct TestCryptoEngine {
+    static bool getCachedSecret(uint32_t lookupKey, CachedSharedSecret &entry)
+    {
+        auto iter = crypto->sharedSecretCache.find(lookupKey);
+        if (iter == crypto->sharedSecretCache.end()) {
+            return false;
+        }
+        entry = iter->second;
+        return true;
+    }
+};
+
 void HexToBytes(uint8_t *result, const std::string hex, size_t len = 0)
 {
     if (len) {
@@ -108,6 +120,33 @@ void test_DH25519(void)
     TEST_ASSERT(crypto->setDHPublicKey(public_key));
     crypto->hash(crypto->shared_key, 32);
     TEST_ASSERT_EQUAL_MEMORY(expected_shared, crypto->shared_key, 32);
+
+    // Caching code path generates the same secret
+    uint8_t now = (millis() >> 22) & 0xff;
+    meshtastic_UserLite_public_key_t userlite_public_key;
+    memcpy(userlite_public_key.bytes, public_key, 32);
+    TEST_ASSERT(crypto->setCryptoSharedSecret(userlite_public_key));
+    TEST_ASSERT_EQUAL_MEMORY(expected_shared, crypto->shared_key, 32);
+
+    // Check it was added to the cache
+    CachedSharedSecret entry;
+    uint32_t lookupKey;
+    memcpy(&lookupKey, public_key, sizeof(lookupKey));
+    TEST_ASSERT(TestCryptoEngine::getCachedSecret(lookupKey, entry));
+    TEST_ASSERT_EQUAL_MEMORY(expected_shared, entry.shared_secret, 32);
+    TEST_ASSERT_TRUE(entry.last_used >= now);
+
+    // Calling again should fetch from the cache. Shared secret is the same.
+    // FIXME If tests could mock the millis() time, it would be ideal to mock the time forward by a
+    // couple hours before hitting the cache.
+    TEST_ASSERT(crypto->setCryptoSharedSecret(userlite_public_key));
+    TEST_ASSERT_EQUAL_MEMORY(expected_shared, crypto->shared_key, 32);
+
+    // Check cache was updated
+    now = (millis() >> 22) & 0xff;
+    TEST_ASSERT(TestCryptoEngine::getCachedSecret(lookupKey, entry));
+    TEST_ASSERT_EQUAL_MEMORY(expected_shared, entry.shared_secret, 32);
+    TEST_ASSERT_TRUE(entry.last_used >= now);
 }
 
 void test_PKC(void)
