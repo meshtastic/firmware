@@ -439,8 +439,12 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 #endif
 
             case MLX90614_ADDR_DEF:
-                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0e), 1);
-                if (registerValue == 0x5a) {
+                // Do we have the MLX90614 or the MPR121KB or the CST226SE
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x06), 1);
+                if (registerValue == 0xAB) {
+                    type = CST226SE;
+                    logFoundDevice("CST226SE", (uint8_t)addr.address);
+                } else if (getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0e), 1) == 0x5a) {
                     type = MLX90614;
                     logFoundDevice("MLX90614", (uint8_t)addr.address);
                 } else {
