@@ -71,6 +71,7 @@ class ScanI2C
         DPS310,
         LTR390UV,
         TCA8418KB,
+        CST226SE,
     } DeviceType;
 
     // typedef uint8_t DeviceAddress;

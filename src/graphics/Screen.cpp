@@ -1104,7 +1104,7 @@ static void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const NodeStat
     char usersString[20];
     snprintf(usersString, sizeof(usersString), "%d/%d", nodeStatus->getNumOnline(), nodeStatus->getNumTotal());
 #if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) ||      \
-     defined(ST7789_CS) || defined(USE_ST7789) || defined(HX8357_CS)) &&                                                         \
+     defined(ST7789_CS) || defined(USE_ST7789) || defined(USE_ST7796) || defined(HX8357_CS)) &&                                  \
     !defined(DISPLAY_FORCE_SMALL_FONTS)
     display->drawFastImage(x, y + 3, 8, 8, imgUser);
 #else
@@ -1525,6 +1525,8 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 
 #if defined(ESP_PLATFORM) && defined(USE_ST7789)
 SPIClass SPI1(HSPI);
+#elif defined(ESP_PLATFORM) && defined(USE_ST7796)
+SPIClass SPI3(VSPI);
 #endif
 
 Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_OledType screenType, OLEDDISPLAY_GEOMETRY geometry)
@@ -1540,6 +1542,13 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
                             ST7789_MISO, ST7789_SCK);
 #else
     dispdev = new ST7789Spi(&SPI1, ST7789_RESET, ST7789_RS, ST7789_NSS, GEOMETRY_RAWMODE, TFT_WIDTH, TFT_HEIGHT);
+#endif
+#elif defined(USE_ST7796)
+#ifdef ESP_PLATFORM
+    dispdev = new ST7796Spi(&SPI3, ST7796_RESET, ST7796_RS, ST7796_NSS, GEOMETRY_RAWMODE, TFT_WIDTH, TFT_HEIGHT, ST7796_SDA,
+                            ST7796_MISO, ST7796_SCK);
+#else
+    dispdev = new ST7796Spi(&SPI3, ST7796_RESET, ST7796_RS, ST7796_NSS, GEOMETRY_RAWMODE, TFT_WIDTH, TFT_HEIGHT);
 #endif
 #elif defined(USE_SSD1306)
     dispdev = new SSD1306Wire(address.address, -1, -1, geometry,
@@ -1633,6 +1642,17 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             digitalWrite(VTFT_LEDA, TFT_BACKLIGHT_ON);
 #endif
 #endif
+#ifdef USE_ST7796
+            pinMode(VTFT_CTRL, OUTPUT);
+            digitalWrite(VTFT_CTRL, LOW);
+            ui->init();
+#ifdef ESP_PLATFORM
+            analogWrite(VTFT_LEDA, BRIGHTNESS_DEFAULT);
+#else
+            pinMode(VTFT_LEDA, OUTPUT);
+            digitalWrite(VTFT_LEDA, TFT_BACKLIGHT_ON);
+#endif
+#endif
             enabled = true;
             setInterval(0); // Draw ASAP
             runASAP = true;
@@ -1666,6 +1686,22 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             nrf_gpio_cfg_default(ST7789_NSS);
 #endif
 #endif
+#ifdef USE_ST7796
+            SPI3.end();
+#if defined(ARCH_ESP32)
+            pinMode(VTFT_LEDA, ANALOG);
+            pinMode(VTFT_CTRL, ANALOG);
+            pinMode(ST7796_RESET, ANALOG);
+            pinMode(ST7796_RS, ANALOG);
+            pinMode(ST7796_NSS, ANALOG);
+#else
+            nrf_gpio_cfg_default(VTFT_LEDA);
+            nrf_gpio_cfg_default(VTFT_CTRL);
+            nrf_gpio_cfg_default(ST7796_RESET);
+            nrf_gpio_cfg_default(ST7796_RS);
+            nrf_gpio_cfg_default(ST7796_NSS);
+#endif
+#endif
 
 #ifdef T_WATCH_S3
             PMU->disablePowerOutput(XPOWERS_ALDO2);
@@ -1694,6 +1730,10 @@ void Screen::setup()
 #if defined(USE_ST7789) && defined(TFT_MESH)
     // Heltec T114 and T190: honor a custom text color, if defined in variant.h
     static_cast<ST7789Spi *>(dispdev)->setRGB(TFT_MESH);
+#endif
+#if defined(USE_ST7796) && defined(TFT_MESH)
+    // Custom text color, if defined in variant.h
+    static_cast<ST7796Spi *>(dispdev)->setRGB(TFT_MESH);
 #endif
 
     // Initialising the UI will init the display too.
@@ -1755,6 +1795,8 @@ void Screen::setup()
         static_cast<TFTDisplay *>(dispdev)->flipScreenVertically();
 #elif defined(USE_ST7789)
         static_cast<ST7789Spi *>(dispdev)->flipScreenVertically();
+#elif defined(USE_ST7796)
+        static_cast<ST7796Spi *>(dispdev)->flipScreenVertically();
 #else
         dispdev->flipScreenVertically();
 #endif
@@ -2490,7 +2532,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         if (!Throttle::isWithinTimespanMs(storeForwardModule->lastHeartbeat,
                                           (storeForwardModule->heartbeatInterval * 1200))) { // no heartbeat, overlap a bit
 #if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) ||      \
-     defined(ST7789_CS) || defined(USE_ST7789) || defined(HX8357_CS) || ARCH_PORTDUINO) &&                                       \
+     defined(ST7789_CS) || defined(USE_ST7789) || defined(USE_ST7796) || defined(HX8357_CS) || ARCH_PORTDUINO) &&                \
     !defined(DISPLAY_FORCE_SMALL_FONTS)
             display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(ourId), y + 3 + FONT_HEIGHT_SMALL, 12, 8,
                                    imgQuestionL1);
@@ -2502,7 +2544,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 #endif
         } else {
 #if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) ||      \
-     defined(ST7789_CS) || defined(USE_ST7789) || defined(HX8357_CS)) &&                                                         \
+     defined(ST7789_CS) || defined(USE_ST7789) || defined(USE_ST7796) || defined(HX8357_CS)) &&                                  \
     !defined(DISPLAY_FORCE_SMALL_FONTS)
             display->drawFastImage(x + SCREEN_WIDTH - 18 - display->getStringWidth(ourId), y + 3 + FONT_HEIGHT_SMALL, 16, 8,
                                    imgSFL1);
@@ -2517,7 +2559,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     } else {
         // TODO: Raspberry Pi supports more than just the one screen size
 #if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) ||      \
-     defined(ST7789_CS) || defined(USE_ST7789) || defined(HX8357_CS) || ARCH_PORTDUINO) &&                                       \
+     defined(ST7789_CS) || defined(USE_ST7789) || defined(USE_ST7796) || defined(HX8357_CS) || ARCH_PORTDUINO) &&                \
     !defined(DISPLAY_FORCE_SMALL_FONTS)
         display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(ourId), y + 3 + FONT_HEIGHT_SMALL, 12, 8,
                                imgInfoL1);
