@@ -1405,7 +1405,7 @@ void Screen::drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char 
 
 // Draw nodes status
 static void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const NodeStatus *nodeStatus, int node_offset = 0,
-                      bool show_total = true)
+                      bool show_total = true, String additional_words = "")
 {
     char usersString[20];
     int nodes_online = (nodeStatus->getNumOnline() > 0) ? nodeStatus->getNumOnline() + node_offset : 0;
@@ -1426,10 +1426,10 @@ static void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const NodeStat
 #endif
     display->drawString(x + 10, y - 2, usersString);
     int string_offset = (SCREEN_WIDTH > 128) ? 2 : 1;
-    if (!show_total) {
-        display->drawString(x + 10 + display->getStringWidth(usersString) + string_offset, y - 2, "online");
+    if (additional_words != "") {
+        display->drawString(x + 10 + display->getStringWidth(usersString) + string_offset, y - 2, additional_words);
         if (config.display.heading_bold)
-            display->drawString(x + 11 + display->getStringWidth(usersString) + string_offset, y - 2, "online");
+            display->drawString(x + 11 + display->getStringWidth(usersString) + string_offset, y - 2, additional_words);
     }
 }
 #if HAS_GPS
@@ -2246,13 +2246,13 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
                 if (feet < 1000)
                     snprintf(distStr, sizeof(distStr), "%dft", feet);
                 else
-                    snprintf(distStr, sizeof(distStr), "¼mi");  // 4-char max
+                    snprintf(distStr, sizeof(distStr), "¼mi"); // 4-char max
             } else {
                 int roundedMiles = (int)(miles + 0.5);
                 if (roundedMiles < 1000)
                     snprintf(distStr, sizeof(distStr), "%dmi", roundedMiles);
                 else
-                    snprintf(distStr, sizeof(distStr), "999");  // Max display cap
+                    snprintf(distStr, sizeof(distStr), "999"); // Max display cap
             }
         } else {
             if (distanceKm < 1.0) {
@@ -2477,13 +2477,13 @@ static void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, i
     // Display Region and Channel Utilization
     config.display.heading_bold = false;
 
-    drawNodes(display, x + 1, compactFirstLine + 3, nodeStatus, -1, false);
+    drawNodes(display, x + 1, compactFirstLine + 3, nodeStatus, -1, false, "online");
 
 #if HAS_GPS
     auto number_of_satellites = gpsStatus->getNumSatellites();
-    int gps_rightchar_offset = (SCREEN_WIDTH > 128) ? -30 : -46;
+    int gps_rightchar_offset = (SCREEN_WIDTH > 128) ? -51 : -46;
     if (number_of_satellites < 10) {
-        gps_rightchar_offset -= (SCREEN_WIDTH > 128) ? 14 : 6;
+        gps_rightchar_offset += (SCREEN_WIDTH > 128) ? 8 : 6;
     }
     if (!gpsStatus || !gpsStatus->getIsConnected()) {
         gps_rightchar_offset = (SCREEN_WIDTH > 128) ? -20 : 2;
