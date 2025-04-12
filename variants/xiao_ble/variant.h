@@ -143,9 +143,10 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 #ifdef EBYTE_E22_900M30S
-// 10dB PA gain and 30dB rated output; based on PA output table from Ebyte Robin <sales06@ebyte.com>
-#define REGULATORY_GAIN_LORA 10
-#define SX126X_MAX_POWER 20
+// 10dB PA gain and 30dB rated output; based on measurements from
+// https://github.com/S5NC/EBYTE_ESP32-S3/blob/main/E22-900M30S%20power%20output%20testing.txt
+#define REGULATORY_GAIN_LORA 7
+#define SX126X_MAX_POWER 22
 #endif
 #ifdef EBYTE_E22_900M33S
 // 25dB PA gain and 33dB rated output; based on TX Power Curve from E22-900M33S_UserManual_EN_v1.0.pdf
