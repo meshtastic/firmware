@@ -43,8 +43,9 @@ int32_t AirQualityTelemetryModule::runOnce()
             LOG_INFO("Air quality Telemetry: init");
 
 #ifdef PMSA003I_ENABLE_PIN
+            // put the sensor to sleep on startup
             pinMode(PMSA003I_ENABLE_PIN, OUTPUT);
-            digitalWrite(PMSA003I_ENABLE_PIN, 0);
+            digitalWrite(PMSA003I_ENABLE_PIN, LOW);
 #endif /* PMSA003I_ENABLE_PIN */
 
             if (!aqi.begin_I2C()) {
@@ -81,7 +82,7 @@ int32_t AirQualityTelemetryModule::runOnce()
             case State::IDLE:
                 // sensor is in standby; fire it up and sleep
                 LOG_DEBUG("runOnce(): state = idle");
-                digitalWrite(PMSA003I_ENABLE_PIN, 1);
+                digitalWrite(PMSA003I_ENABLE_PIN, HIGH);
                 state = State::ACTIVE;
 
                 return PMSA003I_WARMUP_MS;
@@ -104,9 +105,9 @@ int32_t AirQualityTelemetryModule::runOnce()
                     sendTelemetry(NODENUM_BROADCAST, true);
                 }
 
+#ifdef PMSA003I_ENABLE_PIN
                 // put sensor back to sleep
-#if PMSA003I_ENABLE_PIN
-                digitalWrite(PMSA003I_ENABLE_PIN, 0);
+                digitalWrite(PMSA003I_ENABLE_PIN, LOW);
                 state = State::IDLE;
 #endif /* PMSA003I_ENABLE_PIN */
 
