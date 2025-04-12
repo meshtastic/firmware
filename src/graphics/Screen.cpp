@@ -1643,8 +1643,6 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 #endif
 #endif
 #ifdef USE_ST7796
-            pinMode(VTFT_CTRL, OUTPUT);
-            digitalWrite(VTFT_CTRL, LOW);
             ui->init();
 #ifdef ESP_PLATFORM
             analogWrite(VTFT_LEDA, BRIGHTNESS_DEFAULT);
@@ -1690,7 +1688,6 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             SPI3.end();
 #if defined(ARCH_ESP32)
             pinMode(VTFT_LEDA, ANALOG);
-            pinMode(VTFT_CTRL, ANALOG);
             pinMode(ST7796_RESET, ANALOG);
             pinMode(ST7796_RS, ANALOG);
             pinMode(ST7796_NSS, ANALOG);
@@ -1796,7 +1793,7 @@ void Screen::setup()
 #elif defined(USE_ST7789)
         static_cast<ST7789Spi *>(dispdev)->flipScreenVertically();
 #elif defined(USE_ST7796)
-        static_cast<ST7796Spi *>(dispdev)->flipScreenVertically();
+        static_cast<ST7796Spi *>(dispdev)->mirrorScreen();
 #else
         dispdev->flipScreenVertically();
 #endif
