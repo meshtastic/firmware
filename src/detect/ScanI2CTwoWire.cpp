@@ -10,11 +10,6 @@
 #include "meshUtils.h" // vformat
 #endif
 
-// AXP192 and AXP2101 have the same device address, we just need to identify it in Power.cpp
-#ifndef XPOWERS_AXP192_AXP2101_ADDRESS
-#define XPOWERS_AXP192_AXP2101_ADDRESS 0x34
-#endif
-
 bool in_array(uint8_t *array, int size, uint8_t lookfor)
 {
     int i;
@@ -221,9 +216,17 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 #ifdef HAS_LP5562
                 SCAN_SIMPLE_CASE(LP5562_ADDR, LP5562, "LP5562", (uint8_t)addr.address);
 #endif
-#ifdef HAS_PMU
-                SCAN_SIMPLE_CASE(XPOWERS_AXP192_AXP2101_ADDRESS, PMU_AXP192_AXP2101, "AXP192/AXP2101", (uint8_t)addr.address)
-#endif
+            case XPOWERS_AXP192_AXP2101_ADDRESS:
+                // Do we have the axp2101/192 or the TCA8418
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x90), 1);
+                if (registerValue == 0x0) {
+                    logFoundDevice("TCA8418", (uint8_t)addr.address);
+                    type = TCA8418KB;
+                } else {
+                    logFoundDevice("AXP192/AXP2101", (uint8_t)addr.address);
+                    type = PMU_AXP192_AXP2101;
+                }
+                break;
             case BME_ADDR:
             case BME_ADDR_ALTERNATE:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xD0), 1); // GET_ID
