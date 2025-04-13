@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-import xml.etree.ElementTree as ET
-from datetime import datetime, timezone
 import argparse
+import xml.etree.ElementTree as ET
+from defusedxml.ElementTree import parse
+from datetime import datetime, timezone
 
 
 def indent(elem, level=0):
@@ -28,7 +29,7 @@ def main():
 
     args = parser.parse_args()
 
-    tree = ET.parse(args.file)
+    tree = parse(args.file)
     root = tree.getroot()
 
     releases = root.find('releases')
