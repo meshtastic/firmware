@@ -3,13 +3,31 @@
 #define I2C_SDA 21
 #define I2C_SCL 22
 
+// Display addon
+#define USE_ST7796
+#define ST7796_NSS 25
+#define ST7796_RS 13  // DC
+#define ST7796_SDA 14 // MOSI
+#define ST7796_SCK 15
+#define ST7796_RESET 2
+#define ST7796_MISO -1
+#define ST7796_BUSY -1
+#define VTFT_LEDA 4
+#define TFT_BACKLIGHT_ON HIGH
+#define ST7796_SPI_HOST VSPI_HOST
+#define SPI_FREQUENCY 40000000
+#define SPI_READ_FREQUENCY 16000000
+#define TFT_HEIGHT 222
+#define TFT_WIDTH 480
+#define BRIGHTNESS_DEFAULT 100 // Medium Low Brightnes
+
 #define BUTTON_PIN 38 // The middle button GPIO on the T-Beam
 // #define BUTTON_PIN_ALT 13 // Alternate GPIO for an external button if needed. Does anyone use this? It is not documented
 //  anywhere.
-#define EXT_NOTIFY_OUT 13 // Default pin to use for Ext Notify Module.
+// #define EXT_NOTIFY_OUT 13 // Default pin to use for Ext Notify Module.
 
-#define LED_STATE_ON 0 // State when LED is lit
-#define LED_PIN 4      // Newer tbeams (1.1) have an extra led on GPIO4
+// #define LED_STATE_ON 0 // State when LED is lit
+// #define LED_PIN 4      // Newer tbeams (1.1) have an extra led on GPIO4
 
 // TTGO uses a common pinout for their SX1262 vs RF95 modules - both can be enabled and we will probe at runtime for RF95 and if
 // not found then probe for SX1262
