@@ -89,3 +89,16 @@ jobs:
           add-paths: |
             version.properties
             debian/changelog
+
+      - name: Bump org.meshtastic.meshtasticd.metainfo.xml
+        shell: bash
+        run: |
+          chmod +x ./bin/bump_metainfo.py
+          ./bin/bump_metainfo.py --file bin/org.meshtastic.meshtasticd.metainfo.xml "v${{ steps.version.outputs.long }}"
+
+      - name: Create metainfo.xml pull request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          title: Bump org.meshtastic.meshtasticd.metainfo.xml
+          add-paths: |
+            bin/org.meshtastic.meshtasticd.metainfo.xml
