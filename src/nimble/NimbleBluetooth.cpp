@@ -79,7 +79,7 @@ class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
 
 class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
 {
-    virtual uint32_t onPassKeyDisplay(NimBLEConnInfo &connInfo)
+    virtual uint32_t onPassKeyDisplay()
     {
         uint32_t passkey = config.bluetooth.fixed_pin;
 
