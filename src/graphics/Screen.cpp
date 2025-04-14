@@ -1005,7 +1005,6 @@ constexpr uint32_t mailBlinkInterval = 500;
 // ***********************
 void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
 {
-    LOG_INFO("drawCommonHeader: hasUnreadMessage = %s", hasUnreadMessage ? "true" : "false");
     constexpr int HEADER_OFFSET_Y = 1;
     y += HEADER_OFFSET_Y;
 
@@ -1032,7 +1031,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
         lastBlink = now;
     }
 
-    // ✅ Hybrid condition: wide screen AND landscape layout
+    // Hybrid condition: wide screen AND landscape layout
     bool useHorizontalBattery = (SCREEN_WIDTH > 128 && SCREEN_WIDTH > SCREEN_HEIGHT);
 
     if (useHorizontalBattery) {
@@ -1157,6 +1156,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
 
     display->setColor(WHITE);
 }
+
 // ****************************
 // *   Text Message Screen    *
 // ****************************
@@ -2628,18 +2628,44 @@ static void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int
     int chutil_bar_width = (SCREEN_WIDTH > 128) ? 100 : 50;
     int chutil_bar_height = (SCREEN_WIDTH > 128) ? 12 : 7;
     int extraoffset = (SCREEN_WIDTH > 128) ? 6 : 3;
-    int percent = airTime->channelUtilizationPercent();
-    int fillWidth = (chutil_bar_width * percent) / 100;
+    int chutil_percent = airTime->channelUtilizationPercent();
 
     int centerofscreen = SCREEN_WIDTH / 2;
     int total_line_content_width = (chUtil_x + chutil_bar_width + display->getStringWidth(chUtilPercentage) + extraoffset) / 2;
     int starting_position = centerofscreen - total_line_content_width;
 
     display->drawString(starting_position, compactFourthLine, chUtil);
-    display->drawRect(starting_position + chUtil_x, chUtil_y, chutil_bar_width, chutil_bar_height);
-    if (fillWidth > 0) {
-        display->fillRect(starting_position + chUtil_x + 1, chUtil_y + 1, fillWidth - 1, chutil_bar_height - 2);
+
+    // Weighting for nonlinear segments
+    float milestone1 = 25;
+    float milestone2 = 40;
+    float weight1 = 0.4;  // Weight for 0–25%
+    float weight2 = 0.33; // Weight for 25–40%
+    float weight3 = 0.27; // Weight for 40–100%
+    float totalWeight = weight1 + weight2 + weight3;
+
+    int seg1 = chutil_bar_width * (weight1 / totalWeight);
+    int seg2 = chutil_bar_width * (weight2 / totalWeight);
+    int seg3 = chutil_bar_width * (weight3 / totalWeight);
+
+    int fillRight = 0;
+
+    if (chutil_percent <= milestone1) {
+        fillRight = (seg1 * (chutil_percent / milestone1));
+    } else if (chutil_percent <= milestone2) {
+        fillRight = seg1 + (seg2 * ((chutil_percent - milestone1) / (milestone2 - milestone1)));
+    } else {
+        fillRight = seg1 + seg2 + (seg3 * ((chutil_percent - milestone2) / (100 - milestone2)));
     }
+
+    // Draw outline
+    display->drawRect(starting_position + chUtil_x, chUtil_y, chutil_bar_width, chutil_bar_height);
+
+    // Fill progress
+    if (fillRight > 0) {
+        display->fillRect(starting_position + chUtil_x, chUtil_y, fillRight, chutil_bar_height);
+    }
+
     display->drawString(starting_position + chUtil_x + chutil_bar_width + extraoffset, compactFourthLine, chUtilPercentage);
 }
 
@@ -3635,7 +3661,7 @@ void Screen::setFrames(FrameFocus focus)
             break;
 
         case FOCUS_PRESERVE:
-            // 🚫 No more adjustment — force stay on same index
+            // No more adjustment — force stay on same index
             if (originalPosition < fsi.frameCount)
                 ui->switchToFrame(originalPosition);
             else
