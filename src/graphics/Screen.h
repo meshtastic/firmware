@@ -607,6 +607,7 @@ class Screen : public concurrency::OSThread
             uint8_t log = 0;
             uint8_t settings = 0;
             uint8_t wifi = 0;
+            uint8_t deviceFocused = 0;
         } positions;
 
         uint8_t frameCount = 0;

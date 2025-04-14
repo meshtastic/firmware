@@ -3618,52 +3618,29 @@ void Screen::setFrames(FrameFocus focus)
 
     // Focus on a specific frame, in the frame set we just created
     switch (focus) {
-    case FOCUS_DEFAULT:
-        ui->switchToFrame(0); // First frame
-        break;
-    case FOCUS_FAULT:
-        ui->switchToFrame(fsi.positions.fault);
-        break;
-    case FOCUS_TEXTMESSAGE:
-        hasUnreadMessage = false; // ✅ Clear when message is *viewed*
-        ui->switchToFrame(fsi.positions.textMessage);
-        break;
-    case FOCUS_MODULE:
-        // Whichever frame was marked by MeshModule::requestFocus(), if any
-        // If no module requested focus, will show the first frame instead
-        ui->switchToFrame(fsi.positions.focusedModule);
-        break;
+        case FOCUS_DEFAULT:
+            ui->switchToFrame(fsi.positions.deviceFocused);
+            break;
+        case FOCUS_FAULT:
+            ui->switchToFrame(fsi.positions.fault);
+            break;
+        case FOCUS_TEXTMESSAGE:
+            hasUnreadMessage = false; // ✅ Clear when message is *viewed*
+            ui->switchToFrame(fsi.positions.textMessage);
+            break;
+        case FOCUS_MODULE:
+            // Whichever frame was marked by MeshModule::requestFocus(), if any
+            // If no module requested focus, will show the first frame instead
+            ui->switchToFrame(fsi.positions.focusedModule);
+            break;
 
-    case FOCUS_PRESERVE: {
-        const FramesetInfo &oldFsi = this->framesetInfo;
-
-        // ✅ Fix: Account for new message insertion shifting frame positions
-        if (willInsertTextMessage && oldFsi.positions.textMessage == 0 && fsi.positions.textMessage <= originalPosition) {
-            originalPosition++;
-        }
-
-        if (originalPosition == oldFsi.positions.log && fsi.positions.log < fsi.frameCount)
-            ui->switchToFrame(fsi.positions.log);
-        else if (originalPosition == oldFsi.positions.settings && fsi.positions.settings < fsi.frameCount)
-            ui->switchToFrame(fsi.positions.settings);
-        else if (originalPosition == oldFsi.positions.wifi && fsi.positions.wifi < fsi.frameCount)
-            ui->switchToFrame(fsi.positions.wifi);
-
-        // If frame count has decreased
-        else if (fsi.frameCount < oldFsi.frameCount) {
-            uint8_t numDropped = oldFsi.frameCount - fsi.frameCount;
-            // Move n frames backwards
-            if (numDropped <= originalPosition)
-                ui->switchToFrame(originalPosition - numDropped);
-            // Unless that would put us "out of bounds" (< 0)
+        case FOCUS_PRESERVE:
+            // 🚫 No more adjustment — force stay on same index
+            if (originalPosition < fsi.frameCount)
+                ui->switchToFrame(originalPosition);
             else
-                ui->switchToFrame(0);
-        } else if (originalPosition < fsi.frameCount)
-            ui->switchToFrame(originalPosition);
-        else
-            ui->switchToFrame(fsi.frameCount - 1);
-        break;
-    }
+                ui->switchToFrame(fsi.frameCount - 1);
+            break;
     }
 
     // Store the info about this frameset, for future setFrames calls
@@ -3687,13 +3664,20 @@ void Screen::dismissCurrentFrame()
     uint8_t currentFrame = ui->getUiState()->currentFrame;
     bool dismissed = false;
 
-    if (currentFrame == framesetInfo.positions.textMessage && devicestate.has_rx_text_message) {
+    // Only dismiss if the text message frame is currently valid and visible
+    if (framesetInfo.positions.textMessage != 255 &&
+        currentFrame == framesetInfo.positions.textMessage &&
+        devicestate.has_rx_text_message)
+    {
         LOG_INFO("Dismiss Text Message");
         devicestate.has_rx_text_message = false;
+        memset(&devicestate.rx_text_message, 0, sizeof(devicestate.rx_text_message)); // ✅ clear message
         dismissed = true;
     }
 
-    else if (currentFrame == framesetInfo.positions.waypoint && devicestate.has_rx_waypoint) {
+    else if (currentFrame == framesetInfo.positions.waypoint &&
+             devicestate.has_rx_waypoint)
+    {
         LOG_DEBUG("Dismiss Waypoint");
         devicestate.has_rx_waypoint = false;
         dismissed = true;
