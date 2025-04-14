@@ -96,7 +96,7 @@ jobs:
         run: |
           pip install -r bin/bump_metainfo/requirements.txt -q
           chmod +x ./bin/bump_metainfo/bump_metainfo.py
-          ./bin/bump_metainfo/bump_metainfo.py --file bin/org.meshtastic.meshtasticd.metainfo.xml "v${{ steps.version.outputs.short }}"
+          ./bin/bump_metainfo/bump_metainfo.py --file bin/org.meshtastic.meshtasticd.metainfo.xml "${{ steps.version.outputs.short }}"
 
       - name: Create metainfo.xml pull request
         uses: peter-evans/create-pull-request@v7

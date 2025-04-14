@@ -87,8 +87,7 @@
   </screenshots>
 
   <releases>
-    <release version="v2.6.4.b89355f" date="2025-04-10">
-      <url type="details">https://github.com/meshtastic/firmware/releases/tag/v2.6.4.b89355f</url>
-    </release>
+    <release version="2.6.5" date="2025-04-09" />
+    <release version="2.6.4" date="2025-03-29" />
   </releases>
 </component>
