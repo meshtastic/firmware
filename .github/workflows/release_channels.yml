@@ -63,6 +63,7 @@ jobs:
       - name: Get release version string
         run: |
           echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+          echo "short=$(./bin/buildinfo.py short)" >> $GITHUB_OUTPUT
           echo "deb=$(./bin/buildinfo.py deb)" >> $GITHUB_OUTPUT
         id: version
         env:
@@ -95,7 +96,7 @@ jobs:
         run: |
           pip install -r bin/bump_metainfo/requirements.txt -q
           chmod +x ./bin/bump_metainfo/bump_metainfo.py
-          ./bin/bump_metainfo/bump_metainfo.py --file bin/org.meshtastic.meshtasticd.metainfo.xml "v${{ steps.version.outputs.long }}"
+          ./bin/bump_metainfo/bump_metainfo.py --file bin/org.meshtastic.meshtasticd.metainfo.xml "v${{ steps.version.outputs.short }}"
 
       - name: Create metainfo.xml pull request
         uses: peter-evans/create-pull-request@v7
