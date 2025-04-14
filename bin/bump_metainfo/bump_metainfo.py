@@ -48,9 +48,6 @@ def main():
         'date': args.date
     })
 
-    url = ET.SubElement(new_release, 'url', {'type': 'details'})
-    url.text = f"https://github.com/meshtastic/firmware/releases/tag/{args.version}"
-
     releases.insert(0, new_release)
 
     indent(releases, level=1)
