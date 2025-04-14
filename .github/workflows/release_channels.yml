@@ -93,9 +93,9 @@ jobs:
       - name: Bump org.meshtastic.meshtasticd.metainfo.xml
         shell: bash
         run: |
-          pip install defusedxml -q
-          chmod +x ./bin/bump_metainfo.py
-          ./bin/bump_metainfo.py --file bin/org.meshtastic.meshtasticd.metainfo.xml "v${{ steps.version.outputs.long }}"
+          pip install -r bin/bump_metainfo/requirements.txt -q
+          chmod +x ./bin/bump_metainfo/bump_metainfo.py
+          ./bin/bump_metainfo/bump_metainfo.py --file bin/org.meshtastic.meshtasticd.metainfo.xml "v${{ steps.version.outputs.long }}"
 
       - name: Create metainfo.xml pull request
         uses: peter-evans/create-pull-request@v7
