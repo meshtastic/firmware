@@ -60,7 +60,7 @@
 SerialModule *serialModule;
 SerialModuleRadio *serialModuleRadio;
 
-#if defined(TTGO_T_ECHO) || defined(CANARYONE) || defined(MESHLINK)
+#if defined(TTGO_T_ECHO) || defined(CANARYONE) || defined(MESHLINK) || defined(ELECROW_ThinkNode_M1)
 SerialModule::SerialModule() : StreamAPI(&Serial), concurrency::OSThread("Serial") {}
 static Print *serialPrint = &Serial;
 #elif defined(CONFIG_IDF_TARGET_ESP32C6)
@@ -158,7 +158,7 @@ int32_t SerialModule::runOnce()
                 Serial.begin(baud);
                 Serial.setTimeout(moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT);
             }
-#elif !defined(TTGO_T_ECHO) && !defined(CANARYONE) && !defined(MESHLINK)
+#elif !defined(TTGO_T_ECHO) && !defined(CANARYONE) && !defined(MESHLINK) && !defined(ELECROW_ThinkNode_M1)
             if (moduleConfig.serial.rxd && moduleConfig.serial.txd) {
 #ifdef ARCH_RP2040
                 Serial2.setFIFOSize(RX_BUFFER);
@@ -214,7 +214,7 @@ int32_t SerialModule::runOnce()
                 }
             }
 
-#if !defined(TTGO_T_ECHO) && !defined(CANARYONE) && !defined(MESHLINK)
+#if !defined(TTGO_T_ECHO) && !defined(CANARYONE) && !defined(MESHLINK) && !defined(ELECROW_ThinkNode_M1)
             else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_WS85)) {
                 processWXSerial();
 
@@ -408,6 +408,49 @@ uint32_t SerialModule::getBaudRate()
     return BAUD;
 }
 
+// Add this structure to help with parsing WindGust =       24.4 serial lines.
+struct ParsedLine {
+    String name;
+    String value;
+};
+
+/**
+ * Parse a line of format "Name = Value" into name/value pair
+ * @param line Input line to parse
+ * @return ParsedLine containing name and value, or empty strings if parse failed
+ */
+ParsedLine parseLine(const char *line)
+{
+    ParsedLine result = {"", ""};
+
+    // Find equals sign
+    const char *equals = strchr(line, '=');
+    if (!equals) {
+        return result;
+    }
+
+    // Extract name by copying substring
+    char nameBuf[64]; // Temporary buffer
+    size_t nameLen = equals - line;
+    if (nameLen >= sizeof(nameBuf)) {
+        nameLen = sizeof(nameBuf) - 1;
+    }
+    strncpy(nameBuf, line, nameLen);
+    nameBuf[nameLen] = '\0';
+
+    // Create trimmed name string
+    String name = String(nameBuf);
+    name.trim();
+
+    // Extract value after equals sign
+    String value = String(equals + 1);
+    value.trim();
+
+    result.name = name;
+    result.value = value;
+    return result;
+}
+
 /**
  * Process the received weather station serial data, extract wind, voltage, and temperature information,
  * calculate averages and send telemetry data over the mesh network.
@@ -416,7 +459,8 @@ uint32_t SerialModule::getBaudRate()
  */
 void SerialModule::processWXSerial()
 {
-#if !defined(TTGO_T_ECHO) && !defined(CANARYONE) && !defined(CONFIG_IDF_TARGET_ESP32C6) && !defined(MESHLINK)
+#if !defined(TTGO_T_ECHO) && !defined(CANARYONE) && !defined(CONFIG_IDF_TARGET_ESP32C6) && !defined(MESHLINK) &&                 \
+    !defined(ELECROW_ThinkNode_M1)
     static unsigned int lastAveraged = 0;
     static unsigned int averageIntervalMillis = 300000; // 5 minutes hard coded.
     static double dir_sum_sin = 0;
@@ -452,6 +496,7 @@ void SerialModule::processWXSerial()
         // WindSpeed    = 0.5
         // WindGust     = 0.6
         // GXTS04Temp   = 24.4
+        // Temperature = 23.4 // WS80
 
         // RainIntSum     = 0
         // Rain           = 0.0
@@ -470,75 +515,48 @@ void SerialModule::processWXSerial()
                     memset(line, '\0', sizeof(line));
                     if (lineEnd - lineStart < sizeof(line) - 1) {
                         memcpy(line, &serialBytes[lineStart], lineEnd - lineStart);
-                        if (strstr(line, "Wind") != NULL) // we have a wind line
-                        {
-                            gotwind = true;
-                            // Find the positions of "=" signs in the line
-                            char *windDirPos = strstr(line, "WindDir      = ");
-                            char *windSpeedPos = strstr(line, "WindSpeed    = ");
-                            char *windGustPos = strstr(line, "WindGust     = ");
 
-                            if (windDirPos != NULL) {
-                                // Extract data after "=" for WindDir
-                                strlcpy(windDir, windDirPos + 15, sizeof(windDir)); // Add 15 to skip "WindDir = "
+                        ParsedLine parsed = parseLine(line);
+                        if (parsed.name.length() > 0) {
+                            if (parsed.name == "WindDir") {
+                                strlcpy(windDir, parsed.value.c_str(), sizeof(windDir));
                                 double radians = GeoCoord::toRadians(strtof(windDir, nullptr));
                                 dir_sum_sin += sin(radians);
                                 dir_sum_cos += cos(radians);
                                 dirCount++;
-                            } else if (windSpeedPos != NULL) {
-                                // Extract data after "=" for WindSpeed
-                                strlcpy(windVel, windSpeedPos + 15, sizeof(windVel)); // Add 15 to skip "WindSpeed = "
+                                gotwind = true;
+                            } else if (parsed.name == "WindSpeed") {
+                                strlcpy(windVel, parsed.value.c_str(), sizeof(windVel));
                                 float newv = strtof(windVel, nullptr);
                                 velSum += newv;
                                 velCount++;
-                                if (newv < lull || lull == -1)
+                                if (newv < lull || lull == -1) {
                                     lull = newv;
-
-                            } else if (windGustPos != NULL) {
-                                strlcpy(windGust, windGustPos + 15, sizeof(windGust)); // Add 15 to skip "WindSpeed = "
+                                }
+                                gotwind = true;
+                            } else if (parsed.name == "WindGust") {
+                                strlcpy(windGust, parsed.value.c_str(), sizeof(windGust));
                                 float newg = strtof(windGust, nullptr);
-                                if (newg > gust)
+                                if (newg > gust) {
                                     gust = newg;
-                            }
-
-                            // these are also voltage data we care about possibly
-                        } else if (strstr(line, "BatVoltage") != NULL) { // we have a battVoltage line
-                            char *batVoltagePos = strstr(line, "BatVoltage     = ");
-                            if (batVoltagePos != NULL) {
-                                strlcpy(batVoltage, batVoltagePos + 17, sizeof(batVoltage)); // 18 for ws 80, 17 for ws85
+                                }
+                                gotwind = true;
+                            } else if (parsed.name == "BatVoltage") {
+                                strlcpy(batVoltage, parsed.value.c_str(), sizeof(batVoltage));
                                 batVoltageF = strtof(batVoltage, nullptr);
                                 break; // last possible data we want so break
-                            }
-                        } else if (strstr(line, "CapVoltage") != NULL) { // we have a cappVoltage line
-                            char *capVoltagePos = strstr(line, "CapVoltage     = ");
-                            if (capVoltagePos != NULL) {
-                                strlcpy(capVoltage, capVoltagePos + 17, sizeof(capVoltage)); // 18 for ws 80, 17 for ws85
+                            } else if (parsed.name == "CapVoltage") {
+                                strlcpy(capVoltage, parsed.value.c_str(), sizeof(capVoltage));
                                 capVoltageF = strtof(capVoltage, nullptr);
-                            }
-                            // GXTS04Temp   = 24.4
-                        } else if (strstr(line, "GXTS04Temp") != NULL) { // we have a temperature line
-                            char *tempPos = strstr(line, "GXTS04Temp   = ");
-                            if (tempPos != NULL) {
-                                strlcpy(temperature, tempPos + 15, sizeof(temperature)); // 15 spaces for ws85
+                            } else if (parsed.name == "GXTS04Temp" || parsed.name == "Temperature") {
+                                strlcpy(temperature, parsed.value.c_str(), sizeof(temperature));
                                 temperatureF = strtof(temperature, nullptr);
-                            }
-
-                        } else if (strstr(line, "RainIntSum") != NULL) { // we have a rainsum line
-                            // LOG_INFO(line);
-                            char *pos = strstr(line, "RainIntSum     = ");
-                            if (pos != NULL) {
-                                strlcpy(rainStr, pos + 17, sizeof(rainStr)); // 17 spaces for ws85
+                            } else if (parsed.name == "RainIntSum") {
+                                strlcpy(rainStr, parsed.value.c_str(), sizeof(rainStr));
                                 rainSum = int(strtof(rainStr, nullptr));
-                            }
-
-                        } else if (strstr(line, "Rain") != NULL) {  // we have a rain line
-                            if (strstr(line, "WaveRain") == NULL) { // skip WaveRain lines though.
-                                // LOG_INFO(line);
-                                char *pos = strstr(line, "Rain           = ");
-                                if (pos != NULL) {
-                                    strlcpy(rainStr, pos + 17, sizeof(rainStr)); // 17 spaces for ws85
-                                    rain = strtof(rainStr, nullptr);
-                                }
+                            } else if (parsed.name == "Rain") {
+                                strlcpy(rainStr, parsed.value.c_str(), sizeof(rainStr));
+                                rain = strtof(rainStr, nullptr);
                             }
                         }
 
@@ -556,7 +574,7 @@ void SerialModule::processWXSerial()
     }
     if (gotwind) {
 
-        LOG_INFO("WS85 : %i %.1fg%.1f %.1fv %.1fv %.1fC rain: %.1f, %i sum", atoi(windDir), strtof(windVel, nullptr),
+        LOG_INFO("WS8X : %i %.1fg%.1f %.1fv %.1fv %.1fC rain: %.1f, %i sum", atoi(windDir), strtof(windVel, nullptr),
                  strtof(windGust, nullptr), batVoltageF, capVoltageF, temperatureF, rain, rainSum);
     }
     if (gotwind && !Throttle::isWithinTimespanMs(lastAveraged, averageIntervalMillis)) {
@@ -606,7 +624,7 @@ void SerialModule::processWXSerial()
         m.variant.environment_metrics.wind_lull = lull;
         m.variant.environment_metrics.has_wind_lull = true;
 
-        LOG_INFO("WS85 Transmit speed=%fm/s, direction=%d , lull=%f, gust=%f, voltage=%f temperature=%f",
+        LOG_INFO("WS8X Transmit speed=%fm/s, direction=%d , lull=%f, gust=%f, voltage=%f temperature=%f",
                  m.variant.environment_metrics.wind_speed, m.variant.environment_metrics.wind_direction,
                  m.variant.environment_metrics.wind_lull, m.variant.environment_metrics.wind_gust,
                  m.variant.environment_metrics.voltage, m.variant.environment_metrics.temperature);

@@ -109,6 +109,10 @@ void esp32Setup()
     randomSeed(seed);
     */
 
+#ifdef ADC_V
+    pinMode(ADC_V, INPUT);
+#endif
+
     LOG_DEBUG("Total heap: %d", ESP.getHeapSize());
     LOG_DEBUG("Free heap: %d", ESP.getFreeHeap());
     LOG_DEBUG("Total PSRAM: %d", ESP.getPsramSize());

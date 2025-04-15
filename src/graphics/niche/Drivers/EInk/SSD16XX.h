@@ -27,7 +27,7 @@ class SSD16XX : public EInk
     virtual void update(uint8_t *imageData, UpdateTypes type) override;
 
   protected:
-    virtual void wait();
+    virtual void wait(uint32_t timeout = 1000);
     virtual void reset();
     virtual void sendCommand(const uint8_t command);
     virtual void sendData(const uint8_t data);
@@ -44,6 +44,7 @@ class SSD16XX : public EInk
     virtual void detachFromUpdate();
     virtual bool isUpdateDone() override;
     virtual void finalizeUpdate() override;
+    virtual void deepSleep();
 
   protected:
     uint8_t bufferOffsetX = 0; // In bytes. Panel x=0 does not always align with controller x=0. Quirky internal wiring?

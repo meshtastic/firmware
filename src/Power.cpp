@@ -380,6 +380,20 @@ class AnalogBatteryLevel : public HasBatteryLevel
     // if we have a integrated device with a battery, we can assume that the battery is always connected
 #ifdef BATTERY_IMMUTABLE
     virtual bool isBatteryConnect() override { return true; }
+#elif defined(ADC_V)
+    virtual bool isBatteryConnect() override
+    {
+        int lastReading = digitalRead(ADC_V);
+        // 判断值是否变化
+        for (int i = 2; i < 500; i++) {
+            int reading = digitalRead(ADC_V);
+            if (reading != lastReading) {
+                return false; // 有变化，USB供电, 没接电池
+            }
+        }
+
+        return true;
+    }
 #else
     virtual bool isBatteryConnect() override { return getBatteryPercent() != -1; }
 #endif
@@ -668,12 +682,12 @@ void Power::readPowerStatus()
     int8_t batteryChargePercent = -1;
     OptionalBool usbPowered = OptUnknown;
     OptionalBool hasBattery = OptUnknown; // These must be static because NRF_APM code doesn't run every time
-    OptionalBool isCharging = OptUnknown;
+    OptionalBool isChargingNow = OptUnknown;
 
     if (batteryLevel) {
         hasBattery = batteryLevel->isBatteryConnect() ? OptTrue : OptFalse;
         usbPowered = batteryLevel->isVbusIn() ? OptTrue : OptFalse;
-        isCharging = batteryLevel->isCharging() ? OptTrue : OptFalse;
+        isChargingNow = batteryLevel->isCharging() ? OptTrue : OptFalse;
         if (hasBattery) {
             batteryVoltageMv = batteryLevel->getBattVoltage();
             // If the AXP192 returns a valid battery percentage, use it
@@ -702,15 +716,15 @@ void Power::readPowerStatus()
 
     // If changed to DISCONNECTED
     if (nrf_usb_state == NRFX_POWER_USB_STATE_DISCONNECTED)
-        isCharging = usbPowered = OptFalse;
+        isChargingNow = usbPowered = OptFalse;
     // If changed to CONNECTED / READY
     else
-        isCharging = usbPowered = OptTrue;
+        isChargingNow = usbPowered = OptTrue;
 
 #endif
 
     // Notify any status instances that are observing us
-    const PowerStatus powerStatus2 = PowerStatus(hasBattery, usbPowered, isCharging, batteryVoltageMv, batteryChargePercent);
+    const PowerStatus powerStatus2 = PowerStatus(hasBattery, usbPowered, isChargingNow, batteryVoltageMv, batteryChargePercent);
     LOG_DEBUG("Battery: usbPower=%d, isCharging=%d, batMv=%d, batPct=%d", powerStatus2.getHasUSB(), powerStatus2.getIsCharging(),
               powerStatus2.getBatteryVoltageMv(), powerStatus2.getBatteryChargePercent());
     newStatus.notifyObservers(&powerStatus2);
@@ -756,6 +770,7 @@ void Power::readPowerStatus()
     // If we have a battery at all and it is less than 0%, force deep sleep if we have more than 10 low readings in
     // a row. NOTE: min LiIon/LiPo voltage is 2.0 to 2.5V, current OCV min is set to 3100 that is large enough.
     //
+
     if (batteryLevel && powerStatus2.getHasBattery() && !powerStatus2.getHasUSB()) {
         if (batteryLevel->getBattVoltage() < OCV[NUM_OCV_POINTS - 1]) {
             low_voltage_counter++;

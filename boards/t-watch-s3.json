@@ -16,6 +16,7 @@
     "f_cpu": "240000000L",
     "f_flash": "80000000L",
     "flash_mode": "qio",
+    "psram_type": "opi",
     "hwids": [
       ["0x303A", "0x1001"],
       ["0x303A", "0x0002"]
@@ -23,16 +24,16 @@
     "mcu": "esp32s3",
     "variant": "t-watch-s3"
   },
-  "connectivity": ["wifi"],
+  "connectivity": ["wifi", "bluetooth", "lora"],
   "debug": {
     "openocd_target": "esp32s3.cfg"
   },
   "frameworks": ["arduino"],
   "name": "LilyGo T-Watch 2020 V3",
   "upload": {
-    "flash_size": "8MB",
+    "flash_size": "16MB",
     "maximum_ram_size": 327680,
-    "maximum_size": 8388608,
+    "maximum_size": 16777216,
     "require_upload_port": true,
     "use_1200bps_touch": true,
     "wait_for_upload_port": true,
