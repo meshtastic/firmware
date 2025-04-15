@@ -219,7 +219,7 @@ bool EInkDisplay::connect()
     }
 #elif defined(HELTEC_MESH_POCKET)
     {
-        spi1=&SPI1;
+        spi1 = &SPI1;
         spi1->begin();
         // VExt already enabled in setup()
         // RTC GPIO hold disabled in setup()
