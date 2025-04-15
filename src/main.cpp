@@ -1318,7 +1318,7 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 #endif
 // Only edge case here is if we apply this a device with built in Accelerometer and want to detect interrupts
 // We'll have to macro guard against those targets potentially
-#if NO_EXT_GPIO
+#if NO_EXT_GPIO || MESHTASTIC_EXCLUDE_DETECTIONSENSOR
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_DETECTIONSENSOR_CONFIG;
 #endif
 // If we don't have any GPIO and we don't have GPS OR we don't want too - no purpose in having serial config
