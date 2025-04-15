@@ -12,9 +12,9 @@ InkHUD::LogoApplet::LogoApplet() : concurrency::OSThread("LogoApplet")
     OSThread::enabled = true;
 
     textLeft = "";
-    textRight = "";
-    textTitle = xstr(APP_VERSION_SHORT);
-    fontTitle = fontSmall;
+    textRight = xstr(APP_VERSION_SHORT);
+    textTitle = owner.short_name;
+    fontTitle = fontLarge;
 
     bringToForeground();
     // This is then drawn with a FULL refresh by Renderer::begin
