@@ -28,13 +28,13 @@ class LCMEN2R13ECC1 : public SSD16XX
     static constexpr UpdateTypes supported = (UpdateTypes)(FULL | FAST);
 
   public:
-  LCMEN2R13ECC1() : SSD16XX(width, height, supported, 1) {} // Note: left edge of this display is offset by 1 byte
+    LCMEN2R13ECC1() : SSD16XX(width, height, supported, 1) {} // Note: left edge of this display is offset by 1 byte
 
   protected:
-  virtual void configScanning() override;
-  virtual void configWaveform() override;
-  virtual void configUpdateSequence() override;
-  void detachFromUpdate() override;
+    virtual void configScanning() override;
+    virtual void configWaveform() override;
+    virtual void configUpdateSequence() override;
+    void detachFromUpdate() override;
 };
 
 } // namespace NicheGraphics::Drivers

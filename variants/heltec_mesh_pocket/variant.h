@@ -49,16 +49,16 @@ No longer populated on PCB
     */
 #define WIRE_INTERFACES_COUNT 1
 
-#define PIN_WIRE_SDA (32+15)
-#define PIN_WIRE_SCL (32+13)
+#define PIN_WIRE_SDA (32 + 15)
+#define PIN_WIRE_SCL (32 + 13)
 
 /*
  * Lora radio
  */
 
 #define USE_SX1262
-#define SX126X_CS   (0 + 26) // FIXME - we really should define LORA_CS instead
-#define LORA_CS     (0 + 26)
+#define SX126X_CS (0 + 26) // FIXME - we really should define LORA_CS instead
+#define LORA_CS (0 + 26)
 #define SX126X_DIO1 (0 + 16)
 // Note DIO2 is attached internally to the module to an analog switch for TX/RX switching
 // #define SX1262_DIO3 (0 + 21)
@@ -72,25 +72,23 @@ No longer populated on PCB
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 
 // Display (E-Ink)
-#define PIN_EINK_CS   24
-#define PIN_EINK_BUSY 32+6
-#define PIN_EINK_DC   31
-#define PIN_EINK_RES  32+4
+#define PIN_EINK_CS 24
+#define PIN_EINK_BUSY 32 + 6
+#define PIN_EINK_DC 31
+#define PIN_EINK_RES 32 + 4
 #define PIN_EINK_SCLK 22
 #define PIN_EINK_MOSI 20
-
 
 #define PIN_SPI1_MISO -1
 #define PIN_SPI1_MOSI PIN_EINK_MOSI
 #define PIN_SPI1_SCK PIN_EINK_SCLK
 
-
 /*
  * GPS pins
  */
 
-#define PIN_SERIAL1_RX 32+5
-#define PIN_SERIAL1_TX 32+7
+#define PIN_SERIAL1_RX 32 + 5
+#define PIN_SERIAL1_TX 32 + 7
 
 /*
  * SPI Interfaces
@@ -112,7 +110,7 @@ No longer populated on PCB
 // it is defined in the anlaolgue pin section of this file
 // and has 12 bit resolution
 
-#define ADC_CTRL 32+2
+#define ADC_CTRL 32 + 2
 #define ADC_CTRL_ENABLED HIGH
 #define BATTERY_PIN 29
 #define ADC_RESOLUTION 14
@@ -124,12 +122,11 @@ No longer populated on PCB
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
 #define ADC_MULTIPLIER (4.90F)
 
-#undef  HAS_GPS
+#undef HAS_GPS
 #define HAS_GPS 0
 #define HAS_RTC 0
 #ifdef __cplusplus
 }
 #endif
-
 
 #endif
