@@ -152,6 +152,9 @@ extern "C" {
 #define T1000X_NTC_PIN (0 + 31) // P0.31/AIN7
 #define T1000X_LUX_PIN (0 + 29) // P0.29/AIN5
 
+#define HAS_SCREEN 0
+#define NO_EXT_GPIO 1
+
 #ifdef __cplusplus
 }
 #endif
