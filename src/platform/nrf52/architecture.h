@@ -81,6 +81,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_MESHLINK
 #elif defined(SEEED_XIAO_NRF52840_KIT)
 #define HW_VENDOR meshtastic_HardwareModel_XIAO_NRF52_KIT
+#elif defined(Seeed_Solar_Node)
+#define HW_VENDOR meshtastic_HardwareModel_SEEED_SOLAR_NODE
 #else
 #define HW_VENDOR meshtastic_HardwareModel_NRF52_UNKNOWN
 #endif
@@ -105,7 +107,7 @@
 
 #endif
 
-//#define LED_PIN PIN_LED1 // LED1 on nrf52840-DK
+// #define LED_PIN PIN_LED1 // LED1 on nrf52840-DK
 
 #ifdef PIN_BUTTON1
 #define BUTTON_PIN PIN_BUTTON1
