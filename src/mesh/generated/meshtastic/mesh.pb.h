@@ -239,6 +239,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_HELTEC_SENSOR_HUB = 92,
     /* Reserved Fried Chicken ID for future use */
     meshtastic_HardwareModel_RESERVED_FRIED_CHICKEN = 93,
+    /* Heltec Magnetic Power Bank with Meshtastic compatible */
+    meshtastic_HardwareModel_HELTEC_MESH_POCKET = 94,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
