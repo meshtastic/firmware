@@ -83,14 +83,6 @@ jobs:
         run: >-
           debian/ci_changelog.sh
 
-      - name: Create version.properties pull request
-        uses: peter-evans/create-pull-request@v7
-        with:
-          title: Bump version.properties
-          add-paths: |
-            version.properties
-            debian/changelog
-
       - name: Bump org.meshtastic.meshtasticd.metainfo.xml
         shell: bash
         run: |
@@ -98,9 +90,12 @@ jobs:
           chmod +x ./bin/bump_metainfo/bump_metainfo.py
           ./bin/bump_metainfo/bump_metainfo.py --file bin/org.meshtastic.meshtasticd.metainfo.xml "${{ steps.version.outputs.short }}"
 
-      - name: Create metainfo.xml pull request
+      - name: Create Bumps pull request
         uses: peter-evans/create-pull-request@v7
         with:
-          title: Bump org.meshtastic.meshtasticd.metainfo.xml
+          title: "Bump: Bumps on Published release"
+          commit-message: automated bumps
           add-paths: |
+            version.properties
+            debian/changelog
             bin/org.meshtastic.meshtasticd.metainfo.xml
