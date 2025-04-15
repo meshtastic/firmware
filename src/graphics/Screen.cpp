@@ -1546,7 +1546,7 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 #elif defined(USE_ST7796)
 #ifdef ESP_PLATFORM
     dispdev = new ST7796Spi(&SPI3, ST7796_RESET, ST7796_RS, ST7796_NSS, GEOMETRY_RAWMODE, TFT_WIDTH, TFT_HEIGHT, ST7796_SDA,
-                            ST7796_MISO, ST7796_SCK);
+                            ST7796_MISO, ST7796_SCK, TFT_SPI_FREQUENCY);
 #else
     dispdev = new ST7796Spi(&SPI3, ST7796_RESET, ST7796_RS, ST7796_NSS, GEOMETRY_RAWMODE, TFT_WIDTH, TFT_HEIGHT);
 #endif
@@ -1687,13 +1687,13 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 #ifdef USE_ST7796
             SPI3.end();
 #if defined(ARCH_ESP32)
-            pinMode(VTFT_LEDA, ANALOG);
+            pinMode(VTFT_LEDA, OUTPUT);
+            digitalWrite(VTFT_LEDA, LOW);
             pinMode(ST7796_RESET, ANALOG);
             pinMode(ST7796_RS, ANALOG);
             pinMode(ST7796_NSS, ANALOG);
 #else
             nrf_gpio_cfg_default(VTFT_LEDA);
-            nrf_gpio_cfg_default(VTFT_CTRL);
             nrf_gpio_cfg_default(ST7796_RESET);
             nrf_gpio_cfg_default(ST7796_RS);
             nrf_gpio_cfg_default(ST7796_NSS);
