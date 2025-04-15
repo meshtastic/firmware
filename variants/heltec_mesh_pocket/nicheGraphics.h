@@ -34,7 +34,7 @@ void setupNicheGraphics()
 
     // SPI
     // -----------------------------
-    SPIClass *spi1=&SPI1;
+    SPIClass *spi1 = &SPI1;
     spi1->begin();
     // Display is connected to SPI1
 
