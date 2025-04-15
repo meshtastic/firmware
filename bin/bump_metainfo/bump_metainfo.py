@@ -67,17 +67,6 @@ def main():
 
     tree.write(args.file, encoding='UTF-8', xml_declaration=True)
 
-    # `tree.write()` rewrites the <?xml /> section with singlequotes.
-    # This reverts those singlequotes to doublequotes,
-    # as used by FlatHub.
-    with open(args.file, 'r+', encoding='UTF-8') as file:
-        content = file.read()
-        content = content.replace("<?xml version='1.0'", '<?xml version="1.0"')
-        content = content.replace("encoding='UTF-8'", 'encoding="UTF-8"')
-        file.seek(0)
-        file.write(content)
-        file.truncate()
-
 
 if __name__ == "__main__":
     main()
