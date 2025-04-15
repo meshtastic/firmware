@@ -34,7 +34,7 @@ inputs:
   arch:
     description: Processor arch name
     required: true
-    default: "esp32"
+    default: esp32
 
 runs:
   using: composite
@@ -42,6 +42,13 @@ runs:
     - name: Build base
       id: base
       uses: ./.github/actions/setup-base
+
+    - name: Get web ui version
+      if: inputs.include-web-ui == 'true'
+      id: webver
+      shell: bash
+      run: |
+        echo "ver=$(cat bin/web.version)" >> $GITHUB_OUTPUT
 
     - name: Pull web ui
       if: inputs.include-web-ui == 'true'
@@ -51,7 +58,7 @@ runs:
         file: build.tar
         target: build.tar
         token: ${{ inputs.github_token }}
-        version: tags/v2.5.3
+        version: tags/v${{ steps.webver.outputs.ver }}
 
     - name: Unpack web ui
       if: inputs.include-web-ui == 'true'

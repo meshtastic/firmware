@@ -18,12 +18,34 @@
 #define MAX_RX_TOPHONE 32
 #endif
 
-/// max number of nodes allowed in the mesh
+/// Verify baseline assumption of node size. If it increases, we need to reevaluate
+/// the impact of its memory footprint, notably on MAX_NUM_NODES.
+static_assert(sizeof(meshtastic_NodeInfoLite) <= 192, "NodeInfoLite size increased. Reconsider impact on MAX_NUM_NODES.");
+
+/// max number of nodes allowed in the nodeDB
 #ifndef MAX_NUM_NODES
+#if defined(ARCH_STM32WL)
+#define MAX_NUM_NODES 10
+#elif defined(ARCH_NRF52)
+#define MAX_NUM_NODES 80
+#elif defined(CONFIG_IDF_TARGET_ESP32S3)
+#include "Esp.h"
+static inline int get_max_num_nodes()
+{
+    uint32_t flash_size = ESP.getFlashChipSize() / (1024 * 1024); // Convert Bytes to MB
+    if (flash_size >= 15) {
+        return 250;
+    } else if (flash_size >= 7) {
+        return 200;
+    } else {
+        return 100;
+    }
+}
+#define MAX_NUM_NODES get_max_num_nodes()
+#else
 #define MAX_NUM_NODES 100
 #endif
-
-#define MAX_NUM_NODES_FS 100
+#endif
 
 /// Max number of channels allowed
 #define MAX_NUM_CHANNELS (member_size(meshtastic_ChannelFile, channels) / member_size(meshtastic_ChannelFile, channels[0]))

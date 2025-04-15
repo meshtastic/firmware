@@ -144,9 +144,9 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
             bearingToOther -= myHeading;
         screen->drawNodeHeading(display, compassX, compassY, compassDiam, bearingToOther);
 
-        float bearingToOtherDegrees = (bearingToOther < 0) ? bearingToOther + 2*PI : bearingToOther;
-            bearingToOtherDegrees = bearingToOtherDegrees * 180 / PI;
-        
+        float bearingToOtherDegrees = (bearingToOther < 0) ? bearingToOther + 2 * PI : bearingToOther;
+        bearingToOtherDegrees = bearingToOtherDegrees * 180 / PI;
+
         // Distance to Waypoint
         float d = GeoCoord::latLongToMeter(DegD(wp.latitude_i), DegD(wp.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
         if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
@@ -160,7 +160,6 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
             else
                 snprintf(distStr, sizeof(distStr), "%.1fkm   %.0f°", d / 1000, bearingToOtherDegrees);
         }
-
 
     }
 

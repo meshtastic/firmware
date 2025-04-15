@@ -68,8 +68,13 @@ class EInkDisplay : public OLEDDisplay
 
     // If display uses HSPI
 #if defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_WIRELESS_PAPER_V1_0) || defined(HELTEC_VISION_MASTER_E213) ||               \
-    defined(HELTEC_VISION_MASTER_E290) || defined(TLORA_T3S3_EPAPER)
+    defined(HELTEC_VISION_MASTER_E290) || defined(TLORA_T3S3_EPAPER) || defined(CROWPANEL_ESP32S3_5_EPAPER) ||                   \
+    defined(CROWPANEL_ESP32S3_4_EPAPER) || defined(CROWPANEL_ESP32S3_2_EPAPER)
     SPIClass *hspi = NULL;
+#endif
+
+#if defined(HELTEC_MESH_POCKET)
+    SPIClass *spi1 = NULL;
 #endif
 
   private:

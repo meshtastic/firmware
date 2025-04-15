@@ -3,6 +3,7 @@ Section: misc
 Priority: optional
 Maintainer: Austin Lane <vidplace7@gmail.com>
 Build-Depends: debhelper-compat (= 13),
+               lsb-release,
                tar,
                gzip,
                platformio,
@@ -16,6 +17,7 @@ Build-Depends: debhelper-compat (= 13),
                libbluetooth-dev,
                libusb-1.0-0-dev,
                libi2c-dev,
+               libuv1-dev,
                openssl,
                libssl-dev,
                libulfius-dev,

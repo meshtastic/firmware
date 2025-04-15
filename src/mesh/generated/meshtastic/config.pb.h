@@ -180,14 +180,16 @@ typedef enum _meshtastic_Config_DisplayConfig_DisplayUnits {
 
 /* Override OLED outo detect with this if it fails. */
 typedef enum _meshtastic_Config_DisplayConfig_OledType {
-    /* Default / Auto */
+    /* Default / Autodetect */
     meshtastic_Config_DisplayConfig_OledType_OLED_AUTO = 0,
-    /* Default / Auto */
+    /* Default / Autodetect */
     meshtastic_Config_DisplayConfig_OledType_OLED_SSD1306 = 1,
-    /* Default / Auto */
+    /* Default / Autodetect */
     meshtastic_Config_DisplayConfig_OledType_OLED_SH1106 = 2,
     /* Can not be auto detected but set by proto. Used for 128x128 screens */
-    meshtastic_Config_DisplayConfig_OledType_OLED_SH1107 = 3
+    meshtastic_Config_DisplayConfig_OledType_OLED_SH1107 = 3,
+    /* Can not be auto detected but set by proto. Used for 128x64 screens */
+    meshtastic_Config_DisplayConfig_OledType_OLED_SH1107_128_64 = 4
 } meshtastic_Config_DisplayConfig_OledType;
 
 typedef enum _meshtastic_Config_DisplayConfig_DisplayMode {
@@ -374,7 +376,7 @@ typedef struct _meshtastic_Config_PositionConfig {
 /* Power Config\
  See [Power Config](/docs/settings/config/power) for additional power config details. */
 typedef struct _meshtastic_Config_PowerConfig {
-    /* Description: Will sleep everything as much as possible, for the tracker and sensor role this will also include the lora radio. 
+    /* Description: Will sleep everything as much as possible, for the tracker and sensor role this will also include the lora radio.
  Don't use this setting if you want to use your device with the phone apps or are using a device without a user button.
  Technical Details: Works for ESP32 devices and NRF52 devices in the Sensor or Tracker roles */
     bool is_power_saving;
@@ -426,7 +428,7 @@ typedef struct _meshtastic_Config_NetworkConfig {
     char wifi_ssid[33];
     /* If set, will be use to authenticate to the named wifi */
     char wifi_psk[65];
-    /* NTP server to use if WiFi is conneced, defaults to `0.pool.ntp.org` */
+    /* NTP server to use if WiFi is conneced, defaults to `meshtastic.pool.ntp.org` */
     char ntp_server[33];
     /* Enable Ethernet */
     bool eth_enabled;
@@ -639,8 +641,8 @@ extern "C" {
 #define _meshtastic_Config_DisplayConfig_DisplayUnits_ARRAYSIZE ((meshtastic_Config_DisplayConfig_DisplayUnits)(meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL+1))
 
 #define _meshtastic_Config_DisplayConfig_OledType_MIN meshtastic_Config_DisplayConfig_OledType_OLED_AUTO
-#define _meshtastic_Config_DisplayConfig_OledType_MAX meshtastic_Config_DisplayConfig_OledType_OLED_SH1107
-#define _meshtastic_Config_DisplayConfig_OledType_ARRAYSIZE ((meshtastic_Config_DisplayConfig_OledType)(meshtastic_Config_DisplayConfig_OledType_OLED_SH1107+1))
+#define _meshtastic_Config_DisplayConfig_OledType_MAX meshtastic_Config_DisplayConfig_OledType_OLED_SH1107_128_64
+#define _meshtastic_Config_DisplayConfig_OledType_ARRAYSIZE ((meshtastic_Config_DisplayConfig_OledType)(meshtastic_Config_DisplayConfig_OledType_OLED_SH1107_128_64+1))
 
 #define _meshtastic_Config_DisplayConfig_DisplayMode_MIN meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT
 #define _meshtastic_Config_DisplayConfig_DisplayMode_MAX meshtastic_Config_DisplayConfig_DisplayMode_COLOR
