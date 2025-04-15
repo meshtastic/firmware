@@ -281,7 +281,7 @@ struct PubSubConfig {
 #if HAS_NETWORKING
 bool connectPubSub(const PubSubConfig &config, PubSubClient &pubSub, Client &client)
 {
-    pubSub.setBufferSize(1024);
+    pubSub.setBufferSize(1024, 1024);
     pubSub.setClient(client);
     pubSub.setServer(config.serverAddr.c_str(), config.serverPort);
 
