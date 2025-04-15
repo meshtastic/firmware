@@ -135,18 +135,6 @@
 #define GPS_RX_PIN 18
 #define GPS_TX_PIN 17
 
-#if TFT_HEIGHT == 320 || TFT_HEIGHT == 480
-// SDCard 2.4 - 3.5 TFT
-// #define HAS_SDCARD -> must be defined in platformio.ini
-#define SPI_SCK 5
-#define SPI_MISO 4
-#define SPI_MOSI 6
-#define SDCARD_CS 7 // SD does not support -1
-#else
-// SDCard (from 4.3 only if LoRa is disabled)
-
-#endif
-
 // Extension Slot Layout, viewed from above (2.4-3.5)
 // DIO1/IO1 o   o IO2/NRESET
 // SCK/IO10 o   o IO16/NC
