@@ -5,6 +5,7 @@ from defusedxml.ElementTree import parse
 from datetime import datetime, timezone
 
 
+# Indent by 2 spaces to align with xml formatting.
 def indent(elem, level=0):
     i = "\n" + level * "  "
     if len(elem):
@@ -66,6 +67,9 @@ def main():
 
     tree.write(args.file, encoding='UTF-8', xml_declaration=True)
 
+    # `tree.write()` rewrites the <?xml /> section with singlequotes.
+    # This reverts those singlequotes to doublequotes,
+    # as used by FlatHub.
     with open(args.file, 'r+', encoding='UTF-8') as file:
         content = file.read()
         content = content.replace("<?xml version='1.0'", '<?xml version="1.0"')
