@@ -4,7 +4,7 @@ cli:
 plugins:
   sources:
     - id: trunk
-      ref: v1.6.7
+      ref: v1.6.8
       uri: https://github.com/trunk-io/plugins
 lint:
   enabled:
@@ -16,7 +16,7 @@ lint:
     - terrascan@1.19.9
     - trivy@0.61.0
     - taplo@0.9.3
-    - ruff@0.11.4
+    - ruff@0.11.5
     - isort@6.0.1
     - markdownlint@0.44.0
     - oxipng@9.1.4

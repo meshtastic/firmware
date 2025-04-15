@@ -81,6 +81,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_MESHLINK
 #elif defined(SEEED_XIAO_NRF52840_KIT)
 #define HW_VENDOR meshtastic_HardwareModel_XIAO_NRF52_KIT
+#elif defined(HELTEC_MESH_POCKET)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_POCKET
 #else
 #define HW_VENDOR meshtastic_HardwareModel_NRF52_UNKNOWN
 #endif
