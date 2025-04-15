@@ -88,10 +88,10 @@
 
   <releases>
     <release version="2.6.5" date="2025-04-09">
-      <url type="details">https://github.com/meshtastic/firmware/releases</url>
+      <url type="details">https://github.com/meshtastic/firmware/releases?q=tag%3Av2.6.5</url>
     </release>
     <release version="2.6.4" date="2025-03-29">
-      <url type="details">https://github.com/meshtastic/firmware/releases</url>
+      <url type="details">https://github.com/meshtastic/firmware/releases?q=tag%3Av2.6.4</url>
     </release>
   </releases>
 </component>

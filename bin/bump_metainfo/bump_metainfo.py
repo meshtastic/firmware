@@ -23,7 +23,7 @@ def main():
         description="Prepend new release entry to metainfo.xml file.")
     parser.add_argument("--file", help="Path to the metainfo.xml file",
                         default="org.meshtastic.meshtasticd.metainfo.xml")
-    parser.add_argument("version", help="Version string (e.g. v2.6.4.b89355f)")
+    parser.add_argument("version", help="Version string (e.g. 2.6.4)")
     parser.add_argument("--date", help="Release date (YYYY-MM-DD), defaults to today",
                         default=datetime.now(timezone.utc).date().isoformat())
 
@@ -48,7 +48,7 @@ def main():
         'date': args.date
     })
     url = ET.SubElement(new_release, 'url', {'type': 'details'})
-    url.text = "https://github.com/meshtastic/firmware/releases"
+    url.text = f"https://github.com/meshtastic/firmware/releases?q=tag%3Av{args.version}"
 
     releases.insert(0, new_release)
 
