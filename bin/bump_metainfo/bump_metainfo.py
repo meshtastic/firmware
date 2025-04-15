@@ -36,27 +36,35 @@ def main():
     if releases is None:
         raise RuntimeError("<releases> element not found in XML.")
 
-    existing_versions = [release.get('version')
-                         for release in releases.findall('release')]
-    if args.version in existing_versions:
-        print(
-            f"Version {args.version} is already present, skipping insertion.")
-        return
+    existing_versions = {
+        release.get('version'): release
+        for release in releases.findall('release')
+    }
+    existing_release = existing_versions.get(args.version)
 
-    new_release = ET.Element('release', {
-        'version': args.version,
-        'date': args.date
-    })
-    url = ET.SubElement(new_release, 'url', {'type': 'details'})
-    url.text = f"https://github.com/meshtastic/firmware/releases?q=tag%3Av{args.version}"
+    if existing_release is not None:
+        if not existing_release.get('date'):
+            print(f"Version {args.version} found without date. Adding date...")
+            existing_release.set('date', args.date)
+        else:
+            print(
+                f"Version {args.version} is already present with date, skipping insertion.")
+    else:
+        new_release = ET.Element('release', {
+            'version': args.version,
+            'date': args.date
+        })
+        url = ET.SubElement(new_release, 'url', {'type': 'details'})
+        url.text = f"https://github.com/meshtastic/firmware/releases?q=tag%3Av{args.version}"
 
-    releases.insert(0, new_release)
+        releases.insert(0, new_release)
 
-    indent(releases, level=1)
-    releases.tail = "\n"
+        indent(releases, level=1)
+        releases.tail = "\n"
+
+        print(f"Inserted new release: {args.version}")
 
     tree.write(args.file, encoding='UTF-8', xml_declaration=True)
-    print(f"Inserted new release: {args.version}")
 
     with open(args.file, 'r+', encoding='UTF-8') as file:
         content = file.read()
