@@ -73,10 +73,22 @@ const uint32_t g_ADigitalPinMap[] = {
     37, // D18 P1.05 GNSS_ENABLE
     14, // D19 P0.14 BAT_READ
     39, // D20 P1.07 USER_BUTTON
+
+    //
+    21, // D21 P0.21 (QSPI_SCK)
+    25, // D22 P0.25 (QSPI_CSN)
+    20, // D23 P0.20 (QSPI_SIO_0 DI)
+    24, // D24 P0.24 (QSPI_SIO_1 DO)
+    22, // D25 P0.22 (QSPI_SIO_2 WP)
+    23, // D26 P0.23 (QSPI_SIO_3 HOLD)
 };
 }
+
 void initVariant()
 {
+    pinMode(PIN_QSPI_CS, OUTPUT);
+    digitalWrite(PIN_QSPI_CS, HIGH);
+    //This setup is crucial for ensuring low power consumption and proper initialization of the hardware components.
     pinMode(GPS_EN, OUTPUT);
     digitalWrite(GPS_EN, LOW);
 

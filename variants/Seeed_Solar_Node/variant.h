@@ -127,6 +127,20 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 #endif
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  On-board QSPI Flash
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// On-board QSPI Flash
+#define PIN_QSPI_SCK (21)
+#define PIN_QSPI_CS  (22)
+#define PIN_QSPI_IO0 (23)
+#define PIN_QSPI_IO1 (24)
+#define PIN_QSPI_IO2 (25)
+#define PIN_QSPI_IO3 (26)
+
+#define EXTERNAL_FLASH_DEVICES P25Q16H
+#define EXTERNAL_FLASH_USE_QSPI
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  Compatibility Definitions
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #ifdef __cplusplus
