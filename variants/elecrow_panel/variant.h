@@ -126,7 +126,7 @@
 #define DAC_I2S_BCK 13
 #define DAC_I2S_WS 11
 #define DAC_I2S_DOUT 12
-#define DAC_I2S_MCLK 0
+#define DAC_I2S_MCLK 7 // don't use GPIO0 because it's assigned to LoRa or button
 #endif
 
 // GPS via UART1 connector
