@@ -42,7 +42,7 @@ extern "C" {
 #define LED_STATE_ON 1 // State when LED is lit
 
 // XIAO Wio-SX1262 Shield User button
-#define PIN_BUTTON1 33
+#define PIN_BUTTON1 5
 #define BUTTON_NEED_PULLUP
 
 // Digital Pins
