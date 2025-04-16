@@ -1526,7 +1526,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 #if defined(ESP_PLATFORM) && defined(USE_ST7789)
 SPIClass SPI1(HSPI);
 #elif defined(ESP_PLATFORM) && defined(USE_ST7796)
-SPIClass SPI3(VSPI);
+SPIClass SPI3(HSPI);
 #endif
 
 Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_OledType screenType, OLEDDISPLAY_GEOMETRY geometry)

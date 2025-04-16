@@ -46,7 +46,6 @@
 
 // Used when the diplay shield is chosen
 #ifdef USE_ST7796
-#define LORA_SPI_FREQUENCY 1000000
 
 #undef EXT_NOTIFY_OUT
 #undef LED_STATE_ON
@@ -60,7 +59,7 @@
 #define ST7796_MISO -1
 #define ST7796_BUSY -1
 #define VTFT_LEDA 4
-#define TFT_SPI_FREQUENCY 500000
+#define TFT_SPI_FREQUENCY 4000000
 #define TFT_HEIGHT 222
 #define TFT_WIDTH 480
 #define BRIGHTNESS_DEFAULT 100 // Medium Low Brightnes
