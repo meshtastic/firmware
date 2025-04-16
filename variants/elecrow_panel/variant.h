@@ -1,8 +1,6 @@
 #define I2C_SDA 15
 #define I2C_SCL 16
 
-#define PIN_BUZZER 8
-
 #if TFT_HEIGHT == 320 && not defined(HAS_TFT) // 2.4 and 2.8 TFT
 // ST7789 TFT LCD
 #define ST7789_CS 40
@@ -120,13 +118,16 @@
 #define SC7277_PCLK_ACTIVE_NEG 0
 #endif
 
-#if TFT_HEIGHT == 320
+#if TFT_HEIGHT == 320 // 2.4-2.8 have I2S audio
 // dac / amp
-#define HAS_I2S
+// #define HAS_I2S // didn't get I2S sound working
+#define PIN_BUZZER 8 // using pwm buzzer instead (nobody will notice, lol)
 #define DAC_I2S_BCK 13
 #define DAC_I2S_WS 11
 #define DAC_I2S_DOUT 12
-#define DAC_I2S_MCLK 7 // don't use GPIO0 because it's assigned to LoRa or button
+#define DAC_I2S_MCLK 8 // don't use GPIO0 because it's assigned to LoRa or button
+#else
+#define PIN_BUZZER 8
 #endif
 
 // GPS via UART1 connector
