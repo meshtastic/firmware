@@ -840,7 +840,11 @@ void setup()
     // ESP32
     SPI.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
     LOG_DEBUG("SPI.begin(SCK=%d, MISO=%d, MOSI=%d, NSS=%d)", LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
+#if defined(TBEAM_V10) && defined(USE_ST7796)
+    SPI.setFrequency(LORA_SPI_FREQUENCY);
+#else
     SPI.setFrequency(4000000);
+#endif
 #endif
 
     // Initialize the screen first so we can show the logo while we start up everything else.
