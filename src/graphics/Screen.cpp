@@ -1796,7 +1796,9 @@ void Screen::setup()
     powerStatusObserver.observe(&powerStatus->onNewStatus);
     gpsStatusObserver.observe(&gpsStatus->onNewStatus);
     nodeStatusObserver.observe(&nodeStatus->onNewStatus);
+#if !MESHTASTIC_EXCLUDE_ADMIN
     adminMessageObserver.observe(adminModule);
+#endif
     if (textMessageModule)
         textMessageObserver.observe(textMessageModule);
     if (inputBroker)
