@@ -23,16 +23,16 @@ void LCMEN2R13ECC1::configScanning()
 void LCMEN2R13ECC1::configWaveform()
 {
     switch (updateType) {
-        case FAST:
-            sendCommand(0x3C); // Border waveform:
-            sendData(0x85);
-            break;
-    
-        case FULL:
-        default:
-            // From OTP memory
-            break;
-        }
+    case FAST:
+        sendCommand(0x3C); // Border waveform:
+        sendData(0x85);
+        break;
+
+    case FULL:
+    default:
+        // From OTP memory
+        break;
+    }
 }
 
 void LCMEN2R13ECC1::configUpdateSequence()
@@ -65,4 +65,4 @@ void LCMEN2R13ECC1::detachFromUpdate()
     }
 }
 
-#endif   // MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+#endif // MESHTASTIC_INCLUDE_NICHE_GRAPHICS

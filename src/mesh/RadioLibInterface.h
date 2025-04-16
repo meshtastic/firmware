@@ -132,6 +132,11 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     virtual bool isActivelyReceiving() = 0;
 
+    /** Are we are currently sending a packet?
+     * This method is public, intending to expose this information to other firmware components
+     */
+    virtual bool isSending();
+
     /** Attempt to cancel a previously sent packet.  Returns true if a packet was found we could cancel */
     virtual bool cancelSending(NodeNum from, PacketId id) override;
 
