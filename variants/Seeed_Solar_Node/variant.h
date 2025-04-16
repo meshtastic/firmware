@@ -28,7 +28,7 @@
 
 #define LED_GREEN PIN_LED1
 #define LED_BLUE PIN_LED2
-#define LED_PIN PIN_LED2
+// #define LED_PIN PIN_LED2
 #define LED_STATE_ON 1 // State when LED is litted
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  Button Configuration
@@ -131,7 +131,7 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // On-board QSPI Flash
 #define PIN_QSPI_SCK (21)
-#define PIN_QSPI_CS  (22)
+#define PIN_QSPI_CS (22)
 #define PIN_QSPI_IO0 (23)
 #define PIN_QSPI_IO1 (24)
 #define PIN_QSPI_IO2 (25)

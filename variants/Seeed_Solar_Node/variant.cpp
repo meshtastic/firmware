@@ -88,7 +88,7 @@ void initVariant()
 {
     pinMode(PIN_QSPI_CS, OUTPUT);
     digitalWrite(PIN_QSPI_CS, HIGH);
-    //This setup is crucial for ensuring low power consumption and proper initialization of the hardware components.
+    // This setup is crucial for ensuring low power consumption and proper initialization of the hardware components.
     pinMode(GPS_EN, OUTPUT);
     digitalWrite(GPS_EN, LOW);
 
@@ -101,7 +101,7 @@ void initVariant()
     pinMode(PIN_LED2, OUTPUT);
     digitalWrite(PIN_LED2, LOW);
     pinMode(PIN_LED2, OUTPUT);
-    digitalWrite(LED_PIN, LOW);
+    // digitalWrite(LED_PIN, LOW);
 
     pinMode(GPS_EN, OUTPUT);
     digitalWrite(GPS_EN, HIGH);
