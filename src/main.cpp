@@ -1310,7 +1310,7 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_AUDIO_CONFIG;
 #endif
 // Option to explicitly include canned messages for edge cases, e.g. niche graphics
-#if (!HAS_SCREEN && NO_EXT_GPIO) && !MESHTASTIC_INCLUDE_CANNEDMSG
+#if (!HAS_SCREEN || NO_EXT_GPIO) || MESHTASTIC_EXCLUDE_CANNEDMESSAGES
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_CANNEDMSG_CONFIG;
 #endif
 #if NO_EXT_GPIO
@@ -1318,11 +1318,11 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 #endif
 // Only edge case here is if we apply this a device with built in Accelerometer and want to detect interrupts
 // We'll have to macro guard against those targets potentially
-#if NO_EXT_GPIO
+#if NO_EXT_GPIO || MESHTASTIC_EXCLUDE_DETECTIONSENSOR
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_DETECTIONSENSOR_CONFIG;
 #endif
-// If we don't have any GPIO and we don't have GPS, no purpose in having serial config
-#if NO_EXT_GPIO && NO_GPS
+// If we don't have any GPIO and we don't have GPS OR we don't want too - no purpose in having serial config
+#if NO_EXT_GPIO && NO_GPS || MESHTASTIC_EXCLUDE_SERIAL
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_SERIAL_CONFIG;
 #endif
 #ifndef ARCH_ESP32
