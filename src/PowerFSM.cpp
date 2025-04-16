@@ -19,7 +19,7 @@
 #include "sleep.h"
 #include "target_specific.h"
 
-#if HAS_WIFI && !defined(ARCH_PORTDUINO) || !defined(MESHTASTIC_EXCLUDE_WIFI)
+#if HAS_WIFI && !defined(ARCH_PORTDUINO) || defined(MESHTASTIC_EXCLUDE_WIFI)
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
 
@@ -403,7 +403,9 @@ void PowerFSM_setup()
                                       Default::getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs),
                                       NULL, "Screen-on timeout");
     }
-#else
+#endif // HAS_WIFI || !defined(MESHTASTIC_EXCLUDE_WIFI)
+
+#else // (not) ARCH_ESP32
     // If not ESP32, light-sleep not used. Check periodically if config has drifted out of stateDark
     powerFSM.add_timed_transition(&stateDARK, &stateDARK,
                                   Default::getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs), NULL,
@@ -412,5 +414,4 @@ void PowerFSM_setup()
 
     powerFSM.run_machine(); // run one iteration of the state machine, so we run our on enter tasks for the initial DARK state
 }
-#endif
 #endif
