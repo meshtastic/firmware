@@ -25,7 +25,7 @@
       "sd_fwid": "0x0123"
     },
     "bootloader": {
-      "settings_addr": "0xFF000"  
+      "settings_addr": "0xFF000"
     }
   },
   "connectivity": ["bluetooth"],
