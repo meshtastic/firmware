@@ -1523,10 +1523,8 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     screen->drawColumns(display, x, y, fields);
 }
 
-#if defined(ESP_PLATFORM) && defined(USE_ST7789)
+#if defined(ESP_PLATFORM) && (defined(USE_ST7789) || defined(USE_ST7796))
 SPIClass SPI1(HSPI);
-#elif defined(ESP_PLATFORM) && defined(USE_ST7796)
-SPIClass SPI3(HSPI);
 #endif
 
 Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_OledType screenType, OLEDDISPLAY_GEOMETRY geometry)
@@ -1545,10 +1543,10 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 #endif
 #elif defined(USE_ST7796)
 #ifdef ESP_PLATFORM
-    dispdev = new ST7796Spi(&SPI3, ST7796_RESET, ST7796_RS, ST7796_NSS, GEOMETRY_RAWMODE, TFT_WIDTH, TFT_HEIGHT, ST7796_SDA,
+    dispdev = new ST7796Spi(&SPI1, ST7796_RESET, ST7796_RS, ST7796_NSS, GEOMETRY_RAWMODE, TFT_WIDTH, TFT_HEIGHT, ST7796_SDA,
                             ST7796_MISO, ST7796_SCK, TFT_SPI_FREQUENCY);
 #else
-    dispdev = new ST7796Spi(&SPI3, ST7796_RESET, ST7796_RS, ST7796_NSS, GEOMETRY_RAWMODE, TFT_WIDTH, TFT_HEIGHT);
+    dispdev = new ST7796Spi(&SPI1, ST7796_RESET, ST7796_RS, ST7796_NSS, GEOMETRY_RAWMODE, TFT_WIDTH, TFT_HEIGHT);
 #endif
 #elif defined(USE_SSD1306)
     dispdev = new SSD1306Wire(address.address, -1, -1, geometry,
@@ -1685,7 +1683,7 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 #endif
 #endif
 #ifdef USE_ST7796
-            SPI3.end();
+            SPI1.end();
 #if defined(ARCH_ESP32)
             pinMode(VTFT_LEDA, OUTPUT);
             digitalWrite(VTFT_LEDA, LOW);
