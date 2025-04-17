@@ -450,7 +450,6 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
         nvs_flash_erase();
 #endif
 #ifdef ARCH_NRF52
-        Bluefruit.begin();
         LOG_INFO("Clear bluetooth bonds!");
         bond_print_list(BLE_GAP_ROLE_PERIPH);
         bond_print_list(BLE_GAP_ROLE_CENTRAL);
