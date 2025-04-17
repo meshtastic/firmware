@@ -51,6 +51,9 @@
 #undef LED_STATE_ON
 #undef LED_PIN
 
+#define HAS_TOUCHSCREEN 1
+#define SCREEN_TOUCH_INT 35
+
 #define ST7796_NSS 25
 #define ST7796_RS 13  // DC
 #define ST7796_SDA 14 // MOSI
