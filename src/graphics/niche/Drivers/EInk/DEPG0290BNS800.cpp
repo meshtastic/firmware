@@ -116,5 +116,10 @@ void DEPG0290BNS800::finalizeUpdate()
         sendCommand(0x7F); // Terminate image write without update
         wait();
     }
+
+    // Enter deep-sleep to save a few µA
+    // Waking from this requires that display's reset pin is broken out
+    if (pin_rst != 0xFF)
+        deepSleep();
 }
 #endif // MESHTASTIC_INCLUDE_NICHE_GRAPHICS

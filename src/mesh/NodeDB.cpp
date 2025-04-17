@@ -689,7 +689,7 @@ void NodeDB::initConfigIntervals()
 
     config.display.screen_on_secs = default_screen_on_secs;
 
-#if defined(T_WATCH_S3) || defined(T_DECK) || defined(MESH_TAB) || defined(RAK14014)
+#if defined(T_WATCH_S3) || defined(T_DECK) || defined(UNPHONE) || defined(MESH_TAB) || defined(RAK14014)
     config.power.is_power_saving = true;
     config.display.screen_on_secs = 30;
     config.power.wait_bluetooth_secs = 30;
@@ -742,6 +742,15 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.alert_message = true;
     moduleConfig.external_notification.output_ms = 100;
     moduleConfig.external_notification.active = true;
+#endif
+#ifdef ELECROW_ThinkNode_M1
+    // Default to Elecrow USER_LED (blue)
+    moduleConfig.external_notification.enabled = true;
+    moduleConfig.external_notification.output = USER_LED;
+    moduleConfig.external_notification.active = true;
+    moduleConfig.external_notification.alert_message = true;
+    moduleConfig.external_notification.output_ms = 1000;
+    moduleConfig.external_notification.nag_timeout = 60;
 #endif
 #ifdef BUTTON_SECONDARY_CANNEDMESSAGES
     // Use a board's second built-in button as input source for canned messages

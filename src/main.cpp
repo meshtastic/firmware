@@ -216,6 +216,64 @@ const char *getDeviceName()
     return name;
 }
 
+#if defined(ELECROW_ThinkNode_M1) || defined(ELECROW_ThinkNode_M2)
+static int32_t ledBlinkCount = 0;
+
+static int32_t elecrowLedBlinker()
+{
+    // are we in alert buzzer mode?
+#if HAS_BUTTON
+    if (buttonThread->isBuzzing()) {
+        // blink LED three times for 3 seconds, then 3 times for a second, with one second pause
+        if (ledBlinkCount % 2) { // odd means LED OFF
+            ledBlink.set(false);
+            ledBlinkCount++;
+            if (ledBlinkCount >= 12)
+                ledBlinkCount = 0;
+            noTone(PIN_BUZZER);
+            return 1000;
+        } else {
+            if (ledBlinkCount < 6) {
+                ledBlink.set(true);
+                tone(PIN_BUZZER, 4000, 3000);
+                ledBlinkCount++;
+                return 3000;
+            } else {
+                ledBlink.set(true);
+                tone(PIN_BUZZER, 4000, 1000);
+                ledBlinkCount++;
+                return 1000;
+            }
+        }
+    } else {
+#endif
+        ledBlinkCount = 0;
+        if (config.device.led_heartbeat_disabled)
+            return 1000;
+
+        static bool ledOn;
+        // remain on when fully charged or discharging above 10%
+        if ((powerStatus->getIsCharging() && powerStatus->getBatteryChargePercent() >= 100) ||
+            (!powerStatus->getIsCharging() && powerStatus->getBatteryChargePercent() >= 10)) {
+            ledOn = true;
+        } else {
+            ledOn ^= 1;
+        }
+        ledBlink.set(ledOn);
+        // when charging, blink 0.5Hz square wave rate to indicate that
+        if (powerStatus->getIsCharging()) {
+            return 500;
+        }
+        // Blink rapidly when almost empty or if battery is not connected
+        if ((!powerStatus->getIsCharging() && powerStatus->getBatteryChargePercent() < 10) || !powerStatus->getHasBattery()) {
+            return 250;
+        }
+#if HAS_BUTTON
+    }
+#endif
+    return 1000;
+}
+#else
 static int32_t ledBlinker()
 {
     // Still set up the blinking (heartbeat) interval but skip code path below, so LED will blink if
@@ -231,6 +289,7 @@ static int32_t ledBlinker()
     // have a very sparse duty cycle of LED being on, unless charging, then blink 0.5Hz square wave rate to indicate that
     return powerStatus->getIsCharging() ? 1000 : (ledOn ? 1 : 1000);
 }
+#endif
 
 uint32_t timeLastPowered = 0;
 
@@ -267,11 +326,6 @@ void printInfo()
 void setup()
 {
 
-#ifdef POWER_CHRG
-    pinMode(POWER_CHRG, OUTPUT);
-    digitalWrite(POWER_CHRG, HIGH);
-#endif
-
 #if defined(PIN_POWER_EN)
     pinMode(PIN_POWER_EN, OUTPUT);
     digitalWrite(PIN_POWER_EN, HIGH);
@@ -280,11 +334,6 @@ void setup()
 #ifdef LED_POWER
     pinMode(LED_POWER, OUTPUT);
     digitalWrite(LED_POWER, HIGH);
-#endif
-
-#ifdef POWER_LED
-    pinMode(POWER_LED, OUTPUT);
-    digitalWrite(POWER_LED, HIGH);
 #endif
 
 #ifdef USER_LED
@@ -418,7 +467,12 @@ void setup()
 
     OSThread::setup();
 
+#if defined(ELECROW_ThinkNode_M1) || defined(ELECROW_ThinkNode_M2)
+    // The ThinkNodes have their own blink logic
+    ledPeriodic = new Periodic("Blink", elecrowLedBlinker);
+#else
     ledPeriodic = new Periodic("Blink", ledBlinker);
+#endif
 
     fsInit();
 
@@ -591,6 +645,10 @@ void setup()
             // assign an arbitrary value to distinguish from other models
             kb_model = 0x37;
             break;
+        case ScanI2C::DeviceType::TCA8418KB:
+            // assign an arbitrary value to distinguish from other models
+            kb_model = 0x84;
+            break;
         default:
             // use this as default since it's also just zero
             LOG_WARN("kb_info.type is unknown(0x%02x), setting kb_model=0x00", kb_info.type);
@@ -606,9 +664,9 @@ void setup()
  * "found".
  */
 
-// Only one supported RGB LED currently
-#ifdef HAS_NCP5623
-    rgb_found = i2cScanner->find(ScanI2C::DeviceType::NCP5623);
+// Two supported RGB LED currently
+#ifdef HAS_RGB_LED
+    rgb_found = i2cScanner->firstRGBLED();
 #endif
 
 #ifdef HAS_TPS65233
@@ -1262,7 +1320,7 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_AUDIO_CONFIG;
 #endif
 // Option to explicitly include canned messages for edge cases, e.g. niche graphics
-#if (!HAS_SCREEN && NO_EXT_GPIO) && !MESHTASTIC_INCLUDE_CANNEDMSG
+#if (!HAS_SCREEN || NO_EXT_GPIO) || MESHTASTIC_EXCLUDE_CANNEDMESSAGES
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_CANNEDMSG_CONFIG;
 #endif
 #if NO_EXT_GPIO
@@ -1270,17 +1328,17 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 #endif
 // Only edge case here is if we apply this a device with built in Accelerometer and want to detect interrupts
 // We'll have to macro guard against those targets potentially
-#if NO_EXT_GPIO
+#if NO_EXT_GPIO || MESHTASTIC_EXCLUDE_DETECTIONSENSOR
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_DETECTIONSENSOR_CONFIG;
 #endif
-// If we don't have any GPIO and we don't have GPS, no purpose in having serial config
-#if NO_EXT_GPIO && NO_GPS
+// If we don't have any GPIO and we don't have GPS OR we don't want too - no purpose in having serial config
+#if NO_EXT_GPIO && NO_GPS || MESHTASTIC_EXCLUDE_SERIAL
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_SERIAL_CONFIG;
 #endif
 #ifndef ARCH_ESP32
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_PAXCOUNTER_CONFIG;
 #endif
-#if !defined(HAS_NCP5623) && !defined(RGBLED_RED) && !defined(HAS_NEOPIXEL) && !defined(UNPHONE) && !RAK_4631
+#if !defined(HAS_RGB_LED) && !RAK_4631
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_AMBIENTLIGHTING_CONFIG;
 #endif
 
