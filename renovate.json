@@ -13,6 +13,9 @@
   "git-submodules": {
     "enabled": true
   },
+  "pip_requirements": {
+    "fileMatch": ["bin/bump_metainfo/requirements.txt"]
+  },
   "commitMessageTopic": "{{depName}}",
   "labels": ["dependencies"],
   "customDatasources": {

@@ -4,11 +4,11 @@ cli:
 plugins:
   sources:
     - id: trunk
-      ref: v1.6.7
+      ref: v1.6.8
       uri: https://github.com/trunk-io/plugins
 lint:
   enabled:
-    - renovate@39.238.1
+    - renovate@39.243.0
     - prettier@3.5.3
     - trufflehog@3.88.23
     - yamllint@1.37.0
@@ -16,7 +16,7 @@ lint:
     - terrascan@1.19.9
     - trivy@0.61.0
     - taplo@0.9.3
-    - ruff@0.11.4
+    - ruff@0.11.5
     - isort@6.0.1
     - markdownlint@0.44.0
     - oxipng@9.1.4
@@ -28,7 +28,7 @@ lint:
     - shellcheck@0.10.0
     - black@25.1.0
     - git-diff-check
-    - gitleaks@8.24.2
+    - gitleaks@8.24.3
     - clang-format@16.0.3
   ignore:
     - linters: [ALL]
