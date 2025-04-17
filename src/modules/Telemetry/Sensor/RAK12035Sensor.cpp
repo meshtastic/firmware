@@ -8,13 +8,13 @@ RAK12035Sensor::RAK12035Sensor() : TelemetrySensor(meshtastic_TelemetrySensorTyp
 
 int32_t RAK12035Sensor::runOnce()
 {
+
     LOG_INFO("Init sensor: %s", sensorName);
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
-
     sensor.set_sensor_addr(RAK120351_ADDR);
-
+    delay(500);
     sensor.begin(nodeTelemetrySensorsMap[sensorType].first);
     // Get sensor firmware version
     uint8_t data = 0;
@@ -92,26 +92,8 @@ bool RAK12035Sensor::getMetrics(meshtastic_Telemetry *measurement)
         LOG_ERROR("Failed to read sensor data");
         return false;
     }
-    LOG_INFO("Successful read from sensor Temperature: %.2f, Moisture: %ld%", (double)(temp / 10), moisture);
     measurement->variant.environment_metrics.soil_temperature = (float)(temp / 10);
     measurement->variant.environment_metrics.soil_moisture = moisture;
-
-    LOG_INFO("Check if the original temperature and moisture (relative_humidity) are being used.. if not just use them for the "
-             "soil monitoring.");
-
-    if (!measurement->variant.environment_metrics.has_temperature) {
-        LOG_INFO("Overwrite the temp metrics (not being set right now and this will allow the soil temp value to be used in the "
-                 "client interface).");
-        measurement->variant.environment_metrics.has_temperature = true;
-        measurement->variant.environment_metrics.temperature = (float)(temp / 10);
-    }
-
-    if (!measurement->variant.environment_metrics.has_relative_humidity) {
-        LOG_INFO("Overwrite the moisture metrics (not being used for air humidity and this will allow the soil humidity to "
-                 "appear in the client interfaces without adjustments).");
-        measurement->variant.environment_metrics.has_relative_humidity = true;
-        measurement->variant.environment_metrics.relative_humidity = (float)moisture;
-    }
 
     return true;
 }
