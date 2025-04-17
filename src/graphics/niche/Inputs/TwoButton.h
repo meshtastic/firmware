@@ -35,7 +35,7 @@ class TwoButton : protected concurrency::OSThread
     static TwoButton *getInstance(); // Create or get the singleton instance
     void start();                    // Start handling button input
     void stop();                     // Stop handling button input (disconnect ISRs for sleep)
-    void setWiring(uint8_t whichButton, uint8_t pin, bool internalPulldown = false);
+    void setWiring(uint8_t whichButton, uint8_t pin, bool internalPullup = false);
     void setTiming(uint8_t whichButton, uint32_t debounceMs, uint32_t longpressMs);
     void setHandlerDown(uint8_t whichButton, Callback onDown);
     void setHandlerUp(uint8_t whichButton, Callback onUp);
@@ -65,7 +65,6 @@ class TwoButton : protected concurrency::OSThread
         // Per-button config
         uint8_t pin = 0xFF;                 // 0xFF: unset
         bool activeLogic = LOW;             // Active LOW by default. Currently unimplemented.
-        uint8_t mode = INPUT;               // Whether to use internal pull up / pull down resistors
         uint32_t debounceLength = 50;       // Minimum length for shortpress, in ms
         uint32_t longpressLength = 500;     // How long after button down to fire longpress, in ms
         volatile State state = State::REST; // Internal state

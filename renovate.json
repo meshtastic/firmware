@@ -1,0 +1,73 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    ":dependencyDashboard",
+    ":semanticCommitTypeAll(chore)",
+    ":ignoreModulesAndTests",
+    "group:recommended",
+    "replacements:all",
+    "workarounds:all"
+  ],
+  "forkProcessing": "enabled",
+  "ignoreDeps": ["protobufs"],
+  "git-submodules": {
+    "enabled": true
+  },
+  "pip_requirements": {
+    "fileMatch": ["bin/bump_metainfo/requirements.txt"]
+  },
+  "commitMessageTopic": "{{depName}}",
+  "labels": ["dependencies"],
+  "customDatasources": {
+    "pio": {
+      "description": "PlatformIO Registry",
+      "defaultRegistryUrlTemplate": "https://api.registry.platformio.org/v3/packages/{{packageName}}",
+      "format": "json",
+      "transformTemplates": [
+        "{\"releases\": [$map($.versions, function($v) { { \"version\": $v.name, \"releaseTimestamp\": $v.released_at } })], \"homepage\": $encodeUrl($join([\"https://registry.platformio.org/\",$.type,\"/\",$.owner.username,\"/\",$.name])) }"
+      ]
+    }
+  },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Match meshtastic/web version",
+      "fileMatch": ["bin/web.version"],
+      "matchStrings": ["(?<currentValue>.+)$"],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "meshtastic/web",
+      "versioningTemplate": "semver-coerced"
+    },
+    {
+      "customType": "regex",
+      "description": "Match normal PIO dependencies",
+      "fileMatch": [".*\\.ini$"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>.*?)(?: depName=(?<depName>.+?))? packageName=(?<packageName>.+?)(?: versioning=(?<versioning>[a-z-]+?))?\\s+?.+?@(?<currentValue>.+?)\\s"
+      ],
+      "versioningTemplate": "{{#if versioning}}{{{versioning}}}{{else}}semver-coerced{{/if}}"
+    },
+    {
+      "customType": "regex",
+      "description": "Match PIO zipped dependencies with github tag ref",
+      "fileMatch": [".*\\.ini$"],
+      "matchStrings": [
+        "# renovate: datasource=github-tags(?: depName=(?<depName>.+?))? packageName=(?<packageName>.+?)(?: versioning=(?<versioning>[a-z-]+?))?\\s+?https:\/\/.+?archive\/(?<currentValue>.+?).zip\\s"
+      ],
+      "datasourceTemplate": "github-tags",
+      "versioningTemplate": "{{#if versioning}}{{{versioning}}}{{else}}semver-coerced{{/if}}"
+    },
+    {
+      "customType": "regex",
+      "description": "Match PIO zipped dependencies with git commit ref",
+      "fileMatch": [".*\\.ini$"],
+      "matchStrings": [
+        "# renovate: datasource=git-refs(?: depName=(?<depName>.+?))? packageName=(?<packageName>.+?)(?: versioning=(?<versioning>[a-z-]+?))?\\sgitBranch=(?<gitBranch>.+?)\\s+?https:\/\/.+?archive\/(?<currentDigest>.+?).zip\\s"
+      ],
+      "datasourceTemplate": "git-refs",
+      "currentValueTemplate": "{{{gitBranch}}}",
+      "versioningTemplate": "{{#if versioning}}{{{versioning}}}{{else}}git{{/if}}"
+    }
+  ],
+  "packageRules": []
+}
