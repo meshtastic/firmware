@@ -2,11 +2,11 @@
 # trunk-ignore-all(hadolint/DL3002): We must run as root for this container
 # trunk-ignore-all(hadolint/DL3018): Do not pin apk package versions
 # trunk-ignore-all(hadolint/DL3013): Do not pin pip package versions
-ARG PIO_ENV=native
 
 FROM python:3.13-alpine3.21 AS builder
-
+ARG PIO_ENV=native
 ENV PIP_ROOT_USER_ACTION=ignore
+
 RUN apk --no-cache add \
         bash g++ libstdc++-dev linux-headers zip git ca-certificates libgpiod-dev yaml-cpp-dev bluez-dev \
         libusb-dev i2c-tools-dev libuv-dev openssl-dev pkgconf argp-standalone \

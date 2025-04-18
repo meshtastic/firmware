@@ -3,9 +3,9 @@
 # trunk-ignore-all(hadolint/DL3002): We must run as root for this container
 # trunk-ignore-all(hadolint/DL3008): Do not pin apt package versions
 # trunk-ignore-all(hadolint/DL3013): Do not pin pip package versions
-ARG PIO_ENV=native
 
 FROM python:3.13-bookworm AS builder
+ARG PIO_ENV=native
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Etc/UTC
 
