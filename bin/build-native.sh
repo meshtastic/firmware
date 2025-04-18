@@ -15,6 +15,7 @@ platformioFailed() {
 
 VERSION=$(bin/buildinfo.py long)
 SHORT_VERSION=$(bin/buildinfo.py short)
+PIO_ENV=${1:-native}
 
 OUTDIR=release/
 
@@ -24,7 +25,7 @@ mkdir -p $OUTDIR/
 rm -r $OUTDIR/* || true
 
 # Important to pull latest version of libs into all device flavors, otherwise some devices might be stale
-pio pkg update --environment native || platformioFailed
-pio run --environment native || platformioFailed
-cp .pio/build/native/program "$OUTDIR/meshtasticd_linux_$(uname -m)"
+pio pkg update --environment "$PIO_ENV" || platformioFailed
+pio run --environment "$PIO_ENV" || platformioFailed
+cp ".pio/build/$PIO_ENV/program" "$OUTDIR/meshtasticd_linux_$(uname -m)"
 cp bin/native-install.* $OUTDIR
