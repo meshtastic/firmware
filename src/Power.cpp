@@ -295,6 +295,22 @@ class AnalogBatteryLevel : public HasBatteryLevel
             raw = raw / BATTERY_SENSE_SAMPLES;
             scaled = operativeAdcMultiplier * ((1000 * AREF_VOLTAGE) / pow(2, BATTERY_SENSE_RESOLUTION_BITS)) * raw;
 #endif
+#if defined(RAK11310)
+            float voltage_raw = operativeAdcMultiplier * ((1000 * AREF_VOLTAGE) / 1023) * raw;
+            
+            LOG_INFO("[POWER DEBUG] AREF=%.2fV, ADC_RAW=%u, ADC_MULT=%.2f", 
+                     (double)AREF_VOLTAGE, 
+                     raw, 
+                     (double)operativeAdcMultiplier);
+            
+            scaled = (voltage_raw * 1.22f) - 0.1f;
+            scaled = operativeAdcMultiplier * ((1000 * AREF_VOLTAGE) / 4096) * raw;
+            LOG_INFO("[POWER CORRECTION] Before=%.2fmV, After=%.2fmV", 
+                     (double)voltage_raw, 
+                     (double)scaled);
+#else
+            scaled = operativeAdcMultiplier * ((1000 * AREF_VOLTAGE) / 1023) * raw;
+#endif          
             adcDisable();
 
             if (!initial_read_done) {
