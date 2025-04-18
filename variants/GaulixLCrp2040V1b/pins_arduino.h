@@ -3,9 +3,9 @@
 // Pin definitions taken from:
 //    https://datasheets.raspberrypi.org/pico/pico-datasheet.pdf
 
-static const uint8_t WB_IO1 = 22;  // SLOT_A SLOT_B
+static const uint8_t WB_IO1 = 22; // SLOT_A SLOT_B
 static const uint8_t WB_IO2 = 28; // SLOT_A SLOT_B
-static const uint8_t WB_IO3 = 10;  // SLOT_C
+static const uint8_t WB_IO3 = 10; // SLOT_C
 static const uint8_t WB_IO4 = 11; // SLOT_C
 static const uint8_t WB_IO5 = 7;  // SLOT_D
 static const uint8_t WB_IO6 = 6;  // SLOT_D
