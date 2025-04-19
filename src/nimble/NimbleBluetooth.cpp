@@ -122,7 +122,7 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
 #endif
         passkeyShowing = true;
 
-        NimBLEDevice::injectPassKey(connInfo, passkey);
+        return passkey;
     }
 
     virtual void onAuthenticationComplete(NimBLEConnInfo &connInfo)

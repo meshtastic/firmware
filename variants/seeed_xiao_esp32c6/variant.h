@@ -40,4 +40,5 @@
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
 
+// For BLE/WiFi connectivity
 #define USE_XIAO_ESP32C6_EXTERNAL_ANTENNA

@@ -1,3 +1,6 @@
+# # This file configures the ESP-IDF framework for the ESP32 platform.
+# It enables BLE functionality using NimBLE and optimizes for minimal power consumption and size.
+# Refer to the ESP-IDF Kconfig documentation for more details: https://docs.espressif.com/projects/esp-idf/en/v5.1.6/esp32c6/api-reference/kconfig.html
 # CONFIG_AUTOSTART_ARDUINO is not set
 # CONFIG_WS2812_LED_ENABLE is not set
 CONFIG_FREERTOS_HZ=1000

@@ -1415,7 +1415,7 @@ void loop()
 }
 #endif
 
-#if !defined(CONFIG_AUTOSTART_ARDUINO) && (ESP_IDF_VERSION_MAJOR * 100 + ESP_IDF_VERSION_MINOR * 10 + ESP_IDF_VERSION_PATCH) > 514
+#if !defined(CONFIG_AUTOSTART_ARDUINO) && (ESP_IDF_VERSION_MAJOR * 100 + ESP_IDF_VERSION_MINOR * 10 + ESP_IDF_VERSION_PATCH) > 512
 // Define app_main to bridge Arduino and ESP-IDF
 extern "C" void app_main(void)
 {
