@@ -6,8 +6,8 @@
 
 #include "modules/CannedMessageModule.h"
 
+#include "TouchDrvCSTXXX.hpp"
 #include "TouchScreenBase.h"
-#include "touch/TouchClassCST226.h"
 
 class TouchScreenCST226SE : public TouchScreenBase
 {
@@ -17,14 +17,12 @@ class TouchScreenCST226SE : public TouchScreenBase
 
     static bool forwardGetTouch(int16_t *x, int16_t *y);
     bool (*_getTouch)(int16_t *, int16_t *);
-
-  protected:
     virtual bool getTouch(int16_t &x, int16_t &y);
     virtual void onEvent(const TouchEvent &event);
 
   private:
     static TouchScreenCST226SE *instance;
-    TouchClassCST226 touch;
+    TouchDrvCSTXXX touch;
     uint8_t i2cAddress = 0;
 
     static constexpr uint8_t PossibleAddresses[2] = {CST226SE_ADDR, CST226SE_ADDR_ALT};
