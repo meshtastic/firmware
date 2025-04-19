@@ -39,6 +39,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "graphics/ScreenFonts.h"
 #include "graphics/images.h"
 #include "input/ScanAndSelect.h"
+#include "input/TouchScreenCST226SE.h"
 #include "input/TouchScreenImpl1.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
@@ -1823,10 +1824,13 @@ void Screen::setup()
             new TouchScreenImpl1(dispdev->getWidth(), dispdev->getHeight(), static_cast<TFTDisplay *>(dispdev)->getTouch);
         touchScreenImpl1->init();
     }
-#elif HAS_TOUCHSCREEN
+#elif HAS_TOUCHSCREEN && !HAS_CST226SE
     touchScreenImpl1 =
         new TouchScreenImpl1(dispdev->getWidth(), dispdev->getHeight(), static_cast<TFTDisplay *>(dispdev)->getTouch);
     touchScreenImpl1->init();
+#elif HAS_TOUCHSCREEN && HAS_CST226SE
+    touchScreenCST226SE = new TouchScreenCST226SE(TFT_HEIGHT, TFT_WIDTH, TouchScreenCST226SE::forwardGetTouch);
+    touchScreenCST226SE->init();
 #endif
 
     // Subscribe to status updates

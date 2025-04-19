@@ -10,11 +10,13 @@
 
 volatile bool CST_IRQ = false;
 
+TouchScreenCST226SE *TouchScreenCST226SE::instance = nullptr;
 TouchScreenCST226SE *touchScreenCST226SE;
 
 TouchScreenCST226SE::TouchScreenCST226SE(uint16_t width, uint16_t height, bool (*getTouch)(int16_t *, int16_t *))
     : TouchScreenBase("touchscreen1", width, height), _getTouch(getTouch)
 {
+    instance = this;
 }
 
 void TouchScreenCST226SE::init()
@@ -23,11 +25,11 @@ void TouchScreenCST226SE::init()
         if (touch.begin(Wire, addr, I2C_SDA, I2C_SCL)) {
             i2cAddress = addr;
 
-#ifdef TOUCHSCREEN_INT
-            pinMode(TOUCHSCREEN_INT, INPUT);
-            attachInterrupt(
-                TOUCHSCREEN_INT, [] { CST_IRQ = true; }, RISING);
-#endif
+            // #ifdef TOUCHSCREEN_INT
+            //             pinMode(TOUCHSCREEN_INT, INPUT);
+            //             attachInterrupt(
+            //                 TOUCHSCREEN_INT, [] { CST_IRQ = true; }, RISING);
+            // #endif
 
             LOG_DEBUG("CST226SE init OK at address 0x%02X", addr);
             return;
@@ -48,6 +50,16 @@ bool TouchScreenCST226SE::getTouch(int16_t &x, int16_t &y)
         x = x_array[0];
         y = y_array[0];
         return true;
+    }
+
+    return false;
+}
+
+bool TouchScreenCST226SE::forwardGetTouch(int16_t *x, int16_t *y)
+{
+    if (instance) {
+        return instance->getTouch(*x, *y);
+        LOG_DEBUG("TouchScreen touched %dx %dy", x, y);
     }
 
     return false;
