@@ -15,6 +15,7 @@
 
 #include <GFX.h> // GFXRoot drawing lib
 
+#include "mesh/MeshModule.h"
 #include "mesh/MeshTypes.h"
 
 #include "./AppletFont.h"
