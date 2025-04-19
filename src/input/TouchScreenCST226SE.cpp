@@ -33,8 +33,6 @@ void TouchScreenCST226SE::init()
             attachInterrupt(
                 TOUCH_IRQ, []() { isPressed = true; }, FALLING);
             LOG_DEBUG("CST226SE init OK at address 0x%02X", addr);
-            touch.setMaxCoordinates(TFT_WIDTH + 5, TFT_HEIGHT + 5);
-            touch.setMirrorXY(true, true);
             return;
         }
     }
@@ -46,15 +44,19 @@ bool TouchScreenCST226SE::getTouch(int16_t &x, int16_t &y)
 {
     if (!touch.isPressed()) {
         return false;
-
-        int16_t x_array[1], y_array[1];
-        uint8_t touched = touch.getPoint(x_array, y_array, 1);
-        if (touched > 0) {
-            x = x_array[0];
-            y = y_array[0];
-            LOG_DEBUG("TouchScreen touched %dx %dy", x, y);
-            return true;
+    }
+    int16_t x_array[1], y_array[1];
+    uint8_t touched = touch.getPoint(x_array, y_array, 1);
+    if (touched > 0) {
+        int16_t tx = x_array[0];
+        int16_t ty = y_array[0];
+        if (tx > (TFT_WIDTH + 10) && tx < (10) && ty > (TFT_HEIGHT + 10) && ty < (10)) {
+            return false;
         }
+        x = tx;
+        y = ty;
+        LOG_DEBUG("TouchScreen touched %dx %dy", x, y);
+        return true;
     }
     return false;
 }
