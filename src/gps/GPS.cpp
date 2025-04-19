@@ -11,8 +11,8 @@
 #include "PowerMon.h"
 #include "Throttle.h"
 #include "buzz.h"
-#include "gps/RTC.h"
 #include "concurrency/Periodic.h"
+#include "gps/RTC.h"
 #include "meshUtils.h"
 
 #include "main.h" // pmu_found
