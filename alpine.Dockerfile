@@ -39,7 +39,11 @@ RUN apk --no-cache add \
     && mkdir -p /var/lib/meshtasticd \
     && mkdir -p /etc/meshtasticd/config.d \
     && mkdir -p /etc/meshtasticd/ssl
+
+# Fetch compiled binary from the builder
 COPY --from=builder /tmp/firmware/release/meshtasticd /usr/sbin/
+# Copy config templates
+COPY ./bin/config.d /etc/meshtasticd/available.d
 
 WORKDIR /var/lib/meshtasticd
 VOLUME /var/lib/meshtasticd
