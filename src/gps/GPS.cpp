@@ -547,8 +547,13 @@ bool GPS::setup()
             // only ask for RMC and GGA
             _serial_gps->write("$PCAS03,1,0,0,0,1,0,0,0,0,0,,,0,0*02\r\n");
             delay(250);
-            // Switch to Vehicle Mode, since SoftRF enables Aviation < 2g
-            _serial_gps->write("$PCAS11,3*1E\r\n");
+            if (config.position.fixed_position == true) {
+                // Set to stationary mode, which reduces jitter and may save power
+                _serial_gps->write("$PCAS11,1*1C\r\n");
+            } else {
+                // Switch to Vehicle Mode, since SoftRF enables Aviation < 2g
+                _serial_gps->write("$PCAS11,3*1E\r\n");
+            }
             delay(250);
         } else if (gnssModel == GNSS_MODEL_MTK_L76B) {
             // Waveshare Pico-GPS hat uses the L76B with 9600 baud
@@ -567,8 +572,13 @@ bool GPS::setup()
             // Enable PPS for 2D/3D fix only
             _serial_gps->write("$PMTK285,3,100*3F\r\n");
             delay(250);
-            // Switch to Fitness Mode, for running and walking purpose with low speed (<5 m/s)
-            _serial_gps->write("$PMTK886,1*29\r\n");
+            if (config.position.fixed_position == true) {
+                // Set to stationary mode, which reduces jitter and may save power
+                _serial_gps->write("$PMTK886,4*2C\r\n");
+            } else {
+                // Switch to Fitness Mode, for running and walking purpose with low speed (<5 m/s)
+                _serial_gps->write("$PMTK886,1*29\r\n");
+            }
             delay(250);
         } else if (gnssModel == GNSS_MODEL_MTK_PA1010D) {
             // PA1010D is used in the Pimoroni GPS board.
@@ -597,7 +607,16 @@ bool GPS::setup()
             delay(250);
         } else if (gnssModel == GNSS_MODEL_ATGM336H) {
             // Set the intial configuration of the device - these _should_ work for most AT6558 devices
-            msglen = makeCASPacket(0x06, 0x07, sizeof(_message_CAS_CFG_NAVX_CONF), _message_CAS_CFG_NAVX_CONF);
+            if (config.position.fixed_position == true) {
+                // Set to stationary mode, which reduces jitter and may save power
+                uint8_t temp_NAVX_CONF[sizeof(_message_CAS_CFG_NAVX_CONF)];
+                memcpy(temp_NAVX_CONF, _message_CAS_CFG_NAVX_CONF, sizeof(_message_CAS_CFG_NAVX_CONF));
+                temp_NAVX_CONF[4] = 0x01;
+                msglen = makeCASPacket(0x06, 0x07, sizeof(temp_NAVX_CONF), temp_NAVX_CONF);
+            } else {
+                // regular config, which uses automotive mode
+                msglen = makeCASPacket(0x06, 0x07, sizeof(_message_CAS_CFG_NAVX_CONF), _message_CAS_CFG_NAVX_CONF);
+            }
             _serial_gps->write(UBXscratch, msglen);
             if (getACKCas(0x06, 0x07, 250) != GNSS_RESPONSE_OK) {
                 LOG_WARN("ATGM336H: Could not set Config");
@@ -654,6 +673,14 @@ bool GPS::setup()
             _serial_gps->write("$PAIR062,5,0*3B\r\n"); // VTG OFF
             _serial_gps->write("$PAIR062,6,0*38\r\n"); // ZDA ON
 
+            delay(250);
+            if (config.position.fixed_position == true) {
+                // Set to stationary mode, which reduces jitter and may save power
+                _serial_gps->write("$PAIR080,4*2A\r\n");
+            } else {
+                // Switch to Fitness Mode, for running and walking purpose with low speed (<5 m/s)
+                _serial_gps->write("$PAIR080,1*2F\r\n");
+            }
             delay(250);
             _serial_gps->write("$PAIR513*3D\r\n"); // save configuration
         } else if (gnssModel == GNSS_MODEL_UBLOX6) {
