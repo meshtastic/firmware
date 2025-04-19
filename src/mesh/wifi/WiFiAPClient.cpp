@@ -1,8 +1,8 @@
 #include "configuration.h"
 #if HAS_WIFI
 #include "NodeDB.h"
-#include "RTC.h"
 #include "concurrency/Periodic.h"
+#include "gps/RTC.h"
 #include "mesh/wifi/WiFiAPClient.h"
 
 #include "main.h"

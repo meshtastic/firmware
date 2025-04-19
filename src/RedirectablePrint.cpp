@@ -1,8 +1,8 @@
 #include "RedirectablePrint.h"
 #include "NodeDB.h"
-#include "RTC.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
+#include "gps/RTC.h"
 #include "main.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
 #include <assert.h>

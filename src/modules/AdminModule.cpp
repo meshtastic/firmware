@@ -3,8 +3,8 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
-#include "RTC.h"
 #include "SPILock.h"
+#include "gps/RTC.h"
 #include "meshUtils.h"
 #include <FSCommon.h>
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH
