@@ -43,7 +43,7 @@ template <class T, class U> class APIServerPort : public U, private concurrency:
      * delegate to the worker.  Once coroutines are implemented we can relax this restriction.
      */
     T *openAPI = NULL;
-#if RAK_4631
+#if defined(RAK_4631) || defined(RAK11310)
     // Track wait time for RAK13800 Ethernet requests
     int32_t waitTime = 100;
 #endif
