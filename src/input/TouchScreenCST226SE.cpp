@@ -34,8 +34,6 @@ void TouchScreenCST226SE::init()
                 attachInterrupt(
                     TOUCH_IRQ, []() { isPressed = true; }, FALLING);
             }
-            touch.setMirrorXY(false, true);
-            touch.setSwapXY(true);
             LOG_DEBUG("CST226SE init OK at address 0x%02X", addr);
             return;
         }
@@ -49,8 +47,8 @@ bool TouchScreenCST226SE::getTouch(int16_t &x, int16_t &y)
     int16_t x_array[1], y_array[1];
     uint8_t touched = touch.getPoint(x_array, y_array, 1);
     if (touched > 0) {
-        x = x_array[0];
-        y = y_array[0];
+        y = x_array[0];
+        x = (TFT_WIDTH - y_array[0]);
         LOG_DEBUG("TouchScreen touch %dx %dy", x, y);
 
         // Check bounds
