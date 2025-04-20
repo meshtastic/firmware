@@ -1829,7 +1829,7 @@ void Screen::setup()
         new TouchScreenImpl1(dispdev->getWidth(), dispdev->getHeight(), static_cast<TFTDisplay *>(dispdev)->getTouch);
     touchScreenImpl1->init();
 #elif HAS_TOUCHSCREEN && HAS_CST226SE
-    touchScreenCST226SE = new TouchScreenCST226SE(TFT_HEIGHT, TFT_WIDTH, TouchScreenCST226SE::forwardGetTouch);
+    touchScreenCST226SE = new TouchScreenCST226SE(TFT_HEIGHT, TFT_WIDTH);
     touchScreenCST226SE->init();
 #endif
 

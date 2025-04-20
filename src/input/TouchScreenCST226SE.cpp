@@ -17,8 +17,7 @@ volatile bool isPressed = false;
 TouchScreenCST226SE *TouchScreenCST226SE::instance = nullptr;
 TouchScreenCST226SE *touchScreenCST226SE;
 
-TouchScreenCST226SE::TouchScreenCST226SE(uint16_t width, uint16_t height, bool (*getTouch)(int16_t *, int16_t *))
-    : TouchScreenBase("CST226", width, height), _getTouch(getTouch)
+TouchScreenCST226SE::TouchScreenCST226SE(uint16_t width, uint16_t height) : TouchScreenBase("CST226", width, height)
 {
     instance = this;
 }
@@ -36,6 +35,7 @@ void TouchScreenCST226SE::init()
                     TOUCH_IRQ, []() { isPressed = true; }, FALLING);
             }
             touch.setMirrorXY(false, true);
+            touch.setSwapXY(true);
             LOG_DEBUG("CST226SE init OK at address 0x%02X", addr);
             return;
         }
@@ -65,64 +65,53 @@ bool TouchScreenCST226SE::getTouch(int16_t &x, int16_t &y)
     return false; // No valid touch data
 }
 
-bool TouchScreenCST226SE::forwardGetTouch(int16_t *x, int16_t *y)
-{
-    // if (instance) {
-    //     bool result = instance->getTouch(*x, *y);
-    //     if (result) {
-    //         LOG_DEBUG("TouchScreen parsed %dx %dy", *x, *y);
-    //     }
-    //     return result;
-    // } else {
-    return false; // Instance not initialized
-    // }
-}
-
 void TouchScreenCST226SE::onEvent(const TouchEvent &event)
 {
-    // InputEvent e;
-    // e.source = event.source;
+    LOG_DEBUG("Event triggerd");
+    InputEvent e;
+    e.source = event.source;
 
-    // e.touchX = event.x;
-    // e.touchY = event.y;
+    e.touchX = event.x;
+    e.touchY = event.y;
 
-    // switch (event.touchEvent) {
-    // case TOUCH_ACTION_LEFT: {
-    //     e.inputEvent = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT);
-    //     break;
-    // }
-    // case TOUCH_ACTION_RIGHT: {
-    //     e.inputEvent = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT);
-    //     break;
-    // }
-    // case TOUCH_ACTION_UP: {
-    //     e.inputEvent = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP);
-    //     break;
-    // }
-    // case TOUCH_ACTION_DOWN: {
-    //     e.inputEvent = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN);
-    //     break;
-    // }
-    // case TOUCH_ACTION_DOUBLE_TAP: {
-    //     e.inputEvent = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT);
-    //     break;
-    // }
-    // case TOUCH_ACTION_LONG_PRESS: {
-    //     e.inputEvent = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL);
-    //     break;
-    // }
-    // case TOUCH_ACTION_TAP: {
-    //     if (moduleConfig.external_notification.enabled && (externalNotificationModule->nagCycleCutoff != UINT32_MAX)) {
-    //         externalNotificationModule->stopNow();
-    //     } else {
-    //         powerFSM.trigger(EVENT_INPUT);
-    //     }
-    //     break;
-    // }
-    // default:
-    return;
-    // }
-    // this->notifyObservers(&e);
+    switch (event.touchEvent) {
+    case TOUCH_ACTION_LEFT: {
+        e.inputEvent = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT);
+        break;
+    }
+    case TOUCH_ACTION_RIGHT: {
+        e.inputEvent = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT);
+        break;
+    }
+    case TOUCH_ACTION_UP: {
+        e.inputEvent = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP);
+        break;
+    }
+    case TOUCH_ACTION_DOWN: {
+        e.inputEvent = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN);
+        break;
+    }
+    case TOUCH_ACTION_DOUBLE_TAP: {
+        e.inputEvent = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT);
+        break;
+    }
+    case TOUCH_ACTION_LONG_PRESS: {
+        e.inputEvent = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL);
+        break;
+    }
+    case TOUCH_ACTION_TAP: {
+        LOG_DEBUG("tipie tap");
+        if (moduleConfig.external_notification.enabled && (externalNotificationModule->nagCycleCutoff != UINT32_MAX)) {
+            externalNotificationModule->stopNow();
+        } else {
+            powerFSM.trigger(EVENT_INPUT);
+        }
+        break;
+    }
+    default:
+        return;
+    }
+    this->notifyObservers(&e);
 }
 
 #endif

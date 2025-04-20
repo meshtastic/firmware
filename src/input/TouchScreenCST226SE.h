@@ -12,11 +12,11 @@
 class TouchScreenCST226SE : public TouchScreenBase
 {
   public:
-    TouchScreenCST226SE(uint16_t width, uint16_t height, bool (*getTouch)(int16_t *, int16_t *));
+    TouchScreenCST226SE(uint16_t width, uint16_t height);
+    // TouchScreenCST226SE(uint16_t width, uint16_t height, bool (*getTouch)(int16_t *, int16_t *));
     void init(void);
 
-    static bool forwardGetTouch(int16_t *x, int16_t *y);
-    bool (*_getTouch)(int16_t *, int16_t *);
+    // bool (*_getTouch)(int16_t *, int16_t *);
     virtual bool getTouch(int16_t &x, int16_t &y);
     virtual void onEvent(const TouchEvent &event);
 
