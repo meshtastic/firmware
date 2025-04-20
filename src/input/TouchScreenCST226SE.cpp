@@ -30,8 +30,11 @@ void TouchScreenCST226SE::init()
     for (uint8_t addr : PossibleAddresses) {
         if (touch.begin(Wire, addr, I2C_SDA, I2C_SCL)) {
             i2cAddress = addr;
-            attachInterrupt(
-                TOUCH_IRQ, []() { isPressed = true; }, FALLING);
+            if (TOUCH_IRQ != -1) {
+                pinMode(TOUCH_IRQ, INPUT_PULLUP);
+                attachInterrupt(
+                    TOUCH_IRQ, []() { isPressed = true; }, FALLING);
+            }
             LOG_DEBUG("CST226SE init OK at address 0x%02X", addr);
             return;
         }
@@ -42,20 +45,33 @@ void TouchScreenCST226SE::init()
 
 bool TouchScreenCST226SE::getTouch(int16_t &x, int16_t &y)
 {
-    if (!touch.isPressed()) {
-        return false;
+    bool pressed = false;
+
+    if (TOUCH_IRQ == -1) {
+        pressed = touch.isPressed();
+    } else {
+        if (!isPressed)
+            return false;
+        isPressed = false;
+        pressed = touch.isPressed();
     }
+
+    if (!pressed)
+        return false;
+
     int16_t x_array[1], y_array[1];
     uint8_t touched = touch.getPoint(x_array, y_array, 1);
     if (touched > 0) {
         int16_t tx = x_array[0];
         int16_t ty = y_array[0];
-        if (tx > (TFT_WIDTH + 10) && tx < (10) && ty > (TFT_HEIGHT + 10) && ty < (10)) {
+        LOG_DEBUG("TouchScreen touched %dx %dy", tx, ty);
+        if (tx > (TFT_WIDTH + 10) || tx < (10) || ty > (TFT_HEIGHT + 10) || ty < (10)) {
+            LOG_DEBUG("touch ignored");
             return false;
         }
         x = tx;
         y = ty;
-        LOG_DEBUG("TouchScreen touched %dx %dy", x, y);
+        LOG_DEBUG("TouchScreen filtered %dx %dy", x, y);
         return true;
     }
     return false;
