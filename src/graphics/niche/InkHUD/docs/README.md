@@ -504,7 +504,7 @@ Button input is sometimes handled by a system applet. `InkHUD::Events` determine
 
 #### Factory Reset
 
-The Events class handles the admin messages(s) which trigger factory reset. We set `Events::doFactoryReset = true`, which causes `Events::onReboot` to erase the contents of InkHUD's data directory. We do this because some applets (e.g. ThreadedMessageApplet) save their own data to flash, so if we erased earlier, that data would get re-written during reboot.
+The Events class handles the admin messages(s) which trigger factory reset. We set `Events::eraseOnReboot = true`, which causes `Events::onReboot` to erase the contents of InkHUD's data directory. We do this because some applets (e.g. ThreadedMessageApplet) save their own data to flash, so if we erased earlier, that data would get re-written during reboot.
 
 ---
 
