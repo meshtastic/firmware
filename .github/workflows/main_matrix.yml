@@ -145,7 +145,7 @@ jobs:
   test-native:
     uses: ./.github/workflows/test_native.yml
 
-  docker-debian-amd64:
+  docker-deb-amd64:
     uses: ./.github/workflows/docker_build.yml
     with:
       distro: debian
@@ -153,7 +153,16 @@ jobs:
       runs-on: ubuntu-24.04
       push: false
 
-  docker-alpine-amd64:
+  docker-deb-amd64-tft:
+    uses: ./.github/workflows/docker_build.yml
+    with:
+      distro: debian
+      platform: linux/amd64
+      runs-on: ubuntu-24.04
+      push: false
+      pio_env: native-tft
+
+  docker-alp-amd64:
     uses: ./.github/workflows/docker_build.yml
     with:
       distro: alpine
@@ -161,7 +170,16 @@ jobs:
       runs-on: ubuntu-24.04
       push: false
 
-  docker-debian-arm64:
+  docker-alp-amd64-tft:
+    uses: ./.github/workflows/docker_build.yml
+    with:
+      distro: alpine
+      platform: linux/amd64
+      runs-on: ubuntu-24.04
+      push: false
+      pio_env: native-tft
+
+  docker-deb-arm64:
     uses: ./.github/workflows/docker_build.yml
     with:
       distro: debian
@@ -169,7 +187,7 @@ jobs:
       runs-on: ubuntu-24.04-arm
       push: false
 
-  docker-debian-armv7:
+  docker-deb-armv7:
     uses: ./.github/workflows/docker_build.yml
     with:
       distro: debian
