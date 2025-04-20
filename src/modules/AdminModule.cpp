@@ -284,7 +284,6 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     case meshtastic_AdminMessage_remove_by_nodenum_tag: {
         LOG_INFO("Client received remove_nodenum command");
         nodeDB->removeNodeByNum(r->remove_by_nodenum);
-        this->notifyObservers(r); // Observed by screen
         break;
     }
     case meshtastic_AdminMessage_set_favorite_node_tag: {
@@ -443,6 +442,9 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     if (mp.decoded.want_response && !myReply) {
         myReply = allocErrorResponse(meshtastic_Routing_Error_NONE, &mp);
     }
+
+    // Allow any observers (e.g. the UI) to respond to this event
+    notifyObservers(r);
 
     return handled;
 }
