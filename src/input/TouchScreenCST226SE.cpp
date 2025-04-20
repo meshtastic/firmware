@@ -45,35 +45,44 @@ void TouchScreenCST226SE::init()
 
 bool TouchScreenCST226SE::getTouch(int16_t &x, int16_t &y)
 {
-    bool pressed = false;
-
-    if (TOUCH_IRQ == -1) {
-        pressed = touch.isPressed();
-    } else {
-        if (!isPressed)
-            return false;
-        isPressed = false;
-        pressed = touch.isPressed();
-    }
-
-    if (!pressed)
+    if (!touch.isPressed()) {
         return false;
-
+    }
     int16_t x_array[1], y_array[1];
     uint8_t touched = touch.getPoint(x_array, y_array, 1);
     if (touched > 0) {
-        int16_t tx = x_array[0];
-        int16_t ty = y_array[0];
-        LOG_DEBUG("TouchScreen touched %dx %dy", tx, ty);
-        if (tx > (TFT_WIDTH + 10) || tx < (10) || ty > (TFT_HEIGHT + 10) || ty < (10)) {
-            LOG_DEBUG("touch ignored");
-            return false;
-        }
-        x = tx;
-        y = ty;
+        x = x_array[0];
+        y = y_array[0];
         LOG_DEBUG("TouchScreen filtered %dx %dy", x, y);
         return true;
     }
+    // bool pressed = false;
+
+    // if (TOUCH_IRQ == -1) {
+    //     pressed = touch.isPressed();
+    // } else {
+    //     if (!isPressed)
+    //         return false;
+    //     isPressed = false;
+    //     pressed = touch.isPressed();
+    // }
+    // if (pressed) {
+    //     int16_t x_array[1], y_array[1];
+    //     uint8_t touched = touch.getPoint(x_array, y_array, 1);
+    //     if (touched > 0) {
+    //         int16_t tx = x_array[0];
+    //         int16_t ty = y_array[0];
+    //         LOG_DEBUG("TouchScreen touched %dx %dy", tx, ty);
+    //         if (tx > (TFT_WIDTH) || tx < 0 || ty > (TFT_HEIGHT) || ty < 0) {
+    //             LOG_DEBUG("touch ignored");
+    //             return false;
+    //         }
+    //         x = tx;
+    //         y = ty;
+    //         LOG_DEBUG("TouchScreen filtered %dx %dy", x, y);
+    //         return true;
+    //     }
+    // }
     return false;
 }
 
