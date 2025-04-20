@@ -237,7 +237,7 @@ static void drawOEMBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, i
 #endif
 
 #if HAS_ETHERNET
-static void drawEthernetFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) 
+static void drawEthernetFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     display->setFont(FONT_SMALL);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
@@ -248,30 +248,29 @@ static void drawEthernetFrame(OLEDDisplay *display, OLEDDisplayUiState *state, i
     }
 
     display->setColor(WHITE);
-    
-    // Position verticale ajustée - commence plus haut
-    int16_t y_offset = y + 2;  // Réduit l'espace au-dessus
-    
-    // Alignement à gauche (x + petit offset)
+
+    // Adjust vertical position verticale ajustée - starts higher
+    int16_t y_offset = y + 2; // Reduces space at top
+
+    // Left Alignement (x + small offset)
     int16_t x_offset = x + 2;
-    
-    // Affichage non centré, aligné à gauche
+
+    // Display is not centered, align left
     display->drawString(x_offset, y_offset, "Ethernet Config:");
-    y_offset += FONT_HEIGHT_SMALL + 2; // Espacement légèrement réduit
-    
+    y_offset += FONT_HEIGHT_SMALL + 2; // Slightly reduced spacing
+
     display->drawString(x_offset, y_offset, "IP: " + Ethernet.localIP().toString());
     y_offset += FONT_HEIGHT_SMALL;
-    
+
     display->drawString(x_offset, y_offset, "Mask: " + Ethernet.subnetMask().toString());
     y_offset += FONT_HEIGHT_SMALL;
-    
+
     display->drawString(x_offset, y_offset, "GW: " + Ethernet.gatewayIP().toString());
-    //y_offset += FONT_HEIGHT_SMALL;
-    
-    //display->drawString(x_offset, y_offset, "DNS: " + Ethernet.dnsServerIP().toString());
+    // y_offset += FONT_HEIGHT_SMALL;
+
+    // display->drawString(x_offset, y_offset, "DNS: " + Ethernet.dnsServerIP().toString());
 }
 #endif
-
 
 void Screen::drawFrameText(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *message)
 {
@@ -2222,7 +2221,7 @@ void Screen::setFrames(FrameFocus focus)
         normalFrames[numframes++] = &Screen::drawDebugInfoWiFiTrampoline;
     }
 #endif
-    
+
 #if HAS_ETHERNET
     if (Ethernet.hardwareStatus() != EthernetNoHardware) {
         normalFrames[numframes++] = drawEthernetFrame;
