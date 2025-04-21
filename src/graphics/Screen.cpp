@@ -2636,12 +2636,17 @@ static void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int
 
     display->drawString(starting_position, compactFourthLine, chUtil);
 
+    // Force 56% or higher to show a full 100% bar, text would still show related percent.
+    if (chutil_percent >= 61) {
+        chutil_percent = 100;
+    }
+
     // Weighting for nonlinear segments
     float milestone1 = 25;
     float milestone2 = 40;
-    float weight1 = 0.4;  // Weight for 0–25%
-    float weight2 = 0.33; // Weight for 25–40%
-    float weight3 = 0.27; // Weight for 40–100%
+    float weight1 = 0.45; // Weight for 0–25%
+    float weight2 = 0.35; // Weight for 25–40%
+    float weight3 = 0.20; // Weight for 40–100%
     float totalWeight = weight1 + weight2 + weight3;
 
     int seg1 = chutil_bar_width * (weight1 / totalWeight);
