@@ -13,7 +13,6 @@ however this class handles general events which concern InkHUD as a whole, e.g. 
 
 #include "configuration.h"
 
-#include "Modules/AdminModule.h"
 #include "Observer.h"
 
 #include "./InkHUD.h"

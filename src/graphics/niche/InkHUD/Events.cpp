@@ -3,6 +3,7 @@
 #include "./Events.h"
 
 #include "RTC.h"
+#include "modules/AdminModule.h"
 #include "modules/TextMessageModule.h"
 #include "sleep.h"
 
