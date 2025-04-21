@@ -105,7 +105,7 @@ NRF52Bluetooth *nrf52Bluetooth = nullptr;
 #include "AmbientLightingThread.h"
 #include "PowerFSMThread.h"
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
 #include "motion/AccelerometerThread.h"
 AccelerometerThread *accelerometerThread = nullptr;
 #endif
@@ -167,11 +167,6 @@ uint32_t serialSinceMsec;
 bool pauseBluetoothLogging = false;
 
 bool pmu_found;
-
-#if !MESHTASTIC_EXCLUDE_I2C
-// Array map of sensor types with i2c address and wire as we'll find in the i2c scan
-std::pair<uint8_t, TwoWire *> nodeTelemetrySensorsMap[_meshtastic_TelemetrySensorType_MAX + 1] = {};
-#endif
 
 Router *router = NULL; // Users of router don't care what sort of subclass implements that API
 
@@ -573,7 +568,7 @@ void setup()
     }
 #endif
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+#if !defined(ARCH_STM32WL)
     auto acc_info = i2cScanner->firstAccelerometer();
     accelerometer_found = acc_info.type != ScanI2C::DeviceType::NONE ? acc_info.address : accelerometer_found;
     LOG_DEBUG("acc_info = %i", acc_info.type);
@@ -683,7 +678,7 @@ void setup()
 #endif
 
 #if !MESHTASTIC_EXCLUDE_I2C
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+#if !defined(ARCH_STM32WL)
     if (acc_info.type != ScanI2C::DeviceType::NONE) {
         accelerometerThread = new AccelerometerThread(acc_info.type);
     }
@@ -691,7 +686,7 @@ void setup()
 
 #if defined(HAS_NEOPIXEL) || defined(UNPHONE) || defined(RGBLED_RED)
     ambientLightingThread = new AmbientLightingThread(ScanI2C::DeviceType::NONE);
-#elif !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+#elif !defined(ARCH_STM32WL)
     if (rgb_found.type != ScanI2C::DeviceType::NONE) {
         ambientLightingThread = new AmbientLightingThread(rgb_found.type);
     }

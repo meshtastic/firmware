@@ -20,6 +20,7 @@ extern NRF52Bluetooth *nrf52Bluetooth;
 #endif
 #if !MESHTASTIC_EXCLUDE_I2C
 #include "detect/ScanI2CTwoWire.h"
+std::pair<uint8_t, TwoWire *> nodeTelemetrySensorsMap[_meshtastic_TelemetrySensorType_MAX + 1] = {};
 #endif
 
 #if ARCH_PORTDUINO
@@ -52,7 +53,7 @@ extern AudioThread *audioThread;
 // Global Screen singleton.
 extern graphics::Screen *screen;
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
 #include "motion/AccelerometerThread.h"
 extern AccelerometerThread *accelerometerThread;
 #endif

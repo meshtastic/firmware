@@ -4,11 +4,12 @@
 
 #pragma once
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "Arduino.h"
 #include "MeshModule.h"
 #include "NodeDB.h"
 #include <utility>
 
-class TwoWire;
+// class TwoWire;
 
 #define DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS 1000
 extern std::pair<uint8_t, TwoWire *> nodeTelemetrySensorsMap[_meshtastic_TelemetrySensorType_MAX + 1];

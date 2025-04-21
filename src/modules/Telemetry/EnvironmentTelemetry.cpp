@@ -43,7 +43,7 @@
 BMP085Sensor bmp085Sensor;
 BMP280Sensor bmp280Sensor;
 BME280Sensor bme280Sensor;
-BME680Sensor bme680Sensor;
+// BME680Sensor bme680Sensor;
 MCP9808Sensor mcp9808Sensor;
 SHTC3Sensor shtc3Sensor;
 LPS22HBSensor lps22hbSensor;
@@ -123,8 +123,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = bme280Sensor.runOnce();
             if (bmp3xxSensor.hasSensor())
                 result = bmp3xxSensor.runOnce();
-            if (bme680Sensor.hasSensor())
-                result = bme680Sensor.runOnce();
+            //            if (bme680Sensor.hasSensor())
+            //                result = bme680Sensor.runOnce();
             if (mcp9808Sensor.hasSensor())
                 result = mcp9808Sensor.runOnce();
             if (shtc3Sensor.hasSensor())
@@ -167,7 +167,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
         if (!moduleConfig.telemetry.environment_measurement_enabled) {
             return disable();
         } else {
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR_EXTERNAL
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR_EXTERNAL && !defined(ARCH_PORTDUINO)
             if (bme680Sensor.hasSensor())
                 result = bme680Sensor.runTrigger();
 #endif
@@ -400,10 +400,12 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
         valid = valid && bmp3xxSensor.getMetrics(m);
         hasSensor = true;
     }
+#if !defined(ARCH_PORTDUINO)
     if (bme680Sensor.hasSensor()) {
         valid = valid && bme680Sensor.getMetrics(m);
         hasSensor = true;
     }
+#endif
     if (mcp9808Sensor.hasSensor()) {
         valid = valid && mcp9808Sensor.getMetrics(m);
         hasSensor = true;
@@ -604,11 +606,13 @@ AdminMessageHandleResult EnvironmentTelemetryModule::handleAdminMessageForModule
         if (result != AdminMessageHandleResult::NOT_HANDLED)
             return result;
     }
+#if !defined(ARCH_PORTDUINO)
     if (bme680Sensor.hasSensor()) {
         result = bme680Sensor.handleAdminMessage(mp, request, response);
         if (result != AdminMessageHandleResult::NOT_HANDLED)
             return result;
     }
+#endif
     if (mcp9808Sensor.hasSensor()) {
         result = mcp9808Sensor.handleAdminMessage(mp, request, response);
         if (result != AdminMessageHandleResult::NOT_HANDLED)

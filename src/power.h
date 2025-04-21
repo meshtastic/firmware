@@ -40,7 +40,7 @@ extern RTC_NOINIT_ATTR uint64_t RTC_reg_b;
 #include "soc/sens_reg.h" // needed for adc pin reset
 #endif
 
-#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(ARCH_PORTDUINO)
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 #include "modules/Telemetry/Sensor/INA219Sensor.h"
 #include "modules/Telemetry/Sensor/INA226Sensor.h"
 #include "modules/Telemetry/Sensor/INA260Sensor.h"
@@ -51,12 +51,12 @@ extern INA260Sensor ina260Sensor;
 extern INA3221Sensor ina3221Sensor;
 #endif
 
-#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(ARCH_STM32WL)
 #include "modules/Telemetry/Sensor/MAX17048Sensor.h"
 extern MAX17048Sensor max17048Sensor;
 #endif
 
-#if HAS_RAKPROT && !defined(ARCH_PORTDUINO)
+#if HAS_RAKPROT
 #include "../variants/rak2560/RAK9154Sensor.h"
 extern RAK9154Sensor rak9154Sensor;
 #endif
