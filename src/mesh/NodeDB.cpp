@@ -584,7 +584,8 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     resetRadioConfig(true); // This also triggers NodeInfo/Position requests since we're fresh
     strncpy(config.network.ntp_server, "meshtastic.pool.ntp.org", 32);
 
-#if (defined(T_DECK) || defined(T_WATCH_S3) || defined(UNPHONE) || defined(PICOMPUTER_S3) || defined(SENSECAP_INDICATOR)) &&     \
+#if (defined(T_DECK) || defined(T_WATCH_S3) || defined(UNPHONE) || defined(PICOMPUTER_S3) || defined(SENSECAP_INDICATOR) ||      \
+     defined(ELECROW)) &&                                                                                                        \
     HAS_TFT
     // switch BT off by default; use TFT programming mode or hotkey to enable
     config.bluetooth.enabled = false;
@@ -595,7 +596,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.bluetooth.fixed_pin = defaultBLEPin;
 
 #if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7789_CS) ||       \
-    defined(HX8357_CS) || defined(USE_ST7789)
+    defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS)
     bool hasScreen = true;
 #ifdef HELTEC_MESH_NODE_T114
     uint32_t st7789_id = get_st7789_id(ST7789_NSS, ST7789_SCK, ST7789_SDA, ST7789_RS, ST7789_RESET);
@@ -689,7 +690,7 @@ void NodeDB::initConfigIntervals()
 
     config.display.screen_on_secs = default_screen_on_secs;
 
-#if defined(T_WATCH_S3) || defined(T_DECK) || defined(UNPHONE) || defined(MESH_TAB) || defined(RAK14014)
+#if defined(T_WATCH_S3) || defined(T_DECK) || defined(UNPHONE) || defined(MESH_TAB) || defined(RAK14014) || defined(ELECROW)
     config.power.is_power_saving = true;
     config.display.screen_on_secs = 30;
     config.power.wait_bluetooth_secs = 30;
