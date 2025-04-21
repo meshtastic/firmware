@@ -35,10 +35,10 @@ void TouchScreenCST226SE::init()
                     TOUCH_IRQ, []() { isPressed = true; }, FALLING);
             }
             LOG_DEBUG("CST226SE init OK at address 0x%02X", addr);
+            inputBroker->registerSource(this);
             return;
         }
     }
-
     LOG_ERROR("CST226SE init failed at all known addresses");
 }
 
@@ -49,23 +49,17 @@ bool TouchScreenCST226SE::getTouch(int16_t &x, int16_t &y)
     if (touched > 0) {
         y = x_array[0];
         x = (TFT_WIDTH - y_array[0]);
-        LOG_DEBUG("TouchScreen touch %dx %dy", x, y);
-
         // Check bounds
         if (x < 0 || x >= TFT_WIDTH || y < 0 || y >= TFT_HEIGHT) {
-            LOG_DEBUG("Touch ignored - Out of bounds");
             return false;
         }
-
         return true; // Valid touch detected
     }
-
     return false; // No valid touch data
 }
 
 void TouchScreenCST226SE::onEvent(const TouchEvent &event)
 {
-    LOG_DEBUG("Event triggerd");
     InputEvent e;
     e.source = event.source;
 
@@ -98,7 +92,6 @@ void TouchScreenCST226SE::onEvent(const TouchEvent &event)
         break;
     }
     case TOUCH_ACTION_TAP: {
-        LOG_DEBUG("tipie tap");
         if (moduleConfig.external_notification.enabled && (externalNotificationModule->nagCycleCutoff != UINT32_MAX)) {
             externalNotificationModule->stopNow();
         } else {
