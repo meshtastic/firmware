@@ -53,7 +53,9 @@
 
 #define HAS_CST226SE 1
 #define HAS_TOUCHSCREEN 1
-// #define TOUCH_IRQ 35
+// #define TOUCH_IRQ 35 // broken in this version of the lib 0.3.1
+#define CANNED_MESSAGE_MODULE_ENABLE 1
+#define USE_VIRTUAL_KEYBOARD 1
 
 #define ST7796_NSS 25
 #define ST7796_RS 13  // DC
