@@ -44,19 +44,19 @@ float RCWL9620Sensor::getDistance()
     uint32_t data = 0;
     uint8_t b1 = 0, b2 = 0, b3 = 0;
 
-    LOG_INFO("[RCWL9620] Envoi de la commande de mesure");
+    LOG_DEBUG("[RCWL9620] Start measure command");
 
     _wire->beginTransmission(_addr);
     _wire->write(0x01); // À tester aussi sans cette ligne si besoin
     uint8_t result = _wire->endTransmission();
-    LOG_INFO("[RCWL9620] endTransmission result = %d", result);
+    LOG_DEBUG("[RCWL9620] endTransmission result = %d", result);
     delay(100); // délai pour laisser le capteur répondre
 
-    LOG_INFO("[RCWL9620] Lecture des données I2C...");
+    LOG_DEBUG("[RCWL9620] Read i2c data:");
     _wire->requestFrom(_addr, (uint8_t)3);
 
     if (_wire->available() < 3) {
-    LOG_INFO("[RCWL9620] Moins de 3 octets reçus !");
+    LOG_DEBUG("[RCWL9620] less than 3 octets !");
         return 0.0;
     }
 
@@ -68,8 +68,8 @@ float RCWL9620Sensor::getDistance()
 
     float Distance = float(data) / 1000.0;
 
-    LOG_INFO("[RCWL9620] Bytes lus = %02X %02X %02X", b1, b2, b3);
-    LOG_INFO("[RCWL9620] data=%.2f, mesure=%.2f", 
+    LOG_DEBUG("[RCWL9620] Bytes readed = %02X %02X %02X", b1, b2, b3);
+    LOG_DEBUG("[RCWL9620] data=%.2f, level=%.2f", 
              (double)data, 
              (double)Distance);
 
