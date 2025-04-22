@@ -4,6 +4,7 @@
 
 #include "RTC.h"
 
+#include "MeshService.h"
 #include "airtime.h"
 #include "main.h"
 #include "power.h"
@@ -144,6 +145,14 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         inkhud->nextTile();
         break;
 
+    case SEND_PING:
+        service->refreshLocalMeshNode();
+        service->trySendPosition(NODENUM_BROADCAST, true);
+
+        // Force the next refresh to use FULL, to protect the display, as some users will probably spam this button
+        inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FULL);
+        break;
+
     case ROTATE:
         inkhud->rotate();
         break;
@@ -242,7 +251,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         if (settings->optionalMenuItems.nextTile && settings->userTiles.count > 1)
             items.push_back(MenuItem("Next Tile", MenuAction::NEXT_TILE, MenuPage::ROOT)); // Only if multiple applets shown
 
-        // items.push_back(MenuItem("Send", MenuPage::SEND)); // TODO
+        items.push_back(MenuItem("Send", MenuPage::SEND));
         items.push_back(MenuItem("Options", MenuPage::OPTIONS));
         // items.push_back(MenuItem("Display Off", MenuPage::EXIT)); // TODO
         items.push_back(MenuItem("Save & Shut Down", MenuAction::SHUTDOWN));
@@ -250,9 +259,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         break;
 
     case SEND:
-        items.push_back(MenuItem("Send Message", MenuPage::EXIT));
-        items.push_back(MenuItem("Send NodeInfo", MenuAction::SEND_NODEINFO));
-        items.push_back(MenuItem("Send Position", MenuAction::SEND_POSITION));
+        items.push_back(MenuItem("Ping", MenuAction::SEND_PING, MenuPage::EXIT));
+        // Todo: canned messages
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
 
@@ -389,11 +397,14 @@ void InkHUD::MenuApplet::onRender()
         // Center-line for the text
         int16_t center = itemT + (itemH / 2);
 
+        // Box, if currently selected
         if (cursorShown && i == cursor)
             drawRect(itemL, itemT, itemW, itemH, BLACK);
+
+        // Item's text
         printAt(itemL + X(padding), center, item.label, LEFT, MIDDLE);
 
-        // Testing only: circle instead of check box
+        // Checkbox, if relevant
         if (item.checkState) {
             const uint16_t cbWH = fontSmall.lineHeight();  // Checkbox: width / height
             const int16_t cbL = itemR - X(padding) - cbWH; // Checkbox: left

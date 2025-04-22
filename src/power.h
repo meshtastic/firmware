@@ -26,6 +26,10 @@
 #define OCV_ARRAY 2700, 2560, 2540, 2520, 2500, 2460, 2420, 2400, 2380, 2320, 1500
 #elif defined(TRACKER_T1000_E)
 #define OCV_ARRAY 4190, 4078, 4017, 3969, 3887, 3818, 3798, 3791, 3766, 3712, 3100
+#elif defined(HELTEC_MESH_POCKET_BATTERY_5000)
+#define OCV_ARRAY 4300, 4240, 4120, 4000, 3888, 3800, 3740, 3698, 3655, 3580, 3400
+#elif defined(HELTEC_MESH_POCKET_BATTERY_10000)
+#define OCV_ARRAY 4100, 4060, 3960, 3840, 3729, 3625, 3550, 3500, 3420, 3345, 3100
 #else // LiIon
 #define OCV_ARRAY 4190, 4050, 3990, 3890, 3800, 3720, 3630, 3530, 3420, 3300, 3100
 #endif
@@ -83,11 +87,6 @@ class Power : private concurrency::OSThread
     virtual int32_t runOnce() override;
     void setStatusHandler(meshtastic::PowerStatus *handler) { statusHandler = handler; }
     const uint16_t OCV[11] = {OCV_ARRAY};
-
-#if defined(ELECROW_ThinkNode_M1) || defined(POWER_CFG)
-    uint8_t low_voltage_counter_led3;
-    int power_num = 0;
-#endif
 
   protected:
     meshtastic::PowerStatus *statusHandler;
