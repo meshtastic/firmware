@@ -29,6 +29,12 @@
 #include "graphics/niche/Fonts/FreeSans6pt8bCyrillic.h"
 #include <Fonts/FreeSans9pt7b.h>
 
+// Special case - fix T-Echo's touch button
+// ----------------------------------------
+// On a handful of T-Echos, LoRa TX triggers the capacitive touch
+// To avoid this, we lockout the button during TX
+#include "mesh/RadioLibInterface.h"
+
 void setupNicheGraphics()
 {
     using namespace NicheGraphics;
@@ -112,16 +118,25 @@ void setupNicheGraphics()
     // Setup the capacitive touch button
     // - short: momentary backlight
     // - long: latch backlight on
-    buttons->setWiring(TOUCH_BUTTON, PIN_BUTTON_TOUCH, LOW);
+    buttons->setWiring(TOUCH_BUTTON, PIN_BUTTON_TOUCH);
     buttons->setTiming(TOUCH_BUTTON, 50, 5000); // 5 seconds before latch - limited by T-Echo's capacitive touch IC
     buttons->setHandlerDown(TOUCH_BUTTON, [backlight]() {
+        // Discard the button press if radio is active
+        // Rare hardware fault: LoRa activity triggers touch button
+        if (!RadioLibInterface::instance || RadioLibInterface::instance->isSending())
+            return;
+
+        // Backlight on (while held)
         backlight->peek();
-        InkHUD::InkHUD::getInstance()->persistence->settings.optionalMenuItems.backlight =
-            false; // We've proved user still has the button. No need to make backlight togglable via the menu.
+
+        // Handler has run, which confirms touch button wasn't removed as part of DIY build.
+        // No longer need the fallback backlight toggle in menu.
+        InkHUD::InkHUD::getInstance()->persistence->settings.optionalMenuItems.backlight = false;
     });
     buttons->setHandlerLongPress(TOUCH_BUTTON, [backlight]() { backlight->latch(); });
     buttons->setHandlerShortPress(TOUCH_BUTTON, [backlight]() { backlight->off(); });
 
+    // Begin handling button events
     buttons->start();
 }
 

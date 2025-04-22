@@ -1,0 +1,11 @@
+Lora:
+  Module: lr1121
+  CS: 0
+  IRQ: 6
+  Reset: 2
+  Busy: 4
+  spidev: ch341
+  DIO3_TCXO_VOLTAGE: 1.8
+#  USB_Serialnum: 12345678
+  USB_PID: 0x5512
+  USB_VID: 0x1A86

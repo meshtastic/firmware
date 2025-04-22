@@ -242,7 +242,7 @@ typedef struct _meshtastic_AirQualityMetrics {
     /* 10.0um Particle Count */
     bool has_particles_100um;
     uint32_t particles_100um;
-    /* 10.0um Particle Count */
+    /* CO2 concentration in ppm */
     bool has_co2;
     uint32_t co2;
 } meshtastic_AirQualityMetrics;
