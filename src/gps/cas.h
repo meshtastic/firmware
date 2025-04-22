@@ -61,3 +61,26 @@ static const uint8_t _message_CAS_CFG_NAVX_CONF[] = {
     0x00, 0x00, 0x00, 0x00, // Time Accuracy Max
     0x00, 0x00, 0x00, 0x00  // Static Hold Threshold
 };
+
+static const uint8_t _message_CAS_CFG_NAVX_CONF_FLIGHT[] = {
+    0x03, 0x01, 0x00, 0x00, // Update Mask: Dynamic Mode, Fix Mode, Nav Settings
+    0x06,                   // Dynamic Mode: flight <2g
+    0x03,                   // Fix Mode: Auto 2D/3D
+    0x00,                   // Min SV
+    0x00,                   // Max SVs
+    0x00,                   // Min CNO
+    0x00,                   // Reserved1
+    0x00,                   // Init 3D fix
+    0x00,                   // Min Elevation
+    0x00,                   // Dr Limit
+    0x07,                   // Nav System: 2^0 = GPS, 2^1 = BDS 2^2 = GLONASS: 2^3
+                            // 3=GPS+BDS, 7=GPS+BDS+GLONASS
+    0x00, 0x00,             // Rollover Week
+    0x00, 0x00, 0x00, 0x00, // Fix Altitude
+    0x00, 0x00, 0x00, 0x00, // Fix Height Error
+    0x00, 0x00, 0x00, 0x00, // PDOP Maximum
+    0x00, 0x00, 0x00, 0x00, // TDOP Maximum
+    0x00, 0x00, 0x00, 0x00, // Position Accuracy Max
+    0x00, 0x00, 0x00, 0x00, // Time Accuracy Max
+    0x00, 0x00, 0x00, 0x00  // Static Hold Threshold
+};

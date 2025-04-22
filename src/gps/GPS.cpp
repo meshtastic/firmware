@@ -545,6 +545,12 @@ bool GPS::setup()
         } else if (gnssModel == GNSS_MODEL_ATGM336H) {
             // Set the intial configuration of the device - these _should_ work for most AT6558 devices
             msglen = makeCASPacket(0x06, 0x07, sizeof(_message_CAS_CFG_NAVX_CONF), _message_CAS_CFG_NAVX_CONF);
+
+#ifdef USERPREFS_GPS_FLIGHT_MODE
+            if (USERPREFS_GPS_FLIGHT_MODE) {
+                msglen = makeCASPacket(0x06, 0x07, sizeof(_message_CAS_CFG_NAVX_CONF_FLIGHT), _message_CAS_CFG_NAVX_CONF_FLIGHT);
+            }
+#endif
             _serial_gps->write(UBXscratch, msglen);
             if (getACKCas(0x06, 0x07, 250) != GNSS_RESPONSE_OK) {
                 LOG_WARN("ATGM336H: Could not set Config");
@@ -670,6 +676,11 @@ bool GPS::setup()
             }
             // Turn off unwanted NMEA messages, set update rate
             SEND_UBX_PACKET(0x06, 0x08, _message_1HZ, "set GPS update rate", 500);
+#ifdef USERPREFS_GPS_FLIGHT_MODE
+            if (USERPREFS_GPS_FLIGHT_MODE) {
+                SEND_UBX_PACKET(0x06, 0x24, _message_NAV5_FLIGHT, "enable flight mode", 500);
+            }
+#endif
             SEND_UBX_PACKET(0x06, 0x01, _message_GLL, "disable NMEA GLL", 500);
             SEND_UBX_PACKET(0x06, 0x01, _message_GSA, "enable NMEA GSA", 500);
             SEND_UBX_PACKET(0x06, 0x01, _message_GSV, "disable NMEA GSV", 500);
