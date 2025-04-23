@@ -47,6 +47,9 @@
 // Used when the diplay shield is chosen
 #ifdef USE_ST7796
 
+// fixed baudrate for testing
+#define GPS_BAUDRATE 115200
+
 #undef EXT_NOTIFY_OUT
 #undef LED_STATE_ON
 #undef LED_PIN

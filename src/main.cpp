@@ -1294,7 +1294,6 @@ void setup()
 
 #if !HAS_TFT && !USE_ST7796
     setCPUFast(false); // 80MHz is fine for our slow peripherals
-    LOG_DEBUG("SLOW-CPU-SPEED");
 #endif
 
 #ifdef ARDUINO_ARCH_ESP32
