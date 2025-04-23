@@ -200,4 +200,12 @@ class PhoneAPI
 
     /// If the mesh service tells us fromNum has changed, tell the phone
     virtual int onNotify(uint32_t newValue) override;
+
+    /// Helper function to skip excluded module configs and advance state
+    size_t skipExcludedModuleConfig(uint8_t *buf);
+
+    int preflightSleepCb(void *unused = NULL) { return available(); }
+
+    CallbackObserver<PhoneAPI, void *> preflightSleepObserver =
+        CallbackObserver<PhoneAPI, void *>(this, &PhoneAPI::preflightSleepCb);
 };

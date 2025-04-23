@@ -558,6 +558,9 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
 {
     bool valid = true;
     bool hasSensor = false;
+
+    powerFSM.trigger(EVENT_WAKE_TIMER); // ensure we're not light-sleeping
+
     m->time = getTime();
     m->which_variant = meshtastic_Telemetry_environment_metrics_tag;
     m->variant.environment_metrics = meshtastic_EnvironmentMetrics_init_zero;
@@ -623,6 +626,9 @@ meshtastic_MeshPacket *EnvironmentTelemetryModule::allocReply()
 bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 {
     meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
+
+    powerFSM.trigger(EVENT_WAKE_TIMER); // ensure we're not light-sleeping
+
     m.which_variant = meshtastic_Telemetry_environment_metrics_tag;
     m.time = getTime();
 
