@@ -27,6 +27,16 @@
 #define EVENT_FIRMWARE_UPDATE 15 // We just received a new firmware update packet from the phone
 #define EVENT_SHUTDOWN 16        // force a full shutdown now (not just sleep)
 #define EVENT_INPUT 17           // input broker wants something, we need to wake up and enable screen
+#define EVENT_LORA_INTERRUPT 18
+#define EVENT_WEB_REQUEST 19
+
+#if defined(ARCH_ESP32) && !defined(WAKE_TIME_MS)
+#ifdef CONFIG_FREERTOS_USE_TICKLESS_IDLE
+#define WAKE_TIME_MS 500
+#else
+#define WAKE_TIME_MS Default::getConfiguredOrDefaultMs(config.power.min_wake_secs, default_min_wake_secs)
+#endif
+#endif
 
 #if MESHTASTIC_EXCLUDE_POWER_FSM
 class FakeFsm
@@ -51,7 +61,7 @@ void PowerFSM_setup();
 #else
 #include <Fsm.h>
 extern Fsm powerFSM;
-extern State stateON, statePOWER, stateSERIAL, stateDARK;
+extern State stateON, statePOWER, stateSERIAL, stateDARK, stateNB, stateLS;
 
 void PowerFSM_setup();
 #endif
