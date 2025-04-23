@@ -148,7 +148,6 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
 
 void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
 {
-
     LOG_DEBUG("webAPI handleAPIv1FromRadio");
 
     /*
@@ -162,6 +161,8 @@ void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
 
     // std::string paramAll = "all";
     std::string valueAll;
+
+    powerFSM.trigger(EVENT_WEB_REQUEST);
 
     // Status code is 200 OK by default.
     res->setHeader("Content-Type", "application/x-protobuf");
@@ -206,6 +207,8 @@ void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
 void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
 {
     LOG_DEBUG("webAPI handleAPIv1ToRadio");
+
+    powerFSM.trigger(EVENT_WEB_REQUEST);
 
     /*
         For documentation, see:
@@ -316,6 +319,8 @@ JSONArray htmlListDir(const char *dirname, uint8_t levels)
 
 void handleFsBrowseStatic(HTTPRequest *req, HTTPResponse *res)
 {
+    powerFSM.trigger(EVENT_WEB_REQUEST);
+
     res->setHeader("Content-Type", "application/json");
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "GET");
@@ -348,6 +353,8 @@ void handleFsDeleteStatic(HTTPRequest *req, HTTPResponse *res)
 {
     ResourceParameters *params = req->getParams();
     std::string paramValDelete;
+
+    powerFSM.trigger(EVENT_WEB_REQUEST);
 
     res->setHeader("Content-Type", "application/json");
     res->setHeader("Access-Control-Allow-Origin", "*");
@@ -384,6 +391,9 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
     ResourceParameters *params = req->getParams();
 
     std::string parameter1;
+
+    powerFSM.trigger(EVENT_WEB_REQUEST);
+
     // Print the first parameter value
     if (params->getPathParameter(0, parameter1)) {
 
@@ -469,8 +479,10 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
 
 void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
 {
-
     LOG_DEBUG("Form Upload - Disable keep-alive");
+
+    powerFSM.trigger(EVENT_WEB_REQUEST);
+
     res->setHeader("Connection", "close");
 
     // First, we need to check the encoding of the form that we have received.
@@ -597,6 +609,8 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
     ResourceParameters *params = req->getParams();
     std::string content;
 
+    powerFSM.trigger(EVENT_WEB_REQUEST);
+
     if (!params->getQueryParameter("content", content)) {
         content = "json";
     }
@@ -701,6 +715,8 @@ void handleNodes(HTTPRequest *req, HTTPResponse *res)
     ResourceParameters *params = req->getParams();
     std::string content;
 
+    powerFSM.trigger(EVENT_WEB_REQUEST);
+
     if (!params->getQueryParameter("content", content)) {
         content = "json";
     }
@@ -774,6 +790,8 @@ void handleHotspot(HTTPRequest *req, HTTPResponse *res)
 {
     LOG_INFO("Hotspot Request");
 
+    powerFSM.trigger(EVENT_WEB_REQUEST);
+
     /*
         If we don't do a redirect, be sure to return a "Success" message
         otherwise iOS will have trouble detecting that the connection to the SoftAP worked.
@@ -791,6 +809,8 @@ void handleHotspot(HTTPRequest *req, HTTPResponse *res)
 
 void handleDeleteFsContent(HTTPRequest *req, HTTPResponse *res)
 {
+    powerFSM.trigger(EVENT_WEB_REQUEST);
+
     res->setHeader("Content-Type", "text/html");
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "GET");
@@ -808,6 +828,8 @@ void handleDeleteFsContent(HTTPRequest *req, HTTPResponse *res)
 
 void handleAdmin(HTTPRequest *req, HTTPResponse *res)
 {
+    powerFSM.trigger(EVENT_WEB_REQUEST);
+
     res->setHeader("Content-Type", "text/html");
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "GET");
@@ -820,6 +842,8 @@ void handleAdmin(HTTPRequest *req, HTTPResponse *res)
 
 void handleAdminSettings(HTTPRequest *req, HTTPResponse *res)
 {
+    powerFSM.trigger(EVENT_WEB_REQUEST);
+
     res->setHeader("Content-Type", "text/html");
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "GET");
@@ -842,6 +866,8 @@ void handleAdminSettings(HTTPRequest *req, HTTPResponse *res)
 
 void handleAdminSettingsApply(HTTPRequest *req, HTTPResponse *res)
 {
+    powerFSM.trigger(EVENT_WEB_REQUEST);
+
     res->setHeader("Content-Type", "text/html");
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "POST");
@@ -854,6 +880,8 @@ void handleAdminSettingsApply(HTTPRequest *req, HTTPResponse *res)
 
 void handleFs(HTTPRequest *req, HTTPResponse *res)
 {
+    powerFSM.trigger(EVENT_WEB_REQUEST);
+
     res->setHeader("Content-Type", "text/html");
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "GET");
@@ -866,6 +894,8 @@ void handleFs(HTTPRequest *req, HTTPResponse *res)
 
 void handleRestart(HTTPRequest *req, HTTPResponse *res)
 {
+    powerFSM.trigger(EVENT_WEB_REQUEST);
+
     res->setHeader("Content-Type", "text/html");
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "GET");
@@ -879,6 +909,8 @@ void handleRestart(HTTPRequest *req, HTTPResponse *res)
 
 void handleBlinkLED(HTTPRequest *req, HTTPResponse *res)
 {
+    powerFSM.trigger(EVENT_WEB_REQUEST);
+
     res->setHeader("Content-Type", "application/json");
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "POST");
@@ -917,6 +949,8 @@ void handleBlinkLED(HTTPRequest *req, HTTPResponse *res)
 
 void handleScanNetworks(HTTPRequest *req, HTTPResponse *res)
 {
+    powerFSM.trigger(EVENT_WEB_REQUEST);
+
     res->setHeader("Content-Type", "application/json");
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "GET");
