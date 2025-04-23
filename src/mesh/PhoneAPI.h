@@ -172,4 +172,9 @@ class PhoneAPI
 
     /// If the mesh service tells us fromNum has changed, tell the phone
     virtual int onNotify(uint32_t newValue) override;
+
+    int preflightSleepCb(void *unused = NULL) { return available(); }
+
+    CallbackObserver<PhoneAPI, void *> preflightSleepObserver =
+        CallbackObserver<PhoneAPI, void *>(this, &PhoneAPI::preflightSleepCb);
 };
