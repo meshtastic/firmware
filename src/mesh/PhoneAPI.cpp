@@ -17,6 +17,7 @@
 #include "TypeConversions.h"
 #include "concurrency/LockGuard.h"
 #include "main.h"
+#include "sleep.h"
 #include "xmodem.h"
 
 #if FromRadio_size > MAX_TO_FROM_RADIO_SIZE
@@ -37,12 +38,14 @@ bool heartbeatReceived = false;
 
 PhoneAPI::PhoneAPI()
 {
-    lastContactMsec = millis();
     std::fill(std::begin(recentToRadioPacketIds), std::end(recentToRadioPacketIds), 0);
+
+    preflightSleepObserver.observe(&preflightSleep);
 }
 
 PhoneAPI::~PhoneAPI()
 {
+    preflightSleepObserver.unobserve(&preflightSleep);
     close();
 }
 

@@ -1,6 +1,7 @@
 #include "RadioLibInterface.h"
 #include "MeshTypes.h"
 #include "NodeDB.h"
+#include "PowerFSM.h"
 #include "PowerMon.h"
 #include "SPILock.h"
 #include "Throttle.h"
@@ -255,6 +256,8 @@ currently active.
 */
 void RadioLibInterface::onNotify(uint32_t notification)
 {
+    powerFSM.trigger(EVENT_LORA_INTERRUPT);
+
     switch (notification) {
     case ISR_TX:
         handleTransmitInterrupt();
