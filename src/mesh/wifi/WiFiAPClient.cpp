@@ -294,10 +294,12 @@ bool initWifi()
 #ifdef ARCH_ESP32
             WiFi.onEvent(WiFiEvent);
             WiFi.setAutoReconnect(true);
-            WiFi.setSleep(false);
 
-            // This is needed to improve performance.
-            esp_wifi_set_ps(WIFI_PS_NONE); // Disable radio power saving
+#ifdef WIFI_MAX_PERFORMANCE
+            esp_wifi_set_ps(config.power.is_power_saving ? WIFI_PS_MIN_MODEM : WIFI_PS_NONE);
+#else
+            esp_wifi_set_ps(config.power.is_power_saving ? WIFI_PS_MAX_MODEM : WIFI_PS_MIN_MODEM);
+#endif
 
             WiFi.onEvent(
                 [](WiFiEvent_t event, WiFiEventInfo_t info) {
