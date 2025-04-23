@@ -1,4 +1,7 @@
 #pragma once
+
+#define HTTP_API_SESSION_TIMEOUT_MS 5000
+
 void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer);
 
 // Declare some handler functions for the various URLs on the server
@@ -33,5 +36,5 @@ class HttpAPI : public PhoneAPI
 
   protected:
     /// Check the current underlying physical link to see if the client is currently connected
-    virtual bool checkIsConnected() override { return true; } // FIXME, be smarter about this
+    virtual bool checkIsConnected() override { return millis() - lastContactMsec < HTTP_API_SESSION_TIMEOUT_MS; }
 };
