@@ -573,6 +573,19 @@ Power::Power() : OSThread("Power")
 #ifdef DEBUG_HEAP
     lastheap = memGet.getFreeHeap();
 #endif
+
+#ifdef ARCH_ESP32
+    lsObserver.observe(&notifyLightSleep);
+    lsEndObserver.observe(&notifyLightSleepEnd);
+#endif
+}
+
+Power::~Power()
+{
+#ifdef ARCH_ESP32
+    lsObserver.unobserve(&notifyLightSleep);
+    lsEndObserver.unobserve(&notifyLightSleepEnd);
+#endif
 }
 
 bool Power::analogInit()
@@ -708,6 +721,8 @@ void Power::readPowerStatus()
     OptionalBool usbPowered = OptUnknown;
     OptionalBool hasBattery = OptUnknown; // These must be static because NRF_APM code doesn't run every time
     OptionalBool isChargingNow = OptUnknown;
+
+    powerFSM.trigger(EVENT_WAKE_TIMER); // ensure we're not light-sleeping
 
     if (batteryLevel) {
         hasBattery = batteryLevel->isBatteryConnect() ? OptTrue : OptFalse;
@@ -863,9 +878,28 @@ int32_t Power::runOnce()
         PMU->clearIrqStatus();
     }
 #endif
+
     // Only read once every 20 seconds once the power status for the app has been initialized
-    return (statusHandler && statusHandler->isInitialized()) ? (1000 * 20) : RUN_SAME;
+    if (statusHandler && statusHandler->isInitialized() && interval == 0) {
+        setInterval(20 * 1000UL);
+    }
+
+    return RUN_SAME;
 }
+
+#ifdef ARCH_ESP32
+int Power::beforeLightSleep(void *unused)
+{
+    setInterval(config.power.ls_secs * 1000UL);
+    return 0;
+}
+
+int Power::afterLightSleep(esp_sleep_wakeup_cause_t cause)
+{
+    setInterval(20 * 1000UL);
+    return 0;
+}
+#endif
 
 /**
  * Init the power manager chip
