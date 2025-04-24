@@ -98,8 +98,6 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     ResourceNode *nodeJsonFsBrowseStatic = new ResourceNode("/json/fs/browse/static", "GET", &handleFsBrowseStatic);
     ResourceNode *nodeJsonDelete = new ResourceNode("/json/fs/delete/static", "DELETE", &handleFsDeleteStatic);
 
-    ResourceNode *nodeRoot = new ResourceNode("/*", "GET", &handleStatic);
-
     // Secure nodes
     secureServer->registerNode(nodeAPIv1ToRadioOptions);
     secureServer->registerNode(nodeAPIv1ToRadio);
@@ -121,7 +119,6 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     //    secureServer->registerNode(nodeAdminFs);
     //    secureServer->registerNode(nodeAdminSettings);
     //    secureServer->registerNode(nodeAdminSettingsApply);
-    secureServer->registerNode(nodeRoot); // This has to be last
 
     // Insecure nodes
     insecureServer->registerNode(nodeAPIv1ToRadioOptions);
@@ -143,7 +140,32 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
     //    insecureServer->registerNode(nodeAdminFs);
     //    insecureServer->registerNode(nodeAdminSettings);
     //    insecureServer->registerNode(nodeAdminSettingsApply);
-    insecureServer->registerNode(nodeRoot); // This has to be last
+
+    // Web-UI
+    // ResourceNode doesn't traverse subdirectories
+    // As a workaround, scan /static/ and automatically create ResourceNode for one layer of subdirectories
+
+    File root = FSCom.open("/static", FILE_O_READ);
+    assert(root && root.isDirectory());
+
+    File file = root.openNextFile();
+    while (file) {
+        if (file.isDirectory()) {
+            std::string path = "/" + std::string(file.name()) + "/*";
+            ResourceNode *nodeSubdir = new ResourceNode(path, "GET", &handleStatic);
+            secureServer->registerNode(nodeSubdir);
+            insecureServer->registerNode(nodeSubdir);
+        }
+        file.close();
+        file = root.openNextFile();
+    }
+
+    root.close();
+
+    // We need to register nodeRoot after all others
+    ResourceNode *nodeRoot = new ResourceNode("/*", "GET", &handleStatic);
+    secureServer->registerNode(nodeRoot);
+    insecureServer->registerNode(nodeRoot);
 }
 
 void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
@@ -387,8 +409,15 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
     // Print the first parameter value
     if (params->getPathParameter(0, parameter1)) {
 
-        std::string filename = "/static/" + parameter1;
-        std::string filenameGzip = "/static/" + parameter1 + ".gz";
+        // Determine the path to the resource, by checking which ResourceNode called handleStatic
+        // Workaround which registers each subdir in /static as its own ResourceNode
+        std::string path = req->getResolvedNode()->_path;
+        assert(path.back() == '*');
+        path.pop_back();
+        assert(path.back() == '/');
+
+        std::string filename = "/static" + path + parameter1;
+        std::string filenameGzip = filename + ".gz";
 
         // Try to open the file
         File file;
