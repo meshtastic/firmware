@@ -21,7 +21,7 @@
 #define EVENT_FIRMWARE_UPDATE 15 // We just received a new firmware update packet from the phone
 #define EVENT_SHUTDOWN 16        // force a full shutdown now (not just sleep)
 #define EVENT_INPUT 17           // input broker wants something, we need to wake up and enable screen
-#define EVENT_LORA_INTERRUPT 18
+#define EVENT_RADIO_INTERRUPT 18
 #define EVENT_WEB_REQUEST 19
 
 #if defined(ARCH_ESP32) && !defined(WAKE_TIME_MS)
