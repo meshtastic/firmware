@@ -130,7 +130,7 @@ static void lsIdle()
 
     case ESP_SLEEP_WAKEUP_EXT0:
         LOG_DEBUG("Wake cause ESP_SLEEP_WAKEUP_EXT0");
-        powerFSM.trigger(EVENT_LORA_INTERRUPT);
+        powerFSM.trigger(EVENT_RADIO_INTERRUPT);
         return;
 
     case ESP_SLEEP_WAKEUP_EXT1:
@@ -383,10 +383,12 @@ void PowerFSM_setup()
     // when we leave, go to ON (which might not be the correct state if we have power connected, we will fix that in onEnter)
     powerFSM.add_transition(&stateSERIAL, &stateON, EVENT_SERIAL_DISCONNECTED, NULL, "Serial disconnect");
 
-    powerFSM.add_transition(&stateLS, stateIDLE, EVENT_LORA_INTERRUPT, NULL, "LoRa interrupt");
     powerFSM.add_transition(&stateLS, stateIDLE, EVENT_WAKE_TIMER, NULL, "Wake timer");
+    powerFSM.add_transition(&stateLS, stateIDLE, EVENT_RADIO_INTERRUPT, NULL, "Radio interrupt");
 
     powerFSM.add_transition(stateIDLE, stateIDLE, EVENT_WAKE_TIMER, NULL, "Wake timer");
+    powerFSM.add_transition(stateIDLE, stateIDLE, EVENT_WEB_REQUEST, NULL, "Web request");
+    powerFSM.add_transition(stateIDLE, stateIDLE, EVENT_RADIO_INTERRUPT, NULL, "Radio interrupt");
 
 #ifdef USE_EINK
     // Allow E-Ink devices to suppress the screensaver, if screen timeout set to 0
