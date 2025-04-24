@@ -246,7 +246,7 @@ currently active.
 */
 void RadioLibInterface::onNotify(uint32_t notification)
 {
-    powerFSM.trigger(EVENT_LORA_INTERRUPT);
+    powerFSM.trigger(EVENT_RADIO_INTERRUPT);
 
     switch (notification) {
     case ISR_TX:
