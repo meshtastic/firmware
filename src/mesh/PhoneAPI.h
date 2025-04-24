@@ -20,6 +20,7 @@
 
 #define SPECIAL_NONCE_ONLY_CONFIG 69420
 #define SPECIAL_NONCE_ONLY_NODES 69421 // ( ͡° ͜ʖ ͡°)
+#define WAKE_SESSION_TIMEOUT_MS 10000
 
 /**
  * Provides our protobuf based API which phone/PC clients can use to talk to our device
@@ -173,7 +174,7 @@ class PhoneAPI
     /// If the mesh service tells us fromNum has changed, tell the phone
     virtual int onNotify(uint32_t newValue) override;
 
-    int preflightSleepCb(void *unused = NULL) { return available(); }
+    int preflightSleepCb(void *unused = NULL) { return available() && (millis() - lastContactMsec) < WAKE_SESSION_TIMEOUT_MS; }
 
     CallbackObserver<PhoneAPI, void *> preflightSleepObserver =
         CallbackObserver<PhoneAPI, void *>(this, &PhoneAPI::preflightSleepCb);
