@@ -19,12 +19,12 @@ class Lock
     /// Locks the lock.
     //
     // Must not be called from an ISR.
-    virtual void lock();
+    void lock();
 
     // Unlocks the lock.
     //
     // Must not be called from an ISR.
-    virtual void unlock();
+    void unlock();
 
   private:
 #ifdef HAS_FREE_RTOS
