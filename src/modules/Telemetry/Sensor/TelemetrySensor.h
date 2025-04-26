@@ -42,7 +42,7 @@ class TelemetrySensor
         initialized = true;
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
-    virtual void setup();
+    virtual void setup() = 0;
 
   public:
     virtual AdminMessageHandleResult handleAdminMessage(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,
