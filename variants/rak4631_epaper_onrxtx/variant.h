@@ -69,7 +69,9 @@ static const uint8_t A7 = PIN_A7;
 
 // Other pins
 #define PIN_AREF (2)
-// #define PIN_NFC1 (9)
+#define PIN_NFC1 (9)
+#define WB_IO5 PIN_NFC1
+#define WB_IO4 (4)
 // #define PIN_NFC2 (10)
 
 static const uint8_t AREF = PIN_AREF;
@@ -160,6 +162,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 
 // enables 3.3V periphery like GPS or IO Module
 #define PIN_3V3_EN (34)
+#define WB_IO2 PIN_3V3_EN
 
 // NO GPS
 #undef GPS_RX_PIN
