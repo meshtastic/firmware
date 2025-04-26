@@ -76,23 +76,47 @@ static const uint8_t ext_chrg_detect_value = EXT_CHRG_DETECT_VALUE;
 #endif
 #endif
 
-#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(ARCH_PORTDUINO)
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#if __has_include(<Adafruit_INA219.h>)
 INA219Sensor ina219Sensor;
-INA226Sensor ina226Sensor;
-INA260Sensor ina260Sensor;
-INA3221Sensor ina3221Sensor;
+#else
+NullSensor ina219Sensor;
 #endif
 
-#if !MESHTASTIC_EXCLUDE_I2C && !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+#if __has_include(<INA226.h>)
+INA226Sensor ina226Sensor;
+#else
+NullSensor ina226Sensor;
+#endif
+
+#if __has_include(<Adafruit_INA260.h>)
+INA260Sensor ina260Sensor;
+#else
+NullSensor ina260Sensor;
+#endif
+
+#if __has_include(<INA3221.h>)
+INA3221Sensor ina3221Sensor;
+#else
+NullSensor ina3221Sensor;
+#endif
+
+#endif
+
+#if !MESHTASTIC_EXCLUDE_I2C && !defined(ARCH_STM32WL)
 #include "modules/Telemetry/Sensor/MAX17048Sensor.h"
 #include <utility>
 extern std::pair<uint8_t, TwoWire *> nodeTelemetrySensorsMap[_meshtastic_TelemetrySensorType_MAX + 1];
 #if HAS_TELEMETRY && (!MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR || !MESHTASTIC_EXCLUDE_POWER_TELEMETRY)
+#if __has_include(<Adafruit_MAX1704X.h>)
 MAX17048Sensor max17048Sensor;
+#else
+NullSensor max17048Sensor;
+#endif
 #endif
 #endif
 
-#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && HAS_RAKPROT && !defined(ARCH_PORTDUINO)
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && HAS_RAKPROT
 RAK9154Sensor rak9154Sensor;
 #endif
 
