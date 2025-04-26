@@ -33,7 +33,7 @@ NullSensor aht10Sensor;
 #endif
 #if __has_include(<Adafruit_BME280.h>)
 #include "Sensor/BME280Sensor.h"
-BME280Sensor bme280Sensor;
+BMP280Sensor bmp280Sensor;
 #else
 NullSensor bmp280Sensor;
 #endif
@@ -47,7 +47,7 @@ NullSensor bmp085Sensor;
 
 #if __has_include(<Adafruit_BMP280.h>)
 #include "Sensor/BMP280Sensor.h"
-BMP280Sensor bmp280Sensor;
+BME280Sensor bme280Sensor;
 #else
 NullSensor bme280Sensor;
 #endif
