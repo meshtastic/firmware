@@ -1,6 +1,6 @@
 #include "ICM20948Sensor.h"
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && __has_include(<ICM_20948.h>)
 
 // Flag when an interrupt has been detected
 volatile static bool ICM20948_IRQ = false;
