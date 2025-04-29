@@ -15,10 +15,10 @@
 #define UDP_MULTICAST_DEFAUL_PORT 4403 // Default port for UDP multicast is same as TCP api server
 #define UDP_MULTICAST_THREAD_INTERVAL_MS 15000
 
-class UdpMulticastThread : public concurrency::OSThread
+class UdpMulticastThread final
 {
   public:
-    UdpMulticastThread() : OSThread("UdpMulticast") { udpIpAddress = IPAddress(224, 0, 0, 69); }
+    UdpMulticastThread() { udpIpAddress = IPAddress(224, 0, 0, 69); }
 
     void start()
     {
@@ -69,14 +69,6 @@ class UdpMulticastThread : public concurrency::OSThread
         size_t encodedLength = pb_encode_to_bytes(buffer, sizeof(buffer), &meshtastic_MeshPacket_msg, mp);
         udp.writeTo(buffer, encodedLength, udpIpAddress, UDP_MULTICAST_DEFAUL_PORT);
         return true;
-    }
-
-  protected:
-    int32_t runOnce() override
-    {
-        canSleep = true;
-        // TODO: Implement nodeinfo broadcast
-        return UDP_MULTICAST_THREAD_INTERVAL_MS;
     }
 
   private:
