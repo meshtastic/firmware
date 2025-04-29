@@ -13,12 +13,11 @@
 #endif // HAS_ETHERNET
 
 #define UDP_MULTICAST_DEFAUL_PORT 4403 // Default port for UDP multicast is same as TCP api server
-#define UDP_MULTICAST_THREAD_INTERVAL_MS 15000
 
-class UdpMulticastThread final
+class UdpMulticastHandler final
 {
   public:
-    UdpMulticastThread() { udpIpAddress = IPAddress(224, 0, 0, 69); }
+    UdpMulticastHandler() { udpIpAddress = IPAddress(224, 0, 0, 69); }
 
     void start()
     {
