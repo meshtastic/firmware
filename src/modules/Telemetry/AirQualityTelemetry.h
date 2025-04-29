@@ -51,8 +51,8 @@ class AirQualityTelemetryModule : private concurrency::OSThread, public Protobuf
 
   private:
     enum State {
-      IDLE = 0,
-      ACTIVE = 1,
+        IDLE = 0,
+        ACTIVE = 1,
     };
 
     State state;

@@ -79,41 +79,41 @@ int32_t AirQualityTelemetryModule::runOnce()
 
         switch (state) {
 #ifdef PMSA003I_ENABLE_PIN
-            case State::IDLE:
-                // sensor is in standby; fire it up and sleep
-                LOG_DEBUG("runOnce(): state = idle");
-                digitalWrite(PMSA003I_ENABLE_PIN, HIGH);
-                state = State::ACTIVE;
+        case State::IDLE:
+            // sensor is in standby; fire it up and sleep
+            LOG_DEBUG("runOnce(): state = idle");
+            digitalWrite(PMSA003I_ENABLE_PIN, HIGH);
+            state = State::ACTIVE;
 
-                return PMSA003I_WARMUP_MS;
+            return PMSA003I_WARMUP_MS;
 #endif /* PMSA003I_ENABLE_PIN */
-            case State::ACTIVE:
-                // sensor is already warmed up; grab telemetry and send it
-                LOG_DEBUG("runOnce(): state = active");
+        case State::ACTIVE:
+            // sensor is already warmed up; grab telemetry and send it
+            LOG_DEBUG("runOnce(): state = active");
 
-                if (((lastSentToMesh == 0) ||
-                    !Throttle::isWithinTimespanMs(lastSentToMesh, Default::getConfiguredOrDefaultMsScaled(
-                                                                    moduleConfig.telemetry.air_quality_interval,
-                                                                    default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
-                    airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
-                    airTime->isTxAllowedAirUtil()) {
-                    sendTelemetry();
-                    lastSentToMesh = millis();
-                } else if (service->isToPhoneQueueEmpty()) {
-                    // Just send to phone when it's not our time to send to mesh yet
-                    // Only send while queue is empty (phone assumed connected)
-                    sendTelemetry(NODENUM_BROADCAST, true);
-                }
+            if (((lastSentToMesh == 0) ||
+                 !Throttle::isWithinTimespanMs(lastSentToMesh, Default::getConfiguredOrDefaultMsScaled(
+                                                                   moduleConfig.telemetry.air_quality_interval,
+                                                                   default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
+                airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
+                airTime->isTxAllowedAirUtil()) {
+                sendTelemetry();
+                lastSentToMesh = millis();
+            } else if (service->isToPhoneQueueEmpty()) {
+                // Just send to phone when it's not our time to send to mesh yet
+                // Only send while queue is empty (phone assumed connected)
+                sendTelemetry(NODENUM_BROADCAST, true);
+            }
 
 #ifdef PMSA003I_ENABLE_PIN
-                // put sensor back to sleep
-                digitalWrite(PMSA003I_ENABLE_PIN, LOW);
-                state = State::IDLE;
+            // put sensor back to sleep
+            digitalWrite(PMSA003I_ENABLE_PIN, LOW);
+            state = State::IDLE;
 #endif /* PMSA003I_ENABLE_PIN */
 
-                return sendToPhoneIntervalMs;
-            default:
-                return disable();
+            return sendToPhoneIntervalMs;
+        default:
+            return disable();
         }
     }
 }
