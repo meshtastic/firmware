@@ -197,6 +197,12 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 
 */
 
+// configure the SET pin on the RAK12039 sensor board to disable the sensor while not reading
+// air quality telemetry.  PIN_NFC2 doesn't seem to be used anywhere else in the codebase, but if
+// you're having problems with your node behaving weirdly when a RAK12039 board isn't connected,
+// try disabling this.
+#define PMSA003I_ENABLE_PIN PIN_NFC2
+
 #define DETECTION_SENSOR_EN 4
 
 #define USE_SX1262
