@@ -7,7 +7,7 @@
 
 #include "../configuration.h"
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
 
 #include "../PowerFSM.h"
 #include "../detect/ScanI2C.h"
