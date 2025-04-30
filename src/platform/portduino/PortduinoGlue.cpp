@@ -531,6 +531,8 @@ bool loadConfig(const char *configPath)
                 settingsMap[displayPanel] = hx8357d;
             else if (yamlConfig["Display"]["Panel"].as<std::string>("") == "X11")
                 settingsMap[displayPanel] = x11;
+            else if (yamlConfig["Display"]["Panel"].as<std::string>("") == "FB")
+                settingsMap[displayPanel] = fb;
             settingsMap[displayHeight] = yamlConfig["Display"]["Height"].as<int>(0);
             settingsMap[displayWidth] = yamlConfig["Display"]["Width"].as<int>(0);
             settingsMap[displayDC] = yamlConfig["Display"]["DC"].as<int>(-1);
