@@ -31,6 +31,8 @@ void tft_task_handler(void *param = nullptr)
             deviceScreen->task_handler();
             spiLock->unlock();
             deviceScreen->sleep();
+        } else {
+            delay(100);
         }
     }
 }
