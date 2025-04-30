@@ -27,12 +27,10 @@ CallbackObserver<DeviceScreen, esp_sleep_wakeup_cause_t> endSleepObserver =
 void tft_task_handler(void *param = nullptr)
 {
     while (true) {
-        if (deviceScreen) {
-            spiLock->lock();
-            deviceScreen->task_handler();
-            spiLock->unlock();
-            deviceScreen->sleep();
-        }
+        spiLock->lock();
+        deviceScreen->task_handler();
+        spiLock->unlock();
+        deviceScreen->sleep();
     }
 }
 
