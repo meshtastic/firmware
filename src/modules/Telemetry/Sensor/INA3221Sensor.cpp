@@ -1,6 +1,6 @@
 #include "configuration.h"
 
-#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && __has_include(<INA3221.h>)
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "INA3221Sensor.h"

@@ -95,10 +95,13 @@ jobs:
           pip install -r bin/bump_metainfo/requirements.txt -q
           chmod +x ./bin/bump_metainfo/bump_metainfo.py
           ./bin/bump_metainfo/bump_metainfo.py --file bin/org.meshtastic.meshtasticd.metainfo.xml "${{ steps.version.outputs.short }}"
+        env:
+          PIP_DISABLE_PIP_VERSION_CHECK: 1
 
       - name: Create Bumps pull request
         uses: peter-evans/create-pull-request@v7
         with:
+          base: ${{ github.event.repository.default_branch }}
           title: Bump release version
           commit-message: automated bumps
           add-paths: |
