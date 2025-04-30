@@ -26,6 +26,7 @@
 #define SCREEN_TOUCH_RST 48
 #define TOUCH_I2C_PORT 0
 #define TOUCH_SLAVE_ADDRESS 0x38 // FT5x06
+#define WAKE_ON_TOUCH
 #endif
 
 #if TFT_HEIGHT == 480 && not defined(HAS_TFT) // 3.5 TFT
@@ -53,6 +54,7 @@
 #define SCREEN_TOUCH_RST 48
 #define TOUCH_I2C_PORT 0
 #define TOUCH_SLAVE_ADDRESS 0x5D // GT911
+#define WAKE_ON_TOUCH
 #endif
 
 #ifdef CROW_SELECT
@@ -160,7 +162,8 @@
 #define USE_SX1262
 #define LORA_CS 0 // GND
 
-#if TFT_HEIGHT == 320 || TFT_HEIGHT == 480 // 2.4 - 3.5 TFT
+#if TFT_HEIGHT == 320 || TFT_WIDTH == 320 // 2.4 - 3.5 TFT
+#define HW_SPI1_DEVICE
 #define LORA_SCK 10
 #define LORA_MISO 9
 #define LORA_MOSI 3
@@ -182,7 +185,6 @@
 #define LORA_DIO2 2  // SX1262 BUSY
 #endif
 
-#define HW_SPI1_DEVICE
 #define SX126X_CS LORA_CS
 #define SX126X_DIO1 LORA_DIO1
 #define SX126X_BUSY LORA_DIO2

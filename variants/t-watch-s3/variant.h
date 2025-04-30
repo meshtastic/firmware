@@ -24,6 +24,7 @@
 #define SCREEN_TOUCH_USE_I2C1
 #define TOUCH_I2C_PORT 1
 #define TOUCH_SLAVE_ADDRESS 0x38
+#define WAKE_ON_TOUCH
 
 #define SLEEP_TIME 180
 
