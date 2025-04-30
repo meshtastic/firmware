@@ -652,7 +652,7 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
     } else if (IS_ONE_OF(meshtastic_PortNum_POSITION_APP, meshtastic_PortNum_WAYPOINT_APP, meshtastic_PortNum_ALERT_APP) &&
                lastPortNumToRadio[p.decoded.portnum] &&
                Throttle::isWithinTimespanMs(lastPortNumToRadio[p.decoded.portnum], TEN_SECONDS_MS)) {
-        // TODO: Make this rate limit throttling scale up / down with the preset
+        // TODO: [Issue #123] Make this rate limit throttling scale up / down with the preset
         LOG_WARN("Rate limit portnum %d", p.decoded.portnum);
         meshtastic_QueueStatus qs = router->getQueueStatus();
         service->sendQueueStatusToPhone(qs, 0, p.id);
