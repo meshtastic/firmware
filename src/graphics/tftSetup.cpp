@@ -11,6 +11,7 @@
 
 #ifdef ARCH_PORTDUINO
 #include "PortduinoGlue.h"
+#include <thread>
 #endif
 
 DeviceScreen *deviceScreen = nullptr;
@@ -26,12 +27,10 @@ CallbackObserver<DeviceScreen, esp_sleep_wakeup_cause_t> endSleepObserver =
 void tft_task_handler(void *param = nullptr)
 {
     while (true) {
-        if (deviceScreen) {
-            spiLock->lock();
-            deviceScreen->task_handler();
-            spiLock->unlock();
-            deviceScreen->sleep();
-        }
+        spiLock->lock();
+        deviceScreen->task_handler();
+        spiLock->unlock();
+        deviceScreen->sleep();
     }
 }
 
@@ -116,11 +115,15 @@ void tftSetup(void)
     }
 #endif
 
+    if (deviceScreen) {
 #ifdef ARCH_ESP32
-    tftSleepObserver.observe(&notifyLightSleep);
-    endSleepObserver.observe(&notifyLightSleepEnd);
-    xTaskCreatePinnedToCore(tft_task_handler, "tft", 10240, NULL, 1, NULL, 0);
+        tftSleepObserver.observe(&notifyLightSleep);
+        endSleepObserver.observe(&notifyLightSleepEnd);
+        xTaskCreatePinnedToCore(tft_task_handler, "tft", 10240, NULL, 1, NULL, 0);
+#elif defined(ARCH_PORTDUINO)
+        std::thread *tft_task = new std::thread([] { tft_task_handler(); });
 #endif
+    }
 }
 
 #endif

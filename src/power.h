@@ -45,23 +45,48 @@ extern RTC_NOINIT_ATTR uint64_t RTC_reg_b;
 #include "soc/sens_reg.h" // needed for adc pin reset
 #endif
 
-#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(ARCH_PORTDUINO)
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#include "modules/Telemetry/Sensor/nullSensor.h"
+#if __has_include(<Adafruit_INA219.h>)
 #include "modules/Telemetry/Sensor/INA219Sensor.h"
-#include "modules/Telemetry/Sensor/INA226Sensor.h"
-#include "modules/Telemetry/Sensor/INA260Sensor.h"
-#include "modules/Telemetry/Sensor/INA3221Sensor.h"
 extern INA219Sensor ina219Sensor;
+#else
+extern NullSensor ina219Sensor;
+#endif
+
+#if __has_include(<INA226.h>)
+#include "modules/Telemetry/Sensor/INA226Sensor.h"
 extern INA226Sensor ina226Sensor;
+#else
+extern NullSensor ina226Sensor;
+#endif
+
+#if __has_include(<Adafruit_INA260.h>)
+#include "modules/Telemetry/Sensor/INA260Sensor.h"
 extern INA260Sensor ina260Sensor;
+#else
+extern NullSensor ina260Sensor;
+#endif
+
+#if __has_include(<INA3221.h>)
+#include "modules/Telemetry/Sensor/INA3221Sensor.h"
 extern INA3221Sensor ina3221Sensor;
+#else
+extern NullSensor ina3221Sensor;
 #endif
 
-#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+#endif
+
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(ARCH_STM32WL)
 #include "modules/Telemetry/Sensor/MAX17048Sensor.h"
+#if __has_include(<Adafruit_MAX1704X.h>)
 extern MAX17048Sensor max17048Sensor;
+#else
+extern NullSensor max17048Sensor;
+#endif
 #endif
 
-#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && HAS_RAKPROT && !defined(ARCH_PORTDUINO)
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && HAS_RAKPROT
 #include "modules/Telemetry/Sensor/RAK9154Sensor.h"
 extern RAK9154Sensor rak9154Sensor;
 #endif
