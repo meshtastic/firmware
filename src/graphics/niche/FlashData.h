@@ -135,6 +135,29 @@ template <typename T> class FlashData
     }
 };
 
+// Erase contents of the NicheGraphics data directory
+inline void clearFlashData()
+{
+
+#ifdef FSCom
+    File dir = FSCom.open("/NicheGraphics"); // Open the directory
+    File file = dir.openNextFile();          // Attempt to open the first file in the directory
+
+    // While the directory still contains files
+    while (file) {
+        std::string path = "/NicheGraphics/";
+        path += file.name();
+        LOG_DEBUG("Erasing %s", path.c_str());
+        file.close();
+        FSCom.remove(path.c_str());
+
+        file = dir.openNextFile();
+    }
+#else
+    LOG_ERROR("ERROR: Filesystem not implemented\n");
+#endif
+}
+
 } // namespace NicheGraphics
 
 #endif
