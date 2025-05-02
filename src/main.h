@@ -51,8 +51,8 @@ extern AudioThread *audioThread;
 #endif
 
 #ifdef HAS_UDP_MULTICAST
-#include "mesh/udp/UdpMulticastThread.h"
-extern UdpMulticastThread *udpThread;
+#include "mesh/udp/UdpMulticastHandler.h"
+extern UdpMulticastHandler *udpHandler;
 #endif
 
 // Global Screen singleton.

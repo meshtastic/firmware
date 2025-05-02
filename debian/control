@@ -21,7 +21,10 @@ Build-Depends: debhelper-compat (= 13),
                openssl,
                libssl-dev,
                libulfius-dev,
-               liborcania-dev
+               liborcania-dev,
+               libx11-dev,
+               libinput-dev,
+               libxkbcommon-x11-dev
 Standards-Version: 4.6.2
 Homepage: https://github.com/meshtastic/firmware
 Rules-Requires-Root: no
