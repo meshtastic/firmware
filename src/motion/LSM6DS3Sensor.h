@@ -4,7 +4,7 @@
 
 #include "MotionSensor.h"
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && __has_include(<Adafruit_LSM6DS3TRC.h>)
 
 #ifndef LSM6DS3_WAKE_THRESH
 #define LSM6DS3_WAKE_THRESH 20
