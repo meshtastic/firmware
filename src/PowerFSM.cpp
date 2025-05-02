@@ -179,7 +179,7 @@ static void lsExit()
 
         powerMon->clearState(meshtastic_PowerMon_State_CPU_LightSleep);
 
-        LOG_DEBUG("Exit state: LS, slept %d ms", sleepTime);
+        LOG_DEBUG("Exit state: LS, stayed %d ms in light-sleep state", sleepTime);
     }
 }
 
