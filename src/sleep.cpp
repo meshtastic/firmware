@@ -430,7 +430,7 @@ void doLightSleep(uint32_t sleepMsec)
     res = gpio_wakeup_enable((gpio_num_t)INPUTDRIVER_ENCODER_BTN, GPIO_INTR_LOW_LEVEL);
     assert(res == ESP_OK);
 #endif
-#if defined(WAKE_ON_TOUCH)
+#if defined(T_WATCH_S3) || defined(ELECROW)
     res = gpio_wakeup_enable((gpio_num_t)SCREEN_TOUCH_INT, GPIO_INTR_LOW_LEVEL);
     assert(res == ESP_OK);
 #endif
