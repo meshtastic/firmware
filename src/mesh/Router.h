@@ -8,9 +8,6 @@
 #include "PointerQueue.h"
 #include "RadioInterface.h"
 #include "concurrency/OSThread.h"
-#ifdef ARCH_PORTDUINO
-#include <mutex>
-#endif
 
 /**
  * A mesh aware router that supports multiple interfaces.
@@ -21,12 +18,6 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     /// Packets which have just arrived from the radio, ready to be processed by this service and possibly
     /// forwarded to the phone.
     PointerQueue<meshtastic_MeshPacket> fromRadioQueue;
-
-#ifdef ARCH_PORTDUINO
-    /// linux calls enqueueReceivedMessage from an other thread when receiving UDP packets,
-    /// to avoid a data race with LoRa, lock that method.
-    std::mutex queueMutex;
-#endif
 
   protected:
     RadioInterface *iface = NULL;
