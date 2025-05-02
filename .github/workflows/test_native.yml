@@ -45,7 +45,9 @@ jobs:
           timeout 20 bash -c "until ls -al /proc/$PID/fd | grep socket; do sleep 1; done"
           echo "Simulator started, launching python test..."
           python3 -c 'from meshtastic.test import testSimulator; testSimulator()'
-          wait
+          TEST_EXIT=$?
+          kill $PID
+          exit $TEST_EXIT
 
       - name: Capture coverage information
         if: always() # run this step even if previous step failed
