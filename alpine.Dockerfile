@@ -28,12 +28,19 @@ RUN bash ./bin/build-native.sh "$PIO_ENV" && \
 # ##### PRODUCTION BUILD #############
 
 FROM alpine:3.21
+LABEL org.opencontainers.image.title="Meshtastic" \
+      org.opencontainers.image.description="Alpine Meshtastic daemon" \
+      org.opencontainers.image.url="https://meshtastic.org" \
+      org.opencontainers.image.documentation="https://meshtastic.org/docs/" \
+      org.opencontainers.image.authors="Meshtastic" \
+      org.opencontainers.image.licenses="GPL-3.0-or-later" \
+      org.opencontainers.image.source="https://github.com/meshtastic/firmware/"
 
 # nosemgrep: dockerfile.security.last-user-is-root.last-user-is-root
 USER root
 
 RUN apk --no-cache add \
-        libstdc++ libgpiod yaml-cpp libusb i2c-tools libuv \
+        shadow libstdc++ libgpiod yaml-cpp libusb i2c-tools libuv \
         libx11 libinput libxkbcommon \
     && rm -rf /var/cache/apk/* \
     && mkdir -p /var/lib/meshtasticd \
@@ -41,7 +48,7 @@ RUN apk --no-cache add \
     && mkdir -p /etc/meshtasticd/ssl
 
 # Fetch compiled binary from the builder
-COPY --from=builder /tmp/firmware/release/meshtasticd /usr/sbin/
+COPY --from=builder /tmp/firmware/release/meshtasticd /usr/bin/
 # Copy config templates
 COPY ./bin/config.d /etc/meshtasticd/available.d
 
