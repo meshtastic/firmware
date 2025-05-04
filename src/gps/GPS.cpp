@@ -222,6 +222,20 @@ uint8_t GPS::makeCASPacket(uint8_t class_id, uint8_t msg_id, uint8_t payload_siz
     return (payload_size + 10);
 }
 
+// Function to create CAS packet with specified Dynamic Mode
+int GPS::makeCASPacketWithDynamicMode(uint8_t dynamicMode)
+{
+    // Base configuration (mutable copy of _message_CAS_CFG_NAVX_CONF)
+    static uint8_t config[sizeof(_message_CAS_CFG_NAVX_CONF)];
+    memcpy(config, _message_CAS_CFG_NAVX_CONF, sizeof(_message_CAS_CFG_NAVX_CONF));
+
+    // Update Dynamic Mode (index 4)
+    config[4] = dynamicMode;
+
+    // Create CAS packet with updated configuration
+    return makeCASPacket(0x06, 0x07, sizeof(config), config);
+}
+
 GPS_RESPONSE GPS::getACK(const char *message, uint32_t waitMillis)
 {
     uint8_t buffer[768] = {0};
@@ -597,7 +611,16 @@ bool GPS::setup()
             delay(250);
         } else if (gnssModel == GNSS_MODEL_ATGM336H) {
             // Set the intial configuration of the device - these _should_ work for most AT6558 devices
-            msglen = makeCASPacket(0x06, 0x07, sizeof(_message_CAS_CFG_NAVX_CONF), _message_CAS_CFG_NAVX_CONF);
+            // Default to Automotive mode
+            // Default to Automotive mode (Dynamic Mode = 0x03)
+            msglen = makeCASPacketWithDynamicMode(0x03);
+
+#ifdef USERPREFS_GPS_FLIGHT_MODE
+            if (USERPREFS_GPS_FLIGHT_MODE) {
+                // Switch to Flight mode (Dynamic Mode = 0x06)
+                msglen = makeCASPacketWithDynamicMode(0x06);
+            }
+#endif
             _serial_gps->write(UBXscratch, msglen);
             if (getACKCas(0x06, 0x07, 250) != GNSS_RESPONSE_OK) {
                 LOG_WARN("ATGM336H: Could not set Config");
@@ -723,6 +746,11 @@ bool GPS::setup()
             }
             // Turn off unwanted NMEA messages, set update rate
             SEND_UBX_PACKET(0x06, 0x08, _message_1HZ, "set GPS update rate", 500);
+#ifdef USERPREFS_GPS_FLIGHT_MODE
+            if (USERPREFS_GPS_FLIGHT_MODE) {
+                SEND_UBX_PACKET(0x06, 0x24, _message_NAV5_FLIGHT, "enable flight mode", 500);
+            }
+#endif
             SEND_UBX_PACKET(0x06, 0x01, _message_GLL, "disable NMEA GLL", 500);
             SEND_UBX_PACKET(0x06, 0x01, _message_GSA, "enable NMEA GSA", 500);
             SEND_UBX_PACKET(0x06, 0x01, _message_GSV, "disable NMEA GSV", 500);

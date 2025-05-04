@@ -194,6 +194,26 @@ static const uint8_t _message_NAVX5_8[] = {
     0x00                    // useAdr
 };
 
+// Flight mode
+static const uint8_t _message_NAV5_FLIGHT[] PROGMEM = {
+    0xFF, 0xFF,             // mask
+    0x06,                   // dynModel
+    0x02,                   // fixMode
+    0x00, 0x00, 0x00, 0x00, // fixedAlt
+    0x00, 0x00, 0x00, 0x00, // fixedAltVar
+    0x05,                   // minElev
+    0x00,                   // drLimit
+    0xFA, 0x00,             // pDop
+    0xFA, 0x00,             // tDop
+    0x64, 0x00,             // pAcc
+    0x2C, 0x01,             // tAcc
+    0x00,                   // staticHoldThresh
+    0x00,                   // dgpsTimeOut
+    0x00, 0x00, 0x00, 0x00, // reserved2
+    0x00, 0x00, 0x00, 0x00, // reserved3
+    0x00, 0x00, 0x00, 0x00  // reserved4
+};
+
 // Set GPS update rate to 1Hz
 // Lowering the update rate helps to save power.
 // Additionally, for some new modules like the M9/M10, an update rate lower than 5Hz
