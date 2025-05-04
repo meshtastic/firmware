@@ -157,7 +157,7 @@ static bool haveGlyphs(const char *str)
         }
     }
 
-    LOG_DEBUG("haveGlyphs=%d", have);
+    // LOG_DEBUG("haveGlyphs=%d", have);
     return have;
 }
 bool hasUnreadMessage = false;
@@ -1055,6 +1055,9 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
         // === Vertical battery ===
         int batteryX = 1;
         int batteryY = HEADER_OFFSET_Y + 1;
+#ifdef USE_EINK
+        batteryY = batteryY + 2;
+#endif
 
         display->drawXbm(batteryX, batteryY, 7, 11, batteryBitmap_v);
 
@@ -1079,7 +1082,11 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
 
     int chargeNumWidth = display->getStringWidth(chargeStr);
     const int batteryOffset = useHorizontalBattery ? 28 : 6;
+#ifdef USE_EINK
+    const int percentX = x + xOffset + batteryOffset - 2;
+#else
     const int percentX = x + xOffset + batteryOffset;
+#endif
 
     display->drawString(percentX, textY, chargeStr);
     display->drawString(percentX + chargeNumWidth - 1, textY, "%");
@@ -2137,9 +2144,8 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
 void drawEntryLastHeard(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth)
 {
     bool isLeftCol = (x < SCREEN_WIDTH / 2);
-    int timeOffset = (SCREEN_WIDTH > 128) 
-        ? (isLeftCol ? 7 : 10)     // Offset for Wide Screens (Left Column:Right Column)
-        : (isLeftCol ? 3 : 7);    // Offset for Narrow Screens (Left Column:Right Column)
+    int timeOffset = (SCREEN_WIDTH > 128) ? (isLeftCol ? 7 : 10) // Offset for Wide Screens (Left Column:Right Column)
+                                          : (isLeftCol ? 3 : 7); // Offset for Narrow Screens (Left Column:Right Column)
 
     String nodeName = getSafeNodeName(node);
 
@@ -2175,12 +2181,10 @@ void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
     bool isLeftCol = (x < SCREEN_WIDTH / 2);
 
     int nameMaxWidth = columnWidth - 25;
-    int barsOffset = (SCREEN_WIDTH > 128) 
-        ? (isLeftCol ? 16 : 20)     // Offset for Wide Screens (Left Column:Right Column)
-        : (isLeftCol ? 15 : 19);    // Offset for Narrow Screens (Left Column:Right Column)
-    int hopOffset = (SCREEN_WIDTH > 128) 
-        ? (isLeftCol ? 22 : 28)     // Offset for Wide Screens (Left Column:Right Column)
-        : (isLeftCol ? 18 : 20);    // Offset for Narrow Screens (Left Column:Right Column)
+    int barsOffset = (SCREEN_WIDTH > 128) ? (isLeftCol ? 16 : 20)  // Offset for Wide Screens (Left Column:Right Column)
+                                          : (isLeftCol ? 15 : 19); // Offset for Narrow Screens (Left Column:Right Column)
+    int hopOffset = (SCREEN_WIDTH > 128) ? (isLeftCol ? 22 : 28)   // Offset for Wide Screens (Left Column:Right Column)
+                                         : (isLeftCol ? 18 : 20);  // Offset for Narrow Screens (Left Column:Right Column)
     int barsXOffset = columnWidth - barsOffset;
 
     String nodeName = getSafeNodeName(node);
@@ -2276,10 +2280,8 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     display->drawStringMaxWidth(x, y, nameMaxWidth, nodeName);
 
     if (strlen(distStr) > 0) {
-        int offset = 
-            (SCREEN_WIDTH > 128) 
-                ? (isLeftCol ? 7 : 10) // Offset for Wide Screens (Left Column:Right Column)
-                : (isLeftCol ? 5 : 8);  // Offset for Narrow Screens (Left Column:Right Column)
+        int offset = (SCREEN_WIDTH > 128) ? (isLeftCol ? 7 : 10) // Offset for Wide Screens (Left Column:Right Column)
+                                          : (isLeftCol ? 5 : 8); // Offset for Narrow Screens (Left Column:Right Column)
         int rightEdge = x + columnWidth - offset;
         int textWidth = display->getStringWidth(distStr);
         display->drawString(rightEdge - textWidth, y, distStr);
@@ -2362,7 +2364,7 @@ static void drawDynamicNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *
     if (state->ticksSinceLastStateSwitch == 0) {
         currentMode = MODE_LAST_HEARD;
     }
-    const char *title = getCurrentModeTitle();
+    const char *title = getCurrentModeTitle(display->getWidth());
     drawNodeListScreen(display, state, x, y, title, drawEntryDynamic);
 }
 #endif
@@ -3651,29 +3653,29 @@ void Screen::setFrames(FrameFocus focus)
 
     // Focus on a specific frame, in the frame set we just created
     switch (focus) {
-        case FOCUS_DEFAULT:
-            ui->switchToFrame(fsi.positions.deviceFocused);
-            break;
-        case FOCUS_FAULT:
-            ui->switchToFrame(fsi.positions.fault);
-            break;
-        case FOCUS_TEXTMESSAGE:
-            hasUnreadMessage = false; // ✅ Clear when message is *viewed*
-            ui->switchToFrame(fsi.positions.textMessage);
-            break;
-        case FOCUS_MODULE:
-            // Whichever frame was marked by MeshModule::requestFocus(), if any
-            // If no module requested focus, will show the first frame instead
-            ui->switchToFrame(fsi.positions.focusedModule);
-            break;
+    case FOCUS_DEFAULT:
+        ui->switchToFrame(fsi.positions.deviceFocused);
+        break;
+    case FOCUS_FAULT:
+        ui->switchToFrame(fsi.positions.fault);
+        break;
+    case FOCUS_TEXTMESSAGE:
+        hasUnreadMessage = false; // ✅ Clear when message is *viewed*
+        ui->switchToFrame(fsi.positions.textMessage);
+        break;
+    case FOCUS_MODULE:
+        // Whichever frame was marked by MeshModule::requestFocus(), if any
+        // If no module requested focus, will show the first frame instead
+        ui->switchToFrame(fsi.positions.focusedModule);
+        break;
 
-        case FOCUS_PRESERVE:
-            // No more adjustment — force stay on same index
-            if (originalPosition < fsi.frameCount)
-                ui->switchToFrame(originalPosition);
-            else
-                ui->switchToFrame(fsi.frameCount - 1);
-            break;
+    case FOCUS_PRESERVE:
+        // No more adjustment — force stay on same index
+        if (originalPosition < fsi.frameCount)
+            ui->switchToFrame(originalPosition);
+        else
+            ui->switchToFrame(fsi.frameCount - 1);
+        break;
     }
 
     // Store the info about this frameset, for future setFrames calls
@@ -3698,19 +3700,15 @@ void Screen::dismissCurrentFrame()
     bool dismissed = false;
 
     // Only dismiss if the text message frame is currently valid and visible
-    if (framesetInfo.positions.textMessage != 255 &&
-        currentFrame == framesetInfo.positions.textMessage &&
-        devicestate.has_rx_text_message)
-    {
+    if (framesetInfo.positions.textMessage != 255 && currentFrame == framesetInfo.positions.textMessage &&
+        devicestate.has_rx_text_message) {
         LOG_INFO("Dismiss Text Message");
         devicestate.has_rx_text_message = false;
         memset(&devicestate.rx_text_message, 0, sizeof(devicestate.rx_text_message)); // ✅ clear message
         dismissed = true;
     }
 
-    else if (currentFrame == framesetInfo.positions.waypoint &&
-             devicestate.has_rx_waypoint)
-    {
+    else if (currentFrame == framesetInfo.positions.waypoint && devicestate.has_rx_waypoint) {
         LOG_DEBUG("Dismiss Waypoint");
         devicestate.has_rx_waypoint = false;
         dismissed = true;
