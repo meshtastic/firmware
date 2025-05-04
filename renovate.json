@@ -69,5 +69,11 @@
       "versioningTemplate": "{{#if versioning}}{{{versioning}}}{{else}}git{{/if}}"
     }
   ],
-  "packageRules": []
+  "packageRules": [
+    {
+      "matchPackageNames": ["meshtastic/device-ui"],
+      "reviewers": ["mverch67"],
+      "changelogUrl": "https://github.com/meshtastic/device-ui/compare/{{currentDigest}}...{{newDigest}}"
+    }
+  ]
 }
