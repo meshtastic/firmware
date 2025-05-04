@@ -2860,9 +2860,10 @@ static void drawMemoryScreen(OLEDDisplay *display, OLEDDisplayUiState *state, in
 
         char combinedStr[24];
         if (SCREEN_WIDTH > 128) {
-            snprintf(combinedStr, sizeof(combinedStr), "%3d%%  %lu/%luKB", percent, used / 1024, total / 1024);
+            snprintf(combinedStr, sizeof(combinedStr), "%s%3d%%  %lu/%luKB", (percent > 80) ? "! " : "", percent, used / 1024,
+                     total / 1024);
         } else {
-            snprintf(combinedStr, sizeof(combinedStr), "%3d%%", percent);
+            snprintf(combinedStr, sizeof(combinedStr), "%s%3d%%", (percent > 80) ? "! " : "", percent);
         }
 
         int textWidth = display->getStringWidth(combinedStr);
@@ -2881,8 +2882,6 @@ static void drawMemoryScreen(OLEDDisplay *display, OLEDDisplayUiState *state, in
         display->setColor(WHITE);
         display->drawRect(barX, barY, adjustedBarWidth, barHeight);
 
-        if (percent >= 80)
-            display->setColor(BLACK);
         display->fillRect(barX, barY, fillWidth, barHeight);
         display->setColor(WHITE);
 
