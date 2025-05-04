@@ -49,38 +49,53 @@ static uint8_t lastToRadio[MAX_TO_FROM_RADIO_SIZE];
 
 class NimbleBluetoothToRadioCallback : public NimBLECharacteristicCallbacks
 {
+#ifdef CONFIG_NIMBLE_CPP_IDF
+    virtual void onWrite(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo){
+#else
     virtual void onWrite(NimBLECharacteristic *pCharacteristic)
     {
+#endif
         LOG_DEBUG("To Radio onwrite");
-        auto val = pCharacteristic->getValue();
+    auto val = pCharacteristic->getValue();
 
-        if (memcmp(lastToRadio, val.data(), val.length()) != 0) {
-            LOG_DEBUG("New ToRadio packet");
-            memcpy(lastToRadio, val.data(), val.length());
-            bluetoothPhoneAPI->handleToRadio(val.data(), val.length());
-        } else {
-            LOG_DEBUG("Drop dup ToRadio packet we just saw");
-        }
+    if (memcmp(lastToRadio, val.data(), val.length()) != 0) {
+        LOG_DEBUG("New ToRadio packet");
+        memcpy(lastToRadio, val.data(), val.length());
+        bluetoothPhoneAPI->handleToRadio(val.data(), val.length());
+    } else {
+        LOG_DEBUG("Drop dup ToRadio packet we just saw");
     }
-};
+}
+}
+;
 
 class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
 {
+#ifdef CONFIG_NIMBLE_CPP_IDF
+    virtual void onRead(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo){
+#else
     virtual void onRead(NimBLECharacteristic *pCharacteristic)
     {
+#endif
         uint8_t fromRadioBytes[meshtastic_FromRadio_size];
-        size_t numBytes = bluetoothPhoneAPI->getFromRadio(fromRadioBytes);
+    size_t numBytes = bluetoothPhoneAPI->getFromRadio(fromRadioBytes);
 
-        std::string fromRadioByteString(fromRadioBytes, fromRadioBytes + numBytes);
+    std::string fromRadioByteString(fromRadioBytes, fromRadioBytes + numBytes);
 
-        pCharacteristic->setValue(fromRadioByteString);
-    }
-};
+    pCharacteristic->setValue(fromRadioByteString);
+}
+}
+;
 
 class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
 {
+#ifdef CONFIG_NIMBLE_CPP_IDF
+    virtual uint32_t onPassKeyDisplay()
+    {
+#else
     virtual uint32_t onPassKeyRequest()
     {
+#endif
         uint32_t passkey = config.bluetooth.fixed_pin;
 
         if (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN) {
@@ -124,9 +139,13 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
 
         return passkey;
     }
-
+#ifdef CONFIG_NIMBLE_CPP_IDF
+    virtual void onAuthenticationComplete(NimBLEConnInfo &connInfo)
+    {
+#else
     virtual void onAuthenticationComplete(ble_gap_conn_desc *desc)
     {
+#endif
         LOG_INFO("BLE authentication complete");
 
         bluetoothStatus->updateStatus(new meshtastic::BluetoothStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED));
@@ -138,10 +157,15 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
         }
     }
 
+#ifdef CONFIG_NIMBLE_CPP_IDF
+    virtual void onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo, int reason)
+    {
+        LOG_INFO("BLE disconnect. Reason: %i", reason);
+#else
     virtual void onDisconnect(NimBLEServer *pServer, ble_gap_conn_desc *desc)
     {
         LOG_INFO("BLE disconnect");
-
+#endif
         bluetoothStatus->updateStatus(
             new meshtastic::BluetoothStatus(meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED));
 
@@ -191,7 +215,11 @@ int NimbleBluetooth::getRssi()
     if (bleServer && isConnected()) {
         auto service = bleServer->getServiceByUUID(MESH_SERVICE_UUID);
         uint16_t handle = service->getHandle();
+#ifdef CONFIG_NIMBLE_CPP_IDF
+        return NimBLEDevice::getClientByHandle(handle)->getRssi();
+#else
         return NimBLEDevice::getClientByID(handle)->getRssi();
+#endif
     }
     return 0; // FIXME figure out where to source this
 }
@@ -216,6 +244,9 @@ void NimbleBluetooth::setup()
 
     NimbleBluetoothServerCallback *serverCallbacks = new NimbleBluetoothServerCallback();
     bleServer->setCallbacks(serverCallbacks, true);
+#ifdef CONFIG_NIMBLE_CPP_IDF
+    bleServer->advertiseOnDisconnect(true);
+#endif
     setupService();
     startAdvertising();
 }
@@ -259,7 +290,11 @@ void NimbleBluetooth::setupService()
     BatteryCharacteristic = batteryService->createCharacteristic( // 0x2A19 is the Battery Level characteristic)
         (uint16_t)0x2a19, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY, 1);
 
+#ifdef CONFIG_NIMBLE_CPP_IDF
+    NimBLE2904 *batteryLevelDescriptor = (NimBLE2904 *)BatteryCharacteristic->create2904();
+#else
     NimBLE2904 *batteryLevelDescriptor = (NimBLE2904 *)BatteryCharacteristic->createDescriptor((uint16_t)0x2904);
+#endif
     batteryLevelDescriptor->setFormat(NimBLE2904::FORMAT_UINT8);
     batteryLevelDescriptor->setNamespace(1);
     batteryLevelDescriptor->setUnit(0x27ad);
