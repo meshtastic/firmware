@@ -94,9 +94,11 @@ SHTC3Sensor shtc3Sensor;
 NullSensor shtc3Sensor;
 #endif
 
-
-#ifdef RAK4630
+#if __has_include(<RAK12035Sensor.h>) && defined(RAK4630)
 #include "Sensor/RAK12035Sensor.h"
+RAK12035Sensor rak12035Sensor;
+#else
+NullSensor shtc3Sensor;
 #endif
 
 #if __has_include(<Adafruit_VEML7700.h>)
@@ -164,9 +166,7 @@ NullSensor bmp3xxSensor;
 
 RCWL9620Sensor rcwl9620Sensor;
 CGRadSensSensor cgRadSens;
-#ifdef RAK4630
-RAK12035Sensor rak12035Sensor;
-#endif
+
 #endif
 #ifdef T1000X_SENSOR_EN
 #include "Sensor/T1000xSensor.h"
