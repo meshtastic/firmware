@@ -94,21 +94,13 @@ SHTC3Sensor shtc3Sensor;
 NullSensor shtc3Sensor;
 #endif
 
-#if __has_include(<Adafruit_VEML7700.h>)
-#include "Sensor/VEML7700Sensor.h"
+
 #ifdef RAK4630
 #include "Sensor/RAK12035Sensor.h"
 #endif
 
-BMP085Sensor bmp085Sensor;
-BMP280Sensor bmp280Sensor;
-BME280Sensor bme280Sensor;
-BME680Sensor bme680Sensor;
-DPS310Sensor dps310Sensor;
-MCP9808Sensor mcp9808Sensor;
-SHTC3Sensor shtc3Sensor;
-LPS22HBSensor lps22hbSensor;
-SHT31Sensor sht31Sensor;
+#if __has_include(<Adafruit_VEML7700.h>)
+#include "Sensor/VEML7700Sensor.h"
 VEML7700Sensor veml7700Sensor;
 #else
 NullSensor veml7700Sensor;
