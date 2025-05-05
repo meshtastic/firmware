@@ -110,6 +110,14 @@ bool RAK12035Sensor::getMetrics(meshtastic_Telemetry *measurement)
     measurement->variant.environment_metrics.soil_temperature = (float)(temp / 10);
     measurement->variant.environment_metrics.soil_moisture = moisture;
 
+    if (variant.environment_metrics.temperature == 0 || variant.environment_metrics.temperature == null && variant.environment_metrics.relative_humidity == 0 || variant.environment_metrics.relative_humidity == null)
+    {
+        measurement->variant.environment_metrics.has_temperature = true;
+        measurement->variant.environment_metrics.has_relative_humidity = true;
+        measurement->variant.environment_metrics.temperature = measurement->variant.environment_metrics.soil_temperature;
+        measurement->variant.environment_metrics.relative_humidity = measurement->variant.environment_metrics.soil_moisture;
+    }
+
     return true;
 }
 #endif
