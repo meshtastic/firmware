@@ -235,10 +235,6 @@ void nrf52InitSemiHosting()
 
 void nrf52Setup()
 {
-#ifdef USB_CHECK
-    pinMode(USB_CHECK, INPUT);
-#endif
-
 #ifdef ADC_V
     pinMode(ADC_V, INPUT);
 #endif
@@ -288,7 +284,7 @@ void cpuDeepSleep(uint32_t msecToWake)
 #endif
     // This may cause crashes as debug messages continue to flow.
     Serial.end();
-#ifdef PIN_SERIAL_RX1
+#ifdef PIN_SERIAL1_RX
     Serial1.end();
 #endif
     setBluetoothEnable(false);

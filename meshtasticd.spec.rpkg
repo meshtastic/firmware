@@ -21,7 +21,7 @@ Summary:        Meshtastic daemon for communicating with Meshtastic devices
 License:        GPL-3.0
 URL:            https://github.com/meshtastic/firmware
 Source0:        {{{ git_dir_pack }}}
-Source1:        https://github.com/meshtastic/web/releases/latest/download/build.tar
+Source1:        https://github.com/meshtastic/web/releases/download/v{{{ web_version }}}/build.tar
 
 BuildRequires: systemd-rpm-macros
 BuildRequires: python3-devel
@@ -42,6 +42,10 @@ BuildRequires: pkgconfig(openssl)
 BuildRequires: pkgconfig(liborcania)
 BuildRequires: pkgconfig(libyder)
 BuildRequires: pkgconfig(libulfius)
+# TFT components:
+BuildRequires: pkgconfig(x11)
+BuildRequires: pkgconfig(libinput)
+BuildRequires: pkgconfig(xkbcommon-x11)
 
 %description
 Meshtastic daemon for controlling Meshtastic devices. Meshtastic is an off-grid
@@ -55,12 +59,12 @@ tar -xf %{SOURCE1} -C web
 gzip -dr web
 
 %build
-# Use the “native” environment from platformio to build a Linux binary
-platformio run -e native
+# Use the “native-tft” environment from platformio to build a Linux binary
+platformio run -e native-tft
 
 %install
 mkdir -p %{buildroot}%{_sbindir}
-install -m 0755 .pio/build/native/program %{buildroot}%{_sbindir}/meshtasticd
+install -m 0755 .pio/build/native-tft/program %{buildroot}%{_sbindir}/meshtasticd
 
 mkdir -p %{buildroot}%{_sysconfdir}/meshtasticd
 install -m 0644 bin/config-dist.yaml %{buildroot}%{_sysconfdir}/meshtasticd/config.yaml

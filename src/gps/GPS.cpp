@@ -12,6 +12,7 @@
 #include "RTC.h"
 #include "Throttle.h"
 #include "buzz.h"
+#include "concurrency/Periodic.h"
 #include "meshUtils.h"
 
 #include "main.h" // pmu_found
@@ -88,6 +89,45 @@ static const char *getGPSPowerStateString(GPSPowerState state)
         return "FALSE"; // to make new ESP-IDF happy
     }
 }
+
+#ifdef PIN_GPS_SWITCH
+// If we have a hardware switch, define a periodic watcher outside of the GPS runOnce thread, since this can be sleeping
+// idefinitely
+
+int lastState = LOW;
+bool firstrun = true;
+
+static int32_t gpsSwitch()
+{
+    if (gps) {
+        int currentState = digitalRead(PIN_GPS_SWITCH);
+
+        // if the switch is set to zero, disable the GPS Thread
+        if (firstrun)
+            if (currentState == LOW)
+                lastState = HIGH;
+
+        if (currentState != lastState) {
+            if (currentState == LOW) {
+                config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_DISABLED;
+                if (!firstrun)
+                    playGPSDisableBeep();
+                gps->disable();
+            } else {
+                config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
+                if (!firstrun)
+                    playGPSEnableBeep();
+                gps->enable();
+            }
+            lastState = currentState;
+        }
+        firstrun = false;
+    }
+    return 1000;
+}
+
+static concurrency::Periodic *gpsPeriodic;
+#endif
 
 static void UBXChecksum(uint8_t *message, size_t length)
 {
@@ -530,6 +570,19 @@ bool GPS::setup()
             // Switch to Fitness Mode, for running and walking purpose with low speed (<5 m/s)
             _serial_gps->write("$PMTK886,1*29\r\n");
             delay(250);
+        } else if (gnssModel == GNSS_MODEL_MTK_PA1010D) {
+            // PA1010D is used in the Pimoroni GPS board.
+
+            // Enable all constellations.
+            _serial_gps->write("$PMTK353,1,1,1,1,1*2A\r\n");
+            // Above command will reset the GPS and takes longer before it will accept new commands
+            delay(1000);
+            // Only ask for RMC and GGA (GNRMC and GNGGA)
+            _serial_gps->write("$PMTK314,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*28\r\n");
+            delay(250);
+            // Enable SBAS / WAAS
+            _serial_gps->write("$PMTK301,2*2E\r\n");
+            delay(250);
         } else if (gnssModel == GNSS_MODEL_MTK_PA1616S) {
             // PA1616S is used in some GPS breakout boards from Adafruit
             // PA1616S does not have GLONASS capability. PA1616D does, but is not implemented here.
@@ -770,13 +823,6 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
     powerState = newState;
     LOG_INFO("GPS power state move from %s to %s", getGPSPowerStateString(oldState), getGPSPowerStateString(newState));
 
-#ifdef HELTEC_MESH_NODE_T114
-    if ((oldState == GPS_OFF || oldState == GPS_HARDSLEEP) && (newState != GPS_OFF && newState != GPS_HARDSLEEP)) {
-        _serial_gps->begin(serialSpeeds[speedSelect]);
-    } else if ((newState == GPS_OFF || newState == GPS_HARDSLEEP) && (oldState != GPS_OFF && oldState != GPS_HARDSLEEP)) {
-        _serial_gps->end();
-    }
-#endif
     switch (newState) {
     case GPS_ACTIVE:
     case GPS_IDLE:
@@ -1205,8 +1251,11 @@ GnssModel_t GPS::probe(int serialSpeed)
     _serial_gps->write("$PMTK514,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*2E\r\n");
     delay(20);
     std::vector<ChipInfo> mtk = {{"L76B", "Quectel-L76B", GNSS_MODEL_MTK_L76B},
+                                 {"PA1010D", "1010D", GNSS_MODEL_MTK_PA1010D},
                                  {"PA1616S", "1616S", GNSS_MODEL_MTK_PA1616S},
-                                 {"LS20031", "MC-1513", GNSS_MODEL_MTK_L76B}};
+                                 {"LS20031", "MC-1513", GNSS_MODEL_MTK_L76B},
+                                 {"L96", "Quectel-L96", GNSS_MODEL_MTK_L76B}};
+
     PROBE_FAMILY("MTK Family", "$PMTK605*31", mtk, 500);
 
     uint8_t cfg_rate[] = {0xB5, 0x62, 0x06, 0x08, 0x00, 0x00, 0x00, 0x00};
@@ -1387,6 +1436,12 @@ GPS *GPS::createGps()
 #ifdef PIN_GPS_PPS
     // pulse per second
     pinMode(PIN_GPS_PPS, INPUT);
+#endif
+
+#ifdef PIN_GPS_SWITCH
+    // toggle GPS via external GPIO switch
+    pinMode(PIN_GPS_SWITCH, INPUT);
+    gpsPeriodic = new concurrency::Periodic("GPSSwitch", gpsSwitch);
 #endif
 
 // Currently disabled per issue #525 (TinyGPS++ crash bug)

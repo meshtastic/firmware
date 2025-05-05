@@ -1,0 +1,53 @@
+{
+  "build": {
+    "arduino": {
+      "ldscript": "nrf52840_s140_v6.ld"
+    },
+    "core": "nRF5",
+    "cpu": "cortex-m4",
+    "extra_flags": "-DNRF52840_XXAA",
+    "f_cpu": "64000000L",
+    "hwids": [
+      ["0x239A", "0x4405"],
+      ["0x239A", "0x0029"],
+      ["0x239A", "0x002A"]
+    ],
+    "usb_product": "HT-n5262",
+    "mcu": "nrf52840",
+    "variant": "heltec_mesh_pocket",
+    "variants_dir": "variants",
+    "bsp": {
+      "name": "adafruit"
+    },
+    "softdevice": {
+      "sd_flags": "-DS140",
+      "sd_name": "s140",
+      "sd_version": "6.1.1",
+      "sd_fwid": "0x00B6"
+    },
+    "bootloader": {
+      "settings_addr": "0xFF000"
+    }
+  },
+  "connectivity": ["bluetooth"],
+  "debug": {
+    "jlink_device": "nRF52840_xxAA",
+    "onboard_tools": ["jlink"],
+    "svd_path": "nrf52840.svd",
+    "openocd_target": "nrf52840-mdk-rs"
+  },
+  "frameworks": ["arduino"],
+  "name": "Heltec nrf (Adafruit BSP)",
+  "upload": {
+    "maximum_ram_size": 248832,
+    "maximum_size": 815104,
+    "speed": 115200,
+    "protocol": "nrfutil",
+    "protocols": ["jlink", "nrfjprog", "nrfutil", "stlink"],
+    "use_1200bps_touch": true,
+    "require_upload_port": true,
+    "wait_for_upload_port": true
+  },
+  "url": "https://heltec.org/project/meshpocket/",
+  "vendor": "Heltec"
+}
