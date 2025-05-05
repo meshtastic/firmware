@@ -1,5 +1,5 @@
 #include "configuration.h"
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && defined(RAK4630)
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && __has_include("RAK12035_SoilMoisture.h") && defined(RAK_4631)
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "RAK12035Sensor.h"
