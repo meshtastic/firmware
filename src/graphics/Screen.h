@@ -181,9 +181,10 @@ class Screen : public concurrency::OSThread
 
   public:
     explicit Screen(ScanI2C::DeviceAddress, meshtastic_Config_DisplayConfig_OledType, OLEDDISPLAY_GEOMETRY);
-
+    size_t frameCount = 0; // Total number of active frames
     ~Screen();
 
+    std::vector<const uint8_t *> indicatorIcons; // Per-frame custom icon pointers
     Screen(const Screen &) = delete;
     Screen &operator=(const Screen &) = delete;
 

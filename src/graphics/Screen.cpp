@@ -2369,6 +2369,26 @@ static void drawDynamicNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *
 }
 #endif
 
+// Add these below (still inside #ifdef USE_EINK if you prefer):
+#ifdef USE_EINK
+static void drawLastHeardScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    const char *title = "Node List";
+    drawNodeListScreen(display, state, x, y, title, drawEntryLastHeard);
+}
+
+static void drawHopSignalScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    const char *title = (display->getWidth() > 128) ? "Hops|Signals" : "Hop|Sig";
+    drawNodeListScreen(display, state, x, y, title, drawEntryHopSignal);
+}
+
+static void drawDistanceScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    const char *title = "Distances";
+    drawNodeListScreen(display, state, x, y, title, drawNodeDistance);
+}
+#endif
 // Helper function: Draw a single node entry for Node List (Modified for Compass Screen)
 void drawEntryCompass(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth)
 {
@@ -3116,13 +3136,60 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
         screenOn = on;
     }
 }
+static int8_t lastFrameIndex = -1;
+static uint32_t lastFrameChangeTime = 0;
+constexpr uint32_t ICON_DISPLAY_DURATION_MS = 1000;
+
+void drawCustomFrameIcons(OLEDDisplay *display, OLEDDisplayUiState *state)
+{
+    int currentFrame = state->currentFrame;
+
+    // Detect frame change and record time
+    if (currentFrame != lastFrameIndex) {
+        lastFrameIndex = currentFrame;
+        lastFrameChangeTime = millis();
+    }
+
+    // Only show bar briefly after switching frames
+    if (millis() - lastFrameChangeTime > ICON_DISPLAY_DURATION_MS) return;
+
+    const int iconSize = 8;
+    const int spacing = 2;
+    size_t totalIcons = screen->indicatorIcons.size();
+    if (totalIcons == 0) return;
+
+    int totalWidth = totalIcons * iconSize + (totalIcons - 1) * spacing;
+    int xStart = (SCREEN_WIDTH - totalWidth) / 2;
+    int y = SCREEN_HEIGHT - iconSize - 1;
+
+    // Clear background under icon bar to avoid overlaps
+    display->setColor(BLACK);
+    display->fillRect(xStart - 1, y - 2, totalWidth + 2, iconSize + 4);
+    display->setColor(WHITE);
+
+    for (size_t i = 0; i < totalIcons; ++i) {
+        const uint8_t* icon = screen->indicatorIcons[i];
+        int x = xStart + i * (iconSize + spacing);
+
+        if (i == static_cast<size_t>(currentFrame)) {
+            // Draw white box and invert icon for visibility
+            display->setColor(WHITE);
+            display->fillRect(x - 1, y - 1, iconSize + 2, iconSize + 2);
+            display->setColor(BLACK);
+            display->drawXbm(x, y, iconSize, iconSize, icon);
+            display->setColor(WHITE);
+        } else {
+            display->drawXbm(x, y, iconSize, iconSize, icon);
+        }
+    }
+}
 
 void Screen::setup()
 {
-    // We don't set useDisplay until setup() is called, because some boards have a declaration of this object but the device
-    // is never found when probing i2c and therefore we don't call setup and never want to do (invalid) accesses to this device.
+    // === Enable display rendering ===
     useDisplay = true;
 
+    // === Detect OLED subtype (if supported by board variant) ===
 #ifdef AutoOLEDWire_h
     if (isAUTOOled)
         static_cast<AutoOLEDWire *>(dispdev)->setDetected(model);
@@ -3133,110 +3200,110 @@ void Screen::setup()
 #endif
 
 #if defined(USE_ST7789) && defined(TFT_MESH)
-    // Heltec T114 and T190: honor a custom text color, if defined in variant.h
+    // Apply custom RGB color (e.g. Heltec T114/T190)
     static_cast<ST7789Spi *>(dispdev)->setRGB(TFT_MESH);
 #endif
 
-    // Initialising the UI will init the display too.
+    // === Initialize display and UI system ===
     ui->init();
-
     displayWidth = dispdev->width();
     displayHeight = dispdev->height();
 
-    ui->setTimePerTransition(0);
+    ui->setTimePerTransition(0);              // Disable animation delays
+    ui->setIndicatorPosition(BOTTOM);         // Not used (indicators disabled below)
+    ui->setIndicatorDirection(LEFT_RIGHT);    // Not used (indicators disabled below)
+    ui->setFrameAnimation(SLIDE_LEFT);        // Used only when indicators are active
+    ui->disableAllIndicators();               // Disable page indicator dots
+    ui->getUiState()->userData = this;        // Allow static callbacks to access Screen instance
 
-    ui->setIndicatorPosition(BOTTOM);
-    // Defines where the first frame is located in the bar.
-    ui->setIndicatorDirection(LEFT_RIGHT);
-    ui->setFrameAnimation(SLIDE_LEFT);
-    // Don't show the page swipe dots while in boot screen.
-    ui->disableAllIndicators();
-    // Store a pointer to Screen so we can get to it from static functions.
-    ui->getUiState()->userData = this;
+    // === Set custom overlay callbacks ===
+    static OverlayCallback overlays[] = {
+        drawFunctionOverlay,     // For mute/buzzer modifiers etc.
+        drawCustomFrameIcons     // Custom indicator icons for each frame
+    };
+    ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
 
-    // Set the utf8 conversion function
+    // === Enable UTF-8 to display mapping ===
     dispdev->setFontTableLookupFunction(customFontTableLookup);
 
 #ifdef USERPREFS_OEM_TEXT
-    logo_timeout *= 2; // Double the time if we have a custom logo
+    logo_timeout *= 2; // Give more time for branded boot logos
 #endif
 
-    // Add frames.
-    EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST);
-    alertFrames[0] = [this](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
+    // === Configure alert frames (e.g., "Resuming..." or region name) ===
+    EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Skip slow refresh
+    alertFrames[0] = [this](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) {
 #ifdef ARCH_ESP32
-        if (wakeCause == ESP_SLEEP_WAKEUP_TIMER || wakeCause == ESP_SLEEP_WAKEUP_EXT1) {
+        if (wakeCause == ESP_SLEEP_WAKEUP_TIMER || wakeCause == ESP_SLEEP_WAKEUP_EXT1)
             drawFrameText(display, state, x, y, "Resuming...");
-        } else
+        else
 #endif
         {
-            // Draw region in upper left
-            const char *region = myRegion ? myRegion->name : NULL;
+            const char *region = myRegion ? myRegion->name : nullptr;
             drawIconScreen(region, display, state, x, y);
         }
     };
     ui->setFrames(alertFrames, 1);
-    // No overlays.
-    ui->setOverlays(nullptr, 0);
+    ui->disableAutoTransition(); // Require manual navigation between frames
 
-    // Require presses to switch between frames.
-    ui->disableAutoTransition();
-
-    // Set up a log buffer with 3 lines, 32 chars each.
+    // === Log buffer for on-screen logs (3 lines max) ===
     dispdev->setLogBuffer(3, 32);
 
+    // === Optional screen mirroring or flipping (e.g. for T-Beam orientation) ===
 #ifdef SCREEN_MIRROR
     dispdev->mirrorScreen();
 #else
-    // Standard behaviour is to FLIP the screen (needed on T-Beam). If this config item is set, unflip it, and thereby logically
-    // flip it. If you have a headache now, you're welcome.
     if (!config.display.flip_screen) {
-#if defined(ST7701_CS) || defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) ||      \
-    defined(ST7789_CS) || defined(RAK14014) || defined(HX8357_CS) || defined(ILI9488_CS)
+    #if defined(ST7701_CS) || defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7789_CS) || \
+        defined(RAK14014) || defined(HX8357_CS) || defined(ILI9488_CS)
         static_cast<TFTDisplay *>(dispdev)->flipScreenVertically();
-#elif defined(USE_ST7789)
+    #elif defined(USE_ST7789)
         static_cast<ST7789Spi *>(dispdev)->flipScreenVertically();
-#else
+    #else
         dispdev->flipScreenVertically();
-#endif
+    #endif
     }
 #endif
 
-    // Get our hardware ID
+    // === Generate device ID from MAC address ===
     uint8_t dmac[6];
     getMacAddr(dmac);
     snprintf(ourId, sizeof(ourId), "%02x%02x", dmac[4], dmac[5]);
+
 #if ARCH_PORTDUINO
-    handleSetOn(false); // force clean init
+    handleSetOn(false);  // Ensure proper init for Arduino targets
 #endif
 
-    // Turn on the display.
+    // === Turn on display and trigger first draw ===
     handleSetOn(true);
-
-    // On some ssd1306 clones, the first draw command is discarded, so draw it
-    // twice initially. Skip this for EINK Displays to save a few seconds during boot
     ui->update();
 #ifndef USE_EINK
-    ui->update();
+    ui->update(); // Some SSD1306 clones drop the first draw, so run twice
 #endif
     serialSinceMsec = millis();
 
+    // === Optional touchscreen support ===
 #if ARCH_PORTDUINO && !HAS_TFT
     if (settingsMap[touchscreenModule]) {
-        touchScreenImpl1 =
-            new TouchScreenImpl1(dispdev->getWidth(), dispdev->getHeight(), static_cast<TFTDisplay *>(dispdev)->getTouch);
+        touchScreenImpl1 = new TouchScreenImpl1(
+            dispdev->getWidth(), dispdev->getHeight(),
+            static_cast<TFTDisplay *>(dispdev)->getTouch
+        );
         touchScreenImpl1->init();
     }
 #elif HAS_TOUCHSCREEN
-    touchScreenImpl1 =
-        new TouchScreenImpl1(dispdev->getWidth(), dispdev->getHeight(), static_cast<TFTDisplay *>(dispdev)->getTouch);
+    touchScreenImpl1 = new TouchScreenImpl1(
+        dispdev->getWidth(), dispdev->getHeight(),
+        static_cast<TFTDisplay *>(dispdev)->getTouch
+    );
     touchScreenImpl1->init();
 #endif
 
-    // Subscribe to status updates
+    // === Subscribe to device status updates ===
     powerStatusObserver.observe(&powerStatus->onNewStatus);
     gpsStatusObserver.observe(&gpsStatus->onNewStatus);
     nodeStatusObserver.observe(&nodeStatus->onNewStatus);
+
 #if !MESHTASTIC_EXCLUDE_ADMIN
     adminMessageObserver.observe(adminModule);
 #endif
@@ -3245,7 +3312,7 @@ void Screen::setup()
     if (inputBroker)
         inputObserver.observe(inputBroker);
 
-    // Modules can notify screen about refresh
+    // === Notify modules that support UI events ===
     MeshModule::observeUIEvents(&uiFrameEventObserver);
 }
 
@@ -3394,6 +3461,9 @@ int32_t Screen::runOnce()
     // Switch to a low framerate (to save CPU) when we are not in transition
     // but we should only call setTargetFPS when framestate changes, because
     // otherwise that breaks animations.
+    // === Auto-hide indicator icons unless in transition ===
+    OLEDDisplayUiState *state = ui->getUiState();
+
     if (targetFramerate != IDLE_FRAMERATE && ui->getUiState()->frameState == FIXED) {
         // oldFrameState = ui->getUiState()->frameState;
         targetFramerate = IDLE_FRAMERATE;
@@ -3409,8 +3479,8 @@ int32_t Screen::runOnce()
         if (config.display.auto_screen_carousel_secs > 0 &&
             !Throttle::isWithinTimespanMs(lastScreenTransition, config.display.auto_screen_carousel_secs * 1000)) {
 
-// If an E-Ink display struggles with fast refresh, force carousel to use full refresh instead
-// Carousel is potentially a major source of E-Ink display wear
+            // If an E-Ink display struggles with fast refresh, force carousel to use full refresh instead
+            // Carousel is potentially a major source of E-Ink display wear
 #if !defined(EINK_BACKGROUND_USES_FAST)
             EINK_ADD_FRAMEFLAG(dispdev, COSMETIC);
 #endif
@@ -3532,6 +3602,7 @@ void Screen::setFrames(FrameFocus focus)
     LOG_DEBUG("Show standard frames");
     showingNormalScreen = true;
 
+    indicatorIcons.clear();
 #ifdef USE_EINK
     // If user has disabled the screensaver, warn them after boot
     static bool warnedScreensaverDisabled = false;
@@ -3573,6 +3644,7 @@ void Screen::setFrames(FrameFocus focus)
         if (m == waypointModule)
             fsi.positions.waypoint = numframes;
 
+        indicatorIcons.push_back(icon_module);
         numframes++;
     }
 
@@ -3582,6 +3654,7 @@ void Screen::setFrames(FrameFocus focus)
     fsi.positions.fault = numframes;
     if (error_code) {
         normalFrames[numframes++] = drawCriticalFaultFrame;
+        indicatorIcons.push_back(icon_error);
         focus = FOCUS_FAULT; // Change our "focus" parameter, to ensure we show the fault frame
     }
 
@@ -3595,22 +3668,40 @@ void Screen::setFrames(FrameFocus focus)
     if (willInsertTextMessage) {
         fsi.positions.textMessage = numframes;
         normalFrames[numframes++] = drawTextMessageFrame;
+        indicatorIcons.push_back(icon_mail);
     }
 
     normalFrames[numframes++] = drawDeviceFocused;
+    indicatorIcons.push_back(icon_home);
+
+#ifndef USE_EINK
     normalFrames[numframes++] = drawDynamicNodeListScreen;
+    indicatorIcons.push_back(icon_nodes);
+#endif
 
 // Show detailed node views only on E-Ink builds
 #ifdef USE_EINK
     normalFrames[numframes++] = drawLastHeardScreen;
+    indicatorIcons.push_back(icon_nodes);
+
     normalFrames[numframes++] = drawHopSignalScreen;
+    indicatorIcons.push_back(icon_signal);
+
     normalFrames[numframes++] = drawDistanceScreen;
+    indicatorIcons.push_back(icon_distance);
 #endif
 
     normalFrames[numframes++] = drawNodeListWithCompasses;
+    indicatorIcons.push_back(icon_list);
+
     normalFrames[numframes++] = drawCompassAndLocationScreen;
+    indicatorIcons.push_back(icon_compass);
+
     normalFrames[numframes++] = drawLoRaFocused;
+    indicatorIcons.push_back(icon_radio);
+
     normalFrames[numframes++] = drawMemoryScreen;
+    indicatorIcons.push_back(icon_memory);
 
     // then all the nodes
     // We only show a few nodes in our scrolling list - because meshes with many nodes would have too many screens
@@ -3632,20 +3723,24 @@ void Screen::setFrames(FrameFocus focus)
     fsi.positions.wifi = numframes;
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
     if (isWifiAvailable()) {
-        // call a method on debugInfoScreen object (for more details)
         normalFrames[numframes++] = &Screen::drawDebugInfoWiFiTrampoline;
+        indicatorIcons.push_back(icon_wifi);
     }
 #endif
 
     fsi.frameCount = numframes; // Total framecount is used to apply FOCUS_PRESERVE
+    this->frameCount = numframes; // ✅ Save frame count for use in custom overlay
     LOG_DEBUG("Finished build frames. numframes: %d", numframes);
 
     ui->setFrames(normalFrames, numframes);
-    ui->enableAllIndicators();
+    ui->disableAllIndicators();
 
     // Add function overlay here. This can show when notifications muted, modifier key is active etc
-    static OverlayCallback functionOverlay[] = {drawFunctionOverlay};
-    ui->setOverlays(functionOverlay, sizeof(functionOverlay) / sizeof(functionOverlay[0]));
+    static OverlayCallback overlays[] = {
+        drawFunctionOverlay,
+        drawCustomFrameIcons
+    };
+    ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
 
     prevFrame = -1; // Force drawNodeInfo to pick a new node (because our list
                     // just changed)
