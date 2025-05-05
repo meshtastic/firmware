@@ -19,8 +19,8 @@
 #include <OLEDDisplayUi.h>
 
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR_EXTERNAL
-// Sensors
 
+// Sensors
 #include "Sensor/CGRadSensSensor.h"
 #include "Sensor/RCWL9620Sensor.h"
 #include "Sensor/nullSensor.h"
