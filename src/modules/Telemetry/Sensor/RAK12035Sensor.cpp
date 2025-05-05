@@ -16,6 +16,11 @@ int32_t RAK12035Sensor::runOnce()
     sensor.set_sensor_addr(RAK120351_ADDR);
     delay(500);
     sensor.begin(nodeTelemetrySensorsMap[sensorType].first);
+
+
+    // TODO:: check for up to 2 additional sensors and start them if present.
+
+
     // Get sensor firmware version
     uint8_t data = 0;
     sensor.get_sensor_version(&data);
@@ -36,6 +41,7 @@ void RAK12035Sensor::setup()
 {
     // Set the calibration values
     // Reading the saved calibration values from the sensor.
+    // TODO:: Check for and run calibration check for up to 2 additional sensors if present.
     uint16_t zero_val = 0;
     uint16_t hundred_val = 0;
     uint16_t default_zero_val = 550;
@@ -73,6 +79,10 @@ void RAK12035Sensor::setup()
 
 bool RAK12035Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
+    // TODO:: read and send metrics for up to 2 additional soil monitors if present.
+    //  -- how to do this.. this could get a little complex.. 
+    //     ie - 1> we combine them into an average and send that, 2> we send them as separate metrics 
+    //      ^-- these scenarios would require different handling of the metrics in the receiving end and maybe a setting in the device ui and an additional proto for that?
     measurement->variant.environment_metrics.has_soil_temperature = true;
     measurement->variant.environment_metrics.has_soil_moisture = true;
 
