@@ -398,13 +398,19 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
         entries.push_back("Hum: " + String(m.relative_humidity, 0) + "%");
     if (m.barometric_pressure != 0)
         entries.push_back("Prss: " + String(m.barometric_pressure, 0) + " hPa");
-    if (m.iaq != 0) {
-        String aqi = "IAQ: " + String(m.iaq);
-        if (m.iaq < 50) aqi += " (Good)";
-        else if (m.iaq < 100) aqi += " (Moderate)";
-        else aqi += " (!)";
-        entries.push_back(aqi);
-    }
+        if (m.iaq != 0) {
+            String aqi = "IAQ: " + String(m.iaq);
+        
+            if (m.iaq <= 50) aqi += " (Good)";
+            else if (m.iaq <= 100) aqi += " (Moderate)";
+            else if (m.iaq <= 150) aqi += " (Poor)";
+            else if (m.iaq <= 200) aqi += " (Unhealthy)";
+            else if (m.iaq <= 250) aqi += " (Very Unhealthy)";
+            else if (m.iaq <= 350) aqi += " (Hazardous)";
+            else aqi += " (Extreme)";
+        
+            entries.push_back(aqi);
+        }
     if (m.voltage != 0 || m.current != 0)
         entries.push_back(String(m.voltage, 1) + "V / " + String(m.current, 0) + "mA");
     if (m.lux != 0)
