@@ -88,18 +88,16 @@ int32_t ICM20948Sensor::runOnce()
         //           lowestY, highestY, lowestZ, highestZ);
     }
 
-    int highestRealX = highestX - (highestX + lowestX) / 2;
-
     magX -= (highestX + lowestX) / 2;
     magY -= (highestY + lowestY) / 2;
     magZ -= (highestZ + lowestZ) / 2;
     FusionVector ga, ma;
-    ga.axis.x = -(sensor->agmt.acc.axes.x); // default location for the BMX160 is on the rear of the board
+    ga.axis.x = (sensor->agmt.acc.axes.x);
     ga.axis.y = -(sensor->agmt.acc.axes.y);
-    ga.axis.z = (sensor->agmt.acc.axes.z);
-    ma.axis.x = -magX;
-    ma.axis.y = -magY;
-    ma.axis.z = magZ * 3;
+    ga.axis.z = -(sensor->agmt.acc.axes.z);
+    ma.axis.x = magX;
+    ma.axis.y = magY;
+    ma.axis.z = magZ;
 
     // If we're set to one of the inverted positions
     if (config.display.compass_orientation > meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270) {

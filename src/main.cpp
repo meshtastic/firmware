@@ -1300,7 +1300,8 @@ void setup()
     LOG_DEBUG("Free heap  : %7d bytes", ESP.getFreeHeap());
     LOG_DEBUG("Free PSRAM : %7d bytes", ESP.getFreePsram());
 #endif
-    accelerometerThread->calibrate(30);
+    if (accelerometerThread)
+        accelerometerThread->calibrate(30);
 }
 #endif
 uint32_t rebootAtMsec;   // If not zero we will reboot at this time (used to reboot shortly after the update completes)
