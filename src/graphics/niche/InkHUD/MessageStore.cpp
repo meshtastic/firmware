@@ -22,6 +22,8 @@ InkHUD::MessageStore::MessageStore(std::string label)
 }
 
 // Write the contents of the MessageStore::messages object to flash
+// Takes the firmware's SPI lock during FS operations. Implemented for consistency, but only relevant when using SD card.
+// Need to lock and unlock around specific FS methods, as the SafeFile class takes the lock for itself internally
 void InkHUD::MessageStore::saveToFlash()
 {
     assert(!filename.empty());
@@ -29,13 +31,18 @@ void InkHUD::MessageStore::saveToFlash()
 #ifdef FSCom
     // Make the directory, if doesn't already exist
     // This is the same directory accessed by NicheGraphics::FlashData
+    spiLock->lock();
     FSCom.mkdir("/NicheGraphics");
+    spiLock->unlock();
 
     // Open or create the file
     // No "full atomic": don't save then rename
     auto f = SafeFile(filename.c_str(), false);
 
     LOG_INFO("Saving messages in %s", filename.c_str());
+
+    // Take firmware's SPI Lock while writing
+    spiLock->lock();
 
     // 1st byte: how many messages will be written to store
     f.write(messages.size());
@@ -51,6 +58,9 @@ void InkHUD::MessageStore::saveToFlash()
         LOG_DEBUG("Wrote message %u, length %u, text \"%s\"", (uint32_t)i, min(MAX_MESSAGE_SIZE, m.text.size()), m.text.c_str());
     }
 
+    // Release firmware's SPI lock, because SafeFile::close needs it
+    spiLock->unlock();
+
     bool writeSucceeded = f.close();
 
     if (!writeSucceeded) {
@@ -63,12 +73,16 @@ void InkHUD::MessageStore::saveToFlash()
 
 // Attempt to load the previous contents of the MessageStore:message deque from flash.
 // Filename is controlled by the "label" parameter
+// Takes the firmware's SPI lock during FS operations. Implemented for consistency, but only relevant when using SD card.
 void InkHUD::MessageStore::loadFromFlash()
 {
     // Hopefully redundant. Initial intention is to only load / save once per boot.
     messages.clear();
 
 #ifdef FSCom
+
+    // Take the firmware's SPI Lock, in case filesystem is on SD card
+    concurrency::LockGuard guard(spiLock);
 
     // Check that the file *does* actually exist
     if (!FSCom.exists(filename.c_str())) {
