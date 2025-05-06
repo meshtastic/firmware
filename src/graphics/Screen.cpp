@@ -38,6 +38,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "gps/GeoCoord.h"
 #include "gps/RTC.h"
 #include "graphics/ScreenFonts.h"
+#include "graphics/SharedUIDisplay.h"
 #include "graphics/images.h"
 #include "input/ScanAndSelect.h"
 #include "input/TouchScreenImpl1.h"
@@ -52,7 +53,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "modules/WaypointModule.h"
 #include "sleep.h"
 #include "target_specific.h"
-#include "graphics/SharedUIDisplay.h"
 
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
 #include "mesh/wifi/WiFiAPClient.h"
@@ -2953,7 +2953,7 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 }
 static int8_t lastFrameIndex = -1;
 static uint32_t lastFrameChangeTime = 0;
-constexpr uint32_t ICON_DISPLAY_DURATION_MS = 1250;
+constexpr uint32_t ICON_DISPLAY_DURATION_MS = 1000;
 
 // Bottom navigation icons
 void drawCustomFrameIcons(OLEDDisplay *display, OLEDDisplayUiState *state)
@@ -2966,10 +2966,6 @@ void drawCustomFrameIcons(OLEDDisplay *display, OLEDDisplayUiState *state)
         lastFrameChangeTime = millis();
     }
 
-    // Only show bar briefly after switching frames
-    if (millis() - lastFrameChangeTime > ICON_DISPLAY_DURATION_MS)
-        return;
-
     const bool useBigIcons = (SCREEN_WIDTH > 128);
     const int iconSize = useBigIcons ? 16 : 8;
     const int spacing = useBigIcons ? 8 : 4;
@@ -2981,7 +2977,12 @@ void drawCustomFrameIcons(OLEDDisplay *display, OLEDDisplayUiState *state)
 
     const int totalWidth = totalIcons * iconSize + (totalIcons - 1) * spacing;
     const int xStart = (SCREEN_WIDTH - totalWidth) / 2;
-    const int y = SCREEN_HEIGHT - iconSize - 1;
+
+    // Only show bar briefly after switching frames
+    int y = SCREEN_HEIGHT - iconSize - 1;
+    if (millis() - lastFrameChangeTime > ICON_DISPLAY_DURATION_MS) {
+        y = SCREEN_HEIGHT;
+    }
 
     // Pre-calculate bounding rect
     const int rectX = xStart - 2 - bigOffset;
