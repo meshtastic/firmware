@@ -46,7 +46,7 @@ int32_t ICM20948Sensor::runOnce()
 
 int32_t ICM20948Sensor::runOnce()
 {
-#if !defined(MESHTASTIC_EXCLUDE_SCREEN)
+#if !defined(MESHTASTIC_EXCLUDE_SCREEN) && HAS_SCREEN
     float magX = 0, magY = 0, magZ = 0;
     if (sensor->dataReady()) {
         sensor->getAGMT();
@@ -153,7 +153,7 @@ int32_t ICM20948Sensor::runOnce()
 
 void ICM20948Sensor::calibrate(uint16_t forSeconds)
 {
-#if !defined(MESHTASTIC_EXCLUDE_SCREEN)
+#if !defined(MESHTASTIC_EXCLUDE_SCREEN) && HAS_SCREEN
     LOG_DEBUG("BMX160 calibration started for %is", forSeconds);
 
     doCalibration = true;

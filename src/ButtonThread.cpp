@@ -255,7 +255,7 @@ int32_t ButtonThread::runOnce()
                 digitalWrite(PIN_EINK_EN, digitalRead(PIN_EINK_EN) == LOW);
                 break;
 #endif
-#if !MESHTASTIC_EXCLUDE_SCREEN
+#if !MESHTASTIC_EXCLUDE_SCREEN && HAS_SCREEN
             // 5 clicks: start accelerometer/magenetometer calibration for 30 seconds
             case 5:
                 if (accelerometerThread) {
