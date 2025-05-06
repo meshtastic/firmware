@@ -71,7 +71,7 @@ Flash image file to device, but first erasing and writing system information.
     -P PYTHON        Specify alternate python interpreter to use to invoke esptool. (Default: "$PYTHON")
     -f FILENAME      The firmware .bin file to flash.  Custom to your device type and region.
     --web            Enable WebUI. (Default: false)
-	--change-mode    Attempt to place the device in correct mode. Some hardware requires this twice. (1200bps Reset)
+    --change-mode    Attempt to place the device in correct mode. Some hardware requires this twice. (1200bps Reset)
 
 EOF
 }
