@@ -158,7 +158,7 @@ static bool haveGlyphs(const char *str)
     // LOG_DEBUG("haveGlyphs=%d", have);
     return have;
 }
-bool hasUnreadMessage = false;
+extern bool hasUnreadMessage;
 /**
  * Draw the icon with extra info printed around the corners
  */
@@ -978,7 +978,6 @@ bool deltaToTimestamp(uint32_t secondsAgo, uint8_t *hours, uint8_t *minutes, int
     validCached = true;
     return validCached;
 }
-// *********************************
 
 // ****************************
 // *   Text Message Screen    *
