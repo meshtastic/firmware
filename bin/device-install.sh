@@ -2,6 +2,7 @@
 
 PYTHON=${PYTHON:-$(which python3 python | head -n 1)}
 WEB_APP=false
+CHANGE_MODE=false
 TFT_BUILD=false
 MCU=""
 
@@ -62,7 +63,7 @@ set -e
 # Usage info
 show_help() {
 	cat <<EOF
-Usage: $(basename $0) [-h] [-p ESPTOOL_PORT] [-P PYTHON] [-f FILENAME] [--web]
+Usage: $(basename $0) [-h] [-p ESPTOOL_PORT] [-P PYTHON] [-f FILENAME] [--web] [--change-mode]
 Flash image file to device, but first erasing and writing system information.
 
     -h               Display this help and exit.
@@ -70,6 +71,7 @@ Flash image file to device, but first erasing and writing system information.
     -P PYTHON        Specify alternate python interpreter to use to invoke esptool. (Default: "$PYTHON")
     -f FILENAME      The firmware .bin file to flash.  Custom to your device type and region.
     --web            Enable WebUI. (Default: false)
+	--change-mode    Attempt to place the device in correct mode. Some hardware requires this twice. (1200bps Reset)
 
 EOF
 }
@@ -95,6 +97,9 @@ while [ $# -gt 0 ]; do
 	--web)
 		WEB_APP=true
 		;;
+	--change-mode)
+		CHANGE_MODE=true
+		;;
 	--) # Stop parsing options
 		shift
 		break
@@ -106,6 +111,10 @@ while [ $# -gt 0 ]; do
 	esac
 	shift # Move to the next argument
 done
+
+if [[ $WEB_APP == true ]]; then
+	$ESPTOOL_CMD --baud 1200 --after no_reset read_flash_status
+fi
 
 [ -z "$FILENAME" -a -n "$1" ] && {
 	FILENAME=$1
