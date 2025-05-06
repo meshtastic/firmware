@@ -114,6 +114,7 @@ done
 
 if [[ $WEB_APP == true ]]; then
 	$ESPTOOL_CMD --baud 1200 --after no_reset read_flash_status
+	exit 0
 fi
 
 [ -z "$FILENAME" -a -n "$1" ] && {
