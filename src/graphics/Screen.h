@@ -601,18 +601,26 @@ class Screen : public concurrency::OSThread
     // - Used to dismiss the currently shown frame (txt; waypoint) by CardKB combo
     struct FramesetInfo {
         struct FramePositions {
-            uint8_t fault = 0;
-            uint8_t textMessage = 0;
-            uint8_t waypoint = 0;
-            uint8_t focusedModule = 0;
-            uint8_t log = 0;
-            uint8_t settings = 0;
-            uint8_t wifi = 0;
-            uint8_t deviceFocused = 0;
+            uint8_t fault = 255;
+            uint8_t textMessage = 255;
+            uint8_t waypoint = 255;
+            uint8_t focusedModule = 255;
+            uint8_t log = 255;
+            uint8_t settings = 255;
+            uint8_t wifi = 255;
+            uint8_t deviceFocused = 255;
+            uint8_t memory = 255;
         } positions;
 
         uint8_t frameCount = 0;
     } framesetInfo;
+
+    struct DismissedFrames {
+        bool textMessage = false;
+        bool waypoint = false;
+        bool wifi = false;
+        bool memory = false;
+    } dismissedFrames;
 
     // Which frame we want to be displayed, after we regen the frameset by calling setFrames
     enum FrameFocus : uint8_t {

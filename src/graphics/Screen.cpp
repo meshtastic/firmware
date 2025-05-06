@@ -3537,8 +3537,11 @@ void Screen::setFrames(FrameFocus focus)
     normalFrames[numframes++] = drawLoRaFocused;
     indicatorIcons.push_back(icon_radio);
 
-    normalFrames[numframes++] = drawMemoryScreen;
-    indicatorIcons.push_back(icon_memory);
+    if (!dismissedFrames.memory) {
+        fsi.positions.memory = numframes;
+        normalFrames[numframes++] = drawMemoryScreen;
+        indicatorIcons.push_back(icon_memory);
+    }
 
     // then all the nodes
     // We only show a few nodes in our scrolling list - because meshes with many nodes would have too many screens
@@ -3557,13 +3560,13 @@ void Screen::setFrames(FrameFocus focus)
     // fsi.positions.settings = numframes;
     // normalFrames[numframes++] = &Screen::drawDebugInfoSettingsTrampoline;
 
-    fsi.positions.wifi = numframes;
-#if HAS_WIFI && !defined(ARCH_PORTDUINO)
-    if (isWifiAvailable()) {
+    #if HAS_WIFI && !defined(ARCH_PORTDUINO)
+    if (!dismissedFrames.wifi && isWifiAvailable()) {
+        fsi.positions.wifi = numframes;
         normalFrames[numframes++] = &Screen::drawDebugInfoWiFiTrampoline;
         indicatorIcons.push_back(icon_wifi);
     }
-#endif
+    #endif
 
     fsi.frameCount = numframes;   // Total framecount is used to apply FOCUS_PRESERVE
     this->frameCount = numframes; // ✅ Save frame count for use in custom overlay
@@ -3627,25 +3630,35 @@ void Screen::dismissCurrentFrame()
     uint8_t currentFrame = ui->getUiState()->currentFrame;
     bool dismissed = false;
 
-    // Only dismiss if the text message frame is currently valid and visible
-    if (framesetInfo.positions.textMessage != 255 && currentFrame == framesetInfo.positions.textMessage &&
-        devicestate.has_rx_text_message) {
+    if (currentFrame == framesetInfo.positions.textMessage && devicestate.has_rx_text_message) {
         LOG_INFO("Dismiss Text Message");
         devicestate.has_rx_text_message = false;
-        memset(&devicestate.rx_text_message, 0, sizeof(devicestate.rx_text_message)); // ✅ clear message
+        memset(&devicestate.rx_text_message, 0, sizeof(devicestate.rx_text_message));
+        dismissedFrames.textMessage = true;
         dismissed = true;
     }
-
     else if (currentFrame == framesetInfo.positions.waypoint && devicestate.has_rx_waypoint) {
         LOG_DEBUG("Dismiss Waypoint");
         devicestate.has_rx_waypoint = false;
+        dismissedFrames.waypoint = true;
+        dismissed = true;
+    }
+    else if (currentFrame == framesetInfo.positions.wifi) {
+        LOG_DEBUG("Dismiss WiFi Screen");
+        dismissedFrames.wifi = true;
+        dismissed = true;
+    }
+    else if (currentFrame == framesetInfo.positions.memory) {
+        LOG_INFO("Dismiss Memory");
+        dismissedFrames.memory = true;
         dismissed = true;
     }
 
-    // If we did make changes to dismiss, we now need to regenerate the frameset
-    if (dismissed)
-        setFrames();
+    if (dismissed) {
+        setFrames(FOCUS_DEFAULT); // You could also use FOCUS_PRESERVE
+    }
 }
+
 
 void Screen::handleStartFirmwareUpdateScreen()
 {
