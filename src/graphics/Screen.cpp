@@ -135,6 +135,20 @@ static bool heartbeat = false;
 #include "graphics/ScreenFonts.h"
 #include <Throttle.h>
 
+void drawScaledXBitmap16x16(int x, int y, int width, int height, const uint8_t *bitmapXBM, OLEDDisplay *display)
+{
+    for (int row = 0; row < height; row++) {
+        uint8_t rowMask = (1 << row);
+        for (int col = 0; col < width; col++) {
+            uint8_t colData = pgm_read_byte(&bitmapXBM[col]);
+            if (colData & rowMask) {
+                // Note: rows become X, columns become Y after transpose
+                display->fillRect(x + row * 2, y + col * 2, 2, 2);
+            }
+        }
+    }
+}
+
 #define getStringCenteredX(s) ((SCREEN_WIDTH - display->getStringWidth(s)) / 2)
 
 // Check if the display can render a string (detect special chars; emoji)
@@ -3138,8 +3152,10 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 }
 static int8_t lastFrameIndex = -1;
 static uint32_t lastFrameChangeTime = 0;
-constexpr uint32_t ICON_DISPLAY_DURATION_MS = 1000;
+// constexpr uint32_t ICON_DISPLAY_DURATION_MS = 1250;
+constexpr uint32_t ICON_DISPLAY_DURATION_MS = 10250;
 
+// Bottom navigation icons
 void drawCustomFrameIcons(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
     int currentFrame = state->currentFrame;
@@ -3151,37 +3167,61 @@ void drawCustomFrameIcons(OLEDDisplay *display, OLEDDisplayUiState *state)
     }
 
     // Only show bar briefly after switching frames
-    if (millis() - lastFrameChangeTime > ICON_DISPLAY_DURATION_MS) return;
+    if (millis() - lastFrameChangeTime > ICON_DISPLAY_DURATION_MS)
+        return;
 
-    const int iconSize = 8;
-    const int spacing = 2;
-    size_t totalIcons = screen->indicatorIcons.size();
-    if (totalIcons == 0) return;
+    const bool useBigIcons = (SCREEN_WIDTH > 128);
+    const int iconSize = useBigIcons ? 16 : 8;
+    const int spacing = useBigIcons ? 8 : 4;
+    const int bigOffset = useBigIcons ? 1 : 0;
 
-    int totalWidth = totalIcons * iconSize + (totalIcons - 1) * spacing;
-    int xStart = (SCREEN_WIDTH - totalWidth) / 2;
-    int y = SCREEN_HEIGHT - iconSize - 1;
+    const size_t totalIcons = screen->indicatorIcons.size();
+    if (totalIcons == 0)
+        return;
 
-    // Clear background under icon bar to avoid overlaps
+    const int totalWidth = totalIcons * iconSize + (totalIcons - 1) * spacing;
+    const int xStart = (SCREEN_WIDTH - totalWidth) / 2;
+    const int y = SCREEN_HEIGHT - iconSize - 1;
+
+    // Pre-calculate bounding rect
+    const int rectX = xStart - 2 - bigOffset;
+    const int rectWidth = totalWidth + 4 + (bigOffset * 2);
+    const int rectHeight = iconSize + 6;
+
+    // Clear background and draw border
     display->setColor(BLACK);
-    display->fillRect(xStart - 1, y - 2, totalWidth + 2, iconSize + 4);
+    display->fillRect(rectX + 1, y - 2, rectWidth - 2, rectHeight - 2);
     display->setColor(WHITE);
+    display->drawRect(rectX, y - 2, rectWidth, rectHeight);
 
+    // Icon drawing loop
     for (size_t i = 0; i < totalIcons; ++i) {
-        const uint8_t* icon = screen->indicatorIcons[i];
-        int x = xStart + i * (iconSize + spacing);
+        const uint8_t *icon = screen->indicatorIcons[i];
+        const int x = xStart + i * (iconSize + spacing);
+        const bool isActive = (i == static_cast<size_t>(currentFrame));
 
-        if (i == static_cast<size_t>(currentFrame)) {
-            // Draw white box and invert icon for visibility
+        if (isActive) {
             display->setColor(WHITE);
-            display->fillRect(x - 1, y - 1, iconSize + 2, iconSize + 2);
+            display->fillRect(x - 2, y - 2, iconSize + 4, iconSize + 4);
             display->setColor(BLACK);
-            display->drawXbm(x, y, iconSize, iconSize, icon);
-            display->setColor(WHITE);
+        }
+
+        if (useBigIcons) {
+            drawScaledXBitmap16x16(x, y, 8, 8, icon, display);
         } else {
             display->drawXbm(x, y, iconSize, iconSize, icon);
         }
+
+        if (isActive) {
+            display->setColor(WHITE);
+        }
     }
+
+    // Knock the corners off the square
+    display->setColor(BLACK);
+    display->drawRect(rectX, y - 2, 1, 1);
+    display->drawRect(rectX + rectWidth - 1, y - 2, 1, 1);
+    display->setColor(WHITE);
 }
 
 void Screen::setup()
@@ -3209,17 +3249,17 @@ void Screen::setup()
     displayWidth = dispdev->width();
     displayHeight = dispdev->height();
 
-    ui->setTimePerTransition(0);              // Disable animation delays
-    ui->setIndicatorPosition(BOTTOM);         // Not used (indicators disabled below)
-    ui->setIndicatorDirection(LEFT_RIGHT);    // Not used (indicators disabled below)
-    ui->setFrameAnimation(SLIDE_LEFT);        // Used only when indicators are active
-    ui->disableAllIndicators();               // Disable page indicator dots
-    ui->getUiState()->userData = this;        // Allow static callbacks to access Screen instance
+    ui->setTimePerTransition(0);           // Disable animation delays
+    ui->setIndicatorPosition(BOTTOM);      // Not used (indicators disabled below)
+    ui->setIndicatorDirection(LEFT_RIGHT); // Not used (indicators disabled below)
+    ui->setFrameAnimation(SLIDE_LEFT);     // Used only when indicators are active
+    ui->disableAllIndicators();            // Disable page indicator dots
+    ui->getUiState()->userData = this;     // Allow static callbacks to access Screen instance
 
     // === Set custom overlay callbacks ===
     static OverlayCallback overlays[] = {
-        drawFunctionOverlay,     // For mute/buzzer modifiers etc.
-        drawCustomFrameIcons     // Custom indicator icons for each frame
+        drawFunctionOverlay, // For mute/buzzer modifiers etc.
+        drawCustomFrameIcons // Custom indicator icons for each frame
     };
     ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
 
@@ -3254,14 +3294,14 @@ void Screen::setup()
     dispdev->mirrorScreen();
 #else
     if (!config.display.flip_screen) {
-    #if defined(ST7701_CS) || defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7789_CS) || \
-        defined(RAK14014) || defined(HX8357_CS) || defined(ILI9488_CS)
+#if defined(ST7701_CS) || defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7789_CS) ||      \
+    defined(RAK14014) || defined(HX8357_CS) || defined(ILI9488_CS)
         static_cast<TFTDisplay *>(dispdev)->flipScreenVertically();
-    #elif defined(USE_ST7789)
+#elif defined(USE_ST7789)
         static_cast<ST7789Spi *>(dispdev)->flipScreenVertically();
-    #else
+#else
         dispdev->flipScreenVertically();
-    #endif
+#endif
     }
 #endif
 
@@ -3271,7 +3311,7 @@ void Screen::setup()
     snprintf(ourId, sizeof(ourId), "%02x%02x", dmac[4], dmac[5]);
 
 #if ARCH_PORTDUINO
-    handleSetOn(false);  // Ensure proper init for Arduino targets
+    handleSetOn(false); // Ensure proper init for Arduino targets
 #endif
 
     // === Turn on display and trigger first draw ===
@@ -3285,17 +3325,13 @@ void Screen::setup()
     // === Optional touchscreen support ===
 #if ARCH_PORTDUINO && !HAS_TFT
     if (settingsMap[touchscreenModule]) {
-        touchScreenImpl1 = new TouchScreenImpl1(
-            dispdev->getWidth(), dispdev->getHeight(),
-            static_cast<TFTDisplay *>(dispdev)->getTouch
-        );
+        touchScreenImpl1 =
+            new TouchScreenImpl1(dispdev->getWidth(), dispdev->getHeight(), static_cast<TFTDisplay *>(dispdev)->getTouch);
         touchScreenImpl1->init();
     }
 #elif HAS_TOUCHSCREEN
-    touchScreenImpl1 = new TouchScreenImpl1(
-        dispdev->getWidth(), dispdev->getHeight(),
-        static_cast<TFTDisplay *>(dispdev)->getTouch
-    );
+    touchScreenImpl1 =
+        new TouchScreenImpl1(dispdev->getWidth(), dispdev->getHeight(), static_cast<TFTDisplay *>(dispdev)->getTouch);
     touchScreenImpl1->init();
 #endif
 
@@ -3728,7 +3764,7 @@ void Screen::setFrames(FrameFocus focus)
     }
 #endif
 
-    fsi.frameCount = numframes; // Total framecount is used to apply FOCUS_PRESERVE
+    fsi.frameCount = numframes;   // Total framecount is used to apply FOCUS_PRESERVE
     this->frameCount = numframes; // ✅ Save frame count for use in custom overlay
     LOG_DEBUG("Finished build frames. numframes: %d", numframes);
 
@@ -3736,10 +3772,7 @@ void Screen::setFrames(FrameFocus focus)
     ui->disableAllIndicators();
 
     // Add function overlay here. This can show when notifications muted, modifier key is active etc
-    static OverlayCallback overlays[] = {
-        drawFunctionOverlay,
-        drawCustomFrameIcons
-    };
+    static OverlayCallback overlays[] = {drawFunctionOverlay, drawCustomFrameIcons};
     ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
 
     prevFrame = -1; // Force drawNodeInfo to pick a new node (because our list
