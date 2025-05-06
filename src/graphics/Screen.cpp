@@ -52,6 +52,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "modules/WaypointModule.h"
 #include "sleep.h"
 #include "target_specific.h"
+#include "graphics/SharedUIDisplay.h"
 
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
 #include "mesh/wifi/WiFiAPClient.h"
@@ -114,23 +115,6 @@ GeoCoord geoCoord;
 #ifdef SHOW_REDRAWS
 static bool heartbeat = false;
 #endif
-
-// Quick access to screen dimensions from static drawing functions
-// DEPRECATED. To-do: move static functions inside Screen class
-#define SCREEN_WIDTH display->getWidth()
-#define SCREEN_HEIGHT display->getHeight()
-
-// Pre-defined lines; this is intended to be used AFTER the common header
-#define compactFirstLine ((FONT_HEIGHT_SMALL - 1) * 1)
-#define compactSecondLine ((FONT_HEIGHT_SMALL - 1) * 2) - 2
-#define compactThirdLine ((FONT_HEIGHT_SMALL - 1) * 3) - 4
-#define compactFourthLine ((FONT_HEIGHT_SMALL - 1) * 4) - 6
-#define compactFifthLine ((FONT_HEIGHT_SMALL - 1) * 5) - 8
-
-#define standardFirstLine (FONT_HEIGHT_SMALL + 1) * 1
-#define standardSecondLine (FONT_HEIGHT_SMALL + 1) * 2
-#define standardThirdLine (FONT_HEIGHT_SMALL + 1) * 3
-#define standardFourthLine (FONT_HEIGHT_SMALL + 1) * 4
 
 #include "graphics/ScreenFonts.h"
 #include <Throttle.h>
@@ -995,188 +979,6 @@ bool deltaToTimestamp(uint32_t secondsAgo, uint8_t *hours, uint8_t *minutes, int
     return validCached;
 }
 // *********************************
-// *Rounding Header when inverted  *
-// *********************************
-void drawRoundedHighlight(OLEDDisplay *display, int16_t x, int16_t y, int16_t w, int16_t h, int16_t r)
-{
-    display->fillRect(x + r, y, w - 2 * r, h);
-    display->fillRect(x, y + r, r, h - 2 * r);
-    display->fillRect(x + w - r, y + r, r, h - 2 * r);
-    display->fillCircle(x + r + 1, y + r, r);
-    display->fillCircle(x + w - r - 1, y + r, r);
-    display->fillCircle(x + r + 1, y + h - r - 1, r);
-    display->fillCircle(x + w - r - 1, y + h - r - 1, r);
-}
-bool isBoltVisible = true;
-uint32_t lastBlink = 0;
-const uint32_t blinkInterval = 500;
-static uint32_t lastMailBlink = 0;
-static bool isMailIconVisible = true;
-constexpr uint32_t mailBlinkInterval = 500;
-
-// ***********************
-// * Common Header       *
-// ***********************
-void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
-{
-    constexpr int HEADER_OFFSET_Y = 1;
-    y += HEADER_OFFSET_Y;
-
-    const bool isInverted = (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED);
-    const bool isBold = config.display.heading_bold;
-    const int xOffset = 4;
-    const int highlightHeight = FONT_HEIGHT_SMALL - 1;
-
-    display->setFont(FONT_SMALL);
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-
-    // === Background highlight ===
-    if (isInverted) {
-        drawRoundedHighlight(display, x, y, SCREEN_WIDTH, highlightHeight, 2);
-        display->setColor(BLACK);
-    }
-
-    // === Battery Vertical and Horizontal ===
-    int chargePercent = powerStatus->getBatteryChargePercent();
-    bool isCharging = powerStatus->getIsCharging() == OptionalBool::OptTrue;
-    uint32_t now = millis();
-    if (isCharging && now - lastBlink > blinkInterval) {
-        isBoltVisible = !isBoltVisible;
-        lastBlink = now;
-    }
-
-    // Hybrid condition: wide screen AND landscape layout
-    bool useHorizontalBattery = (SCREEN_WIDTH > 128 && SCREEN_WIDTH > SCREEN_HEIGHT);
-
-    if (useHorizontalBattery) {
-        // === Horizontal battery  ===
-        int batteryX = 2;
-        int batteryY = HEADER_OFFSET_Y + 2;
-
-        display->drawXbm(batteryX, batteryY, 29, 15, batteryBitmap_h);
-
-        if (isCharging && isBoltVisible) {
-            display->drawXbm(batteryX + 9, batteryY + 1, 9, 13, lightning_bolt_h);
-        } else if (isCharging && !isBoltVisible) {
-            display->drawXbm(batteryX + 8, batteryY, 12, 15, batteryBitmap_sidegaps_h);
-        } else {
-            display->drawXbm(batteryX + 8, batteryY, 12, 15, batteryBitmap_sidegaps_h);
-            int fillWidth = 24 * chargePercent / 100;
-            int fillX = batteryX + fillWidth;
-            display->fillRect(batteryX + 1, batteryY + 1, fillX, 13);
-        }
-    } else {
-        // === Vertical battery ===
-        int batteryX = 1;
-        int batteryY = HEADER_OFFSET_Y + 1;
-#ifdef USE_EINK
-        batteryY = batteryY + 2;
-#endif
-
-        display->drawXbm(batteryX, batteryY, 7, 11, batteryBitmap_v);
-
-        if (isCharging && isBoltVisible) {
-            display->drawXbm(batteryX + 1, batteryY + 3, 5, 5, lightning_bolt_v);
-        } else if (isCharging && !isBoltVisible) {
-            display->drawXbm(batteryX - 1, batteryY + 4, 8, 3, batteryBitmap_sidegaps_v);
-        } else {
-            display->drawXbm(batteryX - 1, batteryY + 4, 8, 3, batteryBitmap_sidegaps_v);
-            int fillHeight = 8 * chargePercent / 100;
-            int fillY = batteryY - fillHeight;
-            display->fillRect(batteryX + 1, fillY + 10, 5, fillHeight);
-        }
-    }
-
-    // === Text baseline ===
-    const int textY = y + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
-
-    // === Battery % Text ===
-    char chargeStr[4];
-    snprintf(chargeStr, sizeof(chargeStr), "%d", chargePercent);
-
-    int chargeNumWidth = display->getStringWidth(chargeStr);
-    const int batteryOffset = useHorizontalBattery ? 28 : 6;
-#ifdef USE_EINK
-    const int percentX = x + xOffset + batteryOffset - 2;
-#else
-    const int percentX = x + xOffset + batteryOffset;
-#endif
-
-    display->drawString(percentX, textY, chargeStr);
-    display->drawString(percentX + chargeNumWidth - 1, textY, "%");
-
-    if (isBold) {
-        display->drawString(percentX + 1, textY, chargeStr);
-        display->drawString(percentX + chargeNumWidth, textY, "%");
-    }
-    // === Time string (right-aligned) ===
-    uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true);
-    if (rtc_sec > 0) {
-        long hms = (rtc_sec % SEC_PER_DAY + SEC_PER_DAY) % SEC_PER_DAY;
-        int hour = hms / SEC_PER_HOUR;
-        int minute = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
-
-        char timeStr[10];
-
-        snprintf(timeStr, sizeof(timeStr), "%d:%02d", hour, minute);
-        if (config.display.use_12h_clock) {
-            bool isPM = hour >= 12;
-            hour = hour % 12;
-            if (hour == 0)
-                hour = 12;
-            snprintf(timeStr, sizeof(timeStr), "%d:%02d%s", hour, minute, isPM ? "p" : "a");
-        }
-
-        int timeStrWidth = display->getStringWidth(timeStr);
-        int timeX = SCREEN_WIDTH - xOffset - timeStrWidth + 4; // time to the right by 4
-
-        // Mail icon next to time (drawn as 'M' in a tight square)
-        if (hasUnreadMessage) {
-            if (now - lastMailBlink > mailBlinkInterval) {
-                isMailIconVisible = !isMailIconVisible;
-                lastMailBlink = now;
-            }
-
-            if (isMailIconVisible) {
-                const bool isWide = useHorizontalBattery;
-
-                if (isWide) {
-                    // Dimensions for the wide mail icon
-                    const int iconW = 16;
-                    const int iconH = 12;
-
-                    const int iconX = timeX - iconW - 3;
-                    const int iconY = textY + (FONT_HEIGHT_SMALL - iconH) / 2 - 1;
-
-                    // Draw envelope rectangle
-                    display->drawRect(iconX, iconY, iconW, iconH);
-
-                    // Define envelope corners and center
-                    const int leftX = iconX + 1;
-                    const int rightX = iconX + iconW - 2;
-                    const int topY = iconY + 1;
-                    const int bottomY = iconY + iconH - 2;
-                    const int centerX = iconX + iconW / 2;
-                    const int peakY = bottomY - 1;
-
-                    // Draw "M" diagonals
-                    display->drawLine(leftX, topY, centerX, peakY);
-                    display->drawLine(rightX, topY, centerX, peakY);
-                } else {
-                    // Small icon for non-wide screens
-                    const int iconX = timeX - mail_width;
-                    const int iconY = textY + (FONT_HEIGHT_SMALL - mail_height) / 2;
-                    display->drawXbm(iconX, iconY, mail_width, mail_height, mail);
-                }
-            }
-        }
-        display->drawString(timeX, textY, timeStr);
-        if (isBold)
-            display->drawString(timeX - 1, textY, timeStr);
-    }
-
-    display->setColor(WHITE);
-}
 
 // ****************************
 // *   Text Message Screen    *
@@ -1767,7 +1569,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     display->setFont(FONT_SMALL);
 
     // === Header ===
-    drawCommonHeader(display, x, y);
+    graphics::drawCommonHeader(display, x, y);
 
     // === Reset color in case inverted mode left it BLACK ===
     display->setColor(WHITE);
@@ -2081,7 +1883,7 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     display->clear();
 
     // === Draw the battery/time header ===
-    drawCommonHeader(display, x, y);
+    graphics::drawCommonHeader(display, x, y);
 
     // === Manually draw the centered title within the header ===
     const int highlightHeight = COMMON_HEADER_HEIGHT;
@@ -2502,7 +2304,7 @@ static void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, i
     display->setFont(FONT_SMALL);
 
     // === Header ===
-    drawCommonHeader(display, x, y);
+    graphics::drawCommonHeader(display, x, y);
 
     // === Content below header ===
 
@@ -2599,7 +2401,7 @@ static void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int
     display->setFont(FONT_SMALL);
 
     // === Header ===
-    drawCommonHeader(display, x, y);
+    graphics::drawCommonHeader(display, x, y);
 
     // === Draw title (aligned with header baseline) ===
     const int highlightHeight = FONT_HEIGHT_SMALL - 1;
@@ -2720,7 +2522,7 @@ static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiStat
     display->setFont(FONT_SMALL);
 
     // === Header ===
-    drawCommonHeader(display, x, y);
+    graphics::drawCommonHeader(display, x, y);
 
     // === Draw title ===
     const int highlightHeight = FONT_HEIGHT_SMALL - 1;
@@ -2850,7 +2652,7 @@ static void drawMemoryScreen(OLEDDisplay *display, OLEDDisplayUiState *state, in
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
     // === Header ===
-    drawCommonHeader(display, x, y);
+    graphics::drawCommonHeader(display, x, y);
 
     // === Draw title ===
     const int highlightHeight = FONT_HEIGHT_SMALL - 1;
@@ -3152,8 +2954,7 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 }
 static int8_t lastFrameIndex = -1;
 static uint32_t lastFrameChangeTime = 0;
-// constexpr uint32_t ICON_DISPLAY_DURATION_MS = 1250;
-constexpr uint32_t ICON_DISPLAY_DURATION_MS = 10250;
+constexpr uint32_t ICON_DISPLAY_DURATION_MS = 1250;
 
 // Bottom navigation icons
 void drawCustomFrameIcons(OLEDDisplay *display, OLEDDisplayUiState *state)

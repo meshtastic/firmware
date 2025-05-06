@@ -1,0 +1,37 @@
+#pragma once
+
+#include <OLEDDisplay.h>
+
+namespace graphics {
+
+// =======================
+// Shared UI Helpers
+// =======================
+
+// Compact line layout
+#define compactFirstLine ((FONT_HEIGHT_SMALL - 1) * 1)
+#define compactSecondLine ((FONT_HEIGHT_SMALL - 1) * 2) - 2
+#define compactThirdLine ((FONT_HEIGHT_SMALL - 1) * 3) - 4
+#define compactFourthLine ((FONT_HEIGHT_SMALL - 1) * 4) - 6
+#define compactFifthLine ((FONT_HEIGHT_SMALL - 1) * 5) - 8
+
+// Standard line layout
+#define standardFirstLine (FONT_HEIGHT_SMALL + 1) * 1
+#define standardSecondLine (FONT_HEIGHT_SMALL + 1) * 2
+#define standardThirdLine (FONT_HEIGHT_SMALL + 1) * 3
+#define standardFourthLine (FONT_HEIGHT_SMALL + 1) * 4
+
+// Quick screen access
+#define SCREEN_WIDTH display->getWidth()
+#define SCREEN_HEIGHT display->getHeight()
+
+// Shared state (declare inside namespace)
+extern bool hasUnreadMessage;
+
+// Rounded highlight (used for inverted headers)
+void drawRoundedHighlight(OLEDDisplay *display, int16_t x, int16_t y, int16_t w, int16_t h, int16_t r);
+
+// Shared battery/time/mail header
+void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y);
+
+} // namespace graphics
