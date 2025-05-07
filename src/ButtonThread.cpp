@@ -219,11 +219,17 @@ int32_t ButtonThread::runOnce()
 
         case BUTTON_EVENT_DOUBLE_PRESSED: {
             LOG_BUTTON("Double press!");
-#ifdef ELECROW_ThinkNode_M1
+        
+        #ifdef ELECROW_ThinkNode_M1
             digitalWrite(PIN_EINK_EN, digitalRead(PIN_EINK_EN) == LOW);
             break;
-#endif
+        #endif
+        
+            // Send GPS position immediately
             sendAdHocPosition();
+        
+            // Show temporary on-screen confirmation banner for 3 seconds
+            screen->showOverlayBanner("Ad-hoc Position Sent", 3000);
             break;
         }
 
