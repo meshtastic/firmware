@@ -55,7 +55,7 @@ while getopts ":hp:P:f:" opt; do
 done
 shift "$((OPTIND-1))"
 
-if [[ $WEB_APP == true ]]; then
+if [[ $CHANGE_MODE == true ]]; then
 	$ESPTOOL_CMD --baud 1200 --after no_reset read_flash_status
     exit 0
 fi

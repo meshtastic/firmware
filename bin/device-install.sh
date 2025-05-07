@@ -112,7 +112,7 @@ while [ $# -gt 0 ]; do
 	shift # Move to the next argument
 done
 
-if [[ $WEB_APP == true ]]; then
+if [[ $CHANGE_MODE == true ]]; then
 	$ESPTOOL_CMD --baud 1200 --after no_reset read_flash_status
 	exit 0
 fi
