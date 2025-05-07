@@ -1,13 +1,14 @@
 #include "graphics/SharedUIDisplay.h"
+#include "RTC.h"
 #include "graphics/ScreenFonts.h"
 #include "main.h"
-#include "power.h"
 #include "meshtastic/config.pb.h"
-#include "RTC.h"
+#include "power.h"
 #include <OLEDDisplay.h>
 #include <graphics/images.h>
 
-namespace graphics {
+namespace graphics
+{
 
 // === Shared External State ===
 bool hasUnreadMessage = false;
@@ -82,9 +83,9 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
     } else {
         int batteryX = 1;
         int batteryY = HEADER_OFFSET_Y + 1;
-    #ifdef USE_EINK
+#ifdef USE_EINK
         batteryY += 2;
-    #endif
+#endif
         display->drawXbm(batteryX, batteryY, 7, 11, batteryBitmap_v);
         if (isCharging && isBoltVisibleShared) {
             display->drawXbm(batteryX + 1, batteryY + 3, 5, 5, lightning_bolt_v);
@@ -125,7 +126,8 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
         if (config.display.use_12h_clock) {
             bool isPM = hour >= 12;
             hour %= 12;
-            if (hour == 0) hour = 12;
+            if (hour == 0)
+                hour = 12;
             snprintf(timeStr, sizeof(timeStr), "%d:%02d%s", hour, minute, isPM ? "p" : "a");
         }
 
@@ -141,11 +143,11 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
             if (isMailIconVisible) {
                 if (useHorizontalBattery) {
                     int iconW = 16, iconH = 12;
-                    int iconX = timeX - iconW - 3;
+                    int iconX = timeX - iconW - 4;
                     int iconY = textY + (FONT_HEIGHT_SMALL - iconH) / 2 - 1;
-                    display->drawRect(iconX, iconY, iconW, iconH);
-                    display->drawLine(iconX + 1, iconY + 1, iconX + iconW / 2, iconY + iconH - 2);
-                    display->drawLine(iconX + iconW - 2, iconY + 1, iconX + iconW / 2, iconY + iconH - 2);
+                    display->drawRect(iconX, iconY, iconW + 1, iconH);
+                    display->drawLine(iconX, iconY, iconX + iconW / 2, iconY + iconH - 4);
+                    display->drawLine(iconX + iconW, iconY, iconX + iconW / 2, iconY + iconH - 4);
                 } else {
                     int iconX = timeX - mail_width;
                     int iconY = textY + (FONT_HEIGHT_SMALL - mail_height) / 2;
@@ -155,7 +157,8 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
         }
 
         display->drawString(timeX, textY, timeStr);
-        if (isBold) display->drawString(timeX - 1, textY, timeStr);
+        if (isBold)
+            display->drawString(timeX - 1, textY, timeStr);
     }
 
     display->setColor(WHITE);
