@@ -297,7 +297,6 @@ static void drawWelcomeScreen(OLEDDisplay *display, OLEDDisplayUiState *state, i
     esp_task_wdt_reset();
 #endif
 }
-
 // ==============================
 // Overlay Alert Banner Renderer
 // ==============================
@@ -319,8 +318,7 @@ static void drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisplayUiState *sta
     if (alertBannerMessage.length() == 0 || millis() > alertBannerUntil) return;
 
     // === Layout Configuration ===
-    constexpr uint16_t padding = 5;           // Padding around the text
-    constexpr uint8_t imprecision = 3;        // Pixel jitter to reduce burn-in on E-Ink
+    constexpr uint16_t padding = 5; // Padding around the text
 
     // Setup font and alignment
     display->setFont(FONT_SMALL);
@@ -331,8 +329,8 @@ static void drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisplayUiState *sta
     uint16_t boxWidth = padding * 2 + textWidth;
     uint16_t boxHeight = FONT_HEIGHT_SMALL + padding * 2;
 
-    int16_t boxLeft = (display->width() / 2) - (boxWidth / 2) + random(-imprecision, imprecision + 1);
-    int16_t boxTop  = (display->height() / 2) - (boxHeight / 2) + random(-imprecision, imprecision + 1);
+    int16_t boxLeft = (display->width() / 2) - (boxWidth / 2);
+    int16_t boxTop  = (display->height() / 2) - (boxHeight / 2);
 
     // === Draw background box ===
     display->setColor(BLACK);

@@ -418,7 +418,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
         uint32_t now = millis();
 
         bool isOwnTelemetry = lastMeasurementPacket->from == nodeDB->getNodeNum();
-        bool isIAQAlert = m.iaq > 100 && (now - lastAlertTime > 60000);
+        bool isIAQAlert = m.iaq > 200 && (now - lastAlertTime > 60000);
 
         if (isOwnTelemetry && isIAQAlert) {
             LOG_INFO("drawFrame: IAQ %d (own) — showing banner", m.iaq);

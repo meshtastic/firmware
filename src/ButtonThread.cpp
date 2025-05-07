@@ -229,7 +229,7 @@ int32_t ButtonThread::runOnce()
             sendAdHocPosition();
         
             // Show temporary on-screen confirmation banner for 3 seconds
-            screen->showOverlayBanner("Ad-hoc Position Sent", 3000);
+            screen->showOverlayBanner("Ad-hoc Ping Sent", 3000);
             break;
         }
 
