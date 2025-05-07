@@ -16,8 +16,6 @@ class BMX160Sensor : public MotionSensor
 {
   private:
     RAK_BMX160 sensor;
-    bool showingScreen = false;
-    float highestX = 0, lowestX = 0, highestY = 0, lowestY = 0, highestZ = 0, lowestZ = 0;
 
   public:
     explicit BMX160Sensor(ScanI2C::FoundDevice foundDevice);
