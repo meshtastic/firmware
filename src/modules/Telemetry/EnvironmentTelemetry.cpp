@@ -19,6 +19,8 @@
 #include <OLEDDisplayUi.h>
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/images.h"
+#include "buzz.h"
+#include "modules/ExternalNotificationModule.h"
 
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR_EXTERNAL
 // Sensors
@@ -398,19 +400,35 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
         entries.push_back("Hum: " + String(m.relative_humidity, 0) + "%");
     if (m.barometric_pressure != 0)
         entries.push_back("Prss: " + String(m.barometric_pressure, 0) + " hPa");
-        if (m.iaq != 0) {
-            String aqi = "IAQ: " + String(m.iaq);
-        
-            if (m.iaq <= 50) aqi += " (Good)";
-            else if (m.iaq <= 100) aqi += " (Moderate)";
-            else if (m.iaq <= 150) aqi += " (Poor)";
-            else if (m.iaq <= 200) aqi += " (Unhealthy)";
-            else if (m.iaq <= 250) aqi += " (Very Unhealthy)";
-            else if (m.iaq <= 350) aqi += " (Hazardous)";
-            else aqi += " (Extreme)";
-        
-            entries.push_back(aqi);
+    if (m.iaq != 0) {
+        String aqi = "IAQ: " + String(m.iaq);
+
+        if (m.iaq <= 50) aqi += " (Good)";
+        else if (m.iaq <= 100) aqi += " (Moderate)";
+        else if (m.iaq <= 150) aqi += " (Poor)";
+        else if (m.iaq <= 200) aqi += " (Unhealthy)";
+        else if (m.iaq <= 250) aqi += " (Very Unhealthy)";
+        else if (m.iaq <= 350) aqi += " (Hazardous)";
+        else aqi += " (Extreme)";
+
+        entries.push_back(aqi);
+
+        // === IAQ alert logic ===
+        static uint32_t lastAlertTime = 0;
+        uint32_t now = millis();
+
+        bool isOwnTelemetry = lastMeasurementPacket->from == nodeDB->getNodeNum();
+        bool isIAQAlert = m.iaq > 100 && (now - lastAlertTime > 60000);
+
+        if (isOwnTelemetry && isIAQAlert) {
+            LOG_INFO("drawFrame: IAQ %d (own) — showing banner", m.iaq);
+            screen->showOverlayBanner("Unhealthy IAQ Levels", 3000); // Always show banner
+            if (moduleConfig.external_notification.enabled && !externalNotificationModule->getMute()) {
+                playLongBeep(); // Only buzz if not muted
+            }
+            lastAlertTime = now;
         }
+    }
     if (m.voltage != 0 || m.current != 0)
         entries.push_back(String(m.voltage, 1) + "V / " + String(m.current, 0) + "mA");
     if (m.lux != 0)

@@ -261,6 +261,8 @@ class Screen : public concurrency::OSThread
         enqueueCmd(cmd);
     }
 
+    void showOverlayBanner(const String &message, uint32_t durationMs = 3000);
+    
     void startFirmwareUpdateScreen()
     {
         ScreenCmd cmd;

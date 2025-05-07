@@ -84,6 +84,8 @@ namespace graphics
 // A text message frame + debug frame + all the node infos
 FrameCallback *normalFrames;
 static uint32_t targetFramerate = IDLE_FRAMERATE;
+static String alertBannerMessage;
+static uint32_t alertBannerUntil = 0;
 
 uint32_t logo_timeout = 5000; // 4 seconds for EACH logo
 
@@ -294,6 +296,53 @@ static void drawWelcomeScreen(OLEDDisplay *display, OLEDDisplayUiState *state, i
     yield();
     esp_task_wdt_reset();
 #endif
+}
+
+// ==============================
+// Overlay Alert Banner Renderer
+// ==============================
+// Displays a temporary centered banner message (e.g., warning, status, etc.)
+// The banner appears in the center of the screen and disappears after the specified duration
+
+// Called to trigger a banner with custom message and duration
+void Screen::showOverlayBanner(const String &message, uint32_t durationMs)
+{
+    // Store the message and set the expiration timestamp
+    alertBannerMessage = message;
+    alertBannerUntil = millis() + durationMs;
+}
+
+// Draws the overlay banner on screen, if still within display duration
+static void drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
+{
+    // Exit if no message is active or duration has passed
+    if (alertBannerMessage.length() == 0 || millis() > alertBannerUntil) return;
+
+    // === Layout Configuration ===
+    constexpr uint16_t padding = 5;           // Padding around the text
+    constexpr uint8_t imprecision = 3;        // Pixel jitter to reduce burn-in on E-Ink
+
+    // Setup font and alignment
+    display->setFont(FONT_SMALL);
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+    // === Measure and position the box ===
+    uint16_t textWidth = display->getStringWidth(alertBannerMessage.c_str(), alertBannerMessage.length(), true);
+    uint16_t boxWidth = padding * 2 + textWidth;
+    uint16_t boxHeight = FONT_HEIGHT_SMALL + padding * 2;
+
+    int16_t boxLeft = (display->width() / 2) - (boxWidth / 2) + random(-imprecision, imprecision + 1);
+    int16_t boxTop  = (display->height() / 2) - (boxHeight / 2) + random(-imprecision, imprecision + 1);
+
+    // === Draw background box ===
+    display->setColor(BLACK);
+    display->fillRect(boxLeft - 1, boxTop - 1, boxWidth + 2, boxHeight + 2); // Slightly oversized box
+    display->setColor(WHITE);
+    display->drawRect(boxLeft, boxTop, boxWidth, boxHeight);                // Border
+
+    // === Draw the text (twice for faux bold) ===
+    display->drawString(boxLeft + padding, boxTop + padding, alertBannerMessage);
+    display->drawString(boxLeft + padding + 1, boxTop + padding, alertBannerMessage); // Faux bold effect
 }
 
 // draw overlay in bottom right corner of screen to show when notifications are muted or modifier key is active
@@ -3576,7 +3625,7 @@ void Screen::setFrames(FrameFocus focus)
     ui->disableAllIndicators();
 
     // Add function overlay here. This can show when notifications muted, modifier key is active etc
-    static OverlayCallback overlays[] = {drawFunctionOverlay, drawCustomFrameIcons};
+    static OverlayCallback overlays[] = {drawFunctionOverlay, drawCustomFrameIcons, drawAlertBannerOverlay};
     ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
 
     prevFrame = -1; // Force drawNodeInfo to pick a new node (because our list
