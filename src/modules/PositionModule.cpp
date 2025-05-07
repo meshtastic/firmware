@@ -373,9 +373,9 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
         meshtastic_ClientNotification *notification = clientNotificationPool.allocZeroed();
         notification->level = meshtastic_LogRecord_Level_INFO;
         notification->time = getValidTime(RTCQualityFromNet);
-        sprintf(notification->message, "Sending position and sleeping for %is interval in a moment",
+        sprintf(notification->message, "Sending position and sleeping for %us interval in a moment",
                 Default::getConfiguredOrDefaultMs(config.position.position_broadcast_secs, default_broadcast_interval_secs) /
-                    1000);
+                    1000U);
         service->sendClientNotification(notification);
         sleepOnNextExecution = true;
         LOG_DEBUG("Start next execution in 5s, then sleep");

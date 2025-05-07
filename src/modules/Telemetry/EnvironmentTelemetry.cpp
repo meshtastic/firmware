@@ -678,10 +678,10 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
                 meshtastic_ClientNotification *notification = clientNotificationPool.allocZeroed();
                 notification->level = meshtastic_LogRecord_Level_INFO;
                 notification->time = getValidTime(RTCQualityFromNet);
-                sprintf(notification->message, "Sending telemetry and sleeping for %is interval in a moment",
+                sprintf(notification->message, "Sending telemetry and sleeping for %us interval in a moment",
                         Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval,
                                                           default_telemetry_broadcast_interval_secs) /
-                            1000);
+                            1000U);
                 service->sendClientNotification(notification);
                 sleepOnNextExecution = true;
                 LOG_DEBUG("Start next execution in 5s, then sleep");
