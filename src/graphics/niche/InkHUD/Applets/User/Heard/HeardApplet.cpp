@@ -41,6 +41,7 @@ void InkHUD::HeardApplet::handleParsed(CardInfo c)
 
     cards.push_front(c);                                  // Insert into base class' card collection
     cards.resize(min(maxCards(), (uint8_t)cards.size())); // Don't keep more cards than we could *ever* fit on screen
+    cards.shrink_to_fit();
 
     // Our rendered image needs to change if:
     if (previous.nodeNum != c.nodeNum                  // Different node
