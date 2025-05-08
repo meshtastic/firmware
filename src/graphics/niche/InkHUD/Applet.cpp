@@ -350,18 +350,18 @@ std::string InkHUD::Applet::parseShortName(meshtastic_NodeInfoLite *node)
     return nodeID.substr(nodeID.length() - 4);
 }
 
-// Determine if a string contains only emoji, without any text
+// Determine if all characters of a string are printable using the current font
 bool InkHUD::Applet::isPrintable(std::string text)
 {
     // Scan for DEL (0x7F), which is the value assigned by AppletFont::applyEncoding if a unicode character is not handled
     // Todo: move this to from DEL to SUB, once the fonts have been changed for this
     for (char &c : text) {
         if (c == '\x7F')
-            return true;
+            return false;
     }
 
     // No unprintable characters found
-    return false;
+    return true;
 }
 
 // Gets rendered width of a string
