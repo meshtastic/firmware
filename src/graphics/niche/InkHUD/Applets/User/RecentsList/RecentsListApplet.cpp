@@ -105,7 +105,7 @@ void InkHUD::RecentsListApplet::prune()
             cards.shrink_to_fit();
 
             // Request an update, if pruning did modify our data
-            // Required if pruning was scheduled. Redundent if pruning was prior to rendering.
+            // Required if pruning was scheduled. Redundant if pruning was prior to rendering.
             requestAutoshow();
             requestUpdate();
 

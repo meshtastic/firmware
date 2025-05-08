@@ -117,7 +117,7 @@ void InkHUD::NotificationApplet::onRender()
     int16_t textM = divX + padW + (getTextWidth(text) / 2);
 
     // Restrict area for printing
-    // - don't overlap border, or diveder
+    // - don't overlap border, or divider
     setCrop(divX + 1, 1, (width() - (divX + 1) - 1), height() - 2);
 
     // Drop shadow
