@@ -1,3 +1,4 @@
+#include "SignalReplyModule.h"
 #include "configuration.h"
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER
 #include "input/ExpressLRSFiveWay.h"
@@ -141,6 +142,9 @@ void setupModules()
 #endif
         // Note: if the rest of meshtastic doesn't need to explicitly use your module, you do not need to assign the instance
         // to a global variable.
+
+
+        new SignalReplyModule();  
 
 #if !MESHTASTIC_EXCLUDE_REMOTEHARDWARE
         new RemoteHardwareModule();
