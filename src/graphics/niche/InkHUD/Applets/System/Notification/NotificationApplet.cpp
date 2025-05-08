@@ -241,7 +241,8 @@ std::string InkHUD::NotificationApplet::getNotificationText(uint16_t widthAvaila
         }
     }
 
-    return text;
+    // Parse any non-ascii characters and return
+    return parse(text);
 }
 
 #endif
