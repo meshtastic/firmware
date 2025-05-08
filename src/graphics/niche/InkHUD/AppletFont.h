@@ -54,4 +54,28 @@ class AppletFont
 
 } // namespace NicheGraphics::InkHUD
 
+// Macros for InkHUD's standard fonts
+// --------------------------------------
+
+// Use these once only, passing them to InkHUD::Applet::fontLarge and InkHUD::Applet:fontSmall
+// Line padding has been adjusted manually, to compensate for a few *extra tall* diacritics
+
+// Central European
+#include "graphics/niche/Fonts/FreeSans6pt_Win1250.h"
+#include "graphics/niche/Fonts/FreeSans9pt_Win1250.h"
+#define FREESANS_9PT_WIN1250 InkHUD::AppletFont(FreeSans9pt_Win1250, InkHUD::AppletFont::WINDOWS_1250, -1, -1)
+#define FREESANS_6PT_WIN1250 InkHUD::AppletFont(FreeSans6pt_Win1250, InkHUD::AppletFont::WINDOWS_1250, -1, -2)
+
+// Cyrillic
+#include "graphics/niche/Fonts/FreeSans6pt_Win1251.h"
+#include "graphics/niche/Fonts/FreeSans9pt_Win1251.h"
+#define FREESANS_9PT_WIN1251 InkHUD::AppletFont(FreeSans9pt_Win1251, InkHUD::AppletFont::WINDOWS_1251, -2, -1)
+#define FREESANS_6PT_WIN1251 InkHUD::AppletFont(FreeSans6pt_Win1251, InkHUD::AppletFont::WINDOWS_1251, -1, -2)
+
+// Western European
+#include "graphics/niche/Fonts/FreeSans6pt_Win1252.h"
+#include "graphics/niche/Fonts/FreeSans9pt_Win1252.h"
+#define FREESANS_9PT_WIN1252 InkHUD::AppletFont(FreeSans9pt_Win1252, InkHUD::AppletFont::WINDOWS_1252, -2, -1)
+#define FREESANS_6PT_WIN1252 InkHUD::AppletFont(FreeSans6pt_Win1252, InkHUD::AppletFont::WINDOWS_1252, -1, -2)
+
 #endif
