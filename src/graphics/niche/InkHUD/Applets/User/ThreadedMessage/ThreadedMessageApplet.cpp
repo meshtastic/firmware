@@ -200,11 +200,6 @@ int InkHUD::ThreadedMessageApplet::onReceiveTextMessage(const meshtastic_MeshPac
     if (p->to != NODENUM_BROADCAST)
         return 0;
 
-    // Abort if messages was an "emoji reaction"
-    // Possibly some implemetation of this in future?
-    if (p->decoded.emoji)
-        return 0;
-
     // Extract info into our slimmed-down "StoredMessage" type
     MessageStore::Message newMessage;
     newMessage.timestamp = getValidTime(RTCQuality::RTCQualityDevice, true); // Current RTC time

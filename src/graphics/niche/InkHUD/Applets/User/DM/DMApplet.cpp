@@ -23,11 +23,6 @@ int InkHUD::DMApplet::onReceiveTextMessage(const meshtastic_MeshPacket *p)
     if (!isActive())
         return 0;
 
-    // Abort if only an "emoji reactions"
-    // Possibly some implemetation of this in future?
-    if (p->decoded.emoji)
-        return 0;
-
     // If DM (not broadcast)
     if (!isBroadcast(p->to)) {
         // Want to update display, if applet is foreground
