@@ -43,6 +43,7 @@ S3_VARIANTS=(
 	"wireless-tracker"
 	"station-g2"
 	"unphone"
+	"t-eth-elite"
 )
 
 # Determine the correct esptool command to use
