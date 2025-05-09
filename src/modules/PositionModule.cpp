@@ -370,9 +370,16 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
     if (IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_TRACKER,
                   meshtastic_Config_DeviceConfig_Role_TAK_TRACKER) &&
         config.power.is_power_saving) {
-        LOG_DEBUG("Start next execution in 5s, then sleep");
+        meshtastic_ClientNotification *notification = clientNotificationPool.allocZeroed();
+        notification->level = meshtastic_LogRecord_Level_INFO;
+        notification->time = getValidTime(RTCQualityFromNet);
+        sprintf(notification->message, "Sending position and sleeping for %us interval in a moment",
+                Default::getConfiguredOrDefaultMs(config.position.position_broadcast_secs, default_broadcast_interval_secs) /
+                    1000U);
+        service->sendClientNotification(notification);
         sleepOnNextExecution = true;
-        setIntervalFromNow(5000);
+        LOG_DEBUG("Start next execution in 5s, then sleep");
+        setIntervalFromNow(FIVE_SECONDS_MS);
     }
 }
 
