@@ -286,9 +286,12 @@ int32_t ButtonThread::runOnce()
         case BUTTON_EVENT_LONG_PRESSED: {
             LOG_BUTTON("Long press!");
             powerFSM.trigger(EVENT_PRESS);
+        
             if (screen) {
-                screen->startAlert("Shutting down...");
+                // Show shutdown message as a temporary overlay banner
+                screen->showOverlayBanner("Shutting Down...");  // Display for 3 seconds
             }
+        
             playBeep();
             break;
         }

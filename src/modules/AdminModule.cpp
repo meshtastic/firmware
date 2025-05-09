@@ -1096,7 +1096,7 @@ void AdminModule::handleGetDeviceUIConfig(const meshtastic_MeshPacket &req)
 void AdminModule::reboot(int32_t seconds)
 {
     LOG_INFO("Reboot in %d seconds", seconds);
-    screen->startAlert("Rebooting...");
+    screen->showOverlayBanner("Rebooting...", 0);  // stays on screen
     rebootAtMsec = (seconds < 0) ? 0 : (millis() + seconds * 1000);
 }
 

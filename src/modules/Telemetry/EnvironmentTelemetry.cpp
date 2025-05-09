@@ -402,14 +402,24 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
         entries.push_back("Prss: " + String(m.barometric_pressure, 0) + " hPa");
     if (m.iaq != 0) {
         String aqi = "IAQ: " + String(m.iaq);
+        const char *bannerMsg = nullptr;  // Default: no banner
 
-        if (m.iaq <= 50) aqi += " (Good)";
-        else if (m.iaq <= 100) aqi += " (Moderate)";
-        else if (m.iaq <= 150) aqi += " (Poor)";
-        else if (m.iaq <= 200) aqi += " (Unhealthy)";
-        else if (m.iaq <= 250) aqi += " (Very Unhealthy)";
-        else if (m.iaq <= 350) aqi += " (Hazardous)";
-        else aqi += " (Extreme)";
+        if (m.iaq <= 25)        aqi += " (Excellent)";
+        else if (m.iaq <= 50)   aqi += " (Good)";
+        else if (m.iaq <= 100)  aqi += " (Moderate)";
+        else if (m.iaq <= 150)  aqi += " (Poor)";
+        else if (m.iaq <= 200) {
+            aqi += " (Unhealthy)";
+            bannerMsg = "Unhealthy IAQ";
+        }
+        else if (m.iaq <= 300) {
+            aqi += " (Very Unhealthy)";
+            bannerMsg = "Very Unhealthy IAQ";
+        }
+        else {
+            aqi += " (Hazardous)";
+            bannerMsg = "Hazardous IAQ";
+        }
 
         entries.push_back(aqi);
 
@@ -418,14 +428,17 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
         uint32_t now = millis();
 
         bool isOwnTelemetry = lastMeasurementPacket->from == nodeDB->getNodeNum();
-        bool isIAQAlert = m.iaq > 200 && (now - lastAlertTime > 60000);
+        bool isCooldownOver = (now - lastAlertTime > 60000);
 
-        if (isOwnTelemetry && isIAQAlert) {
-            LOG_INFO("drawFrame: IAQ %d (own) — showing banner", m.iaq);
-            screen->showOverlayBanner("Unhealthy IAQ Levels", 3000); // Always show banner
-            if (moduleConfig.external_notification.enabled && !externalNotificationModule->getMute()) {
-                playLongBeep(); // Only buzz if not muted
+        if (isOwnTelemetry && bannerMsg && isCooldownOver) {
+            LOG_INFO("drawFrame: IAQ %d (own) — showing banner: %s", m.iaq, bannerMsg);
+            screen->showOverlayBanner(bannerMsg, 3000);
+
+            // Only buzz if IAQ is over 200
+            if (m.iaq > 200 && moduleConfig.external_notification.enabled && !externalNotificationModule->getMute()) {
+                playLongBeep();
             }
+
             lastAlertTime = now;
         }
     }

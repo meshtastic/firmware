@@ -308,26 +308,43 @@ void Screen::showOverlayBanner(const String &message, uint32_t durationMs)
 {
     // Store the message and set the expiration timestamp
     alertBannerMessage = message;
-    alertBannerUntil = millis() + durationMs;
+    alertBannerUntil = (durationMs == 0) ? 0 : millis() + durationMs;
 }
 
 // Draws the overlay banner on screen, if still within display duration
 static void drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
     // Exit if no message is active or duration has passed
-    if (alertBannerMessage.length() == 0 || millis() > alertBannerUntil) return;
+    if (alertBannerMessage.length() == 0 || (alertBannerUntil != 0 && millis() > alertBannerUntil)) return;
 
     // === Layout Configuration ===
-    constexpr uint16_t padding = 5; // Padding around the text
+    constexpr uint16_t padding = 5;     // Padding around text inside the box
+    constexpr uint8_t lineSpacing = 1;  // Extra space between lines
 
     // Setup font and alignment
     display->setFont(FONT_SMALL);
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setTextAlignment(TEXT_ALIGN_LEFT); // We will manually center per line
 
-    // === Measure and position the box ===
-    uint16_t textWidth = display->getStringWidth(alertBannerMessage.c_str(), alertBannerMessage.length(), true);
-    uint16_t boxWidth = padding * 2 + textWidth;
-    uint16_t boxHeight = FONT_HEIGHT_SMALL + padding * 2;
+    // === Split the message into lines (supports multi-line banners) ===
+    std::vector<String> lines;
+    int start = 0, newlineIdx;
+    while ((newlineIdx = alertBannerMessage.indexOf('\n', start)) != -1) {
+        lines.push_back(alertBannerMessage.substring(start, newlineIdx));
+        start = newlineIdx + 1;
+    }
+    lines.push_back(alertBannerMessage.substring(start));
+
+    // === Measure text dimensions ===
+    uint16_t maxWidth = 0;
+    std::vector<uint16_t> lineWidths;
+    for (const auto& line : lines) {
+        uint16_t w = display->getStringWidth(line.c_str(), line.length(), true);
+        lineWidths.push_back(w);
+        if (w > maxWidth) maxWidth = w;
+    }
+
+    uint16_t boxWidth = padding * 2 + maxWidth;
+    uint16_t boxHeight = padding * 2 + lines.size() * FONT_HEIGHT_SMALL + (lines.size() - 1) * lineSpacing;
 
     int16_t boxLeft = (display->width() / 2) - (boxWidth / 2);
     int16_t boxTop  = (display->height() / 2) - (boxHeight / 2);
@@ -338,9 +355,16 @@ static void drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisplayUiState *sta
     display->setColor(WHITE);
     display->drawRect(boxLeft, boxTop, boxWidth, boxHeight);                // Border
 
-    // === Draw the text (twice for faux bold) ===
-    display->drawString(boxLeft + padding, boxTop + padding, alertBannerMessage);
-    display->drawString(boxLeft + padding + 1, boxTop + padding, alertBannerMessage); // Faux bold effect
+    // === Draw each line centered in the box ===
+    int16_t lineY = boxTop + padding;
+    for (size_t i = 0; i < lines.size(); ++i) {
+        int16_t textX = boxLeft + (boxWidth - lineWidths[i]) / 2;
+
+        display->drawString(textX,     lineY, lines[i]);
+        display->drawString(textX + 1, lineY, lines[i]); // Faux bold
+
+        lineY += FONT_HEIGHT_SMALL + lineSpacing;
+    }
 }
 
 // draw overlay in bottom right corner of screen to show when notifications are muted or modifier key is active
@@ -4199,11 +4223,17 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
             setFrames(FOCUS_PRESERVE); // Stay on same frame, silently add/remove frames
         } else {
             // Incoming message
-            // setFrames(FOCUS_TEXTMESSAGE);          // Focus on the new message
             devicestate.has_rx_text_message = true; // Needed to include the message frame
             hasUnreadMessage = true;                // Enables mail icon in the header
             setFrames(FOCUS_PRESERVE);              // Refresh frame list without switching view
             forceDisplay();                         // Forces screen redraw (this works in your codebase)
+
+            // === Show banner: "New Message" followed by name on second line ===
+            const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(packet->from);
+            if (node && node->has_user && node->user.long_name[0]) {
+                String name = String(node->user.long_name);
+                screen->showOverlayBanner("New Message\nfrom " + name, 3000); // Multiline banner
+            }
         }
     }
 
