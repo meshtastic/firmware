@@ -4226,19 +4226,37 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
             devicestate.has_rx_text_message = true; // Needed to include the message frame
             hasUnreadMessage = true;                // Enables mail icon in the header
             setFrames(FOCUS_PRESERVE);              // Refresh frame list without switching view
-            forceDisplay();                         // Forces screen redraw (this works in your codebase)
+            forceDisplay();                         // Forces screen redraw
 
-            // === Show banner: "New Message" followed by name on second line ===
+            // === Prepare banner content ===
             const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(packet->from);
-            if (node && node->has_user && node->user.long_name[0]) {
-                String name = String(node->user.long_name);
-                screen->showOverlayBanner("New Message\nfrom " + name, 3000); // Multiline banner
+            const char *longName = (node && node->has_user) ? node->user.long_name : nullptr;
+
+            const char *msgRaw = reinterpret_cast<const char *>(packet->decoded.payload.bytes);
+            String msg = String(msgRaw);
+            msg.trim();  // Remove leading/trailing whitespace/newlines
+
+            String banner;
+
+            // Match bell character or exact alert text
+            if (msg == "\x07" || msg.indexOf("Alert Bell Character") != -1) {
+                banner = "Alert Received";
+            } else {
+                banner = "New Message";
             }
+
+            if (longName && longName[0]) {
+                banner += "\nfrom ";
+                banner += longName;
+            }
+
+            screen->showOverlayBanner(banner, 3000);
         }
     }
 
     return 0;
 }
+
 
 // Triggered by MeshModules
 int Screen::handleUIFrameEvent(const UIFrameEvent *event)
