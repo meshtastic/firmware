@@ -169,6 +169,7 @@ static void drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDispl
     // draw centered icon
     int iconX = x + (SCREEN_WIDTH - icon_width) / 2;
     int iconY = y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - icon_height) / 2 + 2;
+    iconY -= (SCREEN_WIDTH > 128) ? 0 : 4;
 
     display->drawXbm(iconX, iconY, icon_width, icon_height, icon_bits);
 
