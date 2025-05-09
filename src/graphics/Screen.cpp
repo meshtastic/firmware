@@ -166,33 +166,41 @@ extern bool hasUnreadMessage;
  */
 static void drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    // draw an xbm image.
-    // Please note that everything that should be transitioned
-    // needs to be drawn relative to x and y
+    // draw centered icon
+    int iconX = x + (SCREEN_WIDTH - icon_width) / 2;
+    int iconY = y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - icon_height) / 2 + 2;
 
-    // draw centered icon left to right and centered above the one line of app text
-    display->drawXbm(x + (SCREEN_WIDTH - icon_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - icon_height) / 2 + 2,
-                     icon_width, icon_height, icon_bits);
+    display->drawXbm(iconX, iconY, icon_width, icon_height, icon_bits);
 
+    // Draw centered label "BaseUI" just below the icon
+    display->setFont(FONT_SMALL);
+    const char *label = "BaseUI";
+    int labelY = iconY + icon_height;
+    labelY += (SCREEN_WIDTH > 128) ? 2 : -2;
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->drawString(x + SCREEN_WIDTH / 2, labelY, label);
+
+    // Draw app title
     display->setFont(FONT_MEDIUM);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     const char *title = "meshtastic.org";
     display->drawString(x + getStringCenteredX(title), y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM, title);
-    display->setFont(FONT_SMALL);
 
     // Draw region in upper left
+    display->setFont(FONT_SMALL);
     if (upperMsg)
         display->drawString(x + 0, y + 0, upperMsg);
 
     // Draw version and short name in upper right
     char buf[25];
     snprintf(buf, sizeof(buf), "%s\n%s", xstr(APP_VERSION_SHORT), haveGlyphs(owner.short_name) ? owner.short_name : "");
-
     display->setTextAlignment(TEXT_ALIGN_RIGHT);
     display->drawString(x + SCREEN_WIDTH, y + 0, buf);
+
     screen->forceDisplay();
 
-    display->setTextAlignment(TEXT_ALIGN_LEFT); // Restore left align, just to be kind to any other unsuspecting code
+    // Restore default alignment
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
 }
 
 #ifdef USERPREFS_OEM_TEXT
@@ -349,8 +357,8 @@ static void drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisplayUiState *sta
     }
 
     uint16_t boxWidth = padding * 2 + maxWidth;
-    if (needs_bell && boxWidth < 78)
-        boxWidth += 20;
+    if (needs_bell && boxWidth < (SCREEN_WIDTH > 128) ? 106 : 78)
+        boxWidth += (SCREEN_WIDTH > 128) ? 26 : 20;
 
     uint16_t boxHeight = padding * 2 + lines.size() * FONT_HEIGHT_SMALL + (lines.size() - 1) * lineSpacing;
 
@@ -4263,7 +4271,7 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
                 banner += longName;
             }
 
-            screen->showOverlayBanner(banner, 30000);
+            screen->showOverlayBanner(banner, 3000);
         }
     }
 
