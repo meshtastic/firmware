@@ -347,6 +347,7 @@ static void drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisplayUiState *sta
     lines.push_back(alertBannerMessage.substring(start));
 
     // === Measure text dimensions ===
+    uint16_t minWidth = (SCREEN_WIDTH > 128) ? 106 : 78;
     uint16_t maxWidth = 0;
     std::vector<uint16_t> lineWidths;
     for (const auto &line : lines) {
@@ -357,7 +358,7 @@ static void drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisplayUiState *sta
     }
 
     uint16_t boxWidth = padding * 2 + maxWidth;
-    if (needs_bell && boxWidth < (SCREEN_WIDTH > 128) ? 106 : 78)
+    if (needs_bell && boxWidth < minWidth)
         boxWidth += (SCREEN_WIDTH > 128) ? 26 : 20;
 
     uint16_t boxHeight = padding * 2 + lines.size() * FONT_HEIGHT_SMALL + (lines.size() - 1) * lineSpacing;
