@@ -389,6 +389,11 @@ const uint8_t icon_module[] PROGMEM = {
     0b00111100, // ░░████░░
     0b00011000  // ░░░██░░░
 };
+
+// Bell icon for Alert Message
+const unsigned char bell_alert[] PROGMEM = {0b00011000, 0b00100100, 0b00100100, 0b01000010,
+                                            0b01000010, 0b01000010, 0b11111111, 0b00011000};
+
 #endif
 
 #include "img/icon.xbm"

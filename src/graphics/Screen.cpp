@@ -315,11 +315,15 @@ void Screen::showOverlayBanner(const String &message, uint32_t durationMs)
 static void drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
     // Exit if no message is active or duration has passed
-    if (alertBannerMessage.length() == 0 || (alertBannerUntil != 0 && millis() > alertBannerUntil)) return;
+    if (alertBannerMessage.length() == 0 || (alertBannerUntil != 0 && millis() > alertBannerUntil))
+        return;
 
     // === Layout Configuration ===
-    constexpr uint16_t padding = 5;     // Padding around text inside the box
-    constexpr uint8_t lineSpacing = 1;  // Extra space between lines
+    constexpr uint16_t padding = 5;    // Padding around text inside the box
+    constexpr uint8_t lineSpacing = 1; // Extra space between lines
+
+    // Search the mesage to determine if we need the bell added
+    bool needs_bell = (alertBannerMessage.indexOf("Alert Received") != -1);
 
     // Setup font and alignment
     display->setFont(FONT_SMALL);
@@ -337,31 +341,43 @@ static void drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisplayUiState *sta
     // === Measure text dimensions ===
     uint16_t maxWidth = 0;
     std::vector<uint16_t> lineWidths;
-    for (const auto& line : lines) {
+    for (const auto &line : lines) {
         uint16_t w = display->getStringWidth(line.c_str(), line.length(), true);
         lineWidths.push_back(w);
-        if (w > maxWidth) maxWidth = w;
+        if (w > maxWidth)
+            maxWidth = w;
     }
 
     uint16_t boxWidth = padding * 2 + maxWidth;
+    if (needs_bell && boxWidth < 78)
+        boxWidth += 20;
+
     uint16_t boxHeight = padding * 2 + lines.size() * FONT_HEIGHT_SMALL + (lines.size() - 1) * lineSpacing;
 
     int16_t boxLeft = (display->width() / 2) - (boxWidth / 2);
-    int16_t boxTop  = (display->height() / 2) - (boxHeight / 2);
+    int16_t boxTop = (display->height() / 2) - (boxHeight / 2);
 
     // === Draw background box ===
     display->setColor(BLACK);
     display->fillRect(boxLeft - 1, boxTop - 1, boxWidth + 2, boxHeight + 2); // Slightly oversized box
     display->setColor(WHITE);
-    display->drawRect(boxLeft, boxTop, boxWidth, boxHeight);                // Border
+    display->drawRect(boxLeft, boxTop, boxWidth, boxHeight); // Border
 
     // === Draw each line centered in the box ===
     int16_t lineY = boxTop + padding;
     for (size_t i = 0; i < lines.size(); ++i) {
         int16_t textX = boxLeft + (boxWidth - lineWidths[i]) / 2;
+        uint16_t line_width = display->getStringWidth(lines[i].c_str(), lines[i].length(), true);
 
-        display->drawString(textX,     lineY, lines[i]);
-        display->drawString(textX + 1, lineY, lines[i]); // Faux bold
+        if (needs_bell && i == 0) {
+            int bellY = lineY + (FONT_HEIGHT_SMALL - 8) / 2;
+            display->drawXbm(textX - 10, bellY, 8, 8, bell_alert);
+            display->drawXbm(textX + line_width + 2, bellY, 8, 8, bell_alert);
+        }
+
+        display->drawString(textX, lineY, lines[i]);
+        if (SCREEN_WIDTH > 128)
+            display->drawString(textX + 1, lineY, lines[i]); // Faux bold
 
         lineY += FONT_HEIGHT_SMALL + lineSpacing;
     }
@@ -3631,13 +3647,13 @@ void Screen::setFrames(FrameFocus focus)
     // fsi.positions.settings = numframes;
     // normalFrames[numframes++] = &Screen::drawDebugInfoSettingsTrampoline;
 
-    #if HAS_WIFI && !defined(ARCH_PORTDUINO)
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
     if (!dismissedFrames.wifi && isWifiAvailable()) {
         fsi.positions.wifi = numframes;
         normalFrames[numframes++] = &Screen::drawDebugInfoWiFiTrampoline;
         indicatorIcons.push_back(icon_wifi);
     }
-    #endif
+#endif
 
     fsi.frameCount = numframes;   // Total framecount is used to apply FOCUS_PRESERVE
     this->frameCount = numframes; // ✅ Save frame count for use in custom overlay
@@ -3707,19 +3723,16 @@ void Screen::dismissCurrentFrame()
         memset(&devicestate.rx_text_message, 0, sizeof(devicestate.rx_text_message));
         dismissedFrames.textMessage = true;
         dismissed = true;
-    }
-    else if (currentFrame == framesetInfo.positions.waypoint && devicestate.has_rx_waypoint) {
+    } else if (currentFrame == framesetInfo.positions.waypoint && devicestate.has_rx_waypoint) {
         LOG_DEBUG("Dismiss Waypoint");
         devicestate.has_rx_waypoint = false;
         dismissedFrames.waypoint = true;
         dismissed = true;
-    }
-    else if (currentFrame == framesetInfo.positions.wifi) {
+    } else if (currentFrame == framesetInfo.positions.wifi) {
         LOG_DEBUG("Dismiss WiFi Screen");
         dismissedFrames.wifi = true;
         dismissed = true;
-    }
-    else if (currentFrame == framesetInfo.positions.memory) {
+    } else if (currentFrame == framesetInfo.positions.memory) {
         LOG_INFO("Dismiss Memory");
         dismissedFrames.memory = true;
         dismissed = true;
@@ -3729,7 +3742,6 @@ void Screen::dismissCurrentFrame()
         setFrames(FOCUS_DEFAULT); // You could also use FOCUS_PRESERVE
     }
 }
-
 
 void Screen::handleStartFirmwareUpdateScreen()
 {
@@ -4234,12 +4246,13 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
 
             const char *msgRaw = reinterpret_cast<const char *>(packet->decoded.payload.bytes);
             String msg = String(msgRaw);
-            msg.trim();  // Remove leading/trailing whitespace/newlines
+            msg.trim(); // Remove leading/trailing whitespace/newlines
 
             String banner;
 
             // Match bell character or exact alert text
-            if (msg == "\x07" || msg.indexOf("Alert Bell Character") != -1) {
+            // if (msg == "\x07" || msg.indexOf("Alert Bell Character") != -1) {
+            if (msg.indexOf("\x07") != -1) {
                 banner = "Alert Received";
             } else {
                 banner = "New Message";
@@ -4250,13 +4263,12 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
                 banner += longName;
             }
 
-            screen->showOverlayBanner(banner, 3000);
+            screen->showOverlayBanner(banner, 30000);
         }
     }
 
     return 0;
 }
-
 
 // Triggered by MeshModules
 int Screen::handleUIFrameEvent(const UIFrameEvent *event)
