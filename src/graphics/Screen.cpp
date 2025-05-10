@@ -1,11 +1,10 @@
 /*
 BaseUI
-Developed by:
-Ronald Garcia (aka HarukiToreda)
 
-In collaboration with:
-- JasonP: Graphics icon work, UI adjustments, code optimizations, enhancements, and testing
-- TonyG (aka Topho) – Project management, structural planning, and testing
+Developed and Maintained By:
+- Ronald Garcia (HarukiToreda) – Lead development and implementation.
+- JasonP (aka Xaositek)  – Screen layout and icon design, UI improvements and testing.
+- TonyG (aka Tropho) – Project management, structural planning, and testing
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -178,12 +177,12 @@ static void drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDispl
         int padding = 4;
         int boxWidth = max(icon_width, textWidth) + padding * 2;
         int boxHeight = icon_height + FONT_HEIGHT_SMALL + padding * 3;
-        int boxX = x + (SCREEN_WIDTH - boxWidth) / 2;
+        int boxX = x - 1 + (SCREEN_WIDTH - boxWidth) / 2;
         int boxY = y + (SCREEN_HEIGHT - boxHeight) / 2;
 
         display->setColor(WHITE);
         display->fillRect(boxX + r, boxY, boxWidth - 2 * r, boxHeight);
-        display->fillRect(boxX, boxY + r, boxWidth, boxHeight - 2 * r);
+        display->fillRect(boxX, boxY + r, boxWidth - 1, boxHeight - 2 * r);
         display->fillCircle(boxX + r, boxY + r, r);
         display->fillCircle(boxX + boxWidth - r - 1, boxY + r, r);
         display->fillCircle(boxX + r, boxY + boxHeight - r - 1, r);
@@ -196,8 +195,8 @@ static void drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDispl
 
         int labelY = iconY + icon_height + padding;
         display->setTextAlignment(TEXT_ALIGN_CENTER);
-        display->drawString(x + SCREEN_WIDTH / 2, labelY, label);
-        display->drawString(x + SCREEN_WIDTH / 2 + 1, labelY, label); // faux bold
+        display->drawString(x + SCREEN_WIDTH / 2 - 3, labelY, label);
+        display->drawString(x + SCREEN_WIDTH / 2 - 2, labelY, label); // faux bold
 
     } else {
         // === TIGHT SMALL SCREEN LAYOUT ===
@@ -214,7 +213,7 @@ static void drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDispl
 
         display->setColor(WHITE);
         display->fillRect(boxX + r, boxY, boxWidth - 2 * r, boxHeight);
-        display->fillRect(boxX, boxY + r, boxWidth, boxHeight - 2 * r);
+        display->fillRect(boxX, boxY + r, boxWidth - 1, boxHeight - 2 * r);
         display->fillCircle(boxX + r, boxY + r, r);
         display->fillCircle(boxX + boxWidth - r - 1, boxY + r, r);
         display->fillCircle(boxX + r, boxY + boxHeight - r - 1, r);
@@ -236,7 +235,8 @@ static void drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDispl
     display->drawString(x + getStringCenteredX(title), y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM, title);
 
     display->setFont(FONT_SMALL);
-    if (upperMsg) display->drawString(x + 0, y + 0, upperMsg);
+    if (upperMsg)
+        display->drawString(x + 0, y + 0, upperMsg);
 
     char buf[25];
     snprintf(buf, sizeof(buf), "%s\n%s", xstr(APP_VERSION_SHORT), haveGlyphs(owner.short_name) ? owner.short_name : "");
