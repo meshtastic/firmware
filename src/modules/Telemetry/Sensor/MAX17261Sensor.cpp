@@ -1,4 +1,4 @@
-#include "MAX17048Sensor.h"
+#include "MAX17261Sensor.h"
 
 #if !MESHTASTIC_EXCLUDE_I2C && !defined(ARCH_STM32WL) && __has_include(<Adafruit_MAX1704X.h>)
 

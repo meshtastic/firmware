@@ -413,6 +413,19 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 #else
                 SCAN_SIMPLE_CASE(PMSA0031_ADDR, PMSA0031, "PMSA0031", (uint8_t)addr.address)
 #endif
+            case MAX1704X_ADDR:
+                // Try to read the MAX17261 DevName register 0x21 first
+                // See:
+                // https://www.analog.com/media/en/technical-documentation/user-guides/max1726x-modelgauge-m5-ez-user-guide.pdf
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x21), 2);
+                if (registerValue == 0x3340) {
+                    logFoundDevice("MAX17261", (uint8_t)addr.address);
+                    type = MAX17261;
+                } else {
+                    logFoundDevice("MAX17048", (uint8_t)addr.address);
+                    type = MAX17048;
+                }
+                break;
             case BMA423_ADDR: // this can also be LIS3DH_ADDR_ALT
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0F), 2);
                 if (registerValue == 0x3300 || registerValue == 0x3333) { // RAK4631 WisBlock has LIS3DH register at 0x3333
@@ -431,7 +444,6 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 SCAN_SIMPLE_CASE(TSL25911_ADDR, TSL2591, "TSL2591", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(MLX90632_ADDR, MLX90632, "MLX90632", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(NAU7802_ADDR, NAU7802, "NAU7802", (uint8_t)addr.address);
-                SCAN_SIMPLE_CASE(MAX1704X_ADDR, MAX17048, "MAX17048", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(DFROBOT_RAIN_ADDR, DFROBOT_RAIN, "DFRobot Rain Gauge", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(LTR390UV_ADDR, LTR390UV, "LTR390UV", (uint8_t)addr.address);
 #ifdef HAS_TPS65233

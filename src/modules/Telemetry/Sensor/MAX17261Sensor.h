@@ -1,7 +1,7 @@
 #pragma once
 
-#ifndef MAX17048_SENSOR_H
-#define MAX17048_SENSOR_H
+#ifndef MAX17261_SENSOR_H
+#define MAX17261_SENSOR_H
 
 #include "configuration.h"
 

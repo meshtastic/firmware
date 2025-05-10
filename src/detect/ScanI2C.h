@@ -28,6 +28,7 @@ class ScanI2C
         INA219,
         INA3221,
         MAX17048,
+        MAX17261,
         MCP9808,
         SHT31,
         SHT4X,
