@@ -391,12 +391,9 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
     if (validEvent) {
         requestFocus(); // Tell Screen::setFrames to move to our module's frame, next time it runs
 
-        // Let runOnce to be called immediately.
-        if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_SELECT) {
-            setIntervalFromNow(0); // on fast keypresses, this isn't fast enough.
-        } else {
-            runOnce();
-        }
+        // Run CannedMessageModule thread now from callee thread context,
+        // and also schedule it to run later in its own context with the requested delay.
+        setIntervalFromNow(runOnce());
     }
 
     return 0;
@@ -440,9 +437,13 @@ int32_t CannedMessageModule::runOnce()
     if ((this->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) ||
         (this->runState == CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED) || (this->runState == CANNED_MESSAGE_RUN_STATE_MESSAGE)) {
         // TODO: might have some feedback of sending state
-        this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+        if (this->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) {
+            this->restoreOldState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+        }
+        this->runState = this->restoreOldState;
         temporaryMessage = "";
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
+
         this->currentMessageIndex = -1;
         this->freetext = ""; // clear freetext
         this->cursor = 0;
@@ -454,11 +455,9 @@ int32_t CannedMessageModule::runOnce()
         this->notifyObservers(&e);
     } else if (((this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT)) &&
                !Throttle::isWithinTimespanMs(this->lastTouchMillis, INACTIVATE_AFTER_MS)) {
-        // Reset module
+        // Don't reset module, just hide the frame
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
         this->currentMessageIndex = -1;
-        this->freetext = ""; // clear freetext
-        this->cursor = 0;
 
 #if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(USE_VIRTUAL_KEYBOARD)
         this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
@@ -511,8 +510,6 @@ int32_t CannedMessageModule::runOnce()
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_UP) {
         if (this->messagesCount > 0) {
             this->currentMessageIndex = getPrevIndex();
-            this->freetext = ""; // clear freetext
-            this->cursor = 0;
 
 #if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(USE_VIRTUAL_KEYBOARD)
             this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
@@ -524,8 +521,6 @@ int32_t CannedMessageModule::runOnce()
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_DOWN) {
         if (this->messagesCount > 0) {
             this->currentMessageIndex = this->getNextIndex();
-            this->freetext = ""; // clear freetext
-            this->cursor = 0;
 
 #if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(USE_VIRTUAL_KEYBOARD)
             this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
@@ -675,13 +670,9 @@ int32_t CannedMessageModule::runOnce()
             if (screen)
                 screen->removeFunctionSymbol("Fn");
         }
-
-        this->lastTouchMillis = millis();
-        this->notifyObservers(&e);
-        return INACTIVATE_AFTER_MS;
     }
 
-    if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) {
+    if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT || this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) {
         this->lastTouchMillis = millis();
         this->notifyObservers(&e);
         return INACTIVATE_AFTER_MS;
@@ -765,6 +756,7 @@ void CannedMessageModule::showTemporaryMessage(const String &message)
     UIFrameEvent e;
     e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
     notifyObservers(&e);
+    this->restoreOldState = this->runState;
     runState = CANNED_MESSAGE_RUN_STATE_MESSAGE;
     // run this loop again in 2 seconds, next iteration will clear the display
     setIntervalFromNow(2000);
@@ -1156,6 +1148,7 @@ ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &
             UIFrameEvent e;
             e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
             requestFocus(); // Tell Screen::setFrames that our module's frame should be shown, even if not "first" in the frameset
+            this->restoreOldState = this->runState;
             this->runState = CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED;
             this->incoming = service->getNodenumFromRequestId(mp.decoded.request_id);
             meshtastic_Routing decoded = meshtastic_Routing_init_default;
