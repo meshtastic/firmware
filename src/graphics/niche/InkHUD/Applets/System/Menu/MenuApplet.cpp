@@ -244,6 +244,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
 void InkHUD::MenuApplet::showPage(MenuPage page)
 {
     items.clear();
+    items.shrink_to_fit();
 
     switch (page) {
     case ROOT:

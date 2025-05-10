@@ -27,11 +27,6 @@ int InkHUD::AllMessageApplet::onReceiveTextMessage(const meshtastic_MeshPacket *
     if (getFrom(p) == nodeDB->getNodeNum())
         return 0;
 
-    // Abort if message was only an "emoji reaction"
-    // Possibly some implemetation of this in future?
-    if (p->decoded.emoji)
-        return 0;
-
     requestAutoshow(); // Want to become foreground, if permitted
     requestUpdate();   // Want to update display, if applet is foreground
 
@@ -100,19 +95,22 @@ void InkHUD::AllMessageApplet::onRender()
     // Print message text
     // ===================
 
+    // Parse any non-ascii chars in the message
+    std::string text = parse(message->text);
+
     // Extra gap below the header
     int16_t textTop = headerDivY + padDivH;
 
     // Determine size if printed large
     setFont(fontLarge);
-    uint32_t textHeight = getWrappedTextHeight(0, width(), message->text);
+    uint32_t textHeight = getWrappedTextHeight(0, width(), text);
 
     // If too large, swap to small font
     if (textHeight + textTop > (uint32_t)height()) // (compare signed and unsigned)
         setFont(fontSmall);
 
     // Print text
-    printWrapped(0, textTop, width(), message->text);
+    printWrapped(0, textTop, width(), text);
 }
 
 // Don't show notifications for text messages when our applet is displayed

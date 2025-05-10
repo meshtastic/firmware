@@ -23,9 +23,9 @@ void InkHUD::PairingApplet::onRender()
 
     // Device's bluetooth name, if it will fit
     setFont(fontSmall);
-    std::string name = "Name: " + std::string(getDeviceName());
+    std::string name = "Name: " + parse(getDeviceName());
     if (getTextWidth(name) > width()) // Too wide, try without the leading "Name: "
-        name = std::string(getDeviceName());
+        name = parse(getDeviceName());
     if (getTextWidth(name) < width()) // Does it fit?
         printAt(X(0.5), Y(0.75), name, CENTER, MIDDLE);
 }
