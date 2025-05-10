@@ -954,7 +954,7 @@ void setup()
 // Don't call screen setup until after nodedb is setup (because we need
 // the current region name)
 #if defined(ST7701_CS) || defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) ||       \
-    defined(ST7789_CS) || defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS)
+    defined(ST7789_CS) || defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(USE_ST7796)
     screen->setup();
 #elif defined(ARCH_PORTDUINO)
     if (screen_found.port != ScanI2C::I2CPort::NO_I2C || settingsMap[displayPanel]) {
@@ -1292,7 +1292,7 @@ void setup()
     PowerFSM_setup(); // we will transition to ON in a couple of seconds, FIXME, only do this for cold boots, not waking from SDS
     powerFSMthread = new PowerFSMThread();
 
-#if !HAS_TFT
+#if !HAS_TFT && !USE_ST7796
     setCPUFast(false); // 80MHz is fine for our slow peripherals
 #endif
 

@@ -434,13 +434,18 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 SCAN_SIMPLE_CASE(MAX1704X_ADDR, MAX17048, "MAX17048", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(DFROBOT_RAIN_ADDR, DFROBOT_RAIN, "DFRobot Rain Gauge", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(LTR390UV_ADDR, LTR390UV, "LTR390UV", (uint8_t)addr.address);
+                SCAN_SIMPLE_CASE(CST226SE_ADDR, CST226SE, "CST226SE", (uint8_t)addr.address);
 #ifdef HAS_TPS65233
                 SCAN_SIMPLE_CASE(TPS65233_ADDR, TPS65233, "TPS65233", (uint8_t)addr.address);
 #endif
 
             case MLX90614_ADDR_DEF:
-                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0e), 1);
-                if (registerValue == 0x5a) {
+                // Do we have the MLX90614 or the MPR121KB or the CST226SE
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x06), 1);
+                if (registerValue == 0xAB) {
+                    type = CST226SE;
+                    logFoundDevice("CST226SE", (uint8_t)addr.address);
+                } else if (getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0e), 1) == 0x5a) {
                     type = MLX90614;
                     logFoundDevice("MLX90614", (uint8_t)addr.address);
                 } else {
