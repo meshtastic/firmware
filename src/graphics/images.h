@@ -391,6 +391,8 @@ const uint8_t icon_module[] PROGMEM = {
 };
 
 // Bell icon for Alert Message
+#define bell_alert_width 8
+#define bell_alert_height 8
 const unsigned char bell_alert[] PROGMEM = {0b00011000, 0b00100100, 0b00100100, 0b01000010,
                                             0b01000010, 0b01000010, 0b11111111, 0b00011000};
 

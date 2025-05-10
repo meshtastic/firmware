@@ -1119,6 +1119,43 @@ bool deltaToTimestamp(uint32_t secondsAgo, uint8_t *hours, uint8_t *minutes, int
     return validCached;
 }
 
+struct Emote {
+    const char *code;
+    const uint8_t *bitmap;
+    int width, height;
+};
+
+void drawStringWithEmotes(OLEDDisplay* display, int x, int y, const std::string& line, const Emote* emotes, int emoteCount)
+{
+    int cursorX = x;
+    const int fontHeight = FONT_HEIGHT_SMALL;
+    const int fontMidline = y + (fontHeight / 2);
+
+    for (size_t i = 0; i < line.length();) {
+        bool matched = false;
+
+        for (int e = 0; e < emoteCount; ++e) {
+            size_t emojiLen = strlen(emotes[e].code);
+            if (line.compare(i, emojiLen, emotes[e].code) == 0) {
+                // Vertically center + nudge upward for better alignment
+                int iconY = fontMidline - (emotes[e].height / 2) - 1;
+                display->drawXbm(cursorX, iconY, emotes[e].width, emotes[e].height, emotes[e].bitmap);
+                cursorX += emotes[e].width + 1;
+                i += emojiLen;
+                matched = true;
+                break;
+            }
+        }
+
+        if (!matched) {
+            char c[2] = {line[i], '\0'};
+            display->drawString(cursorX, y, c);
+            cursorX += display->getStringWidth(c);
+            ++i;
+        }
+    }
+}
+
 // ****************************
 // *   Text Message Screen    *
 // ****************************
@@ -1182,13 +1219,6 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         bounceY = (bounceY + 1) % (bounceRange * 2);
     }
 
-    // === Emote rendering ===
-    struct Emote {
-        const char *code;
-        const uint8_t *bitmap;
-        int width, height;
-    };
-
     const Emote emotes[] = {{"\U0001F44D", thumbup, thumbs_width, thumbs_height},
                             {"\U0001F44E", thumbdown, thumbs_width, thumbs_height},
                             {"\U0001F60A", smiley, smiley_width, smiley_height},
@@ -1217,7 +1247,8 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                             {"\U0001F495", heart, heart_width, heart_height},
                             {"\U0001F496", heart, heart_width, heart_height},
                             {"\U0001F497", heart, heart_width, heart_height},
-                            {"\U0001F498", heart, heart_width, heart_height}};
+                            {"\U0001F498", heart, heart_width, heart_height},
+                            {"\U0001F514", bell_alert, bell_alert_width, bell_alert_height}};
 
     for (const Emote &e : emotes) {
         if (strcmp(msg, e.code) == 0) {
@@ -1336,7 +1367,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                     display->drawString(x + 4, lineY, lines[i].c_str());
                 display->setColor(WHITE);
             } else {
-                display->drawString(x, lineY, lines[i].c_str());
+                drawStringWithEmotes(display, x, lineY, lines[i], emotes, sizeof(emotes)/sizeof(Emote));
             }
         }
     }
