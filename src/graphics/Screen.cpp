@@ -1170,10 +1170,17 @@ void drawStringWithEmotes(OLEDDisplay* display, int x, int y, const std::string&
         }
 
         if (!matched) {
-            char c[2] = {line[i], '\0'};
-            display->drawString(cursorX, fontY, c);
-            cursorX += display->getStringWidth(c);
-            ++i;
+            uint8_t c = static_cast<uint8_t>(line[i]);
+            int charLen = 1;
+
+            if ((c & 0xE0) == 0xC0) charLen = 2;           // 2-byte UTF-8
+            else if ((c & 0xF0) == 0xE0) charLen = 3;      // 3-byte UTF-8
+            else if ((c & 0xF8) == 0xF0) charLen = 4;      // 4-byte UTF-8
+
+            std::string utf8char = line.substr(i, charLen);
+            display->drawString(cursorX, fontY, utf8char.c_str());
+            cursorX += display->getStringWidth(utf8char.c_str());
+            i += charLen;
         }
     }
 }
