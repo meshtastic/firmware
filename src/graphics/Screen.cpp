@@ -1129,16 +1129,38 @@ void drawStringWithEmotes(OLEDDisplay* display, int x, int y, const std::string&
 {
     int cursorX = x;
     const int fontHeight = FONT_HEIGHT_SMALL;
-    const int fontMidline = y + (fontHeight / 2);
 
+    // === Step 1: Find tallest emote in the line ===
+    int maxIconHeight = 0;
+
+    for (size_t i = 0; i < line.length();) {
+        for (int e = 0; e < emoteCount; ++e) {
+            size_t emojiLen = strlen(emotes[e].code);
+            if (line.compare(i, emojiLen, emotes[e].code) == 0) {
+                if (emotes[e].height > maxIconHeight)
+                    maxIconHeight = emotes[e].height;
+                i += emojiLen;
+                goto next_char;
+            }
+        }
+        i++; // move to next char if no emote match
+    next_char:;
+    }
+
+    // === Step 2: Calculate vertical shift to center line ===
+    int lineHeight = std::max(fontHeight, maxIconHeight);
+    int baselineOffset = (lineHeight - fontHeight) / 2;
+    int fontY = y + baselineOffset;
+    int fontMidline = fontY + fontHeight / 2;
+
+    // === Step 3: Render text and icons centered in line ===
     for (size_t i = 0; i < line.length();) {
         bool matched = false;
 
         for (int e = 0; e < emoteCount; ++e) {
             size_t emojiLen = strlen(emotes[e].code);
             if (line.compare(i, emojiLen, emotes[e].code) == 0) {
-                // Vertically center + nudge upward for better alignment
-                int iconY = fontMidline - (emotes[e].height / 2) - 1;
+                int iconY = fontMidline - emotes[e].height / 2 - 1; // slight nudge up
                 display->drawXbm(cursorX, iconY, emotes[e].width, emotes[e].height, emotes[e].bitmap);
                 cursorX += emotes[e].width + 1;
                 i += emojiLen;
@@ -1149,7 +1171,7 @@ void drawStringWithEmotes(OLEDDisplay* display, int x, int y, const std::string&
 
         if (!matched) {
             char c[2] = {line[i], '\0'};
-            display->drawString(cursorX, y, c);
+            display->drawString(cursorX, fontY, c);
             cursorX += display->getStringWidth(c);
             ++i;
         }
@@ -1310,9 +1332,24 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         lines.push_back(line);
 
     // === Scrolling logic ===
-    const float rowHeight = FONT_HEIGHT_SMALL - 1;
-    const int totalHeight = lines.size() * rowHeight;
-    const int scrollStop = std::max(0, totalHeight - usableHeight);
+    std::vector<int> rowHeights;
+
+    for (const auto& line : lines) {
+        int maxHeight = FONT_HEIGHT_SMALL;
+        for (const Emote &e : emotes) {
+            if (line.find(e.code) != std::string::npos) {
+                if (e.height > maxHeight)
+                    maxHeight = e.height;
+            }
+        }
+        rowHeights.push_back(maxHeight);
+    }
+    int totalHeight = 0;
+    for (size_t i = 1; i < rowHeights.size(); ++i) {
+        totalHeight += rowHeights[i];
+    }
+    int usableScrollHeight = usableHeight - rowHeights[0]; // remove header height
+    int scrollStop = std::max(0, totalHeight - usableScrollHeight);
 
     static float scrollY = 0.0f;
     static uint32_t lastTime = 0, scrollStartDelay = 0, pauseStart = 0;
@@ -1357,8 +1394,10 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
     // === Render visible lines ===
     for (size_t i = 0; i < lines.size(); ++i) {
-        int lineY = static_cast<int>(i * rowHeight + yOffset);
-        if (lineY > -rowHeight && lineY < scrollBottom) {
+        int lineY = yOffset;
+        for (size_t j = 0; j < i; ++j)
+            lineY += rowHeights[j];
+        if (lineY > -rowHeights[i] && lineY < scrollBottom) {
             if (i == 0 && isInverted) {
                 drawRoundedHighlight(display, x, lineY, SCREEN_WIDTH, FONT_HEIGHT_SMALL - 1, cornerRadius);
                 display->setColor(BLACK);
