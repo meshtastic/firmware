@@ -6,6 +6,7 @@
 
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && __has_include(<ICM_20948.h>)
 
+#include "Fusion/Fusion.h"
 #include <ICM_20948.h>
 
 // Set the default gyro scale - dps250, dps500, dps1000, dps2000
@@ -80,6 +81,8 @@ class ICM20948Sensor : public MotionSensor
 {
   private:
     ICM20948Singleton *sensor = nullptr;
+    bool showingScreen = false;
+    float highestX = 0, lowestX = 0, highestY = 0, lowestY = 0, highestZ = 0, lowestZ = 0;
 
   public:
     explicit ICM20948Sensor(ScanI2C::FoundDevice foundDevice);
@@ -89,6 +92,7 @@ class ICM20948Sensor : public MotionSensor
 
     // Called each time our sensor gets a chance to run
     virtual int32_t runOnce() override;
+    virtual void calibrate(uint16_t forSeconds) override;
 };
 
 #endif

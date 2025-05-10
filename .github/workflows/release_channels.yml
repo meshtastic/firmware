@@ -63,20 +63,16 @@ jobs:
         with:
           python-version: 3.x
 
-      - name: Get release version string
-        run: |
-          echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
-          echo "short=$(./bin/buildinfo.py short)" >> $GITHUB_OUTPUT
-          echo "deb=$(./bin/buildinfo.py deb)" >> $GITHUB_OUTPUT
-        id: version
-        env:
-          BUILD_LOCATION: local
-
       - name: Bump version.properties
         run: |
           # Bump version.properties
           chmod +x ./bin/bump_version.py
           ./bin/bump_version.py
+
+      - name: Get new release version string
+        run: |
+          echo "short=$(./bin/buildinfo.py short)" >> $GITHUB_OUTPUT
+        id: new_version
 
       - name: Ensure debian deps are installed
         run: |
@@ -94,7 +90,7 @@ jobs:
           # Bump org.meshtastic.meshtasticd.metainfo.xml
           pip install -r bin/bump_metainfo/requirements.txt -q
           chmod +x ./bin/bump_metainfo/bump_metainfo.py
-          ./bin/bump_metainfo/bump_metainfo.py --file bin/org.meshtastic.meshtasticd.metainfo.xml "${{ steps.version.outputs.short }}"
+          ./bin/bump_metainfo/bump_metainfo.py --file bin/org.meshtastic.meshtasticd.metainfo.xml "${{ steps.new_version.outputs.short }}"
         env:
           PIP_DISABLE_PIP_VERSION_CHECK: 1
 
