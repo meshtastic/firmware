@@ -10,8 +10,8 @@ lint:
   enabled:
     - renovate@40.0.6
     - prettier@3.5.3
-    - trufflehog@3.88.26
-    - yamllint@1.37.0
+    - trufflehog@3.88.27
+    - yamllint@1.37.1
     - bandit@1.8.3
     - terrascan@1.19.9
     - trivy@0.61.1
