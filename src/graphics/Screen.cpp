@@ -1,9 +1,11 @@
 /*
+BaseUI
+Developed by:
+Ronald Garcia (aka HarukiToreda)
 
-SSD1306 - Screen module
-
-Copyright (C) 2018 by Xose Pérez <xose dot perez at gmail dot com>
-
+In collaboration with:
+- JasonP: Graphics icon work, UI adjustments, code optimizations, enhancements, and testing
+- TonyG (aka Topho) – Project management, structural planning, and testing
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -166,41 +168,82 @@ extern bool hasUnreadMessage;
  */
 static void drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    // draw centered icon
-    int iconX = x + (SCREEN_WIDTH - icon_width) / 2;
-    int iconY = y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - icon_height) / 2 + 2;
-    iconY -= (SCREEN_WIDTH > 128) ? 0 : 4;
-
-    display->drawXbm(iconX, iconY, icon_width, icon_height, icon_bits);
-
-    // Draw centered label "BaseUI" just below the icon
-    display->setFont(FONT_SMALL);
     const char *label = "BaseUI";
-    int labelY = iconY + icon_height;
-    labelY += (SCREEN_WIDTH > 128) ? 2 : -2;
-    display->setTextAlignment(TEXT_ALIGN_CENTER);
-    display->drawString(x + SCREEN_WIDTH / 2, labelY, label);
+    display->setFont(FONT_SMALL);
+    int textWidth = display->getStringWidth(label);
+    int r = 3; // corner radius
 
-    // Draw app title
+    if (SCREEN_WIDTH > 128) {
+        // === ORIGINAL WIDE SCREEN LAYOUT (unchanged) ===
+        int padding = 4;
+        int boxWidth = max(icon_width, textWidth) + padding * 2;
+        int boxHeight = icon_height + FONT_HEIGHT_SMALL + padding * 3;
+        int boxX = x + (SCREEN_WIDTH - boxWidth) / 2;
+        int boxY = y + (SCREEN_HEIGHT - boxHeight) / 2;
+
+        display->setColor(WHITE);
+        display->fillRect(boxX + r, boxY, boxWidth - 2 * r, boxHeight);
+        display->fillRect(boxX, boxY + r, boxWidth, boxHeight - 2 * r);
+        display->fillCircle(boxX + r, boxY + r, r);
+        display->fillCircle(boxX + boxWidth - r - 1, boxY + r, r);
+        display->fillCircle(boxX + r, boxY + boxHeight - r - 1, r);
+        display->fillCircle(boxX + boxWidth - r - 1, boxY + boxHeight - r - 1, r);
+
+        display->setColor(BLACK);
+        int iconX = boxX + (boxWidth - icon_width) / 2;
+        int iconY = boxY + padding;
+        display->drawXbm(iconX, iconY, icon_width, icon_height, icon_bits);
+
+        int labelY = iconY + icon_height + padding;
+        display->setTextAlignment(TEXT_ALIGN_CENTER);
+        display->drawString(x + SCREEN_WIDTH / 2, labelY, label);
+        display->drawString(x + SCREEN_WIDTH / 2 + 1, labelY, label); // faux bold
+
+    } else {
+        // === TIGHT SMALL SCREEN LAYOUT ===
+        int iconY = y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - icon_height) / 2 + 2;
+        iconY -= 4;
+
+        int labelY = iconY + icon_height - 2;
+
+        int boxWidth = max(icon_width, textWidth) + 4;
+        int boxX = x + (SCREEN_WIDTH - boxWidth) / 2;
+        int boxY = iconY - 1;
+        int boxBottom = labelY + FONT_HEIGHT_SMALL - 2;
+        int boxHeight = boxBottom - boxY;
+
+        display->setColor(WHITE);
+        display->fillRect(boxX + r, boxY, boxWidth - 2 * r, boxHeight);
+        display->fillRect(boxX, boxY + r, boxWidth, boxHeight - 2 * r);
+        display->fillCircle(boxX + r, boxY + r, r);
+        display->fillCircle(boxX + boxWidth - r - 1, boxY + r, r);
+        display->fillCircle(boxX + r, boxY + boxHeight - r - 1, r);
+        display->fillCircle(boxX + boxWidth - r - 1, boxY + boxHeight - r - 1, r);
+
+        display->setColor(BLACK);
+        int iconX = boxX + (boxWidth - icon_width) / 2;
+        display->drawXbm(iconX, iconY, icon_width, icon_height, icon_bits);
+
+        display->setTextAlignment(TEXT_ALIGN_CENTER);
+        display->drawString(x + SCREEN_WIDTH / 2, labelY, label);
+    }
+
+    // === Footer and headers (shared) ===
     display->setFont(FONT_MEDIUM);
+    display->setColor(WHITE);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     const char *title = "meshtastic.org";
     display->drawString(x + getStringCenteredX(title), y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM, title);
 
-    // Draw region in upper left
     display->setFont(FONT_SMALL);
-    if (upperMsg)
-        display->drawString(x + 0, y + 0, upperMsg);
+    if (upperMsg) display->drawString(x + 0, y + 0, upperMsg);
 
-    // Draw version and short name in upper right
     char buf[25];
     snprintf(buf, sizeof(buf), "%s\n%s", xstr(APP_VERSION_SHORT), haveGlyphs(owner.short_name) ? owner.short_name : "");
     display->setTextAlignment(TEXT_ALIGN_RIGHT);
     display->drawString(x + SCREEN_WIDTH, y + 0, buf);
 
     screen->forceDisplay();
-
-    // Restore default alignment
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 }
 
