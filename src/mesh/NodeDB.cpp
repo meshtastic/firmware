@@ -584,7 +584,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     strncpy(config.network.ntp_server, "meshtastic.pool.ntp.org", 32);
 
 #if (defined(T_DECK) || defined(T_WATCH_S3) || defined(UNPHONE) || defined(PICOMPUTER_S3) || defined(SENSECAP_INDICATOR) ||      \
-     defined(ELECROW)) &&                                                                                                        \
+     defined(ELECROW_PANEL)) &&                                                                                                  \
     HAS_TFT
     // switch BT off by default; use TFT programming mode or hotkey to enable
     config.bluetooth.enabled = false;
@@ -689,7 +689,7 @@ void NodeDB::initConfigIntervals()
 
     config.display.screen_on_secs = default_screen_on_secs;
 
-#if defined(T_WATCH_S3) || defined(T_DECK) || defined(UNPHONE) || defined(MESH_TAB) || defined(RAK14014) || defined(ELECROW)
+#if defined(USE_POWERSAVE)
     config.power.is_power_saving = true;
     config.display.screen_on_secs = 30;
     config.power.wait_bluetooth_secs = 30;
