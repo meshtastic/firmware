@@ -546,8 +546,8 @@ bool PhoneAPI::available()
         if (nodeInfoForPhone.num == 0) {
             auto nextNode = nodeDB->readNextMeshNode(readIndex);
             if (nextNode) {
-                bool isUs = nodeInfoForPhone.num == nodeDB->getNodeNum();
                 nodeInfoForPhone = TypeConversions::ConvertToNodeInfo(nextNode);
+                bool isUs = nodeInfoForPhone.num == nodeDB->getNodeNum();
                 nodeInfoForPhone.hops_away = isUs ? 0 : nodeInfoForPhone.hops_away;
                 nodeInfoForPhone.last_heard = isUs ? getValidTime(RTCQualityFromNet) : nodeInfoForPhone.last_heard;
                 nodeInfoForPhone.snr = isUs ? 0 : nodeInfoForPhone.snr;
