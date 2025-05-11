@@ -14,6 +14,7 @@
 #include "input/ScanAndSelect.h"
 #include "mesh/generated/meshtastic/cannedmessages.pb.h"
 #include "modules/AdminModule.h"
+#include "graphics/SharedUIDisplay.h"
 
 #include "main.h"                               // for cardkb_found
 #include "modules/ExternalNotificationModule.h" // for buzzer control
@@ -35,6 +36,7 @@
 #define INACTIVATE_AFTER_MS 20000
 
 extern ScanI2C::DeviceAddress cardkb_found;
+extern bool graphics::isMuted;
 
 static const char *cannedMessagesConfigFile = "/prefs/cannedConf.proto";
 
@@ -463,23 +465,19 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
             break;
         // mute (switch off/toggle) external notifications on fn+m
         case INPUT_BROKER_MSG_MUTE_TOGGLE:
-        if (moduleConfig.external_notification.enabled == true) {
-            if (externalNotificationModule->getMute()) {
-                externalNotificationModule->setMute(false);
-                if (screen) {
-                    screen->removeFunctionSymbol("M");
-                    screen->showOverlayBanner("Notifications\nEnabled", 3000);
-                }
-            } else {
-                externalNotificationModule->stopNow();
-                externalNotificationModule->setMute(true);
-                if (screen) {
-                    screen->setFunctionSymbol("M");
-                    screen->showOverlayBanner("Notifications\nDisabled", 3000);
+            if (moduleConfig.external_notification.enabled == true) {
+                if (externalNotificationModule->getMute()) {
+                    externalNotificationModule->setMute(false);
+                    graphics::isMuted = false;
+                    if (screen) screen->showOverlayBanner("Notifications\nEnabled", 3000);
+                } else {
+                    externalNotificationModule->stopNow();
+                    externalNotificationModule->setMute(true);
+                    graphics::isMuted = true;
+                    if (screen) screen->showOverlayBanner("Notifications\nDisabled", 3000);
                 }
             }
-        }
-        break;
+            break;
 
         case INPUT_BROKER_MSG_GPS_TOGGLE:
         #if !MESHTASTIC_EXCLUDE_GPS

@@ -27,6 +27,7 @@ namespace graphics {
 
 // Shared state (declare inside namespace)
 extern bool hasUnreadMessage;
+extern bool isMuted;
 
 // Rounded highlight (used for inverted headers)
 void drawRoundedHighlight(OLEDDisplay *display, int16_t x, int16_t y, int16_t w, int16_t h, int16_t r);

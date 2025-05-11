@@ -330,7 +330,8 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
     // === Draw Title (Centered under header) ===
     const int highlightHeight = FONT_HEIGHT_SMALL - 1;
     const int titleY = y + 1 + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
-    const char *titleStr = "Environment";
+    const char *titleStr = (SCREEN_WIDTH > 128) ? "Environment" : "Env.";
+
     const int centerX = x + SCREEN_WIDTH / 2;
 
     // Use black text on white background if in inverted mode
