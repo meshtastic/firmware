@@ -64,12 +64,6 @@ extern "C" {
 #define D9 (9ul)
 #define D10 (10ul)
 
-// Wio-SX1262 for XIAO
-// Store page: https://www.seeedstudio.com/Wio-SX1262-for-XIAO-p-6379.html
-// Schematic: https://files.seeedstudio.com/products/SenseCAP/Wio_SX1262/Wio-SX1262%20for%20XIAO%20V1.0_SCH.pdf
-#define PIN_BUTTON1 D0
-#define BUTTON_NEED_PULLUP
-
 /*
  * Analog pins
  */
@@ -119,16 +113,36 @@ static const uint8_t SCK = PIN_SPI_SCK;
 // supported modules list
 #define USE_SX1262
 
-// common pinouts for SX126X modules
+#ifdef SEEED_XIAO_WIO1_1
+// Wio-SX1262 PCB v1.1 pinout
+// XIAO ESP32S3 & Wio-SX1262 Kit ships with this PCB
+#define SX126X_CS D3
+#define SX126X_DIO1 D0
+#define SX126X_BUSY D1
+#define SX126X_RESET D2
+#define SX126X_RXEN 38
 
+// Button on Wio-SX1262
+#define PIN_BUTTON1 D5
+#define BUTTON_NEED_PULLUP
+#else
+// Wio-SX1262 PCB v1.0 pinout
+// XIAO nRF52840 & Wio-SX1262 Kit ships with this PCB
 #define SX126X_CS D4
 #define SX126X_DIO1 D1
 #define SX126X_BUSY D3
 #define SX126X_RESET D2
+#define SX126X_RXEN D5 // This is used to control the RX side of the RF switch
 
+// Button on Wio-SX1262, it conflicts with the L76K GPS enable pin
+#ifdef SEEED_XIAO_D6D7_L76K
+#define PIN_BUTTON1 D0
+#define BUTTON_NEED_PULLUP
+#endif
+#endif
+
+// RF switch strategy for Wio-SX1262
 #define SX126X_TXEN RADIOLIB_NC
-
-#define SX126X_RXEN D5           // This is used to control the RX side of the RF switch
 #define SX126X_DIO2_AS_RF_SWITCH // DIO2 is used to control the TX side of the RF switch
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 
@@ -162,8 +176,6 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 #define GPS_BAUDRATE 9600
 #define GPS_THREAD_INTERVAL 50
 #define PIN_GPS_STANDBY D0
-#undef PIN_BUTTON1 // Overlapping assignment with Wio-SX1262 for XIAO user button
-#define PIN_BUTTON1 (-1)
 #else
 #define HAS_GPS 0
 #endif
