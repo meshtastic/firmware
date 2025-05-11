@@ -703,4 +703,7 @@ class Screen : public concurrency::OSThread
 
 } // namespace graphics
 
+extern String alertBannerMessage;
+extern uint32_t alertBannerUntil;
+
 #endif

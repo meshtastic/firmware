@@ -71,6 +71,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 using namespace meshtastic; /** @todo remove */
 
+String alertBannerMessage = "";
+uint32_t alertBannerUntil = 0;
+
 namespace graphics
 {
 
@@ -3826,8 +3829,8 @@ void Screen::setFrames(FrameFocus focus)
     ui->setFrames(normalFrames, numframes);
     ui->disableAllIndicators();
 
-    // Add function overlay here. This can show when notifications muted, modifier key is active etc
-    static OverlayCallback overlays[] = {drawFunctionOverlay, drawCustomFrameIcons, drawAlertBannerOverlay};
+    // Add overlays: frame icons and alert banner)
+    static OverlayCallback overlays[] = {drawCustomFrameIcons, drawAlertBannerOverlay};
     ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
 
     prevFrame = -1; // Force drawNodeInfo to pick a new node (because our list

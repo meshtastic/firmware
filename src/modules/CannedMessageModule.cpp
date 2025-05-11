@@ -202,6 +202,28 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         //   source at all)
         return 0;
     }
+
+    // === Toggle Destination Selector with Tab ===
+    if (event->kbchar == 0x09) {
+        if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NODE) {
+            // Exit selection
+            this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
+            this->runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
+        } else {
+            // Enter selection
+            this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
+            this->destIndex = 0;
+            this->scrollIndex = 0;
+            this->runState = CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION;
+        }
+
+        UIFrameEvent e;
+        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+        this->notifyObservers(&e);
+        screen->forceDisplay();
+        return 0;
+    }
+
     if (this->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) {
         return 0; // Ignore input while sending
     }
@@ -435,9 +457,17 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         validEvent = true;
     }
     if (event->inputEvent == static_cast<char>(ANYKEY)) {
-        // when inactive, this will switch to the freetext mode
-        if ((this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) ||
-            (this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED)) {
+        // Prevent entering freetext mode while overlay banner is showing
+        extern String alertBannerMessage;
+        extern uint32_t alertBannerUntil;
+        if (alertBannerMessage.length() > 0 && (alertBannerUntil == 0 || millis() <= alertBannerUntil)) {
+            return 0;
+        }
+
+        if ((this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE ||
+            this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE ||
+            this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED) &&
+            (event->kbchar >= 32 && event->kbchar <= 126)) {
             this->runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
         }
 
