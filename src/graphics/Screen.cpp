@@ -1161,7 +1161,16 @@ void drawStringWithEmotes(OLEDDisplay* display, int x, int y, const std::string&
 
     // === Step 3: Render line in segments ===
     size_t i = 0;
+    bool inBold = false;
+
     while (i < line.length()) {
+        // Check for ** start/end for faux bold
+        if (line.compare(i, 2, "**") == 0) {
+            inBold = !inBold;
+            i += 2;
+            continue;
+        }
+
         // Look ahead for the next emote match
         size_t nextEmotePos = std::string::npos;
         const Emote* matchedEmote = nullptr;
@@ -1176,16 +1185,24 @@ void drawStringWithEmotes(OLEDDisplay* display, int x, int y, const std::string&
             }
         }
 
-        // Render normal text segment up to the emote
-        if (nextEmotePos != std::string::npos && nextEmotePos > i) {
-            std::string textChunk = line.substr(i, nextEmotePos - i);
+        // Render normal text segment up to the emote or bold toggle
+        size_t nextControl = std::min(nextEmotePos, line.find("**", i));
+        if (nextControl == std::string::npos) nextControl = line.length();
+
+        if (nextControl > i) {
+            std::string textChunk = line.substr(i, nextControl - i);
+            if (inBold) {
+                // Faux bold: draw twice, offset by 1px
+                display->drawString(cursorX + 1, fontY, textChunk.c_str());
+            }
             display->drawString(cursorX, fontY, textChunk.c_str());
             cursorX += display->getStringWidth(textChunk.c_str());
-            i = nextEmotePos;
+            i = nextControl;
+            continue;
         }
 
         // Render the emote (if found)
-        if (matchedEmote) {
+        if (matchedEmote && i == nextEmotePos) {
             int iconY = fontMidline - matchedEmote->height / 2 - 1;
             display->drawXbm(cursorX, iconY, matchedEmote->width, matchedEmote->height, matchedEmote->bitmap);
             cursorX += matchedEmote->width + 1;
@@ -1193,6 +1210,9 @@ void drawStringWithEmotes(OLEDDisplay* display, int x, int y, const std::string&
         } else {
             // No more emotes — render the rest of the line
             std::string remaining = line.substr(i);
+            if (inBold) {
+                display->drawString(cursorX + 1, fontY, remaining.c_str());
+            }
             display->drawString(cursorX, fontY, remaining.c_str());
             cursorX += display->getStringWidth(remaining.c_str());
             break;
