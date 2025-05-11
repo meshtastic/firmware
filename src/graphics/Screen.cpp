@@ -1131,56 +1131,71 @@ void drawStringWithEmotes(OLEDDisplay* display, int x, int y, const std::string&
     const int fontHeight = FONT_HEIGHT_SMALL;
 
     // === Step 1: Find tallest emote in the line ===
-    int maxIconHeight = 0;
-
+    int maxIconHeight = fontHeight;
     for (size_t i = 0; i < line.length();) {
+        bool matched = false;
         for (int e = 0; e < emoteCount; ++e) {
             size_t emojiLen = strlen(emotes[e].code);
             if (line.compare(i, emojiLen, emotes[e].code) == 0) {
                 if (emotes[e].height > maxIconHeight)
                     maxIconHeight = emotes[e].height;
                 i += emojiLen;
-                goto next_char;
+                matched = true;
+                break;
             }
         }
-        i++; // move to next char if no emote match
-    next_char:;
+        if (!matched) {
+            uint8_t c = static_cast<uint8_t>(line[i]);
+            if ((c & 0xE0) == 0xC0) i += 2;
+            else if ((c & 0xF0) == 0xE0) i += 3;
+            else if ((c & 0xF8) == 0xF0) i += 4;
+            else i += 1;
+        }
     }
 
-    // === Step 2: Calculate vertical shift to center line ===
+    // === Step 2: Baseline alignment ===
     int lineHeight = std::max(fontHeight, maxIconHeight);
     int baselineOffset = (lineHeight - fontHeight) / 2;
     int fontY = y + baselineOffset;
     int fontMidline = fontY + fontHeight / 2;
 
-    // === Step 3: Render text and icons centered in line ===
-    for (size_t i = 0; i < line.length();) {
-        bool matched = false;
+    // === Step 3: Render line in segments ===
+    size_t i = 0;
+    while (i < line.length()) {
+        // Look ahead for the next emote match
+        size_t nextEmotePos = std::string::npos;
+        const Emote* matchedEmote = nullptr;
+        size_t emojiLen = 0;
 
         for (int e = 0; e < emoteCount; ++e) {
-            size_t emojiLen = strlen(emotes[e].code);
-            if (line.compare(i, emojiLen, emotes[e].code) == 0) {
-                int iconY = fontMidline - emotes[e].height / 2 - 1; // slight nudge up
-                display->drawXbm(cursorX, iconY, emotes[e].width, emotes[e].height, emotes[e].bitmap);
-                cursorX += emotes[e].width + 1;
-                i += emojiLen;
-                matched = true;
-                break;
+            size_t pos = line.find(emotes[e].code, i);
+            if (pos != std::string::npos && (nextEmotePos == std::string::npos || pos < nextEmotePos)) {
+                nextEmotePos = pos;
+                matchedEmote = &emotes[e];
+                emojiLen = strlen(emotes[e].code);
             }
         }
 
-        if (!matched) {
-            uint8_t c = static_cast<uint8_t>(line[i]);
-            int charLen = 1;
+        // Render normal text segment up to the emote
+        if (nextEmotePos != std::string::npos && nextEmotePos > i) {
+            std::string textChunk = line.substr(i, nextEmotePos - i);
+            display->drawString(cursorX, fontY, textChunk.c_str());
+            cursorX += display->getStringWidth(textChunk.c_str());
+            i = nextEmotePos;
+        }
 
-            if ((c & 0xE0) == 0xC0) charLen = 2;           // 2-byte UTF-8
-            else if ((c & 0xF0) == 0xE0) charLen = 3;      // 3-byte UTF-8
-            else if ((c & 0xF8) == 0xF0) charLen = 4;      // 4-byte UTF-8
-
-            std::string utf8char = line.substr(i, charLen);
-            display->drawString(cursorX, fontY, utf8char.c_str());
-            cursorX += display->getStringWidth(utf8char.c_str());
-            i += charLen;
+        // Render the emote (if found)
+        if (matchedEmote) {
+            int iconY = fontMidline - matchedEmote->height / 2 - 1;
+            display->drawXbm(cursorX, iconY, matchedEmote->width, matchedEmote->height, matchedEmote->bitmap);
+            cursorX += matchedEmote->width + 1;
+            i += emojiLen;
+        } else {
+            // No more emotes — render the rest of the line
+            std::string remaining = line.substr(i);
+            display->drawString(cursorX, fontY, remaining.c_str());
+            cursorX += display->getStringWidth(remaining.c_str());
+            break;
         }
     }
 }
@@ -1956,8 +1971,7 @@ struct NodeEntry {
 enum NodeListMode { MODE_LAST_HEARD = 0, MODE_HOP_SIGNAL = 1, MODE_DISTANCE = 2, MODE_COUNT = 3 };
 
 static NodeListMode currentMode = MODE_LAST_HEARD;
-static unsigned long lastModeSwitchTime = 0;
-static int scrollIndex = 0;
+ static int scrollIndex = 0;
 
 // Use dynamic timing based on mode
 unsigned long getModeCycleIntervalMs()
