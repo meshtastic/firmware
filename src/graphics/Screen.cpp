@@ -1626,6 +1626,7 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 
             dispdev->displayOn();
 #ifdef HELTEC_TRACKER_V1_X
+            // If the TFT VEXT power is not enabled, initialize the UI.
             if(!tft_vext_enabled)
             {
             ui->init();
