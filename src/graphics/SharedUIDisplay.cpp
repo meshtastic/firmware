@@ -56,18 +56,19 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
     const int screenW = display->getWidth();
     const int screenH = display->getHeight();
 
-    // === Draw background highlight if inverted ===
+    // === Inverted Header Background ===
     if (isInverted) {
         drawRoundedHighlight(display, x, y, screenW, highlightHeight, 2);
         display->setColor(BLACK);
     }
 
-    // === Get battery charge percentage and charging status ===
+    // === Battery State ===
     int chargePercent = powerStatus->getBatteryChargePercent();
     bool isCharging = powerStatus->getIsCharging() == meshtastic::OptionalBool::OptTrue;
-
-    // === Animate lightning bolt blinking if charging ===
+    static uint32_t lastBlinkShared = 0;
+    static bool isBoltVisibleShared = true;
     uint32_t now = millis();
+
     if (isCharging && now - lastBlinkShared > 500) {
         isBoltVisibleShared = !isBoltVisibleShared;
         lastBlinkShared = now;
@@ -76,30 +77,28 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
     bool useHorizontalBattery = (screenW > 128 && screenW > screenH);
     const int textY = y + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
 
-    // === Draw battery icon ===
+    // === Battery Icons ===
     if (useHorizontalBattery) {
-        // Wide screen battery layout
         int batteryX = 2;
         int batteryY = HEADER_OFFSET_Y + 2;
         display->drawXbm(batteryX, batteryY, 29, 15, batteryBitmap_h);
-        if (isCharging && isBoltVisibleShared) {
+        if (isCharging && isBoltVisibleShared)
             display->drawXbm(batteryX + 9, batteryY + 1, 9, 13, lightning_bolt_h);
-        } else {
+        else {
             display->drawXbm(batteryX + 8, batteryY, 12, 15, batteryBitmap_sidegaps_h);
             int fillWidth = 24 * chargePercent / 100;
             display->fillRect(batteryX + 1, batteryY + 1, fillWidth, 13);
         }
     } else {
-        // Tall screen battery layout
         int batteryX = 1;
         int batteryY = HEADER_OFFSET_Y + 1;
-#ifdef USE_EINK
-        batteryY += 2; // Extra spacing on E-Ink
-#endif
+    #ifdef USE_EINK
+        batteryY += 2;
+    #endif
         display->drawXbm(batteryX, batteryY, 7, 11, batteryBitmap_v);
-        if (isCharging && isBoltVisibleShared) {
+        if (isCharging && isBoltVisibleShared)
             display->drawXbm(batteryX + 1, batteryY + 3, 5, 5, lightning_bolt_v);
-        } else {
+        else {
             display->drawXbm(batteryX - 1, batteryY + 4, 8, 3, batteryBitmap_sidegaps_v);
             int fillHeight = 8 * chargePercent / 100;
             int fillY = batteryY - fillHeight;
@@ -107,7 +106,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
         }
     }
 
-    // === Battery % Text ===
+    // === Battery % Display ===
     char chargeStr[4];
     snprintf(chargeStr, sizeof(chargeStr), "%d", chargePercent);
     int chargeNumWidth = display->getStringWidth(chargeStr);
@@ -124,18 +123,19 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
         display->drawString(percentX + chargeNumWidth, textY, "%");
     }
 
-    // === Handle time display and alignment ===
+    // === Time and Right-aligned Icons ===
     uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true);
-    char timeStr[10] = "";
-    int alignX;
+    char timeStr[10] = "--:--"; // Fallback display
+    int timeStrWidth = display->getStringWidth("12:34"); // Default alignment
+    int timeX = screenW - xOffset - timeStrWidth + 4;
 
     if (rtc_sec > 0) {
-        // Format time string (12h or 24h)
+        // === Build Time String ===
         long hms = (rtc_sec % SEC_PER_DAY + SEC_PER_DAY) % SEC_PER_DAY;
         int hour = hms / SEC_PER_HOUR;
         int minute = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
-
         snprintf(timeStr, sizeof(timeStr), "%d:%02d", hour, minute);
+
         if (config.display.use_12h_clock) {
             bool isPM = hour >= 12;
             hour %= 12;
@@ -143,54 +143,92 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
             snprintf(timeStr, sizeof(timeStr), "%d:%02d%s", hour, minute, isPM ? "p" : "a");
         }
 
-        int timeStrWidth = display->getStringWidth(timeStr);
-        alignX = screenW - xOffset - timeStrWidth + 4;
+        timeStrWidth = display->getStringWidth(timeStr);
+        timeX = screenW - xOffset - timeStrWidth + 4;
+
+        // === Show Mail or Mute Icon to the Left of Time ===
+        int iconRightEdge = timeX - 2;
+
+        static bool isMailIconVisible = true;
+        static uint32_t lastMailBlink = 0;
+        bool showMail = false;
+
+        if (hasUnreadMessage) {
+            if (now - lastMailBlink > 500) {
+                isMailIconVisible = !isMailIconVisible;
+                lastMailBlink = now;
+            }
+            showMail = isMailIconVisible;
+        }
+
+        if (showMail) {
+            if (useHorizontalBattery) {
+                int iconW = 16, iconH = 12;
+                int iconX = iconRightEdge - iconW;
+                int iconY = textY + (FONT_HEIGHT_SMALL - iconH) / 2 - 1;
+                display->drawRect(iconX, iconY, iconW + 1, iconH);
+                display->drawLine(iconX, iconY, iconX + iconW / 2, iconY + iconH - 4);
+                display->drawLine(iconX + iconW, iconY, iconX + iconW / 2, iconY + iconH - 4);
+            } else {
+                int iconX = iconRightEdge - mail_width;
+                int iconY = textY + (FONT_HEIGHT_SMALL - mail_height) / 2;
+                display->drawXbm(iconX, iconY, mail_width, mail_height, mail);
+            }
+        } else if (isMuted) {
+            const char* muteStr = "M";
+            int mWidth = display->getStringWidth(muteStr);
+            int mX = iconRightEdge - mWidth;
+            display->drawString(mX, textY, muteStr);
+            if (isBold)
+                display->drawString(mX + 1, textY, muteStr);
+        }
+
+        // === Draw Time ===
+        display->drawString(timeX, textY, timeStr);
+        if (isBold)
+            display->drawString(timeX - 1, textY, timeStr);
+
     } else {
-        // If time is not valid, reserve space for alignment anyway
-        int fallbackWidth = display->getStringWidth("12:34");
-        alignX = screenW - xOffset - fallbackWidth + 4;
-    }
+        // === No Time Available: Mail/Mute Icon Moves to Far Right ===
+        int iconRightEdge = screenW - xOffset;
 
-    // === Determine if mail icon should blink ===
-    bool showMail = false;
-    if (hasUnreadMessage) {
-        if (now - lastMailBlink > 500) {
-            isMailIconVisible = !isMailIconVisible;
-            lastMailBlink = now;
+        static bool isMailIconVisible = true;
+        static uint32_t lastMailBlink = 0;
+        bool showMail = false;
+
+        if (hasUnreadMessage) {
+            if (now - lastMailBlink > 500) {
+                isMailIconVisible = !isMailIconVisible;
+                lastMailBlink = now;
+            }
+            showMail = isMailIconVisible;
         }
-        showMail = isMailIconVisible;
-    }
 
-    // === Draw Mail or Mute icon in the top-right corner ===
-    if (showMail) {
-        if (useHorizontalBattery) {
-            int iconW = 16, iconH = 12;
-            int iconX = screenW - xOffset - iconW;
-            int iconY = textY + (FONT_HEIGHT_SMALL - iconH) / 2 - 1;
-            display->drawRect(iconX, iconY, iconW + 1, iconH);
-            display->drawLine(iconX, iconY, iconX + iconW / 2, iconY + iconH - 4);
-            display->drawLine(iconX + iconW, iconY, iconX + iconW / 2, iconY + iconH - 4);
-        } else {
-            int iconX = screenW - xOffset - mail_width;
-            int iconY = textY + (FONT_HEIGHT_SMALL - mail_height) / 2;
-            display->drawXbm(iconX, iconY, mail_width, mail_height, mail);
+        if (showMail) {
+            if (useHorizontalBattery) {
+                int iconW = 16, iconH = 12;
+                int iconX = iconRightEdge - iconW;
+                int iconY = textY + (FONT_HEIGHT_SMALL - iconH) / 2 - 1;
+                display->drawRect(iconX, iconY, iconW + 1, iconH);
+                display->drawLine(iconX, iconY, iconX + iconW / 2, iconY + iconH - 4);
+                display->drawLine(iconX + iconW, iconY, iconX + iconW / 2, iconY + iconH - 4);
+            } else {
+                int iconX = iconRightEdge - mail_width;
+                int iconY = textY + (FONT_HEIGHT_SMALL - mail_height) / 2;
+                display->drawXbm(iconX, iconY, mail_width, mail_height, mail);
+            }
+        } else if (isMuted) {
+            const char* muteStr = "M";
+            int mWidth = display->getStringWidth(muteStr);
+            int mX = iconRightEdge - mWidth;
+            display->drawString(mX, textY, muteStr);
+            if (isBold)
+                display->drawString(mX + 1, textY, muteStr);
         }
-    } else if (isMuted) {
-        const char* muteStr = "M";
-        int mWidth = display->getStringWidth(muteStr);
-        int mX = screenW - xOffset - mWidth;
-        display->drawString(mX, textY, muteStr);
-        if (isBold)
-            display->drawString(mX + 1, textY, muteStr);
-    } else if (rtc_sec > 0) {
-        // Only draw the time if nothing else is shown
-        display->drawString(alignX, textY, timeStr);
-        if (isBold)
-            display->drawString(alignX - 1, textY, timeStr);
     }
 
-    // === Reset color back to white for following content ===
-    display->setColor(WHITE);
+    display->setColor(WHITE); // Reset for other UI
 }
+
 
 } // namespace graphics
