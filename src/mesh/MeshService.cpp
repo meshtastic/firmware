@@ -408,6 +408,14 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
     // Update our current position in the local DB
     nodeDB->updatePosition(nodeDB->getNodeNum(), pos, RX_SRC_LOCAL);
 
+    if (pos.has_latitude_i && pos.has_longitude_i) {
+        updateLongitude(pos.longitude_i * 1e-7);
+        updateLatitude(pos.latitude_i * 1e-7);
+        if (pos.has_altitude) {
+            updateAltitude(pos.altitude);
+        }
+    }
+
     return 0;
 }
 #endif

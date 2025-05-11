@@ -13,6 +13,11 @@ static BLECharacteristic fromNum = BLECharacteristic(BLEUuid(FROMNUM_UUID_16));
 static BLECharacteristic fromRadio = BLECharacteristic(BLEUuid(FROMRADIO_UUID_16));
 static BLECharacteristic toRadio = BLECharacteristic(BLEUuid(TORADIO_UUID_16));
 static BLECharacteristic logRadio = BLECharacteristic(BLEUuid(LOGRADIO_UUID_16));
+static BLECharacteristic latitude = BLECharacteristic(UUID16_CHR_LATITUDE);
+static BLECharacteristic longitude = BLECharacteristic(UUID16_CHR_LONGITUDE);
+static BLECharacteristic altitude = BLECharacteristic(UUID16_CHR_ELEVATION);
+
+static BLEService locationService;
 
 static BLEDis bledis; // DIS (Device Information Service) helper class instance
 static BLEBas blebas; // BAS (Battery Service) helper class instance
@@ -106,6 +111,7 @@ void startAdv(void)
     // Include Name
     // Bluefruit.Advertising.addName();
     Bluefruit.Advertising.addService(meshBleService);
+    Bluefruit.Advertising.addService(locationService);
     /* Start Advertising
      * - Enable auto advertising if disconnected
      * - Interval:  fast mode = 20 ms, slow mode = 152.5 ms
@@ -204,7 +210,36 @@ void setupMeshService(void)
     logRadio.setCccdWriteCallback(onCccd);
     logRadio.write32(0);
     logRadio.begin();
+
+    // Configure the Location and Navigation service
+    locationService = BLEService(UUID16_SVC_LOCATION_AND_NAVIGATION);
+
+    // Setup the service
+    locationService.begin();
+
+    // Configure the latitude characteristic
+    latitude.setProperties(CHR_PROPS_READ | CHR_PROPS_NOTIFY);
+    latitude.setPermission(secMode, SECMODE_NO_ACCESS);
+    latitude.setFixedLen(4); // IEEE-11073 32-bit FLOAT
+    latitude.write32(0);     // Set default value to 0
+    latitude.begin();
+
+    // Configure the longitude characteristic
+    // Properties: READ and NOTIFY
+    longitude.setProperties(CHR_PROPS_READ | CHR_PROPS_NOTIFY);
+    longitude.setPermission(secMode, SECMODE_NO_ACCESS);
+    longitude.setFixedLen(4); // IEEE-11073 32-bit FLOAT
+    longitude.write32(0);     // Set default value to 0
+    longitude.begin();
+
+    // Configure the altitude characteristic
+    altitude.setProperties(CHR_PROPS_READ | CHR_PROPS_NOTIFY);
+    altitude.setPermission(secMode, SECMODE_NO_ACCESS);
+    altitude.setFixedLen(4); // IEEE-11073 32-bit FLOAT
+    altitude.write32(0);     // Set default value to 0
+    altitude.begin();
 }
+
 static uint32_t configuredPasskey;
 void NRF52Bluetooth::shutdown()
 {
@@ -300,6 +335,40 @@ void updateBatteryLevel(uint8_t level)
 {
     blebas.write(level);
 }
+
+void updateLongitude(double lon)
+{
+    if (!Bluefruit.connected()) {
+        return;
+    }
+
+    // Convert double to IEEE-11073 32-bit FLOAT format
+    int32_t longValue = (int32_t)(lon * 10000000); // Convert to fixed-point value (7 decimal places)
+    longitude.notify(&longValue, sizeof(longValue));
+}
+
+void updateLatitude(double lat)
+{
+    if (!Bluefruit.connected()) {
+        return;
+    }
+
+    // Convert double to IEEE-11073 32-bit FLOAT format
+    int32_t latValue = round(lat); // Convert to fixed-point value (7 decimal places)
+    latitude.notify(&latValue, sizeof(latValue));
+}
+
+void updateAltitude(float alt)
+{
+    if (!Bluefruit.connected()) {
+        return;
+    }
+
+    // Convert float to IEEE - 11073 32 - bit FLOAT format
+    int32_t altValue = (int32_t)(alt * 100); // Convert to centimeters (2 decimal places)
+    altitude.notify(&altValue, sizeof(altValue));
+}
+
 void NRF52Bluetooth::clearBonds()
 {
     LOG_INFO("Clear bluetooth bonds!");

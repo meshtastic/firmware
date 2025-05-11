@@ -20,6 +20,9 @@ extern const uint8_t MESH_SERVICE_UUID_16[], TORADIO_UUID_16[16u], FROMRADIO_UUI
 
 /// Given a level between 0-100, update the BLE attribute
 void updateBatteryLevel(uint8_t level);
+void updateLongitude(double longitude);
+void updateLatitude(double latitude);
+void updateAltitude(float altitude);
 
 class BluetoothApi
 {
