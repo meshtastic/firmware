@@ -2840,9 +2840,6 @@ int Screen::handleInputEvent(const InputEvent *event)
 
 int Screen::handleAdminMessage(const meshtastic_AdminMessage *arg)
 {
-    // Note: only selected admin messages notify this observer
-    // If you wish to handle a new type of message, you should modify AdminModule.cpp first
-
     switch (arg->which_payload_variant) {
     // Node removed manually (i.e. via app)
     case meshtastic_AdminMessage_remove_by_nodenum_tag:

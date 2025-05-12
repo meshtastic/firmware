@@ -105,7 +105,7 @@ NRF52Bluetooth *nrf52Bluetooth = nullptr;
 #include "AmbientLightingThread.h"
 #include "PowerFSMThread.h"
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
 #include "motion/AccelerometerThread.h"
 AccelerometerThread *accelerometerThread = nullptr;
 #endif
@@ -124,8 +124,8 @@ extern void tftSetup(void);
 #endif
 
 #ifdef HAS_UDP_MULTICAST
-#include "mesh/udp/UdpMulticastThread.h"
-UdpMulticastThread *udpThread = nullptr;
+#include "mesh/udp/UdpMulticastHandler.h"
+UdpMulticastHandler *udpHandler = nullptr;
 #endif
 
 #if defined(TCXO_OPTIONAL)
@@ -696,7 +696,7 @@ void setup()
     }
 #endif
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+#if !defined(ARCH_STM32WL)
     auto acc_info = i2cScanner->firstAccelerometer();
     accelerometer_found = acc_info.type != ScanI2C::DeviceType::NONE ? acc_info.address : accelerometer_found;
     LOG_DEBUG("acc_info = %i", acc_info.type);
@@ -817,7 +817,7 @@ void setup()
 #endif
 
 #if !MESHTASTIC_EXCLUDE_I2C
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+#if !defined(ARCH_STM32WL)
     if (acc_info.type != ScanI2C::DeviceType::NONE) {
         accelerometerThread = new AccelerometerThread(acc_info.type);
     }
@@ -928,12 +928,12 @@ void setup()
 
 #ifdef HAS_UDP_MULTICAST
     LOG_DEBUG("Start multicast thread");
-    udpThread = new UdpMulticastThread();
+    udpHandler = new UdpMulticastHandler();
 #ifdef ARCH_PORTDUINO
     // FIXME: portduino does not ever call onNetworkConnected so call it here because I don't know what happen if I call
     // onNetworkConnected there
     if (config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST) {
-        udpThread->start();
+        udpHandler->start();
     }
 #endif
 #endif
@@ -1310,7 +1310,12 @@ void setup()
     LOG_DEBUG("Free heap  : %7d bytes", ESP.getFreeHeap());
     LOG_DEBUG("Free PSRAM : %7d bytes", ESP.getFreePsram());
 #endif
+#if !defined(ARCH_STM32WL)
+    if (accelerometerThread)
+        accelerometerThread->calibrate(30);
+#endif
 }
+
 #endif
 uint32_t rebootAtMsec;   // If not zero we will reboot at this time (used to reboot shortly after the update completes)
 uint32_t shutdownAtMsec; // If not zero we will shutdown at this time (used to shutdown from python or mobile client)

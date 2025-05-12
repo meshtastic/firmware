@@ -345,7 +345,7 @@ void Channels::setChannel(const meshtastic_Channel &c)
 
 bool Channels::anyMqttEnabled()
 {
-#if USERPREFS_EVENT_MODE
+#if USERPREFS_EVENT_MODE && !MESHTASTIC_EXCLUDE_MQTT
     // Don't publish messages on the public MQTT broker if we are in event mode
     if (mqtt && mqtt->isUsingDefaultServer()) {
         return false;
