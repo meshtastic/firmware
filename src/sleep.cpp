@@ -526,14 +526,8 @@ void enableLoraInterrupt()
     gpio_pullup_en((gpio_num_t)LORA_CS);
 #endif
 
-    //    if (rtc_gpio_is_valid_gpio((gpio_num_t)LORA_DIO1)) {
-    // Setup light/deep sleep with wakeup by external source
-    //        LOG_INFO("setup LORA_DIO1 (GPIO%02d) with wakeup by external source", LORA_DIO1);
-    //        esp_sleep_enable_ext0_wakeup((gpio_num_t)LORA_DIO1, HIGH);
-    //    } else {
     LOG_INFO("setup LORA_DIO1 (GPIO%02d) with wakeup by gpio interrupt", LORA_DIO1);
     gpio_wakeup_enable((gpio_num_t)LORA_DIO1, GPIO_INTR_HIGH_LEVEL);
-    //    }
 
 #elif defined(LORA_DIO1) && (LORA_DIO1 != RADIOLIB_NC)
     if (radioType != RF95_RADIO) {
