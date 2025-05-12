@@ -1128,7 +1128,7 @@ struct Emote {
     int width, height;
 };
 
-void drawStringWithEmotes(OLEDDisplay* display, int x, int y, const std::string& line, const Emote* emotes, int emoteCount)
+void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string &line, const Emote *emotes, int emoteCount)
 {
     int cursorX = x;
     const int fontHeight = FONT_HEIGHT_SMALL;
@@ -1149,10 +1149,14 @@ void drawStringWithEmotes(OLEDDisplay* display, int x, int y, const std::string&
         }
         if (!matched) {
             uint8_t c = static_cast<uint8_t>(line[i]);
-            if ((c & 0xE0) == 0xC0) i += 2;
-            else if ((c & 0xF0) == 0xE0) i += 3;
-            else if ((c & 0xF8) == 0xF0) i += 4;
-            else i += 1;
+            if ((c & 0xE0) == 0xC0)
+                i += 2;
+            else if ((c & 0xF0) == 0xE0)
+                i += 3;
+            else if ((c & 0xF8) == 0xF0)
+                i += 4;
+            else
+                i += 1;
         }
     }
 
@@ -1176,7 +1180,7 @@ void drawStringWithEmotes(OLEDDisplay* display, int x, int y, const std::string&
 
         // Look ahead for the next emote match
         size_t nextEmotePos = std::string::npos;
-        const Emote* matchedEmote = nullptr;
+        const Emote *matchedEmote = nullptr;
         size_t emojiLen = 0;
 
         for (int e = 0; e < emoteCount; ++e) {
@@ -1190,7 +1194,8 @@ void drawStringWithEmotes(OLEDDisplay* display, int x, int y, const std::string&
 
         // Render normal text segment up to the emote or bold toggle
         size_t nextControl = std::min(nextEmotePos, line.find("**", i));
-        if (nextControl == std::string::npos) nextControl = line.length();
+        if (nextControl == std::string::npos)
+            nextControl = line.length();
 
         if (nextControl > i) {
             std::string textChunk = line.substr(i, nextControl - i);
@@ -1379,7 +1384,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     // === Scrolling logic ===
     std::vector<int> rowHeights;
 
-    for (const auto& line : lines) {
+    for (const auto &line : lines) {
         int maxHeight = FONT_HEIGHT_SMALL;
         for (const Emote &e : emotes) {
             if (line.find(e.code) != std::string::npos) {
@@ -1451,7 +1456,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                     display->drawString(x + 4, lineY, lines[i].c_str());
                 display->setColor(WHITE);
             } else {
-                drawStringWithEmotes(display, x, lineY, lines[i], emotes, sizeof(emotes)/sizeof(Emote));
+                drawStringWithEmotes(display, x, lineY, lines[i], emotes, sizeof(emotes) / sizeof(Emote));
             }
         }
     }
@@ -1994,7 +1999,7 @@ struct NodeEntry {
 enum NodeListMode { MODE_LAST_HEARD = 0, MODE_HOP_SIGNAL = 1, MODE_DISTANCE = 2, MODE_COUNT = 3 };
 
 static NodeListMode currentMode = MODE_LAST_HEARD;
- static int scrollIndex = 0;
+static int scrollIndex = 0;
 
 // Use dynamic timing based on mode
 unsigned long getModeCycleIntervalMs()
@@ -2561,43 +2566,13 @@ static void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, i
 
     // === Content below header ===
 
-    // === First Row: Region / Channel Utilization and GPS ===
+    // === First Row: Region / Channel Utilization and Uptime ===
     bool origBold = config.display.heading_bold;
     config.display.heading_bold = false;
 
     // Display Region and Channel Utilization
-    config.display.heading_bold = false;
-
     drawNodes(display, x + 1, compactFirstLine + 3, nodeStatus, -1, false, "online");
 
-#if HAS_GPS
-    auto number_of_satellites = gpsStatus->getNumSatellites();
-    int gps_rightchar_offset = (SCREEN_WIDTH > 128) ? -51 : -46;
-    if (number_of_satellites < 10) {
-        gps_rightchar_offset += (SCREEN_WIDTH > 128) ? 8 : 6;
-    }
-    if (!gpsStatus || !gpsStatus->getIsConnected()) {
-        gps_rightchar_offset = (SCREEN_WIDTH > 128) ? -20 : 2;
-    }
-
-    if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
-        String displayLine = "";
-        if (config.position.fixed_position) {
-            gps_rightchar_offset = (SCREEN_WIDTH > 128) ? -80 : -50;
-            displayLine = "Fixed GPS";
-        } else {
-            gps_rightchar_offset = (SCREEN_WIDTH > 128) ? -58 : -38;
-            displayLine = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "No GPS" : "GPS off";
-        }
-        display->drawString(SCREEN_WIDTH + gps_rightchar_offset, compactFirstLine, displayLine);
-    } else {
-        drawGPS(display, SCREEN_WIDTH + gps_rightchar_offset, compactFirstLine + 3, gpsStatus);
-    }
-#endif
-
-    config.display.heading_bold = origBold;
-
-    // === Second Row: Uptime and Voltage ===
     uint32_t uptime = millis() / 1000;
     char uptimeStr[6];
     uint32_t minutes = uptime / 60, hours = minutes / 60, days = hours / 24;
@@ -2618,7 +2593,28 @@ static void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, i
 
     char uptimeFullStr[16];
     snprintf(uptimeFullStr, sizeof(uptimeFullStr), "Uptime: %s", uptimeStr);
-    display->drawString(x, compactSecondLine, uptimeFullStr);
+    display->drawString(SCREEN_WIDTH - display->getStringWidth(uptimeFullStr), compactFirstLine, uptimeFullStr);
+
+    config.display.heading_bold = origBold;
+
+    // === Second Row: Satellites and Voltage ===
+    config.display.heading_bold = false;
+
+#if HAS_GPS
+    auto number_of_satellites = gpsStatus->getNumSatellites();
+
+    if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
+        String displayLine = "";
+        if (config.position.fixed_position) {
+            displayLine = "Fixed GPS";
+        } else {
+            displayLine = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "No GPS" : "GPS off";
+        }
+        display->drawString(0, compactSecondLine, displayLine);
+    } else {
+        drawGPS(display, 0, compactSecondLine + 3, gpsStatus);
+    }
+#endif
 
     char batStr[20];
     if (powerStatus->getHasBattery()) {
@@ -2629,6 +2625,8 @@ static void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, i
     } else {
         display->drawString(x + SCREEN_WIDTH - display->getStringWidth("USB"), compactSecondLine, String("USB"));
     }
+
+    config.display.heading_bold = origBold;
 
     // === Third Row: LongName Centered ===
     // Blank
@@ -2799,30 +2797,22 @@ static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiStat
 #if HAS_GPS
     bool origBold = config.display.heading_bold;
     config.display.heading_bold = false;
-    if (config.position.fixed_position) {
-        display->drawString(x, compactFirstLine, "Sat:");
-        if (SCREEN_WIDTH > 128) {
-            drawGPS(display, x + 32, compactFirstLine + 3, gpsStatus);
+
+    auto number_of_satellites = gpsStatus->getNumSatellites();
+    String Satelite_String = "Sat:";
+    display->drawString(0, compactFirstLine, Satelite_String);
+    String displayLine = "";
+    if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
+        if (config.position.fixed_position) {
+            displayLine = "Fixed GPS";
         } else {
-            drawGPS(display, x + 23, compactFirstLine + 3, gpsStatus);
+            displayLine = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "No GPS" : "GPS off";
         }
-    } else if (!gpsStatus || !gpsStatus->getIsConnected()) {
-        String displayLine =
-            config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "No GPS" : "GPS off";
-        display->drawString(x, compactFirstLine, "Sat:");
-        if (SCREEN_WIDTH > 128) {
-            display->drawString(x + 32, compactFirstLine, displayLine);
-        } else {
-            display->drawString(x + 23, compactFirstLine, displayLine);
-        }
+        display->drawString(display->getStringWidth(Satelite_String) + 3, compactFirstLine, displayLine);
     } else {
-        display->drawString(x, compactFirstLine, "Sat:");
-        if (SCREEN_WIDTH > 128) {
-            drawGPS(display, x + 32, compactFirstLine + 3, gpsStatus);
-        } else {
-            drawGPS(display, x + 23, compactFirstLine + 3, gpsStatus);
-        }
+        drawGPS(display, display->getStringWidth(Satelite_String) + 3, compactFirstLine + 3, gpsStatus);
     }
+
     config.display.heading_bold = origBold;
 
     // === Update GeoCoord ===
@@ -2841,22 +2831,26 @@ static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiStat
         validHeading = !isnan(heading);
     }
 
-    // === Second Row: Altitude ===
-    String displayLine;
-    displayLine = "Alt: " + String(geoCoord.getAltitude()) + "m";
-    if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL)
-        displayLine = "Alt: " + String(geoCoord.getAltitude() * METERS_TO_FEET) + "ft";
-    display->drawString(x, compactSecondLine, displayLine);
+    // If GPS is off, no need to display these parts
+    if (displayLine != "GPS off" && displayLine != "No GPS") {
 
-    // === Third Row: Latitude ===
-    char latStr[32];
-    snprintf(latStr, sizeof(latStr), "Lat: %.5f", geoCoord.getLatitude() * 1e-7);
-    display->drawString(x, compactThirdLine, latStr);
+        // === Second Row: Altitude ===
+        String displayLine;
+        displayLine = "Alt: " + String(geoCoord.getAltitude()) + "m";
+        if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL)
+            displayLine = "Alt: " + String(geoCoord.getAltitude() * METERS_TO_FEET) + "ft";
+        display->drawString(x, compactSecondLine, displayLine);
 
-    // === Fifth Row: Longitude ===
-    char lonStr[32];
-    snprintf(lonStr, sizeof(lonStr), "Lon: %.5f", geoCoord.getLongitude() * 1e-7);
-    display->drawString(x, compactFourthLine, lonStr);
+        // === Third Row: Latitude ===
+        char latStr[32];
+        snprintf(latStr, sizeof(latStr), "Lat: %.5f", geoCoord.getLatitude() * 1e-7);
+        display->drawString(x, compactThirdLine, latStr);
+
+        // === Fourth Row: Longitude ===
+        char lonStr[32];
+        snprintf(lonStr, sizeof(lonStr), "Lon: %.5f", geoCoord.getLongitude() * 1e-7);
+        display->drawString(x, compactFourthLine, lonStr);
+    }
 
     // === Draw Compass if heading is valid ===
     if (validHeading) {
