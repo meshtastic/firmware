@@ -256,6 +256,11 @@ bool isDefaultServer(const String &host)
     return host.length() == 0 || host == default_mqtt_address;
 }
 
+bool isDefaultRootTopic(const String &root)
+{
+    return root.length() == 0 || root == default_mqtt_root;
+}
+
 struct PubSubConfig {
     explicit PubSubConfig(const meshtastic_ModuleConfig_MQTTConfig &config)
     {
@@ -387,10 +392,12 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
             cryptTopic = moduleConfig.mqtt.root + cryptTopic;
             jsonTopic = moduleConfig.mqtt.root + jsonTopic;
             mapTopic = moduleConfig.mqtt.root + mapTopic;
+            isConfiguredForDefaultRootTopic = isDefaultRootTopic(moduleConfig.mqtt.root);
         } else {
             cryptTopic = "msh" + cryptTopic;
             jsonTopic = "msh" + jsonTopic;
             mapTopic = "msh" + mapTopic;
+            isConfiguredForDefaultRootTopic = true;
         }
 
         if (moduleConfig.mqtt.map_reporting_enabled && moduleConfig.mqtt.has_map_report_settings) {

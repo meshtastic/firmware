@@ -761,11 +761,39 @@ void NodeDB::installDefaultModuleConfig()
 
     moduleConfig.has_canned_message = true;
 
+#if USERPREFS_MQTT_ENABLED && !MESHTASTIC_EXCLUDE_MQTT
+    moduleConfig.mqtt.enabled = true;
+#endif
+#ifdef USERPREFS_MQTT_ADDRESS
+    strncpy(moduleConfig.mqtt.address, USERPREFS_MQTT_ADDRESS, sizeof(moduleConfig.mqtt.address));
+#else
     strncpy(moduleConfig.mqtt.address, default_mqtt_address, sizeof(moduleConfig.mqtt.address));
+#endif
+#ifdef USERPREFS_MQTT_USERNAME
+    strncpy(moduleConfig.mqtt.username, USERPREFS_MQTT_USERNAME, sizeof(moduleConfig.mqtt.username));
+#else
     strncpy(moduleConfig.mqtt.username, default_mqtt_username, sizeof(moduleConfig.mqtt.username));
+#endif
+#ifdef USERPREFS_MQTT_PASSWORD
+    strncpy(moduleConfig.mqtt.password, USERPREFS_MQTT_PASSWORD, sizeof(moduleConfig.mqtt.password));
+#else
     strncpy(moduleConfig.mqtt.password, default_mqtt_password, sizeof(moduleConfig.mqtt.password));
+#endif
+#ifdef USERPREFS_MQTT_ROOT_TOPIC
+    strncpy(moduleConfig.mqtt.root, USERPREFS_MQTT_ROOT_TOPIC, sizeof(moduleConfig.mqtt.root));
+#else
     strncpy(moduleConfig.mqtt.root, default_mqtt_root, sizeof(moduleConfig.mqtt.root));
-    moduleConfig.mqtt.encryption_enabled = true;
+#endif
+#ifdef USERPREFS_MQTT_ENCRYPTION_ENABLED
+    moduleConfig.mqtt.encryption_enabled = USERPREFS_MQTT_ENCRYPTION_ENABLED;
+#else
+    moduleConfig.mqtt.encryption_enabled = default_mqtt_encryption_enabled;
+#endif
+#ifdef USERPREFS_MQTT_TLS_ENABLED
+    moduleConfig.mqtt.tls_enabled = USERPREFS_MQTT_TLS_ENABLED;
+#else
+    moduleConfig.mqtt.tls_enabled = default_mqtt_tls_enabled;
+#endif
 
     moduleConfig.has_neighbor_info = true;
     moduleConfig.neighbor_info.enabled = false;
