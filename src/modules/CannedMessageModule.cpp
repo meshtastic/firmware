@@ -510,17 +510,19 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
             break;
 
         case INPUT_BROKER_MSG_GPS_TOGGLE:
-        #if !MESHTASTIC_EXCLUDE_GPS
+#if !MESHTASTIC_EXCLUDE_GPS
             if (gps != nullptr) {
                 gps->toggleGpsMode();
+                const char* statusMsg = (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED)
+                    ? "GPS Enabled"
+                    : "GPS Disabled";
+                if (screen) {
+                    screen->forceDisplay();
+                    screen->showOverlayBanner(statusMsg, 3000);
+                }
             }
-            if (screen) {
-                screen->forceDisplay();
-                screen->showOverlayBanner("GPS Toggled", 3000);
-            }
-        #endif
+#endif
             break;
-
         case INPUT_BROKER_MSG_BLUETOOTH_TOGGLE:
             if (config.bluetooth.enabled == true) {
                 config.bluetooth.enabled = false;
@@ -543,6 +545,21 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
             } else {
                 if (screen) screen->showOverlayBanner("Node Info\nUpdate Sent", 3000);
             }
+            break;
+        case INPUT_BROKER_MSG_SHUTDOWN:
+            if (screen)
+                screen->showOverlayBanner("Shutting down...");
+            shutdownAtMsec = millis() + DEFAULT_SHUTDOWN_SECONDS * 1000;
+            this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+            validEvent = true;
+            break;
+
+        case INPUT_BROKER_MSG_REBOOT:
+            if (screen)
+                screen->showOverlayBanner("Rebooting...", 0); // stays on screen
+            rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+            this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+            validEvent = true;
             break;
         case INPUT_BROKER_MSG_DISMISS_FRAME: // fn+del: dismiss screen frames like text or waypoint
             // Avoid opening the canned message screen frame
@@ -898,19 +915,6 @@ int32_t CannedMessageModule::runOnce()
             case INPUT_BROKER_MSG_LEFT:
             case INPUT_BROKER_MSG_RIGHT:
                 // already handled above
-                break;
-                // handle fn+s for shutdown
-            case INPUT_BROKER_MSG_SHUTDOWN:
-                if (screen)
-                shutdownAtMsec = millis() + DEFAULT_SHUTDOWN_SECONDS * 1000;
-                runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
-                break;
-            // and fn+r for reboot
-            case INPUT_BROKER_MSG_REBOOT:
-                if (screen)
-                    screen->showOverlayBanner("Rebooting...", 0);  // stays on screen
-                rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
-                runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
                 break;
             default:
                 if (this->highlight != 0x00) {

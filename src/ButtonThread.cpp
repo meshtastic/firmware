@@ -237,14 +237,21 @@ int32_t ButtonThread::runOnce()
             LOG_BUTTON("Mulitipress! %hux", multipressClickCount);
             switch (multipressClickCount) {
 #if HAS_GPS && !defined(ELECROW_ThinkNode_M1)
-            // 3 clicks: toggle GPS
-            case 3:
-                if (!config.device.disable_triple_click && (gps != nullptr)) {
-                    gps->toggleGpsMode();
-                    if (screen)
-                        screen->forceDisplay(true); // Force a new UI frame, then force an EInk update
+        // 3 clicks: toggle GPS
+        case 3:
+            if (!config.device.disable_triple_click && (gps != nullptr)) {
+                gps->toggleGpsMode();
+
+                const char* statusMsg = (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED)
+                    ? "GPS Enabled"
+                    : "GPS Disabled";
+
+                if (screen) {
+                    screen->forceDisplay(true); // Force a new UI frame, then force an EInk update
+                    screen->showOverlayBanner(statusMsg, 3000);
                 }
-                break;
+            }
+            break;
 #elif defined(ELECROW_ThinkNode_M1) || defined(ELECROW_ThinkNode_M2)
             case 3:
                 LOG_INFO("3 clicks: toggle buzzer");
