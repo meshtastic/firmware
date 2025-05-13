@@ -149,6 +149,7 @@ jobs:
     secrets: inherit
 
   test-native:
+    if: ${{ !contains(github.ref_name, 'event/') }}
     uses: ./.github/workflows/test_native.yml
 
   docker-deb-amd64:
