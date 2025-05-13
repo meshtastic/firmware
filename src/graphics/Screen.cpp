@@ -4387,13 +4387,18 @@ int Screen::handleStatusUpdate(const meshtastic::Status *arg)
     return 0;
 }
 
-// Handles when message is received would jump to text message frame.
+// Handles when message is received; will jump to text message frame.
 int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
 {
     if (showingNormalScreen) {
         if (packet->from == 0) {
-            // Outgoing message
-            setFrames(FOCUS_PRESERVE); // Stay on same frame, silently add/remove frames
+            // Outgoing message (likely sent from phone)
+            devicestate.has_rx_text_message = false;
+            memset(&devicestate.rx_text_message, 0, sizeof(devicestate.rx_text_message));
+            dismissedFrames.textMessage = true;
+            hasUnreadMessage = false; // Clear unread state when user replies
+
+            setFrames(FOCUS_PRESERVE); // Stay on same frame, silently update frame list
         } else {
             // Incoming message
             devicestate.has_rx_text_message = true; // Needed to include the message frame
@@ -4412,7 +4417,6 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
             String banner;
 
             // Match bell character or exact alert text
-            // if (msg == "\x07" || msg.indexOf("Alert Bell Character") != -1) {
             if (msg.indexOf("\x07") != -1) {
                 banner = "Alert Received";
             } else {
