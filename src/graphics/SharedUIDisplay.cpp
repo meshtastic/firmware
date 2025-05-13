@@ -31,10 +31,10 @@ void drawRoundedHighlight(OLEDDisplay *display, int16_t x, int16_t y, int16_t w,
     display->fillRect(x + w - r, y + r, r, h - 2 * r); // right edge
 
     // Draw the rounded corners using filled circles
-    display->fillCircle(x + r + 1, y + r, r);               // top-left
-    display->fillCircle(x + w - r - 1, y + r, r);           // top-right
-    display->fillCircle(x + r + 1, y + h - r - 1, r);       // bottom-left
-    display->fillCircle(x + w - r - 1, y + h - r - 1, r);   // bottom-right
+    display->fillCircle(x + r + 1, y + r, r);             // top-left
+    display->fillCircle(x + w - r - 1, y + r, r);         // top-right
+    display->fillCircle(x + r + 1, y + h - r - 1, r);     // bottom-left
+    display->fillCircle(x + w - r - 1, y + h - r - 1, r); // bottom-right
 }
 
 // *************************
@@ -92,9 +92,9 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
     } else {
         int batteryX = 1;
         int batteryY = HEADER_OFFSET_Y + 1;
-    #ifdef USE_EINK
+#ifdef USE_EINK
         batteryY += 2;
-    #endif
+#endif
         display->drawXbm(batteryX, batteryY, 7, 11, batteryBitmap_v);
         if (isCharging && isBoltVisibleShared)
             display->drawXbm(batteryX + 1, batteryY + 3, 5, 5, lightning_bolt_v);
@@ -125,7 +125,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
 
     // === Time and Right-aligned Icons ===
     uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true);
-    char timeStr[10] = "--:--"; // Fallback display
+    char timeStr[10] = "--:--";                          // Fallback display
     int timeStrWidth = display->getStringWidth("12:34"); // Default alignment
     int timeX = screenW - xOffset - timeStrWidth + 4;
 
@@ -139,7 +139,8 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
         if (config.display.use_12h_clock) {
             bool isPM = hour >= 12;
             hour %= 12;
-            if (hour == 0) hour = 12;
+            if (hour == 0)
+                hour = 12;
             snprintf(timeStr, sizeof(timeStr), "%d:%02d%s", hour, minute, isPM ? "p" : "a");
         }
 
@@ -175,12 +176,9 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
                 display->drawXbm(iconX, iconY, mail_width, mail_height, mail);
             }
         } else if (isMuted) {
-            const char* muteStr = "M";
-            int mWidth = display->getStringWidth(muteStr);
-            int mX = iconRightEdge - mWidth;
-            display->drawString(mX, textY, muteStr);
-            if (isBold)
-                display->drawString(mX + 1, textY, muteStr);
+            int iconX = iconRightEdge - mute_symbol_width;
+            int iconY = textY + (FONT_HEIGHT_SMALL - mail_height) / 2;
+            display->drawXbm(iconX, iconY, mute_symbol_width, mute_symbol_height, mute_symbol);
         }
 
         // === Draw Time ===
@@ -218,17 +216,13 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
                 display->drawXbm(iconX, iconY, mail_width, mail_height, mail);
             }
         } else if (isMuted) {
-            const char* muteStr = "M";
-            int mWidth = display->getStringWidth(muteStr);
-            int mX = iconRightEdge - mWidth;
-            display->drawString(mX, textY, muteStr);
-            if (isBold)
-                display->drawString(mX + 1, textY, muteStr);
+            int iconX = iconRightEdge - mute_symbol_width;
+            int iconY = textY + (FONT_HEIGHT_SMALL - mail_height) / 2;
+            display->drawXbm(iconX, iconY, mute_symbol_width, bell_alert_height, bell_alert);
         }
     }
 
     display->setColor(WHITE); // Reset for other UI
 }
-
 
 } // namespace graphics
