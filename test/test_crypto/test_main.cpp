@@ -7,12 +7,13 @@
 struct TestCryptoEngine {
     static bool getCachedSecret(uint32_t lookupKey, CachedSharedSecret &entry)
     {
-        auto iter = crypto->sharedSecretCache.find(lookupKey);
-        if (iter == crypto->sharedSecretCache.end()) {
-            return false;
+        for (size_t i = 0; i < MAX_CACHED_SHARED_SECRETS; i++) {
+            entry = crypto->sharedSecretCache[i];
+            if (entry.lookup_key == lookupKey) {
+                return true;
+            }
         }
-        entry = iter->second;
-        return true;
+        return false;
     }
 };
 

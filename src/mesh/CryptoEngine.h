@@ -17,6 +17,7 @@ struct CryptoKey {
 };
 
 struct CachedSharedSecret {
+    uint32_t lookup_key;
     uint8_t shared_secret[32];
     uint8_t last_used;
 };
@@ -114,7 +115,7 @@ class CryptoEngine
     /**
      * Cache mapping peers' public keys -> {shared_secret, last_used}
      */
-    std::unordered_map<uint32_t, CachedSharedSecret> sharedSecretCache;
+    CachedSharedSecret sharedSecretCache[MAX_CACHED_SHARED_SECRETS] = {0};
 
     /**
      * Set cryptographic (hashed) shared_key calculated from the given pubkey

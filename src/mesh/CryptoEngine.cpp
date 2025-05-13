@@ -263,15 +263,41 @@ bool CryptoEngine::setCryptoSharedSecret(meshtastic_UserLite_public_key_t pubkey
     uint32_t lookupKey;
     memcpy(&lookupKey, pubkey.bytes, sizeof(lookupKey));
 
-    // See if we cached the secret already
-    auto iter = sharedSecretCache.find(lookupKey);
-    if (iter != sharedSecretCache.end()) {
-        // Cache hit! Copy it into shared_key.
-        CachedSharedSecret &entry = iter->second;
-        memcpy(shared_key, entry.shared_secret, 32);
-        // Update the last used timestamp
-        entry.last_used = now;
-        return true;
+    uint16_t oldestDelta = 0;
+    CachedSharedSecret &oldestEntry = sharedSecretCache[0];
+    for (size_t i = 0; i < MAX_CACHED_SHARED_SECRETS; i++) {
+        CachedSharedSecret &entry = sharedSecretCache[i];
+        if (entry.lookup_key == lookupKey) {
+            // Cache hit! Copy it into shared_key.
+            memcpy(shared_key, entry.shared_secret, 32);
+            // Update the last used timestamp
+            entry.last_used = now;
+            return true;
+        }
+
+        if (oldestEntry.lookup_key == 0) {
+            // We already have a valid slot to insert into. Keep looking for a cache hit.
+            continue;
+        }
+
+        if (entry.lookup_key == 0) {
+            // This entry is empty. We can insert into it later, if needed.
+            oldestEntry = entry;
+            continue;
+        }
+
+        // Track the oldest entry in case the cache is full.
+        uint16_t delta = 0;
+        if (now >= entry.last_used) {
+            delta = now - entry.last_used;
+        } else {
+            // Assume a larger last used timestamp is further in the past
+            delta = uint16_t(0x100) + now - entry.last_used;
+        }
+        if (delta > oldestDelta) {
+            oldestEntry = entry;
+            oldestDelta = delta;
+        }
     }
 
     // Cache miss. Generate the shared secret.
@@ -280,34 +306,10 @@ bool CryptoEngine::setCryptoSharedSecret(meshtastic_UserLite_public_key_t pubkey
     }
     hash(shared_key, 32);
 
-    // If the cache will grow too large, remove the oldest entry first
-    if (sharedSecretCache.size() >= MAX_CACHED_SHARED_SECRETS) {
-        uint16_t oldestDelta = 0;
-        uint32_t oldestKey = sharedSecretCache.begin()->first;
-        for (const auto &p : sharedSecretCache) {
-            const uint32_t key = p.first;
-            const CachedSharedSecret &entry = p.second;
-
-            uint16_t delta = 0;
-            if (now >= entry.last_used) {
-                delta = now - entry.last_used;
-            } else {
-                // Assume a larger last used timestamp is further in the past
-                delta = uint16_t(0x100) + now - entry.last_used;
-            }
-            if (delta > oldestDelta) {
-                oldestKey = key;
-                oldestDelta = delta;
-            }
-        }
-        sharedSecretCache.erase(oldestKey);
-    }
-
-    // Now insert the calculated shared secret
-    CachedSharedSecret entry;
-    entry.last_used = now;
-    memcpy(entry.shared_secret, shared_key, 32);
-    sharedSecretCache.insert({lookupKey, entry});
+    // Insert the calculated shared secret into the cache, overwriting an old entry if needed.
+    oldestEntry.lookup_key = lookupKey;
+    oldestEntry.last_used = now;
+    memcpy(oldestEntry.shared_secret, shared_key, 32);
     return true;
 }
 
