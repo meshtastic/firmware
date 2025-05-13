@@ -218,7 +218,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
         } else if (isMuted) {
             int iconX = iconRightEdge - mute_symbol_width;
             int iconY = textY + (FONT_HEIGHT_SMALL - mail_height) / 2;
-            display->drawXbm(iconX, iconY, mute_symbol_width, bell_alert_height, bell_alert);
+            display->drawXbm(iconX, iconY, mute_symbol_width, bell_alert_height, mute_symbol);
         }
     }
 

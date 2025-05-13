@@ -1320,7 +1320,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                             {"\U0001F496", heart, heart_width, heart_height},
                             {"\U0001F497", heart, heart_width, heart_height},
                             {"\U0001F498", heart, heart_width, heart_height},
-                            {"\U0001F514", bell_alert, bell_alert_width, bell_alert_height}};
+                            {"\U0001F514", bell_icon, bell_icon_width, bell_icon_height}};
 
     for (const Emote &e : emotes) {
         if (strcmp(msg, e.code) == 0) {
