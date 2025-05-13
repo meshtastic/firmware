@@ -264,7 +264,7 @@ bool CryptoEngine::setCryptoSharedSecret(meshtastic_UserLite_public_key_t pubkey
     memcpy(&lookupKey, pubkey.bytes, sizeof(lookupKey));
 
     uint16_t oldestDelta = 0;
-    CachedSharedSecret &oldestEntry = sharedSecretCache[0];
+    size_t oldestIndex = 0;
     for (size_t i = 0; i < MAX_CACHED_SHARED_SECRETS; i++) {
         CachedSharedSecret &entry = sharedSecretCache[i];
         if (entry.lookup_key == lookupKey) {
@@ -275,14 +275,14 @@ bool CryptoEngine::setCryptoSharedSecret(meshtastic_UserLite_public_key_t pubkey
             return true;
         }
 
-        if (oldestEntry.lookup_key == 0) {
+        if (sharedSecretCache[oldestIndex].lookup_key == 0) {
             // We already have a valid slot to insert into. Keep looking for a cache hit.
             continue;
         }
 
         if (entry.lookup_key == 0) {
             // This entry is empty. We can insert into it later, if needed.
-            oldestEntry = entry;
+            oldestIndex = i;
             continue;
         }
 
@@ -295,7 +295,7 @@ bool CryptoEngine::setCryptoSharedSecret(meshtastic_UserLite_public_key_t pubkey
             delta = uint16_t(0x100) + now - entry.last_used;
         }
         if (delta > oldestDelta) {
-            oldestEntry = entry;
+            oldestIndex = i;
             oldestDelta = delta;
         }
     }
@@ -307,6 +307,7 @@ bool CryptoEngine::setCryptoSharedSecret(meshtastic_UserLite_public_key_t pubkey
     hash(shared_key, 32);
 
     // Insert the calculated shared secret into the cache, overwriting an old entry if needed.
+    CachedSharedSecret &oldestEntry = sharedSecretCache[oldestIndex];
     oldestEntry.lookup_key = lookupKey;
     oldestEntry.last_used = now;
     memcpy(oldestEntry.shared_secret, shared_key, 32);
