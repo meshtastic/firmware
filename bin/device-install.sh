@@ -44,6 +44,15 @@ S3_VARIANTS=(
 	"station-g2"
 	"unphone"
 	"t-eth-elite"
+ 	"mesh-tab"
+	"dreamcatcher"
+	"ESP32-S3-Pico"
+	"seeed-sensecap-indicator"
+	"heltec_capsule_sensor_v3"
+	"vision-master"
+	"icarus"
+	"tracksenger"
+	"elecrow-adv"
 )
 
 # Determine the correct esptool command to use
