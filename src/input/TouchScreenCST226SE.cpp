@@ -14,13 +14,9 @@
 
 volatile bool isPressed = false;
 
-TouchScreenCST226SE *TouchScreenCST226SE::instance = nullptr;
 TouchScreenCST226SE *touchScreenCST226SE;
 
-TouchScreenCST226SE::TouchScreenCST226SE(uint16_t width, uint16_t height) : TouchScreenBase("CST226", width, height)
-{
-    instance = this;
-}
+TouchScreenCST226SE::TouchScreenCST226SE(uint16_t width, uint16_t height) : TouchScreenBase("CST226", width, height) {}
 
 void TouchScreenCST226SE::init()
 {
