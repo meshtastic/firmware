@@ -31,7 +31,7 @@
     "openocd_target": "nrf52840-mdk-rs"
   },
   "frameworks": ["arduino"],
-  "name": "Seeed_Solar_Node",
+  "name": "seeed_solar_node",
   "upload": {
     "maximum_ram_size": 248832,
     "maximum_size": 815104,
