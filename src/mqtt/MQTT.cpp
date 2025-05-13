@@ -587,14 +587,12 @@ int32_t MQTT::runOnce()
                 return 30000;
         }
     } else {
-        // we are connected to server, check often for new requests on the TCP port
         if (!wantConnection) {
             LOG_INFO("MQTT link not needed, drop");
             pubSub.disconnect();
         }
 
-        powerFSM.trigger(EVENT_CONTACT_FROM_PHONE); // Suppress entering light sleep (because that would turn off bluetooth)
-        return 20;
+        return 100;
     }
 #endif
     return 30000;
