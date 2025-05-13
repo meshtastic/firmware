@@ -480,7 +480,7 @@ void enableButtonInterrupt()
     pin = (gpio_num_t)(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN);
 #ifdef SOC_PM_SUPPORT_EXT_WAKEUP
     if (rtc_gpio_is_valid_gpio(pin)) {
-        LOG_DEBUG("Setup button pin (GPIO%02d) with wakeup by ext2 source", pin);
+        LOG_DEBUG("Setup button pin (GPIO%02d) with wakeup by ext1 source", pin);
 #ifdef BUTTON_NEED_PULLUP
         res = rtc_gpio_pullup_en(pin);
         assert(res == ESP_OK);
@@ -534,7 +534,7 @@ void enableLoraInterrupt()
 
 #if SOC_PM_SUPPORT_EXT_WAKEUP
     if (rtc_gpio_is_valid_gpio(pin)) {
-        LOG_DEBUG("Setup radio interrupt (GPIO%02d) with wakeup by ext1 source", pin);
+        LOG_DEBUG("Setup radio interrupt (GPIO%02d) with wakeup by ext0 source", pin);
         res = rtc_gpio_pulldown_en((gpio_num_t)pin);
         assert(res == ESP_OK);
         res = rtc_gpio_hold_en((gpio_num_t)pin);
