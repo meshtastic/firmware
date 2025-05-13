@@ -304,10 +304,12 @@ int32_t ButtonThread::runOnce()
             if (!screen)
                 break;
 
+#ifdef TTGO_T_ECHO
             // Ignore if: TX in progress
             // Uncommon T-Echo hardware bug, LoRa TX triggers touch button
             if (!RadioLibInterface::instance || RadioLibInterface::instance->isSending())
                 break;
+#endif
 
             // Wake if asleep
             if (powerFSM.getState() == &stateDARK)
