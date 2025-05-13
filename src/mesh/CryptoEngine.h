@@ -5,7 +5,6 @@
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 #include <Arduino.h>
-#include <unordered_map>
 
 extern concurrency::Lock *cryptLock;
 
