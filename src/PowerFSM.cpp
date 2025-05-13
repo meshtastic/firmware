@@ -179,7 +179,7 @@ static void lsExit()
 
         powerMon->clearState(meshtastic_PowerMon_State_CPU_LightSleep);
 
-        LOG_DEBUG("Exit state: LS, slept %d ms", sleepTime);
+        LOG_DEBUG("Exit state: LS, stayed %d ms in light-sleep state", sleepTime);
     }
 }
 
@@ -196,7 +196,7 @@ static void nbEnter()
 
 static void darkEnter()
 {
-    // LOG_DEBUG("State: DARK");
+    // LOG_DEBUG("State: DARK");    i
     setBluetoothEnable(true);
     if (screen)
         screen->setOn(false);
@@ -293,7 +293,7 @@ void PowerFSM_setup()
 #else
     stateIDLE = &stateDARK;
 #endif
-    LOG_INFO("PowerFSM init, USB power=%d", hasPower ? 1 : 0);
+    LOG_INFO("PowerFSM init, USB power=%d, is_power_saving=%d", hasPower ? 1 : 0, config.power.is_power_saving ? 1 : 0);
 
     powerFSM.add_timed_transition(&stateBOOT, hasPower ? &statePOWER : &stateON, 3 * 1000, NULL, "boot timeout");
 
