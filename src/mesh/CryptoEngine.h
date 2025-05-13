@@ -28,7 +28,18 @@ struct CachedSharedSecret {
 
 #define MAX_BLOCKSIZE 256
 #define TEST_CURVE25519_FIELD_OPS // Exposes Curve25519::isWeakPoint() for testing keys
-#define MAX_CACHED_SHARED_SECRETS 64
+
+/**
+ * Max number of cached secrets to track. This should be roughly dependent on MAX_NUM_NODES but
+ * cannot be directly because it is not a constant expression.
+ */
+#if defined(ARCH_STM32WL)
+#define MAX_CACHED_SHARED_SECRETS 2
+#elif defined(ARCH_NRF52)
+#define MAX_CACHED_SHARED_SECRETS 8
+#else
+#define MAX_CACHED_SHARED_SECRETS 10
+#endif
 
 class CryptoEngine
 {
