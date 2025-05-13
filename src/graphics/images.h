@@ -419,6 +419,14 @@ const uint8_t mute_symbol[] PROGMEM = {
     0b10011000, //        █
 };
 
+#define mute_symbol_big_width 16
+#define mute_symbol_big_height 16
+const uint8_t mute_symbol_big[] PROGMEM = {0b00000001, 0b00000000, 0b11000010, 0b00000011, 0b00110100, 0b00001100, 0b00011000,
+                                           0b00001000, 0b00011000, 0b00010000, 0b00101000, 0b00010000, 0b01001000, 0b00010000,
+                                           0b10001000, 0b00010000, 0b00001000, 0b00010001, 0b00001000, 0b00010010, 0b00001000,
+                                           0b00010100, 0b00000100, 0b00101000, 0b11111100, 0b00111111, 0b01000000, 0b00100010,
+                                           0b10000000, 0b01000001, 0b00000000, 0b10000000};
+
 // Bell icon for Alert Message
 #define bell_alert_width 8
 #define bell_alert_height 8

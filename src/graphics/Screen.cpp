@@ -3,8 +3,8 @@ BaseUI
 
 Developed and Maintained By:
 - Ronald Garcia (HarukiToreda) – Lead development and implementation.
-- JasonP (aka Xaositek)  – Screen layout and icon design, UI improvements and testing.
-- TonyG (aka Tropho) – Project management, structural planning, and testing
+- JasonP (Xaositek)  – Screen layout and icon design, UI improvements and testing.
+- TonyG (Tropho) – Project management, structural planning, and testing
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -178,22 +178,22 @@ static void drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDispl
     if (SCREEN_WIDTH > 128) {
         // === ORIGINAL WIDE SCREEN LAYOUT (unchanged) ===
         int padding = 4;
-        int boxWidth = max(icon_width, textWidth) + padding * 2;
-        int boxHeight = icon_height + FONT_HEIGHT_SMALL + padding * 3;
+        int boxWidth = max(icon_width, textWidth) + (padding * 2) + 16;
+        int boxHeight = icon_height + FONT_HEIGHT_SMALL + (padding * 3) - 8;
         int boxX = x - 1 + (SCREEN_WIDTH - boxWidth) / 2;
-        int boxY = y + (SCREEN_HEIGHT - boxHeight) / 2;
+        int boxY = y - 6 + (SCREEN_HEIGHT - boxHeight) / 2;
 
         display->setColor(WHITE);
         display->fillRect(boxX + r, boxY, boxWidth - 2 * r, boxHeight);
         display->fillRect(boxX, boxY + r, boxWidth - 1, boxHeight - 2 * r);
-        display->fillCircle(boxX + r, boxY + r, r);
-        display->fillCircle(boxX + boxWidth - r - 1, boxY + r, r);
-        display->fillCircle(boxX + r, boxY + boxHeight - r - 1, r);
-        display->fillCircle(boxX + boxWidth - r - 1, boxY + boxHeight - r - 1, r);
+        display->fillCircle(boxX + r, boxY + r, r);                                // Upper Left
+        display->fillCircle(boxX + boxWidth - r - 1, boxY + r, r);                 // Upper Right
+        display->fillCircle(boxX + r, boxY + boxHeight - r - 1, r);                // Lower Left
+        display->fillCircle(boxX + boxWidth - r - 1, boxY + boxHeight - r - 1, r); // Lower Right
 
         display->setColor(BLACK);
         int iconX = boxX + (boxWidth - icon_width) / 2;
-        int iconY = boxY + padding;
+        int iconY = boxY + padding - 2;
         display->drawXbm(iconX, iconY, icon_width, icon_height, icon_bits);
 
         int labelY = iconY + icon_height + padding;

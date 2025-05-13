@@ -56,6 +56,8 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
     const int screenW = display->getWidth();
     const int screenH = display->getHeight();
 
+    const bool useBigIcons = (screenW > 128);
+
     // === Inverted Header Background ===
     if (isInverted) {
         drawRoundedHighlight(display, x, y, screenW, highlightHeight, 2);
@@ -176,9 +178,15 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
                 display->drawXbm(iconX, iconY, mail_width, mail_height, mail);
             }
         } else if (isMuted) {
-            int iconX = iconRightEdge - mute_symbol_width;
-            int iconY = textY + (FONT_HEIGHT_SMALL - mail_height) / 2;
-            display->drawXbm(iconX, iconY, mute_symbol_width, mute_symbol_height, mute_symbol);
+            if (useBigIcons) {
+                int iconX = iconRightEdge - mute_symbol_big_width;
+                int iconY = textY + (FONT_HEIGHT_SMALL - mute_symbol_big_height) / 2;
+                display->drawXbm(iconX, iconY, mute_symbol_big_width, mute_symbol_big_height, mute_symbol_big);
+            } else {
+                int iconX = iconRightEdge - mute_symbol_width;
+                int iconY = textY + (FONT_HEIGHT_SMALL - mail_height) / 2;
+                display->drawXbm(iconX, iconY, mute_symbol_width, mute_symbol_height, mute_symbol);
+            }
         }
 
         // === Draw Time ===
@@ -216,9 +224,15 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
                 display->drawXbm(iconX, iconY, mail_width, mail_height, mail);
             }
         } else if (isMuted) {
-            int iconX = iconRightEdge - mute_symbol_width;
-            int iconY = textY + (FONT_HEIGHT_SMALL - mail_height) / 2;
-            display->drawXbm(iconX, iconY, mute_symbol_width, bell_alert_height, mute_symbol);
+            if (useBigIcons) {
+                int iconX = iconRightEdge - mute_symbol_big_width;
+                int iconY = textY + (FONT_HEIGHT_SMALL - mute_symbol_big_height) / 2;
+                display->drawXbm(iconX, iconY, mute_symbol_big_width, mute_symbol_big_height, mute_symbol_big);
+            } else {
+                int iconX = iconRightEdge - mute_symbol_width;
+                int iconY = textY + (FONT_HEIGHT_SMALL - mail_height) / 2;
+                display->drawXbm(iconX, iconY, mute_symbol_width, mute_symbol_height, mute_symbol);
+            }
         }
     }
 
