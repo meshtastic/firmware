@@ -504,7 +504,7 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
             sendWarning(licensedModeMessage);
         }
     }
-    if (owner.has_is_unmessagable != o.has_is_unmessagable || 
+    if (owner.has_is_unmessagable != o.has_is_unmessagable ||
         (o.has_is_unmessagable && owner.is_unmessagable != o.is_unmessagable)) {
         changed = 1;
         owner.has_is_unmessagable = o.has_is_unmessagable || o.has_is_unmessagable;
