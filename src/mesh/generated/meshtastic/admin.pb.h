@@ -446,7 +446,7 @@ extern const pb_msgdesc_t meshtastic_SharedContact_msg;
 #define meshtastic_AdminMessage_size             511
 #define meshtastic_HamParameters_size            31
 #define meshtastic_NodeRemoteHardwarePinsResponse_size 496
-#define meshtastic_SharedContact_size            121
+#define meshtastic_SharedContact_size            123
 
 #ifdef __cplusplus
 } /* extern "C" */
