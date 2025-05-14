@@ -584,7 +584,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     strncpy(config.network.ntp_server, "meshtastic.pool.ntp.org", 32);
 
 #if (defined(T_DECK) || defined(T_WATCH_S3) || defined(UNPHONE) || defined(PICOMPUTER_S3) || defined(SENSECAP_INDICATOR) ||      \
-     defined(ELECROW)) &&                                                                                                        \
+     defined(ELECROW_PANEL)) &&                                                                                                  \
     HAS_TFT
     // switch BT off by default; use TFT programming mode or hotkey to enable
     config.bluetooth.enabled = false;
@@ -689,7 +689,7 @@ void NodeDB::initConfigIntervals()
 
     config.display.screen_on_secs = default_screen_on_secs;
 
-#if defined(T_WATCH_S3) || defined(T_DECK) || defined(UNPHONE) || defined(MESH_TAB) || defined(RAK14014) || defined(ELECROW)
+#if defined(USE_POWERSAVE)
     config.power.is_power_saving = true;
     config.display.screen_on_secs = 30;
     config.power.wait_bluetooth_secs = 30;
@@ -1453,6 +1453,26 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
     info->has_device_metrics = true;
     updateGUIforNode = info;
     notifyObservers(true); // Force an update whether or not our node counts have changed
+}
+
+/**
+ * Update the node database with a new contact
+ */
+void NodeDB::addFromContact(meshtastic_SharedContact contact)
+{
+    meshtastic_NodeInfoLite *info = getOrCreateMeshNode(contact.node_num);
+    if (!info) {
+        return;
+    }
+    info->num = contact.node_num;
+    info->last_heard = getValidTime(RTCQualityNTP);
+    info->has_user = true;
+    info->user = TypeConversions::ConvertToUserLite(contact.user);
+    info->is_favorite = true;
+    updateGUIforNode = info;
+    powerFSM.trigger(EVENT_NODEDB_UPDATED);
+    notifyObservers(true); // Force an update whether or not our node counts have changed
+    saveNodeDatabaseToDisk();
 }
 
 /** Update user info and channel for this node based on received user data
