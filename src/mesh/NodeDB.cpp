@@ -328,6 +328,11 @@ NodeDB::NodeDB()
         moduleConfig.telemetry.health_update_interval = Default::getConfiguredOrMinimumValue(
             moduleConfig.telemetry.health_update_interval, min_default_telemetry_interval_secs);
     }
+    if (moduleConfig.mqtt.has_map_report_settings &&
+        moduleConfig.mqtt.map_report_settings.publish_interval_secs < default_map_publish_interval_secs) {
+        moduleConfig.mqtt.map_report_settings.publish_interval_secs = default_map_publish_interval_secs;
+    }
+
     // Ensure that the neighbor info update interval is coerced to the minimum
     moduleConfig.neighbor_info.update_interval =
         Default::getConfiguredOrMinimumValue(moduleConfig.neighbor_info.update_interval, min_neighbor_info_broadcast_secs);

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Default.h"
 #include "configuration.h"
 
 #include "concurrency/OSThread.h"
@@ -105,8 +106,7 @@ class MQTT : private concurrency::OSThread
     std::string mapTopic = "/2/map/";   // For protobuf-encoded MapReport messages
 
     // For map reporting (only applies when enabled)
-    const uint32_t default_map_position_precision = 14;         // defaults to max. offset of ~1459m
-    const uint32_t default_map_publish_interval_secs = 60 * 15; // defaults to 15 minutes
+    const uint32_t default_map_position_precision = 14; // defaults to max. offset of ~1459m
     uint32_t last_report_to_map = 0;
     uint32_t map_position_precision = default_map_position_precision;
     uint32_t map_publish_interval_msecs = default_map_publish_interval_secs * 1000;
