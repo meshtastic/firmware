@@ -308,8 +308,10 @@ const meshtastic_MeshPacket encrypted = {
 // Initialize mocks and configuration before running each test.
 void setUp(void)
 {
-    moduleConfig.mqtt = meshtastic_ModuleConfig_MQTTConfig{
-        .enabled = true, .map_reporting_enabled = true, .has_map_report_settings = true, .should_report_location = true};
+    moduleConfig.mqtt =
+        meshtastic_ModuleConfig_MQTTConfig{.enabled = true, .map_reporting_enabled = true, .has_map_report_settings = true};
+    mqtt.map_report_settings = meshtastic_ModuleConfig_MQTTConfig_MapReportSettings{
+        .position_precision = 14, .publish_interval_secs = 0, .should_report_location = true};
     channelFile.channels[0] = meshtastic_Channel{
         .index = 0,
         .has_settings = true,
