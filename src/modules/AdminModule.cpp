@@ -504,6 +504,12 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
             sendWarning(licensedModeMessage);
         }
     }
+    if (owner.has_is_unmessagable != o.has_is_unmessagable || 
+        (o.has_is_unmessagable && owner.is_unmessagable != o.is_unmessagable)) {
+        changed = 1;
+        owner.has_is_unmessagable = o.has_is_unmessagable || o.has_is_unmessagable;
+        owner.is_unmessagable = o.is_unmessagable;
+    }
 
     if (changed) { // If nothing really changed, don't broadcast on the network or write to flash
         service->reloadOwner(!hasOpenEditTransaction);
@@ -553,8 +559,10 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             sendWarning(warning);
         }
         // If we're setting router role for the first time, install its intervals
-        if (existingRole != c.payload_variant.device.role)
+        if (existingRole != c.payload_variant.device.role) {
             nodeDB->installRoleDefaults(c.payload_variant.device.role);
+            changes |= SEGMENT_NODEDATABASE | SEGMENT_DEVICESTATE; // Some role defaults affect owner
+        }
         if (config.device.node_info_broadcast_secs < min_node_info_broadcast_secs) {
             LOG_DEBUG("Tried to set node_info_broadcast_secs too low, setting to %d", min_node_info_broadcast_secs);
             config.device.node_info_broadcast_secs = min_node_info_broadcast_secs;
