@@ -256,6 +256,11 @@ bool isDefaultServer(const String &host)
     return host.length() == 0 || host == default_mqtt_address;
 }
 
+bool isDefaultRootTopic(const String &root)
+{
+    return root.length() == 0 || root == default_mqtt_root;
+}
+
 struct PubSubConfig {
     explicit PubSubConfig(const meshtastic_ModuleConfig_MQTTConfig &config)
     {
@@ -387,10 +392,12 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
             cryptTopic = moduleConfig.mqtt.root + cryptTopic;
             jsonTopic = moduleConfig.mqtt.root + jsonTopic;
             mapTopic = moduleConfig.mqtt.root + mapTopic;
+            isConfiguredForDefaultRootTopic = isDefaultRootTopic(moduleConfig.mqtt.root);
         } else {
             cryptTopic = "msh" + cryptTopic;
             jsonTopic = "msh" + jsonTopic;
             mapTopic = "msh" + mapTopic;
+            isConfiguredForDefaultRootTopic = true;
         }
 
         if (moduleConfig.mqtt.map_reporting_enabled && moduleConfig.mqtt.has_map_report_settings) {
@@ -762,7 +769,8 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
 
 void MQTT::perhapsReportToMap()
 {
-    if (!moduleConfig.mqtt.map_reporting_enabled || !(moduleConfig.mqtt.proxy_to_client_enabled || isConnectedDirectly()))
+    if (!moduleConfig.mqtt.map_reporting_enabled || !moduleConfig.mqtt.map_report_settings.should_report_location ||
+        !(moduleConfig.mqtt.proxy_to_client_enabled || isConnectedDirectly()))
         return;
 
     if (Throttle::isWithinTimespanMs(last_report_to_map, map_publish_interval_msecs))
@@ -794,6 +802,7 @@ void MQTT::perhapsReportToMap()
     mapReport.region = config.lora.region;
     mapReport.modem_preset = config.lora.modem_preset;
     mapReport.has_default_channel = channels.hasDefaultChannel();
+    mapReport.has_opted_report_location = true;
 
     // Set position with precision (same as in PositionModule)
     if (map_position_precision < 32 && map_position_precision > 0) {
