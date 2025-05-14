@@ -58,6 +58,7 @@ class MQTT : private concurrency::OSThread
     void start() { setIntervalFromNow(0); };
 
     bool isUsingDefaultServer() { return isConfiguredForDefaultServer; }
+    bool isUsingDefaultRootTopic() { return isConfiguredForDefaultRootTopic; }
 
     /// Validate the meshtastic_ModuleConfig_MQTTConfig.
     static bool isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config) { return isValidConfig(config, nullptr); }
@@ -71,6 +72,7 @@ class MQTT : private concurrency::OSThread
 
     int reconnectCount = 0;
     bool isConfiguredForDefaultServer = true;
+    bool isConfiguredForDefaultRootTopic = true;
 
     virtual int32_t runOnce() override;
 
