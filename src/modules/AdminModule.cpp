@@ -286,6 +286,11 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         nodeDB->removeNodeByNum(r->remove_by_nodenum);
         break;
     }
+    case meshtastic_AdminMessage_add_contact_tag: {
+        LOG_INFO("Client received add_contact command");
+        nodeDB->addFromContact(r->add_contact);
+        break;
+    }
     case meshtastic_AdminMessage_set_favorite_node_tag: {
         LOG_INFO("Client received set_favorite_node command");
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->set_favorite_node);
