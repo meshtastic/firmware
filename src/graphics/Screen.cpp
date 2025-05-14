@@ -2722,7 +2722,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     if (config.display.heading_bold)
         display->drawString(x - 1 + SCREEN_WIDTH - display->getStringWidth(uptime.c_str()), y, uptime.c_str());
 
-    display->setColor(WHITE);
+    display->setColor(OLED_WHITE);
 
     // Setup string to assemble analogClock string
     std::string analogClock = "";
