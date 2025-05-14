@@ -769,7 +769,8 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
 
 void MQTT::perhapsReportToMap()
 {
-    if (!moduleConfig.mqtt.map_reporting_enabled || !(moduleConfig.mqtt.proxy_to_client_enabled || isConnectedDirectly()))
+    if (!moduleConfig.mqtt.map_reporting_enabled || !moduleConfig.mqtt.map_report_settings.should_report_location ||
+        !(moduleConfig.mqtt.proxy_to_client_enabled || isConnectedDirectly()))
         return;
 
     if (Throttle::isWithinTimespanMs(last_report_to_map, map_publish_interval_msecs))
@@ -801,6 +802,7 @@ void MQTT::perhapsReportToMap()
     mapReport.region = config.lora.region;
     mapReport.modem_preset = config.lora.modem_preset;
     mapReport.has_default_channel = channels.hasDefaultChannel();
+    mapReport.has_opted_report_location = true;
 
     // Set position with precision (same as in PositionModule)
     if (map_position_precision < 32 && map_position_precision > 0) {
