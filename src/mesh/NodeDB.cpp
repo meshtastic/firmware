@@ -1455,6 +1455,26 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
     notifyObservers(true); // Force an update whether or not our node counts have changed
 }
 
+/**
+ * Update the node database with a new contact
+ */
+void NodeDB::addFromContact(meshtastic_SharedContact contact)
+{
+    meshtastic_NodeInfoLite *info = getOrCreateMeshNode(contact.node_num);
+    if (!info) {
+        return;
+    }
+    info->num = contact.node_num;
+    info->last_heard = getValidTime(RTCQualityNTP);
+    info->has_user = true;
+    info->user = TypeConversions::ConvertToUserLite(contact.user);
+    info->is_favorite = true;
+    updateGUIforNode = info;
+    powerFSM.trigger(EVENT_NODEDB_UPDATED);
+    notifyObservers(true); // Force an update whether or not our node counts have changed
+    saveNodeDatabaseToDisk();
+}
+
 /** Update user info and channel for this node based on received user data
  */
 bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelIndex)
