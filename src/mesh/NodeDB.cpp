@@ -820,9 +820,13 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
         initModuleConfigIntervals();
         config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY;
     } else if (role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
+        owner.has_is_unmessagable = true;
+        owner.is_unmessagable = true;
         config.display.screen_on_secs = 1;
         config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY;
     } else if (role == meshtastic_Config_DeviceConfig_Role_SENSOR) {
+        owner.has_is_unmessagable = true;
+        owner.is_unmessagable = true;
         moduleConfig.telemetry.environment_measurement_enabled = true;
         moduleConfig.telemetry.environment_update_interval = 300;
     } else if (role == meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND) {
@@ -837,7 +841,12 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
             (meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE | meshtastic_Config_PositionConfig_PositionFlags_SPEED |
              meshtastic_Config_PositionConfig_PositionFlags_HEADING | meshtastic_Config_PositionConfig_PositionFlags_DOP);
         moduleConfig.telemetry.device_update_interval = ONE_DAY;
+    } else if (role == meshtastic_Config_DeviceConfig_Role_TRACKER) {
+        owner.has_is_unmessagable = true;
+        owner.is_unmessagable = true;
     } else if (role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER) {
+        owner.has_is_unmessagable = true;
+        owner.is_unmessagable = true;
         config.device.node_info_broadcast_secs = ONE_DAY;
         config.position.position_broadcast_smart_enabled = true;
         config.position.position_broadcast_secs = 3 * 60; // Every 3 minutes
@@ -970,6 +979,8 @@ void NodeDB::installDefaultDeviceState()
 #endif
     snprintf(owner.id, sizeof(owner.id), "!%08x", getNodeNum()); // Default node ID now based on nodenum
     memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
+    owner.has_is_unmessagable = true;
+    owner.is_unmessagable = false;
 }
 
 // We reserve a few nodenums for future use
