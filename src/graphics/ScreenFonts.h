@@ -16,6 +16,10 @@
 #include "graphics/fonts/OLEDDisplayFontsCS.h"
 #endif
 
+#ifdef CROWPANEL_ESP32S3_5_EPAPER
+#include "graphics/fonts/EinkDisplayFonts.h"
+#endif
+
 #ifdef OLED_PL
 #define FONT_SMALL_LOCAL ArialMT_Plain_10_PL
 #else
@@ -61,7 +65,7 @@
 #endif
 
 #if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) ||      \
-     defined(ST7789_CS) || defined(USE_ST7789) || defined(HX8357_CS)) &&                                                         \
+     defined(ST7789_CS) || defined(USE_ST7789) || defined(HX8357_CS) || defined(ILI9488_CS)) &&                                  \
     !defined(DISPLAY_FORCE_SMALL_FONTS)
 // The screen is bigger so use bigger fonts
 #define FONT_SMALL FONT_MEDIUM_LOCAL // Height: 19
@@ -74,13 +78,12 @@
 #endif
 
 #if defined(CROWPANEL_ESP32S3_5_EPAPER)
-#include "graphics/fonts/EinkDisplayFonts.h"
 #undef FONT_SMALL
 #undef FONT_MEDIUM
 #undef FONT_LARGE
-#define FONT_SMALL FONT_LARGE_LOCAL  // Height: 30
-#define FONT_MEDIUM FONT_LARGE_LOCAL // Height: 30
-#define FONT_LARGE FONT_LARGE_LOCAL  // Height: 30
+#define FONT_SMALL Monospaced_plain_30
+#define FONT_MEDIUM Monospaced_plain_30
+#define FONT_LARGE Monospaced_plain_30
 #endif
 
 #define _fontHeight(font) ((font)[1] + 1) // height is position 1

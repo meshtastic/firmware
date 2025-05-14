@@ -1,8 +1,8 @@
-.pio/build/native/meshtasticd  usr/sbin
+.pio/build/native-tft/meshtasticd  usr/sbin
 
-bin/config.yaml                etc/meshtasticd
-bin/config.d/*                 etc/meshtasticd/available.d
+bin/config.yaml                    etc/meshtasticd
+bin/config.d/*                     etc/meshtasticd/available.d
 
-bin/meshtasticd.service        lib/systemd/system
+bin/meshtasticd.service            lib/systemd/system
 
-web/*                          usr/share/meshtasticd/web
+web/*                              usr/share/meshtasticd/web

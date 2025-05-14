@@ -48,6 +48,7 @@ static constexpr const char *configFileName = "/prefs/config.proto";
 static constexpr const char *uiconfigFileName = "/prefs/uiconfig.proto";
 static constexpr const char *moduleConfigFileName = "/prefs/module.proto";
 static constexpr const char *channelFileName = "/prefs/channels.proto";
+static constexpr const char *backupFileName = "/backups/backup.proto";
 
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
 uint32_t sinceLastSeen(const meshtastic_NodeInfoLite *n);
@@ -103,7 +104,7 @@ class NodeDB
      * @param is_fresh_install set to true after a fresh install, to trigger NodeInfo/Position requests
      * @return true if the config was completely reset, in that case, we should send it back to the client
      */
-    bool resetRadioConfig(bool factory_reset = false, bool is_fresh_install = false);
+    void resetRadioConfig(bool is_fresh_install = false);
 
     /// given a subpacket sniffed from the network, update our DB state
     /// we updateGUI and updateGUIforNode if we think our this change is big enough for a redraw
@@ -202,8 +203,13 @@ class NodeDB
 
     bool hasValidPosition(const meshtastic_NodeInfoLite *n);
 
+    bool backupPreferences(meshtastic_AdminMessage_BackupLocation location);
+    bool restorePreferences(meshtastic_AdminMessage_BackupLocation location,
+                            int restoreWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
+
   private:
-    uint32_t lastNodeDbSave = 0; // when we last saved our db to flash
+    uint32_t lastNodeDbSave = 0;    // when we last saved our db to flash
+    uint32_t lastBackupAttempt = 0; // when we last tried a backup automatically or manually
     /// Find a node in our DB, create an empty NodeInfoLite if missing
     meshtastic_NodeInfoLite *getOrCreateMeshNode(NodeNum n);
 

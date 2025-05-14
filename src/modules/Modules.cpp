@@ -7,7 +7,9 @@
 #include "input/SerialKeyboardImpl.h"
 #include "input/TrackballInterruptImpl1.h"
 #include "input/UpDownInterruptImpl1.h"
+#if !MESHTASTIC_EXCLUDE_I2C
 #include "input/cardKbI2cImpl.h"
+#endif
 #include "input/kbMatrixImpl.h"
 #endif
 #if !MESHTASTIC_EXCLUDE_ADMIN
@@ -63,6 +65,10 @@
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_POWER_TELEMETRY
 #include "modules/Telemetry/PowerTelemetry.h"
 #endif
+#if !MESHTASTIC_EXCLUDE_GENERIC_THREAD_MODULE
+#include "modules/GenericThreadModule.h"
+#endif
+
 #ifdef ARCH_ESP32
 #if defined(USE_SX1280) && !MESHTASTIC_EXCLUDE_AUDIO
 #include "modules/esp32/AudioModule.h"
@@ -129,6 +135,9 @@ void setupModules()
 
 #if !MESHTASTIC_EXCLUDE_DROPZONE
         dropzoneModule = new DropzoneModule();
+#endif
+#if !MESHTASTIC_EXCLUDE_GENERIC_THREAD_MODULE
+        new GenericThreadModule();
 #endif
         // Note: if the rest of meshtastic doesn't need to explicitly use your module, you do not need to assign the instance
         // to a global variable.

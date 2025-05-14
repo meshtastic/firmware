@@ -483,7 +483,7 @@ int32_t CannedMessageModule::runOnce()
 #if defined(USE_VIRTUAL_KEYBOARD)
                     sendText(this->dest, indexChannels[this->channel], this->messages[this->currentMessageIndex], true);
 #else
-                    sendText(NODENUM_BROADCAST, channels.getPrimaryIndex(), this->messages[this->currentMessageIndex], true);
+                    sendText(this->dest, indexChannels[this->channel], this->messages[this->currentMessageIndex], true);
 #endif
                 }
                 this->runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
@@ -1057,6 +1057,11 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         display->drawString(10 + x, 0 + y + FONT_HEIGHT_SMALL, "Canned Message\nModule disabled.");
     } else if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
         requestFocus(); // Tell Screen::setFrames to move to our module's frame
+#if defined(USE_EINK) && defined(USE_EINK_DYNAMICDISPLAY)
+        EInkDynamicDisplay *einkDisplay = static_cast<EInkDynamicDisplay *>(display);
+        einkDisplay->enableUnlimitedFastMode(); // Enable unlimited fast refresh while typing
+#endif
+
 #if defined(USE_VIRTUAL_KEYBOARD)
         drawKeyboard(display, state, 0, 0);
 #else
@@ -1109,20 +1114,19 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
             display->drawStringf(0 + x, 0 + y, buffer, "To: %s", cannedMessageModule->getNodeName(this->dest));
             int lines = (display->getHeight() / FONT_HEIGHT_SMALL) - 1;
             if (lines == 3) {
-                // static (old) behavior for small displays
-                display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL, cannedMessageModule->getPrevMessage());
                 display->fillRect(0 + x, 0 + y + FONT_HEIGHT_SMALL * 2, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
                 display->setColor(BLACK);
                 display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * 2, cannedMessageModule->getCurrentMessage());
                 display->setColor(WHITE);
-                display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * 3, cannedMessageModule->getNextMessage());
+                if (this->messagesCount > 1) {
+                    display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL, cannedMessageModule->getPrevMessage());
+                    display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * 3, cannedMessageModule->getNextMessage());
+                }
             } else {
-                // use entire display height for larger displays
                 int topMsg = (messagesCount > lines && currentMessageIndex >= lines - 1) ? currentMessageIndex - lines + 2 : 0;
                 for (int i = 0; i < std::min(messagesCount, lines); i++) {
                     if (i == currentMessageIndex - topMsg) {
 #ifdef USE_EINK
-                        // Avoid drawing solid black with fillRect: harder to clear for E-Ink
                         display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * (i + 1), ">");
                         display->drawString(12 + x, 0 + y + FONT_HEIGHT_SMALL * (i + 1),
                                             cannedMessageModule->getCurrentMessage());
@@ -1133,7 +1137,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
                         display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * (i + 1), cannedMessageModule->getCurrentMessage());
                         display->setColor(WHITE);
 #endif
-                    } else {
+                    } else if (messagesCount > 1) { // Only draw others if there are multiple messages
                         display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * (i + 1),
                                             cannedMessageModule->getMessageByIndex(topMsg + i));
                     }
