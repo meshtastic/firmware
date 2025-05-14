@@ -819,6 +819,11 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
         initConfigIntervals();
         initModuleConfigIntervals();
         config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY;
+        owner.has_is_unmessagable = true;
+        owner.is_unmessagable = true;
+    } else if (role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE) {
+        owner.has_is_unmessagable = true;
+        owner.is_unmessagable = true;
     } else if (role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
         owner.has_is_unmessagable = true;
         owner.is_unmessagable = true;
