@@ -1,8 +1,10 @@
 #include "HostMetrics.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "MeshService.h"
+#if ARCH_PORTDUINO
 #include "PortduinoGlue.h"
 #include <filesystem>
+#endif
 
 int32_t HostMetricsModule::runOnce()
 {
@@ -10,7 +12,7 @@ int32_t HostMetricsModule::runOnce()
     sendMetrics();
     return 60 * 1000 * 30; // setting to once per 30 minutes for initial testing
 #else
-    return disabled();
+    return disable();
 #endif
 }
 
@@ -34,6 +36,7 @@ bool HostMetricsModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, 
     return false; // Let others look at this message also if they want
 }
 
+/*
 meshtastic_MeshPacket *HostMetricsModule::allocReply()
 {
     if (currentRequest) {
@@ -56,7 +59,9 @@ meshtastic_MeshPacket *HostMetricsModule::allocReply()
     }
     return NULL;
 }
+    */
 
+#if ARCH_PORTDUINO
 meshtastic_Telemetry HostMetricsModule::getHostMetrics()
 {
     std::string file_line;
@@ -121,3 +126,4 @@ bool HostMetricsModule::sendMetrics()
     service->sendToMesh(p, RX_SRC_LOCAL, true);
     return true;
 }
+#endif

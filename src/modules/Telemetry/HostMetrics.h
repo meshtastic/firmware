@@ -24,7 +24,7 @@ class HostMetricsModule : private concurrency::OSThread, public ProtobufModule<m
     @return true if you've guaranteed you've handled this message and no other handlers should be considered for it
     */
     virtual bool handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *p) override;
-    virtual meshtastic_MeshPacket *allocReply() override;
+    // virtual meshtastic_MeshPacket *allocReply() override;
     virtual int32_t runOnce() override;
     /**
      * Send our Telemetry into the mesh
