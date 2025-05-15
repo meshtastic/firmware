@@ -600,6 +600,11 @@ bool loadConfig(const char *configPath)
                 (yamlConfig["Webserver"]["SSLCert"]).as<std::string>("/etc/meshtasticd/ssl/certificate.pem");
         }
 
+        if (yamlConfig["HostMetrics"]) {
+            settingsMap[hostMetrics_channel] = (yamlConfig["HostMetrics"]["Channel"]).as<int>(0);
+            settingsMap[hostMetrics_interval] = (yamlConfig["HostMetrics"]["ReportInterval"]).as<int>(0);
+        }
+
         if (yamlConfig["General"]) {
             settingsMap[maxnodes] = (yamlConfig["General"]["MaxNodes"]).as<int>(200);
             settingsMap[maxtophone] = (yamlConfig["General"]["MaxMessageQueue"]).as<int>(100);
