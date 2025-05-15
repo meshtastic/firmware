@@ -62,6 +62,12 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
     if (isInverted) {
         drawRoundedHighlight(display, x, y, screenW, highlightHeight, 2);
         display->setColor(BLACK);
+    } else {
+        if (screenW > 128) {
+            display->drawLine(0, 20, screenW, 20);
+        } else {
+            display->drawLine(0, 14, screenW, 14);
+        }
     }
 
     // === Battery State ===

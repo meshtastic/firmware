@@ -1504,7 +1504,7 @@ static void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const NodeStat
     !defined(DISPLAY_FORCE_SMALL_FONTS)
     display->drawFastImage(x, y + 3, 8, 8, imgUser);
 #else
-    display->drawFastImage(x, y, 8, 8, imgUser);
+    display->drawFastImage(x, y + 1, 8, 8, imgUser);
 #endif
     display->drawString(x + 10, y - 2, usersString);
     int string_offset = (SCREEN_WIDTH > 128) ? 2 : 1;
@@ -2571,7 +2571,7 @@ static void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, i
     config.display.heading_bold = false;
 
     // Display Region and Channel Utilization
-    drawNodes(display, x + 1, compactFirstLine + 3, nodeStatus, -1, false, "online");
+    drawNodes(display, x + 1, compactFirstLine + 2, nodeStatus, -1, false, "online");
 
     uint32_t uptime = millis() / 1000;
     char uptimeStr[6];
