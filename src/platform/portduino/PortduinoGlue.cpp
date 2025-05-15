@@ -600,6 +600,11 @@ bool loadConfig(const char *configPath)
                 (yamlConfig["Webserver"]["SSLCert"]).as<std::string>("/etc/meshtasticd/ssl/certificate.pem");
         }
 
+        if (yamlConfig["HostMetrics"]) {
+            settingsMap[hostMetrics_channel] = (yamlConfig["HostMetrics"]["Channel"]).as<int>(0);
+            settingsMap[hostMetrics_interval] = (yamlConfig["HostMetrics"]["ReportInterval"]).as<int>(0);
+        }
+
         if (yamlConfig["General"]) {
             settingsMap[maxnodes] = (yamlConfig["General"]["MaxNodes"]).as<int>(200);
             settingsMap[maxtophone] = (yamlConfig["General"]["MaxMessageQueue"]).as<int>(100);
@@ -650,4 +655,18 @@ bool MAC_from_string(std::string mac_str, uint8_t *dmac)
     } else {
         return false;
     }
+}
+
+std::string exec(const char *cmd)
+{ // https://stackoverflow.com/a/478960
+    std::array<char, 128> buffer;
+    std::string result;
+    std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd, "r"), pclose);
+    if (!pipe) {
+        throw std::runtime_error("popen() failed!");
+    }
+    while (fgets(buffer.data(), static_cast<int>(buffer.size()), pipe.get()) != nullptr) {
+        result += buffer.data();
+    }
+    return result;
 }
