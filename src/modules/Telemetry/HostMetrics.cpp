@@ -73,7 +73,7 @@ meshtastic_Telemetry HostMetricsModule::getHostMetrics()
         if (proc_uptime.is_open()) {
             std::getline(proc_uptime, file_line, ' ');
             proc_uptime.close();
-            t.variant.host_metrics.uptime_seconds = stoi(file_line);
+            t.variant.host_metrics.uptime_seconds = stoul(file_line);
         }
     }
 
@@ -87,7 +87,7 @@ meshtastic_Telemetry HostMetricsModule::getHostMetrics()
                 std::getline(proc_meminfo, file_line);
             } while (file_line.find("MemAvailable") == std::string::npos);
             proc_meminfo.close();
-            t.variant.host_metrics.freemem_bytes = stoi(file_line.substr(file_line.find_first_of("0123456789"))) * 1024;
+            t.variant.host_metrics.freemem_bytes = stoull(file_line.substr(file_line.find_first_of("0123456789"))) * 1024;
         }
     }
     if (access("/proc/loadavg", R_OK) == 0) {
