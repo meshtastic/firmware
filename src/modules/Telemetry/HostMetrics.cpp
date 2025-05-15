@@ -95,13 +95,10 @@ meshtastic_Telemetry HostMetricsModule::getHostMetrics()
         if (proc_loadavg.is_open()) {
             std::getline(proc_loadavg, file_line, ' ');
             t.variant.host_metrics.load1 = stof(file_line) * 100;
-            LOG_INFO("load1: %u", t.variant.host_metrics.load1);
             std::getline(proc_loadavg, file_line, ' ');
             t.variant.host_metrics.load5 = stof(file_line) * 100;
-            LOG_INFO("load5: %u", t.variant.host_metrics.load5);
             std::getline(proc_loadavg, file_line, ' ');
             t.variant.host_metrics.load15 = stof(file_line) * 100;
-            LOG_INFO("load15: %u", t.variant.host_metrics.load15);
             proc_loadavg.close();
         }
     }
