@@ -39,8 +39,8 @@ case "$1" in
 
 
     # migrate /root/.portduino to /var/lib/meshtasticd/.portduino
-    # should only run once, upon upgrade from < 2.6.8
-    if [ -n "$2" ] && dpkg --compare-versions "$2" lt 2.6.8; then
+    # should only run once, upon upgrade from < 2.6.9
+    if [ -n "$2" ] && dpkg --compare-versions "$2" lt 2.6.9; then
         if [ -d /root/.portduino ] && [ ! -e /var/lib/meshtasticd/.portduino ]; then
             cp -r /root/.portduino /var/lib/meshtasticd/.portduino
             echo "Migrated meshtasticd VFS from /root/.portduino to /var/lib/meshtasticd/.portduino"

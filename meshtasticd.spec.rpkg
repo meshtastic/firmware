@@ -112,7 +112,7 @@ getent group audio > /dev/null && usermod -a -G audio %{meshtasticd_user} > /dev
 getent group input > /dev/null && usermod -a -G input %{meshtasticd_user} > /dev/null
 exit 0
 
-%triggerin -- meshtasticd < 2.6.8
+%triggerin -- meshtasticd < 2.6.9
 # migrate .portduino (if it exists and hasn’t already been copied)
 if [ -d /root/.portduino ] && [ ! -e /var/lib/meshtasticd/.portduino ]; then
     mkdir -p /var/lib/meshtasticd
