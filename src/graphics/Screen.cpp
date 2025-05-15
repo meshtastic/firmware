@@ -1334,6 +1334,11 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 display->setColor(WHITE);
             } else {
                 display->drawString(x, 0, headerStr);
+                if (SCREEN_WIDTH > 128) {
+                    display->drawLine(0, 20, SCREEN_WIDTH, 20);
+                } else {
+                    display->drawLine(0, 14, SCREEN_WIDTH, 14);
+                }
             }
 
             // Center the emote below header + apply bounce
@@ -1441,6 +1446,13 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
     int scrollOffset = static_cast<int>(scrollY);
     int yOffset = -scrollOffset;
+    if (!isInverted) {
+        if (SCREEN_WIDTH > 128) {
+            display->drawLine(0, yOffset + 20, SCREEN_WIDTH, yOffset + 20);
+        } else {
+            display->drawLine(0, yOffset + 14, SCREEN_WIDTH, yOffset + 14);
+        }
+    }
 
     // === Render visible lines ===
     for (size_t i = 0; i < lines.size(); ++i) {
