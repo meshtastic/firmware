@@ -609,6 +609,9 @@ typedef struct _meshtastic_User {
     /* The public key of the user's device.
  This is sent out to other nodes on the mesh to allow them to compute a shared secret key. */
     meshtastic_User_public_key_t public_key;
+    /* Whether or not the node can be messaged */
+    bool has_is_unmessagable;
+    bool is_unmessagable;
 } meshtastic_User;
 
 /* A message used in a traceroute */
@@ -1204,7 +1207,7 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define meshtastic_Position_init_default         {false, 0, false, 0, false, 0, 0, _meshtastic_Position_LocSource_MIN, _meshtastic_Position_AltSource_MIN, 0, 0, false, 0, false, 0, 0, 0, 0, 0, false, 0, false, 0, 0, 0, 0, 0, 0, 0, 0}
-#define meshtastic_User_init_default             {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}}
+#define meshtastic_User_init_default             {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}, false, 0}
 #define meshtastic_RouteDiscovery_init_default   {0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define meshtastic_Routing_init_default          {0, {meshtastic_RouteDiscovery_init_default}}
 #define meshtastic_Data_init_default             {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0, false, 0}
@@ -1229,7 +1232,7 @@ extern "C" {
 #define meshtastic_resend_chunks_init_default    {{{NULL}, NULL}}
 #define meshtastic_ChunkedPayloadResponse_init_default {0, 0, {0}}
 #define meshtastic_Position_init_zero            {false, 0, false, 0, false, 0, 0, _meshtastic_Position_LocSource_MIN, _meshtastic_Position_AltSource_MIN, 0, 0, false, 0, false, 0, 0, 0, 0, 0, false, 0, false, 0, 0, 0, 0, 0, 0, 0, 0}
-#define meshtastic_User_init_zero                {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}}
+#define meshtastic_User_init_zero                {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}, false, 0}
 #define meshtastic_RouteDiscovery_init_zero      {0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define meshtastic_Routing_init_zero             {0, {meshtastic_RouteDiscovery_init_zero}}
 #define meshtastic_Data_init_zero                {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0, false, 0}
@@ -1286,6 +1289,7 @@ extern "C" {
 #define meshtastic_User_is_licensed_tag          6
 #define meshtastic_User_role_tag                 7
 #define meshtastic_User_public_key_tag           8
+#define meshtastic_User_is_unmessagable_tag      9
 #define meshtastic_RouteDiscovery_route_tag      1
 #define meshtastic_RouteDiscovery_snr_towards_tag 2
 #define meshtastic_RouteDiscovery_route_back_tag 3
@@ -1457,7 +1461,8 @@ X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, macaddr,           4) \
 X(a, STATIC,   SINGULAR, UENUM,    hw_model,          5) \
 X(a, STATIC,   SINGULAR, BOOL,     is_licensed,       6) \
 X(a, STATIC,   SINGULAR, UENUM,    role,              7) \
-X(a, STATIC,   SINGULAR, BYTES,    public_key,        8)
+X(a, STATIC,   SINGULAR, BYTES,    public_key,        8) \
+X(a, STATIC,   OPTIONAL, BOOL,     is_unmessagable,   9)
 #define meshtastic_User_CALLBACK NULL
 #define meshtastic_User_DEFAULT NULL
 
@@ -1786,14 +1791,14 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_MyNodeInfo_size               77
 #define meshtastic_NeighborInfo_size             258
 #define meshtastic_Neighbor_size                 22
-#define meshtastic_NodeInfo_size                 319
+#define meshtastic_NodeInfo_size                 321
 #define meshtastic_NodeRemoteHardwarePin_size    29
 #define meshtastic_Position_size                 144
 #define meshtastic_QueueStatus_size              23
 #define meshtastic_RouteDiscovery_size           256
 #define meshtastic_Routing_size                  259
 #define meshtastic_ToRadio_size                  504
-#define meshtastic_User_size                     113
+#define meshtastic_User_size                     115
 #define meshtastic_Waypoint_size                 165
 
 #ifdef __cplusplus

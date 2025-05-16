@@ -3,11 +3,13 @@
 #include "./Events.h"
 
 #include "RTC.h"
+#include "modules/AdminModule.h"
 #include "modules/TextMessageModule.h"
 #include "sleep.h"
 
 #include "./Applet.h"
 #include "./SystemApplet.h"
+#include "graphics/niche/FlashData.h"
 
 using namespace NicheGraphics;
 
@@ -25,6 +27,9 @@ void InkHUD::Events::begin()
     deepSleepObserver.observe(&notifyDeepSleep);
     rebootObserver.observe(&notifyReboot);
     textMessageObserver.observe(textMessageModule);
+#if !MESHTASTIC_EXCLUDE_ADMIN
+    adminMessageObserver.observe(adminModule);
+#endif
 #ifdef ARCH_ESP32
     lightSleepObserver.observe(&notifyLightSleep);
 #endif
@@ -117,8 +122,13 @@ int InkHUD::Events::beforeReboot(void *unused)
         sa->onReboot();
     }
 
-    inkhud->persistence->saveSettings();
-    inkhud->persistence->saveLatestMessage();
+    // Save settings to flash, or erase if factory reset in progress
+    if (!eraseOnReboot) {
+        inkhud->persistence->saveSettings();
+        inkhud->persistence->saveLatestMessage();
+    } else {
+        NicheGraphics::clearFlashData();
+    }
 
     // Note: no forceUpdate call here
     // We don't have any final screen to draw, although LogoApplet::onReboot did already display a "rebooting" screen
@@ -167,6 +177,23 @@ int InkHUD::Events::onReceiveTextMessage(const meshtastic_MeshPacket *packet)
     // Need to specify manually how many bytes, because source not null-terminated
     storedMessage->text =
         std::string(&packet->decoded.payload.bytes[0], &packet->decoded.payload.bytes[packet->decoded.payload.size]);
+
+    return 0; // Tell caller to continue notifying other observers. (No reason to abort this event)
+}
+
+int InkHUD::Events::onAdminMessage(const meshtastic_AdminMessage *message)
+{
+    switch (message->which_payload_variant) {
+    // Factory reset
+    // Two possible messages. One preserves BLE bonds, other wipes. Both should clear InkHUD data.
+    case meshtastic_AdminMessage_factory_reset_device_tag:
+    case meshtastic_AdminMessage_factory_reset_config_tag:
+        eraseOnReboot = true;
+        break;
+
+    default:
+        break;
+    }
 
     return 0; // Tell caller to continue notifying other observers. (No reason to abort this event)
 }

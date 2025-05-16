@@ -15,7 +15,7 @@ int32_t SHTC3Sensor::runOnce()
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
-    status = shtc3.begin();
+    status = shtc3.begin(nodeTelemetrySensorsMap[sensorType].second);
     return initI2CSensor();
 }
 
