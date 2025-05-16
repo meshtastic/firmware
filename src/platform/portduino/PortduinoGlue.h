@@ -100,7 +100,9 @@ enum configNames {
     ascii_logs,
     config_directory,
     available_directory,
-    mac_address
+    mac_address,
+    hostMetrics_interval,
+    hostMetrics_channel
 };
 enum { no_screen, x11, fb, st7789, st7735, st7735s, st7796, ili9341, ili9342, ili9486, ili9488, hx8357d };
 enum { no_touchscreen, xpt2046, stmpe610, gt911, ft5x06 };
@@ -115,3 +117,4 @@ bool loadConfig(const char *configPath);
 static bool ends_with(std::string_view str, std::string_view suffix);
 void getMacAddr(uint8_t *dmac);
 bool MAC_from_string(std::string mac_str, uint8_t *dmac);
+std::string exec(const char *cmd);
