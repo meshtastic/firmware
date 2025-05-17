@@ -24,6 +24,9 @@ PB_BIND(meshtastic_LocalStats, meshtastic_LocalStats, AUTO)
 PB_BIND(meshtastic_HealthMetrics, meshtastic_HealthMetrics, AUTO)
 
 
+PB_BIND(meshtastic_HostMetrics, meshtastic_HostMetrics, AUTO)
+
+
 PB_BIND(meshtastic_Telemetry, meshtastic_Telemetry, AUTO)
 
 

@@ -10,7 +10,7 @@
     "hwids": [["0x2886", "0x0059"]],
     "usb_product": "XIAO-BOOT",
     "mcu": "nrf52840",
-    "variant": "Seeed_Solar_Node",
+    "variant": "seeed_solar_node",
     "bsp": {
       "name": "adafruit"
     },
@@ -31,7 +31,7 @@
     "openocd_target": "nrf52840-mdk-rs"
   },
   "frameworks": ["arduino"],
-  "name": "Seeed_Solar_Node",
+  "name": "seeed_solar_node",
   "upload": {
     "maximum_ram_size": 248832,
     "maximum_size": 815104,
