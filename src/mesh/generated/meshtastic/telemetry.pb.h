@@ -314,7 +314,8 @@ typedef struct _meshtastic_HostMetrics {
     uint16_t load15;
     /* Optional User-provided string for arbitrary host system information
  that doesn't make sense as a dedicated entry. */
-    pb_callback_t user_string;
+    bool has_user_string;
+    char user_string[200];
 } meshtastic_HostMetrics;
 
 /* Types of Measurements the telemetry module is equipped to handle */
@@ -375,7 +376,7 @@ extern "C" {
 #define meshtastic_AirQualityMetrics_init_default {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_LocalStats_init_default       {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_HealthMetrics_init_default    {false, 0, false, 0, false, 0}
-#define meshtastic_HostMetrics_init_default      {0, 0, 0, false, 0, false, 0, 0, 0, 0, {{NULL}, NULL}}
+#define meshtastic_HostMetrics_init_default      {0, 0, 0, false, 0, false, 0, 0, 0, 0, false, ""}
 #define meshtastic_Telemetry_init_default        {0, 0, {meshtastic_DeviceMetrics_init_default}}
 #define meshtastic_Nau7802Config_init_default    {0, 0}
 #define meshtastic_DeviceMetrics_init_zero       {false, 0, false, 0, false, 0, false, 0, false, 0}
@@ -384,7 +385,7 @@ extern "C" {
 #define meshtastic_AirQualityMetrics_init_zero   {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_LocalStats_init_zero          {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_HealthMetrics_init_zero       {false, 0, false, 0, false, 0}
-#define meshtastic_HostMetrics_init_zero         {0, 0, 0, false, 0, false, 0, 0, 0, 0, {{NULL}, NULL}}
+#define meshtastic_HostMetrics_init_zero         {0, 0, 0, false, 0, false, 0, 0, 0, 0, false, ""}
 #define meshtastic_Telemetry_init_zero           {0, 0, {meshtastic_DeviceMetrics_init_zero}}
 #define meshtastic_Nau7802Config_init_zero       {0, 0}
 
@@ -563,8 +564,8 @@ X(a, STATIC,   OPTIONAL, UINT64,   diskfree3_bytes,   5) \
 X(a, STATIC,   SINGULAR, UINT32,   load1,             6) \
 X(a, STATIC,   SINGULAR, UINT32,   load5,             7) \
 X(a, STATIC,   SINGULAR, UINT32,   load15,            8) \
-X(a, CALLBACK, OPTIONAL, STRING,   user_string,       9)
-#define meshtastic_HostMetrics_CALLBACK pb_default_field_callback
+X(a, STATIC,   OPTIONAL, STRING,   user_string,       9)
+#define meshtastic_HostMetrics_CALLBACK NULL
 #define meshtastic_HostMetrics_DEFAULT NULL
 
 #define meshtastic_Telemetry_FIELDLIST(X, a) \
@@ -614,16 +615,16 @@ extern const pb_msgdesc_t meshtastic_Nau7802Config_msg;
 #define meshtastic_Nau7802Config_fields &meshtastic_Nau7802Config_msg
 
 /* Maximum encoded size of messages (where known) */
-/* meshtastic_HostMetrics_size depends on runtime parameters */
-/* meshtastic_Telemetry_size depends on runtime parameters */
-#define MESHTASTIC_MESHTASTIC_TELEMETRY_PB_H_MAX_SIZE meshtastic_EnvironmentMetrics_size
+#define MESHTASTIC_MESHTASTIC_TELEMETRY_PB_H_MAX_SIZE meshtastic_Telemetry_size
 #define meshtastic_AirQualityMetrics_size        78
 #define meshtastic_DeviceMetrics_size            27
 #define meshtastic_EnvironmentMetrics_size       113
 #define meshtastic_HealthMetrics_size            11
+#define meshtastic_HostMetrics_size              264
 #define meshtastic_LocalStats_size               60
 #define meshtastic_Nau7802Config_size            16
 #define meshtastic_PowerMetrics_size             30
+#define meshtastic_Telemetry_size                272
 
 #ifdef __cplusplus
 } /* extern "C" */
