@@ -65,7 +65,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "modules/StoreForwardModule.h"
 #include "platform/portduino/PortduinoGlue.h"
 #endif
-
+#if defined(M5STACK_CORE2)
+#include "M5Unified.h"
+#define OLED_BLACK OLEDDISPLAY_COLOR::BLACK
+#define OLED_WHITE OLEDDISPLAY_COLOR::WHITE
+#else
+#define OLED_BLACK BLACK
+#define OLED_WHITE WHITE
+#endif
+extern DataInfo DataRegion;
 using namespace meshtastic; /** @todo remove */
 
 namespace graphics
@@ -949,7 +957,24 @@ bool deltaToTimestamp(uint32_t secondsAgo, uint8_t *hours, uint8_t *minutes, int
     validCached = true;
     return validCached;
 }
-
+static void drawLoraMessage(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    display->drawString(x + 0, y + 0, myRegion->name);
+    display->setFont(FONT_MEDIUM);
+    display->drawString(x + 10, y + 30, "channel: " + String(DataRegion.lora_channel_num + 1));
+    display->drawString(x + 10, y + 60, "bw: " + String(DataRegion.lora_bw));
+    display->drawString(x + SCREEN_WIDTH / 2 + 10, y + 30, "freq: " + String(DataRegion.lora_freq));
+    display->drawString(x + SCREEN_WIDTH / 2 + 10, y + 60, "power: " + String(DataRegion.lora_power_output));
+    display->drawString(x + 10, y + 90, "sf: " + String(DataRegion.lora_sf));
+    display->drawString(x + SCREEN_WIDTH / 2 + 10, y + 90, "cr: 4/:" + String(DataRegion.lora_cr));
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    const char *title = "LoRa";
+    display->drawString(x + SCREEN_WIDTH / 2 - 20, y + 0, title);
+    display->setFont(FONT_SMALL);
+    display->setTextAlignment(TEXT_ALIGN_RIGHT);
+    display->drawString(x + SCREEN_WIDTH, y, String(DataRegion.lora_channel_name));
+    display->setTextAlignment(TEXT_ALIGN_LEFT); // Restore left align, just to be kind to any other unsuspecting code
+}
 /// Draw the last text message we received
 static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
@@ -968,7 +993,7 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
     display->setFont(FONT_SMALL);
     if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
         display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
-        display->setColor(BLACK);
+        display->setColor(OLED_BLACK);
     }
 
     // For time delta
@@ -1002,7 +1027,7 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
         }
     }
 
-    display->setColor(WHITE);
+    display->setColor(OLED_WHITE);
 #ifndef EXCLUDE_EMOJI
     const char *msg = reinterpret_cast<const char *>(mp.decoded.payload.bytes);
     if (strcmp(msg, "\U0001F44D") == 0) {
@@ -1085,10 +1110,10 @@ void Screen::drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char 
     int xo = x, yo = y;
     while (*f) {
         display->drawString(xo, yo, *f);
-        if ((display->getColor() == BLACK) && config.display.heading_bold)
-            display->drawString(xo + 1, yo, *f);
 
-        display->setColor(WHITE);
+        if ((display->getColor() == OLED_BLACK) && config.display.heading_bold)
+            display->drawString(xo + 1, yo, *f);
+        display->setColor(OLED_WHITE);
         yo += FONT_HEIGHT_SMALL;
         if (yo > SCREEN_HEIGHT - FONT_HEIGHT_SMALL) {
             xo += SCREEN_WIDTH / 2;
@@ -1517,7 +1542,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     display->drawCircle(compassX, compassY, compassDiam / 2);
 
     if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
-        display->setColor(BLACK);
+        display->setColor(OLED_BLACK);
     }
     // Must be after distStr is populated
     screen->drawColumns(display, x, y, fields);
@@ -1642,6 +1667,14 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             digitalWrite(VTFT_LEDA, TFT_BACKLIGHT_ON);
 #endif
 #endif
+#ifdef TFT_BL
+            pinMode(TFT_BL, OUTPUT);
+            digitalWrite(TFT_BL, HIGH);
+#endif
+#if defined(M5STACK_CORE2)
+            M5.Power.Axp192.setDCDC3(1000);
+            M5.Display.setBrightness(130);
+#endif
             enabled = true;
             setInterval(0); // Draw ASAP
             runASAP = true;
@@ -1659,6 +1692,13 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             }
 #endif
             dispdev->displayOff();
+#ifdef TFT_BL
+            pinMode(TFT_BL, OUTPUT);
+            digitalWrite(TFT_BL, LOW);
+#endif
+#if defined(M5STACK_CORE2)
+            M5.Power.Axp192.setDCDC3(0);
+#endif
 #ifdef USE_ST7789
             SPI1.end();
 #if defined(ARCH_ESP32)
@@ -2165,7 +2205,7 @@ void Screen::setFrames(FrameFocus focus)
         fsi.positions.textMessage = numframes;
         normalFrames[numframes++] = drawTextMessageFrame;
     }
-
+    normalFrames[numframes++] = drawLoraMessage;
     // then all the nodes
     // We only show a few nodes in our scrolling list - because meshes with many nodes would have too many screens
     size_t numToShow = min(numMeshNodes, 4U);
@@ -2451,7 +2491,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
     if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
         display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
-        display->setColor(BLACK);
+        display->setColor(OLED_BLACK);
     }
 
     char channelStr[20];
@@ -2492,7 +2532,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         }
     }
 #endif
-    display->setColor(WHITE);
+    display->setColor(OLED_WHITE);
     // Draw the channel name
     display->drawString(x, y + FONT_HEIGHT_SMALL, channelStr);
     // Draw our hardware ID to assist with bluetooth pairing. Either prefix with Info or S&F Logo
@@ -2565,7 +2605,7 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
 
     if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
         display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
-        display->setColor(BLACK);
+        display->setColor(OLED_BLACK);
     }
 
     if (WiFi.status() != WL_CONNECTED) {
@@ -2585,7 +2625,7 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
         }
     }
 
-    display->setColor(WHITE);
+    display->setColor(OLED_WHITE);
 
     /*
     - WL_CONNECTED: assigned when connected to a WiFi network;
@@ -2645,7 +2685,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
 
     if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
         display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
-        display->setColor(BLACK);
+        display->setColor(OLED_BLACK);
     }
 
     char batStr[20];
@@ -2691,7 +2731,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     if (config.display.heading_bold)
         display->drawString(x - 1 + SCREEN_WIDTH - display->getStringWidth(uptime.c_str()), y, uptime.c_str());
 
-    display->setColor(WHITE);
+    display->setColor(OLED_WHITE);
 
     // Setup string to assemble analogClock string
     std::string analogClock = "";
