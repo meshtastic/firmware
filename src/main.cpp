@@ -537,12 +537,6 @@ void setup()
     digitalWrite(AQ_SET_PIN, HIGH);
 #endif
 
-#if HAS_TFT
-    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
-        tftSetup();
-    }
-#endif
-
     // Currently only the tbeam has a PMU
     // PMU initialization needs to be placed before i2c scanning
     power = new Power();
@@ -767,6 +761,12 @@ void setup()
     // but we need to do this after main cpu init (esp32setup), because we need the random seed set
     nodeDB = new NodeDB;
 
+#if HAS_TFT
+    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+        tftSetup();
+    }
+#endif
+
     // If we're taking on the repeater role, use NextHopRouter and turn off 3V3_S rail because peripherals are not needed
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
         router = new NextHopRouter();
@@ -955,7 +955,7 @@ void setup()
     defined(ST7789_CS) || defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS)
     screen->setup();
 #elif defined(ARCH_PORTDUINO)
-    if (screen_found.port != ScanI2C::I2CPort::NO_I2C || settingsMap[displayPanel]) {
+    if ((screen_found.port != ScanI2C::I2CPort::NO_I2C || settingsMap[displayPanel]) && config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
         screen->setup();
     }
 #else
@@ -963,8 +963,9 @@ void setup()
         screen->setup();
 #endif
 #endif
-
-    screen->print("Started...\n");
+    if (screen) {
+	    screen->print("Started...\n");
+	}
 
 #ifdef PIN_PWR_DELAY_MS
     // This may be required to give the peripherals time to power up.

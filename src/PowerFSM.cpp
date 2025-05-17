@@ -198,7 +198,8 @@ static void powerEnter()
         LOG_INFO("Loss of power in Powered");
         powerFSM.trigger(EVENT_POWER_DISCONNECTED);
     } else {
-        screen->setOn(true);
+	if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR )
+	        screen->setOn(true);
         setBluetoothEnable(true);
         // within enter() the function getState() returns the state we came from
 
@@ -221,7 +222,8 @@ static void powerIdle()
 
 static void powerExit()
 {
-    screen->setOn(true);
+    if (screen)
+	screen->setOn(true);
     setBluetoothEnable(true);
 
     // Mothballed: print change of power-state to device screen
