@@ -532,3 +532,36 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
         return res == RADIOLIB_ERR_NONE;
     }
 }
+
+void RadioLibInterface::enableFan()
+{
+#ifdef RADIO_FAN_EN
+
+#ifdef RADIO_FAN_PWM
+#if defined(ARCH_ESP32)
+    ledcWrite(1, config.lora.pa_fan_disabled ? 0 : (pa_fan_percentage * 2.55));
+#elif defined(ARCH_NRF52)
+    analogWrite(RADIO_FAN_EN, config.lora.pa_fan_disabled ? 0 : (pa_fan_percentage * 2.55));
+#endif
+#else
+    pinMode(RADIO_FAN_EN, OUTPUT);
+    digitalWrite(RADIO_FAN_EN, 1);
+#endif
+#endif
+}
+
+void RadioLibInterface::disableFan()
+{
+#ifdef RADIO_FAN_EN
+#ifdef RADIO_FAN_PWM
+#if defined(ARCH_ESP32)
+    ledcWrite(1, 0);
+#elif defined(ARCH_NRF52)
+    analogWrite(RADIO_FAN_EN, 0);
+#endif
+#else
+    pinMode(RADIO_FAN_EN, OUTPUT);
+    digitalWrite(RADIO_FAN_EN, 0);
+#endif
+#endif
+}
