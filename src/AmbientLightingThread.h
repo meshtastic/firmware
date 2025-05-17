@@ -59,12 +59,12 @@ class AmbientLightingThread : public concurrency::OSThread
             return;
         }
         LOG_DEBUG("AmbientLighting init");
-#if defined(HAS_NCP5623) || defined(HAS_LP5562)
+#ifdef HAS_NCP5623
         if (_type == ScanI2C::NCP5623) {
             rgb.begin();
 #endif
 #ifdef HAS_LP5562
-        } else if (_type == ScanI2C::LP5562) {
+        if (_type == ScanI2C::LP5562) {
             rgbw.begin();
 #endif
 #ifdef RGBLED_RED
