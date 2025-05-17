@@ -666,8 +666,6 @@ class LGFX : public lgfx::LGFX_Device
   public:
     LGFX(void)
     {
-        int _width = 0;
-        int _height = 0;
         if (settingsMap[displayPanel] == st7789)
             _panel_instance = new lgfx::Panel_ST7789;
         else if (settingsMap[displayPanel] == st7735)
@@ -688,13 +686,7 @@ class LGFX : public lgfx::LGFX_Device
             _panel_instance = new lgfx::Panel_NULL;
             LOG_ERROR("Unknown display panel configured!");
         }
-        if (settingsMap[displayRotate]) {
-            _width = settingsMap[displayHeight];
-            _height = settingsMap[displayWidth];
-        } else {
-            _width = settingsMap[displayWidth];
-            _height = settingsMap[displayHeight];
-        }
+
         auto buscfg = _bus_instance.config();
         buscfg.spi_mode = 0;
         buscfg.spi_host = settingsMap[displayspidev];
@@ -705,11 +697,16 @@ class LGFX : public lgfx::LGFX_Device
         _panel_instance->setBus(&_bus_instance); // set the bus on the panel.
 
         auto cfg = _panel_instance->config(); // Gets a structure for display panel settings.
-        LOG_DEBUG("Height: %d, Width: %d ", settingsMap[displayHeight], settingsMap[displayWidth]);
+        LOG_DEBUG("Width: %d, Height: %d", settingsMap[displayWidth], settingsMap[displayHeight]);
         cfg.pin_cs = settingsMap[displayCS]; // Pin number where CS is connected (-1 = disable)
         cfg.pin_rst = settingsMap[displayReset];
-        cfg.panel_width = _width;                               // actual displayable width
-        cfg.panel_height = _height;                             // actual displayable height
+        if (settingsMap[displayRotate]) {
+            cfg.panel_width = settingsMap[displayHeight]; // actual displayable width
+            cfg.panel_height = settingsMap[displayWidth]; // actual displayable height
+        } else {
+            cfg.panel_width = settingsMap[displayWidth];   // actual displayable width
+            cfg.panel_height = settingsMap[displayHeight]; // actual displayable height
+        }
         cfg.offset_x = settingsMap[displayOffsetX];             // Panel offset amount in X direction
         cfg.offset_y = settingsMap[displayOffsetY];             // Panel offset amount in Y direction
         cfg.offset_rotation = settingsMap[displayOffsetRotate]; // Rotation direction value offset 0~7 (4~7 is mirrored)
@@ -985,7 +982,11 @@ TFTDisplay::TFTDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY g
     backlightEnable = p;
 
 #if ARCH_PORTDUINO
-    setGeometry(GEOMETRY_RAWMODE, settingsMap[configNames::displayWidth], settingsMap[configNames::displayHeight]);
+    if (settingsMap[displayRotate]) {
+        setGeometry(GEOMETRY_RAWMODE, settingsMap[configNames::displayWidth], settingsMap[configNames::displayHeight]);
+    } else {
+        setGeometry(GEOMETRY_RAWMODE, settingsMap[configNames::displayHeight], settingsMap[configNames::displayWidth]);
+    }
 
 #elif defined(SCREEN_ROTATE)
     setGeometry(GEOMETRY_RAWMODE, TFT_HEIGHT, TFT_WIDTH);
