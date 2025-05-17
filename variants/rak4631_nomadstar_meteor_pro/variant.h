@@ -236,9 +236,6 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 
 // Define pin to enable GPS toggle (set GPIO to LOW) via user button triple press
 
-// RAK12002 RTC Module
-#define RV3028_RTC (uint8_t)0b1010010
-
 // RAK18001 Buzzer in Slot C
 // #define PIN_BUZZER 21 // IO3 is PWM2
 // NEW: set this via protobuf instead!
@@ -254,9 +251,9 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
 #define ADC_MULTIPLIER 1.73
 
-#define HAS_RTC 1
+#define HAS_RTC 0
 
-#define HAS_ETHERNET 1
+#define HAS_ETHERNET 0
 
 #define RAK_4631 1
 
