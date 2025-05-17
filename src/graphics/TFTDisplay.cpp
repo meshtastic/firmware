@@ -697,11 +697,16 @@ class LGFX : public lgfx::LGFX_Device
         _panel_instance->setBus(&_bus_instance); // set the bus on the panel.
 
         auto cfg = _panel_instance->config(); // Gets a structure for display panel settings.
-        LOG_DEBUG("Height: %d, Width: %d ", settingsMap[displayHeight], settingsMap[displayWidth]);
+        LOG_DEBUG("Width: %d, Height: %d", settingsMap[displayWidth], settingsMap[displayHeight]);
         cfg.pin_cs = settingsMap[displayCS]; // Pin number where CS is connected (-1 = disable)
         cfg.pin_rst = settingsMap[displayReset];
-        cfg.panel_width = settingsMap[displayWidth];            // actual displayable width
-        cfg.panel_height = settingsMap[displayHeight];          // actual displayable height
+        if (settingsMap[displayRotate]) {
+            cfg.panel_width = settingsMap[displayHeight]; // actual displayable width
+            cfg.panel_height = settingsMap[displayWidth]; // actual displayable height
+        } else {
+            cfg.panel_width = settingsMap[displayWidth];   // actual displayable width
+            cfg.panel_height = settingsMap[displayHeight]; // actual displayable height
+        }
         cfg.offset_x = settingsMap[displayOffsetX];             // Panel offset amount in X direction
         cfg.offset_y = settingsMap[displayOffsetY];             // Panel offset amount in Y direction
         cfg.offset_rotation = settingsMap[displayOffsetRotate]; // Rotation direction value offset 0~7 (4~7 is mirrored)
@@ -978,9 +983,9 @@ TFTDisplay::TFTDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY g
 
 #if ARCH_PORTDUINO
     if (settingsMap[displayRotate]) {
-        setGeometry(GEOMETRY_RAWMODE, settingsMap[configNames::displayHeight], settingsMap[configNames::displayWidth]);
-    } else {
         setGeometry(GEOMETRY_RAWMODE, settingsMap[configNames::displayWidth], settingsMap[configNames::displayHeight]);
+    } else {
+        setGeometry(GEOMETRY_RAWMODE, settingsMap[configNames::displayHeight], settingsMap[configNames::displayWidth]);
     }
 
 #elif defined(SCREEN_ROTATE)
@@ -1169,6 +1174,8 @@ bool TFTDisplay::connect()
     tft->setRotation(1); // T-Deck has the TFT in landscape
 #elif defined(T_WATCH_S3) || defined(SENSECAP_INDICATOR)
     tft->setRotation(2); // T-Watch S3 left-handed orientation
+#elif defined(ARCH_PORTDUINO)
+    tft->setRotation(0);
 #else
     tft->setRotation(3); // Orient horizontal and wide underneath the silkscreen name label
 #endif
