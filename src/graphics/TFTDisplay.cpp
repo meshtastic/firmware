@@ -653,7 +653,7 @@ static LGFX *tft = nullptr;
 #include <TFT_eSPI.h> // Graphics and font library for ILI9342 driver chip
 
 static TFT_eSPI *tft = nullptr; // Invoke library, pins defined in User_Setup.h
-#elif ARCH_PORTDUINO && HAS_SCREEN != 0 && !HAS_TFT
+#elif ARCH_PORTDUINO
 #include <LovyanGFX.hpp> // Graphics and font library for ST7735 driver chip
 
 class LGFX : public lgfx::LGFX_Device
@@ -708,17 +708,11 @@ class LGFX : public lgfx::LGFX_Device
         LOG_DEBUG("Height: %d, Width: %d ", settingsMap[displayHeight], settingsMap[displayWidth]);
         cfg.pin_cs = settingsMap[displayCS]; // Pin number where CS is connected (-1 = disable)
         cfg.pin_rst = settingsMap[displayReset];
-        cfg.panel_width = _width;            // actual displayable width
-        cfg.panel_height = _height;          // actual displayable height
+        cfg.panel_width = _width;                               // actual displayable width
+        cfg.panel_height = _height;                             // actual displayable height
         cfg.offset_x = settingsMap[displayOffsetX];             // Panel offset amount in X direction
         cfg.offset_y = settingsMap[displayOffsetY];             // Panel offset amount in Y direction
-        if (settingsMap[displayOffsetRotate] = 3) {
-            cfg.offset_rotation = 0;
-        } else if (settingsMap[displayOffsetRotate] = 7) {
-            cfg.offset_rotation = 4;
-        } else {
-            cfg.offset_rotation = settingsMap[displayOffsetRotate] + 1; // Rotation direction value offset 0~7 (4~7 is mirrored)
-        }
+        cfg.offset_rotation = settingsMap[displayOffsetRotate]; // Rotation direction value offset 0~7 (4~7 is mirrored)
         cfg.invert = settingsMap[displayInvert];                // Set to true if the light/darkness of the panel is reversed
 
         _panel_instance->config(cfg);
@@ -1179,6 +1173,8 @@ bool TFTDisplay::connect()
     tft->setRotation(1); // T-Deck has the TFT in landscape
 #elif defined(T_WATCH_S3) || defined(SENSECAP_INDICATOR)
     tft->setRotation(2); // T-Watch S3 left-handed orientation
+#elif ARCH_PORTDUINO
+    tft->setRotation(0);
 #else
     tft->setRotation(3); // Orient horizontal and wide underneath the silkscreen name label
 #endif

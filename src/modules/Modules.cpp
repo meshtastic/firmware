@@ -183,9 +183,11 @@ void setupModules()
         aSerialKeyboardImpl->init();
 #endif // INPUTBROKER_MATRIX_TYPE
 #endif // HAS_BUTTON
-#if ARCH_PORTDUINO && !HAS_TFT
-        aLinuxInputImpl = new LinuxInputImpl();
-        aLinuxInputImpl->init();
+#if ARCH_PORTDUINO
+        if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+            aLinuxInputImpl = new LinuxInputImpl();
+            aLinuxInputImpl->init();
+        }
 #endif
 #if HAS_TRACKBALL && !MESHTASTIC_EXCLUDE_INPUTBROKER
         trackballInterruptImpl1 = new TrackballInterruptImpl1();
