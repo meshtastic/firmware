@@ -15,6 +15,12 @@ struct CryptoKey {
     int8_t length;
 };
 
+struct CachedSharedSecret {
+    uint32_t lookup_key;
+    uint8_t shared_secret[32];
+    uint8_t last_used;
+};
+
 /**
  * see docs/software/crypto.md for details.
  *
@@ -22,6 +28,18 @@ struct CryptoKey {
 
 #define MAX_BLOCKSIZE 256
 #define TEST_CURVE25519_FIELD_OPS // Exposes Curve25519::isWeakPoint() for testing keys
+
+/**
+ * Max number of cached secrets to track. This should be roughly dependent on MAX_NUM_NODES but
+ * cannot be directly because it is not a constant expression.
+ */
+#if defined(ARCH_STM32WL)
+#define MAX_CACHED_SHARED_SECRETS 2
+#elif defined(ARCH_NRF52)
+#define MAX_CACHED_SHARED_SECRETS 8
+#else
+#define MAX_CACHED_SHARED_SECRETS 10
+#endif
 
 class CryptoEngine
 {
@@ -92,6 +110,19 @@ class CryptoEngine
      * a 32 bit block counter (starts at zero)
      */
     void initNonce(uint32_t fromNode, uint64_t packetId, uint32_t extraNonce = 0);
+
+    /**
+     * Cache mapping peers' public keys -> {shared_secret, last_used}
+     */
+    CachedSharedSecret sharedSecretCache[MAX_CACHED_SHARED_SECRETS] = {0};
+
+    /**
+     * Set cryptographic (hashed) shared_key calculated from the given pubkey
+     */
+    bool setCryptoSharedSecret(meshtastic_UserLite_public_key_t pubkey);
+
+    // Allow unit test harness to peer into private/protected members
+    friend struct TestCryptoEngine;
 };
 
 extern CryptoEngine *crypto;
