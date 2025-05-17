@@ -13,7 +13,7 @@ This document is intended as a reference for maintainers. A haphazard collection
   - [Non-interactive](#non-interactive)
   - [Customizable](#customizable)
   - [Event-Driven Rendering](#event-driven-rendering)
-  - [No `#ifdef` spaghetti](#no-ifdef-spaghetti)
+  - [Avoid the Preprocessor](#avoid-the-preprocessor)
 - [The Implementation](#the-implementation)
 - [The Rendering Process](#the-rendering-process)
 - [Concepts](#concepts)
@@ -23,6 +23,10 @@ This document is intended as a reference for maintainers. A haphazard collection
 - [Adding a Variant](#adding-a-variant)
   - [platformio.ini](#platformioini)
   - [nicheGraphics.h](#nichegraphicsh)
+- [Fonts](#fonts)
+  - [Parsing Unicode Text](#parsing-unicode-text)
+  - [Localization](#localization)
+  - [Creating / Modifying](#creating--modifying)
 - [Class Notes](#class-notes)
   - [`InkHUD::InkHUD`](#inkhudinkhud)
   - [`InkHUD::Persistence`](#inkhudpersistence)
@@ -73,9 +77,11 @@ The user should be given the choice to decide which information they would like 
 
 The display image does not update "automatically". Individual applets are responsible for deciding when they have new information to show, and then requesting a display update.
 
-### No `#ifdef` spaghetti
+### Avoid the Preprocessor
 
-**Don't** use preprocessor macros for device-specific configuration. This should be achieved with config methods, in [`nicheGraphics.h`](#nichegraphicsh).
+**Don't** use preprocessor macros to write code which targets individual devices.
+
+**Do** configure InkHUD to suit each device in [`nicheGraphics.h`](#nichegraphicsh).
 
 **Do** use preprocessor macros to guard all files
 
@@ -103,7 +109,7 @@ The display image does not update "automatically". Individual applets are respon
 
 (animated diagram)
 
-<img src="rendering.gif" alt="animated process diagram of InkHUD rendering" height="480"/>
+<img src="rendering.gif" alt="animated process diagram of InkHUD rendering" height="480" width="auto" />
 
 An overview:
 
@@ -281,11 +287,14 @@ ${esp32s3_base.lib_deps}
 
 ### nicheGraphics.h
 
-⚠ Wrap this file in `#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS`
+Should contain a `setupNicheGraphics` method, which creates and configures the various components for InkHUD.
 
-`nicheGraphics.h` should be placed in the same folder as your variant's `platformio.ini`. If this is not possible, modify `build_src_filter`.
+For well commented examples, see:
 
-`nicheGraphics.h` should contain a `setupNicheGraphics` method, which creates and configures the various components for InkHUD.
+- `/variants/heltec_vision_master_e290/nicheGraphics.h` (ESP32)
+- `/variants/ELECROW-ThinkNode-M1/nicheGraphics.h` (NRF52)
+
+As a general overview:
 
 - Display
   - Start SPI
@@ -301,10 +310,80 @@ ${esp32s3_base.lib_deps}
   - Setup `TwoButton` driver (user button, optional "auxiliary" button)
   - Connect to InkHUD handlers (use lambdas)
 
-For well commented examples, see:
+## Fonts
 
-- `variants/heltec_vision_master_e290/nicheGraphics.h` (ESP32)
-- `variants/t-echo/nicheGraphics.h` (NRF52)
+InkHUD uses AdafruitGFX fonts. The large and small font which are shared by all applets are set in nicheGraphics.h.
+
+```cpp
+// Prepare fonts
+InkHUD::Applet::fontLarge = FREESANS_9PT_WIN1252;
+InkHUD::Applet::fontSmall = FREESANS_6PT_WIN1252;
+
+// Using a generic AdafruitGFX font instead:
+// InkHUD::Applet::fontLarge = FreeSerif9pt7b;
+```
+
+Any generic AdafruitGFX font may be used, but the fonts which are bundled with InkHUD have been customized with extended-ASCII character sets.
+
+### Parsing Unicode Text
+
+Text received by the firmware is encoded as UTF-8.
+
+Applets must manually parse any text which may contain non-ASCII characters. Strings like text-messages and node names should be parsed.
+
+```cpp
+std::string greeting = "Góðan daginn!";
+std::string parsed = parse(greeting);
+```
+
+This will re-encode the characters to match whichever extended-ASCII font InkHUD has been built with.
+
+### Localization
+
+InkHUD is bundled with extended-ASCII fonts for:
+
+- Windows-1250 (Central European)
+- Windows-1251 (Cyrillic)
+- Windows-1252 (Western European)
+
+The default builds use Windows-1252 encoding. This can be changed in nicheGraphics.h.
+
+```cpp
+InkHUD::Applet::fontLarge = FREESANS_9PT_WIN1250;
+InkHUD::Applet::fontSmall = FREESANS_6PT_WIN1250;
+
+InkHUD::Applet::fontLarge = FREESANS_9PT_WIN1251;
+InkHUD::Applet::fontSmall = FREESANS_6PT_WIN1251;
+```
+
+### Creating / Modifying
+
+For basic conversion and editing, online tools might be sufficient:
+
+- [https://rop.nl/truetype2gfx/](https://rop.nl/truetype2gfx/) - converting from ttf
+- [https://tchapi.github.io/Adafruit-GFX-Font-Customiser/](https://tchapi.github.io/Adafruit-GFX-Font-Customiser/) - editing glyphs
+
+For heavy editing, this offline workflow is suggested:
+
+- [FontForge](https://fontforge.org/en-US/)
+  - re-ordering glyphs
+    - Encoding > Load Encoding
+    - Encoding > Reencode
+  - .ttf to .bdf conversion
+    - Element > Bitmap Strikes Available..
+    - File > Generate Fonts
+- [GFXFontEditor](https://github.com/ScottFerg56/GFXFontEditor)
+  - manual glyph correction
+  - .bdf to AdafruitGFX .h conversion
+    - File > Edit Font Properties
+    - right-click glyph list, flatten font
+    - File > Save As
+    - manually edit exported .h
+      - remove `#include <AdafruitGFX.h>`
+
+If possible, custom Extended-ASCII fonts should use one of the encodings which InkHUD already supports. If this is not possible, a mapping for the new encoding will need to be added.
+
+See [Encoding](#encoding) for details on using an extended-ASCII font.
 
 ## Class Notes
 
@@ -628,17 +707,30 @@ The default AdafruitGFX text handling places characters "upon a line", as if han
 
 The height of this box is `AppletFont::lineHeight`, which is the height of the tallest character in the font. This gives us a fixed-height for text, which is much tighter than with AdafruitGFX's default line spacing.
 
-#### UTF-8 Substitutions
+#### Encoding
 
-To enable non-English text, the `AppletFont` class includes a mechanism to detect specific UTF-8 characters, and replace them with alternative glyphs from the AdafruitGFX font. This can be used to remap characters for a custom font, or to offer a suitable ASCII replacement.
+An AppletFont may be constructed from a standard 7bit ASCII AdafruitGFX font, however InkHUD also supports 8bit extended-ASCII fonts.
+
+For this, the encoding must be specified when instantiating the AppletFont.
 
 ```cpp
-// With a custom font
-// ї is ASCII 0xBF, in Windows-1251 encoding
-addSubstitution("ї", "\xBF");
-
-// Substitution (with a default font)
-addSubstitution("ö", "oe");
+InkHUD::AppletFont(FreeSans9pt_Win1250, InkHUD::AppletFont::WINDOWS_1250);
 ```
 
-These substitutions should be performed in a variant's `setupNicheGraphics` method. For convenience, some common ASCII encodings have ready-to-go sets of substitutions you can apply, for example `AppletFont::addSubstitutionsWin1251`
+Currently supported encodings are:
+
+- ASCII
+- Windows-1250 (Central European)
+- Windows-1251 (Cyrillic)
+- Windows-1252 (Western European)
+
+To add support for additional encodings, add to the `AppletFont::Encodings` enum, and then define the mapping from unicode in `AppletFont::applyEncoding`.
+
+#### Custom Line Height
+
+Some fonts may have a handful of especially tall characters, especially extended-ASCII fonts with diacritcs. Ideally, the font should be modified to help resolve this, but if the problem remains, manual offsets to the automatically determined line height can be specified in the constructor.
+
+```cpp
+// -2 px of padding above, +1 px of padding below
+InkHUD::AppletFont(FreeSans9pt7b, ASCII, -2, 1);
+```
