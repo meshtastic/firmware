@@ -82,7 +82,8 @@ static uint32_t secsSlept;
 static void lsEnter()
 {
     LOG_INFO("lsEnter begin, ls_secs=%u", config.power.ls_secs);
-    screen->setOn(false);
+    if (screen)
+        screen->setOn(false);
     secsSlept = 0; // How long have we been sleeping this time
 
     // LOG_INFO("lsEnter end");
@@ -160,7 +161,8 @@ static void lsExit()
 static void nbEnter()
 {
     LOG_DEBUG("State: NB");
-    screen->setOn(false);
+    if (screen)
+        screen->setOn(false);
 #ifdef ARCH_ESP32
     // Only ESP32 should turn off bluetooth
     setBluetoothEnable(false);
@@ -190,7 +192,8 @@ static void serialExit()
 {
     // Turn bluetooth back on when we leave serial stream API
     setBluetoothEnable(true);
-    screen->print("Serial disconnected\n");
+    if (screen)
+        screen->print("Serial disconnected\n");
 }
 
 static void powerEnter()
@@ -201,7 +204,7 @@ static void powerEnter()
         LOG_INFO("Loss of power in Powered");
         powerFSM.trigger(EVENT_POWER_DISCONNECTED);
     } else {
-	if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR )
+	if (screen)
 	        screen->setOn(true);
         setBluetoothEnable(true);
         // within enter() the function getState() returns the state we came from
@@ -226,7 +229,7 @@ static void powerIdle()
 static void powerExit()
 {
     if (screen)
-	screen->setOn(true);
+	    screen->setOn(true);
     setBluetoothEnable(true);
 
     // Mothballed: print change of power-state to device screen
@@ -237,7 +240,8 @@ static void powerExit()
 static void onEnter()
 {
     LOG_DEBUG("State: ON");
-    screen->setOn(true);
+    if (screen)
+        screen->setOn(true);
     setBluetoothEnable(true);
 }
 
@@ -251,7 +255,8 @@ static void onIdle()
 
 static void screenPress()
 {
-    screen->onPress();
+    if (screen)
+        screen->onPress();
 }
 
 static void bootEnter()

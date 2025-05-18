@@ -60,7 +60,8 @@ int32_t ICM20948Sensor::runOnce()
         if (!showingScreen) {
             powerFSM.trigger(EVENT_PRESS); // keep screen alive during calibration
             showingScreen = true;
-            screen->startAlert((FrameCallback)drawFrameCalibration);
+            if (screen)
+                screen->startAlert((FrameCallback)drawFrameCalibration);
         }
 
         if (magX > highestX)
@@ -81,7 +82,8 @@ int32_t ICM20948Sensor::runOnce()
             doCalibration = false;
             endCalibrationAt = 0;
             showingScreen = false;
-            screen->endAlert();
+            if (screen)
+                screen->endAlert();
         }
 
         // LOG_DEBUG("ICM20948 min_x: %.4f, max_X: %.4f, min_Y: %.4f, max_Y: %.4f, min_Z: %.4f, max_Z: %.4f", lowestX, highestX,
@@ -124,8 +126,8 @@ int32_t ICM20948Sensor::runOnce()
         heading += 270;
         break;
     }
-
-    screen->setHeading(heading);
+    if (screen)
+        screen->setHeading(heading);
 #endif
 
     // Wake on motion using polling  - this is not as efficient as using hardware interrupt pin (see above)
@@ -159,7 +161,8 @@ void ICM20948Sensor::calibrate(uint16_t forSeconds)
     doCalibration = true;
     uint16_t calibrateFor = forSeconds * 1000; // calibrate for seconds provided
     endCalibrationAt = millis() + calibrateFor;
-    screen->setEndCalibration(endCalibrationAt);
+    if (screen)
+        screen->setEndCalibration(endCalibrationAt);
 #endif
 }
 // ----------------------------------------------------------------------

@@ -853,7 +853,8 @@ int32_t Power::runOnce()
 #ifndef T_WATCH_S3 // FIXME - why is this triggering on the T-Watch S3?
         if (PMU->isPekeyLongPressIrq()) {
             LOG_DEBUG("PEK long button press");
-            screen->setOn(false);
+            if (screen)
+                screen->setOn(false);
         }
 #endif
 

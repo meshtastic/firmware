@@ -84,7 +84,8 @@ int32_t ScanAndSelectInput::runOnce()
         // Dismiss the alert screen several seconds after it appears
         if (!Throttle::isWithinTimespanMs(alertingSinceMs, durationAlertMs)) {
             alertingNoMessage = false;
-            screen->endAlert();
+            if (screen)
+                screen->endAlert();
         }
     }
 
@@ -183,13 +184,15 @@ void ScanAndSelectInput::alertNoMessage()
     alertingSinceMs = millis();
 
     // Graphics code: the alert frame to show on screen
-    screen->startAlert([](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
-        display->setTextAlignment(TEXT_ALIGN_CENTER_BOTH);
-        display->setFont(FONT_SMALL);
-        int16_t textX = display->getWidth() / 2;
-        int16_t textY = display->getHeight() / 2;
-        display->drawString(textX + x, textY + y, "No Canned Messages");
-    });
+    if (screen) {
+        screen->startAlert([](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
+            display->setTextAlignment(TEXT_ALIGN_CENTER_BOTH);
+            display->setFont(FONT_SMALL);
+            int16_t textX = display->getWidth() / 2;
+            int16_t textY = display->getHeight() / 2;
+            display->drawString(textX + x, textY + y, "No Canned Messages");
+        });
+    }
 }
 
 // Remove the canned message frame from screen

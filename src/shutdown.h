@@ -41,7 +41,7 @@ void powerCommandsCheck()
     }
 
 #if defined(ARCH_ESP32) || defined(ARCH_NRF52)
-    if (shutdownAtMsec) {
+    if (shutdownAtMsec && screen) {
         screen->startAlert("Shutting down...");
     }
 #endif

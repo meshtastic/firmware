@@ -903,6 +903,7 @@ void handleBlinkLED(HTTPRequest *req, HTTPResponse *res)
         }
     } else {
 #if HAS_SCREEN
+    if (screen)
         screen->blink();
 #endif
     }
