@@ -172,15 +172,18 @@ static void nbEnter()
 static void darkEnter()
 {
     setBluetoothEnable(true);
-    screen->setOn(false);
+    if (screen)
+        screen->setOn(false);
 }
 
 static void serialEnter()
 {
     LOG_DEBUG("State: SERIAL");
     setBluetoothEnable(false);
-    screen->setOn(true);
-    screen->print("Serial connected\n");
+    if (screen) {
+        screen->setOn(true);
+        screen->print("Serial connected\n");
+    }
 }
 
 static void serialExit()
