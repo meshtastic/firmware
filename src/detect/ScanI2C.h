@@ -122,7 +122,7 @@ class ScanI2C
     FoundDevice firstKeyboard() const;
 
     FoundDevice firstAccelerometer() const;
-    
+
     FoundDevice firstINA() const;
 
     FoundDevice firstRGBLED() const;
