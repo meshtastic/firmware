@@ -1,4 +1,7 @@
 #define LED_PIN 45 // LED is not populated on earliest board variant
+
+#define HAS_32768HZ
+
 #define BUTTON_PIN 0
 #define PIN_BUTTON2 21             // Second built-in button
 #define ALT_BUTTON_PIN PIN_BUTTON2 // Send the up event
