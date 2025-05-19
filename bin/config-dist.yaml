@@ -188,10 +188,16 @@ Logging:
 #  AsciiLogs: true     # default if not specified is !isatty() on stdout
 
 Webserver:
-#  Port: 443 # Port for Webserver & Webservices
+#  Port: 9443 # Port for Webserver & Webservices
 #  RootPath: /usr/share/meshtasticd/web # Root Dir of WebServer
 #  SSLKey: /etc/meshtasticd/ssl/private_key.pem # Path to SSL Key, generated if not present
 #  SSLCert: /etc/meshtasticd/ssl/certificate.pem # Path to SSL Certificate, generated if not present
+
+
+HostMetrics:
+#  ReportInterval: 30 # Interval in minutes between HostMetrics report packets, or 0 for disabled
+#  Channel: 0 # channel to send Host Metrics over. Defaults to the primary channel.
+
 
 General:
   MaxNodes: 200

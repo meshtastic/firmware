@@ -308,6 +308,9 @@ extern "C"
 #define HAS_TOUCHSCREEN 1
 #define SCREEN_TOUCH_INT WB_IO6
 
+#define USE_POWERSAVE
+#define SLEEP_TIME 120
+
 #define CANNED_MESSAGE_MODULE_ENABLE 1
 #define USE_VIRTUAL_KEYBOARD 1
 /*----------------------------------------------------------------------------

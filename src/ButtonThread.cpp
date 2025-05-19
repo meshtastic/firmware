@@ -255,7 +255,7 @@ int32_t ButtonThread::runOnce()
                 digitalWrite(PIN_EINK_EN, digitalRead(PIN_EINK_EN) == LOW);
                 break;
 #endif
-#if defined(RAK_4631)
+#if !MESHTASTIC_EXCLUDE_SCREEN && HAS_SCREEN
             // 5 clicks: start accelerometer/magenetometer calibration for 30 seconds
             case 5:
                 if (accelerometerThread) {
@@ -300,14 +300,23 @@ int32_t ButtonThread::runOnce()
 #ifdef BUTTON_PIN_TOUCH
         case BUTTON_EVENT_TOUCH_LONG_PRESSED: {
             LOG_BUTTON("Touch press!");
-            if (screen) {
-                // Wake if asleep
-                if (powerFSM.getState() == &stateDARK)
-                    powerFSM.trigger(EVENT_PRESS);
+            // Ignore if: no screen
+            if (!screen)
+                break;
 
-                // Update display (legacy behaviour)
-                screen->forceDisplay();
-            }
+#ifdef TTGO_T_ECHO
+            // Ignore if: TX in progress
+            // Uncommon T-Echo hardware bug, LoRa TX triggers touch button
+            if (!RadioLibInterface::instance || RadioLibInterface::instance->isSending())
+                break;
+#endif
+
+            // Wake if asleep
+            if (powerFSM.getState() == &stateDARK)
+                powerFSM.trigger(EVENT_PRESS);
+
+            // Update display (legacy behaviour)
+            screen->forceDisplay();
             break;
         }
 #endif // BUTTON_PIN_TOUCH

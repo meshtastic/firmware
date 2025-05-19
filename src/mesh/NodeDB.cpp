@@ -328,6 +328,11 @@ NodeDB::NodeDB()
         moduleConfig.telemetry.health_update_interval = Default::getConfiguredOrMinimumValue(
             moduleConfig.telemetry.health_update_interval, min_default_telemetry_interval_secs);
     }
+    if (moduleConfig.mqtt.has_map_report_settings &&
+        moduleConfig.mqtt.map_report_settings.publish_interval_secs < default_map_publish_interval_secs) {
+        moduleConfig.mqtt.map_report_settings.publish_interval_secs = default_map_publish_interval_secs;
+    }
+
     // Ensure that the neighbor info update interval is coerced to the minimum
     moduleConfig.neighbor_info.update_interval =
         Default::getConfiguredOrMinimumValue(moduleConfig.neighbor_info.update_interval, min_neighbor_info_broadcast_secs);
@@ -584,7 +589,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     strncpy(config.network.ntp_server, "meshtastic.pool.ntp.org", 32);
 
 #if (defined(T_DECK) || defined(T_WATCH_S3) || defined(UNPHONE) || defined(PICOMPUTER_S3) || defined(SENSECAP_INDICATOR) ||      \
-     defined(ELECROW)) &&                                                                                                        \
+     defined(ELECROW_PANEL)) &&                                                                                                  \
     HAS_TFT
     // switch BT off by default; use TFT programming mode or hotkey to enable
     config.bluetooth.enabled = false;
@@ -689,7 +694,7 @@ void NodeDB::initConfigIntervals()
 
     config.display.screen_on_secs = default_screen_on_secs;
 
-#if defined(T_WATCH_S3) || defined(T_DECK) || defined(UNPHONE) || defined(MESH_TAB) || defined(RAK14014) || defined(ELECROW)
+#if defined(USE_POWERSAVE)
     config.power.is_power_saving = true;
     config.display.screen_on_secs = 30;
     config.power.wait_bluetooth_secs = 30;
@@ -761,11 +766,39 @@ void NodeDB::installDefaultModuleConfig()
 
     moduleConfig.has_canned_message = true;
 
+#if USERPREFS_MQTT_ENABLED && !MESHTASTIC_EXCLUDE_MQTT
+    moduleConfig.mqtt.enabled = true;
+#endif
+#ifdef USERPREFS_MQTT_ADDRESS
+    strncpy(moduleConfig.mqtt.address, USERPREFS_MQTT_ADDRESS, sizeof(moduleConfig.mqtt.address));
+#else
     strncpy(moduleConfig.mqtt.address, default_mqtt_address, sizeof(moduleConfig.mqtt.address));
+#endif
+#ifdef USERPREFS_MQTT_USERNAME
+    strncpy(moduleConfig.mqtt.username, USERPREFS_MQTT_USERNAME, sizeof(moduleConfig.mqtt.username));
+#else
     strncpy(moduleConfig.mqtt.username, default_mqtt_username, sizeof(moduleConfig.mqtt.username));
+#endif
+#ifdef USERPREFS_MQTT_PASSWORD
+    strncpy(moduleConfig.mqtt.password, USERPREFS_MQTT_PASSWORD, sizeof(moduleConfig.mqtt.password));
+#else
     strncpy(moduleConfig.mqtt.password, default_mqtt_password, sizeof(moduleConfig.mqtt.password));
+#endif
+#ifdef USERPREFS_MQTT_ROOT_TOPIC
+    strncpy(moduleConfig.mqtt.root, USERPREFS_MQTT_ROOT_TOPIC, sizeof(moduleConfig.mqtt.root));
+#else
     strncpy(moduleConfig.mqtt.root, default_mqtt_root, sizeof(moduleConfig.mqtt.root));
-    moduleConfig.mqtt.encryption_enabled = true;
+#endif
+#ifdef USERPREFS_MQTT_ENCRYPTION_ENABLED
+    moduleConfig.mqtt.encryption_enabled = USERPREFS_MQTT_ENCRYPTION_ENABLED;
+#else
+    moduleConfig.mqtt.encryption_enabled = default_mqtt_encryption_enabled;
+#endif
+#ifdef USERPREFS_MQTT_TLS_ENABLED
+    moduleConfig.mqtt.tls_enabled = USERPREFS_MQTT_TLS_ENABLED;
+#else
+    moduleConfig.mqtt.tls_enabled = default_mqtt_tls_enabled;
+#endif
 
     moduleConfig.has_neighbor_info = true;
     moduleConfig.neighbor_info.enabled = false;
@@ -791,10 +824,19 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
         initConfigIntervals();
         initModuleConfigIntervals();
         config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY;
+        owner.has_is_unmessagable = true;
+        owner.is_unmessagable = true;
+    } else if (role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE) {
+        owner.has_is_unmessagable = true;
+        owner.is_unmessagable = true;
     } else if (role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
+        owner.has_is_unmessagable = true;
+        owner.is_unmessagable = true;
         config.display.screen_on_secs = 1;
         config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY;
     } else if (role == meshtastic_Config_DeviceConfig_Role_SENSOR) {
+        owner.has_is_unmessagable = true;
+        owner.is_unmessagable = true;
         moduleConfig.telemetry.environment_measurement_enabled = true;
         moduleConfig.telemetry.environment_update_interval = 300;
     } else if (role == meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND) {
@@ -809,7 +851,12 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
             (meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE | meshtastic_Config_PositionConfig_PositionFlags_SPEED |
              meshtastic_Config_PositionConfig_PositionFlags_HEADING | meshtastic_Config_PositionConfig_PositionFlags_DOP);
         moduleConfig.telemetry.device_update_interval = ONE_DAY;
+    } else if (role == meshtastic_Config_DeviceConfig_Role_TRACKER) {
+        owner.has_is_unmessagable = true;
+        owner.is_unmessagable = true;
     } else if (role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER) {
+        owner.has_is_unmessagable = true;
+        owner.is_unmessagable = true;
         config.device.node_info_broadcast_secs = ONE_DAY;
         config.position.position_broadcast_smart_enabled = true;
         config.position.position_broadcast_secs = 3 * 60; // Every 3 minutes
@@ -942,6 +989,8 @@ void NodeDB::installDefaultDeviceState()
 #endif
     snprintf(owner.id, sizeof(owner.id), "!%08x", getNodeNum()); // Default node ID now based on nodenum
     memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
+    owner.has_is_unmessagable = true;
+    owner.is_unmessagable = false;
 }
 
 // We reserve a few nodenums for future use
@@ -1453,6 +1502,26 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
     info->has_device_metrics = true;
     updateGUIforNode = info;
     notifyObservers(true); // Force an update whether or not our node counts have changed
+}
+
+/**
+ * Update the node database with a new contact
+ */
+void NodeDB::addFromContact(meshtastic_SharedContact contact)
+{
+    meshtastic_NodeInfoLite *info = getOrCreateMeshNode(contact.node_num);
+    if (!info) {
+        return;
+    }
+    info->num = contact.node_num;
+    info->last_heard = getValidTime(RTCQualityNTP);
+    info->has_user = true;
+    info->user = TypeConversions::ConvertToUserLite(contact.user);
+    info->is_favorite = true;
+    updateGUIforNode = info;
+    powerFSM.trigger(EVENT_NODEDB_UPDATED);
+    notifyObservers(true); // Force an update whether or not our node counts have changed
+    saveNodeDatabaseToDisk();
 }
 
 /** Update user info and channel for this node based on received user data

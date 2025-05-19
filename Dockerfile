@@ -1,4 +1,3 @@
-# trunk-ignore-all(terrascan/AC_DOCKER_0002): Known terrascan issue
 # trunk-ignore-all(trivy/DS002): We must run as root for this container
 # trunk-ignore-all(hadolint/DL3002): We must run as root for this container
 # trunk-ignore-all(hadolint/DL3008): Do not pin apt package versions
@@ -38,6 +37,13 @@ RUN curl -L "https://github.com/meshtastic/web/releases/download/v$(cat /tmp/fir
 ##### PRODUCTION BUILD #############
 
 FROM debian:bookworm-slim
+LABEL org.opencontainers.image.title="Meshtastic" \
+      org.opencontainers.image.description="Debian Meshtastic daemon and web interface" \
+      org.opencontainers.image.url="https://meshtastic.org" \
+      org.opencontainers.image.documentation="https://meshtastic.org/docs/" \
+      org.opencontainers.image.authors="Meshtastic" \
+      org.opencontainers.image.licenses="GPL-3.0-or-later" \
+      org.opencontainers.image.source="https://github.com/meshtastic/firmware/"
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Etc/UTC
 
@@ -54,7 +60,7 @@ RUN apt-get update && apt-get --no-install-recommends -y install \
     && mkdir -p /etc/meshtasticd/ssl
 
 # Fetch compiled binary from the builder
-COPY --from=builder /tmp/firmware/release/meshtasticd /usr/sbin/
+COPY --from=builder /tmp/firmware/release/meshtasticd /usr/bin/
 COPY --from=builder /tmp/web /usr/share/meshtasticd/
 # Copy config templates
 COPY ./bin/config.d /etc/meshtasticd/available.d
@@ -65,8 +71,8 @@ VOLUME /var/lib/meshtasticd
 # Expose Meshtastic TCP API port from the host
 EXPOSE 4403
 # Expose Meshtastic Web UI port from the host
-EXPOSE 443
+EXPOSE 9443
 
-CMD [ "sh", "-cx", "meshtasticd -d /var/lib/meshtasticd" ]
+CMD [ "sh", "-cx", "meshtasticd --fsdir=/var/lib/meshtasticd" ]
 
 HEALTHCHECK NONE
