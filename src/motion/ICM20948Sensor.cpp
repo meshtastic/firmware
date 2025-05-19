@@ -189,13 +189,19 @@ bool ICM20948Singleton::init(ScanI2C::FoundDevice device)
     enableDebugging();
 #endif
 
-// startup
-#ifdef Wire1
-    ICM_20948_Status_e status =
-        begin(device.address.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire, device.address.address == ICM20948_ADDR ? 1 : 0);
+    // startup
+#if defined(WIRE_INTERFACES_COUNT) && (WIRE_INTERFACES_COUNT > 1)
+    TwoWire &bus = (device.address.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire);
 #else
-    ICM_20948_Status_e status = begin(Wire, device.address.address == ICM20948_ADDR ? 1 : 0);
+    TwoWire &bus = Wire; // fallback if only one I2C interface
 #endif
+
+    bool bAddr = (device.address.address == 0x69);
+    delay(100);
+
+    LOG_DEBUG("ICM20948 begin on addr 0x%02X (port=%d, bAddr=%d)", device.address.address, device.address.port, bAddr);
+
+    ICM_20948_Status_e status = begin(bus, bAddr);
     if (status != ICM_20948_Stat_Ok) {
         LOG_DEBUG("ICM20948 init begin - %s", statusString());
         return false;
