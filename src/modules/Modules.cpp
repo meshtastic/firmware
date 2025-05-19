@@ -104,7 +104,9 @@ void setupModules()
 {
     if (config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER) {
 #if (HAS_BUTTON || ARCH_PORTDUINO) && !MESHTASTIC_EXCLUDE_INPUTBROKER
-        inputBroker = new InputBroker();
+        if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+            inputBroker = new InputBroker();
+        }
 #endif
 #if !MESHTASTIC_EXCLUDE_ADMIN
         adminModule = new AdminModule();
@@ -152,36 +154,40 @@ void setupModules()
         // Example: Put your module here
         // new ReplyModule();
 #if (HAS_BUTTON || ARCH_PORTDUINO) && !MESHTASTIC_EXCLUDE_INPUTBROKER
-        rotaryEncoderInterruptImpl1 = new RotaryEncoderInterruptImpl1();
-        if (!rotaryEncoderInterruptImpl1->init()) {
-            delete rotaryEncoderInterruptImpl1;
-            rotaryEncoderInterruptImpl1 = nullptr;
-        }
-        upDownInterruptImpl1 = new UpDownInterruptImpl1();
-        if (!upDownInterruptImpl1->init()) {
-            delete upDownInterruptImpl1;
-            upDownInterruptImpl1 = nullptr;
-        }
+
+        if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+            rotaryEncoderInterruptImpl1 = new RotaryEncoderInterruptImpl1();
+            if (!rotaryEncoderInterruptImpl1->init()) {
+                delete rotaryEncoderInterruptImpl1;
+                rotaryEncoderInterruptImpl1 = nullptr;
+            }
+            upDownInterruptImpl1 = new UpDownInterruptImpl1();
+            if (!upDownInterruptImpl1->init()) {
+                delete upDownInterruptImpl1;
+                upDownInterruptImpl1 = nullptr;
+            }
 
 #if HAS_SCREEN
-        // In order to have the user button dismiss the canned message frame, this class lightly interacts with the Screen class
-        scanAndSelectInput = new ScanAndSelectInput();
-        if (!scanAndSelectInput->init()) {
-            delete scanAndSelectInput;
-            scanAndSelectInput = nullptr;
-        }
+            // In order to have the user button dismiss the canned message frame, this class lightly interacts with the Screen
+            // class
+            scanAndSelectInput = new ScanAndSelectInput();
+            if (!scanAndSelectInput->init()) {
+                delete scanAndSelectInput;
+                scanAndSelectInput = nullptr;
+            }
 #endif
 
-        cardKbI2cImpl = new CardKbI2cImpl();
-        cardKbI2cImpl->init();
+            cardKbI2cImpl = new CardKbI2cImpl();
+            cardKbI2cImpl->init();
 #ifdef INPUTBROKER_MATRIX_TYPE
-        kbMatrixImpl = new KbMatrixImpl();
-        kbMatrixImpl->init();
+            kbMatrixImpl = new KbMatrixImpl();
+            kbMatrixImpl->init();
 #endif // INPUTBROKER_MATRIX_TYPE
 #ifdef INPUTBROKER_SERIAL_TYPE
-        aSerialKeyboardImpl = new SerialKeyboardImpl();
-        aSerialKeyboardImpl->init();
+            aSerialKeyboardImpl = new SerialKeyboardImpl();
+            aSerialKeyboardImpl->init();
 #endif // INPUTBROKER_MATRIX_TYPE
+        }
 #endif // HAS_BUTTON
 #if ARCH_PORTDUINO
         if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
@@ -190,14 +196,19 @@ void setupModules()
         }
 #endif
 #if HAS_TRACKBALL && !MESHTASTIC_EXCLUDE_INPUTBROKER
-        trackballInterruptImpl1 = new TrackballInterruptImpl1();
-        trackballInterruptImpl1->init();
+        if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+            trackballInterruptImpl1 = new TrackballInterruptImpl1();
+            trackballInterruptImpl1->init();
+        }
 #endif
+        LOG_DEBUG("location5");
 #ifdef INPUTBROKER_EXPRESSLRSFIVEWAY_TYPE
         expressLRSFiveWayInput = new ExpressLRSFiveWay();
 #endif
 #if HAS_SCREEN && !MESHTASTIC_EXCLUDE_CANNEDMESSAGES
-        cannedMessageModule = new CannedMessageModule();
+        if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+            cannedMessageModule = new CannedMessageModule();
+        }
 #endif
 #if ARCH_PORTDUINO
         new HostMetricsModule();
