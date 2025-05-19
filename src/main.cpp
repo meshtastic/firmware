@@ -961,7 +961,7 @@ void setup()
         screen->setup();
     }
 #else
-    if (screen_found.port != ScanI2C::I2CPort::NO_I2C)
+    if (screen_found.port != ScanI2C::I2CPort::NO_I2C && screen)
         screen->setup();
 #endif
 #endif
