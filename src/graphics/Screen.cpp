@@ -125,6 +125,63 @@ static bool heartbeat = false;
 #include "graphics/ScreenFonts.h"
 #include <Throttle.h>
 
+
+// Start Functions to write date/time to the screen
+#include <string>  // Only needed if you're using std::string elsewhere
+
+bool isLeapYear(int year) {
+    return (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0));
+}
+
+const int daysInMonth[] = { 31,28,31,30,31,30,31,31,30,31,30,31 };
+
+// Fills the buffer with a formatted date/time string and returns pixel width
+int formatDateTime(char* buf, size_t bufSize, uint32_t rtc_sec, OLEDDisplay* display, bool includeTime) {
+    int sec = rtc_sec % 60;
+    rtc_sec /= 60;
+    int min = rtc_sec % 60;
+    rtc_sec /= 60;
+    int hour = rtc_sec % 24;
+    rtc_sec /= 24;
+
+    int year = 1970;
+    while (true) {
+        int daysInYear = isLeapYear(year) ? 366 : 365;
+        if (rtc_sec >= daysInYear) {
+            rtc_sec -= daysInYear;
+            year++;
+        } else {
+            break;
+        }
+    }
+
+    int month = 0;
+    while (month < 12) {
+        int dim = daysInMonth[month];
+        if (month == 1 && isLeapYear(year)) dim++;
+        if (rtc_sec >= dim) {
+            rtc_sec -= dim;
+            month++;
+        } else {
+            break;
+        }
+    }
+
+    int day = rtc_sec + 1;
+
+    if (includeTime) {
+        snprintf(buf, bufSize, "%04d-%02d-%02d %02d:%02d:%02d", year, month + 1, day, hour, min, sec);
+    } else {
+        snprintf(buf, bufSize, "%04d-%02d-%02d", year, month + 1, day);
+    }
+
+    return display->getStringWidth(buf);
+}
+
+// Usage: int stringWidth = formatDateTime(datetimeStr, sizeof(datetimeStr), rtc_sec, display);
+// End Functions to write date/time to the screen
+
+
 void drawScaledXBitmap16x16(int x, int y, int width, int height, const uint8_t *bitmapXBM, OLEDDisplay *display)
 {
     for (int row = 0; row < height; row++) {
@@ -2862,6 +2919,17 @@ static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiStat
         char lonStr[32];
         snprintf(lonStr, sizeof(lonStr), "Lon: %.5f", geoCoord.getLongitude() * 1e-7);
         display->drawString(x, compactFourthLine, lonStr);
+
+        if(SCREEN_HEIGHT > 64){
+            // === Fifth Row: Date ===
+            uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true);
+            char datetimeStr[25];
+            bool showTime = false;  // set to true for full datetime
+            formatDateTime(datetimeStr, sizeof(datetimeStr), rtc_sec, display, showTime);
+            char fullLine[40];
+            snprintf(fullLine, sizeof(fullLine), "Date: %s", datetimeStr);
+            display->drawString(0, compactFifthLine, fullLine);
+        }
     }
 
     // === Draw Compass if heading is valid ===
