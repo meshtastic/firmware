@@ -204,8 +204,8 @@ static void powerEnter()
         LOG_INFO("Loss of power in Powered");
         powerFSM.trigger(EVENT_POWER_DISCONNECTED);
     } else {
-	if (screen)
-	        screen->setOn(true);
+        if (screen)
+            screen->setOn(true);
         setBluetoothEnable(true);
         // within enter() the function getState() returns the state we came from
 
@@ -229,7 +229,7 @@ static void powerIdle()
 static void powerExit()
 {
     if (screen)
-	    screen->setOn(true);
+        screen->setOn(true);
     setBluetoothEnable(true);
 
     // Mothballed: print change of power-state to device screen
