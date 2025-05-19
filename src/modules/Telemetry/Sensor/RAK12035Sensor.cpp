@@ -1,5 +1,5 @@
 #include "configuration.h"
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && __has_include("RAK12035_SoilMoisture.h") && defined(RAK_4631)
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && __has_include("RAK12035_SoilMoisture.h") && defined(RAK_4631) && RAK_4631 == 1
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "RAK12035Sensor.h"
@@ -109,6 +109,20 @@ bool RAK12035Sensor::getMetrics(meshtastic_Telemetry *measurement)
     }
     measurement->variant.environment_metrics.soil_temperature = (float)(temp / 10);
     measurement->variant.environment_metrics.soil_moisture = moisture;
+
+    // TODO:: remove this once the clients are updated to use the new proto
+    //  temp code to get the values to the gui. will remove this once at least one of the clients is updated to use the new proto
+    // if (!measurement->variant.environment_metrics.has_temperature && measurement->variant.environment_metrics.temperature == 0)
+    // {
+    //     measurement->variant.environment_metrics.has_temperature = true;
+    //     measurement->variant.environment_metrics.temperature = measurement->variant.environment_metrics.soil_temperature;
+    // }
+
+    // if (!measurement->variant.environment_metrics.has_relative_humidity && measurement->variant.environment_metrics.relative_humidity == 0)
+    // {
+    //     measurement->variant.environment_metrics.has_relative_humidity = true;
+    //     measurement->variant.environment_metrics.relative_humidity = measurement->variant.environment_metrics.soil_moisture;
+    // }
 
     return true;
 }

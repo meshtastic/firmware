@@ -94,7 +94,7 @@ SHTC3Sensor shtc3Sensor;
 NullSensor shtc3Sensor;
 #endif
 
-#if __has_include(<RAK12035_SoilMoisture.h>) && defined(RAK_4631)
+#if __has_include("RAK12035_SoilMoisture.h") && defined(RAK_4631) && RAK_4631 == 1
 #include "Sensor/RAK12035Sensor.h"
 RAK12035Sensor rak12035Sensor;
 #else
@@ -283,7 +283,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
 
             result = rak9154Sensor.runOnce();
 #endif
-#if __has_include("RAK12035_SoilMoisture.h") && defined(RAK_4631)
+#if __has_include("RAK12035_SoilMoisture.h") && defined(RAK_4631) && RAK_4631 == 1
             if (rak12035Sensor.hasSensor())
             {
                 result = rak12035Sensor.runOnce();
@@ -678,7 +678,7 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
     valid = valid && rak9154Sensor.getMetrics(m);
     hasSensor = true;
 #endif
-#if __has_include(<RAK12035_SoilMoisture.h>) && defined(RAK_4631) // Not really needed, but may as well just skip at a lower level it if no library or not a RAK_4631
+#if __has_include("RAK12035_SoilMoisture.h") && defined(RAK_4631) && RAK_4631 == 1 // Not really needed, but may as well just skip at a lower level it if no library or not a RAK_4631
     if (rak12035Sensor.hasSensor())
     {
         valid = valid && rak12035Sensor.getMetrics(m);
@@ -938,7 +938,7 @@ AdminMessageHandleResult EnvironmentTelemetryModule::handleAdminMessageForModule
         if (result != AdminMessageHandleResult::NOT_HANDLED)
             return result;
     }
-#if __has_include(<RAK12035_SoilMoisture.h>) && defined(RAK_4631) // Not really needed, but may as well just skip it at a lower level if no library or not a RAK_4631
+#if __has_include("RAK12035_SoilMoisture.h") && defined(RAK_4631) && RAK_4631 == 1 // Not really needed, but may as well just skip it at a lower level if no library or not a RAK_4631
     if (rak12035Sensor.hasSensor())
     {
         result = rak12035Sensor.handleAdminMessage(mp, request, response);
