@@ -550,6 +550,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
             if (screen)
                 screen->showOverlayBanner("Shutting down...");
             shutdownAtMsec = millis() + DEFAULT_SHUTDOWN_SECONDS * 1000;
+            nodeDB->saveToDisk();
             this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
             validEvent = true;
             break;
@@ -557,6 +558,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         case INPUT_BROKER_MSG_REBOOT:
             if (screen)
                 screen->showOverlayBanner("Rebooting...", 0); // stays on screen
+            nodeDB->saveToDisk();
             rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
             this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
             validEvent = true;
