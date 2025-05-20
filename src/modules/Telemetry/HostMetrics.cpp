@@ -69,8 +69,9 @@ meshtastic_MeshPacket *HostMetricsModule::allocReply()
 meshtastic_Telemetry HostMetricsModule::getHostMetrics()
 {
     std::string file_line;
-    meshtastic_Telemetry t = meshtastic_HostMetrics_init_zero;
+    meshtastic_Telemetry t = meshtastic_Telemetry_init_zero;
     t.which_variant = meshtastic_Telemetry_host_metrics_tag;
+    t.variant.host_metrics = meshtastic_HostMetrics_init_zero;
 
     if (access("/proc/uptime", R_OK) == 0) {
         std::ifstream proc_uptime("/proc/uptime");
