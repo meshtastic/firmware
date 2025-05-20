@@ -232,7 +232,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 
 #ifndef MINIMUM_SAFE_FREE_HEAP
+#ifdef ESP32
 #define MINIMUM_SAFE_FREE_HEAP 15000
+#else
+#define MINIMUM_SAFE_FREE_HEAP 1500
+#endif
 #endif
 
 #ifndef WIRE_INTERFACES_COUNT
