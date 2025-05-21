@@ -2773,27 +2773,26 @@ static void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int
     display->setColor(WHITE);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
-    // === First Row: Region / Radio Preset ===
+    // === First Row: Region / BLE Name ===
     drawNodes(display, x, compactFirstLine + 3, nodeStatus, 0, true);
 
-    auto mode = DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false);
-
-    // Display Region and Radio Preset
-    char regionradiopreset[25];
-    const char *region = myRegion ? myRegion->name : NULL;
-    snprintf(regionradiopreset, sizeof(regionradiopreset), "%s/%s", region, mode);
-    int textWidth = display->getStringWidth(regionradiopreset);
-    display->drawString(SCREEN_WIDTH - textWidth, compactFirstLine, regionradiopreset);
-
-    // === Second Row: BLE Name ===
     uint8_t dmac[6];
     char shortnameble[35];
     getMacAddr(dmac);
     snprintf(ourId, sizeof(ourId), "%02x%02x", dmac[4], dmac[5]);
     snprintf(shortnameble, sizeof(shortnameble), "BLE: %s", ourId);
-    textWidth = display->getStringWidth(shortnameble);
-    int nameX = (SCREEN_WIDTH - textWidth) / 2;
-    display->drawString(nameX, compactSecondLine, shortnameble);
+    int textWidth = display->getStringWidth(shortnameble);
+    int nameX = (SCREEN_WIDTH - textWidth);
+    display->drawString(nameX, compactFirstLine, shortnameble);
+
+    // === Second Row: Radio Preset ===
+    auto mode = DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false);
+    char regionradiopreset[25];
+    const char *region = myRegion ? myRegion->name : NULL;
+    snprintf(regionradiopreset, sizeof(regionradiopreset), "%s/%s", region, mode);
+    textWidth = display->getStringWidth(regionradiopreset);
+    nameX = (SCREEN_WIDTH - textWidth) / 2;
+    display->drawString(nameX, compactSecondLine, regionradiopreset);
 
     // === Third Row: Frequency / ChanNum ===
     char frequencyslot[35];
