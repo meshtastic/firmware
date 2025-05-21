@@ -46,6 +46,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "mesh/Channels.h"
+#include "RadioLibInterface.h"
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
 #include "meshUtils.h"
 #include "modules/AdminModule.h"
@@ -2697,18 +2698,49 @@ static void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, i
 
     config.display.heading_bold = origBold;
 
-    // === Third Row: LongName Centered ===
-    // Blank
 
-    // === Fourth Row: LongName Centered ===
+    // Crafting all the data first so we can use it
+    int textWidth = 0;
+    int nameX = 0;
+    int yOffset = (SCREEN_WIDTH > 128) ? 0 : 7;
+    const char *longName = nullptr;
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     if (ourNode && ourNode->has_user && strlen(ourNode->user.long_name) > 0) {
-        const char *longName = ourNode->user.long_name;
-        int textWidth = display->getStringWidth(longName);
-        int nameX = (SCREEN_WIDTH - textWidth) / 2;
-        int yOffset = (SCREEN_WIDTH > 128) ? 0 : 7;
-        display->drawString(nameX, compactFourthLine - yOffset, longName);
+        longName = ourNode->user.long_name;
     }
+    uint8_t dmac[6];
+    char shortnameble[35];
+    getMacAddr(dmac);
+    snprintf(ourId, sizeof(ourId), "%02x%02x", dmac[4], dmac[5]);
+    snprintf(shortnameble, sizeof(shortnameble), "%s", haveGlyphs(owner.short_name) ? owner.short_name : "");
+
+    char combinedName[50];
+    snprintf(combinedName, sizeof(combinedName), "%s (%s)", longName, shortnameble);
+    if(SCREEN_WIDTH - (display->getStringWidth(longName) + display->getStringWidth(shortnameble)) > 10){
+        // === Third Row: combinedName Centered ===
+        size_t len = strlen(combinedName);
+        if (len >= 3 && strcmp(combinedName + len - 3, " ()") == 0) {
+            combinedName[len - 3] = '\0';  // Remove the last three characters
+        }
+        textWidth = display->getStringWidth(combinedName);
+        nameX = (SCREEN_WIDTH - textWidth) / 2;
+        display->drawString(nameX, compactThirdLine + yOffset, combinedName);
+    } else {
+        // === Third Row: LongName Centered ===
+        textWidth = display->getStringWidth(longName);
+        nameX = (SCREEN_WIDTH - textWidth) / 2;
+        yOffset = (strcmp(shortnameble, "") == 0) ? 1 : 0;
+        if(yOffset == 1){
+            yOffset = (SCREEN_WIDTH > 128) ? 0 : 7;
+        }
+        display->drawString(nameX, compactThirdLine + yOffset, longName);
+
+        // === Fourth Row: ShortName Centered ===
+        textWidth = display->getStringWidth(shortnameble);
+        nameX = (SCREEN_WIDTH - textWidth) / 2;
+        display->drawString(nameX, compactFourthLine, shortnameble);
+    }
+
 }
 
 // ****************************
@@ -2751,29 +2783,35 @@ static void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int
     const char *region = myRegion ? myRegion->name : NULL;
     snprintf(regionradiopreset, sizeof(regionradiopreset), "%s/%s", region, mode);
     int textWidth = display->getStringWidth(regionradiopreset);
-    int nameX = (SCREEN_WIDTH - textWidth) / 2;
     display->drawString(SCREEN_WIDTH - textWidth, compactFirstLine, regionradiopreset);
 
-    // === Second Row: Channel Utilization ===
-    // Get our hardware ID
+    // === Second Row: BLE Name ===
     uint8_t dmac[6];
+    char shortnameble[35];
     getMacAddr(dmac);
     snprintf(ourId, sizeof(ourId), "%02x%02x", dmac[4], dmac[5]);
-
-    char shortnameble[35];
-    snprintf(shortnameble, sizeof(shortnameble), "%s_%s", haveGlyphs(owner.short_name) ? owner.short_name : "", ourId);
+    snprintf(shortnameble, sizeof(shortnameble), "BLE: %s", ourId);
     textWidth = display->getStringWidth(shortnameble);
-    nameX = (SCREEN_WIDTH - textWidth) / 2;
+    int nameX = (SCREEN_WIDTH - textWidth) / 2;
     display->drawString(nameX, compactSecondLine, shortnameble);
 
-    // === Third Row: Node longName ===
-    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
-    if (ourNode && ourNode->has_user && strlen(ourNode->user.long_name) > 0) {
-        const char *longName = ourNode->user.long_name;
-        textWidth = display->getStringWidth(longName);
-        nameX = (SCREEN_WIDTH - textWidth) / 2;
-        display->drawString(nameX, compactThirdLine, longName);
+    // === Third Row: Frequency / ChanNum ===
+    char frequencyslot[35];
+    char freqStr[16];
+    float freq = RadioLibInterface::instance->getFreq();
+    snprintf(freqStr, sizeof(freqStr), "%.3f", freq);
+    if(config.lora.channel_num == 0){
+        snprintf(frequencyslot, sizeof(frequencyslot), "Freq: %s", freqStr);
+    } else {
+        snprintf(frequencyslot, sizeof(frequencyslot), "Freq/Chan: %s (%d)", freqStr, config.lora.channel_num);
     }
+    size_t len = strlen(frequencyslot);
+    if (len >= 4 && strcmp(frequencyslot + len - 4, " (0)") == 0) {
+        frequencyslot[len - 4] = '\0';  // Remove the last three characters
+    }
+    textWidth = display->getStringWidth(frequencyslot);
+    nameX = (SCREEN_WIDTH - textWidth) / 2;
+    display->drawString(nameX, compactThirdLine, frequencyslot);
 
     // === Fourth Row: Channel Utilization ===
     const char *chUtil = "ChUtil:";
