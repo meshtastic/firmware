@@ -148,7 +148,7 @@ int formatDateTime(char* buf, size_t bufSize, uint32_t rtc_sec, OLEDDisplay* dis
     int year = 1970;
     while (true) {
         int daysInYear = isLeapYear(year) ? 366 : 365;
-        if (rtc_sec >= daysInYear) {
+        if (rtc_sec >= (uint32_t)daysInYear) {
             rtc_sec -= daysInYear;
             year++;
         } else {
@@ -160,7 +160,7 @@ int formatDateTime(char* buf, size_t bufSize, uint32_t rtc_sec, OLEDDisplay* dis
     while (month < 12) {
         int dim = daysInMonth[month];
         if (month == 1 && isLeapYear(year)) dim++;
-        if (rtc_sec >= dim) {
+        if (rtc_sec >= (uint32_t)dim) {
             rtc_sec -= dim;
             month++;
         } else {
