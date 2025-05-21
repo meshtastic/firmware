@@ -310,6 +310,7 @@ int32_t ButtonThread::runOnce()
             playShutdownMelody();
             delay(3000);
             power->shutdown();
+            nodeDB->saveToDisk();
             break;
         }
 
