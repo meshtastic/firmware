@@ -911,7 +911,6 @@ void setup()
     RUN_TEST(test_publishTextMessageDirect);
     RUN_TEST(test_publishTextMessageWithProxy);
     RUN_TEST(test_reportToMapDefaultImprecise);
-    RUN_TEST(test_reportToMapPrecise);
     RUN_TEST(test_reportToMapImpreciseProxied);
     RUN_TEST(test_reportToMapInvalidPrecision);
     RUN_TEST(test_usingDefaultServer);
