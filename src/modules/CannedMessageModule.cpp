@@ -69,7 +69,7 @@ CannedMessageModule::CannedMessageModule()
         disable();
     }
 }
-
+static bool returnToCannedList = false;
 bool hasKeyForNode(const meshtastic_NodeInfoLite* node) {
     return node && node->has_user && node->user.public_key.size > 0;
 }
@@ -116,16 +116,19 @@ int CannedMessageModule::splitConfiguredMessages()
         }
         i += 1;
     }
+
+    // Add "[Select Destination]" as the final message
     if (strlen(this->messages[messageIndex - 1]) > 0) {
-        // We have a last message.
-        LOG_DEBUG("CannedMessage %d is: '%s'", messageIndex - 1, this->messages[messageIndex - 1]);
+        this->messages[messageIndex - 1] = (char*)"[Select Destination]";
         this->messagesCount = messageIndex;
     } else {
-        this->messagesCount = messageIndex - 1;
+        this->messages[messageIndex - 1] = (char*)"[Select Destination]";
+        this->messagesCount = messageIndex;
     }
 
     return this->messagesCount;
 }
+
 void CannedMessageModule::resetSearch() {
     LOG_INFO("Resetting search, restoring full destination list");
 
@@ -340,7 +343,8 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
             }
         
             // ✅ Now correctly switches to FreeText screen with selected node/channel
-            this->runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
+            this->runState = returnToCannedList ? CANNED_MESSAGE_RUN_STATE_ACTIVE : CANNED_MESSAGE_RUN_STATE_FREETEXT;
+            returnToCannedList = false;
             this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
             screen->forceDisplay();
             return 0;
@@ -381,6 +385,15 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
     }
     if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT)) {
 
+        if (strcmp(this->messages[this->currentMessageIndex], "[Select Destination]") == 0) {
+        returnToCannedList = true;
+        this->runState = CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION;
+        this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
+        this->destIndex = 0;
+        this->scrollIndex = 0;
+        screen->forceDisplay();
+        return 0;
+    }
 #if defined(USE_VIRTUAL_KEYBOARD)
         if (this->currentMessageIndex == 0) {
             this->runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
@@ -689,13 +702,22 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
     // Prevents the canned message module from regenerating the screen's frameset at unexpected times,
     // or raising a UIFrameEvent before another module has the chance
     this->waitingForAck = true;
-    this->lastSentNode = dest;
+
     LOG_INFO("Send message id=%d, dest=%x, msg=%.*s", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
 
     service->sendToMesh(
         p, RX_SRC_LOCAL,
         true); // send to mesh, cc to phone. Even if there's no phone connected, this stores the message to match ACKs
+
+    // === Simulate local message to dismiss the message frame after sending ===
+    // This mimics what happens when replying from the phone to clear unread state and UI
+    if (screen) {
+        meshtastic_MeshPacket simulatedPacket = {};
+        simulatedPacket.from = 0; // Outgoing message (from local device)
+        screen->handleTextMessage(&simulatedPacket); // Calls logic to clear unread and dismiss frame
+    }
 }
+
 unsigned long lastUpdateMillis = 0;
 int32_t CannedMessageModule::runOnce()
 {
@@ -752,6 +774,10 @@ int32_t CannedMessageModule::runOnce()
                 this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
             }
         } else {
+            if (strcmp(this->messages[this->currentMessageIndex], "[Select Destination]") == 0) {
+                this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
+                return INT32_MAX;
+            }
             if ((this->messagesCount > this->currentMessageIndex) && (strlen(this->messages[this->currentMessageIndex]) > 0)) {
                 if (strcmp(this->messages[this->currentMessageIndex], "~") == 0) {
                     powerFSM.trigger(EVENT_PRESS);
@@ -1384,18 +1410,8 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
 #else
         display->setFont(FONT_MEDIUM);
 #endif
-        if (this->ack) {
-            if (this->lastSentNode == NODENUM_BROADCAST) {
-                snprintf(buffer, sizeof(buffer), "Relayed to %s", channels.getName(this->channel));
-            } else {
-                snprintf(buffer, sizeof(buffer), "%s\nto %s",
-                        this->lastAckWasRelayed ? "Delivered (Relayed)" : "Delivered (Direct)",
-                        getNodeName(this->incoming));
-            }
-        } else {
-            snprintf(buffer, sizeof(buffer), "Delivery failed\nto %s", getNodeName(this->incoming));
-        }
-        display->drawString(display->getWidth() / 2 + x, 0 + y + 12, buffer);
+        String displayString = this->ack ? "Delivered to\n%s" : "Delivery failed\nto %s";
+        display->drawStringf(display->getWidth() / 2 + x, 0 + y + 12, buffer, displayString, getNodeName(this->incoming));
         display->setFont(FONT_SMALL);
 
         // SNR/RSSI
@@ -1520,43 +1536,22 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         }
     }
 }
-#endif //! HAS_TFT
+#endif
 
 ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
     if (mp.decoded.portnum == meshtastic_PortNum_ROUTING_APP && waitingForAck) {
+        // look for a request_id
         if (mp.decoded.request_id != 0) {
             UIFrameEvent e;
-            e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
-            requestFocus();
+            e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
+            requestFocus(); // Tell Screen::setFrames that our module's frame should be shown, even if not "first" in the frameset
             this->runState = CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED;
-
-            // Decode the Routing payload to check for errors
+            this->incoming = service->getNodenumFromRequestId(mp.decoded.request_id);
             meshtastic_Routing decoded = meshtastic_Routing_init_default;
             pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, meshtastic_Routing_fields, &decoded);
-
-            // === Relay Detection ===
-            uint8_t relayByte = mp.relay_node;
-            uint8_t senderLastByte = mp.from & 0xFF;
-            this->lastAckWasRelayed = (relayByte != senderLastByte);
-
-            // === Accept ACK if no error AND:
-            //     - Broadcast (allow any ACK)
-            //     - OR matches exact destination
-            bool isAck = (decoded.error_reason == meshtastic_Routing_Error_NONE);
-            bool isFromDest = (mp.from == this->lastSentNode);
-            bool isBroadcast = (this->lastSentNode == NODENUM_BROADCAST);
-
-            this->ack = isAck && (isBroadcast || isFromDest);
-
-            // === Set .incoming to the node who ACK'd (even if it was broadcast)
-            if (isBroadcast && mp.from != nodeDB->getNodeNum()) {
-                this->incoming = mp.from;
-            } else {
-                this->incoming = this->lastSentNode;
-            }
-
-            waitingForAck = false;
+            this->ack = decoded.error_reason == meshtastic_Routing_Error_NONE;
+            waitingForAck = false; // No longer want routing packets
             this->notifyObservers(&e);
             // run the next time 2 seconds later
             setIntervalFromNow(2000);
