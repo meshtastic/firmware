@@ -2,6 +2,7 @@
 
 #include "configuration.h"
 #include "mesh-pb-constants.h"
+#include "airtime.h"
 
 FloodingRouter::FloodingRouter() {}
 
@@ -48,9 +49,13 @@ void FloodingRouter::perhapsCancelDupe(const meshtastic_MeshPacket *p)
     if (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER &&
         config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER &&
         config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER_LATE) {
-        // cancel rebroadcast of this message *if* there was already one, unless we're a router/repeater!
-        if (Router::cancelSending(p->from, p->id))
-            txRelayCanceled++;
+        // Repeater roles should always rebroadcast.        
+        if (!airTime->isTxAllowedAirUtil() && !airTime->isTxAllowedChannelUtil(true)) {
+            // Other rebroadcasting roles should rebroadcast if there's available airtime
+            // This keeps small and sparse meshes more reliable and attenuates congestion in busy ones
+            if (Router::cancelSending(p->from, p->id))
+                txRelayCanceled++;
+        }
     }
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE && iface) {
         iface->clampToLateRebroadcastWindow(getFrom(p), p->id);
