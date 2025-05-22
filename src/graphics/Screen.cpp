@@ -3352,11 +3352,15 @@ void drawCustomFrameIcons(OLEDDisplay *display, OLEDDisplayUiState *state)
     const int totalWidth = totalIcons * iconSize + (totalIcons - 1) * spacing;
     const int xStart = (SCREEN_WIDTH - totalWidth) / 2;
 
-    // Only show bar briefly after switching frames
+    // Only show bar briefly after switching frames (unless on E-Ink)
+#if defined(USE_EINK)
+    int y = SCREEN_HEIGHT - iconSize - 1;
+#else
     int y = SCREEN_HEIGHT - iconSize - 1;
     if (millis() - lastFrameChangeTime > ICON_DISPLAY_DURATION_MS) {
         y = SCREEN_HEIGHT;
     }
+#endif
 
     // Pre-calculate bounding rect
     const int rectX = xStart - 2 - bigOffset;
