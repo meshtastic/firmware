@@ -50,7 +50,7 @@ void FloodingRouter::perhapsCancelDupe(const meshtastic_MeshPacket *p)
         config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER &&
         config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER_LATE) {
         // Repeater roles should always rebroadcast.        
-        if (!airTime->isTxAllowedAirUtil() && !airTime->isTxAllowedChannelUtil(true)) {
+        if (!airTime->isTxAllowedAirUtil() || !airTime->isTxAllowedChannelUtil(true)) {
             // Other rebroadcasting roles should rebroadcast if there's available airtime
             // This keeps small and sparse meshes more reliable and attenuates congestion in busy ones
             if (Router::cancelSending(p->from, p->id))
