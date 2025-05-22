@@ -61,6 +61,8 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     bool needsUpdate = true;
     String searchQuery;
     std::vector<uint8_t> activeChannelIndices;
+    bool shouldRedraw = false;
+    unsigned long lastUpdateMillis = 0;
 
   public:
     CannedMessageModule();
@@ -164,8 +166,10 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     uint8_t numChannels = 0;
     ChannelIndex indexChannels[MAX_NUM_CHANNELS] = {0};
     NodeNum incoming = NODENUM_BROADCAST;
+    NodeNum lastSentNode = 0;  // Tracks who the message was sent to (for ACK screen)
     bool ack = false;           // True means ACK, false means NAK (error_reason != NONE)
     bool waitingForAck = false; // Are currently interested in routing packets?
+    bool lastAckWasRelayed = false; 
     float lastRxSnr = 0;
     int32_t lastRxRssi = 0;
 
