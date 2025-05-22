@@ -912,7 +912,7 @@ void setup()
     RUN_TEST(test_publishTextMessageWithProxy);
     RUN_TEST(test_reportToMapDefaultImprecise);
     RUN_TEST(test_reportToMapPrecise);
-    RUN_TEST(test_reportToMapPreciseProxied);
+    RUN_TEST(test_reportToMapImpreciseProxied);
     RUN_TEST(test_reportToMapInvalidPrecision);
     RUN_TEST(test_usingDefaultServer);
     RUN_TEST(test_usingDefaultServerWithPort);
