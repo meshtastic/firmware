@@ -77,10 +77,12 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
     static bool isBoltVisibleShared = true;
     uint32_t now = millis();
 
+#ifndef USE_EINK
     if (isCharging && now - lastBlinkShared > 500) {
         isBoltVisibleShared = !isBoltVisibleShared;
         lastBlinkShared = now;
     }
+#endif
 
     bool useHorizontalBattery = (screenW > 128 && screenW > screenH);
     const int textY = y + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
@@ -162,6 +164,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
         static uint32_t lastMailBlink = 0;
         bool showMail = false;
 
+#ifndef USE_EINK
         if (hasUnreadMessage) {
             if (now - lastMailBlink > 500) {
                 isMailIconVisible = !isMailIconVisible;
@@ -169,6 +172,11 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
             }
             showMail = isMailIconVisible;
         }
+#else
+        if (hasUnreadMessage) {
+            showMail = true;
+        }
+#endif
 
         if (showMail) {
             if (useHorizontalBattery) {
