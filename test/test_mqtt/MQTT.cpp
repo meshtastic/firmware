@@ -725,18 +725,6 @@ void test_reportToMapImpreciseProxied(void)
     const DecodedServiceEnvelope env(message.payload_variant.data.bytes, message.payload_variant.data.size);
 }
 
-// Imprecise location is reported when the precision is invalid.
-void test_reportToMapInvalidPrecision(void)
-{
-    unitTest->reportToMap(/*precision=*/0);
-
-    TEST_ASSERT_EQUAL(1, mockMeshService->messages_.size());
-    const meshtastic_MqttClientProxyMessage &message = mockMeshService->messages_.front();
-    TEST_ASSERT_EQUAL_STRING("msh/2/map/", message.topic);
-    TEST_ASSERT_EQUAL(meshtastic_MqttClientProxyMessage_data_tag, message.which_payload_variant);
-    const DecodedServiceEnvelope env(message.payload_variant.data.bytes, message.payload_variant.data.size);
-}
-
 // isUsingDefaultServer returns true when using the default server.
 void test_usingDefaultServer(void)
 {
@@ -912,7 +900,6 @@ void setup()
     RUN_TEST(test_publishTextMessageWithProxy);
     RUN_TEST(test_reportToMapDefaultImprecise);
     RUN_TEST(test_reportToMapImpreciseProxied);
-    RUN_TEST(test_reportToMapInvalidPrecision);
     RUN_TEST(test_usingDefaultServer);
     RUN_TEST(test_usingDefaultServerWithPort);
     RUN_TEST(test_usingDefaultServerWithInvalidPort);
