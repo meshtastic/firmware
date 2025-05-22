@@ -775,7 +775,7 @@ void MQTT::perhapsReportToMap()
 
     // Coerce the map position precision to be within the valid range
     // This removes obtusely large radius and privacy problematic ones from the map
-    if (map_position_precision < 10 || map_position_precision > 16) {
+    if (map_position_precision < 11 || map_position_precision > 16) {
         LOG_WARN("MQTT Map report position precision %u is out of range, using default %u", map_position_precision,
                  default_map_position_precision);
         map_position_precision = default_map_position_precision;
