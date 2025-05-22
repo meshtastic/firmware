@@ -310,6 +310,8 @@ void setUp(void)
 {
     moduleConfig.mqtt =
         meshtastic_ModuleConfig_MQTTConfig{.enabled = true, .map_reporting_enabled = true, .has_map_report_settings = true};
+    moduleConfig.mqtt.map_report_settings = meshtastic_ModuleConfig_MapReportSettings{
+        .publish_interval_secs = 0, .position_precision = 14, .should_report_location = true};
     channelFile.channels[0] = meshtastic_Channel{
         .index = 0,
         .has_settings = true,

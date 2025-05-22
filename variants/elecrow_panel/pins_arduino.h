@@ -3,13 +3,11 @@
 
 #include <stdint.h>
 
-// static const uint8_t LED_BUILTIN = -1;
+static const uint8_t TX = 43;
+static const uint8_t RX = 44;
 
-// static const uint8_t TX = 43;
-// static const uint8_t RX = 44;
-
-static const uint8_t SDA = 39;
-static const uint8_t SCL = 40;
+static const uint8_t SDA = 15;
+static const uint8_t SCL = 16;
 
 // Default SPI will be mapped to Radio
 static const uint8_t SS = -1;
@@ -17,13 +15,9 @@ static const uint8_t MOSI = 48;
 static const uint8_t MISO = 47;
 static const uint8_t SCK = 41;
 
-#ifndef CROW_SELECT
 static const uint8_t SPI_MOSI = 6;
 static const uint8_t SPI_SCK = 5;
 static const uint8_t SPI_MISO = 4;
-static const uint8_t SPI_CS = 7; // SD does not support -1
-static const uint8_t SDCARD_CS = SPI_CS;
-#endif
 
 static const uint8_t A0 = 1;
 static const uint8_t A1 = 2;

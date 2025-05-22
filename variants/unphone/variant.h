@@ -41,6 +41,9 @@
 #define USE_XPT2046 1
 #define TOUCH_CS 38
 
+#define USE_POWERSAVE
+#define SLEEP_TIME 180
+
 #define HAS_GPS                                                                                                                  \
     0 // the unphone doesn't have a gps module by default (though
       // GPS featherwing -- https://www.adafruit.com/product/3133
