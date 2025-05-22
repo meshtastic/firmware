@@ -2240,15 +2240,20 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
 
     int totalEntries = nodeList.size();
     int totalRowsAvailable = (display->getHeight() - y) / rowYOffset;
+    #ifdef USE_EINK
+        totalRowsAvailable -= 1;
+    #endif
     int visibleNodeRows = totalRowsAvailable;
+    int totalColumns = 2;
 
-    int startIndex = scrollIndex * visibleNodeRows * 2;
-    int endIndex = std::min(startIndex + visibleNodeRows * 2, totalEntries);
+    int startIndex = scrollIndex * visibleNodeRows * totalColumns;
+    int endIndex = std::min(startIndex + visibleNodeRows * totalColumns, totalEntries);
 
     int yOffset = 0;
     int col = 0;
     int lastNodeY = y;
     int shownCount = 0;
+    int rowCount = 0;
 
     for (int i = startIndex; i < endIndex; ++i) {
         int xPos = x + (col * columnWidth);
@@ -2263,11 +2268,13 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
         lastNodeY = std::max(lastNodeY, yPos + FONT_HEIGHT_SMALL);
         yOffset += rowYOffset;
         shownCount++;
+        rowCount++;
 
-        if (y + yOffset > display->getHeight() - FONT_HEIGHT_SMALL) {
+        if (rowCount >= totalRowsAvailable) {
             yOffset = 0;
+            rowCount = 0;
             col++;
-            if (col > 1)
+            if (col > (totalColumns - 1))
                 break;
         }
     }
