@@ -251,9 +251,23 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         return 0; // Ignore input while sending
     }
     static int lastDestIndex = -1; // Cache the last index
-    bool selectionChanged = false; // Track if UI needs redrawing
-    bool isUp = event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP);
-    bool isDown = event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN);
+    bool isUp = false;
+    bool isDown = false;
+    bool isSelect = false;
+
+    // Accept both inputEvent and kbchar from rotary encoder or CardKB
+    if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP) ||
+        event->kbchar == INPUT_BROKER_MSG_UP) {
+        isUp = true;
+    }
+    if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN) ||
+        event->kbchar == INPUT_BROKER_MSG_DOWN) {
+        isDown = true;
+    }
+    if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT) ||
+        event->kbchar == INPUT_BROKER_MSG_SELECT) {
+        isSelect = true;
+    }
 
     if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NODE) {
         if (event->kbchar >= 32 && event->kbchar <= 126) {
@@ -327,7 +341,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
             screen->forceDisplay();
             shouldRedraw = false;
         }
-        if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT)) {
+        if (isSelect) {
             if (this->destIndex < static_cast<int>(this->activeChannelIndices.size())) {
                 this->dest = NODENUM_BROADCAST;
                 this->channel = this->activeChannelIndices[this->destIndex];
@@ -383,7 +397,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
             }
         }
     }
-    if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT)) {
+    if (isSelect) {
 
         if (strcmp(this->messages[this->currentMessageIndex], "[Select Destination]") == 0) {
         returnToCannedList = true;

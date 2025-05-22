@@ -19,6 +19,8 @@
 #define INPUT_BROKER_MSG_FN_SYMBOL_ON 0xf1
 #define INPUT_BROKER_MSG_FN_SYMBOL_OFF 0xf2
 #define INPUT_BROKER_MSG_BLUETOOTH_TOGGLE 0xAA
+#define INPUT_BROKER_MSG_SELECT 0x0D  // Enter key / rotary encoder click
+
 
 typedef struct _InputEvent {
     const char *source;
