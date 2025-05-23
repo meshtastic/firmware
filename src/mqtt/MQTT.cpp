@@ -773,15 +773,20 @@ void MQTT::perhapsReportToMap()
         !(moduleConfig.mqtt.proxy_to_client_enabled || isConnectedDirectly()))
         return;
 
+    // Coerce the map position precision to be within the valid range
+    // This removes obtusely large radius and privacy problematic ones from the map
+    if (map_position_precision < 12 || map_position_precision > 15) {
+        LOG_WARN("MQTT Map report position precision %u is out of range, using default %u", map_position_precision,
+                 default_map_position_precision);
+        map_position_precision = default_map_position_precision;
+    }
+
     if (Throttle::isWithinTimespanMs(last_report_to_map, map_publish_interval_msecs))
         return;
 
-    if (map_position_precision == 0 || (localPosition.latitude_i == 0 && localPosition.longitude_i == 0)) {
+    if (localPosition.latitude_i == 0 && localPosition.longitude_i == 0) {
         last_report_to_map = millis();
-        if (map_position_precision == 0)
-            LOG_WARN("MQTT Map report enabled, but precision is 0");
-        if (localPosition.latitude_i == 0 && localPosition.longitude_i == 0)
-            LOG_WARN("MQTT Map report enabled, but no position available");
+        LOG_WARN("MQTT Map report enabled, but no position available");
         return;
     }
 
@@ -805,15 +810,11 @@ void MQTT::perhapsReportToMap()
     mapReport.has_opted_report_location = true;
 
     // Set position with precision (same as in PositionModule)
-    if (map_position_precision < 32 && map_position_precision > 0) {
-        mapReport.latitude_i = localPosition.latitude_i & (UINT32_MAX << (32 - map_position_precision));
-        mapReport.longitude_i = localPosition.longitude_i & (UINT32_MAX << (32 - map_position_precision));
-        mapReport.latitude_i += (1 << (31 - map_position_precision));
-        mapReport.longitude_i += (1 << (31 - map_position_precision));
-    } else {
-        mapReport.latitude_i = localPosition.latitude_i;
-        mapReport.longitude_i = localPosition.longitude_i;
-    }
+    mapReport.latitude_i = localPosition.latitude_i & (UINT32_MAX << (32 - map_position_precision));
+    mapReport.longitude_i = localPosition.longitude_i & (UINT32_MAX << (32 - map_position_precision));
+    mapReport.latitude_i += (1 << (31 - map_position_precision));
+    mapReport.longitude_i += (1 << (31 - map_position_precision));
+
     mapReport.altitude = localPosition.altitude;
     mapReport.position_precision = map_position_precision;
 
