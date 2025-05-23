@@ -52,7 +52,7 @@ BMP280Sensor bmp280Sensor;
 NullSensor bme280Sensor;
 #endif
 
-#if __has_include(<Adafruit_BMP280.h>)
+#if __has_include(<Adafruit_LTR390.h>)
 #include "Sensor/LTR390UVSensor.h"
 LTR390UVSensor ltr390uvSensor;
 #else

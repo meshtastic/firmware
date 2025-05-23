@@ -45,8 +45,6 @@ bool LTR390UVSensor::getMetrics(meshtastic_Telemetry *measurement)
 
             ltr390uv.setGain(
                 LTR390_GAIN_18); // Recommended for UVI - x18. Do not change, 2300 UV Sensitivity only specified for x18 gain
-            ltr390uv.setResolution(LTR390_RESOLUTION_20BIT); // Recommended for UVI - 20-bit. Do not change, 2300 UV Sensitivity
-                                                             // only specified for 20-bit res
             ltr390uv.setMode(LTR390_MODE_UVS);
         } else if (ltr390uv.getMode() == LTR390_MODE_UVS) {
             lastUVReading = ltr390uv.readUVS() /
@@ -58,8 +56,6 @@ bool LTR390UVSensor::getMetrics(meshtastic_Telemetry *measurement)
 
             ltr390uv.setGain(
                 LTR390_GAIN_1); // x1 gain will already max out the sensor at direct sunlight, so no need to increase it
-            ltr390uv.setResolution(
-                LTR390_RESOLUTION_20BIT); // There is plenty of time between telemetry calls for a full 20bit conversion
             ltr390uv.setMode(LTR390_MODE_ALS);
         }
     }
