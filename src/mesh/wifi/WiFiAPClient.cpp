@@ -345,13 +345,15 @@ static void WiFiEvent(WiFiEvent_t event)
         break;
     case ARDUINO_EVENT_WIFI_STA_CONNECTED:
         LOG_INFO("Connected to access point");
+        if (config.network.ipv6_enabled) {
 #if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
-        WiFi.enableIPv6();
+            WiFi.enableIPv6();
 #else
-        if (!WiFi.enableIpV6()) {
-            LOG_WARN("Failed to enable IPv6");
-        }
+            if (!WiFi.enableIpV6()) {
+                LOG_WARN("Failed to enable IPv6");
+            }
 #endif
+        }
         break;
     case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
         LOG_INFO("Disconnected from WiFi access point");
