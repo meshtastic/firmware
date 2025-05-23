@@ -270,7 +270,10 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
     }
 
     if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NODE) {
-        if (event->kbchar >= 32 && event->kbchar <= 126) {
+        //Fix rotary encoder registering as character instead of navigation
+        if (isUp || isDown || isSelect) {
+            // Already handled below — skip character input
+        } else if (event->kbchar >= 32 && event->kbchar <= 126) {
             this->searchQuery += event->kbchar;
             needsUpdate = true;
             runOnce(); // <=== Force filtering immediately
