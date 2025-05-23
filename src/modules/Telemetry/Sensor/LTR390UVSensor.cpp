@@ -16,11 +16,11 @@ int32_t LTR390UVSensor::runOnce()
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
-    
+
     status = ltr390uv.begin(nodeTelemetrySensorsMap[sensorType].second);
     ltr390uv.setMode(LTR390_MODE_UVS);
-    ltr390uv.setGain(LTR390_GAIN_18); // Datasheet default
-    ltr390uv.setResolution(LTR390_RESOLUTION_20BIT);  // Datasheet default
+    ltr390uv.setGain(LTR390_GAIN_18);                // Datasheet default
+    ltr390uv.setResolution(LTR390_RESOLUTION_20BIT); // Datasheet default
 
     return initI2CSensor();
 }
@@ -37,27 +37,32 @@ bool LTR390UVSensor::getMetrics(meshtastic_Telemetry *measurement)
     // Because the sensor does not measure Lux and UV at the same time, we need to read them in two passes.
     if (ltr390uv.newDataAvailable()) {
         if (ltr390uv.getMode() == LTR390_MODE_ALS) {
-            lastLuxReading = 0.6 * ltr390uv.readALS() / (1 * 4);  // Datasheet page 23 for gain x1 and 20bit resolution
+            lastLuxReading = 0.6 * ltr390uv.readALS() / (1 * 4); // Datasheet page 23 for gain x1 and 20bit resolution
             LOG_DEBUG("LTR390UV Lux reading: %f", lastLuxReading);
 
             measurement->variant.environment_metrics.lux = lastLuxReading;
             measurement->variant.environment_metrics.uv_lux = lastUVReading;
-            
-            ltr390uv.setGain(LTR390_GAIN_18);                  //Recommended for UVI - x18. Do not change, 2300 UV Sensitivity only specified for x18 gain
-            ltr390uv.setResolution(LTR390_RESOLUTION_20BIT);   //Recommended for UVI - 20-bit. Do not change, 2300 UV Sensitivity only specified for 20-bit res
-            ltr390uv.setMode(LTR390_MODE_UVS);             
+
+            ltr390uv.setGain(
+                LTR390_GAIN_18); // Recommended for UVI - x18. Do not change, 2300 UV Sensitivity only specified for x18 gain
+            ltr390uv.setResolution(LTR390_RESOLUTION_20BIT); // Recommended for UVI - 20-bit. Do not change, 2300 UV Sensitivity
+                                                             // only specified for 20-bit res
+            ltr390uv.setMode(LTR390_MODE_UVS);
         } else if (ltr390uv.getMode() == LTR390_MODE_UVS) {
-            lastUVReading = ltr390uv.readUVS() / 2300.f; // Datasheet page 23 and page 6, only characterisation for gain x18 and 20bit resolution
+            lastUVReading = ltr390uv.readUVS() /
+                            2300.f; // Datasheet page 23 and page 6, only characterisation for gain x18 and 20bit resolution
             LOG_DEBUG("LTR390UV UV reading: %f", lastUVReading);
 
             measurement->variant.environment_metrics.lux = lastLuxReading;
             measurement->variant.environment_metrics.uv_lux = lastUVReading;
-            
-            ltr390uv.setGain(LTR390_GAIN_1);                   // x1 gain will already max out the sensor at direct sunlight, so no need to increase it
-            ltr390uv.setResolution(LTR390_RESOLUTION_20BIT);   // There is plenty of time between telemetry calls for a full 20bit conversion
+
+            ltr390uv.setGain(
+                LTR390_GAIN_1); // x1 gain will already max out the sensor at direct sunlight, so no need to increase it
+            ltr390uv.setResolution(
+                LTR390_RESOLUTION_20BIT); // There is plenty of time between telemetry calls for a full 20bit conversion
             ltr390uv.setMode(LTR390_MODE_ALS);
+        }
     }
-  }
 
     return true;
 }
