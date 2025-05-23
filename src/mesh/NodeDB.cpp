@@ -1518,6 +1518,8 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
     info->has_user = true;
     info->user = TypeConversions::ConvertToUserLite(contact.user);
     info->is_favorite = true;
+    // Mark the node's key as manually verified to indicate trustworthiness.
+    info->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
     updateGUIforNode = info;
     powerFSM.trigger(EVENT_NODEDB_UPDATED);
     notifyObservers(true); // Force an update whether or not our node counts have changed
