@@ -6,13 +6,12 @@
 #include "LTR390UVSensor.h"
 #include "TelemetrySensor.h"
 #include <Adafruit_LTR390.h>
-#include <typeinfo>
 
 LTR390UVSensor::LTR390UVSensor() : TelemetrySensor(meshtastic_TelemetrySensorType_LTR390UV, "LTR390UV") {}
 
 int32_t LTR390UVSensor::runOnce()
 {
-    LOG_INFO("Init sensor: %s with x3 gain and 18bit resolution", sensorName);
+    LOG_INFO("Init sensor: %s", sensorName);
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
