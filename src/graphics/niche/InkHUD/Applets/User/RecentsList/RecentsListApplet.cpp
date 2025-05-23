@@ -53,6 +53,7 @@ void InkHUD::RecentsListApplet::handleParsed(CardInfo c)
 
     cards.push_front(c);                                  // Store this CardInfo
     cards.resize(min(maxCards(), (uint8_t)cards.size())); // Don't keep more cards than we could *ever* fit on screen
+    cards.shrink_to_fit();
 
     // Record the time of this observation
     // Used to count active nodes, and to know when to prune inactive nodes
@@ -99,10 +100,12 @@ void InkHUD::RecentsListApplet::prune()
         if (!isActive(ages.at(i).seenAtMs)) {
             // Drop this item, and all others behind it
             ages.resize(i);
+            ages.shrink_to_fit();
             cards.resize(i);
+            cards.shrink_to_fit();
 
             // Request an update, if pruning did modify our data
-            // Required if pruning was scheduled. Redundent if pruning was prior to rendering.
+            // Required if pruning was scheduled. Redundant if pruning was prior to rendering.
             requestAutoshow();
             requestUpdate();
 

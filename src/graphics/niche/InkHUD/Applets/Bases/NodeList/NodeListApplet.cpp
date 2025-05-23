@@ -142,16 +142,18 @@ void InkHUD::NodeListApplet::onRender()
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeNum);
 
         // -- Shortname --
-        // use "?" if unknown
-        if (node && node->has_user)
-            shortName = node->user.short_name;
+        // Parse special chars in the short name
+        // Use "?" if unknown
+        if (node)
+            shortName = parseShortName(node);
         else
             shortName = "?";
 
         // -- Longname --
-        // use node id if unknown
+        // Parse special chars in long name
+        // Use node id if unknown
         if (node && node->has_user)
-            longName = node->user.long_name; // Found in nodeDB
+            longName = parse(node->user.long_name); // Found in nodeDB
         else {
             // Not found in nodeDB, show a hex nodeid instead
             longName = hexifyNodeNum(nodeNum);

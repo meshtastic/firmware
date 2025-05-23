@@ -16,7 +16,7 @@ void InkHUD::HeardApplet::onActivate()
 
 void InkHUD::HeardApplet::onDeactivate()
 {
-    // Avoid an unlikely situation where frquent activation / deactivation populated duplicate info from node DB
+    // Avoid an unlikely situation where frequent activation / deactivation populates duplicate info from node DB
     cards.clear();
 }
 
@@ -41,6 +41,7 @@ void InkHUD::HeardApplet::handleParsed(CardInfo c)
 
     cards.push_front(c);                                  // Insert into base class' card collection
     cards.resize(min(maxCards(), (uint8_t)cards.size())); // Don't keep more cards than we could *ever* fit on screen
+    cards.shrink_to_fit();
 
     // Our rendered image needs to change if:
     if (previous.nodeNum != c.nodeNum                  // Different node
@@ -54,7 +55,7 @@ void InkHUD::HeardApplet::handleParsed(CardInfo c)
 }
 
 // When applet is activated, pre-fill with stale data from NodeDB
-// We're sorting using the last_heard value. Succeptible to weirdness if node's RTC changes.
+// We're sorting using the last_heard value. Susceptible to weirdness if node's RTC changes.
 // No SNR is available in node db, so we can't calculate signal either
 // These initial cards from node db will be gradually pushed out by new packets which originate from out base applet instead
 void InkHUD::HeardApplet::populateFromNodeDB()
@@ -72,7 +73,7 @@ void InkHUD::HeardApplet::populateFromNodeDB()
         return (top->last_heard > bottom->last_heard);
     });
 
-    // Keep the most recent entries onlyt
+    // Keep the most recent entries only
     // Just enough to fill the screen
     if (ordered.size() > maxCards())
         ordered.resize(maxCards());
