@@ -233,8 +233,6 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = bme280Sensor.runOnce();
             if (ltr390uvSensor.hasSensor())
                 result = ltr390uvSensor.runOnce();
-            if (ltr390uvSensor.hasSensor())
-                result = ltr390uvSensor.runOnce();
             if (bmp3xxSensor.hasSensor())
                 result = bmp3xxSensor.runOnce();
             if (bme680Sensor.hasSensor())
@@ -530,10 +528,6 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
         valid = valid && ltr390uvSensor.getMetrics(m);
         hasSensor = true;
     }
-    if (ltr390uvSensor.hasSensor()) {
-        valid = valid && ltr390uvSensor.getMetrics(m);
-        hasSensor = true;
-    }
     if (bmp3xxSensor.hasSensor()) {
         valid = valid && bmp3xxSensor.getMetrics(m);
         hasSensor = true;
@@ -755,11 +749,6 @@ AdminMessageHandleResult EnvironmentTelemetryModule::handleAdminMessageForModule
     }
     if (bme280Sensor.hasSensor()) {
         result = bme280Sensor.handleAdminMessage(mp, request, response);
-        if (result != AdminMessageHandleResult::NOT_HANDLED)
-            return result;
-    }
-    if (ltr390uvSensor.hasSensor()) {
-        result = ltr390uvSensor.handleAdminMessage(mp, request, response);
         if (result != AdminMessageHandleResult::NOT_HANDLED)
             return result;
     }
