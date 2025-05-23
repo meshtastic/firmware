@@ -20,8 +20,8 @@
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  LEDs
 //  LEDs
-#define PIN_LED1 (11) // LED        P1.15
-#define PIN_LED2 (12) //
+#define PIN_LED1 (12) // LED        P1.15
+#define PIN_LED2 (11) //
 
 #define LED_BUILTIN PIN_LED1
 #define LED_CONN PIN_LED2
