@@ -52,6 +52,13 @@ BMP280Sensor bmp280Sensor;
 NullSensor bme280Sensor;
 #endif
 
+#if __has_include(<Adafruit_BMP280.h>)
+#include "Sensor/LTR390UVSensor.h"
+LTR390UVSensor ltr390uvSensor;
+#else
+NullSensor ltr390uvSensor;
+#endif
+
 #if __has_include(<bsec2.h>)
 #include "Sensor/BME680Sensor.h"
 BME680Sensor bme680Sensor;
@@ -224,6 +231,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
 #endif
             if (bme280Sensor.hasSensor())
                 result = bme280Sensor.runOnce();
+            if (ltr390uvSensor.hasSensor())
+                result = ltr390uvSensor.runOnce();
             if (bmp3xxSensor.hasSensor())
                 result = bmp3xxSensor.runOnce();
             if (bme680Sensor.hasSensor())
@@ -515,6 +524,10 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
         valid = valid && bme280Sensor.getMetrics(m);
         hasSensor = true;
     }
+    if (ltr390uvSensor.hasSensor()) {
+        valid = valid && ltr390uvSensor.getMetrics(m);
+        hasSensor = true;
+    }
     if (bmp3xxSensor.hasSensor()) {
         valid = valid && bmp3xxSensor.getMetrics(m);
         hasSensor = true;
@@ -736,6 +749,11 @@ AdminMessageHandleResult EnvironmentTelemetryModule::handleAdminMessageForModule
     }
     if (bme280Sensor.hasSensor()) {
         result = bme280Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (ltr390uvSensor.hasSensor()) {
+        result = ltr390uvSensor.handleAdminMessage(mp, request, response);
         if (result != AdminMessageHandleResult::NOT_HANDLED)
             return result;
     }
