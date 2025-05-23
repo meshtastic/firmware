@@ -41,6 +41,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/images.h"
+#include "graphics/emotes.h"
 #include "input/ScanAndSelect.h"
 #include "input/TouchScreenImpl1.h"
 #include "main.h"
@@ -55,6 +56,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "modules/WaypointModule.h"
 #include "sleep.h"
 #include "target_specific.h"
+
+
+using graphics::Emote;
+using graphics::emotes;
+using graphics::numEmotes;
 
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
 #include "mesh/wifi/WiFiAPClient.h"
@@ -1180,12 +1186,6 @@ bool deltaToTimestamp(uint32_t secondsAgo, uint8_t *hours, uint8_t *minutes, int
     return validCached;
 }
 
-struct Emote {
-    const char *code;
-    const uint8_t *bitmap;
-    int width, height;
-};
-
 void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string &line, const Emote *emotes, int emoteCount)
 {
     int cursorX = x;
@@ -1196,8 +1196,8 @@ void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string 
     for (size_t i = 0; i < line.length();) {
         bool matched = false;
         for (int e = 0; e < emoteCount; ++e) {
-            size_t emojiLen = strlen(emotes[e].code);
-            if (line.compare(i, emojiLen, emotes[e].code) == 0) {
+            size_t emojiLen = strlen(emotes[e].label);
+            if (line.compare(i, emojiLen, emotes[e].label) == 0) {
                 if (emotes[e].height > maxIconHeight)
                     maxIconHeight = emotes[e].height;
                 i += emojiLen;
@@ -1242,11 +1242,11 @@ void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string 
         size_t emojiLen = 0;
 
         for (int e = 0; e < emoteCount; ++e) {
-            size_t pos = line.find(emotes[e].code, i);
+            size_t pos = line.find(emotes[e].label, i);
             if (pos != std::string::npos && (nextEmotePos == std::string::npos || pos < nextEmotePos)) {
                 nextEmotePos = pos;
                 matchedEmote = &emotes[e];
-                emojiLen = strlen(emotes[e].code);
+                emojiLen = strlen(emotes[e].label);
             }
         }
 
@@ -1348,40 +1348,9 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         lastBounceTime = now;
         bounceY = (bounceY + 1) % (bounceRange * 2);
     }
-
-    const Emote emotes[] = {{"\U0001F44D", thumbup, thumbs_width, thumbs_height},
-                            {"\U0001F44E", thumbdown, thumbs_width, thumbs_height},
-                            {"\U0001F60A", smiley, smiley_width, smiley_height},
-                            {"\U0001F600", smiley, smiley_width, smiley_height},
-                            {"\U0001F642", smiley, smiley_width, smiley_height},
-                            {"\U0001F609", smiley, smiley_width, smiley_height},
-                            {"\U0001F601", smiley, smiley_width, smiley_height},
-                            {"❓", question, question_width, question_height},
-                            {"‼️", bang, bang_width, bang_height},
-                            {"\U0001F4A9", poo, poo_width, poo_height},
-                            {"\U0001F923", haha, haha_width, haha_height},
-                            {"\U0001F44B", wave_icon, wave_icon_width, wave_icon_height},
-                            {"\U0001F920", cowboy, cowboy_width, cowboy_height},
-                            {"\U0001F42D", deadmau5, deadmau5_width, deadmau5_height},
-                            {"☀️", sun, sun_width, sun_height},
-                            {"\xE2\x98\x80\xEF\xB8\x8F", sun, sun_width, sun_height},
-                            {"☔", rain, rain_width, rain_height},
-                            {"\u2614", rain, rain_width, rain_height},
-                            {"☁️", cloud, cloud_width, cloud_height},
-                            {"🌫️", fog, fog_width, fog_height},
-                            {"\U0001F608", devil, devil_width, devil_height},
-                            {"♥️", heart, heart_width, heart_height},
-                            {"\U0001F9E1", heart, heart_width, heart_height},
-                            {"\U00002763", heart, heart_width, heart_height},
-                            {"\U00002764", heart, heart_width, heart_height},
-                            {"\U0001F495", heart, heart_width, heart_height},
-                            {"\U0001F496", heart, heart_width, heart_height},
-                            {"\U0001F497", heart, heart_width, heart_height},
-                            {"\U0001F498", heart, heart_width, heart_height},
-                            {"\U0001F514", bell_icon, bell_icon_width, bell_icon_height}};
-
-    for (const Emote &e : emotes) {
-        if (strcmp(msg, e.code) == 0) {
+    for (int i = 0; i < numEmotes; ++i) {
+        const Emote &e = emotes[i];
+        if (strcmp(msg, e.label) == 0){
             // Draw the header
             if (isInverted) {
                 drawRoundedHighlight(display, x, 0, SCREEN_WIDTH, FONT_HEIGHT_SMALL - 1, cornerRadius);
@@ -1449,8 +1418,9 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
     for (const auto &line : lines) {
         int maxHeight = FONT_HEIGHT_SMALL;
-        for (const Emote &e : emotes) {
-            if (line.find(e.code) != std::string::npos) {
+        for (int i = 0; i < numEmotes; ++i) {
+            const Emote &e = emotes[i];
+            if (line.find(e.label) != std::string::npos) {
                 if (e.height > maxHeight)
                     maxHeight = e.height;
             }
@@ -1526,7 +1496,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                     display->drawString(x + 4, lineY, lines[i].c_str());
                 display->setColor(WHITE);
             } else {
-                drawStringWithEmotes(display, x, lineY, lines[i], emotes, sizeof(emotes) / sizeof(Emote));
+                drawStringWithEmotes(display, x, lineY, lines[i], emotes, numEmotes);
             }
         }
     }
