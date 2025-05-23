@@ -37,6 +37,9 @@ class ButtonThread : public concurrency::OSThread
     void attachButtonInterrupts();
     void detachButtonInterrupts();
     void storeClickCount();
+    bool isBuzzing() { return buzzer_flag; }
+    void setScreenFlag(bool flag) { screen_flag = flag; }
+    bool getScreenFlag() { return screen_flag; }
 
     // Disconnect and reconnect interrupts for light sleep
 #ifdef ARCH_ESP32
@@ -72,14 +75,12 @@ class ButtonThread : public concurrency::OSThread
 
     static void wakeOnIrq(int irq, int mode);
 
+    static void sendAdHocPosition();
+    static void switchPage();
+
     // IRQ callbacks
     static void userButtonPressed() { btnEvent = BUTTON_EVENT_PRESSED; }
-    static void userButtonPressedScreen()
-    {
-        if (millis() > c_holdOffTime) {
-            btnEvent = BUTTON_EVENT_PRESSED_SCREEN;
-        }
-    }
+    static void userButtonPressedScreen() { btnEvent = BUTTON_EVENT_PRESSED_SCREEN; }
     static void userButtonDoublePressed() { btnEvent = BUTTON_EVENT_DOUBLE_PRESSED; }
     static void userButtonMultiPressed(void *callerThread); // Retrieve click count from non-static Onebutton while still valid
     static void userButtonPressedLongStart();

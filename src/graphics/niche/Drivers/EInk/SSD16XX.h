@@ -44,6 +44,7 @@ class SSD16XX : public EInk
     virtual void detachFromUpdate();
     virtual bool isUpdateDone() override;
     virtual void finalizeUpdate() override;
+    virtual void deepSleep();
 
   protected:
     uint8_t bufferOffsetX = 0; // In bytes. Panel x=0 does not always align with controller x=0. Quirky internal wiring?

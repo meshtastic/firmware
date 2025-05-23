@@ -247,7 +247,7 @@ void portduinoSetup()
                 std::cerr << "autoconf: Unable to find config for " << autoconf_product << std::endl;
                 exit(EXIT_FAILURE);
             }
-            if (loadConfig(("/etc/meshtasticd/available.d/" + product_config).c_str())) {
+            if (loadConfig((settingsStrings[available_directory] + product_config).c_str())) {
                 std::cout << "autoconf: Using " << product_config << " as config file for " << autoconf_product << std::endl;
             } else {
                 std::cerr << "autoconf: Unable to use " << product_config << " as config file for " << autoconf_product
@@ -531,6 +531,8 @@ bool loadConfig(const char *configPath)
                 settingsMap[displayPanel] = hx8357d;
             else if (yamlConfig["Display"]["Panel"].as<std::string>("") == "X11")
                 settingsMap[displayPanel] = x11;
+            else if (yamlConfig["Display"]["Panel"].as<std::string>("") == "FB")
+                settingsMap[displayPanel] = fb;
             settingsMap[displayHeight] = yamlConfig["Display"]["Height"].as<int>(0);
             settingsMap[displayWidth] = yamlConfig["Display"]["Width"].as<int>(0);
             settingsMap[displayDC] = yamlConfig["Display"]["DC"].as<int>(-1);
@@ -598,10 +600,18 @@ bool loadConfig(const char *configPath)
                 (yamlConfig["Webserver"]["SSLCert"]).as<std::string>("/etc/meshtasticd/ssl/certificate.pem");
         }
 
+        if (yamlConfig["HostMetrics"]) {
+            settingsMap[hostMetrics_channel] = (yamlConfig["HostMetrics"]["Channel"]).as<int>(0);
+            settingsMap[hostMetrics_interval] = (yamlConfig["HostMetrics"]["ReportInterval"]).as<int>(0);
+            settingsStrings[hostMetrics_user_command] = (yamlConfig["HostMetrics"]["UserStringCommand"]).as<std::string>("");
+        }
+
         if (yamlConfig["General"]) {
             settingsMap[maxnodes] = (yamlConfig["General"]["MaxNodes"]).as<int>(200);
             settingsMap[maxtophone] = (yamlConfig["General"]["MaxMessageQueue"]).as<int>(100);
             settingsStrings[config_directory] = (yamlConfig["General"]["ConfigDirectory"]).as<std::string>("");
+            settingsStrings[available_directory] =
+                (yamlConfig["General"]["AvailableDirectory"]).as<std::string>("/etc/meshtasticd/available.d/");
             if ((yamlConfig["General"]["MACAddress"]).as<std::string>("") != "" &&
                 (yamlConfig["General"]["MACAddressSource"]).as<std::string>("") != "") {
                 std::cout << "Cannot set both MACAddress and MACAddressSource!" << std::endl;
@@ -646,4 +656,18 @@ bool MAC_from_string(std::string mac_str, uint8_t *dmac)
     } else {
         return false;
     }
+}
+
+std::string exec(const char *cmd)
+{ // https://stackoverflow.com/a/478960
+    std::array<char, 128> buffer;
+    std::string result;
+    std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd, "r"), pclose);
+    if (!pipe) {
+        throw std::runtime_error("popen() failed!");
+    }
+    while (fgets(buffer.data(), static_cast<int>(buffer.size()), pipe.get()) != nullptr) {
+        result += buffer.data();
+    }
+    return result;
 }

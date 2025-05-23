@@ -180,14 +180,16 @@ typedef enum _meshtastic_Config_DisplayConfig_DisplayUnits {
 
 /* Override OLED outo detect with this if it fails. */
 typedef enum _meshtastic_Config_DisplayConfig_OledType {
-    /* Default / Auto */
+    /* Default / Autodetect */
     meshtastic_Config_DisplayConfig_OledType_OLED_AUTO = 0,
-    /* Default / Auto */
+    /* Default / Autodetect */
     meshtastic_Config_DisplayConfig_OledType_OLED_SSD1306 = 1,
-    /* Default / Auto */
+    /* Default / Autodetect */
     meshtastic_Config_DisplayConfig_OledType_OLED_SH1106 = 2,
     /* Can not be auto detected but set by proto. Used for 128x128 screens */
-    meshtastic_Config_DisplayConfig_OledType_OLED_SH1107 = 3
+    meshtastic_Config_DisplayConfig_OledType_OLED_SH1107 = 3,
+    /* Can not be auto detected but set by proto. Used for 128x64 screens */
+    meshtastic_Config_DisplayConfig_OledType_OLED_SH1107_128_64 = 4
 } meshtastic_Config_DisplayConfig_OledType;
 
 typedef enum _meshtastic_Config_DisplayConfig_DisplayMode {
@@ -639,8 +641,8 @@ extern "C" {
 #define _meshtastic_Config_DisplayConfig_DisplayUnits_ARRAYSIZE ((meshtastic_Config_DisplayConfig_DisplayUnits)(meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL+1))
 
 #define _meshtastic_Config_DisplayConfig_OledType_MIN meshtastic_Config_DisplayConfig_OledType_OLED_AUTO
-#define _meshtastic_Config_DisplayConfig_OledType_MAX meshtastic_Config_DisplayConfig_OledType_OLED_SH1107
-#define _meshtastic_Config_DisplayConfig_OledType_ARRAYSIZE ((meshtastic_Config_DisplayConfig_OledType)(meshtastic_Config_DisplayConfig_OledType_OLED_SH1107+1))
+#define _meshtastic_Config_DisplayConfig_OledType_MAX meshtastic_Config_DisplayConfig_OledType_OLED_SH1107_128_64
+#define _meshtastic_Config_DisplayConfig_OledType_ARRAYSIZE ((meshtastic_Config_DisplayConfig_OledType)(meshtastic_Config_DisplayConfig_OledType_OLED_SH1107_128_64+1))
 
 #define _meshtastic_Config_DisplayConfig_DisplayMode_MIN meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT
 #define _meshtastic_Config_DisplayConfig_DisplayMode_MAX meshtastic_Config_DisplayConfig_DisplayMode_COLOR

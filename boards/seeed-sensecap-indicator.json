@@ -18,6 +18,7 @@
     "f_boot": "120000000L",
     "boot": "qio",
     "flash_mode": "qio",
+    "psram_type": "opi",
     "hwids": [["0x1A86", "0x7523"]],
     "mcu": "esp32s3",
     "variant": "esp32s3"
