@@ -2675,8 +2675,7 @@ static void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, i
 
     config.display.heading_bold = origBold;
 
-
-    // Crafting all the data first so we can use it
+    // === Third & Fourth Rows: Node Identity ===
     int textWidth = 0;
     int nameX = 0;
     int yOffset = (SCREEN_WIDTH > 128) ? 0 : 7;
@@ -2718,6 +2717,12 @@ static void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, i
         display->drawString(nameX, compactFourthLine, shortnameble);
     }
 
+    // === Fifth Row: Bluetooth Off Icon ===
+    if (!config.bluetooth.enabled) {
+        const int iconX = 2; // Left aligned
+        const int iconY = compactFifthLine;
+        display->drawXbm(iconX, iconY, placeholder_width, placeholder_height, placeholder);
+    }
 }
 
 // ****************************

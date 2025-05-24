@@ -255,4 +255,17 @@ const uint8_t key_symbol[] PROGMEM = {
     0b00000000
 };
 
+#define placeholder_width 8
+#define placeholder_height 8
+const uint8_t placeholder[] PROGMEM = {
+    0b11111111,
+    0b11111111,
+    0b11111111,
+    0b11111111,
+    0b11111111,
+    0b11111111,
+    0b11111111,
+    0b11111111
+};
+
 #include "img/icon.xbm"
