@@ -44,7 +44,7 @@
 #define GPS_TX_PIN 12
 // #define GPS_DEBUG
 
-// Used when the diplay shield is chosen
+// Used when the display shield is chosen
 #ifdef USE_ST7796
 
 #undef EXT_NOTIFY_OUT
