@@ -3296,8 +3296,7 @@ static int8_t lastFrameIndex = -1;
 static uint32_t lastFrameChangeTime = 0;
 constexpr uint32_t ICON_DISPLAY_DURATION_MS = 1000;
 
-// Bottom navigation icons
-void drawCustomFrameIcons(OLEDDisplay *display, OLEDDisplayUiState *state)
+void NavigationBar(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
     int currentFrame = state->currentFrame;
 
@@ -3313,10 +3312,15 @@ void drawCustomFrameIcons(OLEDDisplay *display, OLEDDisplayUiState *state)
     const int bigOffset = useBigIcons ? 1 : 0;
 
     const size_t totalIcons = screen->indicatorIcons.size();
-    if (totalIcons == 0)
-        return;
+    if (totalIcons == 0) return;
 
-    const int totalWidth = totalIcons * iconSize + (totalIcons - 1) * spacing;
+    const int iconsPerPage = (SCREEN_WIDTH + spacing) / (iconSize + spacing);
+    const int totalPages = (totalIcons + iconsPerPage - 1) / iconsPerPage;
+    const int currentPage = currentFrame / iconsPerPage;
+    const int pageStart = currentPage * iconsPerPage;
+    const int pageEnd = min(pageStart + iconsPerPage, totalIcons);
+
+    const int totalWidth = (pageEnd - pageStart) * iconSize + (pageEnd - pageStart - 1) * spacing;
     const int xStart = (SCREEN_WIDTH - totalWidth) / 2;
 
     // Only show bar briefly after switching frames (unless on E-Ink)
@@ -3340,10 +3344,10 @@ void drawCustomFrameIcons(OLEDDisplay *display, OLEDDisplayUiState *state)
     display->setColor(WHITE);
     display->drawRect(rectX, y - 2, rectWidth, rectHeight);
 
-    // Icon drawing loop
-    for (size_t i = 0; i < totalIcons; ++i) {
+    // Icon drawing loop for the current page
+    for (size_t i = pageStart; i < pageEnd; ++i) {
         const uint8_t *icon = screen->indicatorIcons[i];
-        const int x = xStart + i * (iconSize + spacing);
+        const int x = xStart + (i - pageStart) * (iconSize + spacing);
         const bool isActive = (i == static_cast<size_t>(currentFrame));
 
         if (isActive) {
@@ -3405,7 +3409,7 @@ void Screen::setup()
     // === Set custom overlay callbacks ===
     static OverlayCallback overlays[] = {
         drawFunctionOverlay, // For mute/buzzer modifiers etc.
-        drawCustomFrameIcons // Custom indicator icons for each frame
+        NavigationBar // Custom indicator icons for each frame
     };
     ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
 
@@ -3923,7 +3927,7 @@ void Screen::setFrames(FrameFocus focus)
     ui->disableAllIndicators();
 
     // Add overlays: frame icons and alert banner)
-    static OverlayCallback overlays[] = {drawCustomFrameIcons, drawAlertBannerOverlay};
+    static OverlayCallback overlays[] = {NavigationBar, drawAlertBannerOverlay};
     ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
 
     prevFrame = -1; // Force drawNodeInfo to pick a new node (because our list
