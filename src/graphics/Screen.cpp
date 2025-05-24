@@ -2030,7 +2030,7 @@ static int scrollIndex = 0;
 unsigned long getModeCycleIntervalMs()
 {
     // return (currentMode == MODE_DISTANCE) ? 3000 : 2000;
-    return 2000;
+    return 3000;
 }
 
 // h! Calculates bearing between two lat/lon points (used for compass)
@@ -3294,7 +3294,7 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 }
 static int8_t lastFrameIndex = -1;
 static uint32_t lastFrameChangeTime = 0;
-constexpr uint32_t ICON_DISPLAY_DURATION_MS = 1000;
+constexpr uint32_t ICON_DISPLAY_DURATION_MS = 2000;
 
 void NavigationBar(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
@@ -3314,11 +3314,11 @@ void NavigationBar(OLEDDisplay *display, OLEDDisplayUiState *state)
     const size_t totalIcons = screen->indicatorIcons.size();
     if (totalIcons == 0) return;
 
-    const int iconsPerPage = (SCREEN_WIDTH + spacing) / (iconSize + spacing);
-    const int totalPages = (totalIcons + iconsPerPage - 1) / iconsPerPage;
-    const int currentPage = currentFrame / iconsPerPage;
-    const int pageStart = currentPage * iconsPerPage;
-    const int pageEnd = min(pageStart + iconsPerPage, totalIcons);
+    const size_t iconsPerPage = (SCREEN_WIDTH + spacing) / (iconSize + spacing);
+    const size_t totalPages = (totalIcons + iconsPerPage - 1) / iconsPerPage;
+    const size_t currentPage = currentFrame / iconsPerPage;
+    const size_t pageStart = currentPage * iconsPerPage;
+    const size_t pageEnd = min(pageStart + iconsPerPage, totalIcons);
 
     const int totalWidth = (pageEnd - pageStart) * iconSize + (pageEnd - pageStart - 1) * spacing;
     const int xStart = (SCREEN_WIDTH - totalWidth) / 2;
