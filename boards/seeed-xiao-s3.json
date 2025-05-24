@@ -15,6 +15,7 @@
     "f_cpu": "240000000L",
     "f_flash": "80000000L",
     "flash_mode": "qio",
+    "psram_type": "opi",
     "hwids": [["0x2886", "0x0059"]],
     "mcu": "esp32s3",
     "variant": "seeed-xiao-s3"

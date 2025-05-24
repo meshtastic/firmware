@@ -26,6 +26,10 @@
 #define OCV_ARRAY 2700, 2560, 2540, 2520, 2500, 2460, 2420, 2400, 2380, 2320, 1500
 #elif defined(TRACKER_T1000_E)
 #define OCV_ARRAY 4190, 4078, 4017, 3969, 3887, 3818, 3798, 3791, 3766, 3712, 3100
+#elif defined(HELTEC_MESH_POCKET_BATTERY_5000)
+#define OCV_ARRAY 4300, 4240, 4120, 4000, 3888, 3800, 3740, 3698, 3655, 3580, 3400
+#elif defined(HELTEC_MESH_POCKET_BATTERY_10000)
+#define OCV_ARRAY 4100, 4060, 3960, 3840, 3729, 3625, 3550, 3500, 3420, 3345, 3100
 #else // LiIon
 #define OCV_ARRAY 4190, 4050, 3990, 3890, 3800, 3720, 3630, 3530, 3420, 3300, 3100
 #endif
@@ -41,23 +45,48 @@ extern RTC_NOINIT_ATTR uint64_t RTC_reg_b;
 #include "soc/sens_reg.h" // needed for adc pin reset
 #endif
 
-#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(ARCH_PORTDUINO)
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#include "modules/Telemetry/Sensor/nullSensor.h"
+#if __has_include(<Adafruit_INA219.h>)
 #include "modules/Telemetry/Sensor/INA219Sensor.h"
-#include "modules/Telemetry/Sensor/INA226Sensor.h"
-#include "modules/Telemetry/Sensor/INA260Sensor.h"
-#include "modules/Telemetry/Sensor/INA3221Sensor.h"
 extern INA219Sensor ina219Sensor;
+#else
+extern NullSensor ina219Sensor;
+#endif
+
+#if __has_include(<INA226.h>)
+#include "modules/Telemetry/Sensor/INA226Sensor.h"
 extern INA226Sensor ina226Sensor;
+#else
+extern NullSensor ina226Sensor;
+#endif
+
+#if __has_include(<Adafruit_INA260.h>)
+#include "modules/Telemetry/Sensor/INA260Sensor.h"
 extern INA260Sensor ina260Sensor;
+#else
+extern NullSensor ina260Sensor;
+#endif
+
+#if __has_include(<INA3221.h>)
+#include "modules/Telemetry/Sensor/INA3221Sensor.h"
 extern INA3221Sensor ina3221Sensor;
+#else
+extern NullSensor ina3221Sensor;
 #endif
 
-#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+#endif
+
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(ARCH_STM32WL)
 #include "modules/Telemetry/Sensor/MAX17048Sensor.h"
+#if __has_include(<Adafruit_MAX1704X.h>)
 extern MAX17048Sensor max17048Sensor;
+#else
+extern NullSensor max17048Sensor;
+#endif
 #endif
 
-#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && HAS_RAKPROT && !defined(ARCH_PORTDUINO)
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && HAS_RAKPROT
 #include "modules/Telemetry/Sensor/RAK9154Sensor.h"
 extern RAK9154Sensor rak9154Sensor;
 #endif
@@ -83,11 +112,6 @@ class Power : private concurrency::OSThread
     virtual int32_t runOnce() override;
     void setStatusHandler(meshtastic::PowerStatus *handler) { statusHandler = handler; }
     const uint16_t OCV[11] = {OCV_ARRAY};
-
-#if defined(ELECROW_ThinkNode_M1) || defined(POWER_CFG)
-    uint8_t low_voltage_counter_led3;
-    int power_num = 0;
-#endif
 
   protected:
     meshtastic::PowerStatus *statusHandler;

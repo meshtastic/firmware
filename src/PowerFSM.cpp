@@ -19,7 +19,7 @@
 #include "sleep.h"
 #include "target_specific.h"
 
-#if HAS_WIFI && !defined(ARCH_PORTDUINO)
+#if HAS_WIFI && !defined(ARCH_PORTDUINO) || defined(MESHTASTIC_EXCLUDE_WIFI)
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
 
@@ -269,9 +269,6 @@ Fsm powerFSM(&stateBOOT);
 void PowerFSM_setup()
 {
     bool isRouter = (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ? 1 : 0);
-    bool isTrackerOrSensor = config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER ||
-                             config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER ||
-                             config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR;
     bool hasPower = isPowered();
 
     LOG_INFO("PowerFSM init, USB power=%d", hasPower ? 1 : 0);
@@ -383,6 +380,12 @@ void PowerFSM_setup()
     // See: https://github.com/meshtastic/firmware/issues/1071
     // Don't add power saving transitions if we are a power saving tracker or sensor or have Wifi enabled. Sleep will be initiated
     // through the modules
+
+#if HAS_WIFI || !defined(MESHTASTIC_EXCLUDE_WIFI)
+    bool isTrackerOrSensor = config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER ||
+                             config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER ||
+                             config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR;
+
     if ((isRouter || config.power.is_power_saving) && !isWifiAvailable() && !isTrackerOrSensor) {
         powerFSM.add_timed_transition(&stateNB, &stateLS,
                                       Default::getConfiguredOrDefaultMs(config.power.min_wake_secs, default_min_wake_secs), NULL,
@@ -400,7 +403,9 @@ void PowerFSM_setup()
                                       Default::getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs),
                                       NULL, "Screen-on timeout");
     }
-#else
+#endif // HAS_WIFI || !defined(MESHTASTIC_EXCLUDE_WIFI)
+
+#else // (not) ARCH_ESP32
     // If not ESP32, light-sleep not used. Check periodically if config has drifted out of stateDark
     powerFSM.add_timed_transition(&stateDARK, &stateDARK,
                                   Default::getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs), NULL,

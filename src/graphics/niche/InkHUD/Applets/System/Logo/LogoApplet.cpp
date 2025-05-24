@@ -11,10 +11,19 @@ InkHUD::LogoApplet::LogoApplet() : concurrency::OSThread("LogoApplet")
     OSThread::setIntervalFromNow(8 * 1000UL);
     OSThread::enabled = true;
 
-    textLeft = "";
-    textRight = "";
-    textTitle = xstr(APP_VERSION_SHORT);
-    fontTitle = fontSmall;
+    // During onboarding, show the default short name as well as the version string
+    // This behavior assists manufacturers during mass production, and should not be modified without good reason
+    if (!settings->tips.safeShutdownSeen) {
+        fontTitle = fontLarge;
+        textLeft = xstr(APP_VERSION_SHORT);
+        textRight = owner.short_name;
+        textTitle = "Meshtastic";
+    } else {
+        fontTitle = fontSmall;
+        textLeft = "";
+        textRight = "";
+        textTitle = xstr(APP_VERSION_SHORT);
+    }
 
     bringToForeground();
     // This is then drawn with a FULL refresh by Renderer::begin

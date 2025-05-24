@@ -116,46 +116,55 @@ ButtonThread::ButtonThread() : OSThread("Button")
 #endif
 }
 
+void ButtonThread::switchPage()
+{
+#ifdef BUTTON_PIN
+#if !defined(USERPREFS_BUTTON_PIN)
+    if (((config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN) !=
+         moduleConfig.canned_message.inputbroker_pin_press) ||
+        !(moduleConfig.canned_message.updown1_enabled || moduleConfig.canned_message.rotary1_enabled) ||
+        !moduleConfig.canned_message.enabled) {
+        powerFSM.trigger(EVENT_PRESS);
+    }
+#endif
+#if defined(USERPREFS_BUTTON_PIN)
+    if (((config.device.button_gpio ? config.device.button_gpio : USERPREFS_BUTTON_PIN) !=
+         moduleConfig.canned_message.inputbroker_pin_press) ||
+        !(moduleConfig.canned_message.updown1_enabled || moduleConfig.canned_message.rotary1_enabled) ||
+        !moduleConfig.canned_message.enabled) {
+        powerFSM.trigger(EVENT_PRESS);
+    }
+#endif
+
+#endif
+#if defined(ARCH_PORTDUINO)
+    if ((settingsMap.count(user) != 0 && settingsMap[user] != RADIOLIB_NC) &&
+            (settingsMap[user] != moduleConfig.canned_message.inputbroker_pin_press) ||
+        !moduleConfig.canned_message.enabled) {
+        powerFSM.trigger(EVENT_PRESS);
+    }
+#endif
+}
+
+void ButtonThread::sendAdHocPosition()
+{
+    service->refreshLocalMeshNode();
+    auto sentPosition = service->trySendPosition(NODENUM_BROADCAST, true);
+    if (screen) {
+        if (sentPosition)
+            screen->print("Sent ad-hoc position\n");
+        else
+            screen->print("Sent ad-hoc nodeinfo\n");
+        screen->forceDisplay(true); // Force a new UI frame, then force an EInk update
+    }
+}
+
 int32_t ButtonThread::runOnce()
 {
     // If the button is pressed we suppress CPU sleep until release
     canSleep = true; // Assume we should not keep the board awake
 
 #if defined(BUTTON_PIN) || defined(USERPREFS_BUTTON_PIN)
-    // #if defined(ELECROW_ThinkNode_M1) || defined(ELECROW_ThinkNode_M2)
-    //     buzzer_updata();
-    //     if (buttonPressed) {
-    //         buttonPressed = false;            // 清除标志
-    //         LOG_INFO("PIN_BUTTON2 pressed!"); // 串口打印信息
-    //         // off_currentTime = millis();
-    //         while (digitalRead(PIN_BUTTON2) == HIGH) {
-    //             if (cont < 40) {
-    //                 //     unsigned long currentTime = millis(); // 获取当前时间
-    //                 //     if (currentTime - off_currentTime >= 1000) {
-    //                 cont++;
-    //                 //         off_currentTime = currentTime;
-    //                 //     }
-    //                 delay(100);
-    //             } else {
-
-    //                 currentState = OFF;
-    //                 isBuzzing = false;
-    //                 cont = 0;
-    //                 BEEP_STATE = false;
-    //                 analogWrite(M2_buzzer, 0);
-    //                 pinMode(M2_buzzer, INPUT);
-    //                 screen->setOn(false);
-    //                 cont = 0;
-    //                 LOG_INFO("GGGGGGGGGGGGGGGGGGGGGGGGG");
-    //                 pinMode(1, OUTPUT);
-    //                 digitalWrite(1, LOW);
-    //                 pinMode(6, OUTPUT);
-    //                 digitalWrite(6, LOW);
-    //             }
-    //         }
-    //     }
-
-    // #endif
     userButton.tick();
     canSleep &= userButton.isIdle();
 #elif defined(ARCH_PORTDUINO)
@@ -180,32 +189,27 @@ int32_t ButtonThread::runOnce()
             // If a nag notification is running, stop it and prevent other actions
             if (moduleConfig.external_notification.enabled && (externalNotificationModule->nagCycleCutoff != UINT32_MAX)) {
                 externalNotificationModule->stopNow();
-                return 50;
+                break;
             }
-#ifdef BUTTON_PIN
-#if !defined(USERPREFS_BUTTON_PIN)
-            if (((config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN) !=
+#ifdef ELECROW_ThinkNode_M1
+            sendAdHocPosition();
+            break;
 #endif
-#if defined(USERPREFS_BUTTON_PIN)
-            if (((config.device.button_gpio ? config.device.button_gpio : USERPREFS_BUTTON_PIN) !=
-#endif
-                 moduleConfig.canned_message.inputbroker_pin_press) ||
-                !(moduleConfig.canned_message.updown1_enabled || moduleConfig.canned_message.rotary1_enabled) ||
-                !moduleConfig.canned_message.enabled) {
-                powerFSM.trigger(EVENT_PRESS);
-            }
-#endif
-#if defined(ARCH_PORTDUINO)
-            if ((settingsMap.count(user) != 0 && settingsMap[user] != RADIOLIB_NC) &&
-                    (settingsMap[user] != moduleConfig.canned_message.inputbroker_pin_press) ||
-                !moduleConfig.canned_message.enabled) {
-                powerFSM.trigger(EVENT_PRESS);
-            }
-#endif
+            switchPage();
             break;
         }
 
         case BUTTON_EVENT_PRESSED_SCREEN: {
+            LOG_BUTTON("AltPress!");
+#ifdef ELECROW_ThinkNode_M1
+            // If a nag notification is running, stop it and prevent other actions
+            if (moduleConfig.external_notification.enabled && (externalNotificationModule->nagCycleCutoff != UINT32_MAX)) {
+                externalNotificationModule->stopNow();
+                break;
+            }
+            switchPage();
+            break;
+#endif
             // turn screen on or off
             screen_flag = !screen_flag;
             if (screen)
@@ -215,22 +219,18 @@ int32_t ButtonThread::runOnce()
 
         case BUTTON_EVENT_DOUBLE_PRESSED: {
             LOG_BUTTON("Double press!");
-            service->refreshLocalMeshNode();
-            auto sentPosition = service->trySendPosition(NODENUM_BROADCAST, true);
-            if (screen) {
-                if (sentPosition)
-                    screen->print("Sent ad-hoc position\n");
-                else
-                    screen->print("Sent ad-hoc nodeinfo\n");
-                screen->forceDisplay(true); // Force a new UI frame, then force an EInk update
-            }
+#ifdef ELECROW_ThinkNode_M1
+            digitalWrite(PIN_EINK_EN, digitalRead(PIN_EINK_EN) == LOW);
+            break;
+#endif
+            sendAdHocPosition();
             break;
         }
 
         case BUTTON_EVENT_MULTI_PRESSED: {
             LOG_BUTTON("Mulitipress! %hux", multipressClickCount);
             switch (multipressClickCount) {
-#if HAS_GPS
+#if HAS_GPS && !defined(ELECROW_ThinkNode_M1)
             // 3 clicks: toggle GPS
             case 3:
                 if (!config.device.disable_triple_click && (gps != nullptr)) {
@@ -239,23 +239,23 @@ int32_t ButtonThread::runOnce()
                         screen->forceDisplay(true); // Force a new UI frame, then force an EInk update
                 }
                 break;
-#elif defined(ELECROW_ThinkNode_M2)
+#elif defined(ELECROW_ThinkNode_M1) || defined(ELECROW_ThinkNode_M2)
             case 3:
                 LOG_INFO("3 clicks: toggle buzzer");
                 buzzer_flag = !buzzer_flag;
-                if (buzzer_flag) {
-                    playBeep();
-                }
+                if (!buzzer_flag)
+                    noTone(PIN_BUZZER);
                 break;
+
 #endif
 
-#if defined(USE_EINK) && defined(PIN_EINK_EN) // i.e. T-Echo
+#if defined(USE_EINK) && defined(PIN_EINK_EN) && !defined(ELECROW_ThinkNode_M1) // i.e. T-Echo
             // 4 clicks: toggle backlight
             case 4:
                 digitalWrite(PIN_EINK_EN, digitalRead(PIN_EINK_EN) == LOW);
                 break;
 #endif
-#if defined(RAK_4631)
+#if !MESHTASTIC_EXCLUDE_SCREEN && HAS_SCREEN
             // 5 clicks: start accelerometer/magenetometer calibration for 30 seconds
             case 5:
                 if (accelerometerThread) {
@@ -300,14 +300,23 @@ int32_t ButtonThread::runOnce()
 #ifdef BUTTON_PIN_TOUCH
         case BUTTON_EVENT_TOUCH_LONG_PRESSED: {
             LOG_BUTTON("Touch press!");
-            if (screen) {
-                // Wake if asleep
-                if (powerFSM.getState() == &stateDARK)
-                    powerFSM.trigger(EVENT_PRESS);
+            // Ignore if: no screen
+            if (!screen)
+                break;
 
-                // Update display (legacy behaviour)
-                screen->forceDisplay();
-            }
+#ifdef TTGO_T_ECHO
+            // Ignore if: TX in progress
+            // Uncommon T-Echo hardware bug, LoRa TX triggers touch button
+            if (!RadioLibInterface::instance || RadioLibInterface::instance->isSending())
+                break;
+#endif
+
+            // Wake if asleep
+            if (powerFSM.getState() == &stateDARK)
+                powerFSM.trigger(EVENT_PRESS);
+
+            // Update display (legacy behaviour)
+            screen->forceDisplay();
             break;
         }
 #endif // BUTTON_PIN_TOUCH
@@ -349,7 +358,11 @@ void ButtonThread::attachButtonInterrupts()
 #endif
 
 #ifdef BUTTON_PIN_ALT
+#ifdef ELECROW_ThinkNode_M2
+    wakeOnIrq(BUTTON_PIN_ALT, RISING);
+#else
     wakeOnIrq(BUTTON_PIN_ALT, FALLING);
+#endif
 #endif
 
 #ifdef BUTTON_PIN_TOUCH

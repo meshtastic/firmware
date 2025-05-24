@@ -110,6 +110,8 @@ class NodeDB
     /// we updateGUI and updateGUIforNode if we think our this change is big enough for a redraw
     void updateFrom(const meshtastic_MeshPacket &p);
 
+    void addFromContact(const meshtastic_SharedContact);
+
     /** Update position info for this node based on received position data
      */
     void updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSource src = RX_SRC_RADIO);
@@ -272,6 +274,8 @@ extern meshtastic_CriticalErrorCode error_code;
  * A numeric error address (nonzero if available)
  */
 extern uint32_t error_address;
+#define NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_SHIFT 0
+#define NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK (1 << NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_SHIFT)
 
 #define Module_Config_size                                                                                                       \
     (ModuleConfig_CannedMessageConfig_size + ModuleConfig_ExternalNotificationConfig_size + ModuleConfig_MQTTConfig_size +       \

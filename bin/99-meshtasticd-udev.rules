@@ -1,0 +1,4 @@
+# Set spidev ownership to 'spi' group.
+SUBSYSTEM=="spidev", KERNEL=="spidev*", GROUP="spi", MODE="0660"
+# Allow access to USB CH341 devices
+SUBSYSTEM=="usb", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="5512", MODE="0666"
