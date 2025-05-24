@@ -50,7 +50,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
 
     const int xOffset = 4;
     const int highlightHeight = FONT_HEIGHT_SMALL - 1;
-    const bool isInverted = (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED);
+    const bool isInverted = (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED);
     const bool isBold = config.display.heading_bold;
 
     const int screenW = display->getWidth();
