@@ -1863,97 +1863,100 @@ uint16_t Screen::getCompassDiam(uint32_t displayWidth, uint32_t displayHeight)
 // *********************
 static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+    static std::vector<meshtastic_NodeInfoLite *> favoritedNodes;
+    static int prevFrame = -1;
+
+    if (state->currentFrame != prevFrame) {
+        prevFrame = state->currentFrame;
+
+        favoritedNodes.clear();
+        size_t total = nodeDB->getNumMeshNodes();
+        for (size_t i = 0; i < total; i++) {
+            meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(i);
+            if (!n || n->num == nodeDB->getNodeNum()) continue;
+            if (n->is_favorite) favoritedNodes.push_back(n);
+        }
+
+        // Sort favorites by node number to keep consistent order
+        std::sort(favoritedNodes.begin(), favoritedNodes.end(), [](meshtastic_NodeInfoLite *a, meshtastic_NodeInfoLite *b) {
+            return a->num < b->num;
+        });
+    }
+
+    if (favoritedNodes.empty()) return;
+
+    int nodeIndex = state->currentFrame - (screen->frameCount - favoritedNodes.size());
+    if (nodeIndex < 0 || nodeIndex >= (int)favoritedNodes.size()) return;
+
+    meshtastic_NodeInfoLite *node = favoritedNodes[nodeIndex];
+    if (!node || node->num == nodeDB->getNodeNum() || !node->is_favorite) return;
+
     display->clear();
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-    display->setFont(FONT_SMALL);
 
     // === Header ===
     graphics::drawCommonHeader(display, x, y);
 
-    // === Reset color in case inverted mode left it BLACK ===
-    display->setColor(WHITE);
-
-    // === Advance to next favorite node when frame changes ===
-    if (state->currentFrame != prevFrame) {
-        prevFrame = state->currentFrame;
-
-        int attempts = 0;
-        int total = nodeDB->getNumMeshNodes();
-        do {
-            nodeIndex = (nodeIndex + 1) % total;
-            meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(nodeIndex);
-            if (n && n->is_favorite && n->num != nodeDB->getNodeNum()) {
-                break;
-            }
-        } while (++attempts < total);
-    }
-
-    meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(nodeIndex);
-    if (!node || !node->is_favorite || node->num == nodeDB->getNodeNum())
-        return;
-
-    // === Draw Title (centered safe short name or ID) ===
-    static char titleBuf[20];
-    const char *titleStr = nullptr;
-
-    bool valid = node->has_user && strlen(node->user.short_name) > 0;
-    if (valid) {
-        for (size_t i = 0; i < strlen(node->user.short_name); i++) {
-            uint8_t c = (uint8_t)node->user.short_name[i];
-            if (c < 32 || c > 126) {
-                valid = false;
-                break;
-            }
-        }
-    }
-
-    if (valid) {
-        titleStr = node->user.short_name;
-    } else {
-        snprintf(titleBuf, sizeof(titleBuf), "%04X", (uint16_t)(node->num & 0xFFFF));
-        titleStr = titleBuf;
-    }
-
-    const int centerX = x + SCREEN_WIDTH / 2;
+    // === Title: Short Name centered in header row ===
     const int highlightHeight = FONT_HEIGHT_SMALL - 1;
-    const int headerOffsetY = 2;
-    const int titleY = y + headerOffsetY + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
+    const int textY = y + 1 + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
+    const int centerX = x + SCREEN_WIDTH / 2;
+    const char *shortName = (node->has_user && haveGlyphs(node->user.short_name)) ? node->user.short_name : "Node";
+
+    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED)
+        display->setColor(BLACK);
 
     display->setTextAlignment(TEXT_ALIGN_CENTER);
-    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
-        display->setColor(BLACK);
-    }
-    display->drawString(centerX, titleY, titleStr);
-    if (config.display.heading_bold) {
-        display->drawString(centerX + 1, titleY, titleStr);
-    }
+    display->setFont(FONT_SMALL);
+    display->drawString(centerX, textY, shortName);
+    if (config.display.heading_bold)
+        display->drawString(centerX + 1, textY, shortName);
+
     display->setColor(WHITE);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
 
-    // === First Row: Last Heard ===
-    static char lastStr[20];
-    screen->getTimeAgoStr(sinceLastSeen(node), lastStr, sizeof(lastStr));
-    display->drawString(x, compactFirstLine, lastStr);
+    const char *username = node->has_user ? node->user.long_name : "Unknown Name";
 
-    // === Second Row: Signal / Hops ===
     static char signalStr[20];
-    if (node->hops_away > 0) {
-        snprintf(signalStr, sizeof(signalStr), "Hops Away: %d", node->hops_away);
-    } else {
+    if (node->hops_away > 0)
+        snprintf(signalStr, sizeof(signalStr), "Hops: %d", node->hops_away);
+    else
         snprintf(signalStr, sizeof(signalStr), "Signal: %d%%", clamp((int)((node->snr + 10) * 5), 0, 100));
-    }
-    display->drawString(x, compactSecondLine, signalStr);
 
-    // === Third Row: Distance and Bearing ===
+    static char seenStr[20];
+    uint32_t seconds = sinceLastSeen(node);
+    if (seconds == 0 || seconds == UINT32_MAX) {
+        snprintf(seenStr, sizeof(seenStr), "Heard: ?");
+    } else {
+        uint32_t minutes = seconds / 60, hours = minutes / 60, days = hours / 24;
+        snprintf(seenStr, sizeof(seenStr), (days > 365 ? "Heard: ?" : "Heard: %d%c ago"),
+                 (days    ? days
+                  : hours ? hours
+                          : minutes),
+                 (days    ? 'd'
+                  : hours ? 'h'
+                          : 'm'));
+    }
+
     static char distStr[20];
-    strncpy(distStr, "? km ?°", sizeof(distStr));
-    if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
-        strncpy(distStr, "? mi ?°", sizeof(distStr));
-    }
+    strncpy(distStr,
+            (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) ? "? mi ?°" : "? km ?°",
+            sizeof(distStr));
 
+    // === First Row: Long Name ===
+    display->drawString(x, compactFirstLine, username);
+
+    // === Second Row: Last Seen ===
+    display->drawString(x, compactSecondLine, seenStr);
+
+    // === Third Row: Signal Strength or Hops ===
+    display->drawString(x, compactThirdLine, signalStr);
+
+    // === Fourth Row: Distance/Bearing ===
+    display->drawString(x, compactFourthLine, distStr);
+
+    // === Compass Rendering (resized like CompassAndLocation screen) ===
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
-
-    // === Match GPS screen compass position ===
     const int16_t topY = compactFirstLine;
     const int16_t bottomY = SCREEN_HEIGHT - (FONT_HEIGHT_SMALL - 1);
     const int16_t usableHeight = bottomY - topY - 5;
@@ -1966,56 +1969,38 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     const int16_t compassY = topY + (usableHeight / 2) + ((FONT_HEIGHT_SMALL - 1) / 2) + 2;
 
     bool hasNodeHeading = false;
-    if (ourNode && (nodeDB->hasValidPosition(ourNode) || screen->hasHeading())) {
-        const meshtastic_PositionLite &op = ourNode->position;
-        float myHeading = screen->hasHeading() ? radians(screen->getHeading())
-                                               : screen->estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
 
+    if (ourNode && (nodeDB->hasValidPosition(ourNode) || screen->hasHeading())) {
+        const auto &op = ourNode->position;
+        float myHeading = screen->hasHeading() ? screen->getHeading() * PI / 180
+                                               : screen->estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
         screen->drawCompassNorth(display, compassX, compassY, myHeading);
 
         if (nodeDB->hasValidPosition(node)) {
             hasNodeHeading = true;
-            const meshtastic_PositionLite &p = node->position;
+            const auto &p = node->position;
+            float d = GeoCoord::latLongToMeter(DegD(p.latitude_i), DegD(p.longitude_i),
+                                                DegD(op.latitude_i), DegD(op.longitude_i));
+            float bearing = GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i),
+                                              DegD(p.latitude_i), DegD(p.longitude_i));
+            if (!config.display.compass_north_top) bearing -= myHeading;
 
-            float d =
-                GeoCoord::latLongToMeter(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
+            screen->drawNodeHeading(display, compassX, compassY, compassDiam, bearing);
 
-            float bearingToOther =
-                GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(p.latitude_i), DegD(p.longitude_i));
-
-            if (!config.display.compass_north_top)
-                bearingToOther -= myHeading;
-
-            screen->drawNodeHeading(display, compassX, compassY, compassDiam, bearingToOther);
-
-            float bearingToOtherDegrees = (bearingToOther < 0) ? bearingToOther + 2 * PI : bearingToOther;
-            bearingToOtherDegrees = bearingToOtherDegrees * 180 / PI;
-
-            if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
-                if (d < (2 * MILES_TO_FEET))
-                    snprintf(distStr, sizeof(distStr), "%.0fft   %.0f°", d * METERS_TO_FEET, bearingToOtherDegrees);
-                else
-                    snprintf(distStr, sizeof(distStr), "%.1fmi   %.0f°", d * METERS_TO_FEET / MILES_TO_FEET,
-                             bearingToOtherDegrees);
-            } else {
-                if (d < 2000)
-                    snprintf(distStr, sizeof(distStr), "%.0fm   %.0f°", d, bearingToOtherDegrees);
-                else
-                    snprintf(distStr, sizeof(distStr), "%.1fkm   %.0f°", d / 1000, bearingToOtherDegrees);
-            }
+            float bearingDeg = fmodf((bearing < 0 ? bearing + 2 * PI : bearing) * 180 / PI, 360.0f);
+            if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL)
+                snprintf(distStr, sizeof(distStr), d < 2 * MILES_TO_FEET ? "%.0fft   %.0f°" : "%.1fmi   %.0f°",
+                         d * METERS_TO_FEET / (d < 2 * MILES_TO_FEET ? 1 : MILES_TO_FEET), bearingDeg);
+            else
+                snprintf(distStr, sizeof(distStr), d < 2000 ? "%.0fm   %.0f°" : "%.1fkm   %.0f°",
+                         d / (d < 2000 ? 1 : 1000), bearingDeg);
         }
     }
 
-    display->drawString(x, compactThirdLine, distStr);
-
-    if (!hasNodeHeading) {
+    if (!hasNodeHeading)
         display->drawString(compassX - FONT_HEIGHT_SMALL / 4, compassY - FONT_HEIGHT_SMALL / 2, "?");
-    }
 
     display->drawCircle(compassX, compassY, compassRadius);
-
-    // === Final reset to WHITE to ensure clean state for next frame ===
-    display->setColor(WHITE);
 }
 
 // Combined dynamic node list frame cycling through LastHeard, HopSignal, and Distance modes
@@ -3859,7 +3844,7 @@ void Screen::setFrames(FrameFocus focus)
     normalFrames[numframes++] = screen->digitalWatchFace ? &Screen::drawDigitalClockFrame : &Screen::drawAnalogClockFrame;
 #endif
 
-    // ✅ Declare this early so it’s available in FOCUS_PRESERVE block
+    // Declare this early so it’s available in FOCUS_PRESERVE block
     bool willInsertTextMessage = shouldDrawMessage(&devicestate.rx_text_message);
 
     if (willInsertTextMessage) {
@@ -3903,11 +3888,13 @@ void Screen::setFrames(FrameFocus focus)
         indicatorIcons.push_back(icon_memory);
     }
 
-    // then all the nodes
-    // We only show a few nodes in our scrolling list - because meshes with many nodes would have too many screens
-    // size_t numToShow = min(numMeshNodes, 4U);
-    // for (size_t i = 0; i < numToShow; i++)
-    // normalFrames[numframes++] = drawNodeInfo;
+    for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
+        meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(i);
+        if (n && n->num != nodeDB->getNodeNum() && n->is_favorite) {
+            normalFrames[numframes++] = drawNodeInfo;
+            indicatorIcons.push_back(icon_node);
+        }
+    }
 
     // then the debug info
 

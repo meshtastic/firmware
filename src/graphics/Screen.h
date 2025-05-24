@@ -184,6 +184,19 @@ class Screen : public concurrency::OSThread
     size_t frameCount = 0; // Total number of active frames
     ~Screen();
 
+    // Which frame we want to be displayed, after we regen the frameset by calling setFrames
+    enum FrameFocus : uint8_t {
+        FOCUS_DEFAULT,  // No specific frame
+        FOCUS_PRESERVE, // Return to the previous frame
+        FOCUS_FAULT,
+        FOCUS_TEXTMESSAGE,
+        FOCUS_MODULE, // Note: target module should call requestFocus(), otherwise no info about which module to focus
+    };
+
+    // Regenerate the normal set of frames, focusing a specific frame if requested
+    // Call when a frame should be added / removed, or custom frames should be cleared
+    void setFrames(FrameFocus focus = FOCUS_DEFAULT);
+
     std::vector<const uint8_t *> indicatorIcons; // Per-frame custom icon pointers
     Screen(const Screen &) = delete;
     Screen &operator=(const Screen &) = delete;
@@ -623,19 +636,6 @@ class Screen : public concurrency::OSThread
         bool wifi = false;
         bool memory = false;
     } dismissedFrames;
-
-    // Which frame we want to be displayed, after we regen the frameset by calling setFrames
-    enum FrameFocus : uint8_t {
-        FOCUS_DEFAULT,  // No specific frame
-        FOCUS_PRESERVE, // Return to the previous frame
-        FOCUS_FAULT,
-        FOCUS_TEXTMESSAGE,
-        FOCUS_MODULE, // Note: target module should call requestFocus(), otherwise no info about which module to focus
-    };
-
-    // Regenerate the normal set of frames, focusing a specific frame if requested
-    // Call when a frame should be added / removed, or custom frames should be cleared
-    void setFrames(FrameFocus focus = FOCUS_DEFAULT);
 
     /// Try to start drawing ASAP
     void setFastFramerate();

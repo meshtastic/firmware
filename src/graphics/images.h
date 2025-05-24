@@ -268,4 +268,17 @@ const uint8_t placeholder[] PROGMEM = {
     0b11111111
 };
 
+#define icon_node_width 8
+#define icon_node_height 8
+static const uint8_t icon_node[] PROGMEM = {
+    0x10, //    #     
+    0x10, //    #     ← antenna
+    0x10, //    #
+    0xFE, // #######  ← device top
+    0x82, // #     #  
+    0xAA, // # # # #  ← body with pattern
+    0x92, // #  #  #  
+    0xFE  // #######  ← device base
+};
+
 #include "img/icon.xbm"
