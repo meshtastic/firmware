@@ -2,7 +2,6 @@
 #define SDCARD_USE_HSPI
 
 // Display (E-Ink)
-#define USE_EINK
 #define PIN_EINK_CS 15
 #define PIN_EINK_BUSY 48
 #define PIN_EINK_DC 16

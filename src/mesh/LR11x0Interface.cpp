@@ -247,8 +247,8 @@ template <typename T> void LR11x0Interface<T>::startReceive()
     lora.setPreambleLength(preambleLength); // Solve RX ack fail after direct message sent.  Not sure why this is needed.
 
     // We use a 16 bit preamble so this should save some power by letting radio sit in standby mostly.
-    // Furthermore, we need the PREAMBLE_DETECTED and HEADER_VALID IRQ flag to detect whether we are actively receiving
-    int err = lora.startReceive(RADIOLIB_LR11X0_RX_TIMEOUT_INF, RADIOLIB_IRQ_RX_DEFAULT_FLAGS, RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
+    int err =
+        lora.startReceive(RADIOLIB_LR11X0_RX_TIMEOUT_INF, MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS, RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
     assert(err == RADIOLIB_ERR_NONE);
 
     RadioLibInterface::startReceive();

@@ -4,7 +4,7 @@
 #define PIN_BUTTON1 47 // 功能键
 #define PIN_BUTTON2 4  // 电源键
 
-#define LED_PIN_POWER 6
+#define LED_POWER 6
 #define ADC_V 42
 // USB_CHECK
 #define EXT_PWR_DETECT 7

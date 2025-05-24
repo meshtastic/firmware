@@ -18,7 +18,8 @@
 #error "meshtastic_ToRadio_size is too large for our BLE packets"
 #endif
 
-#define SPECIAL_NONCE 69420
+#define SPECIAL_NONCE_ONLY_CONFIG 69420
+#define SPECIAL_NONCE_ONLY_NODES 69421 // ( ͡° ͜ʖ ͡°)
 
 /**
  * Provides our protobuf based API which phone/PC clients can use to talk to our device

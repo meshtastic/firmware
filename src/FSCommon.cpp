@@ -12,15 +12,14 @@
 #include "SPILock.h"
 #include "configuration.h"
 
-#ifdef HAS_SDCARD
-#include "SPILock.h"
+// Software SPI is used by MUI so disable SD card here until it's also implemented
+#if defined(HAS_SDCARD) && !defined(SDCARD_USE_SOFT_SPI)
 #include <SD.h>
 #include <SPI.h>
-#if defined(ARCH_ESP32)
-#if defined(SDCARD_USE_HSPI)
-SPIClass SDHandler = SPIClass(HSPI);
-#elif defined(SDCARD_USE_VSPI)
-SPIClass SDHandler = SPIClass(VSPI);
+
+#ifdef SDCARD_USE_SPI1
+SPIClass SPI_HSPI(HSPI);
+#define SDHandler SPI_HSPI
 #else
 #define SDHandler SPI
 #endif
@@ -313,7 +312,7 @@ void fsInit()
  */
 void setupSDCard()
 {
-#ifdef HAS_SDCARD
+#if defined(HAS_SDCARD) && !defined(SDCARD_USE_SOFT_SPI)
     concurrency::LockGuard g(spiLock);
 #if (defined(ARCH_ESP32) || defined(ARCH_NRF52))
 #if (defined(ARCH_ESP32))
