@@ -1516,40 +1516,68 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         return;
     }
 
-    // === Canned Messages List ===
+// === Canned Messages List ===
     if (this->messagesCount > 0) {
         display->setTextAlignment(TEXT_ALIGN_LEFT);
         display->setFont(FONT_SMALL);
-        display->drawStringf(0 + x, 0 + y, buffer, "To: %s", getNodeName(this->dest));
-        int lines = (display->getHeight() / FONT_HEIGHT_SMALL) - 1;
 
-        if (lines == 3) {
-            display->fillRect(0 + x, 0 + y + FONT_HEIGHT_SMALL * 2, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
-            display->setColor(BLACK);
-            display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * 2, getCurrentMessage());
-            display->setColor(WHITE);
+        const int rowSpacing = FONT_HEIGHT_SMALL - 4;
+        const int highlightHeight = FONT_HEIGHT_SMALL - 1;
+        const int boxYOffset = (highlightHeight - FONT_HEIGHT_SMALL) / 2;
 
-            if (this->messagesCount > 1) {
-                display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL, getPrevMessage());
-                display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * 3, getNextMessage());
+        // Draw header (To: ...)
+        switch (this->destSelect) {
+        case CANNED_MESSAGE_DESTINATION_TYPE_NODE:
+            display->drawStringf(x + 0, y + 0, buffer, "To: >%s<@%s", getNodeName(this->dest), channels.getName(this->channel));
+            break;
+        case CANNED_MESSAGE_DESTINATION_TYPE_CHANNEL:
+            display->drawStringf(x + 0, y + 0, buffer, "To: %s@>%s<", getNodeName(this->dest), channels.getName(this->channel));
+            break;
+        default:
+            if (display->getWidth() > 128) {
+                display->drawStringf(x + 0, y + 0, buffer, "To: %s@%s", getNodeName(this->dest), channels.getName(this->channel));
+            } else {
+                display->drawStringf(x + 0, y + 0, buffer, "To: %.5s@%.5s", getNodeName(this->dest), channels.getName(this->channel));
             }
-        } else {
-            int topMsg = (messagesCount > lines && currentMessageIndex >= lines - 1) ? currentMessageIndex - lines + 2 : 0;
-            for (int i = 0; i < std::min(messagesCount, lines); i++) {
-                if (i == currentMessageIndex - topMsg) {
+            break;
+        }
+
+        // Shift message list upward by 3 pixels to reduce spacing between header and first message
+        const int listYOffset = y + FONT_HEIGHT_SMALL - 3;
+        const int visibleRows = (display->getHeight() - listYOffset) / rowSpacing;
+
+        int topMsg = (messagesCount > visibleRows && currentMessageIndex >= visibleRows - 1)
+                    ? currentMessageIndex - visibleRows + 2
+                    : 0;
+
+        for (int i = 0; i < std::min(messagesCount, visibleRows); i++) {
+            int lineY = listYOffset + rowSpacing * i;
+            const char* msg = getMessageByIndex(topMsg + i);
+
+            if ((topMsg + i) == currentMessageIndex) {
 #ifdef USE_EINK
-                    display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * (i + 1), ">");
-                    display->drawString(12 + x, 0 + y + FONT_HEIGHT_SMALL * (i + 1), getCurrentMessage());
+                display->drawString(x + 0, lineY, ">");
+                display->drawString(x + 12, lineY, msg);
 #else
-                    display->fillRect(0 + x, 0 + y + FONT_HEIGHT_SMALL * (i + 1), x + display->getWidth(), y + FONT_HEIGHT_SMALL);
-                    display->setColor(BLACK);
-                    display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * (i + 1), getCurrentMessage());
-                    display->setColor(WHITE);
+                int scrollPadding = 8;
+                display->fillRect(x + 0, lineY + 2, display->getWidth() - scrollPadding, FONT_HEIGHT_SMALL - 5);
+                display->setColor(BLACK);
+                display->drawString(x + 2, lineY, msg);
+                display->setColor(WHITE);
 #endif
-                } else {
-                    display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * (i + 1), getMessageByIndex(topMsg + i));
-                }
+            } else {
+                display->drawString(x + 0, lineY, msg);
             }
+        }
+
+        // Scrollbar
+        if (messagesCount > visibleRows) {
+            int scrollHeight = display->getHeight() - listYOffset;
+            int scrollTrackX = display->getWidth() - 6;
+            display->drawRect(scrollTrackX, listYOffset, 4, scrollHeight);
+            int barHeight = (scrollHeight * visibleRows) / messagesCount;
+            int scrollPos = listYOffset + (scrollHeight * topMsg) / messagesCount;
+            display->fillRect(scrollTrackX, scrollPos, 4, barHeight);
         }
     }
 }
