@@ -64,6 +64,10 @@ bool LTR390UVSensor::getMetrics(meshtastic_Telemetry *measurement)
         }
     }
 
+    // In case we fail to read the sensor mode, set the has_lux and has_uv_lux back to false
+    measurement->variant.environment_metrics.has_lux = false;
+    measurement->variant.environment_metrics.has_uv_lux = false;
+
     return false;
 }
 #endif
