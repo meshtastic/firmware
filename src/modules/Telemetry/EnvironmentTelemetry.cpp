@@ -335,7 +335,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
     const int centerX = x + SCREEN_WIDTH / 2;
 
     // Use black text on white background if in inverted mode
-    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED)
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED)
         display->setColor(BLACK);
 
     display->setTextAlignment(TEXT_ALIGN_CENTER);

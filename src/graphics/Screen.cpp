@@ -1306,13 +1306,20 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     const int textWidth = SCREEN_WIDTH;
     const int cornerRadius = 2;
 
-    bool isInverted = (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED);
+    bool isInverted = (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED);
     bool isBold = config.display.heading_bold;
 
     // === Header Construction ===
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(getFrom(&mp));
     char headerStr[80];
-    const char *sender = (node && node->has_user) ? node->user.short_name : "???";
+    const char *sender = "???";
+    if (node && node->has_user) {
+        if (SCREEN_WIDTH >= 200 && strlen(node->user.long_name) > 0) {
+            sender = node->user.long_name;
+        } else {
+            sender = node->user.short_name;
+        }
+    }
     uint32_t seconds = sinceReceived(&mp), minutes = seconds / 60, hours = minutes / 60, days = hours / 24;
     uint8_t timestampHours, timestampMinutes;
     int32_t daysAgo;
@@ -1902,7 +1909,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     const int centerX = x + SCREEN_WIDTH / 2;
     const char *shortName = (node->has_user && haveGlyphs(node->user.short_name)) ? node->user.short_name : "Node";
 
-    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED)
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED)
         display->setColor(BLACK);
 
     display->setTextAlignment(TEXT_ALIGN_CENTER);
@@ -2176,7 +2183,7 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     display->setFont(FONT_SMALL);
     display->setTextAlignment(TEXT_ALIGN_CENTER);
 
-    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED)
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED)
         display->setColor(BLACK);
 
     display->drawString(centerX, textY, title);
@@ -2728,7 +2735,7 @@ static void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int
     const char *titleStr = (SCREEN_WIDTH > 128) ? "LoRa Info" : "LoRa";
     const int centerX = x + SCREEN_WIDTH / 2;
 
-    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
         display->setColor(BLACK);
     }
 
@@ -2854,7 +2861,7 @@ static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiStat
     const char *titleStr = "GPS";
     const int centerX = x + SCREEN_WIDTH / 2;
 
-    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
         display->setColor(BLACK);
     }
 
@@ -2991,7 +2998,7 @@ static void drawMemoryScreen(OLEDDisplay *display, OLEDDisplayUiState *state, in
     const char *titleStr = (SCREEN_WIDTH > 128) ? "Memory" : "Mem";
     const int centerX = x + SCREEN_WIDTH / 2;
 
-    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
         display->setColor(BLACK);
     }
 
@@ -4167,7 +4174,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     // The coordinates define the left starting point of the text
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
-    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
         display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
         display->setColor(BLACK);
     }
@@ -4281,7 +4288,7 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
     // The coordinates define the left starting point of the text
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
-    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
         display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
         display->setColor(BLACK);
     }
@@ -4361,7 +4368,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     // The coordinates define the left starting point of the text
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
-    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
         display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
         display->setColor(BLACK);
     }

@@ -120,7 +120,7 @@ void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *s
     const char *titleStr = (SCREEN_WIDTH > 128) ? "Power Telem." : "Power";
     const int centerX = x + SCREEN_WIDTH / 2;
 
-    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
         display->setColor(BLACK);
     }
 
