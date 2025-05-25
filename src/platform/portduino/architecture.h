@@ -20,3 +20,6 @@
 #ifndef HAS_TELEMETRY
 #define HAS_TELEMETRY 1
 #endif
+#ifndef HAS_SENSOR
+#define HAS_SENSOR 1
+#endif

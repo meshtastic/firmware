@@ -181,7 +181,7 @@ void TwoButton::isrSecondary()
 void TwoButton::startThread()
 {
     if (!OSThread::enabled) {
-        OSThread::setInterval(50);
+        OSThread::setInterval(10);
         OSThread::enabled = true;
     }
 }
