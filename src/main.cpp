@@ -1293,7 +1293,7 @@ void setup()
     PowerFSM_setup(); // we will transition to ON in a couple of seconds, FIXME, only do this for cold boots, not waking from SDS
     powerFSMthread = new PowerFSMThread();
 
-#if !HAS_TFT && !USE_ST7796
+#if !HAS_TFT
     setCPUFast(false); // 80MHz is fine for our slow peripherals
 #endif
 
