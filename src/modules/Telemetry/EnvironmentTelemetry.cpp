@@ -23,6 +23,14 @@
 
 #include "Sensor/CGRadSensSensor.h"
 #include "Sensor/RCWL9620Sensor.h"
+#include "Sensor/SHT31Sensor.h"
+#include "Sensor/SHT4XSensor.h"
+#include "Sensor/SHTC3Sensor.h"
+#include "Sensor/TSL2591Sensor.h"
+#include "Sensor/VEML7700Sensor.h"
+#ifdef RAK4630
+#include "Sensor/RAK12035Sensor.h"
+#endif
 #include "Sensor/nullSensor.h"
 
 #if __has_include(<Adafruit_AHTX0.h>)
@@ -159,6 +167,9 @@ NullSensor bmp3xxSensor;
 
 RCWL9620Sensor rcwl9620Sensor;
 CGRadSensSensor cgRadSens;
+#ifdef RAK4630
+RAK12035Sensor rak12035Sensor;
+#endif
 #endif
 #ifdef T1000X_SENSOR_EN
 #include "Sensor/T1000xSensor.h"
@@ -168,6 +179,7 @@ T1000xSensor t1000xSensor;
 #include "Sensor/IndicatorSensor.h"
 IndicatorSensor indicatorSensor;
 #endif
+
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
 
@@ -269,6 +281,11 @@ int32_t EnvironmentTelemetryModule::runOnce()
 #ifdef HAS_RAKPROT
 
             result = rak9154Sensor.runOnce();
+#endif
+#ifdef RAK4630
+            if (rak12035Sensor.hasSensor()) {
+                result = rak12035Sensor.runOnce();
+            }
 #endif
 #endif
         }
@@ -599,6 +616,12 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
     valid = valid && rak9154Sensor.getMetrics(m);
     hasSensor = true;
 #endif
+#ifdef RAK4630
+    if (rak12035Sensor.hasSensor()) {
+        valid = valid && rak12035Sensor.getMetrics(m);
+        hasSensor = true;
+    }
+#endif
 #endif
     return valid && hasSensor;
 }
@@ -652,6 +675,9 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
                  m.variant.environment_metrics.wind_direction, m.variant.environment_metrics.weight);
 
         LOG_INFO("Send: radiation=%fµR/h", m.variant.environment_metrics.radiation);
+
+        LOG_INFO("Send: soil_temperature=%f, soil_moisture=%u", m.variant.environment_metrics.soil_temperature,
+                 m.variant.environment_metrics.soil_moisture);
 
         sensor_read_error_count = 0;
 
@@ -819,6 +845,13 @@ AdminMessageHandleResult EnvironmentTelemetryModule::handleAdminMessageForModule
         if (result != AdminMessageHandleResult::NOT_HANDLED)
             return result;
     }
+#ifdef RAK4630
+    if (rak12035Sensor.hasSensor()) {
+        result = rak12035Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+#endif
 #endif
     return result;
 }
