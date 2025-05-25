@@ -1300,10 +1300,6 @@ void setup()
     LOG_DEBUG("Free heap  : %7d bytes", ESP.getFreeHeap());
     LOG_DEBUG("Free PSRAM : %7d bytes", ESP.getFreePsram());
 #endif
-#if !defined(ARCH_STM32WL)
-    if (accelerometerThread)
-        accelerometerThread->calibrate(30);
-#endif
 }
 
 #endif

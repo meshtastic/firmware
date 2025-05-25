@@ -71,27 +71,28 @@ void InkHUD::ThreadedMessageApplet::onRender()
         MessageStore::Message &m = store->messages.at(i);
         bool outgoing = (m.sender == 0);
         meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(m.sender);
+        std::string bodyText = parse(m.text); // Parse any non-ascii chars in the message
 
         // Cache bottom Y of message text
         // - Used when drawing vertical line alongside
         const int16_t dotsB = msgB;
 
         // Get dimensions for message text
-        uint16_t bodyH = getWrappedTextHeight(msgL, msgW, m.text);
+        uint16_t bodyH = getWrappedTextHeight(msgL, msgW, bodyText);
         int16_t bodyT = msgB - bodyH;
 
         // Print message
         // - if incoming
         if (!outgoing)
-            printWrapped(msgL, bodyT, msgW, m.text);
+            printWrapped(msgL, bodyT, msgW, bodyText);
 
         // Print message
         // - if outgoing
         else {
-            if (getTextWidth(m.text) < width())          // If short,
-                printAt(msgR, bodyT, m.text, RIGHT);     // print right align
-            else                                         // If long,
-                printWrapped(msgL, bodyT, msgW, m.text); // need printWrapped(), which doesn't support right align
+            if (getTextWidth(bodyText) < width())          // If short,
+                printAt(msgR, bodyT, bodyText, RIGHT);     // print right align
+            else                                           // If long,
+                printWrapped(msgL, bodyT, msgW, bodyText); // need printWrapped(), which doesn't support right align
         }
 
         // Move cursor up
@@ -103,12 +104,16 @@ void InkHUD::ThreadedMessageApplet::onRender()
         // - shortname, if possible, or "me"
         // - time received, if possible
         std::string info;
-        if (sender && sender->has_user)
-            info += sender->user.short_name;
-        else if (outgoing)
+        if (outgoing)
             info += "Me";
-        else
-            info += hexifyNodeNum(m.sender);
+        else {
+            // Check if sender is node db
+            meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(m.sender);
+            if (sender)
+                info += parseShortName(sender); // Handle any unprintable chars in short name
+            else
+                info += hexifyNodeNum(m.sender); // No node info at all. Print the node num
+        }
 
         std::string timeString = getTimeString(m.timestamp);
         if (timeString.length() > 0) {
@@ -193,11 +198,6 @@ int InkHUD::ThreadedMessageApplet::onReceiveTextMessage(const meshtastic_MeshPac
 
     // Abort if message was a DM
     if (p->to != NODENUM_BROADCAST)
-        return 0;
-
-    // Abort if messages was an "emoji reaction"
-    // Possibly some implemetation of this in future?
-    if (p->decoded.emoji)
         return 0;
 
     // Extract info into our slimmed-down "StoredMessage" type
