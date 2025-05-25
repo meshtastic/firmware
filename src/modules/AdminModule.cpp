@@ -622,8 +622,12 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         config.has_display = true;
         if (config.display.screen_on_secs == c.payload_variant.display.screen_on_secs &&
             config.display.flip_screen == c.payload_variant.display.flip_screen &&
-            config.display.oled == c.payload_variant.display.oled) {
+            config.display.oled == c.payload_variant.display.oled &&
+            config.display.displaymode == c.payload_variant.display.displaymode) {
             requiresReboot = false;
+        } else if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR &&
+                   c.payload_variant.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+            config.bluetooth.enabled = false;
         }
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
         if (config.display.wake_on_tap_or_motion == false && c.payload_variant.display.wake_on_tap_or_motion == true &&
