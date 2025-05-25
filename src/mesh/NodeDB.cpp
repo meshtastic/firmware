@@ -1521,6 +1521,8 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
     info->has_user = true;
     info->user = TypeConversions::ConvertToUserLite(contact.user);
     info->is_favorite = true;
+    // Mark the node's key as manually verified to indicate trustworthiness.
+    info->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
     updateGUIforNode = info;
     powerFSM.trigger(EVENT_NODEDB_UPDATED);
     notifyObservers(true); // Force an update whether or not our node counts have changed
@@ -1656,8 +1658,10 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
             int oldestIndex = -1;
             int oldestBoringIndex = -1;
             for (int i = 1; i < numMeshNodes; i++) {
-                // Simply the oldest non-favorite node
-                if (!meshNodes->at(i).is_favorite && !meshNodes->at(i).is_ignored && meshNodes->at(i).last_heard < oldest) {
+                // Simply the oldest non-favorite, non-ignored, non-verified node
+                if (!meshNodes->at(i).is_favorite && !meshNodes->at(i).is_ignored &&
+                    !(meshNodes->at(i).bitfield & NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK) &&
+                    meshNodes->at(i).last_heard < oldest) {
                     oldest = meshNodes->at(i).last_heard;
                     oldestIndex = i;
                 }
