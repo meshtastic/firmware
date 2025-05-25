@@ -87,6 +87,8 @@ meshtastic_UserLite TypeConversions::ConvertToUserLite(meshtastic_User user)
     memcpy(lite.macaddr, user.macaddr, sizeof(lite.macaddr));
     memcpy(lite.public_key.bytes, user.public_key.bytes, sizeof(lite.public_key.bytes));
     lite.public_key.size = user.public_key.size;
+    lite.has_is_unmessagable = user.has_is_unmessagable;
+    lite.is_unmessagable = user.is_unmessagable;
     return lite;
 }
 
@@ -103,6 +105,8 @@ meshtastic_User TypeConversions::ConvertToUser(uint32_t nodeNum, meshtastic_User
     memcpy(user.macaddr, lite.macaddr, sizeof(user.macaddr));
     memcpy(user.public_key.bytes, lite.public_key.bytes, sizeof(user.public_key.bytes));
     user.public_key.size = lite.public_key.size;
+    user.has_is_unmessagable = lite.has_is_unmessagable;
+    user.is_unmessagable = lite.is_unmessagable;
 
     return user;
 }
