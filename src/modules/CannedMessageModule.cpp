@@ -703,35 +703,43 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
 
 void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const char *message, bool wantReplies)
 {
+    // === Prepare packet ===
     meshtastic_MeshPacket *p = allocDataPacket();
     p->to = dest;
     p->channel = channel;
     p->want_ack = true;
+
+    // Save destination for ACK/NACK UI fallback
+    this->lastSentNode = dest;
+    this->incoming = dest;
+
+    // Copy message payload
     p->decoded.payload.size = strlen(message);
     memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
-    if (moduleConfig.canned_message.send_bell && p->decoded.payload.size < meshtastic_Constants_DATA_PAYLOAD_LEN) {
-        p->decoded.payload.bytes[p->decoded.payload.size] = 7;        // Bell character
-        p->decoded.payload.bytes[p->decoded.payload.size + 1] = '\0'; // Bell character
-        p->decoded.payload.size++;
+
+    // Optionally add bell character
+    if (moduleConfig.canned_message.send_bell &&
+        p->decoded.payload.size < meshtastic_Constants_DATA_PAYLOAD_LEN)
+    {
+        p->decoded.payload.bytes[p->decoded.payload.size++] = 7;  // Bell
+        p->decoded.payload.bytes[p->decoded.payload.size] = '\0'; // Null-terminate
     }
 
-    // Only receive routing messages when expecting ACK for a canned message
-    // Prevents the canned message module from regenerating the screen's frameset at unexpected times,
-    // or raising a UIFrameEvent before another module has the chance
+    // Mark as waiting for ACK to trigger ACK/NACK screen
     this->waitingForAck = true;
 
-    LOG_INFO("Send message id=%d, dest=%x, msg=%.*s", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
+    // Log outgoing message
+    LOG_INFO("Send message id=%d, dest=%x, msg=%.*s",
+             p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
 
-    service->sendToMesh(
-        p, RX_SRC_LOCAL,
-        true); // send to mesh, cc to phone. Even if there's no phone connected, this stores the message to match ACKs
+    // Send to mesh and phone (even if no phone connected, to track ACKs)
+    service->sendToMesh(p, RX_SRC_LOCAL, true);
 
-    // === Simulate local message to dismiss the message frame after sending ===
-    // This mimics what happens when replying from the phone to clear unread state and UI
+    // === Simulate local message to clear unread UI ===
     if (screen) {
         meshtastic_MeshPacket simulatedPacket = {};
-        simulatedPacket.from = 0; // Outgoing message (from local device)
-        screen->handleTextMessage(&simulatedPacket); // Calls logic to clear unread and dismiss frame
+        simulatedPacket.from = 0; // Local device
+        screen->handleTextMessage(&simulatedPacket);
     }
 }
 
@@ -1028,16 +1036,16 @@ const char *CannedMessageModule::getMessageByIndex(int index)
 
 const char *CannedMessageModule::getNodeName(NodeNum node)
 {
-    if (node == NODENUM_BROADCAST) {
-        return "Broadcast";
-    } else {
-        meshtastic_NodeInfoLite *info = nodeDB->getMeshNode(node);
-        if (info != NULL) {
-            return info->user.long_name;
-        } else {
-            return "Unknown";
-        }
+    if (node == NODENUM_BROADCAST) return "Broadcast";
+
+    meshtastic_NodeInfoLite *info = nodeDB->getMeshNode(node);
+    if (info && info->has_user && strlen(info->user.long_name) > 0) {
+        return info->user.long_name;
     }
+
+    static char fallback[12];
+    snprintf(fallback, sizeof(fallback), "0x%08x", node);
+    return fallback;
 }
 
 bool CannedMessageModule::shouldDraw()
@@ -1422,28 +1430,48 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         requestFocus();
         EINK_ADD_FRAMEFLAG(display, COSMETIC);
         display->setTextAlignment(TEXT_ALIGN_CENTER);
-#ifdef USE_EINK
-        display->setFont(FONT_SMALL);
-#else
-        display->setFont(FONT_MEDIUM);
-#endif
-        String displayString = this->ack ? "Delivered to\n%s" : "Delivery failed\nto %s";
-        display->drawStringf(display->getWidth() / 2 + x, 0 + y + 12, buffer, displayString, getNodeName(this->incoming));
-        display->setFont(FONT_SMALL);
 
-        // SNR/RSSI
-        if (display->getHeight() > 100) {
-            int16_t snrY = 100;
-            int16_t rssiY = 130;
-            if (display->getHeight() < rssiY + FONT_HEIGHT_SMALL) {
-                snrY = display->getHeight() - ((1.5) * FONT_HEIGHT_SMALL);
-                rssiY = display->getHeight() - ((2.5) * FONT_HEIGHT_SMALL);
+    #ifdef USE_EINK
+        display->setFont(FONT_SMALL);
+        int yOffset = y + 10;
+    #else
+        display->setFont(FONT_MEDIUM);
+        int yOffset = y + 10;
+    #endif
+
+        // --- Delivery Status Message ---
+        if (this->ack) {
+            if (this->lastSentNode == NODENUM_BROADCAST) {
+                snprintf(buffer, sizeof(buffer), "Broadcast Sent to\n%s", channels.getName(this->channel));
+            } else if (this->lastAckHopLimit > this->lastAckHopStart) {
+                snprintf(buffer, sizeof(buffer), "Delivered (%d hops)\nto %s",
+                        this->lastAckHopLimit - this->lastAckHopStart,
+                        getNodeName(this->incoming));
+            } else {
+                snprintf(buffer, sizeof(buffer), "Delivered\nto %s", getNodeName(this->incoming));
             }
-            if (this->ack) {
-                display->drawStringf(display->getWidth() / 2 + x, snrY + y, buffer, "Last Rx SNR: %f", this->lastRxSnr);
-                display->drawStringf(display->getWidth() / 2 + x, rssiY + y, buffer, "Last Rx RSSI: %d", this->lastRxRssi);
-            }
+        } else {
+            snprintf(buffer, sizeof(buffer), "Delivery failed\nto %s", getNodeName(this->incoming));
         }
+
+        // Draw delivery message and compute y-offset after text height
+        int lineCount = 1;
+        for (const char *ptr = buffer; *ptr; ptr++) {
+            if (*ptr == '\n') lineCount++;
+        }
+
+        display->drawString(display->getWidth() / 2 + x, yOffset, buffer);
+        yOffset += lineCount * FONT_HEIGHT_MEDIUM; // only 1 line gap, no extra padding
+
+    #ifndef USE_EINK
+        // --- SNR + RSSI Compact Line ---
+        if (this->ack) {
+            display->setFont(FONT_SMALL);
+            snprintf(buffer, sizeof(buffer), "SNR: %.1f dB   RSSI: %d", this->lastRxSnr, this->lastRxRssi);
+            display->drawString(display->getWidth() / 2 + x, yOffset, buffer);
+        }
+    #endif
+
         return;
     }
 
@@ -1586,20 +1614,40 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
 ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
     if (mp.decoded.portnum == meshtastic_PortNum_ROUTING_APP && waitingForAck) {
-        // look for a request_id
         if (mp.decoded.request_id != 0) {
+            // Trigger screen refresh for ACK/NACK feedback
             UIFrameEvent e;
-            e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
-            requestFocus(); // Tell Screen::setFrames that our module's frame should be shown, even if not "first" in the frameset
+            e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+            requestFocus();
             this->runState = CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED;
-            this->incoming = service->getNodenumFromRequestId(mp.decoded.request_id);
+
+            // Decode the routing response
             meshtastic_Routing decoded = meshtastic_Routing_init_default;
             pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, meshtastic_Routing_fields, &decoded);
-            this->ack = decoded.error_reason == meshtastic_Routing_Error_NONE;
-            waitingForAck = false; // No longer want routing packets
+
+            // Track hop metadata
+            this->lastAckWasRelayed = (mp.hop_limit != mp.hop_start);
+            this->lastAckHopStart = mp.hop_start;
+            this->lastAckHopLimit = mp.hop_limit;
+
+            // Determine ACK status
+            bool isAck = (decoded.error_reason == meshtastic_Routing_Error_NONE);
+            bool isFromDest = (mp.from == this->lastSentNode);
+            bool isBroadcast = (this->lastSentNode == NODENUM_BROADCAST);
+
+            // Identify the responding node
+            if (isBroadcast && mp.from != nodeDB->getNodeNum()) {
+                this->incoming = mp.from; // Relayed by another node
+            } else {
+                this->incoming = this->lastSentNode; // Direct reply
+            }
+
+            // Final ACK confirmation logic
+            this->ack = isAck && (isBroadcast || isFromDest);
+
+            waitingForAck = false;
             this->notifyObservers(&e);
-            // run the next time 2 seconds later
-            setIntervalFromNow(2000);
+            setIntervalFromNow(3000); // Time to show ACK/NACK screen
         }
     }
 

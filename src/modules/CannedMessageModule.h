@@ -63,7 +63,8 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     std::vector<uint8_t> activeChannelIndices;
     bool shouldRedraw = false;
     unsigned long lastUpdateMillis = 0;
-
+    uint8_t lastAckHopStart = 0;
+    uint8_t lastAckHopLimit = 0;
   public:
     CannedMessageModule();
     const char *getCurrentMessage();
