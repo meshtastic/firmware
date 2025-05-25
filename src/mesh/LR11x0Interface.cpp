@@ -71,6 +71,8 @@ template <typename T> bool LR11x0Interface<T>::init()
 
     RadioLibInterface::init();
 
+    limitPower();
+
     if (power > LR1110_MAX_POWER) // Clamp power to maximum defined level
         power = LR1110_MAX_POWER;
 
@@ -79,8 +81,6 @@ template <typename T> bool LR11x0Interface<T>::init()
         power = LR1120_MAX_POWER;
         preambleLength = 12; // 12 is the default for operation above 2GHz
     }
-
-    limitPower();
 
 #ifdef LR11X0_RF_SWITCH_SUBGHZ
     pinMode(LR11X0_RF_SWITCH_SUBGHZ, OUTPUT);
