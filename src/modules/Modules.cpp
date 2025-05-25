@@ -1,5 +1,6 @@
 #include "configuration.h"
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER
+#include "KeyVerificationModule.h"
 #include "input/ExpressLRSFiveWay.h"
 #include "input/InputBroker.h"
 #include "input/RotaryEncoderInterruptImpl1.h"
@@ -133,7 +134,7 @@ void setupModules()
 #if !MESHTASTIC_EXCLUDE_ATAK
         atakPluginModule = new AtakPluginModule();
 #endif
-
+        keyVerificationModule = new KeyVerificationModule();
 #if !MESHTASTIC_EXCLUDE_DROPZONE
         dropzoneModule = new DropzoneModule();
 #endif

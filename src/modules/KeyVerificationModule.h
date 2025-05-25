@@ -9,10 +9,10 @@ enum KeyVerificationState {
     KEY_VERIFICATION_SENDER_AWAITING_NUMBER,
     KEY_VERIFICATION_SENDER_AWAITING_USER,
     KEY_VERIFICATION_RECEIVER_AWAITING_USER,
+    KEY_VERIFICATION_RECEIVER_AWAITING_HASH1,
 };
 
-class KeyVerificationModule
-    : public SinglePortModule //, public ProtobufModule<meshtastic_KeyVerification> //, private concurrency::OSThread //
+class KeyVerificationModule : public ProtobufModule<meshtastic_KeyVerification> //, private concurrency::OSThread //
 {
     // CallbackObserver<KeyVerificationModule, const meshtastic::Status *> nodeStatusObserver =
     //     CallbackObserver<KeyVerificationModule, const meshtastic::Status *>(this, &KeyVerificationModule::handleStatusUpdate);
@@ -27,7 +27,6 @@ class KeyVerificationModule
     }*/
     virtual bool wantUIFrame() { return false; };
     bool sendInitialRequest(NodeNum remoteNode);
-    bool sendResponse(const meshtastic_MeshPacket &, meshtastic_KeyVerification *);
 
   protected:
     /* Called to handle a particular incoming message
@@ -44,12 +43,21 @@ class KeyVerificationModule
      * Send our Telemetry into the mesh
      */
     bool sendMetrics();
+    virtual meshtastic_MeshPacket *allocReply() override;
 
   private:
     uint64_t currentNonce = 0;
     uint32_t currentNonceTimestamp = 0;
     NodeNum currentRemoteNode = 0;
-    KeyVerificationState currentstate = KEY_VERIFICATION_IDLE;
+    uint32_t currentSecurityNumber = 0;
+    KeyVerificationState currentState = KEY_VERIFICATION_IDLE;
+    uint8_t hash1[32] = {0}; //
+    uint8_t hash2[32] = {0}; //
+    char message[26] = {0};
 
+    void processSecurityNumber(uint32_t);
     void updateState(); // check the timeouts and maybe reset the state to idle
+    void resetToIdle(); // Zero out module state
 };
+
+extern KeyVerificationModule *keyVerificationModule;
