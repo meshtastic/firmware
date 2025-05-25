@@ -71,7 +71,6 @@ class ScanI2C
         DPS310,
         LTR390UV,
         TCA8418KB,
-        PCT2075,
         CST226SE,
     } DeviceType;
 
