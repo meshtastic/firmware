@@ -65,7 +65,7 @@
 #define ST7796_MISO -1
 #define ST7796_BUSY -1
 #define VTFT_LEDA 4
-#define TFT_SPI_FREQUENCY 4000000
+#define TFT_SPI_FREQUENCY 40000000
 #define TFT_HEIGHT 222
 #define TFT_WIDTH 480
 #define BRIGHTNESS_DEFAULT 100 // Medium Low Brightness
