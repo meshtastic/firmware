@@ -34,6 +34,8 @@ ScanI2C::I2CPort MotionSensor::devicePort()
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN) && HAS_SCREEN
 void MotionSensor::drawFrameCalibration(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+    if (screen == nullptr)
+        return;
     // int x_offset = display->width() / 2;
     // int y_offset = display->height() <= 80 ? 0 : 32;
     display->setTextAlignment(TEXT_ALIGN_LEFT);

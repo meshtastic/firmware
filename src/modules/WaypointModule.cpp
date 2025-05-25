@@ -48,6 +48,8 @@ ProcessMessage WaypointModule::handleReceived(const meshtastic_MeshPacket &mp)
 bool WaypointModule::shouldDraw()
 {
 #if !MESHTASTIC_EXCLUDE_WAYPOINT
+    if (screen == nullptr)
+        return false;
     // If no waypoint to show
     if (!devicestate.has_rx_waypoint)
         return false;
@@ -79,6 +81,8 @@ bool WaypointModule::shouldDraw()
 /// Draw the last waypoint we received
 void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+    if (screen == nullptr)
+        return;
     // Prepare to draw
     display->setFont(FONT_SMALL);
     display->setTextAlignment(TEXT_ALIGN_LEFT);

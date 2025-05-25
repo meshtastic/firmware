@@ -372,11 +372,9 @@ void setup()
     SPISettings spiSettings(4000000, MSBFIRST, SPI_MODE0);
 #endif
 
-#if !HAS_TFT
     meshtastic_Config_DisplayConfig_OledType screen_model =
         meshtastic_Config_DisplayConfig_OledType::meshtastic_Config_DisplayConfig_OledType_OLED_AUTO;
     OLEDDISPLAY_GEOMETRY screen_geometry = GEOMETRY_128_64;
-#endif
 
 #ifdef USE_SEGGER
     auto mode = false ? SEGGER_RTT_MODE_BLOCK_IF_FIFO_FULL : SEGGER_RTT_MODE_NO_BLOCK_TRIM;
@@ -539,10 +537,6 @@ void setup()
     digitalWrite(AQ_SET_PIN, HIGH);
 #endif
 
-#if HAS_TFT
-    tftSetup();
-#endif
-
     // Currently only the tbeam has a PMU
     // PMU initialization needs to be placed before i2c scanning
     power = new Power();
@@ -605,7 +599,6 @@ void setup()
     }
 #endif
 
-#if !HAS_TFT
     auto screenInfo = i2cScanner->firstScreen();
     screen_found = screenInfo.type != ScanI2C::DeviceType::NONE ? screenInfo.address : ScanI2C::ADDRESS_NONE;
 
@@ -623,7 +616,6 @@ void setup()
             screen_model = meshtastic_Config_DisplayConfig_OledType::meshtastic_Config_DisplayConfig_OledType_OLED_AUTO;
         }
     }
-#endif
 
 #define UPDATE_FROM_SCANNER(FIND_FN)
 
@@ -769,6 +761,12 @@ void setup()
     // but we need to do this after main cpu init (esp32setup), because we need the random seed set
     nodeDB = new NodeDB;
 
+#if HAS_TFT
+    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+        tftSetup();
+    }
+#endif
+
     // If we're taking on the repeater role, use NextHopRouter and turn off 3V3_S rail because peripherals are not needed
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
         router = new NextHopRouter();
@@ -791,11 +789,9 @@ void setup()
     else
         playStartMelody();
 
-#if !HAS_TFT
     // fixed screen override?
     if (config.display.oled != meshtastic_Config_DisplayConfig_OledType_OLED_AUTO)
         screen_model = config.display.oled;
-#endif
 
 #if defined(USE_SH1107)
     screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // set dimension of 128x128
@@ -865,7 +861,9 @@ void setup()
 
     // Initialize the screen first so we can show the logo while we start up everything else.
 #if HAS_SCREEN
-    screen = new graphics::Screen(screen_found, screen_model, screen_geometry);
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+        screen = new graphics::Screen(screen_found, screen_model, screen_geometry);
+    }
 #endif
     // setup TZ prior to time actions.
 #if !MESHTASTIC_EXCLUDE_TZ
@@ -955,18 +953,21 @@ void setup()
 // the current region name)
 #if defined(ST7701_CS) || defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) ||       \
     defined(ST7789_CS) || defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS)
-    screen->setup();
+    if (screen)
+        screen->setup();
 #elif defined(ARCH_PORTDUINO)
-    if (screen_found.port != ScanI2C::I2CPort::NO_I2C || settingsMap[displayPanel]) {
+    if ((screen_found.port != ScanI2C::I2CPort::NO_I2C || settingsMap[displayPanel]) &&
+        config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
         screen->setup();
     }
 #else
-    if (screen_found.port != ScanI2C::I2CPort::NO_I2C)
+    if (screen_found.port != ScanI2C::I2CPort::NO_I2C && screen)
         screen->setup();
 #endif
 #endif
-
-    screen->print("Started...\n");
+    if (screen) {
+        screen->print("Started...\n");
+    }
 
 #ifdef PIN_PWR_DELAY_MS
     // This may be required to give the peripherals time to power up.
@@ -1228,7 +1229,8 @@ void setup()
         nodeDB->saveToDisk(SEGMENT_CONFIG);
         if (!rIf->reconfigure()) {
             LOG_WARN("Reconfigure failed, rebooting");
-            screen->startAlert("Rebooting...");
+            if (screen)
+                screen->startAlert("Rebooting...");
             rebootAtMsec = millis() + 5000;
         }
     }

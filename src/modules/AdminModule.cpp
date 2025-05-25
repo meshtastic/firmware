@@ -200,14 +200,16 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 #if defined(ARCH_ESP32)
 #if !MESHTASTIC_EXCLUDE_BLUETOOTH
         if (!BleOta::getOtaAppVersion().isEmpty()) {
-            screen->startFirmwareUpdateScreen();
+            if (screen)
+                screen->startFirmwareUpdateScreen();
             BleOta::switchToOtaApp();
             LOG_INFO("Rebooting to BLE OTA");
         }
 #endif
 #if !MESHTASTIC_EXCLUDE_WIFI
         if (WiFiOTA::trySwitchToOTA()) {
-            screen->startFirmwareUpdateScreen();
+            if (screen)
+                screen->startFirmwareUpdateScreen();
             WiFiOTA::saveConfig(&config.network);
             LOG_INFO("Rebooting to WiFi OTA");
         }
@@ -1111,7 +1113,8 @@ void AdminModule::handleGetDeviceUIConfig(const meshtastic_MeshPacket &req)
 void AdminModule::reboot(int32_t seconds)
 {
     LOG_INFO("Reboot in %d seconds", seconds);
-    screen->startAlert("Rebooting...");
+    if (screen)
+        screen->startAlert("Rebooting...");
     rebootAtMsec = (seconds < 0) ? 0 : (millis() + seconds * 1000);
 }
 

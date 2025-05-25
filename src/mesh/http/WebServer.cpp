@@ -154,7 +154,8 @@ void createSSLCert()
                     esp_task_wdt_reset();
 #if HAS_SCREEN
                     if (millis() / 1000 >= 3) {
-                        screen->setSSLFrames();
+                        if (screen)
+                            screen->setSSLFrames();
                     }
 #endif
                 }
