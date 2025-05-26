@@ -1,3 +1,4 @@
+#if !MESHTASTIC_EXCLUDE_PKI
 #include "KeyVerificationModule.h"
 #include "MeshService.h"
 #include "RTC.h"
@@ -303,3 +304,4 @@ void KeyVerificationModule::generateVerificationCode(char *readableCode)
         readableCode[i] = (hash1[i] >> 2) + 48; // not a standardized base64, but workable and avoids having a dictionary.
     }
 }
+#endif

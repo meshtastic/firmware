@@ -1,6 +1,5 @@
 #include "configuration.h"
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER
-#include "KeyVerificationModule.h"
 #include "input/ExpressLRSFiveWay.h"
 #include "input/InputBroker.h"
 #include "input/RotaryEncoderInterruptImpl1.h"
@@ -12,6 +11,9 @@
 #include "input/cardKbI2cImpl.h"
 #endif
 #include "input/kbMatrixImpl.h"
+#endif
+#if !MESHTASTIC_EXCLUDE_PKI
+#include "KeyVerificationModule.h"
 #endif
 #if !MESHTASTIC_EXCLUDE_ADMIN
 #include "modules/AdminModule.h"
@@ -134,7 +136,9 @@ void setupModules()
 #if !MESHTASTIC_EXCLUDE_ATAK
         atakPluginModule = new AtakPluginModule();
 #endif
+#if !MESHTASTIC_EXCLUDE_PKI
         keyVerificationModule = new KeyVerificationModule();
+#endif
 #if !MESHTASTIC_EXCLUDE_DROPZONE
         dropzoneModule = new DropzoneModule();
 #endif
