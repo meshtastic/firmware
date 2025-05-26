@@ -354,7 +354,7 @@ void NimbleBluetooth::Send_GPWPL(uint32_t node, char* name, int32_t latitude_i, 
         int nSendLen = min(20, nHaveLen);
         gpwplCharacteristic->setValue(((uint8_t*)strGPWPL) + nOffset, nSendLen);
         gpwplCharacteristic->notify();
-        delay(50); // 为了稳定传输，添加一点延时
+        delay(50); // To ensure stable transmission, add a little delay.
 
         nOffset += nSendLen;
         nHaveLen -= nSendLen;
