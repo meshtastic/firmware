@@ -575,7 +575,7 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent* event) {
         currentMessageIndex = -1;
         shift = false;
         valid = true;
-    } else if (keyTapped.length() > 0) {
+    } else if (!keyTapped.isEmpty()) {
 #ifndef RAK14014
         highlight = keyTapped[0];
 #endif
