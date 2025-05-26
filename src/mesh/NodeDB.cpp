@@ -1128,6 +1128,29 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
     } else {
         LOG_ERROR("Could not open / read %s", filename);
     }
+
+    if (state != LoadFileResult::LOAD_SUCCESS) {
+        // Try loading from temporary file in case rename was interrupted
+        String tmp = filename;
+        tmp += ".tmp";
+        if (FSCom.exists(tmp.c_str())) {
+            LOG_WARN("Attempting recovery from %s", tmp.c_str());
+            auto f2 = FSCom.open(tmp.c_str(), FILE_O_READ);
+            if (f2) {
+                pb_istream_t stream = {&readcb, &f2, protoSize};
+                memset(dest_struct, 0, objSize);
+                if (pb_decode(&stream, fields, dest_struct)) {
+                    LOG_INFO("Recovered preferences from %s", tmp.c_str());
+                    state = LoadFileResult::LOAD_SUCCESS;
+                    f2.close();
+                    renameFile(tmp.c_str(), filename);
+                } else {
+                    LOG_ERROR("Recovery decode failed for %s", tmp.c_str());
+                    f2.close();
+                }
+            }
+        }
+    }
 #else
     LOG_ERROR("ERROR: Filesystem not implemented");
     state = LoadFileResult::NO_FILESYSTEM;

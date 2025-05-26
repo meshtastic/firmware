@@ -8,8 +8,10 @@ static File openFile(const char *filename, bool fullAtomic)
     concurrency::LockGuard g(spiLock);
     LOG_DEBUG("Opening %s, fullAtomic=%d", filename, fullAtomic);
 #ifdef ARCH_NRF52
-    FSCom.remove(filename);
-    return FSCom.open(filename, FILE_O_WRITE);
+    if (!fullAtomic) {
+        FSCom.remove(filename);
+        return FSCom.open(filename, FILE_O_WRITE);
+    }
 #endif
     if (!fullAtomic) {
         FSCom.remove(filename); // Nuke the old file to make space (ignore if it !exists)
@@ -75,10 +77,9 @@ bool SafeFile::close()
 
     { // Scope for lock
         concurrency::LockGuard g(spiLock);
-        // brief window of risk here ;-)
-        if (fullAtomic && FSCom.exists(filename.c_str()) && !FSCom.remove(filename.c_str())) {
-            LOG_ERROR("Can't remove old pref file");
-            return false;
+        if (fullAtomic && FSCom.exists(filename.c_str())) {
+            // Old config will be replaced by renameFile
+            // Do not remove here to avoid data loss if power fails before rename
         }
     }
 
