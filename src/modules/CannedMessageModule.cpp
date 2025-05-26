@@ -596,7 +596,7 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent* event) {
         if (dest == 0) dest = NODENUM_BROADCAST;
 
         // Defensive: If channel isn't valid, pick the first available channel
-        if (channel >= channels.getNumChannels()) channel = 0;
+        if (channel < 0 || channel >= channels.getNumChannels()) channel = 0;
 
         payload = CANNED_MESSAGE_RUN_STATE_FREETEXT;
         currentMessageIndex = -1;
@@ -1028,7 +1028,7 @@ int32_t CannedMessageModule::runOnce()
             switch (this->payload) { // code below all trigger the freetext window (where you type to send a message) or reset the
                                      // display back to the default window
             case 0x08:               // backspace
-                if (this->freetext.length() > 0 && this->key_highlight == 0x00) {
+                if (this->freetext.length() > 0 && this->highlight == 0x00) {
                     if (this->cursor == this->freetext.length()) {
                         this->freetext = this->freetext.substring(0, this->freetext.length() - 1);
                     } else {
@@ -1062,7 +1062,7 @@ int32_t CannedMessageModule::runOnce()
                 // already handled above
                 break;
             default:
-                if (this->key_highlight != 0x00) {
+                if (this->highlight != 0x00) {
                     break;
                 }
 

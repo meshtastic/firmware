@@ -281,6 +281,4 @@ static const uint8_t icon_node[] PROGMEM = {
     0xFE  // #######  ← device base
 };
 
-
 #include "img/icon.xbm"
-static_assert(sizeof(icon_bits) >= 0, "Silence unused variable warning");
