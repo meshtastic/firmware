@@ -10,8 +10,9 @@
 #include "buzz.h"
 #include "main.h"
 #include "modules/ExternalNotificationModule.h"
+#include "modules/CannedMessageModule.h"
 #include "power.h"
-#include "sleep.h"
+#include "sleep.h"  
 #ifdef ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
 #endif
@@ -26,6 +27,7 @@
 using namespace concurrency;
 
 ButtonThread *buttonThread; // Declared extern in header
+extern CannedMessageModule* cannedMessageModule;
 volatile ButtonThread::ButtonEventType ButtonThread::btnEvent = ButtonThread::BUTTON_EVENT_NONE;
 
 #if defined(BUTTON_PIN) || defined(ARCH_PORTDUINO) || defined(USERPREFS_BUTTON_PIN)
@@ -118,6 +120,17 @@ ButtonThread::ButtonThread() : OSThread("Button")
 
 void ButtonThread::switchPage()
 {
+    // Prevent screen switch if CannedMessageModule is focused and intercepting input
+#if HAS_SCREEN
+    extern CannedMessageModule* cannedMessageModule;
+
+    if (cannedMessageModule && cannedMessageModule->isInterceptingAndFocused()) {
+        LOG_DEBUG("User button ignored during canned message input");
+        return; // Skip screen change
+    }
+#endif
+
+    // Default behavior if not blocked
 #ifdef BUTTON_PIN
 #if !defined(USERPREFS_BUTTON_PIN)
     if (((config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN) !=
@@ -135,8 +148,8 @@ void ButtonThread::switchPage()
         powerFSM.trigger(EVENT_PRESS);
     }
 #endif
-
 #endif
+
 #if defined(ARCH_PORTDUINO)
     if ((settingsMap.count(user) != 0 && settingsMap[user] != RADIOLIB_NC) &&
             (settingsMap[user] != moduleConfig.canned_message.inputbroker_pin_press) ||

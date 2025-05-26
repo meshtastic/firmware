@@ -11,13 +11,13 @@ enum cannedMessageModuleRunState {
     CANNED_MESSAGE_RUN_STATE_DISABLED,
     CANNED_MESSAGE_RUN_STATE_INACTIVE,
     CANNED_MESSAGE_RUN_STATE_ACTIVE,
-    CANNED_MESSAGE_RUN_STATE_FREETEXT,
     CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE,
     CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED,
-    CANNED_MESSAGE_RUN_STATE_MESSAGE,
     CANNED_MESSAGE_RUN_STATE_ACTION_SELECT,
     CANNED_MESSAGE_RUN_STATE_ACTION_UP,
     CANNED_MESSAGE_RUN_STATE_ACTION_DOWN,
+    CANNED_MESSAGE_RUN_STATE_FREETEXT,
+    CANNED_MESSAGE_RUN_STATE_MESSAGE_SELECTION,
     CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION
 };
 
@@ -77,6 +77,7 @@ public:
     void showTemporaryMessage(const String &message);
     void resetSearch();
     void updateFilteredNodes();
+    bool isInterceptingAndFocused();
     String drawWithCursor(String text, int cursor);
 
     // === Admin Handlers ===
@@ -182,6 +183,15 @@ private:
     std::vector<uint8_t> activeChannelIndices;
     std::vector<NodeEntry> filteredNodes;
 
+    bool isInputSourceAllowed(const InputEvent *event);
+    bool isUpEvent(const InputEvent *event);
+    bool isDownEvent(const InputEvent *event);
+    bool isSelectEvent(const InputEvent *event);
+    bool handleTabSwitch(const InputEvent *event);
+    int handleDestinationSelectionInput(const InputEvent *event, bool isUp, bool isDown, bool isSelect);
+    bool handleMessageSelectorInput(const InputEvent *event, bool isUp, bool isDown, bool isSelect);
+    bool handleFreeTextInput(const InputEvent *event);
+    bool handleSystemCommandInput(const InputEvent *event);
 
 #if defined(USE_VIRTUAL_KEYBOARD)
     Letter keyboard[2][4][10] = {{{{"Q", 20, 0, 0, 0, 0},

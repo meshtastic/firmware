@@ -1754,7 +1754,6 @@ float Screen::estimatedHeading(double lat, double lon)
 
 /// We will skip one node - the one for us, so we just blindly loop over all
 /// nodes
-static size_t nodeIndex;
 static int8_t prevFrame = -1;
 
 // Draw the arrow pointing to a node's location
@@ -2640,8 +2639,6 @@ static void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, i
     config.display.heading_bold = false;
 
 #if HAS_GPS
-    auto number_of_satellites = gpsStatus->getNumSatellites();
-
     if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
         String displayLine = "";
         if (config.position.fixed_position) {
@@ -2878,7 +2875,6 @@ static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiStat
     bool origBold = config.display.heading_bold;
     config.display.heading_bold = false;
 
-    auto number_of_satellites = gpsStatus->getNumSatellites();
     String Satelite_String = "Sat:";
     display->drawString(0, compactFirstLine, Satelite_String);
     String displayLine = "";
@@ -3322,7 +3318,6 @@ void NavigationBar(OLEDDisplay *display, OLEDDisplayUiState *state)
     if (totalIcons == 0) return;
 
     const size_t iconsPerPage = (SCREEN_WIDTH + spacing) / (iconSize + spacing);
-    const size_t totalPages = (totalIcons + iconsPerPage - 1) / iconsPerPage;
     const size_t currentPage = currentFrame / iconsPerPage;
     const size_t pageStart = currentPage * iconsPerPage;
     const size_t pageEnd = min(pageStart + iconsPerPage, totalIcons);
@@ -3654,8 +3649,6 @@ int32_t Screen::runOnce()
     // Switch to a low framerate (to save CPU) when we are not in transition
     // but we should only call setTargetFPS when framestate changes, because
     // otherwise that breaks animations.
-    // === Auto-hide indicator icons unless in transition ===
-    OLEDDisplayUiState *state = ui->getUiState();
 
     if (targetFramerate != IDLE_FRAMERATE && ui->getUiState()->frameState == FIXED) {
         // oldFrameState = ui->getUiState()->frameState;
