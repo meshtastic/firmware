@@ -150,6 +150,13 @@ private:
     String freetext;
     String temporaryMessage;
 
+#if defined(USE_VIRTUAL_KEYBOARD)
+    bool shift = false;   // True if Shift (caps/alt) is active
+    int charSet = 0;      // 0 = alpha keyboard, 1 = numeric/symbol keyboard
+    int highlight = -1;   // Highlighted key for UI feedback
+#endif
+    char key_highlight = 0x00;
+    
     // === Message Storage ===
     char messageStore[CANNED_MESSAGE_MODULE_MESSAGES_SIZE + 1];
     char *messages[CANNED_MESSAGE_MODULE_MESSAGE_MAX_COUNT];
@@ -176,7 +183,6 @@ private:
     // === State Tracking ===
     cannedMessageModuleRunState runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
     cannedMessageDestinationType destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
-    char highlight = 0x00;
     char payload = 0x00;
     unsigned int cursor = 0;
     unsigned long lastTouchMillis = 0;
