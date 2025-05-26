@@ -68,5 +68,6 @@
 #define TFT_SPI_FREQUENCY 40000000
 #define TFT_HEIGHT 222
 #define TFT_WIDTH 480
-#define BRIGHTNESS_DEFAULT 100 // Medium Low Brightness
+#define BRIGHTNESS_DEFAULT 100        // Medium Low Brightness
+#define SCREEN_TRANSITION_FRAMERATE 5 // fps
 #endif
