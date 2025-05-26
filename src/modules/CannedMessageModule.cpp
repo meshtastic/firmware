@@ -217,20 +217,33 @@ void CannedMessageModule::updateFilteredNodes() {
 // Main input handler for the Canned Message UI.
 // This function dispatches all key/button/touch input events relevant to canned messaging,
 // and routes them to the appropriate handler or updates state as needed.
-
 int CannedMessageModule::handleInputEvent(const InputEvent* event) {
     // Only allow input from the permitted source (usually "kb" or "_any")
     if (!isInputSourceAllowed(event)) return 0;
 
-    // --- TAB key: Used for switching between destination selection and freetext entry.
-    if (event->kbchar == 0x09) { // 0x09 == Tab key
+    // TAB: Switch between destination and canned messages (or trigger tab logic)
+    if (event->kbchar == INPUT_BROKER_MSG_TAB) {
         if (handleTabSwitch(event)) return 0;
     }
 
-    // --- System/global commands: Brightness, Fn key, Bluetooth, GPS, etc.
+    // === Printable key in INACTIVE, ACTIVE, or DISABLED opens FreeText ===
+    if ((runState == CANNED_MESSAGE_RUN_STATE_INACTIVE ||
+         runState == CANNED_MESSAGE_RUN_STATE_ACTIVE ||
+         runState == CANNED_MESSAGE_RUN_STATE_DISABLED) &&
+        (event->kbchar >= 32 && event->kbchar <= 126))
+    {
+        runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
+        requestFocus();
+        UIFrameEvent e;
+        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+        notifyObservers(&e);
+        // DO NOT return here! Let this key event continue into FreeText input logic below.
+    }
+
+    // === System/global commands: Brightness, Fn, Bluetooth, GPS, Power, etc ===
     if (handleSystemCommandInput(event)) return 0;
 
-    // --- In INACTIVE state, Enter/Select acts like "Right" to advance frame.
+    // === In INACTIVE state, Enter/Select acts like "Right" to advance frame. ===
     if (runState == CANNED_MESSAGE_RUN_STATE_INACTIVE &&
         (event->inputEvent == meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT))
     {
@@ -240,33 +253,14 @@ int CannedMessageModule::handleInputEvent(const InputEvent* event) {
         return 0; // Let the screen/frame navigation code handle it
     }
 
-    // --- Any printable character (except Tab or Enter) opens FreeText input from inactive, active, or disabled
-    if ((runState == CANNED_MESSAGE_RUN_STATE_INACTIVE ||
-         runState == CANNED_MESSAGE_RUN_STATE_ACTIVE ||
-         runState == CANNED_MESSAGE_RUN_STATE_DISABLED) &&
-        (event->kbchar >= 32 && event->kbchar <= 126)) // Printable ASCII
-    {
-        // Skip Tab (0x09) and Enter since those have special functions above
-        if (event->kbchar != 0x09 && !isSelectEvent(event)) {
-            runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
-            requestFocus();
-            UIFrameEvent e;
-            e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
-            notifyObservers(&e);
-            // DO NOT return here! Let this key event continue into the FreeText handler below.
-        }
-    }
-
-    // Block all input when in the middle of sending a message
+    // === Block input when sending ===
     if (runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) return 0;
 
-    // Cancel/Back while in FreeText mode exits back to inactive (clears draft)
+    // === Cancel/Back while in FreeText mode: exit to inactive and clear draft ===
     if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL) &&
         runState == CANNED_MESSAGE_RUN_STATE_FREETEXT)
     {
         runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
-        freetext = "";
-        cursor = 0;
         payload = 0;
         UIFrameEvent e;
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
@@ -275,25 +269,27 @@ int CannedMessageModule::handleInputEvent(const InputEvent* event) {
         return 1; // Handled
     }
 
-    // --- Normalize directional/select events for sub-UIs (node select, message select, etc.)
+    // --- Normalize directional/select events for sub-UIs (node select, message select, etc.) ---
     bool isUp = isUpEvent(event);
     bool isDown = isDownEvent(event);
     bool isSelect = isSelectEvent(event);
 
-    // --- If currently selecting a destination node, handle navigation within that UI
-    if (destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NODE &&
-        runState != CANNED_MESSAGE_RUN_STATE_FREETEXT)
-    {
-        return handleDestinationSelectionInput(event, isUp, isDown, isSelect);
+    // === FreeText input mode ===
+    if (runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
+        if (handleFreeTextInput(event)) return 1; // Consumed by freetext, do NOT send to search
+        return 0;
     }
 
-    // --- Handle navigation in canned message list UI (up/down/select)
+    // === Node/Destination Selection input mode ===
+    if (runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) {
+        if (handleDestinationSelectionInput(event, isUp, isDown, isSelect)) return 1; // Consumed by search, do NOT send to freetext
+        return 0;
+    }
+    
+    // === Handle navigation in canned message list UI (up/down/select) ===
     if (handleMessageSelectorInput(event, isUp, isDown, isSelect)) return 0;
 
-    // --- Handle actual text entry or special input in FreeText mode
-    if (handleFreeTextInput(event)) return 0;
-
-    // --- Matrix keypad mode (used for hardware with a matrix input)
+    // === Matrix keypad mode (used for hardware with a matrix input) ===
     if (event->inputEvent == static_cast<char>(MATRIXKEY)) {
         runState = CANNED_MESSAGE_RUN_STATE_ACTION_SELECT;
         payload = MATRIXKEY;
@@ -303,7 +299,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent* event) {
         return 0;
     }
 
-    // Default: Not handled, let other input layers process this event if needed
+    // === Default: Not handled, let other input layers process this event if needed ===
     return 0;
 }
 
@@ -314,15 +310,11 @@ bool CannedMessageModule::isInputSourceAllowed(const InputEvent* event) {
 }
 
 bool CannedMessageModule::isUpEvent(const InputEvent* event) {
-    return event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP) ||
-           event->kbchar == INPUT_BROKER_MSG_UP;
+    return event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP);
 }
-
 bool CannedMessageModule::isDownEvent(const InputEvent* event) {
-    return event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN) ||
-           event->kbchar == INPUT_BROKER_MSG_DOWN;
+    return event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN);
 }
-
 bool CannedMessageModule::isSelectEvent(const InputEvent* event) {
     return event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT);
 }
@@ -354,7 +346,7 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent* event
     static bool shouldRedraw = false;
 
     // Handle character input for search
-    if (!isUp && !isDown && !isSelect && event->kbchar >= 32 && event->kbchar <= 126) {
+        if (event->kbchar >= 32 && event->kbchar <= 126) {
         this->searchQuery += event->kbchar;
         needsUpdate = true;
         runOnce(); // update filter immediately
@@ -640,57 +632,35 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent* event) {
 }
 
 bool CannedMessageModule::handleSystemCommandInput(const InputEvent* event) {
-    // Only respond to "ANYKEY" events
+    // Only respond to "ANYKEY" events for system keys
     if (event->inputEvent != static_cast<char>(ANYKEY)) return false;
 
-    // In FreeText, printable keys should go to FreeText input, not here
-    if (runState == CANNED_MESSAGE_RUN_STATE_FREETEXT &&
-        event->kbchar >= 32 && event->kbchar <= 126) {
-        return false; // Let handleFreeTextInput() process it
-    }
-
-    // Suppress all system input if an alert banner is showing
+    // Block ALL input if an alert banner is active
     extern String alertBannerMessage;
     extern uint32_t alertBannerUntil;
     if (alertBannerMessage.length() > 0 && (alertBannerUntil == 0 || millis() <= alertBannerUntil)) {
         return true;
     }
 
-    // Printable character in inactive/active/disabled: switch to FreeText (but let handleFreeTextInput actually handle key)
-    if ((runState == CANNED_MESSAGE_RUN_STATE_INACTIVE ||
-         runState == CANNED_MESSAGE_RUN_STATE_ACTIVE ||
-         runState == CANNED_MESSAGE_RUN_STATE_DISABLED) &&
-        (event->kbchar >= 32 && event->kbchar <= 126))
-    {
-        runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
-        requestFocus();
-        UIFrameEvent e;
-        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
-        notifyObservers(&e);
-        // Let FreeText input handler process the key itself
-        return false;
-    }
-
-    bool valid = false;
-
+    // System commands (all others fall through to return false)
     switch (event->kbchar) {
         // Fn key symbols
         case INPUT_BROKER_MSG_FN_SYMBOL_ON:
             if (screen) screen->setFunctionSymbol("Fn");
-            break;
+            return true;
         case INPUT_BROKER_MSG_FN_SYMBOL_OFF:
             if (screen) screen->removeFunctionSymbol("Fn");
-            break;
-
-        // Screen/system toggles
+            return true;
+        // Brightness
         case INPUT_BROKER_MSG_BRIGHTNESS_UP:
             if (screen) screen->increaseBrightness();
             LOG_DEBUG("Increase Screen Brightness");
-            break;
+            return true;
         case INPUT_BROKER_MSG_BRIGHTNESS_DOWN:
             if (screen) screen->decreaseBrightness();
             LOG_DEBUG("Decrease Screen Brightness");
-            break;
+            return true;
+        // Mute
         case INPUT_BROKER_MSG_MUTE_TOGGLE:
             if (moduleConfig.external_notification.enabled && externalNotificationModule) {
                 bool isMuted = externalNotificationModule->getMute();
@@ -701,14 +671,13 @@ bool CannedMessageModule::handleSystemCommandInput(const InputEvent* event) {
                 if (screen)
                     screen->showOverlayBanner(isMuted ? "Notifications\nEnabled" : "Notifications\nDisabled", 3000);
             }
-            break;
-
-        // Bluetooth toggle
+            return true;
+        // Bluetooth
         case INPUT_BROKER_MSG_BLUETOOTH_TOGGLE:
             config.bluetooth.enabled = !config.bluetooth.enabled;
             LOG_INFO("User toggled Bluetooth");
             nodeDB->saveToDisk();
-#if defined(ARDUINO_ARCH_NRF52)
+    #if defined(ARDUINO_ARCH_NRF52)
             if (!config.bluetooth.enabled) {
                 disableBluetooth();
                 if (screen) screen->showOverlayBanner("Bluetooth OFF\nRebooting", 3000);
@@ -717,7 +686,7 @@ bool CannedMessageModule::handleSystemCommandInput(const InputEvent* event) {
                 if (screen) screen->showOverlayBanner("Bluetooth ON\nRebooting", 3000);
                 rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
             }
-#else
+    #else
             if (!config.bluetooth.enabled) {
                 disableBluetooth();
                 if (screen) screen->showOverlayBanner("Bluetooth OFF", 3000);
@@ -725,24 +694,22 @@ bool CannedMessageModule::handleSystemCommandInput(const InputEvent* event) {
                 if (screen) screen->showOverlayBanner("Bluetooth ON\nRebooting", 3000);
                 rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
             }
-#endif
-            break;
-
-        // GPS toggle
+    #endif
+            return true;
+        // GPS
         case INPUT_BROKER_MSG_GPS_TOGGLE:
-#if !MESHTASTIC_EXCLUDE_GPS
+    #if !MESHTASTIC_EXCLUDE_GPS
             if (gps) {
                 gps->toggleGpsMode();
                 const char* msg = (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED)
-                                  ? "GPS Enabled" : "GPS Disabled";
+                                    ? "GPS Enabled" : "GPS Disabled";
                 if (screen) {
                     screen->forceDisplay();
                     screen->showOverlayBanner(msg, 3000);
                 }
             }
-#endif
-            break;
-
+    #endif
+            return true;
         // Mesh ping
         case INPUT_BROKER_MSG_SEND_PING:
             service->refreshLocalMeshNode();
@@ -751,37 +718,28 @@ bool CannedMessageModule::handleSystemCommandInput(const InputEvent* event) {
             } else {
                 if (screen) screen->showOverlayBanner("Node Info\nUpdate Sent", 3000);
             }
-            break;
-
+            return true;
         // Power control
         case INPUT_BROKER_MSG_SHUTDOWN:
             if (screen) screen->showOverlayBanner("Shutting down...");
             shutdownAtMsec = millis() + DEFAULT_SHUTDOWN_SECONDS * 1000;
             nodeDB->saveToDisk();
             runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
-            valid = true;
-            break;
+            return true;
         case INPUT_BROKER_MSG_REBOOT:
             if (screen) screen->showOverlayBanner("Rebooting...", 0);
             nodeDB->saveToDisk();
             rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
             runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
-            valid = true;
-            break;
+            return true;
         case INPUT_BROKER_MSG_DISMISS_FRAME:
             runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
             if (screen) screen->dismissCurrentFrame();
             return true;
-
-        // Default: store last key and let other input handlers process if needed
+        // Not a system command, let other handlers process it
         default:
-            payload = event->kbchar;
-            lastTouchMillis = millis();
-            valid = true;
-            break;
+            return false;
     }
-
-    return valid;
 }
 
 void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const char *message, bool wantReplies)
