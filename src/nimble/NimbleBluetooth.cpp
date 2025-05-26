@@ -279,7 +279,7 @@ void NimbleBluetooth::startAdvertising()
     pAdvertising->reset();
     pAdvertising->addServiceUUID(MESH_SERVICE_UUID);
     pAdvertising->addServiceUUID(NimBLEUUID((uint16_t)0x180f)); // 0x180F is the Battery Service
-    pAdvertising->addServiceUUID(GPWPL_SERVICE_UUID);//ljk
+    pAdvertising->addServiceUUID(GPWPL_SERVICE_UUID);
     pAdvertising->start(0);
 }
 
