@@ -54,6 +54,9 @@ typedef struct _meshtastic_MapReport {
     uint32_t position_precision;
     /* Number of online nodes (heard in the last 2 hours) this node has in its list that were received locally (not via MQTT) */
     uint16_t num_online_local_nodes;
+    /* User has opted in to share their location (map report) with the mqtt server
+ Controlled by map_report.should_report_location */
+    bool has_opted_report_location;
 } meshtastic_MapReport;
 
 
@@ -63,9 +66,9 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define meshtastic_ServiceEnvelope_init_default  {NULL, NULL, NULL}
-#define meshtastic_MapReport_init_default        {"", "", _meshtastic_Config_DeviceConfig_Role_MIN, _meshtastic_HardwareModel_MIN, "", _meshtastic_Config_LoRaConfig_RegionCode_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, 0, 0}
+#define meshtastic_MapReport_init_default        {"", "", _meshtastic_Config_DeviceConfig_Role_MIN, _meshtastic_HardwareModel_MIN, "", _meshtastic_Config_LoRaConfig_RegionCode_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ServiceEnvelope_init_zero     {NULL, NULL, NULL}
-#define meshtastic_MapReport_init_zero           {"", "", _meshtastic_Config_DeviceConfig_Role_MIN, _meshtastic_HardwareModel_MIN, "", _meshtastic_Config_LoRaConfig_RegionCode_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, 0, 0}
+#define meshtastic_MapReport_init_zero           {"", "", _meshtastic_Config_DeviceConfig_Role_MIN, _meshtastic_HardwareModel_MIN, "", _meshtastic_Config_LoRaConfig_RegionCode_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, 0, 0, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_ServiceEnvelope_packet_tag    1
@@ -84,6 +87,7 @@ extern "C" {
 #define meshtastic_MapReport_altitude_tag        11
 #define meshtastic_MapReport_position_precision_tag 12
 #define meshtastic_MapReport_num_online_local_nodes_tag 13
+#define meshtastic_MapReport_has_opted_report_location_tag 14
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_ServiceEnvelope_FIELDLIST(X, a) \
@@ -107,7 +111,8 @@ X(a, STATIC,   SINGULAR, SFIXED32, latitude_i,        9) \
 X(a, STATIC,   SINGULAR, SFIXED32, longitude_i,      10) \
 X(a, STATIC,   SINGULAR, INT32,    altitude,         11) \
 X(a, STATIC,   SINGULAR, UINT32,   position_precision,  12) \
-X(a, STATIC,   SINGULAR, UINT32,   num_online_local_nodes,  13)
+X(a, STATIC,   SINGULAR, UINT32,   num_online_local_nodes,  13) \
+X(a, STATIC,   SINGULAR, BOOL,     has_opted_report_location,  14)
 #define meshtastic_MapReport_CALLBACK NULL
 #define meshtastic_MapReport_DEFAULT NULL
 
@@ -121,7 +126,7 @@ extern const pb_msgdesc_t meshtastic_MapReport_msg;
 /* Maximum encoded size of messages (where known) */
 /* meshtastic_ServiceEnvelope_size depends on runtime parameters */
 #define MESHTASTIC_MESHTASTIC_MQTT_PB_H_MAX_SIZE meshtastic_MapReport_size
-#define meshtastic_MapReport_size                108
+#define meshtastic_MapReport_size                110
 
 #ifdef __cplusplus
 } /* extern "C" */

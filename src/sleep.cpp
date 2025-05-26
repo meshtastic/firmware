@@ -24,6 +24,7 @@
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
 #include "rom/rtc.h"
+#include <RadioLib.h>
 #include <driver/rtc_io.h>
 #include <driver/uart.h>
 
@@ -284,6 +285,8 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
     pinMode(LORA_CS, OUTPUT);
     digitalWrite(LORA_CS, HIGH);
     gpio_hold_en((gpio_num_t)LORA_CS);
+#elif defined(ELECROW_PANEL)
+    // Elecrow panels do not use LORA_CS, do nothing
 #else
     if (GPIO_IS_VALID_OUTPUT_GPIO(LORA_CS)) {
         // LoRa CS (RADIO_NSS) needs to stay HIGH, even during deep sleep
@@ -400,7 +403,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 #ifdef INPUTDRIVER_ENCODER_BTN
     gpio_wakeup_enable((gpio_num_t)INPUTDRIVER_ENCODER_BTN, GPIO_INTR_LOW_LEVEL);
 #endif
-#if defined(T_WATCH_S3) || defined(ELECROW)
+#if defined(WAKE_ON_TOUCH)
     gpio_wakeup_enable((gpio_num_t)SCREEN_TOUCH_INT, GPIO_INTR_LOW_LEVEL);
 #endif
     enableLoraInterrupt();
@@ -433,11 +436,12 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     // Disable wake-on-button interrupt. Re-attach normal button-interrupts
     gpio_wakeup_disable(pin);
 #endif
-
-#if defined(T_WATCH_S3) || defined(ELECROW)
+#if defined(INPUTDRIVER_ENCODER_BTN)
+    gpio_wakeup_disable((gpio_num_t)INPUTDRIVER_ENCODER_BTN);
+#endif
+#if defined(WAKE_ON_TOUCH)
     gpio_wakeup_disable((gpio_num_t)SCREEN_TOUCH_INT);
 #endif
-
 #if !defined(SOC_PM_SUPPORT_EXT_WAKEUP) && defined(LORA_DIO1) && (LORA_DIO1 != RADIOLIB_NC)
     if (radioType != RF95_RADIO) {
         gpio_wakeup_disable((gpio_num_t)LORA_DIO1);
@@ -506,23 +510,24 @@ bool shouldLoraWake(uint32_t msecToWake)
 
 void enableLoraInterrupt()
 {
+    esp_err_t res;
 #if SOC_PM_SUPPORT_EXT_WAKEUP && defined(LORA_DIO1) && (LORA_DIO1 != RADIOLIB_NC)
-    gpio_pulldown_en((gpio_num_t)LORA_DIO1);
+    res = gpio_pulldown_en((gpio_num_t)LORA_DIO1);
+    if (res != ESP_OK) {
+        LOG_ERROR("gpio_pulldown_en(LORA_DIO1) result %d", res);
+    }
 #if defined(LORA_RESET) && (LORA_RESET != RADIOLIB_NC)
-    gpio_pullup_en((gpio_num_t)LORA_RESET);
+    res = gpio_pullup_en((gpio_num_t)LORA_RESET);
+    if (res != ESP_OK) {
+        LOG_ERROR("gpio_pullup_en(LORA_RESET) result %d", res);
+    }
 #endif
-#if defined(LORA_CS) && (LORA_CS != RADIOLIB_NC)
+#if defined(LORA_CS) && (LORA_CS != RADIOLIB_NC) && !defined(ELECROW_PANEL)
     gpio_pullup_en((gpio_num_t)LORA_CS);
 #endif
 
-    if (rtc_gpio_is_valid_gpio((gpio_num_t)LORA_DIO1)) {
-        // Setup light/deep sleep with wakeup by external source
-        LOG_INFO("setup LORA_DIO1 (GPIO%02d) with wakeup by external source", LORA_DIO1);
-        esp_sleep_enable_ext0_wakeup((gpio_num_t)LORA_DIO1, HIGH);
-    } else {
-        LOG_INFO("setup LORA_DIO1 (GPIO%02d) with wakeup by gpio interrupt", LORA_DIO1);
-        gpio_wakeup_enable((gpio_num_t)LORA_DIO1, GPIO_INTR_HIGH_LEVEL);
-    }
+    LOG_INFO("setup LORA_DIO1 (GPIO%02d) with wakeup by gpio interrupt", LORA_DIO1);
+    gpio_wakeup_enable((gpio_num_t)LORA_DIO1, GPIO_INTR_HIGH_LEVEL);
 
 #elif defined(LORA_DIO1) && (LORA_DIO1 != RADIOLIB_NC)
     if (radioType != RF95_RADIO) {

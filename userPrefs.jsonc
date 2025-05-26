@@ -44,5 +44,12 @@
   // "USERPREFS_NETWORK_WIFI_ENABLED": "true",
   // "USERPREFS_NETWORK_WIFI_SSID": "wifi_ssid",
   // "USERPREFS_NETWORK_WIFI_PSK": "wifi_psk",
+  // "USERPREFS_MQTT_ENABLED": "1",
+  // "USERPREFS_MQTT_ADDRESS": "'mqtt.meshtastic.org'",
+  // "USERPREFS_MQTT_USERNAME": "meshdev",
+  // "USERPREFS_MQTT_PASSWORD": "large4cats",
+  // "USERPREFS_MQTT_ENCRYPTION_ENABLED": "true",
+  // "USERPREFS_MQTT_TLS_ENABLED": "false",
+  // "USERPREFS_MQTT_ROOT_TOPIC": "event/REPLACEME",
   "USERPREFS_TZ_STRING": "tzplaceholder                                         "
 }

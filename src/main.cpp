@@ -732,6 +732,7 @@ void setup()
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::DFROBOT_RAIN, meshtastic_TelemetrySensorType_DFROBOT_RAIN);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::LTR390UV, meshtastic_TelemetrySensorType_LTR390UV);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::DPS310, meshtastic_TelemetrySensorType_DPS310);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::PCT2075, meshtastic_TelemetrySensorType_PCT2075);
 
     i2cScanner.reset();
 #endif
@@ -1299,10 +1300,6 @@ void setup()
 #ifdef ARDUINO_ARCH_ESP32
     LOG_DEBUG("Free heap  : %7d bytes", ESP.getFreeHeap());
     LOG_DEBUG("Free PSRAM : %7d bytes", ESP.getFreePsram());
-#endif
-#if !defined(ARCH_STM32WL)
-    if (accelerometerThread)
-        accelerometerThread->calibrate(30);
 #endif
 }
 

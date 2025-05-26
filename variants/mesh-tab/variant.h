@@ -3,7 +3,8 @@
 
 #define HAS_TOUCHSCREEN 1
 
-#define SLEEP_TIME 120
+#define USE_POWERSAVE
+#define SLEEP_TIME 180
 
 // Analog pins
 #define BATTERY_PIN 4 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
