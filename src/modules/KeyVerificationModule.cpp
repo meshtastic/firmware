@@ -29,83 +29,82 @@ AdminMessageHandleResult KeyVerificationModule::handleAdminMessageForModule(cons
                        meshtastic_KeyVerificationAdmin_MessageType_PROVIDE_SECURITY_NUMBER &&
                    request->key_verification_admin.has_security_number &&
                    currentState == KEY_VERIFICATION_SENDER_AWAITING_NUMBER &&
-                   request->key_verification_admin.nonce == currentNonce) { // also check nonce and has_security_number
+                   request->key_verification_admin.nonce == currentNonce) {
             processSecurityNumber(request->key_verification_admin.security_number);
 
-        } else if (request->key_verification_admin.message_type == meshtastic_KeyVerificationAdmin_MessageType_DO_VERIFY) {
+        } else if (request->key_verification_admin.message_type == meshtastic_KeyVerificationAdmin_MessageType_DO_VERIFY &&
+                   request->key_verification_admin.nonce == currentNonce) {
+            auto remoteNodePtr = nodeDB->getMeshNode(currentRemoteNode);
+            remoteNodePtr->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
             resetToIdle();
-
         } else if (request->key_verification_admin.message_type == meshtastic_KeyVerificationAdmin_MessageType_DO_NOT_VERIFY) {
             resetToIdle();
         }
-
-        // meshtastic_MeshPacket *p = allocDataPacket();
-        //  check current state, do rate limiting.
-
         return AdminMessageHandleResult::HANDLED;
     }
     return AdminMessageHandleResult::NOT_HANDLED;
 }
 
-// handle messages to this port
-
 bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_KeyVerification *r)
 {
-    LOG_WARN("incoming nonce: %u, hash1size: %u hash2size %u", r->nonce, r->hash1.size, r->hash2.size);
     updateState();
     if (mp.pki_encrypted == false)
         return false;
-    if (mp.from != currentRemoteNode)
+    if (mp.from != currentRemoteNode) // because the inital connection request is handled in allocReply()
         return false;
     if (currentState == KEY_VERIFICATION_IDLE) {
-        return false; // if we're idle, the only acceptable message is an init, which should be handled by allocReply()?
+        return false; // if we're idle, the only acceptable message is an init, which should be handled by allocReply()
 
     } else if (currentState == KEY_VERIFICATION_SENDER_HAS_INITIATED && r->nonce == currentNonce && r->hash2.size == 32 &&
                r->hash1.size == 0) {
         memcpy(hash2, r->hash2.bytes, 32);
         if (screen)
-            screen->startAlert("Security Number?");
-        LOG_WARN("Received hash2, prompting for security number");
-        // do sanity checks, store hash2, prompt the user for the security number
+            screen->startAlert("Enter Security Number"); // TODO: replace with actual prompt in BaseUI
+
+        meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+        cn->level = meshtastic_LogRecord_Level_WARNING;
+        sprintf(cn->message, "Enter Security Number for Key Verificatino");
+        cn->which_payload_variant = meshtastic_ClientNotification_key_verification_number_request_tag;
+        cn->payload_variant.key_verification_number_request.nonce = currentNonce;
+        strncpy(cn->payload_variant.key_verification_number_request.remote_longname, // should really check for nulls, etc
+                nodeDB->getMeshNode(currentRemoteNode)->user.long_name,
+                sizeof(cn->payload_variant.key_verification_number_request.remote_longname));
+        service->sendClientNotification(cn);
+        LOG_INFO("Received hash2");
         currentState = KEY_VERIFICATION_SENDER_AWAITING_NUMBER;
         return true;
 
-    } else if (currentState == KEY_VERIFICATION_RECEIVER_AWAITING_HASH1 && r->hash1.size == 32) {
+    } else if (currentState == KEY_VERIFICATION_RECEIVER_AWAITING_HASH1 && r->hash1.size == 32 && r->nonce == currentNonce) {
         if (memcmp(hash1, r->hash1.bytes, 32) == 0) {
-            char verificationCode[9] = {0};
-            for (int i = 0; i < 8; i++) {
-                // drop the two highest significance bits, then encode as a base64
-                verificationCode[i] =
-                    (hash1[i] >> 2) + 48; // not a standardized base64, but workable and avoids having a dictionary.
-            }
-            snprintf(message, 25, "Verification: %s", verificationCode);
-            LOG_WARN("Hash1 received");
-            if (screen)
+            memset(message, 0, sizeof(message));
+            sprintf(message, "Verification: \n");
+            generateVerificationCode(message + 15);
+            LOG_INFO("Hash1 matches!");
+            if (screen) {
                 screen->endAlert();
-            screen->startAlert(message);
+                screen->startAlert(message);
+            }
+            meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+            cn->level = meshtastic_LogRecord_Level_WARNING;
+            sprintf(cn->message, "Final confirmation for incoming manual key verification %s", message);
+            cn->which_payload_variant = meshtastic_ClientNotification_key_verification_final_tag;
+            cn->payload_variant.key_verification_final.nonce = currentNonce;
+            strncpy(cn->payload_variant.key_verification_final.remote_longname, // should really check for nulls, etc
+                    nodeDB->getMeshNode(currentRemoteNode)->user.long_name,
+                    sizeof(cn->payload_variant.key_verification_final.remote_longname));
+            cn->payload_variant.key_verification_final.isSender = false;
+            service->sendClientNotification(cn);
+
             currentState = KEY_VERIFICATION_RECEIVER_AWAITING_USER;
             return true;
         }
-        // do sanity checks, compare the incoming hash1, and prompt the user to accept
     }
-    // for each incoming message, do the state timeout check
-    // then if the state is not idle, sanity check for the same nonce and the right current state for the received message
-    //
-
-    // if this is the response containing hash2:
-    // save the message details and prompt the user for the 4 digit code
-    //            service->sendToPhone(decompressedCopy);
-    // if (screen)
-    // screen.showalert();
-
-    // if this is the final message containing hash1:
-    // save the details and prompt the user for the final decision
     return false;
 }
 
 bool KeyVerificationModule::sendInitialRequest(NodeNum remoteNode)
 {
-    LOG_WARN("Attempting keyVerification start");
+    LOG_DEBUG("keyVerification start");
     // generate nonce
     updateState();
     if (currentState != KEY_VERIFICATION_IDLE) {
@@ -125,6 +124,7 @@ bool KeyVerificationModule::sendInitialRequest(NodeNum remoteNode)
     p->decoded.want_response = true;
     p->priority = meshtastic_MeshPacket_Priority_HIGH;
     service->sendToMesh(p, RX_SRC_LOCAL, true);
+
     currentState = KEY_VERIFICATION_SENDER_HAS_INITIATED;
     return true;
 }
@@ -134,7 +134,7 @@ meshtastic_MeshPacket *KeyVerificationModule::allocReply()
     SHA256 hash;
     NodeNum ourNodeNum = nodeDB->getNodeNum();
     updateState();
-    if (currentState != KEY_VERIFICATION_IDLE) {
+    if (currentState != KEY_VERIFICATION_IDLE) { // TODO: cooldown period
         LOG_WARN("Key Verification requested, but already in a request");
         return nullptr;
     } else if (!currentRequest->pki_encrypted) {
@@ -142,18 +142,13 @@ meshtastic_MeshPacket *KeyVerificationModule::allocReply()
         return nullptr;
     }
     currentState = KEY_VERIFICATION_RECEIVER_AWAITING_HASH1;
-    // There needs to be a cool down period, to prevent this being spammed.
-    // Packets coming too fast are just ignored
-    // This will be specifically for responding to an initial request packet, as that's the only one with want_response marked
-    // true
+
     auto req = *currentRequest;
     const auto &p = req.decoded;
     meshtastic_KeyVerification scratch;
     meshtastic_KeyVerification response;
     meshtastic_MeshPacket *responsePacket = nullptr;
     pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_KeyVerification_msg, &scratch);
-
-    // check that we were pki encrypted and sent to us
 
     currentNonce = scratch.nonce;
     response.nonce = scratch.nonce;
@@ -184,13 +179,22 @@ meshtastic_MeshPacket *KeyVerificationModule::allocReply()
 
     responsePacket->pki_encrypted = true;
     if (screen) {
-        snprintf(message, 25, "Security Number %03u %03u", currentSecurityNumber / 1000, currentSecurityNumber % 1000);
+        snprintf(message, 25, "Security Number \n%03u %03u", currentSecurityNumber / 1000, currentSecurityNumber % 1000);
         screen->startAlert(message);
-        // screen->startAlert("Security Number 8088");
         LOG_WARN("%s", message);
     }
+    meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+    cn->level = meshtastic_LogRecord_Level_WARNING;
+    sprintf(cn->message, "Incoming Key Verification.\nSecurity Number\n%03u %03u", currentSecurityNumber / 1000,
+            currentSecurityNumber % 1000);
+    cn->which_payload_variant = meshtastic_ClientNotification_key_verification_number_inform_tag;
+    cn->payload_variant.key_verification_number_inform.nonce = currentNonce;
+    strncpy(cn->payload_variant.key_verification_number_inform.remote_longname, // should really check for nulls, etc
+            nodeDB->getMeshNode(currentRemoteNode)->user.long_name,
+            sizeof(cn->payload_variant.key_verification_number_inform.remote_longname));
+    cn->payload_variant.key_verification_number_inform.security_number = currentSecurityNumber;
+    service->sendClientNotification(cn);
     LOG_WARN("Security Number %04u", currentSecurityNumber);
-
     return responsePacket;
 }
 
@@ -242,11 +246,26 @@ void KeyVerificationModule::processSecurityNumber(uint32_t incomingNumber)
     p->priority = meshtastic_MeshPacket_Priority_HIGH;
     service->sendToMesh(p, RX_SRC_LOCAL, true);
     currentState = KEY_VERIFICATION_SENDER_AWAITING_USER;
-    // send the toPhone packet
-    return;
+    memset(message, 0, sizeof(message));
+    sprintf(message, "Verification: \n");
+    generateVerificationCode(message + 15); // send the toPhone packet
+    if (screen) {
+        screen->endAlert();
+        screen->startAlert(message);
+    }
+    meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+    cn->level = meshtastic_LogRecord_Level_WARNING;
+    sprintf(cn->message, "Final confirmation for outgoing manual key verification %s", message);
+    cn->which_payload_variant = meshtastic_ClientNotification_key_verification_final_tag;
+    cn->payload_variant.key_verification_final.nonce = currentNonce;
+    strncpy(cn->payload_variant.key_verification_final.remote_longname, // should really check for nulls, etc
+            nodeDB->getMeshNode(currentRemoteNode)->user.long_name,
+            sizeof(cn->payload_variant.key_verification_final.remote_longname));
+    cn->payload_variant.key_verification_final.isSender = true;
+    service->sendClientNotification(cn);
+    LOG_INFO(message);
 
-    // do the hash calculation, and compare to the saved hash2
-    //
+    return;
 }
 
 void KeyVerificationModule::updateState()
@@ -270,4 +289,17 @@ void KeyVerificationModule::resetToIdle()
     currentState = KEY_VERIFICATION_IDLE;
     if (screen)
         screen->endAlert();
+}
+
+void KeyVerificationModule::generateVerificationCode(char *readableCode)
+{
+    for (int i = 0; i < 4; i++) {
+        // drop the two highest significance bits, then encode as a base64
+        readableCode[i] = (hash1[i] >> 2) + 48; // not a standardized base64, but workable and avoids having a dictionary.
+    }
+    readableCode[4] = ' ';
+    for (int i = 5; i < 9; i++) {
+        // drop the two highest significance bits, then encode as a base64
+        readableCode[i] = (hash1[i] >> 2) + 48; // not a standardized base64, but workable and avoids having a dictionary.
+    }
 }

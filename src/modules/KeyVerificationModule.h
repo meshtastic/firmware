@@ -56,8 +56,9 @@ class KeyVerificationModule : public ProtobufModule<meshtastic_KeyVerification> 
     char message[26] = {0};
 
     void processSecurityNumber(uint32_t);
-    void updateState(); // check the timeouts and maybe reset the state to idle
-    void resetToIdle(); // Zero out module state
+    void updateState();                    // check the timeouts and maybe reset the state to idle
+    void resetToIdle();                    // Zero out module state
+    void generateVerificationCode(char *); // fills char with the user readable verification code
 };
 
 extern KeyVerificationModule *keyVerificationModule;
