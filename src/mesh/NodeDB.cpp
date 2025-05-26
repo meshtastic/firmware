@@ -1479,6 +1479,8 @@ void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSou
     info->has_position = true;
     updateGUIforNode = info;
     notifyObservers(true); // Force an update whether or not our node counts have changed
+
+    nimbleBluetooth->Send_GPWPL(nodeId, info->user.short_name, info->position.latitude_i, info->position.longitude_i);
 }
 
 /** Update telemetry info for this node based on received metrics

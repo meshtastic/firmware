@@ -14,6 +14,9 @@
 #define LEGACY_LOGRADIO_UUID "6c6fd238-78fa-436b-aacf-15c5be1ef2e2"
 #define LOGRADIO_UUID "5a3d6e49-06e6-4423-9944-e9de8cdf9547"
 
+#define GPWPL_SERVICE_UUID "0000181A-0000-1000-8000-00805f9b34fb"//gpwpl service uuid
+#define GPWPL_UUID "00002A6F-0000-1000-8000-00805f9b34fb"//gpwpl uuid
+
 // NRF52 wants these constants as byte arrays
 // Generated here https://yupana-engineering.com/online-uuid-to-c-array-converter - but in REVERSE BYTE ORDER
 extern const uint8_t MESH_SERVICE_UUID_16[], TORADIO_UUID_16[16u], FROMRADIO_UUID_16[], FROMNUM_UUID_16[], LOGRADIO_UUID_16[];

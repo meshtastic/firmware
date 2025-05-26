@@ -13,6 +13,7 @@
 NimBLECharacteristic *fromNumCharacteristic;
 NimBLECharacteristic *BatteryCharacteristic;
 NimBLECharacteristic *logRadioCharacteristic;
+NimBLECharacteristic *gpwplCharacteristic;
 NimBLEServer *bleServer;
 
 static bool passkeyShowing;
@@ -265,6 +266,11 @@ void NimbleBluetooth::setupService()
     batteryLevelDescriptor->setUnit(0x27ad);
 
     batteryService->start();
+
+    // Setup the gpwpl service
+    NimBLEService *gpwplService = bleServer->createService(GPWPL_SERVICE_UUID);
+    gpwplCharacteristic = gpwplService->createCharacteristic(GPWPL_UUID, NIMBLE_PROPERTY::NOTIFY);
+    gpwplService->start();
 }
 
 void NimbleBluetooth::startAdvertising()
@@ -273,6 +279,7 @@ void NimbleBluetooth::startAdvertising()
     pAdvertising->reset();
     pAdvertising->addServiceUUID(MESH_SERVICE_UUID);
     pAdvertising->addServiceUUID(NimBLEUUID((uint16_t)0x180f)); // 0x180F is the Battery Service
+    pAdvertising->addServiceUUID(GPWPL_SERVICE_UUID);//ljk
     pAdvertising->start(0);
 }
 
@@ -297,6 +304,65 @@ void NimbleBluetooth::sendLog(const uint8_t *logMessage, size_t length)
         return;
     }
     logRadioCharacteristic->notify(logMessage, length, true);
+}
+
+// Convert the decimal format of latitude and longitude to NMEA format (degrees and minutes)
+void convertToNMEAFormat(double value, char* buffer, int bufferSize, int isLatitude) {
+    int degrees = (int)value;
+    double minutes = (value - degrees) * 60.0;
+    
+    if (isLatitude) {
+        snprintf(buffer, bufferSize, "%02d%07.4f", degrees, minutes);
+    } else {
+        snprintf(buffer, bufferSize, "%03d%07.4f", degrees, minutes);
+    }
+}
+
+void NimbleBluetooth::Send_GPWPL(uint32_t node, char* name, int32_t latitude_i, int32_t longitude_i)
+{
+    double f_latitude = (double)latitude_i * (double)0.0000001;
+    double f_longitude = (double)longitude_i * (double)0.0000001;
+    char str_latitude_head[20] = {0};
+    char str_longitude_head[20] = {0};
+    convertToNMEAFormat(fabs(f_latitude), str_latitude_head, sizeof(str_latitude_head), 1);
+    convertToNMEAFormat(fabs(f_longitude), str_longitude_head, sizeof(str_longitude_head), 0);
+
+    char str_latitude_symbol[2] = {0};
+    char str_longitude_symbol[2] = {0};
+    str_latitude_symbol[0] = (f_latitude >= 0) ? 'N' : 'S';
+    str_longitude_symbol[0] = (f_longitude >= 0) ? 'E' : 'W';
+
+    char strGPWPL[100] = {0};
+    snprintf(strGPWPL, sizeof(strGPWPL), "$GPWPL,%s,%s,%s,%s,%s", 
+        str_latitude_head, str_latitude_symbol,
+        str_longitude_head, str_longitude_symbol,
+        name);
+
+    // Calculate the check value
+    uint8_t checksum = 0;
+    for (int i = 1; i < strlen(strGPWPL); i++)
+    {
+        checksum ^= (uint8_t)strGPWPL[i];
+    }
+    snprintf(strGPWPL + strlen(strGPWPL), sizeof(strGPWPL) - strlen(strGPWPL), "*%02X\r\n\r\n", (uint8_t)checksum);
+
+    // Split the long string and send it.
+    int nOffset = 0;
+    int nHaveLen = strlen(strGPWPL);
+    while (true)
+    {
+        int nSendLen = min(20, nHaveLen);
+        gpwplCharacteristic->setValue(((uint8_t*)strGPWPL) + nOffset, nSendLen);
+        gpwplCharacteristic->notify();
+        delay(50); // 为了稳定传输，添加一点延时
+
+        nOffset += nSendLen;
+        nHaveLen -= nSendLen;
+        if (nHaveLen <= 0)
+        {
+            break;
+        }
+    }
 }
 
 void clearNVS()
