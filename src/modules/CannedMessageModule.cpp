@@ -214,92 +214,85 @@ void CannedMessageModule::updateFilteredNodes() {
     }
 }
 
-// Main input handler for the Canned Message UI.
-// This function dispatches all key/button/touch input events relevant to canned messaging,
-// and routes them to the appropriate handler or updates state as needed.
+// Returns true if character input is currently allowed (used for search/freetext states)
+bool CannedMessageModule::isCharInputAllowed() const {
+    return runState == CANNED_MESSAGE_RUN_STATE_FREETEXT ||
+           runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION;
+}
+/**
+ * Main input event dispatcher for CannedMessageModule.
+ * Routes keyboard/button/touch input to the correct handler based on the current runState.
+ * Only one handler (per state) processes each event, eliminating redundancy.
+ */
 int CannedMessageModule::handleInputEvent(const InputEvent* event) {
-    // Only allow input from the permitted source (usually "kb" or "_any")
+    // Allow input only from configured source (hardware/software filter)
     if (!isInputSourceAllowed(event)) return 0;
 
-    // TAB: Switch between destination and canned messages (or trigger tab logic)
-    if (event->kbchar == INPUT_BROKER_MSG_TAB) {
-        if (handleTabSwitch(event)) return 0;
-    }
+    // Global/system commands always processed (brightness, BT, GPS, shutdown, etc.)
+    if (handleSystemCommandInput(event)) return 1;
 
-    // === Printable key in INACTIVE, ACTIVE, or DISABLED opens FreeText ===
-    if ((runState == CANNED_MESSAGE_RUN_STATE_INACTIVE ||
-         runState == CANNED_MESSAGE_RUN_STATE_ACTIVE ||
-         runState == CANNED_MESSAGE_RUN_STATE_DISABLED) &&
-        (event->kbchar >= 32 && event->kbchar <= 126))
-    {
-        runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
-        requestFocus();
-        UIFrameEvent e;
-        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
-        notifyObservers(&e);
-        // DO NOT return here! Let this key event continue into FreeText input logic below.
-    }
+    // Tab key: Always allow switching between canned/destination screens
+    if (event->kbchar == INPUT_BROKER_MSG_TAB && handleTabSwitch(event)) return 1;
 
-    // === System/global commands: Brightness, Fn, Bluetooth, GPS, Power, etc ===
-    if (handleSystemCommandInput(event)) return 0;
-
-    // === In INACTIVE state, Enter/Select acts like "Right" to advance frame. ===
-    if (runState == CANNED_MESSAGE_RUN_STATE_INACTIVE &&
-        (event->inputEvent == meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT))
-    {
-        // Mutate the event to look like a RIGHT arrow press, which will move to the next frame
-        const_cast<InputEvent*>(event)->inputEvent = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT);
-        const_cast<InputEvent*>(event)->kbchar = INPUT_BROKER_MSG_RIGHT;
-        return 0; // Let the screen/frame navigation code handle it
-    }
-
-    // === Block input when sending ===
-    if (runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) return 0;
-
-    // === Cancel/Back while in FreeText mode: exit to inactive and clear draft ===
-    if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL) &&
-        runState == CANNED_MESSAGE_RUN_STATE_FREETEXT)
-    {
-        runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
-        payload = 0;
-        UIFrameEvent e;
-        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
-        notifyObservers(&e);
-        screen->forceDisplay();
-        return 1; // Handled
-    }
-
-    // --- Normalize directional/select events for sub-UIs (node select, message select, etc.) ---
-    bool isUp = isUpEvent(event);
-    bool isDown = isDownEvent(event);
-    bool isSelect = isSelectEvent(event);
-
-    // === FreeText input mode ===
-    if (runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
-        if (handleFreeTextInput(event)) return 1; // Consumed by freetext, do NOT send to search
-        return 0;
-    }
-
-    // === Node/Destination Selection input mode ===
-    if (runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) {
-        if (handleDestinationSelectionInput(event, isUp, isDown, isSelect)) return 1; // Consumed by search, do NOT send to freetext
-        return 0;
-    }
-    
-    // === Handle navigation in canned message list UI (up/down/select) ===
-    if (handleMessageSelectorInput(event, isUp, isDown, isSelect)) return 0;
-
-    // === Matrix keypad mode (used for hardware with a matrix input) ===
+    // Matrix keypad: If matrix key, trigger action select for canned message
     if (event->inputEvent == static_cast<char>(MATRIXKEY)) {
         runState = CANNED_MESSAGE_RUN_STATE_ACTION_SELECT;
         payload = MATRIXKEY;
         currentMessageIndex = event->kbchar - 1;
         lastTouchMillis = millis();
         requestFocus();
-        return 0;
+        return 1;
     }
 
-    // === Default: Not handled, let other input layers process this event if needed ===
+    // Always normalize navigation/select buttons for further handlers
+    bool isUp = isUpEvent(event);
+    bool isDown = isDownEvent(event);
+    bool isSelect = isSelectEvent(event);
+
+    // Route event to handler for current UI state (no double-handling)
+    switch (runState) {
+        // Node/Channel destination selection mode: Handles character search, arrows, select, cancel, backspace
+        case CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION:
+            return handleDestinationSelectionInput(event, isUp, isDown, isSelect); // All allowed input for this state
+
+        // Free text input mode: Handles character input, cancel, backspace, select, etc.
+        case CANNED_MESSAGE_RUN_STATE_FREETEXT:
+            return handleFreeTextInput(event); // All allowed input for this state
+
+        // If sending, block all input except global/system (handled above)
+        case CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE:
+            return 1; // Swallow all
+
+        // If inactive: allow select to advance frame, or char to open free text input
+        case CANNED_MESSAGE_RUN_STATE_INACTIVE:
+            if (isSelect) {
+                // Remap select to right (frame advance), let screen navigation handle it
+                const_cast<InputEvent*>(event)->inputEvent = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT);
+                const_cast<InputEvent*>(event)->kbchar = INPUT_BROKER_MSG_RIGHT;
+                return 0;
+            }
+            // Printable char (ASCII) opens free text compose; then let the handler process the event
+            if (event->kbchar >= 32 && event->kbchar <= 126) {
+                runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
+                requestFocus();
+                UIFrameEvent e;
+                e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+                notifyObservers(&e);
+                // Immediately process the input in the new state (freetext)
+                return handleFreeTextInput(event);
+            }
+            break;
+
+        // (Other states can be added here as needed)
+        default:
+            break;
+    }
+
+    // If no state handler above processed the event, let the message selector try to handle it
+    // (Handles up/down/select on canned message list, exit/return)
+    if (handleMessageSelectorInput(event, isUp, isDown, isSelect)) return 1;
+
+    // Default: event not handled by canned message system, allow others to process
     return 0;
 }
 

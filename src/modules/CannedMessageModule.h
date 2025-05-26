@@ -78,6 +78,7 @@ public:
     void resetSearch();
     void updateFilteredNodes();
     bool isInterceptingAndFocused();
+    bool isCharInputAllowed() const;
     String drawWithCursor(String text, int cursor);
 
     // === Admin Handlers ===
