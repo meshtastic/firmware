@@ -96,35 +96,46 @@ int CannedMessageModule::splitConfiguredMessages()
     // Copy all message parts into the buffer
     strncpy(this->messageStore, canned_messages.c_str(), sizeof(this->messageStore));
 
-    // First message points to start of buffer
-    this->messages[messageIndex++] = this->messageStore;
+    // Temporary array to allow for insertion
+    const char* tempMessages[CANNED_MESSAGE_MODULE_MESSAGE_MAX_COUNT + 3] = {0};
+    int tempCount = 0;
+
+    // First message always starts at buffer start
+    tempMessages[tempCount++] = this->messageStore;
     int upTo = strlen(this->messageStore) - 1;
 
     // Walk buffer, splitting on '|'
     while (i < upTo) {
         if (this->messageStore[i] == '|') {
             this->messageStore[i] = '\0'; // End previous message
-
-            // Stop if we've hit max message slots
-            if (messageIndex >= CANNED_MESSAGE_MODULE_MESSAGE_MAX_COUNT) {
-                this->messagesCount = messageIndex;
-                return this->messagesCount;
-            }
-
-            // Point to the next message start
-            this->messages[messageIndex++] = (this->messageStore + i + 1);
+            if (tempCount >= CANNED_MESSAGE_MODULE_MESSAGE_MAX_COUNT)
+                break;
+            tempMessages[tempCount++] = (this->messageStore + i + 1);
         }
         i += 1;
     }
 
-    // Always add "[Select Destination]" next-to-last
-    this->messages[messageIndex++] = (char*)"[Select Destination]";
+    // Insert "[Select Destination]" after Free Text if present, otherwise at the top
+#if defined(USE_VIRTUAL_KEYBOARD)
+    // Insert at position 1 (after Free Text)
+    for (int j = tempCount; j > 1; j--) tempMessages[j] = tempMessages[j - 1];
+    tempMessages[1] = "[Select Destination]";
+    tempCount++;
+#else
+    // Insert at position 0 (top)
+    for (int j = tempCount; j > 0; j--) tempMessages[j] = tempMessages[j - 1];
+    tempMessages[0] = "[Select Destination]";
+    tempCount++;
+#endif
 
-    // === Add [Exit] as the final entry in the list ===
-    this->messages[messageIndex++] = (char*)"[Exit]";
+    // Add [Exit] as the last entry
+    tempMessages[tempCount++] = "[Exit]";
 
-    // Record how many messages there are
-    this->messagesCount = messageIndex;
+    // Copy to the member array
+    for (int k = 0; k < tempCount; ++k) {
+        this->messages[k] = (char*)tempMessages[k];
+    }
+    this->messagesCount = tempCount;
 
     return this->messagesCount;
 }
