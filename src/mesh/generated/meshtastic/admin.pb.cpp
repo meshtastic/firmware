@@ -18,6 +18,11 @@ PB_BIND(meshtastic_NodeRemoteHardwarePinsResponse, meshtastic_NodeRemoteHardware
 PB_BIND(meshtastic_SharedContact, meshtastic_SharedContact, AUTO)
 
 
+PB_BIND(meshtastic_KeyVerificationAdmin, meshtastic_KeyVerificationAdmin, AUTO)
+
+
+
+
 
 
 
