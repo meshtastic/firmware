@@ -533,64 +533,72 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent* event, bo
 }
 
 bool CannedMessageModule::handleFreeTextInput(const InputEvent* event) {
-#if defined(USE_VIRTUAL_KEYBOARD)
+    // Always process only if in FREETEXT mode
     if (runState != CANNED_MESSAGE_RUN_STATE_FREETEXT) return false;
 
-    String keyTapped = keyForCoordinates(event->touchX, event->touchY);
-    bool valid = false;
+#if defined(USE_VIRTUAL_KEYBOARD)
+    // Touch input (virtual keyboard) handling
+    // Only handle if touch coordinates present (CardKB won't set these)
+    if (event->touchX != 0 || event->touchY != 0) {
+        String keyTapped = keyForCoordinates(event->touchX, event->touchY);
+        bool valid = false;
 
-    if (keyTapped == "⇧") {
-        highlight = -1;
-        payload = 0x00;
-        shift = !shift;
-        valid = true;
-    } else if (keyTapped == "⌫") {
-#ifndef RAK14014
-        highlight = keyTapped[0];
-#endif
-        payload = 0x08;
-        shift = false;
-        valid = true;
-    } else if (keyTapped == "123" || keyTapped == "ABC") {
-        highlight = -1;
-        payload = 0x00;
-        charSet = (charSet == 0 ? 1 : 0);
-        valid = true;
-    } else if (keyTapped == " ") {
-#ifndef RAK14014
-        highlight = keyTapped[0];
-#endif
-        payload = keyTapped[0];
-        shift = false;
-        valid = true;
-    } 
-    // Touch enter/submit
-    else if (keyTapped == "↵") {
-        runState = CANNED_MESSAGE_RUN_STATE_ACTION_SELECT; // Send the message!
-        payload = CANNED_MESSAGE_RUN_STATE_FREETEXT;
-        currentMessageIndex = -1;
-        shift = false;
-        valid = true;
-    } else if (!keyTapped.isEmpty()) {
-#ifndef RAK14014
-        highlight = keyTapped[0];
-#endif
-        payload = shift ? keyTapped[0] : std::tolower(keyTapped[0]);
-        shift = false;
-        valid = true;
+        if (keyTapped == "⇧") {
+            highlight = -1;
+            payload = 0x00;
+            shift = !shift;
+            valid = true;
+        } else if (keyTapped == "⌫") {
+    #ifndef RAK14014
+            highlight = keyTapped[0];
+    #endif
+            payload = 0x08;
+            shift = false;
+            valid = true;
+        } else if (keyTapped == "123" || keyTapped == "ABC") {
+            highlight = -1;
+            payload = 0x00;
+            charSet = (charSet == 0 ? 1 : 0);
+            valid = true;
+        } else if (keyTapped == " ") {
+    #ifndef RAK14014
+            highlight = keyTapped[0];
+    #endif
+            payload = keyTapped[0];
+            shift = false;
+            valid = true;
+        } 
+        // Touch enter/submit
+        else if (keyTapped == "↵") {
+            runState = CANNED_MESSAGE_RUN_STATE_ACTION_SELECT; // Send the message!
+            payload = CANNED_MESSAGE_RUN_STATE_FREETEXT;
+            currentMessageIndex = -1;
+            shift = false;
+            valid = true;
+        } else if (!keyTapped.isEmpty()) {
+    #ifndef RAK14014
+            highlight = keyTapped[0];
+    #endif
+            payload = shift ? keyTapped[0] : std::tolower(keyTapped[0]);
+            shift = false;
+            valid = true;
+        }
+
+        if (valid) {
+            lastTouchMillis = millis();
+            return true; // STOP: We handled a VKB touch
+        }
     }
+#endif // USE_VIRTUAL_KEYBOARD
 
-    if (valid) {
-        lastTouchMillis = millis();
-        return true;
-    }
-#endif
+    // ---- All hardware keys fall through to here (CardKB, physical, etc.) ----
 
+    // Confirm select (Enter)
     bool isSelect = isSelectEvent(event);
-
-    if (runState == CANNED_MESSAGE_RUN_STATE_FREETEXT && isSelect) {
+    if (isSelect) {
+    LOG_DEBUG("[SELECT] handleFreeTextInput: runState=%d, dest=%u, channel=%d, freetext='%s'",
+        (int)runState, dest, channel, freetext.c_str());
         if (dest == 0) dest = NODENUM_BROADCAST;
-
         // Defensive: If channel isn't valid, pick the first available channel
         if (channel < 0 || channel >= channels.getNumChannels()) channel = 0;
 
@@ -598,6 +606,7 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent* event) {
         currentMessageIndex = -1;
         runState = CANNED_MESSAGE_RUN_STATE_ACTION_SELECT;
         lastTouchMillis = millis();
+        runOnce();
         return true;
     }
 
