@@ -12,6 +12,9 @@
 #endif
 #include "input/kbMatrixImpl.h"
 #endif
+#if !MESHTASTIC_EXCLUDE_PKI
+#include "KeyVerificationModule.h"
+#endif
 #if !MESHTASTIC_EXCLUDE_ADMIN
 #include "modules/AdminModule.h"
 #endif
@@ -136,7 +139,9 @@ void setupModules()
 #if !MESHTASTIC_EXCLUDE_ATAK
         atakPluginModule = new AtakPluginModule();
 #endif
-
+#if !MESHTASTIC_EXCLUDE_PKI
+        keyVerificationModule = new KeyVerificationModule();
+#endif
 #if !MESHTASTIC_EXCLUDE_DROPZONE
         dropzoneModule = new DropzoneModule();
 #endif
