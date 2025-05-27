@@ -19,26 +19,25 @@ AdminMessageHandleResult KeyVerificationModule::handleAdminMessageForModule(cons
                                                                             meshtastic_AdminMessage *response)
 {
     updateState();
-    if (request->which_payload_variant == meshtastic_AdminMessage_key_verification_admin_tag && mp.from == 0) {
-        LOG_WARN("Handling Key Verification Admin Message type %u", request->key_verification_admin.message_type);
+    if (request->which_payload_variant == meshtastic_AdminMessage_key_verification_tag && mp.from == 0) {
+        LOG_WARN("Handling Key Verification Admin Message type %u", request->key_verification.message_type);
 
-        if (request->key_verification_admin.message_type == meshtastic_KeyVerificationAdmin_MessageType_INITIATE_VERIFICATION &&
+        if (request->key_verification.message_type == meshtastic_KeyVerificationAdmin_MessageType_INITIATE_VERIFICATION &&
             currentState == KEY_VERIFICATION_IDLE) {
-            sendInitialRequest(request->key_verification_admin.remote_nodenum);
+            sendInitialRequest(request->key_verification.remote_nodenum);
 
-        } else if (request->key_verification_admin.message_type ==
+        } else if (request->key_verification.message_type ==
                        meshtastic_KeyVerificationAdmin_MessageType_PROVIDE_SECURITY_NUMBER &&
-                   request->key_verification_admin.has_security_number &&
-                   currentState == KEY_VERIFICATION_SENDER_AWAITING_NUMBER &&
-                   request->key_verification_admin.nonce == currentNonce) {
-            processSecurityNumber(request->key_verification_admin.security_number);
+                   request->key_verification.has_security_number && currentState == KEY_VERIFICATION_SENDER_AWAITING_NUMBER &&
+                   request->key_verification.nonce == currentNonce) {
+            processSecurityNumber(request->key_verification.security_number);
 
-        } else if (request->key_verification_admin.message_type == meshtastic_KeyVerificationAdmin_MessageType_DO_VERIFY &&
-                   request->key_verification_admin.nonce == currentNonce) {
+        } else if (request->key_verification.message_type == meshtastic_KeyVerificationAdmin_MessageType_DO_VERIFY &&
+                   request->key_verification.nonce == currentNonce) {
             auto remoteNodePtr = nodeDB->getMeshNode(currentRemoteNode);
             remoteNodePtr->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
             resetToIdle();
-        } else if (request->key_verification_admin.message_type == meshtastic_KeyVerificationAdmin_MessageType_DO_NOT_VERIFY) {
+        } else if (request->key_verification.message_type == meshtastic_KeyVerificationAdmin_MessageType_DO_NOT_VERIFY) {
             resetToIdle();
         }
         return AdminMessageHandleResult::HANDLED;
