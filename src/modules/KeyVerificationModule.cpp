@@ -63,7 +63,7 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
 
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
         cn->level = meshtastic_LogRecord_Level_WARNING;
-        sprintf(cn->message, "Enter Security Number for Key Verificatino");
+        sprintf(cn->message, "Enter Security Number for Key Verification");
         cn->which_payload_variant = meshtastic_ClientNotification_key_verification_number_request_tag;
         cn->payload_variant.key_verification_number_request.nonce = currentNonce;
         strncpy(cn->payload_variant.key_verification_number_request.remote_longname, // should really check for nulls, etc
