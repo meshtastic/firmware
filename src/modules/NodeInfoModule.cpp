@@ -81,11 +81,8 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
         ignoreRequest = true; // Mark it as ignored for MeshModule
         return NULL;
     } else {
-        ignoreRequest = false;     // Don't ignore requests anymore
-        meshtastic_User u = owner; // Create a copy to avoid modifying the global owner
-
-        // Null out user.id on transmit
-        u.id[0] = 0;
+        ignoreRequest = false; // Don't ignore requests anymore
+        meshtastic_User &u = owner;
 
         // Strip the public key if the user is licensed
         if (u.is_licensed && u.public_key.size > 0) {
