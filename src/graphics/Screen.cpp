@@ -2708,9 +2708,10 @@ static void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, i
 
     // === Fifth Row: Bluetooth Off Icon ===
     if (!config.bluetooth.enabled) {
-        const int iconX = 2; // Left aligned
-        const int iconY = compactFifthLine;
-        display->drawXbm(iconX, iconY, placeholder_width, placeholder_height, placeholder);
+        const int iconX = 0; // Left aligned
+        const int iconY = compactFifthLine + ((SCREEN_WIDTH > 128) ? 42 : 2);
+        display->drawXbm(iconX, iconY, bluetoothdisabled_width, bluetoothdisabled_height, bluetoothdisabled);
+        display->drawLine(iconX, iconY, iconX + 9, iconY + 5);
     }
 }
 
