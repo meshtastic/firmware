@@ -252,10 +252,10 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_LINK_32 = 98,
     /* *
  Seeed Tracker L1 */
-    meshtastic_HardwareModel_SEEED_TRACKER_L1 = 99,
+    meshtastic_HardwareModel_SEEED_WIO_TRACKER_L1 = 99,
     /* *
  Seeed Tracker L1 EINK driver */
-    meshtastic_HardwareModel_SEEED_TRACKER_L1_EINK = 100,
+    meshtastic_HardwareModel_SEEED_WIO_TRACKER_L1_EINK = 100,
     /* Reserved ID for future and past use */
     meshtastic_HardwareModel_QWANTZ_TINY_ARMS = 101,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
