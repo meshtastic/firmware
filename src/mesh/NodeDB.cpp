@@ -1480,7 +1480,9 @@ void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSou
     updateGUIforNode = info;
     notifyObservers(true); // Force an update whether or not our node counts have changed
 
+#ifdef ARCH_ESP32
     nimbleBluetooth->Send_GPWPL(nodeId, info->user.short_name, info->position.latitude_i, info->position.longitude_i);
+#endif
 }
 
 /** Update telemetry info for this node based on received metrics
