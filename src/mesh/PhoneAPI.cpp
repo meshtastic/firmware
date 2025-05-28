@@ -54,7 +54,13 @@ void PhoneAPI::handleStartConfig()
     }
 
     // even if we were already connected - restart our state machine
-    state = STATE_SEND_MY_INFO;
+    if (config_nonce == SPECIAL_NONCE_ONLY_NODES) {
+        // If client only wants node info, jump directly to sending nodes
+        state = STATE_SEND_OWN_NODEINFO;
+        LOG_INFO("Client only wants node info, skipping other config");
+    } else {
+        state = STATE_SEND_MY_INFO;
+    }
     pauseBluetoothLogging = true;
     spiLock->lock();
     filesManifest = getFiles("/", 10);
@@ -224,7 +230,12 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             // Should allow us to resume sending NodeInfo in STATE_SEND_OTHER_NODEINFOS
             nodeInfoForPhone.num = 0;
         }
-        state = STATE_SEND_METADATA;
+        if (config_nonce == SPECIAL_NONCE_ONLY_NODES) {
+            // If client only wants node info, jump directly to sending nodes
+            state = STATE_SEND_OTHER_NODEINFOS;
+        } else {
+            state = STATE_SEND_METADATA;
+        }
         break;
     }
 
@@ -388,8 +399,14 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         config_state++;
         // Advance when we have sent all of our ModuleConfig objects
         if (config_state > (_meshtastic_AdminMessage_ModuleConfigType_MAX + 1)) {
-            // Clients sending special nonce don't want to see other nodeinfos
-            state = config_nonce == SPECIAL_NONCE ? STATE_SEND_FILEMANIFEST : STATE_SEND_OTHER_NODEINFOS;
+            // Handle special nonce behaviors:
+            // - SPECIAL_NONCE_ONLY_CONFIG: Skip node info, go directly to file manifest
+            // - SPECIAL_NONCE_ONLY_NODES: After sending nodes, skip to complete
+            if (config_nonce == SPECIAL_NONCE_ONLY_CONFIG) {
+                state = STATE_SEND_FILEMANIFEST;
+            } else {
+                state = STATE_SEND_OTHER_NODEINFOS;
+            }
             config_state = 0;
         }
         break;
@@ -415,7 +432,8 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
     case STATE_SEND_FILEMANIFEST: {
         LOG_DEBUG("FromRadio=STATE_SEND_FILEMANIFEST");
         // last element
-        if (config_state == filesManifest.size()) { // also handles an empty filesManifest
+        if (config_state == filesManifest.size() ||
+            config_nonce == SPECIAL_NONCE_ONLY_NODES) { // also handles an empty filesManifest
             config_state = 0;
             filesManifest.clear();
             // Skip to complete packet
@@ -547,9 +565,12 @@ bool PhoneAPI::available()
             auto nextNode = nodeDB->readNextMeshNode(readIndex);
             if (nextNode) {
                 nodeInfoForPhone = TypeConversions::ConvertToNodeInfo(nextNode);
-                nodeInfoForPhone.hops_away = nodeInfoForPhone.num == nodeDB->getNodeNum() ? 0 : nodeInfoForPhone.hops_away;
-                nodeInfoForPhone.is_favorite =
-                    nodeInfoForPhone.is_favorite || nodeInfoForPhone.num == nodeDB->getNodeNum(); // Our node is always a favorite
+                bool isUs = nodeInfoForPhone.num == nodeDB->getNodeNum();
+                nodeInfoForPhone.hops_away = isUs ? 0 : nodeInfoForPhone.hops_away;
+                nodeInfoForPhone.last_heard = isUs ? getValidTime(RTCQualityFromNet) : nodeInfoForPhone.last_heard;
+                nodeInfoForPhone.snr = isUs ? 0 : nodeInfoForPhone.snr;
+                nodeInfoForPhone.via_mqtt = isUs ? false : nodeInfoForPhone.via_mqtt;
+                nodeInfoForPhone.is_favorite = nodeInfoForPhone.is_favorite || isUs; // Our node is always a favorite
             }
         }
         return true; // Always say we have something, because we might need to advance our state machine

@@ -157,6 +157,13 @@ BMP3XXSensor bmp3xxSensor;
 NullSensor bmp3xxSensor;
 #endif
 
+#if __has_include(<Adafruit_PCT2075.h>)
+#include "Sensor/PCT2075Sensor.h"
+PCT2075Sensor pct2075Sensor;
+#else
+NullSensor pct2075Sensor;
+#endif
+
 RCWL9620Sensor rcwl9620Sensor;
 CGRadSensSensor cgRadSens;
 #endif
@@ -264,6 +271,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = max17048Sensor.runOnce();
             if (cgRadSens.hasSensor())
                 result = cgRadSens.runOnce();
+            if (pct2075Sensor.hasSensor())
+                result = pct2075Sensor.runOnce();
                 // this only works on the wismesh hub with the solar option. This is not an I2C sensor, so we don't need the
                 // sensormap here.
 #ifdef HAS_RAKPROT
@@ -595,6 +604,10 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
         valid = valid && cgRadSens.getMetrics(m);
         hasSensor = true;
     }
+    if (pct2075Sensor.hasSensor()) {
+        valid = valid && pct2075Sensor.getMetrics(m);
+        hasSensor = true;
+    }
 #ifdef HAS_RAKPROT
     valid = valid && rak9154Sensor.getMetrics(m);
     hasSensor = true;
@@ -675,9 +688,17 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
             service->sendToMesh(p, RX_SRC_LOCAL, true);
 
             if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving) {
-                LOG_DEBUG("Start next execution in 5s, then sleep");
+                meshtastic_ClientNotification *notification = clientNotificationPool.allocZeroed();
+                notification->level = meshtastic_LogRecord_Level_INFO;
+                notification->time = getValidTime(RTCQualityFromNet);
+                sprintf(notification->message, "Sending telemetry and sleeping for %us interval in a moment",
+                        Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval,
+                                                          default_telemetry_broadcast_interval_secs) /
+                            1000U);
+                service->sendClientNotification(notification);
                 sleepOnNextExecution = true;
-                setIntervalFromNow(5000);
+                LOG_DEBUG("Start next execution in 5s, then sleep");
+                setIntervalFromNow(FIVE_SECONDS_MS);
             }
         }
         return true;
