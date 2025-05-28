@@ -8,7 +8,6 @@ RAK12035Sensor::RAK12035Sensor() : TelemetrySensor(meshtastic_TelemetrySensorTyp
 
 int32_t RAK12035Sensor::runOnce()
 {
-    string msg = "Init sensor: %s \n", sensorName;
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
@@ -22,9 +21,11 @@ int32_t RAK12035Sensor::runOnce()
     uint8_t data = 0;
     sensor.get_sensor_version(&data);
     if (data != 0) {
-        msg += format("RAK12035Sensor Init Succeed \nSensor1 Firmware version: %i", data);
+        LOG_INFO("Init sensor: %s", sensorName);
+        LOG_INFO("RAK12035Sensor Init Succeed \nSensor1 Firmware version: %i", data, sensorName);
         status = true;
     } else {
+        LOG_INFO("Init sensor: %s \n", sensorName);
         LOG_ERROR("RAK12035Sensor Init Failed");
         status = false;
     }
