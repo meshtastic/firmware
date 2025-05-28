@@ -735,8 +735,8 @@ bool CannedMessageModule::handleSystemCommandInput(const InputEvent* event) {
         // Power control
         case INPUT_BROKER_MSG_SHUTDOWN:
             if (screen) screen->showOverlayBanner("Shutting down...");
-            shutdownAtMsec = millis() + DEFAULT_SHUTDOWN_SECONDS * 1000;
             nodeDB->saveToDisk();
+            shutdownAtMsec = millis() + DEFAULT_SHUTDOWN_SECONDS * 1000;
             runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
             return true;
         case INPUT_BROKER_MSG_REBOOT:
