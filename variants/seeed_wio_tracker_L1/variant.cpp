@@ -27,13 +27,6 @@
  *
  * Format: Logical Pin (Dx) -> nRF Port.Pin (Px.xx)
  *
- * Pin Groupings:
- * [D0-D10]  - Peripheral control (LoRa, GNSS)
- * [D11-D12] - LED outputs
- * [D13]     - User button
- * [D14-D15] - Grove/NFC interface
- * [D16]     - Battery voltage ADC input
- * [D17]     - GNSS module reset
  */
 
 extern "C" {
@@ -83,6 +76,7 @@ const uint32_t g_ADigitalPinMap[] = {
     11, // D27 TB_LEFT
     35, // D28 TB_RIGHT
     37, // D29 TB_PRESS
+    4, // D30 BAT_CTL
 };
 }
 
@@ -93,7 +87,7 @@ void initVariant()
     // This setup is crucial for ensuring low power consumption and proper initialization of the hardware components.
     // VBAT_ENABLE
     pinMode(BAT_READ, OUTPUT);
-    digitalWrite(BAT_READ, LOW);
+    digitalWrite(BAT_READ, HIGH);
 
     pinMode(PIN_LED1, OUTPUT);
     digitalWrite(PIN_LED1, LOW);

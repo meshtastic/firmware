@@ -108,12 +108,11 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 #define BAT_READ                                                                                                                 \
-    D16 // P0_14 = 14  Reads battery voltage from divider on signal board. (PIN_VBAT is reading voltage divider on XIAO and is
-        // program pin 32 / or P0.31)
+    30 // D30 = P0.04  Reads battery voltage from divider on signal board. 
 #define BATTERY_SENSE_RESOLUTION_BITS 12
-#define ADC_MULTIPLIER 3.3
+#define ADC_MULTIPLIER 2.0 
 #define BATTERY_PIN PIN_VBAT // PIN_A7
-#define AREF_VOLTAGE 3.3
+#define AREF_VOLTAGE 3.6
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  GPS L76KB
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
