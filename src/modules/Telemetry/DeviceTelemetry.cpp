@@ -9,6 +9,7 @@
 #include "Router.h"
 #include "configuration.h"
 #include "main.h"
+#include "memGet.h"
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 #include <meshUtils.h>
@@ -133,6 +134,9 @@ meshtastic_Telemetry DeviceTelemetryModule::getLocalStatsTelemetry()
         telemetry.variant.local_stats.num_packets_rx_bad = SimRadio::instance->rxBad;
         telemetry.variant.local_stats.num_tx_relay = SimRadio::instance->txRelay;
     }
+#else
+    telemetry.variant.local_stats.heap_total_bytes = memGet.getHeapSize();
+    telemetry.variant.local_stats.heap_free_bytes = memGet.getFreeHeap();
 #endif
     if (router) {
         telemetry.variant.local_stats.num_rx_dupe = router->rxDupe;
