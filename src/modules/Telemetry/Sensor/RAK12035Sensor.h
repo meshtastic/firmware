@@ -14,15 +14,15 @@
 
 class RAK12035Sensor : public TelemetrySensor
 {
-private:
-  RAK12035 sensor;
+  private:
+    RAK12035 sensor;
 
-protected:
-  virtual void setup() override;
+  protected:
+    virtual void setup() override;
 
-public:
-  RAK12035Sensor();
-  virtual int32_t runOnce() override;
-  virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
+  public:
+    RAK12035Sensor();
+    virtual int32_t runOnce() override;
+    virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
 };
 #endif

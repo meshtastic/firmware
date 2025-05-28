@@ -10,8 +10,7 @@ int32_t RAK12035Sensor::runOnce()
 {
 
     LOG_INFO("Init sensor: %s", sensorName);
-    if (!hasSensor())
-    {
+    if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
 
@@ -25,13 +24,10 @@ int32_t RAK12035Sensor::runOnce()
     sensor.get_sensor_version(&data);
     LOG_INFO("Sensor1 Firmware version: %i", data);
 
-    if (data != 0)
-    {
+    if (data != 0) {
         LOG_INFO("RAK12035Sensor Init Succeed");
         status = true;
-    }
-    else
-    {
+    } else {
         LOG_ERROR("RAK12035Sensor Init Failed");
         status = false;
     }
@@ -53,8 +49,7 @@ void RAK12035Sensor::setup()
     sensor.get_dry_cal(&zero_val);
     sensor.get_wet_cal(&hundred_val);
     delay(200);
-    if (zero_val == 0 || zero_val <= hundred_val)
-    {
+    if (zero_val == 0 || zero_val <= hundred_val) {
         LOG_INFO("Dry calibration value is %d", zero_val);
         LOG_INFO("Wet calibration value is %d", hundred_val);
         LOG_INFO("This does not make sense. You can recalibrate this sensor using the calibration sketch included here: "
@@ -64,8 +59,7 @@ void RAK12035Sensor::setup()
         sensor.get_dry_cal(&zero_val);
         LOG_INFO("Dry calibration reset complete. New value is %d", zero_val);
     }
-    if (hundred_val == 0 || hundred_val >= zero_val)
-    {
+    if (hundred_val == 0 || hundred_val >= zero_val) {
         LOG_INFO("Dry calibration value is %d", zero_val);
         LOG_INFO("Wet calibration value is %d", hundred_val);
         LOG_INFO("This does not make sense. You can recalibrate this sensor using the calibration sketch included here: "
@@ -86,7 +80,8 @@ bool RAK12035Sensor::getMetrics(meshtastic_Telemetry *measurement)
     // TODO:: read and send metrics for up to 2 additional soil monitors if present.
     //  -- how to do this.. this could get a little complex..
     //     ie - 1> we combine them into an average and send that, 2> we send them as separate metrics
-    //      ^-- these scenarios would require different handling of the metrics in the receiving end and maybe a setting in the device ui and an additional proto for that?
+    //      ^-- these scenarios would require different handling of the metrics in the receiving end and maybe a setting in the
+    //      device ui and an additional proto for that?
     measurement->variant.environment_metrics.has_soil_temperature = true;
     measurement->variant.environment_metrics.has_soil_moisture = true;
 
@@ -102,8 +97,7 @@ bool RAK12035Sensor::getMetrics(meshtastic_Telemetry *measurement)
     delay(200);
     sensor.sensor_sleep();
 
-    if (success == false)
-    {
+    if (success == false) {
         LOG_ERROR("Failed to read sensor data");
         return false;
     }

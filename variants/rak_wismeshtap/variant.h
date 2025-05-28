@@ -34,8 +34,7 @@
 #include "WVariant.h"
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif // __cplusplus
 
 // Number of pins defined in PinDescription array
@@ -56,9 +55,9 @@ extern "C"
 
 #define LED_STATE_ON 1 // State when LED is litted
 
-  /*
-   * Buttons
-   */
+/*
+ * Buttons
+ */
 
 #define PIN_BUTTON1 9 // Pin for button on E-ink button module or IO expansion such as the RAK14014 or RAK14015 TFT modules
 #define BUTTON_NEED_PULLUP
@@ -78,14 +77,14 @@ extern "C"
 #define PIN_A6 (0xff)
 #define PIN_A7 (0xff)
 
-  static const uint8_t A0 = PIN_A0;
-  static const uint8_t A1 = PIN_A1;
-  static const uint8_t A2 = PIN_A2;
-  static const uint8_t A3 = PIN_A3;
-  static const uint8_t A4 = PIN_A4;
-  static const uint8_t A5 = PIN_A5;
-  static const uint8_t A6 = PIN_A6;
-  static const uint8_t A7 = PIN_A7;
+static const uint8_t A0 = PIN_A0;
+static const uint8_t A1 = PIN_A1;
+static const uint8_t A2 = PIN_A2;
+static const uint8_t A3 = PIN_A3;
+static const uint8_t A4 = PIN_A4;
+static const uint8_t A5 = PIN_A5;
+static const uint8_t A6 = PIN_A6;
+static const uint8_t A7 = PIN_A7;
 #define ADC_RESOLUTION 14
 
 // Other pins
@@ -95,7 +94,7 @@ extern "C"
 #define WB_IO4 (4)
 #define PIN_NFC2 (10)
 
-  static const uint8_t AREF = PIN_AREF;
+static const uint8_t AREF = PIN_AREF;
 
 /*
  * Serial interfaces
@@ -120,14 +119,14 @@ extern "C"
 #define PIN_SPI1_MOSI (30) // (0 + 30)
 #define PIN_SPI1_SCK (3)   // (0 + 3)
 
-  static const uint8_t SS = 42;
-  static const uint8_t MOSI = PIN_SPI_MOSI;
-  static const uint8_t MISO = PIN_SPI_MISO;
-  static const uint8_t SCK = PIN_SPI_SCK;
+static const uint8_t SS = 42;
+static const uint8_t MOSI = PIN_SPI_MOSI;
+static const uint8_t MISO = PIN_SPI_MISO;
+static const uint8_t SCK = PIN_SPI_SCK;
 
-  /*
-   * eink display pins
-   */
+/*
+ * eink display pins
+ */
 
 #define PIN_EINK_CS (0 + 26)
 #define PIN_EINK_BUSY (0 + 4)
@@ -161,65 +160,65 @@ extern "C"
 #define EXTERNAL_FLASH_DEVICES IS25LP080D
 #define EXTERNAL_FLASH_USE_QSPI
 
-  /* @note RAK5005-O GPIO mapping to RAK4631 GPIO ports
-     RAK5005-O <->  nRF52840
-     IO1       <->  P0.17 (Arduino GPIO number 17)
-     IO2       <->  P1.02 (Arduino GPIO number 34)
-     IO3       <->  P0.21 (Arduino GPIO number 21)
-     IO4       <->  P0.04 (Arduino GPIO number 4)
-     IO5       <->  P0.09 (Arduino GPIO number 9)
-     IO6       <->  P0.10 (Arduino GPIO number 10)
-     IO7       <->  P0.28 (Arduino GPIO number 28)
-     SW1       <->  P0.01 (Arduino GPIO number 1)
-     A0        <->  P0.04/AIN2 (Arduino Analog A2
-     A1        <->  P0.31/AIN7 (Arduino Analog A7
-     SPI_CS    <->  P0.26 (Arduino GPIO number 26)
-   */
+/* @note RAK5005-O GPIO mapping to RAK4631 GPIO ports
+   RAK5005-O <->  nRF52840
+   IO1       <->  P0.17 (Arduino GPIO number 17)
+   IO2       <->  P1.02 (Arduino GPIO number 34)
+   IO3       <->  P0.21 (Arduino GPIO number 21)
+   IO4       <->  P0.04 (Arduino GPIO number 4)
+   IO5       <->  P0.09 (Arduino GPIO number 9)
+   IO6       <->  P0.10 (Arduino GPIO number 10)
+   IO7       <->  P0.28 (Arduino GPIO number 28)
+   SW1       <->  P0.01 (Arduino GPIO number 1)
+   A0        <->  P0.04/AIN2 (Arduino Analog A2
+   A1        <->  P0.31/AIN7 (Arduino Analog A7
+   SPI_CS    <->  P0.26 (Arduino GPIO number 26)
+ */
 
-  // No reason not to have the RAK Wireless pin defs here too.  This allows code from example RAK sketches to run without
-  // modification.
+// No reason not to have the RAK Wireless pin defs here too.  This allows code from example RAK sketches to run without
+// modification.
 
-  static const uint8_t WB_IO1 = 17; // SLOT_A SLOT_B
-  static const uint8_t WB_IO2 = 34; // SLOT_A SLOT_B
-  static const uint8_t WB_IO3 = 21; // SLOT_C
-  // static const uint8_t WB_IO4 = 4;       // SLOT_C <- already defined above (ln. 94)
-  // static const uint8_t WB_IO5 = 9;       // SLOT_D <- already defined above (ln. 93)
-  static const uint8_t WB_IO6 = 10;      // SLOT_D
-  static const uint8_t WB_SW1 = 33;      // IO_SLOT
-  static const uint8_t WB_A0 = 5;        // IO_SLOT
-  static const uint8_t WB_A1 = 31;       // IO_SLOT
-  static const uint8_t WB_I2C1_SDA = 13; // SENSOR_SLOT IO_SLOT
-  static const uint8_t WB_I2C1_SCL = 14; // SENSOR_SLOT IO_SLOT
-  static const uint8_t WB_I2C2_SDA = 24; // IO_SLOT
-  static const uint8_t WB_I2C2_SCL = 25; // IO_SLOT
-  static const uint8_t WB_SPI_CS = 26;   // IO_SLOT
-  static const uint8_t WB_SPI_CLK = 3;   // IO_SLOT
-  static const uint8_t WB_SPI_MISO = 29; // IO_SLOT
-  static const uint8_t WB_SPI_MOSI = 30; // IO_SLOT
+static const uint8_t WB_IO1 = 17; // SLOT_A SLOT_B
+static const uint8_t WB_IO2 = 34; // SLOT_A SLOT_B
+static const uint8_t WB_IO3 = 21; // SLOT_C
+// static const uint8_t WB_IO4 = 4;       // SLOT_C <- already defined above (ln. 94)
+// static const uint8_t WB_IO5 = 9;       // SLOT_D <- already defined above (ln. 93)
+static const uint8_t WB_IO6 = 10;      // SLOT_D
+static const uint8_t WB_SW1 = 33;      // IO_SLOT
+static const uint8_t WB_A0 = 5;        // IO_SLOT
+static const uint8_t WB_A1 = 31;       // IO_SLOT
+static const uint8_t WB_I2C1_SDA = 13; // SENSOR_SLOT IO_SLOT
+static const uint8_t WB_I2C1_SCL = 14; // SENSOR_SLOT IO_SLOT
+static const uint8_t WB_I2C2_SDA = 24; // IO_SLOT
+static const uint8_t WB_I2C2_SCL = 25; // IO_SLOT
+static const uint8_t WB_SPI_CS = 26;   // IO_SLOT
+static const uint8_t WB_SPI_CLK = 3;   // IO_SLOT
+static const uint8_t WB_SPI_MISO = 29; // IO_SLOT
+static const uint8_t WB_SPI_MOSI = 30; // IO_SLOT
 
-  // RAK4630 LoRa module
+// RAK4630 LoRa module
 
-  /* Setup of the SX1262 LoRa module ( https://docs.rakwireless.com/Product-Categories/WisBlock/RAK4631/Datasheet/ )
+/* Setup of the SX1262 LoRa module ( https://docs.rakwireless.com/Product-Categories/WisBlock/RAK4631/Datasheet/ )
 
-  P1.10   NSS     SPI NSS (Arduino GPIO number 42)
-  P1.11   SCK     SPI CLK (Arduino GPIO number 43)
-  P1.12   MOSI    SPI MOSI (Arduino GPIO number 44)
-  P1.13   MISO    SPI MISO (Arduino GPIO number 45)
-  P1.14   BUSY    BUSY signal (Arduino GPIO number 46)
-  P1.15   DIO1    DIO1 event interrupt (Arduino GPIO number 47)
-  P1.06   NRESET  NRESET manual reset of the SX1262 (Arduino GPIO number 38)
+P1.10   NSS     SPI NSS (Arduino GPIO number 42)
+P1.11   SCK     SPI CLK (Arduino GPIO number 43)
+P1.12   MOSI    SPI MOSI (Arduino GPIO number 44)
+P1.13   MISO    SPI MISO (Arduino GPIO number 45)
+P1.14   BUSY    BUSY signal (Arduino GPIO number 46)
+P1.15   DIO1    DIO1 event interrupt (Arduino GPIO number 47)
+P1.06   NRESET  NRESET manual reset of the SX1262 (Arduino GPIO number 38)
 
-  Important for successful SX1262 initialization:
+Important for successful SX1262 initialization:
 
-  * Setup DIO2 to control the antenna switch
-  * Setup DIO3 to control the TCXO power supply
-  * Setup the SX1262 to use it's DCDC regulator and not the LDO
-  * RAK4630 schematics show GPIO P1.07 connected to the antenna switch, but it should not be initialized, as DIO2 will do the
-  control of the antenna switch
+* Setup DIO2 to control the antenna switch
+* Setup DIO3 to control the TCXO power supply
+* Setup the SX1262 to use it's DCDC regulator and not the LDO
+* RAK4630 schematics show GPIO P1.07 connected to the antenna switch, but it should not be initialized, as DIO2 will do the
+control of the antenna switch
 
-  SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
+SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 
-  */
+*/
 
 #define USE_SX1262
 #define SX126X_CS (42)
