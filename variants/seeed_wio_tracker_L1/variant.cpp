@@ -32,7 +32,7 @@
 extern "C" {
 const uint32_t g_ADigitalPinMap[] = {
     // D0 .. D10 - Peripheral control pins
-    38, // D0  P1.06    GNSS_WAKEUP
+    41, // D0  P1.09    GNSS_WAKEUP
     7,  // D1  P0.07     LORA_DIO1
     39, // D2  P1,07     LORA_RESET
     42, // D3  P1.10     LORA_BUSY
