@@ -99,7 +99,7 @@ bool RAK12035Sensor::getMetrics(meshtastic_Telemetry *measurement)
         LOG_ERROR("Failed to read sensor data");
         return false;
     }
-    measurement->variant.environment_metrics.soil_temperature = (float)(temp / 10);
+    measurement->variant.environment_metrics.soil_temperature = ((float)temp / 10.0f);
     measurement->variant.environment_metrics.soil_moisture = moisture;
 
     return true;
