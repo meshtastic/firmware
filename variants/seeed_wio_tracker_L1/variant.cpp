@@ -70,13 +70,12 @@ const uint32_t g_ADigitalPinMap[] = {
     22, // D23 P0.22 (QSPI_SIO_2 WP)
     23, // D24 P0.23 (QSPI_SIO_3 HOLD)
 
-    
     36, // D25 TB_UP
     12, // D26 TB_DOWN
     11, // D27 TB_LEFT
     35, // D28 TB_RIGHT
     37, // D29 TB_PRESS
-    4, // D30 BAT_CTL
+    4,  // D30 BAT_CTL
 };
 }
 

@@ -107,10 +107,9 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 //  Power Management
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-#define BAT_READ                                                                                                                 \
-    30 // D30 = P0.04  Reads battery voltage from divider on signal board. 
+#define BAT_READ 30 // D30 = P0.04  Reads battery voltage from divider on signal board.
 #define BATTERY_SENSE_RESOLUTION_BITS 12
-#define ADC_MULTIPLIER 2.0 
+#define ADC_MULTIPLIER 2.0
 #define BATTERY_PIN PIN_VBAT // PIN_A7
 #define AREF_VOLTAGE 3.6
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
