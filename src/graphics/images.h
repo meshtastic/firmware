@@ -294,5 +294,18 @@ const uint8_t bluetoothdisabled[] PROGMEM = {
     0b00000000
 };
 
+#define smallbulletpoint_width 8
+#define smallbulletpoint_height 8
+const uint8_t smallbulletpoint[] PROGMEM = {
+    0b00000011,
+    0b00000011,
+    0b00000000,
+    0b00000000,
+    0b00000000,
+    0b00000000,
+    0b00000000,
+    0b00000000
+};
+
 #include "img/icon.xbm"
 static_assert(sizeof(icon_bits) >= 0, "Silence unused variable warning");

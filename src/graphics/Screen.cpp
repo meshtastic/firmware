@@ -2230,8 +2230,6 @@ String getSafeNodeName(meshtastic_NodeInfoLite *node)
             nodeName = String(idStr);
         }
     }
-    if (node->is_favorite)
-        nodeName = "*" + nodeName;
     return nodeName;
 }
 
@@ -2425,7 +2423,14 @@ void drawEntryLastHeard(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
-    display->drawString(x, y, nodeName);
+    display->drawString(x + ((SCREEN_WIDTH > 128) ? 6 : 2), y, nodeName);
+    if (node->is_favorite){
+        if(SCREEN_WIDTH > 128){
+            drawScaledXBitmap16x16(x, y + 6, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint, display);
+        } else {
+            display->drawXbm(x, y + 5, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint);
+        }
+    }
 
     int rightEdge = x + columnWidth - timeOffset;
     int textWidth = display->getStringWidth(timeStr);
@@ -2450,7 +2455,15 @@ void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
-    display->drawStringMaxWidth(x, y, nameMaxWidth, nodeName);
+    
+    display->drawStringMaxWidth(x + ((SCREEN_WIDTH > 128) ? 6 : 2), y, nameMaxWidth, nodeName);
+    if (node->is_favorite){
+        if(SCREEN_WIDTH > 128){
+            drawScaledXBitmap16x16(x, y + 6, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint, display);
+        } else {
+            display->drawXbm(x, y + 5, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint);
+        }
+    }
 
     char hopStr[6] = "";
     if (node->has_hops_away && node->hops_away > 0)
@@ -2536,7 +2549,14 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
-    display->drawStringMaxWidth(x, y, nameMaxWidth, nodeName);
+    display->drawStringMaxWidth(x + ((SCREEN_WIDTH > 128) ? 6 : 2), y, nameMaxWidth, nodeName);
+    if (node->is_favorite){
+        if(SCREEN_WIDTH > 128){
+            drawScaledXBitmap16x16(x, y + 6, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint, display);
+        } else {
+            display->drawXbm(x, y + 5, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint);
+        }
+    }
 
     if (strlen(distStr) > 0) {
         int offset = (SCREEN_WIDTH > 128) ? (isLeftCol ? 7 : 10) // Offset for Wide Screens (Left Column:Right Column)
@@ -2660,7 +2680,14 @@ void drawEntryCompass(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
-    display->drawStringMaxWidth(x, y, nameMaxWidth, nodeName);
+    display->drawStringMaxWidth(x + ((SCREEN_WIDTH > 128) ? 6 : 2), y, nameMaxWidth, nodeName);
+    if (node->is_favorite){
+        if(SCREEN_WIDTH > 128){
+            drawScaledXBitmap16x16(x, y + 6, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint, display);
+        } else {
+            display->drawXbm(x, y + 5, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint);
+        }
+    }
 }
 void drawCompassArrow(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth, float myHeading,
                       double userLat, double userLon)
@@ -3495,8 +3522,6 @@ void NavigationBar(OLEDDisplay *display, OLEDDisplayUiState *state)
     if (currentFrame != lastFrameIndex) {
         lastFrameIndex = currentFrame;
         lastFrameChangeTime = millis();
-
-        EINK_ADD_FRAMEFLAG(display, DEMAND_FAST);
     }
 
     const bool useBigIcons = (SCREEN_WIDTH > 128);
@@ -3518,8 +3543,6 @@ void NavigationBar(OLEDDisplay *display, OLEDDisplayUiState *state)
     // Only show bar briefly after switching frames (unless on E-Ink)
 #if defined(USE_EINK)
     int y = SCREEN_HEIGHT - iconSize - 1;
-
-    EINK_ADD_FRAMEFLAG(display, DEMAND_FAST);
 #else
     int y = SCREEN_HEIGHT - iconSize - 1;
     if (millis() - lastFrameChangeTime > ICON_DISPLAY_DURATION_MS) {

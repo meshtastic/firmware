@@ -84,7 +84,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
     }
 #endif
 
-    bool useHorizontalBattery = (screenW > 128 && screenW > screenH);
+    bool useHorizontalBattery = (screenW > 128 && screenW >= screenH);
     const int textY = y + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
 
     // === Battery Icons ===
