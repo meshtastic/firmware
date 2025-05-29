@@ -3089,37 +3089,77 @@ static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiStat
 
     // === Draw Compass if heading is valid ===
     if (validHeading) {
-        const int16_t topY = compactFirstLine;
-        const int16_t bottomY = SCREEN_HEIGHT - (FONT_HEIGHT_SMALL - 1); // nav row height
-        const int16_t usableHeight = bottomY - topY - 5;
+        // --- Compass Rendering: landscape (wide) screens use original side-aligned logic ---
+        if (SCREEN_WIDTH > SCREEN_HEIGHT) {
+            const int16_t topY = compactFirstLine;
+            const int16_t bottomY = SCREEN_HEIGHT - (FONT_HEIGHT_SMALL - 1); // nav row height
+            const int16_t usableHeight = bottomY - topY - 5;
 
-        int16_t compassRadius = usableHeight / 2;
-        if (compassRadius < 8)
-            compassRadius = 8;
-        const int16_t compassDiam = compassRadius * 2;
-        const int16_t compassX = x + SCREEN_WIDTH - compassRadius - 8;
+            int16_t compassRadius = usableHeight / 2;
+            if (compassRadius < 8)
+                compassRadius = 8;
+            const int16_t compassDiam = compassRadius * 2;
+            const int16_t compassX = x + SCREEN_WIDTH - compassRadius - 8;
 
-        // Center vertically and nudge down slightly to keep "N" clear of header
-        const int16_t compassY = topY + (usableHeight / 2) + ((FONT_HEIGHT_SMALL - 1) / 2) + 2;
+            // Center vertically and nudge down slightly to keep "N" clear of header
+            const int16_t compassY = topY + (usableHeight / 2) + ((FONT_HEIGHT_SMALL - 1) / 2) + 2;
 
-        // Draw compass
-        screen->drawNodeHeading(display, compassX, compassY, compassDiam, -heading);
-        display->drawCircle(compassX, compassY, compassRadius);
+            screen->drawNodeHeading(display, compassX, compassY, compassDiam, -heading);
+            display->drawCircle(compassX, compassY, compassRadius);
 
-        // "N" label
-        float northAngle = -heading;
-        float radius = compassRadius;
-        int16_t nX = compassX + (radius - 1) * sin(northAngle);
-        int16_t nY = compassY - (radius - 1) * cos(northAngle);
-        int16_t nLabelWidth = display->getStringWidth("N") + 2;
-        int16_t nLabelHeightBox = FONT_HEIGHT_SMALL + 1;
+            // "N" label
+            float northAngle = -heading;
+            float radius = compassRadius;
+            int16_t nX = compassX + (radius - 1) * sin(northAngle);
+            int16_t nY = compassY - (radius - 1) * cos(northAngle);
+            int16_t nLabelWidth = display->getStringWidth("N") + 2;
+            int16_t nLabelHeightBox = FONT_HEIGHT_SMALL + 1;
 
-        display->setColor(BLACK);
-        display->fillRect(nX - nLabelWidth / 2, nY - nLabelHeightBox / 2, nLabelWidth, nLabelHeightBox);
-        display->setColor(WHITE);
-        display->setFont(FONT_SMALL);
-        display->setTextAlignment(TEXT_ALIGN_CENTER);
-        display->drawString(nX, nY - FONT_HEIGHT_SMALL / 2, "N");
+            display->setColor(BLACK);
+            display->fillRect(nX - nLabelWidth / 2, nY - nLabelHeightBox / 2, nLabelWidth, nLabelHeightBox);
+            display->setColor(WHITE);
+            display->setFont(FONT_SMALL);
+            display->setTextAlignment(TEXT_ALIGN_CENTER);
+            display->drawString(nX, nY - FONT_HEIGHT_SMALL / 2, "N");
+        } else {
+            // Portrait or square: put compass at the bottom and centered, scaled to fit available space
+            // For E-Ink screens, account for navigation bar at the bottom!
+            int yBelowContent = ((SCREEN_HEIGHT > 64) ? compactFifthLine : moreCompactFifthLine) + FONT_HEIGHT_SMALL + 2;
+            const int margin = 4;
+            int availableHeight =
+#if defined(USE_EINK)
+                SCREEN_HEIGHT - yBelowContent - 24; // Leave extra space for nav bar on E-Ink
+#else
+                SCREEN_HEIGHT - yBelowContent - margin;
+#endif
+
+            if (availableHeight < FONT_HEIGHT_SMALL * 2) return;
+
+            int compassRadius = availableHeight / 2;
+            if (compassRadius < 8) compassRadius = 8;
+            if (compassRadius * 2 > SCREEN_WIDTH - 16) compassRadius = (SCREEN_WIDTH - 16) / 2;
+
+            int compassX = x + SCREEN_WIDTH / 2;
+            int compassY = yBelowContent + availableHeight / 2;
+
+            screen->drawNodeHeading(display, compassX, compassY, compassRadius * 2, -heading);
+            display->drawCircle(compassX, compassY, compassRadius);
+
+            // "N" label
+            float northAngle = -heading;
+            float radius = compassRadius;
+            int16_t nX = compassX + (radius - 1) * sin(northAngle);
+            int16_t nY = compassY - (radius - 1) * cos(northAngle);
+            int16_t nLabelWidth = display->getStringWidth("N") + 2;
+            int16_t nLabelHeightBox = FONT_HEIGHT_SMALL + 1;
+
+            display->setColor(BLACK);
+            display->fillRect(nX - nLabelWidth / 2, nY - nLabelHeightBox / 2, nLabelWidth, nLabelHeightBox);
+            display->setColor(WHITE);
+            display->setFont(FONT_SMALL);
+            display->setTextAlignment(TEXT_ALIGN_CENTER);
+            display->drawString(nX, nY - FONT_HEIGHT_SMALL / 2, "N");
+        }
     }
 #endif
 }
