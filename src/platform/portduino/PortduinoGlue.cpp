@@ -603,6 +603,7 @@ bool loadConfig(const char *configPath)
         if (yamlConfig["HostMetrics"]) {
             settingsMap[hostMetrics_channel] = (yamlConfig["HostMetrics"]["Channel"]).as<int>(0);
             settingsMap[hostMetrics_interval] = (yamlConfig["HostMetrics"]["ReportInterval"]).as<int>(0);
+            settingsStrings[hostMetrics_user_command] = (yamlConfig["HostMetrics"]["UserStringCommand"]).as<std::string>("");
         }
 
         if (yamlConfig["General"]) {

@@ -80,10 +80,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Override user saved region, for producing region-locked builds
 // #define REGULATORY_LORA_REGIONCODE meshtastic_Config_LoRaConfig_RegionCode_SG_923
 
-// Total system gain in dBm to subtract from Tx power to remain within regulatory ERP limit for non-licensed operators
-// This value should be set in variant.h and is PA gain + antenna gain (if system ships with an antenna)
-#ifndef REGULATORY_GAIN_LORA
-#define REGULATORY_GAIN_LORA 0
+// Total system gain in dBm to subtract from Tx power to remain within regulatory and Tx PA limits
+// This value should be set in variant.h and is PA gain + antenna gain (if variant has a non-removable antenna)
+#ifndef TX_GAIN_LORA
+#define TX_GAIN_LORA 0
 #endif
 
 // -----------------------------------------------------------------------------
@@ -99,8 +99,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 // OLED & Input
 // -----------------------------------------------------------------------------
-
+#if defined(SEEED_WIO_TRACKER_L1)
+#define SSD1306_ADDRESS 0x3D
+#define USE_SH1106
+#else
 #define SSD1306_ADDRESS 0x3C
+#endif
 #define ST7567_ADDRESS 0x3F
 
 // The SH1106 controller is almost, but not quite, the same as SSD1306
@@ -153,6 +157,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define CGRADSENS_ADDR 0x66
 #define LTR390UV_ADDR 0x53
 #define XPOWERS_AXP192_AXP2101_ADDRESS 0x34 // same adress as TCA8418
+#define PCT2075_ADDR 0x37
 
 // -----------------------------------------------------------------------------
 // ACCELEROMETER
