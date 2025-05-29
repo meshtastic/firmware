@@ -1945,14 +1945,14 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     }
 
     // === 2. Signal and Hops (combined on one line, if available) ===
-    // If both are present: "Signal: 97%  [2hops]"
+    // If both are present: "Sig: 97%  [2hops]"
     // If only one: show only that one
     char signalHopsStr[32] = "";
     bool haveSignal = false;
     int percentSignal = clamp((int)((node->snr + 10) * 5), 0, 100);
 
-    // Use shorter label if screen is narrow (<= 128 px)
-    const char *signalLabel = (display->getWidth() > 128) ? "Signal" : "Sig";
+    // Always use "Sig" for the label
+    const char *signalLabel = " Sig";
 
     // --- Build the Signal/Hops line ---
     // If SNR looks reasonable, show signal
@@ -1981,7 +1981,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
         uint32_t minutes = seconds / 60, hours = minutes / 60, days = hours / 24;
         // Format as "Heard: Xm ago", "Heard: Xh ago", or "Heard: Xd ago"
         snprintf(seenStr, sizeof(seenStr),
-                 (days > 365 ? "Heard: ?" : "Heard: %d%c ago"),
+                 (days > 365 ? " Heard: ?" : " Heard: %d%c ago"),
                  (days ? days : hours ? hours : minutes),
                  (days ? 'd' : hours ? 'h' : 'm'));
     }
@@ -1998,11 +1998,11 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
         uint32_t mins = (uptime % 3600) / 60;
         // Show as "Up: 2d 3h", "Up: 5h 14m", or "Up: 37m"
         if (days)
-            snprintf(uptimeStr, sizeof(uptimeStr), "Uptime: %ud %uh", days, hours);
+            snprintf(uptimeStr, sizeof(uptimeStr), " Uptime: %ud %uh", days, hours);
         else if (hours)
-            snprintf(uptimeStr, sizeof(uptimeStr), "Uptime: %uh %um", hours, mins);
+            snprintf(uptimeStr, sizeof(uptimeStr), " Uptime: %uh %um", hours, mins);
         else
-            snprintf(uptimeStr, sizeof(uptimeStr), "Uptime: %um", mins);
+            snprintf(uptimeStr, sizeof(uptimeStr), " Uptime: %um", mins);
     }
     if (uptimeStr[0] && line < 5) {
         display->drawString(x, yPositions[line++], uptimeStr);
@@ -2033,16 +2033,16 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
             if (miles < 0.1) {
                 int feet = (int)(miles * 5280);
                 if (feet > 0 && feet < 1000) {
-                    snprintf(distStr, sizeof(distStr), "Distance: %dft", feet);
+                    snprintf(distStr, sizeof(distStr), " Distance: %dft", feet);
                     haveDistance = true;
                 } else if (feet >= 1000) {
-                    snprintf(distStr, sizeof(distStr), "Distance: ¼mi");
+                    snprintf(distStr, sizeof(distStr), " Distance: ¼mi");
                     haveDistance = true;
                 }
             } else {
                 int roundedMiles = (int)(miles + 0.5);
                 if (roundedMiles > 0 && roundedMiles < 1000) {
-                    snprintf(distStr, sizeof(distStr), "Distance: %dmi", roundedMiles);
+                    snprintf(distStr, sizeof(distStr), " Distance: %dmi", roundedMiles);
                     haveDistance = true;
                 }
             }
@@ -2050,16 +2050,16 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
             if (distanceKm < 1.0) {
                 int meters = (int)(distanceKm * 1000);
                 if (meters > 0 && meters < 1000) {
-                    snprintf(distStr, sizeof(distStr), "Distance: %dm", meters);
+                    snprintf(distStr, sizeof(distStr), " Distance: %dm", meters);
                     haveDistance = true;
                 } else if (meters >= 1000) {
-                    snprintf(distStr, sizeof(distStr), "Distance: 1km");
+                    snprintf(distStr, sizeof(distStr), " Distance: 1km");
                     haveDistance = true;
                 }
             } else {
                 int km = (int)(distanceKm + 0.5);
                 if (km > 0 && km < 1000) {
-                    snprintf(distStr, sizeof(distStr), "Distance: %dkm", km);
+                    snprintf(distStr, sizeof(distStr), " Distance: %dkm", km);
                     haveDistance = true;
                 }
             }
@@ -3062,19 +3062,19 @@ static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiStat
 
         // === Second Row: Altitude ===
         String displayLine;
-        displayLine = "Alt: " + String(geoCoord.getAltitude()) + "m";
+        displayLine = " Alt: " + String(geoCoord.getAltitude()) + "m";
         if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL)
-            displayLine = "Alt: " + String(geoCoord.getAltitude() * METERS_TO_FEET) + "ft";
+            displayLine = " Alt: " + String(geoCoord.getAltitude() * METERS_TO_FEET) + "ft";
         display->drawString(x, ((SCREEN_HEIGHT > 64) ? compactSecondLine : moreCompactSecondLine), displayLine);
 
         // === Third Row: Latitude ===
         char latStr[32];
-        snprintf(latStr, sizeof(latStr), "Lat: %.5f", geoCoord.getLatitude() * 1e-7);
+        snprintf(latStr, sizeof(latStr), " Lat: %.5f", geoCoord.getLatitude() * 1e-7);
         display->drawString(x, ((SCREEN_HEIGHT > 64) ? compactThirdLine : moreCompactThirdLine), latStr);
 
         // === Fourth Row: Longitude ===
         char lonStr[32];
-        snprintf(lonStr, sizeof(lonStr), "Lon: %.5f", geoCoord.getLongitude() * 1e-7);
+        snprintf(lonStr, sizeof(lonStr), " Lon: %.5f", geoCoord.getLongitude() * 1e-7);
         display->drawString(x, ((SCREEN_HEIGHT > 64) ? compactFourthLine : moreCompactFourthLine), lonStr);
 
         // === Fifth Row: Date ===
@@ -3083,7 +3083,7 @@ static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiStat
         bool showTime = false;  // set to true for full datetime
         formatDateTime(datetimeStr, sizeof(datetimeStr), rtc_sec, display, showTime);
         char fullLine[40];
-        snprintf(fullLine, sizeof(fullLine), "Date: %s", datetimeStr);
+        snprintf(fullLine, sizeof(fullLine), " Date: %s", datetimeStr);
         display->drawString(0, ((SCREEN_HEIGHT > 64) ? compactFifthLine : moreCompactFifthLine), fullLine);
     }
 
