@@ -4,6 +4,7 @@
 
 #include "GxEPD2_BW.h"
 #include <OLEDDisplay.h>
+#include "EinkMultiWrapper.h"
 
 /**
  * An adapter class that allows using the GxEPD2 library as if it was an OLEDDisplay implementation.
@@ -64,8 +65,11 @@ class EInkDisplay : public OLEDDisplay
     virtual bool connect() override;
 
     // AdafruitGFX display object - instantiated in connect(), variant specific
+#if defined(HELTEC_WIRELESS_PAPER)
+    EInkMultiWrapper<EINK_DISPLAY_MODEL1, EINK_DISPLAY_MODEL2> *adafruitDisplay;
+#else
     GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT> *adafruitDisplay = NULL;
-
+#endif
     // If display uses HSPI
 #if defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_WIRELESS_PAPER_V1_0) || defined(HELTEC_VISION_MASTER_E213) ||               \
     defined(HELTEC_VISION_MASTER_E290) || defined(TLORA_T3S3_EPAPER) || defined(CROWPANEL_ESP32S3_5_EPAPER) ||                   \

@@ -19,11 +19,57 @@
 // Shared NicheGraphics components
 // --------------------------------
 #include "graphics/niche/Drivers/EInk/LCMEN2R13EFC1.h"
+#include "graphics/niche/Drivers/EInk/E0213A367.h"
 #include "graphics/niche/Inputs/TwoButton.h"
 
 void setupNicheGraphics()
 {
     using namespace NicheGraphics;
+
+    pinMode(PIN_EINK_SCLK, OUTPUT); 
+    pinMode(PIN_EINK_DC, OUTPUT); 
+    pinMode(PIN_EINK_CS, OUTPUT);
+    pinMode(PIN_EINK_RES, OUTPUT);
+    
+    //rest e-ink
+    digitalWrite(PIN_EINK_RES, LOW);
+    delay(20);
+    digitalWrite(PIN_EINK_RES, HIGH);
+    delay(20);
+
+    digitalWrite(PIN_EINK_DC, LOW);
+    digitalWrite(PIN_EINK_CS, LOW);
+
+    // write cmd
+    uint8_t cmd = 0x2F;
+    pinMode(PIN_EINK_MOSI, OUTPUT);  
+    digitalWrite(PIN_EINK_SCLK, LOW);
+    for (int i = 0; i < 8; i++)
+    {
+        digitalWrite(PIN_EINK_MOSI, (cmd & 0x80) ? HIGH : LOW);
+        cmd <<= 1;
+        digitalWrite(PIN_EINK_SCLK, HIGH);
+        delayMicroseconds(1);
+        digitalWrite(PIN_EINK_SCLK, LOW);
+        delayMicroseconds(1);
+    }
+    delay(10);
+
+    digitalWrite(PIN_EINK_DC, HIGH);
+    pinMode(PIN_EINK_MOSI, INPUT_PULLUP); 
+
+    // read chip ID
+    uint8_t chipId = 0;
+    for (int8_t b = 7; b >= 0; b--) 
+    {
+      digitalWrite(PIN_EINK_SCLK, LOW);  
+      delayMicroseconds(1);
+      digitalWrite(PIN_EINK_SCLK, HIGH);
+      delayMicroseconds(1);
+      if (digitalRead(PIN_EINK_MOSI)) chipId |= (1 << b);  
+    }
+    digitalWrite(PIN_EINK_CS, HIGH);
+    LOG_INFO("eink chipId: %02X", chipId);
 
     // SPI
     // -----------------------------
@@ -34,8 +80,15 @@ void setupNicheGraphics()
 
     // E-Ink Driver
     // -----------------------------
-
-    Drivers::EInk *driver = new Drivers::LCMEN213EFC1;
+    Drivers::EInk *driver;
+    if((chipId &0x03) !=0x01)
+    {
+       driver = new Drivers::LCMEN213EFC1;
+    }
+    else
+    {
+        driver = new Drivers::E0213A367;
+    }
     driver->begin(hspi, PIN_EINK_DC, PIN_EINK_CS, PIN_EINK_BUSY, PIN_EINK_RES);
 
     // InkHUD
