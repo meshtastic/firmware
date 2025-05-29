@@ -2070,46 +2070,92 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
         display->drawString(x, yPositions[line++], distStr);
     }
 
-    // --- Compass Rendering (only show if valid heading/bearing) ---
-    const int16_t topY = compactFirstLine;
-    const int16_t bottomY = SCREEN_HEIGHT - (FONT_HEIGHT_SMALL - 1);
-    const int16_t usableHeight = bottomY - topY - 5;
-    int16_t compassRadius = usableHeight / 2;
-    if (compassRadius < 8)
-        compassRadius = 8;
-    const int16_t compassDiam = compassRadius * 2;
-    const int16_t compassX = x + SCREEN_WIDTH - compassRadius - 8;
-    const int16_t compassY = topY + (usableHeight / 2) + ((FONT_HEIGHT_SMALL - 1) / 2) + 2;
+    // --- Compass Rendering: landscape (wide) screens use the original side-aligned logic ---
+    if (SCREEN_WIDTH > SCREEN_HEIGHT) {
+        bool showCompass = false;
+        if (ourNode && (nodeDB->hasValidPosition(ourNode) || screen->hasHeading()) && nodeDB->hasValidPosition(node)) {
+            showCompass = true;
+        }
+        if (showCompass) {
+            const int16_t topY = compactFirstLine;
+            const int16_t bottomY = SCREEN_HEIGHT - (FONT_HEIGHT_SMALL - 1);
+            const int16_t usableHeight = bottomY - topY - 5;
+            int16_t compassRadius = usableHeight / 2;
+            if (compassRadius < 8)
+                compassRadius = 8;
+            const int16_t compassDiam = compassRadius * 2;
+            const int16_t compassX = x + SCREEN_WIDTH - compassRadius - 8;
+            const int16_t compassY = topY + (usableHeight / 2) + ((FONT_HEIGHT_SMALL - 1) / 2) + 2;
 
-    // Determine if we have valid compass info
-    bool showCompass = false;
-    if (ourNode && (nodeDB->hasValidPosition(ourNode) || screen->hasHeading()) && nodeDB->hasValidPosition(node)) {
-        showCompass = true;
+            const auto &op = ourNode->position;
+            float myHeading = screen->hasHeading()
+                ? screen->getHeading() * PI / 180
+                : screen->estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
+            screen->drawCompassNorth(display, compassX, compassY, myHeading);
+
+            const auto &p = node->position;
+            float d = GeoCoord::latLongToMeter(
+                DegD(p.latitude_i), DegD(p.longitude_i),
+                DegD(op.latitude_i), DegD(op.longitude_i));
+            float bearing = GeoCoord::bearing(
+                DegD(op.latitude_i), DegD(op.longitude_i),
+                DegD(p.latitude_i), DegD(p.longitude_i));
+            if (!config.display.compass_north_top) bearing -= myHeading;
+            screen->drawNodeHeading(display, compassX, compassY, compassDiam, bearing);
+
+            display->drawCircle(compassX, compassY, compassRadius);
+        }
+        // else show nothing
+    } else {
+        // Portrait or square: put compass at the bottom and centered, scaled to fit available space
+        bool showCompass = false;
+        if (ourNode && (nodeDB->hasValidPosition(ourNode) || screen->hasHeading()) && nodeDB->hasValidPosition(node)) {
+            showCompass = true;
+        }
+        if (showCompass) {
+            int yBelowContent = (line > 0 && line <= 5) ? (yPositions[line - 1] + FONT_HEIGHT_SMALL + 2) : moreCompactFirstLine;
+            const int margin = 4;
+            // --------- PATCH FOR EINK NAV BAR (ONLY CHANGE BELOW) -----------
+            #if defined(USE_EINK)
+                const int iconSize = (SCREEN_WIDTH > 128) ? 16 : 8;
+                const int navBarHeight = iconSize + 6;
+            #else
+                const int navBarHeight = 0;
+            #endif
+            int availableHeight = SCREEN_HEIGHT - yBelowContent - navBarHeight - margin;
+            // --------- END PATCH FOR EINK NAV BAR -----------
+
+            if (availableHeight < FONT_HEIGHT_SMALL * 2) return;
+
+            int compassRadius = availableHeight / 2;
+            if (compassRadius < 8) compassRadius = 8;
+            if (compassRadius * 2 > SCREEN_WIDTH - 16) compassRadius = (SCREEN_WIDTH - 16) / 2;
+
+            int compassX = x + SCREEN_WIDTH / 2;
+            int compassY = yBelowContent + availableHeight / 2;
+
+            const auto &op = ourNode->position;
+            float myHeading = screen->hasHeading()
+                ? screen->getHeading() * PI / 180
+                : screen->estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
+            screen->drawCompassNorth(display, compassX, compassY, myHeading);
+
+            const auto &p = node->position;
+            float d = GeoCoord::latLongToMeter(
+                DegD(p.latitude_i), DegD(p.longitude_i),
+                DegD(op.latitude_i), DegD(op.longitude_i));
+            float bearing = GeoCoord::bearing(
+                DegD(op.latitude_i), DegD(op.longitude_i),
+                DegD(p.latitude_i), DegD(p.longitude_i));
+            if (!config.display.compass_north_top) bearing -= myHeading;
+            screen->drawNodeHeading(display, compassX, compassY, compassRadius * 2, bearing);
+
+            display->drawCircle(compassX, compassY, compassRadius);
+        }
+        // else show nothing
     }
-
-    if (showCompass) {
-        // Draw north
-        const auto &op = ourNode->position;
-        float myHeading = screen->hasHeading()
-            ? screen->getHeading() * PI / 180
-            : screen->estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
-        screen->drawCompassNorth(display, compassX, compassY, myHeading);
-
-        // Draw node-to-node bearing
-        const auto &p = node->position;
-        float d = GeoCoord::latLongToMeter(
-            DegD(p.latitude_i), DegD(p.longitude_i),
-            DegD(op.latitude_i), DegD(op.longitude_i));
-        float bearing = GeoCoord::bearing(
-            DegD(op.latitude_i), DegD(op.longitude_i),
-            DegD(p.latitude_i), DegD(p.longitude_i));
-        if (!config.display.compass_north_top) bearing -= myHeading;
-        screen->drawNodeHeading(display, compassX, compassY, compassDiam, bearing);
-
-        display->drawCircle(compassX, compassY, compassRadius);
-    }
-    // (Else, show nothing)
 }
+
 // Combined dynamic node list frame cycling through LastHeard, HopSignal, and Distance modes
 // Uses a single frame and changes data every few seconds (E-Ink variant is separate)
 
