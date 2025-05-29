@@ -1,23 +1,24 @@
 version: 0.1
 cli:
-  version: 1.22.15
+  version: 1.24.0
 plugins:
   sources:
     - id: trunk
-      ref: v1.6.8
+      ref: v1.7.0
       uri: https://github.com/trunk-io/plugins
 lint:
   enabled:
-    - renovate@40.0.6
+    - checkov@3.2.435
+    - renovate@40.33.8
     - prettier@3.5.3
-    - trufflehog@3.88.29
+    - trufflehog@3.88.34
     - yamllint@1.37.1
     - bandit@1.8.3
     - trivy@0.62.1
     - taplo@0.9.3
-    - ruff@0.11.9
+    - ruff@0.11.11
     - isort@6.0.1
-    - markdownlint@0.44.0
+    - markdownlint@0.45.0
     - oxipng@9.1.5
     - svgo@3.3.2
     - actionlint@1.7.7
@@ -37,7 +38,7 @@ runtimes:
   enabled:
     - python@3.10.8
     - go@1.21.0
-    - node@18.20.5
+    - node@22.16.0
 actions:
   disabled:
     - trunk-announce
