@@ -3495,6 +3495,8 @@ void NavigationBar(OLEDDisplay *display, OLEDDisplayUiState *state)
     if (currentFrame != lastFrameIndex) {
         lastFrameIndex = currentFrame;
         lastFrameChangeTime = millis();
+
+        EINK_ADD_FRAMEFLAG(display, DEMAND_FAST);
     }
 
     const bool useBigIcons = (SCREEN_WIDTH > 128);
@@ -3516,6 +3518,8 @@ void NavigationBar(OLEDDisplay *display, OLEDDisplayUiState *state)
     // Only show bar briefly after switching frames (unless on E-Ink)
 #if defined(USE_EINK)
     int y = SCREEN_HEIGHT - iconSize - 1;
+
+    EINK_ADD_FRAMEFLAG(display, DEMAND_FAST);
 #else
     int y = SCREEN_HEIGHT - iconSize - 1;
     if (millis() - lastFrameChangeTime > ICON_DISPLAY_DURATION_MS) {
