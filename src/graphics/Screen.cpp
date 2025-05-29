@@ -2705,12 +2705,19 @@ static void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, i
 
     // === Content below header ===
 
+    // Determine if we need to show 4 or 5 rows on the screen
+    int rows = 4;
+    if (!config.bluetooth.enabled) {
+        rows = 5;
+    }
+
+
     // === First Row: Region / Channel Utilization and Uptime ===
     bool origBold = config.display.heading_bold;
     config.display.heading_bold = false;
 
     // Display Region and Channel Utilization
-    drawNodes(display, x + 1, compactFirstLine + 2, nodeStatus, -1, false, "online");
+    drawNodes(display, x + 1, ((rows == 4) ? compactFirstLine : ((SCREEN_HEIGHT > 64) ? compactFirstLine : moreCompactFirstLine)) + 2, nodeStatus, -1, false, "online");
 
     uint32_t uptime = millis() / 1000;
     char uptimeStr[6];
@@ -2732,7 +2739,7 @@ static void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, i
 
     char uptimeFullStr[16];
     snprintf(uptimeFullStr, sizeof(uptimeFullStr), "Uptime: %s", uptimeStr);
-    display->drawString(SCREEN_WIDTH - display->getStringWidth(uptimeFullStr), compactFirstLine, uptimeFullStr);
+    display->drawString(SCREEN_WIDTH - display->getStringWidth(uptimeFullStr), ((rows == 4) ? compactFirstLine : ((SCREEN_HEIGHT > 64) ? compactFirstLine : moreCompactFirstLine)), uptimeFullStr);
 
     config.display.heading_bold = origBold;
 
@@ -2747,9 +2754,9 @@ static void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, i
         } else {
             displayLine = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "No GPS" : "GPS off";
         }
-        display->drawString(0, compactSecondLine, displayLine);
+        display->drawString(0, ((rows == 4) ? compactSecondLine : ((SCREEN_HEIGHT > 64) ? compactSecondLine : moreCompactSecondLine)), displayLine);
     } else {
-        drawGPS(display, 0, compactSecondLine + 3, gpsStatus);
+        drawGPS(display, 0, ((rows == 4) ? compactSecondLine : ((SCREEN_HEIGHT > 64) ? compactSecondLine : moreCompactSecondLine)) + 3, gpsStatus);
     }
 #endif
 
@@ -2758,12 +2765,17 @@ static void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, i
         int batV = powerStatus->getBatteryVoltageMv() / 1000;
         int batCv = (powerStatus->getBatteryVoltageMv() % 1000) / 10;
         snprintf(batStr, sizeof(batStr), "%01d.%02dV", batV, batCv);
-        display->drawString(x + SCREEN_WIDTH - display->getStringWidth(batStr), compactSecondLine, batStr);
+        display->drawString(x + SCREEN_WIDTH - display->getStringWidth(batStr), ((rows == 4) ? compactSecondLine : ((SCREEN_HEIGHT > 64) ? compactSecondLine : moreCompactSecondLine)), batStr);
     } else {
-        display->drawString(x + SCREEN_WIDTH - display->getStringWidth("USB"), compactSecondLine, String("USB"));
+        display->drawString(x + SCREEN_WIDTH - display->getStringWidth("USB"), ((rows == 4) ? compactSecondLine : ((SCREEN_HEIGHT > 64) ? compactSecondLine : moreCompactSecondLine)), String("USB"));
     }
 
     config.display.heading_bold = origBold;
+
+    // === Third Row: Bluetooth Off (Only If Actually Off) ===
+    if (!config.bluetooth.enabled) {
+        display->drawString(0, ((rows == 4) ? compactThirdLine : ((SCREEN_HEIGHT > 64) ? compactThirdLine : moreCompactThirdLine)), "BT off");
+    }
 
     // === Third & Fourth Rows: Node Identity ===
     int textWidth = 0;
@@ -2783,36 +2795,26 @@ static void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, i
     char combinedName[50];
     snprintf(combinedName, sizeof(combinedName), "%s (%s)", longName, shortnameble);
     if(SCREEN_WIDTH - (display->getStringWidth(longName) + display->getStringWidth(shortnameble)) > 10){
-        // === Third Row: combinedName Centered ===
         size_t len = strlen(combinedName);
         if (len >= 3 && strcmp(combinedName + len - 3, " ()") == 0) {
             combinedName[len - 3] = '\0';  // Remove the last three characters
         }
         textWidth = display->getStringWidth(combinedName);
         nameX = (SCREEN_WIDTH - textWidth) / 2;
-        display->drawString(nameX, compactThirdLine + yOffset, combinedName);
+        display->drawString(nameX, ((rows == 4) ? compactThirdLine : ((SCREEN_HEIGHT > 64) ? compactFourthLine : moreCompactFourthLine)) + yOffset, combinedName);
     } else {
-        // === Third Row: LongName Centered ===
         textWidth = display->getStringWidth(longName);
         nameX = (SCREEN_WIDTH - textWidth) / 2;
         yOffset = (strcmp(shortnameble, "") == 0) ? 1 : 0;
         if(yOffset == 1){
             yOffset = (SCREEN_WIDTH > 128) ? 0 : 7;
         }
-        display->drawString(nameX, compactThirdLine + yOffset, longName);
+        display->drawString(nameX, ((rows == 4) ? compactThirdLine : ((SCREEN_HEIGHT > 64) ? compactFourthLine : moreCompactFourthLine)) + yOffset, longName);
 
         // === Fourth Row: ShortName Centered ===
         textWidth = display->getStringWidth(shortnameble);
         nameX = (SCREEN_WIDTH - textWidth) / 2;
-        display->drawString(nameX, compactFourthLine, shortnameble);
-    }
-
-    // === Fifth Row: Bluetooth Off Icon ===
-    if (!config.bluetooth.enabled) {
-        const int iconX = 0; // Left aligned
-        const int iconY = compactFifthLine + ((SCREEN_WIDTH > 128) ? 42 : 2);
-        display->drawXbm(iconX, iconY, bluetoothdisabled_width, bluetoothdisabled_height, bluetoothdisabled);
-        display->drawLine(iconX, iconY, iconX + 9, iconY + 5);
+        display->drawString(nameX, ((rows == 4) ? compactFourthLine : ((SCREEN_HEIGHT > 64) ? compactFifthLine : moreCompactFifthLine)), shortnameble);
     }
 }
 
@@ -2978,7 +2980,7 @@ static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiStat
     config.display.heading_bold = false;
 
     String Satelite_String = "Sat:";
-    display->drawString(0, compactFirstLine, Satelite_String);
+    display->drawString(0, ((SCREEN_HEIGHT > 64) ? compactFirstLine : moreCompactFirstLine), Satelite_String);
     String displayLine = "";
     if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
         if (config.position.fixed_position) {
@@ -2986,9 +2988,9 @@ static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiStat
         } else {
             displayLine = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "No GPS" : "GPS off";
         }
-        display->drawString(display->getStringWidth(Satelite_String) + 3, compactFirstLine, displayLine);
+        display->drawString(display->getStringWidth(Satelite_String) + 3, ((SCREEN_HEIGHT > 64) ? compactFirstLine : moreCompactFirstLine), displayLine);
     } else {
-        drawGPS(display, display->getStringWidth(Satelite_String) + 3, compactFirstLine + 3, gpsStatus);
+        drawGPS(display, display->getStringWidth(Satelite_String) + 3, ((SCREEN_HEIGHT > 64) ? compactFirstLine : moreCompactFirstLine) + 3, gpsStatus);
     }
 
     config.display.heading_bold = origBold;
@@ -3017,28 +3019,26 @@ static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiStat
         displayLine = "Alt: " + String(geoCoord.getAltitude()) + "m";
         if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL)
             displayLine = "Alt: " + String(geoCoord.getAltitude() * METERS_TO_FEET) + "ft";
-        display->drawString(x, compactSecondLine, displayLine);
+        display->drawString(x, ((SCREEN_HEIGHT > 64) ? compactSecondLine : moreCompactSecondLine), displayLine);
 
         // === Third Row: Latitude ===
         char latStr[32];
         snprintf(latStr, sizeof(latStr), "Lat: %.5f", geoCoord.getLatitude() * 1e-7);
-        display->drawString(x, compactThirdLine, latStr);
+        display->drawString(x, ((SCREEN_HEIGHT > 64) ? compactThirdLine : moreCompactThirdLine), latStr);
 
         // === Fourth Row: Longitude ===
         char lonStr[32];
         snprintf(lonStr, sizeof(lonStr), "Lon: %.5f", geoCoord.getLongitude() * 1e-7);
-        display->drawString(x, compactFourthLine, lonStr);
+        display->drawString(x, ((SCREEN_HEIGHT > 64) ? compactFourthLine : moreCompactFourthLine), lonStr);
 
-        if(SCREEN_HEIGHT > 64){
-            // === Fifth Row: Date ===
-            uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true);
-            char datetimeStr[25];
-            bool showTime = false;  // set to true for full datetime
-            formatDateTime(datetimeStr, sizeof(datetimeStr), rtc_sec, display, showTime);
-            char fullLine[40];
-            snprintf(fullLine, sizeof(fullLine), "Date: %s", datetimeStr);
-            display->drawString(0, compactFifthLine, fullLine);
-        }
+        // === Fifth Row: Date ===
+        uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true);
+        char datetimeStr[25];
+        bool showTime = false;  // set to true for full datetime
+        formatDateTime(datetimeStr, sizeof(datetimeStr), rtc_sec, display, showTime);
+        char fullLine[40];
+        snprintf(fullLine, sizeof(fullLine), "Date: %s", datetimeStr);
+        display->drawString(0, ((SCREEN_HEIGHT > 64) ? compactFifthLine : moreCompactFifthLine), fullLine);
     }
 
     // === Draw Compass if heading is valid ===
