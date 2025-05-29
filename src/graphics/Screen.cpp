@@ -1864,33 +1864,35 @@ uint16_t Screen::getCompassDiam(uint32_t displayWidth, uint32_t displayHeight)
     return diam - 20;
 };
 
-// *********************
-// *    Node Info      *
-// *********************
+// **********************
+// * Favorite Node Info *
+// **********************
 static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+    // --- Cache favorite nodes for the current frame only, to save computation ---
     static std::vector<meshtastic_NodeInfoLite *> favoritedNodes;
     static int prevFrame = -1;
 
+    // --- Only rebuild favorites list if we're on a new frame ---
     if (state->currentFrame != prevFrame) {
         prevFrame = state->currentFrame;
-
         favoritedNodes.clear();
         size_t total = nodeDB->getNumMeshNodes();
         for (size_t i = 0; i < total; i++) {
             meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(i);
+            // Skip nulls and ourself
             if (!n || n->num == nodeDB->getNodeNum()) continue;
             if (n->is_favorite) favoritedNodes.push_back(n);
         }
-
-        // Sort favorites by node number to keep consistent order
-        std::sort(favoritedNodes.begin(), favoritedNodes.end(), [](meshtastic_NodeInfoLite *a, meshtastic_NodeInfoLite *b) {
-            return a->num < b->num;
-        });
+        // Keep a stable, consistent display order
+        std::sort(favoritedNodes.begin(), favoritedNodes.end(),
+                  [](meshtastic_NodeInfoLite *a, meshtastic_NodeInfoLite *b) {
+                      return a->num < b->num;
+                  });
     }
-
     if (favoritedNodes.empty()) return;
 
+    // --- Only display if index is valid ---
     int nodeIndex = state->currentFrame - (screen->frameCount - favoritedNodes.size());
     if (nodeIndex < 0 || nodeIndex >= (int)favoritedNodes.size()) return;
 
@@ -1899,18 +1901,16 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 
     display->clear();
 
-    // === Header ===
+    // === Draw battery/time/mail header (common across screens) ===
     graphics::drawCommonHeader(display, x, y);
 
-    // === Title: Short Name centered in header row ===
+    // === Draw the short node name centered at the top, with bold shadow if set ===
     const int highlightHeight = FONT_HEIGHT_SMALL - 1;
     const int textY = y + 1 + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
     const int centerX = x + SCREEN_WIDTH / 2;
     const char *shortName = (node->has_user && haveGlyphs(node->user.short_name)) ? node->user.short_name : "Node";
-
     if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED)
         display->setColor(BLACK);
-
     display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->setFont(FONT_SMALL);
     display->drawString(centerX, textY, shortName);
@@ -1921,52 +1921,159 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
 
-    const char *username = node->has_user ? node->user.long_name : "Unknown Name";
+    // ===== DYNAMIC ROW STACKING WITH YOUR MACROS =====
+    // 1. Each potential info row has a macro-defined Y position (not regular increments!).
+    // 2. Each row is only shown if it has valid data.
+    // 3. Each row "moves up" if previous are empty, so there are never any blank rows.
+    // 4. The first line is ALWAYS at your macro position; subsequent lines use the next available macro slot.
 
-    static char signalStr[20];
-    if (node->hops_away > 0)
-        snprintf(signalStr, sizeof(signalStr), "Hops: %d", node->hops_away);
-    else
-        snprintf(signalStr, sizeof(signalStr), "Signal: %d%%", clamp((int)((node->snr + 10) * 5), 0, 100));
+    // List of available macro Y positions in order, from top to bottom.
+    const int yPositions[5] = {
+        moreCompactFirstLine,
+        moreCompactSecondLine,
+        moreCompactThirdLine,
+        moreCompactFourthLine,
+        moreCompactFifthLine
+    };
+    int line = 0; // which slot to use next
 
-    static char seenStr[20];
-    uint32_t seconds = sinceLastSeen(node);
-    if (seconds == 0 || seconds == UINT32_MAX) {
-        snprintf(seenStr, sizeof(seenStr), "Heard: ?");
-    } else {
-        uint32_t minutes = seconds / 60, hours = minutes / 60, days = hours / 24;
-        snprintf(seenStr, sizeof(seenStr), (days > 365 ? "Heard: ?" : "Heard: %d%c ago"),
-                 (days    ? days
-                  : hours ? hours
-                          : minutes),
-                 (days    ? 'd'
-                  : hours ? 'h'
-                          : 'm'));
+    // === 1. Long Name (always try to show first) ===
+    const char *username = (node->has_user && node->user.long_name[0]) ? node->user.long_name : nullptr;
+    if (username && line < 5) {
+        // Print node's long name (e.g. "Backpack Node")
+        display->drawString(x, yPositions[line++], username);
     }
 
-    static char distStr[20];
-    strncpy(distStr,
-            (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) ? "? mi ?°" : "? km ?°",
-            sizeof(distStr));
+    // === 2. Signal and Hops (combined on one line, if available) ===
+    // If both are present: "Signal: 97%  [2hops]"
+    // If only one: show only that one
+    char signalHopsStr[32] = "";
+    bool haveSignal = false;
+    int percentSignal = clamp((int)((node->snr + 10) * 5), 0, 100);
 
-    // === First Row: Long Name ===
-    display->drawString(x, compactFirstLine, username);
+    // Use shorter label if screen is narrow (<= 128 px)
+    const char *signalLabel = (display->getWidth() > 128) ? "Signal" : "Sig";
 
-    // === Second Row: Last Seen ===
-    display->drawString(x, compactSecondLine, seenStr);
+    // --- Build the Signal/Hops line ---
+    // If SNR looks reasonable, show signal
+    if ((int)((node->snr + 10) * 5) >= 0 && node->snr > -100) {
+        snprintf(signalHopsStr, sizeof(signalHopsStr), "%s: %d%%", signalLabel, percentSignal);
+        haveSignal = true;
+    }
+    // If hops is valid (>0), show right after signal
+    if (node->hops_away > 0) {
+        size_t len = strlen(signalHopsStr);
+        // Decide between "1 Hop" and "N Hops"
+        if (haveSignal) {
+            snprintf(signalHopsStr + len, sizeof(signalHopsStr) - len, " [%d %s]", node->hops_away, (node->hops_away == 1 ? "Hop" : "Hops"));
+        } else {
+            snprintf(signalHopsStr, sizeof(signalHopsStr), "[%d %s]", node->hops_away, (node->hops_away == 1 ? "Hop" : "Hops"));
+        }
+    }
+    if (signalHopsStr[0] && line < 5) {
+        display->drawString(x, yPositions[line++], signalHopsStr);
+    }
 
-    // === Third Row: Signal Strength or Hops ===
-    display->drawString(x, compactThirdLine, signalStr);
+    // === 3. Heard (last seen, skip if node never seen) ===
+    char seenStr[20] = "";
+    uint32_t seconds = sinceLastSeen(node);
+    if (seconds != 0 && seconds != UINT32_MAX) {
+        uint32_t minutes = seconds / 60, hours = minutes / 60, days = hours / 24;
+        // Format as "Heard: Xm ago", "Heard: Xh ago", or "Heard: Xd ago"
+        snprintf(seenStr, sizeof(seenStr),
+                 (days > 365 ? "Heard: ?" : "Heard: %d%c ago"),
+                 (days ? days : hours ? hours : minutes),
+                 (days ? 'd' : hours ? 'h' : 'm'));
+    }
+    if (seenStr[0] && line < 5) {
+        display->drawString(x, yPositions[line++], seenStr);
+    }
 
-    // === Fourth Row: Distance/Bearing ===
-    display->drawString(x, compactFourthLine, distStr);
+    // === 4. Uptime (only show if metric is present) ===
+    char uptimeStr[32] = "";
+    if (node->has_device_metrics && node->device_metrics.has_uptime_seconds) {
+        uint32_t uptime = node->device_metrics.uptime_seconds;
+        uint32_t days = uptime / 86400;
+        uint32_t hours = (uptime % 86400) / 3600;
+        uint32_t mins = (uptime % 3600) / 60;
+        // Show as "Up: 2d 3h", "Up: 5h 14m", or "Up: 37m"
+        if (days)
+            snprintf(uptimeStr, sizeof(uptimeStr), "Uptime: %ud %uh", days, hours);
+        else if (hours)
+            snprintf(uptimeStr, sizeof(uptimeStr), "Uptime: %uh %um", hours, mins);
+        else
+            snprintf(uptimeStr, sizeof(uptimeStr), "Uptime: %um", mins);
+    }
+    if (uptimeStr[0] && line < 5) {
+        display->drawString(x, yPositions[line++], uptimeStr);
+    }
 
-    // === Compass Rendering (resized like CompassAndLocation screen) ===
+    // === 5. Distance (only if both nodes have GPS position) ===
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    char distStr[24] = "";   // Make buffer big enough for any string
+    bool haveDistance = false;
+
+    if (nodeDB->hasValidPosition(ourNode) && nodeDB->hasValidPosition(node)) {
+        double lat1 = ourNode->position.latitude_i * 1e-7;
+        double lon1 = ourNode->position.longitude_i * 1e-7;
+        double lat2 = node->position.latitude_i * 1e-7;
+        double lon2 = node->position.longitude_i * 1e-7;
+        double earthRadiusKm = 6371.0;
+        double dLat = (lat2 - lat1) * DEG_TO_RAD;
+        double dLon = (lon2 - lon1) * DEG_TO_RAD;
+        double a =
+            sin(dLat / 2) * sin(dLat / 2) +
+            cos(lat1 * DEG_TO_RAD) * cos(lat2 * DEG_TO_RAD) *
+            sin(dLon / 2) * sin(dLon / 2);
+        double c = 2 * atan2(sqrt(a), sqrt(1 - a));
+        double distanceKm = earthRadiusKm * c;
+
+        if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
+            double miles = distanceKm * 0.621371;
+            if (miles < 0.1) {
+                int feet = (int)(miles * 5280);
+                if (feet > 0 && feet < 1000) {
+                    snprintf(distStr, sizeof(distStr), "Distance: %dft", feet);
+                    haveDistance = true;
+                } else if (feet >= 1000) {
+                    snprintf(distStr, sizeof(distStr), "Distance: ¼mi");
+                    haveDistance = true;
+                }
+            } else {
+                int roundedMiles = (int)(miles + 0.5);
+                if (roundedMiles > 0 && roundedMiles < 1000) {
+                    snprintf(distStr, sizeof(distStr), "Distance: %dmi", roundedMiles);
+                    haveDistance = true;
+                }
+            }
+        } else {
+            if (distanceKm < 1.0) {
+                int meters = (int)(distanceKm * 1000);
+                if (meters > 0 && meters < 1000) {
+                    snprintf(distStr, sizeof(distStr), "Distance: %dm", meters);
+                    haveDistance = true;
+                } else if (meters >= 1000) {
+                    snprintf(distStr, sizeof(distStr), "Distance: 1km");
+                    haveDistance = true;
+                }
+            } else {
+                int km = (int)(distanceKm + 0.5);
+                if (km > 0 && km < 1000) {
+                    snprintf(distStr, sizeof(distStr), "Distance: %dkm", km);
+                    haveDistance = true;
+                }
+            }
+        }
+    }
+    // Only display if we actually have a value!
+    if (haveDistance && distStr[0] && line < 5) {
+        display->drawString(x, yPositions[line++], distStr);
+    }
+
+    // --- Compass Rendering (only show if valid heading/bearing) ---
     const int16_t topY = compactFirstLine;
     const int16_t bottomY = SCREEN_HEIGHT - (FONT_HEIGHT_SMALL - 1);
     const int16_t usableHeight = bottomY - topY - 5;
-
     int16_t compassRadius = usableHeight / 2;
     if (compassRadius < 8)
         compassRadius = 8;
@@ -1974,41 +2081,35 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     const int16_t compassX = x + SCREEN_WIDTH - compassRadius - 8;
     const int16_t compassY = topY + (usableHeight / 2) + ((FONT_HEIGHT_SMALL - 1) / 2) + 2;
 
-    bool hasNodeHeading = false;
-
-    if (ourNode && (nodeDB->hasValidPosition(ourNode) || screen->hasHeading())) {
-        const auto &op = ourNode->position;
-        float myHeading = screen->hasHeading() ? screen->getHeading() * PI / 180
-                                               : screen->estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
-        screen->drawCompassNorth(display, compassX, compassY, myHeading);
-
-        if (nodeDB->hasValidPosition(node)) {
-            hasNodeHeading = true;
-            const auto &p = node->position;
-            float d = GeoCoord::latLongToMeter(DegD(p.latitude_i), DegD(p.longitude_i),
-                                                DegD(op.latitude_i), DegD(op.longitude_i));
-            float bearing = GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i),
-                                              DegD(p.latitude_i), DegD(p.longitude_i));
-            if (!config.display.compass_north_top) bearing -= myHeading;
-
-            screen->drawNodeHeading(display, compassX, compassY, compassDiam, bearing);
-
-            float bearingDeg = fmodf((bearing < 0 ? bearing + 2 * PI : bearing) * 180 / PI, 360.0f);
-            if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL)
-                snprintf(distStr, sizeof(distStr), d < 2 * MILES_TO_FEET ? "%.0fft   %.0f°" : "%.1fmi   %.0f°",
-                         d * METERS_TO_FEET / (d < 2 * MILES_TO_FEET ? 1 : MILES_TO_FEET), bearingDeg);
-            else
-                snprintf(distStr, sizeof(distStr), d < 2000 ? "%.0fm   %.0f°" : "%.1fkm   %.0f°",
-                         d / (d < 2000 ? 1 : 1000), bearingDeg);
-        }
+    // Determine if we have valid compass info
+    bool showCompass = false;
+    if (ourNode && (nodeDB->hasValidPosition(ourNode) || screen->hasHeading()) && nodeDB->hasValidPosition(node)) {
+        showCompass = true;
     }
 
-    if (!hasNodeHeading)
-        display->drawString(compassX - FONT_HEIGHT_SMALL / 4, compassY - FONT_HEIGHT_SMALL / 2, "?");
+    if (showCompass) {
+        // Draw north
+        const auto &op = ourNode->position;
+        float myHeading = screen->hasHeading()
+            ? screen->getHeading() * PI / 180
+            : screen->estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
+        screen->drawCompassNorth(display, compassX, compassY, myHeading);
 
-    display->drawCircle(compassX, compassY, compassRadius);
+        // Draw node-to-node bearing
+        const auto &p = node->position;
+        float d = GeoCoord::latLongToMeter(
+            DegD(p.latitude_i), DegD(p.longitude_i),
+            DegD(op.latitude_i), DegD(op.longitude_i));
+        float bearing = GeoCoord::bearing(
+            DegD(op.latitude_i), DegD(op.longitude_i),
+            DegD(p.latitude_i), DegD(p.longitude_i));
+        if (!config.display.compass_north_top) bearing -= myHeading;
+        screen->drawNodeHeading(display, compassX, compassY, compassDiam, bearing);
+
+        display->drawCircle(compassX, compassY, compassRadius);
+    }
+    // (Else, show nothing)
 }
-
 // Combined dynamic node list frame cycling through LastHeard, HopSignal, and Distance modes
 // Uses a single frame and changes data every few seconds (E-Ink variant is separate)
 
