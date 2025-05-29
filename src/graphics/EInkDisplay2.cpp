@@ -174,7 +174,7 @@ bool EInkDisplay::connect()
         }
     }
 
-#elif defined(HELTEC_WIRELESS_PAPER_V1_0) || defined(HELTEC_VISION_MASTER_E213) ||             \
+#elif defined(HELTEC_WIRELESS_PAPER_V1_0) || defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_VISION_MASTER_E213) ||             \
     defined(HELTEC_VISION_MASTER_E290) || defined(TLORA_T3S3_EPAPER) || defined(CROWPANEL_ESP32S3_5_EPAPER) ||                   \
     defined(CROWPANEL_ESP32S3_4_EPAPER) || defined(CROWPANEL_ESP32S3_2_EPAPER)
     {
@@ -227,68 +227,6 @@ bool EInkDisplay::connect()
         // Create GxEPD2 objects
         auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY, *spi1);
         adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(*lowLevel);
-
-        // Init GxEPD2
-        adafruitDisplay->init();
-        adafruitDisplay->setRotation(3);
-    }
-#elif defined(HELTEC_WIRELESS_PAPER)
-    {
-        uint8_t model;
-        pinMode(PIN_EINK_SCLK, OUTPUT); 
-        pinMode(PIN_EINK_DC, OUTPUT); 
-        pinMode(PIN_EINK_CS, OUTPUT);
-        pinMode(PIN_EINK_RES, OUTPUT);
-
-        //rest e-ink
-        digitalWrite(PIN_EINK_RES, LOW);
-        delay(20);
-        digitalWrite(PIN_EINK_RES, HIGH);
-        delay(20);
-
-        digitalWrite(PIN_EINK_DC, LOW);
-        digitalWrite(PIN_EINK_CS, LOW);
-
-        // write cmd
-        uint8_t cmd = 0x2F;
-        pinMode(PIN_EINK_MOSI, OUTPUT);  
-        digitalWrite(PIN_EINK_SCLK, LOW);
-        for (int i = 0; i < 8; i++)
-        {
-            digitalWrite(PIN_EINK_MOSI, (cmd & 0x80) ? HIGH : LOW);
-            cmd <<= 1;
-            digitalWrite(PIN_EINK_SCLK, HIGH);
-            delayMicroseconds(1);
-            digitalWrite(PIN_EINK_SCLK, LOW);
-            delayMicroseconds(1);
-        }
-        delay(10);
-
-        digitalWrite(PIN_EINK_DC, HIGH);
-        pinMode(PIN_EINK_MOSI, INPUT_PULLUP); 
-
-        // read chip ID
-        uint8_t chipId = 0;
-        for (int8_t b = 7; b >= 0; b--) 
-        {
-            digitalWrite(PIN_EINK_SCLK, LOW);  
-            delayMicroseconds(1);
-            digitalWrite(PIN_EINK_SCLK, HIGH);
-            delayMicroseconds(1);
-            if (digitalRead(PIN_EINK_MOSI)) chipId |= (1 << b);  
-        }
-        digitalWrite(PIN_EINK_CS, HIGH);
-        LOG_INFO("eink chipId: %02X", chipId);
-        model = ((chipId&0x03) !=0x01) ? 1 : 2;
-
-        // Start HSPI
-        hspi = new SPIClass(HSPI);
-        hspi->begin(PIN_EINK_SCLK, -1, PIN_EINK_MOSI, PIN_EINK_CS); // SCLK, MISO, MOSI, SS
-        // VExt already enabled in setup()
-        // RTC GPIO hold disabled in setup()
-
-        // Create GxEPD2 objects
-        adafruitDisplay = new EInkMultiWrapper<EINK_DISPLAY_MODEL1, EINK_DISPLAY_MODEL2>(model, PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY, *hspi);
 
         // Init GxEPD2
         adafruitDisplay->init();
