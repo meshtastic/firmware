@@ -223,21 +223,6 @@ static int32_t reconnectWiFi()
 }
 #endif
 
-    if (config.network.wifi_enabled && !WiFi.isConnected()) {
-#ifdef ARCH_RP2040 // (ESP32 handles this in WiFiEvent)
-        /* If APStartupComplete, but we're not connected, try again.
-           Shouldn't try again before APStartupComplete. */
-        needReconnect = APStartupComplete;
-#endif
-        return 1000; // check once per second
-    } else {
-#ifdef ARCH_RP2040
-        onNetworkConnected(); // will only do anything once
-#endif
-        return 300000; // every 5 minutes
-    }
-}
-
 bool isWifiAvailable()
 {
 
