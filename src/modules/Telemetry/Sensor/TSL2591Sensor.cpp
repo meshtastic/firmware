@@ -23,8 +23,8 @@ int32_t TSL2591Sensor::runOnce()
 
 void TSL2591Sensor::setup()
 {
-    tsl.setGain(TSL2591_GAIN_MED); // 25x gain
-    tsl.setTiming(TSL2591_INTEGRATIONTIME_300MS);
+    tsl.setGain(TSL2591_GAIN_LOW); // 1x gain
+    tsl.setTiming(TSL2591_INTEGRATIONTIME_100MS);
 }
 
 bool TSL2591Sensor::getMetrics(meshtastic_Telemetry *measurement)
