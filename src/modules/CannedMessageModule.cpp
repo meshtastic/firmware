@@ -138,6 +138,21 @@ int CannedMessageModule::splitConfiguredMessages()
 
     return this->messagesCount;
 }
+void CannedMessageModule::drawHeader(OLEDDisplay *display, int16_t x, int16_t y, char* buffer) {
+    if (display->getWidth() > 128) {
+        if (this->dest == NODENUM_BROADCAST) {
+            display->drawStringf(x, y, buffer, "To: Broadcast@%s", channels.getName(this->channel));
+        } else {
+            display->drawStringf(x, y, buffer, "To: %s@%s", getNodeName(this->dest), channels.getName(this->channel));
+        }
+    } else {
+        if (this->dest == NODENUM_BROADCAST) {
+            display->drawStringf(x, y, buffer, "To: Broadc@%.5s", channels.getName(this->channel));
+        } else {
+            display->drawStringf(x, y, buffer, "To: %.5s@%.5s", getNodeName(this->dest), channels.getName(this->channel));
+        }
+    }
+}
 
 void CannedMessageModule::resetSearch() {
     LOG_INFO("Resetting search, restoring full destination list");
@@ -1560,33 +1575,17 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         display->setTextAlignment(TEXT_ALIGN_LEFT);
         display->setFont(FONT_SMALL);
 
-        if (this->destSelect != CANNED_MESSAGE_DESTINATION_TYPE_NONE) {
-            display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
-            display->setColor(BLACK);
-        }
+    // --- Draw node/channel header at the top ---
+    drawHeader(display, x, y, buffer);
 
-        switch (this->destSelect) {
-        case CANNED_MESSAGE_DESTINATION_TYPE_NODE:
-            display->drawStringf(0 + x, 0 + y, buffer, "To: >%s<@%s", getNodeName(this->dest), channels.getName(this->channel));
-            break;
-        case CANNED_MESSAGE_DESTINATION_TYPE_CHANNEL:
-            display->drawStringf(0 + x, 0 + y, buffer, "To: %s@>%s<", getNodeName(this->dest), channels.getName(this->channel));
-            break;
-        default:
-            if (display->getWidth() > 128) {
-                display->drawStringf(0 + x, 0 + y, buffer, "To: %s@%s", getNodeName(this->dest), channels.getName(this->channel));
-            } else {
-                display->drawStringf(0 + x, 0 + y, buffer, "To: %.5s@%.5s", getNodeName(this->dest), channels.getName(this->channel));
-            }
-            break;
-        }
-
+        // --- Char count right-aligned ---
         if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NONE) {
             uint16_t charsLeft = meshtastic_Constants_DATA_PAYLOAD_LEN - this->freetext.length() - (moduleConfig.canned_message.send_bell ? 1 : 0);
             snprintf(buffer, sizeof(buffer), "%d left", charsLeft);
             display->drawString(x + display->getWidth() - display->getStringWidth(buffer), y + 0, buffer);
         }
 
+    // --- Draw Free Text input, shifted down ---
         display->setColor(WHITE);
         display->drawStringMaxWidth(0 + x, 0 + y + FONT_HEIGHT_SMALL, x + display->getWidth(),
             drawWithCursor(this->freetext, this->cursor));
@@ -1602,21 +1601,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         const int rowSpacing = FONT_HEIGHT_SMALL - 4;
 
         // Draw header (To: ...)
-        switch (this->destSelect) {
-        case CANNED_MESSAGE_DESTINATION_TYPE_NODE:
-            display->drawStringf(x + 0, y + 0, buffer, "To: >%s<@%s", getNodeName(this->dest), channels.getName(this->channel));
-            break;
-        case CANNED_MESSAGE_DESTINATION_TYPE_CHANNEL:
-            display->drawStringf(x + 0, y + 0, buffer, "To: %s@>%s<", getNodeName(this->dest), channels.getName(this->channel));
-            break;
-        default:
-            if (display->getWidth() > 128) {
-                display->drawStringf(x + 0, y + 0, buffer, "To: %s@%s", getNodeName(this->dest), channels.getName(this->channel));
-            } else {
-                display->drawStringf(x + 0, y + 0, buffer, "To: %.5s@%.5s", getNodeName(this->dest), channels.getName(this->channel));
-            }
-            break;
-        }
+        drawHeader(display, x, y, buffer);
 
         // Shift message list upward by 3 pixels to reduce spacing between header and first message
         const int listYOffset = y + FONT_HEIGHT_SMALL - 3;

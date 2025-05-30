@@ -24,7 +24,6 @@ enum cannedMessageModuleRunState {
 enum cannedMessageDestinationType {
     CANNED_MESSAGE_DESTINATION_TYPE_NONE,
     CANNED_MESSAGE_DESTINATION_TYPE_NODE,
-    CANNED_MESSAGE_DESTINATION_TYPE_CHANNEL
 };
 
 enum CannedMessageModuleIconType { shift, backspace, space, enter };
@@ -102,6 +101,7 @@ protected:
 
     // === Transmission ===
     void sendText(NodeNum dest, ChannelIndex channel, const char *message, bool wantReplies);
+    void drawHeader(OLEDDisplay *display, int16_t x, int16_t y, char* buffer);
     int splitConfiguredMessages();
     int getNextIndex();
     int getPrevIndex();
@@ -162,8 +162,6 @@ private:
     NodeNum incoming = NODENUM_BROADCAST;              // Source node from which last ACK/NACK was received
     NodeNum lastSentNode = 0;                          // Tracks the most recent node we sent a message to (for UI display)
     ChannelIndex channel = 0;                          // Channel index used when sending a message
-    uint8_t numChannels = 0;                           // Total number of channels available for selection
-    ChannelIndex indexChannels[MAX_NUM_CHANNELS] = {0}; // Cached channel indices available for this node
 
     bool ack = false;                                  // True = ACK received, False = NACK or failed
     bool waitingForAck = false;                        // True if we're expecting an ACK and should monitor routing packets
