@@ -1,18 +1,13 @@
-
-
 #define I2C_SDA 9 // I2C pins for this board
 #define I2C_SCL 40
 
-
 #define USE_SX1262
-
 
 #define LORA_SCK 5
 #define LORA_MISO 3
 #define LORA_MOSI 6
 #define LORA_CS 7
 #define LORA_RESET 8
-
 
 // per SX1262_Receive_Interrupt/utilities.h
 #ifdef USE_SX1262
@@ -27,17 +22,9 @@
 #define SX126X_POWER_EN (4)
 #define PIN_3V3_EN (2)
 
-// LEDs
-#define PIN_LED1 (46)
-#define PIN_LED2 (45)
-
-#define LED_BUILTIN PIN_LED1
 #define LED_CONN PIN_LED2
+#define LED_PIN LED_BUILTIN
+#define ledOff(pin) pinMode(pin, INPUT)
 
-#define LED_GREEN PIN_LED1
-#define LED_BLUE PIN_LED2
 
-// #define ledOff(pin) pinMode(pin, INPUT)
-#define ledOff(pin) digitalWrite(pin, LOW) // Turn off the LED by setting it LOW;
-
-// #define LED_STATE_ON 1 // State when LED is litted
+#define LED_STATE_ON 1 // State when LED is litted
