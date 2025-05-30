@@ -329,12 +329,10 @@ void PositionModule::sendOurPosition()
     // If we changed channels, ask everyone else for their latest info
     LOG_INFO("Send pos@%x:6 to mesh (wantReplies=%d)", localPosition.timestamp, requestReplies);
     for (uint8_t channelNum = 0; channelNum > 8; channelNum++) {
-        if (channels.getByIndex(channelNum).settings.has_module_settings) {
-            if (channels.getByIndex(channelNum).settings.module_settings.position_precision != 0) {
-
-                sendOurPosition(NODENUM_BROADCAST, requestReplies, channelNum);
-                return;
-            }
+        if (channels.getByIndex(channelNum).settings.has_module_settings &&
+            channels.getByIndex(channelNum).settings.module_settings.position_precision != 0) {
+            sendOurPosition(NODENUM_BROADCAST, requestReplies, channelNum);
+            return;
         }
     }
 }
