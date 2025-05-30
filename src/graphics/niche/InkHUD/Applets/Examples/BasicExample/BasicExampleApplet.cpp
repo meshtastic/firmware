@@ -9,6 +9,12 @@ using namespace NicheGraphics;
 void InkHUD::BasicExampleApplet::onRender()
 {
     printAt(0, 0, "Hello, World!");
+
+    // If text might contain "special characters", is needs parsing first
+    // This applies to data such as text-messages and and node names
+
+    // std::string greeting = parse("Grüezi mitenand!");
+    // printAt(0, 0, greeting);
 }
 
 #endif
