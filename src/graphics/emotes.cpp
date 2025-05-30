@@ -1,56 +1,57 @@
 #include "emotes.h"
 
-namespace graphics {
+namespace graphics
+{
 
 // Always define Emote list and count
 const Emote emotes[] = {
 #ifndef EXCLUDE_EMOJI
     // --- Thumbs ---
-    {"\U0001F44D", thumbup, thumbs_width, thumbs_height},        // 👍 Thumbs Up
-    {"\U0001F44E", thumbdown, thumbs_width, thumbs_height},      // 👎 Thumbs Down
+    {"\U0001F44D", thumbup, thumbs_width, thumbs_height},   // 👍 Thumbs Up
+    {"\U0001F44E", thumbdown, thumbs_width, thumbs_height}, // 👎 Thumbs Down
 
     // --- Smileys (Multiple Unicode Aliases) ---
-    {"\U0001F60A", smiley, smiley_width, smiley_height},         // 😊 Smiling Face with Smiling Eyes
-    {"\U0001F600", smiley, smiley_width, smiley_height},         // 😀 Grinning Face
-    {"\U0001F642", smiley, smiley_width, smiley_height},         // 🙂 Slightly Smiling Face
-    {"\U0001F609", smiley, smiley_width, smiley_height},         // 😉 Winking Face
-    {"\U0001F601", smiley, smiley_width, smiley_height},         // 😁 Grinning Face with Smiling Eyes
+    {"\U0001F60A", smiley, smiley_width, smiley_height}, // 😊 Smiling Face with Smiling Eyes
+    {"\U0001F600", smiley, smiley_width, smiley_height}, // 😀 Grinning Face
+    {"\U0001F642", smiley, smiley_width, smiley_height}, // 🙂 Slightly Smiling Face
+    {"\U0001F609", smiley, smiley_width, smiley_height}, // 😉 Winking Face
+    {"\U0001F601", smiley, smiley_width, smiley_height}, // 😁 Grinning Face with Smiling Eyes
 
     // --- Question/Alert ---
-    {"\u2753", question, question_width, question_height},       // ❓ Question Mark
-    {"\u203C\uFE0F", bang, bang_width, bang_height},             // ‼️ Double Exclamation Mark
+    {"\u2753", question, question_width, question_height}, // ❓ Question Mark
+    {"\u203C\uFE0F", bang, bang_width, bang_height},       // ‼️ Double Exclamation Mark
 
     // --- Laughing Faces ---
-    {"\U0001F602", haha, haha_width, haha_height},               // 😂 Face with Tears of Joy
-    {"\U0001F923", haha, haha_width, haha_height},               // 🤣 Rolling on the Floor Laughing
-    {"\U0001F606", haha, haha_width, haha_height},               // 😆 Smiling with Open Mouth and Closed Eyes
-    {"\U0001F605", haha, haha_width, haha_height},               // 😅 Smiling with Sweat
-    {"\U0001F604", haha, haha_width, haha_height},               // 😄 Grinning Face with Smiling Eyes
+    {"\U0001F602", haha, haha_width, haha_height}, // 😂 Face with Tears of Joy
+    {"\U0001F923", haha, haha_width, haha_height}, // 🤣 Rolling on the Floor Laughing
+    {"\U0001F606", haha, haha_width, haha_height}, // 😆 Smiling with Open Mouth and Closed Eyes
+    {"\U0001F605", haha, haha_width, haha_height}, // 😅 Smiling with Sweat
+    {"\U0001F604", haha, haha_width, haha_height}, // 😄 Grinning Face with Smiling Eyes
 
     // --- Gestures and People ---
-    {"\U0001F44B", wave_icon, wave_icon_width, wave_icon_height},// 👋 Waving Hand
-    {"\U0001F920", cowboy, cowboy_width, cowboy_height},         // 🤠 Cowboy Hat Face
-    {"\U0001F3A7", deadmau5, deadmau5_width, deadmau5_height},   // 🎧 Headphones
+    {"\U0001F44B", wave_icon, wave_icon_width, wave_icon_height}, // 👋 Waving Hand
+    {"\U0001F920", cowboy, cowboy_width, cowboy_height},          // 🤠 Cowboy Hat Face
+    {"\U0001F3A7", deadmau5, deadmau5_width, deadmau5_height},    // 🎧 Headphones
 
     // --- Weather ---
-    {"\u2600", sun, sun_width, sun_height},                      // ☀ Sun (without variation selector)
-    {"\u2600\uFE0F", sun, sun_width, sun_height},                // ☀️ Sun (with variation selector)
-    {"\U0001F327\uFE0F", rain, rain_width, rain_height},         // 🌧️ Cloud with Rain
-    {"\u2601\uFE0F", cloud, cloud_width, cloud_height},          // ☁️ Cloud
-    {"\U0001F32B\uFE0F", fog, fog_width, fog_height},            // 🌫️ Fog
+    {"\u2600", sun, sun_width, sun_height},              // ☀ Sun (without variation selector)
+    {"\u2600\uFE0F", sun, sun_width, sun_height},        // ☀️ Sun (with variation selector)
+    {"\U0001F327\uFE0F", rain, rain_width, rain_height}, // 🌧️ Cloud with Rain
+    {"\u2601\uFE0F", cloud, cloud_width, cloud_height},  // ☁️ Cloud
+    {"\U0001F32B\uFE0F", fog, fog_width, fog_height},    // 🌫️ Fog
 
     // --- Misc Faces ---
-    {"\U0001F608", devil, devil_width, devil_height},            // 😈 Smiling Face with Horns
+    {"\U0001F608", devil, devil_width, devil_height}, // 😈 Smiling Face with Horns
 
     // --- Hearts (Multiple Unicode Aliases) ---
-    {"\u2764\uFE0F", heart, heart_width, heart_height},          // ❤️ Red Heart
-    {"\U0001F9E1", heart, heart_width, heart_height},            // 🧡 Orange Heart
-    {"\U00002763", heart, heart_width, heart_height},            // ❣ Heart Exclamation
-    {"\U00002764", heart, heart_width, heart_height},            // ❤ Red Heart (legacy)
-    {"\U0001F495", heart, heart_width, heart_height},            // 💕 Two Hearts
-    {"\U0001F496", heart, heart_width, heart_height},            // 💖 Sparkling Heart
-    {"\U0001F497", heart, heart_width, heart_height},            // 💗 Growing Heart
-    {"\U0001F498", heart, heart_width, heart_height},            // 💘 Heart with Arrow
+    {"\u2764\uFE0F", heart, heart_width, heart_height}, // ❤️ Red Heart
+    {"\U0001F9E1", heart, heart_width, heart_height},   // 🧡 Orange Heart
+    {"\U00002763", heart, heart_width, heart_height},   // ❣ Heart Exclamation
+    {"\U00002764", heart, heart_width, heart_height},   // ❤ Red Heart (legacy)
+    {"\U0001F495", heart, heart_width, heart_height},   // 💕 Two Hearts
+    {"\U0001F496", heart, heart_width, heart_height},   // 💖 Sparkling Heart
+    {"\U0001F497", heart, heart_width, heart_height},   // 💗 Growing Heart
+    {"\U0001F498", heart, heart_width, heart_height},   // 💘 Heart with Arrow
 
     // --- Objects ---
     {"\U0001F4A9", poo, poo_width, poo_height},                  // 💩 Pile of Poo
@@ -83,8 +84,7 @@ const unsigned char smiley[] PROGMEM = {
     0x01, 0x09, 0x12, 0x20, 0x01, 0x0f, 0x1e, 0x20, 0x01, 0x00, 0x00, 0x20, 0x01, 0x00, 0x00, 0x20, 0x01, 0x00, 0x00, 0x20,
     0x01, 0x00, 0x00, 0x20, 0x01, 0x00, 0x00, 0x20, 0x01, 0x00, 0x00, 0x20, 0x01, 0x00, 0x00, 0x20, 0x81, 0x00, 0x20, 0x20,
     0x82, 0x00, 0x20, 0x10, 0x02, 0x01, 0x10, 0x10, 0x04, 0x02, 0x08, 0x08, 0x04, 0xfc, 0x07, 0x08, 0x08, 0x00, 0x00, 0x04,
-    0x10, 0x00, 0x00, 0x02, 0x20, 0x00, 0x00, 0x01, 0x40, 0x00, 0xc0, 0x00, 0x80, 0x01, 0x30, 0x00, 0x00, 0xfe, 0x0f, 0x00
-};
+    0x10, 0x00, 0x00, 0x02, 0x20, 0x00, 0x00, 0x01, 0x40, 0x00, 0xc0, 0x00, 0x80, 0x01, 0x30, 0x00, 0x00, 0xfe, 0x0f, 0x00};
 
 const unsigned char question[] PROGMEM = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x3C, 0x00, 0x00, 0x80, 0xFF, 0x01, 0x00, 0xC0, 0xFF, 0x07, 0x00, 0xE0, 0xFF, 0x07, 0x00,
@@ -219,9 +219,7 @@ const unsigned char bell_icon[] PROGMEM = {
     0b00011000, 0b00000000, 0b00000000, 0b00000110, 0b11110000, 0b11111111, 0b11111111, 0b00000011, 0b00000000, 0b00001100,
     0b00001100, 0b00000000, 0b00000000, 0b00011000, 0b00000110, 0b00000000, 0b00000000, 0b11111000, 0b00000111, 0b00000000,
     0b00000000, 0b11100000, 0b00000001, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000,
-    0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000
-};
+    0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000};
 #endif
 
 } // namespace graphics
-

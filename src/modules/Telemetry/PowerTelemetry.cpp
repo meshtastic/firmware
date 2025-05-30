@@ -10,11 +10,11 @@
 #include "PowerTelemetry.h"
 #include "RTC.h"
 #include "Router.h"
+#include "graphics/SharedUIDisplay.h"
 #include "main.h"
 #include "power.h"
 #include "sleep.h"
 #include "target_specific.h"
-#include "graphics/SharedUIDisplay.h"
 
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
@@ -22,8 +22,9 @@
 #include "graphics/ScreenFonts.h"
 #include <Throttle.h>
 
-namespace graphics {
-    extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y);
+namespace graphics
+{
+extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y);
 }
 
 int32_t PowerTelemetryModule::runOnce()
@@ -112,7 +113,7 @@ void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *s
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
 
-    graphics::drawCommonHeader(display, x, y);  // Shared UI header
+    graphics::drawCommonHeader(display, x, y); // Shared UI header
 
     // === Draw title (aligned with header baseline) ===
     const int highlightHeight = FONT_HEIGHT_SMALL - 1;

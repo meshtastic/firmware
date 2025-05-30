@@ -241,71 +241,38 @@ const uint8_t mute_symbol_big[] PROGMEM = {0b00000001, 0b00000000, 0b11000010, 0
 const unsigned char bell_alert[] PROGMEM = {0b00011000, 0b00100100, 0b00100100, 0b01000010,
                                             0b01000010, 0b01000010, 0b11111111, 0b00011000};
 
-                                            
 #define key_symbol_width 8
 #define key_symbol_height 8
-const uint8_t key_symbol[] PROGMEM = {
-    0b00000000,
-    0b00000000,
-    0b00000110,
-    0b11111001,
-    0b10101001,
-    0b10000110,
-    0b00000000,
-    0b00000000
-};
+const uint8_t key_symbol[] PROGMEM = {0b00000000, 0b00000000, 0b00000110, 0b11111001,
+                                      0b10101001, 0b10000110, 0b00000000, 0b00000000};
 
 #define placeholder_width 8
 #define placeholder_height 8
-const uint8_t placeholder[] PROGMEM = {
-    0b11111111,
-    0b11111111,
-    0b11111111,
-    0b11111111,
-    0b11111111,
-    0b11111111,
-    0b11111111,
-    0b11111111
-};
+const uint8_t placeholder[] PROGMEM = {0b11111111, 0b11111111, 0b11111111, 0b11111111,
+                                       0b11111111, 0b11111111, 0b11111111, 0b11111111};
 
 #define icon_node_width 8
 #define icon_node_height 8
 static const uint8_t icon_node[] PROGMEM = {
-    0x10, //    #     
+    0x10, //    #
     0x10, //    #     ← antenna
     0x10, //    #
     0xFE, // #######  ← device top
-    0x82, // #     #  
+    0x82, // #     #
     0xAA, // # # # #  ← body with pattern
-    0x92, // #  #  #  
+    0x92, // #  #  #
     0xFE  // #######  ← device base
 };
 
 #define bluetoothdisabled_width 8
 #define bluetoothdisabled_height 8
-const uint8_t bluetoothdisabled[] PROGMEM = {
-    0b11101100,
-    0b01010100,
-    0b01001100,
-    0b01010100,
-    0b01001100,
-    0b00000000,
-    0b00000000,
-    0b00000000
-};
+const uint8_t bluetoothdisabled[] PROGMEM = {0b11101100, 0b01010100, 0b01001100, 0b01010100,
+                                             0b01001100, 0b00000000, 0b00000000, 0b00000000};
 
 #define smallbulletpoint_width 8
 #define smallbulletpoint_height 8
-const uint8_t smallbulletpoint[] PROGMEM = {
-    0b00000011,
-    0b00000011,
-    0b00000000,
-    0b00000000,
-    0b00000000,
-    0b00000000,
-    0b00000000,
-    0b00000000
-};
+const uint8_t smallbulletpoint[] PROGMEM = {0b00000011, 0b00000011, 0b00000000, 0b00000000,
+                                            0b00000000, 0b00000000, 0b00000000, 0b00000000};
 
 #include "img/icon.xbm"
 static_assert(sizeof(icon_bits) >= 0, "Silence unused variable warning");

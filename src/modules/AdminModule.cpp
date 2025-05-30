@@ -299,7 +299,8 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         if (node != NULL) {
             node->is_favorite = true;
             saveChanges(SEGMENT_NODEDATABASE, false);
-            if (screen) screen->setFrames(graphics::Screen::FOCUS_PRESERVE); // <-- Rebuild screens
+            if (screen)
+                screen->setFrames(graphics::Screen::FOCUS_PRESERVE); // <-- Rebuild screens
         }
         break;
     }
@@ -309,7 +310,8 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         if (node != NULL) {
             node->is_favorite = false;
             saveChanges(SEGMENT_NODEDATABASE, false);
-            if (screen) screen->setFrames(graphics::Screen::FOCUS_PRESERVE); // <-- Rebuild screens
+            if (screen)
+                screen->setFrames(graphics::Screen::FOCUS_PRESERVE); // <-- Rebuild screens
         }
         break;
     }
@@ -1120,7 +1122,7 @@ void AdminModule::reboot(int32_t seconds)
 {
     LOG_INFO("Reboot in %d seconds", seconds);
     if (screen)
-        screen->showOverlayBanner("Rebooting...", 0);  // stays on screen
+        screen->showOverlayBanner("Rebooting...", 0); // stays on screen
     rebootAtMsec = (seconds < 0) ? 0 : (millis() + seconds * 1000);
 }
 

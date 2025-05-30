@@ -11,16 +11,16 @@
 #include "RTC.h"
 #include "Router.h"
 #include "UnitConversions.h"
+#include "buzz.h"
+#include "graphics/SharedUIDisplay.h"
+#include "graphics/images.h"
 #include "main.h"
+#include "modules/ExternalNotificationModule.h"
 #include "power.h"
 #include "sleep.h"
 #include "target_specific.h"
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
-#include "graphics/SharedUIDisplay.h"
-#include "graphics/images.h"
-#include "buzz.h"
-#include "modules/ExternalNotificationModule.h"
 
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR_EXTERNAL
 
@@ -30,8 +30,9 @@
 #include "Sensor/RCWL9620Sensor.h"
 #include "Sensor/nullSensor.h"
 
-namespace graphics {
-    extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y);
+namespace graphics
+{
+extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y);
 }
 #if __has_include(<Adafruit_AHTX0.h>)
 #include "Sensor/AHT10.h"
@@ -358,9 +359,9 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
         display->setColor(BLACK);
 
     display->setTextAlignment(TEXT_ALIGN_CENTER);
-    display->drawString(centerX, titleY, titleStr);  // Centered title
+    display->drawString(centerX, titleY, titleStr); // Centered title
     if (config.display.heading_bold)
-        display->drawString(centerX + 1, titleY, titleStr);  // Bold effect via 1px offset
+        display->drawString(centerX + 1, titleY, titleStr); // Bold effect via 1px offset
 
     // Restore text color & alignment
     display->setColor(WHITE);
@@ -387,9 +388,8 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
     const auto &m = telemetry.variant.environment_metrics;
 
     // Check if any telemetry field has valid data
-    bool hasAny = m.has_temperature || m.has_relative_humidity || m.barometric_pressure != 0 ||
-                  m.iaq != 0 || m.voltage != 0 || m.current != 0 || m.lux != 0 ||
-                  m.white_lux != 0 || m.weight != 0 || m.distance != 0 || m.radiation != 0;
+    bool hasAny = m.has_temperature || m.has_relative_humidity || m.barometric_pressure != 0 || m.iaq != 0 || m.voltage != 0 ||
+                  m.current != 0 || m.lux != 0 || m.white_lux != 0 || m.weight != 0 || m.distance != 0 || m.radiation != 0;
 
     if (!hasAny) {
         display->drawString(x, currentY, "No Telemetry");
@@ -399,21 +399,21 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
     // === First line: Show sender name + time since received (left), and first metric (right) ===
     const char *sender = getSenderShortName(*lastMeasurementPacket);
     uint32_t agoSecs = service->GetTimeSinceMeshPacket(lastMeasurementPacket);
-    String agoStr = (agoSecs > 864000) ? "?" :
-                    (agoSecs > 3600) ? String(agoSecs / 3600) + "h" :
-                    (agoSecs > 60) ? String(agoSecs / 60) + "m" :
-                    String(agoSecs) + "s";
+    String agoStr = (agoSecs > 864000) ? "?"
+                    : (agoSecs > 3600) ? String(agoSecs / 3600) + "h"
+                    : (agoSecs > 60)   ? String(agoSecs / 60) + "m"
+                                       : String(agoSecs) + "s";
 
     String leftStr = String(sender) + " (" + agoStr + ")";
-    display->drawString(x, currentY, leftStr);  // Left side: who and when
+    display->drawString(x, currentY, leftStr); // Left side: who and when
 
     // === Collect sensor readings as label strings (no icons) ===
     std::vector<String> entries;
 
     if (m.has_temperature) {
         String tempStr = moduleConfig.telemetry.environment_display_fahrenheit
-                         ? "Tmp: " + String(UnitConversions::CelsiusToFahrenheit(m.temperature), 1) + "°F"
-                         : "Tmp: " + String(m.temperature, 1) + "°C";
+                             ? "Tmp: " + String(UnitConversions::CelsiusToFahrenheit(m.temperature), 1) + "°F"
+                             : "Tmp: " + String(m.temperature, 1) + "°C";
         entries.push_back(tempStr);
     }
     if (m.has_relative_humidity)
@@ -422,21 +422,23 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
         entries.push_back("Prss: " + String(m.barometric_pressure, 0) + " hPa");
     if (m.iaq != 0) {
         String aqi = "IAQ: " + String(m.iaq);
-        const char *bannerMsg = nullptr;  // Default: no banner
+        const char *bannerMsg = nullptr; // Default: no banner
 
-        if (m.iaq <= 25)        aqi += " (Excellent)";
-        else if (m.iaq <= 50)   aqi += " (Good)";
-        else if (m.iaq <= 100)  aqi += " (Moderate)";
-        else if (m.iaq <= 150)  aqi += " (Poor)";
+        if (m.iaq <= 25)
+            aqi += " (Excellent)";
+        else if (m.iaq <= 50)
+            aqi += " (Good)";
+        else if (m.iaq <= 100)
+            aqi += " (Moderate)";
+        else if (m.iaq <= 150)
+            aqi += " (Poor)";
         else if (m.iaq <= 200) {
             aqi += " (Unhealthy)";
             bannerMsg = "Unhealthy IAQ";
-        }
-        else if (m.iaq <= 300) {
+        } else if (m.iaq <= 300) {
             aqi += " (Very Unhealthy)";
             bannerMsg = "Very Unhealthy IAQ";
-        }
-        else {
+        } else {
             aqi += " (Hazardous)";
             bannerMsg = "Hazardous IAQ";
         }
@@ -480,7 +482,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
         String valueStr = entries.front();
         int rightX = SCREEN_WIDTH - display->getStringWidth(valueStr);
         display->drawString(rightX, currentY, valueStr);
-        entries.erase(entries.begin());  // Remove from queue
+        entries.erase(entries.begin()); // Remove from queue
     }
 
     // === Advance to next line for remaining telemetry entries ===

@@ -2,7 +2,8 @@
 
 #include <OLEDDisplay.h>
 
-namespace graphics {
+namespace graphics
+{
 
 // =======================
 // Shared UI Helpers
@@ -22,11 +23,11 @@ namespace graphics {
 #define standardFourthLine (FONT_HEIGHT_SMALL + 1) * 4
 
 // More Compact line layout
-#define moreCompactFirstLine   compactFirstLine
-#define moreCompactSecondLine  (moreCompactFirstLine + (FONT_HEIGHT_SMALL - 5))
-#define moreCompactThirdLine   (moreCompactSecondLine + (FONT_HEIGHT_SMALL - 5))
-#define moreCompactFourthLine  (moreCompactThirdLine + (FONT_HEIGHT_SMALL - 5))
-#define moreCompactFifthLine   (moreCompactFourthLine + (FONT_HEIGHT_SMALL - 5))
+#define moreCompactFirstLine compactFirstLine
+#define moreCompactSecondLine (moreCompactFirstLine + (FONT_HEIGHT_SMALL - 5))
+#define moreCompactThirdLine (moreCompactSecondLine + (FONT_HEIGHT_SMALL - 5))
+#define moreCompactFourthLine (moreCompactThirdLine + (FONT_HEIGHT_SMALL - 5))
+#define moreCompactFifthLine (moreCompactFourthLine + (FONT_HEIGHT_SMALL - 5))
 
 // Quick screen access
 #define SCREEN_WIDTH display->getWidth()

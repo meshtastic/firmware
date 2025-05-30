@@ -1,7 +1,8 @@
 #pragma once
 #include <Arduino.h>
 
-namespace graphics {
+namespace graphics
+{
 
 // === Emote List ===
 struct Emote {

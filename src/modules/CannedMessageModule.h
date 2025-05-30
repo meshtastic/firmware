@@ -57,10 +57,9 @@ struct NodeEntry {
 //      Main Class
 // ============================
 
-class CannedMessageModule : public SinglePortModule,
-                            public Observable<const UIFrameEvent *>,
-                            private concurrency::OSThread {
-public:
+class CannedMessageModule : public SinglePortModule, public Observable<const UIFrameEvent *>, private concurrency::OSThread
+{
+  public:
     CannedMessageModule();
 
     // === Message navigation ===
@@ -89,19 +88,22 @@ public:
 #endif
 
     // === Packet Interest Filter ===
-    virtual bool wantPacket(const meshtastic_MeshPacket *p) override {
-        if (p->rx_rssi != 0) lastRxRssi = p->rx_rssi;
-        if (p->rx_snr > 0) lastRxSnr = p->rx_snr;
+    virtual bool wantPacket(const meshtastic_MeshPacket *p) override
+    {
+        if (p->rx_rssi != 0)
+            lastRxRssi = p->rx_rssi;
+        if (p->rx_snr > 0)
+            lastRxSnr = p->rx_snr;
         return (p->decoded.portnum == meshtastic_PortNum_ROUTING_APP) ? waitingForAck : false;
     }
 
-protected:
+  protected:
     // === Thread Entry Point ===
     virtual int32_t runOnce() override;
 
     // === Transmission ===
     void sendText(NodeNum dest, ChannelIndex channel, const char *message, bool wantReplies);
-    void drawHeader(OLEDDisplay *display, int16_t x, int16_t y, char* buffer);
+    void drawHeader(OLEDDisplay *display, int16_t x, int16_t y, char *buffer);
     int splitConfiguredMessages();
     int getNextIndex();
     int getPrevIndex();
@@ -130,7 +132,7 @@ protected:
     bool saveProtoForModule();
     void installDefaultCannedMessageModuleConfig();
 
-private:
+  private:
     // === Input Observers ===
     CallbackObserver<CannedMessageModule, const InputEvent *> inputObserver =
         CallbackObserver<CannedMessageModule, const InputEvent *>(this, &CannedMessageModule::handleInputEvent);
@@ -155,19 +157,19 @@ private:
     int currentMessageIndex = -1;
 
     // === Routing & Acknowledgment ===
-    NodeNum dest = NODENUM_BROADCAST;                  // Destination node for outgoing messages (default: broadcast)
-    NodeNum incoming = NODENUM_BROADCAST;              // Source node from which last ACK/NACK was received
-    NodeNum lastSentNode = 0;                          // Tracks the most recent node we sent a message to (for UI display)
-    ChannelIndex channel = 0;                          // Channel index used when sending a message
+    NodeNum dest = NODENUM_BROADCAST;     // Destination node for outgoing messages (default: broadcast)
+    NodeNum incoming = NODENUM_BROADCAST; // Source node from which last ACK/NACK was received
+    NodeNum lastSentNode = 0;             // Tracks the most recent node we sent a message to (for UI display)
+    ChannelIndex channel = 0;             // Channel index used when sending a message
 
-    bool ack = false;                                  // True = ACK received, False = NACK or failed
-    bool waitingForAck = false;                        // True if we're expecting an ACK and should monitor routing packets
-    bool lastAckWasRelayed = false;                    // True if the ACK was relayed through intermediate nodes
-    uint8_t lastAckHopStart = 0;                       // Hop start value from the received ACK packet
-    uint8_t lastAckHopLimit = 0;                       // Hop limit value from the received ACK packet
+    bool ack = false;               // True = ACK received, False = NACK or failed
+    bool waitingForAck = false;     // True if we're expecting an ACK and should monitor routing packets
+    bool lastAckWasRelayed = false; // True if the ACK was relayed through intermediate nodes
+    uint8_t lastAckHopStart = 0;    // Hop start value from the received ACK packet
+    uint8_t lastAckHopLimit = 0;    // Hop limit value from the received ACK packet
 
-    float lastRxSnr = 0;                               // SNR from last received ACK (used for diagnostics/UI)
-    int32_t lastRxRssi = 0;                            // RSSI from last received ACK (used for diagnostics/UI)
+    float lastRxSnr = 0;    // SNR from last received ACK (used for diagnostics/UI)
+    int32_t lastRxRssi = 0; // RSSI from last received ACK (used for diagnostics/UI)
 
     // === State Tracking ===
     cannedMessageModuleRunState runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;

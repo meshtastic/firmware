@@ -1228,7 +1228,7 @@ void setup()
         LOG_WARN("LoRa chip does not support 2.4GHz. Revert to unset");
         config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
         nodeDB->saveToDisk(SEGMENT_CONFIG);
-    
+
         if (!rIf->reconfigure()) {
             LOG_WARN("Reconfigure failed, rebooting");
             screen->startAlert("Rebooting...");
