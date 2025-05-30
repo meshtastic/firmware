@@ -2420,7 +2420,7 @@ void drawEntryLastHeard(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
-    display->drawString(x + ((SCREEN_WIDTH > 128) ? 6 : 2), y, nodeName);
+    display->drawString(x + ((SCREEN_WIDTH > 128) ? 6 : 3), y, nodeName);
     if (node->is_favorite) {
         if (SCREEN_WIDTH > 128) {
             drawScaledXBitmap16x16(x, y + 6, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint, display);
@@ -2444,8 +2444,8 @@ void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
     int nameMaxWidth = columnWidth - 25;
     int barsOffset = (SCREEN_WIDTH > 128) ? (isLeftCol ? 16 : 20)  // Offset for Wide Screens (Left Column:Right Column)
                                           : (isLeftCol ? 15 : 19); // Offset for Narrow Screens (Left Column:Right Column)
-    int hopOffset = (SCREEN_WIDTH > 128) ? (isLeftCol ? 22 : 28)   // Offset for Wide Screens (Left Column:Right Column)
-                                         : (isLeftCol ? 18 : 20);  // Offset for Narrow Screens (Left Column:Right Column)
+    int hopOffset = (SCREEN_WIDTH > 128) ? (isLeftCol ? 17 : 25)   // Offset for Wide Screens (Left Column:Right Column)
+                                         : (isLeftCol ? 13 : 17);  // Offset for Narrow Screens (Left Column:Right Column)
     int barsXOffset = columnWidth - barsOffset;
 
     String nodeName = getSafeNodeName(node);
@@ -2453,7 +2453,7 @@ void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
 
-    display->drawStringMaxWidth(x + ((SCREEN_WIDTH > 128) ? 6 : 2), y, nameMaxWidth, nodeName);
+    display->drawStringMaxWidth(x + ((SCREEN_WIDTH > 128) ? 6 : 3), y, nameMaxWidth, nodeName);
     if (node->is_favorite) {
         if (SCREEN_WIDTH > 128) {
             drawScaledXBitmap16x16(x, y + 6, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint, display);
@@ -2475,7 +2475,7 @@ void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
     int bars = (node->snr > 5) ? 4 : (node->snr > 0) ? 3 : (node->snr > -5) ? 2 : (node->snr > -10) ? 1 : 0;
     int barWidth = 2;
     int barStartX = x + barsXOffset;
-    int barStartY = y + (FONT_HEIGHT_SMALL / 2) + 2;
+    int barStartY = y + 1 + (FONT_HEIGHT_SMALL / 2) + 2;
 
     for (int b = 0; b < 4; b++) {
         if (b < bars) {
@@ -2546,7 +2546,7 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
-    display->drawStringMaxWidth(x + ((SCREEN_WIDTH > 128) ? 6 : 2), y, nameMaxWidth, nodeName);
+    display->drawStringMaxWidth(x + ((SCREEN_WIDTH > 128) ? 6 : 3), y, nameMaxWidth, nodeName);
     if (node->is_favorite) {
         if (SCREEN_WIDTH > 128) {
             drawScaledXBitmap16x16(x, y + 6, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint, display);
@@ -2677,7 +2677,7 @@ void drawEntryCompass(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
-    display->drawStringMaxWidth(x + ((SCREEN_WIDTH > 128) ? 6 : 2), y, nameMaxWidth, nodeName);
+    display->drawStringMaxWidth(x + ((SCREEN_WIDTH > 128) ? 6 : 3), y, nameMaxWidth, nodeName);
     if (node->is_favorite) {
         if (SCREEN_WIDTH > 128) {
             drawScaledXBitmap16x16(x, y + 6, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint, display);
