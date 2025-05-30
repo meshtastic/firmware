@@ -99,8 +99,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 // OLED & Input
 // -----------------------------------------------------------------------------
-
+#if defined(SEEED_WIO_TRACKER_L1)
+#define SSD1306_ADDRESS 0x3D
+#define USE_SH1106
+#else
 #define SSD1306_ADDRESS 0x3C
+#endif
 #define ST7567_ADDRESS 0x3F
 
 // The SH1106 controller is almost, but not quite, the same as SSD1306
