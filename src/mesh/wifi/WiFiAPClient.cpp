@@ -506,4 +506,4 @@ uint8_t getWifiDisconnectReason()
 {
     return wifiDisconnectReason;
 }
-#endif
+
