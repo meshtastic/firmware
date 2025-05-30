@@ -111,9 +111,10 @@ void InkHUD::LogoApplet::onShutdown()
 
     // Prepare for the powered-off screen now
     // We can change these values because the initial "shutting down" screen has already rendered at this point
+    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     textLeft = "";
     textRight = "";
-    textTitle = owner.short_name;
+    textTitle = parseShortName(ourNode);
     fontTitle = fontLarge;
 
     // This is then drawn by InkHUD::Events::onShutdown, with a blocking FULL update, after InkHUD's flash write is complete
