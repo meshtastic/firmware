@@ -14,12 +14,17 @@
 #include "power.h"
 #include "sleep.h"
 #include "target_specific.h"
+#include "graphics/SharedUIDisplay.h"
 
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
 
 #include "graphics/ScreenFonts.h"
 #include <Throttle.h>
+
+namespace graphics {
+    extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y);
+}
 
 int32_t PowerTelemetryModule::runOnce()
 {
@@ -103,13 +108,33 @@ bool PowerTelemetryModule::wantUIFrame()
 
 void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+    display->clear();
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
 
+    graphics::drawCommonHeader(display, x, y);  // Shared UI header
+
+    // === Draw title (aligned with header baseline) ===
+    const int highlightHeight = FONT_HEIGHT_SMALL - 1;
+    const int textY = y + 1 + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
+    const char *titleStr = (SCREEN_WIDTH > 128) ? "Power Telem." : "Power";
+    const int centerX = x + SCREEN_WIDTH / 2;
+
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
+        display->setColor(BLACK);
+    }
+
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->drawString(centerX, textY, titleStr);
+    if (config.display.heading_bold) {
+        display->drawString(centerX + 1, textY, titleStr);
+    }
+    display->setColor(WHITE);
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+
     if (lastMeasurementPacket == nullptr) {
-        // In case of  no valid packet, display "Power Telemetry", "No measurement"
-        display->drawString(x, y, "Power Telemetry");
-        display->drawString(x, y += _fontHeight(FONT_SMALL), "No measurement");
+        // In case of no valid packet, display "Power Telemetry", "No measurement"
+        display->drawString(x, compactFirstLine, "No measurement");
         return;
     }
 
@@ -120,29 +145,31 @@ void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *s
 
     const meshtastic_Data &p = lastMeasurementPacket->decoded;
     if (!pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Telemetry_msg, &lastMeasurement)) {
-        display->drawString(x, y, "Measurement Error");
+        display->drawString(x, compactFirstLine, "Measurement Error");
         LOG_ERROR("Unable to decode last packet");
         return;
     }
 
     // Display "Pow. From: ..."
-    display->drawString(x, y, "Pow. From: " + String(lastSender) + "(" + String(agoSecs) + "s)");
+    display->drawString(x, compactFirstLine, "Pow. From: " + String(lastSender) + " (" + String(agoSecs) + "s)");
 
     // Display current and voltage based on ...power_metrics.has_[channel/voltage/current]... flags
-    if (lastMeasurement.variant.power_metrics.has_ch1_voltage || lastMeasurement.variant.power_metrics.has_ch1_current) {
-        display->drawString(x, y += _fontHeight(FONT_SMALL),
-                            "Ch1: " + String(lastMeasurement.variant.power_metrics.ch1_voltage, 2) + "V " +
-                                String(lastMeasurement.variant.power_metrics.ch1_current, 0) + "mA");
+    const auto &m = lastMeasurement.variant.power_metrics;
+    int lineY = compactSecondLine;
+
+    auto drawLine = [&](const char *label, float voltage, float current) {
+        display->drawString(x, lineY, String(label) + ": " + String(voltage, 2) + "V " + String(current, 0) + "mA");
+        lineY += _fontHeight(FONT_SMALL);
+    };
+
+    if (m.has_ch1_voltage || m.has_ch1_current) {
+        drawLine("Ch1", m.ch1_voltage, m.ch1_current);
     }
-    if (lastMeasurement.variant.power_metrics.has_ch2_voltage || lastMeasurement.variant.power_metrics.has_ch2_current) {
-        display->drawString(x, y += _fontHeight(FONT_SMALL),
-                            "Ch2: " + String(lastMeasurement.variant.power_metrics.ch2_voltage, 2) + "V " +
-                                String(lastMeasurement.variant.power_metrics.ch2_current, 0) + "mA");
+    if (m.has_ch2_voltage || m.has_ch2_current) {
+        drawLine("Ch2", m.ch2_voltage, m.ch2_current);
     }
-    if (lastMeasurement.variant.power_metrics.has_ch3_voltage || lastMeasurement.variant.power_metrics.has_ch3_current) {
-        display->drawString(x, y += _fontHeight(FONT_SMALL),
-                            "Ch3: " + String(lastMeasurement.variant.power_metrics.ch3_voltage, 2) + "V " +
-                                String(lastMeasurement.variant.power_metrics.ch3_current, 0) + "mA");
+    if (m.has_ch3_voltage || m.has_ch3_current) {
+        drawLine("Ch3", m.ch3_voltage, m.ch3_current);
     }
 }
 

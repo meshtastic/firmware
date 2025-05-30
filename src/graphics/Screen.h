@@ -90,7 +90,7 @@ class Screen
 
 /// Convert an integer GPS coords to a floating point
 #define DegD(i) (i * 1e-7)
-
+extern bool hasUnreadMessage;
 namespace
 {
 /// A basic 2D point class for drawing
@@ -181,9 +181,23 @@ class Screen : public concurrency::OSThread
 
   public:
     explicit Screen(ScanI2C::DeviceAddress, meshtastic_Config_DisplayConfig_OledType, OLEDDISPLAY_GEOMETRY);
-
+    size_t frameCount = 0; // Total number of active frames
     ~Screen();
 
+    // Which frame we want to be displayed, after we regen the frameset by calling setFrames
+    enum FrameFocus : uint8_t {
+        FOCUS_DEFAULT,  // No specific frame
+        FOCUS_PRESERVE, // Return to the previous frame
+        FOCUS_FAULT,
+        FOCUS_TEXTMESSAGE,
+        FOCUS_MODULE, // Note: target module should call requestFocus(), otherwise no info about which module to focus
+    };
+
+    // Regenerate the normal set of frames, focusing a specific frame if requested
+    // Call when a frame should be added / removed, or custom frames should be cleared
+    void setFrames(FrameFocus focus = FOCUS_DEFAULT);
+
+    std::vector<const uint8_t *> indicatorIcons; // Per-frame custom icon pointers
     Screen(const Screen &) = delete;
     Screen &operator=(const Screen &) = delete;
 
@@ -260,6 +274,8 @@ class Screen : public concurrency::OSThread
         enqueueCmd(cmd);
     }
 
+    void showOverlayBanner(const String &message, uint32_t durationMs = 3000);
+    
     void startFirmwareUpdateScreen()
     {
         ScreenCmd cmd;
@@ -600,30 +616,26 @@ class Screen : public concurrency::OSThread
     // - Used to dismiss the currently shown frame (txt; waypoint) by CardKB combo
     struct FramesetInfo {
         struct FramePositions {
-            uint8_t fault = 0;
-            uint8_t textMessage = 0;
-            uint8_t waypoint = 0;
-            uint8_t focusedModule = 0;
-            uint8_t log = 0;
-            uint8_t settings = 0;
-            uint8_t wifi = 0;
+            uint8_t fault = 255;
+            uint8_t textMessage = 255;
+            uint8_t waypoint = 255;
+            uint8_t focusedModule = 255;
+            uint8_t log = 255;
+            uint8_t settings = 255;
+            uint8_t wifi = 255;
+            uint8_t deviceFocused = 255;
+            uint8_t memory = 255;
         } positions;
 
         uint8_t frameCount = 0;
     } framesetInfo;
 
-    // Which frame we want to be displayed, after we regen the frameset by calling setFrames
-    enum FrameFocus : uint8_t {
-        FOCUS_DEFAULT,  // No specific frame
-        FOCUS_PRESERVE, // Return to the previous frame
-        FOCUS_FAULT,
-        FOCUS_TEXTMESSAGE,
-        FOCUS_MODULE, // Note: target module should call requestFocus(), otherwise no info about which module to focus
-    };
-
-    // Regenerate the normal set of frames, focusing a specific frame if requested
-    // Call when a frame should be added / removed, or custom frames should be cleared
-    void setFrames(FrameFocus focus = FOCUS_DEFAULT);
+    struct DismissedFrames {
+        bool textMessage = false;
+        bool waypoint = false;
+        bool wifi = false;
+        bool memory = false;
+    } dismissedFrames;
 
     /// Try to start drawing ASAP
     void setFastFramerate();
@@ -690,5 +702,8 @@ class Screen : public concurrency::OSThread
 };
 
 } // namespace graphics
+
+extern String alertBannerMessage;
+extern uint32_t alertBannerUntil;
 
 #endif

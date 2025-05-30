@@ -10,8 +10,9 @@
 #include "buzz.h"
 #include "main.h"
 #include "modules/ExternalNotificationModule.h"
+#include "modules/CannedMessageModule.h"
 #include "power.h"
-#include "sleep.h"
+#include "sleep.h"  
 #ifdef ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
 #endif
@@ -26,6 +27,7 @@
 using namespace concurrency;
 
 ButtonThread *buttonThread; // Declared extern in header
+extern CannedMessageModule* cannedMessageModule;
 volatile ButtonThread::ButtonEventType ButtonThread::btnEvent = ButtonThread::BUTTON_EVENT_NONE;
 
 #if defined(BUTTON_PIN) || defined(ARCH_PORTDUINO) || defined(USERPREFS_BUTTON_PIN)
@@ -118,6 +120,17 @@ ButtonThread::ButtonThread() : OSThread("Button")
 
 void ButtonThread::switchPage()
 {
+    // Prevent screen switch if CannedMessageModule is focused and intercepting input
+#if HAS_SCREEN
+    extern CannedMessageModule* cannedMessageModule;
+
+    if (cannedMessageModule && cannedMessageModule->isInterceptingAndFocused()) {
+        LOG_DEBUG("User button ignored during canned message input");
+        return; // Skip screen change
+    }
+#endif
+
+    // Default behavior if not blocked
 #ifdef BUTTON_PIN
 #if !defined(USERPREFS_BUTTON_PIN)
     if (((config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN) !=
@@ -135,8 +148,8 @@ void ButtonThread::switchPage()
         powerFSM.trigger(EVENT_PRESS);
     }
 #endif
-
 #endif
+
 #if defined(ARCH_PORTDUINO)
     if ((settingsMap.count(user) != 0 && settingsMap[user] != RADIOLIB_NC) &&
             (settingsMap[user] != moduleConfig.canned_message.inputbroker_pin_press) ||
@@ -219,11 +232,17 @@ int32_t ButtonThread::runOnce()
 
         case BUTTON_EVENT_DOUBLE_PRESSED: {
             LOG_BUTTON("Double press!");
-#ifdef ELECROW_ThinkNode_M1
+        
+        #ifdef ELECROW_ThinkNode_M1
             digitalWrite(PIN_EINK_EN, digitalRead(PIN_EINK_EN) == LOW);
             break;
-#endif
+        #endif
+        
+            // Send GPS position immediately
             sendAdHocPosition();
+        
+            // Show temporary on-screen confirmation banner for 3 seconds
+            screen->showOverlayBanner("Ad-hoc Ping Sent", 3000);
             break;
         }
 
@@ -231,14 +250,21 @@ int32_t ButtonThread::runOnce()
             LOG_BUTTON("Mulitipress! %hux", multipressClickCount);
             switch (multipressClickCount) {
 #if HAS_GPS && !defined(ELECROW_ThinkNode_M1)
-            // 3 clicks: toggle GPS
-            case 3:
-                if (!config.device.disable_triple_click && (gps != nullptr)) {
-                    gps->toggleGpsMode();
-                    if (screen)
-                        screen->forceDisplay(true); // Force a new UI frame, then force an EInk update
+        // 3 clicks: toggle GPS
+        case 3:
+            if (!config.device.disable_triple_click && (gps != nullptr)) {
+                gps->toggleGpsMode();
+
+                const char* statusMsg = (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED)
+                    ? "GPS Enabled"
+                    : "GPS Disabled";
+
+                if (screen) {
+                    screen->forceDisplay(true); // Force a new UI frame, then force an EInk update
+                    screen->showOverlayBanner(statusMsg, 3000);
                 }
-                break;
+            }
+            break;
 #elif defined(ELECROW_ThinkNode_M1) || defined(ELECROW_ThinkNode_M2)
             case 3:
                 LOG_INFO("3 clicks: toggle buzzer");
@@ -280,9 +306,12 @@ int32_t ButtonThread::runOnce()
         case BUTTON_EVENT_LONG_PRESSED: {
             LOG_BUTTON("Long press!");
             powerFSM.trigger(EVENT_PRESS);
+        
             if (screen) {
-                screen->startAlert("Shutting down...");
+                // Show shutdown message as a temporary overlay banner
+                screen->showOverlayBanner("Shutting Down...");  // Display for 3 seconds
             }
+        
             playBeep();
             break;
         }
@@ -294,6 +323,7 @@ int32_t ButtonThread::runOnce()
             playShutdownMelody();
             delay(3000);
             power->shutdown();
+            nodeDB->saveToDisk();
             break;
         }
 

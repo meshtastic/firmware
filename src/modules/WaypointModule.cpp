@@ -89,7 +89,7 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
 
     // Handle inverted display
     // Unsure of expected behavior: for now, copy drawNodeInfo
-    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED)
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED)
         display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
 
     // Decode the waypoint
@@ -184,7 +184,7 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
 
     // Undo color-inversion, if set prior to drawing header
     // Unsure of expected behavior? For now: copy drawNodeInfo
-    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
         display->setColor(BLACK);
     }
 
