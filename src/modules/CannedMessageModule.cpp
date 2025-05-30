@@ -82,7 +82,6 @@ bool hasKeyForNode(const meshtastic_NodeInfoLite* node) {
 
 int CannedMessageModule::splitConfiguredMessages()
 {
-    int messageIndex = 0;
     int i = 0;
 
     String canned_messages = cannedMessageModuleConfig.messages;
@@ -272,17 +271,47 @@ int CannedMessageModule::handleInputEvent(const InputEvent* event) {
 
         // If sending, block all input except global/system (handled above)
         case CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE:
-            return 1; // Swallow all
+            return 1;
 
-        // If inactive: allow select to advance frame, or char to open free text input
         case CANNED_MESSAGE_RUN_STATE_INACTIVE:
             if (isSelect) {
-                // Remap select to right (frame advance), let screen navigation handle it
-                const_cast<InputEvent*>(event)->inputEvent = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT);
-                const_cast<InputEvent*>(event)->kbchar = INPUT_BROKER_MSG_RIGHT;
-                return 0;
+                // When inactive, call the onebutton shortpress instead. Activate module only on up/down
+                powerFSM.trigger(EVENT_PRESS);
+                return 1; // Let caller know we handled it
             }
-            // Printable char (ASCII) opens free text compose; then let the handler process the event
+            // Let LEFT/RIGHT pass through so frame navigation works
+            if (
+                event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT) ||
+                event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT)
+            ) {
+                break;
+            }
+            // Handle UP/DOWN: activate canned message list!
+            if (
+                event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP) ||
+                event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN)
+            ) {
+                // Always select the first real canned message on activation
+                int firstRealMsgIdx = 0;
+                for (int i = 0; i < messagesCount; ++i) {
+                    if (strcmp(messages[i], "[Select Destination]") != 0 &&
+                        strcmp(messages[i], "[Exit]") != 0 &&
+                        strcmp(messages[i], "[---- Free Text ----]") != 0) {
+                        firstRealMsgIdx = i;
+                        break;
+                    }
+                }
+                currentMessageIndex = firstRealMsgIdx;
+
+                // This triggers the canned message list
+                runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
+                requestFocus();
+                UIFrameEvent e;
+                e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+                notifyObservers(&e);
+                return 1;
+            }
+            // Printable char (ASCII) opens free text compose
             if (event->kbchar >= 32 && event->kbchar <= 126) {
                 runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
                 requestFocus();
@@ -349,8 +378,11 @@ bool CannedMessageModule::handleTabSwitch(const InputEvent* event) {
 int CannedMessageModule::handleDestinationSelectionInput(const InputEvent* event, bool isUp, bool isDown, bool isSelect) {
     static bool shouldRedraw = false;
 
-    // Handle character input for search
-        if (event->kbchar >= 32 && event->kbchar <= 126) {
+    if (event->kbchar >= 32 && event->kbchar <= 126 &&
+        !isUp && !isDown && 
+        event->inputEvent != static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT) &&
+        event->inputEvent != static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT) &&
+        event->inputEvent != static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT)) {
         this->searchQuery += event->kbchar;
         needsUpdate = true;
         runOnce(); // update filter immediately
@@ -600,7 +632,7 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent* event) {
         (int)runState, dest, channel, freetext.c_str());
         if (dest == 0) dest = NODENUM_BROADCAST;
         // Defensive: If channel isn't valid, pick the first available channel
-        if (channel < 0 || channel >= channels.getNumChannels()) channel = 0;
+        if (channel >= channels.getNumChannels()) channel = 0;
 
         payload = CANNED_MESSAGE_RUN_STATE_FREETEXT;
         currentMessageIndex = -1;
@@ -613,6 +645,21 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent* event) {
     // Backspace
     if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_BACK)) {
         payload = 0x08;
+        lastTouchMillis = millis();
+        runOnce();
+        return true;
+    }
+
+    // Move cursor left
+    if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {
+        payload = INPUT_BROKER_MSG_LEFT;
+        lastTouchMillis = millis();
+        runOnce();
+        return true;
+    }
+    // Move cursor right
+    if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT)) {
+        payload = INPUT_BROKER_MSG_RIGHT;
         lastTouchMillis = millis();
         runOnce();
         return true;
@@ -865,11 +912,7 @@ int32_t CannedMessageModule::runOnce()
                     powerFSM.trigger(EVENT_PRESS);
                     return INT32_MAX;
                 } else {
-#if defined(USE_VIRTUAL_KEYBOARD)
-                    sendText(this->dest, indexChannels[this->channel], this->messages[this->currentMessageIndex], true);
-#else
                     sendText(this->dest, this->channel, this->messages[this->currentMessageIndex], true);
-#endif
                 }
                 this->runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
             } else {
@@ -888,9 +931,20 @@ int32_t CannedMessageModule::runOnce()
 
         this->notifyObservers(&e);
         return 2000;
-    } else if ((this->runState != CANNED_MESSAGE_RUN_STATE_FREETEXT) && (this->currentMessageIndex == -1)) {
-        this->currentMessageIndex = 0;
-        LOG_DEBUG("First touch (%d):%s", this->currentMessageIndex, this->getCurrentMessage());
+    }
+    // === Always highlight the first real canned message when entering the message list ===
+    else if ((this->runState != CANNED_MESSAGE_RUN_STATE_FREETEXT) && (this->currentMessageIndex == -1)) {
+        // Find first actual canned message (not a special action entry)
+        int firstRealMsgIdx = 0;
+        for (int i = 0; i < this->messagesCount; ++i) {
+            if (strcmp(this->messages[i], "[Select Destination]") != 0 &&
+                strcmp(this->messages[i], "[Exit]") != 0 &&
+                strcmp(this->messages[i], "[---- Free Text ----]") != 0) {
+                firstRealMsgIdx = i;
+                break;
+            }
+        }
+        this->currentMessageIndex = firstRealMsgIdx;
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
         this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_UP) {
@@ -922,73 +976,15 @@ int32_t CannedMessageModule::runOnce()
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT || this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) {
         switch (this->payload) {
         case INPUT_BROKER_MSG_LEFT:
-            if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NODE) {
-                size_t numMeshNodes = nodeDB->getNumMeshNodes();
-                if (this->dest == NODENUM_BROADCAST) {
-                    this->dest = nodeDB->getNodeNum();
-                }
-                for (unsigned int i = 0; i < numMeshNodes; i++) {
-                    if (nodeDB->getMeshNodeByIndex(i)->num == this->dest) {
-                        this->dest =
-                            (i > 0) ? nodeDB->getMeshNodeByIndex(i - 1)->num : nodeDB->getMeshNodeByIndex(numMeshNodes - 1)->num;
-                        break;
-                    }
-                }
-                if (this->dest == nodeDB->getNodeNum()) {
-                    this->dest = NODENUM_BROADCAST;
-                }
-            } else if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_CHANNEL) {
-                for (unsigned int i = 0; i < channels.getNumChannels(); i++) {
-                    if ((channels.getByIndex(i).role == meshtastic_Channel_Role_SECONDARY) ||
-                        (channels.getByIndex(i).role == meshtastic_Channel_Role_PRIMARY)) {
-                        indexChannels[numChannels] = i;
-                        numChannels++;
-                    }
-                }
-                if (this->channel == 0) {
-                    this->channel = numChannels - 1;
-                } else {
-                    this->channel--;
-                }
-            } else {
-                if (this->cursor > 0) {
-                    this->cursor--;
-                }
+            // Only handle cursor movement in freetext
+            if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT && this->cursor > 0) {
+                this->cursor--;
             }
             break;
         case INPUT_BROKER_MSG_RIGHT:
-            if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NODE) {
-                size_t numMeshNodes = nodeDB->getNumMeshNodes();
-                if (this->dest == NODENUM_BROADCAST) {
-                    this->dest = nodeDB->getNodeNum();
-                }
-                for (unsigned int i = 0; i < numMeshNodes; i++) {
-                    if (nodeDB->getMeshNodeByIndex(i)->num == this->dest) {
-                        this->dest =
-                            (i < numMeshNodes - 1) ? nodeDB->getMeshNodeByIndex(i + 1)->num : nodeDB->getMeshNodeByIndex(0)->num;
-                        break;
-                    }
-                }
-                if (this->dest == nodeDB->getNodeNum()) {
-                    this->dest = NODENUM_BROADCAST;
-                }
-            } else if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_CHANNEL) {
-                for (unsigned int i = 0; i < channels.getNumChannels(); i++) {
-                    if ((channels.getByIndex(i).role == meshtastic_Channel_Role_SECONDARY) ||
-                        (channels.getByIndex(i).role == meshtastic_Channel_Role_PRIMARY)) {
-                        indexChannels[numChannels] = i;
-                        numChannels++;
-                    }
-                }
-                if (this->channel == numChannels - 1) {
-                    this->channel = 0;
-                } else {
-                    this->channel++;
-                }
-            } else {
-                if (this->cursor < this->freetext.length()) {
-                    this->cursor++;
-                }
+            // Only handle cursor movement in freetext
+            if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT && this->cursor < this->freetext.length()) {
+                this->cursor++;
             }
             break;
         default:
