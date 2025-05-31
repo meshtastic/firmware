@@ -20,11 +20,16 @@
 #endif
 
 #define SX126X_POWER_EN (4)
+
+#define PIN_POWER_EN PIN_3V3_EN
 #define PIN_3V3_EN (2)
 
 #define LED_CONN PIN_LED2
 #define LED_PIN LED_BUILTIN
 #define ledOff(pin) pinMode(pin, INPUT)
 
-
 #define LED_STATE_ON 1 // State when LED is litted
+
+#define HAS_GPS 1
+#define GPS_TX_PIN 33
+#define GPS_RX_PIN 34
