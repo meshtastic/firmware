@@ -1,13 +1,22 @@
 #include "UIRenderer.h"
+#include "../Screen.h"
 #include "GPSStatus.h"
 #include "configuration.h"
 #include "gps/GeoCoord.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/images.h"
+#include "main.h"
+#include "target_specific.h"
 #include <OLEDDisplay.h>
 
 #if !MESHTASTIC_EXCLUDE_GPS
+
+// External variables
+extern graphics::Screen *screen;
+extern "C" {
+extern char ourId[5];
+}
 
 namespace graphics
 {
@@ -183,6 +192,475 @@ void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const meshta
     }
 }
 
+// Draw nodes status
+void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::NodeStatus *nodeStatus, int node_offset,
+               bool show_total, String additional_words)
+{
+    char usersString[20];
+    int nodes_online = (nodeStatus->getNumOnline() > 0) ? nodeStatus->getNumOnline() + node_offset : 0;
+
+    snprintf(usersString, sizeof(usersString), "%d", nodes_online);
+
+    if (show_total) {
+        int nodes_total = (nodeStatus->getNumTotal() > 0) ? nodeStatus->getNumTotal() + node_offset : 0;
+        snprintf(usersString, sizeof(usersString), "%d/%d", nodes_online, nodes_total);
+    }
+
+#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) ||      \
+     defined(ST7789_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(HX8357_CS)) &&                                  \
+    !defined(DISPLAY_FORCE_SMALL_FONTS)
+    display->drawFastImage(x, y + 3, 8, 8, imgUser);
+#else
+    display->drawFastImage(x, y + 1, 8, 8, imgUser);
+#endif
+    display->drawString(x + 10, y - 2, usersString);
+    int string_offset = (SCREEN_WIDTH > 128) ? 2 : 1;
+    if (additional_words != "") {
+        display->drawString(x + 10 + display->getStringWidth(usersString) + string_offset, y - 2, additional_words);
+        if (config.display.heading_bold)
+            display->drawString(x + 11 + display->getStringWidth(usersString) + string_offset, y - 2, additional_words);
+    }
+}
+
+// **********************
+// * Favorite Node Info *
+// **********************
+void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    // --- Cache favorite nodes for the current frame only, to save computation ---
+    static std::vector<meshtastic_NodeInfoLite *> favoritedNodes;
+    static int prevFrame = -1;
+
+    // --- Only rebuild favorites list if we're on a new frame ---
+    if (state->currentFrame != prevFrame) {
+        prevFrame = state->currentFrame;
+        favoritedNodes.clear();
+        size_t total = nodeDB->getNumMeshNodes();
+        for (size_t i = 0; i < total; i++) {
+            meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(i);
+            // Skip nulls and ourself
+            if (!n || n->num == nodeDB->getNodeNum())
+                continue;
+            if (n->is_favorite)
+                favoritedNodes.push_back(n);
+        }
+        // Keep a stable, consistent display order
+        std::sort(favoritedNodes.begin(), favoritedNodes.end(),
+                  [](meshtastic_NodeInfoLite *a, meshtastic_NodeInfoLite *b) { return a->num < b->num; });
+    }
+    if (favoritedNodes.empty())
+        return;
+
+    // --- Only display if index is valid ---
+    int nodeIndex = state->currentFrame - (screen->frameCount - favoritedNodes.size());
+    if (nodeIndex < 0 || nodeIndex >= (int)favoritedNodes.size())
+        return;
+
+    meshtastic_NodeInfoLite *node = favoritedNodes[nodeIndex];
+    if (!node || node->num == nodeDB->getNodeNum() || !node->is_favorite)
+        return;
+
+    display->clear();
+
+    // === Draw battery/time/mail header (common across screens) ===
+    graphics::drawCommonHeader(display, x, y);
+
+    // === Draw the short node name centered at the top, with bold shadow if set ===
+    const int highlightHeight = FONT_HEIGHT_SMALL - 1;
+    const int textY = y + 1 + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
+    const int centerX = x + SCREEN_WIDTH / 2;
+    const char *shortName = (node->has_user && haveGlyphs(node->user.short_name)) ? node->user.short_name : "Node";
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED)
+        display->setColor(BLACK);
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->setFont(FONT_SMALL);
+    display->drawString(centerX, textY, shortName);
+    if (config.display.heading_bold)
+        display->drawString(centerX + 1, textY, shortName);
+
+    display->setColor(WHITE);
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
+
+    // ===== DYNAMIC ROW STACKING WITH YOUR MACROS =====
+    // 1. Each potential info row has a macro-defined Y position (not regular increments!).
+    // 2. Each row is only shown if it has valid data.
+    // 3. Each row "moves up" if previous are empty, so there are never any blank rows.
+    // 4. The first line is ALWAYS at your macro position; subsequent lines use the next available macro slot.
+
+    // List of available macro Y positions in order, from top to bottom.
+    const int yPositions[5] = {moreCompactFirstLine, moreCompactSecondLine, moreCompactThirdLine, moreCompactFourthLine,
+                               moreCompactFifthLine};
+    int line = 0; // which slot to use next
+
+    // === 1. Long Name (always try to show first) ===
+    const char *username = (node->has_user && node->user.long_name[0]) ? node->user.long_name : nullptr;
+    if (username && line < 5) {
+        // Print node's long name (e.g. "Backpack Node")
+        display->drawString(x, yPositions[line++], username);
+    }
+
+    // === 2. Signal and Hops (combined on one line, if available) ===
+    // If both are present: "Sig: 97%  [2hops]"
+    // If only one: show only that one
+    char signalHopsStr[32] = "";
+    bool haveSignal = false;
+    int percentSignal = clamp((int)((node->snr + 10) * 5), 0, 100);
+
+    // Always use "Sig" for the label
+    const char *signalLabel = " Sig";
+
+    // --- Build the Signal/Hops line ---
+    // If SNR looks reasonable, show signal
+    if ((int)((node->snr + 10) * 5) >= 0 && node->snr > -100) {
+        snprintf(signalHopsStr, sizeof(signalHopsStr), "%s: %d%%", signalLabel, percentSignal);
+        haveSignal = true;
+    }
+    // If hops is valid (>0), show right after signal
+    if (node->hops_away > 0) {
+        size_t len = strlen(signalHopsStr);
+        // Decide between "1 Hop" and "N Hops"
+        if (haveSignal) {
+            snprintf(signalHopsStr + len, sizeof(signalHopsStr) - len, " [%d %s]", node->hops_away,
+                     (node->hops_away == 1 ? "Hop" : "Hops"));
+        } else {
+            snprintf(signalHopsStr, sizeof(signalHopsStr), "[%d %s]", node->hops_away, (node->hops_away == 1 ? "Hop" : "Hops"));
+        }
+    }
+    if (signalHopsStr[0] && line < 5) {
+        display->drawString(x, yPositions[line++], signalHopsStr);
+    }
+
+    // === 3. Heard (last seen, skip if node never seen) ===
+    char seenStr[20] = "";
+    uint32_t seconds = sinceLastSeen(node);
+    if (seconds != 0 && seconds != UINT32_MAX) {
+        uint32_t minutes = seconds / 60, hours = minutes / 60, days = hours / 24;
+        // Format as "Heard: Xm ago", "Heard: Xh ago", or "Heard: Xd ago"
+        snprintf(seenStr, sizeof(seenStr), (days > 365 ? " Heard: ?" : " Heard: %d%c ago"),
+                 (days    ? days
+                  : hours ? hours
+                          : minutes),
+                 (days    ? 'd'
+                  : hours ? 'h'
+                          : 'm'));
+    }
+    if (seenStr[0] && line < 5) {
+        display->drawString(x, yPositions[line++], seenStr);
+    }
+
+    // === 4. Uptime (only show if metric is present) ===
+    char uptimeStr[32] = "";
+    if (node->has_device_metrics && node->device_metrics.has_uptime_seconds) {
+        uint32_t uptime = node->device_metrics.uptime_seconds;
+        uint32_t days = uptime / 86400;
+        uint32_t hours = (uptime % 86400) / 3600;
+        uint32_t mins = (uptime % 3600) / 60;
+        // Show as "Up: 2d 3h", "Up: 5h 14m", or "Up: 37m"
+        if (days)
+            snprintf(uptimeStr, sizeof(uptimeStr), " Uptime: %ud %uh", days, hours);
+        else if (hours)
+            snprintf(uptimeStr, sizeof(uptimeStr), " Uptime: %uh %um", hours, mins);
+        else
+            snprintf(uptimeStr, sizeof(uptimeStr), " Uptime: %um", mins);
+    }
+    if (uptimeStr[0] && line < 5) {
+        display->drawString(x, yPositions[line++], uptimeStr);
+    }
+
+    // === 5. Distance (only if both nodes have GPS position) ===
+    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    char distStr[24] = ""; // Make buffer big enough for any string
+    bool haveDistance = false;
+
+    if (nodeDB->hasValidPosition(ourNode) && nodeDB->hasValidPosition(node)) {
+        double lat1 = ourNode->position.latitude_i * 1e-7;
+        double lon1 = ourNode->position.longitude_i * 1e-7;
+        double lat2 = node->position.latitude_i * 1e-7;
+        double lon2 = node->position.longitude_i * 1e-7;
+        double earthRadiusKm = 6371.0;
+        double dLat = (lat2 - lat1) * DEG_TO_RAD;
+        double dLon = (lon2 - lon1) * DEG_TO_RAD;
+        double a =
+            sin(dLat / 2) * sin(dLat / 2) + cos(lat1 * DEG_TO_RAD) * cos(lat2 * DEG_TO_RAD) * sin(dLon / 2) * sin(dLon / 2);
+        double c = 2 * atan2(sqrt(a), sqrt(1 - a));
+        double distanceKm = earthRadiusKm * c;
+
+        if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
+            double miles = distanceKm * 0.621371;
+            if (miles < 0.1) {
+                int feet = (int)(miles * 5280);
+                if (feet > 0 && feet < 1000) {
+                    snprintf(distStr, sizeof(distStr), " Distance: %dft", feet);
+                    haveDistance = true;
+                } else if (feet >= 1000) {
+                    snprintf(distStr, sizeof(distStr), " Distance: ¼mi");
+                    haveDistance = true;
+                }
+            } else {
+                int roundedMiles = (int)(miles + 0.5);
+                if (roundedMiles > 0 && roundedMiles < 1000) {
+                    snprintf(distStr, sizeof(distStr), " Distance: %dmi", roundedMiles);
+                    haveDistance = true;
+                }
+            }
+        } else {
+            if (distanceKm < 1.0) {
+                int meters = (int)(distanceKm * 1000);
+                if (meters > 0 && meters < 1000) {
+                    snprintf(distStr, sizeof(distStr), " Distance: %dm", meters);
+                    haveDistance = true;
+                } else if (meters >= 1000) {
+                    snprintf(distStr, sizeof(distStr), " Distance: 1km");
+                    haveDistance = true;
+                }
+            } else {
+                int km = (int)(distanceKm + 0.5);
+                if (km > 0 && km < 1000) {
+                    snprintf(distStr, sizeof(distStr), " Distance: %dkm", km);
+                    haveDistance = true;
+                }
+            }
+        }
+    }
+    // Only display if we actually have a value!
+    if (haveDistance && distStr[0] && line < 5) {
+        display->drawString(x, yPositions[line++], distStr);
+    }
+
+    // --- Compass Rendering: landscape (wide) screens use the original side-aligned logic ---
+    if (SCREEN_WIDTH > SCREEN_HEIGHT) {
+        bool showCompass = false;
+        if (ourNode && (nodeDB->hasValidPosition(ourNode) || screen->hasHeading()) && nodeDB->hasValidPosition(node)) {
+            showCompass = true;
+        }
+        if (showCompass) {
+            const int16_t topY = compactFirstLine;
+            const int16_t bottomY = SCREEN_HEIGHT - (FONT_HEIGHT_SMALL - 1);
+            const int16_t usableHeight = bottomY - topY - 5;
+            int16_t compassRadius = usableHeight / 2;
+            if (compassRadius < 8)
+                compassRadius = 8;
+            const int16_t compassDiam = compassRadius * 2;
+            const int16_t compassX = x + SCREEN_WIDTH - compassRadius - 8;
+            const int16_t compassY = topY + (usableHeight / 2) + ((FONT_HEIGHT_SMALL - 1) / 2) + 2;
+
+            const auto &op = ourNode->position;
+            float myHeading = screen->hasHeading() ? screen->getHeading() * PI / 180
+                                                   : screen->estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
+            screen->drawCompassNorth(display, compassX, compassY, myHeading);
+
+            const auto &p = node->position;
+            float d =
+                GeoCoord::latLongToMeter(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
+            float bearing = GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(p.latitude_i), DegD(p.longitude_i));
+            if (!config.display.compass_north_top)
+                bearing -= myHeading;
+            screen->drawNodeHeading(display, compassX, compassY, compassDiam, bearing);
+
+            display->drawCircle(compassX, compassY, compassRadius);
+        }
+        // else show nothing
+    } else {
+        // Portrait or square: put compass at the bottom and centered, scaled to fit available space
+        bool showCompass = false;
+        if (ourNode && (nodeDB->hasValidPosition(ourNode) || screen->hasHeading()) && nodeDB->hasValidPosition(node)) {
+            showCompass = true;
+        }
+        if (showCompass) {
+            int yBelowContent = (line > 0 && line <= 5) ? (yPositions[line - 1] + FONT_HEIGHT_SMALL + 2) : moreCompactFirstLine;
+            const int margin = 4;
+// --------- PATCH FOR EINK NAV BAR (ONLY CHANGE BELOW) -----------
+#if defined(USE_EINK)
+            const int iconSize = (SCREEN_WIDTH > 128) ? 16 : 8;
+            const int navBarHeight = iconSize + 6;
+#else
+            const int navBarHeight = 0;
+#endif
+            int availableHeight = SCREEN_HEIGHT - yBelowContent - navBarHeight - margin;
+            // --------- END PATCH FOR EINK NAV BAR -----------
+
+            if (availableHeight < FONT_HEIGHT_SMALL * 2)
+                return;
+
+            int compassRadius = availableHeight / 2;
+            if (compassRadius < 8)
+                compassRadius = 8;
+            if (compassRadius * 2 > SCREEN_WIDTH - 16)
+                compassRadius = (SCREEN_WIDTH - 16) / 2;
+
+            int compassX = x + SCREEN_WIDTH / 2;
+            int compassY = yBelowContent + availableHeight / 2;
+
+            const auto &op = ourNode->position;
+            float myHeading = screen->hasHeading() ? screen->getHeading() * PI / 180
+                                                   : screen->estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
+            screen->drawCompassNorth(display, compassX, compassY, myHeading);
+
+            const auto &p = node->position;
+            float d =
+                GeoCoord::latLongToMeter(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
+            float bearing = GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(p.latitude_i), DegD(p.longitude_i));
+            if (!config.display.compass_north_top)
+                bearing -= myHeading;
+            screen->drawNodeHeading(display, compassX, compassY, compassRadius * 2, bearing);
+
+            display->drawCircle(compassX, compassY, compassRadius);
+        }
+        // else show nothing
+    }
+}
+
+// ****************************
+// * Device Focused Screen    *
+// ****************************
+void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    display->clear();
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
+
+    // === Header ===
+    graphics::drawCommonHeader(display, x, y);
+
+    // === Content below header ===
+
+    // Determine if we need to show 4 or 5 rows on the screen
+    int rows = 4;
+    if (!config.bluetooth.enabled) {
+        rows = 5;
+    }
+
+    // === First Row: Region / Channel Utilization and Uptime ===
+    bool origBold = config.display.heading_bold;
+    config.display.heading_bold = false;
+
+    // Display Region and Channel Utilization
+    drawNodes(display, x + 1,
+              ((rows == 4) ? compactFirstLine : ((SCREEN_HEIGHT > 64) ? compactFirstLine : moreCompactFirstLine)) + 2, nodeStatus,
+              -1, false, "online");
+
+    uint32_t uptime = millis() / 1000;
+    char uptimeStr[6];
+    uint32_t minutes = uptime / 60, hours = minutes / 60, days = hours / 24;
+
+    if (days > 365) {
+        snprintf(uptimeStr, sizeof(uptimeStr), "?");
+    } else {
+        snprintf(uptimeStr, sizeof(uptimeStr), "%d%c",
+                 days      ? days
+                 : hours   ? hours
+                 : minutes ? minutes
+                           : (int)uptime,
+                 days      ? 'd'
+                 : hours   ? 'h'
+                 : minutes ? 'm'
+                           : 's');
+    }
+
+    char uptimeFullStr[16];
+    snprintf(uptimeFullStr, sizeof(uptimeFullStr), "Uptime: %s", uptimeStr);
+    display->drawString(SCREEN_WIDTH - display->getStringWidth(uptimeFullStr),
+                        ((rows == 4) ? compactFirstLine : ((SCREEN_HEIGHT > 64) ? compactFirstLine : moreCompactFirstLine)),
+                        uptimeFullStr);
+
+    config.display.heading_bold = origBold;
+
+    // === Second Row: Satellites and Voltage ===
+    config.display.heading_bold = false;
+
+#if HAS_GPS
+    if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
+        String displayLine = "";
+        if (config.position.fixed_position) {
+            displayLine = "Fixed GPS";
+        } else {
+            displayLine = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "No GPS" : "GPS off";
+        }
+        display->drawString(
+            0, ((rows == 4) ? compactSecondLine : ((SCREEN_HEIGHT > 64) ? compactSecondLine : moreCompactSecondLine)),
+            displayLine);
+    } else {
+        UIRenderer::drawGPS(
+            display, 0,
+            ((rows == 4) ? compactSecondLine : ((SCREEN_HEIGHT > 64) ? compactSecondLine : moreCompactSecondLine)) + 3,
+            gpsStatus);
+    }
+#endif
+
+    char batStr[20];
+    if (powerStatus->getHasBattery()) {
+        int batV = powerStatus->getBatteryVoltageMv() / 1000;
+        int batCv = (powerStatus->getBatteryVoltageMv() % 1000) / 10;
+        snprintf(batStr, sizeof(batStr), "%01d.%02dV", batV, batCv);
+        display->drawString(
+            x + SCREEN_WIDTH - display->getStringWidth(batStr),
+            ((rows == 4) ? compactSecondLine : ((SCREEN_HEIGHT > 64) ? compactSecondLine : moreCompactSecondLine)), batStr);
+    } else {
+        display->drawString(
+            x + SCREEN_WIDTH - display->getStringWidth("USB"),
+            ((rows == 4) ? compactSecondLine : ((SCREEN_HEIGHT > 64) ? compactSecondLine : moreCompactSecondLine)),
+            String("USB"));
+    }
+
+    config.display.heading_bold = origBold;
+
+    // === Third Row: Bluetooth Off (Only If Actually Off) ===
+    if (!config.bluetooth.enabled) {
+        display->drawString(
+            0, ((rows == 4) ? compactThirdLine : ((SCREEN_HEIGHT > 64) ? compactThirdLine : moreCompactThirdLine)), "BT off");
+    }
+
+    // === Third & Fourth Rows: Node Identity ===
+    int textWidth = 0;
+    int nameX = 0;
+    int yOffset = (SCREEN_WIDTH > 128) ? 0 : 7;
+    const char *longName = nullptr;
+    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    if (ourNode && ourNode->has_user && strlen(ourNode->user.long_name) > 0) {
+        longName = ourNode->user.long_name;
+    }
+    uint8_t dmac[6];
+    char shortnameble[35];
+    getMacAddr(dmac);
+    snprintf(ourId, sizeof(ourId), "%02x%02x", dmac[4], dmac[5]);
+    snprintf(shortnameble, sizeof(shortnameble), "%s",
+             graphics::UIRenderer::haveGlyphs(owner.short_name) ? owner.short_name : "");
+
+    char combinedName[50];
+    snprintf(combinedName, sizeof(combinedName), "%s (%s)", longName, shortnameble);
+    if (SCREEN_WIDTH - (display->getStringWidth(longName) + display->getStringWidth(shortnameble)) > 10) {
+        size_t len = strlen(combinedName);
+        if (len >= 3 && strcmp(combinedName + len - 3, " ()") == 0) {
+            combinedName[len - 3] = '\0'; // Remove the last three characters
+        }
+        textWidth = display->getStringWidth(combinedName);
+        nameX = (SCREEN_WIDTH - textWidth) / 2;
+        display->drawString(
+            nameX,
+            ((rows == 4) ? compactThirdLine : ((SCREEN_HEIGHT > 64) ? compactFourthLine : moreCompactFourthLine)) + yOffset,
+            combinedName);
+    } else {
+        textWidth = display->getStringWidth(longName);
+        nameX = (SCREEN_WIDTH - textWidth) / 2;
+        yOffset = (strcmp(shortnameble, "") == 0) ? 1 : 0;
+        if (yOffset == 1) {
+            yOffset = (SCREEN_WIDTH > 128) ? 0 : 7;
+        }
+        display->drawString(
+            nameX,
+            ((rows == 4) ? compactThirdLine : ((SCREEN_HEIGHT > 64) ? compactFourthLine : moreCompactFourthLine)) + yOffset,
+            longName);
+
+        // === Fourth Row: ShortName Centered ===
+        textWidth = display->getStringWidth(shortnameble);
+        nameX = (SCREEN_WIDTH - textWidth) / 2;
+        display->drawString(nameX,
+                            ((rows == 4) ? compactFourthLine : ((SCREEN_HEIGHT > 64) ? compactFifthLine : moreCompactFifthLine)),
+                            shortnameble);
+    }
+}
+
 // Start Functions to write date/time to the screen
 // Helper function to check if a year is a leap year
 bool isLeapYear(int year)
@@ -238,6 +716,29 @@ int formatDateTime(char *buf, size_t bufSize, uint32_t rtc_sec, OLEDDisplay *dis
     return display->getStringWidth(buf);
 }
 
+// Check if the display can render a string (detect special chars; emoji)
+bool haveGlyphs(const char *str)
+{
+#if defined(OLED_PL) || defined(OLED_UA) || defined(OLED_RU) || defined(OLED_CS)
+    // Don't want to make any assumptions about custom language support
+    return true;
+#endif
+
+    // Check each character with the lookup function for the OLED library
+    // We're not really meant to use this directly..
+    bool have = true;
+    for (uint16_t i = 0; i < strlen(str); i++) {
+        uint8_t result = Screen::customFontTableLookup((uint8_t)str[i]);
+        // If font doesn't support a character, it is substituted for ¿
+        if (result == 191 && (uint8_t)str[i] != 191) {
+            have = false;
+            break;
+        }
+    }
+
+    // LOG_DEBUG("haveGlyphs=%d", have);
+    return have;
+}
 } // namespace UIRenderer
 } // namespace graphics
 

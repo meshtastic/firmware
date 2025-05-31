@@ -52,6 +52,10 @@ void drawFrameText(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, i
 // Text and emote rendering
 void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string &line, const Emote *emotes, int emoteCount);
 
+void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+
+void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+
 // Time and date utilities
 void getTimeAgoStr(uint32_t agoSecs, char *timeStr, uint8_t maxLength);
 std::string drawTimeDelta(uint32_t days, uint32_t hours, uint32_t minutes, uint32_t seconds);
@@ -59,7 +63,8 @@ int formatDateTime(char *buffer, size_t bufferSize, uint32_t rtc_sec, OLEDDispla
 
 // Message filtering
 bool shouldDrawMessage(const meshtastic_MeshPacket *packet);
-
+// Check if the display can render a string (detect special chars; emoji)
+bool haveGlyphs(const char *str);
 } // namespace UIRenderer
 
 } // namespace graphics

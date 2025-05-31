@@ -36,7 +36,9 @@ extern PowerStatus *powerStatus;
 extern NodeStatus *nodeStatus;
 extern GPSStatus *gpsStatus;
 extern Channels channels;
-extern const char *ourId;
+extern "C" {
+extern char ourId[5];
+}
 extern AirTime *airTime;
 
 // External functions from Screen.cpp
