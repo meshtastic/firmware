@@ -124,26 +124,6 @@ bool deltaToTimestamp(uint32_t secondsAgo, uint8_t *hours, uint8_t *minutes, int
     return validCached;
 }
 
-// Forward declaration for drawTimeDelta - we need access to this Screen method
-// For now, we'll implement a local version
-std::string drawTimeDelta(uint32_t days, uint32_t hours, uint32_t minutes, uint32_t seconds)
-{
-    const uint32_t hours_in_month = 730;
-    std::string uptime;
-
-    if (days > (hours_in_month * 6))
-        uptime = "?";
-    else if (days >= 2)
-        uptime = std::to_string(days) + "d";
-    else if (hours >= 2)
-        uptime = std::to_string(hours) + "h";
-    else if (minutes >= 1)
-        uptime = std::to_string(minutes) + "m";
-    else
-        uptime = std::to_string(seconds) + "s";
-    return uptime;
-}
-
 void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string &line, const Emote *emotes, int emoteCount)
 {
     int cursorX = x;
@@ -294,7 +274,8 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                      sender);
         }
     } else {
-        snprintf(headerStr, sizeof(headerStr), "%s ago from %s", drawTimeDelta(days, hours, minutes, seconds).c_str(), sender);
+        snprintf(headerStr, sizeof(headerStr), "%s ago from %s", UIRenderer::drawTimeDelta(days, hours, minutes, seconds).c_str(),
+                 sender);
     }
 
 #ifndef EXCLUDE_EMOJI

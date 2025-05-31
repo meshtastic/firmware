@@ -102,8 +102,6 @@ static uint32_t alertBannerUntil = 0;
 
 uint32_t logo_timeout = 5000; // 4 seconds for EACH logo
 
-uint32_t hours_in_month = 730;
-
 // This image definition is here instead of images.h because it's modified dynamically by the drawBattery function
 uint8_t imgBattery[16] = {0xFF, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0xE7, 0x3C};
 
@@ -779,7 +777,7 @@ void Screen::getTimeAgoStr(uint32_t agoSecs, char *timeStr, uint8_t maxLength)
     else if (agoSecs < 120 * 60) // last 2 hrs
         snprintf(timeStr, maxLength, "%u minutes ago", agoSecs / 60);
     // Only show hours ago if it's been less than 6 months. Otherwise, we may have bad data.
-    else if ((agoSecs / 60 / 60) < (hours_in_month * 6))
+    else if ((agoSecs / 60 / 60) < (HOURS_IN_MONTH * 6))
         snprintf(timeStr, maxLength, "%u hours ago", agoSecs / 60 / 60);
     else
         snprintf(timeStr, maxLength, "unknown age");
@@ -1639,23 +1637,6 @@ void Screen::removeFunctionSymbol(std::string sym)
         functionSymbolString = symbol + " " + functionSymbolString;
     }
     setFastFramerate();
-}
-
-std::string Screen::drawTimeDelta(uint32_t days, uint32_t hours, uint32_t minutes, uint32_t seconds)
-{
-    std::string uptime;
-
-    if (days > (hours_in_month * 6))
-        uptime = "?";
-    else if (days >= 2)
-        uptime = std::to_string(days) + "d";
-    else if (hours >= 2)
-        uptime = std::to_string(hours) + "h";
-    else if (minutes >= 1)
-        uptime = std::to_string(minutes) + "m";
-    else
-        uptime = std::to_string(seconds) + "s";
-    return uptime;
 }
 
 void Screen::handlePrint(const char *text)

@@ -321,9 +321,6 @@ class Screen : public concurrency::OSThread
         }
     }
 
-    /// generates a very brief time delta display
-    std::string drawTimeDelta(uint32_t days, uint32_t hours, uint32_t minutes, uint32_t seconds);
-
     /// Overrides the default utf8 character conversion, to replace empty space with question marks
     static char customFontTableLookup(const uint8_t ch)
     {

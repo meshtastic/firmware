@@ -1223,6 +1223,23 @@ void drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *state)
     display->setColor(WHITE);
 }
 
+std::string drawTimeDelta(uint32_t days, uint32_t hours, uint32_t minutes, uint32_t seconds)
+{
+    std::string uptime;
+
+    if (days > (HOURS_IN_MONTH * 6))
+        uptime = "?";
+    else if (days >= 2)
+        uptime = std::to_string(days) + "d";
+    else if (hours >= 2)
+        uptime = std::to_string(hours) + "h";
+    else if (minutes >= 1)
+        uptime = std::to_string(minutes) + "m";
+    else
+        uptime = std::to_string(seconds) + "s";
+    return uptime;
+}
+
 } // namespace UIRenderer
 } // namespace graphics
 

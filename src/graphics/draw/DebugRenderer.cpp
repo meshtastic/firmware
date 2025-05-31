@@ -296,7 +296,7 @@ void drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t 
     // hours %= 24;
 
     // Show uptime as days, hours, minutes OR seconds
-    std::string uptime = screen->drawTimeDelta(days, hours, minutes, seconds);
+    std::string uptime = UIRenderer::drawTimeDelta(days, hours, minutes, seconds);
 
     // Line 1 (Still)
     display->drawString(x + SCREEN_WIDTH - display->getStringWidth(uptime.c_str()), y, uptime.c_str());
