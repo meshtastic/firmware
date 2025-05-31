@@ -23,27 +23,8 @@ extern "C" {
 #define NUM_ANALOG_OUTPUTS (0)
 
 /*
- * LEDs
+ * Digital Pins
  */
-#define LED_STATE_ON (0) // RGB LED is common anode
-#define LED_RED (11)
-#define LED_GREEN (13)
-#define LED_BLUE (12)
-
-#define PIN_LED1 LED_GREEN // PIN_LED1 is used in src/platform/nrf52/architecture.h to define LED_PIN
-#define PIN_LED2 LED_BLUE
-#define PIN_LED3 LED_RED
-
-#define LED_BUILTIN LED_RED // LED_BUILTIN is used by framework-arduinoadafruitnrf52 to indicate flash writes
-
-#define LED_PWR LED_RED
-#define USER_LED LED_BLUE
-
-/*
- * Buttons
- */
-
-// Digital PINs
 #define D0 (0ul)
 #define D1 (1ul)
 #define D2 (2ul)
@@ -55,14 +36,6 @@ extern "C" {
 #define D8 (8ul)
 #define D9 (9ul)
 #define D10 (10ul)
-
-/*
- *  D0 is shared with PIN_GPS_STANDBY on the L76K GNSS Module.
- *  There are some technical solutions that can solve this problem, and we are
- *  currently exploring and researching them.
- */
-
-// #define BUTTON_PIN D0
 
 /*
  * Analog pins
@@ -84,6 +57,38 @@ static const uint8_t A4 = PIN_A4;
 static const uint8_t A5 = PIN_A5;
 #define ADC_RESOLUTION 12
 
+/*
+ * LEDs
+ */
+#define LED_STATE_ON (0) // RGB LED is common anode
+#define LED_RED (11)
+#define LED_GREEN (13)
+#define LED_BLUE (12)
+
+#define PIN_LED1 LED_GREEN // PIN_LED1 is used in src/platform/nrf52/architecture.h to define LED_PIN
+#define PIN_LED2 LED_BLUE
+#define PIN_LED3 LED_RED
+
+#define LED_BUILTIN LED_RED // LED_BUILTIN is used by framework-arduinoadafruitnrf52 to indicate flash writes
+
+#define LED_PWR LED_RED
+#define USER_LED LED_BLUE
+
+/*
+ * Buttons
+ */
+
+/*
+ *  D0 is shared with PIN_GPS_STANDBY on the L76K GNSS Module.
+ *  There are some technical solutions that can solve this problem, and we are
+ *  currently exploring and researching them.
+ */
+
+// #define BUTTON_PIN D0
+
+/*
+ * Serial Interfaces
+ */
 #define PIN_SERIAL2_RX (-1)
 #define PIN_SERIAL2_TX (-1)
 
