@@ -65,11 +65,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 using graphics::Emote;
 using graphics::emotes;
 using graphics::numEmotes;
-using graphics::NodeListRenderer::drawDistanceScreen;
-using graphics::NodeListRenderer::drawDynamicNodeListScreen;
-using graphics::NodeListRenderer::drawHopSignalScreen;
-using graphics::NodeListRenderer::drawLastHeardScreen;
-using graphics::NodeListRenderer::drawNodeListWithCompasses;
 
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
 #include "mesh/wifi/WiFiAPClient.h"
@@ -1523,17 +1518,17 @@ void Screen::setFrames(FrameFocus focus)
 
 // Show detailed node views only on E-Ink builds
 #ifdef USE_EINK
-    normalFrames[numframes++] = drawLastHeardScreen;
+    normalFrames[numframes++] = graphics::NodeListRenderer::drawLastHeardScreen;
     indicatorIcons.push_back(icon_nodes);
 
-    normalFrames[numframes++] = drawHopSignalScreen;
+    normalFrames[numframes++] = graphics::NodeListRenderer::drawHopSignalScreen;
     indicatorIcons.push_back(icon_signal);
 
-    normalFrames[numframes++] = drawDistanceScreen;
+    normalFrames[numframes++] = graphics::NodeListRenderer::drawDistanceScreen;
     indicatorIcons.push_back(icon_distance);
 #endif
 
-    normalFrames[numframes++] = drawNodeListWithCompasses;
+    normalFrames[numframes++] = graphics::NodeListRenderer::drawNodeListWithCompasses;
     indicatorIcons.push_back(icon_list);
 
     normalFrames[numframes++] = graphics::UIRenderer::drawCompassAndLocationScreen;
