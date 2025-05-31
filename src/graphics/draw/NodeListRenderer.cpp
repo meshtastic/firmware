@@ -357,6 +357,8 @@ void drawEntryDynamic(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
 void drawEntryCompass(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth)
 {
     bool isLeftCol = (x < SCREEN_WIDTH / 2);
+
+    // Adjust max text width depending on column and screen width
     int nameMaxWidth = columnWidth - (SCREEN_WIDTH > 128 ? (isLeftCol ? 25 : 28) : (isLeftCol ? 20 : 22));
 
     String nodeName = getSafeNodeName(node);
@@ -379,19 +381,44 @@ void drawCompassArrow(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     if (!nodeDB->hasValidPosition(node))
         return;
 
+    bool isLeftCol = (x < SCREEN_WIDTH / 2);
+    int arrowXOffset = (SCREEN_WIDTH > 128) ? (isLeftCol ? 22 : 24) : (isLeftCol ? 12 : 18);
+
+    int centerX = x + columnWidth - arrowXOffset;
+    int centerY = y + FONT_HEIGHT_SMALL / 2;
+
     double nodeLat = node->position.latitude_i * 1e-7;
     double nodeLon = node->position.longitude_i * 1e-7;
-    float bearing = calculateBearing(userLat, userLon, nodeLat, nodeLon);
+    float bearingToNode = calculateBearing(userLat, userLon, nodeLat, nodeLon);
+    float relativeBearing = fmod((bearingToNode - myHeading + 360), 360);
+    float angle = relativeBearing * DEG_TO_RAD;
 
-    if (!config.display.compass_north_top)
-        bearing -= myHeading;
+    // Shrink size by 2px
+    int size = FONT_HEIGHT_SMALL - 5;
+    float halfSize = size / 2.0;
 
-    bool isLeftCol = (x < SCREEN_WIDTH / 2);
-    int arrowSize = 6;
-    int arrowX = x + columnWidth - (isLeftCol ? 12 : 16);
-    int arrowY = y + FONT_HEIGHT_SMALL / 2;
+    // Point of the arrow
+    int tipX = centerX + halfSize * cos(angle);
+    int tipY = centerY - halfSize * sin(angle);
 
-    CompassRenderer::drawArrowToNode(display, arrowX, arrowY, arrowSize, bearing);
+    float baseAngle = radians(35);
+    float sideLen = halfSize * 0.95;
+    float notchInset = halfSize * 0.35;
+
+    // Left and right corners
+    int leftX = centerX + sideLen * cos(angle + PI - baseAngle);
+    int leftY = centerY - sideLen * sin(angle + PI - baseAngle);
+
+    int rightX = centerX + sideLen * cos(angle + PI + baseAngle);
+    int rightY = centerY - sideLen * sin(angle + PI + baseAngle);
+
+    // Center notch (cut-in)
+    int notchX = centerX - notchInset * cos(angle);
+    int notchY = centerY + notchInset * sin(angle);
+
+    // Draw the chevron-style arrowhead
+    display->fillTriangle(tipX, tipY, leftX, leftY, notchX, notchY);
+    display->fillTriangle(tipX, tipY, notchX, notchY, rightX, rightY);
 }
 
 // =============================
