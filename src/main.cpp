@@ -363,6 +363,19 @@ void setup()
     pinMode(TFT_CS, OUTPUT);
     digitalWrite(TFT_CS, HIGH);
     delay(100);
+#elif defined(T_DECK_PRO)
+    pinMode(LORA_EN, OUTPUT);
+    digitalWrite(LORA_EN, HIGH);
+    // pinMode(BOARD_1V8_EN, OUTPUT);
+    // digitalWrite(BOARD_1V8_EN, HIGH);
+    // pinMode(BOARD_6609_EN, OUTPUT);
+    // digitalWrite(BOARD_6609_EN, HIGH);
+    pinMode(LORA_CS, OUTPUT);
+    digitalWrite(LORA_CS, HIGH);
+    pinMode(SDCARD_CS, OUTPUT);
+    digitalWrite(SDCARD_CS, HIGH);
+    pinMode(PIN_EINK_CS, OUTPUT);
+    digitalWrite(PIN_EINK_CS, HIGH);
 #endif
 
     concurrency::hasBeenSetup = true;
