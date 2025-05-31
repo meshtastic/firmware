@@ -1,6 +1,5 @@
 #pragma once
 
-#include "graphics/Screen.h"
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 
@@ -19,12 +18,12 @@ class DebugInfo;
  */
 namespace DebugRenderer
 {
-// Debug frame functions (friend functions for DebugInfo class)
+// Debug frame functions
 void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 void drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 void drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 
-// Trampoline functions for DebugInfo class access
+// Trampoline functions for framework callback compatibility
 void drawDebugInfoTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 void drawDebugInfoSettingsTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 void drawDebugInfoWiFiTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);

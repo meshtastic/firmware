@@ -28,8 +28,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <OLEDDisplay.h>
 
 #include "DisplayFormatters.h"
+#include "draw/DebugRenderer.h"
 #include "draw/MessageRenderer.h"
 #include "draw/NodeListRenderer.h"
+#include "draw/UIRenderer.h"
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
 #endif
@@ -630,46 +632,6 @@ static void drawCriticalFaultFrame(OLEDDisplay *display, OLEDDisplayUiState *sta
 static bool shouldDrawMessage(const meshtastic_MeshPacket *packet)
 {
     return packet->from != 0 && !moduleConfig.store_forward.enabled;
-}
-
-// Draw power bars or a charging indicator on an image of a battery, determined by battery charge voltage or percentage.
-static void drawBattery(OLEDDisplay *display, int16_t x, int16_t y, uint8_t *imgBuffer, const PowerStatus *powerStatus)
-{
-    static const uint8_t powerBar[3] = {0x81, 0xBD, 0xBD};
-    static const uint8_t lightning[8] = {0xA1, 0xA1, 0xA5, 0xAD, 0xB5, 0xA5, 0x85, 0x85};
-
-    // Clear the bar area inside the battery image
-    for (int i = 1; i < 14; i++) {
-        imgBuffer[i] = 0x81;
-    }
-
-    // Fill with lightning or power bars
-    if (powerStatus->getIsCharging()) {
-        memcpy(imgBuffer + 3, lightning, 8);
-    } else {
-        for (int i = 0; i < 4; i++) {
-            if (powerStatus->getBatteryChargePercent() >= 25 * i)
-                memcpy(imgBuffer + 1 + (i * 3), powerBar, 3);
-        }
-    }
-
-    // Slightly more conservative scaling based on screen width
-    int scale = 1;
-
-    if (SCREEN_WIDTH >= 200)
-        scale = 2;
-    if (SCREEN_WIDTH >= 300)
-        scale = 2; // Do NOT go higher than 2
-
-    // Draw scaled battery image (16 columns × 8 rows)
-    for (int col = 0; col < 16; col++) {
-        uint8_t colBits = imgBuffer[col];
-        for (int row = 0; row < 8; row++) {
-            if (colBits & (1 << row)) {
-                display->fillRect(x + col * scale, y + row * scale, scale, scale);
-            }
-        }
-    }
 }
 
 #if defined(DISPLAY_CLOCK_FRAME)
@@ -1343,167 +1305,6 @@ static void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const NodeStat
             display->drawString(x + 11 + display->getStringWidth(usersString) + string_offset, y - 2, additional_words);
     }
 }
-#if HAS_GPS
-// Draw GPS status summary
-static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
-{
-    if (config.position.fixed_position) {
-        // GPS coordinates are currently fixed
-        display->drawString(x - 1, y - 2, "Fixed GPS");
-        if (config.display.heading_bold)
-            display->drawString(x, y - 2, "Fixed GPS");
-        return;
-    }
-    if (!gps->getIsConnected()) {
-        display->drawString(x, y - 2, "No GPS");
-        if (config.display.heading_bold)
-            display->drawString(x + 1, y - 2, "No GPS");
-        return;
-    }
-    // Adjust position if we’re going to draw too wide
-    int maxDrawWidth = 6; // Position icon
-
-    if (!gps->getHasLock()) {
-        maxDrawWidth += display->getStringWidth("No sats") + 2; // icon + text + buffer
-    } else {
-        maxDrawWidth += (5 * 2) + 8 + display->getStringWidth("99") + 2; // bars + sat icon + text + buffer
-    }
-
-    if (x + maxDrawWidth > SCREEN_WIDTH) {
-        x = SCREEN_WIDTH - maxDrawWidth;
-        if (x < 0)
-            x = 0; // Clamp to screen
-    }
-
-    display->drawFastImage(x, y, 6, 8, gps->getHasLock() ? imgPositionSolid : imgPositionEmpty);
-    if (!gps->getHasLock()) {
-        // Draw "No sats" to the right of the icon with slightly more gap
-        int textX = x + 9; // 6 (icon) + 3px spacing
-        display->drawString(textX, y - 3, "No sats");
-        if (config.display.heading_bold)
-            display->drawString(textX + 1, y - 3, "No sats");
-        return;
-    } else {
-        char satsString[3];
-        uint8_t bar[2] = {0};
-
-        // Draw DOP signal bars
-        for (int i = 0; i < 5; i++) {
-            if (gps->getDOP() <= dopThresholds[i])
-                bar[0] = ~((1 << (5 - i)) - 1);
-            else
-                bar[0] = 0b10000000;
-
-            display->drawFastImage(x + 9 + (i * 2), y, 2, 8, bar);
-        }
-
-        // Draw satellite image
-        display->drawFastImage(x + 24, y, 8, 8, imgSatellite);
-
-        // Draw the number of satellites
-        snprintf(satsString, sizeof(satsString), "%u", gps->getNumSatellites());
-        int textX = x + 34;
-        display->drawString(textX, y - 2, satsString);
-        if (config.display.heading_bold)
-            display->drawString(textX + 1, y - 2, satsString);
-    }
-}
-
-// Draw status when GPS is disabled or not present
-static void drawGPSpowerstat(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
-{
-    String displayLine;
-    int pos;
-    if (y < FONT_HEIGHT_SMALL) { // Line 1: use short string
-        displayLine = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "No GPS" : "GPS off";
-        pos = SCREEN_WIDTH - display->getStringWidth(displayLine);
-    } else {
-        displayLine = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "GPS not present"
-                                                                                                       : "GPS is disabled";
-        pos = (SCREEN_WIDTH - display->getStringWidth(displayLine)) / 2;
-    }
-    display->drawString(x + pos, y, displayLine);
-}
-
-static void drawGPSAltitude(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
-{
-    String displayLine = "";
-    if (!gps->getIsConnected() && !config.position.fixed_position) {
-        // displayLine = "No GPS Module";
-        // display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
-    } else if (!gps->getHasLock() && !config.position.fixed_position) {
-        // displayLine = "No GPS Lock";
-        // display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
-    } else {
-        geoCoord.updateCoords(int32_t(gps->getLatitude()), int32_t(gps->getLongitude()), int32_t(gps->getAltitude()));
-        displayLine = "Altitude: " + String(geoCoord.getAltitude()) + "m";
-        if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL)
-            displayLine = "Altitude: " + String(geoCoord.getAltitude() * METERS_TO_FEET) + "ft";
-        display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
-    }
-}
-
-// Draw GPS status coordinates
-static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
-{
-    auto gpsFormat = config.display.gps_format;
-    String displayLine = "";
-
-    if (!gps->getIsConnected() && !config.position.fixed_position) {
-        displayLine = "No GPS present";
-        display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
-    } else if (!gps->getHasLock() && !config.position.fixed_position) {
-        displayLine = "No GPS Lock";
-        display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
-    } else {
-
-        geoCoord.updateCoords(int32_t(gps->getLatitude()), int32_t(gps->getLongitude()), int32_t(gps->getAltitude()));
-
-        if (gpsFormat != meshtastic_Config_DisplayConfig_GpsCoordinateFormat_DMS) {
-            char coordinateLine[22];
-            if (gpsFormat == meshtastic_Config_DisplayConfig_GpsCoordinateFormat_DEC) { // Decimal Degrees
-                snprintf(coordinateLine, sizeof(coordinateLine), "%f %f", geoCoord.getLatitude() * 1e-7,
-                         geoCoord.getLongitude() * 1e-7);
-            } else if (gpsFormat == meshtastic_Config_DisplayConfig_GpsCoordinateFormat_UTM) { // Universal Transverse Mercator
-                snprintf(coordinateLine, sizeof(coordinateLine), "%2i%1c %06u %07u", geoCoord.getUTMZone(), geoCoord.getUTMBand(),
-                         geoCoord.getUTMEasting(), geoCoord.getUTMNorthing());
-            } else if (gpsFormat == meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MGRS) { // Military Grid Reference System
-                snprintf(coordinateLine, sizeof(coordinateLine), "%2i%1c %1c%1c %05u %05u", geoCoord.getMGRSZone(),
-                         geoCoord.getMGRSBand(), geoCoord.getMGRSEast100k(), geoCoord.getMGRSNorth100k(),
-                         geoCoord.getMGRSEasting(), geoCoord.getMGRSNorthing());
-            } else if (gpsFormat == meshtastic_Config_DisplayConfig_GpsCoordinateFormat_OLC) { // Open Location Code
-                geoCoord.getOLCCode(coordinateLine);
-            } else if (gpsFormat == meshtastic_Config_DisplayConfig_GpsCoordinateFormat_OSGR) { // Ordnance Survey Grid Reference
-                if (geoCoord.getOSGRE100k() == 'I' || geoCoord.getOSGRN100k() == 'I') // OSGR is only valid around the UK region
-                    snprintf(coordinateLine, sizeof(coordinateLine), "%s", "Out of Boundary");
-                else
-                    snprintf(coordinateLine, sizeof(coordinateLine), "%1c%1c %05u %05u", geoCoord.getOSGRE100k(),
-                             geoCoord.getOSGRN100k(), geoCoord.getOSGREasting(), geoCoord.getOSGRNorthing());
-            }
-
-            // If fixed position, display text "Fixed GPS" alternating with the coordinates.
-            if (config.position.fixed_position) {
-                if ((millis() / 10000) % 2) {
-                    display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(coordinateLine))) / 2, y, coordinateLine);
-                } else {
-                    display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth("Fixed GPS"))) / 2, y, "Fixed GPS");
-                }
-            } else {
-                display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(coordinateLine))) / 2, y, coordinateLine);
-            }
-        } else {
-            char latLine[22];
-            char lonLine[22];
-            snprintf(latLine, sizeof(latLine), "%2i° %2i' %2u\" %1c", geoCoord.getDMSLatDeg(), geoCoord.getDMSLatMin(),
-                     geoCoord.getDMSLatSec(), geoCoord.getDMSLatCP());
-            snprintf(lonLine, sizeof(lonLine), "%3i° %2i' %2u\" %1c", geoCoord.getDMSLonDeg(), geoCoord.getDMSLonMin(),
-                     geoCoord.getDMSLonSec(), geoCoord.getDMSLonCP());
-            display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(latLine))) / 2, y - FONT_HEIGHT_SMALL * 1, latLine);
-            display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(lonLine))) / 2, y, lonLine);
-        }
-    }
-}
-#endif
 /**
  * Given a recent lat/lon return a guess of the heading the user is walking on.
  *
@@ -2008,9 +1809,10 @@ static void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, i
             0, ((rows == 4) ? compactSecondLine : ((SCREEN_HEIGHT > 64) ? compactSecondLine : moreCompactSecondLine)),
             displayLine);
     } else {
-        drawGPS(display, 0,
-                ((rows == 4) ? compactSecondLine : ((SCREEN_HEIGHT > 64) ? compactSecondLine : moreCompactSecondLine)) + 3,
-                gpsStatus);
+        UIRenderer::drawGPS(
+            display, 0,
+            ((rows == 4) ? compactSecondLine : ((SCREEN_HEIGHT > 64) ? compactSecondLine : moreCompactSecondLine)) + 3,
+            gpsStatus);
     }
 #endif
 
@@ -2259,8 +2061,8 @@ static void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiStat
         display->drawString(display->getStringWidth(Satelite_String) + 3,
                             ((SCREEN_HEIGHT > 64) ? compactFirstLine : moreCompactFirstLine), displayLine);
     } else {
-        drawGPS(display, display->getStringWidth(Satelite_String) + 3,
-                ((SCREEN_HEIGHT > 64) ? compactFirstLine : moreCompactFirstLine) + 3, gpsStatus);
+        UIRenderer::drawGPS(display, display->getStringWidth(Satelite_String) + 3,
+                            ((SCREEN_HEIGHT > 64) ? compactFirstLine : moreCompactFirstLine) + 3, gpsStatus);
     }
 
     config.display.heading_bold = origBold;
@@ -3105,20 +2907,17 @@ int32_t Screen::runOnce()
 
 void Screen::drawDebugInfoTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    Screen *screen2 = reinterpret_cast<Screen *>(state->userData);
-    screen2->debugInfo.drawFrame(display, state, x, y);
+    graphics::DebugRenderer::drawDebugInfoTrampoline(display, state, x, y);
 }
 
 void Screen::drawDebugInfoSettingsTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    Screen *screen2 = reinterpret_cast<Screen *>(state->userData);
-    screen2->debugInfo.drawFrameSettings(display, state, x, y);
+    graphics::DebugRenderer::drawDebugInfoSettingsTrampoline(display, state, x, y);
 }
 
 void Screen::drawDebugInfoWiFiTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    Screen *screen2 = reinterpret_cast<Screen *>(state->userData);
-    screen2->debugInfo.drawFrameWiFi(display, state, x, y);
+    graphics::DebugRenderer::drawDebugInfoWiFiTrampoline(display, state, x, y);
 }
 
 /* show a message that the SSL cert is being built
@@ -3577,321 +3376,6 @@ void Screen::setFastFramerate()
     ui->setTargetFPS(targetFramerate);
     setInterval(0); // redraw ASAP
     runASAP = true;
-}
-
-void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    display->setFont(FONT_SMALL);
-
-    // The coordinates define the left starting point of the text
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
-        display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
-        display->setColor(BLACK);
-    }
-
-    char channelStr[20];
-    {
-        concurrency::LockGuard guard(&lock);
-        snprintf(channelStr, sizeof(channelStr), "#%s", channels.getName(channels.getPrimaryIndex()));
-    }
-
-    // Display power status
-    if (powerStatus->getHasBattery()) {
-        if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT) {
-            drawBattery(display, x, y + 2, imgBattery, powerStatus);
-        } else {
-            drawBattery(display, x + 1, y + 3, imgBattery, powerStatus);
-        }
-    } else if (powerStatus->knowsUSB()) {
-        if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT) {
-            display->drawFastImage(x, y + 2, 16, 8, powerStatus->getHasUSB() ? imgUSB : imgPower);
-        } else {
-            display->drawFastImage(x + 1, y + 3, 16, 8, powerStatus->getHasUSB() ? imgUSB : imgPower);
-        }
-    }
-    // Display nodes status
-    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT) {
-        drawNodes(display, x + (SCREEN_WIDTH * 0.25), y + 2, nodeStatus);
-    } else {
-        drawNodes(display, x + (SCREEN_WIDTH * 0.25), y + 3, nodeStatus);
-    }
-#if HAS_GPS
-    // Display GPS status
-    if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
-        drawGPSpowerstat(display, x, y + 2, gpsStatus);
-    } else {
-        if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT) {
-            drawGPS(display, x + (SCREEN_WIDTH * 0.63), y + 2, gpsStatus);
-        } else {
-            drawGPS(display, x + (SCREEN_WIDTH * 0.63), y + 3, gpsStatus);
-        }
-    }
-#endif
-    display->setColor(WHITE);
-    // Draw the channel name
-    display->drawString(x, y + FONT_HEIGHT_SMALL, channelStr);
-    // Draw our hardware ID to assist with bluetooth pairing. Either prefix with Info or S&F Logo
-    if (moduleConfig.store_forward.enabled) {
-#ifdef ARCH_ESP32
-        if (!Throttle::isWithinTimespanMs(storeForwardModule->lastHeartbeat,
-                                          (storeForwardModule->heartbeatInterval * 1200))) { // no heartbeat, overlap a bit
-#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) ||      \
-     defined(ST7789_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(HX8357_CS) || ARCH_PORTDUINO) &&                \
-    !defined(DISPLAY_FORCE_SMALL_FONTS)
-            display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(ourId), y + 3 + FONT_HEIGHT_SMALL, 12, 8,
-                                   imgQuestionL1);
-            display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(ourId), y + 11 + FONT_HEIGHT_SMALL, 12, 8,
-                                   imgQuestionL2);
-#else
-            display->drawFastImage(x + SCREEN_WIDTH - 10 - display->getStringWidth(ourId), y + 2 + FONT_HEIGHT_SMALL, 8, 8,
-                                   imgQuestion);
-#endif
-        } else {
-#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) ||      \
-     defined(ST7789_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(HX8357_CS)) &&                                  \
-    !defined(DISPLAY_FORCE_SMALL_FONTS)
-            display->drawFastImage(x + SCREEN_WIDTH - 18 - display->getStringWidth(ourId), y + 3 + FONT_HEIGHT_SMALL, 16, 8,
-                                   imgSFL1);
-            display->drawFastImage(x + SCREEN_WIDTH - 18 - display->getStringWidth(ourId), y + 11 + FONT_HEIGHT_SMALL, 16, 8,
-                                   imgSFL2);
-#else
-            display->drawFastImage(x + SCREEN_WIDTH - 13 - display->getStringWidth(ourId), y + 2 + FONT_HEIGHT_SMALL, 11, 8,
-                                   imgSF);
-#endif
-        }
-#endif
-    } else {
-        // TODO: Raspberry Pi supports more than just the one screen size
-#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) ||      \
-     defined(ST7789_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(HX8357_CS) || ARCH_PORTDUINO) &&                \
-    !defined(DISPLAY_FORCE_SMALL_FONTS)
-        display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(ourId), y + 3 + FONT_HEIGHT_SMALL, 12, 8,
-                               imgInfoL1);
-        display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(ourId), y + 11 + FONT_HEIGHT_SMALL, 12, 8,
-                               imgInfoL2);
-#else
-        display->drawFastImage(x + SCREEN_WIDTH - 10 - display->getStringWidth(ourId), y + 2 + FONT_HEIGHT_SMALL, 8, 8, imgInfo);
-#endif
-    }
-
-    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(ourId), y + FONT_HEIGHT_SMALL, ourId);
-
-    // Draw any log messages
-    display->drawLogBuffer(x, y + (FONT_HEIGHT_SMALL * 2));
-
-    /* Display a heartbeat pixel that blinks every time the frame is redrawn */
-#ifdef SHOW_REDRAWS
-    if (heartbeat)
-        display->setPixel(0, 0);
-    heartbeat = !heartbeat;
-#endif
-}
-
-// Jm
-void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-#if HAS_WIFI && !defined(ARCH_PORTDUINO)
-    const char *wifiName = config.network.wifi_ssid;
-
-    display->setFont(FONT_SMALL);
-
-    // The coordinates define the left starting point of the text
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
-        display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
-        display->setColor(BLACK);
-    }
-
-    if (WiFi.status() != WL_CONNECTED) {
-        display->drawString(x, y, String("WiFi: Not Connected"));
-        if (config.display.heading_bold)
-            display->drawString(x + 1, y, String("WiFi: Not Connected"));
-    } else {
-        display->drawString(x, y, String("WiFi: Connected"));
-        if (config.display.heading_bold)
-            display->drawString(x + 1, y, String("WiFi: Connected"));
-
-        display->drawString(x + SCREEN_WIDTH - display->getStringWidth("RSSI " + String(WiFi.RSSI())), y,
-                            "RSSI " + String(WiFi.RSSI()));
-        if (config.display.heading_bold) {
-            display->drawString(x + SCREEN_WIDTH - display->getStringWidth("RSSI " + String(WiFi.RSSI())) - 1, y,
-                                "RSSI " + String(WiFi.RSSI()));
-        }
-    }
-
-    display->setColor(WHITE);
-
-    /*
-    - WL_CONNECTED: assigned when connected to a WiFi network;
-    - WL_NO_SSID_AVAIL: assigned when no SSID are available;
-    - WL_CONNECT_FAILED: assigned when the connection fails for all the attempts;
-    - WL_CONNECTION_LOST: assigned when the connection is lost;
-    - WL_DISCONNECTED: assigned when disconnected from a network;
-    - WL_IDLE_STATUS: it is a temporary status assigned when WiFi.begin() is called and remains active until the number of
-    attempts expires (resulting in WL_CONNECT_FAILED) or a connection is established (resulting in WL_CONNECTED);
-    - WL_SCAN_COMPLETED: assigned when the scan networks is completed;
-    - WL_NO_SHIELD: assigned when no WiFi shield is present;
-
-    */
-    if (WiFi.status() == WL_CONNECTED) {
-        display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "IP: " + String(WiFi.localIP().toString().c_str()));
-    } else if (WiFi.status() == WL_NO_SSID_AVAIL) {
-        display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "SSID Not Found");
-    } else if (WiFi.status() == WL_CONNECTION_LOST) {
-        display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "Connection Lost");
-    } else if (WiFi.status() == WL_CONNECT_FAILED) {
-        display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "Connection Failed");
-    } else if (WiFi.status() == WL_IDLE_STATUS) {
-        display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "Idle ... Reconnecting");
-    }
-#ifdef ARCH_ESP32
-    else {
-        // Codes:
-        // https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/wifi.html#wi-fi-reason-code
-        display->drawString(x, y + FONT_HEIGHT_SMALL * 1,
-                            WiFi.disconnectReasonName(static_cast<wifi_err_reason_t>(getWifiDisconnectReason())));
-    }
-#else
-    else {
-        display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "Unkown status: " + String(WiFi.status()));
-    }
-#endif
-
-    display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "SSID: " + String(wifiName));
-
-    display->drawString(x, y + FONT_HEIGHT_SMALL * 3, "http://meshtastic.local");
-
-    /* Display a heartbeat pixel that blinks every time the frame is redrawn */
-#ifdef SHOW_REDRAWS
-    if (heartbeat)
-        display->setPixel(0, 0);
-    heartbeat = !heartbeat;
-#endif
-#endif
-}
-
-void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    display->setFont(FONT_SMALL);
-
-    // The coordinates define the left starting point of the text
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
-        display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
-        display->setColor(BLACK);
-    }
-
-    char batStr[20];
-    if (powerStatus->getHasBattery()) {
-        int batV = powerStatus->getBatteryVoltageMv() / 1000;
-        int batCv = (powerStatus->getBatteryVoltageMv() % 1000) / 10;
-
-        snprintf(batStr, sizeof(batStr), "B %01d.%02dV %3d%% %c%c", batV, batCv, powerStatus->getBatteryChargePercent(),
-                 powerStatus->getIsCharging() ? '+' : ' ', powerStatus->getHasUSB() ? 'U' : ' ');
-
-        // Line 1
-        display->drawString(x, y, batStr);
-        if (config.display.heading_bold)
-            display->drawString(x + 1, y, batStr);
-    } else {
-        // Line 1
-        display->drawString(x, y, String("USB"));
-        if (config.display.heading_bold)
-            display->drawString(x + 1, y, String("USB"));
-    }
-
-    //    auto mode = DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, true);
-
-    //    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(mode), y, mode);
-    //    if (config.display.heading_bold)
-    //        display->drawString(x + SCREEN_WIDTH - display->getStringWidth(mode) - 1, y, mode);
-
-    uint32_t currentMillis = millis();
-    uint32_t seconds = currentMillis / 1000;
-    uint32_t minutes = seconds / 60;
-    uint32_t hours = minutes / 60;
-    uint32_t days = hours / 24;
-    // currentMillis %= 1000;
-    // seconds %= 60;
-    // minutes %= 60;
-    // hours %= 24;
-
-    // Show uptime as days, hours, minutes OR seconds
-    std::string uptime = screen->drawTimeDelta(days, hours, minutes, seconds);
-
-    // Line 1 (Still)
-    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(uptime.c_str()), y, uptime.c_str());
-    if (config.display.heading_bold)
-        display->drawString(x - 1 + SCREEN_WIDTH - display->getStringWidth(uptime.c_str()), y, uptime.c_str());
-
-    display->setColor(WHITE);
-
-    // Setup string to assemble analogClock string
-    std::string analogClock = "";
-
-    uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true); // Display local timezone
-    if (rtc_sec > 0) {
-        long hms = rtc_sec % SEC_PER_DAY;
-        // hms += tz.tz_dsttime * SEC_PER_HOUR;
-        // hms -= tz.tz_minuteswest * SEC_PER_MIN;
-        // mod `hms` to ensure in positive range of [0...SEC_PER_DAY)
-        hms = (hms + SEC_PER_DAY) % SEC_PER_DAY;
-
-        // Tear apart hms into h:m:s
-        int hour = hms / SEC_PER_HOUR;
-        int min = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
-        int sec = (hms % SEC_PER_HOUR) % SEC_PER_MIN; // or hms % SEC_PER_MIN
-
-        char timebuf[12];
-
-        if (config.display.use_12h_clock) {
-            std::string meridiem = "am";
-            if (hour >= 12) {
-                if (hour > 12)
-                    hour -= 12;
-                meridiem = "pm";
-            }
-            if (hour == 00) {
-                hour = 12;
-            }
-            snprintf(timebuf, sizeof(timebuf), "%d:%02d:%02d%s", hour, min, sec, meridiem.c_str());
-        } else {
-            snprintf(timebuf, sizeof(timebuf), "%02d:%02d:%02d", hour, min, sec);
-        }
-        analogClock += timebuf;
-    }
-
-    // Line 2
-    display->drawString(x, y + FONT_HEIGHT_SMALL * 1, analogClock.c_str());
-
-    // Display Channel Utilization
-    char chUtil[13];
-    snprintf(chUtil, sizeof(chUtil), "ChUtil %2.0f%%", airTime->channelUtilizationPercent());
-    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(chUtil), y + FONT_HEIGHT_SMALL * 1, chUtil);
-
-#if HAS_GPS
-    if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
-        // Line 3
-        if (config.display.gps_format !=
-            meshtastic_Config_DisplayConfig_GpsCoordinateFormat_DMS) // if DMS then don't draw altitude
-            drawGPSAltitude(display, x, y + FONT_HEIGHT_SMALL * 2, gpsStatus);
-
-        // Line 4
-        drawGPScoordinates(display, x, y + FONT_HEIGHT_SMALL * 3, gpsStatus);
-    } else {
-        drawGPSpowerstat(display, x, y + FONT_HEIGHT_SMALL * 2, gpsStatus);
-    }
-#endif
-/* Display a heartbeat pixel that blinks every time the frame is redrawn */
-#ifdef SHOW_REDRAWS
-    if (heartbeat)
-        display->setPixel(0, 0);
-    heartbeat = !heartbeat;
-#endif
 }
 
 int Screen::handleStatusUpdate(const meshtastic::Status *arg)
