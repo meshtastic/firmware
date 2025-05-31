@@ -84,7 +84,7 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
     constexpr uint16_t padding = 5;    // Padding around text inside the box
     constexpr uint8_t lineSpacing = 1; // Extra space between lines
 
-    // Search the mesage to determine if we need the bell added
+    // Search the message to determine if we need the bell added
     bool needs_bell = (alertBannerMessage.indexOf("Alert Received") != -1);
 
     // Setup font and alignment
