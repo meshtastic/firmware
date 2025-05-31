@@ -233,8 +233,6 @@ class Screen : public concurrency::OSThread
 
     void blink();
 
-    void drawFrameText(OLEDDisplay *, OLEDDisplayUiState *, int16_t, int16_t, const char *);
-
     void getTimeAgoStr(uint32_t agoSecs, char *timeStr, uint8_t maxLength);
 
     // Draw north

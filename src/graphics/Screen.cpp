@@ -139,13 +139,6 @@ static bool heartbeat = false;
 
 extern bool hasUnreadMessage;
 
-void Screen::drawFrameText(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *message)
-{
-    uint16_t x_offset = display->width() / 2;
-    display->setTextAlignment(TEXT_ALIGN_CENTER);
-    display->setFont(FONT_MEDIUM);
-    display->drawString(x_offset + x, 26 + y, message);
-}
 // ==============================
 // Overlay Alert Banner Renderer
 // ==============================
@@ -1002,7 +995,7 @@ void Screen::setup()
     alertFrames[0] = [this](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) {
 #ifdef ARCH_ESP32
         if (wakeCause == ESP_SLEEP_WAKEUP_TIMER || wakeCause == ESP_SLEEP_WAKEUP_EXT1)
-            drawFrameText(display, state, x, y, "Resuming...");
+            graphics::UIRenderer::drawFrameText(display, state, x, y, "Resuming...");
         else
 #endif
         {

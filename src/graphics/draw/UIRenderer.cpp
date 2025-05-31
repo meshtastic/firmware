@@ -1223,6 +1223,14 @@ void drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *state)
     display->setColor(WHITE);
 }
 
+void drawFrameText(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *message)
+{
+    uint16_t x_offset = display->width() / 2;
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->setFont(FONT_MEDIUM);
+    display->drawString(x_offset + x, 26 + y, message);
+}
+
 std::string drawTimeDelta(uint32_t days, uint32_t hours, uint32_t minutes, uint32_t seconds)
 {
     std::string uptime;
