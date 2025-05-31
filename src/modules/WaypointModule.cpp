@@ -7,6 +7,7 @@
 #if HAS_SCREEN
 #include "gps/RTC.h"
 #include "graphics/Screen.h"
+#include "graphics/draw/NodeListRenderer.h"
 #include "main.h"
 #endif
 
@@ -191,6 +192,6 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
     }
 
     // Must be after distStr is populated
-    screen->drawColumns(display, x, y, fields);
+    graphics::NodeListRenderer::drawColumns(display, x, y, fields);
 }
 #endif

@@ -43,8 +43,6 @@ void drawGPSAltitude(OLEDDisplay *display, int16_t x, int16_t y, const meshtasti
 void drawGPSpowerstat(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSStatus *gpsStatus);
 
 // Layout and utility functions
-void drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char **fields);
-void drawColumnSeparator(OLEDDisplay *display, int16_t x, int16_t startY, int16_t endY);
 void drawScrollbar(OLEDDisplay *display, int visibleItems, int totalItems, int scrollIndex, int x, int startY);
 
 // Overlay and special screens

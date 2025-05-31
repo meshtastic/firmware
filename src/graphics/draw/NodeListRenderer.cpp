@@ -850,5 +850,28 @@ void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, in
     }
 }
 
+/// Draw a series of fields in a column, wrapping to multiple columns if needed
+void drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char **fields)
+{
+    // The coordinates define the left starting point of the text
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+    const char **f = fields;
+    int xo = x, yo = y;
+    while (*f) {
+        display->drawString(xo, yo, *f);
+        if ((display->getColor() == BLACK) && config.display.heading_bold)
+            display->drawString(xo + 1, yo, *f);
+
+        display->setColor(WHITE);
+        yo += FONT_HEIGHT_SMALL;
+        if (yo > SCREEN_HEIGHT - FONT_HEIGHT_SMALL) {
+            xo += SCREEN_WIDTH / 2;
+            yo = 0;
+        }
+        f++;
+    }
+}
+
 } // namespace NodeListRenderer
 } // namespace graphics

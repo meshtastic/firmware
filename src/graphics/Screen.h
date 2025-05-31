@@ -238,8 +238,6 @@ class Screen : public concurrency::OSThread
     // Draw north
     float estimatedHeading(double lat, double lon);
 
-    void drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char **fields);
-
     /// Handle button press, trackball or swipe action)
     void onPress() { enqueueCmd(ScreenCmd{.cmd = Cmd::ON_PRESS}); }
     void showPrevFrame() { enqueueCmd(ScreenCmd{.cmd = Cmd::SHOW_PREV_FRAME}); }

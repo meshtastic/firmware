@@ -61,6 +61,7 @@ const char *getCurrentModeTitle(int screenWidth);
 void retrieveAndSortNodes(std::vector<NodeEntry> &nodeList);
 String getSafeNodeName(meshtastic_NodeInfoLite *node);
 uint32_t sinceLastSeen(meshtastic_NodeInfoLite *node);
+void drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char **fields);
 
 // Bitmap drawing function
 void drawScaledXBitmap16x16(int x, int y, int width, int height, const uint8_t *bitmapXBM, OLEDDisplay *display);
