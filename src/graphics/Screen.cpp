@@ -181,75 +181,6 @@ static void drawFunctionOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
     }
 }
 
-#ifdef USE_EINK
-/// Used on eink displays while in deep sleep
-static void drawDeepSleepScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-
-    // Next frame should use full-refresh, and block while running, else device will sleep before async callback
-    EINK_ADD_FRAMEFLAG(display, COSMETIC);
-    EINK_ADD_FRAMEFLAG(display, BLOCKING);
-
-    LOG_DEBUG("Draw deep sleep screen");
-
-    // Display displayStr on the screen
-    graphics::UIRenderer::drawIconScreen("Sleeping", display, state, x, y);
-}
-
-/// Used on eink displays when screen updates are paused
-static void drawScreensaverOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
-{
-    LOG_DEBUG("Draw screensaver overlay");
-
-    EINK_ADD_FRAMEFLAG(display, COSMETIC); // Take the opportunity for a full-refresh
-
-    // Config
-    display->setFont(FONT_SMALL);
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-    const char *pauseText = "Screen Paused";
-    const char *idText = owner.short_name;
-    const bool useId = haveGlyphs(idText); // This bool is used to hide the idText box if we can't render the short name
-    constexpr uint16_t padding = 5;
-    constexpr uint8_t dividerGap = 1;
-    constexpr uint8_t imprecision = 5; // How far the box origins can drift from center. Combat burn-in.
-
-    // Dimensions
-    const uint16_t idTextWidth = display->getStringWidth(idText, strlen(idText), true); // "true": handle utf8 chars
-    const uint16_t pauseTextWidth = display->getStringWidth(pauseText, strlen(pauseText));
-    const uint16_t boxWidth = padding + (useId ? idTextWidth + padding + padding : 0) + pauseTextWidth + padding;
-    const uint16_t boxHeight = padding + FONT_HEIGHT_SMALL + padding;
-
-    // Position
-    const int16_t boxLeft = (display->width() / 2) - (boxWidth / 2) + random(-imprecision, imprecision + 1);
-    // const int16_t boxRight = boxLeft + boxWidth - 1;
-    const int16_t boxTop = (display->height() / 2) - (boxHeight / 2 + random(-imprecision, imprecision + 1));
-    const int16_t boxBottom = boxTop + boxHeight - 1;
-    const int16_t idTextLeft = boxLeft + padding;
-    const int16_t idTextTop = boxTop + padding;
-    const int16_t pauseTextLeft = boxLeft + (useId ? padding + idTextWidth + padding : 0) + padding;
-    const int16_t pauseTextTop = boxTop + padding;
-    const int16_t dividerX = boxLeft + padding + idTextWidth + padding;
-    const int16_t dividerTop = boxTop + 1 + dividerGap;
-    const int16_t dividerBottom = boxBottom - 1 - dividerGap;
-
-    // Draw: box
-    display->setColor(EINK_WHITE);
-    display->fillRect(boxLeft - 1, boxTop - 1, boxWidth + 2, boxHeight + 2); // Clear a slightly oversized area for the box
-    display->setColor(EINK_BLACK);
-    display->drawRect(boxLeft, boxTop, boxWidth, boxHeight);
-
-    // Draw: Text
-    if (useId)
-        display->drawString(idTextLeft, idTextTop, idText);
-    display->drawString(pauseTextLeft, pauseTextTop, pauseText);
-    display->drawString(pauseTextLeft + 1, pauseTextTop, pauseText); // Faux bold
-
-    // Draw: divider
-    if (useId)
-        display->drawLine(dividerX, dividerTop, dividerX, dividerBottom);
-}
-#endif
-
 static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     uint8_t module_frame;
@@ -1023,7 +954,7 @@ Screen::~Screen()
 void Screen::doDeepSleep()
 {
 #ifdef USE_EINK
-    setOn(false, drawDeepSleepScreen);
+    setOn(false, graphics::UIRender::drawDeepSleepScreen);
 #ifdef PIN_EINK_EN
     digitalWrite(PIN_EINK_EN, LOW); // power off backlight
 #endif
@@ -1569,7 +1500,7 @@ void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
 
     // Else, display the usual "overlay" screensaver
     else {
-        screensaverOverlay = drawScreensaverOverlay;
+        screensaverOverlay = graphics::UIRenderer::drawScreensaverOverlay;
         ui->setOverlays(&screensaverOverlay, 1);
     }
 
