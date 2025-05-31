@@ -755,35 +755,6 @@ float Screen::estimatedHeading(double lat, double lon)
 /// nodes
 static int8_t prevFrame = -1;
 
-// Draw the arrow pointing to a node's location
-void Screen::drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t compassY, uint16_t compassDiam, float headingRadian)
-{
-    Point tip(0.0f, 0.5f), tail(0.0f, -0.35f); // pointing up initially
-    float arrowOffsetX = 0.14f, arrowOffsetY = 1.0f;
-    Point leftArrow(tip.x - arrowOffsetX, tip.y - arrowOffsetY), rightArrow(tip.x + arrowOffsetX, tip.y - arrowOffsetY);
-
-    Point *arrowPoints[] = {&tip, &tail, &leftArrow, &rightArrow};
-
-    for (int i = 0; i < 4; i++) {
-        arrowPoints[i]->rotate(headingRadian);
-        arrowPoints[i]->scale(compassDiam * 0.6);
-        arrowPoints[i]->translate(compassX, compassY);
-    }
-    /* Old arrow
-    display->drawLine(tip.x, tip.y, tail.x, tail.y);
-    display->drawLine(leftArrow.x, leftArrow.y, tip.x, tip.y);
-    display->drawLine(rightArrow.x, rightArrow.y, tip.x, tip.y);
-    display->drawLine(leftArrow.x, leftArrow.y, tail.x, tail.y);
-    display->drawLine(rightArrow.x, rightArrow.y, tail.x, tail.y);
-    */
-#ifdef USE_EINK
-    display->drawTriangle(tip.x, tip.y, rightArrow.x, rightArrow.y, tail.x, tail.y);
-#else
-    display->fillTriangle(tip.x, tip.y, rightArrow.x, rightArrow.y, tail.x, tail.y);
-#endif
-    display->drawTriangle(tip.x, tip.y, leftArrow.x, leftArrow.y, tail.x, tail.y);
-}
-
 // Get a string representation of the time passed since something happened
 void Screen::getTimeAgoStr(uint32_t agoSecs, char *timeStr, uint8_t maxLength)
 {
@@ -813,55 +784,6 @@ void Screen::getTimeAgoStr(uint32_t agoSecs, char *timeStr, uint8_t maxLength)
     else
         snprintf(timeStr, maxLength, "unknown age");
 }
-
-void Screen::drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t compassY, float myHeading)
-{
-    Serial.print("🧭 [Main Compass] Raw Heading (deg): ");
-    Serial.println(myHeading * RAD_TO_DEG);
-
-    // If north is supposed to be at the top of the compass we want rotation to be +0
-    if (config.display.compass_north_top)
-        myHeading = -0;
-    /* N sign points currently not deleted*/
-    Point N1(-0.04f, 0.65f), N2(0.04f, 0.65f); // N sign points (N1-N4)
-    Point N3(-0.04f, 0.55f), N4(0.04f, 0.55f);
-    Point NC1(0.00f, 0.50f); // north circle center point
-    Point *rosePoints[] = {&N1, &N2, &N3, &N4, &NC1};
-
-    uint16_t compassDiam = Screen::getCompassDiam(SCREEN_WIDTH, SCREEN_HEIGHT);
-
-    for (int i = 0; i < 5; i++) {
-        // North on compass will be negative of heading
-        rosePoints[i]->rotate(-myHeading);
-        rosePoints[i]->scale(compassDiam);
-        rosePoints[i]->translate(compassX, compassY);
-    }
-}
-
-uint16_t Screen::getCompassDiam(uint32_t displayWidth, uint32_t displayHeight)
-{
-    uint16_t diam = 0;
-    uint16_t offset = 0;
-
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT)
-        offset = FONT_HEIGHT_SMALL;
-
-    // get the smaller of the 2 dimensions and subtract 20
-    if (displayWidth > (displayHeight - offset)) {
-        diam = displayHeight - offset;
-        // if 2/3 of the other size would be smaller, use that
-        if (diam > (displayWidth * 2 / 3)) {
-            diam = displayWidth * 2 / 3;
-        }
-    } else {
-        diam = displayWidth;
-        if (diam > ((displayHeight - offset) * 2 / 3)) {
-            diam = (displayHeight - offset) * 2 / 3;
-        }
-    }
-
-    return diam - 20;
-};
 
 // Combined dynamic node list frame cycling through LastHeard, HopSignal, and Distance modes
 // Uses a single frame and changes data every few seconds (E-Ink variant is separate)

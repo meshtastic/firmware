@@ -238,13 +238,7 @@ class Screen : public concurrency::OSThread
     void getTimeAgoStr(uint32_t agoSecs, char *timeStr, uint8_t maxLength);
 
     // Draw north
-    void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t compassY, float myHeading);
-
-    static uint16_t getCompassDiam(uint32_t displayWidth, uint32_t displayHeight);
-
     float estimatedHeading(double lat, double lon);
-
-    void drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t compassY, uint16_t compassDiam, float headingRadian);
 
     void drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char **fields);
 
