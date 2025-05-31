@@ -59,7 +59,7 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
                r->hash1.size == 0) {
         memcpy(hash2, r->hash2.bytes, 32);
         if (screen)
-            screen->startAlert("Enter Security Number"); // TODO: replace with actual prompt in BaseUI
+            screen->showOverlayBanner("Enter Security Number", 15000);
 
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
         cn->level = meshtastic_LogRecord_Level_WARNING;
@@ -81,8 +81,7 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
             generateVerificationCode(message + 15);
             LOG_INFO("Hash1 matches!");
             if (screen) {
-                screen->endAlert();
-                screen->startAlert(message);
+                screen->showOverlayBanner(message, 15000);
             }
             meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
             cn->level = meshtastic_LogRecord_Level_WARNING;
@@ -180,7 +179,7 @@ meshtastic_MeshPacket *KeyVerificationModule::allocReply()
     responsePacket->pki_encrypted = true;
     if (screen) {
         snprintf(message, 25, "Security Number \n%03u %03u", currentSecurityNumber / 1000, currentSecurityNumber % 1000);
-        screen->startAlert(message);
+        screen->showOverlayBanner(message, 15000);
         LOG_WARN("%s", message);
     }
     meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
@@ -250,8 +249,7 @@ void KeyVerificationModule::processSecurityNumber(uint32_t incomingNumber)
     sprintf(message, "Verification: \n");
     generateVerificationCode(message + 15); // send the toPhone packet
     if (screen) {
-        screen->endAlert();
-        screen->startAlert(message);
+        screen->showOverlayBanner(message, 15000);
     }
     meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
     cn->level = meshtastic_LogRecord_Level_WARNING;
@@ -287,8 +285,6 @@ void KeyVerificationModule::resetToIdle()
     currentSecurityNumber = 0;
     currentRemoteNode = 0;
     currentState = KEY_VERIFICATION_IDLE;
-    if (screen)
-        screen->endAlert();
 }
 
 void KeyVerificationModule::generateVerificationCode(char *readableCode)
