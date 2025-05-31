@@ -114,16 +114,15 @@ uint32_t dopThresholds[5] = {2000, 1000, 500, 200, 100};
 // we'll need to hold onto pointers for the modules that can draw a frame.
 std::vector<MeshModule *> moduleFrames;
 
+// Global variables for screen function overlay symbols
+std::vector<std::string> functionSymbol;
+std::string functionSymbolString;
+
 // Stores the last 4 of our hardware ID, to make finding the device for pairing easier
 // FIXME: Needs refactoring and getMacAddr needs to be moved to a utility class
 extern "C" {
 char ourId[5];
 }
-
-// vector where symbols (string) are displayed in bottom corner of display.
-std::vector<std::string> functionSymbol;
-// string displayed in bottom right corner of display. Created from elements in functionSymbol vector
-std::string functionSymbolString = "";
 
 #if HAS_GPS
 // GeoCoord object for the screen
@@ -161,18 +160,6 @@ void Screen::showOverlayBanner(const String &message, uint32_t durationMs)
     // Store the message and set the expiration timestamp
     alertBannerMessage = message;
     alertBannerUntil = (durationMs == 0) ? 0 : millis() + durationMs;
-}
-
-// draw overlay in bottom right corner of screen to show when notifications are muted or modifier key is active
-static void drawFunctionOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
-{
-    // LOG_DEBUG("Draw function overlay");
-    if (functionSymbol.begin() != functionSymbol.end()) {
-        char buf[64];
-        display->setFont(FONT_SMALL);
-        snprintf(buf, sizeof(buf), "%s", functionSymbolString.c_str());
-        display->drawString(SCREEN_WIDTH - display->getStringWidth(buf), SCREEN_HEIGHT - FONT_HEIGHT_SMALL, buf);
-    }
 }
 
 static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -1078,8 +1065,8 @@ void Screen::setup()
 
     // === Set custom overlay callbacks ===
     static OverlayCallback overlays[] = {
-        drawFunctionOverlay,                    // For mute/buzzer modifiers etc.
-        graphics::UIRenderer::drawNavigationBar // Custom indicator icons for each frame
+        graphics::UIRenderer::drawFunctionOverlay, // For mute/buzzer modifiers etc.
+        graphics::UIRenderer::drawNavigationBar    // Custom indicator icons for each frame
     };
     ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
 

@@ -5,6 +5,8 @@
 #include "detect/ScanI2C.h"
 #include "mesh/generated/meshtastic/config.pb.h"
 #include <OLEDDisplay.h>
+#include <string>
+#include <vector>
 
 #define getStringCenteredX(s) ((SCREEN_WIDTH - display->getStringWidth(s)) / 2)
 
@@ -66,6 +68,7 @@ class Screen
 #include "mesh/MeshModule.h"
 #include "power.h"
 #include <string>
+#include <vector>
 
 // 0 to 255, though particular variants might define different defaults
 #ifndef BRIGHTNESS_DEFAULT
@@ -700,5 +703,9 @@ class Screen : public concurrency::OSThread
 
 extern String alertBannerMessage;
 extern uint32_t alertBannerUntil;
+
+// Extern declarations for function symbols used in UIRenderer
+extern std::vector<std::string> functionSymbol;
+extern std::string functionSymbolString;
 
 #endif

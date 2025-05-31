@@ -48,6 +48,9 @@ void drawScrollbar(OLEDDisplay *display, int visibleItems, int totalItems, int s
 // Overlay and special screens
 void drawFrameText(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *text);
 
+// Function overlay for showing mute/buzzer modifiers etc.
+void drawFunctionOverlay(OLEDDisplay *display, OLEDDisplayUiState *state);
+
 // Navigation bar overlay
 void drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *state);
 

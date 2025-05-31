@@ -1,9 +1,10 @@
 #include "UIRenderer.h"
-#include "../Screen.h"
 #include "GPSStatus.h"
+#include "NodeDB.h"
 #include "NodeListRenderer.h"
 #include "configuration.h"
 #include "gps/GeoCoord.h"
+#include "graphics/Screen.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/images.h"
@@ -1125,6 +1126,18 @@ void drawOEMBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t 
 }
 
 #endif
+
+// Function overlay for showing mute/buzzer modifiers etc.
+void drawFunctionOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
+{
+    // LOG_DEBUG("Draw function overlay");
+    if (functionSymbol.begin() != functionSymbol.end()) {
+        char buf[64];
+        display->setFont(FONT_SMALL);
+        snprintf(buf, sizeof(buf), "%s", functionSymbolString.c_str());
+        display->drawString(SCREEN_WIDTH - display->getStringWidth(buf), SCREEN_HEIGHT - FONT_HEIGHT_SMALL, buf);
+    }
+}
 
 // Navigation bar overlay implementation
 static int8_t lastFrameIndex = -1;

@@ -1,4 +1,5 @@
 #include "CompassRenderer.h"
+#include "NodeDB.h"
 #include "UIRenderer.h"
 #include "configuration.h"
 #include "gps/GeoCoord.h"

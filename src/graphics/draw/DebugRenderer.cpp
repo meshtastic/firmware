@@ -1,6 +1,7 @@
 #include "DebugRenderer.h"
 #include "../Screen.h"
 #include "FSCommon.h"
+#include "NodeDB.h"
 #include "Throttle.h"
 #include "UIRenderer.h"
 #include "airtime.h"
