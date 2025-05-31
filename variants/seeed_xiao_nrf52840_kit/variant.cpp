@@ -84,10 +84,6 @@ void initVariant()
     pinMode(HICHG, OUTPUT);
     digitalWrite(HICHG, LOW);
 
-    // Provide P0.14: VBAT voltage divider sink
-    pinMode(BAT_READ, OUTPUT);
-    digitalWrite(BAT_READ, LOW);
-
     // LEDs
     pinMode(PIN_LED1, OUTPUT);
     ledOff(PIN_LED1);

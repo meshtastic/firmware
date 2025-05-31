@@ -154,7 +154,8 @@ static const uint8_t SCL = PIN_WIRE_SCL;
  */
 #define BATTERY_PIN PIN_VBAT      // P0.31: VBAT voltage divider
 #define ADC_MULTIPLIER (3)        // ... R17=1M, R18=510k
-#define BAT_READ VBAT_ENABLE      // P0.14: VBAT voltage divider sink
+#define ADC_CTRL VBAT_ENABLE      // P0.14: VBAT voltage divider
+#define ADC_CTRL_ENABLED LOW      // ... sink
 #define EXT_CHRG_DETECT (23)      // P0.17: Charge LED
 #define EXT_CHRG_DETECT_VALUE LOW // ... BQ25101 ~CHG indicates charging
 #define HICHG (22)                // P0.13: BQ25101 ISET 100mA instead of 50mA
