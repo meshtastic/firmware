@@ -954,7 +954,7 @@ Screen::~Screen()
 void Screen::doDeepSleep()
 {
 #ifdef USE_EINK
-    setOn(false, graphics::UIRender::drawDeepSleepScreen);
+    setOn(false, graphics::UIRenderer::drawDeepSleepFrame);
 #ifdef PIN_EINK_EN
     digitalWrite(PIN_EINK_EN, LOW); // power off backlight
 #endif
