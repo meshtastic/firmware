@@ -158,6 +158,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define LTR390UV_ADDR 0x53
 #define XPOWERS_AXP192_AXP2101_ADDRESS 0x34 // same adress as TCA8418
 #define PCT2075_ADDR 0x37
+#define BQ27220_ADDR 0x55 // same address as TDECK_KB
+#define BQ25896_ADDR 0x6B
+#define LTR553ALS_ADDR 0x23
 
 // -----------------------------------------------------------------------------
 // ACCELEROMETER
@@ -171,6 +174,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define BMX160_ADDR 0x69
 #define ICM20948_ADDR 0x69
 #define ICM20948_ADDR_ALT 0x68
+#define BHI260AP_ADDR 0x28
 
 // -----------------------------------------------------------------------------
 // LED
@@ -192,6 +196,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Touchscreen
 // -----------------------------------------------------------------------------
 #define FT6336U_ADDR 0x48
+#define CST328_ADDR 0x1A
 
 // -----------------------------------------------------------------------------
 // BIAS-T Generator

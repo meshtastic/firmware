@@ -103,9 +103,69 @@ enum {
     _TCA8418_COL9  // Pin ID for column 9
 };
 
+#if defined(T_DECK_PRO)
+#define _TCA8418_COLS 10
+#define _TCA8418_ROWS 4
+#define _TCA8418_NUM_KEYS 35
+
+#define _TCA8418_LONG_PRESS_THRESHOLD 2000
+#define _TCA8418_MULTI_TAP_THRESHOLD 1500
+
+// Num chars per key, Modulus for rotating through characters
+uint8_t TCA8418TapMod[_TCA8418_NUM_KEYS] = {3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+                                            3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3};
+
+// https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes
+unsigned char TCA8418TapMap[_TCA8418_NUM_KEYS][3] = {{'p', 'P', '@'},
+                                                     {'o', 'O', '+'},
+                                                     {'i', 'I', '-'},
+                                                     {'u', 'U', '_'},
+                                                     {'y', 'Y', ')'},
+                                                     {'t', 'T', '('},
+                                                     {'r', 'R', '3'},
+                                                     {'e', 'E', '2'},
+                                                     {'w', 'W', '1'},
+                                                     {'q', 'Q', '#'},
+                                                     {_TCA8418_BSP, 0x00, 0x00},
+                                                     {'l', 'L', '"'},
+                                                     {'k', 'K', '\''},
+                                                     {'j', 'J', ';'},
+                                                     {'h', 'H', ':'},
+                                                     {'g', 'G', '/'},
+                                                     {'f', 'F', '6'},
+                                                     {'d', 'D', '5'},
+                                                     {'s', 'S', '4'},
+                                                     {'a', 'A', '*'},
+                                                     {0x0d, 0x00, 0x00},
+                                                     {'$', 0x00, 0x00},
+                                                     {'m', 'M', '.'},
+                                                     {'n', 'N', ','},
+                                                     {'b', 'B', '!'},
+                                                     {'v', 'V', '?'},
+                                                     {'c', 'C', '9'},
+                                                     {'x', 'X', '8'},
+                                                     {'z', 'Z', '7'},
+                                                     {0xa4, 0x00, 0x00},
+                                                     {0xa1, 0x00, 0x00},
+                                                     {0x00, 0x00, 0x00},
+                                                     {0x20, 0x00, 0x00},
+                                                     {0x00, 0x00, '0'},
+                                                     {0xa0, 0x00, 0x00}};
+
+unsigned char TCA8418LongPressMap[_TCA8418_NUM_KEYS] = {
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, _TCA8418_ESC, // p,o,i,u,y,t,r,e,w,q
+    0x00, 0x00, 0x00, 0xb5, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,         // bsp,l,k,j,h,g,f,d,s,a
+    0x00, 0x00, 0xb7, 0xb6, 0xb4, 0x00, 0x00, 0x00, 0x00, 0x00,         // ent,$,m,n,b,v,c,x,z,alt
+    0x00, 0x00, 0x00, 0x00, 0x00                                        // rShift,sym,space,mic,lShift
+};
+
+#else
 #define _TCA8418_COLS 3
 #define _TCA8418_ROWS 4
 #define _TCA8418_NUM_KEYS 12
+
+#define _TCA8418_LONG_PRESS_THRESHOLD 2000
+#define _TCA8418_MULTI_TAP_THRESHOLD 750
 
 uint8_t TCA8418TapMod[_TCA8418_NUM_KEYS] = {13, 7, 7, 7, 7, 7,
                                             9,  7, 9, 2, 2, 2}; // Num chars per key, Modulus for rotating through characters
@@ -139,9 +199,7 @@ unsigned char TCA8418LongPressMap[_TCA8418_NUM_KEYS] = {
     _TCA8418_NONE,  // 0
     _TCA8418_NONE,  // #
 };
-
-#define _TCA8418_LONG_PRESS_THRESHOLD 2000
-#define _TCA8418_MULTI_TAP_THRESHOLD 750
+#endif
 
 TCA8418Keyboard::TCA8418Keyboard() : m_wire(nullptr), m_addr(0), readCallback(nullptr), writeCallback(nullptr)
 {
@@ -182,10 +240,14 @@ void TCA8418Keyboard::reset()
     //  set default all GIO pins to INPUT
     writeRegister(_TCA8418_REG_GPIO_DIR_1, 0x00);
     writeRegister(_TCA8418_REG_GPIO_DIR_2, 0x00);
+#ifndef T_DECK_PRO
     // Set COL9 as GPIO output
     writeRegister(_TCA8418_REG_GPIO_DIR_3, 0x02);
     // Switch off keyboard backlight (COL9 = LOW)
     writeRegister(_TCA8418_REG_GPIO_DAT_OUT_3, 0x00);
+#else
+    writeRegister(_TCA8418_REG_GPIO_DIR_3, 0x00);
+#endif
 
     //  add all pins to key events
     writeRegister(_TCA8418_REG_GPI_EM_1, 0xFF);
@@ -516,11 +578,19 @@ void TCA8418Keyboard::disableDebounce()
 
 void TCA8418Keyboard::setBacklight(bool on)
 {
+#ifdef T_DECK_PRO
+    if (on) {
+        digitalWrite(KB_BL_PIN, HIGH);
+    } else {
+        digitalWrite(KB_BL_PIN, LOW);
+    }
+#else
     if (on) {
         digitalWrite(_TCA8418_COL9, HIGH);
     } else {
         digitalWrite(_TCA8418_COL9, LOW);
     }
+#endif
 }
 
 uint8_t TCA8418Keyboard::readRegister(uint8_t reg) const
