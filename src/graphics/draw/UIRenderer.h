@@ -49,12 +49,21 @@ void drawScrollbar(OLEDDisplay *display, int visibleItems, int totalItems, int s
 void drawScreensaverOverlay(OLEDDisplay *display, OLEDDisplayUiState *state);
 void drawFrameText(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *text);
 
-// Text and emote rendering
-void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string &line, const Emote *emotes, int emoteCount);
-
 void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 
 void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+
+// Icon and screen drawing functions
+void drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+
+// Compass and location screen
+void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+
+// OEM screens
+#ifdef USERPREFS_OEM_TEXT
+void drawOEMIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+void drawOEMBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+#endif
 
 // Time and date utilities
 void getTimeAgoStr(uint32_t agoSecs, char *timeStr, uint8_t maxLength);

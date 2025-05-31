@@ -20,7 +20,7 @@ namespace ScreenRenderer
 {
 // Screen frame functions
 void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-void drawMemoryScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+void drawMemoryUsage(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 

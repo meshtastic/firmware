@@ -28,6 +28,11 @@ void drawDebugInfoTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, in
 void drawDebugInfoSettingsTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 void drawDebugInfoWiFiTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 
+// LoRa information display
+void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+
+// Memory screen display
+void drawMemoryUsage(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 } // namespace DebugRenderer
 
 } // namespace graphics

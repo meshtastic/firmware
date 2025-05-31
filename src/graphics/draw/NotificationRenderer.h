@@ -3,6 +3,12 @@
 #include "OLEDDisplay.h"
 #include "OLEDDisplayUi.h"
 
+namespace graphics
+{
+
+namespace NotificationRenderer
+{
+
 class NotificationRenderer
 {
   public:
@@ -12,3 +18,7 @@ class NotificationRenderer
     static void drawWelcomeScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
     static void drawFrameFirmware(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 };
+
+} // namespace NotificationRenderer
+
+} // namespace graphics

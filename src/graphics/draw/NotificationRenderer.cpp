@@ -23,6 +23,12 @@ extern std::vector<std::string> functionSymbol;
 extern std::string functionSymbolString;
 extern bool hasUnreadMessage;
 
+namespace graphics
+{
+
+namespace NotificationRenderer
+{
+
 // Used on boot when a certificate is being created
 void NotificationRenderer::drawSSLScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
@@ -165,3 +171,7 @@ void NotificationRenderer::drawFrameFirmware(OLEDDisplay *display, OLEDDisplayUi
     display->drawStringMaxWidth(0 + x, 2 + y + FONT_HEIGHT_SMALL * 2, x + display->getWidth(),
                                 "Please be patient and do not power off.");
 }
+
+} // namespace NotificationRenderer
+
+} // namespace graphics

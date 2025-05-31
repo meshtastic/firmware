@@ -1,5 +1,6 @@
 #include "DebugRenderer.h"
 #include "../Screen.h"
+#include "FSCommon.h"
 #include "Throttle.h"
 #include "UIRenderer.h"
 #include "airtime.h"
@@ -24,6 +25,9 @@
 #ifdef ARCH_ESP32
 #include "modules/StoreForwardModule.h"
 #endif
+#include <DisplayFormatters.h>
+#include <RadioLibInterface.h>
+#include <target_specific.h>
 
 using namespace meshtastic;
 
@@ -380,5 +384,287 @@ void drawDebugInfoWiFiTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state
     drawFrameWiFi(display, state, x, y);
 }
 
+// ****************************
+// * LoRa Focused Screen      *
+// ****************************
+void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    display->clear();
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
+
+    // === Header ===
+    graphics::drawCommonHeader(display, x, y);
+
+    // === Draw title (aligned with header baseline) ===
+    const int highlightHeight = FONT_HEIGHT_SMALL - 1;
+    const int textY = y + 1 + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
+    const char *titleStr = (SCREEN_WIDTH > 128) ? "LoRa Info" : "LoRa";
+    const int centerX = x + SCREEN_WIDTH / 2;
+
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
+        display->setColor(BLACK);
+    }
+
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->drawString(centerX, textY, titleStr);
+    if (config.display.heading_bold) {
+        display->drawString(centerX + 1, textY, titleStr);
+    }
+    display->setColor(WHITE);
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+    // === First Row: Region / BLE Name ===
+    graphics::UIRenderer::drawNodes(display, x, compactFirstLine + 3, nodeStatus, 0, true);
+
+    uint8_t dmac[6];
+    char shortnameble[35];
+    getMacAddr(dmac);
+    snprintf(ourId, sizeof(ourId), "%02x%02x", dmac[4], dmac[5]);
+    snprintf(shortnameble, sizeof(shortnameble), "BLE: %s", ourId);
+    int textWidth = display->getStringWidth(shortnameble);
+    int nameX = (SCREEN_WIDTH - textWidth);
+    display->drawString(nameX, compactFirstLine, shortnameble);
+
+    // === Second Row: Radio Preset ===
+    auto mode = DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false);
+    char regionradiopreset[25];
+    const char *region = myRegion ? myRegion->name : NULL;
+    snprintf(regionradiopreset, sizeof(regionradiopreset), "%s/%s", region, mode);
+    textWidth = display->getStringWidth(regionradiopreset);
+    nameX = (SCREEN_WIDTH - textWidth) / 2;
+    display->drawString(nameX, compactSecondLine, regionradiopreset);
+
+    // === Third Row: Frequency / ChanNum ===
+    char frequencyslot[35];
+    char freqStr[16];
+    float freq = RadioLibInterface::instance->getFreq();
+    snprintf(freqStr, sizeof(freqStr), "%.3f", freq);
+    if (config.lora.channel_num == 0) {
+        snprintf(frequencyslot, sizeof(frequencyslot), "Freq: %s", freqStr);
+    } else {
+        snprintf(frequencyslot, sizeof(frequencyslot), "Freq/Chan: %s (%d)", freqStr, config.lora.channel_num);
+    }
+    size_t len = strlen(frequencyslot);
+    if (len >= 4 && strcmp(frequencyslot + len - 4, " (0)") == 0) {
+        frequencyslot[len - 4] = '\0'; // Remove the last three characters
+    }
+    textWidth = display->getStringWidth(frequencyslot);
+    nameX = (SCREEN_WIDTH - textWidth) / 2;
+    display->drawString(nameX, compactThirdLine, frequencyslot);
+
+    // === Fourth Row: Channel Utilization ===
+    const char *chUtil = "ChUtil:";
+    char chUtilPercentage[10];
+    snprintf(chUtilPercentage, sizeof(chUtilPercentage), "%2.0f%%", airTime->channelUtilizationPercent());
+
+    int chUtil_x = (SCREEN_WIDTH > 128) ? display->getStringWidth(chUtil) + 10 : display->getStringWidth(chUtil) + 5;
+    int chUtil_y = compactFourthLine + 3;
+
+    int chutil_bar_width = (SCREEN_WIDTH > 128) ? 100 : 50;
+    int chutil_bar_height = (SCREEN_WIDTH > 128) ? 12 : 7;
+    int extraoffset = (SCREEN_WIDTH > 128) ? 6 : 3;
+    int chutil_percent = airTime->channelUtilizationPercent();
+
+    int centerofscreen = SCREEN_WIDTH / 2;
+    int total_line_content_width = (chUtil_x + chutil_bar_width + display->getStringWidth(chUtilPercentage) + extraoffset) / 2;
+    int starting_position = centerofscreen - total_line_content_width;
+
+    display->drawString(starting_position, compactFourthLine, chUtil);
+
+    // Force 56% or higher to show a full 100% bar, text would still show related percent.
+    if (chutil_percent >= 61) {
+        chutil_percent = 100;
+    }
+
+    // Weighting for nonlinear segments
+    float milestone1 = 25;
+    float milestone2 = 40;
+    float weight1 = 0.45; // Weight for 0–25%
+    float weight2 = 0.35; // Weight for 25–40%
+    float weight3 = 0.20; // Weight for 40–100%
+    float totalWeight = weight1 + weight2 + weight3;
+
+    int seg1 = chutil_bar_width * (weight1 / totalWeight);
+    int seg2 = chutil_bar_width * (weight2 / totalWeight);
+    int seg3 = chutil_bar_width * (weight3 / totalWeight);
+
+    int fillRight = 0;
+
+    if (chutil_percent <= milestone1) {
+        fillRight = (seg1 * (chutil_percent / milestone1));
+    } else if (chutil_percent <= milestone2) {
+        fillRight = seg1 + (seg2 * ((chutil_percent - milestone1) / (milestone2 - milestone1)));
+    } else {
+        fillRight = seg1 + seg2 + (seg3 * ((chutil_percent - milestone2) / (100 - milestone2)));
+    }
+
+    // Draw outline
+    display->drawRect(starting_position + chUtil_x, chUtil_y, chutil_bar_width, chutil_bar_height);
+
+    // Fill progress
+    if (fillRight > 0) {
+        display->fillRect(starting_position + chUtil_x, chUtil_y, fillRight, chutil_bar_height);
+    }
+
+    display->drawString(starting_position + chUtil_x + chutil_bar_width + extraoffset, compactFourthLine, chUtilPercentage);
+}
+
+// ****************************
+// *      Memory Screen       *
+// ****************************
+void drawMemoryUsage(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    display->clear();
+    display->setFont(FONT_SMALL);
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+    // === Header ===
+    graphics::drawCommonHeader(display, x, y);
+
+    // === Draw title ===
+    const int highlightHeight = FONT_HEIGHT_SMALL - 1;
+    const int textY = y + 1 + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
+    const char *titleStr = (SCREEN_WIDTH > 128) ? "Memory" : "Mem";
+    const int centerX = x + SCREEN_WIDTH / 2;
+
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
+        display->setColor(BLACK);
+    }
+
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->drawString(centerX, textY, titleStr);
+    if (config.display.heading_bold) {
+        display->drawString(centerX + 1, textY, titleStr);
+    }
+    display->setColor(WHITE);
+
+    // === Layout ===
+    int contentY = y + FONT_HEIGHT_SMALL;
+    const int rowYOffset = FONT_HEIGHT_SMALL - 3;
+    const int barHeight = 6;
+    const int labelX = x;
+    const int barsOffset = (SCREEN_WIDTH > 128) ? 24 : 0;
+    const int barX = x + 40 + barsOffset;
+
+    int rowY = contentY;
+
+    // === Heap delta tracking (disabled) ===
+    /*
+    static uint32_t previousHeapFree = 0;
+    static int32_t totalHeapDelta = 0;
+    static int deltaChangeCount = 0;
+    */
+
+    auto drawUsageRow = [&](const char *label, uint32_t used, uint32_t total, bool isHeap = false) {
+        if (total == 0)
+            return;
+
+        int percent = (used * 100) / total;
+
+        char combinedStr[24];
+        if (SCREEN_WIDTH > 128) {
+            snprintf(combinedStr, sizeof(combinedStr), "%s%3d%%  %lu/%luKB", (percent > 80) ? "! " : "", percent, used / 1024,
+                     total / 1024);
+        } else {
+            snprintf(combinedStr, sizeof(combinedStr), "%s%3d%%", (percent > 80) ? "! " : "", percent);
+        }
+
+        int textWidth = display->getStringWidth(combinedStr);
+        int adjustedBarWidth = SCREEN_WIDTH - barX - textWidth - 6;
+        if (adjustedBarWidth < 10)
+            adjustedBarWidth = 10;
+
+        int fillWidth = (used * adjustedBarWidth) / total;
+
+        // Label
+        display->setTextAlignment(TEXT_ALIGN_LEFT);
+        display->drawString(labelX, rowY, label);
+
+        // Bar
+        int barY = rowY + (FONT_HEIGHT_SMALL - barHeight) / 2;
+        display->setColor(WHITE);
+        display->drawRect(barX, barY, adjustedBarWidth, barHeight);
+
+        display->fillRect(barX, barY, fillWidth, barHeight);
+        display->setColor(WHITE);
+
+        // Value string
+        display->setTextAlignment(TEXT_ALIGN_RIGHT);
+        display->drawString(SCREEN_WIDTH - 2, rowY, combinedStr);
+
+        rowY += rowYOffset;
+
+        // === Heap delta display (disabled) ===
+        /*
+        if (isHeap && previousHeapFree > 0) {
+            int32_t delta = (int32_t)(memGet.getFreeHeap() - previousHeapFree);
+            if (delta != 0) {
+                totalHeapDelta += delta;
+                deltaChangeCount++;
+
+                char deltaStr[16];
+                snprintf(deltaStr, sizeof(deltaStr), "%ld", delta);
+
+                int deltaX = centerX - display->getStringWidth(deltaStr) / 2 - 8;
+                int deltaY = rowY + 1;
+
+                // Triangle
+                if (delta > 0) {
+                    display->drawLine(deltaX, deltaY + 6, deltaX + 3, deltaY);
+                    display->drawLine(deltaX + 3, deltaY, deltaX + 6, deltaY + 6);
+                    display->drawLine(deltaX, deltaY + 6, deltaX + 6, deltaY + 6);
+                } else {
+                    display->drawLine(deltaX, deltaY, deltaX + 3, deltaY + 6);
+                    display->drawLine(deltaX + 3, deltaY + 6, deltaX + 6, deltaY);
+                    display->drawLine(deltaX, deltaY, deltaX + 6, deltaY);
+                }
+
+                display->setTextAlignment(TEXT_ALIGN_CENTER);
+                display->drawString(centerX + 6, deltaY, deltaStr);
+                rowY += rowYOffset;
+            }
+        }
+
+        if (isHeap) {
+            previousHeapFree = memGet.getFreeHeap();
+        }
+        */
+    };
+
+    // === Memory values ===
+    uint32_t heapUsed = memGet.getHeapSize() - memGet.getFreeHeap();
+    uint32_t heapTotal = memGet.getHeapSize();
+
+    uint32_t psramUsed = memGet.getPsramSize() - memGet.getFreePsram();
+    uint32_t psramTotal = memGet.getPsramSize();
+
+    uint32_t flashUsed = 0, flashTotal = 0;
+#ifdef ESP32
+    flashUsed = FSCom.usedBytes();
+    flashTotal = FSCom.totalBytes();
+#endif
+
+    uint32_t sdUsed = 0, sdTotal = 0;
+    bool hasSD = false;
+    /*
+    #ifdef HAS_SDCARD
+        hasSD = SD.cardType() != CARD_NONE;
+        if (hasSD) {
+            sdUsed = SD.usedBytes();
+            sdTotal = SD.totalBytes();
+        }
+    #endif
+    */
+    // === Draw memory rows
+    drawUsageRow("Heap:", heapUsed, heapTotal, true);
+    drawUsageRow("PSRAM:", psramUsed, psramTotal);
+#ifdef ESP32
+    if (flashTotal > 0)
+        drawUsageRow("Flash:", flashUsed, flashTotal);
+#endif
+    if (hasSD && sdTotal > 0)
+        drawUsageRow("SD:", sdUsed, sdTotal);
+}
 } // namespace DebugRenderer
 } // namespace graphics

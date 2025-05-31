@@ -144,6 +144,106 @@ std::string drawTimeDelta(uint32_t days, uint32_t hours, uint32_t minutes, uint3
     return uptime;
 }
 
+void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string &line, const Emote *emotes, int emoteCount)
+{
+    int cursorX = x;
+    const int fontHeight = FONT_HEIGHT_SMALL;
+
+    // === Step 1: Find tallest emote in the line ===
+    int maxIconHeight = fontHeight;
+    for (size_t i = 0; i < line.length();) {
+        bool matched = false;
+        for (int e = 0; e < emoteCount; ++e) {
+            size_t emojiLen = strlen(emotes[e].label);
+            if (line.compare(i, emojiLen, emotes[e].label) == 0) {
+                if (emotes[e].height > maxIconHeight)
+                    maxIconHeight = emotes[e].height;
+                i += emojiLen;
+                matched = true;
+                break;
+            }
+        }
+        if (!matched) {
+            uint8_t c = static_cast<uint8_t>(line[i]);
+            if ((c & 0xE0) == 0xC0)
+                i += 2;
+            else if ((c & 0xF0) == 0xE0)
+                i += 3;
+            else if ((c & 0xF8) == 0xF0)
+                i += 4;
+            else
+                i += 1;
+        }
+    }
+
+    // === Step 2: Baseline alignment ===
+    int lineHeight = std::max(fontHeight, maxIconHeight);
+    int baselineOffset = (lineHeight - fontHeight) / 2;
+    int fontY = y + baselineOffset;
+    int fontMidline = fontY + fontHeight / 2;
+
+    // === Step 3: Render line in segments ===
+    size_t i = 0;
+    bool inBold = false;
+
+    while (i < line.length()) {
+        // Check for ** start/end for faux bold
+        if (line.compare(i, 2, "**") == 0) {
+            inBold = !inBold;
+            i += 2;
+            continue;
+        }
+
+        // Look ahead for the next emote match
+        size_t nextEmotePos = std::string::npos;
+        const Emote *matchedEmote = nullptr;
+        size_t emojiLen = 0;
+
+        for (int e = 0; e < emoteCount; ++e) {
+            size_t pos = line.find(emotes[e].label, i);
+            if (pos != std::string::npos && (nextEmotePos == std::string::npos || pos < nextEmotePos)) {
+                nextEmotePos = pos;
+                matchedEmote = &emotes[e];
+                emojiLen = strlen(emotes[e].label);
+            }
+        }
+
+        // Render normal text segment up to the emote or bold toggle
+        size_t nextControl = std::min(nextEmotePos, line.find("**", i));
+        if (nextControl == std::string::npos)
+            nextControl = line.length();
+
+        if (nextControl > i) {
+            std::string textChunk = line.substr(i, nextControl - i);
+            if (inBold) {
+                // Faux bold: draw twice, offset by 1px
+                display->drawString(cursorX + 1, fontY, textChunk.c_str());
+            }
+            display->drawString(cursorX, fontY, textChunk.c_str());
+            cursorX += display->getStringWidth(textChunk.c_str());
+            i = nextControl;
+            continue;
+        }
+
+        // Render the emote (if found)
+        if (matchedEmote && i == nextEmotePos) {
+            int iconY = fontMidline - matchedEmote->height / 2 - 1;
+            display->drawXbm(cursorX, iconY, matchedEmote->width, matchedEmote->height, matchedEmote->bitmap);
+            cursorX += matchedEmote->width + 1;
+            i += emojiLen;
+        } else {
+            // No more emotes — render the rest of the line
+            std::string remaining = line.substr(i);
+            if (inBold) {
+                display->drawString(cursorX + 1, fontY, remaining.c_str());
+            }
+            display->drawString(cursorX, fontY, remaining.c_str());
+            cursorX += display->getStringWidth(remaining.c_str());
+            break;
+        }
+    }
+}
+
 void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     // Clear the unread message indicator when viewing the message
@@ -357,7 +457,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                     display->drawString(x + 4, lineY, lines[i].c_str());
                 display->setColor(WHITE);
             } else {
-                graphics::UIRenderer::drawStringWithEmotes(display, x, lineY, lines[i], emotes, numEmotes);
+                drawStringWithEmotes(display, x, lineY, lines[i], emotes, numEmotes);
             }
         }
     }

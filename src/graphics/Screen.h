@@ -6,6 +6,8 @@
 #include "mesh/generated/meshtastic/config.pb.h"
 #include <OLEDDisplay.h>
 
+#define getStringCenteredX(s) ((SCREEN_WIDTH - display->getStringWidth(s)) / 2)
+
 #if !HAS_SCREEN
 #include "power.h"
 namespace graphics
