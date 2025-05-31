@@ -48,6 +48,9 @@ void drawScrollbar(OLEDDisplay *display, int visibleItems, int totalItems, int s
 // Overlay and special screens
 void drawFrameText(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *text);
 
+// Navigation bar overlay
+void drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *state);
+
 void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 
 void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);

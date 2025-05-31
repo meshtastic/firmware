@@ -70,7 +70,6 @@ using graphics::NodeListRenderer::drawDynamicNodeListScreen;
 using graphics::NodeListRenderer::drawHopSignalScreen;
 using graphics::NodeListRenderer::drawLastHeardScreen;
 using graphics::NodeListRenderer::drawNodeListWithCompasses;
-using graphics::NodeListRenderer::drawScaledXBitmap16x16;
 
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
 #include "mesh/wifi/WiFiAPClient.h"
@@ -1049,87 +1048,6 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
         screenOn = on;
     }
 }
-static int8_t lastFrameIndex = -1;
-static uint32_t lastFrameChangeTime = 0;
-constexpr uint32_t ICON_DISPLAY_DURATION_MS = 2000;
-
-void NavigationBar(OLEDDisplay *display, OLEDDisplayUiState *state)
-{
-    int currentFrame = state->currentFrame;
-
-    // Detect frame change and record time
-    if (currentFrame != lastFrameIndex) {
-        lastFrameIndex = currentFrame;
-        lastFrameChangeTime = millis();
-    }
-
-    const bool useBigIcons = (SCREEN_WIDTH > 128);
-    const int iconSize = useBigIcons ? 16 : 8;
-    const int spacing = useBigIcons ? 8 : 4;
-    const int bigOffset = useBigIcons ? 1 : 0;
-
-    const size_t totalIcons = screen->indicatorIcons.size();
-    if (totalIcons == 0)
-        return;
-
-    const size_t iconsPerPage = (SCREEN_WIDTH + spacing) / (iconSize + spacing);
-    const size_t currentPage = currentFrame / iconsPerPage;
-    const size_t pageStart = currentPage * iconsPerPage;
-    const size_t pageEnd = min(pageStart + iconsPerPage, totalIcons);
-
-    const int totalWidth = (pageEnd - pageStart) * iconSize + (pageEnd - pageStart - 1) * spacing;
-    const int xStart = (SCREEN_WIDTH - totalWidth) / 2;
-
-    // Only show bar briefly after switching frames (unless on E-Ink)
-#if defined(USE_EINK)
-    int y = SCREEN_HEIGHT - iconSize - 1;
-#else
-    int y = SCREEN_HEIGHT - iconSize - 1;
-    if (millis() - lastFrameChangeTime > ICON_DISPLAY_DURATION_MS) {
-        y = SCREEN_HEIGHT;
-    }
-#endif
-
-    // Pre-calculate bounding rect
-    const int rectX = xStart - 2 - bigOffset;
-    const int rectWidth = totalWidth + 4 + (bigOffset * 2);
-    const int rectHeight = iconSize + 6;
-
-    // Clear background and draw border
-    display->setColor(BLACK);
-    display->fillRect(rectX + 1, y - 2, rectWidth - 2, rectHeight - 2);
-    display->setColor(WHITE);
-    display->drawRect(rectX, y - 2, rectWidth, rectHeight);
-
-    // Icon drawing loop for the current page
-    for (size_t i = pageStart; i < pageEnd; ++i) {
-        const uint8_t *icon = screen->indicatorIcons[i];
-        const int x = xStart + (i - pageStart) * (iconSize + spacing);
-        const bool isActive = (i == static_cast<size_t>(currentFrame));
-
-        if (isActive) {
-            display->setColor(WHITE);
-            display->fillRect(x - 2, y - 2, iconSize + 4, iconSize + 4);
-            display->setColor(BLACK);
-        }
-
-        if (useBigIcons) {
-            drawScaledXBitmap16x16(x, y, 8, 8, icon, display);
-        } else {
-            display->drawXbm(x, y, iconSize, iconSize, icon);
-        }
-
-        if (isActive) {
-            display->setColor(WHITE);
-        }
-    }
-
-    // Knock the corners off the square
-    display->setColor(BLACK);
-    display->drawRect(rectX, y - 2, 1, 1);
-    display->drawRect(rectX + rectWidth - 1, y - 2, 1, 1);
-    display->setColor(WHITE);
-}
 
 void Screen::setup()
 {
@@ -1165,8 +1083,8 @@ void Screen::setup()
 
     // === Set custom overlay callbacks ===
     static OverlayCallback overlays[] = {
-        drawFunctionOverlay, // For mute/buzzer modifiers etc.
-        NavigationBar        // Custom indicator icons for each frame
+        drawFunctionOverlay,                    // For mute/buzzer modifiers etc.
+        graphics::UIRenderer::drawNavigationBar // Custom indicator icons for each frame
     };
     ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
 
@@ -1440,21 +1358,6 @@ int32_t Screen::runOnce()
     return (1000 / targetFramerate);
 }
 
-void Screen::drawDebugInfoTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    graphics::DebugRenderer::drawDebugInfoTrampoline(display, state, x, y);
-}
-
-void Screen::drawDebugInfoSettingsTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    graphics::DebugRenderer::drawDebugInfoSettingsTrampoline(display, state, x, y);
-}
-
-void Screen::drawDebugInfoWiFiTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    graphics::DebugRenderer::drawDebugInfoWiFiTrampoline(display, state, x, y);
-}
-
 /* show a message that the SSL cert is being built
  * it is expected that this will be used during the boot phase */
 void Screen::setSSLFrames()
@@ -1658,16 +1561,16 @@ void Screen::setFrames(FrameFocus focus)
     // Since frames are basic function pointers, we have to use a helper to
     // call a method on debugInfo object.
     // fsi.positions.log = numframes;
-    // normalFrames[numframes++] = &Screen::drawDebugInfoTrampoline;
+    // normalFrames[numframes++] = graphics::DebugRenderer::drawDebugInfoTrampoline;
 
     // call a method on debugInfoScreen object (for more details)
     // fsi.positions.settings = numframes;
-    // normalFrames[numframes++] = &Screen::drawDebugInfoSettingsTrampoline;
+    // normalFrames[numframes++] = graphics::DebugRenderer::drawDebugInfoSettingsTrampoline;
 
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
     if (!dismissedFrames.wifi && isWifiAvailable()) {
         fsi.positions.wifi = numframes;
-        normalFrames[numframes++] = &Screen::drawDebugInfoWiFiTrampoline;
+        normalFrames[numframes++] = graphics::DebugRenderer::drawDebugInfoWiFiTrampoline;
         indicatorIcons.push_back(icon_wifi);
     }
 #endif
@@ -1680,7 +1583,7 @@ void Screen::setFrames(FrameFocus focus)
     ui->disableAllIndicators();
 
     // Add overlays: frame icons and alert banner)
-    static OverlayCallback overlays[] = {NavigationBar,
+    static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar,
                                          graphics::NotificationRenderer::NotificationRenderer::drawAlertBannerOverlay};
     ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
 

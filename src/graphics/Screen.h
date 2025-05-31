@@ -645,13 +645,6 @@ class Screen : public concurrency::OSThread
     // Sets frame up for immediate drawing
     void setFrameImmediateDraw(FrameCallback *drawFrames);
 
-    /// Called when debug screen is to be drawn, calls through to debugInfo.drawFrame.
-    static void drawDebugInfoTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-
-    static void drawDebugInfoSettingsTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-
-    static void drawDebugInfoWiFiTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-
 #if defined(DISPLAY_CLOCK_FRAME)
     static void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 

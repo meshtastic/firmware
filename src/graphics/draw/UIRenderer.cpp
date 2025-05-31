@@ -1,6 +1,7 @@
 #include "UIRenderer.h"
 #include "../Screen.h"
 #include "GPSStatus.h"
+#include "NodeListRenderer.h"
 #include "configuration.h"
 #include "gps/GeoCoord.h"
 #include "graphics/ScreenFonts.h"
@@ -1124,6 +1125,89 @@ void drawOEMBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t 
 }
 
 #endif
+
+// Navigation bar overlay implementation
+static int8_t lastFrameIndex = -1;
+static uint32_t lastFrameChangeTime = 0;
+constexpr uint32_t ICON_DISPLAY_DURATION_MS = 2000;
+
+void drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *state)
+{
+    int currentFrame = state->currentFrame;
+
+    // Detect frame change and record time
+    if (currentFrame != lastFrameIndex) {
+        lastFrameIndex = currentFrame;
+        lastFrameChangeTime = millis();
+    }
+
+    const bool useBigIcons = (SCREEN_WIDTH > 128);
+    const int iconSize = useBigIcons ? 16 : 8;
+    const int spacing = useBigIcons ? 8 : 4;
+    const int bigOffset = useBigIcons ? 1 : 0;
+
+    const size_t totalIcons = screen->indicatorIcons.size();
+    if (totalIcons == 0)
+        return;
+
+    const size_t iconsPerPage = (SCREEN_WIDTH + spacing) / (iconSize + spacing);
+    const size_t currentPage = currentFrame / iconsPerPage;
+    const size_t pageStart = currentPage * iconsPerPage;
+    const size_t pageEnd = min(pageStart + iconsPerPage, totalIcons);
+
+    const int totalWidth = (pageEnd - pageStart) * iconSize + (pageEnd - pageStart - 1) * spacing;
+    const int xStart = (SCREEN_WIDTH - totalWidth) / 2;
+
+    // Only show bar briefly after switching frames (unless on E-Ink)
+#if defined(USE_EINK)
+    int y = SCREEN_HEIGHT - iconSize - 1;
+#else
+    int y = SCREEN_HEIGHT - iconSize - 1;
+    if (millis() - lastFrameChangeTime > ICON_DISPLAY_DURATION_MS) {
+        y = SCREEN_HEIGHT;
+    }
+#endif
+
+    // Pre-calculate bounding rect
+    const int rectX = xStart - 2 - bigOffset;
+    const int rectWidth = totalWidth + 4 + (bigOffset * 2);
+    const int rectHeight = iconSize + 6;
+
+    // Clear background and draw border
+    display->setColor(BLACK);
+    display->fillRect(rectX + 1, y - 2, rectWidth - 2, rectHeight - 2);
+    display->setColor(WHITE);
+    display->drawRect(rectX, y - 2, rectWidth, rectHeight);
+
+    // Icon drawing loop for the current page
+    for (size_t i = pageStart; i < pageEnd; ++i) {
+        const uint8_t *icon = screen->indicatorIcons[i];
+        const int x = xStart + (i - pageStart) * (iconSize + spacing);
+        const bool isActive = (i == static_cast<size_t>(currentFrame));
+
+        if (isActive) {
+            display->setColor(WHITE);
+            display->fillRect(x - 2, y - 2, iconSize + 4, iconSize + 4);
+            display->setColor(BLACK);
+        }
+
+        if (useBigIcons) {
+            NodeListRenderer::drawScaledXBitmap16x16(x, y, 8, 8, icon, display);
+        } else {
+            display->drawXbm(x, y, iconSize, iconSize, icon);
+        }
+
+        if (isActive) {
+            display->setColor(WHITE);
+        }
+    }
+
+    // Knock the corners off the square
+    display->setColor(BLACK);
+    display->drawRect(rectX, y - 2, 1, 1);
+    display->drawRect(rectX + rectWidth - 1, y - 2, 1, 1);
+    display->setColor(WHITE);
+}
 
 } // namespace UIRenderer
 } // namespace graphics
