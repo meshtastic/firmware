@@ -285,19 +285,34 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
         double c = 2 * atan2(sqrt(a), sqrt(1 - a));
         double distanceKm = earthRadiusKm * c;
 
-        if (distanceKm < 1.0) {
-            int meters = (int)(distanceKm * 1000);
-            if (meters < 1000) {
-                snprintf(distStr, sizeof(distStr), "%dm", meters);
+        if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
+            double miles = distanceKm * 0.621371;
+            if (miles < 0.1) {
+                int feet = (int)(miles * 5280);
+                if (feet < 1000)
+                    snprintf(distStr, sizeof(distStr), "%dft", feet);
+                else
+                    snprintf(distStr, sizeof(distStr), "¼mi"); // 4-char max
             } else {
-                snprintf(distStr, sizeof(distStr), "1km");
+                int roundedMiles = (int)(miles + 0.5);
+                if (roundedMiles < 1000)
+                    snprintf(distStr, sizeof(distStr), "%dmi", roundedMiles);
+                else
+                    snprintf(distStr, sizeof(distStr), "999"); // Max display cap
             }
         } else {
-            int km = (int)(distanceKm + 0.5);
-            if (km < 1000) {
-                snprintf(distStr, sizeof(distStr), "%dkm", km);
+            if (distanceKm < 1.0) {
+                int meters = (int)(distanceKm * 1000);
+                if (meters < 1000)
+                    snprintf(distStr, sizeof(distStr), "%dm", meters);
+                else
+                    snprintf(distStr, sizeof(distStr), "1k");
             } else {
-                snprintf(distStr, sizeof(distStr), "999");
+                int km = (int)(distanceKm + 0.5);
+                if (km < 1000)
+                    snprintf(distStr, sizeof(distStr), "%dk", km);
+                else
+                    snprintf(distStr, sizeof(distStr), "999");
             }
         }
     }
@@ -314,7 +329,8 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     }
 
     if (strlen(distStr) > 0) {
-        int offset = (SCREEN_WIDTH > 128) ? (isLeftCol ? 7 : 10) : (isLeftCol ? 5 : 8);
+        int offset = (SCREEN_WIDTH > 128) ? (isLeftCol ? 7 : 10) // Offset for Wide Screens (Left Column:Right Column)
+                                          : (isLeftCol ? 5 : 8); // Offset for Narrow Screens (Left Column:Right Column)
         int rightEdge = x + columnWidth - offset;
         int textWidth = display->getStringWidth(distStr);
         display->drawString(rightEdge - textWidth, y, distStr);
