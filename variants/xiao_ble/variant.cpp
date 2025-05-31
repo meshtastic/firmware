@@ -59,8 +59,4 @@ void initVariant()
     // Set BQ25101 ISET to 100mA instead of 50mA
     pinMode(HICHG, OUTPUT);
     digitalWrite(HICHG, LOW);
-
-    // Provide P0.14: VBAT voltage divider sink
-    pinMode(BAT_READ, OUTPUT);
-    digitalWrite(BAT_READ, LOW);
 }
