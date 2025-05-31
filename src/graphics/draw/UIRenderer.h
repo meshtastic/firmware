@@ -55,7 +55,7 @@ void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string 
 // Time and date utilities
 void getTimeAgoStr(uint32_t agoSecs, char *timeStr, uint8_t maxLength);
 std::string drawTimeDelta(uint32_t days, uint32_t hours, uint32_t minutes, uint32_t seconds);
-void formatDateTime(char *buffer, size_t bufferSize, uint32_t rtc_sec, OLEDDisplay *display, bool showTime);
+int formatDateTime(char *buffer, size_t bufferSize, uint32_t rtc_sec, OLEDDisplay *display, bool showTime);
 
 // Message filtering
 bool shouldDrawMessage(const meshtastic_MeshPacket *packet);

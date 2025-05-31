@@ -183,8 +183,62 @@ void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const meshta
     }
 }
 
-} // namespace UIRenderer
+// Start Functions to write date/time to the screen
+// Helper function to check if a year is a leap year
+bool isLeapYear(int year)
+{
+    return (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0));
+}
 
+// Array of days in each month (non-leap year)
+const int daysInMonth[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+
+// Fills the buffer with a formatted date/time string and returns pixel width
+int formatDateTime(char *buf, size_t bufSize, uint32_t rtc_sec, OLEDDisplay *display, bool includeTime)
+{
+    int sec = rtc_sec % 60;
+    rtc_sec /= 60;
+    int min = rtc_sec % 60;
+    rtc_sec /= 60;
+    int hour = rtc_sec % 24;
+    rtc_sec /= 24;
+
+    int year = 1970;
+    while (true) {
+        int daysInYear = isLeapYear(year) ? 366 : 365;
+        if (rtc_sec >= (uint32_t)daysInYear) {
+            rtc_sec -= daysInYear;
+            year++;
+        } else {
+            break;
+        }
+    }
+
+    int month = 0;
+    while (month < 12) {
+        int dim = daysInMonth[month];
+        if (month == 1 && isLeapYear(year))
+            dim++;
+        if (rtc_sec >= (uint32_t)dim) {
+            rtc_sec -= dim;
+            month++;
+        } else {
+            break;
+        }
+    }
+
+    int day = rtc_sec + 1;
+
+    if (includeTime) {
+        snprintf(buf, bufSize, "%04d-%02d-%02d %02d:%02d:%02d", year, month + 1, day, hour, min, sec);
+    } else {
+        snprintf(buf, bufSize, "%04d-%02d-%02d", year, month + 1, day);
+    }
+
+    return display->getStringWidth(buf);
+}
+
+} // namespace UIRenderer
 } // namespace graphics
 
 #endif // !MESHTASTIC_EXCLUDE_GPS
