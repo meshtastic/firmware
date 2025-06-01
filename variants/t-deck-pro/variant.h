@@ -28,6 +28,9 @@
 
 #define BUTTON_PIN 0
 
+// vibration motor
+#define PIN_VIBRATION 2
+
 // Have SPI interface SD card slot
 #define HAS_SDCARD
 #define SDCARD_USE_SPI1
