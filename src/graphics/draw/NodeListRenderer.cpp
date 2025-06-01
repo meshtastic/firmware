@@ -49,9 +49,9 @@ static int scrollIndex = 0;
 // Utility Functions
 // =============================
 
-String getSafeNodeName(meshtastic_NodeInfoLite *node)
+const char *getSafeNodeName(meshtastic_NodeInfoLite *node)
 {
-    String nodeName = "?";
+    static char nodeName[16] = "?";
     if (node->has_user && strlen(node->user.short_name) > 0) {
         bool valid = true;
         const char *name = node->user.short_name;
@@ -63,12 +63,13 @@ String getSafeNodeName(meshtastic_NodeInfoLite *node)
             }
         }
         if (valid) {
-            nodeName = name;
+            strncpy(nodeName, name, sizeof(nodeName) - 1);
+            nodeName[sizeof(nodeName) - 1] = '\0';
         } else {
-            char idStr[6];
-            snprintf(idStr, sizeof(idStr), "%04X", (uint16_t)(node->num & 0xFFFF));
-            nodeName = String(idStr);
+            snprintf(nodeName, sizeof(nodeName), "%04X", (uint16_t)(node->num & 0xFFFF));
         }
+    } else {
+        strcpy(nodeName, "?");
     }
     return nodeName;
 }
@@ -181,7 +182,7 @@ void drawEntryLastHeard(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
     bool isLeftCol = (x < SCREEN_WIDTH / 2);
     int timeOffset = (SCREEN_WIDTH > 128) ? (isLeftCol ? 7 : 10) : (isLeftCol ? 3 : 7);
 
-    String nodeName = getSafeNodeName(node);
+    const char *nodeName = getSafeNodeName(node);
 
     char timeStr[10];
     uint32_t seconds = sinceLastSeen(node);
@@ -224,7 +225,7 @@ void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
 
     int barsXOffset = columnWidth - barsOffset;
 
-    String nodeName = getSafeNodeName(node);
+    const char *nodeName = getSafeNodeName(node);
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
@@ -268,7 +269,7 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     bool isLeftCol = (x < SCREEN_WIDTH / 2);
     int nameMaxWidth = columnWidth - (SCREEN_WIDTH > 128 ? (isLeftCol ? 25 : 28) : (isLeftCol ? 20 : 22));
 
-    String nodeName = getSafeNodeName(node);
+    const char *nodeName = getSafeNodeName(node);
     char distStr[10] = "";
 
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
@@ -363,7 +364,7 @@ void drawEntryCompass(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     // Adjust max text width depending on column and screen width
     int nameMaxWidth = columnWidth - (SCREEN_WIDTH > 128 ? (isLeftCol ? 25 : 28) : (isLeftCol ? 20 : 22));
 
-    String nodeName = getSafeNodeName(node);
+    const char *nodeName = getSafeNodeName(node);
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);

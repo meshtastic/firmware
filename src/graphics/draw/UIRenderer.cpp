@@ -15,6 +15,7 @@
 #include "target_specific.h"
 #include <OLEDDisplay.h>
 #include <RTC.h>
+#include <cstring>
 
 #if !MESHTASTIC_EXCLUDE_GPS
 
@@ -104,7 +105,7 @@ void drawGps(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSSt
 // Draw status when GPS is disabled or not present
 void drawGpsPowerStatus(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSStatus *gps)
 {
-    String displayLine;
+    const char *displayLine;
     int pos;
     if (y < FONT_HEIGHT_SMALL) { // Line 1: use short string
         displayLine = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "No GPS" : "GPS off";
@@ -119,7 +120,7 @@ void drawGpsPowerStatus(OLEDDisplay *display, int16_t x, int16_t y, const meshta
 
 void drawGpsAltitude(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSStatus *gps)
 {
-    String displayLine = "";
+    char displayLine[32];
     if (!gps->getIsConnected() && !config.position.fixed_position) {
         // displayLine = "No GPS Module";
         // display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
@@ -128,9 +129,10 @@ void drawGpsAltitude(OLEDDisplay *display, int16_t x, int16_t y, const meshtasti
         // display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     } else {
         geoCoord.updateCoords(int32_t(gps->getLatitude()), int32_t(gps->getLongitude()), int32_t(gps->getAltitude()));
-        displayLine = "Altitude: " + String(geoCoord.getAltitude()) + "m";
         if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL)
-            displayLine = "Altitude: " + String(geoCoord.getAltitude() * METERS_TO_FEET) + "ft";
+            snprintf(displayLine, sizeof(displayLine), "Altitude: %.0fft", geoCoord.getAltitude() * METERS_TO_FEET);
+        else
+            snprintf(displayLine, sizeof(displayLine), "Altitude: %.0fm", geoCoord.getAltitude());
         display->drawString(x + (display->getWidth() - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     }
 }
@@ -139,13 +141,13 @@ void drawGpsAltitude(OLEDDisplay *display, int16_t x, int16_t y, const meshtasti
 void drawGpsCoordinates(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSStatus *gps)
 {
     auto gpsFormat = config.display.gps_format;
-    String displayLine = "";
+    char displayLine[32];
 
     if (!gps->getIsConnected() && !config.position.fixed_position) {
-        displayLine = "No GPS present";
+        strcpy(displayLine, "No GPS present");
         display->drawString(x + (display->getWidth() - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     } else if (!gps->getHasLock() && !config.position.fixed_position) {
-        displayLine = "No GPS Lock";
+        strcpy(displayLine, "No GPS Lock");
         display->drawString(x + (display->getWidth() - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     } else {
 
@@ -260,10 +262,10 @@ void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::Nod
 #endif
     display->drawString(x + 10, y - 2, usersString);
     int string_offset = (SCREEN_WIDTH > 128) ? 2 : 1;
-    if (additional_words != "") {
-        display->drawString(x + 10 + display->getStringWidth(usersString) + string_offset, y - 2, additional_words);
+    if (additional_words.length() > 0) {
+        display->drawString(x + 10 + display->getStringWidth(usersString) + string_offset, y - 2, additional_words.c_str());
         if (config.display.heading_bold)
-            display->drawString(x + 11 + display->getStringWidth(usersString) + string_offset, y - 2, additional_words);
+            display->drawString(x + 11 + display->getStringWidth(usersString) + string_offset, y - 2, additional_words.c_str());
     }
 }
 
@@ -616,7 +618,7 @@ void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t 
 
 #if HAS_GPS
     if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
-        String displayLine = "";
+        const char *displayLine;
         if (config.position.fixed_position) {
             displayLine = "Fixed GPS";
         } else {
@@ -644,8 +646,7 @@ void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t 
     } else {
         display->drawString(
             x + SCREEN_WIDTH - display->getStringWidth("USB"),
-            ((rows == 4) ? compactSecondLine : ((SCREEN_HEIGHT > 64) ? compactSecondLine : moreCompactSecondLine)),
-            String("USB"));
+            ((rows == 4) ? compactSecondLine : ((SCREEN_HEIGHT > 64) ? compactSecondLine : moreCompactSecondLine)), "USB");
     }
 
     config.display.heading_bold = origBold;
@@ -975,9 +976,9 @@ void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiState *stat
     bool origBold = config.display.heading_bold;
     config.display.heading_bold = false;
 
-    String Satelite_String = "Sat:";
+    const char *Satelite_String = "Sat:";
     display->drawString(0, ((SCREEN_HEIGHT > 64) ? compactFirstLine : moreCompactFirstLine), Satelite_String);
-    String displayLine = "";
+    const char *displayLine = ""; // Initialize to empty string by default
     if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
         if (config.position.fixed_position) {
             displayLine = "Fixed GPS";
@@ -987,6 +988,7 @@ void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiState *stat
         display->drawString(display->getStringWidth(Satelite_String) + 3,
                             ((SCREEN_HEIGHT > 64) ? compactFirstLine : moreCompactFirstLine), displayLine);
     } else {
+        displayLine = "GPS enabled"; // Set a value when GPS is enabled
         UIRenderer::drawGps(display, display->getStringWidth(Satelite_String) + 3,
                             ((SCREEN_HEIGHT > 64) ? compactFirstLine : moreCompactFirstLine) + 3, gpsStatus);
     }
@@ -1010,13 +1012,15 @@ void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiState *stat
     }
 
     // If GPS is off, no need to display these parts
-    if (displayLine != "GPS off" && displayLine != "No GPS") {
+    if (strcmp(displayLine, "GPS off") != 0 && strcmp(displayLine, "No GPS") != 0) {
 
         // === Second Row: Altitude ===
-        String displayLine;
-        displayLine = " Alt: " + String(geoCoord.getAltitude()) + "m";
-        if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL)
-            displayLine = " Alt: " + String(geoCoord.getAltitude() * METERS_TO_FEET) + "ft";
+        char displayLine[32];
+        if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
+            snprintf(displayLine, sizeof(displayLine), " Alt: %.0fft", geoCoord.getAltitude() * METERS_TO_FEET);
+        } else {
+            snprintf(displayLine, sizeof(displayLine), " Alt: %.0fm", geoCoord.getAltitude());
+        }
         display->drawString(x, ((SCREEN_HEIGHT > 64) ? compactSecondLine : moreCompactSecondLine), displayLine);
 
         // === Third Row: Latitude ===

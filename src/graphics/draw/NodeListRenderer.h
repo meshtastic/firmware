@@ -59,7 +59,7 @@ void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, in
 // Utility functions
 const char *getCurrentModeTitle(int screenWidth);
 void retrieveAndSortNodes(std::vector<NodeEntry> &nodeList);
-String getSafeNodeName(meshtastic_NodeInfoLite *node);
+const char *getSafeNodeName(meshtastic_NodeInfoLite *node);
 uint32_t sinceLastSeen(meshtastic_NodeInfoLite *node);
 void drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char **fields);
 
