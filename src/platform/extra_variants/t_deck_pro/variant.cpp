@@ -19,14 +19,13 @@ void touchISR()
 
 bool readTouch(int16_t *x, int16_t *y)
 {
-    if (1 /* intReceived */) {
+    if (intReceived) {
         intReceived = false;
         // Reattach the interrupt for the next touch
-        // attachInterrupt (digitalPinToInterrupt(CST328_PIN_INT), touchISR, FALLING);
+        attachInterrupt(digitalPinToInterrupt(CST328_PIN_INT), touchISR, FALLING);
 
         // Read the touch point
-        // if (tsPanel.isTouched(0)) {
-        if (tsPanel.getTouches()) {
+        if (tsPanel.isTouched(0)) {
             *x = tsPanel.getPoint(0).x;
             *y = tsPanel.getPoint(0).y;
             return true;
@@ -39,7 +38,7 @@ bool readTouch(int16_t *x, int16_t *y)
 void lateInitVariant()
 {
     tsPanel.begin();
-    // attachInterrupt (digitalPinToInterrupt(CST328_PIN_INT), touchISR, FALLING);
+    attachInterrupt(digitalPinToInterrupt(CST328_PIN_INT), touchISR, FALLING);
     touchScreenImpl1 = new TouchScreenImpl1(EINK_WIDTH, EINK_HEIGHT, readTouch);
     touchScreenImpl1->init();
 }

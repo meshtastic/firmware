@@ -10,6 +10,7 @@
 #define I2C_SCL SCL
 
 // CST328 touch screen (implementation in src/platform/extra_variants/t_deck_pro/variant.cpp)
+#define HAS_TOUCHSCREEN 1
 #define CST328_PIN_INT 12
 #define CST328_PIN_RST 45
 
