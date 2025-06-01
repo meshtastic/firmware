@@ -21,6 +21,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 */
 
+#include "configuration.h"
+#if HAS_SCREEN
 #include "MessageRenderer.h"
 
 // Core includes
@@ -446,3 +448,4 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
 } // namespace MessageRenderer
 } // namespace graphics
+#endif
