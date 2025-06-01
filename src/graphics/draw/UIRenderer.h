@@ -31,7 +31,7 @@ class Screen;
 namespace UIRenderer
 {
 // Common UI elements
-void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y);
+// void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y);
 void drawBattery(OLEDDisplay *display, int16_t x, int16_t y, uint8_t *imgBuffer, const meshtastic::PowerStatus *powerStatus);
 void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::NodeStatus *nodeStatus, int node_offset = 0,
                bool show_total = true, String additional_words = "");
