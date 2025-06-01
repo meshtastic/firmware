@@ -54,11 +54,9 @@
 #define BOARD_1V8_EN 38
 #define HAS_BHI260AP
 
-// battery quality sensor BQ25896
-#define HAS_BQ25896
-
-// battery quality sensor BQ27220
-#define HAS_BQ27220
+// battery charger BQ25896
+#define HAS_PPM 1
+#define XPOWERS_CHIP_BQ25896
 
 // LoRa
 #define USE_SX1262
