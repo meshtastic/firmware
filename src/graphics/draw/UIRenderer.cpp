@@ -1,9 +1,9 @@
+#include "configuration.h"
 #if HAS_SCREEN
-#include "UIRenderer.h"
 #include "CompassRenderer.h"
 #include "GPSStatus.h"
 #include "NodeDB.h"
-#include "NodeListRenderer.h"
+#include "UIRenderer.h"
 #include "configuration.h"
 #include "gps/GeoCoord.h"
 #include "graphics/Screen.h"

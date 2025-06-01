@@ -1,9 +1,9 @@
+#include "configuration.h"
 #if HAS_SCREEN
-#include "NodeListRenderer.h"
 #include "CompassRenderer.h"
 #include "NodeDB.h"
+#include "NodeListRenderer.h"
 #include "UIRenderer.h"
-#include "configuration.h"
 #include "gps/GeoCoord.h"
 #include "gps/RTC.h" // for getTime() function
 #include "graphics/ScreenFonts.h"
