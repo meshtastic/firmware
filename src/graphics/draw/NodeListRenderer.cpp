@@ -634,7 +634,8 @@ void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, in
     const int highlightHeight = FONT_HEIGHT_SMALL - 1;
     const int textY = y + 1 + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
     const int centerX = x + SCREEN_WIDTH / 2;
-    const char *shortName = (node->has_user && haveGlyphs(node->user.short_name)) ? node->user.short_name : "Node";
+    const char *shortName =
+        (node->has_user && graphics::UIRenderer::haveGlyphs(node->user.short_name)) ? node->user.short_name : "Node";
 
     if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED)
         display->setColor(BLACK);
@@ -662,7 +663,7 @@ void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, in
     // 2. Signal and Hops (combined on one line, if available)
     char signalHopsStr[32] = "";
     bool haveSignal = false;
-    int percentSignal = clamp((int)((node->snr + 10) * 5), 0, 100);
+    int percentSignal = std::clamp((int)((node->snr + 10) * 5), 0, 100);
     const char *signalLabel = " Sig";
 
     // If SNR looks reasonable, show signal
