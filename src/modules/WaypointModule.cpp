@@ -2,9 +2,12 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "configuration.h"
+#include "graphics/draw/CompassRenderer.h"
+
 #if HAS_SCREEN
 #include "gps/RTC.h"
 #include "graphics/Screen.h"
+#include "graphics/draw/NodeListRenderer.h"
 #include "main.h"
 #endif
 
@@ -119,7 +122,7 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
 
     // Dimensions / co-ordinates for the compass/circle
     int16_t compassX = 0, compassY = 0;
-    uint16_t compassDiam = graphics::Screen::getCompassDiam(display->getWidth(), display->getHeight());
+    uint16_t compassDiam = graphics::CompassRenderer::getCompassDiam(display->getWidth(), display->getHeight());
 
     if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT) {
         compassX = x + display->getWidth() - compassDiam / 2 - 5;
@@ -137,7 +140,7 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
             myHeading = (screen->getHeading()) * PI / 180; // gotta convert compass degrees to Radians
         else
             myHeading = screen->estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
-        screen->drawCompassNorth(display, compassX, compassY, myHeading);
+        graphics::CompassRenderer::drawCompassNorth(display, compassX, compassY, myHeading);
 
         // Compass bearing to waypoint
         float bearingToOther =
@@ -146,7 +149,7 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
         // If the top of the compass is not a static north we need adjust bearingToOther based on heading
         if (!config.display.compass_north_top)
             bearingToOther -= myHeading;
-        screen->drawNodeHeading(display, compassX, compassY, compassDiam, bearingToOther);
+        graphics::CompassRenderer::drawNodeHeading(display, compassX, compassY, compassDiam, bearingToOther);
 
         float bearingToOtherDegrees = (bearingToOther < 0) ? bearingToOther + 2 * PI : bearingToOther;
         bearingToOtherDegrees = bearingToOtherDegrees * 180 / PI;
@@ -189,6 +192,6 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
     }
 
     // Must be after distStr is populated
-    screen->drawColumns(display, x, y, fields);
+    graphics::NodeListRenderer::drawColumns(display, x, y, fields);
 }
 #endif

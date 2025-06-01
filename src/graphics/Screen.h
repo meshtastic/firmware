@@ -5,6 +5,10 @@
 #include "detect/ScanI2C.h"
 #include "mesh/generated/meshtastic/config.pb.h"
 #include <OLEDDisplay.h>
+#include <string>
+#include <vector>
+
+#define getStringCenteredX(s) ((SCREEN_WIDTH - display->getStringWidth(s)) / 2)
 
 #if !HAS_SCREEN
 #include "power.h"
@@ -64,6 +68,7 @@ class Screen
 #include "mesh/MeshModule.h"
 #include "power.h"
 #include <string>
+#include <vector>
 
 // 0 to 255, though particular variants might define different defaults
 #ifndef BRIGHTNESS_DEFAULT
@@ -228,20 +233,10 @@ class Screen : public concurrency::OSThread
 
     void blink();
 
-    void drawFrameText(OLEDDisplay *, OLEDDisplayUiState *, int16_t, int16_t, const char *);
-
     void getTimeAgoStr(uint32_t agoSecs, char *timeStr, uint8_t maxLength);
 
     // Draw north
-    void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t compassY, float myHeading);
-
-    static uint16_t getCompassDiam(uint32_t displayWidth, uint32_t displayHeight);
-
     float estimatedHeading(double lat, double lon);
-
-    void drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t compassY, uint16_t compassDiam, float headingRadian);
-
-    void drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char **fields);
 
     /// Handle button press, trackball or swipe action)
     void onPress() { enqueueCmd(ScreenCmd{.cmd = Cmd::ON_PRESS}); }
@@ -321,9 +316,6 @@ class Screen : public concurrency::OSThread
             free(cmd.print_text);
         }
     }
-
-    /// generates a very brief time delta display
-    std::string drawTimeDelta(uint32_t days, uint32_t hours, uint32_t minutes, uint32_t seconds);
 
     /// Overrides the default utf8 character conversion, to replace empty space with question marks
     static char customFontTableLookup(const uint8_t ch)
@@ -643,13 +635,6 @@ class Screen : public concurrency::OSThread
     // Sets frame up for immediate drawing
     void setFrameImmediateDraw(FrameCallback *drawFrames);
 
-    /// Called when debug screen is to be drawn, calls through to debugInfo.drawFrame.
-    static void drawDebugInfoTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-
-    static void drawDebugInfoSettingsTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-
-    static void drawDebugInfoWiFiTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-
 #if defined(DISPLAY_CLOCK_FRAME)
     static void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 
@@ -705,5 +690,9 @@ class Screen : public concurrency::OSThread
 
 extern String alertBannerMessage;
 extern uint32_t alertBannerUntil;
+
+// Extern declarations for function symbols used in UIRenderer
+extern std::vector<std::string> functionSymbol;
+extern std::string functionSymbolString;
 
 #endif
