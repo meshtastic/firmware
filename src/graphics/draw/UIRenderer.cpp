@@ -35,7 +35,7 @@ namespace UIRenderer
 {
 
 // Draw GPS status summary
-void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSStatus *gps)
+void drawGps(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSStatus *gps)
 {
     if (config.position.fixed_position) {
         // GPS coordinates are currently fixed
@@ -100,7 +100,7 @@ void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSSt
 }
 
 // Draw status when GPS is disabled or not present
-void drawGPSpowerstat(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSStatus *gps)
+void drawGpsPowerStatus(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSStatus *gps)
 {
     String displayLine;
     int pos;
@@ -115,7 +115,7 @@ void drawGPSpowerstat(OLEDDisplay *display, int16_t x, int16_t y, const meshtast
     display->drawString(x + pos, y, displayLine);
 }
 
-void drawGPSAltitude(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSStatus *gps)
+void drawGpsAltitude(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSStatus *gps)
 {
     String displayLine = "";
     if (!gps->getIsConnected() && !config.position.fixed_position) {
@@ -134,7 +134,7 @@ void drawGPSAltitude(OLEDDisplay *display, int16_t x, int16_t y, const meshtasti
 }
 
 // Draw GPS status coordinates
-void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSStatus *gps)
+void drawGpsCoordinates(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSStatus *gps)
 {
     auto gpsFormat = config.display.gps_format;
     String displayLine = "";
@@ -585,7 +585,7 @@ void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t 
             0, ((rows == 4) ? compactSecondLine : ((SCREEN_HEIGHT > 64) ? compactSecondLine : moreCompactSecondLine)),
             displayLine);
     } else {
-        UIRenderer::drawGPS(
+        UIRenderer::drawGps(
             display, 0,
             ((rows == 4) ? compactSecondLine : ((SCREEN_HEIGHT > 64) ? compactSecondLine : moreCompactSecondLine)) + 3,
             gpsStatus);
@@ -946,7 +946,7 @@ void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiState *stat
         display->drawString(display->getStringWidth(Satelite_String) + 3,
                             ((SCREEN_HEIGHT > 64) ? compactFirstLine : moreCompactFirstLine), displayLine);
     } else {
-        UIRenderer::drawGPS(display, display->getStringWidth(Satelite_String) + 3,
+        UIRenderer::drawGps(display, display->getStringWidth(Satelite_String) + 3,
                             ((SCREEN_HEIGHT > 64) ? compactFirstLine : moreCompactFirstLine) + 3, gpsStatus);
     }
 

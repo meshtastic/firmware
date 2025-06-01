@@ -96,12 +96,12 @@ void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16
 #if HAS_GPS
     // Display GPS status
     if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
-        UIRenderer::drawGPSpowerstat(display, x, y + 2, gpsStatus);
+        UIRenderer::drawGpsPowerStatus(display, x, y + 2, gpsStatus);
     } else {
         if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT) {
-            UIRenderer::drawGPS(display, x + (SCREEN_WIDTH * 0.63), y + 2, gpsStatus);
+            UIRenderer::drawGps(display, x + (SCREEN_WIDTH * 0.63), y + 2, gpsStatus);
         } else {
-            UIRenderer::drawGPS(display, x + (SCREEN_WIDTH * 0.63), y + 3, gpsStatus);
+            UIRenderer::drawGps(display, x + (SCREEN_WIDTH * 0.63), y + 3, gpsStatus);
         }
     }
 #endif
@@ -353,12 +353,12 @@ void drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t 
         // Line 3
         if (config.display.gps_format !=
             meshtastic_Config_DisplayConfig_GpsCoordinateFormat_DMS) // if DMS then don't draw altitude
-            UIRenderer::drawGPSAltitude(display, x, y + FONT_HEIGHT_SMALL * 2, gpsStatus);
+            UIRenderer::drawGpsAltitude(display, x, y + FONT_HEIGHT_SMALL * 2, gpsStatus);
 
         // Line 4
-        UIRenderer::drawGPScoordinates(display, x, y + FONT_HEIGHT_SMALL * 3, gpsStatus);
+        UIRenderer::drawGpsCoordinates(display, x, y + FONT_HEIGHT_SMALL * 3, gpsStatus);
     } else {
-        UIRenderer::drawGPSpowerstat(display, x, y + FONT_HEIGHT_SMALL * 2, gpsStatus);
+        UIRenderer::drawGpsPowerStatus(display, x, y + FONT_HEIGHT_SMALL * 2, gpsStatus);
     }
 #endif
 /* Display a heartbeat pixel that blinks every time the frame is redrawn */
