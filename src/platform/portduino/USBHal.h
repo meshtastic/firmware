@@ -8,6 +8,9 @@
 #include <iostream>
 #include <libpinedio-usb.h>
 #include <unistd.h>
+extern "C" {
+#include "platform/portduino/ch341a_i2c.h"
+}
 
 // include the library for Raspberry GPIO pins
 
@@ -47,6 +50,9 @@ class Ch341Hal : public RadioLibHal
             std::string s = "Could not open SPI: ";
             throw(s + std::to_string(ret));
         }
+        // How to read the eeprom
+        // uint8_t buffer[1024] = {0};
+        // ch341readEEPROM_param(buffer, 0, 128, 128, 8, 1, 0x50, pinedio.handle);
 
         pinedio_set_option(&pinedio, PINEDIO_OPTION_AUTO_CS, 0);
         pinedio_set_pin_mode(&pinedio, 3, true);
