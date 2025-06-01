@@ -19,13 +19,6 @@
 //   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "ch341a_i2c.h"
-#include <assert.h>
-#include <errno.h>
-#include <libusb-1.0/libusb.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
 // extern struct libusb_device_handle *handle;
 unsigned char *readbuf;
@@ -151,7 +144,7 @@ int32_t ch341readEEPROM_param(uint8_t *buffer, uint32_t offset, uint32_t bytesto
 
         if (ret < 0 || getnextpkt == -1) { // indicates an error
             printf("ret from libusb_handle_timeout = %d\n", ret);
-            printf("getnextpkt = %d\n", getnextpkt);
+            printf("getnextpkt = %u\n", getnextpkt);
             if (ret < 0)
                 printf("USB read error : %s\n", strerror(-ret));
             libusb_free_transfer(xferBulkIn);

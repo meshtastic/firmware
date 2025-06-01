@@ -4,7 +4,13 @@
 #ifndef __CH341A_I2C_H__
 #define __CH341A_I2C_H__
 
+#include <assert.h>
+#include <errno.h>
+#include <libusb-1.0/libusb.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #define BULK_WRITE_ENDPOINT 0x02 /* bEndpointAddress 0x02  EP 2 OUT (Bulk)*/
 #define BULK_READ_ENDPOINT 0x82  /* bEndpointAddress 0x82  EP 2 IN  (Bulk)*/
