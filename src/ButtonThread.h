@@ -40,6 +40,7 @@ class ButtonThread : public concurrency::OSThread
     bool isBuzzing() { return buzzer_flag; }
     void setScreenFlag(bool flag) { screen_flag = flag; }
     bool getScreenFlag() { return screen_flag; }
+    bool isInterceptingAndFocused();
 
     // Disconnect and reconnect interrupts for light sleep
 #ifdef ARCH_ESP32

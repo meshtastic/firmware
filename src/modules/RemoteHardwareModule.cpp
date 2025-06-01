@@ -84,7 +84,8 @@ bool RemoteHardwareModule::handleReceivedProtobuf(const meshtastic_MeshPacket &r
         switch (p.type) {
         case meshtastic_HardwareMessage_Type_WRITE_GPIOS: {
             // Print notification to LCD screen
-            screen->print("Write GPIOs\n");
+            if (screen)
+                screen->print("Write GPIOs\n");
 
             pinModes(p.gpio_mask, OUTPUT, availablePins);
             for (uint8_t i = 0; i < NUM_GPIOS; i++) {
