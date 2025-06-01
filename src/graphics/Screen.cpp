@@ -222,7 +222,7 @@ void Screen::drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *sta
 {
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
-    drawBattery(display, x, y + 7, imgBattery, powerStatus);
+    UIRenderer::drawBattery(display, x, y + 7, imgBattery, powerStatus);
 
     if (powerStatus->getHasBattery()) {
         String batteryPercent = String(powerStatus->getBatteryChargePercent()) + "%";
@@ -454,7 +454,7 @@ void Screen::drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *stat
 {
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
-    drawBattery(display, x, y + 7, imgBattery, powerStatus);
+    UIRenderer::drawBattery(display, x, y + 7, imgBattery, powerStatus);
 
     if (powerStatus->getHasBattery()) {
         String batteryPercent = String(powerStatus->getBatteryChargePercent()) + "%";
