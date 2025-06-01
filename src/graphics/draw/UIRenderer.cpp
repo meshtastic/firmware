@@ -3,6 +3,7 @@
 #include "CompassRenderer.h"
 #include "GPSStatus.h"
 #include "NodeDB.h"
+#include "NodeListRenderer.h"
 #include "UIRenderer.h"
 #include "configuration.h"
 #include "gps/GeoCoord.h"
