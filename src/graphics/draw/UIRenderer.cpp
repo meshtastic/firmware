@@ -1,3 +1,4 @@
+#if HAS_SCREEN
 #include "UIRenderer.h"
 #include "CompassRenderer.h"
 #include "GPSStatus.h"
@@ -1291,3 +1292,4 @@ std::string drawTimeDelta(uint32_t days, uint32_t hours, uint32_t minutes, uint3
 } // namespace graphics
 
 #endif // !MESHTASTIC_EXCLUDE_GPS
+#endif // HAS_SCREEN

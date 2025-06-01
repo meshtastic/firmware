@@ -18,6 +18,14 @@ namespace graphics
 class Screen
 {
   public:
+    enum FrameFocus : uint8_t {
+        FOCUS_DEFAULT,  // No specific frame
+        FOCUS_PRESERVE, // Return to the previous frame
+        FOCUS_FAULT,
+        FOCUS_TEXTMESSAGE,
+        FOCUS_MODULE, // Note: target module should call requestFocus(), otherwise no info about which module to focus
+    };
+
     explicit Screen(ScanI2C::DeviceAddress, meshtastic_Config_DisplayConfig_OledType, OLEDDISPLAY_GEOMETRY);
     void onPress() {}
     void setup() {}
@@ -31,6 +39,8 @@ class Screen
     void setFunctionSymbol(std::string) {}
     void removeFunctionSymbol(std::string) {}
     void startAlert(const char *) {}
+    void showOverlayBanner(String, uint32_t durationMs = 3000) {}
+    void setFrames(FrameFocus focus) {}
     void endAlert() {}
 };
 } // namespace graphics

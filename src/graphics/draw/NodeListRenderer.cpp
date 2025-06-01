@@ -1,3 +1,4 @@
+#if HAS_SCREEN
 #include "NodeListRenderer.h"
 #include "CompassRenderer.h"
 #include "NodeDB.h"
@@ -877,3 +878,4 @@ void drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char **fields
 
 } // namespace NodeListRenderer
 } // namespace graphics
+#endif

@@ -27,7 +27,9 @@
 using namespace concurrency;
 
 ButtonThread *buttonThread; // Declared extern in header
+#if HAS_SCREEN
 extern CannedMessageModule *cannedMessageModule;
+#endif
 volatile ButtonThread::ButtonEventType ButtonThread::btnEvent = ButtonThread::BUTTON_EVENT_NONE;
 
 #if defined(BUTTON_PIN) || defined(ARCH_PORTDUINO) || defined(USERPREFS_BUTTON_PIN)
