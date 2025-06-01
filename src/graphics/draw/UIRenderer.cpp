@@ -592,7 +592,7 @@ void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t 
     if (days > 365) {
         snprintf(uptimeStr, sizeof(uptimeStr), "?");
     } else {
-        snprintf(uptimeStr, sizeof(uptimeStr), "%d%c",
+        snprintf(uptimeStr, sizeof(uptimeStr), "%u%c",
                  days      ? days
                  : hours   ? hours
                  : minutes ? minutes
