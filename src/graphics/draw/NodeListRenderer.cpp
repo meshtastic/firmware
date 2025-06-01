@@ -713,11 +713,11 @@ void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, in
         uint32_t mins = (uptime % 3600) / 60;
 
         if (days > 0) {
-            snprintf(uptimeStr, sizeof(uptimeStr), " Uptime: %dd %dh", days, hours);
+            snprintf(uptimeStr, sizeof(uptimeStr), " Uptime: %ud %uh", days, hours);
         } else if (hours > 0) {
-            snprintf(uptimeStr, sizeof(uptimeStr), " Uptime: %dh %dm", hours, mins);
+            snprintf(uptimeStr, sizeof(uptimeStr), " Uptime: %uh %um", hours, mins);
         } else {
-            snprintf(uptimeStr, sizeof(uptimeStr), " Uptime: %dm", mins);
+            snprintf(uptimeStr, sizeof(uptimeStr), " Uptime: %um", mins);
         }
     }
     if (uptimeStr[0] && line < 5) {

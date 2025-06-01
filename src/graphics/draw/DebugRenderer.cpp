@@ -431,7 +431,9 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     auto mode = DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false);
     char regionradiopreset[25];
     const char *region = myRegion ? myRegion->name : NULL;
-    snprintf(regionradiopreset, sizeof(regionradiopreset), "%s/%s", region, mode);
+    if (region != nullptr) {
+        snprintf(regionradiopreset, sizeof(regionradiopreset), "%s/%s", region, mode);
+    }
     textWidth = display->getStringWidth(regionradiopreset);
     nameX = (SCREEN_WIDTH - textWidth) / 2;
     display->drawString(nameX, compactSecondLine, regionradiopreset);
@@ -565,7 +567,7 @@ void drawMemoryUsage(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
 
         char combinedStr[24];
         if (SCREEN_WIDTH > 128) {
-            snprintf(combinedStr, sizeof(combinedStr), "%s%3d%%  %lu/%luKB", (percent > 80) ? "! " : "", percent, used / 1024,
+            snprintf(combinedStr, sizeof(combinedStr), "%s%3d%%  %u/%uKB", (percent > 80) ? "! " : "", percent, used / 1024,
                      total / 1024);
         } else {
             snprintf(combinedStr, sizeof(combinedStr), "%s%3d%%", (percent > 80) ? "! " : "", percent);
