@@ -8,6 +8,7 @@
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/images.h"
+#include "meshUtils.h"
 #include <algorithm>
 
 // Forward declarations for functions defined in Screen.cpp
@@ -663,7 +664,7 @@ void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, in
     // 2. Signal and Hops (combined on one line, if available)
     char signalHopsStr[32] = "";
     bool haveSignal = false;
-    int percentSignal = std::clamp((int)((node->snr + 10) * 5), 0, 100);
+    int percentSignal = clamp((int)((node->snr + 10) * 5), 0, 100);
     const char *signalLabel = " Sig";
 
     // If SNR looks reasonable, show signal
