@@ -366,10 +366,6 @@ void setup()
 #elif defined(T_DECK_PRO)
     pinMode(LORA_EN, OUTPUT);
     digitalWrite(LORA_EN, HIGH);
-    // pinMode(BOARD_1V8_EN, OUTPUT);
-    // digitalWrite(BOARD_1V8_EN, HIGH);
-    // pinMode(BOARD_6609_EN, OUTPUT);
-    // digitalWrite(BOARD_6609_EN, HIGH);
     pinMode(LORA_CS, OUTPUT);
     digitalWrite(LORA_CS, HIGH);
     pinMode(SDCARD_CS, OUTPUT);
