@@ -1,4 +1,4 @@
-#define I2C_SDA 9 // I2C pins for this board
+#define I2C_SDA 9
 #define I2C_SCL 40
 
 #define USE_SX1262
@@ -9,7 +9,6 @@
 #define LORA_CS 7
 #define LORA_RESET 8
 
-// per SX1262_Receive_Interrupt/utilities.h
 #ifdef USE_SX1262
 #define SX126X_CS LORA_CS
 #define SX126X_DIO1 47
@@ -31,5 +30,5 @@
 #define LED_STATE_ON 1 // State when LED is litted
 
 #define HAS_GPS 1
-#define GPS_TX_PIN 33
-#define GPS_RX_PIN 34
+#define GPS_TX_PIN 43
+#define GPS_RX_PIN 44

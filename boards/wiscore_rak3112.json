@@ -2,7 +2,8 @@
   "build": {
     "arduino": {
       "ldscript": "esp32s3_out.ld",
-      "memory_type": "qio_opi"
+      "memory_type": "qio_opi",
+      "partitions": "default_16MB.csv"
     },
     "core": "esp32",
     "extra_flags": [
@@ -25,7 +26,7 @@
     "openocd_target": "esp32s3.cfg"
   },
   "frameworks": ["arduino", "espidf"],
-  "name": "rak3112",
+  "name": "WisCore RAK3112 Board",
   "upload": {
     "flash_size": "16MB",
     "maximum_ram_size": 327680,
