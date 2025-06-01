@@ -80,9 +80,6 @@ using graphics::numEmotes;
 
 using namespace meshtastic; /** @todo remove */
 
-String alertBannerMessage = "";
-uint32_t alertBannerUntil = 0;
-
 namespace graphics
 {
 
@@ -97,8 +94,12 @@ namespace graphics
 // A text message frame + debug frame + all the node infos
 FrameCallback *normalFrames;
 static uint32_t targetFramerate = IDLE_FRAMERATE;
-static String alertBannerMessage;
-static uint32_t alertBannerUntil = 0;
+// Global variables for alert banner - explicitly define with extern "C" linkage to prevent optimization
+extern "C" {
+static char alertBannerBuffer[256] = "";
+char *alertBannerMessage = alertBannerBuffer;
+uint32_t alertBannerUntil = 0;
+}
 
 uint32_t logo_timeout = 5000; // 4 seconds for EACH logo
 
@@ -146,10 +147,11 @@ extern bool hasUnreadMessage;
 // The banner appears in the center of the screen and disappears after the specified duration
 
 // Called to trigger a banner with custom message and duration
-void Screen::showOverlayBanner(const String &message, uint32_t durationMs)
+void Screen::showOverlayBanner(const char *message, uint32_t durationMs)
 {
     // Store the message and set the expiration timestamp
-    alertBannerMessage = message;
+    strncpy(alertBannerMessage, message, 255);
+    alertBannerMessage[255] = '\0'; // Ensure null termination
     alertBannerUntil = (durationMs == 0) ? 0 : millis() + durationMs;
 }
 
@@ -225,7 +227,8 @@ void Screen::drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *sta
     drawBattery(display, x, y + 7, imgBattery, powerStatus);
 
     if (powerStatus->getHasBattery()) {
-        String batteryPercent = String(powerStatus->getBatteryChargePercent()) + "%";
+        char batteryPercent[8];
+        snprintf(batteryPercent, sizeof(batteryPercent), "%d%%", powerStatus->getBatteryChargePercent());
 
         display->setFont(FONT_SMALL);
 
@@ -255,16 +258,13 @@ void Screen::drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *sta
             hour = 12;
         }
 
-        // hours string
-        String hourString = String(hour);
+        // Format time string
+        char timeString[16];
+        snprintf(timeString, sizeof(timeString), "%d:%02d", hour, minute);
 
-        // minutes string
-        String minuteString = minute < 10 ? "0" + String(minute) : String(minute);
-
-        String timeString = hourString + ":" + minuteString;
-
-        // seconds string
-        String secondString = second < 10 ? "0" + String(second) : String(second);
+        // Format seconds string
+        char secondString[8];
+        snprintf(secondString, sizeof(secondString), "%02d", second);
 
         float scale = 1.5;
 
@@ -272,12 +272,12 @@ void Screen::drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *sta
         uint16_t segmentHeight = SEGMENT_HEIGHT * scale;
 
         // calculate hours:minutes string width
-        uint16_t timeStringWidth = timeString.length() * 5;
+        uint16_t timeStringWidth = strlen(timeString) * 5;
 
-        for (uint8_t i = 0; i < timeString.length(); i++) {
-            String character = String(timeString[i]);
+        for (uint8_t i = 0; i < strlen(timeString); i++) {
+            char character = timeString[i];
 
-            if (character == ":") {
+            if (character == ':') {
                 timeStringWidth += segmentHeight;
             } else {
                 timeStringWidth += segmentWidth + (segmentHeight * 2) + 4;
@@ -285,7 +285,7 @@ void Screen::drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *sta
         }
 
         // calculate seconds string width
-        uint16_t secondStringWidth = (secondString.length() * 12) + 4;
+        uint16_t secondStringWidth = (strlen(secondString) * 12) + 4;
 
         // sum these to get total string width
         uint16_t totalWidth = timeStringWidth + secondStringWidth;
@@ -297,15 +297,15 @@ void Screen::drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *sta
         uint16_t hourMinuteTextY = (display->getHeight() / 2) - (((segmentWidth * 2) + (segmentHeight * 3) + 8) / 2);
 
         // iterate over characters in hours:minutes string and draw segmented characters
-        for (uint8_t i = 0; i < timeString.length(); i++) {
-            String character = String(timeString[i]);
+        for (uint8_t i = 0; i < strlen(timeString); i++) {
+            char character = timeString[i];
 
-            if (character == ":") {
+            if (character == ':') {
                 drawSegmentedDisplayColon(display, hourMinuteTextX, hourMinuteTextY, scale);
 
                 hourMinuteTextX += segmentHeight + 6;
             } else {
-                drawSegmentedDisplayCharacter(display, hourMinuteTextX, hourMinuteTextY, character.toInt(), scale);
+                drawSegmentedDisplayCharacter(display, hourMinuteTextX, hourMinuteTextY, character - '0', scale);
 
                 hourMinuteTextX += segmentWidth + (segmentHeight * 2) + 4;
             }
@@ -457,7 +457,8 @@ void Screen::drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *stat
     drawBattery(display, x, y + 7, imgBattery, powerStatus);
 
     if (powerStatus->getHasBattery()) {
-        String batteryPercent = String(powerStatus->getBatteryChargePercent()) + "%";
+        char batteryPercent[8];
+        snprintf(batteryPercent, sizeof(batteryPercent), "%d%%", powerStatus->getBatteryChargePercent());
 
         display->setFont(FONT_SMALL);
 
@@ -1711,21 +1712,30 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
             const char *longName = (node && node->has_user) ? node->user.long_name : nullptr;
 
             const char *msgRaw = reinterpret_cast<const char *>(packet->decoded.payload.bytes);
-            String msg = String(msgRaw);
-            msg.trim(); // Remove leading/trailing whitespace/newlines
 
-            String banner;
+            char banner[256];
 
-            // Match bell character or exact alert text
-            if (msg.indexOf("\x07") != -1) {
-                banner = "Alert Received";
-            } else {
-                banner = "New Message";
+            // Check for bell character in message to determine alert type
+            bool isAlert = false;
+            for (size_t i = 0; i < packet->decoded.payload.size && i < 100; i++) {
+                if (msgRaw[i] == '\x07') {
+                    isAlert = true;
+                    break;
+                }
             }
 
-            if (longName && longName[0]) {
-                banner += "\nfrom ";
-                banner += longName;
+            if (isAlert) {
+                if (longName && longName[0]) {
+                    snprintf(banner, sizeof(banner), "Alert Received\nfrom %s", longName);
+                } else {
+                    strcpy(banner, "Alert Received");
+                }
+            } else {
+                if (longName && longName[0]) {
+                    snprintf(banner, sizeof(banner), "New Message\nfrom %s", longName);
+                } else {
+                    strcpy(banner, "New Message");
+                }
             }
 
             screen->showOverlayBanner(banner, 3000);

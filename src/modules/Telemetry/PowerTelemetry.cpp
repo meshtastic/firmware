@@ -152,14 +152,18 @@ void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *s
     }
 
     // Display "Pow. From: ..."
-    display->drawString(x, compactFirstLine, "Pow. From: " + String(lastSender) + " (" + String(agoSecs) + "s)");
+    char fromStr[64];
+    snprintf(fromStr, sizeof(fromStr), "Pow. From: %s (%ds)", lastSender, agoSecs);
+    display->drawString(x, compactFirstLine, fromStr);
 
     // Display current and voltage based on ...power_metrics.has_[channel/voltage/current]... flags
     const auto &m = lastMeasurement.variant.power_metrics;
     int lineY = compactSecondLine;
 
     auto drawLine = [&](const char *label, float voltage, float current) {
-        display->drawString(x, lineY, String(label) + ": " + String(voltage, 2) + "V " + String(current, 0) + "mA");
+        char lineStr[64];
+        snprintf(lineStr, sizeof(lineStr), "%s: %.2fV %.0fmA", label, voltage, current);
+        display->drawString(x, lineY, lineStr);
         lineY += _fontHeight(FONT_SMALL);
     };
 

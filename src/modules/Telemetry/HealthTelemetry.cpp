@@ -118,22 +118,31 @@ void HealthTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *
     }
 
     // Display "Health From: ..." on its own
-    display->drawString(x, y, "Health From: " + String(lastSender) + "(" + String(agoSecs) + "s)");
+    char headerStr[64];
+    snprintf(headerStr, sizeof(headerStr), "Health From: %s(%ds)", lastSender, (int)agoSecs);
+    display->drawString(x, y, headerStr);
 
-    String last_temp = String(lastMeasurement.variant.health_metrics.temperature, 0) + "°C";
+    char last_temp[16];
     if (moduleConfig.telemetry.environment_display_fahrenheit) {
-        last_temp = String(UnitConversions::CelsiusToFahrenheit(lastMeasurement.variant.health_metrics.temperature), 0) + "°F";
+        snprintf(last_temp, sizeof(last_temp), "%.0f°F",
+                 UnitConversions::CelsiusToFahrenheit(lastMeasurement.variant.health_metrics.temperature));
+    } else {
+        snprintf(last_temp, sizeof(last_temp), "%.0f°C", lastMeasurement.variant.health_metrics.temperature);
     }
 
     // Continue with the remaining details
-    display->drawString(x, y += _fontHeight(FONT_SMALL), "Temp: " + last_temp);
+    char tempStr[32];
+    snprintf(tempStr, sizeof(tempStr), "Temp: %s", last_temp);
+    display->drawString(x, y += _fontHeight(FONT_SMALL), tempStr);
     if (lastMeasurement.variant.health_metrics.has_heart_bpm) {
-        display->drawString(x, y += _fontHeight(FONT_SMALL),
-                            "Heart Rate: " + String(lastMeasurement.variant.health_metrics.heart_bpm, 0) + " bpm");
+        char heartStr[32];
+        snprintf(heartStr, sizeof(heartStr), "Heart Rate: %.0f bpm", lastMeasurement.variant.health_metrics.heart_bpm);
+        display->drawString(x, y += _fontHeight(FONT_SMALL), heartStr);
     }
     if (lastMeasurement.variant.health_metrics.has_spO2) {
-        display->drawString(x, y += _fontHeight(FONT_SMALL),
-                            "spO2: " + String(lastMeasurement.variant.health_metrics.spO2, 0) + " %");
+        char spo2Str[32];
+        snprintf(spo2Str, sizeof(spo2Str), "spO2: %.0f %%", lastMeasurement.variant.health_metrics.spO2);
+        display->drawString(x, y += _fontHeight(FONT_SMALL), spo2Str);
     }
 }
 

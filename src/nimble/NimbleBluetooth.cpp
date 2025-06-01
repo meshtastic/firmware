@@ -109,14 +109,14 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
                 display->drawString(x_offset + x, y_offset + y, "Enter this code");
 
                 display->setFont(FONT_LARGE);
-                String displayPin(btPIN);
-                String pin = displayPin.substring(0, 3) + " " + displayPin.substring(3, 6);
+                char pin[8];
+                snprintf(pin, sizeof(pin), "%.3s %.3s", btPIN, btPIN + 3);
                 y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_SMALL - 5 : y_offset + FONT_HEIGHT_SMALL + 5;
                 display->drawString(x_offset + x, y_offset + y, pin);
 
                 display->setFont(FONT_SMALL);
-                String deviceName = "Name: ";
-                deviceName.concat(getDeviceName());
+                char deviceName[64];
+                snprintf(deviceName, sizeof(deviceName), "Name: %s", getDeviceName());
                 y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_LARGE - 6 : y_offset + FONT_HEIGHT_LARGE + 5;
                 display->drawString(x_offset + x, y_offset + y, deviceName);
             });

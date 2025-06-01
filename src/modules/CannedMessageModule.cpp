@@ -11,6 +11,7 @@
 #include "PowerFSM.h" // needed for button bypass
 #include "SPILock.h"
 #include "detect/ScanI2C.h"
+#include "graphics/Screen.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/images.h"
 #include "input/ScanAndSelect.h"
@@ -732,9 +733,7 @@ bool CannedMessageModule::handleSystemCommandInput(const InputEvent *event)
         return false;
 
     // Block ALL input if an alert banner is active
-    extern String alertBannerMessage;
-    extern uint32_t alertBannerUntil;
-    if (alertBannerMessage.length() > 0 && (alertBannerUntil == 0 || millis() <= alertBannerUntil)) {
+    if (strlen(alertBannerMessage) > 0 && (alertBannerUntil == 0 || millis() <= alertBannerUntil)) {
         return true;
     }
 
@@ -1462,12 +1461,12 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
 
             int xOffset = 0;
             int yOffset = row * (FONT_HEIGHT_SMALL - 4) + rowYOffset;
-            String entryText;
+            char entryText[64];
 
             // Draw Channels First
             if (itemIndex < numActiveChannels) {
                 uint8_t channelIndex = this->activeChannelIndices[itemIndex];
-                entryText = String("@") + String(channels.getName(channelIndex));
+                snprintf(entryText, sizeof(entryText), "@%s", channels.getName(channelIndex));
             }
             // Then Draw Nodes
             else {
@@ -1475,13 +1474,17 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
                 if (nodeIndex >= 0 && nodeIndex < static_cast<int>(this->filteredNodes.size())) {
                     meshtastic_NodeInfoLite *node = this->filteredNodes[nodeIndex].node;
                     if (node) {
-                        entryText = node->is_favorite ? "* " + String(node->user.long_name) : String(node->user.long_name);
+                        if (node->is_favorite) {
+                            snprintf(entryText, sizeof(entryText), "* %s", node->user.long_name);
+                        } else {
+                            snprintf(entryText, sizeof(entryText), "%s", node->user.long_name);
+                        }
                     }
                 }
             }
 
-            if (entryText.length() == 0 || entryText == "Unknown")
-                entryText = "?";
+            if (strlen(entryText) == 0 || strcmp(entryText, "Unknown") == 0)
+                strcpy(entryText, "?");
 
             // === Highlight background (if selected) ===
             if (itemIndex == destIndex) {

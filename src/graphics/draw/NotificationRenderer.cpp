@@ -2,6 +2,7 @@
 #include "DisplayFormatters.h"
 #include "NodeDB.h"
 #include "configuration.h"
+#include "graphics/Screen.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/images.h"
@@ -17,8 +18,6 @@
 using namespace meshtastic;
 
 // External references to global variables from Screen.cpp
-extern String alertBannerMessage;
-extern uint32_t alertBannerUntil;
 extern std::vector<std::string> functionSymbol;
 extern std::string functionSymbolString;
 extern bool hasUnreadMessage;
@@ -77,7 +76,7 @@ void NotificationRenderer::drawWelcomeScreen(OLEDDisplay *display, OLEDDisplayUi
 void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
     // Exit if no message is active or duration has passed
-    if (alertBannerMessage.length() == 0 || (alertBannerUntil != 0 && millis() > alertBannerUntil))
+    if (strlen(alertBannerMessage) == 0 || (alertBannerUntil != 0 && millis() > alertBannerUntil))
         return;
 
     // === Layout Configuration ===
@@ -85,28 +84,37 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
     constexpr uint8_t lineSpacing = 1; // Extra space between lines
 
     // Search the message to determine if we need the bell added
-    bool needs_bell = (alertBannerMessage.indexOf("Alert Received") != -1);
+    bool needs_bell = (strstr(alertBannerMessage, "Alert Received") != nullptr);
 
     // Setup font and alignment
     display->setFont(FONT_SMALL);
     display->setTextAlignment(TEXT_ALIGN_LEFT); // We will manually center per line
 
     // === Split the message into lines (supports multi-line banners) ===
-    std::vector<String> lines;
-    int start = 0, newlineIdx;
-    while ((newlineIdx = alertBannerMessage.indexOf('\n', start)) != -1) {
-        lines.push_back(alertBannerMessage.substring(start, newlineIdx));
-        start = newlineIdx + 1;
+    const int MAX_LINES = 10;
+    char lines[MAX_LINES][256];
+    int lineCount = 0;
+
+    // Create a working copy of the message to tokenize
+    char messageCopy[256];
+    strncpy(messageCopy, alertBannerMessage, sizeof(messageCopy) - 1);
+    messageCopy[sizeof(messageCopy) - 1] = '\0';
+
+    char *line = strtok(messageCopy, "\n");
+    while (line != nullptr && lineCount < MAX_LINES) {
+        strncpy(lines[lineCount], line, sizeof(lines[lineCount]) - 1);
+        lines[lineCount][sizeof(lines[lineCount]) - 1] = '\0';
+        lineCount++;
+        line = strtok(nullptr, "\n");
     }
-    lines.push_back(alertBannerMessage.substring(start));
 
     // === Measure text dimensions ===
     uint16_t minWidth = (SCREEN_WIDTH > 128) ? 106 : 78;
     uint16_t maxWidth = 0;
-    std::vector<uint16_t> lineWidths;
-    for (const auto &line : lines) {
-        uint16_t w = display->getStringWidth(line.c_str(), line.length(), true);
-        lineWidths.push_back(w);
+    uint16_t lineWidths[MAX_LINES];
+    for (int i = 0; i < lineCount; i++) {
+        uint16_t w = display->getStringWidth(lines[i], strlen(lines[i]), true);
+        lineWidths[i] = w;
         if (w > maxWidth)
             maxWidth = w;
     }
@@ -115,7 +123,7 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
     if (needs_bell && boxWidth < minWidth)
         boxWidth += (SCREEN_WIDTH > 128) ? 26 : 20;
 
-    uint16_t boxHeight = padding * 2 + lines.size() * FONT_HEIGHT_SMALL + (lines.size() - 1) * lineSpacing;
+    uint16_t boxHeight = padding * 2 + lineCount * FONT_HEIGHT_SMALL + (lineCount - 1) * lineSpacing;
 
     int16_t boxLeft = (display->width() / 2) - (boxWidth / 2);
     int16_t boxTop = (display->height() / 2) - (boxHeight / 2);
@@ -128,9 +136,9 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
 
     // === Draw each line centered in the box ===
     int16_t lineY = boxTop + padding;
-    for (size_t i = 0; i < lines.size(); ++i) {
+    for (int i = 0; i < lineCount; i++) {
         int16_t textX = boxLeft + (boxWidth - lineWidths[i]) / 2;
-        uint16_t line_width = display->getStringWidth(lines[i].c_str(), lines[i].length(), true);
+        uint16_t line_width = display->getStringWidth(lines[i], strlen(lines[i]), true);
 
         if (needs_bell && i == 0) {
             int bellY = lineY + (FONT_HEIGHT_SMALL - 8) / 2;

@@ -269,7 +269,7 @@ class Screen : public concurrency::OSThread
         enqueueCmd(cmd);
     }
 
-    void showOverlayBanner(const String &message, uint32_t durationMs = 3000);
+    void showOverlayBanner(const char *message, uint32_t durationMs = 3000);
 
     void startFirmwareUpdateScreen()
     {
@@ -688,8 +688,10 @@ class Screen : public concurrency::OSThread
 
 } // namespace graphics
 
-extern String alertBannerMessage;
+extern "C" {
+extern char *alertBannerMessage;
 extern uint32_t alertBannerUntil;
+}
 
 // Extern declarations for function symbols used in UIRenderer
 extern std::vector<std::string> functionSymbol;

@@ -181,19 +181,19 @@ void drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, i
     }
 
     if (WiFi.status() != WL_CONNECTED) {
-        display->drawString(x, y, String("WiFi: Not Connected"));
+        display->drawString(x, y, "WiFi: Not Connected");
         if (config.display.heading_bold)
-            display->drawString(x + 1, y, String("WiFi: Not Connected"));
+            display->drawString(x + 1, y, "WiFi: Not Connected");
     } else {
-        display->drawString(x, y, String("WiFi: Connected"));
+        display->drawString(x, y, "WiFi: Connected");
         if (config.display.heading_bold)
-            display->drawString(x + 1, y, String("WiFi: Connected"));
+            display->drawString(x + 1, y, "WiFi: Connected");
 
-        display->drawString(x + SCREEN_WIDTH - display->getStringWidth("RSSI " + String(WiFi.RSSI())), y,
-                            "RSSI " + String(WiFi.RSSI()));
+        char rssiStr[32];
+        snprintf(rssiStr, sizeof(rssiStr), "RSSI %d", WiFi.RSSI());
+        display->drawString(x + SCREEN_WIDTH - display->getStringWidth(rssiStr), y, rssiStr);
         if (config.display.heading_bold) {
-            display->drawString(x + SCREEN_WIDTH - display->getStringWidth("RSSI " + String(WiFi.RSSI())) - 1, y,
-                                "RSSI " + String(WiFi.RSSI()));
+            display->drawString(x + SCREEN_WIDTH - display->getStringWidth(rssiStr) - 1, y, rssiStr);
         }
     }
 
@@ -212,7 +212,9 @@ void drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, i
 
     */
     if (WiFi.status() == WL_CONNECTED) {
-        display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "IP: " + String(WiFi.localIP().toString().c_str()));
+        char ipStr[64];
+        snprintf(ipStr, sizeof(ipStr), "IP: %s", WiFi.localIP().toString().c_str());
+        display->drawString(x, y + FONT_HEIGHT_SMALL * 1, ipStr);
     } else if (WiFi.status() == WL_NO_SSID_AVAIL) {
         display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "SSID Not Found");
     } else if (WiFi.status() == WL_CONNECTION_LOST) {
@@ -231,11 +233,15 @@ void drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, i
     }
 #else
     else {
-        display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "Unkown status: " + String(WiFi.status()));
+        char statusStr[32];
+        snprintf(statusStr, sizeof(statusStr), "Unknown status: %d", WiFi.status());
+        display->drawString(x, y + FONT_HEIGHT_SMALL * 1, statusStr);
     }
 #endif
 
-    display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "SSID: " + String(wifiName));
+    char ssidStr[64];
+    snprintf(ssidStr, sizeof(ssidStr), "SSID: %s", wifiName);
+    display->drawString(x, y + FONT_HEIGHT_SMALL * 2, ssidStr);
 
     display->drawString(x, y + FONT_HEIGHT_SMALL * 3, "http://meshtastic.local");
 
@@ -274,9 +280,9 @@ void drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t 
             display->drawString(x + 1, y, batStr);
     } else {
         // Line 1
-        display->drawString(x, y, String("USB"));
+        display->drawString(x, y, "USB");
         if (config.display.heading_bold)
-            display->drawString(x + 1, y, String("USB"));
+            display->drawString(x + 1, y, "USB");
     }
 
     //    auto mode = DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, true);
@@ -416,7 +422,7 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
     // === First Row: Region / BLE Name ===
-    graphics::UIRenderer::drawNodes(display, x, compactFirstLine + 3, nodeStatus, 0, true);
+    graphics::UIRenderer::drawNodes(display, x, compactFirstLine + 3, nodeStatus, 0, true, "");
 
     uint8_t dmac[6];
     char shortnameble[35];
