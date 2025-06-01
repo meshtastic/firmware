@@ -18,6 +18,8 @@
 #define SLEEP_TIME 120
 
 // GNNS
+#define HAS_GPS 1
+#define GPS_BAUDRATE 38400
 #define PIN_GPS_EN 15
 #define GPS_EN_ACTIVE 1
 #define GPS_RX_PIN 44
@@ -35,8 +37,6 @@
 #define SPI_CS (48)
 #define SDCARD_CS SPI_CS
 #define SD_SPI_FREQUENCY 75000000U
-
-// T-Deck Pro PMU
 
 // TCA8418 keyboard
 #define KB_BL_PIN 42
