@@ -1,11 +1,12 @@
-#include "DebugRenderer.h"
+#include "configuration.h"
+#if HAS_SCREEN
 #include "../Screen.h"
+#include "DebugRenderer.h"
 #include "FSCommon.h"
 #include "NodeDB.h"
 #include "Throttle.h"
 #include "UIRenderer.h"
 #include "airtime.h"
-#include "configuration.h"
 #include "gps/RTC.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
@@ -675,3 +676,4 @@ void drawMemoryUsage(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
 }
 } // namespace DebugRenderer
 } // namespace graphics
+#endif

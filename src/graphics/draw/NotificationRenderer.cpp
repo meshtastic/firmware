@@ -1,7 +1,9 @@
-#include "NotificationRenderer.h"
+#include "configuration.h"
+#if HAS_SCREEN
+
 #include "DisplayFormatters.h"
 #include "NodeDB.h"
-#include "configuration.h"
+#include "NotificationRenderer.h"
 #include "graphics/Screen.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
@@ -189,3 +191,4 @@ void NotificationRenderer::drawFrameFirmware(OLEDDisplay *display, OLEDDisplayUi
 } // namespace NotificationRenderer
 
 } // namespace graphics
+#endif
