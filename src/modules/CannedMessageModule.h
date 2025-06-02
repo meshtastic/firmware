@@ -21,11 +21,6 @@ enum cannedMessageModuleRunState {
     CANNED_MESSAGE_RUN_STATE_MESSAGE_SELECTION
 };
 
-enum cannedMessageDestinationType {
-    CANNED_MESSAGE_DESTINATION_TYPE_NONE,
-    CANNED_MESSAGE_DESTINATION_TYPE_NODE,
-};
-
 enum CannedMessageModuleIconType { shift, backspace, space, enter };
 
 #define CANNED_MESSAGE_MODULE_MESSAGE_MAX_COUNT 50
@@ -74,7 +69,8 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     bool hasMessages();
     void showTemporaryMessage(const String &message);
     void resetSearch();
-    void updateFilteredNodes();
+    void updateDestinationSelectionList();
+    void drawDestinationSelectionScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
     bool isInterceptingAndFocused();
     bool isCharInputAllowed() const;
     String drawWithCursor(String text, int cursor);
@@ -143,10 +139,8 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     int scrollIndex = 0;
     int visibleRows = 0;
     bool needsUpdate = true;
-    bool shouldRedraw = false;
     unsigned long lastUpdateMillis = 0;
     String searchQuery;
-    String nodeSelectionInput;
     String freetext;
     String temporaryMessage;
 
@@ -173,13 +167,19 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
 
     // === State Tracking ===
     cannedMessageModuleRunState runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
-    cannedMessageDestinationType destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
     char highlight = 0x00;
     char payload = 0x00;
     unsigned int cursor = 0;
     unsigned long lastTouchMillis = 0;
+    uint32_t lastFilterUpdate = 0;
+    static constexpr uint32_t filterDebounceMs = 30;
     std::vector<uint8_t> activeChannelIndices;
     std::vector<NodeEntry> filteredNodes;
+
+#if defined(USE_VIRTUAL_KEYBOARD)
+    bool shift = false;
+    int charSet = 0; // 0=ABC, 1=123
+#endif
 
     bool isInputSourceAllowed(const InputEvent *event);
     bool isUpEvent(const InputEvent *event);

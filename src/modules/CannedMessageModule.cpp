@@ -56,12 +56,6 @@ CannedMessageModule::CannedMessageModule()
             disable();
         } else {
             LOG_INFO("CannedMessageModule is enabled");
-
-            // T-Watch interface currently has no way to select destination type, so default to 'node'
-#if defined(USE_VIRTUAL_KEYBOARD)
-            this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
-#endif
-
             this->inputObserver.observe(inputBroker);
         }
     } else {
@@ -165,7 +159,7 @@ void CannedMessageModule::resetSearch()
     int previousDestIndex = destIndex;
 
     searchQuery = "";
-    updateFilteredNodes();
+    updateDestinationSelectionList();
 
     // Adjust scrollIndex so previousDestIndex is still visible
     int totalEntries = activeChannelIndices.size() + filteredNodes.size();
@@ -178,7 +172,7 @@ void CannedMessageModule::resetSearch()
     lastUpdateMillis = millis();
     requestFocus();
 }
-void CannedMessageModule::updateFilteredNodes()
+void CannedMessageModule::updateDestinationSelectionList()
 {
     static size_t lastNumMeshNodes = 0;
     static String lastSearchQuery = "";
@@ -242,7 +236,7 @@ void CannedMessageModule::updateFilteredNodes()
     });
     scrollIndex = 0; // Show first result at the top
     destIndex = 0;   // Highlight the first entry
-    if (nodesChanged) {
+    if (nodesChanged && runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) {
         LOG_INFO("Nodes changed, forcing UI refresh.");
         screen->forceDisplay();
     }
@@ -385,16 +379,15 @@ bool CannedMessageModule::handleTabSwitch(const InputEvent *event)
     if (event->kbchar != 0x09)
         return false;
 
-    destSelect = (destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NODE) ? CANNED_MESSAGE_DESTINATION_TYPE_NONE
-                                                                      : CANNED_MESSAGE_DESTINATION_TYPE_NODE;
-    runState = (destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NONE) ? CANNED_MESSAGE_RUN_STATE_FREETEXT
-                                                                    : CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION;
+    runState = (runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION)
+        ? CANNED_MESSAGE_RUN_STATE_FREETEXT
+        : CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION;
 
     destIndex = 0;
     scrollIndex = 0;
     // RESTORE THIS!
     if (runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION)
-        updateFilteredNodes();
+        updateDestinationSelectionList();
 
     UIFrameEvent e;
     e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
@@ -405,15 +398,16 @@ bool CannedMessageModule::handleTabSwitch(const InputEvent *event)
 
 int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event, bool isUp, bool isDown, bool isSelect)
 {
-    static bool shouldRedraw = false;
-
     if (event->kbchar >= 32 && event->kbchar <= 126 && !isUp && !isDown &&
         event->inputEvent != static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT) &&
         event->inputEvent != static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT) &&
         event->inputEvent != static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT)) {
         this->searchQuery += event->kbchar;
         needsUpdate = true;
-        runOnce(); // update filter immediately
+        if ((millis() - lastFilterUpdate) > filterDebounceMs) {
+            runOnce(); // update filter immediately
+            lastFilterUpdate = millis();
+        }
         return 0;
     }
 
@@ -446,7 +440,8 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
         else if ((destIndex / columns) >= (scrollIndex + visibleRows))
             scrollIndex = (destIndex / columns) - visibleRows + 1;
 
-        shouldRedraw = true;
+        screen->forceDisplay();
+        return 0;
     }
 
     // DOWN
@@ -455,12 +450,8 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
         if ((destIndex / columns) >= (scrollIndex + visibleRows))
             scrollIndex = (destIndex / columns) - visibleRows + 1;
 
-        shouldRedraw = true;
-    }
-
-    if (shouldRedraw) {
         screen->forceDisplay();
-        shouldRedraw = false;
+        return 0;
     }
 
     // SELECT
@@ -481,14 +472,12 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
 
         runState = returnToCannedList ? CANNED_MESSAGE_RUN_STATE_ACTIVE : CANNED_MESSAGE_RUN_STATE_FREETEXT;
         returnToCannedList = false;
-        destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
         screen->forceDisplay();
         return 0;
     }
 
     // CANCEL
     if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL)) {
-        destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
         runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         searchQuery = "";
 
@@ -504,7 +493,7 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
 
 bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bool isUp, bool isDown, bool isSelect)
 {
-    if (destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NODE)
+    if (runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION)
         return false;
 
     // === Handle Cancel key: go inactive, clear UI state ===
@@ -539,10 +528,9 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
         if (strcmp(current, "[Select Destination]") == 0) {
             returnToCannedList = true;
             runState = CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION;
-            destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
             destIndex = 0;
             scrollIndex = 0;
-            updateFilteredNodes(); // Make sure list is fresh
+            updateDestinationSelectionList(); // Make sure list is fresh
             screen->forceDisplay();
             return true;
         }
@@ -889,28 +877,26 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
         screen->handleTextMessage(&simulatedPacket);
     }
 }
-bool validEvent = false;
-unsigned long lastUpdateMillis = 0;
 int32_t CannedMessageModule::runOnce()
 {
-#define NODE_UPDATE_IDLE_MS 100
-#define NODE_UPDATE_ACTIVE_MS 80
-
-    unsigned long updateThreshold = (searchQuery.length() > 0) ? NODE_UPDATE_ACTIVE_MS : NODE_UPDATE_IDLE_MS;
-    if (needsUpdate && millis() - lastUpdateMillis > updateThreshold) {
-        updateFilteredNodes();
-        lastUpdateMillis = millis();
+    if (this->runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION && needsUpdate) {
+        updateDestinationSelectionList();
+        needsUpdate = false;
     }
-    // Prevent message list activity when selecting destination
+
+    // If we're in node selection, do nothing except keep alive
     if (this->runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) {
         return INACTIVATE_AFTER_MS;
     }
 
+    // Normal module disable/idle handling
     if (((!moduleConfig.canned_message.enabled) && !CANNED_MESSAGE_MODULE_ENABLE) ||
-        (this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED) || (this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE)) {
+        (this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED) ||
+        (this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE)) {
         temporaryMessage = "";
         return INT32_MAX;
     }
+
     UIFrameEvent e;
     if ((this->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) ||
         (this->runState == CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED) ||
@@ -919,29 +905,27 @@ int32_t CannedMessageModule::runOnce()
         temporaryMessage = "";
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
         this->currentMessageIndex = -1;
-        this->freetext = ""; // clear freetext
+        this->freetext = "";
         this->cursor = 0;
-
-#if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(SENSECAP_INDICATOR)
-        this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
-#endif
-
+    #if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(SENSECAP_INDICATOR)
+        int destSelect = 0;
+    #endif
         this->notifyObservers(&e);
-    } else if (((this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT)) &&
-               !Throttle::isWithinTimespanMs(this->lastTouchMillis, INACTIVATE_AFTER_MS)) {
-        // Reset module
+    }
+    else if (((this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT)) &&
+        !Throttle::isWithinTimespanMs(this->lastTouchMillis, INACTIVATE_AFTER_MS)) {
+        // Reset module on inactivity
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
         this->currentMessageIndex = -1;
-        this->freetext = ""; // clear freetext
+        this->freetext = "";
         this->cursor = 0;
-
-#if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(USE_VIRTUAL_KEYBOARD)
-        this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
-#endif
-
+    #if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(USE_VIRTUAL_KEYBOARD)
+        int destSelect = 0;
+    #endif
         this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         this->notifyObservers(&e);
-    } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_SELECT) {
+    }
+    else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_SELECT) {
         if (this->payload == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
             if (this->freetext.length() > 0) {
                 sendText(this->dest, this->channel, this->freetext.c_str(), true);
@@ -963,25 +947,18 @@ int32_t CannedMessageModule::runOnce()
                 }
                 this->runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
             } else {
-                // LOG_DEBUG("Reset message is empty");
                 this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
             }
         }
-        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
+        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
         this->currentMessageIndex = -1;
-        this->freetext = ""; // clear freetext
+        this->freetext = "";
         this->cursor = 0;
-
-#if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(USE_VIRTUAL_KEYBOARD)
-        this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
-#endif
-
         this->notifyObservers(&e);
         return 2000;
     }
-    // === Always highlight the first real canned message when entering the message list ===
+    // Always highlight the first real canned message when entering the message list
     else if ((this->runState != CANNED_MESSAGE_RUN_STATE_FREETEXT) && (this->currentMessageIndex == -1)) {
-        // Find first actual canned message (not a special action entry)
         int firstRealMsgIdx = 0;
         for (int i = 0; i < this->messagesCount; ++i) {
             if (strcmp(this->messages[i], "[Select Destination]") != 0 && strcmp(this->messages[i], "[Exit]") != 0 &&
@@ -991,44 +968,35 @@ int32_t CannedMessageModule::runOnce()
             }
         }
         this->currentMessageIndex = firstRealMsgIdx;
-        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
+        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
         this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
-    } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_UP) {
+    }
+    else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_UP) {
         if (this->messagesCount > 0) {
             this->currentMessageIndex = getPrevIndex();
-            this->freetext = ""; // clear freetext
+            this->freetext = "";
             this->cursor = 0;
-
-#if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(USE_VIRTUAL_KEYBOARD)
-            this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
-#endif
-
             this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
             LOG_DEBUG("MOVE UP (%d):%s", this->currentMessageIndex, this->getCurrentMessage());
         }
-    } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_DOWN) {
+    }
+    else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_DOWN) {
         if (this->messagesCount > 0) {
             this->currentMessageIndex = this->getNextIndex();
-            this->freetext = ""; // clear freetext
+            this->freetext = "";
             this->cursor = 0;
-
-#if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(USE_VIRTUAL_KEYBOARD)
-            this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
-#endif
-
             this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
             LOG_DEBUG("MOVE DOWN (%d):%s", this->currentMessageIndex, this->getCurrentMessage());
         }
-    } else if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT || this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) {
+    }
+    else if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT || this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) {
         switch (this->payload) {
         case INPUT_BROKER_MSG_LEFT:
-            // Only handle cursor movement in freetext
             if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT && this->cursor > 0) {
                 this->cursor--;
             }
             break;
         case INPUT_BROKER_MSG_RIGHT:
-            // Only handle cursor movement in freetext
             if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT && this->cursor < this->freetext.length()) {
                 this->cursor++;
             }
@@ -1037,56 +1005,32 @@ int32_t CannedMessageModule::runOnce()
             break;
         }
         if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
-            e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
-            switch (this->payload) { // code below all trigger the freetext window (where you type to send a message) or reset the
-                                     // display back to the default window
-            case 0x08:               // backspace
+            e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+            switch (this->payload) {
+            case 0x08: // backspace
                 if (this->freetext.length() > 0 && this->highlight == 0x00) {
                     if (this->cursor == this->freetext.length()) {
                         this->freetext = this->freetext.substring(0, this->freetext.length() - 1);
                     } else {
                         this->freetext = this->freetext.substring(0, this->cursor - 1) +
-                                         this->freetext.substring(this->cursor, this->freetext.length());
+                            this->freetext.substring(this->cursor, this->freetext.length());
                     }
                     this->cursor--;
                 }
                 break;
-            case INPUT_BROKER_MSG_TAB: // Tab key (Switch to Destination Selection Mode)
-            {
-                if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NONE) {
-                    // Enter selection screen
-                    this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
-                    this->destIndex = 0;   // Reset to first node/channel
-                    this->scrollIndex = 0; // Reset scrolling
-                    this->runState = CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION;
-
-                    // Ensure UI updates correctly
-                    UIFrameEvent e;
-                    e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
-                    this->notifyObservers(&e);
-                }
-
-                // If already inside the selection screen, do nothing (prevent exiting)
+            case INPUT_BROKER_MSG_TAB: // Tab key: handled by input handler
                 return 0;
-            } break;
             case INPUT_BROKER_MSG_LEFT:
             case INPUT_BROKER_MSG_RIGHT:
-                // already handled above
                 break;
             default:
-                if (this->highlight != 0x00) {
-                    break;
-                }
-
+                if (this->highlight != 0x00) break;
                 if (this->cursor == this->freetext.length()) {
                     this->freetext += this->payload;
                 } else {
-                    this->freetext =
-                        this->freetext.substring(0, this->cursor) + this->payload + this->freetext.substring(this->cursor);
+                    this->freetext = this->freetext.substring(0, this->cursor) + this->payload + this->freetext.substring(this->cursor);
                 }
-
                 this->cursor += 1;
-
                 uint16_t maxChars = meshtastic_Constants_DATA_PAYLOAD_LEN - (moduleConfig.canned_message.send_bell ? 1 : 0);
                 if (this->freetext.length() > maxChars) {
                     this->cursor = maxChars;
@@ -1095,7 +1039,6 @@ int32_t CannedMessageModule::runOnce()
                 break;
             }
         }
-
         this->lastTouchMillis = millis();
         this->notifyObservers(&e);
         return INACTIVATE_AFTER_MS;
@@ -1105,10 +1048,6 @@ int32_t CannedMessageModule::runOnce()
         this->lastTouchMillis = millis();
         this->notifyObservers(&e);
         return INACTIVATE_AFTER_MS;
-    }
-    if (shouldRedraw) {
-        screen->forceDisplay();
-        shouldRedraw = false;
     }
     return INT32_MAX;
 }
@@ -1407,6 +1346,107 @@ bool CannedMessageModule::interceptingKeyboardInput()
     }
 }
 
+// Draw the node/channel selection screen
+void CannedMessageModule::drawDestinationSelectionScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) {
+    requestFocus();
+    display->setColor(WHITE); // Always draw cleanly
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
+
+    // === Header ===
+    int titleY = 2;
+    String titleText = "Select Destination";
+    titleText += searchQuery.length() > 0 ? " [" + searchQuery + "]" : " [ ]";
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->drawString(display->getWidth() / 2, titleY, titleText);
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+    // === List Items ===
+    int rowYOffset = titleY + (FONT_HEIGHT_SMALL - 4);
+    int numActiveChannels = this->activeChannelIndices.size();
+    int totalEntries = numActiveChannels + this->filteredNodes.size();
+    int columns = 1;
+    this->visibleRows = (display->getHeight() - (titleY + FONT_HEIGHT_SMALL)) / (FONT_HEIGHT_SMALL - 4);
+    if (this->visibleRows < 1)
+        this->visibleRows = 1;
+
+    // === Clamp scrolling ===
+    if (scrollIndex > totalEntries / columns)
+        scrollIndex = totalEntries / columns;
+    if (scrollIndex < 0)
+        scrollIndex = 0;
+
+    for (int row = 0; row < visibleRows; row++) {
+        int itemIndex = scrollIndex + row;
+        if (itemIndex >= totalEntries)
+            break;
+
+        int xOffset = 0;
+        int yOffset = row * (FONT_HEIGHT_SMALL - 4) + rowYOffset;
+        String entryText;
+
+        // Draw Channels First
+        if (itemIndex < numActiveChannels) {
+            uint8_t channelIndex = this->activeChannelIndices[itemIndex];
+            entryText = String("@") + String(channels.getName(channelIndex));
+        }
+        // Then Draw Nodes
+        else {
+            int nodeIndex = itemIndex - numActiveChannels;
+            if (nodeIndex >= 0 && nodeIndex < static_cast<int>(this->filteredNodes.size())) {
+                meshtastic_NodeInfoLite *node = this->filteredNodes[nodeIndex].node;
+                if (node) {
+                    entryText = node->is_favorite ? "* " + String(node->user.long_name) : String(node->user.long_name);
+                }
+            }
+        }
+
+        if (entryText.length() == 0 || entryText == "Unknown")
+            entryText = "?";
+
+        // === Highlight background (if selected) ===
+        if (itemIndex == destIndex) {
+            int scrollPadding = 8; // Reserve space for scrollbar
+            display->fillRect(0, yOffset + 2, display->getWidth() - scrollPadding, FONT_HEIGHT_SMALL - 5);
+            display->setColor(BLACK);
+        }
+
+        // === Draw entry text ===
+        display->drawString(xOffset + 2, yOffset, entryText);
+        display->setColor(WHITE);
+
+        // === Draw key icon (after highlight) ===
+        if (itemIndex >= numActiveChannels) {
+            int nodeIndex = itemIndex - numActiveChannels;
+            if (nodeIndex >= 0 && nodeIndex < static_cast<int>(this->filteredNodes.size())) {
+                meshtastic_NodeInfoLite *node = this->filteredNodes[nodeIndex].node;
+                if (node && hasKeyForNode(node)) {
+                    int iconX = display->getWidth() - key_symbol_width - 15;
+                    int iconY = yOffset + (FONT_HEIGHT_SMALL - key_symbol_height) / 2;
+
+                    if (itemIndex == destIndex) {
+                        display->setColor(INVERSE);
+                    } else {
+                        display->setColor(WHITE);
+                    }
+                    display->drawXbm(iconX, iconY, key_symbol_width, key_symbol_height, key_symbol);
+                }
+            }
+        }
+    }
+
+    // Scrollbar
+    if (totalEntries > visibleRows) {
+        int scrollbarHeight = visibleRows * (FONT_HEIGHT_SMALL - 4);
+        int totalScrollable = totalEntries;
+        int scrollTrackX = display->getWidth() - 6;
+        display->drawRect(scrollTrackX, rowYOffset, 4, scrollbarHeight);
+        int scrollHeight = (scrollbarHeight * visibleRows) / totalScrollable;
+        int scrollPos = rowYOffset + (scrollbarHeight * scrollIndex) / totalScrollable;
+        display->fillRect(scrollTrackX, scrollPos, 4, scrollHeight);
+    }
+}
+
 void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     this->displayHeight = display->getHeight(); // Store display height for later use
@@ -1425,105 +1465,8 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
     }
 
     // === Destination Selection ===
-    if (this->runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION ||
-        this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NODE) {
-        requestFocus();
-        display->setColor(WHITE); // Always draw cleanly
-        display->setTextAlignment(TEXT_ALIGN_LEFT);
-        display->setFont(FONT_SMALL);
-
-        // === Header ===
-        int titleY = 2;
-        String titleText = "Select Destination";
-        titleText += searchQuery.length() > 0 ? " [" + searchQuery + "]" : " [ ]";
-        display->setTextAlignment(TEXT_ALIGN_CENTER);
-        display->drawString(display->getWidth() / 2, titleY, titleText);
-        display->setTextAlignment(TEXT_ALIGN_LEFT);
-
-        // === List Items ===
-        int rowYOffset = titleY + (FONT_HEIGHT_SMALL - 4);
-        int numActiveChannels = this->activeChannelIndices.size();
-        int totalEntries = numActiveChannels + this->filteredNodes.size();
-        int columns = 1;
-        this->visibleRows = (display->getHeight() - (titleY + FONT_HEIGHT_SMALL)) / (FONT_HEIGHT_SMALL - 4);
-        if (this->visibleRows < 1)
-            this->visibleRows = 1;
-
-        // === Clamp scrolling ===
-        if (scrollIndex > totalEntries / columns)
-            scrollIndex = totalEntries / columns;
-        if (scrollIndex < 0)
-            scrollIndex = 0;
-
-        for (int row = 0; row < visibleRows; row++) {
-            int itemIndex = scrollIndex + row;
-            if (itemIndex >= totalEntries)
-                break;
-
-            int xOffset = 0;
-            int yOffset = row * (FONT_HEIGHT_SMALL - 4) + rowYOffset;
-            String entryText;
-
-            // Draw Channels First
-            if (itemIndex < numActiveChannels) {
-                uint8_t channelIndex = this->activeChannelIndices[itemIndex];
-                entryText = String("@") + String(channels.getName(channelIndex));
-            }
-            // Then Draw Nodes
-            else {
-                int nodeIndex = itemIndex - numActiveChannels;
-                if (nodeIndex >= 0 && nodeIndex < static_cast<int>(this->filteredNodes.size())) {
-                    meshtastic_NodeInfoLite *node = this->filteredNodes[nodeIndex].node;
-                    if (node) {
-                        entryText = node->is_favorite ? "* " + String(node->user.long_name) : String(node->user.long_name);
-                    }
-                }
-            }
-
-            if (entryText.length() == 0 || entryText == "Unknown")
-                entryText = "?";
-
-            // === Highlight background (if selected) ===
-            if (itemIndex == destIndex) {
-                int scrollPadding = 8; // Reserve space for scrollbar
-                display->fillRect(0, yOffset + 2, display->getWidth() - scrollPadding, FONT_HEIGHT_SMALL - 5);
-                display->setColor(BLACK);
-            }
-
-            // === Draw entry text ===
-            display->drawString(xOffset + 2, yOffset, entryText);
-            display->setColor(WHITE);
-
-            // === Draw key icon (after highlight) ===
-            if (itemIndex >= numActiveChannels) {
-                int nodeIndex = itemIndex - numActiveChannels;
-                if (nodeIndex >= 0 && nodeIndex < static_cast<int>(this->filteredNodes.size())) {
-                    meshtastic_NodeInfoLite *node = this->filteredNodes[nodeIndex].node;
-                    if (node && hasKeyForNode(node)) {
-                        int iconX = display->getWidth() - key_symbol_width - 15;
-                        int iconY = yOffset + (FONT_HEIGHT_SMALL - key_symbol_height) / 2;
-
-                        if (itemIndex == destIndex) {
-                            display->setColor(INVERSE);
-                        } else {
-                            display->setColor(WHITE);
-                        }
-                        display->drawXbm(iconX, iconY, key_symbol_width, key_symbol_height, key_symbol);
-                    }
-                }
-            }
-        }
-
-        // Scrollbar
-        if (totalEntries > visibleRows) {
-            int scrollbarHeight = visibleRows * (FONT_HEIGHT_SMALL - 4);
-            int totalScrollable = totalEntries;
-            int scrollTrackX = display->getWidth() - 6;
-            display->drawRect(scrollTrackX, rowYOffset, 4, scrollbarHeight);
-            int scrollHeight = (scrollbarHeight * visibleRows) / totalScrollable;
-            int scrollPos = rowYOffset + (scrollbarHeight * scrollIndex) / totalScrollable;
-            display->fillRect(scrollTrackX, scrollPos, 4, scrollHeight);
-        }
+    if (this->runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) {
+        drawDestinationSelectionScreen(display, state, x, y);
         return;
     }
 
@@ -1616,7 +1559,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         drawHeader(display, x, y, buffer);
 
         // --- Char count right-aligned ---
-        if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NONE) {
+        if (runState != CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) {
             uint16_t charsLeft =
                 meshtastic_Constants_DATA_PAYLOAD_LEN - this->freetext.length() - (moduleConfig.canned_message.send_bell ? 1 : 0);
             snprintf(buffer, sizeof(buffer), "%d left", charsLeft);
