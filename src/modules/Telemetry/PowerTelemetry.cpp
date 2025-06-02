@@ -153,7 +153,7 @@ void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *s
 
     // Display "Pow. From: ..."
     char fromStr[64];
-    snprintf(fromStr, sizeof(fromStr), "Pow. From: %s (%ds)", lastSender, agoSecs);
+    snprintf(fromStr, sizeof(fromStr), "Pow. From: %s (%us)", lastSender, agoSecs);
     display->drawString(x, compactFirstLine, fromStr);
 
     // Display current and voltage based on ...power_metrics.has_[channel/voltage/current]... flags
