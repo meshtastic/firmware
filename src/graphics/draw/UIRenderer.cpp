@@ -21,9 +21,6 @@
 
 // External variables
 extern graphics::Screen *screen;
-extern "C" {
-extern char ourId[5];
-}
 
 namespace graphics
 {
@@ -669,7 +666,7 @@ void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t 
     uint8_t dmac[6];
     char shortnameble[35];
     getMacAddr(dmac);
-    snprintf(ourId, sizeof(ourId), "%02x%02x", dmac[4], dmac[5]);
+    snprintf(screen->ourId, sizeof(screen->ourId), "%02x%02x", dmac[4], dmac[5]);
     snprintf(shortnameble, sizeof(shortnameble), "%s",
              graphics::UIRenderer::haveGlyphs(owner.short_name) ? owner.short_name : "");
 

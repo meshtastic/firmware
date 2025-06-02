@@ -220,6 +220,13 @@ class Screen : public concurrency::OSThread
     meshtastic_Config_DisplayConfig_OledType model;
     OLEDDISPLAY_GEOMETRY geometry;
 
+    char alertBannerMessage[256] = {0};
+    uint32_t alertBannerUntil = 0;
+
+    // Stores the last 4 of our hardware ID, to make finding the device for pairing easier
+    // FIXME: Needs refactoring and getMacAddr needs to be moved to a utility class
+    char ourId[5];
+
     /// Initializes the UI, turns on the display, starts showing boot screen.
     //
     // Not thread safe - must be called before any other methods are called.
@@ -697,11 +704,6 @@ class Screen : public concurrency::OSThread
 };
 
 } // namespace graphics
-
-extern "C" {
-extern char *alertBannerMessage;
-extern uint32_t alertBannerUntil;
-}
 
 // Extern declarations for function symbols used in UIRenderer
 extern std::vector<std::string> functionSymbol;

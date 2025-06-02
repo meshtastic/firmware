@@ -380,9 +380,8 @@ bool CannedMessageModule::handleTabSwitch(const InputEvent *event)
     if (event->kbchar != 0x09)
         return false;
 
-    runState = (runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION)
-        ? CANNED_MESSAGE_RUN_STATE_FREETEXT
-        : CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION;
+    runState = (runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) ? CANNED_MESSAGE_RUN_STATE_FREETEXT
+                                                                            : CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION;
 
     destIndex = 0;
     scrollIndex = 0;
@@ -720,8 +719,8 @@ bool CannedMessageModule::handleSystemCommandInput(const InputEvent *event)
     if (event->inputEvent != static_cast<char>(ANYKEY))
         return false;
 
-    // Block ALL input if an alert banner is active
-    if (strlen(alertBannerMessage) > 0 && (alertBannerUntil == 0 || millis() <= alertBannerUntil)) {
+    // Block ALL input if an alert banner is active // TODO: Make an accessor function
+    if (strlen(screen->alertBannerMessage) > 0 && (screen->alertBannerUntil == 0 || millis() <= screen->alertBannerUntil)) {
         return true;
     }
 
@@ -890,8 +889,7 @@ int32_t CannedMessageModule::runOnce()
 
     // Normal module disable/idle handling
     if (((!moduleConfig.canned_message.enabled) && !CANNED_MESSAGE_MODULE_ENABLE) ||
-        (this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED) ||
-        (this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE)) {
+        (this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED) || (this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE)) {
         temporaryMessage = "";
         return INT32_MAX;
     }
@@ -906,25 +904,23 @@ int32_t CannedMessageModule::runOnce()
         this->currentMessageIndex = -1;
         this->freetext = "";
         this->cursor = 0;
-    #if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(SENSECAP_INDICATOR)
+#if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(SENSECAP_INDICATOR)
         int destSelect = 0;
-    #endif
+#endif
         this->notifyObservers(&e);
-    }
-    else if (((this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT)) &&
-        !Throttle::isWithinTimespanMs(this->lastTouchMillis, INACTIVATE_AFTER_MS)) {
+    } else if (((this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT)) &&
+               !Throttle::isWithinTimespanMs(this->lastTouchMillis, INACTIVATE_AFTER_MS)) {
         // Reset module on inactivity
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
         this->currentMessageIndex = -1;
         this->freetext = "";
         this->cursor = 0;
-    #if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(USE_VIRTUAL_KEYBOARD)
+#if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(USE_VIRTUAL_KEYBOARD)
         int destSelect = 0;
-    #endif
+#endif
         this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         this->notifyObservers(&e);
-    }
-    else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_SELECT) {
+    } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_SELECT) {
         if (this->payload == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
             if (this->freetext.length() > 0) {
                 sendText(this->dest, this->channel, this->freetext.c_str(), true);
@@ -969,8 +965,7 @@ int32_t CannedMessageModule::runOnce()
         this->currentMessageIndex = firstRealMsgIdx;
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
         this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
-    }
-    else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_UP) {
+    } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_UP) {
         if (this->messagesCount > 0) {
             this->currentMessageIndex = getPrevIndex();
             this->freetext = "";
@@ -978,8 +973,7 @@ int32_t CannedMessageModule::runOnce()
             this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
             LOG_DEBUG("MOVE UP (%d):%s", this->currentMessageIndex, this->getCurrentMessage());
         }
-    }
-    else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_DOWN) {
+    } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_DOWN) {
         if (this->messagesCount > 0) {
             this->currentMessageIndex = this->getNextIndex();
             this->freetext = "";
@@ -987,8 +981,7 @@ int32_t CannedMessageModule::runOnce()
             this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
             LOG_DEBUG("MOVE DOWN (%d):%s", this->currentMessageIndex, this->getCurrentMessage());
         }
-    }
-    else if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT || this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) {
+    } else if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT || this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) {
         switch (this->payload) {
         case INPUT_BROKER_MSG_LEFT:
             if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT && this->cursor > 0) {
@@ -1012,7 +1005,7 @@ int32_t CannedMessageModule::runOnce()
                         this->freetext = this->freetext.substring(0, this->freetext.length() - 1);
                     } else {
                         this->freetext = this->freetext.substring(0, this->cursor - 1) +
-                            this->freetext.substring(this->cursor, this->freetext.length());
+                                         this->freetext.substring(this->cursor, this->freetext.length());
                     }
                     this->cursor--;
                 }
@@ -1023,11 +1016,13 @@ int32_t CannedMessageModule::runOnce()
             case INPUT_BROKER_MSG_RIGHT:
                 break;
             default:
-                if (this->highlight != 0x00) break;
+                if (this->highlight != 0x00)
+                    break;
                 if (this->cursor == this->freetext.length()) {
                     this->freetext += this->payload;
                 } else {
-                    this->freetext = this->freetext.substring(0, this->cursor) + this->payload + this->freetext.substring(this->cursor);
+                    this->freetext =
+                        this->freetext.substring(0, this->cursor) + this->payload + this->freetext.substring(this->cursor);
                 }
                 this->cursor += 1;
                 uint16_t maxChars = meshtastic_Constants_DATA_PAYLOAD_LEN - (moduleConfig.canned_message.send_bell ? 1 : 0);
@@ -1346,7 +1341,8 @@ bool CannedMessageModule::interceptingKeyboardInput()
 }
 
 // Draw the node/channel selection screen
-void CannedMessageModule::drawDestinationSelectionScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) {
+void CannedMessageModule::drawDestinationSelectionScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
     requestFocus();
     display->setColor(WHITE); // Always draw cleanly
     display->setTextAlignment(TEXT_ALIGN_LEFT);
@@ -1380,32 +1376,32 @@ void CannedMessageModule::drawDestinationSelectionScreen(OLEDDisplay *display, O
         if (itemIndex >= totalEntries)
             break;
 
-            int xOffset = 0;
-            int yOffset = row * (FONT_HEIGHT_SMALL - 4) + rowYOffset;
-            char entryText[64];
+        int xOffset = 0;
+        int yOffset = row * (FONT_HEIGHT_SMALL - 4) + rowYOffset;
+        char entryText[64];
 
-            // Draw Channels First
-            if (itemIndex < numActiveChannels) {
-                uint8_t channelIndex = this->activeChannelIndices[itemIndex];
-                snprintf(entryText, sizeof(entryText), "@%s", channels.getName(channelIndex));
-            }
-            // Then Draw Nodes
-            else {
-                int nodeIndex = itemIndex - numActiveChannels;
-                if (nodeIndex >= 0 && nodeIndex < static_cast<int>(this->filteredNodes.size())) {
-                    meshtastic_NodeInfoLite *node = this->filteredNodes[nodeIndex].node;
-                    if (node) {
-                        if (node->is_favorite) {
-                            snprintf(entryText, sizeof(entryText), "* %s", node->user.long_name);
-                        } else {
-                            snprintf(entryText, sizeof(entryText), "%s", node->user.long_name);
-                        }
+        // Draw Channels First
+        if (itemIndex < numActiveChannels) {
+            uint8_t channelIndex = this->activeChannelIndices[itemIndex];
+            snprintf(entryText, sizeof(entryText), "@%s", channels.getName(channelIndex));
+        }
+        // Then Draw Nodes
+        else {
+            int nodeIndex = itemIndex - numActiveChannels;
+            if (nodeIndex >= 0 && nodeIndex < static_cast<int>(this->filteredNodes.size())) {
+                meshtastic_NodeInfoLite *node = this->filteredNodes[nodeIndex].node;
+                if (node) {
+                    if (node->is_favorite) {
+                        snprintf(entryText, sizeof(entryText), "* %s", node->user.long_name);
+                    } else {
+                        snprintf(entryText, sizeof(entryText), "%s", node->user.long_name);
                     }
                 }
             }
+        }
 
-            if (strlen(entryText) == 0 || strcmp(entryText, "Unknown") == 0)
-                strcpy(entryText, "?");
+        if (strlen(entryText) == 0 || strcmp(entryText, "Unknown") == 0)
+            strcpy(entryText, "?");
 
         // === Highlight background (if selected) ===
         if (itemIndex == destIndex) {

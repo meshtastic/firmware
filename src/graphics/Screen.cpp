@@ -95,11 +95,6 @@ namespace graphics
 FrameCallback *normalFrames;
 static uint32_t targetFramerate = IDLE_FRAMERATE;
 // Global variables for alert banner - explicitly define with extern "C" linkage to prevent optimization
-extern "C" {
-static char alertBannerBuffer[256] = "";
-char *alertBannerMessage = alertBannerBuffer;
-uint32_t alertBannerUntil = 0;
-}
 
 uint32_t logo_timeout = 5000; // 4 seconds for EACH logo
 
@@ -116,12 +111,6 @@ std::vector<MeshModule *> moduleFrames;
 // Global variables for screen function overlay symbols
 std::vector<std::string> functionSymbol;
 std::string functionSymbolString;
-
-// Stores the last 4 of our hardware ID, to make finding the device for pairing easier
-// FIXME: Needs refactoring and getMacAddr needs to be moved to a utility class
-extern "C" {
-char ourId[5];
-}
 
 #if HAS_GPS
 // GeoCoord object for the screen
@@ -1006,7 +995,7 @@ void Screen::setup()
     // === Generate device ID from MAC address ===
     uint8_t dmac[6];
     getMacAddr(dmac);
-    snprintf(ourId, sizeof(ourId), "%02x%02x", dmac[4], dmac[5]);
+    snprintf(screen->ourId, sizeof(screen->ourId), "%02x%02x", dmac[4], dmac[5]);
 
 #if ARCH_PORTDUINO
     handleSetOn(false); // Ensure proper init for Arduino targets
