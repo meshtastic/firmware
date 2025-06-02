@@ -39,7 +39,7 @@ ECHO     --web            Enable WebUI. (default: false)
 ECHO     --1200bps-reset  Attempt to place the device in correct mode. (1200bps Reset)
 ECHO                      Some hardware requires this twice.
 ECHO.
-ECHO Example: %SCRIPT_NAME% -p COM17 --change-mode
+ECHO Example: %SCRIPT_NAME% -p COM17 --1200bps-reset
 ECHO Example: %SCRIPT_NAME% -f firmware-t-deck-tft-2.6.0.0b106d4.bin -p COM11
 ECHO Example: %SCRIPT_NAME% -f firmware-unphone-2.6.0.0b106d4.bin -p COM11 --web
 GOTO eof
