@@ -129,7 +129,7 @@ void drawGpsAltitude(OLEDDisplay *display, int16_t x, int16_t y, const meshtasti
         if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL)
             snprintf(displayLine, sizeof(displayLine), "Altitude: %.0fft", geoCoord.getAltitude() * METERS_TO_FEET);
         else
-            snprintf(displayLine, sizeof(displayLine), "Altitude: %.0fm", geoCoord.getAltitude());
+            snprintf(displayLine, sizeof(displayLine), "Altitude: %.0fm", (double)geoCoord.getAltitude());
         display->drawString(x + (display->getWidth() - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     }
 }
@@ -1016,7 +1016,7 @@ void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiState *stat
         if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
             snprintf(displayLine, sizeof(displayLine), " Alt: %.0fft", geoCoord.getAltitude() * METERS_TO_FEET);
         } else {
-            snprintf(displayLine, sizeof(displayLine), " Alt: %.0fm", geoCoord.getAltitude());
+            snprintf(displayLine, sizeof(displayLine), " Alt: %.0fm", (double)geoCoord.getAltitude());
         }
         display->drawString(x, ((SCREEN_HEIGHT > 64) ? compactSecondLine : moreCompactSecondLine), displayLine);
 
