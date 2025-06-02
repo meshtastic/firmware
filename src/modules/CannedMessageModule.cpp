@@ -720,7 +720,7 @@ bool CannedMessageModule::handleSystemCommandInput(const InputEvent *event)
         return false;
 
     // Block ALL input if an alert banner is active // TODO: Make an accessor function
-    if (strlen(screen->alertBannerMessage) > 0 && (screen->alertBannerUntil == 0 || millis() <= screen->alertBannerUntil)) {
+    if (screen && screen->isOverlayBannerShowing()) {
         return true;
     }
 

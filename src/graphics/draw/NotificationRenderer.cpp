@@ -78,7 +78,7 @@ void NotificationRenderer::drawWelcomeScreen(OLEDDisplay *display, OLEDDisplayUi
 void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
     // Exit if no message is active or duration has passed
-    if (strlen(screen->alertBannerMessage) == 0 || (screen->alertBannerUntil != 0 && millis() > screen->alertBannerUntil))
+    if (screen->isOverlayBannerShowing())
         return;
 
     // === Layout Configuration ===

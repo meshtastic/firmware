@@ -221,7 +221,7 @@ class Screen : public concurrency::OSThread
     OLEDDISPLAY_GEOMETRY geometry;
 
     char alertBannerMessage[256] = {0};
-    uint32_t alertBannerUntil = 0;
+    uint32_t alertBannerUntil = 0; // 0 is a special case meaning forever
 
     // Stores the last 4 of our hardware ID, to make finding the device for pairing easier
     // FIXME: Needs refactoring and getMacAddr needs to be moved to a utility class
@@ -287,6 +287,11 @@ class Screen : public concurrency::OSThread
     }
 
     void showOverlayBanner(const char *message, uint32_t durationMs = 3000);
+
+    bool isOverlayBannerShowing()
+    {
+        return strlen(alertBannerMessage) > 0 && (alertBannerUntil == 0 || millis() <= alertBannerUntil);
+    }
 
     void startFirmwareUpdateScreen()
     {
