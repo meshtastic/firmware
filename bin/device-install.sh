@@ -2,7 +2,7 @@
 
 PYTHON=${PYTHON:-$(which python3 python | head -n 1)}
 WEB_APP=false
-CHANGE_MODE=false
+BPS_RESET=false
 TFT_BUILD=false
 MCU=""
 
@@ -81,7 +81,7 @@ Flash image file to device, but first erasing and writing system information.
     -P PYTHON        Specify alternate python interpreter to use to invoke esptool. (Default: "$PYTHON")
     -f FILENAME      The firmware .bin file to flash.  Custom to your device type and region.
     --web            Enable WebUI. (Default: false)
-    --change-mode    Attempt to place the device in correct mode. Some hardware requires this twice. (1200bps Reset)
+    --1200bps-reset  Attempt to place the device in correct mode. Some hardware requires this twice. (1200bps Reset)
 
 EOF
 }
@@ -107,8 +107,8 @@ while [ $# -gt 0 ]; do
 	--web)
 		WEB_APP=true
 		;;
-	--change-mode)
-		CHANGE_MODE=true
+	--1200bps-reset)
+		BPS_RESET=true
 		;;
 	--) # Stop parsing options
 		shift
@@ -122,7 +122,7 @@ while [ $# -gt 0 ]; do
 	shift # Move to the next argument
 done
 
-if [[ $CHANGE_MODE == true ]]; then
+if [[ $BPS_RESET == true ]]; then
 	$ESPTOOL_CMD --baud 1200 --after no_reset read_flash_status
 	exit 0
 fi

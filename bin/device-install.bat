@@ -12,7 +12,7 @@ SET "BIGDB16=0"
 SET "ESPTOOL_BAUD=115200"
 SET "ESPTOOL_CMD="
 SET "LOGCOUNTER=0"
-SET "CHANGE_MODE=0"
+SET "BPS_RESET=0"
 
 @REM FIXME: Determine mcu from PlatformIO variant, this is unmaintainable.
 SET "S3=s3 v3 t-deck wireless-paper wireless-tracker station-g2 unphone"
@@ -36,7 +36,7 @@ ECHO     -P python        Specify alternate python interpreter to use to invoke 
 ECHO                      If supplied the script will use python.
 ECHO                      If not supplied the script will try to find esptool in Path.
 ECHO     --web            Enable WebUI. (default: false)
-ECHO     --change-mode    Attempt to place the device in correct mode. (1200bps Reset)
+ECHO     --1200bps-reset  Attempt to place the device in correct mode. (1200bps Reset)
 ECHO                      Some hardware requires this twice.
 ECHO.
 ECHO Example: %SCRIPT_NAME% -p COM17 --change-mode
@@ -62,12 +62,12 @@ IF "%~1"=="-p" SET "ESPTOOL_PORT=%~2" & SHIFT
 IF /I "%~1"=="--port" SET "ESPTOOL_PORT=%~2" & SHIFT
 IF "%~1"=="-P" SET "PYTHON=%~2" & SHIFT
 IF /I "%~1"=="--web" SET "WEB_APP=1"
-IF /I "%~1"=="--change-mode" SET "CHANGE_MODE=1"
+IF /I "%~1"=="--1200bps-reset" SET "BPS_RESET=1"
 SHIFT
 GOTO getopts
 :endopts
 
-IF %CHANGE_MODE% EQU 1 GOTO skip-filename
+IF %BPS_RESET% EQU 1 GOTO skip-filename
 
 CALL :LOG_MESSAGE DEBUG "Checking FILENAME parameter..."
 IF "__!FILENAME!__"=="____" (
@@ -143,7 +143,7 @@ IF "__!ESPTOOL_PORT!__" == "____" (
 )
 CALL :LOG_MESSAGE INFO "Using esptool baud: !ESPTOOL_BAUD!."
 
-IF %CHANGE_MODE% EQU 1 (
+IF %BPS_RESET% EQU 1 (
     @REM Attempt to change mode via 1200bps Reset.
     CALL :RUN_ESPTOOL !ESPTOOL_BAUD! --after no_reset read_flash_status
     GOTO eof
@@ -270,7 +270,7 @@ EXIT /B %ERRORLEVEL%
 IF %DEBUG% EQU 1 CALL :LOG_MESSAGE DEBUG "About to run command: !ESPTOOL_CMD! --baud %~1 %~2 %~3 %~4"
 CALL :RESET_ERROR
 !ESPTOOL_CMD! --baud %~1 %~2 %~3 %~4
-IF %CHANGE_MODE% EQU 1 GOTO :eof
+IF %BPS_RESET% EQU 1 GOTO :eof
 IF %ERRORLEVEL% NEQ 0 (
     CALL :LOG_MESSAGE ERROR "Error running command: !ESPTOOL_CMD! --baud %~1 %~2 %~3 %~4"
     EXIT /B %ERRORLEVEL%
