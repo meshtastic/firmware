@@ -1,6 +1,6 @@
 version: 0.1
 cli:
-  version: 1.22.15
+  version: 1.24.0
 plugins:
   sources:
     - id: trunk
@@ -9,7 +9,7 @@ plugins:
 lint:
   enabled:
     - checkov@3.2.435
-    - renovate@40.32.7
+    - renovate@40.34.4
     - prettier@3.5.3
     - trufflehog@3.88.34
     - yamllint@1.37.1
