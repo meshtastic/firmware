@@ -1378,7 +1378,7 @@ void CannedMessageModule::drawDestinationSelectionScreen(OLEDDisplay *display, O
 
         int xOffset = 0;
         int yOffset = row * (FONT_HEIGHT_SMALL - 4) + rowYOffset;
-        char entryText[64];
+        char entryText[64] = "";
 
         // Draw Channels First
         if (itemIndex < numActiveChannels) {
