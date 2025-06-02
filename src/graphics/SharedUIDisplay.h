@@ -15,6 +15,7 @@ namespace graphics
 #define compactThirdLine ((FONT_HEIGHT_SMALL - 1) * 3) - 4
 #define compactFourthLine ((FONT_HEIGHT_SMALL - 1) * 4) - 6
 #define compactFifthLine ((FONT_HEIGHT_SMALL - 1) * 5) - 8
+#define compactSixLine ((FONT_HEIGHT_SMALL - 1) * 6) - 10
 
 // Standard line layout
 #define standardFirstLine (FONT_HEIGHT_SMALL + 1) * 1
@@ -28,6 +29,7 @@ namespace graphics
 #define moreCompactThirdLine (moreCompactSecondLine + (FONT_HEIGHT_SMALL - 5))
 #define moreCompactFourthLine (moreCompactThirdLine + (FONT_HEIGHT_SMALL - 5))
 #define moreCompactFifthLine (moreCompactFourthLine + (FONT_HEIGHT_SMALL - 5))
+#define moreCompactSixthLine (moreCompactFifthLine + (FONT_HEIGHT_SMALL - 5))
 
 // Quick screen access
 #define SCREEN_WIDTH display->getWidth()

@@ -532,7 +532,7 @@ void drawMemoryUsage(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     // === Draw title ===
     const int highlightHeight = FONT_HEIGHT_SMALL - 1;
     const int textY = y + 1 + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
-    const char *titleStr = (SCREEN_WIDTH > 128) ? "Memory" : "Mem";
+    const char *titleStr = (SCREEN_WIDTH > 128) ? "System" : "Sys";
     const int centerX = x + SCREEN_WIDTH / 2;
 
     if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
@@ -547,21 +547,13 @@ void drawMemoryUsage(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     display->setColor(WHITE);
 
     // === Layout ===
-    int contentY = y + FONT_HEIGHT_SMALL;
-    const int rowYOffset = FONT_HEIGHT_SMALL - 3;
+    const int yPositions[6] = {moreCompactFirstLine,  moreCompactSecondLine, moreCompactThirdLine,
+                               moreCompactFourthLine, moreCompactFifthLine,  moreCompactSixthLine};
+    int line = 0;
     const int barHeight = 6;
     const int labelX = x;
     const int barsOffset = (SCREEN_WIDTH > 128) ? 24 : 0;
     const int barX = x + 40 + barsOffset;
-
-    int rowY = contentY;
-
-    // === Heap delta tracking (disabled) ===
-    /*
-    static uint32_t previousHeapFree = 0;
-    static int32_t totalHeapDelta = 0;
-    static int deltaChangeCount = 0;
-    */
 
     auto drawUsageRow = [&](const char *label, uint32_t used, uint32_t total, bool isHeap = false) {
         if (total == 0)
@@ -586,10 +578,10 @@ void drawMemoryUsage(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
 
         // Label
         display->setTextAlignment(TEXT_ALIGN_LEFT);
-        display->drawString(labelX, rowY, label);
+        display->drawString(labelX, yPositions[line], label);
 
         // Bar
-        int barY = rowY + (FONT_HEIGHT_SMALL - barHeight) / 2;
+        int barY = yPositions[line] + (FONT_HEIGHT_SMALL - barHeight) / 2;
         display->setColor(WHITE);
         display->drawRect(barX, barY, adjustedBarWidth, barHeight);
 
@@ -598,45 +590,7 @@ void drawMemoryUsage(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
 
         // Value string
         display->setTextAlignment(TEXT_ALIGN_RIGHT);
-        display->drawString(SCREEN_WIDTH - 2, rowY, combinedStr);
-
-        rowY += rowYOffset;
-
-        // === Heap delta display (disabled) ===
-        /*
-        if (isHeap && previousHeapFree > 0) {
-            int32_t delta = (int32_t)(memGet.getFreeHeap() - previousHeapFree);
-            if (delta != 0) {
-                totalHeapDelta += delta;
-                deltaChangeCount++;
-
-                char deltaStr[16];
-                snprintf(deltaStr, sizeof(deltaStr), "%ld", delta);
-
-                int deltaX = centerX - display->getStringWidth(deltaStr) / 2 - 8;
-                int deltaY = rowY + 1;
-
-                // Triangle
-                if (delta > 0) {
-                    display->drawLine(deltaX, deltaY + 6, deltaX + 3, deltaY);
-                    display->drawLine(deltaX + 3, deltaY, deltaX + 6, deltaY + 6);
-                    display->drawLine(deltaX, deltaY + 6, deltaX + 6, deltaY + 6);
-                } else {
-                    display->drawLine(deltaX, deltaY, deltaX + 3, deltaY + 6);
-                    display->drawLine(deltaX + 3, deltaY + 6, deltaX + 6, deltaY);
-                    display->drawLine(deltaX, deltaY, deltaX + 6, deltaY);
-                }
-
-                display->setTextAlignment(TEXT_ALIGN_CENTER);
-                display->drawString(centerX + 6, deltaY, deltaStr);
-                rowY += rowYOffset;
-            }
-        }
-
-        if (isHeap) {
-            previousHeapFree = memGet.getFreeHeap();
-        }
-        */
+        display->drawString(SCREEN_WIDTH - 2, yPositions[line], combinedStr);
     };
 
     // === Memory values ===
@@ -665,13 +619,55 @@ void drawMemoryUsage(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     */
     // === Draw memory rows
     drawUsageRow("Heap:", heapUsed, heapTotal, true);
-    drawUsageRow("PSRAM:", psramUsed, psramTotal);
 #ifdef ESP32
-    if (flashTotal > 0)
+    line += 1;
+    drawUsageRow("PSRAM:", psramUsed, psramTotal);
+    if (flashTotal > 0) {
+        line += 1;
         drawUsageRow("Flash:", flashUsed, flashTotal);
+    }
 #endif
-    if (hasSD && sdTotal > 0)
+    if (hasSD && sdTotal > 0) {
+        line += 1;
         drawUsageRow("SD:", sdUsed, sdTotal);
+    }
+
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    // System Uptime
+    if (line < 3) {
+        line += 1;
+    }
+    line += 1;
+    char appversionstr[35];
+    snprintf(appversionstr, sizeof(appversionstr), "Ver.: %s", optstr(APP_VERSION));
+    int textWidth = display->getStringWidth(appversionstr);
+    int nameX = (SCREEN_WIDTH - textWidth) / 2;
+    display->drawString(nameX, yPositions[line], appversionstr);
+
+    line += 1;
+    uint32_t uptime = millis() / 1000;
+    char uptimeStr[6];
+    uint32_t minutes = uptime / 60, hours = minutes / 60, days = hours / 24;
+
+    if (days > 365) {
+        snprintf(uptimeStr, sizeof(uptimeStr), "?");
+    } else {
+        snprintf(uptimeStr, sizeof(uptimeStr), "%u%c",
+                 days      ? days
+                 : hours   ? hours
+                 : minutes ? minutes
+                           : (int)uptime,
+                 days      ? 'd'
+                 : hours   ? 'h'
+                 : minutes ? 'm'
+                           : 's');
+    }
+
+    char uptimeFullStr[16];
+    snprintf(uptimeFullStr, sizeof(uptimeFullStr), "Uptime: %s", uptimeStr);
+    textWidth = display->getStringWidth(uptimeFullStr);
+    nameX = (SCREEN_WIDTH - textWidth) / 2;
+    display->drawString(nameX, yPositions[line], uptimeFullStr);
 }
 } // namespace DebugRenderer
 } // namespace graphics
