@@ -15,7 +15,7 @@ namespace graphics
 #define compactThirdLine ((FONT_HEIGHT_SMALL - 1) * 3) - 4
 #define compactFourthLine ((FONT_HEIGHT_SMALL - 1) * 4) - 6
 #define compactFifthLine ((FONT_HEIGHT_SMALL - 1) * 5) - 8
-#define compactSixLine ((FONT_HEIGHT_SMALL - 1) * 6) - 10
+#define compactSixthLine ((FONT_HEIGHT_SMALL - 1) * 6) - 10
 
 // Standard line layout
 #define standardFirstLine (FONT_HEIGHT_SMALL + 1) * 1
