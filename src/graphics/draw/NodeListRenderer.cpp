@@ -151,7 +151,7 @@ void retrieveAndSortNodes(std::vector<NodeEntry> &nodeList)
 void drawColumnSeparator(OLEDDisplay *display, int16_t x, int16_t yStart, int16_t yEnd)
 {
     int columnWidth = display->getWidth() / 2;
-    int separatorX = x + columnWidth - 1;
+    int separatorX = x + columnWidth - 2;
     for (int y = yStart; y <= yEnd; y += 2) {
         display->setPixel(separatorX, y);
     }
