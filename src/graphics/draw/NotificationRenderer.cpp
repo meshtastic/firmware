@@ -92,18 +92,21 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
     const int MAX_LINES = 10;
 
     uint16_t maxWidth = 0;
-    uint16_t lineWidths[MAX_LINES];
-    char *lineStarts[MAX_LINES];
+    uint16_t lineWidths[MAX_LINES] = {0};
+    uint16_t lineLengths[MAX_LINES] = {0};
+    char *lineStarts[MAX_LINES + 1];
     uint16_t lineCount = 0;
     char lineBuffer[40] = {0};
-    uint16_t alertLength = strnlen(screen->alertBannerMessage, sizeof(screen->alertBannerMessage));
+    // pointer to the terminating null
+    char *alertEnd = screen->alertBannerMessage + strnlen(screen->alertBannerMessage, sizeof(screen->alertBannerMessage));
     lineStarts[lineCount] = screen->alertBannerMessage;
+    LOG_WARN(lineStarts[lineCount]);
 
     // loop through lines finding \n characters
-    while (lineCount < 10 && lineStarts[lineCount] != screen->alertBannerMessage + alertLength) {
-        lineStarts[lineCount + 1] = std::find(lineStarts[lineCount], screen->alertBannerMessage + alertLength, '\n');
-        lineWidths[lineCount] =
-            display->getStringWidth(lineStarts[lineCount], lineStarts[lineCount + 1] - lineStarts[lineCount], true);
+    while ((lineCount < 10) && (lineStarts[lineCount] < alertEnd)) {
+        lineStarts[lineCount + 1] = std::find(lineStarts[lineCount], alertEnd, '\n') + 1;
+        lineLengths[lineCount] = lineStarts[lineCount + 1] - lineStarts[lineCount];
+        lineWidths[lineCount] = display->getStringWidth(lineStarts[lineCount], lineLengths[lineCount], true);
         if (lineWidths[lineCount] > maxWidth) {
             maxWidth = lineWidths[lineCount];
         }
@@ -112,15 +115,20 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
 
     // set width from longest line
     uint16_t boxWidth = padding * 2 + maxWidth;
-    if (needs_bell && boxWidth < (SCREEN_WIDTH > 128) ? 106 : 78)
-        boxWidth += (SCREEN_WIDTH > 128) ? 26 : 20;
+    if (needs_bell) {
+        if (SCREEN_WIDTH > 128 && boxWidth < 106) {
+            boxWidth += 26;
+        }
+        if (SCREEN_WIDTH <= 128 && boxWidth < 78) {
+            boxWidth += 20;
+        }
+    }
 
     // set height from line count
     uint16_t boxHeight = padding * 2 + lineCount * FONT_HEIGHT_SMALL + (lineCount - 1) * lineSpacing;
 
     int16_t boxLeft = (display->width() / 2) - (boxWidth / 2);
     int16_t boxTop = (display->height() / 2) - (boxHeight / 2);
-
     // === Draw background box ===
     display->setColor(BLACK);
     display->fillRect(boxLeft - 1, boxTop - 1, boxWidth + 2, boxHeight + 2); // Slightly oversized box
@@ -131,7 +139,10 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
     int16_t lineY = boxTop + padding;
     for (int i = 0; i < lineCount; i++) {
         strncpy(lineBuffer, lineStarts[i], 40);
-        lineStarts[i][40] = '\0';
+        if (lineLengths[i] > 39)
+            lineBuffer[39] = '\0';
+        else
+            lineBuffer[lineLengths[i]] = '\0';
 
         int16_t textX = boxLeft + (boxWidth - lineWidths[i]) / 2;
 
