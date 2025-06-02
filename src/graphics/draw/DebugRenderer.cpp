@@ -620,8 +620,10 @@ void drawMemoryUsage(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     // === Draw memory rows
     drawUsageRow("Heap:", heapUsed, heapTotal, true);
 #ifdef ESP32
-    line += 1;
-    drawUsageRow("PSRAM:", psramUsed, psramTotal);
+    if (psramUsed > 0) {
+        line += 1;
+        drawUsageRow("PSRAM:", psramUsed, psramTotal);
+    }
     if (flashTotal > 0) {
         line += 1;
         drawUsageRow("Flash:", flashUsed, flashTotal);
@@ -634,7 +636,7 @@ void drawMemoryUsage(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     // System Uptime
-    if (line < 3) {
+    if (line < 2) {
         line += 1;
     }
     line += 1;
@@ -644,30 +646,32 @@ void drawMemoryUsage(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     int nameX = (SCREEN_WIDTH - textWidth) / 2;
     display->drawString(nameX, yPositions[line], appversionstr);
 
-    line += 1;
-    uint32_t uptime = millis() / 1000;
-    char uptimeStr[6];
-    uint32_t minutes = uptime / 60, hours = minutes / 60, days = hours / 24;
+    if (SCREEN_HEIGHT > 64 || (SCREEN_HEIGHT <= 64 && line < 4)) { // Only show uptime if the screen can show it
+        line += 1;
+        uint32_t uptime = millis() / 1000;
+        char uptimeStr[6];
+        uint32_t minutes = uptime / 60, hours = minutes / 60, days = hours / 24;
 
-    if (days > 365) {
-        snprintf(uptimeStr, sizeof(uptimeStr), "?");
-    } else {
-        snprintf(uptimeStr, sizeof(uptimeStr), "%u%c",
-                 days      ? days
-                 : hours   ? hours
-                 : minutes ? minutes
-                           : (int)uptime,
-                 days      ? 'd'
-                 : hours   ? 'h'
-                 : minutes ? 'm'
-                           : 's');
+        if (days > 365) {
+            snprintf(uptimeStr, sizeof(uptimeStr), "?");
+        } else {
+            snprintf(uptimeStr, sizeof(uptimeStr), "%u%c",
+                     days      ? days
+                     : hours   ? hours
+                     : minutes ? minutes
+                               : (int)uptime,
+                     days      ? 'd'
+                     : hours   ? 'h'
+                     : minutes ? 'm'
+                               : 's');
+        }
+
+        char uptimeFullStr[16];
+        snprintf(uptimeFullStr, sizeof(uptimeFullStr), "Uptime: %s", uptimeStr);
+        textWidth = display->getStringWidth(uptimeFullStr);
+        nameX = (SCREEN_WIDTH - textWidth) / 2;
+        display->drawString(nameX, yPositions[line], uptimeFullStr);
     }
-
-    char uptimeFullStr[16];
-    snprintf(uptimeFullStr, sizeof(uptimeFullStr), "Uptime: %s", uptimeStr);
-    textWidth = display->getStringWidth(uptimeFullStr);
-    nameX = (SCREEN_WIDTH - textWidth) / 2;
-    display->drawString(nameX, yPositions[line], uptimeFullStr);
 }
 } // namespace DebugRenderer
 } // namespace graphics
