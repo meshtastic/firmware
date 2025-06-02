@@ -297,6 +297,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef HAS_BLUETOOTH
 #define HAS_BLUETOOTH 0
 #endif
+#ifndef HAS_BATTERY
+#define HAS_BATTERY 0
+#endif
 
 #ifndef HW_VENDOR
 #error HW_VENDOR must be defined

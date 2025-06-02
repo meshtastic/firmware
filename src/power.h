@@ -122,7 +122,8 @@ class Power : private concurrency::OSThread
     bool analogInit();
     /// Setup a Lipo battery level sensor
     bool lipoInit();
-
+    /// Setup INA battery level sensor
+    bool inaInit();
   private:
     // open circuit voltage lookup table
     uint8_t low_voltage_counter;

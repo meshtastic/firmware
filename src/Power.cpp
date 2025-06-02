@@ -214,13 +214,29 @@ static void adcDisable()
 #endif
 }
 
-#endif
+#endif //BATTERY_PIN
 
 /**
  * A simple battery level sensor that assumes the battery voltage is attached via a voltage-divider to an analog input
  */
 class AnalogBatteryLevel : public HasBatteryLevel
 {
+  private:
+    /// If we see a battery voltage higher than physics allows - assume charger is pumping
+    /// in power
+
+    /// For heltecs with no battery connected, the measured voltage is 2204, so
+    // need to be higher than that, in this case is 2500mV (3000-500)
+    const uint16_t OCV[NUM_OCV_POINTS] = {OCV_ARRAY};
+    const float chargingVolt = (OCV[0] + 10) * NUM_CELLS;
+    const float noBatVolt = (OCV[NUM_OCV_POINTS - 1] - 500) * NUM_CELLS;
+    // Start value from minimum voltage for the filter to not start from 0
+    // that could trigger some events.
+    // This value is over-written by the first ADC reading, it the voltage seems reasonable.
+    bool initial_read_done = false;
+    float last_read_value = (OCV[NUM_OCV_POINTS - 1] * NUM_CELLS);
+    uint32_t last_read_time_ms = 0;
+
   public:
     /**
      * Battery state of charge, from 0 to 100 or -1 for unknown
@@ -475,22 +491,6 @@ class AnalogBatteryLevel : public HasBatteryLevel
         return isVbusIn();
     }
 
-  private:
-    /// If we see a battery voltage higher than physics allows - assume charger is pumping
-    /// in power
-
-    /// For heltecs with no battery connected, the measured voltage is 2204, so
-    // need to be higher than that, in this case is 2500mV (3000-500)
-    const uint16_t OCV[NUM_OCV_POINTS] = {OCV_ARRAY};
-    const float chargingVolt = (OCV[0] + 10) * NUM_CELLS;
-    const float noBatVolt = (OCV[NUM_OCV_POINTS - 1] - 500) * NUM_CELLS;
-    // Start value from minimum voltage for the filter to not start from 0
-    // that could trigger some events.
-    // This value is over-written by the first ADC reading, it the voltage seems reasonable.
-    bool initial_read_done = false;
-    float last_read_value = (OCV[NUM_OCV_POINTS - 1] * NUM_CELLS);
-    uint32_t last_read_time_ms = 0;
-
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && defined(HAS_RAKPROT)
 
     uint16_t getRAKVoltage() { return rak9154Sensor.getBusVoltageMv(); }
@@ -502,7 +502,6 @@ class AnalogBatteryLevel : public HasBatteryLevel
         return rak9154Sensor.isRunning();
     }
 #endif
-
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(ARCH_STM32WL)
     uint16_t getINAVoltage()
     {
@@ -655,6 +654,23 @@ bool Power::analogInit()
 }
 
 /**
+ * Initializes the INA sensor for power monitoring.
+ *
+ * @return true if the INA sensor is ready, false otherwise.
+ */
+bool Power::inaInit()
+{
+    #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(ARCH_STM32WL)
+        bool result = analogLevel.hasINA();
+        batteryLevel = &analogLevel;
+
+        LOG_DEBUG("Power::inaInit INA sensor is %s", result ? "ready" : "not ready yet");
+        return result;
+    #endif
+    return false;
+}
+
+/**
  * Initializes the Power class.
  *
  * @return true if the setup was successful, false otherwise.
@@ -667,6 +683,8 @@ bool Power::setup()
         found = lipoInit();
     if (!found)
         found = analogInit();
+    if (!found)
+        found = inaInit();
 
 #ifdef NRF_APM
     found = true;
