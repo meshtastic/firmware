@@ -73,7 +73,7 @@ set -e
 # Usage info
 show_help() {
 	cat <<EOF
-Usage: $(basename $0) [-h] [-p ESPTOOL_PORT] [-P PYTHON] [-f FILENAME] [--web] [--change-mode]
+Usage: $(basename $0) [-h] [-p ESPTOOL_PORT] [-P PYTHON] [-f FILENAME] [--web] [--1200bps-reset]
 Flash image file to device, but first erasing and writing system information.
 
     -h               Display this help and exit.

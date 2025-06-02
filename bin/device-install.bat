@@ -25,7 +25,7 @@ GOTO getopts
 :help
 ECHO Flash image file to device, but first erasing and writing system information.
 ECHO.
-ECHO Usage: %SCRIPT_NAME% -f filename [-p PORT] [-P python] (--web) [--change-mode]
+ECHO Usage: %SCRIPT_NAME% -f filename [-p PORT] [-P python] (--web) [--1200bps-reset]
 ECHO.
 ECHO Options:
 ECHO     -f filename      The firmware .bin file to flash.  Custom to your device type and region. (required)
