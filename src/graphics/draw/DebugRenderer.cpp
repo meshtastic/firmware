@@ -406,7 +406,7 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     graphics::drawCommonHeader(display, x, y, titleStr);
 
     // === First Row: Region / BLE Name ===
-    graphics::UIRenderer::drawNodes(display, x, compactFirstLine + 3, nodeStatus, 0, true, "");
+    graphics::UIRenderer::drawNodes(display, x, compactFirstLine + 2, nodeStatus, 0, true, "");
 
     uint8_t dmac[6];
     char shortnameble[35];
