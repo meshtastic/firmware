@@ -50,6 +50,14 @@ class ButtonThread : public concurrency::OSThread
     void setScreenFlag(bool flag) { screen_flag = flag; }
     bool getScreenFlag() { return screen_flag; }
     bool isInterceptingAndFocused();
+    bool isButtonPressed(int buttonPin)
+    {
+#ifdef BUTTON_ACTIVE_LOW
+        return !digitalRead(buttonPin); // Active low: pressed = LOW
+#else
+        return digitalRead(buttonPin); // Most buttons are active low by default
+#endif
+    }
 
     // Disconnect and reconnect interrupts for light sleep
 #ifdef ARCH_ESP32

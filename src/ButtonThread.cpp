@@ -214,15 +214,11 @@ int32_t ButtonThread::runOnce()
 #else
     int buttonPin = config.device.button_gpio ? config.device.button_gpio : USERPREFS_BUTTON_PIN;
 #endif
-#ifdef BUTTON_ACTIVE_LOW
-    buttonCurrentlyPressed = !digitalRead(buttonPin); // Active low: pressed = LOW
-#else
-    buttonCurrentlyPressed = !digitalRead(buttonPin); // Most buttons are active low by default
-#endif
+    buttonCurrentlyPressed = isButtonPressed(buttonPin);
 #elif defined(ARCH_PORTDUINO)
     if (settingsMap.count(user) != 0 && settingsMap[user] != RADIOLIB_NC) {
         // For portduino, assume active low
-        buttonCurrentlyPressed = !digitalRead(settingsMap[user]);
+        buttonCurrentlyPressed = isButtonPressed(settingsMap[user]);
     }
 #endif
 
