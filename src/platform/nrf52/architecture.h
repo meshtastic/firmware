@@ -85,6 +85,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_SEEED_SOLAR_NODE
 #elif defined(HELTEC_MESH_POCKET)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_POCKET
+#elif defined(NOMADSTAR_METEOR_PRO)
+#define HW_VENDOR meshtastic_HardwareModel_NOMADSTAR_METEOR_PRO
 #else
 #define HW_VENDOR meshtastic_HardwareModel_NRF52_UNKNOWN
 #endif
