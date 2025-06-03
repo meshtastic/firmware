@@ -164,39 +164,33 @@ void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16
 #endif
 }
 
+// ****************************
+// * WiFi Screen              *
+// ****************************
 void drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
-    const char *wifiName = config.network.wifi_ssid;
-
+    display->clear();
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
 
-    // The coordinates define the left starting point of the text
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    // === Set Title
+    const char *titleStr = "WiFi";
 
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
-        display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
-        display->setColor(BLACK);
-    }
+    // === Header ===
+    graphics::drawCommonHeader(display, x, y, titleStr);
+
+    const char *wifiName = config.network.wifi_ssid;
 
     if (WiFi.status() != WL_CONNECTED) {
-        display->drawString(x, y, "WiFi: Not Connected");
-        if (config.display.heading_bold)
-            display->drawString(x + 1, y, "WiFi: Not Connected");
+        display->drawString(x, moreCompactFirstLine, "WiFi: Not Connected");
     } else {
-        display->drawString(x, y, "WiFi: Connected");
-        if (config.display.heading_bold)
-            display->drawString(x + 1, y, "WiFi: Connected");
+        display->drawString(x, moreCompactFirstLine, "WiFi: Connected");
 
         char rssiStr[32];
-        snprintf(rssiStr, sizeof(rssiStr), "RSSI %d", WiFi.RSSI());
-        display->drawString(x + SCREEN_WIDTH - display->getStringWidth(rssiStr), y, rssiStr);
-        if (config.display.heading_bold) {
-            display->drawString(x + SCREEN_WIDTH - display->getStringWidth(rssiStr) - 1, y, rssiStr);
-        }
+        snprintf(rssiStr, sizeof(rssiStr), "RSSI: %d", WiFi.RSSI());
+        display->drawString(x, moreCompactSecondLine, rssiStr);
     }
-
-    display->setColor(WHITE);
 
     /*
     - WL_CONNECTED: assigned when connected to a WiFi network;
@@ -213,36 +207,36 @@ void drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, i
     if (WiFi.status() == WL_CONNECTED) {
         char ipStr[64];
         snprintf(ipStr, sizeof(ipStr), "IP: %s", WiFi.localIP().toString().c_str());
-        display->drawString(x, y + FONT_HEIGHT_SMALL * 1, ipStr);
+        display->drawString(x, moreCompactThirdLine, ipStr);
     } else if (WiFi.status() == WL_NO_SSID_AVAIL) {
-        display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "SSID Not Found");
+        display->drawString(x, moreCompactThirdLine, "SSID Not Found");
     } else if (WiFi.status() == WL_CONNECTION_LOST) {
-        display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "Connection Lost");
+        display->drawString(x, moreCompactThirdLine, "Connection Lost");
     } else if (WiFi.status() == WL_IDLE_STATUS) {
-        display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "Idle ... Reconnecting");
+        display->drawString(x, moreCompactThirdLine, "Idle ... Reconnecting");
     } else if (WiFi.status() == WL_CONNECT_FAILED) {
-        display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "Connection Failed");
+        display->drawString(x, moreCompactThirdLine, "Connection Failed");
     }
 #ifdef ARCH_ESP32
     else {
         // Codes:
         // https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/wifi.html#wi-fi-reason-code
-        display->drawString(x, y + FONT_HEIGHT_SMALL * 1,
+        display->drawString(x, moreCompactThirdLine,
                             WiFi.disconnectReasonName(static_cast<wifi_err_reason_t>(getWifiDisconnectReason())));
     }
 #else
     else {
         char statusStr[32];
         snprintf(statusStr, sizeof(statusStr), "Unknown status: %d", WiFi.status());
-        display->drawString(x, y + FONT_HEIGHT_SMALL * 1, statusStr);
+        display->drawString(x, moreCompactThirdLine, statusStr);
     }
 #endif
 
     char ssidStr[64];
     snprintf(ssidStr, sizeof(ssidStr), "SSID: %s", wifiName);
-    display->drawString(x, y + FONT_HEIGHT_SMALL * 2, ssidStr);
+    display->drawString(x, moreCompactFourthLine, ssidStr);
 
-    display->drawString(x, y + FONT_HEIGHT_SMALL * 3, "http://meshtastic.local");
+    display->drawString(x, moreCompactFifthLine, "URL: http://meshtastic.local");
 
     /* Display a heartbeat pixel that blinks every time the frame is redrawn */
 #ifdef SHOW_REDRAWS
