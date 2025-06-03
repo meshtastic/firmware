@@ -137,6 +137,10 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
     // === Draw background box ===
     display->setColor(BLACK);
     display->fillRect(boxLeft - 1, boxTop - 1, boxWidth + 2, boxHeight + 2); // Slightly oversized box
+    display->fillRect(boxLeft, boxTop - 2, boxWidth, 1);                     // Top Line
+    display->fillRect(boxLeft, boxTop + boxHeight + 1, boxWidth, 1);         // Bottom Line
+    display->fillRect(boxLeft - 2, boxTop, 1, boxHeight);                    // Left Line
+    display->fillRect(boxLeft + boxWidth + 1, boxTop, 1, boxHeight);         // Right Line
     display->setColor(WHITE);
     display->drawRect(boxLeft, boxTop, boxWidth, boxHeight); // Border
     display->setColor(BLACK);
