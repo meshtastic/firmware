@@ -172,6 +172,7 @@ void ButtonThread::sendAdHocPosition()
             screen->print("Sent ad-hoc nodeinfo\n");
         screen->forceDisplay(true); // Force a new UI frame, then force an EInk update
     }
+    playComboTune();
 }
 
 int32_t ButtonThread::runOnce()
@@ -197,10 +198,62 @@ int32_t ButtonThread::runOnce()
     canSleep &= userButtonTouch.isIdle();
 #endif
 
+    // Check for combination timeout
+    if (waitingForLongPress && (millis() - shortPressTime) > BUTTON_COMBO_TIMEOUT_MS) {
+        waitingForLongPress = false;
+    }
+
+    // Check if we should play lead-up sound during long press
+    // Play lead-up when button has been held for BUTTON_LEADUP_MS but before long press triggers
+#if defined(BUTTON_PIN) || defined(USERPREFS_BUTTON_PIN) || defined(ARCH_PORTDUINO)
+    bool buttonCurrentlyPressed = false;
+#if defined(BUTTON_PIN) || defined(USERPREFS_BUTTON_PIN)
+    // Read the actual physical state of the button pin
+#if !defined(USERPREFS_BUTTON_PIN)
+    int buttonPin = config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN;
+#else
+    int buttonPin = config.device.button_gpio ? config.device.button_gpio : USERPREFS_BUTTON_PIN;
+#endif
+    buttonCurrentlyPressed = isButtonPressed(buttonPin);
+#elif defined(ARCH_PORTDUINO)
+    if (settingsMap.count(user) != 0 && settingsMap[user] != RADIOLIB_NC) {
+        // For portduino, assume active low
+        buttonCurrentlyPressed = isButtonPressed(settingsMap[user]);
+    }
+#endif
+
+    static uint32_t buttonPressStartTime = 0;
+    static bool buttonWasPressed = false;
+
+    // Detect start of button press
+    if (buttonCurrentlyPressed && !buttonWasPressed) {
+        buttonPressStartTime = millis();
+        leadUpPlayed = false;
+    }
+
+    // Check if we should play lead-up sound
+    if (buttonCurrentlyPressed && !leadUpPlayed && (millis() - buttonPressStartTime) >= BUTTON_LEADUP_MS &&
+        (millis() - buttonPressStartTime) < BUTTON_LONGPRESS_MS) {
+        playLongPressLeadUp();
+        leadUpPlayed = true;
+    }
+
+    // Reset when button is released
+    if (!buttonCurrentlyPressed && buttonWasPressed) {
+        leadUpPlayed = false;
+    }
+
+    buttonWasPressed = buttonCurrentlyPressed;
+#endif
+
     if (btnEvent != BUTTON_EVENT_NONE) {
         switch (btnEvent) {
         case BUTTON_EVENT_PRESSED: {
             LOG_BUTTON("press!");
+
+            // Play boop sound for every button press
+            playBoop();
+
             // If a nag notification is running, stop it and prevent other actions
             if (moduleConfig.external_notification.enabled && (externalNotificationModule->nagCycleCutoff != UINT32_MAX)) {
                 externalNotificationModule->stopNow();
@@ -210,12 +263,24 @@ int32_t ButtonThread::runOnce()
             sendAdHocPosition();
             break;
 #endif
+
+            // Start tracking for potential combination
+            waitingForLongPress = true;
+            shortPressTime = millis();
+
             switchPage();
             break;
         }
 
         case BUTTON_EVENT_PRESSED_SCREEN: {
             LOG_BUTTON("AltPress!");
+
+            // Play boop sound for every button press
+            playBoop();
+
+            // Reset combination tracking
+            waitingForLongPress = false;
+
 #ifdef ELECROW_ThinkNode_M1
             // If a nag notification is running, stop it and prevent other actions
             if (moduleConfig.external_notification.enabled && (externalNotificationModule->nagCycleCutoff != UINT32_MAX)) {
@@ -235,6 +300,12 @@ int32_t ButtonThread::runOnce()
         case BUTTON_EVENT_DOUBLE_PRESSED: {
             LOG_BUTTON("Double press!");
 
+            // Play boop sound for every button press
+            playBoop();
+
+            // Reset combination tracking
+            waitingForLongPress = false;
+
 #ifdef ELECROW_ThinkNode_M1
             digitalWrite(PIN_EINK_EN, digitalRead(PIN_EINK_EN) == LOW);
             break;
@@ -250,6 +321,13 @@ int32_t ButtonThread::runOnce()
 
         case BUTTON_EVENT_MULTI_PRESSED: {
             LOG_BUTTON("Mulitipress! %hux", multipressClickCount);
+
+            // Play boop sound for every button press
+            playBoop();
+
+            // Reset combination tracking
+            waitingForLongPress = false;
+
             switch (multipressClickCount) {
 #if HAS_GPS && !defined(ELECROW_ThinkNode_M1)
             // 3 clicks: toggle GPS
@@ -307,6 +385,18 @@ int32_t ButtonThread::runOnce()
 
         case BUTTON_EVENT_LONG_PRESSED: {
             LOG_BUTTON("Long press!");
+
+            // Check if this is part of a short-press + long-press combination
+            if (waitingForLongPress && (millis() - shortPressTime) <= BUTTON_COMBO_TIMEOUT_MS) {
+                LOG_BUTTON("Combo detected: short-press + long-press!");
+                btnEvent = BUTTON_EVENT_COMBO_SHORT_LONG;
+                waitingForLongPress = false;
+                break;
+            }
+
+            // Reset combination tracking
+            waitingForLongPress = false;
+
             powerFSM.trigger(EVENT_PRESS);
 
             if (screen) {
@@ -314,6 +404,8 @@ int32_t ButtonThread::runOnce()
                 screen->showOverlayBanner("Shutting Down..."); // Display for 3 seconds
             }
 
+            // Lead-up sound already played during button hold
+            // Just a simple beep to confirm long press threshold reached
             playBeep();
             break;
         }
@@ -322,6 +414,10 @@ int32_t ButtonThread::runOnce()
         // may wake the board immediatedly.
         case BUTTON_EVENT_LONG_RELEASED: {
             LOG_INFO("Shutdown from long press");
+
+            // Reset combination tracking
+            waitingForLongPress = false;
+
             playShutdownMelody();
             delay(3000);
             power->shutdown();
@@ -332,6 +428,13 @@ int32_t ButtonThread::runOnce()
 #ifdef BUTTON_PIN_TOUCH
         case BUTTON_EVENT_TOUCH_LONG_PRESSED: {
             LOG_BUTTON("Touch press!");
+
+            // Play boop sound for every button press
+            playBoop();
+
+            // Reset combination tracking
+            waitingForLongPress = false;
+
             // Ignore if: no screen
             if (!screen)
                 break;
@@ -352,6 +455,20 @@ int32_t ButtonThread::runOnce()
             break;
         }
 #endif // BUTTON_PIN_TOUCH
+
+        case BUTTON_EVENT_COMBO_SHORT_LONG: {
+            // Placeholder for short-press + long-press combination
+            LOG_BUTTON("Short-press + Long-press combination detected!");
+
+            // Play the combination tune
+            playComboTune();
+
+            // Optionally show a message on screen
+            if (screen) {
+                screen->showOverlayBanner("Combo Tune Played", 2000);
+            }
+            break;
+        }
 
         default:
             break;
