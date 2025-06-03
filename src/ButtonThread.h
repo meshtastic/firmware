@@ -16,6 +16,14 @@
 #define BUTTON_TOUCH_MS 400
 #endif
 
+#ifndef BUTTON_COMBO_TIMEOUT_MS
+#define BUTTON_COMBO_TIMEOUT_MS 2000 // 2 seconds to complete the combination
+#endif
+
+#ifndef BUTTON_LEADUP_MS
+#define BUTTON_LEADUP_MS 2500 // Play lead-up sound after 2.5 seconds of holding
+#endif
+
 class ButtonThread : public concurrency::OSThread
 {
   public:
@@ -30,6 +38,7 @@ class ButtonThread : public concurrency::OSThread
         BUTTON_EVENT_LONG_PRESSED,
         BUTTON_EVENT_LONG_RELEASED,
         BUTTON_EVENT_TOUCH_LONG_PRESSED,
+        BUTTON_EVENT_COMBO_SHORT_LONG,
     };
 
     ButtonThread();
@@ -73,6 +82,13 @@ class ButtonThread : public concurrency::OSThread
 
     // Store click count during callback, for later use
     volatile int multipressClickCount = 0;
+
+    // Combination tracking state
+    bool waitingForLongPress = false;
+    uint32_t shortPressTime = 0;
+
+    // Long press lead-up tracking
+    bool leadUpPlayed = false;
 
     static void wakeOnIrq(int irq, int mode);
 

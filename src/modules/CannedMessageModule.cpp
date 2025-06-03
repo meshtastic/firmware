@@ -10,6 +10,7 @@
 #include "NodeDB.h"
 #include "PowerFSM.h" // needed for button bypass
 #include "SPILock.h"
+#include "buzz.h"
 #include "detect/ScanI2C.h"
 #include "graphics/Screen.h"
 #include "graphics/SharedUIDisplay.h"
@@ -874,6 +875,7 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
         simulatedPacket.from = 0; // Local device
         screen->handleTextMessage(&simulatedPacket);
     }
+    playComboTune();
 }
 int32_t CannedMessageModule::runOnce()
 {

@@ -6,3 +6,6 @@ void playStartMelody();
 void playShutdownMelody();
 void playGPSEnableBeep();
 void playGPSDisableBeep();
+void playComboTune();
+void playBoop();
+void playLongPressLeadUp();

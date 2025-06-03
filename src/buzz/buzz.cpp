@@ -87,3 +87,36 @@ void playShutdownMelody()
     ToneDuration melody[] = {{NOTE_CS4, DURATION_1_8}, {NOTE_AS3, DURATION_1_8}, {NOTE_FS3, DURATION_1_4}};
     playTones(melody, sizeof(melody) / sizeof(ToneDuration));
 }
+
+void playBoop()
+{
+    // A short, friendly "boop" sound for button presses
+    ToneDuration melody[] = {{NOTE_A3, 50}}; // Very short A3 note
+    playTones(melody, sizeof(melody) / sizeof(ToneDuration));
+}
+
+void playLongPressLeadUp()
+{
+    // An ascending lead-up sequence for long press - builds anticipation
+    ToneDuration melody[] = {
+        {NOTE_C3, 100}, // Start low
+        {NOTE_E3, 100}, // Step up
+        {NOTE_G3, 100}, // Keep climbing
+        {NOTE_B3, 150}  // Peak with longer note for emphasis
+    };
+    playTones(melody, sizeof(melody) / sizeof(ToneDuration));
+}
+
+void playComboTune()
+{
+    // Quick high-pitched notes with trills
+    ToneDuration melody[] = {
+        {NOTE_G3, 80},  // Quick chirp
+        {NOTE_B3, 60},  // Higher chirp
+        {NOTE_CS4, 80}, // Even higher
+        {NOTE_G3, 60},  // Quick trill down
+        {NOTE_CS4, 60}, // Quick trill up
+        {NOTE_B3, 120}  // Ending chirp
+    };
+    playTones(melody, sizeof(melody) / sizeof(ToneDuration));
+}
