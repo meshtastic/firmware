@@ -1,6 +1,7 @@
 #include "configuration.h"
 #if HAS_WIREGUARD_VPN
 #include "mesh/wireguard/WireGuardVPN.h"
+#include "mesh/wireguard/WireGuardConfig.h"
 #include <WiFiUdp.h>
 #include <WiFi.h>
 
@@ -19,8 +20,8 @@ bool startWireGuard()
     }
 
     IPAddress serverIp;
-    if (!WiFi.hostByName(WIREGUARD_SERVER_ADDR, serverIp)) {
-        LOG_ERROR("WireGuard server %s unreachable", WIREGUARD_SERVER_ADDR);
+    if (!WiFi.hostByName(wireGuardConfig.serverAddr, serverIp)) {
+        LOG_ERROR("WireGuard server %s unreachable", wireGuardConfig.serverAddr);
         return false;
     }
 
@@ -30,12 +31,12 @@ bool startWireGuard()
     }
 
     const char handshake[] = "MESHTASTIC_WG_HELLO";
-    wgUDP.beginPacket(serverIp, WIREGUARD_SERVER_PORT);
+    wgUDP.beginPacket(serverIp, wireGuardConfig.serverPort);
     wgUDP.write((const uint8_t *)handshake, sizeof(handshake) - 1);
     wgUDP.endPacket();
 
     LOG_INFO("WireGuard handshake sent to %s:%u", serverIp.toString().c_str(),
-             WIREGUARD_SERVER_PORT);
+             wireGuardConfig.serverPort);
 
     running = true;
     return running;
