@@ -306,11 +306,13 @@ void drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t
 
     display->clear();
 
-    // === Draw the short node name centered at the top, with bold shadow if set ===
+    // === Create the shortName and title string ===
     const char *shortName = (node->has_user && haveGlyphs(node->user.short_name)) ? node->user.short_name : "Node";
+    char titlestr[32] = {0};
+    snprintf(titlestr, sizeof(titlestr), (SCREEN_WIDTH > 128) ? "Fave: %s" : "Fav: %s", shortName);
 
     // === Draw battery/time/mail header (common across screens) ===
-    graphics::drawCommonHeader(display, x, y, shortName);
+    graphics::drawCommonHeader(display, x, y, titlestr);
 
     // ===== DYNAMIC ROW STACKING WITH YOUR MACROS =====
     // 1. Each potential info row has a macro-defined Y position (not regular increments!).
