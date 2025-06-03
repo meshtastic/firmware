@@ -139,6 +139,12 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
     display->fillRect(boxLeft - 1, boxTop - 1, boxWidth + 2, boxHeight + 2); // Slightly oversized box
     display->setColor(WHITE);
     display->drawRect(boxLeft, boxTop, boxWidth, boxHeight); // Border
+    display->setColor(BLACK);
+    display->fillRect(boxLeft, boxTop, 1, 1);                                // Top Left
+    display->fillRect(boxLeft + boxWidth - 1, boxTop, 1, 1);                 // Top Right
+    display->fillRect(boxLeft, boxTop + boxHeight - 1, 1, 1);                // Bottom Left
+    display->fillRect(boxLeft + boxWidth - 1, boxTop + boxHeight - 1, 1, 1); // Bottom Right
+    display->setColor(WHITE);
 
     // === Draw each line centered in the box ===
     int16_t lineY = boxTop + padding;
