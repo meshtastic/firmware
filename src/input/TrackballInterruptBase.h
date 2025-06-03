@@ -41,4 +41,5 @@ class TrackballInterruptBase : public Observable<const InputEvent *>, public con
     char _eventRight = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
     char _eventPressed = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
     const char *_originName;
+    TrackballInterruptBaseActionType lastEvent = TB_ACTION_NONE;
 };
