@@ -179,6 +179,15 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
                 int iconW = 16, iconH = 12;
                 int iconX = iconRightEdge - iconW;
                 int iconY = textY + (FONT_HEIGHT_SMALL - iconH) / 2 - 1;
+                if (isInverted) {
+                    display->setColor(BLACK);
+                    display->drawRect(iconX - 1, iconY - 1, iconW + 3, iconH + 2);
+                    display->setColor(WHITE);
+                } else {
+                    display->setColor(WHITE);
+                    display->drawRect(iconX - 1, iconY - 1, iconW + 3, iconH + 2);
+                    display->setColor(BLACK);
+                }
                 display->drawRect(iconX, iconY, iconW + 1, iconH);
                 display->drawLine(iconX, iconY, iconX + iconW / 2, iconY + iconH - 4);
                 display->drawLine(iconX + iconW, iconY, iconX + iconW / 2, iconY + iconH - 4);

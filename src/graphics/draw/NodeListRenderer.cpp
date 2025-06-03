@@ -201,6 +201,8 @@ void drawEntryLastHeard(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
     }
 
     int rightEdge = x + columnWidth - timeOffset;
+    if (timeStr[strlen(timeStr) - 1] == 'm') // Fix the fact that our fonts don't line up well all the time
+        rightEdge -= 1;
     int textWidth = display->getStringWidth(timeStr);
     display->drawString(rightEdge - textWidth, y, timeStr);
 }
@@ -210,8 +212,8 @@ void drawEntryHopSignal(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int
     bool isLeftCol = (x < SCREEN_WIDTH / 2);
 
     int nameMaxWidth = columnWidth - 25;
-    int barsOffset = (SCREEN_WIDTH > 128) ? (isLeftCol ? 16 : 20) : (isLeftCol ? 15 : 19);
-    int hopOffset = (SCREEN_WIDTH > 128) ? (isLeftCol ? 17 : 25) : (isLeftCol ? 13 : 17);
+    int barsOffset = (SCREEN_WIDTH > 128) ? (isLeftCol ? 20 : 24) : (isLeftCol ? 15 : 19);
+    int hopOffset = (SCREEN_WIDTH > 128) ? (isLeftCol ? 21 : 29) : (isLeftCol ? 13 : 17);
 
     int barsXOffset = columnWidth - barsOffset;
 
