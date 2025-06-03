@@ -113,25 +113,11 @@ void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *s
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
 
-    graphics::drawCommonHeader(display, x, y); // Shared UI header
-
-    // === Draw title (aligned with header baseline) ===
-    const int highlightHeight = FONT_HEIGHT_SMALL - 1;
-    const int textY = y + 1 + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
+    // === Set Title
     const char *titleStr = (SCREEN_WIDTH > 128) ? "Power Telem." : "Power";
-    const int centerX = x + SCREEN_WIDTH / 2;
 
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
-        display->setColor(BLACK);
-    }
-
-    display->setTextAlignment(TEXT_ALIGN_CENTER);
-    display->drawString(centerX, textY, titleStr);
-    if (config.display.heading_bold) {
-        display->drawString(centerX + 1, textY, titleStr);
-    }
-    display->setColor(WHITE);
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    // === Header ===
+    graphics::drawCommonHeader(display, x, y, titleStr);
 
     if (lastMeasurementPacket == nullptr) {
         // In case of no valid packet, display "Power Telemetry", "No measurement"

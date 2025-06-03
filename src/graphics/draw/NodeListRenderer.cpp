@@ -604,27 +604,12 @@ void drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t
 
     display->clear();
 
-    // Draw battery/time/mail header (common across screens)
-    graphics::drawCommonHeader(display, x, y);
-
-    // Draw the short node name centered at the top, with bold shadow if set
-    const int highlightHeight = FONT_HEIGHT_SMALL - 1;
-    const int textY = y + 1 + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
-    const int centerX = x + SCREEN_WIDTH / 2;
+    // === Set Title
     const char *shortName =
         (node->has_user && graphics::UIRenderer::haveGlyphs(node->user.short_name)) ? node->user.short_name : "Node";
 
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED)
-        display->setColor(BLACK);
-    display->setTextAlignment(TEXT_ALIGN_CENTER);
-    display->setFont(FONT_SMALL);
-    display->drawString(centerX, textY, shortName);
-    if (config.display.heading_bold)
-        display->drawString(centerX + 1, textY, shortName);
-
-    display->setColor(WHITE);
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-    display->setFont(FONT_SMALL);
+    // === Header ===
+    graphics::drawCommonHeader(display, x, y, shortName);
 
     // Dynamic row stacking with predefined Y positions
     const int yPositions[5] = {moreCompactFirstLine, moreCompactSecondLine, moreCompactThirdLine, moreCompactFourthLine,

@@ -306,25 +306,11 @@ void drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t
 
     display->clear();
 
-    // === Draw battery/time/mail header (common across screens) ===
-    graphics::drawCommonHeader(display, x, y);
-
     // === Draw the short node name centered at the top, with bold shadow if set ===
-    const int highlightHeight = FONT_HEIGHT_SMALL - 1;
-    const int textY = y + 1 + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
-    const int centerX = x + SCREEN_WIDTH / 2;
     const char *shortName = (node->has_user && haveGlyphs(node->user.short_name)) ? node->user.short_name : "Node";
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED)
-        display->setColor(BLACK);
-    display->setTextAlignment(TEXT_ALIGN_CENTER);
-    display->setFont(FONT_SMALL);
-    display->drawString(centerX, textY, shortName);
-    if (config.display.heading_bold)
-        display->drawString(centerX + 1, textY, shortName);
 
-    display->setColor(WHITE);
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-    display->setFont(FONT_SMALL);
+    // === Draw battery/time/mail header (common across screens) ===
+    graphics::drawCommonHeader(display, x, y, shortName);
 
     // ===== DYNAMIC ROW STACKING WITH YOUR MACROS =====
     // 1. Each potential info row has a macro-defined Y position (not regular increments!).
@@ -569,7 +555,7 @@ void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t 
     display->setFont(FONT_SMALL);
 
     // === Header ===
-    graphics::drawCommonHeader(display, x, y);
+    graphics::drawCommonHeader(display, x, y, "");
 
     // === Content below header ===
 
@@ -949,26 +935,11 @@ void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiState *stat
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
 
-    // === Header ===
-    graphics::drawCommonHeader(display, x, y);
-
-    // === Draw title ===
-    const int highlightHeight = FONT_HEIGHT_SMALL - 1;
-    const int textY = y + 1 + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
+    // === Set Title
     const char *titleStr = "GPS";
-    const int centerX = x + SCREEN_WIDTH / 2;
 
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
-        display->setColor(BLACK);
-    }
-
-    display->setTextAlignment(TEXT_ALIGN_CENTER);
-    display->drawString(centerX, textY, titleStr);
-    if (config.display.heading_bold) {
-        display->drawString(centerX + 1, textY, titleStr);
-    }
-    display->setColor(WHITE);
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    // === Header ===
+    graphics::drawCommonHeader(display, x, y, titleStr);
 
     // === First Row: My Location ===
 #if HAS_GPS

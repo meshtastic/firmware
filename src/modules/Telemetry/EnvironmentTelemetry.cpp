@@ -344,28 +344,11 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
     display->setFont(FONT_SMALL);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
-    // Draw shared header bar (battery, time, etc.)
-    graphics::drawCommonHeader(display, x, y);
-
-    // === Draw Title (Centered under header) ===
-    const int highlightHeight = FONT_HEIGHT_SMALL - 1;
-    const int titleY = y + 1 + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
+    // === Set Title
     const char *titleStr = (SCREEN_WIDTH > 128) ? "Environment" : "Env.";
 
-    const int centerX = x + SCREEN_WIDTH / 2;
-
-    // Use black text on white background if in inverted mode
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED)
-        display->setColor(BLACK);
-
-    display->setTextAlignment(TEXT_ALIGN_CENTER);
-    display->drawString(centerX, titleY, titleStr); // Centered title
-    if (config.display.heading_bold)
-        display->drawString(centerX + 1, titleY, titleStr); // Bold effect via 1px offset
-
-    // Restore text color & alignment
-    display->setColor(WHITE);
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    // === Header ===
+    graphics::drawCommonHeader(display, x, y, titleStr);
 
     // === Row spacing setup ===
     const int rowHeight = FONT_HEIGHT_SMALL - 4;

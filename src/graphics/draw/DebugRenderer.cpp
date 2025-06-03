@@ -399,26 +399,11 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
 
-    // === Header ===
-    graphics::drawCommonHeader(display, x, y);
-
-    // === Draw title (aligned with header baseline) ===
-    const int highlightHeight = FONT_HEIGHT_SMALL - 1;
-    const int textY = y + 1 + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
+    // === Set Title
     const char *titleStr = (SCREEN_WIDTH > 128) ? "LoRa Info" : "LoRa";
-    const int centerX = x + SCREEN_WIDTH / 2;
 
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
-        display->setColor(BLACK);
-    }
-
-    display->setTextAlignment(TEXT_ALIGN_CENTER);
-    display->drawString(centerX, textY, titleStr);
-    if (config.display.heading_bold) {
-        display->drawString(centerX + 1, textY, titleStr);
-    }
-    display->setColor(WHITE);
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    // === Header ===
+    graphics::drawCommonHeader(display, x, y, titleStr);
 
     // === First Row: Region / BLE Name ===
     graphics::UIRenderer::drawNodes(display, x, compactFirstLine + 3, nodeStatus, 0, true, "");
@@ -527,25 +512,11 @@ void drawMemoryUsage(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     display->setFont(FONT_SMALL);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
-    // === Header ===
-    graphics::drawCommonHeader(display, x, y);
-
-    // === Draw title ===
-    const int highlightHeight = FONT_HEIGHT_SMALL - 1;
-    const int textY = y + 1 + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
+    // === Set Title
     const char *titleStr = (SCREEN_WIDTH > 128) ? "System" : "Sys";
-    const int centerX = x + SCREEN_WIDTH / 2;
 
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
-        display->setColor(BLACK);
-    }
-
-    display->setTextAlignment(TEXT_ALIGN_CENTER);
-    display->drawString(centerX, textY, titleStr);
-    if (config.display.heading_bold) {
-        display->drawString(centerX + 1, textY, titleStr);
-    }
-    display->setColor(WHITE);
+    // === Header ===
+    graphics::drawCommonHeader(display, x, y, titleStr);
 
     // === Layout ===
     const int yPositions[6] = {moreCompactFirstLine,  moreCompactSecondLine, moreCompactThirdLine,
