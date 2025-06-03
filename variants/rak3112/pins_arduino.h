@@ -1,6 +1,7 @@
 #ifndef Pins_Arduino_h
 #define Pins_Arduino_h
 
+#include "variant.h"
 #include <stdint.h>
 
 #define USB_VID 0x303a
@@ -22,9 +23,6 @@ static const uint8_t SCK = 13;
 #define SPI_CS (12)
 
 // LEDs
-#define PIN_LED (46)
-#define PIN_LED1 PIN_LED
-#define PIN_LED2 (45)
-#define LED_BUILTIN PIN_LED
+#define LED_BUILTIN LED_GREEN
 
 #endif /* Pins_Arduino_h */

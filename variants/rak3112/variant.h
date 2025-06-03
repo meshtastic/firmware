@@ -23,8 +23,14 @@
 #define PIN_POWER_EN PIN_3V3_EN
 #define PIN_3V3_EN (2)
 
-#define LED_CONN PIN_LED2
-#define LED_PIN LED_BUILTIN
+#define LED_GREEN 46
+#define LED_BLUE 45
+
+#define PIN_LED1 LED_GREEN
+#define PIN_LED2 LED_BLUE
+
+#define LED_CONN LED_BLUE
+#define LED_PIN LED_GREEN
 #define ledOff(pin) pinMode(pin, INPUT)
 
 #define LED_STATE_ON 1 // State when LED is litted
@@ -32,3 +38,7 @@
 #define HAS_GPS 1
 #define GPS_TX_PIN 43
 #define GPS_RX_PIN 44
+
+// #define BATTERY_PIN 1
+// #define ADC_CHANNEL ADC1_GPIO1_CHANNEL
+// #define ADC_MULTIPLIER   1.667
