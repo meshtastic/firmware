@@ -106,8 +106,11 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
 
     // loop through lines finding \n characters
     while ((lineCount < 10) && (lineStarts[lineCount] < alertEnd)) {
-        lineStarts[lineCount + 1] = std::find(lineStarts[lineCount], alertEnd, '\n') + 1;
+        lineStarts[lineCount + 1] = std::find(lineStarts[lineCount], alertEnd, '\n');
         lineLengths[lineCount] = lineStarts[lineCount + 1] - lineStarts[lineCount];
+        if (lineStarts[lineCount + 1][0] == '\n') {
+            lineStarts[lineCount + 1] += 1; // Move the start pointer beyond the \n
+        }
         lineWidths[lineCount] = display->getStringWidth(lineStarts[lineCount], lineLengths[lineCount], true);
         if (lineWidths[lineCount] > maxWidth) {
             maxWidth = lineWidths[lineCount];
