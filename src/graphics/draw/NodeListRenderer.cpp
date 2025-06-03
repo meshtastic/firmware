@@ -431,25 +431,7 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     display->clear();
 
     // Draw the battery/time header
-    graphics::drawCommonHeader(display, x, y);
-
-    // Draw the centered title within the header
-    const int highlightHeight = COMMON_HEADER_HEIGHT;
-    const int textY = y + 1 + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
-    const int centerX = x + SCREEN_WIDTH / 2;
-
-    display->setFont(FONT_SMALL);
-    display->setTextAlignment(TEXT_ALIGN_CENTER);
-
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED)
-        display->setColor(BLACK);
-
-    display->drawString(centerX, textY, title);
-    if (config.display.heading_bold)
-        display->drawString(centerX + 1, textY, title);
-
-    display->setColor(WHITE);
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    graphics::drawCommonHeader(display, x, y, title);
 
     // Space below header
     y += COMMON_HEADER_HEIGHT;

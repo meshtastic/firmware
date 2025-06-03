@@ -24,7 +24,7 @@
 
 namespace graphics
 {
-extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y);
+extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *titleStr);
 }
 
 int32_t PowerTelemetryModule::runOnce()

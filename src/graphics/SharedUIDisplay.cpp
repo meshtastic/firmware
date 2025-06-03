@@ -40,7 +40,7 @@ void drawRoundedHighlight(OLEDDisplay *display, int16_t x, int16_t y, int16_t w,
 // *************************
 // * Common Header Drawing *
 // *************************
-void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
+void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *titleStr)
 {
     constexpr int HEADER_OFFSET_Y = 1;
     y += HEADER_OFFSET_Y;
@@ -69,6 +69,14 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
             display->drawLine(0, 14, screenW, 14);
         }
     }
+
+    // === Screen Title ===
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->drawString(SCREEN_WIDTH / 2, y, titleStr);
+    if (config.display.heading_bold) {
+        display->drawString((SCREEN_WIDTH / 2) + 1, y, titleStr);
+    }
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
 
     // === Battery State ===
     int chargePercent = powerStatus->getBatteryChargePercent();
@@ -156,7 +164,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
         timeX = screenW - xOffset - timeStrWidth + 4;
 
         // === Show Mail or Mute Icon to the Left of Time ===
-        int iconRightEdge = timeX - 2;
+        int iconRightEdge = timeX;
 
         bool showMail = false;
 
@@ -180,30 +188,59 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
                 int iconX = iconRightEdge - iconW;
                 int iconY = textY + (FONT_HEIGHT_SMALL - iconH) / 2 - 1;
                 if (isInverted) {
-                    display->setColor(BLACK);
-                    display->drawRect(iconX - 1, iconY - 1, iconW + 3, iconH + 2);
                     display->setColor(WHITE);
+                    display->fillRect(iconX - 1, iconY - 1, iconW + 3, iconH + 2);
+                    display->setColor(BLACK);
                 } else {
-                    display->setColor(WHITE);
-                    display->drawRect(iconX - 1, iconY - 1, iconW + 3, iconH + 2);
                     display->setColor(BLACK);
+                    display->fillRect(iconX - 1, iconY - 1, iconW + 3, iconH + 2);
+                    display->setColor(WHITE);
                 }
                 display->drawRect(iconX, iconY, iconW + 1, iconH);
                 display->drawLine(iconX, iconY, iconX + iconW / 2, iconY + iconH - 4);
                 display->drawLine(iconX + iconW, iconY, iconX + iconW / 2, iconY + iconH - 4);
             } else {
-                int iconX = iconRightEdge - mail_width;
+                int iconX = iconRightEdge - (mail_width - 2);
                 int iconY = textY + (FONT_HEIGHT_SMALL - mail_height) / 2;
+                if (isInverted) {
+                    display->setColor(WHITE);
+                    display->fillRect(iconX - 1, iconY - 1, mail_width + 2, mail_height + 2);
+                    display->setColor(BLACK);
+                } else {
+                    display->setColor(BLACK);
+                    display->fillRect(iconX - 1, iconY - 1, mail_width + 2, mail_height + 2);
+                    display->setColor(WHITE);
+                }
                 display->drawXbm(iconX, iconY, mail_width, mail_height, mail);
             }
         } else if (isMuted) {
             if (useBigIcons) {
                 int iconX = iconRightEdge - mute_symbol_big_width;
                 int iconY = textY + (FONT_HEIGHT_SMALL - mute_symbol_big_height) / 2;
+
+                if (isInverted) {
+                    display->setColor(WHITE);
+                    display->fillRect(iconX - 1, iconY - 1, mute_symbol_big_width + 2, mute_symbol_big_height + 2);
+                    display->setColor(BLACK);
+                } else {
+                    display->setColor(BLACK);
+                    display->fillRect(iconX - 1, iconY - 1, mute_symbol_big_width + 2, mute_symbol_big_height + 2);
+                    display->setColor(WHITE);
+                }
                 display->drawXbm(iconX, iconY, mute_symbol_big_width, mute_symbol_big_height, mute_symbol_big);
             } else {
                 int iconX = iconRightEdge - mute_symbol_width;
                 int iconY = textY + (FONT_HEIGHT_SMALL - mail_height) / 2;
+
+                if (isInverted) {
+                    display->setColor(WHITE);
+                    display->fillRect(iconX - 1, iconY - 1, mute_symbol_width + 2, mute_symbol_height + 2);
+                    display->setColor(BLACK);
+                } else {
+                    display->setColor(BLACK);
+                    display->fillRect(iconX - 1, iconY - 1, mute_symbol_width + 2, mute_symbol_height + 2);
+                    display->setColor(WHITE);
+                }
                 display->drawXbm(iconX, iconY, mute_symbol_width, mute_symbol_height, mute_symbol);
             }
         }
