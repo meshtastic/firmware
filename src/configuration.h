@@ -114,11 +114,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Define if screen should be mirrored left to right
 // #define SCREEN_MIRROR
 
-// I2C Keyboards (M5Stack, RAK14004, T-Deck)
+// I2C Keyboards (M5Stack, RAK14004, T-Deck, T-Deck Pro, T-Lora Pager, CardKB, BBQ10, MPR121, TCA8418)
 #define CARDKB_ADDR 0x5F
 #define TDECK_KB_ADDR 0x55
 #define BBQ10_KB_ADDR 0x1F
 #define MPR121_KB_ADDR 0x5A
+#define TCA8418_KB_ADDR 0x34
 
 // -----------------------------------------------------------------------------
 // SENSOR
@@ -156,7 +157,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MLX90614_ADDR_DEF 0x5A
 #define CGRADSENS_ADDR 0x66
 #define LTR390UV_ADDR 0x53
-#define XPOWERS_AXP192_AXP2101_ADDRESS 0x34 // same adress as TCA8418
+#define XPOWERS_AXP192_AXP2101_ADDRESS 0x34 // same adress as TCA8418_KB
 #define PCT2075_ADDR 0x37
 #define BQ27220_ADDR 0x55 // same address as TDECK_KB
 #define BQ25896_ADDR 0x6B
