@@ -323,7 +323,7 @@ void drawNodeDistance(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
 
     if (strlen(distStr) > 0) {
         int offset = (SCREEN_WIDTH > 128) ? (isLeftCol ? 7 : 10) // Offset for Wide Screens (Left Column:Right Column)
-                                          : (isLeftCol ? 5 : 8); // Offset for Narrow Screens (Left Column:Right Column)
+                                          : (isLeftCol ? 4 : 7); // Offset for Narrow Screens (Left Column:Right Column)
         int rightEdge = x + columnWidth - offset;
         int textWidth = display->getStringWidth(distStr);
         display->drawString(rightEdge - textWidth, y, distStr);
