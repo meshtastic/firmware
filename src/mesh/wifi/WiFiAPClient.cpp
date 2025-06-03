@@ -4,6 +4,7 @@
 #include "RTC.h"
 #include "concurrency/Periodic.h"
 #include "mesh/wifi/WiFiAPClient.h"
+#include "mesh/wireguard/WireGuardVPN.h" // <--- Added
 
 #include "main.h"
 #include "mesh/api/WiFiServerAPI.h"
@@ -129,6 +130,9 @@ static void onNetworkConnected()
 #if !MESHTASTIC_EXCLUDE_SOCKETAPI
         initApiServer();
 #endif
+#if HAS_WIREGUARD_VPN
+        startWireGuard(); // <--- Added
+#endif
         APStartupComplete = true;
     }
 
@@ -235,6 +239,9 @@ void deinitWifi()
         LOG_INFO("WiFi Turned Off");
         // WiFi.printDiag(Serial);
     }
+#if HAS_WIREGUARD_VPN
+    stopWireGuard(); // <--- Added
+#endif
 }
 
 // Startup WiFi
