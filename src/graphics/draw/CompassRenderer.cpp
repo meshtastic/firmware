@@ -58,9 +58,9 @@ void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t compassY, 
 
 void drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t compassY, uint16_t compassDiam, float headingRadian)
 {
-    Point tip(0.0f, 0.5f), tail(0.0f, -0.35f); // pointing up initially
-    float arrowOffsetX = 0.14f, arrowOffsetY = 1.0f;
-    Point leftArrow(tip.x - arrowOffsetX, tip.y - arrowOffsetY), rightArrow(tip.x + arrowOffsetX, tip.y - arrowOffsetY);
+    Point tip(0.0f, -0.5f), tail(0.0f, 0.35f); // pointing up initially
+    float arrowOffsetX = 0.14f, arrowOffsetY = 0.9f;
+    Point leftArrow(tip.x - arrowOffsetX, tip.y + arrowOffsetY), rightArrow(tip.x + arrowOffsetX, tip.y + arrowOffsetY);
 
     Point *arrowPoints[] = {&tip, &tail, &leftArrow, &rightArrow};
 
