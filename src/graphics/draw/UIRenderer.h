@@ -53,7 +53,7 @@ void drawFunctionOverlay(OLEDDisplay *display, OLEDDisplayUiState *state);
 // Navigation bar overlay
 void drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *state);
 
-void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+void drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t x, int16_t y);
 
 void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 

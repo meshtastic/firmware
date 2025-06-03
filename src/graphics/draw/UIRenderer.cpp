@@ -269,7 +269,7 @@ void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::Nod
 // **********************
 // * Favorite Node Info *
 // **********************
-void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+void drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     // --- Cache favorite nodes for the current frame only, to save computation ---
     static std::vector<meshtastic_NodeInfoLite *> favoritedNodes;
@@ -290,7 +290,7 @@ void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, in
         }
         // Keep a stable, consistent display order
         std::sort(favoritedNodes.begin(), favoritedNodes.end(),
-                  [](meshtastic_NodeInfoLite *a, meshtastic_NodeInfoLite *b) { return a->num < b->num; });
+                  [](const meshtastic_NodeInfoLite *a, const meshtastic_NodeInfoLite *b) { return a->num < b->num; });
     }
     if (favoritedNodes.empty())
         return;
@@ -495,8 +495,10 @@ void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, in
             CompassRenderer::drawCompassNorth(display, compassX, compassY, myHeading);
 
             const auto &p = node->position;
+            /* unused
             float d =
                 GeoCoord::latLongToMeter(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
+            */
             float bearing = GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(p.latitude_i), DegD(p.longitude_i));
             if (!config.display.compass_north_top)
                 bearing -= myHeading;
@@ -542,8 +544,10 @@ void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, in
             graphics::CompassRenderer::drawCompassNorth(display, compassX, compassY, myHeading);
 
             const auto &p = node->position;
+            /* unused
             float d =
                 GeoCoord::latLongToMeter(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
+            */
             float bearing = GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(p.latitude_i), DegD(p.longitude_i));
             if (!config.display.compass_north_top)
                 bearing -= myHeading;
@@ -608,8 +612,6 @@ void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t 
                         ((rows == 4) ? compactFirstLine : ((SCREEN_HEIGHT > 64) ? compactFirstLine : moreCompactFirstLine)),
                         uptimeFullStr);
 
-    config.display.heading_bold = origBold;
-
     // === Second Row: Satellites and Voltage ===
     config.display.heading_bold = false;
 
@@ -632,8 +634,8 @@ void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t 
     }
 #endif
 
-    char batStr[20];
     if (powerStatus->getHasBattery()) {
+        char batStr[20];
         int batV = powerStatus->getBatteryVoltageMv() / 1000;
         int batCv = (powerStatus->getBatteryVoltageMv() % 1000) / 10;
         snprintf(batStr, sizeof(batStr), "%01d.%02dV", batV, batCv);
@@ -1012,13 +1014,13 @@ void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiState *stat
     if (strcmp(displayLine, "GPS off") != 0 && strcmp(displayLine, "No GPS") != 0) {
 
         // === Second Row: Altitude ===
-        char displayLine[32];
+        char DisplayLineTwo[32] = {0};
         if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
-            snprintf(displayLine, sizeof(displayLine), " Alt: %.0fft", geoCoord.getAltitude() * METERS_TO_FEET);
+            snprintf(DisplayLineTwo, sizeof(DisplayLineTwo), " Alt: %.0fft", geoCoord.getAltitude() * METERS_TO_FEET);
         } else {
-            snprintf(displayLine, sizeof(displayLine), " Alt: %.0im", geoCoord.getAltitude());
+            snprintf(DisplayLineTwo, sizeof(DisplayLineTwo), " Alt: %.0im", geoCoord.getAltitude());
         }
-        display->drawString(x, ((SCREEN_HEIGHT > 64) ? compactSecondLine : moreCompactSecondLine), displayLine);
+        display->drawString(x, ((SCREEN_HEIGHT > 64) ? compactSecondLine : moreCompactSecondLine), DisplayLineTwo);
 
         // === Third Row: Latitude ===
         char latStr[32];

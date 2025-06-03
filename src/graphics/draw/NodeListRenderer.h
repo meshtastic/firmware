@@ -54,13 +54,12 @@ void drawHopSignalScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 void drawDistanceScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 void drawDynamicNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+void drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t x, int16_t y);
 
 // Utility functions
 const char *getCurrentModeTitle(int screenWidth);
 void retrieveAndSortNodes(std::vector<NodeEntry> &nodeList);
 const char *getSafeNodeName(meshtastic_NodeInfoLite *node);
-uint32_t sinceLastSeen(meshtastic_NodeInfoLite *node);
 void drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char **fields);
 
 // Bitmap drawing function

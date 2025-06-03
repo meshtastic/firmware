@@ -360,11 +360,11 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     // === Scrolling logic ===
     std::vector<int> rowHeights;
 
-    for (const auto &line : lines) {
+    for (const auto &_line : lines) {
         int maxHeight = FONT_HEIGHT_SMALL;
         for (int i = 0; i < numEmotes; ++i) {
             const Emote &e = emotes[i];
-            if (line.find(e.label) != std::string::npos) {
+            if (_line.find(e.label) != std::string::npos) {
                 if (e.height > maxHeight)
                     maxHeight = e.height;
             }

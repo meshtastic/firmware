@@ -73,8 +73,6 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
     // === Battery State ===
     int chargePercent = powerStatus->getBatteryChargePercent();
     bool isCharging = powerStatus->getIsCharging() == meshtastic::OptionalBool::OptTrue;
-    static uint32_t lastBlinkShared = 0;
-    static bool isBoltVisibleShared = true;
     uint32_t now = millis();
 
 #ifndef USE_EINK
@@ -160,8 +158,6 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
         // === Show Mail or Mute Icon to the Left of Time ===
         int iconRightEdge = timeX - 2;
 
-        static bool isMailIconVisible = true;
-        static uint32_t lastMailBlink = 0;
         bool showMail = false;
 
 #ifndef USE_EINK
@@ -212,8 +208,6 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y)
         // === No Time Available: Mail/Mute Icon Moves to Far Right ===
         int iconRightEdge = screenW - xOffset;
 
-        static bool isMailIconVisible = true;
-        static uint32_t lastMailBlink = 0;
         bool showMail = false;
 
         if (hasUnreadMessage) {

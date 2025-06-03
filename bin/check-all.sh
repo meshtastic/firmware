@@ -23,4 +23,4 @@ for BOARD in $BOARDS; do
 	CHECK="${CHECK} -e ${BOARD}"
 done
 
-pio check --flags "-DAPP_VERSION=${APP_VERSION} --suppressions-list=suppressions.txt" $CHECK --skip-packages --pattern="src/" --fail-on-defect=medium --fail-on-defect=high
+pio check --flags "-DAPP_VERSION=${APP_VERSION} --suppressions-list=suppressions.txt --inline-suppr" $CHECK --skip-packages --pattern="src/" --fail-on-defect=medium --fail-on-defect=high

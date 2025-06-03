@@ -74,16 +74,6 @@ const char *getSafeNodeName(meshtastic_NodeInfoLite *node)
     return nodeName;
 }
 
-uint32_t sinceLastSeen(meshtastic_NodeInfoLite *node)
-{
-    uint32_t now = getTime();
-    uint32_t last_seen = node->last_heard;
-    if (last_seen == 0 || now < last_seen) {
-        return UINT32_MAX;
-    }
-    return now - last_seen;
-}
-
 const char *getCurrentModeTitle(int screenWidth)
 {
     switch (currentMode) {
@@ -139,7 +129,7 @@ void retrieveAndSortNodes(std::vector<NodeEntry> &nodeList)
         bool aFav = a.node->is_favorite;
         bool bFav = b.node->is_favorite;
         if (aFav != bFav)
-            return aFav > bFav;
+            return aFav;
         if (a.sortValue == 0 || a.sortValue == UINT32_MAX)
             return false;
         if (b.sortValue == 0 || b.sortValue == UINT32_MAX)
@@ -593,7 +583,7 @@ void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, 
     drawNodeListScreen(display, state, x, y, "Bearings", drawEntryCompass, drawCompassArrow, heading, lat, lon);
 }
 
-void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+void drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     // Cache favorite nodes for the current frame only, to save computation
     static std::vector<meshtastic_NodeInfoLite *> favoritedNodes;
@@ -614,7 +604,7 @@ void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, in
         }
         // Keep a stable, consistent display order
         std::sort(favoritedNodes.begin(), favoritedNodes.end(),
-                  [](meshtastic_NodeInfoLite *a, meshtastic_NodeInfoLite *b) { return a->num < b->num; });
+                  [](const meshtastic_NodeInfoLite *a, const meshtastic_NodeInfoLite *b) { return a->num < b->num; });
     }
     if (favoritedNodes.empty())
         return;
