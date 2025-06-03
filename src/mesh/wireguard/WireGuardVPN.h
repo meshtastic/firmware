@@ -12,4 +12,7 @@ bool startWireGuard();
 /// Stop the WireGuard VPN service.
 void stopWireGuard();
 
+/// Query whether the VPN is currently running.
+bool isWireGuardRunning();
+
 #endif // HAS_WIREGUARD_VPN
