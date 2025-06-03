@@ -665,7 +665,7 @@ bool Power::setup()
     bool found = axpChipInit();
     if (!found)
         found = lipoInit();
-    if (!found)
+    if (!found) // cppcheck-suppress duplicateConditionalAssign
         found = analogInit();
 
 #ifdef NRF_APM

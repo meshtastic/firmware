@@ -1411,7 +1411,7 @@ void Screen::setFrames(FrameFocus focus)
     }
 
     for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
-        meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(i);
+        const meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(i);
         if (n && n->num != nodeDB->getNodeNum() && n->is_favorite) {
             normalFrames[numframes++] = graphics::UIRenderer::drawNodeInfo;
             indicatorIcons.push_back(icon_node);

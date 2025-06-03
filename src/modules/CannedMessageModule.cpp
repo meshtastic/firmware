@@ -462,7 +462,7 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
         } else {
             int nodeIndex = destIndex - static_cast<int>(activeChannelIndices.size());
             if (nodeIndex >= 0 && nodeIndex < static_cast<int>(filteredNodes.size())) {
-                meshtastic_NodeInfoLite *selectedNode = filteredNodes[nodeIndex].node;
+                const meshtastic_NodeInfoLite *selectedNode = filteredNodes[nodeIndex].node;
                 if (selectedNode) {
                     dest = selectedNode->num;
                     channel = selectedNode->channel;
@@ -904,9 +904,6 @@ int32_t CannedMessageModule::runOnce()
         this->currentMessageIndex = -1;
         this->freetext = "";
         this->cursor = 0;
-#if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(SENSECAP_INDICATOR)
-        int destSelect = 0;
-#endif
         this->notifyObservers(&e);
     } else if (((this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT)) &&
                !Throttle::isWithinTimespanMs(this->lastTouchMillis, INACTIVATE_AFTER_MS)) {
@@ -915,9 +912,6 @@ int32_t CannedMessageModule::runOnce()
         this->currentMessageIndex = -1;
         this->freetext = "";
         this->cursor = 0;
-#if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(USE_VIRTUAL_KEYBOARD)
-        int destSelect = 0;
-#endif
         this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         this->notifyObservers(&e);
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_SELECT) {
@@ -1418,7 +1412,7 @@ void CannedMessageModule::drawDestinationSelectionScreen(OLEDDisplay *display, O
         if (itemIndex >= numActiveChannels) {
             int nodeIndex = itemIndex - numActiveChannels;
             if (nodeIndex >= 0 && nodeIndex < static_cast<int>(this->filteredNodes.size())) {
-                meshtastic_NodeInfoLite *node = this->filteredNodes[nodeIndex].node;
+                const meshtastic_NodeInfoLite *node = this->filteredNodes[nodeIndex].node;
                 if (node && hasKeyForNode(node)) {
                     int iconX = display->getWidth() - key_symbol_width - 15;
                     int iconY = yOffset + (FONT_HEIGHT_SMALL - key_symbol_height) / 2;
@@ -1585,7 +1579,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
 
         // Shift message list upward by 3 pixels to reduce spacing between header and first message
         const int listYOffset = y + FONT_HEIGHT_SMALL - 3;
-        const int visibleRows = (display->getHeight() - listYOffset) / rowSpacing;
+        visibleRows = (display->getHeight() - listYOffset) / rowSpacing;
 
         int topMsg =
             (messagesCount > visibleRows && currentMessageIndex >= visibleRows - 1) ? currentMessageIndex - visibleRows + 2 : 0;
@@ -1644,17 +1638,17 @@ ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &
             // Determine ACK status
             bool isAck = (decoded.error_reason == meshtastic_Routing_Error_NONE);
             bool isFromDest = (mp.from == this->lastSentNode);
-            bool isBroadcast = (this->lastSentNode == NODENUM_BROADCAST);
+            bool wasBroadcast = (this->lastSentNode == NODENUM_BROADCAST);
 
             // Identify the responding node
-            if (isBroadcast && mp.from != nodeDB->getNodeNum()) {
+            if (wasBroadcast && mp.from != nodeDB->getNodeNum()) {
                 this->incoming = mp.from; // Relayed by another node
             } else {
                 this->incoming = this->lastSentNode; // Direct reply
             }
 
             // Final ACK confirmation logic
-            this->ack = isAck && (isBroadcast || isFromDest);
+            this->ack = isAck && (wasBroadcast || isFromDest);
 
             waitingForAck = false;
             this->notifyObservers(&e);
