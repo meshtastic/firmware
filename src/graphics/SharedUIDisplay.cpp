@@ -164,7 +164,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
         timeX = screenW - xOffset - timeStrWidth + 4;
 
         // === Show Mail or Mute Icon to the Left of Time ===
-        int iconRightEdge = timeX;
+        int iconRightEdge = timeX - 1;
 
         bool showMail = false;
 
