@@ -40,6 +40,9 @@ Join our community and help improve Meshtastic! 🚀
 
 ## WireGuard VPN (Experimental)
 
-Basic hooks for running a WireGuard VPN client are now included in the firmware.
-Define `HAS_WIREGUARD_VPN` in your build configuration to enable the feature.
-Actual tunnel setup is still under development.
+An experimental WireGuard VPN client is now stubbed into the firmware. Enable
+it by defining `HAS_WIREGUARD_VPN` at compile time. Configuration lives in
+`src/mesh/wireguard/WireGuardConfig.h` where default server details and keys can
+be statically specified. The client currently sends a UDP handshake to the
+configured server whenever the network comes online and tears the socket down
+when WiFi shuts off. Full tunnel functionality is not implemented yet.
