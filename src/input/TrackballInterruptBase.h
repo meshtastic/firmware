@@ -7,15 +7,16 @@ class TrackballInterruptBase : public Observable<const InputEvent *>, public con
 {
   public:
     explicit TrackballInterruptBase(const char *name);
-    void init(uint8_t pinDown, uint8_t pinUp, uint8_t pinLeft, uint8_t pinRight, uint8_t pinPress, char eventDown, char eventUp,
-              char eventLeft, char eventRight, char eventPressed, void (*onIntDown)(), void (*onIntUp)(), void (*onIntLeft)(),
-              void (*onIntRight)(), void (*onIntPress)());
+    void init(uint8_t pinDown, uint8_t pinUp, uint8_t pinLeft, uint8_t pinRight, uint8_t pinPress, uint8_t pinMenu,
+              char eventDown, char eventUp, char eventLeft, char eventRight, char eventPressed, char eventmenu,
+              void (*onIntDown)(), void (*onIntUp)(), void (*onIntLeft)(), void (*onIntRight)(), void (*onIntPress)(),
+              void (*onMenuPress)());
     void intPressHandler();
     void intDownHandler();
     void intUpHandler();
     void intLeftHandler();
     void intRightHandler();
-
+    void intMenuHandler();
     virtual int32_t runOnce() override;
 
   protected:
@@ -25,7 +26,8 @@ class TrackballInterruptBase : public Observable<const InputEvent *>, public con
         TB_ACTION_UP,
         TB_ACTION_DOWN,
         TB_ACTION_LEFT,
-        TB_ACTION_RIGHT
+        TB_ACTION_RIGHT,
+        TB_ACTION_MENU
     };
 
     volatile TrackballInterruptBaseActionType action = TB_ACTION_NONE;
@@ -35,10 +37,13 @@ class TrackballInterruptBase : public Observable<const InputEvent *>, public con
     uint8_t _pinUp = 0;
     uint8_t _pinLeft = 0;
     uint8_t _pinRight = 0;
+    uint8_t _pinPress = 0;
+    uint8_t _pinMenu = 0;
     char _eventDown = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
     char _eventUp = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
     char _eventLeft = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
     char _eventRight = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
     char _eventPressed = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
+    char _eventMenu = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
     const char *_originName;
 };
