@@ -26,11 +26,10 @@ bool startWireGuard()
         return false;
     }
 
-    if (!vpn.begin(wireGuardConfig.privateKey,
-                   wireGuardConfig.publicKey,
-                   wireGuardConfig.presharedKey,
-                   WiFi.localIP(),
-                   serverIp,
+    if (!vpn.begin(wireGuardConfig.address,      // local (client) IP/subnet
+                   wireGuardConfig.privateKey,   // base64 private key
+                   wireGuardConfig.serverAddr,   // server hostname/IP
+                   wireGuardConfig.publicKey,    // server public key
                    wireGuardConfig.serverPort)) {
         LOG_ERROR("Unable to start WireGuard tunnel");
         return false;

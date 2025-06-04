@@ -17,18 +17,18 @@ typedef struct WireGuardConfig {
     uint16_t serverPort;       ///< WireGuard server port
     const char *privateKey;    ///< Client private key
     const char *publicKey;     ///< Server public key
-    const char *presharedKey;  ///< Optional preshared key
+    const char *presharedKey;  ///< Optional preshared key, not available in Wireguard-ESP32 as of now
     const char *dns;           ///< DNS server to use while connected
     const char *allowedIps;    ///< Routes through the tunnel
     uint16_t persistentKeepalive; ///< Optional keepalive interval
 } WireGuardConfig;
 
 #ifndef WIREGUARD_DEFAULT_ADDRESS
-#define WIREGUARD_DEFAULT_ADDRESS "<ip address>/<subnet mask>"
+#define WIREGUARD_DEFAULT_ADDRESS ""
 #endif
 
 #ifndef WIREGUARD_DEFAULT_SERVER_ADDR
-#define WIREGUARD_DEFAULT_SERVER_ADDR "<ip or hostname>"
+#define WIREGUARD_DEFAULT_SERVER_ADDR ""
 #endif
 
 #ifndef WIREGUARD_DEFAULT_SERVER_PORT
@@ -36,19 +36,19 @@ typedef struct WireGuardConfig {
 #endif
 
 #ifndef WIREGUARD_DEFAULT_PRIVATE_KEY
-#define WIREGUARD_DEFAULT_PRIVATE_KEY "<key>"
+#define WIREGUARD_DEFAULT_PRIVATE_KEY ""
 #endif
 
 #ifndef WIREGUARD_DEFAULT_PUBLIC_KEY
-#define WIREGUARD_DEFAULT_PUBLIC_KEY "<key>"
+#define WIREGUARD_DEFAULT_PUBLIC_KEY ""
 #endif
 
-#ifndef WIREGUARD_DEFAULT_PRESHARED_KEY
+#ifndef WIREGUARD_DEFAULT_PRESHARED_KEY  // Note: WireGuard-ESP32 does not support preshared keys as of now.
 #define WIREGUARD_DEFAULT_PRESHARED_KEY ""
 #endif
 
 #ifndef WIREGUARD_DEFAULT_DNS
-#define WIREGUARD_DEFAULT_DNS "192.168.1.1"
+#define WIREGUARD_DEFAULT_DNS ""
 #endif
 
 #ifndef WIREGUARD_DEFAULT_ALLOWED_IPS
