@@ -2,6 +2,7 @@
 #if HAS_WIREGUARD_VPN
 #include "mesh/wireguard/WireGuardVPN.h"
 #include "mesh/wireguard/WireGuardConfig.h"
+#include "mesh/NodeDB.h"
 #include <WiFiUdp.h>
 #include <WiFi.h>
 
@@ -30,9 +31,13 @@ bool startWireGuard()
         return false;
     }
 
-    const char handshake[] = "MESHTASTIC_WG_HELLO";
+    struct {
+        char tag[20];
+        uint32_t nodeId;
+    } handshake = {"MESHTASTIC_WG_HELLO", myNodeInfo.my_node_num};
+
     wgUDP.beginPacket(serverIp, wireGuardConfig.serverPort);
-    wgUDP.write((const uint8_t *)handshake, sizeof(handshake) - 1);
+    wgUDP.write((const uint8_t *)&handshake, sizeof(handshake));
     wgUDP.endPacket();
 
     LOG_INFO("WireGuard handshake sent to %s:%u", serverIp.toString().c_str(),
