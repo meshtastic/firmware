@@ -37,62 +37,26 @@ namespace UIRenderer
 // Draw GPS status summary
 void drawGps(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSStatus *gps)
 {
+    // Draw satellite image
+    display->drawFastImage(x + 2, y, 8, 8, imgSatellite);
+
     if (config.position.fixed_position) {
         // GPS coordinates are currently fixed
-        display->drawString(x - 1, y - 2, "Fixed GPS");
-        if (config.display.heading_bold)
-            display->drawString(x, y - 2, "Fixed GPS");
+        display->drawString(x + 12, y - 2, (SCREEN_WIDTH > 128) ? "GPS: Fixed" : "Fixed");
         return;
     }
     if (!gps->getIsConnected()) {
-        display->drawString(x, y - 2, "No GPS");
-        if (config.display.heading_bold)
-            display->drawString(x + 1, y - 2, "No GPS");
+        display->drawString(x + 12, y - 2, (SCREEN_WIDTH > 128) ? "GPS: No Lock" : "No Lock");
         return;
     }
-    // Adjust position if we're going to draw too wide
-    int maxDrawWidth = 6; // Position icon
-
-    if (!gps->getHasLock()) {
-        maxDrawWidth += display->getStringWidth("No sats") + 2; // icon + text + buffer
-    } else {
-        maxDrawWidth += (5 * 2) + 8 + display->getStringWidth("99") + 2; // bars + sat icon + text + buffer
-    }
-
-    if (x + maxDrawWidth > display->getWidth()) {
-        x = display->getWidth() - maxDrawWidth;
-        if (x < 0)
-            x = 0; // Clamp to screen
-    }
-
-    display->drawFastImage(x, y, 6, 8, gps->getHasLock() ? imgPositionSolid : imgPositionEmpty);
     if (!gps->getHasLock()) {
         // Draw "No sats" to the right of the icon with slightly more gap
-        int textX = x + 9; // 6 (icon) + 3px spacing
-        display->drawString(textX, y - 3, "No sats");
-        if (config.display.heading_bold)
-            display->drawString(textX + 1, y - 3, "No sats");
+        display->drawString(x + 12, y - 3, (SCREEN_WIDTH > 128) ? "GPS: No Sats" : "No Sats");
         return;
     } else {
         char satsString[3];
-        uint8_t bar[2] = {0};
-
-        // Draw DOP signal bars
-        for (int i = 0; i < 5; i++) {
-            if (gps->getDOP() <= dopThresholds[i])
-                bar[0] = ~((1 << (5 - i)) - 1);
-            else
-                bar[0] = 0b10000000;
-
-            display->drawFastImage(x + 9 + (i * 2), y, 2, 8, bar);
-        }
-
-        // Draw satellite image
-        display->drawFastImage(x + 24, y, 8, 8, imgSatellite);
-
-        // Draw the number of satellites
         snprintf(satsString, sizeof(satsString), "%u", gps->getNumSatellites());
-        int textX = x + 34;
+        int textX = x + 12;
         display->drawString(textX, y - 2, satsString);
         if (config.display.heading_bold)
             display->drawString(textX + 1, y - 2, satsString);
@@ -390,11 +354,11 @@ void drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t
         uint32_t mins = (uptime % 3600) / 60;
         // Show as "Up: 2d 3h", "Up: 5h 14m", or "Up: 37m"
         if (days)
-            snprintf(uptimeStr, sizeof(uptimeStr), " Uptime: %ud %uh", days, hours);
+            snprintf(uptimeStr, sizeof(uptimeStr), "Up: %ud %uh", days, hours);
         else if (hours)
-            snprintf(uptimeStr, sizeof(uptimeStr), " Uptime: %uh %um", hours, mins);
+            snprintf(uptimeStr, sizeof(uptimeStr), "Up: %uh %um", hours, mins);
         else
-            snprintf(uptimeStr, sizeof(uptimeStr), " Uptime: %um", mins);
+            snprintf(uptimeStr, sizeof(uptimeStr), "Up: %um", mins);
     }
     if (uptimeStr[0] && line < 5) {
         display->drawString(x, yPositions[line++], uptimeStr);
