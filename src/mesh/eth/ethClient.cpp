@@ -83,7 +83,9 @@ static int32_t reconnectETH()
             tv.tv_usec = 0;
 
             perhapsSetRTC(RTCQualityNTP, &tv);
-
+#if HAS_WIREGUARD_VPN
+            startWireGuard();
+#endif
             ntp_renew = millis() + 43200 * 1000; // success, refresh every 12 hours
         } else {
             LOG_ERROR("NTP Update failed");

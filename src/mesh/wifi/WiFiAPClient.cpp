@@ -131,7 +131,11 @@ static void onNetworkConnected()
         initApiServer();
 #endif
 #if HAS_WIREGUARD_VPN
-        startWireGuard(); // <--- Added
+    if (getRTCQuality() >= RTCQualityNTP) {
+        startWireGuard();
+    } else {
+        LOG_INFO("Waiting for NTP before starting WireGuard");
+        }
 #endif
         APStartupComplete = true;
     }

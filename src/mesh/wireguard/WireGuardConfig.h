@@ -24,11 +24,11 @@ typedef struct WireGuardConfig {
 } WireGuardConfig;
 
 #ifndef WIREGUARD_DEFAULT_ADDRESS
-#define WIREGUARD_DEFAULT_ADDRESS "192.168.1.1" // Client address in Wireguard configuration. Must not include subnet mask.
+#define WIREGUARD_DEFAULT_ADDRESS "" // Client address in Wireguard configuration. Must not include subnet mask.
 #endif
 
 #ifndef WIREGUARD_DEFAULT_SERVER_ADDR
-#define WIREGUARD_DEFAULT_SERVER_ADDR "22.22.222.222" // Default WireGuard server (public) IP address - FQDN not tested
+#define WIREGUARD_DEFAULT_SERVER_ADDR "" // Default WireGuard server (public) IP address - FQDN not tested
 #endif
 
 #ifndef WIREGUARD_DEFAULT_SERVER_PORT
@@ -36,11 +36,11 @@ typedef struct WireGuardConfig {
 #endif
 
 #ifndef WIREGUARD_DEFAULT_PRIVATE_KEY
-#define WIREGUARD_DEFAULT_PRIVATE_KEY "<Key not set>"
+#define WIREGUARD_DEFAULT_PRIVATE_KEY ""
 #endif
 
 #ifndef WIREGUARD_DEFAULT_PUBLIC_KEY
-#define WIREGUARD_DEFAULT_PUBLIC_KEY "Key not set"
+#define WIREGUARD_DEFAULT_PUBLIC_KEY ""
 #endif
 
 #ifndef WIREGUARD_DEFAULT_PRESHARED_KEY  
@@ -52,7 +52,7 @@ typedef struct WireGuardConfig {
 #endif
 
 #ifndef WIREGUARD_DEFAULT_DNS
-#define WIREGUARD_DEFAULT_DNS "192.168.0.1" // Default DNS server to use while connected - not tested yet
+#define WIREGUARD_DEFAULT_DNS "" // Default DNS server to use while connected - not tested yet
 #endif
 
 #ifndef WIREGUARD_DEFAULT_ALLOWED_IPS

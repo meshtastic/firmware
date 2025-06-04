@@ -3,6 +3,7 @@
 #include "mesh/wireguard/WireGuardVPN.h"
 #include "mesh/wireguard/WireGuardConfig.h"
 #include "mesh/NodeDB.h"
+#include "gps/RTC.h"
 #include <WiFi.h>
 #include <WireGuard-ESP32.h>
 
@@ -13,6 +14,11 @@ bool startWireGuard()
 {
     if (running) {
         return true;
+    }
+
+    if (getRTCQuality() < RTCQualityNTP) {
+        LOG_INFO("WireGuard waiting for NTP");
+        return false;
     }
 
     if (WiFi.status() != WL_CONNECTED) {
