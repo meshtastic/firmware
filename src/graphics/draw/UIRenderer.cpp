@@ -54,12 +54,9 @@ void drawGps(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSSt
         display->drawString(x + 12, y - 3, (SCREEN_WIDTH > 128) ? "GPS: No Sats" : "No Sats");
         return;
     } else {
-        char satsString[3];
-        snprintf(satsString, sizeof(satsString), "%u", gps->getNumSatellites());
-        int textX = x + 12;
-        display->drawString(textX, y - 2, satsString);
-        if (config.display.heading_bold)
-            display->drawString(textX + 1, y - 2, satsString);
+        char satsString[8];
+        snprintf(satsString, sizeof(satsString), "%u sats", gps->getNumSatellites());
+        display->drawString(x + 12, y - 2, satsString);
     }
 }
 
