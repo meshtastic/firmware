@@ -10,5 +10,6 @@
   },
   "[powershell]": {
     "editor.defaultFormatter": "ms-vscode.powershell"
-  }
+  },
+  "idf.pythonInstallPath": "C:\\Users\\ChrisNolan\\.espressif\\tools\\idf-python\\3.11.2\\python.exe"
 }

@@ -3,11 +3,11 @@
 #include "mesh/wireguard/WireGuardVPN.h"
 #include "mesh/wireguard/WireGuardConfig.h"
 #include "mesh/NodeDB.h"
-#include <WiFiUdp.h>
 #include <WiFi.h>
+#include <WireGuard-ESP32.h>
 
 static bool running = false;
-static WiFiUDP wgUDP;
+static WireGuard vpn;
 
 bool startWireGuard()
 {
@@ -26,21 +26,18 @@ bool startWireGuard()
         return false;
     }
 
-    if (!wgUDP.begin(0)) {
-        LOG_ERROR("Unable to open UDP socket for WireGuard");
+    if (!vpn.begin(wireGuardConfig.privateKey,
+                   wireGuardConfig.publicKey,
+                   wireGuardConfig.presharedKey,
+                   WiFi.localIP(),
+                   serverIp,
+                   wireGuardConfig.serverPort)) {
+        LOG_ERROR("Unable to start WireGuard tunnel");
         return false;
     }
 
-    struct {
-        char tag[20];
-        uint32_t nodeId;
-    } handshake = {"MESHTASTIC_WG_HELLO", myNodeInfo.my_node_num};
-
-    wgUDP.beginPacket(serverIp, wireGuardConfig.serverPort);
-    wgUDP.write((const uint8_t *)&handshake, sizeof(handshake));
-    wgUDP.endPacket();
-
-    LOG_INFO("WireGuard handshake sent to %s:%u", serverIp.toString().c_str(),
+    LOG_INFO("WireGuard tunnel started to %s:%u",
+             serverIp.toString().c_str(),
              wireGuardConfig.serverPort);
 
     running = true;
@@ -52,7 +49,7 @@ void stopWireGuard()
     if (!running) {
         return;
     }
-    wgUDP.stop();
+    vpn.end();
     LOG_INFO("WireGuard VPN stopped");
     running = false;
 }
