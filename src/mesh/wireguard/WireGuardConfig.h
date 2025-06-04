@@ -24,39 +24,43 @@ typedef struct WireGuardConfig {
 } WireGuardConfig;
 
 #ifndef WIREGUARD_DEFAULT_ADDRESS
-#define WIREGUARD_DEFAULT_ADDRESS "192.168.1.1" //EXAMPLE
+#define WIREGUARD_DEFAULT_ADDRESS "192.168.1.1" // Client address in Wireguard configuration. Must not include subnet mask.
 #endif
 
 #ifndef WIREGUARD_DEFAULT_SERVER_ADDR
-#define WIREGUARD_DEFAULT_SERVER_ADDR "216.58.214.174" //EXAMPLE
+#define WIREGUARD_DEFAULT_SERVER_ADDR "22.22.222.222" // Default WireGuard server (public) IP address - FQDN not tested
 #endif
 
 #ifndef WIREGUARD_DEFAULT_SERVER_PORT
-#define WIREGUARD_DEFAULT_SERVER_PORT 60105 //EXAMPLE
+#define WIREGUARD_DEFAULT_SERVER_PORT 60105
 #endif
 
 #ifndef WIREGUARD_DEFAULT_PRIVATE_KEY
-#define WIREGUARD_DEFAULT_PRIVATE_KEY "YElkG5676G/sE1X8WN14deSpb6yCPxgwxWel8OXvDlE=" //EXAMPLE
+#define WIREGUARD_DEFAULT_PRIVATE_KEY "<Key not set>"
 #endif
 
 #ifndef WIREGUARD_DEFAULT_PUBLIC_KEY
-#define WIREGUARD_DEFAULT_PUBLIC_KEY "4rWE3xfIDMV0/tR0tDMNHmELhF3Gs&*SeL3KLsYLjE=" //EXAMPLE
+#define WIREGUARD_DEFAULT_PUBLIC_KEY "Key not set"
 #endif
 
-// #ifndef WIREGUARD_DEFAULT_PRESHARED_KEY  // Note: WireGuard-ESP32 does not support preshared keys as of now.
-// #define WIREGUARD_DEFAULT_PRESHARED_KEY ""
-// #endif
+#ifndef WIREGUARD_DEFAULT_PRESHARED_KEY  
+// WireGuard-ESP32 does not currently make use of preshared keys but the
+// structure contains a field for future compatibility. Define a default
+// empty value so that the configuration compiles when the feature is
+// enabled.
+#define WIREGUARD_DEFAULT_PRESHARED_KEY ""
+#endif
 
 #ifndef WIREGUARD_DEFAULT_DNS
-#define WIREGUARD_DEFAULT_DNS "192.168.200.60"
+#define WIREGUARD_DEFAULT_DNS "192.168.0.1" // Default DNS server to use while connected - not tested yet
 #endif
 
 #ifndef WIREGUARD_DEFAULT_ALLOWED_IPS
-#define WIREGUARD_DEFAULT_ALLOWED_IPS "0.0.0.0/0"
+#define WIREGUARD_DEFAULT_ALLOWED_IPS "0.0.0.0/0" // Default allowed IPs for the WireGuard tunnel - all traffic - not tested yet
 #endif
 
 #ifndef WIREGUARD_DEFAULT_PERSISTENT_KEEPALIVE
-#define WIREGUARD_DEFAULT_PERSISTENT_KEEPALIVE 0
+#define WIREGUARD_DEFAULT_PERSISTENT_KEEPALIVE 0 // Not tested yet
 #endif
 
 /// Global WireGuard configuration in RAM.
