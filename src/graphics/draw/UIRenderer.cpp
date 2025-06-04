@@ -354,11 +354,11 @@ void drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t
         uint32_t mins = (uptime % 3600) / 60;
         // Show as "Up: 2d 3h", "Up: 5h 14m", or "Up: 37m"
         if (days)
-            snprintf(uptimeStr, sizeof(uptimeStr), "Up: %ud %uh", days, hours);
+            snprintf(uptimeStr, sizeof(uptimeStr), " Uptime: %ud %uh", days, hours);
         else if (hours)
-            snprintf(uptimeStr, sizeof(uptimeStr), "Up: %uh %um", hours, mins);
+            snprintf(uptimeStr, sizeof(uptimeStr), " Uptime: %uh %um", hours, mins);
         else
-            snprintf(uptimeStr, sizeof(uptimeStr), "Up: %um", mins);
+            snprintf(uptimeStr, sizeof(uptimeStr), " Uptime: %um", mins);
     }
     if (uptimeStr[0] && line < 5) {
         display->drawString(x, yPositions[line++], uptimeStr);
@@ -547,11 +547,11 @@ void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t 
     uint32_t mins = (uptime % 3600) / 60;
     // Show as "Up: 2d 3h", "Up: 5h 14m", or "Up: 37m"
     if (days)
-        snprintf(uptimeStr, sizeof(uptimeStr), " Up: %ud %uh", days, hours);
+        snprintf(uptimeStr, sizeof(uptimeStr), "Up: %ud %uh", days, hours);
     else if (hours)
-        snprintf(uptimeStr, sizeof(uptimeStr), " Up: %uh %um", hours, mins);
+        snprintf(uptimeStr, sizeof(uptimeStr), "Up: %uh %um", hours, mins);
     else
-        snprintf(uptimeStr, sizeof(uptimeStr), " Uptime: %um", mins);
+        snprintf(uptimeStr, sizeof(uptimeStr), "Up: %um", mins);
     display->drawString(SCREEN_WIDTH - display->getStringWidth(uptimeStr),
                         ((rows == 4) ? compactFirstLine : ((SCREEN_HEIGHT > 64) ? compactFirstLine : moreCompactFirstLine)),
                         uptimeStr);
