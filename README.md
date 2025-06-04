@@ -40,11 +40,16 @@ Join our community and help improve Meshtastic! 🚀
 
 ## WireGuard VPN (Experimental)
 
-An experimental WireGuard VPN client is now included in the firmware. Enable
-it by defining `HAS_WIREGUARD_VPN` at compile time. Configuration lives in
-`src/mesh/wireguard/WireGuardConfig.h` where default server details and keys can
-be statically specified. The implementation uses the
-[`wireguard-esp32`](https://github.com/juvinski/wireguard-esp32) library to
-create the VPN tunnel. When WiFi comes online the tunnel is established and
-shut down when WiFi disconnects. Full tunnel functionality is still
-considered experimental.
+The firmware now includes an experimental WireGuard VPN client.
+
+**How to enable:**
+- Edit your `platformio.ini` variant configuration to add: `-DHAS_WIREGUARD_VPN=1`
+
+**Configuration:**
+- Update server details and keys in: `src/mesh/wireguard/WireGuardConfig.h`
+
+**How it works:**
+- Uses the [`wireguard-esp32`](https://github.com/juvinski/wireguard-esp32) library.
+- The VPN tunnel starts automatically when WiFi connects, and stops when WiFi disconnects.
+
+> **Note:** This feature is experimental and full tunnel functionality may not be stable yet.
