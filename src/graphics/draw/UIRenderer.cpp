@@ -576,29 +576,21 @@ void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t 
               ((rows == 4) ? compactFirstLine : ((SCREEN_HEIGHT > 64) ? compactFirstLine : moreCompactFirstLine)) + 2, nodeStatus,
               -1, false, "online");
 
+    char uptimeStr[32] = "";
     uint32_t uptime = millis() / 1000;
-    char uptimeStr[6];
-    uint32_t minutes = uptime / 60, hours = minutes / 60, days = hours / 24;
-
-    if (days > 365) {
-        snprintf(uptimeStr, sizeof(uptimeStr), "?");
-    } else {
-        snprintf(uptimeStr, sizeof(uptimeStr), "%u%c",
-                 days      ? days
-                 : hours   ? hours
-                 : minutes ? minutes
-                           : (int)uptime,
-                 days      ? 'd'
-                 : hours   ? 'h'
-                 : minutes ? 'm'
-                           : 's');
-    }
-
-    char uptimeFullStr[16];
-    snprintf(uptimeFullStr, sizeof(uptimeFullStr), "Uptime: %s", uptimeStr);
-    display->drawString(SCREEN_WIDTH - display->getStringWidth(uptimeFullStr),
+    uint32_t days = uptime / 86400;
+    uint32_t hours = (uptime % 86400) / 3600;
+    uint32_t mins = (uptime % 3600) / 60;
+    // Show as "Up: 2d 3h", "Up: 5h 14m", or "Up: 37m"
+    if (days)
+        snprintf(uptimeStr, sizeof(uptimeStr), " Up: %ud %uh", days, hours);
+    else if (hours)
+        snprintf(uptimeStr, sizeof(uptimeStr), " Up: %uh %um", hours, mins);
+    else
+        snprintf(uptimeStr, sizeof(uptimeStr), " Uptime: %um", mins);
+    display->drawString(SCREEN_WIDTH - display->getStringWidth(uptimeStr),
                         ((rows == 4) ? compactFirstLine : ((SCREEN_HEIGHT > 64) ? compactFirstLine : moreCompactFirstLine)),
-                        uptimeFullStr);
+                        uptimeStr);
 
     // === Second Row: Satellites and Voltage ===
     config.display.heading_bold = false;
