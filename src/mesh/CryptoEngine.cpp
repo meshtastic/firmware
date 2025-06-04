@@ -11,6 +11,9 @@
 #include <RNG.h>
 #include <SHA256.h>
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN)
+#if !defined(ARCH_STM32WL)
+#define CryptRNG RNG
+#endif
 
 /**
  * Create a public/private key pair with Curve25519.
@@ -21,12 +24,12 @@
 void CryptoEngine::generateKeyPair(uint8_t *pubKey, uint8_t *privKey)
 {
     // Mix in any randomness we can, to make key generation stronger.
-    RNG.begin(optstr(APP_VERSION));
+    CryptRNG.begin(optstr(APP_VERSION));
     if (myNodeInfo.device_id.size == 16) {
-        RNG.stir(myNodeInfo.device_id.bytes, myNodeInfo.device_id.size);
+        CryptRNG.stir(myNodeInfo.device_id.bytes, myNodeInfo.device_id.size);
     }
     auto noise = random();
-    RNG.stir((uint8_t *)&noise, sizeof(noise));
+    CryptRNG.stir((uint8_t *)&noise, sizeof(noise));
 
     LOG_DEBUG("Generate Curve25519 keypair");
     Curve25519::dh1(public_key, private_key);
