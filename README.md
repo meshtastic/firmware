@@ -16,7 +16,7 @@
 </div>
 
 <div align="center">
-	<a href="https://meshtastic.org">Website</a>
+	<a href="https://meshtastic.org">站点名称</a>
 	-
 	<a href="https://meshtastic.org/docs/">Documentation</a>
 </div>
