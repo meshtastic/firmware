@@ -38,26 +38,24 @@ namespace UIRenderer
 void drawGps(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSStatus *gps)
 {
     // Draw satellite image
-    display->drawFastImage(x + 2, y, 8, 8, imgSatellite);
+    int yOffset = (SCREEN_WIDTH > 128) ? 4 : 2;
+    display->drawFastImage(x + 1, y + yOffset, 8, 8, imgSatellite);
+    char textString[10];
 
     if (config.position.fixed_position) {
         // GPS coordinates are currently fixed
-        display->drawString(x + 12, y - 2, (SCREEN_WIDTH > 128) ? "GPS: Fixed" : "Fixed");
-        return;
+        snprintf(textString, sizeof(textString), "Fixed");
     }
     if (!gps->getIsConnected()) {
-        display->drawString(x + 12, y - 2, (SCREEN_WIDTH > 128) ? "GPS: No Lock" : "No Lock");
-        return;
+        snprintf(textString, sizeof(textString), "No Lock");
     }
     if (!gps->getHasLock()) {
         // Draw "No sats" to the right of the icon with slightly more gap
-        display->drawString(x + 12, y - 3, (SCREEN_WIDTH > 128) ? "GPS: No Sats" : "No Sats");
-        return;
+        snprintf(textString, sizeof(textString), "No Sats");
     } else {
-        char satsString[8];
-        snprintf(satsString, sizeof(satsString), "%u sats", gps->getNumSatellites());
-        display->drawString(x + 12, y - 2, satsString);
+        snprintf(textString, sizeof(textString), "%u sats", gps->getNumSatellites());
     }
+    display->drawString(x + 12, y, textString);
 }
 
 // Draw status when GPS is disabled or not present
@@ -569,8 +567,7 @@ void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t 
             displayLine);
     } else {
         UIRenderer::drawGps(
-            display, 0,
-            ((rows == 4) ? compactSecondLine : ((SCREEN_HEIGHT > 64) ? compactSecondLine : moreCompactSecondLine)) + 3,
+            display, 0, ((rows == 4) ? compactSecondLine : ((SCREEN_HEIGHT > 64) ? compactSecondLine : moreCompactSecondLine)),
             gpsStatus);
     }
 #endif
@@ -901,8 +898,6 @@ void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiState *stat
     bool origBold = config.display.heading_bold;
     config.display.heading_bold = false;
 
-    const char *Satelite_String = "Sat:";
-    display->drawString(0, ((SCREEN_HEIGHT > 64) ? compactFirstLine : moreCompactFirstLine), Satelite_String);
     const char *displayLine = ""; // Initialize to empty string by default
     if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
         if (config.position.fixed_position) {
@@ -910,12 +905,10 @@ void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiState *stat
         } else {
             displayLine = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "No GPS" : "GPS off";
         }
-        display->drawString(display->getStringWidth(Satelite_String) + 3,
-                            ((SCREEN_HEIGHT > 64) ? compactFirstLine : moreCompactFirstLine), displayLine);
+        display->drawFastImage(x + 1, y, 8, 8, imgSatellite);
+        display->drawString(x + 12, ((SCREEN_HEIGHT > 64) ? compactFirstLine : moreCompactFirstLine), displayLine);
     } else {
-        displayLine = "GPS enabled"; // Set a value when GPS is enabled
-        UIRenderer::drawGps(display, display->getStringWidth(Satelite_String) + 3,
-                            ((SCREEN_HEIGHT > 64) ? compactFirstLine : moreCompactFirstLine) + 3, gpsStatus);
+        UIRenderer::drawGps(display, 0, ((SCREEN_HEIGHT > 64) ? compactFirstLine : moreCompactFirstLine), gpsStatus);
     }
 
     config.display.heading_bold = origBold;
