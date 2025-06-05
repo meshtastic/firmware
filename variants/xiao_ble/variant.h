@@ -145,12 +145,12 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #ifdef EBYTE_E22_900M30S
 // 10dB PA gain and 30dB rated output; based on measurements from
 // https://github.com/S5NC/EBYTE_ESP32-S3/blob/main/E22-900M30S%20power%20output%20testing.txt
-#define REGULATORY_GAIN_LORA 7
+#define TX_GAIN_LORA 7
 #define SX126X_MAX_POWER 22
 #endif
 #ifdef EBYTE_E22_900M33S
 // 25dB PA gain and 33dB rated output; based on TX Power Curve from E22-900M33S_UserManual_EN_v1.0.pdf
-#define REGULATORY_GAIN_LORA 25
+#define TX_GAIN_LORA 25
 #define SX126X_MAX_POWER 8
 #endif
 #endif
@@ -189,9 +189,8 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 
 // Battery
 
-#define BAT_READ                                                                                                                 \
-    14 // P0_14 = 14  Reads battery voltage from divider on signal board. (PIN_VBAT is reading voltage divider on XIAO and is
-       // program pin 32 / or P0.31)
+#define ADC_CTRL VBAT_ENABLE // P0.14: VBAT voltage divider
+#define ADC_CTRL_ENABLED LOW // ... sink
 #define BATTERY_SENSE_RESOLUTION_BITS 10
 #define CHARGE_LED 23 // P0_17 = 17  D23   YELLOW CHARGE LED
 #define HICHG 22      // P0_13 = 13  D22   Charge-select pin for Lipo for 100 mA instead of default 50mA charge

@@ -210,17 +210,8 @@ void NRF52Bluetooth::shutdown()
 {
     // Shutdown bluetooth for minimum power draw
     LOG_INFO("Disable NRF52 bluetooth");
-    uint8_t connection_num = Bluefruit.connected();
-    if (connection_num) {
-        for (uint8_t i = 0; i < connection_num; i++) {
-            LOG_INFO("NRF52 bluetooth disconnecting handle %d", i);
-            Bluefruit.disconnect(i);
-        }
-        // Wait for disconnection
-        while (Bluefruit.connected())
-            yield();
-        LOG_INFO("All bluetooth connections ended");
-    }
+    Bluefruit.Security.setPairPasskeyCallback(NRF52Bluetooth::onUnwantedPairing); // Actively refuse (during factory reset)
+    disconnect();
     Bluefruit.Advertising.stop();
 }
 void NRF52Bluetooth::startDisabled()
@@ -372,6 +363,33 @@ bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passke
     LOG_INFO("BLE passkey pair: match_request=%i", match_request);
     return true;
 }
+
+// Actively refuse new BLE pairings
+// After clearing bonds (at factory reset), clients seem initially able to attempt to re-pair, even with advertising disabled.
+// On NRF52Bluetooth::shutdown, we change the pairing callback to this method, to aggressively refuse any connection attempts.
+bool NRF52Bluetooth::onUnwantedPairing(uint16_t conn_handle, uint8_t const passkey[6], bool match_request)
+{
+    NRF52Bluetooth::disconnect();
+    return false;
+}
+
+// Disconnect any BLE connections
+void NRF52Bluetooth::disconnect()
+{
+    uint8_t connection_num = Bluefruit.connected();
+    if (connection_num) {
+        // Close all connections. We're only expecting one.
+        for (uint8_t i = 0; i < connection_num; i++)
+            Bluefruit.disconnect(i);
+
+        // Wait for disconnection
+        while (Bluefruit.connected())
+            yield();
+
+        LOG_INFO("Ended BLE connection");
+    }
+}
+
 void NRF52Bluetooth::onPairingCompleted(uint16_t conn_handle, uint8_t auth_status)
 {
     if (auth_status == BLE_GAP_SEC_STATUS_SUCCESS) {

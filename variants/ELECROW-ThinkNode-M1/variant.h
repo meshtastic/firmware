@@ -41,16 +41,15 @@ extern "C" {
 #define NUM_ANALOG_INPUTS (1)
 #define NUM_ANALOG_OUTPUTS (0)
 
-#define PIN_LED1 -1
 #define PIN_LED2 -1
 #define PIN_LED3 -1
 
 // LED
-#define POWER_LED (32 + 6) // red
+#define PIN_LED1 (32 + 6) // red
 #define LED_POWER (32 + 4)
 #define USER_LED (0 + 13) // green
 // USB_CHECK
-#define USB_CHECK (32 + 3)
+#define EXT_PWR_DETECT (32 + 3)
 #define ADC_V (0 + 8)
 
 #define LED_RED PIN_LED3
@@ -59,7 +58,7 @@ extern "C" {
 #define LED_BUILTIN LED_BLUE
 #define LED_CONN PIN_GREEN
 #define LED_STATE_ON 0 // State when LED is lit  // LED灯亮时的状态
-#define M1_buzzer (0 + 6)
+#define PIN_BUZZER (0 + 6)
 /*
  * Buttons
  */
@@ -82,6 +81,7 @@ extern "C" {
 static const uint8_t A0 = PIN_A0;
 
 #define ADC_RESOLUTION 14
+#define BATTERY_SENSE_SAMPLES 30
 
 #define PIN_NFC1 (9)
 #define PIN_NFC2 (10)
@@ -159,7 +159,7 @@ External serial flash WP25R1635FZUIL0
 
 #define GPS_THREAD_INTERVAL 50
 
-#define PIN_GPS_PPS (32 + 1) // GPS开关判断
+#define PIN_GPS_SWITCH (32 + 1) // GPS开关判断
 
 #define PIN_SERIAL1_RX GPS_TX_PIN
 #define PIN_SERIAL1_TX GPS_RX_PIN

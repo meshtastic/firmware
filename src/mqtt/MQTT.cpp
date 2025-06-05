@@ -256,6 +256,11 @@ bool isDefaultServer(const String &host)
     return host.length() == 0 || host == default_mqtt_address;
 }
 
+bool isDefaultRootTopic(const String &root)
+{
+    return root.length() == 0 || root == default_mqtt_root;
+}
+
 struct PubSubConfig {
     explicit PubSubConfig(const meshtastic_ModuleConfig_MQTTConfig &config)
     {
@@ -281,7 +286,7 @@ struct PubSubConfig {
 #if HAS_NETWORKING
 bool connectPubSub(const PubSubConfig &config, PubSubClient &pubSub, Client &client)
 {
-    pubSub.setBufferSize(1024);
+    pubSub.setBufferSize(1024, 1024);
     pubSub.setClient(client);
     pubSub.setServer(config.serverAddr.c_str(), config.serverPort);
 
@@ -387,10 +392,12 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
             cryptTopic = moduleConfig.mqtt.root + cryptTopic;
             jsonTopic = moduleConfig.mqtt.root + jsonTopic;
             mapTopic = moduleConfig.mqtt.root + mapTopic;
+            isConfiguredForDefaultRootTopic = isDefaultRootTopic(moduleConfig.mqtt.root);
         } else {
             cryptTopic = "msh" + cryptTopic;
             jsonTopic = "msh" + jsonTopic;
             mapTopic = "msh" + mapTopic;
+            isConfiguredForDefaultRootTopic = true;
         }
 
         if (moduleConfig.mqtt.map_reporting_enabled && moduleConfig.mqtt.has_map_report_settings) {
@@ -762,18 +769,24 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
 
 void MQTT::perhapsReportToMap()
 {
-    if (!moduleConfig.mqtt.map_reporting_enabled || !(moduleConfig.mqtt.proxy_to_client_enabled || isConnectedDirectly()))
+    if (!moduleConfig.mqtt.map_reporting_enabled || !moduleConfig.mqtt.map_report_settings.should_report_location ||
+        !(moduleConfig.mqtt.proxy_to_client_enabled || isConnectedDirectly()))
         return;
+
+    // Coerce the map position precision to be within the valid range
+    // This removes obtusely large radius and privacy problematic ones from the map
+    if (map_position_precision < 12 || map_position_precision > 15) {
+        LOG_WARN("MQTT Map report position precision %u is out of range, using default %u", map_position_precision,
+                 default_map_position_precision);
+        map_position_precision = default_map_position_precision;
+    }
 
     if (Throttle::isWithinTimespanMs(last_report_to_map, map_publish_interval_msecs))
         return;
 
-    if (map_position_precision == 0 || (localPosition.latitude_i == 0 && localPosition.longitude_i == 0)) {
+    if (localPosition.latitude_i == 0 && localPosition.longitude_i == 0) {
         last_report_to_map = millis();
-        if (map_position_precision == 0)
-            LOG_WARN("MQTT Map report enabled, but precision is 0");
-        if (localPosition.latitude_i == 0 && localPosition.longitude_i == 0)
-            LOG_WARN("MQTT Map report enabled, but no position available");
+        LOG_WARN("MQTT Map report enabled, but no position available");
         return;
     }
 
@@ -794,17 +807,14 @@ void MQTT::perhapsReportToMap()
     mapReport.region = config.lora.region;
     mapReport.modem_preset = config.lora.modem_preset;
     mapReport.has_default_channel = channels.hasDefaultChannel();
+    mapReport.has_opted_report_location = true;
 
     // Set position with precision (same as in PositionModule)
-    if (map_position_precision < 32 && map_position_precision > 0) {
-        mapReport.latitude_i = localPosition.latitude_i & (UINT32_MAX << (32 - map_position_precision));
-        mapReport.longitude_i = localPosition.longitude_i & (UINT32_MAX << (32 - map_position_precision));
-        mapReport.latitude_i += (1 << (31 - map_position_precision));
-        mapReport.longitude_i += (1 << (31 - map_position_precision));
-    } else {
-        mapReport.latitude_i = localPosition.latitude_i;
-        mapReport.longitude_i = localPosition.longitude_i;
-    }
+    mapReport.latitude_i = localPosition.latitude_i & (UINT32_MAX << (32 - map_position_precision));
+    mapReport.longitude_i = localPosition.longitude_i & (UINT32_MAX << (32 - map_position_precision));
+    mapReport.latitude_i += (1 << (31 - map_position_precision));
+    mapReport.longitude_i += (1 << (31 - map_position_precision));
+
     mapReport.altitude = localPosition.altitude;
     mapReport.position_precision = map_position_precision;
 

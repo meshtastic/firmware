@@ -210,6 +210,14 @@ bool RadioLibInterface::canSleep()
     return res;
 }
 
+/** Allow other firmware components to ask whether we are currently sending a packet
+Initially implemented to protect T-Echo's capacitive touch button from spurious presses during tx
+*/
+bool RadioLibInterface::isSending()
+{
+    return sendingPacket != NULL;
+}
+
 /** Attempt to cancel a previously sent packet.  Returns true if a packet was found we could cancel */
 bool RadioLibInterface::cancelSending(NodeNum from, PacketId id)
 {

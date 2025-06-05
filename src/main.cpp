@@ -105,7 +105,7 @@ NRF52Bluetooth *nrf52Bluetooth = nullptr;
 #include "AmbientLightingThread.h"
 #include "PowerFSMThread.h"
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
 #include "motion/AccelerometerThread.h"
 AccelerometerThread *accelerometerThread = nullptr;
 #endif
@@ -115,13 +115,17 @@ AccelerometerThread *accelerometerThread = nullptr;
 AudioThread *audioThread = nullptr;
 #endif
 
+#ifdef USE_PCA9557
+PCA9557 IOEXP;
+#endif
+
 #if HAS_TFT
 extern void tftSetup(void);
 #endif
 
 #ifdef HAS_UDP_MULTICAST
-#include "mesh/udp/UdpMulticastThread.h"
-UdpMulticastThread *udpThread = nullptr;
+#include "mesh/udp/UdpMulticastHandler.h"
+UdpMulticastHandler *udpHandler = nullptr;
 #endif
 
 #if defined(TCXO_OPTIONAL)
@@ -131,6 +135,10 @@ float tcxoVoltage = SX126X_DIO3_TCXO_VOLTAGE; // if TCXO is optional, put this h
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
 void setupNicheGraphics();
 #include "nicheGraphics.h"
+#endif
+
+#if defined(HW_SPI1_DEVICE) && defined(ARCH_ESP32)
+SPIClass SPI1(HSPI);
 #endif
 
 using namespace concurrency;
@@ -212,6 +220,64 @@ const char *getDeviceName()
     return name;
 }
 
+#if defined(ELECROW_ThinkNode_M1) || defined(ELECROW_ThinkNode_M2)
+static int32_t ledBlinkCount = 0;
+
+static int32_t elecrowLedBlinker()
+{
+    // are we in alert buzzer mode?
+#if HAS_BUTTON
+    if (buttonThread->isBuzzing()) {
+        // blink LED three times for 3 seconds, then 3 times for a second, with one second pause
+        if (ledBlinkCount % 2) { // odd means LED OFF
+            ledBlink.set(false);
+            ledBlinkCount++;
+            if (ledBlinkCount >= 12)
+                ledBlinkCount = 0;
+            noTone(PIN_BUZZER);
+            return 1000;
+        } else {
+            if (ledBlinkCount < 6) {
+                ledBlink.set(true);
+                tone(PIN_BUZZER, 4000, 3000);
+                ledBlinkCount++;
+                return 3000;
+            } else {
+                ledBlink.set(true);
+                tone(PIN_BUZZER, 4000, 1000);
+                ledBlinkCount++;
+                return 1000;
+            }
+        }
+    } else {
+#endif
+        ledBlinkCount = 0;
+        if (config.device.led_heartbeat_disabled)
+            return 1000;
+
+        static bool ledOn;
+        // remain on when fully charged or discharging above 10%
+        if ((powerStatus->getIsCharging() && powerStatus->getBatteryChargePercent() >= 100) ||
+            (!powerStatus->getIsCharging() && powerStatus->getBatteryChargePercent() >= 10)) {
+            ledOn = true;
+        } else {
+            ledOn ^= 1;
+        }
+        ledBlink.set(ledOn);
+        // when charging, blink 0.5Hz square wave rate to indicate that
+        if (powerStatus->getIsCharging()) {
+            return 500;
+        }
+        // Blink rapidly when almost empty or if battery is not connected
+        if ((!powerStatus->getIsCharging() && powerStatus->getBatteryChargePercent() < 10) || !powerStatus->getHasBattery()) {
+            return 250;
+        }
+#if HAS_BUTTON
+    }
+#endif
+    return 1000;
+}
+#else
 static int32_t ledBlinker()
 {
     // Still set up the blinking (heartbeat) interval but skip code path below, so LED will blink if
@@ -227,6 +293,7 @@ static int32_t ledBlinker()
     // have a very sparse duty cycle of LED being on, unless charging, then blink 0.5Hz square wave rate to indicate that
     return powerStatus->getIsCharging() ? 1000 : (ledOn ? 1 : 1000);
 }
+#endif
 
 uint32_t timeLastPowered = 0;
 
@@ -263,11 +330,6 @@ void printInfo()
 void setup()
 {
 
-#ifdef POWER_CHRG
-    pinMode(POWER_CHRG, OUTPUT);
-    digitalWrite(POWER_CHRG, HIGH);
-#endif
-
 #if defined(PIN_POWER_EN)
     pinMode(PIN_POWER_EN, OUTPUT);
     digitalWrite(PIN_POWER_EN, HIGH);
@@ -276,11 +338,6 @@ void setup()
 #ifdef LED_POWER
     pinMode(LED_POWER, OUTPUT);
     digitalWrite(LED_POWER, HIGH);
-#endif
-
-#ifdef POWER_LED
-    pinMode(POWER_LED, OUTPUT);
-    digitalWrite(POWER_LED, HIGH);
 #endif
 
 #ifdef USER_LED
@@ -315,9 +372,11 @@ void setup()
     SPISettings spiSettings(4000000, MSBFIRST, SPI_MODE0);
 #endif
 
+#if !HAS_TFT
     meshtastic_Config_DisplayConfig_OledType screen_model =
         meshtastic_Config_DisplayConfig_OledType::meshtastic_Config_DisplayConfig_OledType_OLED_AUTO;
     OLEDDISPLAY_GEOMETRY screen_geometry = GEOMETRY_128_64;
+#endif
 
 #ifdef USE_SEGGER
     auto mode = false ? SEGGER_RTT_MODE_BLOCK_IF_FIFO_FULL : SEGGER_RTT_MODE_NO_BLOCK_TRIM;
@@ -414,22 +473,14 @@ void setup()
 
     OSThread::setup();
 
+#if defined(ELECROW_ThinkNode_M1) || defined(ELECROW_ThinkNode_M2)
+    // The ThinkNodes have their own blink logic
+    ledPeriodic = new Periodic("Blink", elecrowLedBlinker);
+#else
     ledPeriodic = new Periodic("Blink", ledBlinker);
+#endif
 
     fsInit();
-
-#if defined(_SEEED_XIAO_NRF52840_SENSE_H_)
-
-    pinMode(CHARGE_LED, INPUT); // sets to detect if charge LED is on or off to see if USB is plugged in
-
-    pinMode(HICHG, OUTPUT);
-    digitalWrite(HICHG, LOW); // 100 mA charging current if set to LOW and 50mA (actually about 20mA) if set to HIGH
-
-    pinMode(BAT_READ, OUTPUT);
-    digitalWrite(BAT_READ, LOW); // This is pin P0_14 = 14 and by pullling low to GND it provices path to read on pin 32 (P0,31)
-                                 // PIN_VBAT the voltage from divider on XIAO board
-
-#endif
 
 #if !MESHTASTIC_EXCLUDE_I2C
 #if defined(I2C_SDA1) && defined(ARCH_RP2040)
@@ -541,6 +592,7 @@ void setup()
     }
 #endif
 
+#if !HAS_TFT
     auto screenInfo = i2cScanner->firstScreen();
     screen_found = screenInfo.type != ScanI2C::DeviceType::NONE ? screenInfo.address : ScanI2C::ADDRESS_NONE;
 
@@ -558,6 +610,7 @@ void setup()
             screen_model = meshtastic_Config_DisplayConfig_OledType::meshtastic_Config_DisplayConfig_OledType_OLED_AUTO;
         }
     }
+#endif
 
 #define UPDATE_FROM_SCANNER(FIND_FN)
 
@@ -626,7 +679,7 @@ void setup()
     }
 #endif
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+#if !defined(ARCH_STM32WL)
     auto acc_info = i2cScanner->firstAccelerometer();
     accelerometer_found = acc_info.type != ScanI2C::DeviceType::NONE ? acc_info.address : accelerometer_found;
     LOG_DEBUG("acc_info = %i", acc_info.type);
@@ -666,6 +719,7 @@ void setup()
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::DFROBOT_RAIN, meshtastic_TelemetrySensorType_DFROBOT_RAIN);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::LTR390UV, meshtastic_TelemetrySensorType_LTR390UV);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::DPS310, meshtastic_TelemetrySensorType_DPS310);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::PCT2075, meshtastic_TelemetrySensorType_PCT2075);
 
     i2cScanner.reset();
 #endif
@@ -725,9 +779,11 @@ void setup()
     else
         playStartMelody();
 
+#if !HAS_TFT
     // fixed screen override?
     if (config.display.oled != meshtastic_Config_DisplayConfig_OledType_OLED_AUTO)
         screen_model = config.display.oled;
+#endif
 
 #if defined(USE_SH1107)
     screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // set dimension of 128x128
@@ -739,7 +795,7 @@ void setup()
 #endif
 
 #if !MESHTASTIC_EXCLUDE_I2C
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+#if !defined(ARCH_STM32WL)
     if (acc_info.type != ScanI2C::DeviceType::NONE) {
         accelerometerThread = new AccelerometerThread(acc_info.type);
     }
@@ -783,10 +839,16 @@ void setup()
 #elif !defined(ARCH_ESP32) // ARCH_RP2040
     SPI.begin();
 #else
-    // ESP32
+        // ESP32
+#if defined(HW_SPI1_DEVICE)
+    SPI1.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
+    LOG_DEBUG("SPI1.begin(SCK=%d, MISO=%d, MOSI=%d, NSS=%d)", LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
+    SPI1.setFrequency(4000000);
+#else
     SPI.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
     LOG_DEBUG("SPI.begin(SCK=%d, MISO=%d, MOSI=%d, NSS=%d)", LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
     SPI.setFrequency(4000000);
+#endif
 #endif
 
     // Initialize the screen first so we can show the logo while we start up everything else.
@@ -844,12 +906,12 @@ void setup()
 
 #ifdef HAS_UDP_MULTICAST
     LOG_DEBUG("Start multicast thread");
-    udpThread = new UdpMulticastThread();
+    udpHandler = new UdpMulticastHandler();
 #ifdef ARCH_PORTDUINO
     // FIXME: portduino does not ever call onNetworkConnected so call it here because I don't know what happen if I call
     // onNetworkConnected there
     if (config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST) {
-        udpThread->start();
+        udpHandler->start();
     }
 #endif
 #endif
@@ -880,7 +942,7 @@ void setup()
 // Don't call screen setup until after nodedb is setup (because we need
 // the current region name)
 #if defined(ST7701_CS) || defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) ||       \
-    defined(ST7789_CS) || defined(HX8357_CS) || defined(USE_ST7789)
+    defined(ST7789_CS) || defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS)
     screen->setup();
 #elif defined(ARCH_PORTDUINO)
     if (screen_found.port != ScanI2C::I2CPort::NO_I2C || settingsMap[displayPanel]) {
@@ -1227,6 +1289,7 @@ void setup()
     LOG_DEBUG("Free PSRAM : %7d bytes", ESP.getFreePsram());
 #endif
 }
+
 #endif
 uint32_t rebootAtMsec;   // If not zero we will reboot at this time (used to reboot shortly after the update completes)
 uint32_t shutdownAtMsec; // If not zero we will shutdown at this time (used to shutdown from python or mobile client)
@@ -1256,7 +1319,7 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_AUDIO_CONFIG;
 #endif
 // Option to explicitly include canned messages for edge cases, e.g. niche graphics
-#if (!HAS_SCREEN && NO_EXT_GPIO) && !MESHTASTIC_INCLUDE_CANNEDMSG
+#if (!HAS_SCREEN || NO_EXT_GPIO) || MESHTASTIC_EXCLUDE_CANNEDMESSAGES
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_CANNEDMSG_CONFIG;
 #endif
 #if NO_EXT_GPIO
@@ -1264,11 +1327,11 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 #endif
 // Only edge case here is if we apply this a device with built in Accelerometer and want to detect interrupts
 // We'll have to macro guard against those targets potentially
-#if NO_EXT_GPIO
+#if NO_EXT_GPIO || MESHTASTIC_EXCLUDE_DETECTIONSENSOR
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_DETECTIONSENSOR_CONFIG;
 #endif
-// If we don't have any GPIO and we don't have GPS, no purpose in having serial config
-#if NO_EXT_GPIO && NO_GPS
+// If we don't have any GPIO and we don't have GPS OR we don't want too - no purpose in having serial config
+#if NO_EXT_GPIO && NO_GPS || MESHTASTIC_EXCLUDE_SERIAL
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_SERIAL_CONFIG;
 #endif
 #ifndef ARCH_ESP32
