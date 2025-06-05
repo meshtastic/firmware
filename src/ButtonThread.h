@@ -44,6 +44,7 @@ class ButtonThread : public concurrency::OSThread
     int afterLightSleep(esp_sleep_wakeup_cause_t cause);
 #endif
   private:
+    bool shuttingDown = false;
 #if defined(BUTTON_PIN) || defined(ARCH_PORTDUINO) || defined(USERPREFS_BUTTON_PIN)
     static OneButton userButton; // Static - accessed from an interrupt
 #endif

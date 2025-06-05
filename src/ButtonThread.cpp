@@ -173,6 +173,15 @@ int32_t ButtonThread::runOnce()
     canSleep &= userButtonTouch.isIdle();
 #endif
 
+    if (btnEvent == BUTTON_EVENT_NONE && shuttingDown==true) {
+            shuttingDown=false;
+            playShutdownMelody();
+            delay(3000);
+            //gpio_pulldown_en((gpio_num_t)PIN_BUZZER);  // 启用内部下拉
+            //gpio_hold_en((gpio_num_t)PIN_BUZZER);      // 锁定配置      
+            power->shutdown();  
+    }
+
     if (btnEvent != BUTTON_EVENT_NONE) {
         switch (btnEvent) {
         case BUTTON_EVENT_PRESSED: {
@@ -269,6 +278,15 @@ int32_t ButtonThread::runOnce()
                 }
                 break;
 #endif
+            case 5:
+                LOG_INFO("Shutdown from 5 clicks");
+                powerFSM.trigger(EVENT_PRESS);
+                if (screen) {
+                    screen->startAlert("Shutting down...");
+                }
+                playBeep();
+                shuttingDown = true;
+                break;
             // No valid multipress action
             default:
                 break;
@@ -278,22 +296,22 @@ int32_t ButtonThread::runOnce()
         } // end multipress event
 
         case BUTTON_EVENT_LONG_PRESSED: {
-            LOG_BUTTON("Long press!");
-            powerFSM.trigger(EVENT_PRESS);
-            if (screen) {
-                screen->startAlert("Shutting down...");
-            }
-            playBeep();
+            // LOG_BUTTON("Long press!");
+            // powerFSM.trigger(EVENT_PRESS);
+            // if (screen) {
+            //     screen->startAlert("Shutting down...");
+            // }
+            // playBeep();
             break;
         }
 
         // Do actual shutdown when button released, otherwise the button release
         // may wake the board immediatedly.
         case BUTTON_EVENT_LONG_RELEASED: {
-            LOG_INFO("Shutdown from long press");
-            playShutdownMelody();
-            delay(3000);
-            power->shutdown();
+            // LOG_INFO("Shutdown from long press");
+            // playShutdownMelody();
+            // delay(3000);
+            // power->shutdown();
             break;
         }
 
