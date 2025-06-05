@@ -34,7 +34,7 @@ struct EEPROM {
     char *name;
     uint32_t size;
     uint16_t page_size;
-    uint8_t addr_size; // Length of addres in bytes
+    uint8_t addr_size; // Length of address in bytes
     uint8_t i2c_addr_mask;
 };
 
