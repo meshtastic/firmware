@@ -513,7 +513,7 @@ void SerialModule::processWXSerial()
                     // Extract the current line
                     char line[meshtastic_Constants_DATA_PAYLOAD_LEN];
                     memset(line, '\0', sizeof(line));
-                    if (lineEnd - lineStart < sizeof(line) - 1) {
+                    if ((size_t)(lineEnd - lineStart) < sizeof(line) - 1) {
                         memcpy(line, &serialBytes[lineStart], lineEnd - lineStart);
 
                         ParsedLine parsed = parseLine(line);

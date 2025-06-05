@@ -7,10 +7,10 @@
     "cpu": "cortex-m4",
     "extra_flags": "-DARDUINO_MDBT50Q_RX -DNRF52840_XXAA",
     "f_cpu": "64000000L",
-    "hwids": [["0x2886", "0x0059"]],
-    "usb_product": "XIAO-BOOT",
+    "hwids": [["0x2886", "0x1668"]],
+    "usb_product": "TRACKER L1",
     "mcu": "nrf52840",
-    "variant": "Seeed_Solar_Node",
+    "variant": "seeed_wio_tracker_L1",
     "bsp": {
       "name": "adafruit"
     },
@@ -31,7 +31,7 @@
     "openocd_target": "nrf52840-mdk-rs"
   },
   "frameworks": ["arduino"],
-  "name": "Seeed_Solar_Node",
+  "name": "seeed_wio_tracker_L1",
   "upload": {
     "maximum_ram_size": 248832,
     "maximum_size": 815104,
@@ -49,6 +49,6 @@
     "require_upload_port": true,
     "wait_for_upload_port": true
   },
-  "url": "https://www.seeedstudio.com/Seeed-XIAO-BLE-Sense-nRF52840-p-5253.html",
+  "url": "https://www.seeedstudio.com/Wio-Tracker-L1-p-6477.html",
   "vendor": "Seeed Studio"
 }

@@ -293,8 +293,8 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     }
 
 #if HAS_UDP_MULTICAST
-    if (udpThread && config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST) {
-        udpThread->onSend(const_cast<meshtastic_MeshPacket *>(p));
+    if (udpHandler && config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST) {
+        udpHandler->onSend(const_cast<meshtastic_MeshPacket *>(p));
     }
 #endif
 

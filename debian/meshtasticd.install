@@ -1,4 +1,4 @@
-.pio/build/native-tft/meshtasticd  usr/sbin
+.pio/build/native-tft/meshtasticd  usr/bin
 
 bin/config.yaml                    etc/meshtasticd
 bin/config.d/*                     etc/meshtasticd/available.d

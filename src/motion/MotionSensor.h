@@ -49,7 +49,7 @@ class MotionSensor
     // Register a button press when a double-tap is detected
     virtual void buttonPress();
 
-#if defined(RAK_4631) & !MESHTASTIC_EXCLUDE_SCREEN
+#if !defined(MESHTASTIC_EXCLUDE_SCREEN) && HAS_SCREEN
     // draw an OLED frame (currently only used by the RAK4631 BMX160 sensor)
     static void drawFrameCalibration(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 #endif

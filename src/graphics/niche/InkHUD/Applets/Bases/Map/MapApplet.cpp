@@ -286,6 +286,10 @@ void InkHUD::MapApplet::drawLabeledMarker(meshtastic_NodeInfoLite *node)
     bool isOurNode = node->num == nodeDB->getNodeNum();
     bool unknownHops = !node->has_hops_away && !isOurNode;
 
+    // Parse any non-ascii chars in the short name,
+    // and use last 4 instead if unknown / can't render
+    std::string shortName = parseShortName(node);
+
     // We will draw a left or right hand variant, to place text towards screen center
     // Hopefully avoid text spilling off screen
     // Most values are the same, regardless of left-right handedness
@@ -299,7 +303,7 @@ void InkHUD::MapApplet::drawLabeledMarker(meshtastic_NodeInfoLite *node)
         markerSize = map(node->hops_away, 0, config.lora.hop_limit, markerSizeMax, markerSizeMin);
 
     // Common dimensions (left or right variant)
-    textW = getTextWidth(node->user.short_name);
+    textW = getTextWidth(shortName);
     if (textW == 0)
         paddingInnerW = 0; // If no text, no padding for text
     textH = fontSmall.lineHeight();
@@ -325,7 +329,7 @@ void InkHUD::MapApplet::drawLabeledMarker(meshtastic_NodeInfoLite *node)
     drawRect(labelX, labelY, labelW, labelH, BLACK);
 
     // Short name
-    printAt(textX, textY, node->user.short_name, LEFT, MIDDLE);
+    printAt(textX, textY, shortName, LEFT, MIDDLE);
 
     // If the label is for our own node,
     // fade it by overdrawing partially with white

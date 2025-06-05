@@ -1,8 +1,10 @@
-#include "./LCMEN2R13EFC1.h"
-
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
 
+#include "./LCMEN2R13EFC1.h"
+
 #include <assert.h>
+
+#include "SPILock.h"
 
 using namespace NicheGraphics::Drivers;
 
@@ -150,6 +152,9 @@ void LCMEN213EFC1::reset()
 
 void LCMEN213EFC1::sendCommand(const uint8_t command)
 {
+    // Take firmware's SPI lock
+    spiLock->lock();
+
     spi->beginTransaction(spiSettings);
     digitalWrite(pin_dc, LOW); // DC pin low indicates command
     digitalWrite(pin_cs, LOW);
@@ -157,6 +162,8 @@ void LCMEN213EFC1::sendCommand(const uint8_t command)
     digitalWrite(pin_cs, HIGH);
     digitalWrite(pin_dc, HIGH);
     spi->endTransaction();
+
+    spiLock->unlock();
 }
 
 void LCMEN213EFC1::sendData(uint8_t data)
@@ -166,6 +173,9 @@ void LCMEN213EFC1::sendData(uint8_t data)
 
 void LCMEN213EFC1::sendData(const uint8_t *data, uint32_t size)
 {
+    // Take firmware's SPI lock
+    spiLock->lock();
+
     spi->beginTransaction(spiSettings);
     digitalWrite(pin_dc, HIGH); // DC pin HIGH indicates data, instead of command
     digitalWrite(pin_cs, LOW);
@@ -183,6 +193,8 @@ void LCMEN213EFC1::sendData(const uint8_t *data, uint32_t size)
     digitalWrite(pin_cs, HIGH);
     digitalWrite(pin_dc, HIGH);
     spi->endTransaction();
+
+    spiLock->unlock();
 }
 
 void LCMEN213EFC1::configFull()
