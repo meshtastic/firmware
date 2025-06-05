@@ -131,10 +131,9 @@ static void onNetworkConnected()
         initApiServer();
 #endif
 #if HAS_WIREGUARD_VPN
-    if (getRTCQuality() >= RTCQualityNTP) {
-        startWireGuard();
-    } else {
-        LOG_INFO("Waiting for NTP before starting WireGuard");
+        // Start the VPN once we have a valid NTP derived time
+        if (WiFi.isConnected() && getRTCQuality() >= RTCQualityNTP && !isWireGuardRunning()) {
+            startWireGuard();
         }
 #endif
         APStartupComplete = true;
@@ -191,7 +190,12 @@ static int32_t reconnectWiFi()
             tv.tv_sec = timeClient.getEpochTime();
             tv.tv_usec = 0;
 
+            // Record that the internal RTC has a valid NTP time.
+            // This works even on boards without a hardware RTC.
             perhapsSetRTC(RTCQualityNTP, &tv);
+#if HAS_WIREGUARD_VPN
+            startWireGuard();
+#endif
             lastrun_ntp = millis();
         } else {
             LOG_DEBUG("NTP Update failed");
@@ -347,6 +351,9 @@ static void WiFiEvent(WiFiEvent_t event)
             needReconnect = true;
             wifiReconnect->setIntervalFromNow(1000);
         }
+#if HAS_WIREGUARD_VPN
+        stopWireGuard();
+#endif
         break;
     case ARDUINO_EVENT_WIFI_STA_AUTHMODE_CHANGE:
         LOG_INFO("Authentication mode of access point has changed");
@@ -354,6 +361,9 @@ static void WiFiEvent(WiFiEvent_t event)
     case ARDUINO_EVENT_WIFI_STA_GOT_IP:
         LOG_INFO("Obtained IP address: %s", WiFi.localIP().toString().c_str());
         onNetworkConnected();
+#if HAS_WIREGUARD_VPN
+        startWireGuard();
+#endif
         break;
     case ARDUINO_EVENT_WIFI_STA_GOT_IP6:
 #if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
@@ -361,6 +371,9 @@ static void WiFiEvent(WiFiEvent_t event)
         LOG_INFO("Obtained GlobalIP6 address: %s", WiFi.globalIPv6().toString().c_str());
 #else
         LOG_INFO("Obtained IP6 address: %s", WiFi.localIPv6().toString().c_str());
+#endif
+#if HAS_WIREGUARD_VPN
+        startWireGuard();
 #endif
         break;
     case ARDUINO_EVENT_WIFI_STA_LOST_IP:
@@ -371,6 +384,9 @@ static void WiFiEvent(WiFiEvent_t event)
             needReconnect = true;
             wifiReconnect->setIntervalFromNow(1000);
         }
+#if HAS_WIREGUARD_VPN
+        stopWireGuard();
+#endif
         break;
     case ARDUINO_EVENT_WPS_ER_SUCCESS:
         LOG_INFO("WiFi Protected Setup (WPS): succeeded in enrollee mode");
@@ -417,6 +433,9 @@ static void WiFiEvent(WiFiEvent_t event)
     case ARDUINO_EVENT_ETH_STOP:
         syslog.disable();
         LOG_INFO("Ethernet stopped");
+#if HAS_WIREGUARD_VPN
+        stopWireGuard();
+#endif
         break;
     case ARDUINO_EVENT_ETH_CONNECTED:
         LOG_INFO("Ethernet connected");
@@ -424,12 +443,18 @@ static void WiFiEvent(WiFiEvent_t event)
     case ARDUINO_EVENT_ETH_DISCONNECTED:
         syslog.disable();
         LOG_INFO("Ethernet disconnected");
+#if HAS_WIREGUARD_VPN
+        stopWireGuard();
+#endif
         break;
     case ARDUINO_EVENT_ETH_GOT_IP:
 #ifdef USE_WS5500
         LOG_INFO("Obtained IP address: %s, %u Mbps, %s", ETH.localIP().toString().c_str(), ETH.linkSpeed(),
                  ETH.fullDuplex() ? "FULL_DUPLEX" : "HALF_DUPLEX");
         onNetworkConnected();
+#if HAS_WIREGUARD_VPN
+        startWireGuard();
+#endif
 #endif
         break;
     case ARDUINO_EVENT_ETH_GOT_IP6:
@@ -439,6 +464,9 @@ static void WiFiEvent(WiFiEvent_t event)
         LOG_INFO("Obtained GlobalIP6 address: %s", ETH.globalIPv6().toString().c_str());
 #else
         LOG_INFO("Obtained IP6 address: %s", ETH.localIPv6().toString().c_str());
+#endif
+#if HAS_WIREGUARD_VPN
+        startWireGuard();
 #endif
 #endif
         break;
