@@ -768,7 +768,7 @@ void NodeDB::installDefaultModuleConfig()
 #endif
 
     moduleConfig.has_canned_message = true;
-
+    moduleConfig.canned_message.enabled = true;
 #if USERPREFS_MQTT_ENABLED && !MESHTASTIC_EXCLUDE_MQTT
     moduleConfig.mqtt.enabled = true;
 #endif

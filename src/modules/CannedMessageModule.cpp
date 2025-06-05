@@ -1696,7 +1696,7 @@ bool CannedMessageModule::saveProtoForModule()
  */
 void CannedMessageModule::installDefaultCannedMessageModuleConfig()
 {
-    memset(cannedMessageModuleConfig.messages, 0, sizeof(cannedMessageModuleConfig.messages));
+    strncpy(cannedMessageModuleConfig.messages, "Hi|Bye|Yes|No|Ok", sizeof(cannedMessageModuleConfig.messages));
 }
 
 /**
