@@ -5,7 +5,7 @@ E-Ink display driver
     - Manufacturer: Zhongjingyuan
     - Size: 2.9 inch
     - Resolution: 128px x 296px
-    - Flex connector label (hints id only): FPC-A005 20.06.15 TRX
+    - Flex connector label (not a unique identifier): FPC-A005 20.06.15 TRX
 
     Note: as of Feb. 2025, these panels are used for "WeActStudio 2.9in B&W" display modules
 
