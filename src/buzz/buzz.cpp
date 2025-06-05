@@ -107,6 +107,35 @@ void playLongPressLeadUp()
     playTones(melody, sizeof(melody) / sizeof(ToneDuration));
 }
 
+// Static state for progressive lead-up notes
+static int leadUpNoteIndex = 0;
+static const ToneDuration leadUpNotes[] = {
+    {NOTE_C3, 100}, // Start low
+    {NOTE_E3, 100}, // Step up
+    {NOTE_G3, 100}, // Keep climbing
+    {NOTE_B3, 150}  // Peak with longer note for emphasis
+};
+static const int leadUpNotesCount = sizeof(leadUpNotes) / sizeof(ToneDuration);
+
+bool playNextLeadUpNote()
+{
+    if (leadUpNoteIndex >= leadUpNotesCount) {
+        return false; // All notes have been played
+    }
+
+    // Use playTones to handle buzzer logic consistently
+    const auto &note = leadUpNotes[leadUpNoteIndex];
+    playTones(&note, 1); // Play single note using existing playTones function
+
+    leadUpNoteIndex++;
+    return true; // Note was played (playTones handles buzzer availability internally)
+}
+
+void resetLeadUpSequence()
+{
+    leadUpNoteIndex = 0;
+}
+
 void playComboTune()
 {
     // Quick high-pitched notes with trills

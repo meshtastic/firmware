@@ -21,7 +21,7 @@
 #endif
 
 #ifndef BUTTON_LEADUP_MS
-#define BUTTON_LEADUP_MS 2500 // Play lead-up sound after 2.5 seconds of holding
+#define BUTTON_LEADUP_MS 2200 // Play lead-up sound after 2.5 seconds of holding
 #endif
 
 class ButtonThread : public concurrency::OSThread
@@ -97,6 +97,8 @@ class ButtonThread : public concurrency::OSThread
 
     // Long press lead-up tracking
     bool leadUpPlayed = false;
+    uint32_t lastLeadUpNoteTime = 0;
+    bool leadUpSequenceActive = false;
 
     static void wakeOnIrq(int irq, int mode);
 

@@ -9,3 +9,5 @@ void playGPSDisableBeep();
 void playComboTune();
 void playBoop();
 void playLongPressLeadUp();
+bool playNextLeadUpNote();  // Play the next note in the lead-up sequence
+void resetLeadUpSequence(); // Reset the lead-up sequence to start from beginning

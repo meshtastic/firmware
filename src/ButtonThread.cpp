@@ -229,18 +229,33 @@ int32_t ButtonThread::runOnce()
     if (buttonCurrentlyPressed && !buttonWasPressed) {
         buttonPressStartTime = millis();
         leadUpPlayed = false;
+        leadUpSequenceActive = false;
+        resetLeadUpSequence();
     }
 
-    // Check if we should play lead-up sound
-    if (buttonCurrentlyPressed && !leadUpPlayed && (millis() - buttonPressStartTime) >= BUTTON_LEADUP_MS &&
+    // Progressive lead-up sound system
+    if (buttonCurrentlyPressed && (millis() - buttonPressStartTime) >= BUTTON_LEADUP_MS &&
         (millis() - buttonPressStartTime) < BUTTON_LONGPRESS_MS) {
-        playLongPressLeadUp();
-        leadUpPlayed = true;
+
+        // Start the progressive sequence if not already active
+        if (!leadUpSequenceActive) {
+            leadUpSequenceActive = true;
+            lastLeadUpNoteTime = millis();
+            playNextLeadUpNote(); // Play the first note immediately
+        }
+        // Continue playing notes at intervals
+        else if ((millis() - lastLeadUpNoteTime) >= 400) { // 400ms interval between notes
+            if (playNextLeadUpNote()) {
+                lastLeadUpNoteTime = millis();
+            }
+        }
     }
 
     // Reset when button is released
     if (!buttonCurrentlyPressed && buttonWasPressed) {
         leadUpPlayed = false;
+        leadUpSequenceActive = false;
+        resetLeadUpSequence();
     }
 
     buttonWasPressed = buttonCurrentlyPressed;
