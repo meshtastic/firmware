@@ -1,5 +1,5 @@
-#ifndef _SEEED_SOLAR_NODE_H_
-#define _SEEED_SOLAR_NODE_H_
+#ifndef _SEEED_TRACKER_L1_H_
+#define _SEEED_TRACKER_L1_H_
 #include "WVariant.h"
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  Clock Configuration
@@ -20,8 +20,8 @@
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  LEDs
 //  LEDs
-#define PIN_LED1 (12) // LED        P1.15
-#define PIN_LED2 (11) //
+#define PIN_LED1 (11) // LED        P1.15
+#define PIN_LED2 (12) //
 
 #define LED_BUILTIN PIN_LED1
 #define LED_CONN PIN_LED2
@@ -38,28 +38,28 @@
 #define BUTTON_ACTIVE_LOW true
 #define BUTTON_ACTIVE_PULLUP false
 
-#define BUTTON_PIN_TOUCH 20 // Touch button
+#define BUTTON_PIN_TOUCH 13 // Touch button
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  Digital Pin Mapping (D0-D10)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#define D0 0   // P0.02 GNSS_WAKEUP/IO0
-#define D1 1   // P0.03 LORA_DIO1
-#define D2 2   // P0.28 LORA_RESET
-#define D3 3   // P0.29 LORA_BUSY
-#define D4 4   // P0.04 LORA_CS/I2C_SDA
-#define D5 5   // P0.05 LORA_SW/I2C_SCL
-#define D6 6   // P1.11 GNSS_TX
-#define D7 7   // P1.12 GNSS_RX
-#define D8 8   // P1.13 SPI_SCK
-#define D9 9   // P1.14 SPI_MISO
-#define D10 10 // P1.15 SPI_MOSI
-#define D13 13 // P1.01 User Button
-#define D14 14 // P0.09 NFC1/GROVE_D1
-#define D15 15 // P0.10 NFC2/GROVE_D0
-#define D16 16 // P0.31 VBAT_ADC (Battery voltage)
-#define D17 17 // P1.03 GNSS_RESET
-#define D18 18 // P1.05 GNSS_ENABLE
-#define D19 19 // P0.14 BAT_READ
+#define D0 0   // P1.06 GNSS_WAKEUP/IO0
+#define D1 1   // P0.07 LORA_DIO1
+#define D2 2   // P1.07 LORA_RESET
+#define D3 3   // P1.10 LORA_BUSY
+#define D4 4   // P1.14 LORA_CS
+#define D5 5   // P1.08 LORA_SW
+#define D6 6   // P0.27 GNSS_TX
+#define D7 7   // P0.26 GNSS_RX
+#define D8 8   // P0.30 SPI_SCK
+#define D9 9   // P0.03 SPI_MISO
+#define D10 10 // P0.28 SPI_MOSI
+#define D12 12 // P1.00 Buzzer
+#define D13 13 // P0.08 User Button
+#define D14 14 // P0.05 OLED SCL
+#define D15 15 // P0.06 OLED SDA
+#define D16 16 // P0.31 VBAT_ADC
+#define D17 17 // P0.00 GROVE SDA
+#define D18 18 // P0.01 GROVE_SCL
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  Analog Pin Definitions
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -82,12 +82,16 @@
 
 static const uint8_t SDA = PIN_WIRE_SDA;
 static const uint8_t SCL = PIN_WIRE_SCL;
+
+#define HAS_SCREEN 1
+#define USE_SSD1306 1
+
 // SPI Configuration (SX1262)
 
 #define SPI_INTERFACES_COUNT 1
-#define PIN_SPI_MISO 9  // P1.14 (D9)
-#define PIN_SPI_MOSI 10 // P1.15 (D10)
-#define PIN_SPI_SCK 8   // P1.13 (D8)
+#define PIN_SPI_MISO 9  // P0.03 (D9)
+#define PIN_SPI_MOSI 10 // P0.28 (D10)
+#define PIN_SPI_SCK 8   // P0.30 (D8)
 
 // SX1262 LoRa Module Pins
 #define USE_SX1262
@@ -103,27 +107,30 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 //  Power Management
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-#define BAT_READ                                                                                                                 \
-    D19 // P0_14 = 14  Reads battery voltage from divider on signal board. (PIN_VBAT is reading voltage divider on XIAO and is
-        // program pin 32 / or P0.31)
+#define BAT_READ 30 // D30 = P0.04  Reads battery voltage from divider on signal board.
 #define BATTERY_SENSE_RESOLUTION_BITS 12
-#define ADC_MULTIPLIER 3.3
+#define ADC_MULTIPLIER 2.0
 #define BATTERY_PIN PIN_VBAT // PIN_A7
-#define AREF_VOLTAGE 3.3
+#define AREF_VOLTAGE 3.6
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  GPS L76KB
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #define GPS_L76K
 #ifdef GPS_L76K
-#define PIN_GPS_RX D6 // 44
-#define PIN_GPS_TX D7 // 43
+#define PIN_GPS_RX D6 // P0.26
+#define PIN_GPS_TX D7
 #define HAS_GPS 1
 #define GPS_BAUDRATE 9600
 #define GPS_THREAD_INTERVAL 50
 #define PIN_SERIAL1_RX PIN_GPS_TX
 #define PIN_SERIAL1_TX PIN_GPS_RX
+
+#define GPS_RX_PIN PIN_GPS_TX
+#define GPS_TX_PIN PIN_GPS_RX
 #define PIN_GPS_STANDBY D0
-#define GPS_EN D18 // P1.05
+
+// #define GPS_DEBUG
+//  #define GPS_EN D18 // P1.05
 #endif
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -140,6 +147,26 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 #define EXTERNAL_FLASH_DEVICES P25Q16H
 #define EXTERNAL_FLASH_USE_QSPI
 
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  Buzzer
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Buzzer
+
+#define PIN_BUZZER D12 // P1.00, pwm output
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  joystick
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+#define CANNED_MESSAGE_MODULE_ENABLE 1
+
+// trackball
+#define HAS_TRACKBALL 1
+#define TB_UP 25
+#define TB_DOWN 26
+#define TB_LEFT 27
+#define TB_RIGHT 28
+#define TB_PRESS 29
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  Compatibility Definitions
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

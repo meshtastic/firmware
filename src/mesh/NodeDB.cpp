@@ -261,7 +261,7 @@ NodeDB::NodeDB()
 
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
 
-    if (!owner.is_licensed) {
+    if (!owner.is_licensed && config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
         bool keygenSuccess = false;
         if (config.security.private_key.size == 32) {
             if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {

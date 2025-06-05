@@ -34,7 +34,8 @@ bool HostMetricsModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, 
                  sender, t->variant.host_metrics.uptime_seconds, t->variant.host_metrics.diskfree1_bytes,
                  t->variant.host_metrics.freemem_bytes, static_cast<float>(t->variant.host_metrics.load1) / 100,
                  static_cast<float>(t->variant.host_metrics.load5) / 100,
-                 static_cast<float>(t->variant.host_metrics.load15) / 100, t->variant.host_metrics.user_string);
+                 static_cast<float>(t->variant.host_metrics.load15) / 100,
+                 t->variant.host_metrics.has_user_string ? t->variant.host_metrics.user_string : "");
 #endif
     }
     return false; // Let others look at this message also if they want
@@ -124,7 +125,8 @@ bool HostMetricsModule::sendMetrics()
              telemetry.variant.host_metrics.uptime_seconds, telemetry.variant.host_metrics.diskfree1_bytes,
              telemetry.variant.host_metrics.freemem_bytes, static_cast<float>(telemetry.variant.host_metrics.load1) / 100,
              static_cast<float>(telemetry.variant.host_metrics.load5) / 100,
-             static_cast<float>(telemetry.variant.host_metrics.load15) / 100, telemetry.variant.host_metrics.user_string);
+             static_cast<float>(telemetry.variant.host_metrics.load15) / 100,
+             telemetry.variant.host_metrics.has_user_string ? telemetry.variant.host_metrics.user_string : "");
 
     meshtastic_MeshPacket *p = allocDataProtobuf(telemetry);
     p->to = NODENUM_BROADCAST;
