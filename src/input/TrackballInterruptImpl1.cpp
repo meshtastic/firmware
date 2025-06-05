@@ -26,15 +26,13 @@ void TrackballInterruptImpl1::init()
     char eventLeft = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT);
     char eventRight = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT);
     char eventPressed = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT);
-    char eventcancel =
-        static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL);
+    char eventcancel = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL);
 
-    TrackballInterruptBase::init(pinDown, pinUp, pinLeft, pinRight, pinPress, pinmenu,
-                                 eventDown, eventUp, eventLeft, eventRight, eventPressed,
-                                 eventcancel,
-                                 TrackballInterruptImpl1::handleIntDown, TrackballInterruptImpl1::handleIntUp,
-                                 TrackballInterruptImpl1::handleIntLeft, TrackballInterruptImpl1::handleIntRight,
-                                 TrackballInterruptImpl1::handleIntPressed, TrackballInterruptImpl1::handleMenuPressed);
+    TrackballInterruptBase::init(pinDown, pinUp, pinLeft, pinRight, pinPress, pinmenu, eventDown, eventUp, eventLeft, eventRight,
+                                 eventPressed, eventcancel, TrackballInterruptImpl1::handleIntDown,
+                                 TrackballInterruptImpl1::handleIntUp, TrackballInterruptImpl1::handleIntLeft,
+                                 TrackballInterruptImpl1::handleIntRight, TrackballInterruptImpl1::handleIntPressed,
+                                 TrackballInterruptImpl1::handleMenuPressed);
     inputBroker->registerSource(this);
 #endif
 }
@@ -64,13 +62,12 @@ void TrackballInterruptImpl1::handleMenuPressed()
 {
     bool activateMenuAction = false;
 
-    
     if (cannedMessageModule && cannedMessageModule->isUIVisibleAndInterceptingInput()) {
         activateMenuAction = true;
     }
 
     if (activateMenuAction) {
-        
+
         if (trackballInterruptImpl1) {
             LOG_DEBUG("Menu pressed; Canned Message UI is active and intercepting input. Activating CANCEL.");
             trackballInterruptImpl1->intMenuHandler();

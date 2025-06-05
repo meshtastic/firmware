@@ -4,9 +4,8 @@
 TrackballInterruptBase::TrackballInterruptBase(const char *name) : concurrency::OSThread(name), _originName(name) {}
 
 void TrackballInterruptBase::init(uint8_t pinDown, uint8_t pinUp, uint8_t pinLeft, uint8_t pinRight, uint8_t pinPress,
-                                  uint8_t pinMenuParam,
-                                  char eventDown, char eventUp, char eventLeft, char eventRight, char eventPressed,
-                                  char eventmenu, void (*onIntDown)(), void (*onIntUp)(), void (*onIntLeft)(),
+                                  uint8_t pinMenuParam, char eventDown, char eventUp, char eventLeft, char eventRight,
+                                  char eventPressed, char eventmenu, void (*onIntDown)(), void (*onIntUp)(), void (*onIntLeft)(),
                                   void (*onIntRight)(), void (*onIntPress)(), void (*onMenuPress)())
 {
     this->_pinDown = pinDown;

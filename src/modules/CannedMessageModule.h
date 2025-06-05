@@ -92,10 +92,7 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
             return false;
         }
     }
-    bool isUIVisibleAndInterceptingInput()
-    {
-        return this->interceptingKeyboardInput();
-    }
+    bool isUIVisibleAndInterceptingInput() { return this->interceptingKeyboardInput(); }
 
   protected:
     virtual int32_t runOnce() override;
