@@ -52,6 +52,13 @@ BMP280Sensor bmp280Sensor;
 NullSensor bme280Sensor;
 #endif
 
+#if __has_include(<Adafruit_LTR390.h>)
+#include "Sensor/LTR390UVSensor.h"
+LTR390UVSensor ltr390uvSensor;
+#else
+NullSensor ltr390uvSensor;
+#endif
+
 #if __has_include(<bsec2.h>)
 #include "Sensor/BME680Sensor.h"
 BME680Sensor bme680Sensor;
@@ -157,6 +164,13 @@ BMP3XXSensor bmp3xxSensor;
 NullSensor bmp3xxSensor;
 #endif
 
+#if __has_include(<Adafruit_PCT2075.h>)
+#include "Sensor/PCT2075Sensor.h"
+PCT2075Sensor pct2075Sensor;
+#else
+NullSensor pct2075Sensor;
+#endif
+
 RCWL9620Sensor rcwl9620Sensor;
 CGRadSensSensor cgRadSens;
 #endif
@@ -224,6 +238,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
 #endif
             if (bme280Sensor.hasSensor())
                 result = bme280Sensor.runOnce();
+            if (ltr390uvSensor.hasSensor())
+                result = ltr390uvSensor.runOnce();
             if (bmp3xxSensor.hasSensor())
                 result = bmp3xxSensor.runOnce();
             if (bme680Sensor.hasSensor())
@@ -264,6 +280,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = max17048Sensor.runOnce();
             if (cgRadSens.hasSensor())
                 result = cgRadSens.runOnce();
+            if (pct2075Sensor.hasSensor())
+                result = pct2075Sensor.runOnce();
                 // this only works on the wismesh hub with the solar option. This is not an I2C sensor, so we don't need the
                 // sensormap here.
 #ifdef HAS_RAKPROT
@@ -515,6 +533,10 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
         valid = valid && bme280Sensor.getMetrics(m);
         hasSensor = true;
     }
+    if (ltr390uvSensor.hasSensor()) {
+        valid = valid && ltr390uvSensor.getMetrics(m);
+        hasSensor = true;
+    }
     if (bmp3xxSensor.hasSensor()) {
         valid = valid && bmp3xxSensor.getMetrics(m);
         hasSensor = true;
@@ -593,6 +615,10 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
     }
     if (cgRadSens.hasSensor()) {
         valid = valid && cgRadSens.getMetrics(m);
+        hasSensor = true;
+    }
+    if (pct2075Sensor.hasSensor()) {
+        valid = valid && pct2075Sensor.getMetrics(m);
         hasSensor = true;
     }
 #ifdef HAS_RAKPROT
@@ -736,6 +762,11 @@ AdminMessageHandleResult EnvironmentTelemetryModule::handleAdminMessageForModule
     }
     if (bme280Sensor.hasSensor()) {
         result = bme280Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (ltr390uvSensor.hasSensor()) {
+        result = ltr390uvSensor.handleAdminMessage(mp, request, response);
         if (result != AdminMessageHandleResult::NOT_HANDLED)
             return result;
     }

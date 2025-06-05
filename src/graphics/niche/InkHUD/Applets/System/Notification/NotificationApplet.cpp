@@ -213,7 +213,7 @@ std::string InkHUD::NotificationApplet::getNotificationText(uint16_t widthAvaila
 
         // Sender id
         if (node && node->has_user)
-            text += node->user.short_name;
+            text += parseShortName(node);
         else
             text += hexifyNodeNum(message->sender);
 
@@ -227,7 +227,7 @@ std::string InkHUD::NotificationApplet::getNotificationText(uint16_t widthAvaila
 
             // Sender id
             if (node && node->has_user)
-                text += node->user.short_name;
+                text += parseShortName(node);
             else
                 text += hexifyNodeNum(message->sender);
 
