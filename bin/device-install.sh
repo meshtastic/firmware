@@ -2,6 +2,7 @@
 
 PYTHON=${PYTHON:-$(which python3 python | head -n 1)}
 WEB_APP=false
+BPS_RESET=false
 TFT_BUILD=false
 MCU=""
 
@@ -22,7 +23,6 @@ BIGDB_8MB=(
 	"icarus"
 	"seeed-xiao-s3"
 	"tbeam-s3-core"
-	"t-watch-s3"
 	"tracksenger"
 )
 BIGDB_16MB=(
@@ -34,6 +34,7 @@ BIGDB_16MB=(
 	"m5stack-cores3"
 	"station-g2"
 	"t-eth-elite"
+	"t-watch-s3"
 )
 S3_VARIANTS=(
 	"s3"
@@ -43,6 +44,16 @@ S3_VARIANTS=(
 	"wireless-tracker"
 	"station-g2"
 	"unphone"
+	"t-eth-elite"
+ 	"mesh-tab"
+	"dreamcatcher"
+	"ESP32-S3-Pico"
+	"seeed-sensecap-indicator"
+	"heltec_capsule_sensor_v3"
+	"vision-master"
+	"icarus"
+	"tracksenger"
+	"elecrow-adv"
 )
 
 # Determine the correct esptool command to use
@@ -62,7 +73,7 @@ set -e
 # Usage info
 show_help() {
 	cat <<EOF
-Usage: $(basename $0) [-h] [-p ESPTOOL_PORT] [-P PYTHON] [-f FILENAME] [--web]
+Usage: $(basename $0) [-h] [-p ESPTOOL_PORT] [-P PYTHON] [-f FILENAME] [--web] [--1200bps-reset]
 Flash image file to device, but first erasing and writing system information.
 
     -h               Display this help and exit.
@@ -70,6 +81,7 @@ Flash image file to device, but first erasing and writing system information.
     -P PYTHON        Specify alternate python interpreter to use to invoke esptool. (Default: "$PYTHON")
     -f FILENAME      The firmware .bin file to flash.  Custom to your device type and region.
     --web            Enable WebUI. (Default: false)
+    --1200bps-reset  Attempt to place the device in correct mode. Some hardware requires this twice. (1200bps Reset)
 
 EOF
 }
@@ -95,6 +107,9 @@ while [ $# -gt 0 ]; do
 	--web)
 		WEB_APP=true
 		;;
+	--1200bps-reset)
+		BPS_RESET=true
+		;;
 	--) # Stop parsing options
 		shift
 		break
@@ -106,6 +121,11 @@ while [ $# -gt 0 ]; do
 	esac
 	shift # Move to the next argument
 done
+
+if [[ $BPS_RESET == true ]]; then
+	$ESPTOOL_CMD --baud 1200 --after no_reset read_flash_status
+	exit 0
+fi
 
 [ -z "$FILENAME" -a -n "$1" ] && {
 	FILENAME=$1
@@ -138,7 +158,7 @@ if [ -f "${FILENAME}" ] && [ -n "${FILENAME##*"update"*}" ]; then
 
 	# littlefs* offset for BigDB 8mb and OTA OFFSET.
 	for variant in "${BIGDB_8MB[@]}"; do
-		if [ -n "${FILENAME##*"$variant"*}" ]; then
+		if [ -z "${FILENAME##*"$variant"*}" ]; then
 			OFFSET=0x670000
 			OTA_OFFSET=0x340000
 		fi
@@ -146,7 +166,7 @@ if [ -f "${FILENAME}" ] && [ -n "${FILENAME##*"update"*}" ]; then
 
 	# littlefs* offset for BigDB 16mb and OTA OFFSET.
 	for variant in "${BIGDB_16MB[@]}"; do
-		if [ -n "${FILENAME##*"$variant"*}" ]; then
+		if [ -z "${FILENAME##*"$variant"*}" ]; then
 			OFFSET=0xc90000
 			OTA_OFFSET=0x650000
 		fi
@@ -155,7 +175,7 @@ if [ -f "${FILENAME}" ] && [ -n "${FILENAME##*"update"*}" ]; then
 	# Account for S3 board's different OTA partition
 	# FIXME: Use PlatformIO info to determine MCU type, this is unmaintainable
 	for variant in "${S3_VARIANTS[@]}"; do
-		if [ -n "${FILENAME##*"$variant"*}" ]; then
+		if [ -z "${FILENAME##*"$variant"*}" ]; then
 			MCU="esp32s3"
 		fi
 	done

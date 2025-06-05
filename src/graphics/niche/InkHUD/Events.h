@@ -33,6 +33,7 @@ class Events
     int beforeDeepSleep(void *unused);                             // Prepare for shutdown
     int beforeReboot(void *unused);                                // Prepare for reboot
     int onReceiveTextMessage(const meshtastic_MeshPacket *packet); // Store most recent text message
+    int onAdminMessage(const meshtastic_AdminMessage *message);    // Handle incoming admin messages
 #ifdef ARCH_ESP32
     int beforeLightSleep(void *unused); // Prepare for light sleep
 #endif
@@ -52,10 +53,17 @@ class Events
     CallbackObserver<Events, const meshtastic_MeshPacket *> textMessageObserver =
         CallbackObserver<Events, const meshtastic_MeshPacket *>(this, &Events::onReceiveTextMessage);
 
+    // Get notified of incoming admin messages, and handle any which are relevant to InkHUD
+    CallbackObserver<Events, const meshtastic_AdminMessage *> adminMessageObserver =
+        CallbackObserver<Events, const meshtastic_AdminMessage *>(this, &Events::onAdminMessage);
+
 #ifdef ARCH_ESP32
     // Get notified when the system is entering light sleep
     CallbackObserver<Events, void *> lightSleepObserver = CallbackObserver<Events, void *>(this, &Events::beforeLightSleep);
 #endif
+
+    // If set, InkHUD's data will be erased during onReboot
+    bool eraseOnReboot = false;
 };
 
 } // namespace NicheGraphics::InkHUD

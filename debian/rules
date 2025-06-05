@@ -26,7 +26,7 @@ override_dh_auto_build:
 	mkdir -p web && tar -xf web.tar -C web
 	gunzip web/ -r
 	# Build with platformio
-	$(PIO_ENV) platformio run -e native
+	$(PIO_ENV) platformio run -e native-tft
 	# Move the binary and default config to the correct name
-	mv .pio/build/native/program .pio/build/native/meshtasticd
+	mv .pio/build/native-tft/program .pio/build/native-tft/meshtasticd
 	cp bin/config-dist.yaml bin/config.yaml

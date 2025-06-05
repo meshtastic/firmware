@@ -31,6 +31,7 @@
 #define TOUCH_I2C_PORT 0
 #define TOUCH_SLAVE_ADDRESS 0x5D // GT911
 
+#define USE_POWERSAVE
 #define SLEEP_TIME 120
 
 #ifndef HAS_TFT

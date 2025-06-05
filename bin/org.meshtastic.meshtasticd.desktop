@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Meshtastic
+Comment=Meshtastic App
+Exec=meshtasticd
+Icon=org.meshtastic.meshtasticd
+Terminal=true
+Type=Application
+Categories=Network;Chat;HamRadio;

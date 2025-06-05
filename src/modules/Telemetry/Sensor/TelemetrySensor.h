@@ -8,7 +8,9 @@
 #include "NodeDB.h"
 #include <utility>
 
+#if !ARCH_PORTDUINO
 class TwoWire;
+#endif
 
 #define DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS 1000
 extern std::pair<uint8_t, TwoWire *> nodeTelemetrySensorsMap[_meshtastic_TelemetrySensorType_MAX + 1];
@@ -40,7 +42,7 @@ class TelemetrySensor
         initialized = true;
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
-    virtual void setup();
+    virtual void setup() = 0;
 
   public:
     virtual AdminMessageHandleResult handleAdminMessage(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,

@@ -98,9 +98,8 @@ void TwoButton::setWiring(uint8_t whichButton, uint8_t pin, bool internalPullup)
     assert(whichButton < 2);
     buttons[whichButton].pin = pin;
     buttons[whichButton].activeLogic = LOW; // Unimplemented
-    buttons[whichButton].mode = internalPullup ? INPUT_PULLUP : INPUT;
 
-    pinMode(buttons[whichButton].pin, buttons[whichButton].mode);
+    pinMode(buttons[whichButton].pin, internalPullup ? INPUT_PULLUP : INPUT);
 }
 
 void TwoButton::setTiming(uint8_t whichButton, uint32_t debounceMs, uint32_t longpressMs)
@@ -182,7 +181,7 @@ void TwoButton::isrSecondary()
 void TwoButton::startThread()
 {
     if (!OSThread::enabled) {
-        OSThread::setInterval(50);
+        OSThread::setInterval(10);
         OSThread::enabled = true;
     }
 }
@@ -299,7 +298,9 @@ int TwoButton::afterLightSleep(esp_sleep_wakeup_cause_t cause)
     // Manually trigger the button-down ISR
     // - during light sleep, our ISR is disabled
     // - if light sleep ends by button press, pretend our own ISR caught it
-    if (cause == ESP_SLEEP_WAKEUP_GPIO)
+    // - need to manually confirm by reading pin ourselves, to avoid occasional false positives
+    //   (false positive only when using internal pullup resistors?)
+    if (cause == ESP_SLEEP_WAKEUP_GPIO && digitalRead(buttons[0].pin) == buttons[0].activeLogic)
         isrPrimary();
 
     return 0; // Indicates success

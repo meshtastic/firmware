@@ -1,0 +1,115 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<component type="desktop-application">
+  <id>org.meshtastic.meshtasticd</id>
+
+  <name>Meshtastic</name>
+  <summary>Decentralized mesh communication</summary>
+
+  <metadata_license>CC-BY-4.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+
+  <developer id="org.meshtastic">
+    <name>Meshtastic</name>
+  </developer>
+
+  <description>
+    <p>
+      Meshtastic is an open source project for creating off-grid, affordable, and resilient communication with LoRa mesh networks.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">org.meshtastic.meshtasticd.desktop</launchable>
+
+  <categories>
+    <category>Network</category>
+    <category>Chat</category>
+    <category>HamRadio</category>
+  </categories>
+  <keywords>
+    <keyword>mesh</keyword>
+    <keyword>LoRa</keyword>
+  </keywords>
+
+  <recommends>
+    <control>keyboard</control>
+    <control>pointing</control>
+    <control>touch</control>
+  </recommends>
+  <requires>
+    <display_length compare="ge">360</display_length>
+  </requires>
+
+  <branding>
+    <color type="primary" scheme_preference="light">#97be89</color>
+    <color type="primary" scheme_preference="dark">#206538</color>
+  </branding>
+
+  <content_rating type="oars-1.1">
+    <content_attribute id="social-chat">intense</content_attribute>
+    <content_attribute id="social-location">intense</content_attribute>
+  </content_rating>
+
+  <url type="bugtracker">https://github.com/meshtastic/firmware/issues</url>
+  <url type="homepage">https://meshtastic.org/</url>
+  <url type="donation">https://opencollective.com/meshtastic</url>
+  <url type="faq">https://meshtastic.org/docs/software/linux/usage/</url>
+  <url type="vcs-browser">https://github.com/meshtastic/firmware/</url>
+
+  <screenshots>
+    <screenshot type="default">
+      <image>https://meshtastic.org/img/software/meshtastic-ui/mui_home_dashboard_dark.webp</image>
+      <caption>Home Dashboard</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://meshtastic.org/img/software/meshtastic-ui/mui_initial_boot.webp</image>
+      <caption>Setup</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://meshtastic.org/img/software/meshtastic-ui/mui_node_list_dark.webp</image>
+      <caption>Nodes List</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://meshtastic.org/img/software/meshtastic-ui/mui_chat_list_dark.webp</image>
+      <caption>Chats List</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://meshtastic.org/img/software/meshtastic-ui/mui_chat_message_dark.webp</image>
+      <caption>Messages</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://meshtastic.org/img/software/meshtastic-ui/mui_map_dark.webp</image>
+      <caption>Map</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://meshtastic.org/img/software/meshtastic-ui/mui_settings_dark.webp</image>
+      <caption>Settings</caption>
+    </screenshot>
+  </screenshots>
+
+  <releases>
+    <release version="2.6.11" date="2025-06-02">
+      <url type="details">https://github.com/meshtastic/firmware/releases?q=tag%3Av2.6.11</url>
+    </release>
+    <release version="2.6.10" date="2025-05-25">
+      <url type="details">https://github.com/meshtastic/firmware/releases?q=tag%3Av2.6.10</url>
+    </release>
+    <release version="2.6.9" date="2025-05-15">
+      <url type="details">https://github.com/meshtastic/firmware/releases?q=tag%3Av2.6.9</url>
+    </release>
+    <release version="2.6.8" date="2025-05-05">
+      <url type="details">https://github.com/meshtastic/firmware/releases?q=tag%3Av2.6.8</url>
+    </release>
+    <release version="2.6.7" date="2025-04-28">
+      <url type="details">https://github.com/meshtastic/firmware/releases?q=tag%3Av2.6.7</url>
+    </release>
+    <release version="2.6.6" date="2025-04-15">
+      <url type="details">https://github.com/meshtastic/firmware/releases?q=tag%3Av2.6.6</url>
+    </release>
+    <release version="2.6.5" date="2025-03-30">
+      <url type="details">https://github.com/meshtastic/firmware/releases?q=tag%3Av2.6.5</url>
+    </release>
+    <release version="2.6.4" date="2025-03-28">
+      <url type="details">https://github.com/meshtastic/firmware/releases?q=tag%3Av2.6.4</url>
+    </release>
+  </releases>
+</component>
