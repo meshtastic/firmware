@@ -43,6 +43,9 @@ int32_t KbI2cBase::runOnce()
             if (cardkb_found.address == MPR121_KB_ADDR) {
                 MPRkeyboard.begin(MPR121_KB_ADDR, &Wire1);
             }
+            if (cardkb_found.address == XPOWERS_AXP192_AXP2101_ADDRESS) {
+                TCAKeyboard.begin(XPOWERS_AXP192_AXP2101_ADDRESS, &Wire1);
+            }
             break;
 #endif
         case ScanI2C::WIRE:
@@ -54,6 +57,9 @@ int32_t KbI2cBase::runOnce()
             }
             if (cardkb_found.address == MPR121_KB_ADDR) {
                 MPRkeyboard.begin(MPR121_KB_ADDR, &Wire);
+            }
+            if (cardkb_found.address == XPOWERS_AXP192_AXP2101_ADDRESS) {
+                TCAKeyboard.begin(XPOWERS_AXP192_AXP2101_ADDRESS, &Wire);
             }
             break;
         case ScanI2C::NO_I2C:
@@ -221,6 +227,68 @@ int32_t KbI2cBase::runOnce()
             }
             if (e.inputEvent != meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE) {
                 LOG_DEBUG("MP121 Notifying: %i Char: %i", e.inputEvent, e.kbchar);
+                this->notifyObservers(&e);
+            }
+        }
+        break;
+    }
+    case 0x84: { // Adafruit TCA8418
+        TCAKeyboard.trigger();
+        InputEvent e;
+        while (TCAKeyboard.hasEvent()) {
+            char nextEvent = TCAKeyboard.dequeueEvent();
+            e.inputEvent = ANYKEY;
+            e.kbchar = 0x00;
+            e.source = this->_originName;
+            switch (nextEvent) {
+            case _TCA8418_NONE:
+                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
+                e.kbchar = 0x00;
+                break;
+            case _TCA8418_REBOOT:
+                e.inputEvent = ANYKEY;
+                e.kbchar = INPUT_BROKER_MSG_REBOOT;
+                break;
+            case _TCA8418_LEFT:
+                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT;
+                e.kbchar = 0x00;
+                break;
+            case _TCA8418_UP:
+                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP;
+                e.kbchar = 0x00;
+                break;
+            case _TCA8418_DOWN:
+                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN;
+                e.kbchar = 0x00;
+                break;
+            case _TCA8418_RIGHT:
+                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT;
+                e.kbchar = 0x00;
+                break;
+            case _TCA8418_BSP:
+                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_BACK;
+                e.kbchar = 0x08;
+                break;
+            case _TCA8418_SELECT:
+                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT;
+                e.kbchar = 0x0d;
+                break;
+            case _TCA8418_ESC:
+                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL;
+                e.kbchar = 0x1b;
+                break;
+            default:
+                if (nextEvent > 127) {
+                    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
+                    e.kbchar = 0x00;
+                    break;
+                }
+                e.inputEvent = ANYKEY;
+                e.kbchar = nextEvent;
+                break;
+            }
+            if (e.inputEvent != meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE) {
+                LOG_DEBUG("TCA8418 Notifying: %i Char: %c", e.inputEvent, e.kbchar);
                 this->notifyObservers(&e);
             }
         }

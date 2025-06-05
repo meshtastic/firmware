@@ -109,9 +109,8 @@ void esp32Setup()
     randomSeed(seed);
     */
 
-#ifdef POWER_FULL
-    pinMode(POWER_FULL, INPUT);
-    pinMode(7, INPUT);
+#ifdef ADC_V
+    pinMode(ADC_V, INPUT);
 #endif
 
     LOG_DEBUG("Total heap: %d", ESP.getHeapSize());

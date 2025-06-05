@@ -1,3 +1,5 @@
+# MeshAdv-Pi E22-900M30S
+# https://github.com/chrismyers2000/MeshAdv-Pi-Hat
 Lora:
   Module: sx1262
   CS: 21

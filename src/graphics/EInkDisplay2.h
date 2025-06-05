@@ -73,6 +73,10 @@ class EInkDisplay : public OLEDDisplay
     SPIClass *hspi = NULL;
 #endif
 
+#if defined(HELTEC_MESH_POCKET)
+    SPIClass *spi1 = NULL;
+#endif
+
   private:
     // FIXME quick hack to limit drawing to a very slow rate
     uint32_t lastDrawMsec = 0;

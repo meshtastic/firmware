@@ -28,6 +28,10 @@
 #include <graphics/RAKled.h>
 #endif
 
+#ifdef HAS_LP5562
+#include <graphics/NomadStarLED.h>
+#endif
+
 #ifdef HAS_NEOPIXEL
 #include <graphics/NeoPixel.h>
 #endif
@@ -37,10 +41,11 @@
 extern unPhone unphone;
 #endif
 
-#if defined(HAS_NCP5623) || defined(RGBLED_RED) || defined(HAS_NEOPIXEL) || defined(UNPHONE)
+#if defined(HAS_RGB_LED)
 uint8_t red = 0;
 uint8_t green = 0;
 uint8_t blue = 0;
+uint8_t white = 0;
 uint8_t colorState = 1;
 uint8_t brightnessIndex = 0;
 uint8_t brightnessValues[] = {0, 10, 20, 30, 50, 90, 160, 170}; // blue gets multiplied by 1.5
@@ -128,13 +133,19 @@ int32_t ExternalNotificationModule::runOnce()
                           millis());
                 setExternalState(2, !getExternal(2));
             }
-#if defined(HAS_NCP5623) || defined(RGBLED_RED) || defined(HAS_NEOPIXEL) || defined(UNPHONE)
+#if defined(HAS_RGB_LED)
             red = (colorState & 4) ? brightnessValues[brightnessIndex] : 0;          // Red enabled on colorState = 4,5,6,7
             green = (colorState & 2) ? brightnessValues[brightnessIndex] : 0;        // Green enabled on colorState = 2,3,6,7
             blue = (colorState & 1) ? (brightnessValues[brightnessIndex] * 1.5) : 0; // Blue enabled on colorState = 1,3,5,7
+            white = (colorState & 12) ? brightnessValues[brightnessIndex] : 0;
 #ifdef HAS_NCP5623
             if (rgb_found.type == ScanI2C::NCP5623) {
                 rgb.setColor(red, green, blue);
+            }
+#endif
+#ifdef HAS_LP5562
+            if (rgb_found.type == ScanI2C::LP5562) {
+                rgbw.setColor(red, green, blue, white);
             }
 #endif
 #ifdef RGBLED_CA
@@ -233,17 +244,23 @@ void ExternalNotificationModule::setExternalState(uint8_t index, bool on)
         break;
     }
 
-#if defined(HAS_NCP5623) || defined(RGBLED_RED) || defined(HAS_NEOPIXEL) || defined(UNPHONE)
+#if defined(HAS_RGB_LED)
     if (!on) {
         red = 0;
         green = 0;
         blue = 0;
+        white = 0;
     }
 #endif
 
 #ifdef HAS_NCP5623
     if (rgb_found.type == ScanI2C::NCP5623) {
         rgb.setColor(red, green, blue);
+    }
+#endif
+#ifdef HAS_LP5562
+    if (rgb_found.type == ScanI2C::LP5562) {
+        rgbw.setColor(red, green, blue, white);
     }
 #endif
 #ifdef RGBLED_CA
@@ -363,6 +380,12 @@ ExternalNotificationModule::ExternalNotificationModule()
         if (rgb_found.type == ScanI2C::NCP5623) {
             rgb.begin();
             rgb.setCurrent(10);
+        }
+#endif
+#ifdef HAS_LP5562
+        if (rgb_found.type == ScanI2C::LP5562) {
+            rgbw.begin();
+            rgbw.setCurrent(20);
         }
 #endif
 #ifdef RGBLED_RED

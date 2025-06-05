@@ -1,0 +1,11 @@
+# MeshAdv Mini E22-900M22S
+# https://github.com/chrismyers2000/MeshAdv-Mini
+Lora:
+  Module: sx1262  # Ebyte E22-900M22S 
+  CS: 8
+  IRQ: 16
+  Busy: 20
+  Reset: 24
+  TXen: 13
+  DIO2_AS_RF_SWITCH: true
+  DIO3_TCXO_VOLTAGE: true

@@ -24,7 +24,7 @@
 // This board has no GPS or Screen for now
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
-#define NO_GPS
+#define NO_GPS 1
 #define HAS_GPS 0
 #define NO_SCREEN
 #define HAS_SCREEN 0
