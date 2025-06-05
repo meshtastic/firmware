@@ -55,7 +55,7 @@ void drawGps(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSSt
     } else {
         snprintf(textString, sizeof(textString), "%u sats", gps->getNumSatellites());
     }
-    display->drawString(x + 12, y, textString);
+    display->drawString(x + 11, y, textString);
 }
 
 // Draw status when GPS is disabled or not present
@@ -906,7 +906,7 @@ void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiState *stat
             displayLine = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "No GPS" : "GPS off";
         }
         display->drawFastImage(x + 1, y, 8, 8, imgSatellite);
-        display->drawString(x + 12, ((SCREEN_HEIGHT > 64) ? compactFirstLine : moreCompactFirstLine), displayLine);
+        display->drawString(x + 11, ((SCREEN_HEIGHT > 64) ? compactFirstLine : moreCompactFirstLine), displayLine);
     } else {
         UIRenderer::drawGps(display, 0, ((SCREEN_HEIGHT > 64) ? compactFirstLine : moreCompactFirstLine), gpsStatus);
     }
