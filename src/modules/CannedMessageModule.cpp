@@ -15,6 +15,7 @@
 #include "graphics/Screen.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/images.h"
+#include "graphics/emotes.h"
 #include "input/ScanAndSelect.h"
 #include "main.h" // for cardkb_found
 #include "mesh/generated/meshtastic/cannedmessages.pb.h"
@@ -1574,36 +1575,140 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         display->setTextAlignment(TEXT_ALIGN_LEFT);
         display->setFont(FONT_SMALL);
 
-        const int rowSpacing = FONT_HEIGHT_SMALL - 4;
+        // ====== Precompute per-row heights based on emotes (centered if present) ======
+        const int baseRowSpacing = FONT_HEIGHT_SMALL - 4;
+
+        int topMsg;
+        std::vector<int> rowHeights;
+        int visibleRows;
 
         // Draw header (To: ...)
         drawHeader(display, x, y, buffer);
 
         // Shift message list upward by 3 pixels to reduce spacing between header and first message
         const int listYOffset = y + FONT_HEIGHT_SMALL - 3;
-        visibleRows = (display->getHeight() - listYOffset) / rowSpacing;
+        visibleRows = (display->getHeight() - listYOffset) / baseRowSpacing;
 
-        int topMsg =
+        // Figure out which messages are visible and their needed heights
+        topMsg =
             (messagesCount > visibleRows && currentMessageIndex >= visibleRows - 1) ? currentMessageIndex - visibleRows + 2 : 0;
+        int countRows = std::min(messagesCount, visibleRows);
 
-        for (int i = 0; i < std::min(messagesCount, visibleRows); i++) {
-            int lineY = listYOffset + rowSpacing * i;
+        // --- Build per-row max height based on all emotes in line ---
+        for (int i = 0; i < countRows; i++) {
             const char *msg = getMessageByIndex(topMsg + i);
-
-            if ((topMsg + i) == currentMessageIndex) {
-#ifdef USE_EINK
-                display->drawString(x + 0, lineY, ">");
-                display->drawString(x + 12, lineY, msg);
-#else
-                int scrollPadding = 8;
-                display->fillRect(x + 0, lineY + 2, display->getWidth() - scrollPadding, FONT_HEIGHT_SMALL - 5);
-                display->setColor(BLACK);
-                display->drawString(x + 2, lineY, msg);
-                display->setColor(WHITE);
-#endif
-            } else {
-                display->drawString(x + 0, lineY, msg);
+            int maxEmoteHeight = 0;
+            for (int j = 0; j < graphics::numEmotes; j++) {
+                const char* label = graphics::emotes[j].label;
+                if (!label || !*label) continue;
+                const char* search = msg;
+                while ((search = strstr(search, label))) {
+                    if (graphics::emotes[j].height > maxEmoteHeight) maxEmoteHeight = graphics::emotes[j].height;
+                    search += strlen(label); // Advance past this emote
+                }
             }
+            rowHeights.push_back(std::max(baseRowSpacing, maxEmoteHeight + 2));
+        }
+
+        // --- Draw all message rows with multi-emote support ---
+        int yCursor = listYOffset;
+        for (int vis = 0; vis < countRows; vis++) {
+            int msgIdx = topMsg + vis;
+            int lineY = yCursor;
+            const char *msg = getMessageByIndex(msgIdx);
+            int rowHeight = rowHeights[vis];
+            bool highlight = (msgIdx == currentMessageIndex);
+
+            // --- Multi-emote tokenization ---
+            std::vector<std::pair<bool, String>> tokens; // (isEmote, token)
+            int pos = 0;
+            int msgLen = strlen(msg);
+            while (pos < msgLen) {
+                const graphics::Emote* foundEmote = nullptr;
+                int foundAt = -1, foundLen = 0;
+
+                // Look for any emote at this pos (prefer longest match)
+                for (int j = 0; j < graphics::numEmotes; j++) {
+                    const char* label = graphics::emotes[j].label;
+                    int labelLen = strlen(label);
+                    if (labelLen == 0) continue;
+                    if (strncmp(msg + pos, label, labelLen) == 0) {
+                        if (!foundEmote || labelLen > foundLen) {
+                            foundEmote = &graphics::emotes[j];
+                            foundAt = pos;
+                            foundLen = labelLen;
+                        }
+                    }
+                }
+
+                if (foundEmote && foundAt == pos) {
+                    // Emote at current pos
+                    tokens.emplace_back(true, String(foundEmote->label));
+                    pos += foundLen;
+                } else {
+                    // Find next emote
+                    int nextEmote = msgLen;
+                    for (int j = 0; j < graphics::numEmotes; j++) {
+                        const char* label = graphics::emotes[j].label;
+                        if (label[0] == 0) continue;
+                        char* found = strstr(msg + pos, label);
+                        if (found && (found - msg) < nextEmote) {
+                            nextEmote = found - msg;
+                        }
+                    }
+                    int textLen = (nextEmote > pos) ? (nextEmote - pos) : (msgLen - pos);
+                    if (textLen > 0) {
+                        tokens.emplace_back(false, String(msg + pos).substring(0, textLen));
+                        pos += textLen;
+                    } else {
+                        break;
+                    }
+                }
+            }
+            // --- End multi-emote tokenization ---
+
+            // Vertically center based on rowHeight
+            int textYOffset = (rowHeight - FONT_HEIGHT_SMALL) / 2;
+
+#ifdef USE_EINK
+            int nextX = x + (highlight ? 12 : 0);
+            if (highlight) display->drawString(x + 0, lineY + textYOffset, ">");
+#else
+            int scrollPadding = 8;
+            if (highlight) {
+                display->fillRect(x + 0, lineY, display->getWidth() - scrollPadding, rowHeight);
+                display->setColor(BLACK);
+            }
+            int nextX = x + (highlight ? 2 : 0);
+#endif
+
+            // Draw all tokens left to right
+            for (auto& token : tokens) {
+                if (token.first) {
+                    // Emote
+                    const graphics::Emote* emote = nullptr;
+                    for (int j = 0; j < graphics::numEmotes; j++) {
+                        if (token.second == graphics::emotes[j].label) {
+                            emote = &graphics::emotes[j];
+                            break;
+                        }
+                    }
+                    if (emote) {
+                        int emoteYOffset = (rowHeight - emote->height) / 2;
+                        display->drawXbm(nextX, lineY + emoteYOffset, emote->width, emote->height, emote->bitmap);
+                        nextX += emote->width + 2;
+                    }
+                } else {
+                    // Text
+                    display->drawString(nextX, lineY + textYOffset, token.second);
+                    nextX += display->getStringWidth(token.second);
+                }
+            }
+#ifndef USE_EINK
+            if (highlight) display->setColor(WHITE);
+#endif
+
+            yCursor += rowHeight;
         }
 
         // Scrollbar
