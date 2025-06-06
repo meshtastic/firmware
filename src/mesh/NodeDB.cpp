@@ -499,9 +499,6 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
         true; // FIXME: maybe false in the future, and setting region to enable it. (unset region forces it off)
     config.lora.override_duty_cycle = false;
     config.lora.config_ok_to_mqtt = false;
-// IS ONE OF macro - thanks Ben
-#define IS_ONE_OF(value, ...) \
-    ((value == __VA_ARGS__) || ...)
 
 #ifdef USERPREFS_CONFIG_DEVICE_ROLE
     // Restrict ROUTER*, LOST AND FOUND, and REPEATER roles for security reasons
