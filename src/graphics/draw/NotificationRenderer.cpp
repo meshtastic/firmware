@@ -183,7 +183,7 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
                 lineBuffer[39] = '\0';
             else
                 lineBuffer[lineLengths[i]] = '\0';
-        } else if (i >= firstOptionToShow && i <= firstOptionToShow + 3) {
+        } else if (i >= firstOptionToShow && i < firstOptionToShow + 3) {
             if (i == curSelected + firstOption) {
                 if (lineLengths[i] > 35)
                     lineLengths[i] = 35;
