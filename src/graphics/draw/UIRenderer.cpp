@@ -271,7 +271,7 @@ void drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t
     // === Create the shortName and title string ===
     const char *shortName = (node->has_user && haveGlyphs(node->user.short_name)) ? node->user.short_name : "Node";
     char titlestr[32] = {0};
-    snprintf(titlestr, sizeof(titlestr), (SCREEN_WIDTH > 128) ? "Fave: %s" : "Fav: %s", shortName);
+    snprintf(titlestr, sizeof(titlestr), "Fav: %s", shortName);
 
     // === Draw battery/time/mail header (common across screens) ===
     graphics::drawCommonHeader(display, x, y, titlestr);
