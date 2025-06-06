@@ -22,6 +22,9 @@
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 
+const int textPositions[7] = {textZeroLine,   textFirstLine, textSecondLine, textThirdLine,
+                              textFourthLine, textFifthLine, textSixthLine};
+
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR_EXTERNAL
 
 // Sensors
@@ -343,6 +346,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
     display->clear();
     display->setFont(FONT_SMALL);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
+    int line = 1;
 
     // === Set Title
     const char *titleStr = (SCREEN_WIDTH > 128) ? "Environment" : "Env.";
@@ -352,7 +356,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
 
     // === Row spacing setup ===
     const int rowHeight = FONT_HEIGHT_SMALL - 4;
-    int currentY = compactFirstLine;
+    int currentY = textPositions[line++];
 
     // === Show "No Telemetry" if no data available ===
     if (!lastMeasurementPacket) {

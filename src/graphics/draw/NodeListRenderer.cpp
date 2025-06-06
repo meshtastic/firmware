@@ -12,6 +12,9 @@
 #include "meshUtils.h"
 #include <algorithm>
 
+const int textPositions[7] = {textZeroLine,   textFirstLine, textSecondLine, textThirdLine,
+                              textFourthLine, textFifthLine, textSixthLine};
+
 // Forward declarations for functions defined in Screen.cpp
 namespace graphics
 {
@@ -612,14 +615,12 @@ void drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t
     graphics::drawCommonHeader(display, x, y, shortName);
 
     // Dynamic row stacking with predefined Y positions
-    const int yPositions[5] = {moreCompactFirstLine, moreCompactSecondLine, moreCompactThirdLine, moreCompactFourthLine,
-                               moreCompactFifthLine};
-    int line = 0;
+    int line = 1;
 
     // 1. Long Name (always try to show first)
     const char *username = (node->has_user && node->user.long_name[0]) ? node->user.long_name : nullptr;
     if (username && line < 5) {
-        display->drawString(x, yPositions[line++], username);
+        display->drawString(x, textPositions[line++], username);
     }
 
     // 2. Signal and Hops (combined on one line, if available)
@@ -644,7 +645,7 @@ void drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t
         }
     }
     if (signalHopsStr[0] && line < 5) {
-        display->drawString(x, yPositions[line++], signalHopsStr);
+        display->drawString(x, textPositions[line++], signalHopsStr);
     }
 
     // 3. Heard (last seen, skip if node never seen)
@@ -661,7 +662,7 @@ void drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t
                           : 'm'));
     }
     if (seenStr[0] && line < 5) {
-        display->drawString(x, yPositions[line++], seenStr);
+        display->drawString(x, textPositions[line++], seenStr);
     }
 
     // 4. Uptime (only show if metric is present)
@@ -681,7 +682,7 @@ void drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t
         }
     }
     if (uptimeStr[0] && line < 5) {
-        display->drawString(x, yPositions[line++], uptimeStr);
+        display->drawString(x, textPositions[line++], uptimeStr);
     }
 
     // 5. Distance (only if both nodes have GPS position)
@@ -733,7 +734,7 @@ void drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t
     }
     // Only display if we actually have a value!
     if (haveDistance && distStr[0] && line < 5) {
-        display->drawString(x, yPositions[line++], distStr);
+        display->drawString(x, textPositions[line++], distStr);
     }
 
     // Compass rendering for different screen orientations
@@ -744,7 +745,7 @@ void drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t
             showCompass = true;
         }
         if (showCompass) {
-            const int16_t topY = compactFirstLine;
+            const int16_t topY = textPositions[1];
             const int16_t bottomY = SCREEN_HEIGHT - (FONT_HEIGHT_SMALL - 1);
             const int16_t usableHeight = bottomY - topY - 5;
             int16_t compassRadius = usableHeight / 2;
@@ -774,7 +775,7 @@ void drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t
             showCompass = true;
         }
         if (showCompass) {
-            int yBelowContent = (line > 0 && line <= 5) ? (yPositions[line - 1] + FONT_HEIGHT_SMALL + 2) : moreCompactFirstLine;
+            int yBelowContent = (line > 1 && line <= 6) ? (textPositions[line - 1] + FONT_HEIGHT_SMALL + 2) : textPositions[1];
 
             const int margin = 4;
 #if defined(USE_EINK)

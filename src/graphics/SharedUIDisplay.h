@@ -9,27 +9,14 @@ namespace graphics
 // Shared UI Helpers
 // =======================
 
-// Compact line layout
-#define compactFirstLine ((FONT_HEIGHT_SMALL - 1) * 1)
-#define compactSecondLine ((FONT_HEIGHT_SMALL - 1) * 2) - 2
-#define compactThirdLine ((FONT_HEIGHT_SMALL - 1) * 3) - 4
-#define compactFourthLine ((FONT_HEIGHT_SMALL - 1) * 4) - 6
-#define compactFifthLine ((FONT_HEIGHT_SMALL - 1) * 5) - 8
-#define compactSixthLine ((FONT_HEIGHT_SMALL - 1) * 6) - 10
-
-// Standard line layout
-#define standardFirstLine (FONT_HEIGHT_SMALL + 1) * 1
-#define standardSecondLine (FONT_HEIGHT_SMALL + 1) * 2
-#define standardThirdLine (FONT_HEIGHT_SMALL + 1) * 3
-#define standardFourthLine (FONT_HEIGHT_SMALL + 1) * 4
-
-// More Compact line layout
-#define moreCompactFirstLine compactFirstLine
-#define moreCompactSecondLine (moreCompactFirstLine + (FONT_HEIGHT_SMALL - 5))
-#define moreCompactThirdLine (moreCompactSecondLine + (FONT_HEIGHT_SMALL - 5))
-#define moreCompactFourthLine (moreCompactThirdLine + (FONT_HEIGHT_SMALL - 5))
-#define moreCompactFifthLine (moreCompactFourthLine + (FONT_HEIGHT_SMALL - 5))
-#define moreCompactSixthLine (moreCompactFifthLine + (FONT_HEIGHT_SMALL - 5))
+// Consistent Line Spacing
+#define textZeroLine 0
+#define textFirstLine ((FONT_HEIGHT_SMALL - 1) * 1)
+#define textSecondLine (textFirstLine + (FONT_HEIGHT_SMALL - 5))
+#define textThirdLine (textSecondLine + (FONT_HEIGHT_SMALL - 5))
+#define textFourthLine (textThirdLine + (FONT_HEIGHT_SMALL - 5))
+#define textFifthLine (textFourthLine + (FONT_HEIGHT_SMALL - 5))
+#define textSixthLine (textFifthLine + (FONT_HEIGHT_SMALL - 5))
 
 // Quick screen access
 #define SCREEN_WIDTH display->getWidth()

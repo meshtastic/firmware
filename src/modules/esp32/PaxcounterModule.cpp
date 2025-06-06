@@ -115,12 +115,17 @@ int32_t PaxcounterModule::runOnce()
 #if HAS_SCREEN
 
 #include "graphics/ScreenFonts.h"
+#include "graphics/SharedUIDisplay.h"
+
+const int textPositions[7] = {textZeroLine,   textFirstLine, textSecondLine, textThirdLine,
+                              textFourthLine, textFifthLine, textSixthLine};
 
 void PaxcounterModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     display->clear();
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
+    int line = 1;
 
     // === Set Title
     const char *titleStr = "Pax";
@@ -136,7 +141,7 @@ void PaxcounterModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state
 
     display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->setFont(FONT_SMALL);
-    display->drawStringf(display->getWidth() / 2 + x, compactFirstLine, buffer, "WiFi: %d\nBLE: %d\nUptime: %ds",
+    display->drawStringf(display->getWidth() / 2 + x, textPositions[line++], buffer, "WiFi: %d\nBLE: %d\nUptime: %ds",
                          count_from_libpax.wifi_count, count_from_libpax.ble_count, millis() / 1000);
 }
 #endif // HAS_SCREEN

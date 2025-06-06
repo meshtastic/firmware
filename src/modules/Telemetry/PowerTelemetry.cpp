@@ -16,6 +16,9 @@
 #include "sleep.h"
 #include "target_specific.h"
 
+const int textPositions[7] = {textZeroLine,   textFirstLine, textSecondLine, textThirdLine,
+                              textFourthLine, textFifthLine, textSixthLine};
+
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
 
@@ -112,6 +115,7 @@ void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *s
     display->clear();
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
+    int line = 1;
 
     // === Set Title
     const char *titleStr = (SCREEN_WIDTH > 128) ? "Power Telem." : "Power";
@@ -121,7 +125,7 @@ void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *s
 
     if (lastMeasurementPacket == nullptr) {
         // In case of no valid packet, display "Power Telemetry", "No measurement"
-        display->drawString(x, compactFirstLine, "No measurement");
+        display->drawString(x, textPositions[line++], "No measurement");
         return;
     }
 
@@ -132,7 +136,7 @@ void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *s
 
     const meshtastic_Data &p = lastMeasurementPacket->decoded;
     if (!pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Telemetry_msg, &lastMeasurement)) {
-        display->drawString(x, compactFirstLine, "Measurement Error");
+        display->drawString(x, textPositions[line++], "Measurement Error");
         LOG_ERROR("Unable to decode last packet");
         return;
     }
@@ -140,11 +144,11 @@ void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *s
     // Display "Pow. From: ..."
     char fromStr[64];
     snprintf(fromStr, sizeof(fromStr), "Pow. From: %s (%us)", lastSender, agoSecs);
-    display->drawString(x, compactFirstLine, fromStr);
+    display->drawString(x, textPositions[line++], fromStr);
 
     // Display current and voltage based on ...power_metrics.has_[channel/voltage/current]... flags
     const auto &m = lastMeasurement.variant.power_metrics;
-    int lineY = compactSecondLine;
+    int lineY = textSecondLine;
 
     auto drawLine = [&](const char *label, float voltage, float current) {
         char lineStr[64];
