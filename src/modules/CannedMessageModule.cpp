@@ -298,6 +298,10 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
     case CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE:
         return 1;
 
+    // If sending, block all input except global/system (handled above)
+    case CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER:
+        return handleEmotePickerInput(event);
+
     case CANNED_MESSAGE_RUN_STATE_INACTIVE:
         if (isSelect) {
             // When inactive, call the onebutton shortpress instead. Activate module only on up/down
@@ -647,6 +651,12 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
 
     // ---- All hardware keys fall through to here (CardKB, physical, etc.) ----
 
+    if (event->kbchar == INPUT_BROKER_MSG_EMOTE_LIST) {
+        runState = CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER;
+        requestFocus();
+        screen->forceDisplay();
+        return true;
+    }
     // Confirm select (Enter)
     bool isSelect = isSelectEvent(event);
     if (isSelect) {
@@ -713,6 +723,47 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     }
 
     return false;
+}
+
+int CannedMessageModule::handleEmotePickerInput(const InputEvent *event)
+{
+    int numEmotes = graphics::numEmotes;
+    bool isUp = isUpEvent(event);
+    bool isDown = isDownEvent(event);
+    bool isSelect = isSelectEvent(event);
+
+    // Scroll emote list
+    if (isUp && emotePickerIndex > 0) {
+        emotePickerIndex--;
+        screen->forceDisplay();
+        return 1;
+    }
+    if (isDown && emotePickerIndex < numEmotes - 1) {
+        emotePickerIndex++;
+        screen->forceDisplay();
+        return 1;
+    }
+    // Select emote: insert into freetext at cursor and return to freetext
+    if (isSelect) {
+        String label = graphics::emotes[emotePickerIndex].label;
+        String emoteInsert = label; // Just the text label, e.g., ":thumbsup:"
+        if (cursor == freetext.length()) {
+            freetext += emoteInsert;
+        } else {
+            freetext = freetext.substring(0, cursor) + emoteInsert + freetext.substring(cursor);
+        }
+        cursor += emoteInsert.length();
+        runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
+        screen->forceDisplay();
+        return 1;
+    }
+    // Cancel returns to freetext
+    if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL)) {
+        runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
+        screen->forceDisplay();
+        return 1;
+    }
+    return 0;
 }
 
 bool CannedMessageModule::handleSystemCommandInput(const InputEvent *event)
@@ -997,14 +1048,16 @@ int32_t CannedMessageModule::runOnce()
             e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
             switch (this->payload) {
             case 0x08: // backspace
-                if (this->freetext.length() > 0 && this->highlight == 0x00) {
-                    if (this->cursor == this->freetext.length()) {
-                        this->freetext = this->freetext.substring(0, this->freetext.length() - 1);
-                    } else {
-                        this->freetext = this->freetext.substring(0, this->cursor - 1) +
-                                         this->freetext.substring(this->cursor, this->freetext.length());
+                if (this->freetext.length() > 0) {
+                    if (this->cursor > 0) {
+                        if (this->cursor == this->freetext.length()) {
+                            this->freetext = this->freetext.substring(0, this->freetext.length() - 1);
+                        } else {
+                            this->freetext = this->freetext.substring(0, this->cursor - 1) +
+                                            this->freetext.substring(this->cursor, this->freetext.length());
+                        }
+                        this->cursor--;
                     }
-                    this->cursor--;
                 }
                 break;
             case INPUT_BROKER_MSG_TAB: // Tab key: handled by input handler
@@ -1013,19 +1066,20 @@ int32_t CannedMessageModule::runOnce()
             case INPUT_BROKER_MSG_RIGHT:
                 break;
             default:
-                if (this->highlight != 0x00)
-                    break;
-                if (this->cursor == this->freetext.length()) {
-                    this->freetext += this->payload;
-                } else {
-                    this->freetext =
-                        this->freetext.substring(0, this->cursor) + this->payload + this->freetext.substring(this->cursor);
-                }
-                this->cursor += 1;
-                uint16_t maxChars = meshtastic_Constants_DATA_PAYLOAD_LEN - (moduleConfig.canned_message.send_bell ? 1 : 0);
-                if (this->freetext.length() > maxChars) {
-                    this->cursor = maxChars;
-                    this->freetext = this->freetext.substring(0, maxChars);
+                // Only insert ASCII printable characters (32–126)
+                if (this->payload >= 32 && this->payload <= 126) {
+                    if (this->cursor == this->freetext.length()) {
+                        this->freetext += (char)this->payload;
+                    } else {
+                        this->freetext =
+                            this->freetext.substring(0, this->cursor) + (char)this->payload + this->freetext.substring(this->cursor);
+                    }
+                    this->cursor++;
+                    uint16_t maxChars = meshtastic_Constants_DATA_PAYLOAD_LEN - (moduleConfig.canned_message.send_bell ? 1 : 0);
+                    if (this->freetext.length() > maxChars) {
+                        this->cursor = maxChars;
+                        this->freetext = this->freetext.substring(0, maxChars);
+                    }
                 }
                 break;
             }
@@ -1443,6 +1497,81 @@ void CannedMessageModule::drawDestinationSelectionScreen(OLEDDisplay *display, O
     }
 }
 
+void CannedMessageModule::drawEmotePickerScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    const int headerFontHeight = FONT_HEIGHT_SMALL; // Make sure this matches your actual small font height
+    const int headerMargin = 2; // Extra pixels below header
+    const int labelGap = 6;
+    const int bitmapGapX = 4;
+
+    // Find max emote height (assume all same, or precalculated)
+    int maxEmoteHeight = 0;
+    for (int i = 0; i < graphics::numEmotes; ++i)
+        if (graphics::emotes[i].height > maxEmoteHeight)
+            maxEmoteHeight = graphics::emotes[i].height;
+
+    const int rowHeight = maxEmoteHeight + 2;
+
+    // Place header at top, then compute start of emote list
+    int headerY = y;
+    int listTop = headerY + headerFontHeight + headerMargin;
+
+    int visibleRows = (display->getHeight() - listTop - 2) / rowHeight;
+    int numEmotes = graphics::numEmotes;
+
+    // Clamp highlight index
+    if (emotePickerIndex < 0) emotePickerIndex = 0;
+    if (emotePickerIndex >= numEmotes) emotePickerIndex = numEmotes - 1;
+
+    // Determine which emote is at the top
+    int topIndex = emotePickerIndex - visibleRows / 2;
+    if (topIndex < 0) topIndex = 0;
+    if (topIndex > numEmotes - visibleRows) topIndex = std::max(0, numEmotes - visibleRows);
+
+    // Draw header/title
+    display->setFont(FONT_SMALL);
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->drawString(display->getWidth() / 2, headerY, "Select Emote");
+
+    // Draw emote rows
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+    for (int vis = 0; vis < visibleRows; ++vis) {
+        int emoteIdx = topIndex + vis;
+        if (emoteIdx >= numEmotes) break;
+        const graphics::Emote& emote = graphics::emotes[emoteIdx];
+        int rowY = listTop + vis * rowHeight;
+
+        // Draw highlight box 2px taller than emote (1px margin above and below)
+        if (emoteIdx == emotePickerIndex) {
+            display->fillRect(x, rowY, display->getWidth() - 8, emote.height + 2);
+            display->setColor(BLACK);
+        }
+
+        // Emote bitmap (left), 1px margin from highlight bar top
+        int emoteY = rowY + 1;
+        display->drawXbm(x + bitmapGapX, emoteY, emote.width, emote.height, emote.bitmap);
+
+        // Emote label (right of bitmap)
+        display->setFont(FONT_MEDIUM);
+        int labelY = rowY + ((rowHeight - FONT_HEIGHT_MEDIUM) / 2);
+        display->drawString(x + bitmapGapX + emote.width + labelGap, labelY, emote.label);
+
+        if (emoteIdx == emotePickerIndex)
+            display->setColor(WHITE);
+    }
+
+    // Draw scrollbar if needed
+    if (numEmotes > visibleRows) {
+        int scrollbarHeight = visibleRows * rowHeight;
+        int scrollTrackX = display->getWidth() - 6;
+        display->drawRect(scrollTrackX, listTop, 4, scrollbarHeight);
+        int scrollBarLen = std::max(6, (scrollbarHeight * visibleRows) / numEmotes);
+        int scrollBarPos = listTop + (scrollbarHeight * topIndex) / numEmotes;
+        display->fillRect(scrollTrackX, scrollBarPos, 4, scrollBarLen);
+    }
+}
+
 void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     this->displayHeight = display->getHeight(); // Store display height for later use
@@ -1460,6 +1589,12 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         return;
     }
 
+    // === Emote Picker Screen ===
+    if (this->runState == CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER) {
+        drawEmotePickerScreen(display, state, x, y);   // <-- Call your emote picker drawer here
+        return;
+    }
+    
     // === Destination Selection ===
     if (this->runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) {
         drawDestinationSelectionScreen(display, state, x, y);
@@ -1562,10 +1697,145 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
             display->drawString(x + display->getWidth() - display->getStringWidth(buffer), y + 0, buffer);
         }
 
-        // --- Draw Free Text input, shifted down ---
+        // --- Draw Free Text input with multi-emote support and proper line wrapping ---
         display->setColor(WHITE);
-        display->drawStringMaxWidth(0 + x, 0 + y + FONT_HEIGHT_SMALL, x + display->getWidth(),
-                                    drawWithCursor(this->freetext, this->cursor));
+        {
+            int inputY = 0 + y + FONT_HEIGHT_SMALL;
+            String msgWithCursor = this->drawWithCursor(this->freetext, this->cursor);
+
+            // Tokenize input into (isEmote, token) pairs
+            std::vector<std::pair<bool, String>> tokens;
+            const char* msg = msgWithCursor.c_str();
+            int msgLen = strlen(msg);
+            int pos = 0;
+            while (pos < msgLen) {
+                const graphics::Emote* foundEmote = nullptr;
+                int foundLen = 0;
+                for (int j = 0; j < graphics::numEmotes; j++) {
+                    const char* label = graphics::emotes[j].label;
+                    int labelLen = strlen(label);
+                    if (labelLen == 0) continue;
+                    if (strncmp(msg + pos, label, labelLen) == 0) {
+                        if (!foundEmote || labelLen > foundLen) {
+                            foundEmote = &graphics::emotes[j];
+                            foundLen = labelLen;
+                        }
+                    }
+                }
+                if (foundEmote) {
+                    tokens.emplace_back(true, String(foundEmote->label));
+                    pos += foundLen;
+                } else {
+                    // Find next emote
+                    int nextEmote = msgLen;
+                    for (int j = 0; j < graphics::numEmotes; j++) {
+                        const char* label = graphics::emotes[j].label;
+                        if (!label || !*label) continue;
+                        char* found = strstr(msg + pos, label);
+                        if (found && (found - msg) < nextEmote) {
+                            nextEmote = found - msg;
+                        }
+                    }
+                    int textLen = (nextEmote > pos) ? (nextEmote - pos) : (msgLen - pos);
+                    if (textLen > 0) {
+                        tokens.emplace_back(false, String(msg + pos).substring(0, textLen));
+                        pos += textLen;
+                    } else {
+                        break;
+                    }
+                }
+            }
+
+            // ===== Advanced word-wrapping (emotes + text, split by word, wrap by char if needed) =====
+            std::vector<std::vector<std::pair<bool, String>>> lines;
+            std::vector<std::pair<bool, String>> currentLine;
+            int lineWidth = 0;
+            int maxWidth = display->getWidth();
+            for (auto& token : tokens) {
+                if (token.first) {
+                    // Emote
+                    int tokenWidth = 0;
+                    for (int j = 0; j < graphics::numEmotes; j++) {
+                        if (token.second == graphics::emotes[j].label) {
+                            tokenWidth = graphics::emotes[j].width + 2;
+                            break;
+                        }
+                    }
+                    if (lineWidth + tokenWidth > maxWidth && !currentLine.empty()) {
+                        lines.push_back(currentLine);
+                        currentLine.clear();
+                        lineWidth = 0;
+                    }
+                    currentLine.push_back(token);
+                    lineWidth += tokenWidth;
+                } else {
+                    // Text: split by words and wrap inside word if needed
+                    String text = token.second;
+                    int pos = 0;
+                    while (pos < text.length()) {
+                        // Find next space (or end)
+                        int spacePos = text.indexOf(' ', pos);
+                        int endPos = (spacePos == -1) ? text.length() : spacePos + 1; // Include space
+                        String word = text.substring(pos, endPos);
+                        int wordWidth = display->getStringWidth(word);
+
+                        if (lineWidth + wordWidth > maxWidth && lineWidth > 0) {
+                            lines.push_back(currentLine);
+                            currentLine.clear();
+                            lineWidth = 0;
+                        }
+                        // If word itself too big, split by character
+                        if (wordWidth > maxWidth) {
+                            int charPos = 0;
+                            while (charPos < word.length()) {
+                                String oneChar = word.substring(charPos, charPos + 1);
+                                int charWidth = display->getStringWidth(oneChar);
+                                if (lineWidth + charWidth > maxWidth && lineWidth > 0) {
+                                    lines.push_back(currentLine);
+                                    currentLine.clear();
+                                    lineWidth = 0;
+                                }
+                                currentLine.push_back({false, oneChar});
+                                lineWidth += charWidth;
+                                charPos++;
+                            }
+                        } else {
+                            currentLine.push_back({false, word});
+                            lineWidth += wordWidth;
+                        }
+                        pos = endPos;
+                    }
+                }
+            }
+            if (!currentLine.empty()) lines.push_back(currentLine);
+
+            // Draw lines with emotes
+            int rowHeight = FONT_HEIGHT_SMALL;
+            int yLine = inputY;
+            for (auto& line : lines) {
+                int nextX = x;
+                for (auto& token : line) {
+                    if (token.first) {
+                        const graphics::Emote* emote = nullptr;
+                        for (int j = 0; j < graphics::numEmotes; j++) {
+                            if (token.second == graphics::emotes[j].label) {
+                                emote = &graphics::emotes[j];
+                                break;
+                            }
+                        }
+                        if (emote) {
+                            int emoteYOffset = (rowHeight - emote->height) / 2;
+                            display->drawXbm(nextX, yLine + emoteYOffset, emote->width, emote->height, emote->bitmap);
+                            nextX += emote->width + 2;
+                        }
+                    } else {
+                        display->drawString(nextX, yLine, token.second);
+                        nextX += display->getStringWidth(token.second);
+                    }
+                }
+                yLine += rowHeight;
+            }
+        }
 #endif
         return;
     }
@@ -1625,9 +1895,9 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
             int msgLen = strlen(msg);
             while (pos < msgLen) {
                 const graphics::Emote* foundEmote = nullptr;
-                int foundAt = -1, foundLen = 0;
+                int foundLen = 0;
 
-                // Look for any emote at this pos (prefer longest match)
+                // Look for any emote label at this pos (prefer longest match)
                 for (int j = 0; j < graphics::numEmotes; j++) {
                     const char* label = graphics::emotes[j].label;
                     int labelLen = strlen(label);
@@ -1635,14 +1905,11 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
                     if (strncmp(msg + pos, label, labelLen) == 0) {
                         if (!foundEmote || labelLen > foundLen) {
                             foundEmote = &graphics::emotes[j];
-                            foundAt = pos;
                             foundLen = labelLen;
                         }
                     }
                 }
-
-                if (foundEmote && foundAt == pos) {
-                    // Emote at current pos
+                if (foundEmote) {
                     tokens.emplace_back(true, String(foundEmote->label));
                     pos += foundLen;
                 } else {

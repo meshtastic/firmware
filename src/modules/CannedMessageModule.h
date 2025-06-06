@@ -18,7 +18,8 @@ enum cannedMessageModuleRunState {
     CANNED_MESSAGE_RUN_STATE_ACTION_DOWN,
     CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION,
     CANNED_MESSAGE_RUN_STATE_FREETEXT,
-    CANNED_MESSAGE_RUN_STATE_MESSAGE_SELECTION
+    CANNED_MESSAGE_RUN_STATE_MESSAGE_SELECTION,
+    CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER
 };
 
 enum CannedMessageModuleIconType { shift, backspace, space, enter };
@@ -57,6 +58,9 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
   public:
     CannedMessageModule();
 
+    // === Emote Picker navigation ===
+    int emotePickerIndex = 0; // Tracks currently selected emote in the picker
+
     // === Message navigation ===
     const char *getCurrentMessage();
     const char *getPrevMessage();
@@ -74,6 +78,10 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     bool isInterceptingAndFocused();
     bool isCharInputAllowed() const;
     String drawWithCursor(String text, int cursor);
+
+    // === Emote Picker ===
+    int handleEmotePickerInput(const InputEvent *event);
+    void drawEmotePickerScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 
     // === Admin Handlers ===
     void handleGetCannedMessageModuleMessages(const meshtastic_MeshPacket &req, meshtastic_AdminMessage *response);
