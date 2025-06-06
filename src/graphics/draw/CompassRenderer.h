@@ -20,7 +20,7 @@ class Screen;
 namespace CompassRenderer
 {
 // Compass drawing functions
-void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t compassY, float myHeading);
+void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t compassY, float myHeading, int16_t radius);
 void drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t compassY, uint16_t compassDiam, float headingRadian);
 void drawArrowToNode(OLEDDisplay *display, int16_t x, int16_t y, int16_t size, float bearing);
 

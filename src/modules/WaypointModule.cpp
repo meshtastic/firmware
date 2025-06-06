@@ -140,7 +140,7 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
             myHeading = (screen->getHeading()) * PI / 180; // gotta convert compass degrees to Radians
         else
             myHeading = screen->estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
-        graphics::CompassRenderer::drawCompassNorth(display, compassX, compassY, myHeading);
+        graphics::CompassRenderer::drawCompassNorth(display, compassX, compassY, myHeading, (compassDiam / 2));
 
         // Compass bearing to waypoint
         float bearingToOther =

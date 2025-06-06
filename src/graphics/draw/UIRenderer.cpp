@@ -440,7 +440,6 @@ void drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t
             const auto &op = ourNode->position;
             float myHeading = screen->hasHeading() ? screen->getHeading() * PI / 180
                                                    : screen->estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
-            CompassRenderer::drawCompassNorth(display, compassX, compassY, myHeading);
 
             const auto &p = node->position;
             /* unused
@@ -450,9 +449,10 @@ void drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t
             float bearing = GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(p.latitude_i), DegD(p.longitude_i));
             if (!config.display.compass_north_top)
                 bearing -= myHeading;
-            CompassRenderer::drawNodeHeading(display, compassX, compassY, compassDiam, bearing);
 
             display->drawCircle(compassX, compassY, compassRadius);
+            CompassRenderer::drawCompassNorth(display, compassX, compassY, myHeading, compassRadius);
+            CompassRenderer::drawNodeHeading(display, compassX, compassY, compassDiam, bearing);
         }
         // else show nothing
     } else {
@@ -489,7 +489,7 @@ void drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t
             const auto &op = ourNode->position;
             float myHeading = screen->hasHeading() ? screen->getHeading() * PI / 180
                                                    : screen->estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
-            graphics::CompassRenderer::drawCompassNorth(display, compassX, compassY, myHeading);
+            graphics::CompassRenderer::drawCompassNorth(display, compassX, compassY, myHeading, compassRadius);
 
             const auto &p = node->position;
             /* unused

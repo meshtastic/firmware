@@ -39,20 +39,28 @@ struct Point {
     }
 };
 
-void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t compassY, float myHeading)
+void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t compassY, float myHeading, int16_t radius)
 {
     // Show the compass heading (not implemented in original)
     // This could draw a "N" indicator or north arrow
     // For now, we'll draw a simple north indicator
-    const float radius = 8.0f;
+    // const float radius = 17.0f;
+    if (display->width() > 128) {
+        radius += 4;
+    }
     Point north(0, -radius);
     north.rotate(-myHeading);
     north.translate(compassX, compassY);
 
-    // Draw a small "N" or north indicator
-    display->drawCircle(north.x, north.y, 2);
     display->setFont(FONT_SMALL);
     display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->setColor(BLACK);
+    if (display->width() > 128) {
+        display->fillRect(north.x - 8, north.y - 1, display->getStringWidth("N") + 3, FONT_HEIGHT_SMALL - 6);
+    } else {
+        display->fillRect(north.x - 4, north.y - 1, display->getStringWidth("N") + 2, FONT_HEIGHT_SMALL - 6);
+    }
+    display->setColor(WHITE);
     display->drawString(north.x, north.y - 3, "N");
 }
 
