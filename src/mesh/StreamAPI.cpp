@@ -66,12 +66,12 @@ int32_t StreamAPI::readStream()
 
                         // If we didn't just fail the packet and we now have the right # of bytes, parse it
                         handleToRadio(rxBuf + HEADER_LEN, len);
+                        // we had bytes available this time, so assume we might have them next time also
+                        lastRxMsec = millis();
                     }
             }
         }
 
-        // we had bytes available this time, so assume we might have them next time also
-        lastRxMsec = millis();
         return 0;
     }
 }
