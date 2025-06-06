@@ -310,7 +310,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         if (isSelect) {
             // When inactive, call the onebutton shortpress instead. Activate module only on up/down
             powerFSM.trigger(EVENT_PRESS);
-            return 1; // Let caller know we handled it
+            return 0; // Main button press no longer runs through powerFSM
         }
         // Let LEFT/RIGHT pass through so frame navigation works
         if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT) ||
