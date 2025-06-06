@@ -1737,7 +1737,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
                         const char *label = graphics::emotes[j].label;
                         if (!label || !*label)
                             continue;
-                        char *found = strstr(msg + pos, label);
+                        const char *found = strstr(msg + pos, label);
                         if (found && (found - msg) < nextEmote) {
                             nextEmote = found - msg;
                         }
@@ -1929,7 +1929,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
                         const char *label = graphics::emotes[j].label;
                         if (label[0] == 0)
                             continue;
-                        char *found = strstr(msg + pos, label);
+                        const char *found = strstr(msg + pos, label);
                         if (found && (found - msg) < nextEmote) {
                             nextEmote = found - msg;
                         }
