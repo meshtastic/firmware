@@ -220,8 +220,7 @@ class Screen : public concurrency::OSThread
     meshtastic_Config_DisplayConfig_OledType model;
     OLEDDISPLAY_GEOMETRY geometry;
 
-    char alertBannerMessage[256] = {0};
-    uint32_t alertBannerUntil = 0; // 0 is a special case meaning forever
+    bool isOverlayBannerShowing();
 
     // Stores the last 4 of our hardware ID, to make finding the device for pairing easier
     // FIXME: Needs refactoring and getMacAddr needs to be moved to a utility class
@@ -286,12 +285,8 @@ class Screen : public concurrency::OSThread
         enqueueCmd(cmd);
     }
 
-    void showOverlayBanner(const char *message, uint32_t durationMs = 3000);
-
-    bool isOverlayBannerShowing()
-    {
-        return strlen(alertBannerMessage) > 0 && (alertBannerUntil == 0 || millis() <= alertBannerUntil);
-    }
+    void showOverlayBanner(const char *message, uint32_t durationMs = 3000, uint8_t options = 0,
+                           std::function<void(int)> bannerCallback = NULL);
 
     void startFirmwareUpdateScreen()
     {
@@ -570,8 +565,6 @@ class Screen : public concurrency::OSThread
 
     /// Draws our SSL cert screen during boot (called from WebServer)
     void setSSLFrames();
-
-    void setWelcomeFrames();
 
     // Dismiss the currently focussed frame, if possible (e.g. text message, waypoint)
     void dismissCurrentFrame();

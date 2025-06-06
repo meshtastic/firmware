@@ -136,12 +136,14 @@ extern bool hasUnreadMessage;
 // The banner appears in the center of the screen and disappears after the specified duration
 
 // Called to trigger a banner with custom message and duration
-void Screen::showOverlayBanner(const char *message, uint32_t durationMs)
+void Screen::showOverlayBanner(const char *message, uint32_t durationMs, uint8_t options, std::function<void(int)> bannerCallback)
 {
     // Store the message and set the expiration timestamp
-    strncpy(alertBannerMessage, message, 255);
-    alertBannerMessage[255] = '\0'; // Ensure null termination
-    alertBannerUntil = (durationMs == 0) ? 0 : millis() + durationMs;
+    strncpy(NotificationRenderer::alertBannerMessage, message, 255);
+    NotificationRenderer::alertBannerMessage[255] = '\0'; // Ensure null termination
+    NotificationRenderer::alertBannerUntil = (durationMs == 0) ? 0 : millis() + durationMs;
+    NotificationRenderer::alertBannerOptions = options;
+    NotificationRenderer::alertBannerCallback = bannerCallback;
 }
 
 static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -1116,10 +1118,45 @@ int32_t Screen::runOnce()
 #endif
 
 #ifndef DISABLE_WELCOME_UNSET
-    if (showingNormalScreen && config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
-        setWelcomeFrames();
+    if (!NotificationRenderer::isOverlayBannerShowing() && config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
+        showOverlayBanner(
+            "Set the LoRa "
+            "region\nUS\nEU_433\nEU_868\nCN\nJP\nANZ\nKR\nTW\nRU\nIN\nNZ_865\nTH\nLORA_24\nUA_433\nUA_868\nMY_433\nMY_919\nSG_"
+            "923\nPH_433\nPH_868\nPH_915",
+            0, 21, [](int selected) -> void {
+                LOG_WARN("Chose %d", selected);
+                config.lora.region = _meshtastic_Config_LoRaConfig_RegionCode(selected + 1);
+                if (!owner.is_licensed) {
+                    bool keygenSuccess = false;
+                    if (config.security.private_key.size == 32) {
+                        if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
+                            keygenSuccess = true;
+                        }
+                    } else {
+                        LOG_INFO("Generate new PKI keys");
+                        crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
+                        keygenSuccess = true;
+                    }
+                    if (keygenSuccess) {
+                        config.security.public_key.size = 32;
+                        config.security.private_key.size = 32;
+                        owner.public_key.size = 32;
+                        memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
+                    }
+                }
+                config.lora.tx_enabled = true;
+                initRegion();
+                if (myRegion->dutyCycle < 100) {
+                    config.lora.ignore_mqtt = true; // Ignore MQTT by default if region has a duty cycle limit
+                }
+                service->reloadConfig(SEGMENT_CONFIG);
+                rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+            });
     }
 #endif
+    if (!NotificationRenderer::isOverlayBannerShowing() && rebootAtMsec != 0) {
+        showOverlayBanner("Rebooting...", 0);
+    }
 
     // Process incoming commands.
     for (;;) {
@@ -1226,20 +1263,9 @@ void Screen::setSSLFrames()
 {
     if (address_found.address) {
         // LOG_DEBUG("Show SSL frames");
-        static FrameCallback sslFrames[] = {graphics::NotificationRenderer::NotificationRenderer::drawSSLScreen};
+        static FrameCallback sslFrames[] = {NotificationRenderer::drawSSLScreen};
         ui->setFrames(sslFrames, 1);
         ui->update();
-    }
-}
-
-/* show a message that the SSL cert is being built
- * it is expected that this will be used during the boot phase */
-void Screen::setWelcomeFrames()
-{
-    if (address_found.address) {
-        // LOG_DEBUG("Show Welcome frames");
-        static FrameCallback frames[] = {graphics::NotificationRenderer::NotificationRenderer::drawWelcomeScreen};
-        setFrameImmediateDraw(frames);
     }
 }
 
@@ -1357,7 +1383,7 @@ void Screen::setFrames(FrameFocus focus)
     // If we have a critical fault, show it first
     fsi.positions.fault = numframes;
     if (error_code) {
-        normalFrames[numframes++] = graphics::NotificationRenderer::NotificationRenderer::drawCriticalFaultFrame;
+        normalFrames[numframes++] = NotificationRenderer::drawCriticalFaultFrame;
         indicatorIcons.push_back(icon_error);
         focus = FOCUS_FAULT; // Change our "focus" parameter, to ensure we show the fault frame
     }
@@ -1445,8 +1471,7 @@ void Screen::setFrames(FrameFocus focus)
     ui->disableAllIndicators();
 
     // Add overlays: frame icons and alert banner)
-    static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar,
-                                         graphics::NotificationRenderer::NotificationRenderer::drawAlertBannerOverlay};
+    static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawAlertBannerOverlay};
     ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
 
     prevFrame = -1; // Force drawNodeInfo to pick a new node (because our list
@@ -1532,7 +1557,7 @@ void Screen::handleStartFirmwareUpdateScreen()
     showingNormalScreen = false;
     EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // E-Ink: Explicitly use fast-refresh for next frame
 
-    static FrameCallback frames[] = {graphics::NotificationRenderer::NotificationRenderer::drawFrameFirmware};
+    static FrameCallback frames[] = {graphics::NotificationRenderer::drawFrameFirmware};
     setFrameImmediateDraw(frames);
 }
 
@@ -1770,7 +1795,12 @@ int Screen::handleInputEvent(const InputEvent *event)
         return 0;
     }
 #endif
-
+    if (NotificationRenderer::isOverlayBannerShowing()) {
+        NotificationRenderer::inEvent = event->inputEvent;
+        setFrames();
+        ui->update();
+        return 0;
+    }
     // Use left or right input from a keyboard to move between frames,
     // so long as a mesh module isn't using these events for some other purpose
     if (showingNormalScreen) {
@@ -1807,6 +1837,11 @@ int Screen::handleAdminMessage(const meshtastic_AdminMessage *arg)
         break;
     }
     return 0;
+}
+
+bool Screen::isOverlayBannerShowing()
+{
+    return NotificationRenderer::isOverlayBannerShowing();
 }
 
 } // namespace graphics

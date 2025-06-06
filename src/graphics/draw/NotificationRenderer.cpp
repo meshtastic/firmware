@@ -4,7 +4,6 @@
 #include "DisplayFormatters.h"
 #include "NodeDB.h"
 #include "NotificationRenderer.h"
-#include "graphics/Screen.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/images.h"
@@ -27,8 +26,12 @@ extern bool hasUnreadMessage;
 namespace graphics
 {
 
-namespace NotificationRenderer
-{
+char NotificationRenderer::inEvent = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE);
+int8_t NotificationRenderer::curSelected = 0;
+char NotificationRenderer::alertBannerMessage[256] = {0};
+uint32_t NotificationRenderer::alertBannerUntil = 0;  // 0 is a special case meaning forever
+uint8_t NotificationRenderer::alertBannerOptions = 0; // last x lines are seelctable options
+std::function<void(int)> NotificationRenderer::alertBannerCallback = NULL;
 
 // Used on boot when a certificate is being created
 void NotificationRenderer::drawSSLScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -36,6 +39,7 @@ void NotificationRenderer::drawSSLScreen(OLEDDisplay *display, OLEDDisplayUiStat
     display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->setFont(FONT_SMALL);
     display->drawString(64 + x, y, "Creating SSL certificate");
+    uint32_t alertBannerUntil = 0; // 0 is a special case meaning forever
 
 #ifdef ARCH_ESP32
     yield();
@@ -50,48 +54,27 @@ void NotificationRenderer::drawSSLScreen(OLEDDisplay *display, OLEDDisplayUiStat
     }
 }
 
-// Used when booting without a region set
-void NotificationRenderer::drawWelcomeScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    display->setFont(FONT_SMALL);
-    display->setTextAlignment(TEXT_ALIGN_CENTER);
-    display->drawString(64 + x, y, "//\\ E S H T /\\ S T / C");
-    display->drawString(64 + x, y + FONT_HEIGHT_SMALL, getDeviceName());
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-
-    if ((millis() / 10000) % 2) {
-        display->drawString(x, y + FONT_HEIGHT_SMALL * 2 - 3, "Set the region using the");
-        display->drawString(x, y + FONT_HEIGHT_SMALL * 3 - 3, "Meshtastic Android, iOS,");
-        display->drawString(x, y + FONT_HEIGHT_SMALL * 4 - 3, "Web or CLI clients.");
-    } else {
-        display->drawString(x, y + FONT_HEIGHT_SMALL * 2 - 3, "Visit meshtastic.org");
-        display->drawString(x, y + FONT_HEIGHT_SMALL * 3 - 3, "for more information.");
-        display->drawString(x, y + FONT_HEIGHT_SMALL * 4 - 3, "");
-    }
-
-#ifdef ARCH_ESP32
-    yield();
-    esp_task_wdt_reset();
-#endif
-}
-
 void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
     // Exit if no message is active or duration has passed
-    if (!screen->isOverlayBannerShowing())
+    if (!isOverlayBannerShowing())
         return;
-
+    LOG_DEBUG("event: %u, curSelected: %d", inEvent, curSelected);
     // === Layout Configuration ===
     constexpr uint16_t padding = 5;    // Padding around text inside the box
+    constexpr uint16_t vPadding = 2;   // Padding around text inside the box
     constexpr uint8_t lineSpacing = 1; // Extra space between lines
 
     // Search the message to determine if we need the bell added
-    bool needs_bell = (strstr(screen->alertBannerMessage, "Alert Received") != nullptr);
+    bool needs_bell = (strstr(alertBannerMessage, "Alert Received") != nullptr);
+
+    uint8_t firstOption = 0;
+    uint8_t firstOptionToShow = 0;
 
     // Setup font and alignment
     display->setFont(FONT_SMALL);
     display->setTextAlignment(TEXT_ALIGN_LEFT); // We will manually center per line
-    const int MAX_LINES = 10;
+    const int MAX_LINES = 23;
 
     uint16_t maxWidth = 0;
     uint16_t lineWidths[MAX_LINES] = {0};
@@ -100,12 +83,11 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
     uint16_t lineCount = 0;
     char lineBuffer[40] = {0};
     // pointer to the terminating null
-    char *alertEnd = screen->alertBannerMessage + strnlen(screen->alertBannerMessage, sizeof(screen->alertBannerMessage));
-    lineStarts[lineCount] = screen->alertBannerMessage;
-    LOG_WARN(lineStarts[lineCount]);
+    char *alertEnd = alertBannerMessage + strnlen(alertBannerMessage, sizeof(alertBannerMessage));
+    lineStarts[lineCount] = alertBannerMessage;
 
     // loop through lines finding \n characters
-    while ((lineCount < 10) && (lineStarts[lineCount] < alertEnd)) {
+    while ((lineCount < MAX_LINES) && (lineStarts[lineCount] < alertEnd)) {
         lineStarts[lineCount + 1] = std::find(lineStarts[lineCount], alertEnd, '\n');
         lineLengths[lineCount] = lineStarts[lineCount + 1] - lineStarts[lineCount];
         if (lineStarts[lineCount + 1][0] == '\n') {
@@ -116,6 +98,38 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
             maxWidth = lineWidths[lineCount];
         }
         lineCount++;
+        // if we are doing a selection, add extra width for arrows
+    }
+
+    if (alertBannerOptions > 0) {
+        // respond to input
+        if (inEvent == meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP) {
+            curSelected--;
+        } else if (inEvent == meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN) {
+            curSelected++;
+        } else if (inEvent == meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT) {
+            alertBannerCallback(curSelected);
+            alertBannerMessage[0] = '\0';
+        }
+        if (curSelected == -1)
+            curSelected = alertBannerOptions - 1;
+        if (curSelected == alertBannerOptions)
+            curSelected = 0;
+        // compare number of options to number of lines
+        if (lineCount < alertBannerOptions)
+            return;
+        firstOption = lineCount - alertBannerOptions;
+        if (curSelected > 1 && alertBannerOptions > 3) {
+            firstOptionToShow = curSelected + firstOption - 1;
+            // put the selected option in the middle
+        } else {
+            firstOptionToShow = firstOption;
+        }
+    } else { // not in an alert with a callback
+        // TODO: check that at least a second has passed since the alert started
+        if (inEvent == meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT) {
+            alertBannerMessage[0] = '\0'; // end the alert early
+        }
     }
 
     // set width from longest line
@@ -128,9 +142,14 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
             boxWidth += 20;
         }
     }
-
+    // calculate max lines on screen? for now it's 4
     // set height from line count
-    uint16_t boxHeight = padding * 2 + lineCount * FONT_HEIGHT_SMALL + (lineCount - 1) * lineSpacing;
+    uint16_t boxHeight;
+    if (lineCount <= 4) {
+        boxHeight = vPadding * 2 + lineCount * FONT_HEIGHT_SMALL + (lineCount - 1) * lineSpacing;
+    } else {
+        boxHeight = vPadding * 2 + 4 * FONT_HEIGHT_SMALL + 4 * lineSpacing;
+    }
 
     int16_t boxLeft = (display->width() / 2) - (boxWidth / 2);
     int16_t boxTop = (display->height() / 2) - (boxHeight / 2);
@@ -151,13 +170,42 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
     display->setColor(WHITE);
 
     // === Draw each line centered in the box ===
-    int16_t lineY = boxTop + padding;
+    int16_t lineY = boxTop + vPadding;
+
+    LOG_DEBUG("firstOptionToShow: %u, firstOption: %u", firstOptionToShow, firstOption);
+    //
     for (int i = 0; i < lineCount; i++) {
-        strncpy(lineBuffer, lineStarts[i], 40);
-        if (lineLengths[i] > 39)
-            lineBuffer[39] = '\0';
-        else
-            lineBuffer[lineLengths[i]] = '\0';
+        // is this line selected?
+        // if so, start the buffer with -> and strncpy to the 4th location
+        if (i == 0 || alertBannerOptions == 0) {
+            strncpy(lineBuffer, lineStarts[i], 40);
+            if (lineLengths[i] > 39)
+                lineBuffer[39] = '\0';
+            else
+                lineBuffer[lineLengths[i]] = '\0';
+        } else if (i >= firstOptionToShow && i <= firstOptionToShow + 3) {
+            if (i == curSelected + firstOption) {
+                if (lineLengths[i] > 35)
+                    lineLengths[i] = 35;
+                strncpy(lineBuffer, "->", 3);
+                strncpy(lineBuffer + 2, lineStarts[i], 36);
+                strncpy(lineBuffer + lineLengths[i] + 2, "<-", 3);
+                lineLengths[i] += 4;
+                lineWidths[i] += display->getStringWidth("-><-", 4, true);
+                if (lineLengths[i] > 35)
+                    lineBuffer[39] = '\0';
+                else
+                    lineBuffer[lineLengths[i]] = '\0';
+            } else {
+                strncpy(lineBuffer, lineStarts[i], 40);
+                if (lineLengths[i] > 39)
+                    lineBuffer[39] = '\0';
+                else
+                    lineBuffer[lineLengths[i]] = '\0';
+            }
+        } else { // add break for the additional lines
+            continue;
+        }
 
         int16_t textX = boxLeft + (boxWidth - lineWidths[i]) / 2;
 
@@ -173,6 +221,7 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
 
         lineY += FONT_HEIGHT_SMALL + lineSpacing;
     }
+    inEvent = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE);
 }
 
 /// Draw the last text message we received
@@ -201,7 +250,10 @@ void NotificationRenderer::drawFrameFirmware(OLEDDisplay *display, OLEDDisplayUi
                                 "Please be patient and do not power off.");
 }
 
-} // namespace NotificationRenderer
+bool NotificationRenderer::isOverlayBannerShowing()
+{
+    return strlen(alertBannerMessage) > 0 && (alertBannerUntil == 0 || millis() <= alertBannerUntil);
+}
 
 } // namespace graphics
 #endif
