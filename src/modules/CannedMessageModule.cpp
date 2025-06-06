@@ -14,8 +14,8 @@
 #include "detect/ScanI2C.h"
 #include "graphics/Screen.h"
 #include "graphics/SharedUIDisplay.h"
-#include "graphics/images.h"
 #include "graphics/emotes.h"
+#include "graphics/images.h"
 #include "input/ScanAndSelect.h"
 #include "main.h" // for cardkb_found
 #include "mesh/generated/meshtastic/cannedmessages.pb.h"
@@ -257,6 +257,10 @@ bool CannedMessageModule::isCharInputAllowed() const
  */
 int CannedMessageModule::handleInputEvent(const InputEvent *event)
 {
+    // Block ALL input if an alert banner is active
+    if (screen && screen->isOverlayBannerShowing()) {
+        return 0;
+    }
     // Allow input only from configured source (hardware/software filter)
     if (!isInputSourceAllowed(event))
         return 0;
@@ -772,11 +776,6 @@ bool CannedMessageModule::handleSystemCommandInput(const InputEvent *event)
     if (event->inputEvent != static_cast<char>(ANYKEY))
         return false;
 
-    // Block ALL input if an alert banner is active // TODO: Make an accessor function
-    if (screen && screen->isOverlayBannerShowing()) {
-        return true;
-    }
-
     // System commands (all others fall through to return false)
     switch (event->kbchar) {
     // Fn key symbols
@@ -1054,7 +1053,7 @@ int32_t CannedMessageModule::runOnce()
                             this->freetext = this->freetext.substring(0, this->freetext.length() - 1);
                         } else {
                             this->freetext = this->freetext.substring(0, this->cursor - 1) +
-                                            this->freetext.substring(this->cursor, this->freetext.length());
+                                             this->freetext.substring(this->cursor, this->freetext.length());
                         }
                         this->cursor--;
                     }
@@ -1071,8 +1070,8 @@ int32_t CannedMessageModule::runOnce()
                     if (this->cursor == this->freetext.length()) {
                         this->freetext += (char)this->payload;
                     } else {
-                        this->freetext =
-                            this->freetext.substring(0, this->cursor) + (char)this->payload + this->freetext.substring(this->cursor);
+                        this->freetext = this->freetext.substring(0, this->cursor) + (char)this->payload +
+                                         this->freetext.substring(this->cursor);
                     }
                     this->cursor++;
                     uint16_t maxChars = meshtastic_Constants_DATA_PAYLOAD_LEN - (moduleConfig.canned_message.send_bell ? 1 : 0);
@@ -1500,7 +1499,7 @@ void CannedMessageModule::drawDestinationSelectionScreen(OLEDDisplay *display, O
 void CannedMessageModule::drawEmotePickerScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     const int headerFontHeight = FONT_HEIGHT_SMALL; // Make sure this matches your actual small font height
-    const int headerMargin = 2; // Extra pixels below header
+    const int headerMargin = 2;                     // Extra pixels below header
     const int labelGap = 6;
     const int bitmapGapX = 4;
 
@@ -1520,13 +1519,17 @@ void CannedMessageModule::drawEmotePickerScreen(OLEDDisplay *display, OLEDDispla
     int numEmotes = graphics::numEmotes;
 
     // Clamp highlight index
-    if (emotePickerIndex < 0) emotePickerIndex = 0;
-    if (emotePickerIndex >= numEmotes) emotePickerIndex = numEmotes - 1;
+    if (emotePickerIndex < 0)
+        emotePickerIndex = 0;
+    if (emotePickerIndex >= numEmotes)
+        emotePickerIndex = numEmotes - 1;
 
     // Determine which emote is at the top
     int topIndex = emotePickerIndex - visibleRows / 2;
-    if (topIndex < 0) topIndex = 0;
-    if (topIndex > numEmotes - visibleRows) topIndex = std::max(0, numEmotes - visibleRows);
+    if (topIndex < 0)
+        topIndex = 0;
+    if (topIndex > numEmotes - visibleRows)
+        topIndex = std::max(0, numEmotes - visibleRows);
 
     // Draw header/title
     display->setFont(FONT_SMALL);
@@ -1538,8 +1541,9 @@ void CannedMessageModule::drawEmotePickerScreen(OLEDDisplay *display, OLEDDispla
 
     for (int vis = 0; vis < visibleRows; ++vis) {
         int emoteIdx = topIndex + vis;
-        if (emoteIdx >= numEmotes) break;
-        const graphics::Emote& emote = graphics::emotes[emoteIdx];
+        if (emoteIdx >= numEmotes)
+            break;
+        const graphics::Emote &emote = graphics::emotes[emoteIdx];
         int rowY = listTop + vis * rowHeight;
 
         // Draw highlight box 2px taller than emote (1px margin above and below)
@@ -1591,10 +1595,10 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
 
     // === Emote Picker Screen ===
     if (this->runState == CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER) {
-        drawEmotePickerScreen(display, state, x, y);   // <-- Call your emote picker drawer here
+        drawEmotePickerScreen(display, state, x, y); // <-- Call your emote picker drawer here
         return;
     }
-    
+
     // === Destination Selection ===
     if (this->runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) {
         drawDestinationSelectionScreen(display, state, x, y);
@@ -1705,16 +1709,17 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
 
             // Tokenize input into (isEmote, token) pairs
             std::vector<std::pair<bool, String>> tokens;
-            const char* msg = msgWithCursor.c_str();
+            const char *msg = msgWithCursor.c_str();
             int msgLen = strlen(msg);
             int pos = 0;
             while (pos < msgLen) {
-                const graphics::Emote* foundEmote = nullptr;
+                const graphics::Emote *foundEmote = nullptr;
                 int foundLen = 0;
                 for (int j = 0; j < graphics::numEmotes; j++) {
-                    const char* label = graphics::emotes[j].label;
+                    const char *label = graphics::emotes[j].label;
                     int labelLen = strlen(label);
-                    if (labelLen == 0) continue;
+                    if (labelLen == 0)
+                        continue;
                     if (strncmp(msg + pos, label, labelLen) == 0) {
                         if (!foundEmote || labelLen > foundLen) {
                             foundEmote = &graphics::emotes[j];
@@ -1729,9 +1734,10 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
                     // Find next emote
                     int nextEmote = msgLen;
                     for (int j = 0; j < graphics::numEmotes; j++) {
-                        const char* label = graphics::emotes[j].label;
-                        if (!label || !*label) continue;
-                        char* found = strstr(msg + pos, label);
+                        const char *label = graphics::emotes[j].label;
+                        if (!label || !*label)
+                            continue;
+                        char *found = strstr(msg + pos, label);
                         if (found && (found - msg) < nextEmote) {
                             nextEmote = found - msg;
                         }
@@ -1751,7 +1757,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
             std::vector<std::pair<bool, String>> currentLine;
             int lineWidth = 0;
             int maxWidth = display->getWidth();
-            for (auto& token : tokens) {
+            for (auto &token : tokens) {
                 if (token.first) {
                     // Emote
                     int tokenWidth = 0;
@@ -1807,16 +1813,17 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
                     }
                 }
             }
-            if (!currentLine.empty()) lines.push_back(currentLine);
+            if (!currentLine.empty())
+                lines.push_back(currentLine);
 
             // Draw lines with emotes
             int rowHeight = FONT_HEIGHT_SMALL;
             int yLine = inputY;
-            for (auto& line : lines) {
+            for (auto &line : lines) {
                 int nextX = x;
-                for (auto& token : line) {
+                for (auto &token : line) {
                     if (token.first) {
-                        const graphics::Emote* emote = nullptr;
+                        const graphics::Emote *emote = nullptr;
                         for (int j = 0; j < graphics::numEmotes; j++) {
                             if (token.second == graphics::emotes[j].label) {
                                 emote = &graphics::emotes[j];
@@ -1869,11 +1876,13 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
             const char *msg = getMessageByIndex(topMsg + i);
             int maxEmoteHeight = 0;
             for (int j = 0; j < graphics::numEmotes; j++) {
-                const char* label = graphics::emotes[j].label;
-                if (!label || !*label) continue;
-                const char* search = msg;
+                const char *label = graphics::emotes[j].label;
+                if (!label || !*label)
+                    continue;
+                const char *search = msg;
                 while ((search = strstr(search, label))) {
-                    if (graphics::emotes[j].height > maxEmoteHeight) maxEmoteHeight = graphics::emotes[j].height;
+                    if (graphics::emotes[j].height > maxEmoteHeight)
+                        maxEmoteHeight = graphics::emotes[j].height;
                     search += strlen(label); // Advance past this emote
                 }
             }
@@ -1894,14 +1903,15 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
             int pos = 0;
             int msgLen = strlen(msg);
             while (pos < msgLen) {
-                const graphics::Emote* foundEmote = nullptr;
+                const graphics::Emote *foundEmote = nullptr;
                 int foundLen = 0;
 
                 // Look for any emote label at this pos (prefer longest match)
                 for (int j = 0; j < graphics::numEmotes; j++) {
-                    const char* label = graphics::emotes[j].label;
+                    const char *label = graphics::emotes[j].label;
                     int labelLen = strlen(label);
-                    if (labelLen == 0) continue;
+                    if (labelLen == 0)
+                        continue;
                     if (strncmp(msg + pos, label, labelLen) == 0) {
                         if (!foundEmote || labelLen > foundLen) {
                             foundEmote = &graphics::emotes[j];
@@ -1916,9 +1926,10 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
                     // Find next emote
                     int nextEmote = msgLen;
                     for (int j = 0; j < graphics::numEmotes; j++) {
-                        const char* label = graphics::emotes[j].label;
-                        if (label[0] == 0) continue;
-                        char* found = strstr(msg + pos, label);
+                        const char *label = graphics::emotes[j].label;
+                        if (label[0] == 0)
+                            continue;
+                        char *found = strstr(msg + pos, label);
                         if (found && (found - msg) < nextEmote) {
                             nextEmote = found - msg;
                         }
@@ -1939,7 +1950,8 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
 
 #ifdef USE_EINK
             int nextX = x + (highlight ? 12 : 0);
-            if (highlight) display->drawString(x + 0, lineY + textYOffset, ">");
+            if (highlight)
+                display->drawString(x + 0, lineY + textYOffset, ">");
 #else
             int scrollPadding = 8;
             if (highlight) {
@@ -1950,10 +1962,10 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
 #endif
 
             // Draw all tokens left to right
-            for (auto& token : tokens) {
+            for (auto &token : tokens) {
                 if (token.first) {
                     // Emote
-                    const graphics::Emote* emote = nullptr;
+                    const graphics::Emote *emote = nullptr;
                     for (int j = 0; j < graphics::numEmotes; j++) {
                         if (token.second == graphics::emotes[j].label) {
                             emote = &graphics::emotes[j];
@@ -1972,7 +1984,8 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
                 }
             }
 #ifndef USE_EINK
-            if (highlight) display->setColor(WHITE);
+            if (highlight)
+                display->setColor(WHITE);
 #endif
 
             yCursor += rowHeight;
