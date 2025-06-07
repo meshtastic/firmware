@@ -1823,7 +1823,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
                         }
                         // If word itself too big, split by character
                         if (wordWidth > maxWidth) {
-                            int charPos = 0;
+                            uint16_t charPos = 0;
                             while (charPos < word.length()) {
                                 String oneChar = word.substring(charPos, charPos + 1);
                                 int charWidth = display->getStringWidth(oneChar);
