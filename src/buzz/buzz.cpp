@@ -38,6 +38,11 @@ const int DURATION_1_1 = 1000; // 1/1 note
 
 void playTones(const ToneDuration *tone_durations, int size)
 {
+    if (config.device.buzzer_mode != meshtastic_Config_DeviceConfig_BuzzerMode_DISABLED &&
+        config.device.buzzer_mode != meshtastic_Config_DeviceConfig_BuzzerMode_NOTIFICATIONS_ONLY) {
+        // Buzzer is disabled or not set to system tones
+        return;
+    }
 #ifdef PIN_BUZZER
     if (!config.device.buzzer_gpio)
         config.device.buzzer_gpio = PIN_BUZZER;
