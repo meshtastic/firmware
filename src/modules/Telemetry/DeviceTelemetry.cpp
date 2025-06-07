@@ -21,13 +21,15 @@ int32_t DeviceTelemetryModule::runOnce()
     refreshUptime();
     bool isImpoliteRole =
         IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_SENSOR, meshtastic_Config_DeviceConfig_Role_ROUTER);
-    if (((lastSentToMesh == 0) ||
-         ((uptimeLastMs - lastSentToMesh) >=
-          Default::getConfiguredOrDefaultMsScaled(moduleConfig.telemetry.device_update_interval,
-                                                  default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
-        airTime->isTxAllowedChannelUtil(!isImpoliteRole) && airTime->isTxAllowedAirUtil() &&
-        config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER &&
-        config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN) {
+    bool isSlient =
+        IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN, meshtastic_Config_DeviceConfig_Role_REPEATER);
+    bool allowChannelUtil = airTime->isTxAllowedChannelUtil(!isImpoliteRole) || config.lora.override_duty_cycle;
+
+    uint32_t device_update_interval = Default::getConfiguredOrDefaultMsScaled(moduleConfig.telemetry.device_update_interval,
+                                                  default_telemetry_broadcast_interval_secs, numOnlineNodes);
+    if (( (lastSentToMesh == 0) || ((uptimeLastMs - lastSentToMesh) >= device_update_interval) ) &&
+        allowChannelUtil && airTime->isTxAllowedAirUtil() && !isSlient)
+    {
         sendTelemetry();
         lastSentToMesh = uptimeLastMs;
     } else if (service->isToPhoneQueueEmpty()) {

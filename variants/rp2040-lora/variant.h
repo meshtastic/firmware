@@ -23,10 +23,13 @@
 //  ratio of voltage divider = 3.0 (R17=200k, R18=100k)
 // #define ADC_MULTIPLIER 3.1 // 3.0 + a bit for being optimistic
 
-// Enables battery-related code and requires BATTERY_IMMUTABLE to be defined. Voltage divider is picked first.
+// Enables battery-related code and requires BATTERY_IMMUTABLE to be defined.
 // Ensure a valid address is configured for the INA sensor from which voltage readings are to be obtained.
-// #define HAS_BATTERY
-// #define BATTERY_IMMUTABLE
+#define HAS_BATTERY
+#define BATTERY_IMMUTABLE
+// Disable ina charging detection to prevent charge percentage readings going to 100% while battery is charging.
+#define DISABLE_INA_CHARGING_DETECTION
+
 
 #define HAS_CPU_SHUTDOWN 1
 #define USE_SX1262
