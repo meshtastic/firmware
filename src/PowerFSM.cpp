@@ -184,7 +184,6 @@ static void serialEnter()
     setBluetoothEnable(false);
     if (screen) {
         screen->setOn(true);
-        screen->print("Serial connected\n");
     }
 }
 
@@ -192,8 +191,6 @@ static void serialExit()
 {
     // Turn bluetooth back on when we leave serial stream API
     setBluetoothEnable(true);
-    if (screen)
-        screen->print("Serial disconnected\n");
 }
 
 static void powerEnter()
@@ -208,12 +205,6 @@ static void powerEnter()
             screen->setOn(true);
         setBluetoothEnable(true);
         // within enter() the function getState() returns the state we came from
-
-        // Mothballed: print change of power-state to device screen
-        /* if (strcmp(powerFSM.getState()->name, "BOOT") != 0 && strcmp(powerFSM.getState()->name, "POWER") != 0 &&
-            strcmp(powerFSM.getState()->name, "DARK") != 0) {
-            screen->print("Powered...\n");
-        }*/
     }
 }
 
@@ -231,10 +222,6 @@ static void powerExit()
     if (screen)
         screen->setOn(true);
     setBluetoothEnable(true);
-
-    // Mothballed: print change of power-state to device screen
-    /*if (!isPowered())
-        screen->print("Unpowered...\n");*/
 }
 
 static void onEnter()

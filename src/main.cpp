@@ -953,9 +953,6 @@ void setup()
         screen->setup();
 #endif
 #endif
-    if (screen) {
-        screen->print("Started...\n");
-    }
 
 #ifdef PIN_PWR_DELAY_MS
     // This may be required to give the peripherals time to power up.

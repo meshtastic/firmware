@@ -166,13 +166,6 @@ void ButtonThread::sendAdHocPosition()
 {
     service->refreshLocalMeshNode();
     auto sentPosition = service->trySendPosition(NODENUM_BROADCAST, true);
-    if (screen) {
-        if (sentPosition)
-            screen->print("Sent ad-hoc position\n");
-        else
-            screen->print("Sent ad-hoc nodeinfo\n");
-        screen->forceDisplay(true); // Force a new UI frame, then force an EInk update
-    }
     playComboTune();
 }
 

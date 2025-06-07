@@ -30,7 +30,6 @@ class Screen
     void onPress() {}
     void setup() {}
     void setOn(bool) {}
-    void print(const char *) {}
     void doDeepSleep() {}
     void forceDisplay(bool forceUiUpdate = false) {}
     void startFirmwareUpdateScreen() {}
@@ -320,20 +319,6 @@ class Screen : public concurrency::OSThread
     /// Stops showing the boot screen.
     void stopBootScreen() { enqueueCmd(ScreenCmd{.cmd = Cmd::STOP_BOOT_SCREEN}); }
 
-    /// Writes a string to the screen.
-    void print(const char *text)
-    {
-        ScreenCmd cmd;
-        cmd.cmd = Cmd::PRINT;
-        // TODO(girts): strdup() here is scary, but we can't use std::string as
-        // FreeRTOS queue is just dumbly copying memory contents. It would be
-        // nice if we had a queue that could copy objects by value.
-        cmd.print_text = strdup(text);
-        if (!enqueueCmd(cmd)) {
-            free(cmd.print_text);
-        }
-    }
-
     /// Overrides the default utf8 character conversion, to replace empty space with question marks
     static char customFontTableLookup(const uint8_t ch)
     {
@@ -614,7 +599,6 @@ class Screen : public concurrency::OSThread
     void handleOnPress();
     void handleShowNextFrame();
     void handleShowPrevFrame();
-    void handlePrint(const char *text);
     void handleStartFirmwareUpdateScreen();
 
     // Info collected by setFrames method.

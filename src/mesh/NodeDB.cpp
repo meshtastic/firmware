@@ -1804,10 +1804,6 @@ bool NodeDB::restorePreferences(meshtastic_AdminMessage_BackupLocation location,
 /// Record an error that should be reported via analytics
 void recordCriticalError(meshtastic_CriticalErrorCode code, uint32_t address, const char *filename)
 {
-    // Print error to screen and serial port
-    String lcd = String("Critical error ") + code + "!\n";
-    if (screen)
-        screen->print(lcd.c_str());
     if (filename) {
         LOG_ERROR("NOTE! Record critical error %d at %s:%lu", code, filename, address);
     } else {

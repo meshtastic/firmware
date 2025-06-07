@@ -14,8 +14,6 @@ meshtastic_MeshPacket *ReplyModule::allocReply()
     // The incoming message is in p.payload
     LOG_INFO("Received message from=0x%0x, id=%d, msg=%.*s", req.from, req.id, p.payload.size, p.payload.bytes);
 #endif
-    if (screen)
-        screen->print("Send reply\n");
 
     const char *replyStr = "Message Received";
     auto reply = allocDataPacket();                 // Allocate a packet for sending

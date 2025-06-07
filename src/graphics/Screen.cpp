@@ -1201,10 +1201,6 @@ int32_t Screen::runOnce()
             EINK_ADD_FRAMEFLAG(dispdev, COSMETIC); // E-Ink: Explicitly use full-refresh for next frame
             setFrames();
             break;
-        case Cmd::PRINT:
-            handlePrint(cmd.print_text);
-            free(cmd.print_text);
-            break;
         default:
             LOG_ERROR("Invalid screen cmd");
         }
@@ -1334,15 +1330,6 @@ void Screen::setFrames(FrameFocus focus)
     showingNormalScreen = true;
 
     indicatorIcons.clear();
-#ifdef USE_EINK
-    // If user has disabled the screensaver, warn them after boot
-    static bool warnedScreensaverDisabled = false;
-    if (config.display.screen_on_secs == 0 && !warnedScreensaverDisabled) {
-        screen->print("Screensaver disabled\n");
-        warnedScreensaverDisabled = true;
-    }
-#endif
-
     moduleFrames = MeshModule::GetMeshModulesWithUIFrames();
     LOG_DEBUG("Show %d module frames", moduleFrames.size());
 #ifdef DEBUG_PORT
@@ -1625,17 +1612,6 @@ void Screen::removeFunctionSymbol(std::string sym)
         functionSymbolString = symbol + " " + functionSymbolString;
     }
     setFastFramerate();
-}
-
-void Screen::handlePrint(const char *text)
-{
-    // the string passed into us probably has a newline, but that would confuse the logging system
-    // so strip it
-    LOG_DEBUG("Screen: %.*s", strlen(text) - 1, text);
-    if (!useDisplay || !showingNormalScreen)
-        return;
-
-    dispdev->print(text);
 }
 
 void Screen::handleOnPress()
