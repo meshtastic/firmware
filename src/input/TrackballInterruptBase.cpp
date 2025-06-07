@@ -40,7 +40,24 @@ int32_t TrackballInterruptBase::runOnce()
 {
     InputEvent e;
     e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
-
+#if defined(T_DECK) // T-deck gets a super-simple debounce on trackball
+    if (this->action == TB_ACTION_PRESSED) {
+        // LOG_DEBUG("Trackball event Press");
+        e.inputEvent = this->_eventPressed;
+    } else if (this->action == TB_ACTION_UP && lastEvent == TB_ACTION_UP) {
+        // LOG_DEBUG("Trackball event UP");
+        e.inputEvent = this->_eventUp;
+    } else if (this->action == TB_ACTION_DOWN && lastEvent == TB_ACTION_DOWN) {
+        // LOG_DEBUG("Trackball event DOWN");
+        e.inputEvent = this->_eventDown;
+    } else if (this->action == TB_ACTION_LEFT && lastEvent == TB_ACTION_LEFT) {
+        // LOG_DEBUG("Trackball event LEFT");
+        e.inputEvent = this->_eventLeft;
+    } else if (this->action == TB_ACTION_RIGHT && lastEvent == TB_ACTION_RIGHT) {
+        // LOG_DEBUG("Trackball event RIGHT");
+        e.inputEvent = this->_eventRight;
+    }
+#else
     if (this->action == TB_ACTION_PRESSED) {
         // LOG_DEBUG("Trackball event Press");
         e.inputEvent = this->_eventPressed;
@@ -57,13 +74,14 @@ int32_t TrackballInterruptBase::runOnce()
         // LOG_DEBUG("Trackball event RIGHT");
         e.inputEvent = this->_eventRight;
     }
+#endif
 
     if (e.inputEvent != meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE) {
         e.source = this->_originName;
         e.kbchar = 0x00;
         this->notifyObservers(&e);
     }
-
+    lastEvent = action;
     this->action = TB_ACTION_NONE;
 
     return 100;

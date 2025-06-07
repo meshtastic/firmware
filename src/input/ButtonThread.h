@@ -8,12 +8,25 @@
 #define BUTTON_CLICK_MS 250
 #endif
 
+#ifdef HAS_SCREEN
+#undef BUTTON_LONGPRESS_MS
+#define BUTTON_LONGPRESS_MS 500
+#else
 #ifndef BUTTON_LONGPRESS_MS
 #define BUTTON_LONGPRESS_MS 5000
+#endif
 #endif
 
 #ifndef BUTTON_TOUCH_MS
 #define BUTTON_TOUCH_MS 400
+#endif
+
+#ifndef BUTTON_COMBO_TIMEOUT_MS
+#define BUTTON_COMBO_TIMEOUT_MS 2000 // 2 seconds to complete the combination
+#endif
+
+#ifndef BUTTON_LEADUP_MS
+#define BUTTON_LEADUP_MS 2200 // Play lead-up sound after 2.5 seconds of holding
 #endif
 
 class ButtonThread : public concurrency::OSThread
@@ -30,6 +43,7 @@ class ButtonThread : public concurrency::OSThread
         BUTTON_EVENT_LONG_PRESSED,
         BUTTON_EVENT_LONG_RELEASED,
         BUTTON_EVENT_TOUCH_LONG_PRESSED,
+        BUTTON_EVENT_COMBO_SHORT_LONG,
     };
 
     ButtonThread();
@@ -40,6 +54,15 @@ class ButtonThread : public concurrency::OSThread
     bool isBuzzing() { return buzzer_flag; }
     void setScreenFlag(bool flag) { screen_flag = flag; }
     bool getScreenFlag() { return screen_flag; }
+    bool isInterceptingAndFocused();
+    bool isButtonPressed(int buttonPin)
+    {
+#ifdef BUTTON_ACTIVE_LOW
+        return !digitalRead(buttonPin); // Active low: pressed = LOW
+#else
+        return digitalRead(buttonPin); // Most buttons are active low by default
+#endif
+    }
 
     // Disconnect and reconnect interrupts for light sleep
 #ifdef ARCH_ESP32
@@ -72,6 +95,15 @@ class ButtonThread : public concurrency::OSThread
 
     // Store click count during callback, for later use
     volatile int multipressClickCount = 0;
+
+    // Combination tracking state
+    bool waitingForLongPress = false;
+    uint32_t shortPressTime = 0;
+
+    // Long press lead-up tracking
+    bool leadUpPlayed = false;
+    uint32_t lastLeadUpNoteTime = 0;
+    bool leadUpSequenceActive = false;
 
     static void wakeOnIrq(int irq, int mode);
 

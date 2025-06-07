@@ -34,6 +34,9 @@ Different NicheGraphics UIs and different hardware variants will each have their
 #include "graphics/niche/Drivers/EInk/DEPG0290BNS800.h"
 #include "graphics/niche/Inputs/TwoButton.h"
 
+// Button feedback
+#include "buzz.h"
+
 void setupNicheGraphics()
 {
     using namespace NicheGraphics;
@@ -98,7 +101,10 @@ void setupNicheGraphics()
 
     // #1: Aux Button
     buttons->setWiring(1, BUTTON_PIN_SECONDARY);
-    buttons->setHandlerShortPress(1, [inkhud]() { inkhud->nextTile(); });
+    buttons->setHandlerShortPress(1, [inkhud]() {
+        inkhud->nextTile();
+        playBoop();
+    });
 
     // Begin handling button events
     buttons->start();

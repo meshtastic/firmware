@@ -21,7 +21,6 @@ class TCA8418Keyboard
 
     KeyState state;
     int8_t last_key;
-    int8_t next_key;
     bool should_backspace;
     uint32_t last_tap;
     uint8_t char_idx;

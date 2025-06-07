@@ -435,6 +435,7 @@ int32_t KbI2cBase::runOnce()
             case 0xaf: // fn+space  INPUT_BROKER_MSG_SEND_PING
             case 0x8b: // fn+del    INPUT_BROKEN_MSG_DISMISS_FRAME
             case 0xAA: // fn+b      INPUT_BROKER_MSG_BLUETOOTH_TOGGLE
+            case 0x8F: // fn+e      INPUT_BROKER_MSG_EMOTE_LIST
                 // just pass those unmodified
                 e.inputEvent = ANYKEY;
                 e.kbchar = c;

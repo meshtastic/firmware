@@ -80,13 +80,13 @@ bool trySwitchToOTA()
     return true;
 }
 
-String getVersion()
+const char *getVersion()
 {
     const esp_partition_t *part = getAppPartition();
-    esp_app_desc_t app_desc;
+    static esp_app_desc_t app_desc;
     if (!getAppDesc(part, &app_desc))
-        return String();
-    return String(app_desc.version);
+        return "";
+    return app_desc.version;
 }
 
 } // namespace WiFiOTA
