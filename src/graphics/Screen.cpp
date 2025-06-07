@@ -1425,6 +1425,7 @@ void Screen::setFrames(FrameFocus focus)
     normalFrames[numframes++] = graphics::NodeListRenderer::drawNodeListWithCompasses;
     indicatorIcons.push_back(icon_list);
 
+    fsi.positions.gps = numframes;
     normalFrames[numframes++] = graphics::UIRenderer::drawCompassAndLocationScreen;
     indicatorIcons.push_back(icon_compass);
 
