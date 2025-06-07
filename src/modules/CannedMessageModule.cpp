@@ -1808,7 +1808,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
                 } else {
                     // Text: split by words and wrap inside word if needed
                     String text = token.second;
-                    int pos = 0;
+                    uint16_t pos = 0;
                     while (pos < text.length()) {
                         // Find next space (or end)
                         int spacePos = text.indexOf(' ', pos);
