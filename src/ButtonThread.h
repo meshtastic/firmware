@@ -9,12 +9,12 @@
 #endif
 
 #ifdef HAS_SCREEN
-  #undef BUTTON_LONGPRESS_MS
-  #define BUTTON_LONGPRESS_MS 500
+#undef BUTTON_LONGPRESS_MS
+#define BUTTON_LONGPRESS_MS 500
 #else
-  #ifndef BUTTON_LONGPRESS_MS
-    #define BUTTON_LONGPRESS_MS 5000
-  #endif
+#ifndef BUTTON_LONGPRESS_MS
+#define BUTTON_LONGPRESS_MS 5000
+#endif
 #endif
 
 #ifndef BUTTON_TOUCH_MS

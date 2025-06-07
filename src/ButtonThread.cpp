@@ -8,12 +8,12 @@
 #include "PowerFSM.h"
 #include "RadioLibInterface.h"
 #include "buzz.h"
+#include "input/InputBroker.h"
 #include "main.h"
 #include "modules/CannedMessageModule.h"
 #include "modules/ExternalNotificationModule.h"
 #include "power.h"
 #include "sleep.h"
-#include "input/InputBroker.h"
 #ifdef ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
 #endif
@@ -264,45 +264,45 @@ int32_t ButtonThread::runOnce()
 
     if (btnEvent != BUTTON_EVENT_NONE) {
 #if HAS_SCREEN
-            switch (btnEvent) {
-            case BUTTON_EVENT_PRESSED: {
-                LOG_BUTTON("press!");
+        switch (btnEvent) {
+        case BUTTON_EVENT_PRESSED: {
+            LOG_BUTTON("press!");
 
-                // Play boop sound for every button press
-                playBoop();
+            // Play boop sound for every button press
+            playBoop();
 
-                // Forward single press to InputBroker (but NOT as DOWN/SELECT, just forward a "button press" event)
-                if (inputBroker) {
-                    InputEvent evt = { "button", INPUT_BROKER_MSG_BUTTON_PRESSED, 0, 0, 0 };
-                    inputBroker->injectInputEvent(&evt);
-                }
-
-                // Start tracking for potential combination
-                waitingForLongPress = true;
-                shortPressTime = millis();
-
-                break;
+            // Forward single press to InputBroker (but NOT as DOWN/SELECT, just forward a "button press" event)
+            if (inputBroker) {
+                InputEvent evt = {"button", INPUT_BROKER_MSG_BUTTON_PRESSED, 0, 0, 0};
+                inputBroker->injectInputEvent(&evt);
             }
-            case BUTTON_EVENT_LONG_PRESSED: {
-                LOG_BUTTON("Long press!");
 
-                // Play beep sound
-                playBeep();
+            // Start tracking for potential combination
+            waitingForLongPress = true;
+            shortPressTime = millis();
 
-                // Forward long press to InputBroker (but NOT as DOWN/SELECT, just forward a "button long press" event)
-                if (inputBroker) {
-                    InputEvent evt = { "button", INPUT_BROKER_MSG_BUTTON_LONG_PRESSED, 0, 0, 0 };
-                    inputBroker->injectInputEvent(&evt);
-                }
+            break;
+        }
+        case BUTTON_EVENT_LONG_PRESSED: {
+            LOG_BUTTON("Long press!");
 
-                waitingForLongPress = false;
-                break;
+            // Play beep sound
+            playBeep();
+
+            // Forward long press to InputBroker (but NOT as DOWN/SELECT, just forward a "button long press" event)
+            if (inputBroker) {
+                InputEvent evt = {"button", INPUT_BROKER_MSG_BUTTON_LONG_PRESSED, 0, 0, 0};
+                inputBroker->injectInputEvent(&evt);
             }
-            default:
-                // Ignore all other events on screen devices
-                break;
-            }
-            btnEvent = BUTTON_EVENT_NONE;
+
+            waitingForLongPress = false;
+            break;
+        }
+        default:
+            // Ignore all other events on screen devices
+            break;
+        }
+        btnEvent = BUTTON_EVENT_NONE;
 #else
         // On devices without screen: full legacy logic
         switch (btnEvent) {
