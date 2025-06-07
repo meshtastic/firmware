@@ -292,7 +292,9 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
     switch (runState) {
     // Node/Channel destination selection mode: Handles character search, arrows, select, cancel, backspace
     case CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION:
-        return handleDestinationSelectionInput(event, isUp, isDown, isSelect); // All allowed input for this state
+        if (handleDestinationSelectionInput(event, isUp, isDown, isSelect))
+            return 1;
+        return 0; // prevent fall-through to selector input
 
     // Free text input mode: Handles character input, cancel, backspace, select, etc.
     case CANNED_MESSAGE_RUN_STATE_FREETEXT:
@@ -408,6 +410,15 @@ bool CannedMessageModule::handleTabSwitch(const InputEvent *event)
 
 int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event, bool isUp, bool isDown, bool isSelect)
 {
+    // Override isDown and isSelect ONLY for destination selector behavior
+    if (runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) {
+        if (event->inputEvent == INPUT_BROKER_MSG_BUTTON_PRESSED) {
+            isDown = true;
+        } else if (event->inputEvent == INPUT_BROKER_MSG_BUTTON_LONG_PRESSED) {
+            isSelect = true;
+        }
+    }
+
     if (event->kbchar >= 32 && event->kbchar <= 126 && !isUp && !isDown &&
         event->inputEvent != static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT) &&
         event->inputEvent != static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT) &&
@@ -503,6 +514,15 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
 
 bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bool isUp, bool isDown, bool isSelect)
 {
+    // Override isDown and isSelect ONLY for canned message list behavior
+    if (runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) {
+        if (event->inputEvent == INPUT_BROKER_MSG_BUTTON_PRESSED) {
+            isDown = true;
+        } else if (event->inputEvent == INPUT_BROKER_MSG_BUTTON_LONG_PRESSED) {
+            isSelect = true;
+        }
+    }
+
     if (runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION)
         return false;
 
@@ -591,7 +611,6 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
 
     return handled;
 }
-
 bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
 {
     // Always process only if in FREETEXT mode
@@ -732,9 +751,18 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
 int CannedMessageModule::handleEmotePickerInput(const InputEvent *event)
 {
     int numEmotes = graphics::numEmotes;
+
+    // Override isDown and isSelect ONLY for emote picker behavior
     bool isUp = isUpEvent(event);
     bool isDown = isDownEvent(event);
     bool isSelect = isSelectEvent(event);
+    if (runState == CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER) {
+        if (event->inputEvent == INPUT_BROKER_MSG_BUTTON_PRESSED) {
+            isDown = true;
+        } else if (event->inputEvent == INPUT_BROKER_MSG_BUTTON_LONG_PRESSED) {
+            isSelect = true;
+        }
+    }
 
     // Scroll emote list
     if (isUp && emotePickerIndex > 0) {
@@ -747,6 +775,7 @@ int CannedMessageModule::handleEmotePickerInput(const InputEvent *event)
         screen->forceDisplay();
         return 1;
     }
+
     // Select emote: insert into freetext at cursor and return to freetext
     if (isSelect) {
         String label = graphics::emotes[emotePickerIndex].label;
@@ -761,12 +790,14 @@ int CannedMessageModule::handleEmotePickerInput(const InputEvent *event)
         screen->forceDisplay();
         return 1;
     }
+
     // Cancel returns to freetext
     if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL)) {
         runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
         screen->forceDisplay();
         return 1;
     }
+
     return 0;
 }
 

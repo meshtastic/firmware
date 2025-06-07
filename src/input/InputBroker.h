@@ -21,6 +21,8 @@
 #define INPUT_BROKER_MSG_BLUETOOTH_TOGGLE 0xAA
 #define INPUT_BROKER_MSG_TAB 0x09
 #define INPUT_BROKER_MSG_EMOTE_LIST 0x8F
+#define INPUT_BROKER_MSG_BUTTON_PRESSED 0xe1
+#define INPUT_BROKER_MSG_BUTTON_LONG_PRESSED 0xe2
 
 typedef struct _InputEvent {
     const char *source;
@@ -37,6 +39,7 @@ class InputBroker : public Observable<const InputEvent *>
   public:
     InputBroker();
     void registerSource(Observable<const InputEvent *> *source);
+    void injectInputEvent(const InputEvent *event) { handleInputEvent(event); }
 
   protected:
     int handleInputEvent(const InputEvent *event);

@@ -1781,7 +1781,6 @@ int Screen::handleUIFrameEvent(const UIFrameEvent *event)
 
 int Screen::handleInputEvent(const InputEvent *event)
 {
-
 #if defined(DISPLAY_CLOCK_FRAME)
     // For the T-Watch, intercept touches to the 'toggle digital/analog watch face' button
     uint8_t watchFaceFrame = error_code ? 1 : 0;
@@ -1810,6 +1809,17 @@ int Screen::handleInputEvent(const InputEvent *event)
         for (MeshModule *module : moduleFrames) {
             if (module->interceptingKeyboardInput())
                 inputIntercepted = true;
+        }
+
+        // Only allow BUTTON_PRESSED and BUTTON_LONG_PRESSED to trigger frame changes if no module is handling input
+        if (!inputIntercepted) {
+            if (event->inputEvent == INPUT_BROKER_MSG_BUTTON_PRESSED) {
+                showNextFrame();
+                return 0;
+            } else if (event->inputEvent == INPUT_BROKER_MSG_BUTTON_LONG_PRESSED) {
+                // Optional: Define alternate screen action or no-op
+                return 0;
+            }
         }
 
         // If no modules are using the input, move between frames
