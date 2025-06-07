@@ -263,22 +263,10 @@ uint16_t InkHUD::Applet::Y(float f)
 // Print text, specifying the position of any edge / corner of the textbox
 void InkHUD::Applet::printAt(int16_t x, int16_t y, const char *text, HorizontalAlignment ha, VerticalAlignment va)
 {
-    printAt(x, y, std::string(text), ha, va);
-}
-
-// Print text, specifying the position of any edge / corner of the textbox
-void InkHUD::Applet::printAt(int16_t x, int16_t y, std::string text, HorizontalAlignment ha, VerticalAlignment va)
-{
-    // Custom font
-    // - set with AppletFont::addSubstitution
-    // - find certain UTF8 chars
-    // - replace with glyph from custom font (or suitable ASCII addSubstitution?)
-    getFont().applySubstitutions(&text);
-
     // We do still have to run getTextBounds to find the width
     int16_t textOffsetX, textOffsetY;
     uint16_t textWidth, textHeight;
-    getTextBounds(text.c_str(), 0, 0, &textOffsetX, &textOffsetY, &textWidth, &textHeight);
+    getTextBounds(text, 0, 0, &textOffsetX, &textOffsetY, &textWidth, &textHeight);
 
     int16_t cursorX = 0;
     int16_t cursorY = 0;
@@ -310,7 +298,13 @@ void InkHUD::Applet::printAt(int16_t x, int16_t y, std::string text, HorizontalA
     }
 
     setCursor(cursorX, cursorY);
-    print(text.c_str());
+    print(text);
+}
+
+// Print text, specifying the position of any edge / corner of the textbox
+void InkHUD::Applet::printAt(int16_t x, int16_t y, std::string text, HorizontalAlignment ha, VerticalAlignment va)
+{
+    printAt(x, y, text.c_str(), ha, va);
 }
 
 // Set which font should be used for subsequent drawing
@@ -328,11 +322,52 @@ InkHUD::AppletFont InkHUD::Applet::getFont()
     return currentFont;
 }
 
+// Parse any text which might have "special characters"
+// Re-encodes UTF-8 characters to match our 8-bit encoded fonts
+std::string InkHUD::Applet::parse(std::string text)
+{
+    return getFont().decodeUTF8(text);
+}
+
+// Get the best version of a node's short name available to us
+// Parses any non-ascii chars
+// Swaps for last-four of node-id if the real short name is unknown or can't be rendered (emoji)
+std::string InkHUD::Applet::parseShortName(meshtastic_NodeInfoLite *node)
+{
+    assert(node);
+
+    // Use the true shortname if known, and doesn't contain any unprintable characters (emoji, etc.)
+    if (node->has_user) {
+        std::string parsed = parse(node->user.short_name);
+        if (isPrintable(parsed))
+            return parsed;
+    }
+
+    // Otherwise, use the "last 4" of node id
+    // - if short name unknown, or
+    // - if short name is emoji (we can't render this)
+    std::string nodeID = hexifyNodeNum(node->num);
+    return nodeID.substr(nodeID.length() - 4);
+}
+
+// Determine if all characters of a string are printable using the current font
+bool InkHUD::Applet::isPrintable(std::string text)
+{
+    // Scan for DEL (0x7F), which is the value assigned by AppletFont::applyEncoding if a unicode character is not handled
+    // Todo: move this to from DEL to SUB, once the fonts have been changed for this
+    for (char &c : text) {
+        if (c == '\x7F')
+            return false;
+    }
+
+    // No unprintable characters found
+    return true;
+}
+
 // Gets rendered width of a string
 // Wrapper for getTextBounds
 uint16_t InkHUD::Applet::getTextWidth(const char *text)
 {
-
     // We do still have to run getTextBounds to find the width
     int16_t textOffsetX, textOffsetY;
     uint16_t textWidth, textHeight;
@@ -345,8 +380,6 @@ uint16_t InkHUD::Applet::getTextWidth(const char *text)
 // Wrapper for getTextBounds
 uint16_t InkHUD::Applet::getTextWidth(std::string text)
 {
-    getFont().applySubstitutions(&text);
-
     return getTextWidth(text.c_str());
 }
 
@@ -395,12 +428,6 @@ std::string InkHUD::Applet::hexifyNodeNum(NodeNum num)
 // Avoids splitting words in half, instead moving the entire word to a new line wherever possible
 void InkHUD::Applet::printWrapped(int16_t left, int16_t top, uint16_t width, std::string text)
 {
-    // Custom font glyphs
-    // - set with AppletFont::addSubstitution
-    // - find certain UTF8 chars
-    // - replace with glyph from custom font (or suitable ASCII addSubstitution?)
-    getFont().applySubstitutions(&text);
-
     // Place the AdafruitGFX cursor to suit our "top" coord
     setCursor(left, top + getFont().heightAboveCursor());
 

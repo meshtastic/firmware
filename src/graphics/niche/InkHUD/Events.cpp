@@ -146,11 +146,6 @@ int InkHUD::Events::onReceiveTextMessage(const meshtastic_MeshPacket *packet)
     if (getFrom(packet) == nodeDB->getNodeNum())
         return 0;
 
-    // Short circuit: don't store "emoji reactions"
-    // Possibly some implementation of this in future?
-    if (packet->decoded.emoji)
-        return 0;
-
     // Determine whether the message is broadcast or a DM
     // Store this info to prevent confusion after a reboot
     // Avoids need to compare timestamps, because of situation where "future" messages block newly received, if time not set

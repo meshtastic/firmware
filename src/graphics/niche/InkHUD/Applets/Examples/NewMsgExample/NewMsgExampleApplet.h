@@ -5,7 +5,7 @@
 An example of an InkHUD applet.
 Tells us when a new text message arrives.
 
-This applet makes use of the MeshModule API to detect new messages,
+This applet makes use of the Module API to detect new messages,
 which is a general part of the Meshtastic firmware, and not part of InkHUD.
 
 In variants/<your device>/nicheGraphics.h:

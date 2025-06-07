@@ -87,6 +87,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_POCKET
 #elif defined(NOMADSTAR_METEOR_PRO)
 #define HW_VENDOR meshtastic_HardwareModel_NOMADSTAR_METEOR_PRO
+#elif defined(SEEED_WIO_TRACKER_L1)
+#define HW_VENDOR meshtastic_HardwareModel_SEEED_WIO_TRACKER_L1
 #else
 #define HW_VENDOR meshtastic_HardwareModel_NRF52_UNKNOWN
 #endif

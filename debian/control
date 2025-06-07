@@ -31,7 +31,9 @@ Rules-Requires-Root: no
 
 Package: meshtasticd
 Architecture: any
-Depends: ${misc:Depends}, ${shlibs:Depends}
+Depends: adduser,
+         ${misc:Depends},
+         ${shlibs:Depends}
 Description: Meshtastic daemon for communicating with Meshtastic devices
  Meshtastic is an off-grid text communication platform that uses inexpensive 
  LoRa radios.

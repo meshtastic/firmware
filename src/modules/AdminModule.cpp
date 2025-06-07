@@ -38,7 +38,7 @@
 #include "modules/PositionModule.h"
 #endif
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
 #include "motion/AccelerometerThread.h"
 #endif
 
@@ -286,6 +286,11 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         nodeDB->removeNodeByNum(r->remove_by_nodenum);
         break;
     }
+    case meshtastic_AdminMessage_add_contact_tag: {
+        LOG_INFO("Client received add_contact command");
+        nodeDB->addFromContact(r->add_contact);
+        break;
+    }
     case meshtastic_AdminMessage_set_favorite_node_tag: {
         LOG_INFO("Client received set_favorite_node command");
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->set_favorite_node);
@@ -499,6 +504,12 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
             sendWarning(licensedModeMessage);
         }
     }
+    if (owner.has_is_unmessagable != o.has_is_unmessagable ||
+        (o.has_is_unmessagable && owner.is_unmessagable != o.is_unmessagable)) {
+        changed = 1;
+        owner.has_is_unmessagable = o.has_is_unmessagable || o.has_is_unmessagable;
+        owner.is_unmessagable = o.is_unmessagable;
+    }
 
     if (changed) { // If nothing really changed, don't broadcast on the network or write to flash
         service->reloadOwner(!hasOpenEditTransaction);
@@ -548,8 +559,10 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             sendWarning(warning);
         }
         // If we're setting router role for the first time, install its intervals
-        if (existingRole != c.payload_variant.device.role)
+        if (existingRole != c.payload_variant.device.role) {
             nodeDB->installRoleDefaults(c.payload_variant.device.role);
+            changes |= SEGMENT_NODEDATABASE | SEGMENT_DEVICESTATE; // Some role defaults affect owner
+        }
         if (config.device.node_info_broadcast_secs < min_node_info_broadcast_secs) {
             LOG_DEBUG("Tried to set node_info_broadcast_secs too low, setting to %d", min_node_info_broadcast_secs);
             config.device.node_info_broadcast_secs = min_node_info_broadcast_secs;
@@ -648,6 +661,24 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         config.lora = c.payload_variant.lora;
         // If we're setting region for the first time, init the region
         if (isRegionUnset && config.lora.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
+            if (!owner.is_licensed) {
+                bool keygenSuccess = false;
+                if (config.security.private_key.size == 32) {
+                    if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
+                        keygenSuccess = true;
+                    }
+                } else {
+                    LOG_INFO("Generate new PKI keys");
+                    crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
+                    keygenSuccess = true;
+                }
+                if (keygenSuccess) {
+                    config.security.public_key.size = 32;
+                    config.security.private_key.size = 32;
+                    owner.public_key.size = 32;
+                    memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
+                }
+            }
             config.lora.tx_enabled = true;
             initRegion();
             if (myRegion->dutyCycle < 100) {

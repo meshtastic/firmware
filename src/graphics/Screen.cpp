@@ -1612,6 +1612,9 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 #ifdef T_WATCH_S3
             PMU->enablePowerOutput(XPOWERS_ALDO2);
 #endif
+#ifdef HELTEC_TRACKER_V1_X
+            uint8_t tft_vext_enabled = digitalRead(VEXT_ENABLE);
+#endif
 #if !ARCH_PORTDUINO
             dispdev->displayOn();
 #endif
@@ -1622,6 +1625,12 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 #endif
 
             dispdev->displayOn();
+#ifdef HELTEC_TRACKER_V1_X
+            // If the TFT VEXT power is not enabled, initialize the UI.
+            if (!tft_vext_enabled) {
+                ui->init();
+            }
+#endif
 #ifdef USE_ST7789
             pinMode(VTFT_CTRL, OUTPUT);
             digitalWrite(VTFT_CTRL, LOW);
