@@ -1824,10 +1824,25 @@ int Screen::handleInputEvent(const InputEvent *event)
 
         // If no modules are using the input, move between frames
         if (!inputIntercepted) {
-            if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT))
+            if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {
                 showPrevFrame();
-            else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT))
+            } else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT)) {
                 showNextFrame();
+            } else if (event->inputEvent ==
+                       static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT)) {
+#if HAS_TFT
+                if (this->ui->getUiState()->currentFrame == framesetInfo.positions.memory) {
+                    showOverlayBanner("Switch to MUI?\nYES\nNO", 30000, 2, [](int selected) -> void {
+                        if (selected == 0) {
+                            config.display.displaymode = meshtastic_Config_DisplayConfig_DisplayMode_COLOR;
+                            config.bluetooth.enabled = false;
+                            service->reloadConfig(SEGMENT_CONFIG);
+                            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+                        }
+                    });
+                }
+#endif
+            }
         }
     }
 
