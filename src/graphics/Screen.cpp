@@ -1787,7 +1787,10 @@ int Screen::handleInputEvent(const InputEvent *event)
 
     if (NotificationRenderer::isOverlayBannerShowing()) {
         NotificationRenderer::inEvent = event->inputEvent;
-        setFrames();
+        static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar,
+                                             NotificationRenderer::drawAlertBannerOverlay};
+        ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
+        setFastFramerate(); // Draw ASAP
         ui->update();
         return 0;
     }
