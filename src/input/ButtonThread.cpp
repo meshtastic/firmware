@@ -18,7 +18,7 @@
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 
-#define DEBUG_BUTTONS 0
+#define DEBUG_BUTTONS 1
 #if DEBUG_BUTTONS
 #define LOG_BUTTON(...) LOG_DEBUG(__VA_ARGS__)
 #else
