@@ -337,12 +337,12 @@ void setup()
 
 #ifdef LED_POWER
     pinMode(LED_POWER, OUTPUT);
-    digitalWrite(LED_POWER, HIGH);
+    digitalWrite(LED_POWER, LED_STATE_ON);
 #endif
 
 #ifdef USER_LED
     pinMode(USER_LED, OUTPUT);
-    digitalWrite(USER_LED, LOW);
+    digitalWrite(USER_LED, HIGH ^ LED_STATE_ON);
 #endif
 
 #if defined(T_DECK)
