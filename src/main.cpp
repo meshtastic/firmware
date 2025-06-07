@@ -99,7 +99,7 @@ NRF52Bluetooth *nrf52Bluetooth = nullptr;
 #endif
 
 #if HAS_BUTTON || defined(ARCH_PORTDUINO)
-#include "ButtonThread.h"
+#include "input/ButtonThread.h"
 #endif
 
 #include "AmbientLightingThread.h"

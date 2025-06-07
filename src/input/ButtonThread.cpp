@@ -266,7 +266,7 @@ int32_t ButtonThread::runOnce()
 #if HAS_SCREEN
         switch (btnEvent) {
         case BUTTON_EVENT_PRESSED: {
-            LOG_BUTTON("press!");
+            LOG_WARN("press!");
 
             // Play boop sound for every button press
             playBoop();
@@ -283,8 +283,24 @@ int32_t ButtonThread::runOnce()
 
             break;
         }
+        case BUTTON_EVENT_DOUBLE_PRESSED: {
+            LOG_WARN("press!");
+
+            // Play boop sound for every button press
+            playBoop();
+
+            // Forward single press to InputBroker (but NOT as DOWN/SELECT, just forward a "button press" event)
+            if (inputBroker) {
+                InputEvent evt = {"button", INPUT_BROKER_MSG_BUTTON_DOUBLE_PRESSED, 0, 0, 0};
+                inputBroker->injectInputEvent(&evt);
+            }
+
+            waitingForLongPress = false;
+
+            break;
+        }
         case BUTTON_EVENT_LONG_PRESSED: {
-            LOG_BUTTON("Long press!");
+            LOG_WARN("Long press!");
 
             // Play beep sound
             playBeep();

@@ -59,7 +59,7 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
     // Exit if no message is active or duration has passed
     if (!isOverlayBannerShowing())
         return;
-    LOG_DEBUG("event: %u, curSelected: %d", inEvent, curSelected);
+
     // === Layout Configuration ===
     constexpr uint16_t padding = 5;    // Padding around text inside the box
     constexpr uint16_t vPadding = 2;   // Padding around text inside the box
@@ -105,9 +105,11 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
         // respond to input
         if (inEvent == meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP) {
             curSelected--;
-        } else if (inEvent == meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN) {
+        } else if (inEvent == meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN ||
+                   inEvent == INPUT_BROKER_MSG_BUTTON_PRESSED) {
             curSelected++;
-        } else if (inEvent == meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT) {
+        } else if (inEvent == meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT ||
+                   inEvent == INPUT_BROKER_MSG_BUTTON_DOUBLE_PRESSED) {
             alertBannerCallback(curSelected);
             alertBannerMessage[0] = '\0';
         }
@@ -172,8 +174,6 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
     // === Draw each line centered in the box ===
     int16_t lineY = boxTop + vPadding;
 
-    LOG_DEBUG("firstOptionToShow: %u, firstOption: %u", firstOptionToShow, firstOption);
-    //
     for (int i = 0; i < lineCount; i++) {
         // is this line selected?
         // if so, start the buffer with -> and strncpy to the 4th location

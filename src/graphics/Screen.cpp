@@ -36,7 +36,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
 #endif
-#include "ButtonThread.h"
 #include "FSCommon.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -48,6 +47,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/emotes.h"
 #include "graphics/images.h"
+#include "input/ButtonThread.h"
 #include "input/ScanAndSelect.h"
 #include "input/TouchScreenImpl1.h"
 #include "main.h"
@@ -1781,6 +1781,13 @@ int Screen::handleUIFrameEvent(const UIFrameEvent *event)
 
 int Screen::handleInputEvent(const InputEvent *event)
 {
+
+    if (NotificationRenderer::isOverlayBannerShowing()) {
+        NotificationRenderer::inEvent = event->inputEvent;
+        setFrames();
+        ui->update();
+        return 0;
+    }
 #if defined(DISPLAY_CLOCK_FRAME)
     // For the T-Watch, intercept touches to the 'toggle digital/analog watch face' button
     uint8_t watchFaceFrame = error_code ? 1 : 0;
@@ -1794,12 +1801,7 @@ int Screen::handleInputEvent(const InputEvent *event)
         return 0;
     }
 #endif
-    if (NotificationRenderer::isOverlayBannerShowing()) {
-        NotificationRenderer::inEvent = event->inputEvent;
-        setFrames();
-        ui->update();
-        return 0;
-    }
+
     // Use left or right input from a keyboard to move between frames,
     // so long as a mesh module isn't using these events for some other purpose
     if (showingNormalScreen) {
@@ -1829,7 +1831,8 @@ int Screen::handleInputEvent(const InputEvent *event)
             } else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT)) {
                 showNextFrame();
             } else if (event->inputEvent ==
-                       static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT)) {
+                           static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT) ||
+                       event->inputEvent == INPUT_BROKER_MSG_BUTTON_DOUBLE_PRESSED) {
 #if HAS_TFT
                 if (this->ui->getUiState()->currentFrame == framesetInfo.positions.memory) {
                     showOverlayBanner("Switch to MUI?\nYES\nNO", 30000, 2, [](int selected) -> void {

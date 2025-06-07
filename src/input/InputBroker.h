@@ -23,6 +23,7 @@
 #define INPUT_BROKER_MSG_EMOTE_LIST 0x8F
 #define INPUT_BROKER_MSG_BUTTON_PRESSED 0xe1
 #define INPUT_BROKER_MSG_BUTTON_LONG_PRESSED 0xe2
+#define INPUT_BROKER_MSG_BUTTON_DOUBLE_PRESSED 0xe3
 
 typedef struct _InputEvent {
     const char *source;
