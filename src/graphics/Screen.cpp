@@ -1390,6 +1390,7 @@ void Screen::setFrames(FrameFocus focus)
 
 #if defined(DISPLAY_CLOCK_FRAME)
     normalFrames[numframes++] = screen->digitalWatchFace ? &Screen::drawDigitalClockFrame : &Screen::drawAnalogClockFrame;
+    indicatorIcons.push_back(icon_compass);
 #endif
 
     // Declare this early so it’s available in FOCUS_PRESERVE block
