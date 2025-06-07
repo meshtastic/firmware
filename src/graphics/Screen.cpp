@@ -144,6 +144,7 @@ void Screen::showOverlayBanner(const char *message, uint32_t durationMs, uint8_t
     NotificationRenderer::alertBannerUntil = (durationMs == 0) ? 0 : millis() + durationMs;
     NotificationRenderer::alertBannerOptions = options;
     NotificationRenderer::alertBannerCallback = bannerCallback;
+    NotificationRenderer::curSelected = 0;
 }
 
 static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -1843,6 +1844,19 @@ int Screen::handleInputEvent(const InputEvent *event)
                             config.bluetooth.enabled = false;
                             service->reloadConfig(SEGMENT_CONFIG);
                             rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+                        }
+                    });
+                }
+#endif
+#if HAS_GPS
+                if (this->ui->getUiState()->currentFrame == framesetInfo.positions.gps) {
+                    showOverlayBanner("Toggle GPS\nENABLED\nDISABLED", 30000, 2, [](int selected) -> void {
+                        if (selected == 0) {
+                            config.position.gps_enabled = true;
+                            gps->enable();
+                        } else if (selected == 1) {
+                            config.position.gps_enabled = false;
+                            gps->disable();
                         }
                     });
                 }
