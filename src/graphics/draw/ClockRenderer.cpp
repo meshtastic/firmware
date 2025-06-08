@@ -274,9 +274,9 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
 
         // draw seconds string
         display->setFont(FONT_SMALL);
-        int xOffset = (SCREEN_WIDTH > 128) ? 0 : 0;
+        int xOffset = (SCREEN_WIDTH > 128) ? 0 : -1;
         if (hour >= 10) {
-            xOffset += (SCREEN_WIDTH > 128) ? 0 : 17;
+            xOffset += (SCREEN_WIDTH > 128) ? 0 : 18;
         }
         int yOffset = (SCREEN_WIDTH > 128) ? 3 : 1;
         if (config.display.use_12h_clock) {
