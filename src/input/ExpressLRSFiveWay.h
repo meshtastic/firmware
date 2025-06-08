@@ -63,7 +63,7 @@ class ExpressLRSFiveWay : public Observable<const InputEvent *>, public concurre
 
     // Meshtastic code
     void determineAction(KeyType key, PressLength length);
-    void sendKey(KeyType key);
+    void sendKey(input_broker_event key);
     inline bool inCannedMessageMenu() { return cannedMessageModule->shouldDraw(); }
     int32_t runOnce() override;
 
