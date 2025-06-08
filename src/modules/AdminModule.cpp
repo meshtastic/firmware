@@ -485,13 +485,30 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
 {
     int changed = 0;
 
+    // Validate long_name and short names have meaningful content
     if (*o.long_name) {
-        changed |= strcmp(owner.long_name, o.long_name);
-        strncpy(owner.long_name, o.long_name, sizeof(owner.long_name));
+        const char *start = o.long_name;
+        while (*start == ' ' || *start == '\t')
+            start++; // Skip whitespace
+
+        if (strlen(start) >= 1) {
+            changed |= strcmp(owner.long_name, o.long_name);
+            strncpy(owner.long_name, o.long_name, sizeof(owner.long_name));
+        } else {
+            LOG_WARN("Rejected long_name: must contain at least 1 non-whitespace character");
+        }
     }
     if (*o.short_name) {
-        changed |= strcmp(owner.short_name, o.short_name);
-        strncpy(owner.short_name, o.short_name, sizeof(owner.short_name));
+        const char *start = o.short_name;
+        while (*start == ' ' || *start == '\t')
+            start++;
+
+        if (strlen(start) >= 1) {
+            changed |= strcmp(owner.short_name, o.short_name);
+            strncpy(owner.short_name, o.short_name, sizeof(owner.short_name));
+        } else {
+            LOG_WARN("Rejected short_name: must contain at least 1 non-whitespace character");
+        }
     }
     if (*o.id) {
         changed |= strcmp(owner.id, o.id);
