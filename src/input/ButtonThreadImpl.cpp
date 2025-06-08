@@ -2,8 +2,6 @@
 #include "InputBroker.h"
 #include "configuration.h"
 
-#if defined(BUTTON_PIN)
-
 ButtonThreadImpl *aButtonThreadImpl;
 
 ButtonThreadImpl::ButtonThreadImpl() : ButtonThread("UserButton") {}
@@ -13,5 +11,3 @@ void ButtonThreadImpl::init() // init should give the pin number and the action 
     if (inputBroker)
         inputBroker->registerSource(this);
 }
-
-#endif // INPUTBROKER_SERIAL_TYPE

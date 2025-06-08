@@ -14,7 +14,6 @@
 
 #if !MESHTASTIC_EXCLUDE_BLUETOOTH
 #include "nimble/NimbleBluetooth.h"
-NimbleBluetooth *nimbleBluetooth = nullptr;
 #endif
 
 #endif
