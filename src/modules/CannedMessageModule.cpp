@@ -2173,9 +2173,4 @@ String CannedMessageModule::drawWithCursor(String text, int cursor)
     return result;
 }
 
-bool CannedMessageModule::isInterceptingAndFocused()
-{
-    return this->interceptingKeyboardInput();
-}
-
 #endif

@@ -207,7 +207,6 @@ void setupModules()
             trackballInterruptImpl1->init();
         }
 #endif
-        LOG_DEBUG("location5");
 #ifdef INPUTBROKER_EXPRESSLRSFIVEWAY_TYPE
         expressLRSFiveWayInput = new ExpressLRSFiveWay();
 #endif

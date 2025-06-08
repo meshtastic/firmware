@@ -75,7 +75,6 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     void resetSearch();
     void updateDestinationSelectionList();
     void drawDestinationSelectionScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-    bool isInterceptingAndFocused();
     bool isCharInputAllowed() const;
     String drawWithCursor(String text, int cursor);
 
