@@ -7,6 +7,7 @@
 #include "SPILock.h"
 #include "meshUtils.h"
 #include <FSCommon.h>
+#include <ctype.h> // for better whitespace handling
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH
 #include "BleOta.h"
 #endif
@@ -155,12 +156,13 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
      */
     case meshtastic_AdminMessage_set_owner_tag:
         LOG_DEBUG("Client set owner");
-        // Validate names before processing
+        // Validate names
         if (*r->set_owner.long_name) {
             const char *start = r->set_owner.long_name;
-            while (*start == ' ' || *start == '\t')
-                start++; // Skip whitespace
-            if (strlen(start) < 1) {
+            // Skip all whitespace (space, tab, newline, unicode, etc)
+            while (*start && isspace((unsigned char)*start))
+                start++;
+            if (*start == '\0') {
                 LOG_WARN("Rejected long_name: must contain at least 1 non-whitespace character");
                 myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
                 break;
@@ -168,9 +170,9 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         }
         if (*r->set_owner.short_name) {
             const char *start = r->set_owner.short_name;
-            while (*start == ' ' || *start == '\t')
-                start++; // Skip whitespace
-            if (strlen(start) < 1) {
+            while (*start && isspace((unsigned char)*start))
+                start++;
+            if (*start == '\0') {
                 LOG_WARN("Rejected short_name: must contain at least 1 non-whitespace character");
                 myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
                 break;
