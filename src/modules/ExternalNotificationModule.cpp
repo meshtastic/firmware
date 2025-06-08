@@ -350,6 +350,9 @@ ExternalNotificationModule::ExternalNotificationModule()
     // moduleConfig.external_notification.alert_message_buzzer = true;
 
     if (moduleConfig.external_notification.enabled) {
+        if (inputBroker) // put our callback in the inputObserver list
+            inputObserver.observe(inputBroker);
+
         if (nodeDB->loadProto(rtttlConfigFile, meshtastic_RTTTLConfig_size, sizeof(meshtastic_RTTTLConfig),
                               &meshtastic_RTTTLConfig_msg, &rtttlConfig) != LoadFileResult::LOAD_SUCCESS) {
             memset(rtttlConfig.ringtone, 0, sizeof(rtttlConfig.ringtone));
@@ -595,4 +598,14 @@ void ExternalNotificationModule::handleSetRingtone(const char *from_msg)
     if (changed) {
         nodeDB->saveProto(rtttlConfigFile, meshtastic_RTTTLConfig_size, &meshtastic_RTTTLConfig_msg, &rtttlConfig);
     }
+}
+
+int ExternalNotificationModule::handleInputEvent(const InputEvent *event)
+{
+    LOG_WARN("ExternalNotification Handle Input");
+    if (nagCycleCutoff != UINT32_MAX) {
+        stopNow();
+        return 1;
+    }
+    return 0;
 }

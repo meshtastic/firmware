@@ -8,7 +8,6 @@
 #include "FSCommon.h"
 #include "MeshService.h"
 #include "NodeDB.h"
-#include "PowerFSM.h" // needed for button bypass
 #include "SPILock.h"
 #include "buzz.h"
 #include "detect/ScanI2C.h"
@@ -587,7 +586,6 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
 
         // Normal canned message selection
         if (runState == CANNED_MESSAGE_RUN_STATE_INACTIVE || runState == CANNED_MESSAGE_RUN_STATE_DISABLED) {
-            powerFSM.trigger(EVENT_PRESS);
         } else {
             payload = runState;
             runState = CANNED_MESSAGE_RUN_STATE_ACTION_SELECT;
@@ -1002,7 +1000,6 @@ int32_t CannedMessageModule::runOnce()
             }
             if ((this->messagesCount > this->currentMessageIndex) && (strlen(this->messages[this->currentMessageIndex]) > 0)) {
                 if (strcmp(this->messages[this->currentMessageIndex], "~") == 0) {
-                    powerFSM.trigger(EVENT_PRESS);
                     return INT32_MAX;
                 } else {
                     sendText(this->dest, this->channel, this->messages[this->currentMessageIndex], true);

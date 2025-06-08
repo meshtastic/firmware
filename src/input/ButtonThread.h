@@ -106,7 +106,6 @@ class ButtonThread : public Observable<const InputEvent *>, public concurrency::
     static void sendAdHocPosition();
 
     // IRQ callbacks
-    static void userButtonPressed() { btnEvent = BUTTON_EVENT_PRESSED; }
     static void userButtonPressedScreen() { btnEvent = BUTTON_EVENT_PRESSED_SCREEN; }
     static void userButtonDoublePressed() { btnEvent = BUTTON_EVENT_DOUBLE_PRESSED; }
     static void userButtonMultiPressed(void *callerThread); // Retrieve click count from non-static Onebutton while still valid

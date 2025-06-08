@@ -5,7 +5,6 @@
 #include "GPS.h"
 #endif
 #include "MeshService.h"
-#include "PowerFSM.h"
 #include "RadioLibInterface.h"
 #include "buzz.h"
 #include "input/InputBroker.h"
@@ -217,174 +216,118 @@ int32_t ButtonThread::runOnce()
 #endif
 
     if (btnEvent != BUTTON_EVENT_NONE) {
-        if (screen) {
-#if HAS_SCREEN
-            switch (btnEvent) {
-            case BUTTON_EVENT_PRESSED: {
-                LOG_WARN("press!");
+        switch (btnEvent) {
+        case BUTTON_EVENT_PRESSED: {
+            LOG_WARN("press!");
 
-                // Play boop sound for every button press
-                playBoop();
+            // Play boop sound for every button press
+            playBoop();
 
-                // Forward single press to InputBroker (but NOT as DOWN/SELECT, just forward a "button press" event)
-                InputEvent evt;
-                evt.source = _originName;
-                evt.kbchar = 0;
-                evt.touchX = 0;
-                evt.touchY = 0;
-                evt.inputEvent = INPUT_BROKER_USER_PRESS;
-                this->notifyObservers(&evt);
-                break;
-            }
-            case BUTTON_EVENT_LONG_PRESSED: {
-                LOG_WARN("Long press!");
+            // Forward single press to InputBroker (but NOT as DOWN/SELECT, just forward a "button press" event)
+            InputEvent evt;
+            evt.source = _originName;
+            evt.kbchar = 0;
+            evt.touchX = 0;
+            evt.touchY = 0;
+            evt.inputEvent = INPUT_BROKER_USER_PRESS;
+            this->notifyObservers(&evt);
 
-                // Play beep sound
-                playBeep();
-
-                // Forward long press to InputBroker (but NOT as DOWN/SELECT, just forward a "button long press" event)
-                if (inputBroker) {
-                    InputEvent evt = {"button", INPUT_BROKER_SELECT, 0, 0, 0};
-                    this->notifyObservers(&evt);
-                }
-                break;
-            }
-            default:
-                // Ignore all other events on screen devices
-                break;
-            }
-            btnEvent = BUTTON_EVENT_NONE;
-#endif
-        } else {
-            // On devices without screen: full legacy logic
-            switch (btnEvent) {
-            case BUTTON_EVENT_PRESSED: {
-                LOG_BUTTON("press!");
-
-                // Play boop sound for every button press
-                playBoop();
-
-                // If a nag notification is running, stop it and prevent other actions
-                if (moduleConfig.external_notification.enabled && (externalNotificationModule->nagCycleCutoff != UINT32_MAX)) {
-                    externalNotificationModule->stopNow();
-                    break;
-                }
-
-                // Start tracking for potential combination
+            // Start tracking for potential combination
+            if (!screen) {
                 waitingForLongPress = true;
                 shortPressTime = millis();
-
-                powerFSM.trigger(EVENT_PRESS);
-                break;
             }
+            break;
+        }
 
-            case BUTTON_EVENT_PRESSED_SCREEN: {
-                LOG_BUTTON("AltPress!");
+        case BUTTON_EVENT_PRESSED_SCREEN: {
+            LOG_BUTTON("AltPress!");
 
-                // Play boop sound for every button press
-                playBoop();
+            // Play boop sound for every button press
+            playBoop();
 
-                // Reset combination tracking
-                waitingForLongPress = false;
+            // Reset combination tracking
+            waitingForLongPress = false;
 
-#ifdef ELECROW_ThinkNode_M1
-                // If a nag notification is running, stop it and prevent other actions
-                if (moduleConfig.external_notification.enabled && (externalNotificationModule->nagCycleCutoff != UINT32_MAX)) {
-                    externalNotificationModule->stopNow();
-                    break;
-                }
-                powerFSM.trigger(EVENT_PRESS);
-                break;
-#endif
-                break;
-            }
+            break;
+        }
 
-            case BUTTON_EVENT_DOUBLE_PRESSED: {
-                LOG_BUTTON("Double press!");
+        case BUTTON_EVENT_DOUBLE_PRESSED: { // not wired in if screen detected
+            LOG_BUTTON("Double press!");
 
-                // Play boop sound for every button press
-                playBoop();
+            // Play boop sound for every button press
+            playBoop();
 
-                // Reset combination tracking
-                waitingForLongPress = false;
+            // Reset combination tracking
+            waitingForLongPress = false;
 
-#ifdef ELECROW_ThinkNode_M1
-                digitalWrite(PIN_EINK_EN, digitalRead(PIN_EINK_EN) == LOW);
-                break;
-#endif
+            // Send GPS position immediately
+            sendAdHocPosition();
 
-                // Send GPS position immediately
-                sendAdHocPosition();
+            break;
+        }
 
-                // Show temporary on-screen confirmation banner for 3 seconds
-                if (screen)
-                    screen->showOverlayBanner("Ad-hoc Ping Sent", 3000);
-                break;
-            }
+        case BUTTON_EVENT_MULTI_PRESSED: { // not wired in when screen is present
+            LOG_BUTTON("Mulitipress! %hux", multipressClickCount);
 
-            case BUTTON_EVENT_MULTI_PRESSED: {
-                LOG_BUTTON("Mulitipress! %hux", multipressClickCount);
+            // Play boop sound for every button press
+            playBoop();
 
-                // Play boop sound for every button press
-                playBoop();
+            // Reset combination tracking
+            waitingForLongPress = false;
 
-                // Reset combination tracking
-                waitingForLongPress = false;
-
-                switch (multipressClickCount) {
+            switch (multipressClickCount) {
 #if HAS_GPS && !defined(ELECROW_ThinkNode_M1)
-                // 3 clicks: toggle GPS
-                case 3:
-                    if (!config.device.disable_triple_click && (gps != nullptr)) {
-                        gps->toggleGpsMode();
-                    }
-                    break;
+            // 3 clicks: toggle GPS
+            case 3:
+                if (!config.device.disable_triple_click && (gps != nullptr)) {
+                    gps->toggleGpsMode();
+                }
+                break;
 #endif
 
 #if defined(USE_EINK) && defined(PIN_EINK_EN) && !defined(ELECROW_ThinkNode_M1) // i.e. T-Echo
-                // 4 clicks: toggle backlight
-                case 4:
-                    digitalWrite(PIN_EINK_EN, digitalRead(PIN_EINK_EN) == LOW);
-                    break;
-#endif
-                // No valid multipress action
-                default:
-                    break;
-                } // end switch: click count
-
+            // 4 clicks: toggle backlight
+            case 4:
+                digitalWrite(PIN_EINK_EN, digitalRead(PIN_EINK_EN) == LOW);
                 break;
-            } // end multipress event
+#endif
+            // No valid multipress action
+            default:
+                break;
+            } // end switch: click count
 
-            case BUTTON_EVENT_LONG_PRESSED: {
-                LOG_BUTTON("Long press!");
+            break;
+        } // end multipress event
 
-                // Check if this is part of a short-press + long-press combination
-                if (waitingForLongPress && (millis() - shortPressTime) <= BUTTON_COMBO_TIMEOUT_MS) {
-                    LOG_BUTTON("Combo detected: short-press + long-press!");
-                    btnEvent = BUTTON_EVENT_COMBO_SHORT_LONG;
-                    waitingForLongPress = false;
-                    break;
-                }
+        case BUTTON_EVENT_LONG_PRESSED: {
+            LOG_BUTTON("Long press!");
 
-                // Reset combination tracking
+            // Check if this is part of a short-press + long-press combination
+            if (waitingForLongPress && (millis() - shortPressTime) <= BUTTON_COMBO_TIMEOUT_MS) {
+                LOG_BUTTON("Combo detected: short-press + long-press!");
+                btnEvent = BUTTON_EVENT_COMBO_SHORT_LONG;
                 waitingForLongPress = false;
-
-                powerFSM.trigger(EVENT_PRESS);
-
-                if (screen) {
-                    // Show shutdown message as a temporary overlay banner
-                    screen->showOverlayBanner("Shutting Down..."); // Display for 3 seconds
-                }
-
-                // Lead-up sound already played during button hold
-                // Just a simple beep to confirm long press threshold reached
-                playBeep();
                 break;
             }
 
-            // Do actual shutdown when button released, otherwise the button release
-            // may wake the board immediatedly.
-            case BUTTON_EVENT_LONG_RELEASED: {
+            // Forward long press to InputBroker (but NOT as DOWN/SELECT, just forward a "button long press" event)
+            InputEvent evt = {"button", INPUT_BROKER_SELECT, 0, 0, 0};
+            this->notifyObservers(&evt);
+
+            // Reset combination tracking
+            waitingForLongPress = false;
+
+            // Lead-up sound already played during button hold
+            // Just a simple beep to confirm long press threshold reached
+            playBeep();
+            break;
+        }
+
+        // Do actual shutdown when button released, otherwise the button release
+        // may wake the board immediatedly.
+        case BUTTON_EVENT_LONG_RELEASED: {
+            if (!screen) {
                 LOG_INFO("Shutdown from long press");
 
                 // Reset combination tracking
@@ -394,59 +337,49 @@ int32_t ButtonThread::runOnce()
                 delay(3000);
                 power->shutdown();
                 nodeDB->saveToDisk();
-                break;
             }
+            break;
+        }
 
 #ifdef BUTTON_PIN_TOUCH
-            case BUTTON_EVENT_TOUCH_LONG_PRESSED: {
-                LOG_BUTTON("Touch press!");
+        case BUTTON_EVENT_TOUCH_LONG_PRESSED: {
+            LOG_BUTTON("Touch press!");
 
-                // Play boop sound for every button press
-                playBoop();
+            // Play boop sound for every button press
+            playBoop();
 
-                // Reset combination tracking
-                waitingForLongPress = false;
-
-                // Ignore if: no screen
-                if (!screen)
-                    break;
+            // Reset combination tracking
+            waitingForLongPress = false;
 
 #ifdef TTGO_T_ECHO
-                // Ignore if: TX in progress
-                // Uncommon T-Echo hardware bug, LoRa TX triggers touch button
-                if (!RadioLibInterface::instance || RadioLibInterface::instance->isSending())
-                    break;
+            // Ignore if: TX in progress
+            // Uncommon T-Echo hardware bug, LoRa TX triggers touch button
+            if (!RadioLibInterface::instance || RadioLibInterface::instance->isSending())
+                break;
 #endif
 
-                // Wake if asleep
-                if (powerFSM.getState() == &stateDARK)
-                    powerFSM.trigger(EVENT_PRESS);
-
-                // Update display (legacy behaviour)
-                screen->forceDisplay();
-                break;
-            }
+            break;
+        }
 #endif // BUTTON_PIN_TOUCH
 
-            case BUTTON_EVENT_COMBO_SHORT_LONG: {
-                // Placeholder for short-press + long-press combination
-                LOG_BUTTON("Short-press + Long-press combination detected!");
+        case BUTTON_EVENT_COMBO_SHORT_LONG: {
+            // Placeholder for short-press + long-press combination
+            LOG_BUTTON("Short-press + Long-press combination detected!");
 
-                // Play the combination tune
-                playComboTune();
+            // Play the combination tune
+            playComboTune();
 
-                // Optionally show a message on screen
-                if (screen) {
-                    screen->showOverlayBanner("Combo Tune Played", 2000);
-                }
-                break;
+            // Optionally show a message on screen
+            if (screen) {
+                screen->showOverlayBanner("Combo Tune Played", 2000);
             }
+            break;
+        }
 
-            default:
-                break;
-            }
-            btnEvent = BUTTON_EVENT_NONE;
-        } // (!screen)
+        default:
+            break;
+        }
+        btnEvent = BUTTON_EVENT_NONE;
     }
 
     return 50;
