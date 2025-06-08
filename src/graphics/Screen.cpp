@@ -174,8 +174,6 @@ static bool shouldDrawMessage(const meshtastic_MeshPacket *packet)
     return packet->from != 0 && !moduleConfig.store_forward.enabled;
 }
 
-#if defined(DISPLAY_CLOCK_FRAME)
-
 void Screen::drawWatchFaceToggleButton(OLEDDisplay *display, int16_t x, int16_t y, bool digitalMode, float scale)
 {
     uint16_t segmentWidth = SEGMENT_WIDTH * scale;
@@ -608,8 +606,6 @@ void Screen::drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *stat
         display->drawLine(centerX, centerY, secondX, secondY);
     }
 }
-
-#endif
 
 // Get an absolute time from "seconds ago" info. Returns false if no valid timestamp possible
 bool deltaToTimestamp(uint32_t secondsAgo, uint8_t *hours, uint8_t *minutes, int32_t *daysAgo)
@@ -1374,7 +1370,7 @@ void Screen::setFrames(FrameFocus focus)
 
 #if defined(DISPLAY_CLOCK_FRAME)
     normalFrames[numframes++] = screen->digitalWatchFace ? &Screen::drawDigitalClockFrame : &Screen::drawAnalogClockFrame;
-    indicatorIcons.push_back(icon_compass);
+    indicatorIcons.push_back(icon_clock);
 #endif
 
     // Declare this early so it’s available in FOCUS_PRESERVE block

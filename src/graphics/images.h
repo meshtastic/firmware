@@ -279,5 +279,11 @@ const uint8_t bluetoothdisabled[] PROGMEM = {0b11101100, 0b01010100, 0b01001100,
 const uint8_t smallbulletpoint[] PROGMEM = {0b00000011, 0b00000011, 0b00000000, 0b00000000,
                                             0b00000000, 0b00000000, 0b00000000, 0b00000000};
 
+// Clock
+#define icon_clock_width 8
+#define icon_clock_height 8
+const uint8_t icon_clock[] PROGMEM = {0b00111100, 0b01000010, 0b10000101, 0b10101001,
+                                      0b10010001, 0b10000001, 0b01000010, 0b00111100};
+
 #include "img/icon.xbm"
 static_assert(sizeof(icon_bits) >= 0, "Silence unused variable warning");
