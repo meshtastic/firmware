@@ -73,11 +73,16 @@ ButtonThread::ButtonThread() : OSThread("Button")
 
 #if defined(BUTTON_PIN) || defined(ARCH_PORTDUINO) || defined(USERPREFS_BUTTON_PIN)
     userButton.attachClick(userButtonPressed);
-    userButton.setClickMs(BUTTON_CLICK_MS);
     userButton.setPressMs(BUTTON_LONGPRESS_MS);
     userButton.setDebounceMs(1);
-    userButton.attachDoubleClick(userButtonDoublePressed);
-    userButton.attachMultiClick(userButtonMultiPressed, this); // Reference to instance: get click count from non-static OneButton
+    if (screen) {
+        userButton.setClickMs(20);
+    } else {
+        userButton.setClickMs(BUTTON_CLICK_MS);
+        userButton.attachDoubleClick(userButtonDoublePressed);
+        userButton.attachMultiClick(userButtonMultiPressed,
+                                    this); // Reference to instance: get click count from non-static OneButton
+    }
 #if !defined(T_DECK) &&                                                                                                          \
     !defined(                                                                                                                    \
         ELECROW_ThinkNode_M2) // T-Deck immediately wakes up after shutdown, Thinknode M2 has this on the smaller ALT button
@@ -121,51 +126,10 @@ ButtonThread::ButtonThread() : OSThread("Button")
 #endif
 }
 
-void ButtonThread::switchPage()
-{
-    // Prevent screen switch if CannedMessageModule is focused and intercepting input
-#if HAS_SCREEN
-    extern CannedMessageModule *cannedMessageModule;
-
-    if (cannedMessageModule && cannedMessageModule->isInterceptingAndFocused()) {
-        LOG_DEBUG("User button ignored during canned message input");
-        return; // Skip screen change
-    }
-#endif
-
-    // Default behavior if not blocked
-#ifdef BUTTON_PIN
-#if !defined(USERPREFS_BUTTON_PIN)
-    if (((config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN) !=
-         moduleConfig.canned_message.inputbroker_pin_press) ||
-        !(moduleConfig.canned_message.updown1_enabled || moduleConfig.canned_message.rotary1_enabled) ||
-        !moduleConfig.canned_message.enabled) {
-        powerFSM.trigger(EVENT_PRESS);
-    }
-#endif
-#if defined(USERPREFS_BUTTON_PIN)
-    if (((config.device.button_gpio ? config.device.button_gpio : USERPREFS_BUTTON_PIN) !=
-         moduleConfig.canned_message.inputbroker_pin_press) ||
-        !(moduleConfig.canned_message.updown1_enabled || moduleConfig.canned_message.rotary1_enabled) ||
-        !moduleConfig.canned_message.enabled) {
-        powerFSM.trigger(EVENT_PRESS);
-    }
-#endif
-#endif
-
-#if defined(ARCH_PORTDUINO)
-    if ((settingsMap.count(user) != 0 && settingsMap[user] != RADIOLIB_NC) &&
-            (settingsMap[user] != moduleConfig.canned_message.inputbroker_pin_press) ||
-        !moduleConfig.canned_message.enabled) {
-        powerFSM.trigger(EVENT_PRESS);
-    }
-#endif
-}
-
 void ButtonThread::sendAdHocPosition()
 {
     service->refreshLocalMeshNode();
-    auto sentPosition = service->trySendPosition(NODENUM_BROADCAST, true);
+    service->trySendPosition(NODENUM_BROADCAST, true);
     playComboTune();
 }
 
@@ -270,11 +234,6 @@ int32_t ButtonThread::runOnce()
                     InputEvent evt = {"button", INPUT_BROKER_MSG_BUTTON_PRESSED, 0, 0, 0};
                     inputBroker->injectInputEvent(&evt);
                 }
-
-                // Start tracking for potential combination
-                waitingForLongPress = true;
-                shortPressTime = millis();
-
                 break;
             }
             case BUTTON_EVENT_DOUBLE_PRESSED: {
@@ -288,9 +247,6 @@ int32_t ButtonThread::runOnce()
                     InputEvent evt = {"button", INPUT_BROKER_MSG_BUTTON_DOUBLE_PRESSED, 0, 0, 0};
                     inputBroker->injectInputEvent(&evt);
                 }
-
-                waitingForLongPress = false;
-
                 break;
             }
             case BUTTON_EVENT_LONG_PRESSED: {
@@ -304,8 +260,6 @@ int32_t ButtonThread::runOnce()
                     InputEvent evt = {"button", INPUT_BROKER_MSG_BUTTON_LONG_PRESSED, 0, 0, 0};
                     inputBroker->injectInputEvent(&evt);
                 }
-
-                waitingForLongPress = false;
                 break;
             }
             default:
@@ -337,7 +291,7 @@ int32_t ButtonThread::runOnce()
                 waitingForLongPress = true;
                 shortPressTime = millis();
 
-                switchPage();
+                powerFSM.trigger(EVENT_PRESS);
                 break;
             }
 
@@ -356,7 +310,7 @@ int32_t ButtonThread::runOnce()
                     externalNotificationModule->stopNow();
                     break;
                 }
-                switchPage();
+                powerFSM.trigger(EVENT_PRESS);
                 break;
 #endif
                 // turn screen on or off
@@ -543,7 +497,7 @@ int32_t ButtonThread::runOnce()
                 break;
             }
             btnEvent = BUTTON_EVENT_NONE;
-        }
+        } // (!screen)
     }
 
     return 50;

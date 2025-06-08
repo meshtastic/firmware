@@ -764,11 +764,6 @@ void setup()
     } else
         router = new ReliableRouter();
 
-#if HAS_BUTTON || defined(ARCH_PORTDUINO)
-    // Buttons. Moved here cause we need NodeDB to be initialized
-    buttonThread = new ButtonThread();
-#endif
-
     // only play start melody when role is not tracker or sensor
     if (config.power.is_power_saving == true &&
         IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_TRACKER,
@@ -865,6 +860,12 @@ void setup()
 #endif
     }
 #endif // HAS_SCREEN
+
+#if HAS_BUTTON || defined(ARCH_PORTDUINO)
+    // Buttons. Moved here cause we need NodeDB to be initialized
+    buttonThread = new ButtonThread();
+#endif
+
     // setup TZ prior to time actions.
 #if !MESHTASTIC_EXCLUDE_TZ
     LOG_DEBUG("Use compiled/slipstreamed %s", slipstreamTZString); // important, removing this clobbers our magic string

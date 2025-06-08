@@ -108,7 +108,6 @@ class ButtonThread : public concurrency::OSThread
     static void wakeOnIrq(int irq, int mode);
 
     static void sendAdHocPosition();
-    static void switchPage();
 
     // IRQ callbacks
     static void userButtonPressed() { btnEvent = BUTTON_EVENT_PRESSED; }
