@@ -468,6 +468,15 @@ class LGFX : public lgfx::LGFX_Device
             // The following setting values ​​are general initial values ​​for each panel, so please comment out any
             // unknown items and try them.
 
+#if defined(T_WATCH_S3)
+            cfg.panel_width     = 240;
+            cfg.panel_height    = 240;
+            cfg.memory_width    = 240;
+            cfg.memory_height   = 320;
+            cfg.offset_x        = 0;
+            cfg.offset_y        = 0; // No vertical shift needed — panel is top-aligned
+            cfg.offset_rotation = 2; // Rotate 180° to correct upside-down layout
+#else
             cfg.memory_width = TFT_WIDTH;                 // Maximum width supported by the driver IC
             cfg.memory_height = TFT_HEIGHT;               // Maximum height supported by the driver IC
             cfg.panel_width = TFT_WIDTH;                  // actual displayable width
@@ -475,6 +484,7 @@ class LGFX : public lgfx::LGFX_Device
             cfg.offset_x = TFT_OFFSET_X;                  // Panel offset amount in X direction
             cfg.offset_y = TFT_OFFSET_Y;                  // Panel offset amount in Y direction
             cfg.offset_rotation = TFT_OFFSET_ROTATION;    // Rotation direction value offset 0~7 (4~7 is mirrored)
+#endif
 #ifdef TFT_DUMMY_READ_PIXELS
             cfg.dummy_read_pixel = TFT_DUMMY_READ_PIXELS; // Number of bits for dummy read before pixel readout
 #else
