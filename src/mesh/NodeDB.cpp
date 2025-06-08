@@ -720,7 +720,7 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.alert_message_buzzer = true;
     moduleConfig.external_notification.nag_timeout = 60;
 #endif
-#if defined(RAK4630) || defined(RAK11310)
+#if defined(RAK4630) || defined(RAK11310) || defined(GAT562_MESH_TRIAL_TRACKER)
     // Default to RAK led pin 2 (blue)
     moduleConfig.external_notification.enabled = true;
     moduleConfig.external_notification.output = PIN_LED2;
