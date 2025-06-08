@@ -27,8 +27,8 @@
 
 typedef struct _InputEvent {
     const char *source;
-    char inputEvent;
-    char kbchar;
+    unsigned char inputEvent;
+    unsigned char kbchar;
     uint16_t touchX;
     uint16_t touchY;
 } InputEvent;

@@ -267,7 +267,7 @@ int32_t ButtonThread::runOnce()
 
                 // Forward single press to InputBroker (but NOT as DOWN/SELECT, just forward a "button press" event)
                 if (inputBroker) {
-                    InputEvent evt = {"button", (char)INPUT_BROKER_MSG_BUTTON_PRESSED, 0, 0, 0};
+                    InputEvent evt = {"button", INPUT_BROKER_MSG_BUTTON_PRESSED, 0, 0, 0};
                     inputBroker->injectInputEvent(&evt);
                 }
 
@@ -285,7 +285,7 @@ int32_t ButtonThread::runOnce()
 
                 // Forward single press to InputBroker (but NOT as DOWN/SELECT, just forward a "button press" event)
                 if (inputBroker) {
-                    InputEvent evt = {"button", (char)INPUT_BROKER_MSG_BUTTON_DOUBLE_PRESSED, 0, 0, 0};
+                    InputEvent evt = {"button", INPUT_BROKER_MSG_BUTTON_DOUBLE_PRESSED, 0, 0, 0};
                     inputBroker->injectInputEvent(&evt);
                 }
 
@@ -301,7 +301,7 @@ int32_t ButtonThread::runOnce()
 
                 // Forward long press to InputBroker (but NOT as DOWN/SELECT, just forward a "button long press" event)
                 if (inputBroker) {
-                    InputEvent evt = {"button", (char)INPUT_BROKER_MSG_BUTTON_LONG_PRESSED, 0, 0, 0};
+                    InputEvent evt = {"button", INPUT_BROKER_MSG_BUTTON_LONG_PRESSED, 0, 0, 0};
                     inputBroker->injectInputEvent(&evt);
                 }
 
