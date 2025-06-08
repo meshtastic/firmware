@@ -21,6 +21,8 @@
 
 #define GAT562_MESH_TRIAL_TRACKER
 
+#define RAK4630
+
 /** Master clock frequency */
 #define VARIANT_MCK (64000000ul)
 
