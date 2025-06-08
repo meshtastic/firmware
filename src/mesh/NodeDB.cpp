@@ -261,7 +261,7 @@ NodeDB::NodeDB()
 
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
 
-    if (!owner.is_licensed) {
+    if (!owner.is_licensed && config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
         bool keygenSuccess = false;
         if (config.security.private_key.size == 32) {
             if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
@@ -499,6 +499,21 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
         true; // FIXME: maybe false in the future, and setting region to enable it. (unset region forces it off)
     config.lora.override_duty_cycle = false;
     config.lora.config_ok_to_mqtt = false;
+
+#ifdef USERPREFS_CONFIG_DEVICE_ROLE
+    // Restrict ROUTER*, LOST AND FOUND, and REPEATER roles for security reasons
+    if (IS_ONE_OF(USERPREFS_CONFIG_DEVICE_ROLE, meshtastic_Config_DeviceConfig_Role_ROUTER,
+                  meshtastic_Config_DeviceConfig_Role_ROUTER_LATE, meshtastic_Config_DeviceConfig_Role_REPEATER,
+                  meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND)) {
+        LOG_WARN("ROUTER roles are restricted, falling back to CLIENT role");
+        config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+    } else {
+        config.device.role = USERPREFS_CONFIG_DEVICE_ROLE;
+    }
+#else
+    config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT; // Default to client.
+#endif
+
 #ifdef USERPREFS_CONFIG_LORA_REGION
     config.lora.region = USERPREFS_CONFIG_LORA_REGION;
 #else
@@ -669,6 +684,11 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     if (WiFiOTA::isUpdated()) {
         WiFiOTA::recoverConfig(&config.network);
     }
+#endif
+
+#ifdef USERPREFS_CONFIG_DEVICE_ROLE
+    // Apply role-specific defaults when role is set via user preferences
+    installRoleDefaults(config.device.role);
 #endif
 
     initConfigIntervals();

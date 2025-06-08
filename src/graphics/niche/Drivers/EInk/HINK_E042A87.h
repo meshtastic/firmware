@@ -5,7 +5,7 @@ E-Ink display driver
     - Manufacturer: Holitech
     - Size: 4.2 inch
     - Resolution: 400px x 300px
-    - Flex connector marking: HINK-E042A07-FPC-A1
+    - Flex connector marking (not a unique identifier): HINK-E042A07-FPC-A1
     - Silver sticker with QR code, marked: HE042A87
 
     Note: as of Feb. 2025, these panels are used for "WeActStudio 4.2in B&W" display modules
