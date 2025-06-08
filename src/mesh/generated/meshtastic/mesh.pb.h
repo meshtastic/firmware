@@ -258,6 +258,12 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_SEEED_WIO_TRACKER_L1_EINK = 100,
     /* Reserved ID for future and past use */
     meshtastic_HardwareModel_QWANTZ_TINY_ARMS = 101,
+    /* *
+ Lilygo T-Deck Pro */
+    meshtastic_HardwareModel_T_DECK_PRO = 102,
+    /* *
+ Lilygo TLora Pager */
+    meshtastic_HardwareModel_T_LORA_PAGER = 103,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
