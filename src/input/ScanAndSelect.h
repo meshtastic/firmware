@@ -29,12 +29,12 @@ class ScanAndSelectInput : public Observable<const InputEvent *>, public concurr
     void alertNoMessage();            // Inform user (screen) that no canned messages have been added
 
   protected:
-    int32_t runOnce() override;          // Runs at regular intervals, when enabled
-    void enableThread();                 // Begin running runOnce at regular intervals
-    static void handleChangeInterrupt(); // Calls enableThread from pin change interrupt
-    void shortPress();                   // Code to run when short press fires
-    void longPress();                    // Code to run when long press fires
-    void raiseEvent(_meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar key); // Feed input to canned message module
+    int32_t runOnce() override;              // Runs at regular intervals, when enabled
+    void enableThread();                     // Begin running runOnce at regular intervals
+    static void handleChangeInterrupt();     // Calls enableThread from pin change interrupt
+    void shortPress();                       // Code to run when short press fires
+    void longPress();                        // Code to run when long press fires
+    void raiseEvent(input_broker_event key); // Feed input to canned message module
 
     bool held = false;           // Have we handled a change in button state?
     bool longPressFired = false; // Long press fires while button still held. This bool ensures the release is no-op

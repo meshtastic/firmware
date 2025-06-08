@@ -144,11 +144,11 @@ void ScanAndSelectInput::longPress()
     if (cannedMessageModule->hasMessages()) {
         // If module frame displayed already, send the current message
         if (cannedMessageModule->shouldDraw())
-            raiseEvent(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT);
+            raiseEvent(INPUT_BROKER_SELECT);
 
         // Otherwise, initial long press opens the module frame
         else
-            raiseEvent(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN);
+            raiseEvent(INPUT_BROKER_DOWN);
     }
 
     // (If canned messages not set) tell the user
@@ -160,7 +160,7 @@ void ScanAndSelectInput::shortPress()
 {
     // (If canned messages set) scroll to next message
     if (cannedMessageModule->hasMessages())
-        raiseEvent(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN);
+        raiseEvent(INPUT_BROKER_DOWN);
 
     // (If canned messages not yet set) tell the user
     else
@@ -202,7 +202,7 @@ void ScanAndSelectInput::alertNoMessage()
 bool ScanAndSelectInput::dismissCannedMessageFrame()
 {
     if (cannedMessageModule->shouldDraw()) {
-        raiseEvent(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL);
+        raiseEvent(INPUT_BROKER_CANCEL);
         return true;
     }
 
@@ -210,7 +210,7 @@ bool ScanAndSelectInput::dismissCannedMessageFrame()
 }
 
 // Feed input to the canned messages module
-void ScanAndSelectInput::raiseEvent(_meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar key)
+void ScanAndSelectInput::raiseEvent(input_broker_event key)
 {
     InputEvent e;
     e.source = name;

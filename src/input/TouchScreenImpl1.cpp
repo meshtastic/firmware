@@ -55,27 +55,27 @@ void TouchScreenImpl1::onEvent(const TouchEvent &event)
 
     switch (event.touchEvent) {
     case TOUCH_ACTION_LEFT: {
-        e.inputEvent = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT);
+        e.inputEvent = INPUT_BROKER_RIGHT;
         break;
     }
     case TOUCH_ACTION_RIGHT: {
-        e.inputEvent = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT);
+        e.inputEvent = INPUT_BROKER_LEFT;
         break;
     }
     case TOUCH_ACTION_UP: {
-        e.inputEvent = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP);
+        e.inputEvent = INPUT_BROKER_UP;
         break;
     }
     case TOUCH_ACTION_DOWN: {
-        e.inputEvent = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN);
+        e.inputEvent = INPUT_BROKER_DOWN;
         break;
     }
     case TOUCH_ACTION_DOUBLE_TAP: {
-        e.inputEvent = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT);
+        e.inputEvent = INPUT_BROKER_SELECT;
         break;
     }
     case TOUCH_ACTION_LONG_PRESS: {
-        e.inputEvent = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL);
+        e.inputEvent = INPUT_BROKER_CANCEL;
         break;
     }
     case TOUCH_ACTION_TAP: {

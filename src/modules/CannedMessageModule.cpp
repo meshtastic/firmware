@@ -274,9 +274,9 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         return 1;
 
     // Matrix keypad: If matrix key, trigger action select for canned message
-    if (event->inputEvent == static_cast<char>(MATRIXKEY)) {
+    if (event->inputEvent == INPUT_BROKER_MATRIXKEY) {
         runState = CANNED_MESSAGE_RUN_STATE_ACTION_SELECT;
-        payload = MATRIXKEY;
+        payload = INPUT_BROKER_MATRIXKEY;
         currentMessageIndex = event->kbchar - 1;
         lastTouchMillis = millis();
         requestFocus();
@@ -315,13 +315,11 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
             return 0; // Main button press no longer runs through powerFSM
         }
         // Let LEFT/RIGHT pass through so frame navigation works
-        if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT) ||
-            event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT)) {
+        if (event->inputEvent == INPUT_BROKER_LEFT || event->inputEvent == INPUT_BROKER_RIGHT) {
             break;
         }
         // Handle UP/DOWN: activate canned message list!
-        if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP) ||
-            event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN)) {
+        if (event->inputEvent == INPUT_BROKER_UP || event->inputEvent == INPUT_BROKER_DOWN) {
             // Always select the first real canned message on activation
             int firstRealMsgIdx = 0;
             for (int i = 0; i < messagesCount; ++i) {
@@ -376,15 +374,15 @@ bool CannedMessageModule::isInputSourceAllowed(const InputEvent *event)
 
 bool CannedMessageModule::isUpEvent(const InputEvent *event)
 {
-    return event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP);
+    return event->inputEvent == INPUT_BROKER_UP;
 }
 bool CannedMessageModule::isDownEvent(const InputEvent *event)
 {
-    return event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN);
+    return event->inputEvent == INPUT_BROKER_DOWN;
 }
 bool CannedMessageModule::isSelectEvent(const InputEvent *event)
 {
-    return event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT);
+    return event->inputEvent == INPUT_BROKER_SELECT;
 }
 
 bool CannedMessageModule::handleTabSwitch(const InputEvent *event)
@@ -412,17 +410,15 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
 {
     // Override isDown and isSelect ONLY for destination selector behavior
     if (runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) {
-        if (event->inputEvent == INPUT_BROKER_MSG_BUTTON_PRESSED) {
+        if (event->inputEvent == INPUT_BROKER_USER_PRESS) {
             isDown = true;
-        } else if (event->inputEvent == INPUT_BROKER_MSG_BUTTON_LONG_PRESSED) {
+        } else if (event->inputEvent == INPUT_BROKER_SELECT) {
             isSelect = true;
         }
     }
 
-    if (event->kbchar >= 32 && event->kbchar <= 126 && !isUp && !isDown &&
-        event->inputEvent != static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT) &&
-        event->inputEvent != static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT) &&
-        event->inputEvent != static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT)) {
+    if (event->kbchar >= 32 && event->kbchar <= 126 && !isUp && !isDown && event->inputEvent != INPUT_BROKER_LEFT &&
+        event->inputEvent != INPUT_BROKER_RIGHT && event->inputEvent != INPUT_BROKER_SELECT) {
         this->searchQuery += event->kbchar;
         needsUpdate = true;
         if ((millis() - lastFilterUpdate) > filterDebounceMs) {
@@ -440,7 +436,7 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
     scrollIndex = clamp(scrollIndex, 0, maxScrollIndex);
 
     // Handle backspace
-    if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_BACK)) {
+    if (event->inputEvent == INPUT_BROKER_BACK) {
         if (searchQuery.length() > 0) {
             searchQuery.remove(searchQuery.length() - 1);
             needsUpdate = true;
@@ -498,7 +494,7 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
     }
 
     // CANCEL
-    if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL)) {
+    if (event->inputEvent == INPUT_BROKER_CANCEL) {
         runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         searchQuery = "";
 
@@ -516,9 +512,9 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
 {
     // Override isDown and isSelect ONLY for canned message list behavior
     if (runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) {
-        if (event->inputEvent == INPUT_BROKER_MSG_BUTTON_PRESSED) {
+        if (event->inputEvent == INPUT_BROKER_USER_PRESS) {
             isDown = true;
-        } else if (event->inputEvent == INPUT_BROKER_MSG_BUTTON_LONG_PRESSED) {
+        } else if (event->inputEvent == INPUT_BROKER_SELECT) {
             isSelect = true;
         }
     }
@@ -527,7 +523,7 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
         return false;
 
     // === Handle Cancel key: go inactive, clear UI state ===
-    if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL)) {
+    if (event->inputEvent == INPUT_BROKER_CANCEL) {
         runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         freetext = "";
         cursor = 0;
@@ -700,7 +696,7 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     }
 
     // Backspace
-    if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_BACK)) {
+    if (event->inputEvent == INPUT_BROKER_BACK) {
         payload = 0x08;
         lastTouchMillis = millis();
         runOnce();
@@ -708,22 +704,22 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     }
 
     // Move cursor left
-    if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {
-        payload = INPUT_BROKER_MSG_LEFT;
+    if (event->inputEvent == INPUT_BROKER_LEFT) {
+        payload = INPUT_BROKER_LEFT;
         lastTouchMillis = millis();
         runOnce();
         return true;
     }
     // Move cursor right
-    if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT)) {
-        payload = INPUT_BROKER_MSG_RIGHT;
+    if (event->inputEvent == INPUT_BROKER_RIGHT) {
+        payload = INPUT_BROKER_RIGHT;
         lastTouchMillis = millis();
         runOnce();
         return true;
     }
 
     // Cancel (dismiss freetext screen)
-    if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL)) {
+    if (event->inputEvent == INPUT_BROKER_CANCEL) {
         runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         UIFrameEvent e;
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
@@ -757,9 +753,9 @@ int CannedMessageModule::handleEmotePickerInput(const InputEvent *event)
     bool isDown = isDownEvent(event);
     bool isSelect = isSelectEvent(event);
     if (runState == CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER) {
-        if (event->inputEvent == INPUT_BROKER_MSG_BUTTON_PRESSED) {
+        if (event->inputEvent == INPUT_BROKER_USER_PRESS) {
             isDown = true;
-        } else if (event->inputEvent == INPUT_BROKER_MSG_BUTTON_LONG_PRESSED) {
+        } else if (event->inputEvent == INPUT_BROKER_SELECT) {
             isSelect = true;
         }
     }
@@ -792,7 +788,7 @@ int CannedMessageModule::handleEmotePickerInput(const InputEvent *event)
     }
 
     // Cancel returns to freetext
-    if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL)) {
+    if (event->inputEvent == INPUT_BROKER_CANCEL) {
         runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
         screen->forceDisplay();
         return 1;
@@ -803,8 +799,8 @@ int CannedMessageModule::handleEmotePickerInput(const InputEvent *event)
 
 bool CannedMessageModule::handleSystemCommandInput(const InputEvent *event)
 {
-    // Only respond to "ANYKEY" events for system keys
-    if (event->inputEvent != static_cast<char>(ANYKEY))
+    // Only respond to "INPUT_BROKER_ANYKEY" events for system keys
+    if (event->inputEvent != INPUT_BROKER_ANYKEY)
         return false;
 
     // System commands (all others fall through to return false)
@@ -908,11 +904,6 @@ bool CannedMessageModule::handleSystemCommandInput(const InputEvent *event)
         nodeDB->saveToDisk();
         rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
         runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
-        return true;
-    case INPUT_BROKER_MSG_DISMISS_FRAME:
-        runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
-        if (screen)
-            screen->dismissCurrentFrame();
         return true;
     // Not a system command, let other handlers process it
     default:
@@ -1061,12 +1052,12 @@ int32_t CannedMessageModule::runOnce()
         }
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT || this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) {
         switch (this->payload) {
-        case INPUT_BROKER_MSG_LEFT:
+        case INPUT_BROKER_LEFT:
             if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT && this->cursor > 0) {
                 this->cursor--;
             }
             break;
-        case INPUT_BROKER_MSG_RIGHT:
+        case INPUT_BROKER_RIGHT:
             if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT && this->cursor < this->freetext.length()) {
                 this->cursor++;
             }
@@ -1092,8 +1083,8 @@ int32_t CannedMessageModule::runOnce()
                 break;
             case INPUT_BROKER_MSG_TAB: // Tab key: handled by input handler
                 return 0;
-            case INPUT_BROKER_MSG_LEFT:
-            case INPUT_BROKER_MSG_RIGHT:
+            case INPUT_BROKER_LEFT:
+            case INPUT_BROKER_RIGHT:
                 break;
             default:
                 // Only insert ASCII printable characters (32–126)

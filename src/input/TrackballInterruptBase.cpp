@@ -4,9 +4,9 @@
 TrackballInterruptBase::TrackballInterruptBase(const char *name) : concurrency::OSThread(name), _originName(name) {}
 
 void TrackballInterruptBase::init(uint8_t pinDown, uint8_t pinUp, uint8_t pinLeft, uint8_t pinRight, uint8_t pinPress,
-                                  char eventDown, char eventUp, char eventLeft, char eventRight, char eventPressed,
-                                  void (*onIntDown)(), void (*onIntUp)(), void (*onIntLeft)(), void (*onIntRight)(),
-                                  void (*onIntPress)())
+                                  input_broker_event eventDown, input_broker_event eventUp, input_broker_event eventLeft,
+                                  input_broker_event eventRight, input_broker_event eventPressed, void (*onIntDown)(),
+                                  void (*onIntUp)(), void (*onIntLeft)(), void (*onIntRight)(), void (*onIntPress)())
 {
     this->_pinDown = pinDown;
     this->_pinUp = pinUp;
@@ -39,7 +39,7 @@ void TrackballInterruptBase::init(uint8_t pinDown, uint8_t pinUp, uint8_t pinLef
 int32_t TrackballInterruptBase::runOnce()
 {
     InputEvent e;
-    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
+    e.inputEvent = INPUT_BROKER_NONE;
 #if defined(T_DECK) // T-deck gets a super-simple debounce on trackball
     if (this->action == TB_ACTION_PRESSED) {
         // LOG_DEBUG("Trackball event Press");
@@ -76,7 +76,7 @@ int32_t TrackballInterruptBase::runOnce()
     }
 #endif
 
-    if (e.inputEvent != meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE) {
+    if (e.inputEvent != INPUT_BROKER_NONE) {
         e.source = this->_originName;
         e.kbchar = 0x00;
         this->notifyObservers(&e);

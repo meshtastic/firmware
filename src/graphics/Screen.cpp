@@ -1798,15 +1798,11 @@ int Screen::handleInputEvent(const InputEvent *event)
 
         // If no modules are using the input, move between frames
         if (!inputIntercepted) {
-            if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {
+            if (event->inputEvent == INPUT_BROKER_LEFT) {
                 showPrevFrame();
-            } else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT) ||
-                       event->inputEvent == INPUT_BROKER_MSG_BUTTON_PRESSED) {
+            } else if (event->inputEvent == INPUT_BROKER_RIGHT || event->inputEvent == INPUT_BROKER_USER_PRESS) {
                 showNextFrame();
-            } else if (event->inputEvent ==
-                           static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT) ||
-                       event->inputEvent == INPUT_BROKER_MSG_BUTTON_DOUBLE_PRESSED ||
-                       event->inputEvent == INPUT_BROKER_MSG_BUTTON_LONG_PRESSED) {
+            } else if (event->inputEvent == INPUT_BROKER_SELECT) {
                 if (this->ui->getUiState()->currentFrame == framesetInfo.positions.home) {
                     setOn(false);
 #if HAS_TFT

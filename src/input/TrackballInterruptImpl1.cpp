@@ -18,11 +18,11 @@ void TrackballInterruptImpl1::init()
     uint8_t pinRight = TB_RIGHT;
     uint8_t pinPress = TB_PRESS;
 
-    char eventDown = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN);
-    char eventUp = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP);
-    char eventLeft = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT);
-    char eventRight = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT);
-    char eventPressed = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT);
+    char eventDown = INPUT_BROKER_DOWN;
+    char eventUp = INPUT_BROKER_UP;
+    char eventLeft = INPUT_BROKER_LEFT;
+    char eventRight = INPUT_BROKER_RIGHT;
+    char eventPressed = INPUT_BROKER_SELECT;
 
     TrackballInterruptBase::init(pinDown, pinUp, pinLeft, pinRight, pinPress, eventDown, eventUp, eventLeft, eventRight,
                                  eventPressed, TrackballInterruptImpl1::handleIntDown, TrackballInterruptImpl1::handleIntUp,

@@ -26,7 +26,7 @@ extern bool hasUnreadMessage;
 namespace graphics
 {
 
-char NotificationRenderer::inEvent = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE);
+char NotificationRenderer::inEvent = INPUT_BROKER_NONE;
 int8_t NotificationRenderer::curSelected = 0;
 char NotificationRenderer::alertBannerMessage[256] = {0};
 uint32_t NotificationRenderer::alertBannerUntil = 0;  // 0 is a special case meaning forever
@@ -39,7 +39,6 @@ void NotificationRenderer::drawSSLScreen(OLEDDisplay *display, OLEDDisplayUiStat
     display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->setFont(FONT_SMALL);
     display->drawString(64 + x, y, "Creating SSL certificate");
-    uint32_t alertBannerUntil = 0; // 0 is a special case meaning forever
 
 #ifdef ARCH_ESP32
     yield();
@@ -103,13 +102,11 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
 
     if (alertBannerOptions > 0) {
         // respond to input
-        if (inEvent == meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP) {
+        if (inEvent == INPUT_BROKER_UP) {
             curSelected--;
-        } else if (inEvent == meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN ||
-                   inEvent == INPUT_BROKER_MSG_BUTTON_PRESSED) {
+        } else if (inEvent == INPUT_BROKER_DOWN || inEvent == INPUT_BROKER_USER_PRESS) {
             curSelected++;
-        } else if (inEvent == meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT ||
-                   inEvent == INPUT_BROKER_MSG_BUTTON_DOUBLE_PRESSED) {
+        } else if (inEvent == INPUT_BROKER_SELECT) {
             alertBannerCallback(curSelected);
             alertBannerMessage[0] = '\0';
         }
@@ -129,7 +126,7 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
         }
     } else { // not in an alert with a callback
         // TODO: check that at least a second has passed since the alert started
-        if (inEvent == meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT) {
+        if (inEvent == INPUT_BROKER_SELECT) {
             alertBannerMessage[0] = '\0'; // end the alert early
         }
     }
@@ -221,7 +218,7 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
 
         lineY += FONT_HEIGHT_SMALL + lineSpacing;
     }
-    inEvent = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE);
+    inEvent = INPUT_BROKER_NONE;
 }
 
 /// Draw the last text message we received
