@@ -1,5 +1,6 @@
 #pragma once
 
+#include "InputBroker.h"
 #include "OneButton.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
@@ -29,9 +30,10 @@
 #define BUTTON_LEADUP_MS 2200 // Play lead-up sound after 2.5 seconds of holding
 #endif
 
-class ButtonThread : public concurrency::OSThread
+class ButtonThread : public Observable<const InputEvent *>, public concurrency::OSThread
 {
   public:
+    const char *_originName;
     static const uint32_t c_holdOffTime = 30000; // hold off 30s after boot
 
     enum ButtonEventType {
@@ -46,15 +48,11 @@ class ButtonThread : public concurrency::OSThread
         BUTTON_EVENT_COMBO_SHORT_LONG,
     };
 
-    ButtonThread();
+    ButtonThread(const char *name);
     int32_t runOnce() override;
     void attachButtonInterrupts();
     void detachButtonInterrupts();
     void storeClickCount();
-    bool isBuzzing() { return buzzer_flag; }
-    void setScreenFlag(bool flag) { screen_flag = flag; }
-    bool getScreenFlag() { return screen_flag; }
-    bool isInterceptingAndFocused();
     bool isButtonPressed(int buttonPin)
     {
 #ifdef BUTTON_ACTIVE_LOW
@@ -90,8 +88,6 @@ class ButtonThread : public concurrency::OSThread
 
     // set during IRQ
     static volatile ButtonEventType btnEvent;
-    bool buzzer_flag = false;
-    bool screen_flag = true;
 
     // Store click count during callback, for later use
     volatile int multipressClickCount = 0;

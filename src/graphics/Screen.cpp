@@ -47,7 +47,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/emotes.h"
 #include "graphics/images.h"
-#include "input/ButtonThread.h"
 #include "input/ScanAndSelect.h"
 #include "input/TouchScreenImpl1.h"
 #include "main.h"
@@ -836,7 +835,6 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
     if (on != screenOn) {
         if (on) {
             LOG_INFO("Turn on screen");
-            buttonThread->setScreenFlag(true);
             powerMon->setState(meshtastic_PowerMon_State_Screen_On);
 #ifdef T_WATCH_S3
             PMU->enablePowerOutput(XPOWERS_ALDO2);
@@ -880,8 +878,6 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             // eInkScreensaver parameter is usually NULL (default argument), default frame used instead
             setScreensaverFrames(einkScreensaver);
 #endif
-            LOG_INFO("Turn off screen");
-            buttonThread->setScreenFlag(false);
 #ifdef ELECROW_ThinkNode_M1
             if (digitalRead(PIN_EINK_EN) == HIGH) {
                 digitalWrite(PIN_EINK_EN, LOW);
@@ -1761,6 +1757,7 @@ int Screen::handleUIFrameEvent(const UIFrameEvent *event)
 
 int Screen::handleInputEvent(const InputEvent *event)
 {
+    LOG_WARN("event %u", event->inputEvent);
 
     if (NotificationRenderer::isOverlayBannerShowing()) {
         NotificationRenderer::inEvent = event->inputEvent;

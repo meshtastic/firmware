@@ -310,8 +310,6 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
 
     case CANNED_MESSAGE_RUN_STATE_INACTIVE:
         if (isSelect) {
-            // When inactive, call the onebutton shortpress instead. Activate module only on up/down
-            powerFSM.trigger(EVENT_PRESS);
             return 0; // Main button press no longer runs through powerFSM
         }
         // Let LEFT/RIGHT pass through so frame navigation works

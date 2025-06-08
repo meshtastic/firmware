@@ -27,17 +27,14 @@
 
 using namespace concurrency;
 
-ButtonThread *buttonThread; // Declared extern in header
-#if HAS_SCREEN
-extern CannedMessageModule *cannedMessageModule;
-#endif
 volatile ButtonThread::ButtonEventType ButtonThread::btnEvent = ButtonThread::BUTTON_EVENT_NONE;
 
 #if defined(BUTTON_PIN) || defined(ARCH_PORTDUINO) || defined(USERPREFS_BUTTON_PIN)
 OneButton ButtonThread::userButton; // Get reference to static member
 #endif
-ButtonThread::ButtonThread() : OSThread("Button")
+ButtonThread::ButtonThread(const char *name) : OSThread(name)
 {
+    _originName = name;
 #if defined(BUTTON_PIN) || defined(ARCH_PORTDUINO) || defined(USERPREFS_BUTTON_PIN)
 
 #if defined(ARCH_PORTDUINO)
@@ -55,7 +52,7 @@ ButtonThread::ButtonThread() : OSThread("Button")
 #if defined(HELTEC_CAPSULE_SENSOR_V3) || defined(HELTEC_SENSOR_HUB)
     this->userButton = OneButton(pin, false, false);
 #elif defined(BUTTON_ACTIVE_LOW)
-    this->userButton = OneButton(pin, BUTTON_ACTIVE_LOW, BUTTON_ACTIVE_PULLUP);
+    userButton = OneButton(pin, BUTTON_ACTIVE_LOW, BUTTON_ACTIVE_PULLUP);
 #else
     this->userButton = OneButton(pin, true, true);
 #endif
@@ -72,20 +69,20 @@ ButtonThread::ButtonThread() : OSThread("Button")
 #endif
 
 #if defined(BUTTON_PIN) || defined(ARCH_PORTDUINO) || defined(USERPREFS_BUTTON_PIN)
-    userButton.attachClick(userButtonPressed);
-    userButton.setPressMs(BUTTON_LONGPRESS_MS);
+    userButton.attachClick([]() { btnEvent = BUTTON_EVENT_PRESSED; });
+
     userButton.setDebounceMs(1);
     if (screen) {
         userButton.setClickMs(20);
+        userButton.setPressMs(500);
     } else {
+        userButton.setPressMs(BUTTON_LONGPRESS_MS);
         userButton.setClickMs(BUTTON_CLICK_MS);
         userButton.attachDoubleClick(userButtonDoublePressed);
         userButton.attachMultiClick(userButtonMultiPressed,
                                     this); // Reference to instance: get click count from non-static OneButton
     }
-#if !defined(T_DECK) &&                                                                                                          \
-    !defined(                                                                                                                    \
-        ELECROW_ThinkNode_M2) // T-Deck immediately wakes up after shutdown, Thinknode M2 has this on the smaller ALT button
+#if !defined(ELECROW_ThinkNode_M2) // T-Deck immediately wakes up after shutdown, Thinknode M2 has this on the smaller ALT button
     userButton.attachLongPressStart(userButtonPressedLongStart);
     userButton.attachLongPressStop(userButtonPressedLongStop);
 #endif
@@ -230,10 +227,13 @@ int32_t ButtonThread::runOnce()
                 playBoop();
 
                 // Forward single press to InputBroker (but NOT as DOWN/SELECT, just forward a "button press" event)
-                if (inputBroker) {
-                    InputEvent evt = {"button", INPUT_BROKER_USER_PRESS, 0, 0, 0};
-                    inputBroker->injectInputEvent(&evt);
-                }
+                InputEvent evt;
+                evt.source = _originName;
+                evt.kbchar = 0;
+                evt.touchX = 0;
+                evt.touchY = 0;
+                evt.inputEvent = INPUT_BROKER_USER_PRESS;
+                this->notifyObservers(&evt);
                 break;
             }
             case BUTTON_EVENT_LONG_PRESSED: {
@@ -245,7 +245,7 @@ int32_t ButtonThread::runOnce()
                 // Forward long press to InputBroker (but NOT as DOWN/SELECT, just forward a "button long press" event)
                 if (inputBroker) {
                     InputEvent evt = {"button", INPUT_BROKER_SELECT, 0, 0, 0};
-                    inputBroker->injectInputEvent(&evt);
+                    this->notifyObservers(&evt);
                 }
                 break;
             }
@@ -269,10 +269,6 @@ int32_t ButtonThread::runOnce()
                     externalNotificationModule->stopNow();
                     break;
                 }
-#ifdef ELECROW_ThinkNode_M1
-                sendAdHocPosition();
-                break;
-#endif
 
                 // Start tracking for potential combination
                 waitingForLongPress = true;
@@ -300,10 +296,6 @@ int32_t ButtonThread::runOnce()
                 powerFSM.trigger(EVENT_PRESS);
                 break;
 #endif
-                // turn screen on or off
-                screen_flag = !screen_flag;
-                if (screen)
-                    screen->setOn(screen_flag);
                 break;
             }
 
@@ -325,7 +317,8 @@ int32_t ButtonThread::runOnce()
                 sendAdHocPosition();
 
                 // Show temporary on-screen confirmation banner for 3 seconds
-                screen->showOverlayBanner("Ad-hoc Ping Sent", 3000);
+                if (screen)
+                    screen->showOverlayBanner("Ad-hoc Ping Sent", 3000);
                 break;
             }
 
@@ -344,45 +337,14 @@ int32_t ButtonThread::runOnce()
                 case 3:
                     if (!config.device.disable_triple_click && (gps != nullptr)) {
                         gps->toggleGpsMode();
-
-                        const char *statusMsg = (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED)
-                                                    ? "GPS Enabled"
-                                                    : "GPS Disabled";
-
-                        if (screen) {
-                            screen->forceDisplay(true); // Force a new UI frame, then force an EInk update
-                            screen->showOverlayBanner(statusMsg, 3000);
-                        }
                     }
                     break;
-#elif defined(ELECROW_ThinkNode_M1) || defined(ELECROW_ThinkNode_M2)
-                case 3:
-                    LOG_INFO("3 clicks: toggle buzzer");
-                    buzzer_flag = !buzzer_flag;
-                    if (!buzzer_flag)
-                        noTone(PIN_BUZZER);
-                    break;
-
 #endif
 
 #if defined(USE_EINK) && defined(PIN_EINK_EN) && !defined(ELECROW_ThinkNode_M1) // i.e. T-Echo
                 // 4 clicks: toggle backlight
                 case 4:
                     digitalWrite(PIN_EINK_EN, digitalRead(PIN_EINK_EN) == LOW);
-                    break;
-#endif
-#if !MESHTASTIC_EXCLUDE_SCREEN && HAS_SCREEN
-                // 5 clicks: start accelerometer/magenetometer calibration for 30 seconds
-                case 5:
-                    if (accelerometerThread) {
-                        accelerometerThread->calibrate(30);
-                    }
-                    break;
-                // 6 clicks: start accelerometer/magenetometer calibration for 60 seconds
-                case 6:
-                    if (accelerometerThread) {
-                        accelerometerThread->calibrate(60);
-                    }
                     break;
 #endif
                 // No valid multipress action
