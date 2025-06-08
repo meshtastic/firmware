@@ -207,10 +207,13 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
         int minute = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
         int second = (hms % SEC_PER_HOUR) % SEC_PER_MIN; // or hms % SEC_PER_MIN
 
-        hour = hour > 12 ? hour - 12 : hour;
-
-        if (hour == 0) {
-            hour = 12;
+        bool isPM = hour >= 12;
+        // hour = hour > 12 ? hour - 12 : hour;
+        if (config.display.use_12h_clock) {
+            hour %= 12;
+            if (hour == 0)
+                hour = 12;
+            bool isPM = hour >= 12;
         }
 
         // Format time string
@@ -246,13 +249,7 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
             }
         }
 
-        // calculate seconds string width
-        uint16_t secondStringWidth = (strlen(secondString) * 12) + 4;
-
-        // sum these to get total string width
-        uint16_t totalWidth = timeStringWidth + secondStringWidth;
-
-        uint16_t hourMinuteTextX = (display->getWidth() / 2) - (totalWidth / 2);
+        uint16_t hourMinuteTextX = (display->getWidth() / 2) - (timeStringWidth / 2);
 
         uint16_t startingHourMinuteTextX = hourMinuteTextX;
 
@@ -276,9 +273,19 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
         }
 
         // draw seconds string
-        display->setFont(FONT_MEDIUM);
-        display->drawString(startingHourMinuteTextX + timeStringWidth + 4,
-                            (display->getHeight() - hourMinuteTextY) - FONT_HEIGHT_MEDIUM + 6, secondString);
+        display->setFont(FONT_SMALL);
+        int xOffset = (SCREEN_WIDTH > 128) ? 0 : 0;
+        if (hour >= 10 && hour < 20) {
+            xOffset += (SCREEN_WIDTH > 128) ? 0 : 15;
+        }
+        int yOffset = (SCREEN_WIDTH > 128) ? 3 : 1;
+        display->drawString(startingHourMinuteTextX + xOffset, (display->getHeight() - hourMinuteTextY) - yOffset, secondString);
+
+        if (config.display.use_12h_clock) {
+            xOffset = (SCREEN_WIDTH > 128) ? 20 : 13;
+            display->drawString(startingHourMinuteTextX + timeStringWidth - xOffset,
+                                (display->getHeight() - hourMinuteTextY) - yOffset - 2, isPM ? "pm" : "am");
+        }
     }
 }
 
@@ -302,11 +309,11 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
         display->drawString(x + 20, y + 2, batteryPercent);
     }
-
+#ifdef T_WATCH_S3
     if (nimbleBluetooth && nimbleBluetooth->isConnected()) {
         drawBluetoothConnectedIcon(display, display->getWidth() - 18, y + 2);
     }
-
+#endif
     drawWatchFaceToggleButton(display, display->getWidth() - 36, display->getHeight() - 36,
                               graphics::ClockRenderer::digitalWatchFace, 1);
 
