@@ -155,6 +155,27 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
      */
     case meshtastic_AdminMessage_set_owner_tag:
         LOG_DEBUG("Client set owner");
+        // Validate names before processing
+        if (*r->set_owner.long_name) {
+            const char *start = r->set_owner.long_name;
+            while (*start == ' ' || *start == '\t')
+                start++; // Skip whitespace
+            if (strlen(start) < 1) {
+                LOG_WARN("Rejected long_name: must contain at least 1 non-whitespace character");
+                myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
+                break;
+            }
+        }
+        if (*r->set_owner.short_name) {
+            const char *start = r->set_owner.short_name;
+            while (*start == ' ' || *start == '\t')
+                start++; // Skip whitespace
+            if (strlen(start) < 1) {
+                LOG_WARN("Rejected short_name: must contain at least 1 non-whitespace character");
+                myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
+                break;
+            }
+        }
         handleSetOwner(r->set_owner);
         break;
 
@@ -485,30 +506,13 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
 {
     int changed = 0;
 
-    // Validate long_name and short names have meaningful content
     if (*o.long_name) {
-        const char *start = o.long_name;
-        while (*start == ' ' || *start == '\t')
-            start++; // Skip whitespace
-
-        if (strlen(start) >= 1) {
-            changed |= strcmp(owner.long_name, o.long_name);
-            strncpy(owner.long_name, o.long_name, sizeof(owner.long_name));
-        } else {
-            LOG_WARN("Rejected long_name: must contain at least 1 non-whitespace character");
-        }
+        changed |= strcmp(owner.long_name, o.long_name);
+        strncpy(owner.long_name, o.long_name, sizeof(owner.long_name));
     }
     if (*o.short_name) {
-        const char *start = o.short_name;
-        while (*start == ' ' || *start == '\t')
-            start++;
-
-        if (strlen(start) >= 1) {
-            changed |= strcmp(owner.short_name, o.short_name);
-            strncpy(owner.short_name, o.short_name, sizeof(owner.short_name));
-        } else {
-            LOG_WARN("Rejected short_name: must contain at least 1 non-whitespace character");
-        }
+        changed |= strcmp(owner.short_name, o.short_name);
+        strncpy(owner.short_name, o.short_name, sizeof(owner.short_name));
     }
     if (*o.id) {
         changed |= strcmp(owner.id, o.id);
