@@ -30,7 +30,7 @@ static void drawBluetoothConnectedIcon(OLEDDisplay *display, int16_t x, int16_t 
 
 #endif
 // Whether we are showing the digital watch face or the analog one
-bool digitalWatchFace = true;
+static bool digitalWatchFace = true;
 
 // Clock frame functions
 void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);

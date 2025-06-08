@@ -98,9 +98,6 @@ static uint32_t targetFramerate = IDLE_FRAMERATE;
 
 uint32_t logo_timeout = 5000; // 4 seconds for EACH logo
 
-// This image definition is here instead of images.h because it's modified dynamically by the drawBattery function
-uint8_t imgBattery[16] = {0xFF, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0xE7, 0x3C};
-
 // Threshold values for the GPS lock accuracy bar display
 uint32_t dopThresholds[5] = {2000, 1000, 500, 200, 100};
 
@@ -937,11 +934,8 @@ void Screen::setFrames(FrameFocus focus)
     }
 
 #if defined(DISPLAY_CLOCK_FRAME)
-    normalFrames[numframes++] = ClockRenderer::digitalWatchFace ? &graphics::ClockRenderer::drawDigitalClockFrame
-                                                                : &graphics::ClockRenderer::drawAnalogClockFrame;
-    indicatorIcons.push_back(icon_clock);
-#else
-    normalFrames[numframes++] = &graphics::ClockRenderer::drawDigitalClockFrame;
+    normalFrames[numframes++] =
+        digitalWatchFace ? graphics::ClockRenderer::drawDigitalClockFrame : &graphics::ClockRenderer::drawAnalogClockFrame;
     indicatorIcons.push_back(icon_clock);
 #endif
 
@@ -990,6 +984,10 @@ void Screen::setFrames(FrameFocus focus)
         normalFrames[numframes++] = graphics::DebugRenderer::drawMemoryUsage;
         indicatorIcons.push_back(icon_memory);
     }
+#if !defined(DISPLAY_CLOCK_FRAME)
+    normalFrames[numframes++] = graphics::ClockRenderer::drawDigitalClockFrame;
+    indicatorIcons.push_back(icon_clock);
+#endif
 
     for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
         const meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(i);

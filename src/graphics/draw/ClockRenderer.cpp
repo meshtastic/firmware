@@ -1,9 +1,26 @@
+#include "configuration.h"
+#if HAS_SCREEN
 #include "ClockRenderer.h"
 #include "NodeDB.h"
 #include "UIRenderer.h"
 #include "configuration.h"
 #include "gps/GeoCoord.h"
+#include "gps/RTC.h"
 #include "graphics/ScreenFonts.h"
+#include "graphics/SharedUIDisplay.h"
+#include "graphics/emotes.h"
+#include "graphics/images.h"
+#include "main.h"
+
+#if !MESHTASTIC_EXCLUDE_BLUETOOTH
+#include "nimble/NimbleBluetooth.h"
+NimbleBluetooth *nimbleBluetooth = nullptr;
+#endif
+
+#endif
+
+namespace graphics
+{
 
 namespace ClockRenderer
 {
@@ -132,8 +149,6 @@ void drawVerticalSegment(OLEDDisplay *display, int x, int y, int width, int heig
     display->fillTriangle(x, y + width, x + height - 1, y + width, x + halfHeight, y + width + halfHeight);
 }
 
-#if defined(DISPLAY_CLOCK_FRAME)
-
 void drawWatchFaceToggleButton(OLEDDisplay *display, int16_t x, int16_t y, bool digitalMode, float scale)
 {
     uint16_t segmentWidth = SEGMENT_WIDTH * scale;
@@ -171,26 +186,18 @@ void drawWatchFaceToggleButton(OLEDDisplay *display, int16_t x, int16_t y, bool 
 // Draw a digital clock
 void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+    display->clear();
     display->setTextAlignment(TEXT_ALIGN_LEFT);
+    int line = 1;
 
-    UIRenderer::drawBattery(display, x, y + 7, imgBattery, powerStatus);
-
-    if (powerStatus->getHasBattery()) {
-        char batteryPercent[8];
-        snprintf(batteryPercent, sizeof(batteryPercent), "%d%%", powerStatus->getBatteryChargePercent());
-
-        display->setFont(FONT_SMALL);
-
-        display->drawString(x + 20, y + 2, batteryPercent);
-    }
-
+#ifdef T_WATCH_S3
     if (nimbleBluetooth && nimbleBluetooth->isConnected()) {
-        drawBluetoothConnectedIcon(display, display->getWidth() - 18, y + 2);
+        graphics::ClockRenderer::drawBluetoothConnectedIcon(display, display->getWidth() - 18, y + 2);
     }
 
-    drawWatchFaceToggleButton(display, display->getWidth() - 36, display->getHeight() - 36, screen->digitalWatchFace, 1);
-
-    display->setColor(OLEDDISPLAY_COLOR::WHITE);
+    drawWatchFaceToggleButton(display, display->getWidth() - 36, display->getHeight() - 36,
+                              graphics::ClockRenderer::digitalWatchFace, 1);
+#endif
 
     uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true); // Display local timezone
     if (rtc_sec > 0) {
@@ -215,7 +222,14 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
         char secondString[8];
         snprintf(secondString, sizeof(secondString), "%02d", second);
 
+#ifdef T_WATCH_S3
         float scale = 1.5;
+#else
+        float scale = 0.75;
+        if (SCREEN_WIDTH > 128) {
+            scale = 1.5;
+        }
+#endif
 
         uint16_t segmentWidth = SEGMENT_WIDTH * scale;
         uint16_t segmentHeight = SEGMENT_HEIGHT * scale;
@@ -279,7 +293,7 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 {
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
-    UIRenderer::drawBattery(display, x, y + 7, imgBattery, powerStatus);
+    graphics::UIRenderer::drawBattery(display, x, y + 7, imgBattery, powerStatus);
 
     if (powerStatus->getHasBattery()) {
         char batteryPercent[8];
@@ -294,7 +308,8 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         drawBluetoothConnectedIcon(display, display->getWidth() - 18, y + 2);
     }
 
-    drawWatchFaceToggleButton(display, display->getWidth() - 36, display->getHeight() - 36, screen->digitalWatchFace, 1);
+    drawWatchFaceToggleButton(display, display->getWidth() - 36, display->getHeight() - 36,
+                              graphics::ClockRenderer::digitalWatchFace, 1);
 
     // clock face center coordinates
     int16_t centerX = display->getWidth() / 2;
@@ -443,6 +458,6 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     }
 }
 
-#endif
-
 } // namespace ClockRenderer
+
+} // namespace graphics
