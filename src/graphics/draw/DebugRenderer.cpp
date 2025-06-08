@@ -36,9 +36,6 @@ const int textPositions[7] = {textZeroLine,   textFirstLine, textSecondLine, tex
 
 using namespace meshtastic;
 
-// Battery icon array
-static uint8_t imgBattery[16] = {0xFF, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0xE7, 0x3C};
-
 // External variables
 extern graphics::Screen *screen;
 extern PowerStatus *powerStatus;

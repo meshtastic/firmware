@@ -1,6 +1,5 @@
 #pragma once
 
-#include "graphics/Screen.h"
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 
@@ -10,14 +9,11 @@ namespace graphics
 /// Forward declarations
 class Screen;
 
-/**
- * @brief Clock drawing functions
- *
- * Contains all functions related to drawing analog and digital clocks,
- * segmented displays, and time-related UI elements.
- */
 namespace ClockRenderer
 {
+// Whether we are showing the digital watch face or the analog one
+static bool digitalWatchFace = true;
+
 // Clock frame functions
 void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
