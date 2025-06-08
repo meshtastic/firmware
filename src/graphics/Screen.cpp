@@ -934,8 +934,8 @@ void Screen::setFrames(FrameFocus focus)
     }
 
 #if defined(DISPLAY_CLOCK_FRAME)
-    normalFrames[numframes++] =
-        digitalWatchFace ? graphics::ClockRenderer::drawDigitalClockFrame : &graphics::ClockRenderer::drawAnalogClockFrame;
+    normalFrames[numframes++] = graphics::ClockRenderer::digitalWatchFace ? graphics::ClockRenderer::drawDigitalClockFrame
+                                                                          : &graphics::ClockRenderer::drawAnalogClockFrame;
     indicatorIcons.push_back(icon_clock);
 #endif
 
