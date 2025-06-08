@@ -1390,6 +1390,7 @@ void Screen::setFrames(FrameFocus focus)
         indicatorIcons.push_back(icon_mail);
     }
 
+    fsi.positions.home = numframes;
     normalFrames[numframes++] = graphics::UIRenderer::drawDeviceFocused;
     indicatorIcons.push_back(icon_home);
 
@@ -1795,28 +1796,21 @@ int Screen::handleInputEvent(const InputEvent *event)
                 inputIntercepted = true;
         }
 
-        // Only allow BUTTON_PRESSED and BUTTON_LONG_PRESSED to trigger frame changes if no module is handling input
-        if (!inputIntercepted) {
-            if (event->inputEvent == INPUT_BROKER_MSG_BUTTON_PRESSED) {
-                showNextFrame();
-                return 0;
-            } else if (event->inputEvent == INPUT_BROKER_MSG_BUTTON_LONG_PRESSED) {
-                // Optional: Define alternate screen action or no-op
-                return 0;
-            }
-        }
-
         // If no modules are using the input, move between frames
         if (!inputIntercepted) {
             if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {
                 showPrevFrame();
-            } else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT)) {
+            } else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT) ||
+                       event->inputEvent == INPUT_BROKER_MSG_BUTTON_PRESSED) {
                 showNextFrame();
             } else if (event->inputEvent ==
                            static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT) ||
-                       event->inputEvent == INPUT_BROKER_MSG_BUTTON_DOUBLE_PRESSED) {
+                       event->inputEvent == INPUT_BROKER_MSG_BUTTON_DOUBLE_PRESSED ||
+                       event->inputEvent == INPUT_BROKER_MSG_BUTTON_LONG_PRESSED) {
+                if (this->ui->getUiState()->currentFrame == framesetInfo.positions.home) {
+                    setOn(false);
 #if HAS_TFT
-                if (this->ui->getUiState()->currentFrame == framesetInfo.positions.memory) {
+                } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.memory) {
                     showOverlayBanner("Switch to MUI?\nYES\nNO", 30000, 2, [](int selected) -> void {
                         if (selected == 0) {
                             config.display.displaymode = meshtastic_Config_DisplayConfig_DisplayMode_COLOR;
@@ -1825,10 +1819,9 @@ int Screen::handleInputEvent(const InputEvent *event)
                             rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
                         }
                     });
-                }
 #endif
 #if HAS_GPS
-                if (this->ui->getUiState()->currentFrame == framesetInfo.positions.gps) {
+                } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.gps) {
                     showOverlayBanner("Toggle GPS\nENABLED\nDISABLED", 30000, 2, [](int selected) -> void {
                         if (selected == 0) {
                             config.position.gps_enabled = true;
@@ -1838,8 +1831,8 @@ int Screen::handleInputEvent(const InputEvent *event)
                             gps->disable();
                         }
                     });
-                }
 #endif
+                }
             }
         }
     }
