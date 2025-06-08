@@ -159,7 +159,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         // Validate names
         if (*r->set_owner.long_name) {
             const char *start = r->set_owner.long_name;
-            // Skip all whitespace (space, tab, newline, unicode, etc)
+            // Skip all whitespace (space, tab, newline, etc)
             while (*start && isspace((unsigned char)*start))
                 start++;
             if (*start == '\0') {
@@ -1176,6 +1176,27 @@ void AdminModule::handleStoreDeviceUIConfig(const meshtastic_DeviceUIConfig &uic
 
 void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
 {
+    // Validate ham parameters before setting since this would bypass validation in the owner struct
+    if (*p.call_sign) {
+        const char *start = p.call_sign;
+        // Skip all whitespace
+        while (*start && isspace((unsigned char)*start))
+            start++;
+        if (*start == '\0') {
+            LOG_WARN("Rejected ham call_sign: must contain at least 1 non-whitespace character");
+            return;
+        }
+    }
+    if (*p.short_name) {
+        const char *start = p.short_name;
+        while (*start && isspace((unsigned char)*start))
+            start++;
+        if (*start == '\0') {
+            LOG_WARN("Rejected ham short_name: must contain at least 1 non-whitespace character");
+            return;
+        }
+    }
+
     // Set call sign and override lora limitations for licensed use
     strncpy(owner.long_name, p.call_sign, sizeof(owner.long_name));
     strncpy(owner.short_name, p.short_name, sizeof(owner.short_name));
