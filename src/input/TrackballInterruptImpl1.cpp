@@ -18,11 +18,11 @@ void TrackballInterruptImpl1::init()
     uint8_t pinRight = TB_RIGHT;
     uint8_t pinPress = TB_PRESS;
 
-    char eventDown = INPUT_BROKER_DOWN;
-    char eventUp = INPUT_BROKER_UP;
-    char eventLeft = INPUT_BROKER_LEFT;
-    char eventRight = INPUT_BROKER_RIGHT;
-    char eventPressed = INPUT_BROKER_SELECT;
+    input_broker_event eventDown = INPUT_BROKER_DOWN;
+    input_broker_event eventUp = INPUT_BROKER_UP;
+    input_broker_event eventLeft = INPUT_BROKER_LEFT;
+    input_broker_event eventRight = INPUT_BROKER_RIGHT;
+    input_broker_event eventPressed = INPUT_BROKER_SELECT;
 
     TrackballInterruptBase::init(pinDown, pinUp, pinLeft, pinRight, pinPress, eventDown, eventUp, eventLeft, eventRight,
                                  eventPressed, TrackballInterruptImpl1::handleIntDown, TrackballInterruptImpl1::handleIntUp,
