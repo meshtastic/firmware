@@ -275,17 +275,18 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
         // draw seconds string
         display->setFont(FONT_SMALL);
         int xOffset = (SCREEN_WIDTH > 128) ? 0 : 0;
-        if (hour >= 10 && hour < 20) {
-            xOffset += (SCREEN_WIDTH > 128) ? 0 : 15;
+        if (hour >= 10) {
+            xOffset += (SCREEN_WIDTH > 128) ? 0 : 17;
         }
         int yOffset = (SCREEN_WIDTH > 128) ? 3 : 1;
-        display->drawString(startingHourMinuteTextX + xOffset, (display->getHeight() - hourMinuteTextY) - yOffset, secondString);
-
         if (config.display.use_12h_clock) {
-            xOffset = (SCREEN_WIDTH > 128) ? 20 : 13;
-            display->drawString(startingHourMinuteTextX + timeStringWidth - xOffset,
-                                (display->getHeight() - hourMinuteTextY) - yOffset - 2, isPM ? "pm" : "am");
+            display->drawString(startingHourMinuteTextX + xOffset, (display->getHeight() - hourMinuteTextY) - yOffset - 2,
+                                isPM ? "pm" : "am");
         }
+
+        xOffset = (SCREEN_WIDTH > 128) ? 18 : 10;
+        display->drawString(startingHourMinuteTextX + timeStringWidth - xOffset,
+                            (display->getHeight() - hourMinuteTextY) - yOffset, secondString);
     }
 }
 
