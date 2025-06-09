@@ -918,6 +918,12 @@ void setup()
 #else
     int _pinNum = config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN;
 #endif
+#ifndef BUTTON_ACTIVE_LOW
+#define BUTTON_ACTIVE_LOW true
+#endif
+#ifndef BUTTON_ACTIVE_PULLUP
+#define BUTTON_ACTIVE_PULLUP true
+#endif
 
     // Buttons. Moved here cause we need NodeDB to be initialized
     // If your variant.h has a BUTTON_PIN defined, go ahead and define BUTTON_ACTIVE_LOW and BUTTON_ACTIVE_PULLUP
