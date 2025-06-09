@@ -882,7 +882,7 @@ void setup()
     setupModules();
 
 // buttons are now inputBroker, so have to come after setupModules
-#if defined(HAS_BUTTON)
+#if HAS_BUTTON
     int pullup_sense = 0;
 #ifdef INPUT_PULLUP_SENSE
     // Some platforms (nrf52) have a SENSE variant which allows wake from sleep - override what OneButton did

@@ -71,7 +71,6 @@ class ButtonThread : public Observable<const InputEvent *>, public concurrency::
     int afterLightSleep(esp_sleep_wakeup_cause_t cause);
 #endif
   private:
-    input_broker_event currentEvent;
     input_broker_event _singlePress = INPUT_BROKER_NONE;
     input_broker_event _longPress = INPUT_BROKER_NONE;
     input_broker_event _doublePress = INPUT_BROKER_NONE;
