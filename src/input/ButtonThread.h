@@ -23,7 +23,7 @@
 #endif
 
 #ifndef BUTTON_COMBO_TIMEOUT_MS
-#define BUTTON_COMBO_TIMEOUT_MS 1000 // 1 second1 to complete the combination -- tap faster
+#define BUTTON_COMBO_TIMEOUT_MS 1000 // 1 second to complete the combination -- tap faster
 #endif
 
 #ifndef BUTTON_LEADUP_MS
