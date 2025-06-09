@@ -76,6 +76,7 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
     const int MAX_LINES = 23;
 
     uint16_t maxWidth = 0;
+    uint16_t arrowsWidth = display->getStringWidth("-><-", 4, true);
     uint16_t lineWidths[MAX_LINES] = {0};
     uint16_t lineLengths[MAX_LINES] = {0};
     char *lineStarts[MAX_LINES + 1];
@@ -95,6 +96,9 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
         lineWidths[lineCount] = display->getStringWidth(lineStarts[lineCount], lineLengths[lineCount], true);
         if (lineWidths[lineCount] > maxWidth) {
             maxWidth = lineWidths[lineCount];
+        }
+        if (alertBannerOptions > 0 && lineCount > 0 && lineWidths[lineCount] + arrowsWidth > maxWidth) {
+            maxWidth = lineWidths[lineCount] + arrowsWidth;
         }
         lineCount++;
         // if we are doing a selection, add extra width for arrows
