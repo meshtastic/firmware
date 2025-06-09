@@ -1371,7 +1371,7 @@ int Screen::handleInputEvent(const InputEvent *event)
                     });
 #endif
 #if HAS_GPS
-                } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.gps) {
+                } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.gps && gps) {
                     showOverlayBanner("Toggle GPS\nENABLED\nDISABLED", 30000, 2, [](int selected) -> void {
                         if (selected == 0) {
                             config.position.gps_enabled = true;
