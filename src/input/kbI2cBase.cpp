@@ -435,9 +435,13 @@ int32_t KbI2cBase::runOnce()
                 e.inputEvent = INPUT_BROKER_SEND_PING;
                 e.kbchar = c;
                 break;
+            case 0x9b: // fn+s      INPUT_BROKER_MSG_SHUTDOWN
+                e.inputEvent = INPUT_BROKER_SHUTDOWN;
+                e.kbchar = c;
+                break;
+
             case 0x90: // fn+r      INPUT_BROKER_MSG_REBOOT
             case 0x91: // fn+t
-            case 0x9b: // fn+s      INPUT_BROKER_MSG_SHUTDOWN
             case 0xac: // fn+m      INPUT_BROKER_MSG_MUTE_TOGGLE
 
             case 0x8b: // fn+del    INPUT_BROKEN_MSG_DISMISS_FRAME
