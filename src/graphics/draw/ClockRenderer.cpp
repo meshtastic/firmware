@@ -16,8 +16,6 @@
 #include "nimble/NimbleBluetooth.h"
 #endif
 
-#endif
-
 namespace graphics
 {
 
@@ -469,3 +467,4 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 } // namespace ClockRenderer
 
 } // namespace graphics
+#endif
