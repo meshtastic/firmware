@@ -5,6 +5,8 @@
 #include "concurrency/OSThread.h"
 #include "configuration.h"
 
+typedef void (*voidFuncPtr)(void);
+
 #ifndef BUTTON_CLICK_MS
 #define BUTTON_CLICK_MS 250
 #endif
@@ -35,10 +37,10 @@ class ButtonThread : public Observable<const InputEvent *>, public concurrency::
   public:
     const char *_originName;
     static const uint32_t c_holdOffTime = 30000; // hold off 30s after boot
-    bool initButton(uint8_t pinNumber, bool activeLow, bool activePullup, uint32_t pullupSense, input_broker_event singlePress,
-                    input_broker_event longPress = INPUT_BROKER_NONE, input_broker_event doublePress = INPUT_BROKER_NONE,
-                    input_broker_event triplePress = INPUT_BROKER_NONE, input_broker_event shortLong = INPUT_BROKER_NONE,
-                    bool touchQuirk = false);
+    bool initButton(uint8_t pinNumber, bool activeLow, bool activePullup, uint32_t pullupSense, voidFuncPtr intRoutine,
+                    input_broker_event singlePress, input_broker_event longPress = INPUT_BROKER_NONE,
+                    input_broker_event doublePress = INPUT_BROKER_NONE, input_broker_event triplePress = INPUT_BROKER_NONE,
+                    input_broker_event shortLong = INPUT_BROKER_NONE, bool touchQuirk = false);
 
     enum ButtonEventType {
         BUTTON_EVENT_NONE,
@@ -54,6 +56,7 @@ class ButtonThread : public Observable<const InputEvent *>, public concurrency::
 
     ButtonThread(const char *name);
     int32_t runOnce() override;
+    OneButton userButton;
     void attachButtonInterrupts();
     void detachButtonInterrupts();
     void storeClickCount();
@@ -77,14 +80,13 @@ class ButtonThread : public Observable<const InputEvent *>, public concurrency::
     input_broker_event _triplePress = INPUT_BROKER_NONE;
     input_broker_event _shortLong = INPUT_BROKER_NONE;
 
+    voidFuncPtr _intRoutine;
     int _pinNum = 0;
     bool _activeLow = true;
     bool _touchQuirk = false;
 
     uint32_t buttonPressStartTime = 0;
     bool buttonWasPressed = false;
-
-    OneButton userButton;
 
 #ifdef ARCH_ESP32
     // Get notified when lightsleep begins and ends

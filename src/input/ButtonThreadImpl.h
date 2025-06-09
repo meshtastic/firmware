@@ -13,8 +13,8 @@ class ButtonThreadImpl : public ButtonThread
 {
   public:
     ButtonThreadImpl(char *);
-    void init(uint8_t pinNumber, bool activeLow, bool activePullup, uint32_t pullupSense, input_broker_event singlePress,
-              input_broker_event longPress = INPUT_BROKER_NONE, input_broker_event doublePress = INPUT_BROKER_NONE,
-              input_broker_event triplePress = INPUT_BROKER_NONE, input_broker_event shortLong = INPUT_BROKER_NONE,
-              bool touchQuirk = false);
+    void init(uint8_t pinNumber, bool activeLow, bool activePullup, uint32_t pullupSense, voidFuncPtr intRoutine,
+              input_broker_event singlePress, input_broker_event longPress = INPUT_BROKER_NONE,
+              input_broker_event doublePress = INPUT_BROKER_NONE, input_broker_event triplePress = INPUT_BROKER_NONE,
+              input_broker_event shortLong = INPUT_BROKER_NONE, bool touchQuirk = false);
 };

@@ -902,14 +902,29 @@ void setup()
 
 #ifdef BUTTON_PIN_TOUCH
     TouchButtonThread = new ButtonThreadImpl("BackButton");
-    TouchButtonThread->init(BUTTON_PIN_TOUCH, true, true, pullup_sense, INPUT_BROKER_NONE,
-                            INPUT_BROKER_BACK); // TODO: make long press again
+    TouchButtonThread->init(
+        BUTTON_PIN_TOUCH, true, true, pullup_sense,
+        []() {
+            TouchButtonThread->userButton.tick();
+            runASAP = true;
+            BaseType_t higherWake = 0;
+            mainDelay.interruptFromISR(&higherWake);
+        },
+        INPUT_BROKER_NONE, INPUT_BROKER_BACK);
 #endif
 
 #if defined(BACK_BUTTON_PIN)
     // Buttons. Moved here cause we need NodeDB to be initialized
     BackButtonThread = new ButtonThreadImpl("BackButton");
-    BackButtonThread->init(BACK_BUTTON_PIN, BACK_BUTTON_ACTIVE_LOW, BACK_BUTTON_ACTIVE_PULLUP, pullup_sense, INPUT_BROKER_BACK);
+    BackButtonThread->init(
+        BACK_BUTTON_PIN, BACK_BUTTON_ACTIVE_LOW, BACK_BUTTON_ACTIVE_PULLUP, pullup_sense,
+        []() {
+            BackButtonThread->userButton.tick();
+            runASAP = true;
+            BaseType_t higherWake = 0;
+            mainDelay.interruptFromISR(&higherWake);
+        },
+        INPUT_BROKER_BACK);
 #endif
 
 #if defined(BUTTON_PIN)
@@ -929,11 +944,25 @@ void setup()
     // If your variant.h has a BUTTON_PIN defined, go ahead and define BUTTON_ACTIVE_LOW and BUTTON_ACTIVE_PULLUP
     UserButtonThread = new ButtonThreadImpl("UserButton");
     if (screen)
-        UserButtonThread->init(_pinNum, BUTTON_ACTIVE_LOW, BUTTON_ACTIVE_PULLUP, pullup_sense, INPUT_BROKER_USER_PRESS,
-                               INPUT_BROKER_SELECT);
+        UserButtonThread->init(
+            _pinNum, BUTTON_ACTIVE_LOW, BUTTON_ACTIVE_PULLUP, pullup_sense,
+            []() {
+                UserButtonThread->userButton.tick();
+                runASAP = true;
+                BaseType_t higherWake = 0;
+                mainDelay.interruptFromISR(&higherWake);
+            },
+            INPUT_BROKER_USER_PRESS, INPUT_BROKER_SELECT);
     else
-        UserButtonThread->init(_pinNum, BUTTON_ACTIVE_LOW, BUTTON_ACTIVE_PULLUP, pullup_sense, INPUT_BROKER_USER_PRESS,
-                               INPUT_BROKER_SHUTDOWN, INPUT_BROKER_SEND_PING, INPUT_BROKER_GPS_TOGGLE);
+        UserButtonThread->init(
+            _pinNum, BUTTON_ACTIVE_LOW, BUTTON_ACTIVE_PULLUP, pullup_sense,
+            []() {
+                UserButtonThread->userButton.tick();
+                runASAP = true;
+                BaseType_t higherWake = 0;
+                mainDelay.interruptFromISR(&higherWake);
+            },
+            INPUT_BROKER_USER_PRESS, INPUT_BROKER_SHUTDOWN, INPUT_BROKER_SEND_PING, INPUT_BROKER_GPS_TOGGLE);
 #endif
 
 #endif

@@ -27,13 +27,14 @@ ButtonThread::ButtonThread(const char *name) : OSThread(name)
     _originName = name;
 }
 
-bool ButtonThread::initButton(uint8_t pinNumber, bool activeLow, bool activePullup, uint32_t pullupSense,
+bool ButtonThread::initButton(uint8_t pinNumber, bool activeLow, bool activePullup, uint32_t pullupSense, voidFuncPtr intRoutine,
                               input_broker_event singlePress, input_broker_event longPress, input_broker_event doublePress,
                               input_broker_event triplePress, input_broker_event shortLong, bool touchQuirk)
 {
     _pinNum = pinNumber;
     _activeLow = activeLow;
     _touchQuirk = touchQuirk;
+    _intRoutine = intRoutine;
 
     userButton = OneButton(pinNumber, activeLow, activePullup);
 
@@ -285,20 +286,8 @@ int32_t ButtonThread::runOnce()
  */
 void ButtonThread::attachButtonInterrupts()
 {
-#if defined(ARCH_PORTDUINO)
-    wakeOnIrq(_pinNum, FALLING);
-#else
     // Interrupt for user button, during normal use. Improves responsiveness.
-    attachInterrupt(
-        _pinNum,
-        []() {
-            // userButton.tick();
-            runASAP = true;
-            BaseType_t higherWake = 0;
-            mainDelay.interruptFromISR(&higherWake);
-        },
-        CHANGE);
-#endif
+    attachInterrupt(_pinNum, _intRoutine, CHANGE);
 }
 
 /*
@@ -307,11 +296,7 @@ void ButtonThread::attachButtonInterrupts()
  */
 void ButtonThread::detachButtonInterrupts()
 {
-#if defined(ARCH_PORTDUINO)
     detachInterrupt(_pinNum);
-#else
-    detachInterrupt(_pinNum);
-#endif
 }
 
 #ifdef ARCH_ESP32
@@ -333,22 +318,6 @@ int ButtonThread::afterLightSleep(esp_sleep_wakeup_cause_t cause)
 }
 
 #endif
-
-/**
- * Watch a GPIO and if we get an IRQ, wake the main thread.
- * Use to add wake on button press
- */
-void ButtonThread::wakeOnIrq(int irq, int mode)
-{
-    attachInterrupt(
-        irq,
-        [] {
-            BaseType_t higherWake = 0;
-            mainDelay.interruptFromISR(&higherWake);
-            runASAP = true;
-        },
-        FALLING);
-}
 
 // Non-static method, runs during callback. Grabs info while still valid
 void ButtonThread::storeClickCount()
