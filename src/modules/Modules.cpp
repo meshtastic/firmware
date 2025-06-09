@@ -7,6 +7,7 @@
 #include "input/SerialKeyboardImpl.h"
 #include "input/TrackballInterruptImpl1.h"
 #include "input/UpDownInterruptImpl1.h"
+#include "modules/SystemCommandsModule.h"
 #if !MESHTASTIC_EXCLUDE_I2C
 #include "input/cardKbI2cImpl.h"
 #endif
@@ -112,6 +113,7 @@ void setupModules()
             inputBroker = new InputBroker();
         }
 #endif
+        systemCommandsModule = new SystemCommandsModule();
 #if !MESHTASTIC_EXCLUDE_ADMIN
         adminModule = new AdminModule();
 #endif

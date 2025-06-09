@@ -100,6 +100,19 @@ NRF52Bluetooth *nrf52Bluetooth = nullptr;
 
 #if HAS_BUTTON || defined(ARCH_PORTDUINO)
 #include "input/ButtonThreadImpl.h"
+
+#if defined(BUTTON_PIN_TOUCH)
+ButtonThreadImpl *TouchButtonThread = nullptr;
+#endif
+
+#if defined(BUTTON_PIN)
+ButtonThreadImpl *UserButtonThread = nullptr;
+#endif
+
+#if defined(BACK_BUTTON_PIN)
+ButtonThreadImpl *BackButtonThread = nullptr;
+#endif
+
 #endif
 
 #include "AmbientLightingThread.h"
@@ -869,10 +882,60 @@ void setup()
     setupModules();
 
 // buttons are now inputBroker, so have to come after setupModules
-#if HAS_BUTTON || defined(ARCH_PORTDUINO)
+#if defined(HAS_BUTTON)
+    int pullup_sense = 0;
+#ifdef INPUT_PULLUP_SENSE
+    // Some platforms (nrf52) have a SENSE variant which allows wake from sleep - override what OneButton did
+#ifdef BUTTON_SENSE_TYPE
+    pullup_sense = BUTTON_SENSE_TYPE;
+#else
+    pullup_sense = INPUT_PULLUP_SENSE;
+#endif
+#endif
+#if defined(ARCH_PORTDUINO) // make it work
+
+    if (settingsMap.count(user) != 0 && settingsMap[user] != RADIOLIB_NC) {
+
+        LOG_DEBUG("Use GPIO%02d for button", settingsMap[user]);
+    }
+#endif
+
+#ifdef BUTTON_PIN_TOUCH
+    TouchButtonThread = new ButtonThreadImpl("BackButton");
+    TouchButtonThread->init(BUTTON_PIN_TOUCH, true, true, pullup_sense, INPUT_BROKER_NONE,
+                            INPUT_BROKER_BACK); // TODO: make long press again
+#endif
+
+#if defined(BACK_BUTTON_PIN)
     // Buttons. Moved here cause we need NodeDB to be initialized
-    aButtonThreadImpl = new ButtonThreadImpl();
-    aButtonThreadImpl->init();
+    BackButtonThread = new ButtonThreadImpl("BackButton");
+    BackButtonThread->init(BACK_BUTTON_PIN, BACK_BUTTON_ACTIVE_LOW, BACK_BUTTON_ACTIVE_PULLUP, pullup_sense, INPUT_BROKER_BACK);
+#endif
+
+#if defined(BUTTON_PIN)
+#if defined(USERPREFS_BUTTON_PIN)
+    int _pinNum = config.device.button_gpio ? config.device.button_gpio : USERPREFS_BUTTON_PIN;
+#else
+    int _pinNum = config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN;
+#endif
+#ifndef BUTTON_ACTIVE_LOW
+#define BUTTON_ACTIVE_LOW true
+#endif
+#ifndef BUTTON_ACTIVE_PULLUP
+#define BUTTON_ACTIVE_PULLUP true
+#endif
+
+    // Buttons. Moved here cause we need NodeDB to be initialized
+    // If your variant.h has a BUTTON_PIN defined, go ahead and define BUTTON_ACTIVE_LOW and BUTTON_ACTIVE_PULLUP
+    UserButtonThread = new ButtonThreadImpl("UserButton");
+    if (screen)
+        UserButtonThread->init(_pinNum, BUTTON_ACTIVE_LOW, BUTTON_ACTIVE_PULLUP, pullup_sense, INPUT_BROKER_USER_PRESS,
+                               INPUT_BROKER_SELECT);
+    else
+        UserButtonThread->init(_pinNum, BUTTON_ACTIVE_LOW, BUTTON_ACTIVE_PULLUP, pullup_sense, INPUT_BROKER_USER_PRESS,
+                               INPUT_BROKER_SHUTDOWN, INPUT_BROKER_SEND_PING, INPUT_BROKER_GPS_TOGGLE);
+#endif
+
 #endif
 
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS

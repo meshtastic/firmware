@@ -602,7 +602,6 @@ void ExternalNotificationModule::handleSetRingtone(const char *from_msg)
 
 int ExternalNotificationModule::handleInputEvent(const InputEvent *event)
 {
-    LOG_WARN("ExternalNotification Handle Input");
     if (nagCycleCutoff != UINT32_MAX) {
         stopNow();
         return 1;

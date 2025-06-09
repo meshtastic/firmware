@@ -36,6 +36,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "draw/UIRenderer.h"
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
+#include "buzz.h"
 #endif
 #include "FSCommon.h"
 #include "MeshService.h"
@@ -1374,15 +1375,19 @@ int Screen::handleInputEvent(const InputEvent *event)
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.gps && gps) {
                     showOverlayBanner("Toggle GPS\nENABLED\nDISABLED", 30000, 2, [](int selected) -> void {
                         if (selected == 0) {
-                            config.position.gps_enabled = true;
+                            config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
+                            playGPSEnableBeep();
                             gps->enable();
                         } else if (selected == 1) {
-                            config.position.gps_enabled = false;
+                            config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_DISABLED;
+                            playGPSDisableBeep();
                             gps->disable();
                         }
                     });
 #endif
                 }
+            } else if (event->inputEvent == INPUT_BROKER_BACK) {
+                setOn(false);
             }
         }
     }

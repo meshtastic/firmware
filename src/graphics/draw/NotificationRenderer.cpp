@@ -76,6 +76,7 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
     const int MAX_LINES = 23;
 
     uint16_t maxWidth = 0;
+    uint16_t arrowsWidth = display->getStringWidth("-><-", 4, true);
     uint16_t lineWidths[MAX_LINES] = {0};
     uint16_t lineLengths[MAX_LINES] = {0};
     char *lineStarts[MAX_LINES + 1];
@@ -96,6 +97,9 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
         if (lineWidths[lineCount] > maxWidth) {
             maxWidth = lineWidths[lineCount];
         }
+        if (alertBannerOptions > 0 && lineCount > 0 && lineWidths[lineCount] + arrowsWidth > maxWidth) {
+            maxWidth = lineWidths[lineCount] + arrowsWidth;
+        }
         lineCount++;
         // if we are doing a selection, add extra width for arrows
     }
@@ -108,6 +112,8 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
             curSelected++;
         } else if (inEvent == INPUT_BROKER_SELECT) {
             alertBannerCallback(curSelected);
+            alertBannerMessage[0] = '\0';
+        } else if (inEvent == INPUT_BROKER_BACK && alertBannerUntil != 0) {
             alertBannerMessage[0] = '\0';
         }
         if (curSelected == -1)
@@ -126,10 +132,13 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
         }
     } else { // not in an alert with a callback
         // TODO: check that at least a second has passed since the alert started
-        if (inEvent == INPUT_BROKER_SELECT) {
+        if (inEvent == INPUT_BROKER_SELECT || inEvent == INPUT_BROKER_BACK) {
             alertBannerMessage[0] = '\0'; // end the alert early
         }
     }
+    inEvent = INPUT_BROKER_NONE;
+    if (alertBannerMessage[0] == '\0')
+        return;
 
     // set width from longest line
     uint16_t boxWidth = padding * 2 + maxWidth;
@@ -218,7 +227,6 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
 
         lineY += FONT_HEIGHT_SMALL + lineSpacing;
     }
-    inEvent = INPUT_BROKER_NONE;
 }
 
 /// Draw the last text message we received

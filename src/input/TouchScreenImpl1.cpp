@@ -79,11 +79,7 @@ void TouchScreenImpl1::onEvent(const TouchEvent &event)
         break;
     }
     case TOUCH_ACTION_TAP: {
-        if (moduleConfig.external_notification.enabled && (externalNotificationModule->nagCycleCutoff != UINT32_MAX)) {
-            externalNotificationModule->stopNow();
-        } else {
-            powerFSM.trigger(EVENT_INPUT);
-        }
+        e.inputEvent = INPUT_BROKER_USER_PRESS;
         break;
     }
     default:

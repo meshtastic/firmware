@@ -381,7 +381,7 @@ int32_t KbI2cBase::runOnce()
                 if (is_sym) {
                     is_sym = false;
                     e.inputEvent = INPUT_BROKER_ANYKEY;
-                    e.kbchar = INPUT_BROKER_MSG_SEND_PING; // (fn + space)
+                    e.kbchar = INPUT_BROKER_SEND_PING; // (fn + space)
                 } else {
                     e.inputEvent = INPUT_BROKER_ANYKEY;
                     e.kbchar = c;
@@ -390,8 +390,8 @@ int32_t KbI2cBase::runOnce()
             case 0x67: // letter g. toggle gps
                 if (is_sym) {
                     is_sym = false;
-                    e.inputEvent = INPUT_BROKER_ANYKEY;
-                    e.kbchar = INPUT_BROKER_MSG_GPS_TOGGLE;
+                    e.inputEvent = INPUT_BROKER_GPS_TOGGLE;
+                    e.kbchar = INPUT_BROKER_GPS_TOGGLE;
                 } else {
                     e.inputEvent = INPUT_BROKER_ANYKEY;
                     e.kbchar = c;
@@ -427,12 +427,23 @@ int32_t KbI2cBase::runOnce()
                 e.kbchar = is_sym ? INPUT_BROKER_MSG_FN_SYMBOL_ON   // send 0xf1 to tell CannedMessages to display that the
                                   : INPUT_BROKER_MSG_FN_SYMBOL_OFF; // modifier key is active
                 break;
+            case 0x9e: // fn+g      INPUT_BROKER_GPS_TOGGLE
+                e.inputEvent = INPUT_BROKER_GPS_TOGGLE;
+                e.kbchar = c;
+                break;
+            case 0xaf: // fn+space  INPUT_BROKER_SEND_PING
+                e.inputEvent = INPUT_BROKER_SEND_PING;
+                e.kbchar = c;
+                break;
+            case 0x9b: // fn+s      INPUT_BROKER_MSG_SHUTDOWN
+                e.inputEvent = INPUT_BROKER_SHUTDOWN;
+                e.kbchar = c;
+                break;
+
             case 0x90: // fn+r      INPUT_BROKER_MSG_REBOOT
             case 0x91: // fn+t
-            case 0x9b: // fn+s      INPUT_BROKER_MSG_SHUTDOWN
             case 0xac: // fn+m      INPUT_BROKER_MSG_MUTE_TOGGLE
-            case 0x9e: // fn+g      INPUT_BROKER_MSG_GPS_TOGGLE
-            case 0xaf: // fn+space  INPUT_BROKER_MSG_SEND_PING
+
             case 0x8b: // fn+del    INPUT_BROKEN_MSG_DISMISS_FRAME
             case 0xAA: // fn+b      INPUT_BROKER_MSG_BLUETOOTH_TOGGLE
             case 0x8F: // fn+e      INPUT_BROKER_MSG_EMOTE_LIST

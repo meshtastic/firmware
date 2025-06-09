@@ -196,7 +196,6 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     int handleDestinationSelectionInput(const InputEvent *event, bool isUp, bool isDown, bool isSelect);
     bool handleMessageSelectorInput(const InputEvent *event, bool isUp, bool isDown, bool isSelect);
     bool handleFreeTextInput(const InputEvent *event);
-    bool handleSystemCommandInput(const InputEvent *event);
 
 #if defined(USE_VIRTUAL_KEYBOARD)
     Letter keyboard[2][4][10] = {{{{"Q", 20, 0, 0, 0, 0},

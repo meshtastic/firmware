@@ -264,10 +264,6 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
     if (!isInputSourceAllowed(event))
         return 0;
 
-    // Global/system commands always processed (brightness, BT, GPS, shutdown, etc.)
-    if (handleSystemCommandInput(event))
-        return 1;
-
     // Tab key: Always allow switching between canned/destination screens
     if (event->kbchar == INPUT_BROKER_MSG_TAB && handleTabSwitch(event))
         return 1;
@@ -791,120 +787,6 @@ int CannedMessageModule::handleEmotePickerInput(const InputEvent *event)
     }
 
     return 0;
-}
-
-bool CannedMessageModule::handleSystemCommandInput(const InputEvent *event)
-{
-    // Only respond to "INPUT_BROKER_ANYKEY" events for system keys
-    if (event->inputEvent != INPUT_BROKER_ANYKEY)
-        return false;
-
-    // System commands (all others fall through to return false)
-    switch (event->kbchar) {
-    // Fn key symbols
-    case INPUT_BROKER_MSG_FN_SYMBOL_ON:
-        if (screen)
-            screen->setFunctionSymbol("Fn");
-        return true;
-    case INPUT_BROKER_MSG_FN_SYMBOL_OFF:
-        if (screen)
-            screen->removeFunctionSymbol("Fn");
-        return true;
-    // Brightness
-    case INPUT_BROKER_MSG_BRIGHTNESS_UP:
-        if (screen)
-            screen->increaseBrightness();
-        LOG_DEBUG("Increase Screen Brightness");
-        return true;
-    case INPUT_BROKER_MSG_BRIGHTNESS_DOWN:
-        if (screen)
-            screen->decreaseBrightness();
-        LOG_DEBUG("Decrease Screen Brightness");
-        return true;
-    // Mute
-    case INPUT_BROKER_MSG_MUTE_TOGGLE:
-        if (moduleConfig.external_notification.enabled && externalNotificationModule) {
-            bool isMuted = externalNotificationModule->getMute();
-            externalNotificationModule->setMute(!isMuted);
-            graphics::isMuted = !isMuted;
-            if (!isMuted)
-                externalNotificationModule->stopNow();
-            if (screen)
-                screen->showOverlayBanner(isMuted ? "Notifications\nEnabled" : "Notifications\nDisabled", 3000);
-        }
-        return true;
-    // Bluetooth
-    case INPUT_BROKER_MSG_BLUETOOTH_TOGGLE:
-        config.bluetooth.enabled = !config.bluetooth.enabled;
-        LOG_INFO("User toggled Bluetooth");
-        nodeDB->saveToDisk();
-#if defined(ARDUINO_ARCH_NRF52)
-        if (!config.bluetooth.enabled) {
-            disableBluetooth();
-            if (screen)
-                screen->showOverlayBanner("Bluetooth OFF\nRebooting", 3000);
-            rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 2000;
-        } else {
-            if (screen)
-                screen->showOverlayBanner("Bluetooth ON\nRebooting", 3000);
-            rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
-        }
-#else
-        if (!config.bluetooth.enabled) {
-            disableBluetooth();
-            if (screen)
-                screen->showOverlayBanner("Bluetooth OFF", 3000);
-        } else {
-            if (screen)
-                screen->showOverlayBanner("Bluetooth ON\nRebooting", 3000);
-            rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
-        }
-#endif
-        return true;
-    // GPS
-    case INPUT_BROKER_MSG_GPS_TOGGLE:
-#if !MESHTASTIC_EXCLUDE_GPS
-        if (gps) {
-            gps->toggleGpsMode();
-            const char *msg =
-                (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) ? "GPS Enabled" : "GPS Disabled";
-            if (screen) {
-                screen->forceDisplay();
-                screen->showOverlayBanner(msg, 3000);
-            }
-        }
-#endif
-        return true;
-    // Mesh ping
-    case INPUT_BROKER_MSG_SEND_PING:
-        service->refreshLocalMeshNode();
-        if (service->trySendPosition(NODENUM_BROADCAST, true)) {
-            if (screen)
-                screen->showOverlayBanner("Position\nUpdate Sent", 3000);
-        } else {
-            if (screen)
-                screen->showOverlayBanner("Node Info\nUpdate Sent", 3000);
-        }
-        return true;
-    // Power control
-    case INPUT_BROKER_MSG_SHUTDOWN:
-        if (screen)
-            screen->showOverlayBanner("Shutting down...");
-        nodeDB->saveToDisk();
-        shutdownAtMsec = millis() + DEFAULT_SHUTDOWN_SECONDS * 1000;
-        runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
-        return true;
-    case INPUT_BROKER_MSG_REBOOT:
-        if (screen)
-            screen->showOverlayBanner("Rebooting...", 0);
-        nodeDB->saveToDisk();
-        rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
-        runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
-        return true;
-    // Not a system command, let other handlers process it
-    default:
-        return false;
-    }
 }
 
 void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const char *message, bool wantReplies)

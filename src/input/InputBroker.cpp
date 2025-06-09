@@ -12,7 +12,7 @@ void InputBroker::registerSource(Observable<const InputEvent *> *source)
 
 int InputBroker::handleInputEvent(const InputEvent *event)
 {
-    powerFSM.trigger(EVENT_INPUT);
+    powerFSM.trigger(EVENT_INPUT); // todo: not every input should wake, like long hold release
     this->notifyObservers(event);
     return 0;
 }
