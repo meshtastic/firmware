@@ -109,6 +109,8 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
         } else if (inEvent == INPUT_BROKER_SELECT) {
             alertBannerCallback(curSelected);
             alertBannerMessage[0] = '\0';
+        } else if (inEvent == INPUT_BROKER_BACK && alertBannerUntil != 0) {
+            alertBannerMessage[0] = '\0';
         }
         if (curSelected == -1)
             curSelected = alertBannerOptions - 1;
@@ -126,10 +128,13 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
         }
     } else { // not in an alert with a callback
         // TODO: check that at least a second has passed since the alert started
-        if (inEvent == INPUT_BROKER_SELECT) {
+        if (inEvent == INPUT_BROKER_SELECT || inEvent == INPUT_BROKER_BACK) {
             alertBannerMessage[0] = '\0'; // end the alert early
         }
     }
+    inEvent = INPUT_BROKER_NONE;
+    if (alertBannerMessage[0] == '\0')
+        return;
 
     // set width from longest line
     uint16_t boxWidth = padding * 2 + maxWidth;
@@ -218,7 +223,6 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
 
         lineY += FONT_HEIGHT_SMALL + lineSpacing;
     }
-    inEvent = INPUT_BROKER_NONE;
 }
 
 /// Draw the last text message we received
