@@ -133,11 +133,6 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define PIN_EINK_SCLK (0 + 3)
 #define PIN_EINK_MOSI (0 + 30) // also called SDI
 
-// #define USE_EINK
-
-// RAKRGB
-#define HAS_NCP5623
-
 /*
  * Wire Interfaces
  */
@@ -155,9 +150,6 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define PIN_QSPI_IO2 28
 #define PIN_QSPI_IO3 2
 
-// On-board QSPI Flash
-#define EXTERNAL_FLASH_DEVICES IS25LP080D
-#define EXTERNAL_FLASH_USE_QSPI
 
 /* @note RAK5005-O GPIO mapping to RAK4631 GPIO ports
    RAK5005-O <->  nRF52840
@@ -246,11 +238,6 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 #define ADC_MULTIPLIER 1.73
 
 #define RAK_4631 1
-
-#define PIN_ETHERNET_RESET 21
-#define PIN_ETHERNET_SS PIN_EINK_CS
-#define ETH_SPI_PORT SPI1
-#define AQ_SET_PIN 10
 
 #ifdef __cplusplus
 }
