@@ -283,10 +283,11 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
             display->drawString(startingHourMinuteTextX + xOffset, (display->getHeight() - hourMinuteTextY) - yOffset - 2,
                                 isPM ? "pm" : "am");
         }
-
+#ifndef USE_EINK
         xOffset = (SCREEN_WIDTH > 128) ? 18 : 10;
         display->drawString(startingHourMinuteTextX + timeStringWidth - xOffset,
                             (display->getHeight() - hourMinuteTextY) - yOffset, secondString);
+#endif
     }
 }
 
