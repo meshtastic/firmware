@@ -22,14 +22,20 @@ int32_t RAK12035Sensor::runOnce()
     sensor.get_sensor_version(&data);
     if (data != 0) {
         LOG_INFO("Init sensor: %s", sensorName);
+
+        LOG_INFO("I2C_SCL_RAK12023: %i", I2C_SCL_RAK12023);
+        LOG_INFO("I2C_SDA_RAK12023: %i", I2C_SDA_RAK12023);
+
         LOG_INFO("RAK12035Sensor Init Succeed \nSensor1 Firmware version: %i, Sensor Name: %s", data, sensorName);
         status = true;
+        sensor.sensor_sleep();
     } else {
-        LOG_INFO("Init sensor: %s \n", sensorName);
+        // If we reach here, it means the sensor did not initialize correctly.
+        LOG_INFO("Init sensor: %s", sensorName);
         LOG_ERROR("RAK12035Sensor Init Failed");
         status = false;
     }
-    sensor.sensor_sleep();
+
     return initI2CSensor();
 }
 

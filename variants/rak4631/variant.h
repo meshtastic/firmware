@@ -88,6 +88,13 @@ static const uint8_t A7 = PIN_A7;
 #define ADC_RESOLUTION 14
 
 // Other pins
+#define WB_I2C1_SDA (13) // SENSOR_SLOT IO_SLOT
+#define WB_I2C1_SCL (14) // SENSOR_SLOT IO_SLOT
+#define WB_I2C2_SDA (24) // IO_SLOT
+#define WB_I2C2_SCL (25) // IO_SLOT
+#define I2C_SCL_RAK12023 (WB_I2C2_SCL)
+#define I2C_SDA_RAK12023 (WB_I2C2_SDA)
+
 #define PIN_AREF (2)
 #define PIN_NFC1 (9)
 #define WB_IO5 PIN_NFC1
@@ -145,8 +152,8 @@ static const uint8_t SCK = PIN_SPI_SCK;
  */
 #define WIRE_INTERFACES_COUNT 1
 
-#define PIN_WIRE_SDA (13)
-#define PIN_WIRE_SCL (14)
+#define PIN_WIRE_SDA (WB_I2C1_SDA)
+#define PIN_WIRE_SCL (WB_I2C1_SCL)
 
 // QSPI Pins
 #define PIN_QSPI_SCK 3
