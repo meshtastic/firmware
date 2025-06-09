@@ -4,6 +4,16 @@
 
 using namespace NicheGraphics::Drivers;
 
+// Map the display controller IC's output to the connected panel
+void GDEY0154D67::configScanning()
+{
+    // "Driver output control"
+    sendCommand(0x01);
+    sendData(0xC7); // Scan until gate 199 (200px vertical res.)
+    sendData(0x00);
+    sendData(0x00);
+}
+
 // Specify which information is used to control the sequence of voltages applied to move the pixels
 // - For this display, configUpdateSequence() specifies that a suitable LUT will be loaded from
 //   the controller IC's OTP memory, when the update procedure begins.

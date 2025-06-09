@@ -31,6 +31,7 @@ class GDEY0154D67 : public SSD16XX
     GDEY0154D67() : SSD16XX(width, height, supported) {}
 
   protected:
+    void configScanning() override;
     void configWaveform() override;
     void configUpdateSequence() override;
     void detachFromUpdate() override;
