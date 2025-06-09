@@ -198,6 +198,7 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
 
     uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true); // Display local timezone
     if (rtc_sec > 0) {
+        char timeString[16];
         long hms = rtc_sec % SEC_PER_DAY;
         hms = (hms + SEC_PER_DAY) % SEC_PER_DAY;
 
@@ -212,11 +213,10 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
             if (hour == 0)
                 hour = 12;
             bool isPM = hour >= 12;
+            snprintf(timeString, sizeof(timeString), "%d:%02d", hour, minute);
+        } else {
+            snprintf(timeString, sizeof(timeString), "%02d:%02d", hour, minute);
         }
-
-        // Format time string
-        char timeString[16];
-        snprintf(timeString, sizeof(timeString), "%d:%02d", hour, minute);
 
         // Format seconds string
         char secondString[8];
