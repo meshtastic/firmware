@@ -2,12 +2,14 @@
 #include "InputBroker.h"
 #include "configuration.h"
 
-ButtonThreadImpl *aButtonThreadImpl;
+ButtonThreadImpl::ButtonThreadImpl(char *_name) : ButtonThread(_name) {}
 
-ButtonThreadImpl::ButtonThreadImpl() : ButtonThread("UserButton") {}
-
-void ButtonThreadImpl::init() // init should give the pin number and the action to perform and whether to do the legacy actions
+void ButtonThreadImpl::init(uint8_t pinNumber, bool activeLow, bool activePullup, uint32_t pullupSense,
+                            input_broker_event singlePress, input_broker_event longPress, input_broker_event doublePress,
+                            input_broker_event triplePress, input_broker_event shortLong, bool touchQuirk)
 {
     if (inputBroker)
         inputBroker->registerSource(this);
+    initButton(pinNumber, activeLow, activePullup, pullupSense, singlePress, longPress, doublePress, triplePress, shortLong,
+               touchQuirk);
 }

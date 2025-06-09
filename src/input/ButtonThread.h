@@ -23,7 +23,7 @@
 #endif
 
 #ifndef BUTTON_COMBO_TIMEOUT_MS
-#define BUTTON_COMBO_TIMEOUT_MS 2000 // 2 seconds to complete the combination
+#define BUTTON_COMBO_TIMEOUT_MS 1000 // 1 second1 to complete the combination -- tap faster
 #endif
 
 #ifndef BUTTON_LEADUP_MS
@@ -35,6 +35,10 @@ class ButtonThread : public Observable<const InputEvent *>, public concurrency::
   public:
     const char *_originName;
     static const uint32_t c_holdOffTime = 30000; // hold off 30s after boot
+    bool initButton(uint8_t pinNumber, bool activeLow, bool activePullup, uint32_t pullupSense, input_broker_event singlePress,
+                    input_broker_event longPress = INPUT_BROKER_NONE, input_broker_event doublePress = INPUT_BROKER_NONE,
+                    input_broker_event triplePress = INPUT_BROKER_NONE, input_broker_event shortLong = INPUT_BROKER_NONE,
+                    bool touchQuirk = false);
 
     enum ButtonEventType {
         BUTTON_EVENT_NONE,
@@ -55,11 +59,10 @@ class ButtonThread : public Observable<const InputEvent *>, public concurrency::
     void storeClickCount();
     bool isButtonPressed(int buttonPin)
     {
-#ifdef BUTTON_ACTIVE_LOW
-        return !digitalRead(buttonPin); // Active low: pressed = LOW
-#else
-        return digitalRead(buttonPin); // Most buttons are active low by default
-#endif
+        if (_activeLow)
+            return !digitalRead(buttonPin); // Active low: pressed = LOW
+        else
+            return digitalRead(buttonPin); // Most buttons are active low by default
     }
 
     // Disconnect and reconnect interrupts for light sleep
@@ -68,15 +71,21 @@ class ButtonThread : public Observable<const InputEvent *>, public concurrency::
     int afterLightSleep(esp_sleep_wakeup_cause_t cause);
 #endif
   private:
-#if defined(BUTTON_PIN) || defined(ARCH_PORTDUINO) || defined(USERPREFS_BUTTON_PIN)
-    static OneButton userButton; // Static - accessed from an interrupt
-#endif
-#ifdef BUTTON_PIN_ALT
-    OneButton userButtonAlt;
-#endif
-#ifdef BUTTON_PIN_TOUCH
-    OneButton userButtonTouch;
-#endif
+    input_broker_event currentEvent;
+    input_broker_event _singlePress = INPUT_BROKER_NONE;
+    input_broker_event _longPress = INPUT_BROKER_NONE;
+    input_broker_event _doublePress = INPUT_BROKER_NONE;
+    input_broker_event _triplePress = INPUT_BROKER_NONE;
+    input_broker_event _shortLong = INPUT_BROKER_NONE;
+
+    int _pinNum = 0;
+    bool _activeLow = true;
+    bool _touchQuirk = false;
+
+    uint32_t buttonPressStartTime = 0;
+    bool buttonWasPressed = false;
+
+    OneButton userButton;
 
 #ifdef ARCH_ESP32
     // Get notified when lightsleep begins and ends
@@ -86,8 +95,7 @@ class ButtonThread : public Observable<const InputEvent *>, public concurrency::
         CallbackObserver<ButtonThread, esp_sleep_wakeup_cause_t>(this, &ButtonThread::afterLightSleep);
 #endif
 
-    // set during IRQ
-    static volatile ButtonEventType btnEvent;
+    volatile ButtonEventType btnEvent = BUTTON_EVENT_NONE;
 
     // Store click count during callback, for later use
     volatile int multipressClickCount = 0;
@@ -104,14 +112,6 @@ class ButtonThread : public Observable<const InputEvent *>, public concurrency::
     static void wakeOnIrq(int irq, int mode);
 
     static void sendAdHocPosition();
-
-    // IRQ callbacks
-    static void userButtonPressedScreen() { btnEvent = BUTTON_EVENT_PRESSED_SCREEN; }
-    static void userButtonDoublePressed() { btnEvent = BUTTON_EVENT_DOUBLE_PRESSED; }
-    static void userButtonMultiPressed(void *callerThread); // Retrieve click count from non-static Onebutton while still valid
-    static void userButtonPressedLongStart();
-    static void userButtonPressedLongStop();
-    static void touchPressedLongStart() { btnEvent = BUTTON_EVENT_TOUCH_LONG_PRESSED; }
 };
 
 extern ButtonThread *buttonThread;

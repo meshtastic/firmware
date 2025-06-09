@@ -115,6 +115,8 @@
 
 #ifdef PIN_BUTTON1
 #define BUTTON_PIN PIN_BUTTON1
+#define BUTTON_ACTIVE_LOW true
+#define BUTTON_ACTIVE_PULLUP true
 #endif
 
 #ifdef PIN_BUTTON2

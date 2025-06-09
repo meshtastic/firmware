@@ -8,6 +8,8 @@
 #define SENSOR_BAUD_RATE 115200
 
 #define BUTTON_PIN 38
+#define BUTTON_ACTIVE_LOW true
+#define BUTTON_ACTIVE_PULLUP true
 
 // #define BUTTON_NEED_PULLUP
 

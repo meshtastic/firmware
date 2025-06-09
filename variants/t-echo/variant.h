@@ -61,8 +61,12 @@ extern "C" {
  * Buttons
  */
 #define PIN_BUTTON1 (32 + 10)
+#define BUTTON_ACTIVE_LOW true
+#define BUTTON_ACTIVE_PULLUP true
 #define PIN_BUTTON2 (0 + 18)      // 0.18 is labeled on the board as RESET but we configure it in the bootloader as a regular GPIO
 #define PIN_BUTTON_TOUCH (0 + 11) // 0.11 is the soft touch button on T-Echo
+#define BUTTON_TOUCH_ACTIVE_LOW true
+#define BUTTON_TOUCH_ACTIVE_PULLUP true
 
 #define BUTTON_CLICK_MS 400
 #define BUTTON_TOUCH_MS 200
