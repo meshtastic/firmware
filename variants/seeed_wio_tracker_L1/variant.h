@@ -33,10 +33,10 @@
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  Button Configuration
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#define BACK_BUTTON_PIN D13 // This is the Program Button
+#define CANCEL_BUTTON_PIN D13 // This is the Program Button
 // #define BUTTON_NEED_PULLUP   1
-#define BACK_BUTTON_ACTIVE_LOW true
-#define BACK_BUTTON_ACTIVE_PULLUP false
+#define CANCEL_BUTTON_ACTIVE_LOW true
+#define CANCEL_BUTTON_ACTIVE_PULLUP false
 
 // #define BUTTON_PIN_TOUCH 13 // Touch button
 //  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

@@ -63,6 +63,9 @@ extern "C" {
  * Buttons
  */
 #define PIN_BUTTON2 (32 + 10)
+#define BACK_BUTTON_PIN PIN_BUTTON2
+#define BACK_BUTTON_ACTIVE_LOW true
+#define BACK_BUTTON_ACTIVE_PULLUP true
 #define PIN_BUTTON1 (32 + 7)
 
 // #define PIN_BUTTON1 (0 + 11)

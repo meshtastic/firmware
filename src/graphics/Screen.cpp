@@ -1437,6 +1437,8 @@ int Screen::handleInputEvent(const InputEvent *event)
                         });
                 }
             } else if (event->inputEvent == INPUT_BROKER_BACK) {
+                showPrevFrame();
+            } else if (event->inputEvent == INPUT_BROKER_CANCEL) {
                 setOn(false);
             }
         }

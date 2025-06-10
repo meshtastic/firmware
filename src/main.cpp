@@ -113,6 +113,10 @@ ButtonThread *UserButtonThread = nullptr;
 ButtonThread *BackButtonThread = nullptr;
 #endif
 
+#if defined(CANCEL_BUTTON_PIN)
+ButtonThread *CancelButtonThread = nullptr;
+#endif
+
 #endif
 
 #include "AmbientLightingThread.h"
@@ -921,6 +925,20 @@ void setup()
             mainDelay.interruptFromISR(&higherWake);
         },
         INPUT_BROKER_NONE, INPUT_BROKER_BACK);
+#endif
+
+#if defined(CANCEL_BUTTON_PIN)
+    // Buttons. Moved here cause we need NodeDB to be initialized
+    CancelButtonThread = new ButtonThread("CancelButton");
+    CancelButtonThread->initButton(
+        CANCEL_BUTTON_PIN, CANCEL_BUTTON_ACTIVE_LOW, CANCEL_BUTTON_ACTIVE_PULLUP, pullup_sense,
+        []() {
+            CancelButtonThread->userButton.tick();
+            runASAP = true;
+            BaseType_t higherWake = 0;
+            mainDelay.interruptFromISR(&higherWake);
+        },
+        INPUT_BROKER_CANCEL, INPUT_BROKER_SHUTDOWN, 4000);
 #endif
 
 #if defined(BACK_BUTTON_PIN)

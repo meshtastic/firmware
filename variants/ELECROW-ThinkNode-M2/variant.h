@@ -3,6 +3,7 @@
 
 #define PIN_BUTTON1 47 // 功能键
 #define PIN_BUTTON2 4  // 电源键
+#define BACK_BUTTON_PIN PIN_BUTTON2
 #define BACK_BUTTON_ACTIVE_LOW false
 #define BACK_BUTTON_ACTIVE_PULLUP false
 

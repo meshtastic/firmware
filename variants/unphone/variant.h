@@ -57,9 +57,9 @@
 #define LED_PIN 13     // the red part of the RGB LED
 #define LED_STATE_ON 0 // State when LED is lit
 
-#define BUTTON_PIN 21      // Button 3 - square - top button in landscape mode
-#define BUTTON_NEED_PULLUP // we do need a helping hand up
-#define BACK_BUTTON_PIN 45 // Button 1 - triangle - bottom button in landscape mode
+#define BUTTON_PIN 21        // Button 3 - square - top button in landscape mode
+#define BUTTON_NEED_PULLUP   // we do need a helping hand up
+#define CANCEL_BUTTON_PIN 45 // Button 1 - triangle - bottom button in landscape mode
 
 #define I2C_SDA 3 // I2C pins for this board
 #define I2C_SCL 4
