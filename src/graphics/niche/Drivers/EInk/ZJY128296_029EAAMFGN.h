@@ -1,11 +1,13 @@
 /*
 
 E-Ink display driver
-    - DEPG0290BNS800
-    - Manufacturer: DKE
+    - ZJY128296-029EAAMFGN
+    - Manufacturer: Zhongjingyuan
     - Size: 2.9 inch
     - Resolution: 128px x 296px
-    - Flex connector marking (not a unique identifier): FPC-7519 rev.b
+    - Flex connector label (not a unique identifier): FPC-A005 20.06.15 TRX
+
+    Note: as of Feb. 2025, these panels are used for "WeActStudio 2.9in B&W" display modules
 
 */
 
@@ -19,7 +21,7 @@ E-Ink display driver
 
 namespace NicheGraphics::Drivers
 {
-class DEPG0290BNS800 : public SSD16XX
+class ZJY128296_029EAAMFGN : public SSD16XX
 {
     // Display properties
   private:
@@ -28,15 +30,15 @@ class DEPG0290BNS800 : public SSD16XX
     static constexpr UpdateTypes supported = (UpdateTypes)(FULL | FAST);
 
   public:
-    DEPG0290BNS800() : SSD16XX(width, height, supported, 1) {} // Note: left edge of this display is offset by 1 byte
+    ZJY128296_029EAAMFGN() : SSD16XX(width, height, supported) {}
 
   protected:
-    void configVoltages() override;
+    void configScanning() override;
     void configWaveform() override;
     void configUpdateSequence() override;
     void detachFromUpdate() override;
-    void finalizeUpdate() override; // Only overriden for a slight optimization
 };
 
 } // namespace NicheGraphics::Drivers
+
 #endif // MESHTASTIC_INCLUDE_NICHE_GRAPHICS

@@ -164,7 +164,8 @@ static const uint8_t SCK = PIN_SPI_SCK;
 // -------
 // P0_14 = 14  Reads battery voltage from divider on signal board.
 // PIN_VBAT is reading voltage divider on XIAO and is program pin 32 / or P0.31
-#define BAT_READ 14
+#define ADC_CTRL VBAT_ENABLE
+#define ADC_CTRL_ENABLED LOW
 #define BATTERY_SENSE_RESOLUTION_BITS 10
 #define CHARGE_LED 23 // P0_17 = 17  D23   YELLOW CHARGE LED
 #define HICHG 22      // P0_13 = 13  D22   Charge-select pin for Lipo for 100 mA instead of default 50mA charge

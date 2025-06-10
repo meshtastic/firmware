@@ -3,7 +3,7 @@
 # trunk-ignore-all(hadolint/DL3018): Do not pin apk package versions
 # trunk-ignore-all(hadolint/DL3013): Do not pin pip package versions
 
-FROM python:3.13-alpine3.21 AS builder
+FROM python:3.13-alpine3.22 AS builder
 ARG PIO_ENV=native
 ENV PIP_ROOT_USER_ACTION=ignore
 
@@ -27,7 +27,7 @@ RUN bash ./bin/build-native.sh "$PIO_ENV" && \
 
 # ##### PRODUCTION BUILD #############
 
-FROM alpine:3.21
+FROM alpine:3.22
 LABEL org.opencontainers.image.title="Meshtastic" \
       org.opencontainers.image.description="Alpine Meshtastic daemon" \
       org.opencontainers.image.url="https://meshtastic.org" \

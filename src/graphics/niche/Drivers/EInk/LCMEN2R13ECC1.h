@@ -5,7 +5,6 @@ E-Ink display driver
     - Manufacturer: WISEVAST
     - Size: 2.13 inch
     - Resolution: 122px x 255px
-    - Flex connector marking: Soldering connector, no connector is needed
 
 */
 

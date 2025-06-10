@@ -19,31 +19,12 @@ extern "C" {
 
 #define PINS_COUNT (33)
 #define NUM_DIGITAL_PINS (33)
-#define NUM_ANALOG_INPUTS (8) // A6 is used for battery, A7 is analog reference
+#define NUM_ANALOG_INPUTS (8)
 #define NUM_ANALOG_OUTPUTS (0)
 
-// LEDs
-
-#define LED_RED 11
-#define LED_BLUE 12
-#define LED_GREEN 13
-
-#define PIN_LED1 LED_GREEN
-#define PIN_LED2 LED_BLUE
-#define PIN_LED3 LED_RED
-
-#define PIN_LED PIN_LED1
-#define LED_PWR (PINS_COUNT)
-
-#define LED_BUILTIN PIN_LED
-
-#define LED_STATE_ON 1 // State when LED is lit
-
 /*
- * Buttons
+ * Digital Pins
  */
-
-// Digital PINs
 #define D0 (0ul)
 #define D1 (1ul)
 #define D2 (2ul)
@@ -55,15 +36,6 @@ extern "C" {
 #define D8 (8ul)
 #define D9 (9ul)
 #define D10 (10ul)
-
-/*Due to the lack of pins,and have to make sure gps standby work well we have temporarily removed the button.
-There are some technical solutions that can solve this problem,
-and we are currently exploring and researching them*/
-
-// #define BUTTON_PIN D0 // This is the Program Button
-// // #define BUTTON_NEED_PULLUP   1
-// #define BUTTON_ACTIVE_LOW true
-// #define BUTTON_ACTIVE_PULLUP false
 
 /*
  * Analog pins
@@ -85,6 +57,38 @@ static const uint8_t A4 = PIN_A4;
 static const uint8_t A5 = PIN_A5;
 #define ADC_RESOLUTION 12
 
+/*
+ * LEDs
+ */
+#define LED_STATE_ON (0) // RGB LED is common anode
+#define LED_RED (11)
+#define LED_GREEN (13)
+#define LED_BLUE (12)
+
+#define PIN_LED1 LED_GREEN // PIN_LED1 is used in src/platform/nrf52/architecture.h to define LED_PIN
+#define PIN_LED2 LED_BLUE
+#define PIN_LED3 LED_RED
+
+#define LED_BUILTIN LED_RED // LED_BUILTIN is used by framework-arduinoadafruitnrf52 to indicate flash writes
+
+#define LED_PWR LED_RED
+#define USER_LED LED_BLUE
+
+/*
+ * Buttons
+ */
+
+/*
+ *  D0 is shared with PIN_GPS_STANDBY on the L76K GNSS Module.
+ *  There are some technical solutions that can solve this problem, and we are
+ *  currently exploring and researching them.
+ */
+
+// #define BUTTON_PIN D0
+
+/*
+ * Serial Interfaces
+ */
 #define PIN_SERIAL2_RX (-1)
 #define PIN_SERIAL2_TX (-1)
 
@@ -102,11 +106,9 @@ static const uint8_t MOSI = PIN_SPI_MOSI;
 static const uint8_t MISO = PIN_SPI_MISO;
 static const uint8_t SCK = PIN_SPI_SCK;
 
-// supported modules list
 #define USE_SX1262
 
-// common pinouts for SX126X modules
-
+// Pinout for SX126X
 #define SX126X_CS D4
 #define SX126X_DIO1 D1
 #define SX126X_BUSY D3
@@ -121,16 +123,19 @@ static const uint8_t SCK = PIN_SPI_SCK;
 /*
  * Wire Interfaces
  */
-
 #define I2C_NO_RESCAN           // I2C is a bit finicky, don't scan too much
 #define WIRE_INTERFACES_COUNT 1 // 2
 
-#define PIN_WIRE_SDA (24) // change to use the correct pins if needed
-#define PIN_WIRE_SCL (25) // change to use the correct pins if needed
+// LSM6DS3TR on XIAO nRF52840 Series
+#define PIN_WIRE_SDA (17)
+#define PIN_WIRE_SCL (16)
 
 static const uint8_t SDA = PIN_WIRE_SDA;
 static const uint8_t SCL = PIN_WIRE_SCL;
 
+/*
+ * GPS
+ */
 // GPS L76KB
 #define GPS_L76K
 #ifdef GPS_L76K
@@ -144,20 +149,18 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 #define PIN_GPS_STANDBY D0
 #endif
 
-// Battery
+/*
+ * Battery
+ */
+#define BATTERY_PIN PIN_VBAT      // P0.31: VBAT voltage divider
+#define ADC_MULTIPLIER (3)        // ... R17=1M, R18=510k
+#define ADC_CTRL VBAT_ENABLE      // P0.14: VBAT voltage divider
+#define ADC_CTRL_ENABLED LOW      // ... sink
+#define EXT_CHRG_DETECT (23)      // P0.17: Charge LED
+#define EXT_CHRG_DETECT_VALUE LOW // ... BQ25101 ~CHG indicates charging
+#define HICHG (22)                // P0.13: BQ25101 ISET 100mA instead of 50mA
 
-#define BAT_READ                                                                                                                 \
-    14 // P0_14 = 14  Reads battery voltage from divider on signal board. (PIN_VBAT is reading voltage divider on XIAO and is
-       // program pin 32 / or P0.31)
-#define BATTERY_SENSE_RESOLUTION_BITS 10
-#define CHARGE_LED 23 // P0_17 = 17  D23   YELLOW CHARGE LED
-#define HICHG 22      // P0_13 = 13  D22   Charge-select pin for Lipo for 100 mA instead of default 50mA charge
-
-// The battery sense is hooked to pin A0 (5)
-#define BATTERY_PIN PIN_VBAT // PIN_A0
-
-// ratio of voltage divider = 3.0 (R17=1M, R18=510k)
-#define ADC_MULTIPLIER 3 // 3.0 + a bit for being optimistic
+#define BATTERY_SENSE_RESOLUTION_BITS (10)
 
 #ifdef __cplusplus
 }

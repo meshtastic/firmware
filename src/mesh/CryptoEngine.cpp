@@ -3,12 +3,17 @@
 #include "architecture.h"
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
+#include "NodeDB.h"
 #include "aes-ccm.h"
 #include "meshUtils.h"
 #include <Crypto.h>
 #include <Curve25519.h>
+#include <RNG.h>
 #include <SHA256.h>
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN)
+#if !defined(ARCH_STM32WL)
+#define CryptRNG RNG
+#endif
 
 /**
  * Create a public/private key pair with Curve25519.
@@ -18,6 +23,14 @@
  */
 void CryptoEngine::generateKeyPair(uint8_t *pubKey, uint8_t *privKey)
 {
+    // Mix in any randomness we can, to make key generation stronger.
+    CryptRNG.begin(optstr(APP_VERSION));
+    if (myNodeInfo.device_id.size == 16) {
+        CryptRNG.stir(myNodeInfo.device_id.bytes, myNodeInfo.device_id.size);
+    }
+    auto noise = random();
+    CryptRNG.stir((uint8_t *)&noise, sizeof(noise));
+
     LOG_DEBUG("Generate Curve25519 keypair");
     Curve25519::dh1(public_key, private_key);
     memcpy(pubKey, public_key, sizeof(public_key));
