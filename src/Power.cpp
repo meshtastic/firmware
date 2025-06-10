@@ -1160,7 +1160,7 @@ bool Power::axpChipInit()
 #endif
 }
 
-#if !MESHTASTIC_EXCLUDE_I2C && !defined(ARCH_PORTDUINO)
+#if !MESHTASTIC_EXCLUDE_I2C && __has_include(<Adafruit_MAX1704X.h>)
 
 /**
  * Wrapper class for an I2C MAX17048 Lipo battery sensor.
