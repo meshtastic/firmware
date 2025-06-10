@@ -63,11 +63,11 @@ void TrackballInterruptImpl1::handleIntPressed()
 void TrackballInterruptImpl1::handleMenuPressed()
 {
     bool activateMenuAction = false;
-
+#if !MESHTASTIC_EXCLUDE_CANNEDMESSAGES
     if (cannedMessageModule && cannedMessageModule->isUIVisibleAndInterceptingInput()) {
         activateMenuAction = true;
     }
-
+#endif
     if (activateMenuAction) {
 
         if (trackballInterruptImpl1) {
