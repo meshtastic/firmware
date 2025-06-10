@@ -3,7 +3,9 @@
 #include "configuration.h"
 
 #include "main.h"
+#if !MESHTASTIC_EXCLUDE_CANNEDMESSAGES
 #include "modules/CannedMessageModule.h"
+#endif
 TrackballInterruptImpl1 *trackballInterruptImpl1;
 
 TrackballInterruptImpl1::TrackballInterruptImpl1() : TrackballInterruptBase("trackball1") {}
