@@ -31,6 +31,8 @@ bool ButtonThread::initButton(uint8_t pinNumber, bool activeLow, bool activePull
                               input_broker_event singlePress, input_broker_event longPress, input_broker_event doublePress,
                               input_broker_event triplePress, input_broker_event shortLong, bool touchQuirk)
 {
+    if (inputBroker)
+        inputBroker->registerSource(this);
     _pinNum = pinNumber;
     _activeLow = activeLow;
     _touchQuirk = touchQuirk;

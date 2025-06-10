@@ -99,18 +99,18 @@ NRF52Bluetooth *nrf52Bluetooth = nullptr;
 #endif
 
 #if HAS_BUTTON || defined(ARCH_PORTDUINO)
-#include "input/ButtonThreadImpl.h"
+#include "input/ButtonThread.h"
 
 #if defined(BUTTON_PIN_TOUCH)
-ButtonThreadImpl *TouchButtonThread = nullptr;
+ButtonThread *TouchButtonThread = nullptr;
 #endif
 
 #if defined(BUTTON_PIN)
-ButtonThreadImpl *UserButtonThread = nullptr;
+ButtonThread *UserButtonThread = nullptr;
 #endif
 
 #if defined(BACK_BUTTON_PIN)
-ButtonThreadImpl *BackButtonThread = nullptr;
+ButtonThread *BackButtonThread = nullptr;
 #endif
 
 #endif
@@ -901,8 +901,8 @@ void setup()
 #endif
 
 #ifdef BUTTON_PIN_TOUCH
-    TouchButtonThread = new ButtonThreadImpl("BackButton");
-    TouchButtonThread->init(
+    TouchButtonThread = new ButtonThread("BackButton");
+    TouchButtonThread->initButton(
         BUTTON_PIN_TOUCH, true, true, pullup_sense,
         []() {
             TouchButtonThread->userButton.tick();
@@ -915,8 +915,8 @@ void setup()
 
 #if defined(BACK_BUTTON_PIN)
     // Buttons. Moved here cause we need NodeDB to be initialized
-    BackButtonThread = new ButtonThreadImpl("BackButton");
-    BackButtonThread->init(
+    BackButtonThread = new ButtonThread("BackButton");
+    BackButtonThread->initButton(
         BACK_BUTTON_PIN, BACK_BUTTON_ACTIVE_LOW, BACK_BUTTON_ACTIVE_PULLUP, pullup_sense,
         []() {
             BackButtonThread->userButton.tick();
@@ -942,9 +942,9 @@ void setup()
 
     // Buttons. Moved here cause we need NodeDB to be initialized
     // If your variant.h has a BUTTON_PIN defined, go ahead and define BUTTON_ACTIVE_LOW and BUTTON_ACTIVE_PULLUP
-    UserButtonThread = new ButtonThreadImpl("UserButton");
+    UserButtonThread = new ButtonThread("UserButton");
     if (screen)
-        UserButtonThread->init(
+        UserButtonThread->initButton(
             _pinNum, BUTTON_ACTIVE_LOW, BUTTON_ACTIVE_PULLUP, pullup_sense,
             []() {
                 UserButtonThread->userButton.tick();
@@ -954,7 +954,7 @@ void setup()
             },
             INPUT_BROKER_USER_PRESS, INPUT_BROKER_SELECT);
     else
-        UserButtonThread->init(
+        UserButtonThread->initButton(
             _pinNum, BUTTON_ACTIVE_LOW, BUTTON_ACTIVE_PULLUP, pullup_sense,
             []() {
                 UserButtonThread->userButton.tick();
