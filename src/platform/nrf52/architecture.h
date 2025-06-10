@@ -85,6 +85,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_SEEED_SOLAR_NODE
 #elif defined(HELTEC_MESH_POCKET)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_POCKET
+#elif defined(NOMADSTAR_METEOR_PRO)
+#define HW_VENDOR meshtastic_HardwareModel_NOMADSTAR_METEOR_PRO
 #elif defined(SEEED_WIO_TRACKER_L1)
 #define HW_VENDOR meshtastic_HardwareModel_SEEED_WIO_TRACKER_L1
 #elif defined(GAT562_MESH_TRIAL_TRACKER)
