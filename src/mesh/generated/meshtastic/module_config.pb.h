@@ -222,72 +222,27 @@ typedef struct _meshtastic_ModuleConfig_PaxcounterConfig {
     int32_t ble_threshold;
 } meshtastic_ModuleConfig_PaxcounterConfig;
 
-/* Serial Config */
-typedef struct _meshtastic_ModuleConfig_SerialConfig {
-    /* Preferences for the SerialModule */
-    bool enabled;
-    /* TODO: REPLACE */
-    bool echo;
-    /* RX pin (should match Arduino gpio pin number) */
-    uint32_t rxd;
-    /* TX pin (should match Arduino gpio pin number) */
-    uint32_t txd;
-    /* Serial baud rate */
-    meshtastic_ModuleConfig_SerialConfig_Serial_Baud baud;
-    /* TODO: REPLACE */
-    uint32_t timeout;
-    /* Mode for serial module operation */
-    meshtastic_ModuleConfig_SerialConfig_Serial_Mode mode;
-    /* Overrides the platform's defacto Serial port instance to use with Serial module config settings
- This is currently only usable in output modes like NMEA / CalTopo and may behave strangely or not work at all in other modes
- Existing logging over the Serial Console will still be present */
-    bool override_console_serial_port;
-} meshtastic_ModuleConfig_SerialConfig;
-
-/* External Notifications Config */
-typedef struct _meshtastic_ModuleConfig_ExternalNotificationConfig {
-    /* Enable the ExternalNotificationModule */
-    bool enabled;
-    /* When using in On/Off mode, keep the output on for this many
- milliseconds. Default 1000ms (1 second). */
-    uint32_t output_ms;
-    /* Define the output pin GPIO setting Defaults to
- EXT_NOTIFY_OUT if set for the board.
- In standalone devices this pin should drive the LED to match the UI. */
-    uint32_t output;
-    /* IF this is true, the 'output' Pin will be pulled active high, false
- means active low. */
-    bool active;
-    /* True: Alert when a text message arrives (output) */
-    bool alert_message;
-    /* True: Alert when the bell character is received (output) */
-    bool alert_bell;
-    /* use a PWM output instead of a simple on/off output. This will ignore
- the 'output', 'output_ms' and 'active' settings and use the
- device.buzzer_gpio instead. */
-    bool use_pwm;
-    /* Optional: Define a secondary output pin for a vibra motor
- This is used in standalone devices to match the UI. */
-    uint8_t output_vibra;
-    /* Optional: Define a tertiary output pin for an active buzzer
- This is used in standalone devices to to match the UI. */
-    uint8_t output_buzzer;
-    /* True: Alert when a text message arrives (output_vibra) */
-    bool alert_message_vibra;
-    /* True: Alert when a text message arrives (output_buzzer) */
-    bool alert_message_buzzer;
-    /* True: Alert when the bell character is received (output_vibra) */
-    bool alert_bell_vibra;
-    /* True: Alert when the bell character is received (output_buzzer) */
-    bool alert_bell_buzzer;
-    /* The notification will toggle with 'output_ms' for this time of seconds.
- Default is 0 which means don't repeat at all. 60 would mean blink
- and/or beep for 60 seconds */
-    uint16_t nag_timeout;
-    /* When true, enables devices with native I2S audio output to use the RTTTL over speaker like a buzzer
- T-Watch S3 and T-Deck for example have this capability */
-    bool use_i2s_as_buzzer;
-} meshtastic_ModuleConfig_ExternalNotificationConfig;
+/* Configuration for the experimental WireGuard VPN client */
+typedef struct _meshtastic_ModuleConfig_WireGuardConfig {
+    /* Client address/subnet (e.g. 10.0.0.2/24) */
+    char address[32];
+    /* WireGuard server host */
+    char server_addr[64];
+    /* WireGuard server port */
+    uint16_t server_port;
+    /* Client private key */
+    char private_key[64];
+    /* Server public key */
+    char public_key[64];
+    /* Optional preshared key */
+    char preshared_key[64];
+    /* DNS server to use while connected */
+    char dns[32];
+    /* Routes through the tunnel */
+    char allowed_ips[64];
+    /* Optional keepalive interval */
+    uint16_t persistent_keepalive;
+} meshtastic_ModuleConfig_WireGuardConfig;
 
 /* Store and Forward Module Config */
 typedef struct _meshtastic_ModuleConfig_StoreForwardConfig {
@@ -446,6 +401,8 @@ typedef struct _meshtastic_ModuleConfig {
         meshtastic_ModuleConfig_DetectionSensorConfig detection_sensor;
         /* TODO: REPLACE */
         meshtastic_ModuleConfig_PaxcounterConfig paxcounter;
+        /* WireGuard VPN configuration */
+        meshtastic_ModuleConfig_WireGuardConfig wireguard;
     } payload_variant;
 } meshtastic_ModuleConfig;
 
@@ -521,6 +478,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_CannedMessageConfig_init_default {0, 0, 0, 0, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, 0, 0, "", 0}
 #define meshtastic_ModuleConfig_AmbientLightingConfig_init_default {0, 0, 0, 0, 0}
 #define meshtastic_RemoteHardwarePin_init_default {0, "", _meshtastic_RemoteHardwarePinType_MIN}
+#define meshtastic_ModuleConfig_WireGuardConfig_init_default {"", "", 0, "", "", "", "", "", 0}
 #define meshtastic_ModuleConfig_init_zero        {0, {meshtastic_ModuleConfig_MQTTConfig_init_zero}}
 #define meshtastic_ModuleConfig_MQTTConfig_init_zero {0, "", "", "", 0, 0, 0, "", 0, 0, false, meshtastic_ModuleConfig_MapReportSettings_init_zero}
 #define meshtastic_ModuleConfig_MapReportSettings_init_zero {0, 0, 0}
@@ -655,6 +613,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_ambient_lighting_tag 11
 #define meshtastic_ModuleConfig_detection_sensor_tag 12
 #define meshtastic_ModuleConfig_paxcounter_tag   13
+#define meshtastic_ModuleConfig_wireguard_tag    14
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_ModuleConfig_FIELDLIST(X, a) \
@@ -668,9 +627,10 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,canned_message,payload_varia
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,audio,payload_variant.audio),   8) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,remote_hardware,payload_variant.remote_hardware),   9) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,neighbor_info,payload_variant.neighbor_info),  10) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,ambient_lighting,payload_variant.ambient_lighting),  11) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,ambient_lighting,ppayload_variant.ambient_lighting),  11) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,detection_sensor,payload_variant.detection_sensor),  12) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,paxcounter,payload_variant.paxcounter),  13)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,paxcounter,payload_variant.paxcounter),  13) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,wireguard,payload_variant.wireguard),  14)
 #define meshtastic_ModuleConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_DEFAULT NULL
 #define meshtastic_ModuleConfig_payload_variant_mqtt_MSGTYPE meshtastic_ModuleConfig_MQTTConfig
@@ -686,6 +646,7 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,paxcounter,payload_variant.p
 #define meshtastic_ModuleConfig_payload_variant_ambient_lighting_MSGTYPE meshtastic_ModuleConfig_AmbientLightingConfig
 #define meshtastic_ModuleConfig_payload_variant_detection_sensor_MSGTYPE meshtastic_ModuleConfig_DetectionSensorConfig
 #define meshtastic_ModuleConfig_payload_variant_paxcounter_MSGTYPE meshtastic_ModuleConfig_PaxcounterConfig
+#define meshtastic_ModuleConfig_payload_variant_wireguard_MSGTYPE meshtastic_ModuleConfig_WireGuardConfig
 
 #define meshtastic_ModuleConfig_MQTTConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, BOOL,     enabled,           1) \
@@ -868,6 +829,7 @@ extern const pb_msgdesc_t meshtastic_ModuleConfig_TelemetryConfig_msg;
 extern const pb_msgdesc_t meshtastic_ModuleConfig_CannedMessageConfig_msg;
 extern const pb_msgdesc_t meshtastic_ModuleConfig_AmbientLightingConfig_msg;
 extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
+extern const pb_msgdesc_t meshtastic_ModuleConfig_WireGuardConfig_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define meshtastic_ModuleConfig_fields &meshtastic_ModuleConfig_msg
@@ -886,6 +848,7 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_ModuleConfig_CannedMessageConfig_fields &meshtastic_ModuleConfig_CannedMessageConfig_msg
 #define meshtastic_ModuleConfig_AmbientLightingConfig_fields &meshtastic_ModuleConfig_AmbientLightingConfig_msg
 #define meshtastic_RemoteHardwarePin_fields &meshtastic_RemoteHardwarePin_msg
+#define meshtastic_ModuleConfig_WireGuardConfig_fields &meshtastic_ModuleConfig_WireGuardConfig_msg
 
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_MODULE_CONFIG_PB_H_MAX_SIZE meshtastic_ModuleConfig_size
@@ -903,7 +866,8 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_ModuleConfig_SerialConfig_size 28
 #define meshtastic_ModuleConfig_StoreForwardConfig_size 24
 #define meshtastic_ModuleConfig_TelemetryConfig_size 46
-#define meshtastic_ModuleConfig_size             227
+#define meshtastic_ModuleConfig_WireGuardConfig_size 399
+#define meshtastic_ModuleConfig_size             402
 #define meshtastic_RemoteHardwarePin_size        21
 
 #ifdef __cplusplus
