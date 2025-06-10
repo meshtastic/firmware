@@ -487,7 +487,7 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
     }
 
     // CANCEL
-    if (event->inputEvent == INPUT_BROKER_CANCEL) {
+    if (event->inputEvent == INPUT_BROKER_CANCEL || event->inputEvent == INPUT_BROKER_BACK) {
         runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         searchQuery = "";
 
@@ -516,7 +516,8 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
         return false;
 
     // === Handle Cancel key: go inactive, clear UI state ===
-    if (event->inputEvent == INPUT_BROKER_CANCEL) {
+    if (runState != CANNED_MESSAGE_RUN_STATE_INACTIVE &&
+        (event->inputEvent == INPUT_BROKER_CANCEL || event->inputEvent == INPUT_BROKER_BACK)) {
         runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         freetext = "";
         cursor = 0;
@@ -711,7 +712,7 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     }
 
     // Cancel (dismiss freetext screen)
-    if (event->inputEvent == INPUT_BROKER_CANCEL) {
+    if (event->inputEvent == INPUT_BROKER_CANCEL || event->inputEvent == INPUT_BROKER_BACK) {
         runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         UIFrameEvent e;
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
@@ -780,7 +781,7 @@ int CannedMessageModule::handleEmotePickerInput(const InputEvent *event)
     }
 
     // Cancel returns to freetext
-    if (event->inputEvent == INPUT_BROKER_CANCEL) {
+    if (event->inputEvent == INPUT_BROKER_CANCEL || event->inputEvent == INPUT_BROKER_BACK) {
         runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
         screen->forceDisplay();
         return 1;
