@@ -8,6 +8,7 @@
 #include "Default.h"
 #include "FSCommon.h"
 #include "MeshRadio.h"
+#include "MeshService.h"
 #include "NodeDB.h"
 #include "PacketHistory.h"
 #include "PowerFSM.h"
@@ -277,6 +278,7 @@ NodeDB::NodeDB()
             config.security.private_key.size = 32;
             owner.public_key.size = 32;
             memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
+            keyIsLowEntropy = checkLowEntropyPublicKey(owner.public_key);
         }
     }
 #elif !(MESHTASTIC_EXCLUDE_PKI)
@@ -285,8 +287,12 @@ NodeDB::NodeDB()
         owner.public_key.size = config.security.public_key.size;
         memcpy(owner.public_key.bytes, config.security.public_key.bytes, config.security.public_key.size);
         crypto->setDHPrivateKey(config.security.private_key.bytes);
+        keyIsLowEntropy = checkLowEntropyPublicKey(owner.public_key);
     }
 #endif
+    if (keyIsLowEntropy) {
+        LOG_WARN(LOW_ENTROPY_WARNING);
+    }
     // Include our owner in the node db under our nodenum
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
     info->user = TypeConversions::ConvertToUserLite(owner);
@@ -1556,8 +1562,20 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
     }
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
-    if (p.public_key.size > 0) {
+    if (p.public_key.size == 32) {
         printBytes("Incoming Pubkey: ", p.public_key.bytes, 32);
+
+        // Alert the user if a remote node is advertising public key that matches our own
+        if (owner.public_key.size == 32 && memcmp(p.public_key.bytes, owner.public_key.bytes, 32) == 0) {
+            char warning[] = "Remote device %s has advertised your public key. This may indicate a low-entropy key. You may need "
+                             "to regenerate your public keys.";
+            LOG_WARN(warning, p.long_name);
+            meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+            cn->level = meshtastic_LogRecord_Level_WARNING;
+            cn->time = getValidTime(RTCQualityFromNet);
+            sprintf(cn->message, warning, p.long_name);
+            service->sendClientNotification(cn);
+        }
     }
     if (info->user.public_key.size > 0) { // if we have a key for this user already, don't overwrite with a new one
         LOG_INFO("Public Key set for node, not updating!");
@@ -1730,6 +1748,30 @@ UserLicenseStatus NodeDB::getLicenseStatus(uint32_t nodeNum)
         return UserLicenseStatus::NotKnown;
     }
     return info->user.is_licensed ? UserLicenseStatus::Licensed : UserLicenseStatus::NotLicensed;
+}
+
+bool NodeDB::checkLowEntropyPublicKey(const meshtastic_User_public_key_t keyToTest)
+{
+    uint8_t keyHash[32] = {0};
+    memcpy(keyHash, keyToTest.bytes, keyToTest.size);
+    crypto->hash(keyHash, 32);
+    if (memcmp(keyHash, LOW_ENTROPY_HASH1, sizeof(LOW_ENTROPY_HASH1)) == 0 ||
+        memcmp(keyHash, LOW_ENTROPY_HASH2, sizeof(LOW_ENTROPY_HASH2)) == 0 ||
+        memcmp(keyHash, LOW_ENTROPY_HASH3, sizeof(LOW_ENTROPY_HASH3)) == 0 ||
+        memcmp(keyHash, LOW_ENTROPY_HASH4, sizeof(LOW_ENTROPY_HASH4)) == 0 ||
+        memcmp(keyHash, LOW_ENTROPY_HASH5, sizeof(LOW_ENTROPY_HASH5)) == 0 ||
+        memcmp(keyHash, LOW_ENTROPY_HASH6, sizeof(LOW_ENTROPY_HASH6)) == 0 ||
+        memcmp(keyHash, LOW_ENTROPY_HASH7, sizeof(LOW_ENTROPY_HASH7)) == 0 ||
+        memcmp(keyHash, LOW_ENTROPY_HASH8, sizeof(LOW_ENTROPY_HASH8)) == 0 ||
+        memcmp(keyHash, LOW_ENTROPY_HASH9, sizeof(LOW_ENTROPY_HASH9)) == 0 ||
+        memcmp(keyHash, LOW_ENTROPY_HASH10, sizeof(LOW_ENTROPY_HASH10)) == 0 ||
+        memcmp(keyHash, LOW_ENTROPY_HASH11, sizeof(LOW_ENTROPY_HASH11)) == 0 ||
+        memcmp(keyHash, LOW_ENTROPY_HASH12, sizeof(LOW_ENTROPY_HASH12)) == 0 ||
+        memcmp(keyHash, LOW_ENTROPY_HASH13, sizeof(LOW_ENTROPY_HASH13)) == 0) {
+        return true;
+    } else {
+        return false;
+    }
 }
 
 bool NodeDB::backupPreferences(meshtastic_AdminMessage_BackupLocation location)
