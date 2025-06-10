@@ -183,7 +183,7 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
     for (int i = 0; i < lineCount; i++) {
         // is this line selected?
         // if so, start the buffer with -> and strncpy to the 4th location
-        if (i == 0 || alertBannerOptions == 0) {
+        if (i < lineCount - alertBannerOptions || alertBannerOptions == 0) {
             strncpy(lineBuffer, lineStarts[i], 40);
             if (lineLengths[i] > 39)
                 lineBuffer[39] = '\0';

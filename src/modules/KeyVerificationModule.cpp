@@ -59,7 +59,7 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
                r->hash1.size == 0) {
         memcpy(hash2, r->hash2.bytes, 32);
         if (screen)
-            screen->showOverlayBanner("Enter Security Number", 15000);
+            screen->showOverlayBanner("Enter Security Number", 30000);
 
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
         cn->level = meshtastic_LogRecord_Level_WARNING;
@@ -79,9 +79,15 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
             memset(message, 0, sizeof(message));
             sprintf(message, "Verification: \n");
             generateVerificationCode(message + 15);
+            sprintf(message + 24, "\nACCEPT\nREJECT");
             LOG_INFO("Hash1 matches!");
             if (screen) {
-                screen->showOverlayBanner(message, 15000);
+                screen->showOverlayBanner(message, 30000, 2, [=](int selected) {
+                    if (selected == 0) {
+                        auto remoteNodePtr = nodeDB->getMeshNode(currentRemoteNode);
+                        remoteNodePtr->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
+                    }
+                });
             }
             meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
             cn->level = meshtastic_LogRecord_Level_WARNING;
@@ -179,7 +185,7 @@ meshtastic_MeshPacket *KeyVerificationModule::allocReply()
     responsePacket->pki_encrypted = true;
     if (screen) {
         snprintf(message, 25, "Security Number \n%03u %03u", currentSecurityNumber / 1000, currentSecurityNumber % 1000);
-        screen->showOverlayBanner(message, 15000);
+        screen->showOverlayBanner(message, 30000);
         LOG_WARN("%s", message);
     }
     meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
@@ -193,7 +199,7 @@ meshtastic_MeshPacket *KeyVerificationModule::allocReply()
             sizeof(cn->payload_variant.key_verification_number_inform.remote_longname));
     cn->payload_variant.key_verification_number_inform.security_number = currentSecurityNumber;
     service->sendClientNotification(cn);
-    LOG_WARN("Security Number %04u", currentSecurityNumber);
+    LOG_WARN("Security Number %04u, nonce %llu", currentSecurityNumber, currentNonce);
     return responsePacket;
 }
 
@@ -249,7 +255,7 @@ void KeyVerificationModule::processSecurityNumber(uint32_t incomingNumber)
     sprintf(message, "Verification: \n");
     generateVerificationCode(message + 15); // send the toPhone packet
     if (screen) {
-        screen->showOverlayBanner(message, 15000);
+        screen->showOverlayBanner(message, 30000);
     }
     meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
     cn->level = meshtastic_LogRecord_Level_WARNING;
@@ -270,8 +276,10 @@ void KeyVerificationModule::updateState()
 {
     if (currentState != KEY_VERIFICATION_IDLE) {
         // check for the 30 second timeout
-        if (currentNonceTimestamp < getTime() - 30) {
+        if (currentNonceTimestamp < getTime() - 60) {
             resetToIdle();
+        } else {
+            currentNonceTimestamp = getTime();
         }
     }
 }

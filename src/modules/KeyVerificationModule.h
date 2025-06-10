@@ -53,7 +53,7 @@ class KeyVerificationModule : public ProtobufModule<meshtastic_KeyVerification> 
     KeyVerificationState currentState = KEY_VERIFICATION_IDLE;
     uint8_t hash1[32] = {0}; //
     uint8_t hash2[32] = {0}; //
-    char message[26] = {0};
+    char message[40] = {0};
 
     void processSecurityNumber(uint32_t);
     void updateState();                    // check the timeouts and maybe reset the state to idle
