@@ -258,6 +258,7 @@ class NodeDB
                             int restoreWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
 
   private:
+    bool duplicateWarned = false;
     uint32_t lastNodeDbSave = 0;    // when we last saved our db to flash
     uint32_t lastBackupAttempt = 0; // when we last tried a backup automatically or manually
     /// Find a node in our DB, create an empty NodeInfoLite if missing
