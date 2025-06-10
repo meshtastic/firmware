@@ -618,6 +618,7 @@ class Screen : public concurrency::OSThread
             uint8_t memory = 255;
             uint8_t gps = 255;
             uint8_t home = 255;
+            uint8_t clock = 255;
         } positions;
 
         uint8_t frameCount = 0;
