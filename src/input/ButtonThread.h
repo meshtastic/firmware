@@ -11,15 +11,6 @@ typedef void (*voidFuncPtr)(void);
 #define BUTTON_CLICK_MS 250
 #endif
 
-#ifdef HAS_SCREEN
-#undef BUTTON_LONGPRESS_MS
-#define BUTTON_LONGPRESS_MS 500
-#else
-#ifndef BUTTON_LONGPRESS_MS
-#define BUTTON_LONGPRESS_MS 5000
-#endif
-#endif
-
 #ifndef BUTTON_TOUCH_MS
 #define BUTTON_TOUCH_MS 400
 #endif
@@ -39,8 +30,9 @@ class ButtonThread : public Observable<const InputEvent *>, public concurrency::
     static const uint32_t c_holdOffTime = 30000; // hold off 30s after boot
     bool initButton(uint8_t pinNumber, bool activeLow, bool activePullup, uint32_t pullupSense, voidFuncPtr intRoutine,
                     input_broker_event singlePress, input_broker_event longPress = INPUT_BROKER_NONE,
-                    input_broker_event doublePress = INPUT_BROKER_NONE, input_broker_event triplePress = INPUT_BROKER_NONE,
-                    input_broker_event shortLong = INPUT_BROKER_NONE, bool touchQuirk = false);
+                    uint16_t longPressTime = 500, input_broker_event doublePress = INPUT_BROKER_NONE,
+                    input_broker_event triplePress = INPUT_BROKER_NONE, input_broker_event shortLong = INPUT_BROKER_NONE,
+                    bool touchQuirk = false);
 
     enum ButtonEventType {
         BUTTON_EVENT_NONE,
@@ -81,6 +73,7 @@ class ButtonThread : public Observable<const InputEvent *>, public concurrency::
     input_broker_event _shortLong = INPUT_BROKER_NONE;
 
     voidFuncPtr _intRoutine = nullptr;
+    uint16_t _longPressTime = 500;
     int _pinNum = 0;
     bool _activeLow = true;
     bool _touchQuirk = false;

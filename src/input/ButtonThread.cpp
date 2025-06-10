@@ -28,11 +28,13 @@ ButtonThread::ButtonThread(const char *name) : OSThread(name)
 }
 
 bool ButtonThread::initButton(uint8_t pinNumber, bool activeLow, bool activePullup, uint32_t pullupSense, voidFuncPtr intRoutine,
-                              input_broker_event singlePress, input_broker_event longPress, input_broker_event doublePress,
-                              input_broker_event triplePress, input_broker_event shortLong, bool touchQuirk)
+                              input_broker_event singlePress, input_broker_event longPress, uint16_t longPressTime,
+                              input_broker_event doublePress, input_broker_event triplePress, input_broker_event shortLong,
+                              bool touchQuirk)
 {
     if (inputBroker)
         inputBroker->registerSource(this);
+    _longPressTime = longPressTime;
     _pinNum = pinNumber;
     _activeLow = activeLow;
     _touchQuirk = touchQuirk;
@@ -97,9 +99,9 @@ bool ButtonThread::initButton(uint8_t pinNumber, bool activeLow, bool activePull
     userButton.setDebounceMs(1);
     if (screen) {
         userButton.setClickMs(20);
-        userButton.setPressMs(BUTTON_LONGPRESS_MS);
+        userButton.setPressMs(_longPressTime);
     } else {
-        userButton.setPressMs(BUTTON_LONGPRESS_MS * 3);
+        userButton.setPressMs(_longPressTime);
         userButton.setClickMs(BUTTON_CLICK_MS);
     }
     attachButtonInterrupts();
@@ -139,7 +141,7 @@ int32_t ButtonThread::runOnce()
 
     // Progressive lead-up sound system
     if (buttonCurrentlyPressed && (millis() - buttonPressStartTime) >= BUTTON_LEADUP_MS &&
-        (millis() - buttonPressStartTime) < BUTTON_LONGPRESS_MS) {
+        (millis() - buttonPressStartTime) < _longPressTime) {
 
         // Start the progressive sequence if not already active
         if (!leadUpSequenceActive) {
