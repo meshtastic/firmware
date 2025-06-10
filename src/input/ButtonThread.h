@@ -80,7 +80,7 @@ class ButtonThread : public Observable<const InputEvent *>, public concurrency::
     input_broker_event _triplePress = INPUT_BROKER_NONE;
     input_broker_event _shortLong = INPUT_BROKER_NONE;
 
-    voidFuncPtr _intRoutine;
+    voidFuncPtr _intRoutine = nullptr;
     int _pinNum = 0;
     bool _activeLow = true;
     bool _touchQuirk = false;
