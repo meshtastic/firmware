@@ -197,96 +197,99 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
 #endif
 
     uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true); // Display local timezone
+    char timeString[16];
+    int hour = 0;
+    int minute = 0;
+    int second = 0;
     if (rtc_sec > 0) {
-        char timeString[16];
         long hms = rtc_sec % SEC_PER_DAY;
         hms = (hms + SEC_PER_DAY) % SEC_PER_DAY;
 
-        int hour = hms / SEC_PER_HOUR;
-        int minute = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
-        int second = (hms % SEC_PER_HOUR) % SEC_PER_MIN; // or hms % SEC_PER_MIN
+        hour = hms / SEC_PER_HOUR;
+        minute = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
+        second = (hms % SEC_PER_HOUR) % SEC_PER_MIN; // or hms % SEC_PER_MIN
+    }
 
+    bool isPM = hour >= 12;
+    // hour = hour > 12 ? hour - 12 : hour;
+    if (config.display.use_12h_clock) {
+        hour %= 12;
+        if (hour == 0)
+            hour = 12;
         bool isPM = hour >= 12;
-        // hour = hour > 12 ? hour - 12 : hour;
-        if (config.display.use_12h_clock) {
-            hour %= 12;
-            if (hour == 0)
-                hour = 12;
-            bool isPM = hour >= 12;
-            snprintf(timeString, sizeof(timeString), "%d:%02d", hour, minute);
-        } else {
-            snprintf(timeString, sizeof(timeString), "%02d:%02d", hour, minute);
-        }
+        snprintf(timeString, sizeof(timeString), "%d:%02d", hour, minute);
+    } else {
+        snprintf(timeString, sizeof(timeString), "%02d:%02d", hour, minute);
+    }
 
-        // Format seconds string
-        char secondString[8];
-        snprintf(secondString, sizeof(secondString), "%02d", second);
+    // Format seconds string
+    char secondString[8];
+    snprintf(secondString, sizeof(secondString), "%02d", second);
 
 #ifdef T_WATCH_S3
-        float scale = 1.5;
+    float scale = 1.5;
 #else
-        float scale = 0.75;
-        if (SCREEN_WIDTH > 128) {
-            scale = 1.5;
-        }
-#endif
-
-        uint16_t segmentWidth = SEGMENT_WIDTH * scale;
-        uint16_t segmentHeight = SEGMENT_HEIGHT * scale;
-
-        // calculate hours:minutes string width
-        uint16_t timeStringWidth = strlen(timeString) * 5;
-
-        for (uint8_t i = 0; i < strlen(timeString); i++) {
-            char character = timeString[i];
-
-            if (character == ':') {
-                timeStringWidth += segmentHeight;
-            } else {
-                timeStringWidth += segmentWidth + (segmentHeight * 2) + 4;
-            }
-        }
-
-        uint16_t hourMinuteTextX = (display->getWidth() / 2) - (timeStringWidth / 2);
-
-        uint16_t startingHourMinuteTextX = hourMinuteTextX;
-
-        uint16_t hourMinuteTextY = (display->getHeight() / 2) - (((segmentWidth * 2) + (segmentHeight * 3) + 8) / 2);
-
-        // iterate over characters in hours:minutes string and draw segmented characters
-        for (uint8_t i = 0; i < strlen(timeString); i++) {
-            char character = timeString[i];
-
-            if (character == ':') {
-                drawSegmentedDisplayColon(display, hourMinuteTextX, hourMinuteTextY, scale);
-
-                hourMinuteTextX += segmentHeight + 6;
-            } else {
-                drawSegmentedDisplayCharacter(display, hourMinuteTextX, hourMinuteTextY, character - '0', scale);
-
-                hourMinuteTextX += segmentWidth + (segmentHeight * 2) + 4;
-            }
-
-            hourMinuteTextX += 5;
-        }
-
-        // draw seconds string
-        display->setFont(FONT_SMALL);
-        int xOffset = (SCREEN_WIDTH > 128) ? 0 : -1;
-        if (hour >= 10) {
-            xOffset += (SCREEN_WIDTH > 128) ? 0 : 18;
-        }
-        int yOffset = (SCREEN_WIDTH > 128) ? 3 : 1;
-        if (config.display.use_12h_clock) {
-            display->drawString(startingHourMinuteTextX + xOffset, (display->getHeight() - hourMinuteTextY) - yOffset - 2,
-                                isPM ? "pm" : "am");
-        }
-#ifndef USE_EINK
-        xOffset = (SCREEN_WIDTH > 128) ? 18 : 10;
-        display->drawString(startingHourMinuteTextX + timeStringWidth - xOffset,
-                            (display->getHeight() - hourMinuteTextY) - yOffset, secondString);
-#endif
+    float scale = 0.75;
+    if (SCREEN_WIDTH > 128) {
+        scale = 1.5;
     }
+#endif
+
+    uint16_t segmentWidth = SEGMENT_WIDTH * scale;
+    uint16_t segmentHeight = SEGMENT_HEIGHT * scale;
+
+    // calculate hours:minutes string width
+    uint16_t timeStringWidth = strlen(timeString) * 5;
+
+    for (uint8_t i = 0; i < strlen(timeString); i++) {
+        char character = timeString[i];
+
+        if (character == ':') {
+            timeStringWidth += segmentHeight;
+        } else {
+            timeStringWidth += segmentWidth + (segmentHeight * 2) + 4;
+        }
+    }
+
+    uint16_t hourMinuteTextX = (display->getWidth() / 2) - (timeStringWidth / 2);
+
+    uint16_t startingHourMinuteTextX = hourMinuteTextX;
+
+    uint16_t hourMinuteTextY = (display->getHeight() / 2) - (((segmentWidth * 2) + (segmentHeight * 3) + 8) / 2);
+
+    // iterate over characters in hours:minutes string and draw segmented characters
+    for (uint8_t i = 0; i < strlen(timeString); i++) {
+        char character = timeString[i];
+
+        if (character == ':') {
+            drawSegmentedDisplayColon(display, hourMinuteTextX, hourMinuteTextY, scale);
+
+            hourMinuteTextX += segmentHeight + 6;
+        } else {
+            drawSegmentedDisplayCharacter(display, hourMinuteTextX, hourMinuteTextY, character - '0', scale);
+
+            hourMinuteTextX += segmentWidth + (segmentHeight * 2) + 4;
+        }
+
+        hourMinuteTextX += 5;
+    }
+
+    // draw seconds string
+    display->setFont(FONT_SMALL);
+    int xOffset = (SCREEN_WIDTH > 128) ? 0 : -1;
+    if (hour >= 10) {
+        xOffset += (SCREEN_WIDTH > 128) ? 0 : 18;
+    }
+    int yOffset = (SCREEN_WIDTH > 128) ? 3 : 1;
+    if (config.display.use_12h_clock) {
+        display->drawString(startingHourMinuteTextX + xOffset, (display->getHeight() - hourMinuteTextY) - yOffset - 2,
+                            isPM ? "pm" : "am");
+    }
+#ifndef USE_EINK
+    xOffset = (SCREEN_WIDTH > 128) ? 18 : 10;
+    display->drawString(startingHourMinuteTextX + timeStringWidth - xOffset, (display->getHeight() - hourMinuteTextY) - yOffset,
+                        secondString);
+#endif
 }
 
 void drawBluetoothConnectedIcon(OLEDDisplay *display, int16_t x, int16_t y)
