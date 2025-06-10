@@ -818,6 +818,22 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         moduleConfig.has_paxcounter = true;
         moduleConfig.paxcounter = c.payload_variant.paxcounter;
         break;
+    case meshtastic_ModuleConfig_wireguard_tag:
+        LOG_INFO("Set module config: WireGuard");
+        moduleConfig.has_wireguard = true;
+        moduleConfig.wireguard = c.payload_variant.wireguard;
+#if HAS_WIREGUARD_VPN
+        wireGuardConfig.address = moduleConfig.wireguard.address;
+        wireGuardConfig.serverAddr = moduleConfig.wireguard.server_addr;
+        wireGuardConfig.serverPort = moduleConfig.wireguard.server_port;
+        wireGuardConfig.privateKey = moduleConfig.wireguard.private_key;
+        wireGuardConfig.publicKey = moduleConfig.wireguard.public_key;
+        wireGuardConfig.presharedKey = moduleConfig.wireguard.preshared_key;
+        wireGuardConfig.dns = moduleConfig.wireguard.dns;
+        wireGuardConfig.allowedIps = moduleConfig.wireguard.allowed_ips;
+        wireGuardConfig.persistentKeepalive = moduleConfig.wireguard.persistent_keepalive;
+#endif
+        break;
     }
     saveChanges(SEGMENT_MODULECONFIG);
     return true;
@@ -990,6 +1006,11 @@ void AdminModule::handleGetModuleConfig(const meshtastic_MeshPacket &req, const 
             LOG_INFO("Get module config: Paxcounter");
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_paxcounter_tag;
             res.get_module_config_response.payload_variant.paxcounter = moduleConfig.paxcounter;
+            break;
+        case meshtastic_AdminMessage_ModuleConfigType_WIREGUARD_CONFIG:
+            LOG_INFO("Get module config: WireGuard");
+            res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_wireguard_tag;
+            res.get_module_config_response.payload_variant.wireguard = moduleConfig.wireguard;
             break;
         }
 
