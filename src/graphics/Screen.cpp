@@ -134,7 +134,8 @@ extern bool hasUnreadMessage;
 // The banner appears in the center of the screen and disappears after the specified duration
 
 // Called to trigger a banner with custom message and duration
-void Screen::showOverlayBanner(const char *message, uint32_t durationMs, uint8_t options, std::function<void(int)> bannerCallback)
+void Screen::showOverlayBanner(const char *message, uint32_t durationMs, uint8_t options, std::function<void(int)> bannerCallback,
+                               int8_t InitialSelected)
 {
     // Store the message and set the expiration timestamp
     strncpy(NotificationRenderer::alertBannerMessage, message, 255);
@@ -142,7 +143,7 @@ void Screen::showOverlayBanner(const char *message, uint32_t durationMs, uint8_t
     NotificationRenderer::alertBannerUntil = (durationMs == 0) ? 0 : millis() + durationMs;
     NotificationRenderer::alertBannerOptions = options;
     NotificationRenderer::alertBannerCallback = bannerCallback;
-    NotificationRenderer::curSelected = 0;
+    NotificationRenderer::curSelected = InitialSelected;
 }
 
 static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -1316,6 +1317,8 @@ int Screen::handleUIFrameEvent(const UIFrameEvent *event)
 int Screen::handleInputEvent(const InputEvent *event)
 {
     LOG_WARN("event %u", event->inputEvent);
+    if (!screenOn)
+        return 0;
 
     if (NotificationRenderer::isOverlayBannerShowing()) {
         NotificationRenderer::inEvent = event->inputEvent;
@@ -1375,17 +1378,20 @@ int Screen::handleInputEvent(const InputEvent *event)
 #endif
 #if HAS_GPS
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.gps && gps) {
-                    showOverlayBanner("Toggle GPS\nENABLED\nDISABLED", 30000, 2, [](int selected) -> void {
-                        if (selected == 0) {
-                            config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
-                            playGPSEnableBeep();
-                            gps->enable();
-                        } else if (selected == 1) {
-                            config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_DISABLED;
-                            playGPSDisableBeep();
-                            gps->disable();
-                        }
-                    });
+                    showOverlayBanner(
+                        "Toggle GPS\nENABLED\nDISABLED", 30000, 2,
+                        [](int selected) -> void {
+                            if (selected == 0) {
+                                config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
+                                playGPSEnableBeep();
+                                gps->enable();
+                            } else if (selected == 1) {
+                                config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_DISABLED;
+                                playGPSDisableBeep();
+                                gps->disable();
+                            }
+                        },
+                        config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED ? 0 : 1);
 #endif
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.clock) {
                     showOverlayBanner(
