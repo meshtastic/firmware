@@ -6,7 +6,7 @@
 #define USE_SSD1306
 
 #define BUTTON_PIN 0 // Button pin for this board
-#define BUTTON_PIN_ALT 36
+#define BACK_BUTTON_PIN 36
 
 #define HAS_NEOPIXEL                         // If defined, we will use the neopixel library
 #define NEOPIXEL_DATA 35                     // Neopixel pin for this board
