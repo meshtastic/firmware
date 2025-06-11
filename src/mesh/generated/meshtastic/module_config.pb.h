@@ -222,6 +222,74 @@ typedef struct _meshtastic_ModuleConfig_PaxcounterConfig {
     int32_t ble_threshold;
 } meshtastic_ModuleConfig_PaxcounterConfig;
 
+/* Serial Config */
+typedef struct _meshtastic_ModuleConfig_SerialConfig {
+    /* Preferences for the SerialModule */
+    bool enabled;
+    /* TODO: REPLACE */
+    bool echo;
+    /* RX pin (should match Arduino gpio pin number) */
+    uint32_t rxd;
+    /* TX pin (should match Arduino gpio pin number) */
+    uint32_t txd;
+    /* Serial baud rate */
+    meshtastic_ModuleConfig_SerialConfig_Serial_Baud baud;
+    /* TODO: REPLACE */
+    uint32_t timeout;
+    /* Mode for serial module operation */
+    meshtastic_ModuleConfig_SerialConfig_Serial_Mode mode;
+    /* Overrides the platform's defacto Serial port instance to use with Serial module config settings
+ This is currently only usable in output modes like NMEA / CalTopo and may behave strangely or not work at all in other modes
+ Existing logging over the Serial Console will still be present */
+    bool override_console_serial_port;
+} meshtastic_ModuleConfig_SerialConfig;
+
+/* External Notifications Config */
+typedef struct _meshtastic_ModuleConfig_ExternalNotificationConfig {
+    /* Enable the ExternalNotificationModule */
+    bool enabled;
+    /* When using in On/Off mode, keep the output on for this many
+ milliseconds. Default 1000ms (1 second). */
+    uint32_t output_ms;
+    /* Define the output pin GPIO setting Defaults to
+ EXT_NOTIFY_OUT if set for the board.
+ In standalone devices this pin should drive the LED to match the UI. */
+    uint32_t output;
+    /* IF this is true, the 'output' Pin will be pulled active high, false
+ means active low. */
+    bool active;
+    /* True: Alert when a text message arrives (output) */
+    bool alert_message;
+    /* True: Alert when the bell character is received (output) */
+    bool alert_bell;
+    /* use a PWM output instead of a simple on/off output. This will ignore
+ the 'output', 'output_ms' and 'active' settings and use the
+ device.buzzer_gpio instead. */
+    bool use_pwm;
+    /* Optional: Define a secondary output pin for a vibra motor
+ This is used in standalone devices to match the UI. */
+    uint8_t output_vibra;
+    /* Optional: Define a tertiary output pin for an active buzzer
+ This is used in standalone devices to to match the UI. */
+    uint8_t output_buzzer;
+    /* True: Alert when a text message arrives (output_vibra) */
+    bool alert_message_vibra;
+    /* True: Alert when a text message arrives (output_buzzer) */
+    bool alert_message_buzzer;
+    /* True: Alert when the bell character is received (output_vibra) */
+    bool alert_bell_vibra;
+    /* True: Alert when the bell character is received (output_buzzer) */
+    bool alert_bell_buzzer;
+    /* The notification will toggle with 'output_ms' for this time of seconds.
+ Default is 0 which means don't repeat at all. 60 would mean blink
+ and/or beep for 60 seconds */
+    uint16_t nag_timeout;
+    /* When true, enables devices with native I2S audio output to use the RTTTL over speaker like a buzzer
+ T-Watch S3 and T-Deck for example have this capability */
+    bool use_i2s_as_buzzer;
+} meshtastic_ModuleConfig_ExternalNotificationConfig;
+
+
 /* Configuration for the experimental WireGuard VPN client */
 typedef struct _meshtastic_ModuleConfig_WireGuardConfig {
     /* Client address/subnet (e.g. 10.0.0.2/24) */
