@@ -66,17 +66,19 @@ bool startWireGuard()
         return false;
     }
 
+    String serverIpStr = serverIp.toString();
     if (!vpn.begin(localIp,                       // local (client) IP/subnet
                    wireGuardConfig.privateKey,    // base64 private key
-                   wireGuardConfig.serverAddr,    // server hostname/IP
+                   serverIpStr.c_str(),           // server IP address
                    wireGuardConfig.publicKey,     // server public key
                    wireGuardConfig.serverPort)) {
         LOG_ERROR("Unable to start WireGuard tunnel");
         return false;
     }
 
-    LOG_INFO("WireGuard tunnel started to %s:%u",
-             serverIp.toString().c_str(),
+    LOG_INFO("WireGuard tunnel started to %s (%s):%u",
+             wireGuardConfig.serverAddr,
+             serverIpStr.c_str(),
              wireGuardConfig.serverPort);
 
     running = true;
