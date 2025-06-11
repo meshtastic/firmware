@@ -1390,8 +1390,10 @@ int Screen::handleInputEvent(const InputEvent *event)
                                 playGPSDisableBeep();
                                 gps->disable();
                             }
+                            service->reloadConfig(SEGMENT_CONFIG);
                         },
-                        config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED ? 0 : 1);
+                        config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED ? 0
+                                                                                                     : 1); // set inital selection
 #endif
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.clock) {
                     showOverlayBanner(
@@ -1434,6 +1436,7 @@ int Screen::handleInputEvent(const InputEvent *event)
                             }
 
                             setenv("TZ", config.device.tzdef, 1);
+                            service->reloadConfig(SEGMENT_CONFIG);
                         });
                 }
             } else if (event->inputEvent == INPUT_BROKER_BACK) {
