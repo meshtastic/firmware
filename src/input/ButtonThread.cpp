@@ -200,7 +200,8 @@ int32_t ButtonThread::runOnce()
             LOG_WARN("Long press!");
 
             // Check if this is part of a short-press + long-press combination
-            if (waitingForLongPress && (millis() - shortPressTime) <= BUTTON_COMBO_TIMEOUT_MS) {
+            if (_shortLong != INPUT_BROKER_NONE && waitingForLongPress &&
+                (millis() - shortPressTime) <= BUTTON_COMBO_TIMEOUT_MS) {
                 LOG_WARN("Short-press + Long-press combination detected!");
                 evt.inputEvent = _shortLong;
                 // evt.kbchar = _shortLong;

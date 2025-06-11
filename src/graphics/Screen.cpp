@@ -1320,6 +1320,12 @@ int Screen::handleInputEvent(const InputEvent *event)
     if (!screenOn)
         return 0;
 
+#ifdef USE_EINK // the screen is the last input handler, so if an event makes it here, we can assume it will prompt a screen draw.
+    EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Use fast-refresh for next frame, no skip please
+    EINK_ADD_FRAMEFLAG(dispdev, BLOCKING);    // Edge case: if this frame is promoted to COSMETIC, wait for update
+    handleSetOn(true);                        // Ensure power-on to receive deep-sleep screensaver (PowerFSM should handle?)
+    setFastFramerate();                       // Draw ASAP
+#endif
     if (NotificationRenderer::isOverlayBannerShowing()) {
         NotificationRenderer::inEvent = event->inputEvent;
         static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar,
