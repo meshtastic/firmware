@@ -52,4 +52,6 @@ The firmware now includes an experimental WireGuard VPN client.
 - Uses the [`wireguard-esp32`](https://github.com/juvinski/wireguard-esp32) library.
 - The VPN tunnel starts automatically when WiFi connects, and stops when WiFi disconnects.
 
+- See [`src\mesh\wireguard\WireGuard_ReadMe.md`] for developer documentation.
+
 > **Note:** This feature is experimental and full tunnel functionality may not be stable yet.
