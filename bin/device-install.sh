@@ -35,6 +35,9 @@ BIGDB_16MB=(
 	"station-g2"
     "t-eth-elite"
     "t-watch-s3"
+    "elecrow-adv-35-tft"
+    "elecrow-adv-24-28-tft"
+    "elecrow-adv1-43-50-70-tft"
 )
 S3_VARIANTS=(
     "s3"
