@@ -554,6 +554,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
                 LOG_WARN(LOW_ENTROPY_WARNING);
                 if (!nodeDB->hasWarned) {
                     meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+                    cn->which_payload_variant = meshtastic_ClientNotification_low_entropy_key_tag;
                     cn->level = meshtastic_LogRecord_Level_WARNING;
                     cn->time = getValidTime(RTCQualityFromNet);
                     sprintf(cn->message, LOW_ENTROPY_WARNING);
