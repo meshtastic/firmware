@@ -48,8 +48,8 @@ bool ScanAndSelectInput::init()
         // Short circuit: if selected pin conficts with the user button
 #if defined(ARCH_PORTDUINO)
     int pinUserButton = 0;
-    if (settingsMap.count(user) != 0) {
-        pinUserButton = settingsMap[user];
+    if (settingsMap.count(userButtonPin) != 0) {
+        pinUserButton = settingsMap[userButtonPin];
     }
 #elif defined(USERPREFS_BUTTON_PIN)
     int pinUserButton = config.device.button_gpio ? config.device.button_gpio : USERPREFS_BUTTON_PIN;

@@ -105,7 +105,7 @@ NRF52Bluetooth *nrf52Bluetooth = nullptr;
 ButtonThread *TouchButtonThread = nullptr;
 #endif
 
-#if defined(BUTTON_PIN)
+#if defined(BUTTON_PIN) || defined(ARCH_PORTDUINO)
 ButtonThread *UserButtonThread = nullptr;
 #endif
 
@@ -908,9 +908,20 @@ void setup()
 #endif
 #if defined(ARCH_PORTDUINO) // make it work
 
-    if (settingsMap.count(user) != 0 && settingsMap[user] != RADIOLIB_NC) {
+    if (settingsMap.count(userButtonPin) != 0 && settingsMap[userButtonPin] != RADIOLIB_NC) {
 
-        LOG_DEBUG("Use GPIO%02d for button", settingsMap[user]);
+        LOG_DEBUG("Use GPIO%02d for button", settingsMap[userButtonPin]);
+            UserButtonThread = new ButtonThread("UserButton");
+    if (screen)
+        UserButtonThread->initButton(
+            settingsMap[userButtonPin], true, true, INPUT_PULLUP, // pull up bias
+            []() {
+                UserButtonThread->userButton.tick();
+                runASAP = true;
+                BaseType_t higherWake = 0;
+                mainDelay.interruptFromISR(&higherWake);
+            },
+            INPUT_BROKER_USER_PRESS, INPUT_BROKER_SELECT);
     }
 #endif
 

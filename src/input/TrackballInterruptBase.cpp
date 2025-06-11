@@ -18,17 +18,27 @@ void TrackballInterruptBase::init(uint8_t pinDown, uint8_t pinUp, uint8_t pinLef
     this->_eventRight = eventRight;
     this->_eventPressed = eventPressed;
 
-    pinMode(pinPress, INPUT_PULLUP);
-    pinMode(this->_pinDown, INPUT_PULLUP);
-    pinMode(this->_pinUp, INPUT_PULLUP);
-    pinMode(this->_pinLeft, INPUT_PULLUP);
-    pinMode(this->_pinRight, INPUT_PULLUP);
+    if (pinPress != 255) {
+        pinMode(pinPress, INPUT_PULLUP);
+        attachInterrupt(pinPress, onIntPress, RISING);
 
-    attachInterrupt(pinPress, onIntPress, RISING);
-    attachInterrupt(this->_pinDown, onIntDown, RISING);
-    attachInterrupt(this->_pinUp, onIntUp, RISING);
-    attachInterrupt(this->_pinLeft, onIntLeft, RISING);
-    attachInterrupt(this->_pinRight, onIntRight, RISING);
+    }
+    if (this->_pinDown != 255) {
+        pinMode(this->_pinDown, INPUT_PULLUP);
+        attachInterrupt(this->_pinDown, onIntDown, RISING);
+    }
+    if (this->_pinUp != 255) {
+        pinMode(this->_pinUp, INPUT_PULLUP);
+        attachInterrupt(this->_pinUp, onIntUp, RISING);
+    }
+    if (this->_pinLeft != 255) {
+        pinMode(this->_pinLeft, INPUT_PULLUP);
+        attachInterrupt(this->_pinLeft, onIntLeft, RISING);
+    }
+    if (this->_pinRight != 255) {
+        pinMode(this->_pinRight, INPUT_PULLUP);
+        attachInterrupt(this->_pinRight, onIntRight, RISING);
+    }
 
     LOG_DEBUG("Trackball GPIO initialized (%d, %d, %d, %d, %d)", this->_pinUp, this->_pinDown, this->_pinLeft, this->_pinRight,
               pinPress);
