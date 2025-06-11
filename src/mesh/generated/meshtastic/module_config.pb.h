@@ -236,12 +236,6 @@ typedef struct _meshtastic_ModuleConfig_WireGuardConfig {
     char public_key[64];
     /* Optional preshared key */
     char preshared_key[64];
-    /* DNS server to use while connected */
-    char dns[32];
-    /* Routes through the tunnel */
-    char allowed_ips[64];
-    /* Optional keepalive interval */
-    uint16_t persistent_keepalive;
 } meshtastic_ModuleConfig_WireGuardConfig;
 
 /* Store and Forward Module Config */
@@ -478,7 +472,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_CannedMessageConfig_init_default {0, 0, 0, 0, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, 0, 0, "", 0}
 #define meshtastic_ModuleConfig_AmbientLightingConfig_init_default {0, 0, 0, 0, 0}
 #define meshtastic_RemoteHardwarePin_init_default {0, "", _meshtastic_RemoteHardwarePinType_MIN}
-#define meshtastic_ModuleConfig_WireGuardConfig_init_default {"", "", 0, "", "", "", "", "", 0}
+#define meshtastic_ModuleConfig_WireGuardConfig_init_default {"", "", 0, "", "", ""}
 #define meshtastic_ModuleConfig_init_zero        {0, {meshtastic_ModuleConfig_MQTTConfig_init_zero}}
 #define meshtastic_ModuleConfig_MQTTConfig_init_zero {0, "", "", "", 0, 0, 0, "", 0, 0, false, meshtastic_ModuleConfig_MapReportSettings_init_zero}
 #define meshtastic_ModuleConfig_MapReportSettings_init_zero {0, 0, 0}

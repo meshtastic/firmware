@@ -18,9 +18,6 @@ typedef struct WireGuardConfig {
     const char *privateKey;    ///< Client private key
     const char *publicKey;     ///< Server public key
     const char *presharedKey;  ///< Optional preshared key, not available in Wireguard-ESP32 as of now
-    const char *dns;           ///< DNS server to use while connected
-    const char *allowedIps;    ///< Routes through the tunnel
-    uint16_t persistentKeepalive; ///< Optional keepalive interval
 } WireGuardConfig;
 
 #ifndef WIREGUARD_DEFAULT_ADDRESS
@@ -49,18 +46,6 @@ typedef struct WireGuardConfig {
 // empty value so that the configuration compiles when the feature is
 // enabled.
 #define WIREGUARD_DEFAULT_PRESHARED_KEY ""
-#endif
-
-#ifndef WIREGUARD_DEFAULT_DNS
-#define WIREGUARD_DEFAULT_DNS "" // Default DNS server to use while connected - not tested yet
-#endif
-
-#ifndef WIREGUARD_DEFAULT_ALLOWED_IPS
-#define WIREGUARD_DEFAULT_ALLOWED_IPS "0.0.0.0/0" // Default allowed IPs for the WireGuard tunnel - all traffic - not tested yet
-#endif
-
-#ifndef WIREGUARD_DEFAULT_PERSISTENT_KEEPALIVE
-#define WIREGUARD_DEFAULT_PERSISTENT_KEEPALIVE 0 // Not tested yet
 #endif
 
 /// Global WireGuard configuration in RAM.

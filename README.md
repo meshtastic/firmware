@@ -46,7 +46,7 @@ The firmware now includes an experimental WireGuard VPN client.
 - Edit your `platformio.ini` variant configuration to add: `-DHAS_WIREGUARD_VPN=1`
 
 **Configuration:**
-- Update server details and keys in: `src/mesh/wireguard/WireGuardConfig.h`
+- Update server details and keys in: `src/mesh/wireguard/WireGuardConfig.h` (use plain IP addresses without subnet masks)
 
 **How it works:**
 - Uses the [`wireguard-esp32`](https://github.com/juvinski/wireguard-esp32) library.

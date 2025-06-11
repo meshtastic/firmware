@@ -6,6 +6,12 @@
 #include "gps/RTC.h"
 #include <WiFi.h>
 #include <WireGuard-ESP32.h>
+#if HAS_WIFI
+#include "mesh/wifi/WiFiAPClient.h"
+#endif
+#if HAS_ETHERNET
+#include "mesh/eth/ethClient.h"
+#endif
 
 static bool running = false;
 static WireGuard vpn;
@@ -21,8 +27,19 @@ bool startWireGuard()
         return false;
     }
 
-    if (WiFi.status() != WL_CONNECTED) {
-        LOG_WARN("WireGuard requires active WiFi");
+    bool haveNetwork = false;
+#if HAS_WIFI
+    if (isWifiAvailable() && WiFi.isConnected()) {
+        haveNetwork = true;
+    }
+#endif
+#if HAS_ETHERNET
+    if (isEthernetAvailable()) {
+        haveNetwork = true;
+    }
+#endif
+    if (!haveNetwork) {
+        LOG_WARN("WireGuard requires an active network");
         return false;
     }
 

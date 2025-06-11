@@ -28,6 +28,10 @@
 #include <pb_encode.h>
 #include <vector>
 
+#if HAS_WIREGUARD_VPN
+#include "mesh/wireguard/WireGuardConfig.h"
+#endif
+
 #ifdef ARCH_ESP32
 #if HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
@@ -66,6 +70,22 @@ meshtastic_LocalConfig config;
 meshtastic_DeviceUIConfig uiconfig{.screen_brightness = 153, .screen_timeout = 30};
 meshtastic_LocalModuleConfig moduleConfig;
 meshtastic_ChannelFile channelFile;
+
+static void updateWireGuardConfigFromModule()
+{
+#if HAS_WIREGUARD_VPN
+    wireGuardConfig.address = moduleConfig.wireguard.address;
+    wireGuardConfig.serverAddr = moduleConfig.wireguard.server_addr;
+    wireGuardConfig.serverPort = moduleConfig.wireguard.server_port;
+    wireGuardConfig.privateKey = moduleConfig.wireguard.private_key;
+    wireGuardConfig.publicKey = moduleConfig.wireguard.public_key;
+    wireGuardConfig.presharedKey = moduleConfig.wireguard.preshared_key;
+    wireGuardConfig.dns = moduleConfig.wireguard.dns;
+    wireGuardConfig.allowedIps = moduleConfig.wireguard.allowed_ips;
+    wireGuardConfig.persistentKeepalive = moduleConfig.wireguard.persistent_keepalive;
+#endif
+}
+
 
 #ifdef USERPREFS_USE_ADMIN_KEY_0
 static unsigned char userprefs_admin_key_0[] = USERPREFS_USE_ADMIN_KEY_0;
@@ -842,6 +862,7 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.ambient_lighting.blue = myNodeInfo.my_node_num & 0x0000FF;
 
     initModuleConfigIntervals();
+    updateWireGuardConfigFromModule();
 }
 
 void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
@@ -1233,6 +1254,7 @@ void NodeDB::loadFromDisk()
             LOG_INFO("Loaded saved moduleConfig version %d", moduleConfig.version);
         }
     }
+    updateWireGuardConfigFromModule();
 
     state = loadProto(channelFileName, meshtastic_ChannelFile_size, sizeof(meshtastic_ChannelFile), &meshtastic_ChannelFile_msg,
                       &channelFile);
