@@ -79,10 +79,7 @@ static void updateWireGuardConfigFromModule()
     wireGuardConfig.serverPort = moduleConfig.wireguard.server_port;
     wireGuardConfig.privateKey = moduleConfig.wireguard.private_key;
     wireGuardConfig.publicKey = moduleConfig.wireguard.public_key;
-    wireGuardConfig.presharedKey = moduleConfig.wireguard.preshared_key;
-    wireGuardConfig.dns = moduleConfig.wireguard.dns;
-    wireGuardConfig.allowedIps = moduleConfig.wireguard.allowed_ips;
-    wireGuardConfig.persistentKeepalive = moduleConfig.wireguard.persistent_keepalive;
+    wireGuardConfig.presharedKey = moduleConfig.wireguard.preshared_key;    
 #endif
 }
 

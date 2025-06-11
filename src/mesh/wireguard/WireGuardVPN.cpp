@@ -44,7 +44,18 @@ bool startWireGuard()
     }
 
     IPAddress serverIp;
-    if (!WiFi.hostByName(wireGuardConfig.serverAddr, serverIp)) {
+    bool resolved = false;
+#if HAS_ETHERNET
+    if (isEthernetAvailable()) {
+        resolved = Ethernet.hostByName(wireGuardConfig.serverAddr, serverIp);
+    }
+#endif
+#if HAS_WIFI
+    if (!resolved && isWifiAvailable() && WiFi.isConnected()) {
+        resolved = WiFi.hostByName(wireGuardConfig.serverAddr, serverIp);
+    }
+#endif
+    if (!resolved) {
         LOG_ERROR("WireGuard server %s unreachable", wireGuardConfig.serverAddr);
         return false;
     }

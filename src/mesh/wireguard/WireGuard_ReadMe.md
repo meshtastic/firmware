@@ -44,7 +44,7 @@ The runtime configuration is defined in `src/mesh/wireguard/WireGuardConfig.h`:
 
 ```cpp
 typedef struct WireGuardConfig {
-    const char *address;       ///< Client address/subnet (e.g. 10.0.0.2/24)
+    const char *address;       ///< Client IPv4 address (e.g. 10.0.0.2)
     const char *serverAddr;    ///< WireGuard server host
     uint16_t serverPort;       ///< WireGuard server port
     const char *privateKey;    ///< Client private key
