@@ -26,6 +26,10 @@
 #include "Default.h"
 #include "TypeConversions.h"
 
+#if HAS_WIREGUARD_VPN
+#include "mesh/wireguard/WireGuardConfig.h"
+#endif
+
 #if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
 #endif
