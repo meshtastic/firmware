@@ -14,6 +14,7 @@
 #include "input/ScanAndSelect.h"
 #include "mesh/generated/meshtastic/cannedmessages.pb.h"
 #include "modules/AdminModule.h"
+#include "graphics/Screen.h"
 
 #include "main.h"                               // for cardkb_found
 #include "modules/ExternalNotificationModule.h" // for buzzer control
@@ -35,6 +36,7 @@
 #define INACTIVATE_AFTER_MS 20000
 
 extern ScanI2C::DeviceAddress cardkb_found;
+extern graphics::Screen *screen;
 
 static const char *cannedMessagesConfigFile = "/prefs/cannedConf.proto";
 
@@ -136,20 +138,68 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
     if (this->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) {
         return 0; // Ignore input while sending
     }
+
+    // Get current time for debouncing and long press detection
+    unsigned long currentTime = millis();
+    
     bool validEvent = false;
+    
+    // Handle UP key with enhanced debouncing
     if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP)) {
+        // Use separate debounce timing for UP key with longer delay to prevent double triggers
+        unsigned long debounceDelay = this->isInNodeSelectMode ? 800 : UP_DOWN_DEBOUNCE_MS;
+        if (currentTime - lastUpKeyTime < debounceDelay) {
+            LOG_DEBUG("UP key debounced: %lu ms since last", currentTime - lastUpKeyTime);
+            return 0;
+        }
+        
         if (this->messagesCount > 0) {
-            this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_UP;
-            validEvent = true;
+            // In node select mode, UP should act like LEFT (previous node)
+            if (this->isInNodeSelectMode) {
+                this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_UP;
+                this->lastUpKeyTime = currentTime;
+                this->lastKeyPressTime = currentTime; // Keep for general timing
+                validEvent = true;
+            } else {
+                this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_UP;
+                this->lastUpKeyTime = currentTime;
+                this->lastKeyPressTime = currentTime; // Keep for general timing
+                validEvent = true;
+            }
         }
     }
-    if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN)) {
+    // Handle DOWN key with enhanced debouncing
+    else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN)) {
+        // Use separate debounce timing for DOWN key with longer delay to prevent double triggers
+        unsigned long debounceDelay = this->isInNodeSelectMode ? 800 : UP_DOWN_DEBOUNCE_MS;
+        if (currentTime - lastDownKeyTime < debounceDelay) {
+            LOG_DEBUG("DOWN key debounced: %lu ms since last", currentTime - lastDownKeyTime);
+            return 0;
+        }
+        
         if (this->messagesCount > 0) {
-            this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_DOWN;
-            validEvent = true;
+            // In node select mode, DOWN should act like RIGHT (next node)
+            if (this->isInNodeSelectMode) {
+                this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_DOWN;
+                this->lastDownKeyTime = currentTime;
+                this->lastKeyPressTime = currentTime; // Keep for general timing
+                validEvent = true;
+            } else {
+                this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_DOWN;
+                this->lastDownKeyTime = currentTime;
+                this->lastKeyPressTime = currentTime; // Keep for general timing
+                validEvent = true;
+            }
         }
     }
+    
     if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT)) {
+        // Use separate debounce timing for SELECT key to prevent multiple triggers
+        unsigned long debounceDelay = this->isInNodeSelectMode ? 800 : DEBOUNCE_DELAY_MS;
+        if (currentTime - lastSelectKeyTime < debounceDelay) {
+            LOG_DEBUG("SELECT key debounced: %lu ms since last", currentTime - lastSelectKeyTime);
+            return 0;
+        }
 
 #if defined(USE_VIRTUAL_KEYBOARD)
         if (this->currentMessageIndex == 0) {
@@ -167,9 +217,28 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         // when inactive, call the onebutton shortpress instead. Activate Module only on up/down
         if ((this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED)) {
             powerFSM.trigger(EVENT_PRESS);
+        } else if (this->isInNodeSelectMode) {
+            // In node select mode - confirm current node selection and exit mode
+            this->isInNodeSelectMode = false;
+            this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
+            this->lastTouchMillis = millis();
+            this->lastSelectKeyTime = currentTime; // Update SELECT key debounce time
+            this->lastKeyPressTime = currentTime; // Update general debounce time
+            validEvent = true;
+        } else if (this->focusedIndex == -1) {
+            // Focus is on "To:" field - enter node select mode
+            this->isInNodeSelectMode = true;
+            this->runState = CANNED_MESSAGE_RUN_STATE_NODE_SELECT;
+            this->lastTouchMillis = millis();
+            this->lastSelectKeyTime = currentTime; // Update SELECT key debounce time
+            this->lastKeyPressTime = currentTime; // Update general debounce time
+            validEvent = true;
         } else {
+            // Focus is on a message - send it
             this->payload = this->runState;
             this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_SELECT;
+            this->lastSelectKeyTime = currentTime; // Update SELECT key debounce time
+            this->lastKeyPressTime = currentTime; // Update general debounce time
             validEvent = true;
         }
     }
@@ -177,6 +246,8 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         UIFrameEvent e;
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
         this->currentMessageIndex = -1;
+        this->focusedIndex = -1;
+        this->isInNodeSelectMode = false;
 
 #if !defined(T_WATCH_S3) && !defined(RAK14014) && !defined(USE_VIRTUAL_KEYBOARD)
         this->freetext = ""; // clear freetext
@@ -444,6 +515,8 @@ int32_t CannedMessageModule::runOnce()
         temporaryMessage = "";
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
         this->currentMessageIndex = -1;
+        this->focusedIndex = -1;
+        this->isInNodeSelectMode = false;
         this->freetext = ""; // clear freetext
         this->cursor = 0;
 
@@ -457,6 +530,7 @@ int32_t CannedMessageModule::runOnce()
         // Reset module
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
         this->currentMessageIndex = -1;
+        this->focusedIndex = -1;
         this->freetext = ""; // clear freetext
         this->cursor = 0;
 
@@ -475,15 +549,18 @@ int32_t CannedMessageModule::runOnce()
                 this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
             }
         } else {
-            if ((this->messagesCount > this->currentMessageIndex) && (strlen(this->messages[this->currentMessageIndex]) > 0)) {
-                if (strcmp(this->messages[this->currentMessageIndex], "~") == 0) {
+            // Use focusedIndex to send the actually selected message, not currentMessageIndex
+            int messageToSendIndex = this->focusedIndex;
+            if ((this->messagesCount > messageToSendIndex) && (messageToSendIndex >= 0) && 
+                (strlen(this->messages[messageToSendIndex]) > 0)) {
+                if (strcmp(this->messages[messageToSendIndex], "~") == 0) {
                     powerFSM.trigger(EVENT_PRESS);
                     return INT32_MAX;
                 } else {
 #if defined(USE_VIRTUAL_KEYBOARD)
-                    sendText(this->dest, indexChannels[this->channel], this->messages[this->currentMessageIndex], true);
+                    sendText(this->dest, indexChannels[this->channel], this->messages[messageToSendIndex], true);
 #else
-                    sendText(this->dest, indexChannels[this->channel], this->messages[this->currentMessageIndex], true);
+                    sendText(this->dest, indexChannels[this->channel], this->messages[messageToSendIndex], true);
 #endif
                 }
                 this->runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
@@ -494,6 +571,7 @@ int32_t CannedMessageModule::runOnce()
         }
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
         this->currentMessageIndex = -1;
+        this->focusedIndex = -1;
         this->freetext = ""; // clear freetext
         this->cursor = 0;
 
@@ -504,13 +582,105 @@ int32_t CannedMessageModule::runOnce()
         this->notifyObservers(&e);
         return 2000;
     } else if ((this->runState != CANNED_MESSAGE_RUN_STATE_FREETEXT) && (this->currentMessageIndex == -1)) {
-        this->currentMessageIndex = 0;
+        // Initialize display to show "1,2,3" pattern even when focus is on "To:" field
+        if (this->messagesCount <= 3) {
+            this->currentMessageIndex = 0; // For few messages, first message in middle
+        } else {
+            this->currentMessageIndex = 1; // For many messages, show "1,2,3" pattern
+        }
+        this->focusedIndex = -1; // Start with focus on "To:" field
         LOG_DEBUG("First touch (%d):%s", this->currentMessageIndex, this->getCurrentMessage());
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
         this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_UP) {
         if (this->messagesCount > 0) {
-            this->currentMessageIndex = getPrevIndex();
+            if (this->isInNodeSelectMode) {
+                // In node select mode, UP should act like LEFT (previous node)
+                this->payload = INPUT_BROKER_MSG_LEFT;
+                this->runState = CANNED_MESSAGE_RUN_STATE_NODE_SELECT;
+                // Force immediate execution of node selection logic
+                this->lastTouchMillis = millis();
+                // Let runOnce handle the node switching
+                runOnce();
+                return 0;
+            } else if (this->focusedIndex == -1) {
+                // Focus is on "To:" field, move to last message
+                this->focusedIndex = this->messagesCount - 1;
+                // Position display to show last message optimally
+                if (this->messagesCount <= 3) {
+                    // Few messages: show last message in middle line
+                    this->currentMessageIndex = this->focusedIndex;
+                } else {
+                    // Many messages: show last message in bottom line for "4,5,6" pattern
+                    // Set currentMessageIndex so that last message appears in bottom line
+                    this->currentMessageIndex = this->focusedIndex - 1;
+                }
+                LOG_DEBUG("UP from To: field - focusedIndex: %d, currentMessageIndex: %d", this->focusedIndex, this->currentMessageIndex);
+            } else if (this->focusedIndex == 0) {
+                // Focus is on first message, move to "To:" field
+                this->focusedIndex = -1;
+                // Keep display showing "1,2,3" pattern
+                if (this->messagesCount <= 3) {
+                    this->currentMessageIndex = 0;
+                } else {
+                    this->currentMessageIndex = 1; // Show "1,2,3" pattern
+                }
+            } else {
+                // Calculate current cursor position in the 3-line window
+                int prevIndex = this->getPrevIndex();
+                int nextIndex = this->getNextIndex();
+                int cursorLine = -1; // 1=top, 2=middle, 3=bottom
+                
+                if (this->focusedIndex == prevIndex) {
+                    cursorLine = 1; // Cursor is in top line
+                } else if (this->focusedIndex == this->currentMessageIndex) {
+                    cursorLine = 2; // Cursor is in middle line
+                } else if (this->focusedIndex == nextIndex) {
+                    cursorLine = 3; // Cursor is in bottom line
+                }
+                
+                // Move to previous message
+                this->focusedIndex--;
+                
+                // Smart positioning based on remaining messages and cursor position  
+                if (this->messagesCount <= 3) {
+                    // Few messages: keep stable positioning
+                    if (this->messagesCount == 1) {
+                        this->currentMessageIndex = 0;
+                    } else if (this->messagesCount == 2) {
+                        this->currentMessageIndex = 0; // Show 0,1,0 pattern
+                    } else {
+                        this->currentMessageIndex = 1; // Show 0,1,2 pattern
+                    }
+                } else {
+                    // Many messages: smart scrolling based on position from start
+                    int messagesFromStart = this->focusedIndex + 1; // 1-based count
+                    
+                    if (messagesFromStart >= 3) {
+                        // Still have 3+ messages from start (including current)
+                        // Keep cursor in middle line (line 2) by scrolling
+                        if (cursorLine == 3) {
+                            // Cursor was in bottom line, move to middle line (no scroll)
+                            // currentMessageIndex stays the same
+                        } else if (cursorLine == 2) {
+                            // Cursor was in middle line, scroll up to keep in middle
+                            this->currentMessageIndex = this->focusedIndex;
+                        } else if (cursorLine == 1) {
+                            // Cursor was in top line, scroll up to move to middle
+                            this->currentMessageIndex = this->focusedIndex;
+                        }
+                    } else if (messagesFromStart == 2) {
+                        // Only at second message
+                        // Move cursor to top line, showing first 3 messages
+                        this->currentMessageIndex = 1; // Show (0, 1, 2)
+                    } else {
+                        // This is the first message
+                        // Keep cursor in top line, showing first 3 messages
+                        this->currentMessageIndex = 1; // Show (0, 1, 2)
+                    }
+                }
+            }
+            
             this->freetext = ""; // clear freetext
             this->cursor = 0;
 
@@ -519,7 +689,7 @@ int32_t CannedMessageModule::runOnce()
 #endif
 
             this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
-            LOG_DEBUG("MOVE UP (%d):%s", this->currentMessageIndex, this->getCurrentMessage());
+            LOG_DEBUG("MOVE UP - focusedIndex: %d, currentMessageIndex: %d", this->focusedIndex, this->currentMessageIndex);
             
             requestFocus();
             e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
@@ -530,7 +700,93 @@ int32_t CannedMessageModule::runOnce()
         }
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_DOWN) {
         if (this->messagesCount > 0) {
-            this->currentMessageIndex = this->getNextIndex();
+            if (this->isInNodeSelectMode) {
+                // In node select mode, DOWN should act like RIGHT (next node)
+                this->payload = INPUT_BROKER_MSG_RIGHT;
+                this->runState = CANNED_MESSAGE_RUN_STATE_NODE_SELECT;
+                // Force immediate execution of node selection logic
+                this->lastTouchMillis = millis();
+                // Let runOnce handle the node switching
+                runOnce();
+                return 0;
+            } else if (this->focusedIndex == -1) {
+                // Focus is on "To:" field, move to first message
+                this->focusedIndex = 0;
+                // Set up display window to show "1,2,3" pattern for many messages
+                if (this->messagesCount <= 3) {
+                    this->currentMessageIndex = 0; // For few messages, first message in middle
+                } else {
+                    this->currentMessageIndex = 1; // For many messages, show "1,2,3" pattern
+                }
+                LOG_DEBUG("DOWN from To: field - focusedIndex: %d, currentMessageIndex: %d", this->focusedIndex, this->currentMessageIndex);
+            } else {
+                // Calculate current cursor position in the 3-line window
+                int prevIndex = this->getPrevIndex();
+                int nextIndex = this->getNextIndex();
+                int cursorLine = -1; // 1=top, 2=middle, 3=bottom
+                
+                if (this->focusedIndex == prevIndex) {
+                    cursorLine = 1; // Cursor is in top line
+                } else if (this->focusedIndex == this->currentMessageIndex) {
+                    cursorLine = 2; // Cursor is in middle line
+                } else if (this->focusedIndex == nextIndex) {
+                    cursorLine = 3; // Cursor is in bottom line
+                }
+                
+                // Move to next message
+                this->focusedIndex++;
+                if (this->focusedIndex >= this->messagesCount) {
+                    // Wrap around to first message
+                    this->focusedIndex = 0;
+                    // For wrap-around, show first message in middle line with proper window
+                    if (this->messagesCount <= 3) {
+                        this->currentMessageIndex = 0;
+                    } else {
+                        // For many messages, show "1,2,3" pattern (indices 0,1,2)
+                        // Set currentMessageIndex to 1 so getPrevMessage()=0, getCurrentMessage()=1, getNextMessage()=2
+                        this->currentMessageIndex = 1;
+                    }
+                } else {
+                    // Smart positioning based on remaining messages and cursor position
+                    if (this->messagesCount <= 3) {
+                        // Few messages: keep stable positioning
+                        if (this->messagesCount == 1) {
+                            this->currentMessageIndex = 0;
+                        } else if (this->messagesCount == 2) {
+                            this->currentMessageIndex = 0; // Show 0,1,0 pattern
+                        } else {
+                            this->currentMessageIndex = 1; // Show 0,1,2 pattern
+                        }
+                    } else {
+                        // Many messages: smart scrolling based on remaining messages
+                        int remainingMessages = this->messagesCount - this->focusedIndex;
+                        
+                        if (remainingMessages >= 3) {
+                            // Still have 3+ messages remaining (including current)
+                            // Keep cursor in middle line (line 2) by scrolling
+                            if (cursorLine == 1) {
+                                // Cursor was in top line, move to middle line (no scroll)
+                                // currentMessageIndex stays the same
+                            } else if (cursorLine == 2) {
+                                // Cursor was in middle line, scroll down to keep in middle
+                                this->currentMessageIndex = this->focusedIndex;
+                            } else if (cursorLine == 3) {
+                                // Cursor was in bottom line, scroll down to move to middle
+                                this->currentMessageIndex = this->focusedIndex;
+                            }
+                        } else if (remainingMessages == 2) {
+                            // Only 2 messages remaining (current + 1 more)
+                            // Move cursor to bottom line, showing last 3 messages
+                            this->currentMessageIndex = this->messagesCount - 2; // Show (n-2, n-1, n)
+                        } else {
+                            // This is the last message
+                            // Keep cursor in bottom line, showing last 3 messages
+                            this->currentMessageIndex = this->messagesCount - 2; // Show (n-2, n-1, n)
+                        }
+                    }
+                }
+            }
+            
             this->freetext = ""; // clear freetext
             this->cursor = 0;
 
@@ -539,7 +795,7 @@ int32_t CannedMessageModule::runOnce()
 #endif
 
             this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
-            LOG_DEBUG("MOVE DOWN (%d):%s", this->currentMessageIndex, this->getCurrentMessage());
+            LOG_DEBUG("MOVE DOWN - focusedIndex: %d, currentMessageIndex: %d", this->focusedIndex, this->currentMessageIndex);
             
             requestFocus();
             e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
@@ -548,6 +804,55 @@ int32_t CannedMessageModule::runOnce()
             this->lastTouchMillis = millis();
             return 100;
         }
+    } else if (this->runState == CANNED_MESSAGE_RUN_STATE_NODE_SELECT) {
+        // Handle node selection mode with left/right navigation
+        switch (this->payload) {
+        case INPUT_BROKER_MSG_LEFT:
+            // Navigate to previous node
+            {
+                size_t numMeshNodes = nodeDB->getNumMeshNodes();
+                if (this->dest == NODENUM_BROADCAST) {
+                    this->dest = nodeDB->getNodeNum();
+                }
+                for (unsigned int i = 0; i < numMeshNodes; i++) {
+                    if (nodeDB->getMeshNodeByIndex(i)->num == this->dest) {
+                        this->dest =
+                            (i > 0) ? nodeDB->getMeshNodeByIndex(i - 1)->num : nodeDB->getMeshNodeByIndex(numMeshNodes - 1)->num;
+                        break;
+                    }
+                }
+                if (this->dest == nodeDB->getNodeNum()) {
+                    this->dest = NODENUM_BROADCAST;
+                }
+            }
+            break;
+        case INPUT_BROKER_MSG_RIGHT:
+            // Navigate to next node
+            {
+                size_t numMeshNodes = nodeDB->getNumMeshNodes();
+                if (this->dest == NODENUM_BROADCAST) {
+                    this->dest = nodeDB->getNodeNum();
+                }
+                for (unsigned int i = 0; i < numMeshNodes; i++) {
+                    if (nodeDB->getMeshNodeByIndex(i)->num == this->dest) {
+                        this->dest =
+                            (i < numMeshNodes - 1) ? nodeDB->getMeshNodeByIndex(i + 1)->num : nodeDB->getMeshNodeByIndex(0)->num;
+                        break;
+                    }
+                }
+                if (this->dest == nodeDB->getNodeNum()) {
+                    this->dest = NODENUM_BROADCAST;
+                }
+            }
+            break;
+        }
+        
+        // Request UI update and stay in node select mode
+        UIFrameEvent e;
+        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+        this->notifyObservers(&e);
+        this->lastTouchMillis = millis();
+        return INACTIVATE_AFTER_MS;
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT || this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) {
         switch (this->payload) {
         case INPUT_BROKER_MSG_LEFT:
@@ -706,19 +1011,32 @@ int32_t CannedMessageModule::runOnce()
 
 const char *CannedMessageModule::getCurrentMessage()
 {
-    return this->messages[this->currentMessageIndex];
+    static char numberedMessage[256];
+    snprintf(numberedMessage, sizeof(numberedMessage), "%d. %s", this->currentMessageIndex + 1, this->messages[this->currentMessageIndex]);
+    return numberedMessage;
 }
 const char *CannedMessageModule::getPrevMessage()
 {
-    return this->messages[this->getPrevIndex()];
+    int prevIndex = this->getPrevIndex();
+    static char numberedMessage[256];
+    snprintf(numberedMessage, sizeof(numberedMessage), "%d. %s", prevIndex + 1, this->messages[prevIndex]);
+    return numberedMessage;
 }
 const char *CannedMessageModule::getNextMessage()
 {
-    return this->messages[this->getNextIndex()];
+    int nextIndex = this->getNextIndex();
+    static char numberedMessage[256];
+    snprintf(numberedMessage, sizeof(numberedMessage), "%d. %s", nextIndex + 1, this->messages[nextIndex]);
+    return numberedMessage;
 }
 const char *CannedMessageModule::getMessageByIndex(int index)
 {
-    return (index >= 0 && index < this->messagesCount) ? this->messages[index] : "";
+    if (index >= 0 && index < this->messagesCount) {
+        static char numberedMessage[256];
+        snprintf(numberedMessage, sizeof(numberedMessage), "%d. %s", index + 1, this->messages[index]);
+        return numberedMessage;
+    }
+    return "";
 }
 
 const char *CannedMessageModule::getNodeName(NodeNum node)
@@ -1125,35 +1443,121 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         if (this->messagesCount > 0) {
             display->setTextAlignment(TEXT_ALIGN_LEFT);
             display->setFont(FONT_SMALL);
-            display->drawStringf(0 + x, 0 + y, buffer, "To: %s", cannedMessageModule->getNodeName(this->dest));
-            int lines = (display->getHeight() / FONT_HEIGHT_SMALL) - 1;
-            if (lines == 3) {
-                display->fillRect(0 + x, 0 + y + FONT_HEIGHT_SMALL * 2, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
-                display->setColor(BLACK);
-                display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * 2, cannedMessageModule->getCurrentMessage());
-                display->setColor(WHITE);
-                if (this->messagesCount > 1) {
-                    display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL, cannedMessageModule->getPrevMessage());
-                    display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * 3, cannedMessageModule->getNextMessage());
+            
+            // Draw "To:" field with focus highlighting and node selection mode
+            if (this->focusedIndex == -1) {
+                // "To:" field is focused - highlight it
+                if (this->isInNodeSelectMode) {
+                    // In node selection mode - show without "To:", with < on left, > on right, and centered node name
+                    display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
+                    display->setColor(BLACK);
+                    
+                    const char *nodeName = cannedMessageModule->getNodeName(this->dest);
+                    
+                    // Draw < on the left
+                    display->drawString(0 + x, 0 + y, "<");
+                    
+                    // Draw > on the right
+                    int rightBracketX = display->getWidth() - display->getStringWidth(">") + x;
+                    display->drawString(rightBracketX, 0 + y, ">");
+                    
+                    // Calculate available space between brackets for node name
+                    int leftBracketWidth = display->getStringWidth("<");
+                    int rightBracketWidth = display->getStringWidth(">");
+                    int availableWidth = display->getWidth() - leftBracketWidth - rightBracketWidth - 4; // 4 pixels margin
+                    
+                    // Center the node name between brackets
+                    String displayName = String(nodeName);
+                    if (display->getStringWidth(nodeName) > availableWidth) {
+                        // Truncate with ellipsis if too long
+                        int ellipsisWidth = display->getStringWidth("...");
+                        int maxNameWidth = availableWidth - ellipsisWidth;
+                        
+                        while (displayName.length() > 0 && display->getStringWidth(displayName.c_str()) > maxNameWidth) {
+                            displayName = displayName.substring(0, displayName.length() - 1);
+                        }
+                        displayName += "...";
+                    }
+                    
+                    // Center the name between the brackets
+                    int nameWidth = display->getStringWidth(displayName.c_str());
+                    int nameX = leftBracketWidth + 2 + (availableWidth - nameWidth) / 2 + x;
+                    display->drawString(nameX, 0 + y, displayName);
+                    
+                    display->setColor(WHITE);
+                } else {
+                    // Focused but not in selection mode - simple highlight
+                    display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
+                    display->setColor(BLACK);
+                    display->drawStringf(0 + x, 0 + y, buffer, "To: %s", cannedMessageModule->getNodeName(this->dest));
+                    display->setColor(WHITE);
                 }
             } else {
-                int topMsg = (messagesCount > lines && currentMessageIndex >= lines - 1) ? currentMessageIndex - lines + 2 : 0;
-                for (int i = 0; i < std::min(messagesCount, lines); i++) {
-                    if (i == currentMessageIndex - topMsg) {
-#ifdef USE_EINK
-                        display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * (i + 1), ">");
-                        display->drawString(12 + x, 0 + y + FONT_HEIGHT_SMALL * (i + 1),
-                                            cannedMessageModule->getCurrentMessage());
-#else
-                        display->fillRect(0 + x, 0 + y + FONT_HEIGHT_SMALL * (i + 1), x + display->getWidth(),
-                                          y + FONT_HEIGHT_SMALL);
+                // "To:" field is not focused - normal display
+                display->drawStringf(0 + x, 0 + y, buffer, "To: %s", cannedMessageModule->getNodeName(this->dest));
+            }
+            int lines = (display->getHeight() / FONT_HEIGHT_SMALL) - 1;
+            if (lines == 3) {
+                // Simple 3-line display with focus highlighting
+                // The focused message should be highlighted regardless of whether it matches currentMessageIndex
+                if (this->focusedIndex == this->currentMessageIndex) {
+                    // Current message is focused - highlight it
+                    display->fillRect(0 + x, 0 + y + FONT_HEIGHT_SMALL * 2, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
+                    display->setColor(BLACK);
+                }
+                display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * 2, cannedMessageModule->getCurrentMessage());
+                if (this->focusedIndex == this->currentMessageIndex) {
+                    display->setColor(WHITE);
+                }
+                
+                if (this->messagesCount > 1) {
+                    // Check if previous message should be highlighted
+                    int prevIndex = this->getPrevIndex();
+                    if (this->focusedIndex == prevIndex) {
+                        display->fillRect(0 + x, 0 + y + FONT_HEIGHT_SMALL, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
                         display->setColor(BLACK);
-                        display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * (i + 1), cannedMessageModule->getCurrentMessage());
+                    }
+                    display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL, cannedMessageModule->getPrevMessage());
+                    if (this->focusedIndex == prevIndex) {
                         display->setColor(WHITE);
+                    }
+                    // Check if next message should be highlighted
+                    int nextIndex = this->getNextIndex();
+                    if (this->focusedIndex == nextIndex) {
+                        display->fillRect(0 + x, 0 + y + FONT_HEIGHT_SMALL * 3, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
+                        display->setColor(BLACK);
+                    }
+                    display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * 3, cannedMessageModule->getNextMessage());
+                    if (this->focusedIndex == nextIndex) {
+                        display->setColor(WHITE);
+                    }
+                }
+            } else {
+                // Multi-line display with proper focus highlighting
+                int topMsg = (messagesCount > lines && focusedIndex >= lines - 1) ? focusedIndex - lines + 2 : 0;
+                for (int i = 0; i < std::min(messagesCount, lines); i++) {
+                    int msgIndex = topMsg + i;
+                    if (msgIndex < messagesCount) {
+                        bool isFocused = (this->focusedIndex == msgIndex);
+                        
+                        if (isFocused) {
+#ifdef USE_EINK
+                            display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * (i + 1), ">");
+                            display->drawString(12 + x, 0 + y + FONT_HEIGHT_SMALL * (i + 1),
+                                                cannedMessageModule->getMessageByIndex(msgIndex));
+#else
+                            display->fillRect(0 + x, 0 + y + FONT_HEIGHT_SMALL * (i + 1), x + display->getWidth(),
+                                              y + FONT_HEIGHT_SMALL);
+                            display->setColor(BLACK);
+                            display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * (i + 1), 
+                                            cannedMessageModule->getMessageByIndex(msgIndex));
+                            display->setColor(WHITE);
 #endif
-                    } else if (messagesCount > 1) { // Only draw others if there are multiple messages
-                        display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * (i + 1),
-                                            cannedMessageModule->getMessageByIndex(topMsg + i));
+                        } else {
+                            // Not focused - normal display
+                            display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * (i + 1),
+                                            cannedMessageModule->getMessageByIndex(msgIndex));
+                        }
                     }
                 }
             }

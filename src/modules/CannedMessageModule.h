@@ -14,6 +14,7 @@ enum cannedMessageModuleRunState {
     CANNED_MESSAGE_RUN_STATE_ACTION_SELECT,
     CANNED_MESSAGE_RUN_STATE_ACTION_UP,
     CANNED_MESSAGE_RUN_STATE_ACTION_DOWN,
+    CANNED_MESSAGE_RUN_STATE_NODE_SELECT,
 };
 
 enum cannedMessageDestinationType {
@@ -149,6 +150,16 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     NodeNum incoming = NODENUM_BROADCAST;
     bool ack = false;           // True means ACK, false means NAK (error_reason != NONE)
     bool waitingForAck = false; // Are currently interested in routing packets?
+    
+    // New variables for improved UI and debouncing
+    int focusedIndex = -1;      // -1 for To: field, 0+ for message index
+    bool isInNodeSelectMode = false;
+    unsigned long lastKeyPressTime = 0;
+    unsigned long lastUpKeyTime = 0;    // Separate debounce for UP key
+    unsigned long lastDownKeyTime = 0;  // Separate debounce for DOWN key
+    unsigned long lastSelectKeyTime = 0; // Separate debounce for SELECT key
+    static const unsigned long DEBOUNCE_DELAY_MS = 150;
+    static const unsigned long UP_DOWN_DEBOUNCE_MS = 250;  // Longer debounce for UP/DOWN to prevent double triggers
     float lastRxSnr = 0;
     int32_t lastRxRssi = 0;
 
