@@ -883,6 +883,7 @@ void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
 void Screen::setFrames(FrameFocus focus)
 {
     uint8_t originalPosition = ui->getUiState()->currentFrame;
+    uint8_t previousFrameCount = framesetInfo.frameCount;
     FramesetInfo fsi; // Location of specific frames, for applying focus parameter
 
     LOG_DEBUG("Show standard frames");
@@ -1042,11 +1043,14 @@ void Screen::setFrames(FrameFocus focus)
         break;
 
     case FOCUS_PRESERVE:
-        // No more adjustment — force stay on same index
-        if (originalPosition < fsi.frameCount)
+        //  No more adjustment — force stay on same index
+        if (previousFrameCount > fsi.frameCount) {
+            ui->switchToFrame(originalPosition - 1);
+        } else if (previousFrameCount < fsi.frameCount) {
+            ui->switchToFrame(originalPosition + 1);
+        } else {
             ui->switchToFrame(originalPosition);
-        else
-            ui->switchToFrame(fsi.frameCount - 1);
+        }
         break;
     }
 
