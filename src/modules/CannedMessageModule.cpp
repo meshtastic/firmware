@@ -520,6 +520,13 @@ int32_t CannedMessageModule::runOnce()
 
             this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
             LOG_DEBUG("MOVE UP (%d):%s", this->currentMessageIndex, this->getCurrentMessage());
+            
+            requestFocus();
+            e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+            this->notifyObservers(&e);
+            
+            this->lastTouchMillis = millis();
+            return 100;
         }
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_DOWN) {
         if (this->messagesCount > 0) {
@@ -533,6 +540,13 @@ int32_t CannedMessageModule::runOnce()
 
             this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
             LOG_DEBUG("MOVE DOWN (%d):%s", this->currentMessageIndex, this->getCurrentMessage());
+            
+            requestFocus();
+            e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+            this->notifyObservers(&e);
+            
+            this->lastTouchMillis = millis();
+            return 100;
         }
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT || this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) {
         switch (this->payload) {
