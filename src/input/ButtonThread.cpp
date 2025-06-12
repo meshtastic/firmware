@@ -29,16 +29,18 @@ ButtonThread::ButtonThread(const char *name) : OSThread(name)
 
 bool ButtonThread::initButton(uint8_t pinNumber, bool activeLow, bool activePullup, uint32_t pullupSense, voidFuncPtr intRoutine,
                               input_broker_event singlePress, input_broker_event longPress, uint16_t longPressTime,
-                              input_broker_event doublePress, input_broker_event triplePress, input_broker_event shortLong,
+                              input_broker_event doublePress, input_broker_event longLongPress, uint16_t longLongPressTime, input_broker_event triplePress, input_broker_event shortLong,
                               bool touchQuirk)
 {
     if (inputBroker)
         inputBroker->registerSource(this);
     _longPressTime = longPressTime;
+    _longLongPressTime = longLongPressTime;
     _pinNum = pinNumber;
     _activeLow = activeLow;
     _touchQuirk = touchQuirk;
     _intRoutine = intRoutine;
+    _longLongPress = longLongPress;
 
     userButton = OneButton(pinNumber, activeLow, activePullup);
 
@@ -141,7 +143,7 @@ int32_t ButtonThread::runOnce()
 
     // Progressive lead-up sound system
     if (buttonCurrentlyPressed && (millis() - buttonPressStartTime) >= BUTTON_LEADUP_MS &&
-        (millis() - buttonPressStartTime) < _longPressTime) {
+        (millis() - buttonPressStartTime) < _longLongPressTime) {
 
         // Start the progressive sequence if not already active
         if (!leadUpSequenceActive) {
@@ -274,6 +276,10 @@ int32_t ButtonThread::runOnce()
         case BUTTON_EVENT_LONG_RELEASED: {
 
             LOG_INFO("LONG PRESS RELEASE");
+            if (_longLongPress != INPUT_BROKER_NONE && (millis() - buttonPressStartTime) >= _longLongPressTime) {
+                evt.inputEvent = _longLongPress;
+                this->notifyObservers(&evt);
+            }
             // Reset combination tracking
             waitingForLongPress = false;
 
