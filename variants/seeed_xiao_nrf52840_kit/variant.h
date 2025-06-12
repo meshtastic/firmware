@@ -143,19 +143,6 @@ static const uint8_t MISO = PIN_SPI_MISO;
 static const uint8_t SCK = PIN_SPI_SCK;
 
 /*
- * Wire Interfaces
- */
-#define I2C_NO_RESCAN           // I2C is a bit finicky, don't scan too much
-#define WIRE_INTERFACES_COUNT 1 // 2
-
-// LSM6DS3TR on XIAO nRF52840 Series
-#define PIN_WIRE_SDA (17)
-#define PIN_WIRE_SCL (16)
-
-static const uint8_t SDA = PIN_WIRE_SDA;
-static const uint8_t SCL = PIN_WIRE_SCL;
-
-/*
  * GPS
  */
 // GPS L76K
@@ -186,8 +173,28 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 #define BATTERY_SENSE_RESOLUTION_BITS (10)
 
 /*
+ * Wire Interfaces
+ * Keep this section after potentially conflicting pin definitions
+ */
+#define I2C_NO_RESCAN // I2C is a bit finicky, don't scan too much
+#define WIRE_INTERFACES_COUNT 1
+
+#if !defined(XIAO_BLE_LEGACY_PINOUT) && !defined(GPS_L76K)
+// If D6 and D7 are free, I2C is probably the most versatile assignment
+#define PIN_WIRE_SDA D6
+#define PIN_WIRE_SCL D7
+#else
+// Internal LSM6DS3TR on XIAO nRF52840 Series
+#define PIN_WIRE_SDA (17)
+#define PIN_WIRE_SCL (16)
+#endif
+
+static const uint8_t SDA = PIN_WIRE_SDA;
+static const uint8_t SCL = PIN_WIRE_SCL;
+
+/*
  * Buttons
- * User button definition must be at the end of the file with definition checks
+ * Keep this section after potentially conflicting pin definitions
  * because D0 has multiple possible conflicts with various XIAO modules:
  * - PIN_GPS_STANDBY on the L76K GNSS Module
  * - DIO1 on the Wio-SX1262 - 30-pin board-to-board connector version
