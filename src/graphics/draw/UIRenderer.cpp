@@ -5,6 +5,7 @@
 #include "NodeDB.h"
 #include "NodeListRenderer.h"
 #include "UIRenderer.h"
+#include "airtime.h"
 #include "configuration.h"
 #include "gps/GeoCoord.h"
 #include "graphics/Screen.h"
@@ -578,15 +579,81 @@ void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t 
 
     config.display.heading_bold = origBold;
 
-    // === Third Row: Bluetooth Off (Only If Actually Off) ===
+    // === Third Row: Channel Utilization Bluetooth Off (Only If Actually Off) ===
+    const char *chUtil = "ChUtil:";
+    char chUtilPercentage[10];
+    snprintf(chUtilPercentage, sizeof(chUtilPercentage), "%2.0f%%", airTime->channelUtilizationPercent());
+
+    int chUtil_x = (SCREEN_WIDTH > 128) ? display->getStringWidth(chUtil) + 10 : display->getStringWidth(chUtil) + 5;
+    int chUtil_y = textPositions[line] + 3;
+
+    int chutil_bar_width = (SCREEN_WIDTH > 128) ? 100 : 50;
     if (!config.bluetooth.enabled) {
-        display->drawString(0, textPositions[line++], "BT off");
+        chutil_bar_width = (SCREEN_WIDTH > 128) ? 80 : 40;
+    }
+    int chutil_bar_height = (SCREEN_WIDTH > 128) ? 12 : 7;
+    int extraoffset = (SCREEN_WIDTH > 128) ? 6 : 3;
+    if (!config.bluetooth.enabled) {
+        extraoffset = (SCREEN_WIDTH > 128) ? 6 : 1;
+    }
+    int chutil_percent = airTime->channelUtilizationPercent();
+
+    int centerofscreen = SCREEN_WIDTH / 2;
+    int total_line_content_width = (chUtil_x + chutil_bar_width + display->getStringWidth(chUtilPercentage) + extraoffset) / 2;
+    int starting_position = centerofscreen - total_line_content_width;
+    if (!config.bluetooth.enabled) {
+        starting_position = 0;
     }
 
-    // === Third & Fourth Rows: Node Identity ===
+    display->drawString(starting_position, textPositions[line], chUtil);
+
+    // Force 56% or higher to show a full 100% bar, text would still show related percent.
+    if (chutil_percent >= 61) {
+        chutil_percent = 100;
+    }
+
+    // Weighting for nonlinear segments
+    float milestone1 = 25;
+    float milestone2 = 40;
+    float weight1 = 0.45; // Weight for 0–25%
+    float weight2 = 0.35; // Weight for 25–40%
+    float weight3 = 0.20; // Weight for 40–100%
+    float totalWeight = weight1 + weight2 + weight3;
+
+    int seg1 = chutil_bar_width * (weight1 / totalWeight);
+    int seg2 = chutil_bar_width * (weight2 / totalWeight);
+    int seg3 = chutil_bar_width * (weight3 / totalWeight);
+
+    int fillRight = 0;
+
+    if (chutil_percent <= milestone1) {
+        fillRight = (seg1 * (chutil_percent / milestone1));
+    } else if (chutil_percent <= milestone2) {
+        fillRight = seg1 + (seg2 * ((chutil_percent - milestone1) / (milestone2 - milestone1)));
+    } else {
+        fillRight = seg1 + seg2 + (seg3 * ((chutil_percent - milestone2) / (100 - milestone2)));
+    }
+
+    // Draw outline
+    display->drawRect(starting_position + chUtil_x, chUtil_y, chutil_bar_width, chutil_bar_height);
+
+    // Fill progress
+    if (fillRight > 0) {
+        display->fillRect(starting_position + chUtil_x, chUtil_y, fillRight, chutil_bar_height);
+    }
+
+    display->drawString(starting_position + chUtil_x + chutil_bar_width + extraoffset, textPositions[line], chUtilPercentage);
+
+    if (!config.bluetooth.enabled) {
+        display->drawString(SCREEN_WIDTH - display->getStringWidth("BT off"), textPositions[line], "BT off");
+    }
+
+    line += 1;
+
+    // === Fourth & Fifth Rows: Node Identity ===
     int textWidth = 0;
     int nameX = 0;
-    int yOffset = (SCREEN_WIDTH > 128) ? 0 : 7;
+    int yOffset = (SCREEN_WIDTH > 128) ? 0 : 5;
     const char *longName = nullptr;
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     if (ourNode && ourNode->has_user && strlen(ourNode->user.long_name) > 0) {
@@ -613,13 +680,12 @@ void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t 
         // === LongName Centered ===
         textWidth = display->getStringWidth(longName);
         nameX = (SCREEN_WIDTH - textWidth) / 2;
-        yOffset = (rows == 4 && SCREEN_WIDTH <= 128) ? 7 : 0;
-        display->drawString(nameX, textPositions[line++] + yOffset, longName);
+        display->drawString(nameX, textPositions[line++], longName);
 
         // === ShortName Centered ===
         textWidth = display->getStringWidth(shortnameble);
         nameX = (SCREEN_WIDTH - textWidth) / 2;
-        display->drawString(nameX, textPositions[line++] + yOffset, shortnameble);
+        display->drawString(nameX, textPositions[line++], shortnameble);
     }
 }
 
