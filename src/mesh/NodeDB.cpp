@@ -278,7 +278,6 @@ NodeDB::NodeDB()
             config.security.private_key.size = 32;
             owner.public_key.size = 32;
             memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
-            keyIsLowEntropy = checkLowEntropyPublicKey(owner.public_key);
         }
     }
 #elif !(MESHTASTIC_EXCLUDE_PKI)
@@ -287,11 +286,17 @@ NodeDB::NodeDB()
         owner.public_key.size = config.security.public_key.size;
         memcpy(owner.public_key.bytes, config.security.public_key.bytes, config.security.public_key.size);
         crypto->setDHPrivateKey(config.security.private_key.bytes);
-        keyIsLowEntropy = checkLowEntropyPublicKey(owner.public_key);
     }
 #endif
+    keyIsLowEntropy = checkLowEntropyPublicKey(config.security.public_key);
     if (keyIsLowEntropy) {
-        LOG_WARN(LOW_ENTROPY_WARNING);
+        LOG_WARN("Erasing low entropy keys");
+        config.security.private_key.size = 0;
+        memfll(config.security.private_key.bytes, '\0', sizeof(config.security.private_key.bytes));
+        config.security.public_key.size = 0;
+        memfll(config.security.public_key.bytes, '\0', sizeof(config.security.public_key.bytes));
+        owner.public_key.size = 0;
+        memfll(owner.public_key.bytes, '\0', sizeof(owner.public_key.bytes));
     }
     // Include our owner in the node db under our nodenum
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
@@ -1575,6 +1580,7 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
                              "to regenerate your public keys.";
             LOG_WARN(warning, p.long_name);
             meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+            cn->which_payload_variant = meshtastic_ClientNotification_duplicated_public_key_tag;
             cn->level = meshtastic_LogRecord_Level_WARNING;
             cn->time = getValidTime(RTCQualityFromNet);
             sprintf(cn->message, warning, p.long_name);
@@ -1753,28 +1759,30 @@ UserLicenseStatus NodeDB::getLicenseStatus(uint32_t nodeNum)
     return info->user.is_licensed ? UserLicenseStatus::Licensed : UserLicenseStatus::NotLicensed;
 }
 
-bool NodeDB::checkLowEntropyPublicKey(const meshtastic_User_public_key_t keyToTest)
+bool NodeDB::checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_public_key_t keyToTest)
 {
-    uint8_t keyHash[32] = {0};
-    memcpy(keyHash, keyToTest.bytes, keyToTest.size);
-    crypto->hash(keyHash, 32);
-    if (memcmp(keyHash, LOW_ENTROPY_HASH1, sizeof(LOW_ENTROPY_HASH1)) == 0 ||
-        memcmp(keyHash, LOW_ENTROPY_HASH2, sizeof(LOW_ENTROPY_HASH2)) == 0 ||
-        memcmp(keyHash, LOW_ENTROPY_HASH3, sizeof(LOW_ENTROPY_HASH3)) == 0 ||
-        memcmp(keyHash, LOW_ENTROPY_HASH4, sizeof(LOW_ENTROPY_HASH4)) == 0 ||
-        memcmp(keyHash, LOW_ENTROPY_HASH5, sizeof(LOW_ENTROPY_HASH5)) == 0 ||
-        memcmp(keyHash, LOW_ENTROPY_HASH6, sizeof(LOW_ENTROPY_HASH6)) == 0 ||
-        memcmp(keyHash, LOW_ENTROPY_HASH7, sizeof(LOW_ENTROPY_HASH7)) == 0 ||
-        memcmp(keyHash, LOW_ENTROPY_HASH8, sizeof(LOW_ENTROPY_HASH8)) == 0 ||
-        memcmp(keyHash, LOW_ENTROPY_HASH9, sizeof(LOW_ENTROPY_HASH9)) == 0 ||
-        memcmp(keyHash, LOW_ENTROPY_HASH10, sizeof(LOW_ENTROPY_HASH10)) == 0 ||
-        memcmp(keyHash, LOW_ENTROPY_HASH11, sizeof(LOW_ENTROPY_HASH11)) == 0 ||
-        memcmp(keyHash, LOW_ENTROPY_HASH12, sizeof(LOW_ENTROPY_HASH12)) == 0 ||
-        memcmp(keyHash, LOW_ENTROPY_HASH13, sizeof(LOW_ENTROPY_HASH13)) == 0) {
-        return true;
-    } else {
-        return false;
+    if (keyToTest.size == 32) {
+        uint8_t keyHash[32] = {0};
+        memcpy(keyHash, keyToTest.bytes, keyToTest.size);
+        crypto->hash(keyHash, 32);
+        if (memcmp(keyHash, LOW_ENTROPY_HASH1, sizeof(LOW_ENTROPY_HASH1)) == 0 ||
+            memcmp(keyHash, LOW_ENTROPY_HASH2, sizeof(LOW_ENTROPY_HASH2)) == 0 ||
+            memcmp(keyHash, LOW_ENTROPY_HASH3, sizeof(LOW_ENTROPY_HASH3)) == 0 ||
+            memcmp(keyHash, LOW_ENTROPY_HASH4, sizeof(LOW_ENTROPY_HASH4)) == 0 ||
+            memcmp(keyHash, LOW_ENTROPY_HASH5, sizeof(LOW_ENTROPY_HASH5)) == 0 ||
+            memcmp(keyHash, LOW_ENTROPY_HASH6, sizeof(LOW_ENTROPY_HASH6)) == 0 ||
+            memcmp(keyHash, LOW_ENTROPY_HASH7, sizeof(LOW_ENTROPY_HASH7)) == 0 ||
+            memcmp(keyHash, LOW_ENTROPY_HASH8, sizeof(LOW_ENTROPY_HASH8)) == 0 ||
+            memcmp(keyHash, LOW_ENTROPY_HASH9, sizeof(LOW_ENTROPY_HASH9)) == 0 ||
+            memcmp(keyHash, LOW_ENTROPY_HASH10, sizeof(LOW_ENTROPY_HASH10)) == 0 ||
+            memcmp(keyHash, LOW_ENTROPY_HASH11, sizeof(LOW_ENTROPY_HASH11)) == 0 ||
+            memcmp(keyHash, LOW_ENTROPY_HASH12, sizeof(LOW_ENTROPY_HASH12)) == 0 ||
+            memcmp(keyHash, LOW_ENTROPY_HASH13, sizeof(LOW_ENTROPY_HASH13)) == 0 ||
+            memcmp(keyHash, LOW_ENTROPY_HASH14, sizeof(LOW_ENTROPY_HASH14)) == 0) {
+            return true;
+        }
     }
+    return false;
 }
 
 bool NodeDB::backupPreferences(meshtastic_AdminMessage_BackupLocation location)
