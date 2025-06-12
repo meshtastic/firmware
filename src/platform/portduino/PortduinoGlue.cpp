@@ -175,6 +175,11 @@ void portduinoSetup()
     settingsMap[ascii_logs] = !isatty(1);
     settingsMap[displayPanel] = no_screen;
     settingsMap[touchscreenModule] = no_touchscreen;
+    settingsMap[tbUpPin] = RADIOLIB_NC;
+    settingsMap[tbDownPin] = RADIOLIB_NC;
+    settingsMap[tbLeftPin] = RADIOLIB_NC;
+    settingsMap[tbRightPin] = RADIOLIB_NC;
+    settingsMap[tbPressPin] = RADIOLIB_NC;
 
     YAML::Node yamlConfig;
 
