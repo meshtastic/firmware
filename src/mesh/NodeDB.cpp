@@ -296,8 +296,8 @@ NodeDB::NodeDB()
         memfll(config.security.private_key.bytes, '\0', sizeof(config.security.private_key.bytes));
         config.security.public_key.size = 0;
         memfll(config.security.public_key.bytes, '\0', sizeof(config.security.public_key.bytes));
-        service->reloadConfig(SEGMENT_CONFIG);
-        rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+        owner.public_key.size = 0;
+        memfll(owner.public_key.bytes, '\0', sizeof(owner.public_key.bytes));
     }
     // Include our owner in the node db under our nodenum
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());

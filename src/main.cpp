@@ -928,6 +928,11 @@ void setup()
     service = new MeshService();
     service->init();
 
+    if (nodeDB->keyIsLowEntropy) {
+        service->reloadConfig(SEGMENT_CONFIG);
+        rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+    }
+
     // Now that the mesh service is created, create any modules
     setupModules();
 
