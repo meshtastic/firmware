@@ -996,7 +996,7 @@ void setup()
                 BaseType_t higherWake = 0;
                 mainDelay.interruptFromISR(&higherWake);
             },
-            INPUT_BROKER_USER_PRESS, INPUT_BROKER_SELECT, INPUT_BROKER_SHUTDOWN);
+            INPUT_BROKER_USER_PRESS, INPUT_BROKER_SELECT, 500, INPUT_BROKER_NONE, INPUT_BROKER_SHUTDOWN);
     else
         UserButtonThread->initButton(
             _pinNum, BUTTON_ACTIVE_LOW, BUTTON_ACTIVE_PULLUP, pullup_sense,
