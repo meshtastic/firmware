@@ -92,32 +92,55 @@ static const uint8_t A5 = PIN_A5;
 #define PIN_SERIAL2_TX (-1)
 
 /*
- * SPI Interfaces
+ * Pinout for SX126x
  */
-#define SPI_INTERFACES_COUNT 1
-
-#define PIN_SPI_MISO (9)
-#define PIN_SPI_MOSI (10)
-#define PIN_SPI_SCK (8)
-
-static const uint8_t SS = D4;
-static const uint8_t MOSI = PIN_SPI_MOSI;
-static const uint8_t MISO = PIN_SPI_MISO;
-static const uint8_t SCK = PIN_SPI_SCK;
-
 #define USE_SX1262
 
-// Pinout for SX126X
+#ifdef XIAO_BLE_LEGACY_PINOUT
+// Legacy xiao_ble variant pinout for third-party SX126x modules e.g. EBYTE E22
+#define SX126X_CS D0
+#define SX126X_DIO1 D1
+#define SX126X_BUSY D2
+#define SX126X_RESET D3
+#define SX126X_RXEN D7
+
+#elif defined(SEEED_XIAO_WIO_BTB)
+// Wio-SX1262 for XIAO with 30-pin board-to-board connector
+// https://files.seeedstudio.com/products/SenseCAP/Wio_SX1262/Schematic_Diagram_Wio-SX1262_for_XIAO.pdf
+#define SX126X_CS D3
+#define SX126X_DIO1 D0
+#define SX126X_BUSY D1
+#define SX126X_RESET D2
+#define SX126X_RXEN D4
+#else
+// Wio-SX1262 for XIAO (standalone SKU 113010003 or nRF52840 kit SKU 102010710)
+// https://files.seeedstudio.com/products/SenseCAP/Wio_SX1262/Wio-SX1262%20for%20XIAO%20V1.0_SCH.pdf
 #define SX126X_CS D4
 #define SX126X_DIO1 D1
 #define SX126X_BUSY D3
 #define SX126X_RESET D2
+#define SX126X_RXEN D5
+#endif
 
+// Common pinouts for all SX126x pinouts above
 #define SX126X_TXEN RADIOLIB_NC
-
-#define SX126X_RXEN D5           // This is used to control the RX side of the RF switch
 #define SX126X_DIO2_AS_RF_SWITCH // DIO2 is used to control the TX side of the RF switch
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
+
+/*
+ * SPI Interfaces
+ * Defined after pinout for SX1262x to factor in CS pinout variations
+ */
+#define SPI_INTERFACES_COUNT 1
+
+#define PIN_SPI_MISO D9
+#define PIN_SPI_MOSI D10
+#define PIN_SPI_SCK D8
+
+static const uint8_t SS = SX126X_CS;
+static const uint8_t MOSI = PIN_SPI_MOSI;
+static const uint8_t MISO = PIN_SPI_MISO;
+static const uint8_t SCK = PIN_SPI_SCK;
 
 /*
  * Wire Interfaces
