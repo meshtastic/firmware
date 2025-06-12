@@ -1775,7 +1775,8 @@ bool NodeDB::checkLowEntropyPublicKey(const meshtastic_User_public_key_t keyToTe
         memcmp(keyHash, LOW_ENTROPY_HASH10, sizeof(LOW_ENTROPY_HASH10)) == 0 ||
         memcmp(keyHash, LOW_ENTROPY_HASH11, sizeof(LOW_ENTROPY_HASH11)) == 0 ||
         memcmp(keyHash, LOW_ENTROPY_HASH12, sizeof(LOW_ENTROPY_HASH12)) == 0 ||
-        memcmp(keyHash, LOW_ENTROPY_HASH13, sizeof(LOW_ENTROPY_HASH13)) == 0) {
+        memcmp(keyHash, LOW_ENTROPY_HASH13, sizeof(LOW_ENTROPY_HASH13)) == 0 ||
+        memcmp(keyHash, LOW_ENTROPY_HASH14, sizeof(LOW_ENTROPY_HASH14)) == 0) {
         return true;
     } else {
         return false;
