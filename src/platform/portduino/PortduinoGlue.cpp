@@ -143,10 +143,26 @@ void portduinoSetup()
 {
     printf("Set up Meshtastic on Portduino...\n");
     int max_GPIO = 0;
-    const configNames GPIO_lines[] = {
-        cs_pin,        irq_pin,        busy_pin,  reset_pin,        sx126x_ant_sw_pin,          txen_pin,
-        rxen_pin,      displayDC,      displayCS, displayBacklight, displayBacklightPWMChannel, displayReset,
-        touchscreenCS, touchscreenIRQ, userButtonPin, tbUpPin, tbDownPin, tbLeftPin, tbRightPin, tbPressPin};
+    const configNames GPIO_lines[] = {cs_pin,
+                                      irq_pin,
+                                      busy_pin,
+                                      reset_pin,
+                                      sx126x_ant_sw_pin,
+                                      txen_pin,
+                                      rxen_pin,
+                                      displayDC,
+                                      displayCS,
+                                      displayBacklight,
+                                      displayBacklightPWMChannel,
+                                      displayReset,
+                                      touchscreenCS,
+                                      touchscreenIRQ,
+                                      userButtonPin,
+                                      tbUpPin,
+                                      tbDownPin,
+                                      tbLeftPin,
+                                      tbRightPin,
+                                      tbPressPin};
 
     std::string gpioChipName = "gpiochip";
     settingsStrings[i2cdev] = "";
@@ -620,7 +636,8 @@ bool loadConfig(const char *configPath)
             settingsMap[tbDownPin] = yamlConfig["Input"]["TrackballDown"].as<int>(RADIOLIB_NC);
             settingsMap[tbLeftPin] = yamlConfig["Input"]["TrackballLeft"].as<int>(RADIOLIB_NC);
             settingsMap[tbRightPin] = yamlConfig["Input"]["TrackballRight"].as<int>(RADIOLIB_NC);
-            settingsMap[tbPressPin] = yamlConfig["Input"]["TrackballPress"].as<int>(RADIOLIB_NC);        }
+            settingsMap[tbPressPin] = yamlConfig["Input"]["TrackballPress"].as<int>(RADIOLIB_NC);
+        }
 
         if (yamlConfig["Webserver"]) {
             settingsMap[webserverport] = (yamlConfig["Webserver"]["Port"]).as<int>(-1);

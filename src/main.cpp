@@ -916,17 +916,17 @@ void setup()
     if (settingsMap.count(userButtonPin) != 0 && settingsMap[userButtonPin] != RADIOLIB_NC) {
 
         LOG_DEBUG("Use GPIO%02d for button", settingsMap[userButtonPin]);
-            UserButtonThread = new ButtonThread("UserButton");
-    if (screen)
-        UserButtonThread->initButton(
-            settingsMap[userButtonPin], true, true, INPUT_PULLUP, // pull up bias
-            []() {
-                UserButtonThread->userButton.tick();
-                runASAP = true;
-                BaseType_t higherWake = 0;
-                mainDelay.interruptFromISR(&higherWake);
-            },
-            INPUT_BROKER_USER_PRESS, INPUT_BROKER_SELECT);
+        UserButtonThread = new ButtonThread("UserButton");
+        if (screen)
+            UserButtonThread->initButton(
+                settingsMap[userButtonPin], true, true, INPUT_PULLUP, // pull up bias
+                []() {
+                    UserButtonThread->userButton.tick();
+                    runASAP = true;
+                    BaseType_t higherWake = 0;
+                    mainDelay.interruptFromISR(&higherWake);
+                },
+                INPUT_BROKER_USER_PRESS, INPUT_BROKER_SELECT);
     }
 #endif
 

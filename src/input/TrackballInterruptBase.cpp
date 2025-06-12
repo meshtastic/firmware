@@ -21,7 +21,6 @@ void TrackballInterruptBase::init(uint8_t pinDown, uint8_t pinUp, uint8_t pinLef
     if (pinPress != 255) {
         pinMode(pinPress, INPUT_PULLUP);
         attachInterrupt(pinPress, onIntPress, RISING);
-
     }
     if (this->_pinDown != 255) {
         pinMode(this->_pinDown, INPUT_PULLUP);
