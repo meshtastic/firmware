@@ -38,7 +38,10 @@ class Screen
     void setFunctionSymbol(std::string) {}
     void removeFunctionSymbol(std::string) {}
     void startAlert(const char *) {}
-    void showOverlayBanner(String, uint32_t durationMs = 3000) {}
+    void showOverlayBanner(const char *message, uint32_t durationMs = 3000, uint8_t options = 0,
+                           std::function<void(int)> bannerCallback = NULL, int8_t InitialSelected = 0)
+    {
+    }
     void setFrames(FrameFocus focus) {}
     void endAlert() {}
 };
