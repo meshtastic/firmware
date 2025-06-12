@@ -1184,7 +1184,7 @@ bool TFTDisplay::connect()
 #elif defined(T_WATCH_S3) || defined(SENSECAP_INDICATOR)
     tft->setRotation(2); // T-Watch S3 left-handed orientation
 #elif ARCH_PORTDUINO
-    tft->setRotation(0);
+    tft->setRotation(0); // use config.yaml to set rotation
 #else
     tft->setRotation(3); // Orient horizontal and wide underneath the silkscreen name label
 #endif

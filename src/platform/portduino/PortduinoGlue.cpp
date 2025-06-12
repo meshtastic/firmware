@@ -526,11 +526,6 @@ bool loadConfig(const char *configPath)
         }
         if (yamlConfig["GPIO"]) {
             settingsMap[userButtonPin] = yamlConfig["GPIO"]["User"].as<int>(RADIOLIB_NC);
-            settingsMap[tbUpPin] = yamlConfig["GPIO"]["TrackballUp"].as<int>(RADIOLIB_NC);
-            settingsMap[tbDownPin] = yamlConfig["GPIO"]["TrackballDown"].as<int>(RADIOLIB_NC);
-            settingsMap[tbLeftPin] = yamlConfig["GPIO"]["TrackballLeft"].as<int>(RADIOLIB_NC);
-            settingsMap[tbRightPin] = yamlConfig["GPIO"]["TrackballRight"].as<int>(RADIOLIB_NC);
-            settingsMap[tbPressPin] = yamlConfig["GPIO"]["TrackballPress"].as<int>(RADIOLIB_NC);
         }
         if (yamlConfig["GPS"]) {
             std::string serialPath = yamlConfig["GPS"]["SerialPath"].as<std::string>("");
@@ -620,7 +615,12 @@ bool loadConfig(const char *configPath)
         if (yamlConfig["Input"]) {
             settingsStrings[keyboardDevice] = (yamlConfig["Input"]["KeyboardDevice"]).as<std::string>("");
             settingsStrings[pointerDevice] = (yamlConfig["Input"]["PointerDevice"]).as<std::string>("");
-        }
+            settingsMap[userButtonPin] = yamlConfig["Input"]["User"].as<int>(RADIOLIB_NC);
+            settingsMap[tbUpPin] = yamlConfig["Input"]["TrackballUp"].as<int>(RADIOLIB_NC);
+            settingsMap[tbDownPin] = yamlConfig["Input"]["TrackballDown"].as<int>(RADIOLIB_NC);
+            settingsMap[tbLeftPin] = yamlConfig["Input"]["TrackballLeft"].as<int>(RADIOLIB_NC);
+            settingsMap[tbRightPin] = yamlConfig["Input"]["TrackballRight"].as<int>(RADIOLIB_NC);
+            settingsMap[tbPressPin] = yamlConfig["Input"]["TrackballPress"].as<int>(RADIOLIB_NC);        }
 
         if (yamlConfig["Webserver"]) {
             settingsMap[webserverport] = (yamlConfig["Webserver"]["Port"]).as<int>(-1);
