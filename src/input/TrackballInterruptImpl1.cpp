@@ -6,7 +6,7 @@ TrackballInterruptImpl1 *trackballInterruptImpl1;
 
 TrackballInterruptImpl1::TrackballInterruptImpl1() : TrackballInterruptBase("trackball1") {}
 
-void TrackballInterruptImpl1::init(uint8_t pinUp, uint8_t pinDown, uint8_t pinLeft, uint8_t pinRight, uint8_t pinPress)
+void TrackballInterruptImpl1::init(uint8_t pinDown, uint8_t pinUp, uint8_t pinLeft, uint8_t pinRight, uint8_t pinPress)
 {
 #if !HAS_TRACKBALL
     // Input device is disabled.
