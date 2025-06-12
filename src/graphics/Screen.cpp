@@ -979,10 +979,10 @@ void Screen::setFrames(FrameFocus focus)
     fsi.positions.gps = numframes;
     normalFrames[numframes++] = graphics::UIRenderer::drawCompassAndLocationScreen;
     indicatorIcons.push_back(icon_compass);
-
-    normalFrames[numframes++] = graphics::DebugRenderer::drawLoRaFocused;
-    indicatorIcons.push_back(icon_radio);
-
+    if (RadioLibInterface::instance) {
+        normalFrames[numframes++] = graphics::DebugRenderer::drawLoRaFocused;
+        indicatorIcons.push_back(icon_radio);
+    }
     if (!dismissedFrames.memory) {
         fsi.positions.memory = numframes;
         normalFrames[numframes++] = graphics::DebugRenderer::drawMemoryUsage;
