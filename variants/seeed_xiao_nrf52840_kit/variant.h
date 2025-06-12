@@ -1,5 +1,5 @@
-#ifndef _SEEED_XIAO_NRF52840_SENSE_H_
-#define _SEEED_XIAO_NRF52840_SENSE_H_
+#ifndef _SEEED_XIAO_NRF52840_KIT_H_
+#define _SEEED_XIAO_NRF52840_KIT_H_
 
 /** Master clock frequency */
 #define VARIANT_MCK (64000000ul)
@@ -79,9 +79,8 @@ static const uint8_t A5 = PIN_A5;
  */
 
 /*
- *  D0 is shared with PIN_GPS_STANDBY on the L76K GNSS Module.
- *  There are some technical solutions that can solve this problem, and we are
- *  currently exploring and researching them.
+ * D0 is shared with PIN_GPS_STANDBY on the L76K GNSS Module, so refer to
+ * GPS_L76K definition preventing this conflict
  */
 
 // #define BUTTON_PIN D0
@@ -136,8 +135,7 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 /*
  * GPS
  */
-// GPS L76KB
-#define GPS_L76K
+// GPS L76K
 #ifdef GPS_L76K
 #define PIN_GPS_RX D6
 #define PIN_GPS_TX D7
@@ -146,6 +144,10 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 #define PIN_SERIAL1_RX PIN_GPS_TX
 #define PIN_SERIAL1_TX PIN_GPS_RX
 #define PIN_GPS_STANDBY D0
+#else
+#define PIN_SERIAL1_RX (-1)
+#define PIN_SERIAL1_TX (-1)
+#define BUTTON_PIN D0
 #endif
 
 /*
