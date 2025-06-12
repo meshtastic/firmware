@@ -170,7 +170,6 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 #else
 #define PIN_SERIAL1_RX (-1)
 #define PIN_SERIAL1_TX (-1)
-#define BUTTON_PIN D0
 #endif
 
 /*
@@ -185,6 +184,19 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 #define HICHG (22)                // P0.13: BQ25101 ISET 100mA instead of 50mA
 
 #define BATTERY_SENSE_RESOLUTION_BITS (10)
+
+/*
+ * Buttons
+ * User button definition must be at the end of the file with definition checks
+ * because D0 has multiple possible conflicts with various XIAO modules:
+ * - PIN_GPS_STANDBY on the L76K GNSS Module
+ * - DIO1 on the Wio-SX1262 - 30-pin board-to-board connector version
+ * - SX1262X CS on XIAO BLE legacy pinout
+ */
+
+#if !defined(GPS_L76K) && !defined(SEEED_XIAO_WIO_BTB) && !defined(XIAO_BLE_OLD_PINOUT)
+#define BUTTON_PIN D0
+#endif
 
 #ifdef __cplusplus
 }
