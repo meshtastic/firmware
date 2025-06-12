@@ -5,6 +5,7 @@
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "SPILock.h"
+#include "input/InputBroker.h"
 #include "meshUtils.h"
 #include <FSCommon.h>
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH
@@ -424,6 +425,11 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             LOG_ERROR("SD backup removal not implemented yet");
         }
 #endif
+        break;
+    }
+    case meshtastic_AdminMessage_send_input_event_tag: {
+        LOG_INFO("Client requesting to send input event");
+        handleSendInputEvent(r->send_input_event);
         break;
     }
 #ifdef ARCH_PORTDUINO
@@ -1248,6 +1254,38 @@ bool AdminModule::messageIsRequest(const meshtastic_AdminMessage *r)
         return true;
     else
         return false;
+}
+
+void AdminModule::handleSendInputEvent(const meshtastic_AdminMessage_InputEvent &inputEvent)
+{
+    LOG_DEBUG("Processing input event: event_code=%u, kb_char=%u, touch_x=%u, touch_y=%u", inputEvent.event_code,
+              inputEvent.kb_char, inputEvent.touch_x, inputEvent.touch_y);
+
+    // Validate input parameters
+    if (inputEvent.event_code > INPUT_BROKER_ANYKEY) {
+        LOG_WARN("Invalid input event code: %u", inputEvent.event_code);
+        return;
+    }
+
+    // Create InputEvent for injection
+    InputEvent event = {.inputEvent = (input_broker_event)inputEvent.event_code,
+                        .kbchar = (unsigned char)inputEvent.kb_char,
+                        .touchX = inputEvent.touch_x,
+                        .touchY = inputEvent.touch_y};
+
+    // Log the event being injected
+    LOG_INFO("Injecting input event from admin: source=%s, event=%u, char=%c(%u), touch=(%u,%u)", event.source, event.inputEvent,
+             (event.kbchar >= 32 && event.kbchar <= 126) ? event.kbchar : '?', event.kbchar, event.touchX, event.touchY);
+
+    // Wake the device if asleep
+    powerFSM.trigger(EVENT_INPUT);
+
+    // Inject the event through InputBroker
+    if (inputBroker) {
+        inputBroker->injectInputEvent(&event);
+    } else {
+        LOG_ERROR("InputBroker not available for event injection");
+    }
 }
 
 void AdminModule::sendWarning(const char *message)
