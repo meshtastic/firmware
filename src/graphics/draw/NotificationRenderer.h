@@ -16,6 +16,8 @@ class NotificationRenderer
     static uint8_t alertBannerOptions; // last x lines are seelctable options
     static std::function<void(int)> alertBannerCallback;
 
+    static bool pauseBanner;
+
     static void drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisplayUiState *state);
     static void drawCriticalFaultFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
     static void drawSSLScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);

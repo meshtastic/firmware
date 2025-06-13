@@ -143,6 +143,7 @@ void Screen::showOverlayBanner(const char *message, uint32_t durationMs, uint8_t
     NotificationRenderer::alertBannerOptions = options;
     NotificationRenderer::alertBannerCallback = bannerCallback;
     NotificationRenderer::curSelected = InitialSelected;
+    NotificationRenderer::pauseBanner = false;
 }
 
 static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -742,6 +743,7 @@ int32_t Screen::runOnce()
         case Cmd::START_ALERT_FRAME: {
             showingBootScreen = false; // this should avoid the edge case where an alert triggers before the boot screen goes away
             showingNormalScreen = false;
+            NotificationRenderer::pauseBanner = true;
             alertFrames[0] = alertFrame;
 #ifdef USE_EINK
             EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Use fast-refresh for next frame, no skip please
@@ -755,6 +757,7 @@ int32_t Screen::runOnce()
             handleStartFirmwareUpdateScreen();
             break;
         case Cmd::STOP_ALERT_FRAME:
+            NotificationRenderer::pauseBanner = false;
         case Cmd::STOP_BOOT_SCREEN:
             EINK_ADD_FRAMEFLAG(dispdev, COSMETIC); // E-Ink: Explicitly use full-refresh for next frame
             setFrames();

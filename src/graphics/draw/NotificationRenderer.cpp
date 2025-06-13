@@ -32,6 +32,7 @@ char NotificationRenderer::alertBannerMessage[256] = {0};
 uint32_t NotificationRenderer::alertBannerUntil = 0;  // 0 is a special case meaning forever
 uint8_t NotificationRenderer::alertBannerOptions = 0; // last x lines are seelctable options
 std::function<void(int)> NotificationRenderer::alertBannerCallback = NULL;
+bool NotificationRenderer::pauseBanner = false;
 
 // Used on boot when a certificate is being created
 void NotificationRenderer::drawSSLScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -57,6 +58,9 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
 {
     // Exit if no message is active or duration has passed
     if (!isOverlayBannerShowing())
+        return;
+
+    if (pauseBanner)
         return;
 
     // === Layout Configuration ===
