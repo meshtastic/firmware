@@ -99,7 +99,7 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
                 char btPIN[16] = "888888";
                 snprintf(btPIN, sizeof(btPIN), "%06u", passkey);
                 int x_offset = display->width() / 2;
-                int y_offset = display->height() <= 80 ? 0 : 32;
+                int y_offset = display->height() <= 80 ? 0 : 12;
                 display->setTextAlignment(TEXT_ALIGN_CENTER);
                 display->setFont(FONT_MEDIUM);
                 display->drawString(x_offset + x, y_offset + y, "Bluetooth");
