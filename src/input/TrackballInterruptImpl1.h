@@ -11,6 +11,7 @@ class TrackballInterruptImpl1 : public TrackballInterruptBase
     static void handleIntLeft();
     static void handleIntRight();
     static void handleIntPressed();
+    static void handleMenuPressed();
 };
 
 extern TrackballInterruptImpl1 *trackballInterruptImpl1;
