@@ -243,15 +243,9 @@ void ExpressLRSFiveWay::shutdown()
     shutdownAtMsec = millis() + 3000;
 }
 
-// Emulate user button, or canned message SELECT
-// This is necessary as canned message module doesn't translate SELECT to user button presses if the module is disabled
-// Contained as one method for easier remapping of buttons by user
 void ExpressLRSFiveWay::click()
 {
-    if (!moduleConfig.canned_message.enabled)
-        powerFSM.trigger(EVENT_PRESS);
-    else
-        sendKey(INPUT_BROKER_SELECT);
+    sendKey(INPUT_BROKER_SELECT);
 }
 
 ExpressLRSFiveWay *expressLRSFiveWayInput = nullptr;

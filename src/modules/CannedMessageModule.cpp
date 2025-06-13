@@ -48,20 +48,15 @@ CannedMessageModule *cannedMessageModule;
 CannedMessageModule::CannedMessageModule()
     : SinglePortModule("canned", meshtastic_PortNum_TEXT_MESSAGE_APP), concurrency::OSThread("CannedMessage")
 {
-    if (moduleConfig.canned_message.enabled || CANNED_MESSAGE_MODULE_ENABLE) {
-        this->loadProtoForModule();
-        if ((this->splitConfiguredMessages() <= 0) && (cardkb_found.address == 0x00) && !INPUTBROKER_MATRIX_TYPE &&
-            !CANNED_MESSAGE_MODULE_ENABLE) {
-            LOG_INFO("CannedMessageModule: No messages are configured. Module is disabled");
-            this->runState = CANNED_MESSAGE_RUN_STATE_DISABLED;
-            disable();
-        } else {
-            LOG_INFO("CannedMessageModule is enabled");
-            this->inputObserver.observe(inputBroker);
-        }
-    } else {
+    this->loadProtoForModule();
+    if ((this->splitConfiguredMessages() <= 0) && (cardkb_found.address == 0x00) && !INPUTBROKER_MATRIX_TYPE &&
+        !CANNED_MESSAGE_MODULE_ENABLE) {
+        LOG_INFO("CannedMessageModule: No messages are configured. Module is disabled");
         this->runState = CANNED_MESSAGE_RUN_STATE_DISABLED;
         disable();
+    } else {
+        LOG_INFO("CannedMessageModule is enabled");
+        this->inputObserver.observe(inputBroker);
     }
 }
 static bool returnToCannedList = false;
@@ -832,8 +827,7 @@ int32_t CannedMessageModule::runOnce()
     }
 
     // Normal module disable/idle handling
-    if (((!moduleConfig.canned_message.enabled) && !CANNED_MESSAGE_MODULE_ENABLE) ||
-        (this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED) || (this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE)) {
+    if ((this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED) || (this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE)) {
         temporaryMessage = "";
         return INT32_MAX;
     }
@@ -1020,9 +1014,6 @@ const char *CannedMessageModule::getNodeName(NodeNum node)
 
 bool CannedMessageModule::shouldDraw()
 {
-    if (!moduleConfig.canned_message.enabled && !CANNED_MESSAGE_MODULE_ENABLE) {
-        return false;
-    }
     return (currentMessageIndex != -1) || (this->runState != CANNED_MESSAGE_RUN_STATE_INACTIVE);
 }
 
