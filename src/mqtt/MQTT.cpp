@@ -763,7 +763,10 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
         }
         entry->topic = std::move(topic);
         entry->envBytes.assign(bytes, numBytes);
-        assert(mqttQueue.enqueue(entry, 0));
+        if (mqttQueue.enqueue(entry, 0) == false) {
+            LOG_CRIT("Failed to add a message to mqttQueue!");
+            abort();
+        }
     }
 }
 

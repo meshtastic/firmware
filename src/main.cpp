@@ -345,6 +345,16 @@ void setup()
     digitalWrite(USER_LED, HIGH ^ LED_STATE_ON);
 #endif
 
+#ifdef WIFI_LED
+    pinMode(WIFI_LED, OUTPUT);
+    digitalWrite(WIFI_LED, LOW);
+#endif
+
+#ifdef BLE_LED
+    pinMode(BLE_LED, OUTPUT);
+    digitalWrite(BLE_LED, LOW);
+#endif
+
 #if defined(T_DECK)
     // GPIO10 manages all peripheral power supplies
     // Turn on peripheral power immediately after MUC starts.
@@ -917,6 +927,11 @@ void setup()
 #endif
     service = new MeshService();
     service->init();
+
+    if (nodeDB->keyIsLowEntropy) {
+        service->reloadConfig(SEGMENT_CONFIG);
+        rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+    }
 
     // Now that the mesh service is created, create any modules
     setupModules();
