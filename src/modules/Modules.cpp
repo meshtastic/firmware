@@ -3,7 +3,6 @@
 #include "input/ExpressLRSFiveWay.h"
 #include "input/InputBroker.h"
 #include "input/RotaryEncoderInterruptImpl1.h"
-#include "input/ScanAndSelect.h"
 #include "input/SerialKeyboardImpl.h"
 #include "input/TrackballInterruptImpl1.h"
 #include "input/UpDownInterruptImpl1.h"
@@ -174,18 +173,6 @@ void setupModules()
                 delete upDownInterruptImpl1;
                 upDownInterruptImpl1 = nullptr;
             }
-            /*
-            #if HAS_SCREEN
-                        // In order to have the user button dismiss the canned message frame, this class lightly interacts with
-            the Screen
-                        // class
-                        scanAndSelectInput = new ScanAndSelectInput();
-                        if (!scanAndSelectInput->init()) {
-                            delete scanAndSelectInput;
-                            scanAndSelectInput = nullptr;
-                        }
-            #endif
-            */
             cardKbI2cImpl = new CardKbI2cImpl();
             cardKbI2cImpl->init();
 #ifdef INPUTBROKER_MATRIX_TYPE

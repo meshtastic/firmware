@@ -15,7 +15,6 @@
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/emotes.h"
 #include "graphics/images.h"
-#include "input/ScanAndSelect.h"
 #include "main.h" // for cardkb_found
 #include "mesh/generated/meshtastic/cannedmessages.pb.h"
 #include "modules/AdminModule.h"
@@ -1034,12 +1033,6 @@ bool CannedMessageModule::shouldDraw()
     if (!moduleConfig.canned_message.enabled && !CANNED_MESSAGE_MODULE_ENABLE) {
         return false;
     }
-
-    // If using "scan and select" input, don't draw the module frame just to say "disabled"
-    // The scanAndSelectInput class will draw its own temporary alert for user, when the input button is pressed
-    else if (scanAndSelectInput != nullptr && !hasMessages())
-        return false;
-
     return (currentMessageIndex != -1) || (this->runState != CANNED_MESSAGE_RUN_STATE_INACTIVE);
 }
 
