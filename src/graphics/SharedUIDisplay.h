@@ -19,7 +19,7 @@ namespace graphics
 #define textSixthLine (textFifthLine + (FONT_HEIGHT_SMALL - 5))
 
 // Consistent Line Spacing for devices like T114 and TEcho/ThinkNode M1 of devices
-#define textFirstLine_medium ((FONT_HEIGHT_SMALL - 1) * 1)
+#define textFirstLine_medium (FONT_HEIGHT_SMALL)
 #define textSecondLine_medium (textFirstLine_medium + FONT_HEIGHT_SMALL)
 #define textThirdLine_medium (textSecondLine_medium + FONT_HEIGHT_SMALL)
 #define textFourthLine_medium (textThirdLine_medium + FONT_HEIGHT_SMALL)
@@ -27,7 +27,7 @@ namespace graphics
 #define textSixthLine_medium (textFifthLine_medium + FONT_HEIGHT_SMALL)
 
 // Consistent Line Spacing for devices like VisionMaster T190
-#define textFirstLine_large ((FONT_HEIGHT_SMALL - 1) * 1)
+#define textFirstLine_large (FONT_HEIGHT_SMALL)
 #define textSecondLine_large (textFirstLine_large + (FONT_HEIGHT_SMALL + 5))
 #define textThirdLine_large (textSecondLine_large + (FONT_HEIGHT_SMALL + 5))
 #define textFourthLine_large (textThirdLine_large + (FONT_HEIGHT_SMALL + 5))
