@@ -347,7 +347,9 @@ static void WiFiEvent(WiFiEvent_t event)
         LOG_INFO("Connected to access point");
         if (config.network.ipv6_enabled) {
 #if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
-            WiFi.enableIPv6();
+            if (!WiFi.enableIPv6()) {
+                LOG_WARN("Failed to enable IPv6");
+            }
 #else
             if (!WiFi.enableIpV6()) {
                 LOG_WARN("Failed to enable IPv6");
