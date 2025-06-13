@@ -39,8 +39,11 @@ namespace UIRenderer
 void drawGps(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSStatus *gps)
 {
     // Draw satellite image
-    int yOffset = (SCREEN_WIDTH > 128) ? 3 : 1;
-    display->drawXbm(x + 1, y + yOffset, imgSatellite_width, imgSatellite_height, imgSatellite);
+    if (SCREEN_WIDTH > 128) {
+        NodeListRenderer::drawScaledXBitmap16x16(x, y - 2, imgSatellite_width, imgSatellite_height, imgSatellite, display);
+    } else {
+        display->drawXbm(x + 1, y + 1, imgSatellite_width, imgSatellite_height, imgSatellite);
+    }
     char textString[10];
 
     if (config.position.fixed_position) {
@@ -56,7 +59,11 @@ void drawGps(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSSt
     } else {
         snprintf(textString, sizeof(textString), "%u sats", gps->getNumSatellites());
     }
-    display->drawString(x + 11, y, textString);
+    if (SCREEN_WIDTH > 128) {
+        display->drawString(x + 18, y, textString);
+    } else {
+        display->drawString(x + 11, y, textString);
+    }
 }
 
 // Draw status when GPS is disabled or not present
@@ -203,27 +210,31 @@ void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::Nod
     char usersString[20];
     int nodes_online = (nodeStatus->getNumOnline() > 0) ? nodeStatus->getNumOnline() + node_offset : 0;
 
-    snprintf(usersString, sizeof(usersString), "%d", nodes_online);
+    snprintf(usersString, sizeof(usersString), "%d %s", nodes_online, additional_words.c_str());
 
     if (show_total) {
         int nodes_total = (nodeStatus->getNumTotal() > 0) ? nodeStatus->getNumTotal() + node_offset : 0;
-        snprintf(usersString, sizeof(usersString), "%d/%d", nodes_online, nodes_total);
+        snprintf(usersString, sizeof(usersString), "%d/%d %s", nodes_online, nodes_total, additional_words.c_str());
     }
 
 #if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) ||      \
      defined(ST7789_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(HX8357_CS)) &&                                  \
     !defined(DISPLAY_FORCE_SMALL_FONTS)
-    display->drawFastImage(x, y + 3, 8, 8, imgUser);
-#else
-    display->drawFastImage(x, y + 1, 8, 8, imgUser);
-#endif
-    display->drawString(x + 10, y - 2, usersString);
-    int string_offset = (SCREEN_WIDTH > 128) ? 2 : 1;
-    if (additional_words.length() > 0) {
-        display->drawString(x + 10 + display->getStringWidth(usersString) + string_offset, y - 2, additional_words.c_str());
-        if (config.display.heading_bold)
-            display->drawString(x + 11 + display->getStringWidth(usersString) + string_offset, y - 2, additional_words.c_str());
+
+    if (SCREEN_WIDTH > 128) {
+        NodeListRenderer::drawScaledXBitmap16x16(x, y, 8, 8, imgUser, display);
+    } else {
+        display->drawFastImage(x, y + 3, 8, 8, imgUser);
     }
+#else
+    if (SCREEN_WIDTH > 128) {
+        NodeListRenderer::drawScaledXBitmap16x16(x, y, 8, 8, imgUser, display);
+    } else {
+        display->drawFastImage(x, y + 1, 8, 8, imgUser);
+    }
+#endif
+    int string_offset = (SCREEN_WIDTH > 128) ? 9 : 0;
+    display->drawString(x + 10 + string_offset, y - 2, usersString);
 }
 
 // **********************
