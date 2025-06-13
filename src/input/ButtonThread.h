@@ -30,7 +30,7 @@ class ButtonThread : public Observable<const InputEvent *>, public concurrency::
     static const uint32_t c_holdOffTime = 30000; // hold off 30s after boot
     bool initButton(uint8_t pinNumber, bool activeLow, bool activePullup, uint32_t pullupSense, voidFuncPtr intRoutine,
                     input_broker_event singlePress, input_broker_event longPress = INPUT_BROKER_NONE,
-                    uint16_t longPressTime = 500,  input_broker_event doublePress = INPUT_BROKER_NONE,
+                    uint16_t longPressTime = 500, input_broker_event doublePress = INPUT_BROKER_NONE,
                     input_broker_event longLongPress = INPUT_BROKER_NONE, uint16_t longLongPressTime = 5000,
                     input_broker_event triplePress = INPUT_BROKER_NONE, input_broker_event shortLong = INPUT_BROKER_NONE,
                     bool touchQuirk = false);

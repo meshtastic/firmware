@@ -29,8 +29,8 @@ ButtonThread::ButtonThread(const char *name) : OSThread(name)
 
 bool ButtonThread::initButton(uint8_t pinNumber, bool activeLow, bool activePullup, uint32_t pullupSense, voidFuncPtr intRoutine,
                               input_broker_event singlePress, input_broker_event longPress, uint16_t longPressTime,
-                              input_broker_event doublePress, input_broker_event longLongPress, uint16_t longLongPressTime, input_broker_event triplePress, input_broker_event shortLong,
-                              bool touchQuirk)
+                              input_broker_event doublePress, input_broker_event longLongPress, uint16_t longLongPressTime,
+                              input_broker_event triplePress, input_broker_event shortLong, bool touchQuirk)
 {
     if (inputBroker)
         inputBroker->registerSource(this);
