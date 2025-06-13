@@ -16,9 +16,6 @@
 #include "sleep.h"
 #include "target_specific.h"
 
-const int textPositions[7] = {textZeroLine,   textFirstLine, textSecondLine, textThirdLine,
-                              textFourthLine, textFifthLine, textSixthLine};
-
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
 
@@ -125,7 +122,7 @@ void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *s
 
     if (lastMeasurementPacket == nullptr) {
         // In case of no valid packet, display "Power Telemetry", "No measurement"
-        display->drawString(x, textPositions[line++], "No measurement");
+        display->drawString(x, graphics::getTextPositions(display)[line++], "No measurement");
         return;
     }
 
@@ -136,7 +133,7 @@ void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *s
 
     const meshtastic_Data &p = lastMeasurementPacket->decoded;
     if (!pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Telemetry_msg, &lastMeasurement)) {
-        display->drawString(x, textPositions[line++], "Measurement Error");
+        display->drawString(x, graphics::getTextPositions(display)[line++], "Measurement Error");
         LOG_ERROR("Unable to decode last packet");
         return;
     }
@@ -144,7 +141,7 @@ void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *s
     // Display "Pow. From: ..."
     char fromStr[64];
     snprintf(fromStr, sizeof(fromStr), "Pow. From: %s (%us)", lastSender, agoSecs);
-    display->drawString(x, textPositions[line++], fromStr);
+    display->drawString(x, graphics::getTextPositions(display)[line++], fromStr);
 
     // Display current and voltage based on ...power_metrics.has_[channel/voltage/current]... flags
     const auto &m = lastMeasurement.variant.power_metrics;
