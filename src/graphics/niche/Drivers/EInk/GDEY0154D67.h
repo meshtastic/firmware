@@ -5,7 +5,7 @@ E-Ink display driver
     - Manufacturer: Goodisplay
     - Size: 1.54 inch
     - Resolution: 200px x 200px
-    - Flex connector marking: FPC-B001
+    - Flex connector marking (not a unique identifier): FPC-B001
 
 */
 
@@ -31,9 +31,9 @@ class GDEY0154D67 : public SSD16XX
     GDEY0154D67() : SSD16XX(width, height, supported) {}
 
   protected:
-    virtual void configScanning() override;
-    virtual void configWaveform() override;
-    virtual void configUpdateSequence() override;
+    void configScanning() override;
+    void configWaveform() override;
+    void configUpdateSequence() override;
     void detachFromUpdate() override;
 };
 
