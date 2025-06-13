@@ -174,17 +174,18 @@ void setupModules()
                 delete upDownInterruptImpl1;
                 upDownInterruptImpl1 = nullptr;
             }
-
-#if HAS_SCREEN
-            // In order to have the user button dismiss the canned message frame, this class lightly interacts with the Screen
-            // class
-            scanAndSelectInput = new ScanAndSelectInput();
-            if (!scanAndSelectInput->init()) {
-                delete scanAndSelectInput;
-                scanAndSelectInput = nullptr;
-            }
-#endif
-
+            /*
+            #if HAS_SCREEN
+                        // In order to have the user button dismiss the canned message frame, this class lightly interacts with
+            the Screen
+                        // class
+                        scanAndSelectInput = new ScanAndSelectInput();
+                        if (!scanAndSelectInput->init()) {
+                            delete scanAndSelectInput;
+                            scanAndSelectInput = nullptr;
+                        }
+            #endif
+            */
             cardKbI2cImpl = new CardKbI2cImpl();
             cardKbI2cImpl->init();
 #ifdef INPUTBROKER_MATRIX_TYPE

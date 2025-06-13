@@ -792,13 +792,6 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.output_ms = 1000;
     moduleConfig.external_notification.nag_timeout = 60;
 #endif
-#ifdef BUTTON_SECONDARY_CANNEDMESSAGES
-    // Use a board's second built-in button as input source for canned messages
-    moduleConfig.canned_message.enabled = true;
-    moduleConfig.canned_message.inputbroker_pin_press = BUTTON_PIN_SECONDARY;
-    strcpy(moduleConfig.canned_message.allow_input_source, "scanAndSelect");
-#endif
-
     moduleConfig.has_canned_message = true;
     moduleConfig.canned_message.enabled = true;
 #if USERPREFS_MQTT_ENABLED && !MESHTASTIC_EXCLUDE_MQTT
