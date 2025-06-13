@@ -16,8 +16,16 @@
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
 #include "sleep.h"
 
-const int textPositions[7] = {textZeroLine,   textFirstLine, textSecondLine, textThirdLine,
-                              textFourthLine, textFifthLine, textSixthLine};
+if (SCREEN_HEIGHT >= 170) {
+    const int textPositions[7] = {textZeroLine,         textFirstLine_large, textSecondLine_large, textThirdLine_large,
+                                  textFourthLine_large, textFifthLine_large, textSixthLine_large};
+} else if (SCREEN_HEIGHT > 64) {
+    const int textPositions[7] = {textZeroLine,          textFirstLine_medium, textSecondLine_medium, textThirdLine_medium,
+                                  textFourthLine_medium, textFifthLine_medium, textSixthLine_medium};
+} else {
+    const int textPositions[7] = {textZeroLine,   textFirstLine, textSecondLine, textThirdLine,
+                                  textFourthLine, textFifthLine, textSixthLine};
+}
 
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
 #include "mesh/wifi/WiFiAPClient.h"
