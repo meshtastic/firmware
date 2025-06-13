@@ -222,13 +222,13 @@ void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::Nod
     !defined(DISPLAY_FORCE_SMALL_FONTS)
 
     if (SCREEN_WIDTH > 128) {
-        NodeListRenderer::drawScaledXBitmap16x16(x, y, 8, 8, imgUser, display);
+        NodeListRenderer::drawScaledXBitmap16x16(x, y - 1, 8, 8, imgUser, display);
     } else {
         display->drawFastImage(x, y + 3, 8, 8, imgUser);
     }
 #else
     if (SCREEN_WIDTH > 128) {
-        NodeListRenderer::drawScaledXBitmap16x16(x, y, 8, 8, imgUser, display);
+        NodeListRenderer::drawScaledXBitmap16x16(x, y - 1, 8, 8, imgUser, display);
     } else {
         display->drawFastImage(x, y + 1, 8, 8, imgUser);
     }
