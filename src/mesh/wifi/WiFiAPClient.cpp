@@ -503,8 +503,3 @@ uint8_t getWifiDisconnectReason()
 {
     return wifiDisconnectReason;
 }
-<<<<<<< master
-
-=======
-#endif
->>>>>>> master
