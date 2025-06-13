@@ -20,10 +20,6 @@
 #include "sleep.h"
 #include "target_specific.h"
 #include <OLEDDisplay.h>
-#include <OLEDDisplayUi.h>
-
-const int textPositions[7] = {textZeroLine,   textFirstLine, textSecondLine, textThirdLine,
-                              textFourthLine, textFifthLine, textSixthLine};
 
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR_EXTERNAL
 
@@ -356,7 +352,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
 
     // === Row spacing setup ===
     const int rowHeight = FONT_HEIGHT_SMALL - 4;
-    int currentY = textPositions[line++];
+    int currentY = graphics::getTextPositions(display)[line++];
 
     // === Show "No Telemetry" if no data available ===
     if (!lastMeasurementPacket) {

@@ -18,9 +18,6 @@
 #include <RTC.h>
 #include <cstring>
 
-const int textPositions[7] = {textZeroLine,   textFirstLine, textSecondLine, textThirdLine,
-                              textFourthLine, textFifthLine, textSixthLine};
-
 #if !MESHTASTIC_EXCLUDE_GPS
 
 // External variables
@@ -290,7 +287,7 @@ void drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t
     const char *username = (node->has_user && node->user.long_name[0]) ? node->user.long_name : nullptr;
     if (username && line < 5) {
         // Print node's long name (e.g. "Backpack Node")
-        display->drawString(x, textPositions[line++], username);
+        display->drawString(x, getTextPositions(display)[line++], username);
     }
 
     // === 2. Signal and Hops (combined on one line, if available) ===
@@ -321,7 +318,7 @@ void drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t
         }
     }
     if (signalHopsStr[0] && line < 5) {
-        display->drawString(x, textPositions[line++], signalHopsStr);
+        display->drawString(x, getTextPositions(display)[line++], signalHopsStr);
     }
 
     // === 3. Heard (last seen, skip if node never seen) ===
@@ -339,7 +336,7 @@ void drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t
                           : 'm'));
     }
     if (seenStr[0] && line < 5) {
-        display->drawString(x, textPositions[line++], seenStr);
+        display->drawString(x, getTextPositions(display)[line++], seenStr);
     }
 
     // === 4. Uptime (only show if metric is present) ===
@@ -358,7 +355,7 @@ void drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t
             snprintf(uptimeStr, sizeof(uptimeStr), " Uptime: %um", mins);
     }
     if (uptimeStr[0] && line < 5) {
-        display->drawString(x, textPositions[line++], uptimeStr);
+        display->drawString(x, getTextPositions(display)[line++], uptimeStr);
     }
 
     // === 5. Distance (only if both nodes have GPS position) ===
@@ -418,7 +415,7 @@ void drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t
     }
     // Only display if we actually have a value!
     if (haveDistance && distStr[0] && line < 5) {
-        display->drawString(x, textPositions[line++], distStr);
+        display->drawString(x, getTextPositions(display)[line++], distStr);
     }
 
     // --- Compass Rendering: landscape (wide) screens use the original side-aligned logic ---
@@ -428,7 +425,7 @@ void drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t
             showCompass = true;
         }
         if (showCompass) {
-            const int16_t topY = textPositions[1];
+            const int16_t topY = getTextPositions(display)[1];
             const int16_t bottomY = SCREEN_HEIGHT - (FONT_HEIGHT_SMALL - 1);
             const int16_t usableHeight = bottomY - topY - 5;
             int16_t compassRadius = usableHeight / 2;
@@ -463,7 +460,8 @@ void drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t
             showCompass = true;
         }
         if (showCompass) {
-            int yBelowContent = (line > 0 && line <= 5) ? (textPositions[line - 1] + FONT_HEIGHT_SMALL + 2) : textPositions[1];
+            int yBelowContent = (line > 0 && line <= 5) ? (getTextPositions(display)[line - 1] + FONT_HEIGHT_SMALL + 2)
+                                                        : getTextPositions(display)[1];
             const int margin = 4;
 // --------- PATCH FOR EINK NAV BAR (ONLY CHANGE BELOW) -----------
 #if defined(USE_EINK)
@@ -534,7 +532,7 @@ void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t 
     config.display.heading_bold = false;
 
     // Display Region and Channel Utilization
-    drawNodes(display, x + 1, textPositions[line] + 2, nodeStatus, -1, false, "online");
+    drawNodes(display, x + 1, getTextPositions(display)[line] + 2, nodeStatus, -1, false, "online");
 
     char uptimeStr[32] = "";
     uint32_t uptime = millis() / 1000;
@@ -548,7 +546,7 @@ void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t 
         snprintf(uptimeStr, sizeof(uptimeStr), "Up: %uh %um", hours, mins);
     else
         snprintf(uptimeStr, sizeof(uptimeStr), "Up: %um", mins);
-    display->drawString(SCREEN_WIDTH - display->getStringWidth(uptimeStr), textPositions[line++], uptimeStr);
+    display->drawString(SCREEN_WIDTH - display->getStringWidth(uptimeStr), getTextPositions(display)[line++], uptimeStr);
 
     // === Second Row: Satellites and Voltage ===
     config.display.heading_bold = false;
@@ -561,9 +559,9 @@ void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t 
         } else {
             displayLine = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "No GPS" : "GPS off";
         }
-        display->drawString(0, textPositions[line], displayLine);
+        display->drawString(0, getTextPositions(display)[line], displayLine);
     } else {
-        UIRenderer::drawGps(display, 0, textPositions[line], gpsStatus);
+        UIRenderer::drawGps(display, 0, getTextPositions(display)[line], gpsStatus);
     }
 #endif
 
@@ -572,9 +570,9 @@ void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t 
         int batV = powerStatus->getBatteryVoltageMv() / 1000;
         int batCv = (powerStatus->getBatteryVoltageMv() % 1000) / 10;
         snprintf(batStr, sizeof(batStr), "%01d.%02dV", batV, batCv);
-        display->drawString(x + SCREEN_WIDTH - display->getStringWidth(batStr), textPositions[line++], batStr);
+        display->drawString(x + SCREEN_WIDTH - display->getStringWidth(batStr), getTextPositions(display)[line++], batStr);
     } else {
-        display->drawString(x + SCREEN_WIDTH - display->getStringWidth("USB"), textPositions[line++], "USB");
+        display->drawString(x + SCREEN_WIDTH - display->getStringWidth("USB"), getTextPositions(display)[line++], "USB");
     }
 
     config.display.heading_bold = origBold;
@@ -585,7 +583,7 @@ void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t 
     snprintf(chUtilPercentage, sizeof(chUtilPercentage), "%2.0f%%", airTime->channelUtilizationPercent());
 
     int chUtil_x = (SCREEN_WIDTH > 128) ? display->getStringWidth(chUtil) + 10 : display->getStringWidth(chUtil) + 5;
-    int chUtil_y = textPositions[line] + 3;
+    int chUtil_y = getTextPositions(display)[line] + 3;
 
     int chutil_bar_width = (SCREEN_WIDTH > 128) ? 100 : 50;
     if (!config.bluetooth.enabled) {
@@ -605,7 +603,7 @@ void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t 
         starting_position = 0;
     }
 
-    display->drawString(starting_position, textPositions[line], chUtil);
+    display->drawString(starting_position, getTextPositions(display)[line], chUtil);
 
     // Force 56% or higher to show a full 100% bar, text would still show related percent.
     if (chutil_percent >= 61) {
@@ -642,10 +640,11 @@ void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t 
         display->fillRect(starting_position + chUtil_x, chUtil_y, fillRight, chutil_bar_height);
     }
 
-    display->drawString(starting_position + chUtil_x + chutil_bar_width + extraoffset, textPositions[line], chUtilPercentage);
+    display->drawString(starting_position + chUtil_x + chutil_bar_width + extraoffset, getTextPositions(display)[line],
+                        chUtilPercentage);
 
     if (!config.bluetooth.enabled) {
-        display->drawString(SCREEN_WIDTH - display->getStringWidth("BT off"), textPositions[line], "BT off");
+        display->drawString(SCREEN_WIDTH - display->getStringWidth("BT off"), getTextPositions(display)[line], "BT off");
     }
 
     line += 1;
@@ -675,17 +674,18 @@ void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t 
         }
         textWidth = display->getStringWidth(combinedName);
         nameX = (SCREEN_WIDTH - textWidth) / 2;
-        display->drawString(nameX, ((rows == 4) ? textPositions[line++] : textPositions[line++]) + yOffset, combinedName);
+        display->drawString(
+            nameX, ((rows == 4) ? getTextPositions(display)[line++] : getTextPositions(display)[line++]) + yOffset, combinedName);
     } else {
         // === LongName Centered ===
         textWidth = display->getStringWidth(longName);
         nameX = (SCREEN_WIDTH - textWidth) / 2;
-        display->drawString(nameX, textPositions[line++], longName);
+        display->drawString(nameX, getTextPositions(display)[line++], longName);
 
         // === ShortName Centered ===
         textWidth = display->getStringWidth(shortnameble);
         nameX = (SCREEN_WIDTH - textWidth) / 2;
-        display->drawString(nameX, textPositions[line++], shortnameble);
+        display->drawString(nameX, getTextPositions(display)[line++], shortnameble);
     }
 }
 
@@ -952,10 +952,10 @@ void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiState *stat
             displayLine = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "No GPS" : "GPS off";
         }
         int yOffset = (SCREEN_WIDTH > 128) ? 3 : 1;
-        display->drawXbm(x + 1, textPositions[line] + yOffset, imgSatellite_width, imgSatellite_height, imgSatellite);
-        display->drawString(x + 11, textPositions[line++], displayLine);
+        display->drawXbm(x + 1, getTextPositions(display)[line] + yOffset, imgSatellite_width, imgSatellite_height, imgSatellite);
+        display->drawString(x + 11, getTextPositions(display)[line++], displayLine);
     } else {
-        UIRenderer::drawGps(display, 0, textPositions[line++], gpsStatus);
+        UIRenderer::drawGps(display, 0, getTextPositions(display)[line++], gpsStatus);
     }
 
     config.display.heading_bold = origBold;
@@ -986,17 +986,17 @@ void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiState *stat
         } else {
             snprintf(DisplayLineTwo, sizeof(DisplayLineTwo), " Alt: %.0im", geoCoord.getAltitude());
         }
-        display->drawString(x, textPositions[line++], DisplayLineTwo);
+        display->drawString(x, getTextPositions(display)[line++], DisplayLineTwo);
 
         // === Third Row: Latitude ===
         char latStr[32];
         snprintf(latStr, sizeof(latStr), " Lat: %.5f", geoCoord.getLatitude() * 1e-7);
-        display->drawString(x, textPositions[line++], latStr);
+        display->drawString(x, getTextPositions(display)[line++], latStr);
 
         // === Fourth Row: Longitude ===
         char lonStr[32];
         snprintf(lonStr, sizeof(lonStr), " Lon: %.5f", geoCoord.getLongitude() * 1e-7);
-        display->drawString(x, textPositions[line++], lonStr);
+        display->drawString(x, getTextPositions(display)[line++], lonStr);
 
         // === Fifth Row: Date ===
         uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true);
@@ -1005,14 +1005,14 @@ void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiState *stat
         UIRenderer::formatDateTime(datetimeStr, sizeof(datetimeStr), rtc_sec, display, showTime);
         char fullLine[40];
         snprintf(fullLine, sizeof(fullLine), " Date: %s", datetimeStr);
-        display->drawString(0, textPositions[line++], fullLine);
+        display->drawString(0, getTextPositions(display)[line++], fullLine);
     }
 
     // === Draw Compass if heading is valid ===
     if (validHeading) {
         // --- Compass Rendering: landscape (wide) screens use original side-aligned logic ---
         if (SCREEN_WIDTH > SCREEN_HEIGHT) {
-            const int16_t topY = textPositions[1];
+            const int16_t topY = getTextPositions(display)[1];
             const int16_t bottomY = SCREEN_HEIGHT - (FONT_HEIGHT_SMALL - 1); // nav row height
             const int16_t usableHeight = bottomY - topY - 5;
 
@@ -1045,7 +1045,7 @@ void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiState *stat
         } else {
             // Portrait or square: put compass at the bottom and centered, scaled to fit available space
             // For E-Ink screens, account for navigation bar at the bottom!
-            int yBelowContent = textPositions[5] + FONT_HEIGHT_SMALL + 2;
+            int yBelowContent = getTextPositions(display)[5] + FONT_HEIGHT_SMALL + 2;
             const int margin = 4;
             int availableHeight =
 #if defined(USE_EINK)

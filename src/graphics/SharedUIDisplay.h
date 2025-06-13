@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ScreenFonts.h"
 #include <OLEDDisplay.h>
 
 namespace graphics
@@ -47,5 +48,7 @@ void drawRoundedHighlight(OLEDDisplay *display, int16_t x, int16_t y, int16_t w,
 
 // Shared battery/time/mail header
 void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *titleStr = "");
+
+const int *getTextPositions(OLEDDisplay *display);
 
 } // namespace graphics
