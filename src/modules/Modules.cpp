@@ -203,7 +203,7 @@ void setupModules()
             aLinuxInputImpl->init();
         }
 #endif
-#if HAS_TRACKBALL && !MESHTASTIC_EXCLUDE_INPUTBROKER
+#if !MESHTASTIC_EXCLUDE_INPUTBROKER
         if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
             trackballInterruptImpl1 = new TrackballInterruptImpl1();
             trackballInterruptImpl1->init(TB_DOWN, TB_UP, TB_LEFT, TB_RIGHT, TB_PRESS);

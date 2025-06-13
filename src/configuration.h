@@ -302,6 +302,22 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #error HW_VENDOR must be defined
 #endif
 
+#ifndef TB_DOWN
+#define TB_DOWN 255
+#endif
+#ifndef TB_UP
+#define TB_UP 255
+#endif
+#ifndef TB_LEFT
+#define TB_LEFT 255
+#endif
+#ifndef TB_RIGHT
+#define TB_RIGHT 255
+#endif
+#ifndef TB_PRESS
+#define TB_PRESS 255
+#endif
+
 // Support multiple RGB LED configuration
 #if defined(HAS_NCP5623) || defined(HAS_LP5562) || defined(RGBLED_RED) || defined(HAS_NEOPIXEL) || defined(UNPHONE)
 #define HAS_RGB_LED

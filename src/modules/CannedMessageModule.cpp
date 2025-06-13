@@ -371,7 +371,8 @@ bool CannedMessageModule::isUpEvent(const InputEvent *event)
 }
 bool CannedMessageModule::isDownEvent(const InputEvent *event)
 {
-    return event->inputEvent == INPUT_BROKER_DOWN;
+    return event->inputEvent == INPUT_BROKER_DOWN ||
+           (runState == CANNED_MESSAGE_RUN_STATE_ACTIVE && event->inputEvent == INPUT_BROKER_USER_PRESS);
 }
 bool CannedMessageModule::isSelectEvent(const InputEvent *event)
 {

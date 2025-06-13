@@ -431,6 +431,10 @@ void setup()
     gpio_pullup_en((gpio_num_t)(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN));
     delay(10);
 #endif
+#ifdef BUTTON_NEED_PULLUP2
+    gpio_pullup_en((gpio_num_t)BUTTON_NEED_PULLUP2);
+    delay(10);
+#endif
 #endif
 #endif
 #endif
@@ -911,7 +915,7 @@ void setup()
     pullup_sense = INPUT_PULLUP_SENSE;
 #endif
 #endif
-#if defined(ARCH_PORTDUINO) // make it work
+#if defined(ARCH_PORTDUINO)
 
     if (settingsMap.count(userButtonPin) != 0 && settingsMap[userButtonPin] != RADIOLIB_NC) {
 

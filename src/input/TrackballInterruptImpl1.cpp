@@ -8,11 +8,6 @@ TrackballInterruptImpl1::TrackballInterruptImpl1() : TrackballInterruptBase("tra
 
 void TrackballInterruptImpl1::init(uint8_t pinDown, uint8_t pinUp, uint8_t pinLeft, uint8_t pinRight, uint8_t pinPress)
 {
-#if !HAS_TRACKBALL
-    // Input device is disabled.
-    return;
-#else
-
     input_broker_event eventDown = INPUT_BROKER_DOWN;
     input_broker_event eventUp = INPUT_BROKER_UP;
     input_broker_event eventLeft = INPUT_BROKER_LEFT;
@@ -24,7 +19,6 @@ void TrackballInterruptImpl1::init(uint8_t pinDown, uint8_t pinUp, uint8_t pinLe
                                  TrackballInterruptImpl1::handleIntLeft, TrackballInterruptImpl1::handleIntRight,
                                  TrackballInterruptImpl1::handleIntPressed);
     inputBroker->registerSource(this);
-#endif
 }
 
 void TrackballInterruptImpl1::handleIntDown()
