@@ -1323,13 +1323,14 @@ void AdminModule::handleSendInputEvent(const meshtastic_AdminMessage_InputEvent 
 
     // Wake the device if asleep
     powerFSM.trigger(EVENT_INPUT);
-
+#if !defined(MESHTASTIC_EXCLUDE_INPUTBROKER)
     // Inject the event through InputBroker
     if (inputBroker) {
         inputBroker->injectInputEvent(&event);
     } else {
         LOG_ERROR("InputBroker not available for event injection");
     }
+#endif
 }
 
 void AdminModule::sendWarning(const char *message)
