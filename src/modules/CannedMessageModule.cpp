@@ -259,9 +259,6 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
     if (screen && screen->isOverlayBannerShowing()) {
         return 0;
     }
-    // Allow input only from configured source (hardware/software filter)
-    if (!isInputSourceAllowed(event))
-        return 0;
 
     // Tab key: Always allow switching between canned/destination screens
     if (event->kbchar == INPUT_BROKER_MSG_TAB && handleTabSwitch(event))
@@ -355,13 +352,6 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
 
     // Default: event not handled by canned message system, allow others to process
     return 0;
-}
-
-bool CannedMessageModule::isInputSourceAllowed(const InputEvent *event)
-{
-    return strlen(moduleConfig.canned_message.allow_input_source) == 0 ||
-           strcasecmp(moduleConfig.canned_message.allow_input_source, event->source) == 0 ||
-           strcasecmp(moduleConfig.canned_message.allow_input_source, "_any") == 0;
 }
 
 bool CannedMessageModule::isUpEvent(const InputEvent *event)
