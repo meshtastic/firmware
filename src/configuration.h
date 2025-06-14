@@ -171,6 +171,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define BMX160_ADDR 0x69
 #define ICM20948_ADDR 0x69
 #define ICM20948_ADDR_ALT 0x68
+#define BMM150_ADDR 0x13
 
 // -----------------------------------------------------------------------------
 // LED
@@ -321,6 +322,20 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Support multiple RGB LED configuration
 #if defined(HAS_NCP5623) || defined(HAS_LP5562) || defined(RGBLED_RED) || defined(HAS_NEOPIXEL) || defined(UNPHONE)
 #define HAS_RGB_LED
+#endif
+
+// default mapping of pins
+#if defined(PIN_BUTTON2) && !defined(CANCEL_BUTTON_PIN)
+#define ALT_BUTTON_PIN PIN_BUTTON2
+#endif
+#if defined ALT_BUTTON_PIN
+
+#ifndef ALT_BUTTON_ACTIVE_LOW
+#define ALT_BUTTON_ACTIVE_LOW true
+#endif
+#ifndef ALT_BUTTON_ACTIVE_PULLUP
+#define ALT_BUTTON_ACTIVE_PULLUP true
+#endif
 #endif
 
 // -----------------------------------------------------------------------------

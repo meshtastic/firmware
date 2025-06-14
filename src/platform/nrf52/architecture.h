@@ -121,19 +121,6 @@
 #define BUTTON_PIN PIN_BUTTON1
 #endif
 
-#if defined(PIN_BUTTON2) && !defined(CANCEL_BUTTON_PIN)
-#define ALT_BUTTON_PIN PIN_BUTTON2
-#endif
-#if defined ALT_BUTTON_PIN
-
-#ifndef ALT_BUTTON_ACTIVE_LOW
-#define ALT_BUTTON_ACTIVE_LOW true
-#endif
-#ifndef ALT_BUTTON_ACTIVE_PULLUP
-#define ALT_BUTTON_ACTIVE_PULLUP true
-#endif
-#endif
-
 #ifdef PIN_BUTTON_TOUCH
 #define BUTTON_PIN_TOUCH PIN_BUTTON_TOUCH
 #endif
