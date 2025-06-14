@@ -1567,7 +1567,7 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
     }
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
-    if (p.public_key.size == 32) {
+    if (p.public_key.size == 32 && nodeId != nodeDB->getNodeNum()) {
         printBytes("Incoming Pubkey: ", p.public_key.bytes, 32);
 
         // Alert the user if a remote node is advertising public key that matches our own
@@ -1777,7 +1777,12 @@ bool NodeDB::checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_pub
             memcmp(keyHash, LOW_ENTROPY_HASH12, sizeof(LOW_ENTROPY_HASH12)) == 0 ||
             memcmp(keyHash, LOW_ENTROPY_HASH13, sizeof(LOW_ENTROPY_HASH13)) == 0 ||
             memcmp(keyHash, LOW_ENTROPY_HASH14, sizeof(LOW_ENTROPY_HASH14)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH15, sizeof(LOW_ENTROPY_HASH15)) == 0) {
+            memcmp(keyHash, LOW_ENTROPY_HASH10, sizeof(LOW_ENTROPY_HASH15)) == 0 ||
+            memcmp(keyHash, LOW_ENTROPY_HASH11, sizeof(LOW_ENTROPY_HASH16)) == 0 ||
+            memcmp(keyHash, LOW_ENTROPY_HASH12, sizeof(LOW_ENTROPY_HASH17)) == 0 ||
+            memcmp(keyHash, LOW_ENTROPY_HASH13, sizeof(LOW_ENTROPY_HASH18)) == 0 ||
+            memcmp(keyHash, LOW_ENTROPY_HASH14, sizeof(LOW_ENTROPY_HASH19)) == 0 ||
+            memcmp(keyHash, LOW_ENTROPY_HASH15, sizeof(LOW_ENTROPY_HASH20)) == 0) {
             return true;
         }
     }
