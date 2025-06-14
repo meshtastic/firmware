@@ -72,6 +72,7 @@ class ScanI2C
         LTR390UV,
         TCA8418KB,
         PCT2075,
+        BMM150,
     } DeviceType;
 
     // typedef uint8_t DeviceAddress;
