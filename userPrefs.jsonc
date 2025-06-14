@@ -52,5 +52,6 @@
   // "USERPREFS_MQTT_ENCRYPTION_ENABLED": "true",
   // "USERPREFS_MQTT_TLS_ENABLED": "false",
   // "USERPREFS_MQTT_ROOT_TOPIC": "event/REPLACEME",
+  // "USERPREFS_NETWORK_IPV6_ENABLED": "1",
   "USERPREFS_TZ_STRING": "tzplaceholder                                         "
 }
