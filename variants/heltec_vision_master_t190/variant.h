@@ -1,7 +1,7 @@
 #ifndef HAS_TFT
 #define BUTTON_PIN 0
-#define BUTTON_PIN_SECONDARY 21    // Second built-in button
-#define TB_UP BUTTON_PIN_SECONDARY // Send the up event
+#define PIN_BUTTON2 21             // Second built-in button
+#define ALT_BUTTON_PIN PIN_BUTTON2 // Send the up event
 
 // I2C
 #define I2C_SDA SDA

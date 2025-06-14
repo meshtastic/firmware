@@ -3,9 +3,9 @@
 
 #define PIN_BUTTON1 47 // 功能键
 #define PIN_BUTTON2 4  // 电源键
-#define BACK_BUTTON_PIN PIN_BUTTON2
-#define BACK_BUTTON_ACTIVE_LOW false
-#define BACK_BUTTON_ACTIVE_PULLUP false
+#define ALT_BUTTON_PIN PIN_BUTTON2
+#define ALT_BUTTON_ACTIVE_LOW false
+#define ALT_BUTTON_ACTIVE_PULLUP false
 
 #define LED_POWER 6
 #define ADC_V 42

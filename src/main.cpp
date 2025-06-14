@@ -109,7 +109,7 @@ ButtonThread *TouchButtonThread = nullptr;
 ButtonThread *UserButtonThread = nullptr;
 #endif
 
-#if defined(BACK_BUTTON_PIN)
+#if defined(ALT_BUTTON_PIN)
 ButtonThread *BackButtonThread = nullptr;
 #endif
 
@@ -961,18 +961,18 @@ void setup()
         INPUT_BROKER_CANCEL, INPUT_BROKER_SHUTDOWN, 4000);
 #endif
 
-#if defined(BACK_BUTTON_PIN)
+#if defined(ALT_BUTTON_PIN)
     // Buttons. Moved here cause we need NodeDB to be initialized
     BackButtonThread = new ButtonThread("BackButton");
     BackButtonThread->initButton(
-        BACK_BUTTON_PIN, BACK_BUTTON_ACTIVE_LOW, BACK_BUTTON_ACTIVE_PULLUP, pullup_sense,
+        ALT_BUTTON_PIN, ALT_BUTTON_ACTIVE_LOW, ALT_BUTTON_ACTIVE_PULLUP, pullup_sense,
         []() {
             BackButtonThread->userButton.tick();
             runASAP = true;
             BaseType_t higherWake = 0;
             mainDelay.interruptFromISR(&higherWake);
         },
-        INPUT_BROKER_BACK, INPUT_BROKER_SHUTDOWN, 4000);
+        INPUT_BROKER_UP, INPUT_BROKER_BACK, 500);
 #endif
 
 #if defined(BUTTON_PIN)

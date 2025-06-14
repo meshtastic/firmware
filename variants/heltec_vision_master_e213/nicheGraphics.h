@@ -87,7 +87,7 @@ void setupNicheGraphics()
     buttons->setHandlerLongPress(0, [inkhud]() { inkhud->longpress(); });
 
     // #1: Aux Button
-    buttons->setWiring(1, BUTTON_PIN_SECONDARY);
+    buttons->setWiring(1, PIN_BUTTON2);
     buttons->setHandlerShortPress(1, [inkhud]() {
         inkhud->nextTile();
         playBoop();
