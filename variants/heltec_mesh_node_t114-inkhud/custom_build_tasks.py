@@ -2,8 +2,9 @@
 # - build using custom task in Platformio's "Project Tasks" panel
 # - build with `pio run -e <variant> -t build_weact_154` (or similar)
 
+# Silence trunk's objections to the import statements
 # trunk-ignore-all(ruff/F821)
-# trunk-ignore-all(flake8/F821): For SConstruct imports
+# trunk-ignore-all(flake8/F821)
 
 from SCons.Script import COMMAND_LINE_TARGETS
 
