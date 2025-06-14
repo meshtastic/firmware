@@ -78,27 +78,6 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
     PacketRecord *found = PRfind(r.sender, r.id); // Find the packet record in the recentPackets array
     bool seenRecently = (found != NULL);          // If found -> the packet was seen recently
 
-    // Expiring packets can be disabled, we have static allocation for history.
-#if FLOOD_EXPIRE_TIME > 0
-    if (seenRecently) { // Check whether found packet has already expired
-        if (!Throttle::isWithinTimespanMs(found->rxTimeMsec,
-                                          FLOOD_EXPIRE_TIME)) { // Check whether found packet has already expired
-            mx_LOG_INFO("PH:wSR s=%08x id=%08x nh=%02x rby=%02x %02x %02x age=%d>%d slot=%d/%d CLEAR", found->sender, found->id,
-                        found->next_hop, found->relayed_by[0], found->relayed_by[1], found->relayed_by[2],
-                        millis() - found->rxTimeMsec, FLOOD_EXPIRE_TIME, found - mx_recentPackets, recentPacketsCapacity);
-
-            memset(found, 0, sizeof(PacketRecord)); // Clear the record
-            found = NULL;
-            seenRecently = false;
-        } else {
-            mx_LOG_INFO("PH:wSR s=%08x id=%08x nh=%02x rby=%02x %02x %02x age=%d<%d slot=%d/%d KEEP", found->sender, found->id,
-                        found->next_hop, found->relayed_by[0], found->relayed_by[1], found->relayed_by[2],
-                        millis() - found->rxTimeMsec, FLOOD_EXPIRE_TIME, found - mx_recentPackets, recentPacketsCapacity);
-            // only debug log here
-        }
-    }
-#endif
-
     // LOG_DEBUG("PH:wSR Found record for fr=%08x id=%08x to=%08x",
     //     p->from, p->id, p->to);     // But we don't save p->to. Keeping it as it was.
 
