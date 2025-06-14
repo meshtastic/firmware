@@ -1763,7 +1763,8 @@ bool NodeDB::checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_pub
         uint8_t keyHash[32] = {0};
         memcpy(keyHash, keyToTest.bytes, keyToTest.size);
         crypto->hash(keyHash, 32);
-        if (memcmp(keyHash, LOW_ENTROPY_HASH1, sizeof(LOW_ENTROPY_HASH1)) == 0 ||
+        if (memcmp(keyHash, LOW_ENTROPY_HASH1, sizeof(LOW_ENTROPY_HASH1)) ==
+                0 || // should become an array that gets looped through rather than this abomination
             memcmp(keyHash, LOW_ENTROPY_HASH2, sizeof(LOW_ENTROPY_HASH2)) == 0 ||
             memcmp(keyHash, LOW_ENTROPY_HASH3, sizeof(LOW_ENTROPY_HASH3)) == 0 ||
             memcmp(keyHash, LOW_ENTROPY_HASH4, sizeof(LOW_ENTROPY_HASH4)) == 0 ||
@@ -1777,12 +1778,12 @@ bool NodeDB::checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_pub
             memcmp(keyHash, LOW_ENTROPY_HASH12, sizeof(LOW_ENTROPY_HASH12)) == 0 ||
             memcmp(keyHash, LOW_ENTROPY_HASH13, sizeof(LOW_ENTROPY_HASH13)) == 0 ||
             memcmp(keyHash, LOW_ENTROPY_HASH14, sizeof(LOW_ENTROPY_HASH14)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH10, sizeof(LOW_ENTROPY_HASH15)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH11, sizeof(LOW_ENTROPY_HASH16)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH12, sizeof(LOW_ENTROPY_HASH17)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH13, sizeof(LOW_ENTROPY_HASH18)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH14, sizeof(LOW_ENTROPY_HASH19)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH15, sizeof(LOW_ENTROPY_HASH20)) == 0) {
+            memcmp(keyHash, LOW_ENTROPY_HASH15, sizeof(LOW_ENTROPY_HASH15)) == 0 ||
+            memcmp(keyHash, LOW_ENTROPY_HASH16, sizeof(LOW_ENTROPY_HASH16)) == 0 ||
+            memcmp(keyHash, LOW_ENTROPY_HASH17, sizeof(LOW_ENTROPY_HASH17)) == 0 ||
+            memcmp(keyHash, LOW_ENTROPY_HASH18, sizeof(LOW_ENTROPY_HASH18)) == 0 ||
+            memcmp(keyHash, LOW_ENTROPY_HASH19, sizeof(LOW_ENTROPY_HASH19)) == 0 ||
+            memcmp(keyHash, LOW_ENTROPY_HASH20, sizeof(LOW_ENTROPY_HASH20)) == 0) {
             return true;
         }
     }
