@@ -5,17 +5,17 @@
     },
     "core": "nRF5",
     "cpu": "cortex-m4",
-    "extra_flags": "-DARDUINO_NRF52840_TTGO_EINK -DNRF52840_XXAA",
+    "extra_flags": "-DARDUINO_NRF52840_FEATHER -DNRF52840_XXAA",
     "f_cpu": "64000000L",
     "hwids": [
-      ["0x239A", "0x4405"],
+      ["0x239A", "0x8029"],
       ["0x239A", "0x0029"],
-      ["0x239A", "0x002A"]
+      ["0x239A", "0x002A"],
+      ["0x239A", "0x802A"]
     ],
-    "usb_product": "elecrow_eink",
+    "usb_product": "GAT562 Mesh Trial Tracker",
     "mcu": "nrf52840",
-    "variant": "ELECROW-ThinkNode-M1",
-    "variants_dir": "variants",
+    "variant": "gat562_mesh_trial_tracker",
     "bsp": {
       "name": "adafruit"
     },
@@ -32,12 +32,11 @@
   "connectivity": ["bluetooth"],
   "debug": {
     "jlink_device": "nRF52840_xxAA",
-    "onboard_tools": ["jlink"],
     "svd_path": "nrf52840.svd",
     "openocd_target": "nrf52840-mdk-rs"
   },
-  "frameworks": ["arduino"],
-  "name": "elecrow eink",
+  "frameworks": ["arduino", "freertos"],
+  "name": "GAT562 Mesh Trial Tracker",
   "upload": {
     "maximum_ram_size": 248832,
     "maximum_size": 815104,
@@ -48,6 +47,6 @@
     "require_upload_port": true,
     "wait_for_upload_port": true
   },
-  "url": "https://www.elecrow.com/thinknode-m1-meshtastic-lora-signal-transceiver-powered-by-nrf52840-with-154-screen-support-gps.html",
-  "vendor": "ELECROW"
+  "url": "http://www.gat-iot.com/",
+  "vendor": "GAT-IOT"
 }

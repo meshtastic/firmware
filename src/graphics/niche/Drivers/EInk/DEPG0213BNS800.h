@@ -5,7 +5,7 @@ E-Ink display driver
     - Manufacturer: DKE
     - Size: 2.13 inch
     - Resolution: 122px x 250px
-    - Flex connector marking: FPC-7528B
+    - Flex connector marking (not a unique identifier): FPC-7528B
 
     Note: this is from an older generation of DKE panels, which still used Solomon Systech controller ICs.
     DKE's website suggests that the latest DEPG0213BN displays may use Fitipower controllers instead.

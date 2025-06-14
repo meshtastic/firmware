@@ -8,7 +8,9 @@
 #define PIN_GPS_EN 4
 #define GPS_POWER_TOGGLE // Moved definition from platformio.ini to here
 
-#define BUTTON_PIN 39  // The middle button GPIO on the T-Beam
+#define BUTTON_PIN 39 // The middle button GPIO on the T-Beam
+// Note: On the ESP32 base version, gpio34-39 are input-only, and do not have internal pull-ups.
+// If 39 is not being used for a button, it is suggested to remove the #define.
 #define BATTERY_PIN 35 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 #define ADC_CHANNEL ADC1_GPIO35_CHANNEL
 #define ADC_MULTIPLIER 1.85 // (R1 = 470k, R2 = 680k)

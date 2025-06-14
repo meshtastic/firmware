@@ -258,6 +258,15 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_SEEED_WIO_TRACKER_L1_EINK = 100,
     /* Reserved ID for future and past use */
     meshtastic_HardwareModel_QWANTZ_TINY_ARMS = 101,
+    /* *
+ Lilygo T-Deck Pro */
+    meshtastic_HardwareModel_T_DECK_PRO = 102,
+    /* *
+ Lilygo TLora Pager */
+    meshtastic_HardwareModel_T_LORA_PAGER = 103,
+    /* *
+ GAT562 Mesh Trial Tracker */
+    meshtastic_HardwareModel_GAT562_MESH_TRIAL_TRACKER = 104,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
@@ -949,6 +958,14 @@ typedef struct _meshtastic_KeyVerificationFinal {
     char verification_characters[10];
 } meshtastic_KeyVerificationFinal;
 
+typedef struct _meshtastic_DuplicatedPublicKey {
+    char dummy_field;
+} meshtastic_DuplicatedPublicKey;
+
+typedef struct _meshtastic_LowEntropyKey {
+    char dummy_field;
+} meshtastic_LowEntropyKey;
+
 /* A notification message from the device to the client
  To be used for important messages that should to be displayed to the user
  in the form of push notifications or validation messages when saving
@@ -968,6 +985,8 @@ typedef struct _meshtastic_ClientNotification {
         meshtastic_KeyVerificationNumberInform key_verification_number_inform;
         meshtastic_KeyVerificationNumberRequest key_verification_number_request;
         meshtastic_KeyVerificationFinal key_verification_final;
+        meshtastic_DuplicatedPublicKey duplicated_public_key;
+        meshtastic_LowEntropyKey low_entropy_key;
     } payload_variant;
 } meshtastic_ClientNotification;
 
@@ -1248,6 +1267,8 @@ extern "C" {
 
 
 
+
+
 #define meshtastic_Compressed_portnum_ENUMTYPE meshtastic_PortNum
 
 
@@ -1280,6 +1301,8 @@ extern "C" {
 #define meshtastic_KeyVerificationNumberInform_init_default {0, "", 0}
 #define meshtastic_KeyVerificationNumberRequest_init_default {0, ""}
 #define meshtastic_KeyVerificationFinal_init_default {0, "", 0, ""}
+#define meshtastic_DuplicatedPublicKey_init_default {0}
+#define meshtastic_LowEntropyKey_init_default    {0}
 #define meshtastic_FileInfo_init_default         {"", 0}
 #define meshtastic_ToRadio_init_default          {0, {meshtastic_MeshPacket_init_default}}
 #define meshtastic_Compressed_init_default       {_meshtastic_PortNum_MIN, {0, {0}}}
@@ -1309,6 +1332,8 @@ extern "C" {
 #define meshtastic_KeyVerificationNumberInform_init_zero {0, "", 0}
 #define meshtastic_KeyVerificationNumberRequest_init_zero {0, ""}
 #define meshtastic_KeyVerificationFinal_init_zero {0, "", 0, ""}
+#define meshtastic_DuplicatedPublicKey_init_zero {0}
+#define meshtastic_LowEntropyKey_init_zero       {0}
 #define meshtastic_FileInfo_init_zero            {"", 0}
 #define meshtastic_ToRadio_init_zero             {0, {meshtastic_MeshPacket_init_zero}}
 #define meshtastic_Compressed_init_zero          {_meshtastic_PortNum_MIN, {0, {0}}}
@@ -1446,6 +1471,8 @@ extern "C" {
 #define meshtastic_ClientNotification_key_verification_number_inform_tag 11
 #define meshtastic_ClientNotification_key_verification_number_request_tag 12
 #define meshtastic_ClientNotification_key_verification_final_tag 13
+#define meshtastic_ClientNotification_duplicated_public_key_tag 14
+#define meshtastic_ClientNotification_low_entropy_key_tag 15
 #define meshtastic_FileInfo_file_name_tag        1
 #define meshtastic_FileInfo_size_bytes_tag       2
 #define meshtastic_Compressed_portnum_tag        1
@@ -1714,12 +1741,16 @@ X(a, STATIC,   SINGULAR, UENUM,    level,             3) \
 X(a, STATIC,   SINGULAR, STRING,   message,           4) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,key_verification_number_inform,payload_variant.key_verification_number_inform),  11) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,key_verification_number_request,payload_variant.key_verification_number_request),  12) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,key_verification_final,payload_variant.key_verification_final),  13)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,key_verification_final,payload_variant.key_verification_final),  13) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,duplicated_public_key,payload_variant.duplicated_public_key),  14) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,low_entropy_key,payload_variant.low_entropy_key),  15)
 #define meshtastic_ClientNotification_CALLBACK NULL
 #define meshtastic_ClientNotification_DEFAULT NULL
 #define meshtastic_ClientNotification_payload_variant_key_verification_number_inform_MSGTYPE meshtastic_KeyVerificationNumberInform
 #define meshtastic_ClientNotification_payload_variant_key_verification_number_request_MSGTYPE meshtastic_KeyVerificationNumberRequest
 #define meshtastic_ClientNotification_payload_variant_key_verification_final_MSGTYPE meshtastic_KeyVerificationFinal
+#define meshtastic_ClientNotification_payload_variant_duplicated_public_key_MSGTYPE meshtastic_DuplicatedPublicKey
+#define meshtastic_ClientNotification_payload_variant_low_entropy_key_MSGTYPE meshtastic_LowEntropyKey
 
 #define meshtastic_KeyVerificationNumberInform_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT64,   nonce,             1) \
@@ -1741,6 +1772,16 @@ X(a, STATIC,   SINGULAR, BOOL,     isSender,          3) \
 X(a, STATIC,   SINGULAR, STRING,   verification_characters,   4)
 #define meshtastic_KeyVerificationFinal_CALLBACK NULL
 #define meshtastic_KeyVerificationFinal_DEFAULT NULL
+
+#define meshtastic_DuplicatedPublicKey_FIELDLIST(X, a) \
+
+#define meshtastic_DuplicatedPublicKey_CALLBACK NULL
+#define meshtastic_DuplicatedPublicKey_DEFAULT NULL
+
+#define meshtastic_LowEntropyKey_FIELDLIST(X, a) \
+
+#define meshtastic_LowEntropyKey_CALLBACK NULL
+#define meshtastic_LowEntropyKey_DEFAULT NULL
 
 #define meshtastic_FileInfo_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, STRING,   file_name,         1) \
@@ -1853,6 +1894,8 @@ extern const pb_msgdesc_t meshtastic_ClientNotification_msg;
 extern const pb_msgdesc_t meshtastic_KeyVerificationNumberInform_msg;
 extern const pb_msgdesc_t meshtastic_KeyVerificationNumberRequest_msg;
 extern const pb_msgdesc_t meshtastic_KeyVerificationFinal_msg;
+extern const pb_msgdesc_t meshtastic_DuplicatedPublicKey_msg;
+extern const pb_msgdesc_t meshtastic_LowEntropyKey_msg;
 extern const pb_msgdesc_t meshtastic_FileInfo_msg;
 extern const pb_msgdesc_t meshtastic_ToRadio_msg;
 extern const pb_msgdesc_t meshtastic_Compressed_msg;
@@ -1884,6 +1927,8 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_KeyVerificationNumberInform_fields &meshtastic_KeyVerificationNumberInform_msg
 #define meshtastic_KeyVerificationNumberRequest_fields &meshtastic_KeyVerificationNumberRequest_msg
 #define meshtastic_KeyVerificationFinal_fields &meshtastic_KeyVerificationFinal_msg
+#define meshtastic_DuplicatedPublicKey_fields &meshtastic_DuplicatedPublicKey_msg
+#define meshtastic_LowEntropyKey_fields &meshtastic_LowEntropyKey_msg
 #define meshtastic_FileInfo_fields &meshtastic_FileInfo_msg
 #define meshtastic_ToRadio_fields &meshtastic_ToRadio_msg
 #define meshtastic_Compressed_fields &meshtastic_Compressed_msg
@@ -1905,6 +1950,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_Compressed_size               239
 #define meshtastic_Data_size                     269
 #define meshtastic_DeviceMetadata_size           54
+#define meshtastic_DuplicatedPublicKey_size      0
 #define meshtastic_FileInfo_size                 236
 #define meshtastic_FromRadio_size                510
 #define meshtastic_Heartbeat_size                0
@@ -1913,6 +1959,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_KeyVerificationNumberRequest_size 52
 #define meshtastic_KeyVerification_size          79
 #define meshtastic_LogRecord_size                426
+#define meshtastic_LowEntropyKey_size            0
 #define meshtastic_MeshPacket_size               378
 #define meshtastic_MqttClientProxyMessage_size   501
 #define meshtastic_MyNodeInfo_size               77

@@ -1,23 +1,24 @@
-#include "./GDEY0154D67.h"
+#include "./HINK_E0213A289.h"
 
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
 
 using namespace NicheGraphics::Drivers;
 
 // Map the display controller IC's output to the connected panel
-void GDEY0154D67::configScanning()
+void HINK_E0213A289::configScanning()
 {
     // "Driver output control"
+    // Scan gates from 0 to 249 (vertical resolution 250px)
     sendCommand(0x01);
-    sendData(0xC7); // Scan until gate 199 (200px vertical res.)
-    sendData(0x00);
-    sendData(0x00);
+    sendData(0xF9); // Maximum gate # (249, bits 0-7)
+    sendData(0x00); // Maximum gate # (bit 8)
+    sendData(0x00); // (Do not invert scanning order)
 }
 
 // Specify which information is used to control the sequence of voltages applied to move the pixels
 // - For this display, configUpdateSequence() specifies that a suitable LUT will be loaded from
 //   the controller IC's OTP memory, when the update procedure begins.
-void GDEY0154D67::configWaveform()
+void HINK_E0213A289::configWaveform()
 {
     sendCommand(0x3C); // Border waveform:
     sendData(0x05);    // Screen border should follow LUT1 waveform (actively drive pixels white)
@@ -26,7 +27,9 @@ void GDEY0154D67::configWaveform()
     sendData(0x80);    // Use internal temperature sensor to select an appropriate refresh waveform
 }
 
-void GDEY0154D67::configUpdateSequence()
+// Describes the sequence of events performed by the displays controller IC during a refresh
+// Includes "power up", "load settings from memory", "update the pixels", etc
+void HINK_E0213A289::configUpdateSequence()
 {
     switch (updateType) {
     case FAST:
@@ -45,14 +48,14 @@ void GDEY0154D67::configUpdateSequence()
 // Once the refresh operation has been started,
 // begin periodically polling the display to check for completion, using the normal Meshtastic threading code
 // Only used when refresh is "async"
-void GDEY0154D67::detachFromUpdate()
+void HINK_E0213A289::detachFromUpdate()
 {
     switch (updateType) {
     case FAST:
-        return beginPolling(50, 300); // At least 300ms for fast refresh
+        return beginPolling(50, 500); // At least 500ms for fast refresh
     case FULL:
     default:
-        return beginPolling(100, 1500); // At least 1.5 seconds for full refresh
+        return beginPolling(100, 1000); // At least 1 second for full refresh (quick; display only blinks pixels once)
     }
 }
 #endif // MESHTASTIC_INCLUDE_NICHE_GRAPHICS

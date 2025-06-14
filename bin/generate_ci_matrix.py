@@ -27,7 +27,7 @@ for subdir, dirs, files in os.walk(rootdir):
                 if c.startswith("env:"):
                     section = config[c].name[4:]
                     if "extends" in config[config[c].name]:
-                        if config[config[c].name]["extends"] == options[0] + "_base":
+                        if options[0] + "_base" in config[config[c].name]["extends"]:
                             if "board_level" in config[config[c].name]:
                                 if (
                                     config[config[c].name]["board_level"] == "extra"
