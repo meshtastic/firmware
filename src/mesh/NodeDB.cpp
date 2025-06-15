@@ -1573,7 +1573,7 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
         // Alert the user if a remote node is advertising public key that matches our own
         if (owner.public_key.size == 32 && memcmp(p.public_key.bytes, owner.public_key.bytes, 32) == 0 && !duplicateWarned) {
             duplicateWarned = true;
-            char warning[] = "Remote device %s has advertised your public key. This may indicate a low-entropy key. You may need "
+            char warning[] = "Remote device %s has advertised your public key. This may indicate a compromised key. You may need "
                              "to regenerate your public keys.";
             LOG_WARN(warning, p.long_name);
             meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
