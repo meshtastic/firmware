@@ -12,6 +12,7 @@ class NimbleBluetooth : BluetoothApi
     bool isConnected();
     int getRssi();
     void sendLog(const uint8_t *logMessage, size_t length);
+    void Send_GPWPL(uint32_t node, char* name,int32_t latitude_i,int32_t longitude_i);
 
   private:
     void setupService();
