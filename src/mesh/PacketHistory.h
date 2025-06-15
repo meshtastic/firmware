@@ -23,7 +23,7 @@ class PacketHistory
 
     uint32_t recentPacketsCapacity =
         0; // Can be set in constructor, no need to recompile. Used to allocate memory for mx_recentPackets.
-    PacketRecord *mx_recentPackets = NULL; // Simple and fixed in size. Debloat.
+    PacketRecord *recentPackets = NULL; // Simple and fixed in size. Debloat.
 
     /** Find a packet record in history.
      * @param sender NodeNum
@@ -63,5 +63,5 @@ class PacketHistory
     void removeRelayer(const uint8_t relayer, const uint32_t id, const NodeNum sender);
 
     // Can Check if the PacketHistory was initialized correctly by constructor
-    bool initOk(void) { return mx_recentPackets != NULL && recentPacketsCapacity != 0; }
+    bool initOk(void) { return recentPackets != NULL && recentPacketsCapacity != 0; }
 };

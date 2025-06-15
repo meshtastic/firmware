@@ -20,7 +20,7 @@
         LOG_DEBUG(__VA_ARGS__);                                                                                                  \
     }
 
-PacketHistory::PacketHistory(uint32_t size) : recentPacketsCapacity(0), mx_recentPackets(NULL) // Initialize members
+PacketHistory::PacketHistory(uint32_t size) : recentPacketsCapacity(0), recentPackets(NULL) // Initialize members
 {
     if (size < 4 || size > PACKETHISTORY_MAX) { // Copilot suggested - makes sense
         // LOG_ERROR("PH:Invalid size %d, using default %d", size, PACKETHISTORY_MAX);
@@ -29,21 +29,21 @@ PacketHistory::PacketHistory(uint32_t size) : recentPacketsCapacity(0), mx_recen
 
     // Allocate memory for the recent packets array
     recentPacketsCapacity = size;
-    mx_recentPackets = new PacketRecord[recentPacketsCapacity];
-    if (!mx_recentPackets) {       // No logging here, console/log probably uninitialized yet.
+    recentPackets = new PacketRecord[recentPacketsCapacity];
+    if (!recentPackets) {          // No logging here, console/log probably uninitialized yet.
         recentPacketsCapacity = 0; // mark allocation fail
         return;                    // return early
     }
 
     // Initialize the recent packets array to zero
-    memset(mx_recentPackets, 0, sizeof(PacketRecord) * recentPacketsCapacity);
+    memset(recentPackets, 0, sizeof(PacketRecord) * recentPacketsCapacity);
 }
 
 PacketHistory::~PacketHistory()
 {
     recentPacketsCapacity = 0;
-    delete[] mx_recentPackets;
-    mx_recentPackets = NULL;
+    delete[] recentPackets;
+    recentPackets = NULL;
 }
 
 /** Update recentPackets and return true if we have already seen this packet */
@@ -148,11 +148,11 @@ PacketHistory::PacketRecord *PacketHistory::PRfind(NodeNum sender, PacketId id)
     }
 
     PacketRecord *it = NULL;
-    for (it = mx_recentPackets; it < (mx_recentPackets + recentPacketsCapacity); ++it) {
+    for (it = recentPackets; it < (recentPackets + recentPacketsCapacity); ++it) {
         if (it->id == id && it->sender == sender) {
             mx_LOG_DEBUG("PH:PRf s=%08x id=%08x FOUND nh=%02x rby=%02x %02x %02x age=%d slot=%d/%d", it->sender, it->id,
                          it->next_hop, it->relayed_by[0], it->relayed_by[1], it->relayed_by[2], millis() - (it->rxTimeMsec),
-                         it - mx_recentPackets, recentPacketsCapacity);
+                         it - recentPackets, recentPacketsCapacity);
             return it; // Return pointer to the found record
         }
     }
@@ -170,13 +170,13 @@ void PacketHistory::PRinsert(PacketRecord &r)
     PacketRecord *it = NULL;
 
     // Find a free or oldest slot in the mx_recentPackets array
-    for (it = mx_recentPackets; it < (mx_recentPackets + recentPacketsCapacity); ++it) {
+    for (it = recentPackets; it < (recentPackets + recentPacketsCapacity); ++it) {
         rxTimeMsec = it->rxTimeMsec;
         if (it->id == 0 && it->sender == 0 && rxTimeMsec == 0) { // Record is empty
             tu = it;                                             // Remember the free slot
-            mx_LOG_DEBUG("PH:PRi Free slot@ %d/%d", tu - mx_recentPackets, recentPacketsCapacity);
+            mx_LOG_DEBUG("PH:PRi Free slot@ %d/%d", tu - recentPackets, recentPacketsCapacity);
             // We have that, Exit the loop
-            it = (mx_recentPackets + recentPacketsCapacity);
+            it = (recentPackets + recentPacketsCapacity);
         } else {
             if (rxTimeMsec != 0 && (now_millis - rxTimeMsec) > OldestrxTimeMsec) { // 49.7 days rollover friendly
                 OldestrxTimeMsec = now_millis - rxTimeMsec;
@@ -185,9 +185,9 @@ void PacketHistory::PRinsert(PacketRecord &r)
         }
     }
     // Full loop was made - we have oldest used - clear it
-    if (it == (mx_recentPackets + recentPacketsCapacity)) {
+    if (it == (recentPackets + recentPacketsCapacity)) {
         if (tu != NULL) {
-            mx_LOG_DEBUG("PH:PRi Reuse slot@ %d/%d age=%d", tu - mx_recentPackets, recentPacketsCapacity,
+            mx_LOG_DEBUG("PH:PRi Reuse slot@ %d/%d age=%d", tu - recentPackets, recentPacketsCapacity,
                          millis() - tu->rxTimeMsec); // mx
             memset(tu, 0, sizeof(PacketRecord));     // Clear the record
         }
@@ -202,13 +202,13 @@ void PacketHistory::PRinsert(PacketRecord &r)
     *tu = r; // store the packet
 
     // debug info
-    if (it == (mx_recentPackets + recentPacketsCapacity)) { // reused
+    if (it == (recentPackets + recentPacketsCapacity)) { // reused
         mx_LOG_INFO("PH:PRi s=%08x id=%08x nh=%02x rby=%02x %02x %02x age=%d Reuse@ %d/%d oldage=%d", tu->sender, tu->id,
                     tu->next_hop, tu->relayed_by[0], tu->relayed_by[1], tu->relayed_by[2], millis() - (tu->rxTimeMsec),
-                    tu - mx_recentPackets, recentPacketsCapacity, millis() - OldestrxTimeMsec);
+                    tu - recentPackets, recentPacketsCapacity, millis() - OldestrxTimeMsec);
     } else { // empty
         mx_LOG_INFO("PH:PRi s=%08x id=%08x nh=%02x rby=%02x %02x %02x age=%d  save@ %d/%d New", tu->sender, tu->id, tu->next_hop,
-                    tu->relayed_by[0], tu->relayed_by[1], tu->relayed_by[2], millis() - (tu->rxTimeMsec), tu - mx_recentPackets,
+                    tu->relayed_by[0], tu->relayed_by[1], tu->relayed_by[2], millis() - (tu->rxTimeMsec), tu - recentPackets,
                     recentPacketsCapacity);
     }
 }
