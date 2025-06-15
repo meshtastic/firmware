@@ -972,7 +972,7 @@ void setup()
             BaseType_t higherWake = 0;
             mainDelay.interruptFromISR(&higherWake);
         },
-        INPUT_BROKER_UP, INPUT_BROKER_BACK, 500);
+        INPUT_BROKER_ALT_PRESS, INPUT_BROKER_ALT_LONG, 500);
 #endif
 
 #if defined(BUTTON_PIN)

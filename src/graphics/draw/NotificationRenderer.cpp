@@ -110,14 +110,14 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
 
     if (alertBannerOptions > 0) {
         // respond to input
-        if (inEvent == INPUT_BROKER_UP) {
+        if (inEvent == INPUT_BROKER_UP || inEvent == INPUT_BROKER_ALT_PRESS) {
             curSelected--;
         } else if (inEvent == INPUT_BROKER_DOWN || inEvent == INPUT_BROKER_USER_PRESS) {
             curSelected++;
         } else if (inEvent == INPUT_BROKER_SELECT) {
             alertBannerCallback(curSelected);
             alertBannerMessage[0] = '\0';
-        } else if ((inEvent == INPUT_BROKER_CANCEL || inEvent == INPUT_BROKER_BACK) && alertBannerUntil != 0) {
+        } else if ((inEvent == INPUT_BROKER_CANCEL || inEvent == INPUT_BROKER_ALT_LONG) && alertBannerUntil != 0) {
             alertBannerMessage[0] = '\0';
         }
         if (curSelected == -1)
@@ -136,7 +136,7 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
         }
     } else { // not in an alert with a callback
         // TODO: check that at least a second has passed since the alert started
-        if (inEvent == INPUT_BROKER_SELECT || inEvent == INPUT_BROKER_BACK || inEvent == INPUT_BROKER_CANCEL) {
+        if (inEvent == INPUT_BROKER_SELECT || inEvent == INPUT_BROKER_ALT_LONG || inEvent == INPUT_BROKER_CANCEL) {
             alertBannerMessage[0] = '\0'; // end the alert early
         }
     }

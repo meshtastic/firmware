@@ -303,7 +303,8 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
             break;
         }
         // Handle UP/DOWN: activate canned message list!
-        if (event->inputEvent == INPUT_BROKER_UP || event->inputEvent == INPUT_BROKER_DOWN) {
+        if (event->inputEvent == INPUT_BROKER_UP || event->inputEvent == INPUT_BROKER_DOWN ||
+            event->inputEvent == INPUT_BROKER_ALT_LONG) {
             // Always select the first real canned message on activation
             int firstRealMsgIdx = 0;
             for (int i = 0; i < messagesCount; ++i) {
@@ -351,12 +352,17 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
 
 bool CannedMessageModule::isUpEvent(const InputEvent *event)
 {
-    return event->inputEvent == INPUT_BROKER_UP;
+    return event->inputEvent == INPUT_BROKER_UP ||
+           ((runState == CANNED_MESSAGE_RUN_STATE_ACTIVE || runState == CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER ||
+             runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) &&
+            event->inputEvent == INPUT_BROKER_ALT_PRESS);
 }
 bool CannedMessageModule::isDownEvent(const InputEvent *event)
 {
     return event->inputEvent == INPUT_BROKER_DOWN ||
-           (runState == CANNED_MESSAGE_RUN_STATE_ACTIVE && event->inputEvent == INPUT_BROKER_USER_PRESS);
+           ((runState == CANNED_MESSAGE_RUN_STATE_ACTIVE || runState == CANNED_MESSAGE_RUN_STATE_EMOTE_PICKER ||
+             runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) &&
+            event->inputEvent == INPUT_BROKER_USER_PRESS);
 }
 bool CannedMessageModule::isSelectEvent(const InputEvent *event)
 {
@@ -403,7 +409,7 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
             runOnce(); // update filter immediately
             lastFilterUpdate = millis();
         }
-        return 0;
+        return 1;
     }
 
     size_t numMeshNodes = filteredNodes.size();
@@ -424,7 +430,7 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
             resetSearch();
             needsUpdate = false;
         }
-        return 0;
+        return 1;
     }
 
     // UP
@@ -436,7 +442,7 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
             scrollIndex = (destIndex / columns) - visibleRows + 1;
 
         screen->forceDisplay();
-        return 0;
+        return 1;
     }
 
     // DOWN
@@ -446,7 +452,7 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
             scrollIndex = (destIndex / columns) - visibleRows + 1;
 
         screen->forceDisplay();
-        return 0;
+        return 1;
     }
 
     // SELECT
@@ -468,19 +474,20 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
         runState = returnToCannedList ? CANNED_MESSAGE_RUN_STATE_ACTIVE : CANNED_MESSAGE_RUN_STATE_FREETEXT;
         returnToCannedList = false;
         screen->forceDisplay();
-        return 0;
+        return 1;
     }
 
     // CANCEL
-    if (event->inputEvent == INPUT_BROKER_CANCEL || event->inputEvent == INPUT_BROKER_BACK) {
-        runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+    if (event->inputEvent == INPUT_BROKER_CANCEL || event->inputEvent == INPUT_BROKER_ALT_LONG) {
+        runState = returnToCannedList ? CANNED_MESSAGE_RUN_STATE_ACTIVE : CANNED_MESSAGE_RUN_STATE_FREETEXT;
+        returnToCannedList = false;
         searchQuery = "";
 
-        UIFrameEvent e;
-        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
-        notifyObservers(&e);
+        // UIFrameEvent e;
+        // e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+        // notifyObservers(&e);
         screen->forceDisplay();
-        return 0;
+        return 1;
     }
 
     return 0;
@@ -502,7 +509,7 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
 
     // === Handle Cancel key: go inactive, clear UI state ===
     if (runState != CANNED_MESSAGE_RUN_STATE_INACTIVE &&
-        (event->inputEvent == INPUT_BROKER_CANCEL || event->inputEvent == INPUT_BROKER_BACK)) {
+        (event->inputEvent == INPUT_BROKER_CANCEL || event->inputEvent == INPUT_BROKER_ALT_LONG)) {
         runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         freetext = "";
         cursor = 0;
@@ -697,7 +704,7 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     }
 
     // Cancel (dismiss freetext screen)
-    if (event->inputEvent == INPUT_BROKER_CANCEL || event->inputEvent == INPUT_BROKER_BACK) {
+    if (event->inputEvent == INPUT_BROKER_CANCEL || event->inputEvent == INPUT_BROKER_ALT_LONG) {
         runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         UIFrameEvent e;
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
@@ -766,7 +773,7 @@ int CannedMessageModule::handleEmotePickerInput(const InputEvent *event)
     }
 
     // Cancel returns to freetext
-    if (event->inputEvent == INPUT_BROKER_CANCEL || event->inputEvent == INPUT_BROKER_BACK) {
+    if (event->inputEvent == INPUT_BROKER_CANCEL || event->inputEvent == INPUT_BROKER_ALT_LONG) {
         runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
         screen->forceDisplay();
         return 1;
