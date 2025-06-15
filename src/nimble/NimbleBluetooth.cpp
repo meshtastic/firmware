@@ -171,6 +171,11 @@ void NimbleBluetooth::deinit()
 {
 #ifdef ARCH_ESP32
     LOG_INFO("Disable bluetooth until reboot");
+
+#ifdef BLE_LED
+    digitalWrite(BLE_LED, LOW);
+#endif
+
     NimBLEDevice::deinit();
 #endif
 }
