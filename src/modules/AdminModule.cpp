@@ -738,11 +738,16 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         LOG_INFO("Set config: Security");
         config.security = c.payload_variant.security;
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN) && !(MESHTASTIC_EXCLUDE_PKI)
-        // We check for a potentially valid private key, and a blank public key, and regen the public key if needed.
-        if (config.security.private_key.size == 32 && !memfll(config.security.private_key.bytes, 0, 32) &&
-            (config.security.public_key.size == 0 || memfll(config.security.public_key.bytes, 0, 32))) {
-            if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
-                config.security.public_key.size = 32;
+        // If the client set the key to blank, go ahead and regenerate so long as we're not in ham mode
+        if (!owner.is_licensed && config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
+            if (config.security.private_key.size != 32) {
+                crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
+
+            } else if (config.security.public_key.size != 32) {
+                // We check for a potentially valid private key, and a blank public key, and regen the public key if needed.
+                if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
+                    config.security.public_key.size = 32;
+                }
             }
         }
 #endif
