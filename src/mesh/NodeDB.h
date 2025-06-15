@@ -79,7 +79,7 @@ static const uint8_t LOW_ENTROPY_HASH19[] = {0x6E, 0x42, 0x7A, 0x4A, 0x8C, 0x61,
 static const uint8_t LOW_ENTROPY_HASH20[] = {0x20, 0x27, 0x2F, 0xBA, 0x0C, 0x99, 0xD7, 0x29, 0xF3, 0x11, 0x35,
                                              0x89, 0x9D, 0x0E, 0x24, 0xA1, 0xC3, 0xCB, 0xDF, 0x8A, 0xF1, 0xC6,
                                              0xFE, 0xD0, 0xD7, 0x9F, 0x92, 0xD6, 0x8F, 0x59, 0xBF, 0xE4};
-static const char LOW_ENTROPY_WARNING[] = "Your Device is configured with a low entropy key. Suggest regenerating DM keys";
+static const char LOW_ENTROPY_WARNING[] = "Compromised keys detected, please regenerate.";
 #endif
 /*
 DeviceState versions used to be defined in the .proto file but really only this function cares.  So changed to a
