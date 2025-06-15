@@ -30,11 +30,11 @@ class PacketHistory
      * @param sender NodeNum
      * @param id PacketId
      * @return pointer to PacketRecord if found, NULL if not found */
-    PacketRecord *PRfind(NodeNum sender, PacketId id);
+    PacketRecord *find(NodeNum sender, PacketId id);
 
     /** Insert/Replace oldest PacketRecord in mx_recentPackets.
      * @param r PacketRecord to insert or replace */
-    void PRinsert(PacketRecord &r);
+    void insert(PacketRecord &r);
 
     /* Check if a certain node was a relayer of a packet in the history given iterator
      * @return true if node was indeed a relayer, false if not */
