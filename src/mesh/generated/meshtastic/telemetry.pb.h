@@ -97,9 +97,9 @@ typedef enum _meshtastic_TelemetrySensorType {
 /* Struct definitions */
 /* Key native device metrics such as battery level */
 typedef struct _meshtastic_DeviceMetrics {
-    /* 0-100 (>100 means powered) */
+    /* 0-100 (>100 means powered, -1 means not connected) */
     bool has_battery_level;
-    uint32_t battery_level;
+    int32_t battery_level;
     /* Voltage measured */
     bool has_voltage;
     float voltage;
@@ -478,7 +478,7 @@ extern "C" {
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_DeviceMetrics_FIELDLIST(X, a) \
-X(a, STATIC,   OPTIONAL, UINT32,   battery_level,     1) \
+X(a, STATIC,   OPTIONAL, INT32,    battery_level,     1) \
 X(a, STATIC,   OPTIONAL, FLOAT,    voltage,           2) \
 X(a, STATIC,   OPTIONAL, FLOAT,    channel_utilization,   3) \
 X(a, STATIC,   OPTIONAL, FLOAT,    air_util_tx,       4) \
@@ -625,7 +625,7 @@ extern const pb_msgdesc_t meshtastic_Nau7802Config_msg;
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_TELEMETRY_PB_H_MAX_SIZE meshtastic_Telemetry_size
 #define meshtastic_AirQualityMetrics_size        78
-#define meshtastic_DeviceMetrics_size            27
+#define meshtastic_DeviceMetrics_size            32
 #define meshtastic_EnvironmentMetrics_size       113
 #define meshtastic_HealthMetrics_size            11
 #define meshtastic_HostMetrics_size              264
