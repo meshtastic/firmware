@@ -3,8 +3,8 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
-#include "RTC.h"
 #include "SPILock.h"
+#include "gps/RTC.h"
 #include "meshUtils.h"
 #include <FSCommon.h>
 #include <ctype.h> // for better whitespace handling
