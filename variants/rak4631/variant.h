@@ -219,6 +219,10 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 
 // Testing USB detection
 #define NRF_APM
+// If using a power chip like the INA3221 you can override the default battery voltage channel below
+// and comment out NRF_APM to use the INA3221 instead of the USB detection for charging
+// #define INA3221_BAT_CH INA3221_CH2
+// #define INA3221_ENV_CH INA3221_CH1
 
 // enables 3.3V periphery like GPS or IO Module
 // Do not toggle this for GPS power savings
