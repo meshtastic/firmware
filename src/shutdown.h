@@ -41,8 +41,8 @@ void powerCommandsCheck()
     }
 
 #if defined(ARCH_ESP32) || defined(ARCH_NRF52)
-    if (shutdownAtMsec) {
-        screen->startAlert("Shutting down...");
+    if (shutdownAtMsec && screen) {
+        screen->showOverlayBanner("Shutting Down...", 0); // stays on screen
     }
 #endif
 

@@ -6,9 +6,7 @@
 #define I2C_SDA1 14 // Second i2c channel on external IO connector
 #define I2C_SCL1 15 // Second i2c channel on external IO connector
 
-#define BUTTON_PIN 36 // The middle button GPIO on the Nano G1
-// #define BUTTON_PIN_ALT 13 // Alternate GPIO for an external button if needed. Does anyone use this? It is not documented
-//  anywhere.
+#define BUTTON_PIN 36     // The middle button GPIO on the Nano G1
 #define EXT_NOTIFY_OUT 13 // Default pin to use for Ext Notify Module.
 
 // common pinout for their SX1262 vs RF95 modules - both can be enabled and we will probe at runtime for RF95 and if

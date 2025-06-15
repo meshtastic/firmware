@@ -73,35 +73,35 @@ int32_t KbMatrixBase::runOnce()
                 LOG_DEBUG("Key 0x%x pressed", key);
                 // reset shift now that we have a keypress
                 InputEvent e;
-                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
+                e.inputEvent = INPUT_BROKER_NONE;
                 e.source = this->_originName;
                 switch (key) {
                 case 0x1b: // ESC
-                    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL;
+                    e.inputEvent = INPUT_BROKER_CANCEL;
                     break;
                 case 0x08: // Back
-                    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_BACK;
-                    e.kbchar = key;
+                    e.inputEvent = INPUT_BROKER_BACK;
+                    e.kbchar = 0;
                     break;
                 case 0xb5: // Up
-                    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP;
+                    e.inputEvent = INPUT_BROKER_UP;
                     break;
                 case 0xb6: // Down
-                    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN;
+                    e.inputEvent = INPUT_BROKER_DOWN;
                     break;
                 case 0xb4: // Left
-                    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT;
-                    e.kbchar = key;
+                    e.inputEvent = INPUT_BROKER_LEFT;
+                    e.kbchar = 0;
                     break;
                 case 0xb7: // Right
-                    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT;
-                    e.kbchar = key;
+                    e.inputEvent = INPUT_BROKER_RIGHT;
+                    e.kbchar = 0;
                     break;
                 case 0x0d: // Enter
-                    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT;
+                    e.inputEvent = INPUT_BROKER_SELECT;
                     break;
                 case 0x00: // nopress
-                    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
+                    e.inputEvent = INPUT_BROKER_NONE;
                     break;
                 case 0x1a: // Shift
                     shift++;
@@ -110,11 +110,11 @@ int32_t KbMatrixBase::runOnce()
                     }
                     break;
                 default: // all other keys
-                    e.inputEvent = ANYKEY;
+                    e.inputEvent = INPUT_BROKER_ANYKEY;
                     e.kbchar = key;
                     break;
                 }
-                if (e.inputEvent != meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE) {
+                if (e.inputEvent != INPUT_BROKER_NONE) {
                     this->notifyObservers(&e);
                 }
             }
