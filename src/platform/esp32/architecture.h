@@ -186,6 +186,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_CROWPANEL
 #elif defined(LINK_32)
 #define HW_VENDOR meshtastic_HardwareModel_LINK_32
+#elif defined(T_DECK_PRO)
+#define HW_VENDOR meshtastic_HardwareModel_T_DECK_PRO
 #endif
 
 // -----------------------------------------------------------------------------

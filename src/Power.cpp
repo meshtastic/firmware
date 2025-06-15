@@ -120,6 +120,11 @@ NullSensor max17048Sensor;
 RAK9154Sensor rak9154Sensor;
 #endif
 
+#ifdef HAS_PPM
+// note: XPOWERS_CHIP_XXX must be defined in variant.h
+#include <XPowersLib.h>
+#endif
+
 #ifdef HAS_PMU
 XPowersLibInterface *PMU = NULL;
 #else
@@ -665,6 +670,8 @@ bool Power::setup()
     bool found = axpChipInit();
     if (!found)
         found = lipoInit();
+    if (!found)
+        found = lipoChargerInit();
     if (!found)
         found = analogInit();
 
@@ -1231,6 +1238,114 @@ bool Power::lipoInit()
  * The Lipo battery level sensor is unavailable - default to AnalogBatteryLevel
  */
 bool Power::lipoInit()
+{
+    return false;
+}
+#endif
+
+#if defined(HAS_PPM) && HAS_PPM
+
+/**
+ * Adapter class for BQ25896 Lipo battery charger.
+ */
+class LipoCharger : public HasBatteryLevel
+{
+  private:
+    XPowersPPM *ppm = nullptr;
+
+  public:
+    /**
+     * Init the I2C BQ25896 Lipo battery charger
+     */
+    bool runOnce()
+    {
+        if (ppm == nullptr) {
+            ppm = new XPowersPPM;
+            bool result = ppm->init(Wire, I2C_SDA, I2C_SCL, BQ25896_ADDR);
+            if (result) {
+                LOG_INFO("PPM BQ25896 init succeeded");
+                // Set the minimum operating voltage. Below this voltage, the PPM will protect
+                ppm->setSysPowerDownVoltage(3100);
+
+                // Set input current limit, default is 500mA
+                ppm->setInputCurrentLimit(3250);
+
+                // Disable current limit pin
+                ppm->disableCurrentLimitPin();
+
+                // Set the charging target voltage, Range:3840 ~ 4608mV ,step:16 mV
+                ppm->setChargeTargetVoltage(4208);
+
+                // Set the precharge current , Range: 64mA ~ 1024mA ,step:64mA
+                ppm->setPrechargeCurr(64);
+
+                // The premise is that limit pin is disabled, or it will
+                // only follow the maximum charging current set by limit pin.
+                // Set the charging current , Range:0~5056mA ,step:64mA
+                ppm->setChargerConstantCurr(1024);
+
+                // To obtain voltage data, the ADC must be enabled first
+                ppm->enableMeasure();
+
+                // Turn on charging function
+                // If there is no battery connected, do not turn on the charging function
+                ppm->enableCharge();
+                return true;
+            } else {
+                LOG_WARN("PPM BQ25896 init failed");
+                delete ppm;
+                ppm = nullptr;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Battery state of charge, from 0 to 100 or -1 for unknown
+     */
+    virtual int getBatteryPercent() override { return -1; }
+
+    /**
+     * The raw voltage of the battery in millivolts, or NAN if unknown
+     */
+    virtual uint16_t getBattVoltage() override { return ppm->getBattVoltage(); }
+
+    /**
+     * return true if there is a battery installed in this unit
+     */
+    virtual bool isBatteryConnect() override { return ppm->getBattVoltage() > 0; }
+
+    /**
+     * return true if there is an external power source detected
+     */
+    virtual bool isVbusIn() override { return ppm->isVbusIn(); }
+
+    /**
+     * return true if the battery is currently charging
+     */
+    virtual bool isCharging() override { return ppm->isCharging(); }
+};
+
+LipoCharger lipoCharger;
+
+/**
+ * Init the Lipo battery charger
+ */
+bool Power::lipoChargerInit()
+{
+    bool result = lipoCharger.runOnce();
+    LOG_DEBUG("Power::lipoChargerInit lipo sensor is %s", result ? "ready" : "not ready yet");
+    if (!result)
+        return false;
+    batteryLevel = &lipoCharger;
+    return true;
+}
+
+#else
+/**
+ * The Lipo battery level sensor is unavailable - default to AnalogBatteryLevel
+ */
+bool Power::lipoChargerInit()
 {
     return false;
 }
