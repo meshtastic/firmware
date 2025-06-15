@@ -1557,7 +1557,7 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
         info->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
         // Mark the node's key as manually verified to indicate trustworthiness.
         updateGUIforNode = info;
-        powerFSM.trigger(EVENT_NODEDB_UPDATED);
+        // powerFSM.trigger(EVENT_NODEDB_UPDATED); This event has been retired
         notifyObservers(true); // Force an update whether or not our node counts have changed
     }
     saveNodeDatabaseToDisk();
