@@ -3,9 +3,10 @@
 #include "BBQ10Keyboard.h"
 #include "InputBroker.h"
 #include "MPR121Keyboard.h"
-#include "TCA8418Keyboard.h"
 #include "Wire.h"
 #include "concurrency/OSThread.h"
+
+class TCA8418KeyboardBase;
 
 class KbI2cBase : public Observable<const InputEvent *>, public concurrency::OSThread
 {
@@ -22,6 +23,6 @@ class KbI2cBase : public Observable<const InputEvent *>, public concurrency::OST
 
     BBQ10Keyboard Q10keyboard;
     MPR121Keyboard MPRkeyboard;
-    TCA8418Keyboard TCAKeyboard;
+    TCA8418KeyboardBase &TCAKeyboard;
     bool is_sym = false;
 };
