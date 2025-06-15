@@ -1545,15 +1545,25 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
         return;
     }
     info->num = contact.node_num;
-    info->last_heard = getValidTime(RTCQualityNTP);
     info->has_user = true;
     info->user = TypeConversions::ConvertToUserLite(contact.user);
-    info->is_favorite = true;
-    // Mark the node's key as manually verified to indicate trustworthiness.
-    info->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
-    updateGUIforNode = info;
-    powerFSM.trigger(EVENT_NODEDB_UPDATED);
-    notifyObservers(true); // Force an update whether or not our node counts have changed
+    if (contact.should_ignore) {
+        // If should_ignore is set,
+        // we need to clear the public key and other cruft, in addition to setting the node as ignored
+        info->is_ignored = true;
+        info->has_device_metrics = false;
+        info->has_position = false;
+        info->user.public_key.size = 0;
+        info->user.public_key.bytes[0] = 0;
+    } else {
+        info->last_heard = getValidTime(RTCQualityNTP);
+        info->is_favorite = true;
+        info->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
+        // Mark the node's key as manually verified to indicate trustworthiness.
+        updateGUIforNode = info;
+        powerFSM.trigger(EVENT_NODEDB_UPDATED);
+        notifyObservers(true); // Force an update whether or not our node counts have changed
+    }
     saveNodeDatabaseToDisk();
 }
 
