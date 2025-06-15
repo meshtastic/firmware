@@ -3,7 +3,7 @@
 #include "NodeDB.h"
 
 #define PACKETHISTORY_MAX                                                                                                        \
-    min((int)(MAX_NUM_NODES * 2.0), 100) // x2..3  Should suffice. Empirical setup. 16B per record malloc'ed, but no less than 100
+    max((int)(MAX_NUM_NODES * 2.0), 100) // x2..3  Should suffice. Empirical setup. 16B per record malloc'ed, but no less than 100
 
 #define NUM_RELAYERS                                                                                                             \
     3 // Number of relayer we keep track of. Use 3 to be efficient with memory alignment of PacketRecord to 16 bytes
