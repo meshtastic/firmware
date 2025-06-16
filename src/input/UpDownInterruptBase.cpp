@@ -8,7 +8,7 @@ UpDownInterruptBase::UpDownInterruptBase(const char *name) : concurrency::OSThre
 
 void UpDownInterruptBase::init(uint8_t pinDown, uint8_t pinUp, uint8_t pinPress, input_broker_event eventDown,
                                input_broker_event eventUp, input_broker_event eventPressed, void (*onIntDown)(),
-                               void (*onIntUp)(), void (*onIntPress)())
+                               void (*onIntUp)(), void (*onIntPress)(), unsigned long updownDebounceMs)
 {
     this->_pinDown = pinDown;
     this->_pinUp = pinUp;
@@ -35,19 +35,19 @@ int32_t UpDownInterruptBase::runOnce()
     e.inputEvent = INPUT_BROKER_NONE;
     unsigned long now = millis();
     if (this->action == UPDOWN_ACTION_PRESSED) {
-        if (now - lastPressKeyTime >= PRESS_DEBOUNCE_MS) {
+        if (now - lastPressKeyTime >= pressDebounceMs) {
             lastPressKeyTime = now;
             LOG_DEBUG("GPIO event Press");
             e.inputEvent = this->_eventPressed;
         }
     } else if (this->action == UPDOWN_ACTION_UP) {
-        if (now - lastUpKeyTime >= UPDOWN_DEBOUNCE_MS) {
+        if (now - lastUpKeyTime >= updownDebounceMs) {
             lastUpKeyTime = now;
             LOG_DEBUG("GPIO event Up");
             e.inputEvent = this->_eventUp;
         }
     } else if (this->action == UPDOWN_ACTION_DOWN) {
-        if (now - lastDownKeyTime >= UPDOWN_DEBOUNCE_MS) {
+        if (now - lastDownKeyTime >= updownDebounceMs) {
             lastDownKeyTime = now;
             LOG_DEBUG("GPIO event Down");
             e.inputEvent = this->_eventDown;
