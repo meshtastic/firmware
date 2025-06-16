@@ -684,7 +684,6 @@ int32_t Screen::runOnce()
             "region\nUS\nEU_433\nEU_868\nCN\nJP\nANZ\nKR\nTW\nRU\nIN\nNZ_865\nTH\nLORA_24\nUA_433\nUA_868\nMY_433\nMY_919\nSG_"
             "923\nPH_433\nPH_868\nPH_915",
             0, 21, [](int selected) -> void {
-                LOG_WARN("Chose %d", selected);
                 config.lora.region = _meshtastic_Config_LoRaConfig_RegionCode(selected + 1);
                 if (!owner.is_licensed) {
                     bool keygenSuccess = false;
@@ -1318,7 +1317,6 @@ int Screen::handleUIFrameEvent(const UIFrameEvent *event)
 
 int Screen::handleInputEvent(const InputEvent *event)
 {
-    LOG_WARN("event %u", event->inputEvent);
     if (!screenOn)
         return 0;
 

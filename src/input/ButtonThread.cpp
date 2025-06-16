@@ -177,8 +177,6 @@ int32_t ButtonThread::runOnce()
         evt.touchY = 0;
         switch (btnEvent) {
         case BUTTON_EVENT_PRESSED: {
-            LOG_WARN("press!");
-
             // Play boop sound for every button press
             playBoop();
 
@@ -199,12 +197,9 @@ int32_t ButtonThread::runOnce()
             if (_touchQuirk && RadioLibInterface::instance && RadioLibInterface::instance->isSending())
                 break;
 
-            LOG_WARN("Long press!");
-
             // Check if this is part of a short-press + long-press combination
             if (_shortLong != INPUT_BROKER_NONE && waitingForLongPress &&
                 (millis() - shortPressTime) <= BUTTON_COMBO_TIMEOUT_MS) {
-                LOG_WARN("Short-press + Long-press combination detected!");
                 evt.inputEvent = _shortLong;
                 // evt.kbchar = _shortLong;
                 this->notifyObservers(&evt);
@@ -256,7 +251,6 @@ int32_t ButtonThread::runOnce()
 
             switch (multipressClickCount) {
             case 3:
-                LOG_WARN("doing %u", _triplePress);
                 evt.inputEvent = _triplePress;
                 // evt.kbchar = _triplePress;
                 this->notifyObservers(&evt);

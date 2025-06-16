@@ -22,7 +22,7 @@ SystemCommandsModule::SystemCommandsModule()
 
 int SystemCommandsModule::handleInputEvent(const InputEvent *event)
 {
-    LOG_WARN("Input event %u! kb %u", event->inputEvent, event->kbchar);
+    LOG_INFO("Input event %u! kb %u", event->inputEvent, event->kbchar);
     // System commands (all others fall through)
     switch (event->kbchar) {
     // Fn key symbols
