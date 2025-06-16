@@ -16,9 +16,12 @@
   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
-#ifndef _VARIANT_RAK4630_
-#define _VARIANT_RAK4630_
+#ifndef _VARIANT_GAT562_MESH_TRIAL_TRACKER_
+#define _VARIANT_GAT562_MESH_TRIAL_TRACKER_
 
+#define GAT562_MESH_TRIAL_TRACKER
+
+// led pin 2 (blue), see https://github.com/meshtastic/firmware/blob/master/src/mesh/NodeDB.cpp#L723
 #define RAK4630
 
 /** Master clock frequency */
@@ -126,17 +129,21 @@ static const uint8_t SCK = PIN_SPI_SCK;
  * eink display pins
  */
 
-#define PIN_EINK_CS (0 + 26)
-#define PIN_EINK_BUSY (0 + 4)
-#define PIN_EINK_DC (0 + 17)
-#define PIN_EINK_RES (-1)
-#define PIN_EINK_SCLK (0 + 3)
-#define PIN_EINK_MOSI (0 + 30) // also called SDI
+// #define PIN_EINK_CS (0 + 26)
+// #define PIN_EINK_BUSY (0 + 4)
+// #define PIN_EINK_DC (0 + 17)
+// #define PIN_EINK_RES (-1)
+// #define PIN_EINK_SCLK (0 + 3)
+// #define PIN_EINK_MOSI (0 + 30) // also called SDI
 
 // #define USE_EINK
 
+// Display - OLED connected via I2C
+#define HAS_SCREEN 1
+#define USE_SSD1306
+
 // RAKRGB
-#define HAS_NCP5623
+// #define HAS_NCP5623
 
 /*
  * Wire Interfaces
@@ -201,9 +208,9 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 // air quality telemetry.  PIN_NFC2 doesn't seem to be used anywhere else in the codebase, but if
 // you're having problems with your node behaving weirdly when a RAK12039 board isn't connected,
 // try disabling this.
-#define PMSA003I_ENABLE_PIN PIN_NFC2
+// #define PMSA003I_ENABLE_PIN PIN_NFC2
 
-#define DETECTION_SENSOR_EN 4
+// #define DETECTION_SENSOR_EN 4
 
 #define USE_SX1262
 #define SX126X_CS (42)
@@ -219,10 +226,6 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 
 // Testing USB detection
 #define NRF_APM
-// If using a power chip like the INA3221 you can override the default battery voltage channel below
-// and comment out NRF_APM to use the INA3221 instead of the USB detection for charging
-// #define INA3221_BAT_CH INA3221_CH2
-// #define INA3221_ENV_CH INA3221_CH1
 
 // enables 3.3V periphery like GPS or IO Module
 // Do not toggle this for GPS power savings
@@ -238,13 +241,15 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 // #define PIN_GPS_EN PIN_3V3_EN
 #define PIN_GPS_PPS (17) // Pulse per second input from the GPS
 
+#define GPS_BAUDRATE 9600
+
 #define GPS_RX_PIN PIN_SERIAL1_RX
 #define GPS_TX_PIN PIN_SERIAL1_TX
 
 // Define pin to enable GPS toggle (set GPIO to LOW) via user button triple press
 
 // RAK12002 RTC Module
-#define RV3028_RTC (uint8_t)0b1010010
+// #define RV3028_RTC (uint8_t)0b1010010
 
 // RAK18001 Buzzer in Slot C
 // #define PIN_BUZZER 21 // IO3 is PWM2
@@ -261,16 +266,16 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
 #define ADC_MULTIPLIER 1.73
 
-#define HAS_RTC 1
+// #define HAS_RTC 1
 
-#define HAS_ETHERNET 1
+// #define HAS_ETHERNET 1
 
-#define RAK_4631 1
+// #define RAK_4631 1
 
-#define PIN_ETHERNET_RESET 21
-#define PIN_ETHERNET_SS PIN_EINK_CS
-#define ETH_SPI_PORT SPI1
-#define AQ_SET_PIN 10
+// #define PIN_ETHERNET_RESET 21
+// #define PIN_ETHERNET_SS PIN_EINK_CS
+// #define ETH_SPI_PORT SPI1
+// #define AQ_SET_PIN 10
 
 #ifdef __cplusplus
 }
