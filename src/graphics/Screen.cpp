@@ -144,6 +144,10 @@ void Screen::showOverlayBanner(const char *message, uint32_t durationMs, uint8_t
     NotificationRenderer::alertBannerCallback = bannerCallback;
     NotificationRenderer::curSelected = InitialSelected;
     NotificationRenderer::pauseBanner = false;
+    static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawAlertBannerOverlay};
+    ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
+    setFastFramerate(); // Draw ASAP
+    ui->update();
 }
 
 static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -1444,6 +1448,15 @@ int Screen::handleInputEvent(const InputEvent *event)
                             setenv("TZ", config.device.tzdef, 1);
                             service->reloadConfig(SEGMENT_CONFIG);
                         });
+                } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.textMessage) {
+                    showOverlayBanner(
+                        "Dismiss Message?\nYES\nNO", 30000, 2,
+                        [](int selected) -> void {
+                            if (selected == 0) {
+                                screen->dismissCurrentFrame();
+                            }
+                        },
+                        1);
                 }
             } else if (event->inputEvent == INPUT_BROKER_BACK) {
                 showPrevFrame();
