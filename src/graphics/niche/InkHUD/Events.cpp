@@ -3,11 +3,14 @@
 #include "./Events.h"
 
 #include "RTC.h"
+#include "modules/AdminModule.h"
+#include "modules/ExternalNotificationModule.h"
 #include "modules/TextMessageModule.h"
 #include "sleep.h"
 
 #include "./Applet.h"
 #include "./SystemApplet.h"
+#include "graphics/niche/FlashData.h"
 
 using namespace NicheGraphics;
 
@@ -25,6 +28,9 @@ void InkHUD::Events::begin()
     deepSleepObserver.observe(&notifyDeepSleep);
     rebootObserver.observe(&notifyReboot);
     textMessageObserver.observe(textMessageModule);
+#if !MESHTASTIC_EXCLUDE_ADMIN
+    adminMessageObserver.observe(adminModule);
+#endif
 #ifdef ARCH_ESP32
     lightSleepObserver.observe(&notifyLightSleep);
 #endif
@@ -32,6 +38,10 @@ void InkHUD::Events::begin()
 
 void InkHUD::Events::onButtonShort()
 {
+    // Cancel any beeping, buzzing, blinking
+    // Some button handling suppressed if we are dismissing an external notification (see below)
+    bool dismissedExt = dismissExternalNotification();
+
     // Check which system applet wants to handle the button press (if any)
     SystemApplet *consumer = nullptr;
     for (SystemApplet *sa : inkhud->systemApplets) {
@@ -44,7 +54,7 @@ void InkHUD::Events::onButtonShort()
     // If no system applet is handling input, default behavior instead is to cycle applets
     if (consumer)
         consumer->onButtonShortPress();
-    else
+    else if (!dismissedExt) // Don't change applet if this button press silenced the external notification module
         inkhud->nextApplet();
 }
 
@@ -117,8 +127,13 @@ int InkHUD::Events::beforeReboot(void *unused)
         sa->onReboot();
     }
 
-    inkhud->persistence->saveSettings();
-    inkhud->persistence->saveLatestMessage();
+    // Save settings to flash, or erase if factory reset in progress
+    if (!eraseOnReboot) {
+        inkhud->persistence->saveSettings();
+        inkhud->persistence->saveLatestMessage();
+    } else {
+        NicheGraphics::clearFlashData();
+    }
 
     // Note: no forceUpdate call here
     // We don't have any final screen to draw, although LogoApplet::onReboot did already display a "rebooting" screen
@@ -134,11 +149,6 @@ int InkHUD::Events::onReceiveTextMessage(const meshtastic_MeshPacket *packet)
 {
     // Short circuit: don't store outgoing messages
     if (getFrom(packet) == nodeDB->getNodeNum())
-        return 0;
-
-    // Short circuit: don't store "emoji reactions"
-    // Possibly some implementation of this in future?
-    if (packet->decoded.emoji)
         return 0;
 
     // Determine whether the message is broadcast or a DM
@@ -171,6 +181,23 @@ int InkHUD::Events::onReceiveTextMessage(const meshtastic_MeshPacket *packet)
     return 0; // Tell caller to continue notifying other observers. (No reason to abort this event)
 }
 
+int InkHUD::Events::onAdminMessage(const meshtastic_AdminMessage *message)
+{
+    switch (message->which_payload_variant) {
+    // Factory reset
+    // Two possible messages. One preserves BLE bonds, other wipes. Both should clear InkHUD data.
+    case meshtastic_AdminMessage_factory_reset_device_tag:
+    case meshtastic_AdminMessage_factory_reset_config_tag:
+        eraseOnReboot = true;
+        break;
+
+    default:
+        break;
+    }
+
+    return 0; // Tell caller to continue notifying other observers. (No reason to abort this event)
+}
+
 #ifdef ARCH_ESP32
 // Callback for lightSleepObserver
 // Make sure the display is not partway through an update when we begin light sleep
@@ -181,5 +208,25 @@ int InkHUD::Events::beforeLightSleep(void *unused)
     return 0; // No special status to report. Ignored anyway by this Observable
 }
 #endif
+
+// Silence all ongoing beeping, blinking, buzzing, coming from the external notification module
+// Returns true if an external notification was active, and we dismissed it
+// Button handling changes depending on our result
+bool InkHUD::Events::dismissExternalNotification()
+{
+    // Abort if not using external notifications
+    if (!moduleConfig.external_notification.enabled)
+        return false;
+
+    // Abort if nothing to dismiss
+    if (!externalNotificationModule->nagging())
+        return false;
+
+    // Stop the beep buzz blink
+    externalNotificationModule->stopNow();
+
+    // Inform that we did indeed dismiss an external notification
+    return true;
+}
 
 #endif

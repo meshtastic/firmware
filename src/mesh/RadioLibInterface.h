@@ -16,6 +16,9 @@
 
 #define RADIOLIB_PIN_TYPE uint32_t
 
+// In addition to the default Rx flags, we need the PREAMBLE_DETECTED flag to detect whether we are actively receiving
+#define MESHTASTIC_RADIOLIB_IRQ_RX_FLAGS (RADIOLIB_IRQ_RX_DEFAULT_FLAGS | (1 << RADIOLIB_IRQ_PREAMBLE_DETECTED))
+
 /**
  * We need to override the RadioLib ArduinoHal class to add mutex protection for SPI bus access
  */

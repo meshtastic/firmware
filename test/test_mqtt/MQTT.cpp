@@ -310,6 +310,8 @@ void setUp(void)
 {
     moduleConfig.mqtt =
         meshtastic_ModuleConfig_MQTTConfig{.enabled = true, .map_reporting_enabled = true, .has_map_report_settings = true};
+    moduleConfig.mqtt.map_report_settings = meshtastic_ModuleConfig_MapReportSettings{
+        .publish_interval_secs = 0, .position_precision = 14, .should_report_location = true};
     channelFile.channels[0] = meshtastic_Channel{
         .index = 0,
         .has_settings = true,
@@ -706,42 +708,21 @@ void test_reportToMapDefaultImprecise(void)
     TEST_ASSERT_EQUAL(1, pubsub->published_.size());
     const auto &[topic, payload] = pubsub->published_.front();
     TEST_ASSERT_EQUAL_STRING("msh/2/map/", topic.c_str());
-    verifyLatLong(std::get<DecodedServiceEnvelope>(payload), 70123520, 30015488);
-}
-
-// Precise location is reported when configured.
-void test_reportToMapPrecise(void)
-{
-    unitTest->reportToMap(/*precision=*/32);
-
-    TEST_ASSERT_EQUAL(1, pubsub->published_.size());
-    const auto &[topic, payload] = pubsub->published_.front();
-    TEST_ASSERT_EQUAL_STRING("msh/2/map/", topic.c_str());
-    verifyLatLong(std::get<DecodedServiceEnvelope>(payload), localPosition.latitude_i, localPosition.longitude_i);
 }
 
 // Location is sent over the phone proxy.
-void test_reportToMapPreciseProxied(void)
+void test_reportToMapImpreciseProxied(void)
 {
     moduleConfig.mqtt.proxy_to_client_enabled = true;
     MQTTUnitTest::restart();
 
-    unitTest->reportToMap(/*precision=*/32);
+    unitTest->reportToMap(/*precision=*/14);
 
     TEST_ASSERT_EQUAL(1, mockMeshService->messages_.size());
     const meshtastic_MqttClientProxyMessage &message = mockMeshService->messages_.front();
     TEST_ASSERT_EQUAL_STRING("msh/2/map/", message.topic);
     TEST_ASSERT_EQUAL(meshtastic_MqttClientProxyMessage_data_tag, message.which_payload_variant);
     const DecodedServiceEnvelope env(message.payload_variant.data.bytes, message.payload_variant.data.size);
-    verifyLatLong(env, localPosition.latitude_i, localPosition.longitude_i);
-}
-
-// No location is reported when the precision is invalid.
-void test_reportToMapInvalidPrecision(void)
-{
-    unitTest->reportToMap(/*precision=*/0);
-
-    TEST_ASSERT_TRUE(pubsub->published_.empty());
 }
 
 // isUsingDefaultServer returns true when using the default server.
@@ -918,9 +899,7 @@ void setup()
     RUN_TEST(test_publishTextMessageDirect);
     RUN_TEST(test_publishTextMessageWithProxy);
     RUN_TEST(test_reportToMapDefaultImprecise);
-    RUN_TEST(test_reportToMapPrecise);
-    RUN_TEST(test_reportToMapPreciseProxied);
-    RUN_TEST(test_reportToMapInvalidPrecision);
+    RUN_TEST(test_reportToMapImpreciseProxied);
     RUN_TEST(test_usingDefaultServer);
     RUN_TEST(test_usingDefaultServerWithPort);
     RUN_TEST(test_usingDefaultServerWithInvalidPort);

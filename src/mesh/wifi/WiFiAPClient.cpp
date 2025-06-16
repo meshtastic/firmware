@@ -133,8 +133,8 @@ static void onNetworkConnected()
     }
 
 #if HAS_UDP_MULTICAST
-    if (udpThread && config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST) {
-        udpThread->start();
+    if (udpHandler && config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST) {
+        udpHandler->start();
     }
 #endif
 }
@@ -327,9 +327,15 @@ static void WiFiEvent(WiFiEvent_t event)
         break;
     case ARDUINO_EVENT_WIFI_STA_CONNECTED:
         LOG_INFO("Connected to access point");
+#ifdef WIFI_LED
+        digitalWrite(WIFI_LED, HIGH);
+#endif
         break;
     case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
         LOG_INFO("Disconnected from WiFi access point");
+#ifdef WIFI_LED
+        digitalWrite(WIFI_LED, LOW);
+#endif
         if (!isReconnecting) {
             WiFi.disconnect(false, true);
             syslog.disable();
@@ -378,9 +384,15 @@ static void WiFiEvent(WiFiEvent_t event)
         break;
     case ARDUINO_EVENT_WIFI_AP_START:
         LOG_INFO("WiFi access point started");
+#ifdef WIFI_LED
+        digitalWrite(WIFI_LED, HIGH);
+#endif
         break;
     case ARDUINO_EVENT_WIFI_AP_STOP:
         LOG_INFO("WiFi access point stopped");
+#ifdef WIFI_LED
+        digitalWrite(WIFI_LED, LOW);
+#endif
         break;
     case ARDUINO_EVENT_WIFI_AP_STACONNECTED:
         LOG_INFO("Client connected");

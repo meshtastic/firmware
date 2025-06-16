@@ -53,7 +53,7 @@ int32_t PowerTelemetryModule::runOnce()
         firstTime = 0;
         uint32_t result = UINT32_MAX;
 
-#if HAS_TELEMETRY && !defined(ARCH_PORTDUINO)
+#if HAS_TELEMETRY
         if (moduleConfig.telemetry.power_measurement_enabled) {
             LOG_INFO("Power Telemetry: init");
             // If sensor is already initialized by EnvironmentTelemetryModule, then we don't need to initialize it again,
@@ -175,7 +175,7 @@ bool PowerTelemetryModule::getPowerTelemetry(meshtastic_Telemetry *m)
     m->which_variant = meshtastic_Telemetry_power_metrics_tag;
 
     m->variant.power_metrics = meshtastic_PowerMetrics_init_zero;
-#if HAS_TELEMETRY && !defined(ARCH_PORTDUINO)
+#if HAS_TELEMETRY
     if (ina219Sensor.hasSensor())
         valid = ina219Sensor.getMetrics(m);
     if (ina226Sensor.hasSensor())

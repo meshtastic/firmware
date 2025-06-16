@@ -1,6 +1,6 @@
 #include "configuration.h"
 
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && __has_include(<Adafruit_SHTC3.h>)
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "SHTC3Sensor.h"
@@ -15,7 +15,7 @@ int32_t SHTC3Sensor::runOnce()
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
-    status = shtc3.begin();
+    status = shtc3.begin(nodeTelemetrySensorsMap[sensorType].second);
     return initI2CSensor();
 }
 
