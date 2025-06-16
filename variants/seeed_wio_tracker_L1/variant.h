@@ -74,7 +74,7 @@
 //  Communication Interfaces
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  I2C Configuration
-//#define HAS_WIRE 1
+// #define HAS_WIRE 1
 #define PIN_WIRE_SDA D14 // P0.09
 #define PIN_WIRE_SCL D15 // P0.10
 #define WIRE_INTERFACES_COUNT 2
