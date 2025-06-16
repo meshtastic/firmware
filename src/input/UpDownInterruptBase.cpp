@@ -33,16 +33,25 @@ int32_t UpDownInterruptBase::runOnce()
 {
     InputEvent e;
     e.inputEvent = INPUT_BROKER_NONE;
-
+    unsigned long now = millis();
     if (this->action == UPDOWN_ACTION_PRESSED) {
-        LOG_DEBUG("GPIO event Press");
-        e.inputEvent = this->_eventPressed;
+        if (now - lastPressKeyTime >= PRESS_DEBOUNCE_MS) {
+            lastPressKeyTime = now;
+            LOG_DEBUG("GPIO event Press");
+            e.inputEvent = this->_eventPressed;
+        }
     } else if (this->action == UPDOWN_ACTION_UP) {
-        LOG_DEBUG("GPIO event Up");
-        e.inputEvent = this->_eventUp;
+        if (now - lastUpKeyTime >= UPDOWN_DEBOUNCE_MS) {
+            lastUpKeyTime = now;
+            LOG_DEBUG("GPIO event Up");
+            e.inputEvent = this->_eventUp;
+        }
     } else if (this->action == UPDOWN_ACTION_DOWN) {
-        LOG_DEBUG("GPIO event Down");
-        e.inputEvent = this->_eventDown;
+        if (now - lastDownKeyTime >= UPDOWN_DEBOUNCE_MS) {
+            lastDownKeyTime = now;
+            LOG_DEBUG("GPIO event Down");
+            e.inputEvent = this->_eventDown;
+        }
     }
 
     if (e.inputEvent != INPUT_BROKER_NONE) {
@@ -52,7 +61,6 @@ int32_t UpDownInterruptBase::runOnce()
     }
 
     this->action = UPDOWN_ACTION_NONE;
-
     return 100;
 }
 
