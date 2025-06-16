@@ -194,6 +194,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define FT6336U_ADDR 0x48
 
 // -----------------------------------------------------------------------------
+// RAK12035VB Soil Monitor (using RAK12023 up to 3 RAK12035 monitors can be connected)
+// - the default i2c address for this sensor is 0x20, and users are instructed to
+// set 0x21 and 0x22 for the second and third sensor if present.
+// -----------------------------------------------------------------------------
+#define RAK120351_ADDR 0x20
+#define RAK120352_ADDR 0x21
+#define RAK120353_ADDR 0x22
+
+// -----------------------------------------------------------------------------
 // BIAS-T Generator
 // -----------------------------------------------------------------------------
 #define TPS65233_ADDR 0x60
