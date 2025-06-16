@@ -21,8 +21,9 @@ bool UpDownInterruptImpl1::init()
     input_broker_event eventUp = INPUT_BROKER_UP;
     input_broker_event eventPressed = INPUT_BROKER_SELECT;
 
+    unsigned long debounceMs = moduleConfig.canned_message.rotary1_enabled ? 100 : 300;
     UpDownInterruptBase::init(pinDown, pinUp, pinPress, eventDown, eventUp, eventPressed, UpDownInterruptImpl1::handleIntDown,
-                              UpDownInterruptImpl1::handleIntUp, UpDownInterruptImpl1::handleIntPressed);
+                              UpDownInterruptImpl1::handleIntUp, UpDownInterruptImpl1::handleIntPressed, debounceMs);
     inputBroker->registerSource(this);
     return true;
 }
