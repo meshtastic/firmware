@@ -99,11 +99,11 @@ bool ButtonThread::initButton(uint8_t pinNumber, bool activeLow, bool activePull
     }
 
     userButton.setDebounceMs(1);
+    userButton.setPressMs(_longPressTime);
+
     if (screen) {
         userButton.setClickMs(20);
-        userButton.setPressMs(_longPressTime);
     } else {
-        userButton.setPressMs(_longPressTime);
         userButton.setClickMs(BUTTON_CLICK_MS);
     }
     attachButtonInterrupts();
@@ -211,7 +211,6 @@ int32_t ButtonThread::runOnce()
 
             // Forward long press to InputBroker (but NOT as DOWN/SELECT, just forward a "button long press" event)
             evt.inputEvent = _longPress;
-            // evt.kbchar = _longPress;
             this->notifyObservers(&evt);
 
             // Reset combination tracking
