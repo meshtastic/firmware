@@ -27,4 +27,10 @@ class UpDownInterruptBase : public Observable<const InputEvent *>, public concur
     input_broker_event _eventUp = INPUT_BROKER_NONE;
     input_broker_event _eventPressed = INPUT_BROKER_NONE;
     const char *_originName;
+    
+    unsigned long lastUpKeyTime = 0;
+    unsigned long lastDownKeyTime = 0;
+    unsigned long lastPressKeyTime = 0;
+    const unsigned long UPDOWN_DEBOUNCE_MS = 300;
+    const unsigned long PRESS_DEBOUNCE_MS = 500;
 };
