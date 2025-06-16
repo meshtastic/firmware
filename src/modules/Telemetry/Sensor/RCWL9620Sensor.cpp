@@ -56,7 +56,7 @@ float RCWL9620Sensor::getDistance()
     _wire->requestFrom(_addr, (uint8_t)3);
 
     if (_wire->available() < 3) {
-    LOG_DEBUG("[RCWL9620] less than 3 octets !");
+        LOG_DEBUG("[RCWL9620] less than 3 octets !");
         return 0.0;
     }
 
@@ -69,9 +69,7 @@ float RCWL9620Sensor::getDistance()
     float Distance = float(data) / 1000.0;
 
     LOG_DEBUG("[RCWL9620] Bytes readed = %02X %02X %02X", b1, b2, b3);
-    LOG_DEBUG("[RCWL9620] data=%.2f, level=%.2f", 
-             (double)data, 
-             (double)Distance);
+    LOG_DEBUG("[RCWL9620] data=%.2f, level=%.2f", (double)data, (double)Distance);
 
     if (Distance > 4500.00) {
         return 4500.00;
@@ -79,6 +77,5 @@ float RCWL9620Sensor::getDistance()
         return Distance;
     }
 }
-
 
 #endif
