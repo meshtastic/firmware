@@ -47,6 +47,7 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
     bool getMute() { return isMuted; }
 
     bool canBuzz();
+    bool nagging();
 
     void stopNow();
 

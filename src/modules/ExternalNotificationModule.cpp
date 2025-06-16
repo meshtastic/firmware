@@ -305,6 +305,12 @@ bool ExternalNotificationModule::getExternal(uint8_t index)
     return externalCurrentState[index];
 }
 
+// Allow other firmware components to determine whether a notification is ongoing
+bool ExternalNotificationModule::nagging()
+{
+    return isNagging;
+}
+
 void ExternalNotificationModule::stopNow()
 {
     rtttl::stop();
