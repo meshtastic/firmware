@@ -2,9 +2,6 @@
 
 #include "NodeDB.h"
 
-#define PACKETHISTORY_MAX                                                                                                        \
-    max((int)(MAX_NUM_NODES * 2.0), 100) // x2..3  Should suffice. Empirical setup. 16B per record malloc'ed, but no less than 100
-
 #define NUM_RELAYERS                                                                                                             \
     3 // Number of relayer we keep track of. Use 3 to be efficient with memory alignment of PacketRecord to 16 bytes
 
@@ -34,7 +31,7 @@ class PacketHistory
 
     /** Insert/Replace oldest PacketRecord in mx_recentPackets.
      * @param r PacketRecord to insert or replace */
-    void insert(PacketRecord &r);
+    void insert(PacketRecord &r); // Insert or replace a packet record in the history
 
     /* Check if a certain node was a relayer of a packet in the history given iterator
      * @return true if node was indeed a relayer, false if not */
@@ -43,7 +40,7 @@ class PacketHistory
     PacketHistory(const PacketHistory &);            // non construction-copyable
     PacketHistory &operator=(const PacketHistory &); // non copyable
   public:
-    explicit PacketHistory(uint32_t size = PACKETHISTORY_MAX); // Constructor with size parameter, default to PACKETHISTORY_MAX
+    explicit PacketHistory(uint32_t size = -1); // Constructor with size parameter, default is PACKETHISTORY_MAX
     ~PacketHistory();
 
     /**
@@ -63,6 +60,6 @@ class PacketHistory
     // Remove a relayer from the list of relayers of a packet in the history given an ID and sender
     void removeRelayer(const uint8_t relayer, const uint32_t id, const NodeNum sender);
 
-    // Can Check if the PacketHistory was initialized correctly by constructor
+    // To check if the PacketHistory was initialized correctly by constructor
     bool initOk(void) { return recentPackets != NULL && recentPacketsCapacity != 0; }
 };
