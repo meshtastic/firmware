@@ -17,9 +17,9 @@ bool UpDownInterruptImpl1::init()
     uint8_t pinDown = moduleConfig.canned_message.inputbroker_pin_b;
     uint8_t pinPress = moduleConfig.canned_message.inputbroker_pin_press;
 
-    char eventDown = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN);
-    char eventUp = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP);
-    char eventPressed = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT);
+    input_broker_event eventDown = INPUT_BROKER_DOWN;
+    input_broker_event eventUp = INPUT_BROKER_UP;
+    input_broker_event eventPressed = INPUT_BROKER_SELECT;
 
     UpDownInterruptBase::init(pinDown, pinUp, pinPress, eventDown, eventUp, eventPressed, UpDownInterruptImpl1::handleIntDown,
                               UpDownInterruptImpl1::handleIntUp, UpDownInterruptImpl1::handleIntPressed);

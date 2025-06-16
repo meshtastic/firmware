@@ -82,7 +82,8 @@ static uint32_t secsSlept;
 static void lsEnter()
 {
     LOG_INFO("lsEnter begin, ls_secs=%u", config.power.ls_secs);
-    screen->setOn(false);
+    if (screen)
+        screen->setOn(false);
     secsSlept = 0; // How long have we been sleeping this time
 
     // LOG_INFO("lsEnter end");
@@ -160,7 +161,8 @@ static void lsExit()
 static void nbEnter()
 {
     LOG_DEBUG("State: NB");
-    screen->setOn(false);
+    if (screen)
+        screen->setOn(false);
 #ifdef ARCH_ESP32
     // Only ESP32 should turn off bluetooth
     setBluetoothEnable(false);
@@ -172,22 +174,23 @@ static void nbEnter()
 static void darkEnter()
 {
     setBluetoothEnable(true);
-    screen->setOn(false);
+    if (screen)
+        screen->setOn(false);
 }
 
 static void serialEnter()
 {
     LOG_DEBUG("State: SERIAL");
     setBluetoothEnable(false);
-    screen->setOn(true);
-    screen->print("Serial connected\n");
+    if (screen) {
+        screen->setOn(true);
+    }
 }
 
 static void serialExit()
 {
     // Turn bluetooth back on when we leave serial stream API
     setBluetoothEnable(true);
-    screen->print("Serial disconnected\n");
 }
 
 static void powerEnter()
@@ -198,15 +201,10 @@ static void powerEnter()
         LOG_INFO("Loss of power in Powered");
         powerFSM.trigger(EVENT_POWER_DISCONNECTED);
     } else {
-        screen->setOn(true);
+        if (screen)
+            screen->setOn(true);
         setBluetoothEnable(true);
         // within enter() the function getState() returns the state we came from
-
-        // Mothballed: print change of power-state to device screen
-        /* if (strcmp(powerFSM.getState()->name, "BOOT") != 0 && strcmp(powerFSM.getState()->name, "POWER") != 0 &&
-            strcmp(powerFSM.getState()->name, "DARK") != 0) {
-            screen->print("Powered...\n");
-        }*/
     }
 }
 
@@ -221,18 +219,16 @@ static void powerIdle()
 
 static void powerExit()
 {
-    screen->setOn(true);
+    if (screen)
+        screen->setOn(true);
     setBluetoothEnable(true);
-
-    // Mothballed: print change of power-state to device screen
-    /*if (!isPowered())
-        screen->print("Unpowered...\n");*/
 }
 
 static void onEnter()
 {
     LOG_DEBUG("State: ON");
-    screen->setOn(true);
+    if (screen)
+        screen->setOn(true);
     setBluetoothEnable(true);
 }
 
@@ -242,11 +238,6 @@ static void onIdle()
         // If we got here, we are in the wrong state - we should be in powered, let that state handle things
         powerFSM.trigger(EVENT_POWER_CONNECTED);
     }
-}
-
-static void screenPress()
-{
-    screen->onPress();
 }
 
 static void bootEnter()
@@ -292,9 +283,9 @@ void PowerFSM_setup()
     powerFSM.add_transition(&stateLS, &stateON, EVENT_PRESS, NULL, "Press");
     powerFSM.add_transition(&stateNB, &stateON, EVENT_PRESS, NULL, "Press");
     powerFSM.add_transition(&stateDARK, isPowered() ? &statePOWER : &stateON, EVENT_PRESS, NULL, "Press");
-    powerFSM.add_transition(&statePOWER, &statePOWER, EVENT_PRESS, screenPress, "Press");
-    powerFSM.add_transition(&stateON, &stateON, EVENT_PRESS, screenPress, "Press"); // reenter On to restart our timers
-    powerFSM.add_transition(&stateSERIAL, &stateSERIAL, EVENT_PRESS, screenPress,
+    powerFSM.add_transition(&statePOWER, &statePOWER, EVENT_PRESS, NULL, "Press");
+    powerFSM.add_transition(&stateON, &stateON, EVENT_PRESS, NULL, "Press"); // reenter On to restart our timers
+    powerFSM.add_transition(&stateSERIAL, &stateSERIAL, EVENT_PRESS, NULL,
                             "Press"); // Allow button to work while in serial API
 
     // Handle critically low power battery by forcing deep sleep
@@ -328,10 +319,10 @@ void PowerFSM_setup()
         // if any packet destined for phone arrives, turn on bluetooth at least
         powerFSM.add_transition(&stateNB, &stateDARK, EVENT_PACKET_FOR_PHONE, NULL, "Packet for phone");
 
-        // show the latest node when we get a new node db update
-        powerFSM.add_transition(&stateNB, &stateON, EVENT_NODEDB_UPDATED, NULL, "NodeDB update");
-        powerFSM.add_transition(&stateDARK, &stateON, EVENT_NODEDB_UPDATED, NULL, "NodeDB update");
-        powerFSM.add_transition(&stateON, &stateON, EVENT_NODEDB_UPDATED, NULL, "NodeDB update");
+        // Removed 2.7: we don't show the nodes individually for every node on the screen anymore
+        // powerFSM.add_transition(&stateNB, &stateON, EVENT_NODEDB_UPDATED, NULL, "NodeDB update");
+        // powerFSM.add_transition(&stateDARK, &stateON, EVENT_NODEDB_UPDATED, NULL, "NodeDB update");
+        // powerFSM.add_transition(&stateON, &stateON, EVENT_NODEDB_UPDATED, NULL, "NodeDB update");
 
         // Show the received text message
         powerFSM.add_transition(&stateLS, &stateON, EVENT_RECEIVED_MSG, NULL, "Received text");

@@ -511,6 +511,10 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.lora.override_duty_cycle = false;
     config.lora.config_ok_to_mqtt = false;
 
+#if HAS_TFT // For the devices that support MUI, default to that
+    config.display.displaymode = meshtastic_Config_DisplayConfig_DisplayMode_COLOR;
+#endif
+
 #ifdef USERPREFS_CONFIG_DEVICE_ROLE
     // Restrict ROUTER*, LOST AND FOUND, and REPEATER roles for security reasons
     if (IS_ONE_OF(USERPREFS_CONFIG_DEVICE_ROLE, meshtastic_Config_DeviceConfig_Role_ROUTER,
@@ -788,15 +792,7 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.output_ms = 1000;
     moduleConfig.external_notification.nag_timeout = 60;
 #endif
-#ifdef BUTTON_SECONDARY_CANNEDMESSAGES
-    // Use a board's second built-in button as input source for canned messages
-    moduleConfig.canned_message.enabled = true;
-    moduleConfig.canned_message.inputbroker_pin_press = BUTTON_PIN_SECONDARY;
-    strcpy(moduleConfig.canned_message.allow_input_source, "scanAndSelect");
-#endif
-
     moduleConfig.has_canned_message = true;
-
 #if USERPREFS_MQTT_ENABLED && !MESHTASTIC_EXCLUDE_MQTT
     moduleConfig.mqtt.enabled = true;
 #endif
@@ -1561,7 +1557,7 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
         info->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
         // Mark the node's key as manually verified to indicate trustworthiness.
         updateGUIforNode = info;
-        powerFSM.trigger(EVENT_NODEDB_UPDATED);
+        // powerFSM.trigger(EVENT_NODEDB_UPDATED); This event has been retired
         notifyObservers(true); // Force an update whether or not our node counts have changed
     }
     saveNodeDatabaseToDisk();
@@ -1620,7 +1616,6 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
 
     if (changed) {
         updateGUIforNode = info;
-        powerFSM.trigger(EVENT_NODEDB_UPDATED);
         notifyObservers(true); // Force an update whether or not our node counts have changed
 
         // We just changed something about a User,
@@ -1891,10 +1886,6 @@ bool NodeDB::restorePreferences(meshtastic_AdminMessage_BackupLocation location,
 /// Record an error that should be reported via analytics
 void recordCriticalError(meshtastic_CriticalErrorCode code, uint32_t address, const char *filename)
 {
-    // Print error to screen and serial port
-    String lcd = String("Critical error ") + code + "!\n";
-    if (screen)
-        screen->print(lcd.c_str());
     if (filename) {
         LOG_ERROR("NOTE! Record critical error %d at %s:%lu", code, filename, address);
     } else {

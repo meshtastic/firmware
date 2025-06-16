@@ -1,7 +1,7 @@
 #define LED_PIN 45 // LED is not populated on earliest board variant
 #define BUTTON_PIN 0
-#define BUTTON_PIN_SECONDARY 21         // Second built-in button
-#define BUTTON_SECONDARY_CANNEDMESSAGES // By default, use the secondary button as canned message input
+#define PIN_BUTTON2 21             // Second built-in button
+#define ALT_BUTTON_PIN PIN_BUTTON2 // Send the up event
 
 // I2C
 #define I2C_SDA SDA

@@ -37,7 +37,6 @@ extern ScanI2C::FoundDevice rgb_found;
 
 extern bool eink_found;
 extern bool pmu_found;
-extern bool isCharging;
 extern bool isUSBPowered;
 
 #ifdef T_WATCH_S3
