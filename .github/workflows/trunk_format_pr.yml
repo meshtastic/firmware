@@ -4,7 +4,11 @@ on:
   issue_comment:
     types: [created]
   workflow_dispatch:
+<<<<<<< HEAD
 
+=======
+  
+>>>>>>> 4fee34d373f1a372dd3bf2b0b16efc618e005219
 permissions: read-all
 
 jobs:
