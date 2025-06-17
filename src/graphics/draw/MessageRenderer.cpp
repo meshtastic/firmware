@@ -234,6 +234,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     const meshtastic_MeshPacket &mp = devicestate.rx_text_message;
     const char *msg = reinterpret_cast<const char *>(mp.decoded.payload.bytes);
 
+    display->clear();
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
 
@@ -245,6 +246,9 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
     bool isInverted = (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED);
     bool isBold = config.display.heading_bold;
+
+    // === Set Title
+    const char *titleStr = "Messages";
 
     // === Header Construction ===
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(getFrom(&mp));
@@ -262,22 +266,26 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     int32_t daysAgo;
     bool useTimestamp = deltaToTimestamp(seconds, &timestampHours, &timestampMinutes, &daysAgo);
 
-    if (useTimestamp && minutes >= 15 && daysAgo == 0) {
-        std::string prefix = (daysAgo == 1 && SCREEN_WIDTH >= 200) ? "Yesterday" : "At";
-        if (config.display.use_12h_clock) {
-            bool isPM = timestampHours >= 12;
-            timestampHours = timestampHours % 12;
-            if (timestampHours == 0)
-                timestampHours = 12;
-            snprintf(headerStr, sizeof(headerStr), "%s %d:%02d%s from %s", prefix.c_str(), timestampHours, timestampMinutes,
-                     isPM ? "p" : "a", sender);
+    if (useTimestamp) {
+        if (minutes >= 15 && daysAgo == 0) {
+            std::string prefix = (daysAgo == 1 && SCREEN_WIDTH >= 200) ? "Yesterday" : "At";
+            if (config.display.use_12h_clock) {
+                bool isPM = timestampHours >= 12;
+                timestampHours = timestampHours % 12;
+                if (timestampHours == 0)
+                    timestampHours = 12;
+                snprintf(headerStr, sizeof(headerStr), "%s %d:%02d%s from %s", prefix.c_str(), timestampHours, timestampMinutes,
+                         isPM ? "p" : "a", sender);
+            } else {
+                snprintf(headerStr, sizeof(headerStr), "%s %d:%02d from %s", prefix.c_str(), timestampHours, timestampMinutes,
+                         sender);
+            }
         } else {
-            snprintf(headerStr, sizeof(headerStr), "%s %d:%02d from %s", prefix.c_str(), timestampHours, timestampMinutes,
-                     sender);
+            snprintf(headerStr, sizeof(headerStr), "%s ago from %s",
+                     UIRenderer::drawTimeDelta(days, hours, minutes, seconds).c_str(), sender);
         }
     } else {
-        snprintf(headerStr, sizeof(headerStr), "%s ago from %s", UIRenderer::drawTimeDelta(days, hours, minutes, seconds).c_str(),
-                 sender);
+        snprintf(headerStr, sizeof(headerStr), "No Messages To Show");
     }
 
 #ifndef EXCLUDE_EMOJI
@@ -295,22 +303,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     for (int i = 0; i < numEmotes; ++i) {
         const Emote &e = emotes[i];
         if (strcmp(msg, e.label) == 0) {
-            // Draw the header
-            if (isInverted) {
-                drawRoundedHighlight(display, x, 0, SCREEN_WIDTH, FONT_HEIGHT_SMALL - 1, cornerRadius);
-                display->setColor(BLACK);
-                display->drawString(x + 3, 0, headerStr);
-                if (isBold)
-                    display->drawString(x + 4, 0, headerStr);
-                display->setColor(WHITE);
-            } else {
-                display->drawString(x, 0, headerStr);
-                if (SCREEN_WIDTH > 128) {
-                    display->drawLine(0, 20, SCREEN_WIDTH, 20);
-                } else {
-                    display->drawLine(0, 14, SCREEN_WIDTH, 14);
-                }
-            }
+            display->drawString(x, getTextPositions(display)[2], headerStr);
 
             // Center the emote below header + apply bounce
             int remainingHeight = SCREEN_HEIGHT - FONT_HEIGHT_SMALL - navHeight;
@@ -417,12 +410,12 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     }
 
     int scrollOffset = static_cast<int>(scrollY);
-    int yOffset = -scrollOffset;
-    if (!isInverted) {
+    int yOffset = -scrollOffset + getTextPositions(display)[1];
+    if (strcmp(headerStr, "No Messages To Show") != 0) {
         if (SCREEN_WIDTH > 128) {
-            display->drawLine(0, yOffset + 20, SCREEN_WIDTH, yOffset + 20);
+            display->drawLine(0, yOffset + 20, SCREEN_WIDTH - (SCREEN_WIDTH * 0.1), yOffset + 20);
         } else {
-            display->drawLine(0, yOffset + 14, SCREEN_WIDTH, yOffset + 14);
+            display->drawLine(0, yOffset + 14, SCREEN_WIDTH - (SCREEN_WIDTH * 0.1), yOffset + 14);
         }
     }
 
@@ -433,17 +426,17 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
             lineY += rowHeights[j];
         if (lineY > -rowHeights[i] && lineY < scrollBottom) {
             if (i == 0 && isInverted) {
-                drawRoundedHighlight(display, x, lineY, SCREEN_WIDTH, FONT_HEIGHT_SMALL - 1, cornerRadius);
-                display->setColor(BLACK);
                 display->drawString(x + 3, lineY, lines[i].c_str());
                 if (isBold)
                     display->drawString(x + 4, lineY, lines[i].c_str());
-                display->setColor(WHITE);
             } else {
                 drawStringWithEmotes(display, x, lineY, lines[i], emotes, numEmotes);
             }
         }
     }
+
+    // === Header ===
+    graphics::drawCommonHeader(display, x, y, titleStr);
 }
 
 } // namespace MessageRenderer

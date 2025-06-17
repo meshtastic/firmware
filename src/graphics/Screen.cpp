@@ -896,19 +896,10 @@ void Screen::setFrames(FrameFocus focus)
     showingNormalScreen = true;
 
     indicatorIcons.clear();
-    moduleFrames = MeshModule::GetMeshModulesWithUIFrames();
-    LOG_DEBUG("Show %d module frames", moduleFrames.size());
-#ifdef DEBUG_PORT
-    int totalFrameCount = MAX_NUM_NODES + NUM_EXTRA_FRAMES + moduleFrames.size();
-    LOG_DEBUG("Total frame count: %d", totalFrameCount);
-#endif
-
-    // We don't show the node info of our node (if we have it yet - we should)
-    size_t numMeshNodes = nodeDB->getNumMeshNodes();
-    if (numMeshNodes > 0)
-        numMeshNodes--;
 
     size_t numframes = 0;
+    moduleFrames = MeshModule::GetMeshModulesWithUIFrames();
+    LOG_DEBUG("Show %d module frames", moduleFrames.size());
 
     // put all of the module frames first.
     // this is a little bit of a dirty hack; since we're going to call
@@ -952,15 +943,13 @@ void Screen::setFrames(FrameFocus focus)
     // Declare this early so it’s available in FOCUS_PRESERVE block
     bool willInsertTextMessage = shouldDrawMessage(&devicestate.rx_text_message);
 
-    if (willInsertTextMessage) {
-        fsi.positions.textMessage = numframes;
-        normalFrames[numframes++] = graphics::MessageRenderer::drawTextMessageFrame;
-        indicatorIcons.push_back(icon_mail);
-    }
-
     fsi.positions.home = numframes;
     normalFrames[numframes++] = graphics::UIRenderer::drawDeviceFocused;
     indicatorIcons.push_back(icon_home);
+
+    fsi.positions.textMessage = numframes;
+    normalFrames[numframes++] = graphics::MessageRenderer::drawTextMessageFrame;
+    indicatorIcons.push_back(icon_mail);
 
 #ifndef USE_EINK
     normalFrames[numframes++] = graphics::NodeListRenderer::drawDynamicNodeListScreen;
@@ -1000,6 +989,11 @@ void Screen::setFrames(FrameFocus focus)
     normalFrames[numframes++] = graphics::ClockRenderer::drawDigitalClockFrame;
     indicatorIcons.push_back(icon_clock);
 #endif
+
+    // We don't show the node info of our node (if we have it yet - we should)
+    size_t numMeshNodes = nodeDB->getNumMeshNodes();
+    if (numMeshNodes > 0)
+        numMeshNodes--;
 
     for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
         const meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(i);

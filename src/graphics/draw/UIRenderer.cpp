@@ -945,7 +945,7 @@ void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiState *stat
     int line = 1;
 
     // === Set Title
-    const char *titleStr = "GPS";
+    const char *titleStr = "Position";
 
     // === Header ===
     graphics::drawCommonHeader(display, x, y, titleStr);
