@@ -998,6 +998,9 @@ void Screen::setFrames(FrameFocus focus)
     for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
         const meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(i);
         if (n && n->num != nodeDB->getNodeNum() && n->is_favorite) {
+            if (fsi.positions.firstFavorite == 255)
+                fsi.positions.firstFavorite = numframes;
+            fsi.positions.lastFavorite = numframes;
             normalFrames[numframes++] = graphics::UIRenderer::drawNodeInfo;
             indicatorIcons.push_back(icon_node);
         }
@@ -1464,6 +1467,20 @@ int Screen::handleInputEvent(const InputEvent *event)
                                 } else {
                                     cannedMessageModule->LaunchWithDestination(devicestate.rx_text_message.from);
                                 }
+                            }
+                        },
+                        1);
+                } else if (framesetInfo.positions.firstFavorite != 255 &&
+                           this->ui->getUiState()->currentFrame >= framesetInfo.positions.firstFavorite &&
+                           this->ui->getUiState()->currentFrame <= framesetInfo.positions.lastFavorite) {
+                    showOverlayBanner(
+                        "Message Action?\nDismiss\nReply", 30000, 2,
+                        [](int selected) -> void {
+                            if (selected == 1) {
+                                cannedMessageModule->LaunchWithDestination(
+                                    graphics::NodeListRenderer::favoritedNodes[screen->ui->getUiState()->currentFrame -
+                                                                               screen->framesetInfo.positions.firstFavorite]
+                                        ->num);
                             }
                         },
                         1);

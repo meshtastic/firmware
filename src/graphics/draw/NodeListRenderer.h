@@ -29,6 +29,8 @@ struct NodeEntry {
     uint32_t sortValue;
 };
 
+static std::vector<meshtastic_NodeInfoLite *> favoritedNodes;
+
 // Node list mode enumeration
 enum NodeListMode { MODE_LAST_HEARD = 0, MODE_HOP_SIGNAL = 1, MODE_DISTANCE = 2, MODE_COUNT = 3 };
 

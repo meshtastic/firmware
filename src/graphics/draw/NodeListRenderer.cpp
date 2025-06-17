@@ -570,7 +570,6 @@ void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, 
 void drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     // Cache favorite nodes for the current frame only, to save computation
-    static std::vector<meshtastic_NodeInfoLite *> favoritedNodes;
     static int prevFrame = -1;
 
     // Only rebuild favorites list if we're on a new frame
