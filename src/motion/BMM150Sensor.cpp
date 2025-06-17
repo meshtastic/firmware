@@ -85,10 +85,9 @@ bool BMM150Singleton::init(ScanI2C::FoundDevice device)
 
     // SW reset to make sure the device starts in a known state
     setOperationMode(BMM150_POWERMODE_NORMAL);
-    setPresetMode(BMM150_PRESETMODE_REGULAR);
+    setPresetMode(BMM150_PRESETMODE_LOWPOWER);
     setRate(BMM150_DATA_RATE_02HZ);
     setMeasurementXYZ();
-    LOG_WARN(getMeasurementStateXYZ().c_str());
     return true;
 }
 
