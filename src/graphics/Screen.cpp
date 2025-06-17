@@ -34,6 +34,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "draw/NodeListRenderer.h"
 #include "draw/NotificationRenderer.h"
 #include "draw/UIRenderer.h"
+#include "modules/CannedMessageModule.h"
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
 #include "buzz.h"
@@ -1450,10 +1451,17 @@ int Screen::handleInputEvent(const InputEvent *event)
                         });
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.textMessage) {
                     showOverlayBanner(
-                        "Dismiss Message?\nYES\nNO", 30000, 2,
+                        "Message Action?\nDismiss\nReply\nNone", 30000, 3,
                         [](int selected) -> void {
                             if (selected == 0) {
                                 screen->dismissCurrentFrame();
+                            } else if (selected == 1) {
+                                if (devicestate.rx_text_message.to == NODENUM_BROADCAST) {
+                                    cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST,
+                                                                               devicestate.rx_text_message.channel);
+                                } else {
+                                    cannedMessageModule->LaunchWithDestination(devicestate.rx_text_message.from);
+                                }
                             }
                         },
                         1);

@@ -59,6 +59,31 @@ CannedMessageModule::CannedMessageModule()
         this->inputObserver.observe(inputBroker);
     }
 }
+
+void CannedMessageModule::LaunchWithDestination(NodeNum newDest, uint8_t newChannel)
+{
+    dest = newDest;
+    channel = newChannel;
+    // Always select the first real canned message on activation
+    int firstRealMsgIdx = 0;
+    for (int i = 0; i < messagesCount; ++i) {
+        if (strcmp(messages[i], "[Select Destination]") != 0 && strcmp(messages[i], "[Exit]") != 0 &&
+            strcmp(messages[i], "[---- Free Text ----]") != 0) {
+            firstRealMsgIdx = i;
+            break;
+        }
+    }
+    currentMessageIndex = firstRealMsgIdx;
+
+    // This triggers the canned message list
+    runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
+    requestFocus();
+    UIFrameEvent e;
+    e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+    notifyObservers(&e);
+    return;
+}
+
 static bool returnToCannedList = false;
 bool hasKeyForNode(const meshtastic_NodeInfoLite *node)
 {
@@ -137,13 +162,13 @@ void CannedMessageModule::drawHeader(OLEDDisplay *display, int16_t x, int16_t y,
         if (this->dest == NODENUM_BROADCAST) {
             display->drawStringf(x, y, buffer, "To: Broadcast@%s", channels.getName(this->channel));
         } else {
-            display->drawStringf(x, y, buffer, "To: %s@%s", getNodeName(this->dest), channels.getName(this->channel));
+            display->drawStringf(x, y, buffer, "To: %s", getNodeName(this->dest));
         }
     } else {
         if (this->dest == NODENUM_BROADCAST) {
             display->drawStringf(x, y, buffer, "To: Broadc@%.5s", channels.getName(this->channel));
         } else {
-            display->drawStringf(x, y, buffer, "To: %.5s@%.5s", getNodeName(this->dest), channels.getName(this->channel));
+            display->drawStringf(x, y, buffer, "To: %s", getNodeName(this->dest));
         }
     }
 }
@@ -305,23 +330,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         // Handle UP/DOWN: activate canned message list!
         if (event->inputEvent == INPUT_BROKER_UP || event->inputEvent == INPUT_BROKER_DOWN ||
             event->inputEvent == INPUT_BROKER_ALT_LONG) {
-            // Always select the first real canned message on activation
-            int firstRealMsgIdx = 0;
-            for (int i = 0; i < messagesCount; ++i) {
-                if (strcmp(messages[i], "[Select Destination]") != 0 && strcmp(messages[i], "[Exit]") != 0 &&
-                    strcmp(messages[i], "[---- Free Text ----]") != 0) {
-                    firstRealMsgIdx = i;
-                    break;
-                }
-            }
-            currentMessageIndex = firstRealMsgIdx;
-
-            // This triggers the canned message list
-            runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
-            requestFocus();
-            UIFrameEvent e;
-            e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
-            notifyObservers(&e);
+            LaunchWithDestination(NODENUM_BROADCAST);
             return 1;
         }
         // Printable char (ASCII) opens free text compose
