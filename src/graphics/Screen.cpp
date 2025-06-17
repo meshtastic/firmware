@@ -1474,9 +1474,9 @@ int Screen::handleInputEvent(const InputEvent *event)
                            this->ui->getUiState()->currentFrame >= framesetInfo.positions.firstFavorite &&
                            this->ui->getUiState()->currentFrame <= framesetInfo.positions.lastFavorite) {
                     showOverlayBanner(
-                        "Message Action?\nDismiss\nReply", 30000, 2,
+                        "Send Message To Node?\nYes\nNo", 30000, 2,
                         [](int selected) -> void {
-                            if (selected == 1) {
+                            if (selected == 0) {
                                 cannedMessageModule->LaunchWithDestination(
                                     graphics::NodeListRenderer::favoritedNodes[screen->ui->getUiState()->currentFrame -
                                                                                screen->framesetInfo.positions.firstFavorite]
