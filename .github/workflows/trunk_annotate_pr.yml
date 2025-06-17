@@ -5,7 +5,7 @@ on:
   workflow_run:
     workflows: [Pull Request] # Name from `trunk_check.yml`
     types: [completed]
-  workflow-dispatch:
+  workflow_dispatch:
   
 permissions: read-all
 
