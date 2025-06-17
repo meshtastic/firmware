@@ -168,7 +168,7 @@ static int32_t reconnectWiFi()
         wifiReconnectStartMillis = millis();
         wifiReconnectPending = true;
         // Do not attempt to connect yet, wait for the next invocation
-        return 100; // Schedule next check soon
+        return 5000; // Schedule next check soon
     }
 
     // Check if we are ready to proceed with the WiFi connection after the 5s wait
@@ -184,7 +184,6 @@ static int32_t reconnectWiFi()
             }
             isReconnecting = false;
             wifiReconnectPending = false;
-            return 300000; // Resume normal interval after reconnect
         } else {
             // Still waiting for 5s to elapse
             return 100; // Check again soon
@@ -221,7 +220,6 @@ static int32_t reconnectWiFi()
         return 300000; // every 5 minutes
     }
 }
-#endif
 
 bool isWifiAvailable()
 {
@@ -503,3 +501,4 @@ uint8_t getWifiDisconnectReason()
 {
     return wifiDisconnectReason;
 }
+#endif // HAS_WIFI
