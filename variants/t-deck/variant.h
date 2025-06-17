@@ -1,6 +1,5 @@
 
 #define TFT_CS 12
-#define BUTTON_PIN 0
 
 // ST7789 TFT LCD
 #define ST7789_CS TFT_CS
@@ -32,7 +31,7 @@
 #define USE_POWERSAVE
 #define SLEEP_TIME 120
 
-#define BUTTON_PIN 0
+#define TB_PRESS 0
 #define BUTTON_ACTIVE_LOW true
 #define BUTTON_ACTIVE_PULLUP true
 
