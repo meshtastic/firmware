@@ -1080,8 +1080,6 @@ void Screen::dismissCurrentFrame()
         LOG_INFO("Dismiss Text Message");
         devicestate.has_rx_text_message = false;
         memset(&devicestate.rx_text_message, 0, sizeof(devicestate.rx_text_message));
-        dismissedFrames.textMessage = true;
-        dismissed = true;
     } else if (currentFrame == framesetInfo.positions.waypoint && devicestate.has_rx_waypoint) {
         LOG_DEBUG("Dismiss Waypoint");
         devicestate.has_rx_waypoint = false;
@@ -1452,7 +1450,8 @@ int Screen::handleInputEvent(const InputEvent *event)
                             setenv("TZ", config.device.tzdef, 1);
                             service->reloadConfig(SEGMENT_CONFIG);
                         });
-                } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.textMessage) {
+                } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.textMessage &&
+                           devicestate.rx_text_message.from) {
                     showOverlayBanner(
                         "Message Action?\nDismiss\nReply\nNone", 30000, 3,
                         [](int selected) -> void {
