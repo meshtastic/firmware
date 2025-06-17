@@ -16,8 +16,7 @@ bool BMM150Sensor::init()
 {
     // Initialise the sensor
     sensor = BMM150Singleton::GetInstance(device);
-    if (!sensor->init(device))
-        return false;
+    return sensor->init(device);
 }
 
 int32_t BMM150Sensor::runOnce()
