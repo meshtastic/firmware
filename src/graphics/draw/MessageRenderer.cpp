@@ -285,7 +285,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                      UIRenderer::drawTimeDelta(days, hours, minutes, seconds).c_str(), sender);
         }
     } else {
-        snprintf(headerStr, sizeof(headerStr), "No Messages To Show");
+        snprintf(headerStr, sizeof(headerStr), "No messages to show");
     }
 
 #ifndef EXCLUDE_EMOJI
@@ -411,7 +411,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
     int scrollOffset = static_cast<int>(scrollY);
     int yOffset = -scrollOffset + getTextPositions(display)[1];
-    if (strcmp(headerStr, "No Messages To Show") != 0) {
+    if (strcmp(headerStr, "No messages to show") != 0) {
         if (SCREEN_WIDTH > 128) {
             display->drawLine(0, yOffset + 20, SCREEN_WIDTH - (SCREEN_WIDTH * 0.1), yOffset + 20);
         } else {
