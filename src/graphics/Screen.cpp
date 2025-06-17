@@ -1375,7 +1375,16 @@ int Screen::handleInputEvent(const InputEvent *event)
                 showNextFrame();
             } else if (event->inputEvent == INPUT_BROKER_SELECT) {
                 if (this->ui->getUiState()->currentFrame == framesetInfo.positions.home) {
-                    setOn(false);
+                    showOverlayBanner(
+                        "Action:\nSend Message\nSleep Screen\nNone", 30000, 3,
+                        [](int selected) -> void {
+                            if (selected == 1) {
+                                screen->setOn(false);
+                            } else if (selected == 0) {
+                                cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST);
+                            }
+                        },
+                        1);
 #if HAS_TFT
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.memory) {
                     showOverlayBanner("Switch to MUI?\nYES\nNO", 30000, 2, [](int selected) -> void {
