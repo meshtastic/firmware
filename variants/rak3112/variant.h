@@ -21,7 +21,7 @@
 #define SX126X_POWER_EN (4)
 
 #define PIN_POWER_EN PIN_3V3_EN
-#define PIN_3V3_EN (2)
+#define PIN_3V3_EN (14)
 
 #define LED_GREEN 46
 #define LED_BLUE 45
@@ -39,6 +39,6 @@
 #define GPS_TX_PIN 43
 #define GPS_RX_PIN 44
 
-// #define BATTERY_PIN 1
-// #define ADC_CHANNEL ADC1_GPIO1_CHANNEL
-// #define ADC_MULTIPLIER   1.667
+#define BATTERY_PIN 1
+#define ADC_CHANNEL ADC1_GPIO1_CHANNEL
+#define ADC_MULTIPLIER 1.667
