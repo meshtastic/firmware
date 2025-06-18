@@ -507,7 +507,7 @@ void drawMemoryUsage(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
     // === Set Title
-    const char *titleStr = (SCREEN_WIDTH > 128) ? "System" : "Sys";
+    const char *titleStr = "System";
 
     // === Header ===
     graphics::drawCommonHeader(display, x, y, titleStr);

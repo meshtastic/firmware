@@ -1343,18 +1343,18 @@ int Screen::handleInputEvent(const InputEvent *event)
                     const char *banner_message;
                     int options;
                     if (kb_found) {
-                        banner_message = "Action?\nSleep Screen\nPreset Messages\nFreetype";
-                        options = 3;
+                        banner_message = "Action?\nBack\nSleep Screen\nPreset Messages\nFreetype";
+                        options = 4;
                     } else {
-                        banner_message = "Action?\nSleep Screen\nPreset Messages";
-                        options = 2;
+                        banner_message = "Action?\nBack\nSleep Screen\nPreset Messages";
+                        options = 3;
                     }
                     showOverlayBanner(banner_message, 30000, options, [](int selected) -> void {
-                        if (selected == 0) {
+                        if (selected == 1) {
                             screen->setOn(false);
-                        } else if (selected == 1) {
-                            cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST);
                         } else if (selected == 2) {
+                            cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST);
+                        } else if (selected == 3) {
                             cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST);
                         }
                     });
@@ -1381,21 +1381,21 @@ int Screen::handleInputEvent(const InputEvent *event)
 #if HAS_GPS
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.gps && gps) {
                     showOverlayBanner(
-                        "Toggle GPS\nENABLED\nDISABLED", 30000, 2,
+                        "Toggle GPS\nBack\nEnabled\nDisabled", 30000, 3,
                         [](int selected) -> void {
-                            if (selected == 0) {
+                            if (selected == 1) {
                                 config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
                                 playGPSEnableBeep();
                                 gps->enable();
-                            } else if (selected == 1) {
+                            } else if (selected == 2) {
                                 config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_DISABLED;
                                 playGPSDisableBeep();
                                 gps->disable();
                             }
                             service->reloadConfig(SEGMENT_CONFIG);
                         },
-                        config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED ? 0
-                                                                                                     : 1); // set inital selection
+                        config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED ? 1
+                                                                                                     : 2); // set inital selection
 #endif
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.clock) {
                     TZPicker();
@@ -1406,10 +1406,10 @@ int Screen::handleInputEvent(const InputEvent *event)
                     const char *banner_message;
                     int options;
                     if (kb_found) {
-                        banner_message = "Message Action?\nNone\nDismiss\nPreset Messages\nFreetype";
+                        banner_message = "Message Action?\nBack\nDismiss\nPreset Messages\nFreetype";
                         options = 4;
                     } else {
-                        banner_message = "Message Action?\nNone\nDismiss\nPreset Messages";
+                        banner_message = "Message Action?\nBack\nDismiss\nPreset Messages";
                         options = 3;
                     }
                     showOverlayBanner(banner_message, 30000, options, [](int selected) -> void {
@@ -1525,47 +1525,48 @@ void Screen::LoraRegionPicker()
 
 void Screen::TZPicker()
 {
-    showOverlayBanner("Pick "
-                      "Timezone\nUS/Hawaii\nUS/Alaska\nUS/Pacific\nUS/Mountain\nUS/Central\nUS/Eastern\nUTC\nEU/Western\nEU/"
-                      "Central\nEU/Eastern\nAsia/Kolkata\nAsia/Hong_Kong\nAU/AWST\nAU/ACST\nAU/AEST\nPacific/NZ",
-                      30000, 16, [](int selected) -> void {
-                          if (selected == 0) { // Hawaii
-                              strncpy(config.device.tzdef, "HST10", sizeof(config.device.tzdef));
-                          } else if (selected == 1) { // Alaska
-                              strncpy(config.device.tzdef, "AKST9AKDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
-                          } else if (selected == 2) { // Pacific
-                              strncpy(config.device.tzdef, "PST8PDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
-                          } else if (selected == 3) { // Mountain
-                              strncpy(config.device.tzdef, "MST7MDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
-                          } else if (selected == 4) { // Central
-                              strncpy(config.device.tzdef, "CST6CDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
-                          } else if (selected == 5) { // Eastern
-                              strncpy(config.device.tzdef, "EST5EDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
-                          } else if (selected == 6) { // UTC
-                              strncpy(config.device.tzdef, "UTC", sizeof(config.device.tzdef));
-                          } else if (selected == 7) { // EU/Western
-                              strncpy(config.device.tzdef, "GMT0BST,M3.5.0/1,M10.5.0", sizeof(config.device.tzdef));
-                          } else if (selected == 8) { // EU/Central
-                              strncpy(config.device.tzdef, "CET-1CEST,M3.5.0,M10.5.0/3", sizeof(config.device.tzdef));
-                          } else if (selected == 9) { // EU/Eastern
-                              strncpy(config.device.tzdef, "EET-2EEST,M3.5.0/3,M10.5.0/4", sizeof(config.device.tzdef));
-                          } else if (selected == 10) { // Asia/Kolkata
-                              strncpy(config.device.tzdef, "IST-5:30", sizeof(config.device.tzdef));
-                          } else if (selected == 11) { // China
-                              strncpy(config.device.tzdef, "HKT-8", sizeof(config.device.tzdef));
-                          } else if (selected == 12) { // AU/AWST
-                              strncpy(config.device.tzdef, "AWST-8", sizeof(config.device.tzdef));
-                          } else if (selected == 13) { // AU/ACST
-                              strncpy(config.device.tzdef, "ACST-9:30ACDT,M10.1.0,M4.1.0/3", sizeof(config.device.tzdef));
-                          } else if (selected == 14) { // AU/AEST
-                              strncpy(config.device.tzdef, "AEST-10AEDT,M10.1.0,M4.1.0/3", sizeof(config.device.tzdef));
-                          } else if (selected == 15) { // NZ
-                              strncpy(config.device.tzdef, "NZST-12NZDT,M9.5.0,M4.1.0/3", sizeof(config.device.tzdef));
-                          }
+    showOverlayBanner(
+        "Pick "
+        "Timezone\nBack\nUS/Hawaii\nUS/Alaska\nUS/Pacific\nUS/Mountain\nUS/Central\nUS/Eastern\nUTC\nEU/Western\nEU/"
+        "Central\nEU/Eastern\nAsia/Kolkata\nAsia/Hong_Kong\nAU/AWST\nAU/ACST\nAU/AEST\nPacific/NZ",
+        30000, 17, [](int selected) -> void {
+            if (selected == 1) { // Hawaii
+                strncpy(config.device.tzdef, "HST10", sizeof(config.device.tzdef));
+            } else if (selected == 2) { // Alaska
+                strncpy(config.device.tzdef, "AKST9AKDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
+            } else if (selected == 3) { // Pacific
+                strncpy(config.device.tzdef, "PST8PDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
+            } else if (selected == 4) { // Mountain
+                strncpy(config.device.tzdef, "MST7MDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
+            } else if (selected == 5) { // Central
+                strncpy(config.device.tzdef, "CST6CDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
+            } else if (selected == 6) { // Eastern
+                strncpy(config.device.tzdef, "EST5EDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
+            } else if (selected == 7) { // UTC
+                strncpy(config.device.tzdef, "UTC", sizeof(config.device.tzdef));
+            } else if (selected == 8) { // EU/Western
+                strncpy(config.device.tzdef, "GMT0BST,M3.5.0/1,M10.5.0", sizeof(config.device.tzdef));
+            } else if (selected == 9) { // EU/Central
+                strncpy(config.device.tzdef, "CET-1CEST,M3.5.0,M10.5.0/3", sizeof(config.device.tzdef));
+            } else if (selected == 10) { // EU/Eastern
+                strncpy(config.device.tzdef, "EET-2EEST,M3.5.0/3,M10.5.0/4", sizeof(config.device.tzdef));
+            } else if (selected == 11) { // Asia/Kolkata
+                strncpy(config.device.tzdef, "IST-5:30", sizeof(config.device.tzdef));
+            } else if (selected == 12) { // China
+                strncpy(config.device.tzdef, "HKT-8", sizeof(config.device.tzdef));
+            } else if (selected == 13) { // AU/AWST
+                strncpy(config.device.tzdef, "AWST-8", sizeof(config.device.tzdef));
+            } else if (selected == 14) { // AU/ACST
+                strncpy(config.device.tzdef, "ACST-9:30ACDT,M10.1.0,M4.1.0/3", sizeof(config.device.tzdef));
+            } else if (selected == 15) { // AU/AEST
+                strncpy(config.device.tzdef, "AEST-10AEDT,M10.1.0,M4.1.0/3", sizeof(config.device.tzdef));
+            } else if (selected == 16) { // NZ
+                strncpy(config.device.tzdef, "NZST-12NZDT,M9.5.0,M4.1.0/3", sizeof(config.device.tzdef));
+            }
 
-                          setenv("TZ", config.device.tzdef, 1);
-                          service->reloadConfig(SEGMENT_CONFIG);
-                      });
+            setenv("TZ", config.device.tzdef, 1);
+            service->reloadConfig(SEGMENT_CONFIG);
+        });
 }
 
 } // namespace graphics

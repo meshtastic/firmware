@@ -570,7 +570,16 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
         } else {
             displayLine = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "No GPS" : "GPS off";
         }
-        display->drawString(0, getTextPositions(display)[line], displayLine);
+        int yOffset = (SCREEN_WIDTH > 128) ? 3 : 1;
+        if (SCREEN_WIDTH > 128) {
+            NodeListRenderer::drawScaledXBitmap16x16(x, getTextPositions(display)[line] + yOffset - 5, imgSatellite_width,
+                                                     imgSatellite_height, imgSatellite, display);
+        } else {
+            display->drawXbm(x + 1, getTextPositions(display)[line] + yOffset, imgSatellite_width, imgSatellite_height,
+                             imgSatellite);
+        }
+        int xOffset = (SCREEN_WIDTH > 128) ? 6 : 0;
+        display->drawString(x + 11 + xOffset, getTextPositions(display)[line], displayLine);
     } else {
         UIRenderer::drawGps(display, 0, getTextPositions(display)[line], gpsStatus);
     }
@@ -963,8 +972,15 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
             displayLine = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "No GPS" : "GPS off";
         }
         int yOffset = (SCREEN_WIDTH > 128) ? 3 : 1;
-        display->drawXbm(x + 1, getTextPositions(display)[line] + yOffset, imgSatellite_width, imgSatellite_height, imgSatellite);
-        display->drawString(x + 11, getTextPositions(display)[line++], displayLine);
+        if (SCREEN_WIDTH > 128) {
+            NodeListRenderer::drawScaledXBitmap16x16(x, getTextPositions(display)[line] + yOffset - 5, imgSatellite_width,
+                                                     imgSatellite_height, imgSatellite, display);
+        } else {
+            display->drawXbm(x + 1, getTextPositions(display)[line] + yOffset, imgSatellite_width, imgSatellite_height,
+                             imgSatellite);
+        }
+        int xOffset = (SCREEN_WIDTH > 128) ? 6 : 0;
+        display->drawString(x + 11 + xOffset, getTextPositions(display)[line++], displayLine);
     } else {
         UIRenderer::drawGps(display, 0, getTextPositions(display)[line++], gpsStatus);
     }
