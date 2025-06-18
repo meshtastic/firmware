@@ -603,6 +603,8 @@ class Screen : public concurrency::OSThread
     void handleShowNextFrame();
     void handleShowPrevFrame();
     void handleStartFirmwareUpdateScreen();
+    void TZPicker();
+    void LoraRegionPicker();
 
     // Info collected by setFrames method.
     // Index location of specific frames.
@@ -624,6 +626,7 @@ class Screen : public concurrency::OSThread
             uint8_t clock = 255;
             uint8_t firstFavorite = 255;
             uint8_t lastFavorite = 255;
+            uint8_t lora = 255;
         } positions;
 
         uint8_t frameCount = 0;

@@ -93,6 +93,13 @@ void playShutdownMelody()
     playTones(melody, sizeof(melody) / sizeof(ToneDuration));
 }
 
+void playChirp()
+{
+    // A short, friendly "chirp" sound for key presses
+    ToneDuration melody[] = {{NOTE_AS3, 20}}; // Very short AS3 note
+    playTones(melody, sizeof(melody) / sizeof(ToneDuration));
+}
+
 void playBoop()
 {
     // A short, friendly "boop" sound for button presses

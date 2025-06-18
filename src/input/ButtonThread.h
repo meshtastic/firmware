@@ -108,8 +108,6 @@ class ButtonThread : public Observable<const InputEvent *>, public concurrency::
     bool leadUpSequenceActive = false;
 
     static void wakeOnIrq(int irq, int mode);
-
-    static void sendAdHocPosition();
 };
 
 extern ButtonThread *buttonThread;

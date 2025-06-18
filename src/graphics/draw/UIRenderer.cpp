@@ -570,7 +570,16 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
         } else {
             displayLine = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "No GPS" : "GPS off";
         }
-        display->drawString(0, getTextPositions(display)[line], displayLine);
+        int yOffset = (SCREEN_WIDTH > 128) ? 3 : 1;
+        if (SCREEN_WIDTH > 128) {
+            NodeListRenderer::drawScaledXBitmap16x16(x, getTextPositions(display)[line] + yOffset - 5, imgSatellite_width,
+                                                     imgSatellite_height, imgSatellite, display);
+        } else {
+            display->drawXbm(x + 1, getTextPositions(display)[line] + yOffset, imgSatellite_width, imgSatellite_height,
+                             imgSatellite);
+        }
+        int xOffset = (SCREEN_WIDTH > 128) ? 6 : 0;
+        display->drawString(x + 11 + xOffset, getTextPositions(display)[line], displayLine);
     } else {
         UIRenderer::drawGps(display, 0, getTextPositions(display)[line], gpsStatus);
     }
@@ -963,8 +972,15 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
             displayLine = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "No GPS" : "GPS off";
         }
         int yOffset = (SCREEN_WIDTH > 128) ? 3 : 1;
-        display->drawXbm(x + 1, getTextPositions(display)[line] + yOffset, imgSatellite_width, imgSatellite_height, imgSatellite);
-        display->drawString(x + 11, getTextPositions(display)[line++], displayLine);
+        if (SCREEN_WIDTH > 128) {
+            NodeListRenderer::drawScaledXBitmap16x16(x, getTextPositions(display)[line] + yOffset - 5, imgSatellite_width,
+                                                     imgSatellite_height, imgSatellite, display);
+        } else {
+            display->drawXbm(x + 1, getTextPositions(display)[line] + yOffset, imgSatellite_width, imgSatellite_height,
+                             imgSatellite);
+        }
+        int xOffset = (SCREEN_WIDTH > 128) ? 6 : 0;
+        display->drawString(x + 11 + xOffset, getTextPositions(display)[line++], displayLine);
     } else {
         UIRenderer::drawGps(display, 0, getTextPositions(display)[line++], gpsStatus);
     }
@@ -990,14 +1006,14 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
     // If GPS is off, no need to display these parts
     if (strcmp(displayLine, "GPS off") != 0 && strcmp(displayLine, "No GPS") != 0) {
 
-        // === Second Row: Altitude ===
-        char DisplayLineTwo[32] = {0};
-        if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
-            snprintf(DisplayLineTwo, sizeof(DisplayLineTwo), " Alt: %.0fft", geoCoord.getAltitude() * METERS_TO_FEET);
-        } else {
-            snprintf(DisplayLineTwo, sizeof(DisplayLineTwo), " Alt: %.0im", geoCoord.getAltitude());
-        }
-        display->drawString(x, getTextPositions(display)[line++], DisplayLineTwo);
+        // === Second Row: Date ===
+        uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true);
+        char datetimeStr[25];
+        bool showTime = false; // set to true for full datetime
+        UIRenderer::formatDateTime(datetimeStr, sizeof(datetimeStr), rtc_sec, display, showTime);
+        char fullLine[40];
+        snprintf(fullLine, sizeof(fullLine), " Date: %s", datetimeStr);
+        display->drawString(0, getTextPositions(display)[line++], fullLine);
 
         // === Third Row: Latitude ===
         char latStr[32];
@@ -1009,14 +1025,14 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
         snprintf(lonStr, sizeof(lonStr), " Lon: %.5f", geoCoord.getLongitude() * 1e-7);
         display->drawString(x, getTextPositions(display)[line++], lonStr);
 
-        // === Fifth Row: Date ===
-        uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true);
-        char datetimeStr[25];
-        bool showTime = false; // set to true for full datetime
-        UIRenderer::formatDateTime(datetimeStr, sizeof(datetimeStr), rtc_sec, display, showTime);
-        char fullLine[40];
-        snprintf(fullLine, sizeof(fullLine), " Date: %s", datetimeStr);
-        display->drawString(0, getTextPositions(display)[line++], fullLine);
+        // === Fifth Row: Altitude ===
+        char DisplayLineTwo[32] = {0};
+        if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
+            snprintf(DisplayLineTwo, sizeof(DisplayLineTwo), " Alt: %.0fft", geoCoord.getAltitude() * METERS_TO_FEET);
+        } else {
+            snprintf(DisplayLineTwo, sizeof(DisplayLineTwo), " Alt: %.0im", geoCoord.getAltitude());
+        }
+        display->drawString(x, getTextPositions(display)[line++], DisplayLineTwo);
     }
 
     // === Draw Compass if heading is valid ===

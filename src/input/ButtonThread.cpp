@@ -177,9 +177,6 @@ int32_t ButtonThread::runOnce()
         evt.touchY = 0;
         switch (btnEvent) {
         case BUTTON_EVENT_PRESSED: {
-            // Play boop sound for every button press
-            playBoop();
-
             // Forward single press to InputBroker (but NOT as DOWN/SELECT, just forward a "button press" event)
             evt.inputEvent = _singlePress;
             // evt.kbchar = _singlePress; // todo: fix this. Some events are kb characters rather than event types
@@ -216,17 +213,11 @@ int32_t ButtonThread::runOnce()
             // Reset combination tracking
             waitingForLongPress = false;
 
-            // Lead-up sound already played during button hold
-            // Just a simple beep to confirm long press threshold reached
-            playBeep();
             break;
         }
 
         case BUTTON_EVENT_DOUBLE_PRESSED: { // not wired in if screen detected
             LOG_INFO("Double press!");
-
-            // Play boop sound for every button press
-            playBoop();
 
             // Reset combination tracking
             waitingForLongPress = false;
@@ -241,9 +232,6 @@ int32_t ButtonThread::runOnce()
 
         case BUTTON_EVENT_MULTI_PRESSED: { // not wired in when screen is present
             LOG_INFO("Mulitipress! %hux", multipressClickCount);
-
-            // Play boop sound for every button press
-            playBoop();
 
             // Reset combination tracking
             waitingForLongPress = false;
