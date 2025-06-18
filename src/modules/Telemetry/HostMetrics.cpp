@@ -29,7 +29,8 @@ bool HostMetricsModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, 
     if (t->which_variant == meshtastic_Telemetry_host_metrics_tag) {
 #ifdef DEBUG_PORT
         const char *sender = getSenderShortName(mp);
-        t->variant.host_metrics.user_string[sizeof(t->variant.host_metrics.user_string) - 1] = '\0';
+        if (t->variant.host_metrics.has_user_string)
+            t->variant.host_metrics.user_string[sizeof(t->variant.host_metrics.user_string) - 1] = '\0';
 
         LOG_INFO("(Received Host Metrics from %s): uptime=%u, diskfree=%lu, memory free=%lu, load=%04.2f, %04.2f, %04.2f, %s",
                  sender, t->variant.host_metrics.uptime_seconds, t->variant.host_metrics.diskfree1_bytes,
