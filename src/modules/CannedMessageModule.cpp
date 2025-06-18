@@ -422,7 +422,7 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
 
     if (event->kbchar >= 32 && event->kbchar <= 126 && !isUp && !isDown && event->inputEvent != INPUT_BROKER_LEFT &&
         event->inputEvent != INPUT_BROKER_RIGHT && event->inputEvent != INPUT_BROKER_SELECT) {
-        this->searchQuery += event->kbchar;
+        this->searchQuery += (char)event->kbchar;
         needsUpdate = true;
         if ((millis() - lastFilterUpdate) > filterDebounceMs) {
             runOnce(); // update filter immediately
