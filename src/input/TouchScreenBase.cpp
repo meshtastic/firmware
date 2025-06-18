@@ -43,6 +43,8 @@ int32_t TouchScreenBase::runOnce()
     // process touch events
     int16_t x, y;
     bool touched = getTouch(x, y);
+    if (x < 0 || y < 0) // T-deck can emit phantom touch events with a negative value when turing off the screen
+        touched = false;
     if (touched) {
         this->setInterval(20);
         _last_x = x;
