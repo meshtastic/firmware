@@ -1276,13 +1276,13 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
 
             if (isAlert) {
                 if (longName && longName[0]) {
-                    snprintf(banner, sizeof(banner), "Alert Received\nfrom %s", longName);
+                    snprintf(banner, sizeof(banner), "Alert Received from\n%s", longName);
                 } else {
                     strcpy(banner, "Alert Received");
                 }
             } else {
                 if (longName && longName[0]) {
-                    snprintf(banner, sizeof(banner), "New Message\nfrom %s", longName);
+                    snprintf(banner, sizeof(banner), "New Message from\n%s", longName);
                 } else {
                     strcpy(banner, "New Message");
                 }
