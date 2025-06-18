@@ -372,7 +372,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         totalHeight += rowHeights[i];
     }
     int usableScrollHeight = usableHeight - rowHeights[0]; // remove header height
-    int scrollStop = std::max(0, totalHeight - usableScrollHeight);
+    int scrollStop = std::max(0, totalHeight - usableScrollHeight + rowHeights.back());
 
     static float scrollY = 0.0f;
     static uint32_t lastTime = 0, scrollStartDelay = 0, pauseStart = 0;
