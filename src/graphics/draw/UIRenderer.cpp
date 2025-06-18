@@ -32,11 +32,10 @@ extern GeoCoord geoCoord;
 // Threshold values for the GPS lock accuracy bar display
 extern uint32_t dopThresholds[5];
 
-namespace UIRenderer
-{
+NodeNum UIRenderer::currentFavoriteNodeNum = 0;
 
 // Draw GPS status summary
-void drawGps(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSStatus *gps)
+void UIRenderer::drawGps(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSStatus *gps)
 {
     // Draw satellite image
     if (SCREEN_WIDTH > 128) {
@@ -67,7 +66,7 @@ void drawGps(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSSt
 }
 
 // Draw status when GPS is disabled or not present
-void drawGpsPowerStatus(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSStatus *gps)
+void UIRenderer::drawGpsPowerStatus(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSStatus *gps)
 {
     const char *displayLine;
     int pos;
@@ -82,7 +81,7 @@ void drawGpsPowerStatus(OLEDDisplay *display, int16_t x, int16_t y, const meshta
     display->drawString(x + pos, y, displayLine);
 }
 
-void drawGpsAltitude(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSStatus *gps)
+void UIRenderer::drawGpsAltitude(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSStatus *gps)
 {
     char displayLine[32];
     if (!gps->getIsConnected() && !config.position.fixed_position) {
@@ -102,7 +101,7 @@ void drawGpsAltitude(OLEDDisplay *display, int16_t x, int16_t y, const meshtasti
 }
 
 // Draw GPS status coordinates
-void drawGpsCoordinates(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSStatus *gps)
+void UIRenderer::drawGpsCoordinates(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSStatus *gps)
 {
     auto gpsFormat = config.display.gps_format;
     char displayLine[32];
@@ -164,7 +163,8 @@ void drawGpsCoordinates(OLEDDisplay *display, int16_t x, int16_t y, const meshta
     }
 }
 
-void drawBattery(OLEDDisplay *display, int16_t x, int16_t y, uint8_t *imgBuffer, const meshtastic::PowerStatus *powerStatus)
+void UIRenderer::drawBattery(OLEDDisplay *display, int16_t x, int16_t y, uint8_t *imgBuffer,
+                             const meshtastic::PowerStatus *powerStatus)
 {
     static const uint8_t powerBar[3] = {0x81, 0xBD, 0xBD};
     static const uint8_t lightning[8] = {0xA1, 0xA1, 0xA5, 0xAD, 0xB5, 0xA5, 0x85, 0x85};
@@ -204,8 +204,8 @@ void drawBattery(OLEDDisplay *display, int16_t x, int16_t y, uint8_t *imgBuffer,
 }
 
 // Draw nodes status
-void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::NodeStatus *nodeStatus, int node_offset,
-               bool show_total, String additional_words)
+void UIRenderer::drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::NodeStatus *nodeStatus, int node_offset,
+                           bool show_total, String additional_words)
 {
     char usersString[20];
     int nodes_online = (nodeStatus->getNumOnline() > 0) ? nodeStatus->getNumOnline() + node_offset : 0;
@@ -240,7 +240,7 @@ void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::Nod
 // **********************
 // * Favorite Node Info *
 // **********************
-void drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t x, int16_t y)
+void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     // --- Cache favorite nodes for the current frame only, to save computation ---
     static std::vector<meshtastic_NodeInfoLite *> favoritedNodes;
@@ -276,7 +276,7 @@ void drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t
         return;
 
     display->clear();
-
+    currentFavoriteNodeNum = node->num;
     // === Create the shortName and title string ===
     const char *shortName = (node->has_user && haveGlyphs(node->user.short_name)) ? node->user.short_name : "Node";
     char titlestr[32] = {0};
@@ -520,7 +520,7 @@ void drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t
 // ****************************
 // * Device Focused Screen    *
 // ****************************
-void drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     display->clear();
     display->setTextAlignment(TEXT_ALIGN_LEFT);
@@ -711,7 +711,7 @@ bool isLeapYear(int year)
 const int daysInMonth[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
 
 // Fills the buffer with a formatted date/time string and returns pixel width
-int formatDateTime(char *buf, size_t bufSize, uint32_t rtc_sec, OLEDDisplay *display, bool includeTime)
+int UIRenderer::formatDateTime(char *buf, size_t bufSize, uint32_t rtc_sec, OLEDDisplay *display, bool includeTime)
 {
     int sec = rtc_sec % 60;
     rtc_sec /= 60;
@@ -756,7 +756,7 @@ int formatDateTime(char *buf, size_t bufSize, uint32_t rtc_sec, OLEDDisplay *dis
 }
 
 // Check if the display can render a string (detect special chars; emoji)
-bool haveGlyphs(const char *str)
+bool UIRenderer::haveGlyphs(const char *str)
 {
 #if defined(OLED_PL) || defined(OLED_UA) || defined(OLED_RU) || defined(OLED_CS)
     // Don't want to make any assumptions about custom language support
@@ -781,7 +781,7 @@ bool haveGlyphs(const char *str)
 
 #ifdef USE_EINK
 /// Used on eink displays while in deep sleep
-void drawDeepSleepFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+void UIRenderer::drawDeepSleepFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
 
     // Next frame should use full-refresh, and block while running, else device will sleep before async callback
@@ -795,7 +795,7 @@ void drawDeepSleepFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
 }
 
 /// Used on eink displays when screen updates are paused
-void drawScreensaverOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
+void UIRenderer::drawScreensaverOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
     LOG_DEBUG("Draw screensaver overlay");
 
@@ -851,7 +851,7 @@ void drawScreensaverOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
 /**
  * Draw the icon with extra info printed around the corners
  */
-void drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+void UIRenderer::drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     const char *label = "BaseUI";
     display->setFont(FONT_SMALL);
@@ -937,7 +937,7 @@ void drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDisplayUiSta
 // ****************************
 // * My Position Screen       *
 // ****************************
-void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     display->clear();
     display->setTextAlignment(TEXT_ALIGN_LEFT);
@@ -945,7 +945,7 @@ void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiState *stat
     int line = 1;
 
     // === Set Title
-    const char *titleStr = "GPS";
+    const char *titleStr = "Position";
 
     // === Header ===
     graphics::drawCommonHeader(display, x, y, titleStr);
@@ -1101,7 +1101,7 @@ void drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayUiState *stat
 
 #ifdef USERPREFS_OEM_TEXT
 
-void drawOEMIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+void UIRenderer::drawOEMIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     static const uint8_t xbm[] = USERPREFS_OEM_IMAGE_DATA;
     display->drawXbm(x + (SCREEN_WIDTH - USERPREFS_OEM_IMAGE_WIDTH) / 2,
@@ -1140,7 +1140,7 @@ void drawOEMIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDisplayUi
     display->setTextAlignment(TEXT_ALIGN_LEFT); // Restore left align, just to be kind to any other unsuspecting code
 }
 
-void drawOEMBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+void UIRenderer::drawOEMBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     // Draw region in upper left
     const char *region = myRegion ? myRegion->name : NULL;
@@ -1150,7 +1150,7 @@ void drawOEMBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t 
 #endif
 
 // Function overlay for showing mute/buzzer modifiers etc.
-void drawFunctionOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
+void UIRenderer::drawFunctionOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
     // LOG_DEBUG("Draw function overlay");
     if (functionSymbol.begin() != functionSymbol.end()) {
@@ -1166,7 +1166,7 @@ static int8_t lastFrameIndex = -1;
 static uint32_t lastFrameChangeTime = 0;
 constexpr uint32_t ICON_DISPLAY_DURATION_MS = 2000;
 
-void drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *state)
+void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
     int currentFrame = state->currentFrame;
 
@@ -1244,7 +1244,7 @@ void drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *state)
     display->setColor(WHITE);
 }
 
-void drawFrameText(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *message)
+void UIRenderer::drawFrameText(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *message)
 {
     uint16_t x_offset = display->width() / 2;
     display->setTextAlignment(TEXT_ALIGN_CENTER);
@@ -1252,7 +1252,7 @@ void drawFrameText(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, i
     display->drawString(x_offset + x, 26 + y, message);
 }
 
-std::string drawTimeDelta(uint32_t days, uint32_t hours, uint32_t minutes, uint32_t seconds)
+std::string UIRenderer::drawTimeDelta(uint32_t days, uint32_t hours, uint32_t minutes, uint32_t seconds)
 {
     std::string uptime;
 
@@ -1269,7 +1269,6 @@ std::string drawTimeDelta(uint32_t days, uint32_t hours, uint32_t minutes, uint3
     return uptime;
 }
 
-} // namespace UIRenderer
 } // namespace graphics
 
 #endif // !MESHTASTIC_EXCLUDE_GPS

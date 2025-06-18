@@ -34,6 +34,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "draw/NodeListRenderer.h"
 #include "draw/NotificationRenderer.h"
 #include "draw/UIRenderer.h"
+#include "modules/CannedMessageModule.h"
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
 #include "buzz.h"
@@ -895,19 +896,10 @@ void Screen::setFrames(FrameFocus focus)
     showingNormalScreen = true;
 
     indicatorIcons.clear();
-    moduleFrames = MeshModule::GetMeshModulesWithUIFrames();
-    LOG_DEBUG("Show %d module frames", moduleFrames.size());
-#ifdef DEBUG_PORT
-    int totalFrameCount = MAX_NUM_NODES + NUM_EXTRA_FRAMES + moduleFrames.size();
-    LOG_DEBUG("Total frame count: %d", totalFrameCount);
-#endif
-
-    // We don't show the node info of our node (if we have it yet - we should)
-    size_t numMeshNodes = nodeDB->getNumMeshNodes();
-    if (numMeshNodes > 0)
-        numMeshNodes--;
 
     size_t numframes = 0;
+    moduleFrames = MeshModule::GetMeshModulesWithUIFrames();
+    LOG_DEBUG("Show %d module frames", moduleFrames.size());
 
     // put all of the module frames first.
     // this is a little bit of a dirty hack; since we're going to call
@@ -951,15 +943,13 @@ void Screen::setFrames(FrameFocus focus)
     // Declare this early so it’s available in FOCUS_PRESERVE block
     bool willInsertTextMessage = shouldDrawMessage(&devicestate.rx_text_message);
 
-    if (willInsertTextMessage) {
-        fsi.positions.textMessage = numframes;
-        normalFrames[numframes++] = graphics::MessageRenderer::drawTextMessageFrame;
-        indicatorIcons.push_back(icon_mail);
-    }
-
     fsi.positions.home = numframes;
     normalFrames[numframes++] = graphics::UIRenderer::drawDeviceFocused;
     indicatorIcons.push_back(icon_home);
+
+    fsi.positions.textMessage = numframes;
+    normalFrames[numframes++] = graphics::MessageRenderer::drawTextMessageFrame;
+    indicatorIcons.push_back(icon_mail);
 
 #ifndef USE_EINK
     normalFrames[numframes++] = graphics::NodeListRenderer::drawDynamicNodeListScreen;
@@ -1000,9 +990,17 @@ void Screen::setFrames(FrameFocus focus)
     indicatorIcons.push_back(icon_clock);
 #endif
 
+    // We don't show the node info of our node (if we have it yet - we should)
+    size_t numMeshNodes = nodeDB->getNumMeshNodes();
+    if (numMeshNodes > 0)
+        numMeshNodes--;
+
     for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
         const meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(i);
         if (n && n->num != nodeDB->getNodeNum() && n->is_favorite) {
+            if (fsi.positions.firstFavorite == 255)
+                fsi.positions.firstFavorite = numframes;
+            fsi.positions.lastFavorite = numframes;
             normalFrames[numframes++] = graphics::UIRenderer::drawNodeInfo;
             indicatorIcons.push_back(icon_node);
         }
@@ -1085,8 +1083,6 @@ void Screen::dismissCurrentFrame()
         LOG_INFO("Dismiss Text Message");
         devicestate.has_rx_text_message = false;
         memset(&devicestate.rx_text_message, 0, sizeof(devicestate.rx_text_message));
-        dismissedFrames.textMessage = true;
-        dismissed = true;
     } else if (currentFrame == framesetInfo.positions.waypoint && devicestate.has_rx_waypoint) {
         LOG_DEBUG("Dismiss Waypoint");
         devicestate.has_rx_waypoint = false;
@@ -1374,7 +1370,24 @@ int Screen::handleInputEvent(const InputEvent *event)
                 showNextFrame();
             } else if (event->inputEvent == INPUT_BROKER_SELECT) {
                 if (this->ui->getUiState()->currentFrame == framesetInfo.positions.home) {
-                    setOn(false);
+                    const char *banner_message;
+                    int options;
+                    if (kb_found) {
+                        banner_message = "Action?\nSleep Screen\nPreset Messages\nFreetype";
+                        options = 3;
+                    } else {
+                        banner_message = "Action?\nSleep Screen\nPreset Messages";
+                        options = 2;
+                    }
+                    showOverlayBanner(banner_message, 30000, options, [](int selected) -> void {
+                        if (selected == 0) {
+                            screen->setOn(false);
+                        } else if (selected == 1) {
+                            cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST);
+                        } else if (selected == 2) {
+                            cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST);
+                        }
+                    });
 #if HAS_TFT
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.memory) {
                     showOverlayBanner("Switch to MUI?\nYES\nNO", 30000, 2, [](int selected) -> void {
@@ -1448,15 +1461,55 @@ int Screen::handleInputEvent(const InputEvent *event)
                             setenv("TZ", config.device.tzdef, 1);
                             service->reloadConfig(SEGMENT_CONFIG);
                         });
-                } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.textMessage) {
-                    showOverlayBanner(
-                        "Dismiss Message?\nYES\nNO", 30000, 2,
-                        [](int selected) -> void {
-                            if (selected == 0) {
-                                screen->dismissCurrentFrame();
+                } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.textMessage &&
+                           devicestate.rx_text_message.from) {
+                    const char *banner_message;
+                    int options;
+                    if (kb_found) {
+                        banner_message = "Message Action?\nNone\nDismiss\nPreset Messages\nFreetype";
+                        options = 4;
+                    } else {
+                        banner_message = "Message Action?\nNone\nDismiss\nPreset Messages";
+                        options = 3;
+                    }
+                    showOverlayBanner(banner_message, 30000, options, [](int selected) -> void {
+                        if (selected == 1) {
+                            screen->dismissCurrentFrame();
+                        } else if (selected == 2) {
+                            if (devicestate.rx_text_message.to == NODENUM_BROADCAST) {
+                                cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST,
+                                                                           devicestate.rx_text_message.channel);
+                            } else {
+                                cannedMessageModule->LaunchWithDestination(devicestate.rx_text_message.from);
                             }
-                        },
-                        1);
+                        } else if (selected == 3) {
+                            if (devicestate.rx_text_message.to == NODENUM_BROADCAST) {
+                                cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST,
+                                                                                   devicestate.rx_text_message.channel);
+                            } else {
+                                cannedMessageModule->LaunchFreetextWithDestination(devicestate.rx_text_message.from);
+                            }
+                        }
+                    });
+                } else if (framesetInfo.positions.firstFavorite != 255 &&
+                           this->ui->getUiState()->currentFrame >= framesetInfo.positions.firstFavorite &&
+                           this->ui->getUiState()->currentFrame <= framesetInfo.positions.lastFavorite) {
+                    const char *banner_message;
+                    int options;
+                    if (kb_found) {
+                        banner_message = "Message Node?\nCancel\nPreset Messages\nFreetype";
+                        options = 3;
+                    } else {
+                        banner_message = "Message Node?\nCancel\nConfirm";
+                        options = 2;
+                    }
+                    showOverlayBanner(banner_message, 30000, options, [](int selected) -> void {
+                        if (selected == 1) {
+                            cannedMessageModule->LaunchWithDestination(graphics::UIRenderer::currentFavoriteNodeNum);
+                        } else if (selected == 2) {
+                            cannedMessageModule->LaunchFreetextWithDestination(graphics::UIRenderer::currentFavoriteNodeNum);
+                        }
+                    });
                 }
             } else if (event->inputEvent == INPUT_BROKER_BACK) {
                 showPrevFrame();

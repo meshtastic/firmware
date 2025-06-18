@@ -234,6 +234,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     const meshtastic_MeshPacket &mp = devicestate.rx_text_message;
     const char *msg = reinterpret_cast<const char *>(mp.decoded.payload.bytes);
 
+    display->clear();
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
 
@@ -245,6 +246,19 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
     bool isInverted = (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED);
     bool isBold = config.display.heading_bold;
+
+    // === Set Title
+    const char *titleStr = "Messages";
+
+    // Check if we have more than an empty message to show
+    char messageBuf[237];
+    snprintf(messageBuf, sizeof(messageBuf), "%s", msg);
+    if (strlen(messageBuf) == 0) {
+        // === Header ===
+        graphics::drawCommonHeader(display, x, y, titleStr);
+        display->drawString(x, getTextPositions(display)[2], "No messages to show");
+        return;
+    }
 
     // === Header Construction ===
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(getFrom(&mp));
@@ -295,22 +309,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     for (int i = 0; i < numEmotes; ++i) {
         const Emote &e = emotes[i];
         if (strcmp(msg, e.label) == 0) {
-            // Draw the header
-            if (isInverted) {
-                drawRoundedHighlight(display, x, 0, SCREEN_WIDTH, FONT_HEIGHT_SMALL - 1, cornerRadius);
-                display->setColor(BLACK);
-                display->drawString(x + 3, 0, headerStr);
-                if (isBold)
-                    display->drawString(x + 4, 0, headerStr);
-                display->setColor(WHITE);
-            } else {
-                display->drawString(x, 0, headerStr);
-                if (SCREEN_WIDTH > 128) {
-                    display->drawLine(0, 20, SCREEN_WIDTH, 20);
-                } else {
-                    display->drawLine(0, 14, SCREEN_WIDTH, 14);
-                }
-            }
+            display->drawString(x, getTextPositions(display)[2], headerStr);
 
             // Center the emote below header + apply bounce
             int remainingHeight = SCREEN_HEIGHT - FONT_HEIGHT_SMALL - navHeight;
@@ -322,9 +321,6 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 #endif
 
     // === Word-wrap and build line list ===
-    char messageBuf[237];
-    snprintf(messageBuf, sizeof(messageBuf), "%s", msg);
-
     std::vector<std::string> lines;
     lines.push_back(std::string(headerStr)); // Header line is always first
 
@@ -417,13 +413,11 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     }
 
     int scrollOffset = static_cast<int>(scrollY);
-    int yOffset = -scrollOffset;
-    if (!isInverted) {
-        if (SCREEN_WIDTH > 128) {
-            display->drawLine(0, yOffset + 20, SCREEN_WIDTH, yOffset + 20);
-        } else {
-            display->drawLine(0, yOffset + 14, SCREEN_WIDTH, yOffset + 14);
-        }
+    int yOffset = -scrollOffset + getTextPositions(display)[1];
+    if (SCREEN_WIDTH > 128) {
+        display->drawLine(0, yOffset + 20, SCREEN_WIDTH - (SCREEN_WIDTH * 0.1), yOffset + 20);
+    } else {
+        display->drawLine(0, yOffset + 14, SCREEN_WIDTH - (SCREEN_WIDTH * 0.1), yOffset + 14);
     }
 
     // === Render visible lines ===
@@ -433,17 +427,17 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
             lineY += rowHeights[j];
         if (lineY > -rowHeights[i] && lineY < scrollBottom) {
             if (i == 0 && isInverted) {
-                drawRoundedHighlight(display, x, lineY, SCREEN_WIDTH, FONT_HEIGHT_SMALL - 1, cornerRadius);
-                display->setColor(BLACK);
                 display->drawString(x + 3, lineY, lines[i].c_str());
                 if (isBold)
                     display->drawString(x + 4, lineY, lines[i].c_str());
-                display->setColor(WHITE);
             } else {
                 drawStringWithEmotes(display, x, lineY, lines[i], emotes, numEmotes);
             }
         }
     }
+
+    // === Header ===
+    graphics::drawCommonHeader(display, x, y, titleStr);
 }
 
 } // namespace MessageRenderer

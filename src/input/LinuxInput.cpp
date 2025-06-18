@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/input.h>
+#include <main.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string>
@@ -50,6 +51,7 @@ int32_t LinuxInput::runOnce()
             perror("unable to epoll add");
             return disable();
         }
+        kb_found = true;
         // This is the first time the OSThread library has called this function, so do port setup
         firstTime = 0;
     }
