@@ -55,7 +55,8 @@ int BuzzerFeedbackThread::handleInputEvent(const InputEvent *event)
         // For other events, check if it's a printable character
         if (event->kbchar >= 32 && event->kbchar <= 126) {
             // Typing feedback - very short boop
-            playChirp();
+            // Removing this for now, too chatty
+            // playChirp();
         }
         break;
     }
