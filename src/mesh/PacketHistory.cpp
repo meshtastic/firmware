@@ -13,6 +13,7 @@
 #define RECENT_WARN_AGE (10 * 60 * 1000L) // Warn if the packet that gets removed was more recent than 10 min
 
 #define VERBOSE_PACKET_HISTORY 0 // Set to 1 for verbose logging, 2 for heavy debugging
+#define PACKET_HISTORY_TRACE_AGING 1
 
 PacketHistory::PacketHistory(uint32_t size) : recentPacketsCapacity(0), recentPackets(NULL) // Initialize members
 {
@@ -254,6 +255,16 @@ void PacketHistory::insert(PacketRecord &r)
 #endif
         }
     }
+
+#if PACKET_HISTORY_TRACE_AGING
+    if (tu->rxTimeMsec != 0) {
+        LOG_INFO("Packet History - insert: Reusing slot aged %.3fs TRACE %s", OldtrxTimeMsec / 1000.,
+                 (tu->id == r.id && tu->sender == r.sender) ? "MATCHED PACKET" : "OLDEST SLOT");
+    } else {
+        LOG_INFO("Packet History - insert: Using new slot @uptime %.3fs TRACE NEW", millis() / 1000.);
+    }
+#endif
+
 #endif
 
 #if VERBOSE_PACKET_HISTORY
