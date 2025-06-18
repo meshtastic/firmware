@@ -624,7 +624,7 @@ void RadioInterface::limitPower(int8_t loraMaxPower)
     if (power > loraMaxPower) // Clamp power to maximum defined level
         power = loraMaxPower;
     
-    if (TX_GAIN_LORA == 0) {
+    if (TX_GAIN_LORA == 0) { //Setting power in config with defined TX_GAIN_LORA will cause decreasing power on each reboot
         config.lora.tx_power = power; //Set limited power in config
     }
 
