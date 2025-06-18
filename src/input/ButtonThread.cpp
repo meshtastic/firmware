@@ -225,9 +225,6 @@ int32_t ButtonThread::runOnce()
         case BUTTON_EVENT_DOUBLE_PRESSED: { // not wired in if screen detected
             LOG_INFO("Double press!");
 
-            // Play boop sound for every button press
-            playBoop();
-
             // Reset combination tracking
             waitingForLongPress = false;
 
