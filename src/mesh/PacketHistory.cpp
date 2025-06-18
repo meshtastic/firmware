@@ -12,8 +12,8 @@
 
 #define RECENT_WARN_AGE (10 * 60 * 1000L) // Warn if the packet that gets removed was more recent than 10 min
 
-#define VERBOSE_PACKET_HISTORY 0 // Set to 1 for verbose logging, 2 for heavy debugging
-#define PACKET_HISTORY_TRACE_AGING 1
+#define VERBOSE_PACKET_HISTORY 0     // Set to 1 for verbose logging, 2 for heavy debugging
+#define PACKET_HISTORY_TRACE_AGING 1 // Set to 1 to enable logging of the age of re/used history slots
 
 PacketHistory::PacketHistory(uint32_t size) : recentPacketsCapacity(0), recentPackets(NULL) // Initialize members
 {
