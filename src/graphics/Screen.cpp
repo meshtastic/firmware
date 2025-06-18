@@ -684,38 +684,7 @@ int32_t Screen::runOnce()
 
 #ifndef DISABLE_WELCOME_UNSET
     if (!NotificationRenderer::isOverlayBannerShowing() && config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
-        showOverlayBanner(
-            "Set the LoRa "
-            "region\nUS\nEU_433\nEU_868\nCN\nJP\nANZ\nKR\nTW\nRU\nIN\nNZ_865\nTH\nLORA_24\nUA_433\nUA_868\nMY_433\nMY_919\nSG_"
-            "923\nPH_433\nPH_868\nPH_915",
-            0, 21, [](int selected) -> void {
-                config.lora.region = _meshtastic_Config_LoRaConfig_RegionCode(selected + 1);
-                if (!owner.is_licensed) {
-                    bool keygenSuccess = false;
-                    if (config.security.private_key.size == 32) {
-                        if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
-                            keygenSuccess = true;
-                        }
-                    } else {
-                        LOG_INFO("Generate new PKI keys");
-                        crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
-                        keygenSuccess = true;
-                    }
-                    if (keygenSuccess) {
-                        config.security.public_key.size = 32;
-                        config.security.private_key.size = 32;
-                        owner.public_key.size = 32;
-                        memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
-                    }
-                }
-                config.lora.tx_enabled = true;
-                initRegion();
-                if (myRegion->dutyCycle < 100) {
-                    config.lora.ignore_mqtt = true; // Ignore MQTT by default if region has a duty cycle limit
-                }
-                service->reloadConfig(SEGMENT_CONFIG);
-                rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
-            });
+        LoraRegionPicker();
     }
 #endif
     if (!NotificationRenderer::isOverlayBannerShowing() && rebootAtMsec != 0) {
@@ -976,6 +945,7 @@ void Screen::setFrames(FrameFocus focus)
     indicatorIcons.push_back(icon_compass);
 #endif
     if (RadioLibInterface::instance) {
+        fsi.positions.lora = numframes;
         normalFrames[numframes++] = graphics::DebugRenderer::drawLoRaFocused;
         indicatorIcons.push_back(icon_radio);
     }
@@ -1428,48 +1398,9 @@ int Screen::handleInputEvent(const InputEvent *event)
                                                                                                      : 1); // set inital selection
 #endif
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.clock) {
-                    showOverlayBanner(
-                        "Pick "
-                        "Timezone\nUS/Hawaii\nUS/Alaska\nUS/Pacific\nUS/Mountain\nUS/Central\nUS/Eastern\nUTC\nEU/Western\nEU/"
-                        "Central\nEU/Eastern\nAsia/Kolkata\nAsia/Hong_Kong\nAU/AWST\nAU/ACST\nAU/AEST\nPacific/NZ",
-                        30000, 16, [](int selected) -> void {
-                            if (selected == 0) { // Hawaii
-                                strncpy(config.device.tzdef, "HST10", sizeof(config.device.tzdef));
-                            } else if (selected == 1) { // Alaska
-                                strncpy(config.device.tzdef, "AKST9AKDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
-                            } else if (selected == 2) { // Pacific
-                                strncpy(config.device.tzdef, "PST8PDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
-                            } else if (selected == 3) { // Mountain
-                                strncpy(config.device.tzdef, "MST7MDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
-                            } else if (selected == 4) { // Central
-                                strncpy(config.device.tzdef, "CST6CDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
-                            } else if (selected == 5) { // Eastern
-                                strncpy(config.device.tzdef, "EST5EDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
-                            } else if (selected == 6) { // UTC
-                                strncpy(config.device.tzdef, "UTC", sizeof(config.device.tzdef));
-                            } else if (selected == 7) { // EU/Western
-                                strncpy(config.device.tzdef, "GMT0BST,M3.5.0/1,M10.5.0", sizeof(config.device.tzdef));
-                            } else if (selected == 8) { // EU/Central
-                                strncpy(config.device.tzdef, "CET-1CEST,M3.5.0,M10.5.0/3", sizeof(config.device.tzdef));
-                            } else if (selected == 9) { // EU/Eastern
-                                strncpy(config.device.tzdef, "EET-2EEST,M3.5.0/3,M10.5.0/4", sizeof(config.device.tzdef));
-                            } else if (selected == 10) { // Asia/Kolkata
-                                strncpy(config.device.tzdef, "IST-5:30", sizeof(config.device.tzdef));
-                            } else if (selected == 11) { // China
-                                strncpy(config.device.tzdef, "HKT-8", sizeof(config.device.tzdef));
-                            } else if (selected == 12) { // AU/AWST
-                                strncpy(config.device.tzdef, "AWST-8", sizeof(config.device.tzdef));
-                            } else if (selected == 13) { // AU/ACST
-                                strncpy(config.device.tzdef, "ACST-9:30ACDT,M10.1.0,M4.1.0/3", sizeof(config.device.tzdef));
-                            } else if (selected == 14) { // AU/AEST
-                                strncpy(config.device.tzdef, "AEST-10AEDT,M10.1.0,M4.1.0/3", sizeof(config.device.tzdef));
-                            } else if (selected == 15) { // NZ
-                                strncpy(config.device.tzdef, "NZST-12NZDT,M9.5.0,M4.1.0/3", sizeof(config.device.tzdef));
-                            }
-
-                            setenv("TZ", config.device.tzdef, 1);
-                            service->reloadConfig(SEGMENT_CONFIG);
-                        });
+                    TZPicker();
+                } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.lora) {
+                    LoraRegionPicker();
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.textMessage &&
                            devicestate.rx_text_message.from) {
                     const char *banner_message;
@@ -1551,7 +1482,94 @@ bool Screen::isOverlayBannerShowing()
     return NotificationRenderer::isOverlayBannerShowing();
 }
 
+void Screen::LoraRegionPicker()
+{
+    showOverlayBanner(
+        "Set the LoRa "
+        "region\nCancel\nUS\nEU_433\nEU_868\nCN\nJP\nANZ\nKR\nTW\nRU\nIN\nNZ_865\nTH\nLORA_24\nUA_433\nUA_868\nMY_433\nMY_"
+        "919\nSG_"
+        "923\nPH_433\nPH_868\nPH_915",
+        0, 22,
+        [](int selected) -> void {
+            if (selected != 0 && config.lora.region != _meshtastic_Config_LoRaConfig_RegionCode(selected)) {
+                config.lora.region = _meshtastic_Config_LoRaConfig_RegionCode(selected);
+                if (!owner.is_licensed) {
+                    bool keygenSuccess = false;
+                    if (config.security.private_key.size == 32) {
+                        if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
+                            keygenSuccess = true;
+                        }
+                    } else {
+                        LOG_INFO("Generate new PKI keys");
+                        crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
+                        keygenSuccess = true;
+                    }
+                    if (keygenSuccess) {
+                        config.security.public_key.size = 32;
+                        config.security.private_key.size = 32;
+                        owner.public_key.size = 32;
+                        memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
+                    }
+                }
+                config.lora.tx_enabled = true;
+                initRegion();
+                if (myRegion->dutyCycle < 100) {
+                    config.lora.ignore_mqtt = true; // Ignore MQTT by default if region has a duty cycle limit
+                }
+                service->reloadConfig(SEGMENT_CONFIG);
+                rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+            }
+        },
+        config.lora.region);
+}
+
+void Screen::TZPicker()
+{
+    showOverlayBanner("Pick "
+                      "Timezone\nUS/Hawaii\nUS/Alaska\nUS/Pacific\nUS/Mountain\nUS/Central\nUS/Eastern\nUTC\nEU/Western\nEU/"
+                      "Central\nEU/Eastern\nAsia/Kolkata\nAsia/Hong_Kong\nAU/AWST\nAU/ACST\nAU/AEST\nPacific/NZ",
+                      30000, 16, [](int selected) -> void {
+                          if (selected == 0) { // Hawaii
+                              strncpy(config.device.tzdef, "HST10", sizeof(config.device.tzdef));
+                          } else if (selected == 1) { // Alaska
+                              strncpy(config.device.tzdef, "AKST9AKDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
+                          } else if (selected == 2) { // Pacific
+                              strncpy(config.device.tzdef, "PST8PDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
+                          } else if (selected == 3) { // Mountain
+                              strncpy(config.device.tzdef, "MST7MDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
+                          } else if (selected == 4) { // Central
+                              strncpy(config.device.tzdef, "CST6CDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
+                          } else if (selected == 5) { // Eastern
+                              strncpy(config.device.tzdef, "EST5EDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
+                          } else if (selected == 6) { // UTC
+                              strncpy(config.device.tzdef, "UTC", sizeof(config.device.tzdef));
+                          } else if (selected == 7) { // EU/Western
+                              strncpy(config.device.tzdef, "GMT0BST,M3.5.0/1,M10.5.0", sizeof(config.device.tzdef));
+                          } else if (selected == 8) { // EU/Central
+                              strncpy(config.device.tzdef, "CET-1CEST,M3.5.0,M10.5.0/3", sizeof(config.device.tzdef));
+                          } else if (selected == 9) { // EU/Eastern
+                              strncpy(config.device.tzdef, "EET-2EEST,M3.5.0/3,M10.5.0/4", sizeof(config.device.tzdef));
+                          } else if (selected == 10) { // Asia/Kolkata
+                              strncpy(config.device.tzdef, "IST-5:30", sizeof(config.device.tzdef));
+                          } else if (selected == 11) { // China
+                              strncpy(config.device.tzdef, "HKT-8", sizeof(config.device.tzdef));
+                          } else if (selected == 12) { // AU/AWST
+                              strncpy(config.device.tzdef, "AWST-8", sizeof(config.device.tzdef));
+                          } else if (selected == 13) { // AU/ACST
+                              strncpy(config.device.tzdef, "ACST-9:30ACDT,M10.1.0,M4.1.0/3", sizeof(config.device.tzdef));
+                          } else if (selected == 14) { // AU/AEST
+                              strncpy(config.device.tzdef, "AEST-10AEDT,M10.1.0,M4.1.0/3", sizeof(config.device.tzdef));
+                          } else if (selected == 15) { // NZ
+                              strncpy(config.device.tzdef, "NZST-12NZDT,M9.5.0,M4.1.0/3", sizeof(config.device.tzdef));
+                          }
+
+                          setenv("TZ", config.device.tzdef, 1);
+                          service->reloadConfig(SEGMENT_CONFIG);
+                      });
+}
+
 } // namespace graphics
+
 #else
 graphics::Screen::Screen(ScanI2C::DeviceAddress, meshtastic_Config_DisplayConfig_OledType, OLEDDISPLAY_GEOMETRY) {}
 #endif // HAS_SCREEN
