@@ -111,7 +111,8 @@ meshtastic_Telemetry HostMetricsModule::getHostMetrics()
     if (settingsStrings[hostMetrics_user_command] != "") {
         std::string userCommandResult = exec(settingsStrings[hostMetrics_user_command].c_str());
         if (userCommandResult.length() > 1) {
-            strncpy(t.variant.host_metrics.user_string, userCommandResult.c_str(), 200);
+            strncpy(t.variant.host_metrics.user_string, userCommandResult.c_str(), sizeof(t.variant.host_metrics.user_string));
+            t.variant.host_metrics.user_string[ sizeof(t.variant.host_metrics.user_string) - 1] = '\0';
             t.variant.host_metrics.has_user_string = true;
         }
     }
