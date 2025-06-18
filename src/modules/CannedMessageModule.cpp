@@ -81,7 +81,17 @@ void CannedMessageModule::LaunchWithDestination(NodeNum newDest, uint8_t newChan
     UIFrameEvent e;
     e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
     notifyObservers(&e);
-    return;
+}
+
+void CannedMessageModule::LaunchFreetextWithDestination(NodeNum newDest, uint8_t newChannel)
+{
+    dest = newDest;
+    channel = newChannel;
+    runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
+    requestFocus();
+    UIFrameEvent e;
+    e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+    notifyObservers(&e);
 }
 
 static bool returnToCannedList = false;

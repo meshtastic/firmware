@@ -186,6 +186,8 @@ ScanI2C::DeviceAddress screen_found = ScanI2C::ADDRESS_NONE;
 ScanI2C::DeviceAddress cardkb_found = ScanI2C::ADDRESS_NONE;
 // 0x02 for RAK14004, 0x00 for cardkb, 0x10 for T-Deck
 uint8_t kb_model;
+// global bool to record that a kb is present
+bool kb_found = false;
 
 // The I2C address of the RTC Module (if found)
 ScanI2C::DeviceAddress rtc_found = ScanI2C::ADDRESS_NONE;
@@ -577,13 +579,16 @@ void setup()
     }
 
 #define UPDATE_FROM_SCANNER(FIND_FN)
-
+#if defined(USE_VIRTUAL_KEYBOARD)
+    kb_found = true;
+#endif
     auto rtc_info = i2cScanner->firstRTC();
     rtc_found = rtc_info.type != ScanI2C::DeviceType::NONE ? rtc_info.address : rtc_found;
 
     auto kb_info = i2cScanner->firstKeyboard();
 
     if (kb_info.type != ScanI2C::DeviceType::NONE) {
+        kb_found = true;
         cardkb_found = kb_info.address;
         switch (kb_info.type) {
         case ScanI2C::DeviceType::RAK14004:

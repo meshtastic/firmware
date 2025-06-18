@@ -1370,16 +1370,24 @@ int Screen::handleInputEvent(const InputEvent *event)
                 showNextFrame();
             } else if (event->inputEvent == INPUT_BROKER_SELECT) {
                 if (this->ui->getUiState()->currentFrame == framesetInfo.positions.home) {
-                    showOverlayBanner(
-                        "Action:\nSend Message\nSleep Screen\nNone", 30000, 3,
-                        [](int selected) -> void {
-                            if (selected == 1) {
-                                screen->setOn(false);
-                            } else if (selected == 0) {
-                                cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST);
-                            }
-                        },
-                        1);
+                    const char *banner_message;
+                    int options;
+                    if (kb_found) {
+                        banner_message = "Action?\nSleep Screen\nPreset Messages\nFreetype";
+                        options = 3;
+                    } else {
+                        banner_message = "Action?\nSleep Screen\nPreset Messages";
+                        options = 2;
+                    }
+                    showOverlayBanner(banner_message, 30000, options, [](int selected) -> void {
+                        if (selected == 0) {
+                            screen->setOn(false);
+                        } else if (selected == 1) {
+                            cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST);
+                        } else if (selected == 2) {
+                            cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST);
+                        }
+                    });
 #if HAS_TFT
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.memory) {
                     showOverlayBanner("Switch to MUI?\nYES\nNO", 30000, 2, [](int selected) -> void {
@@ -1455,32 +1463,53 @@ int Screen::handleInputEvent(const InputEvent *event)
                         });
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.textMessage &&
                            devicestate.rx_text_message.from) {
-                    showOverlayBanner(
-                        "Message Action?\nDismiss\nReply\nNone", 30000, 3,
-                        [](int selected) -> void {
-                            if (selected == 0) {
-                                screen->dismissCurrentFrame();
-                            } else if (selected == 1) {
-                                if (devicestate.rx_text_message.to == NODENUM_BROADCAST) {
-                                    cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST,
-                                                                               devicestate.rx_text_message.channel);
-                                } else {
-                                    cannedMessageModule->LaunchWithDestination(devicestate.rx_text_message.from);
-                                }
+                    const char *banner_message;
+                    int options;
+                    if (kb_found) {
+                        banner_message = "Message Action?\nNone\nDismiss\nPreset Messages\nFreetype";
+                        options = 4;
+                    } else {
+                        banner_message = "Message Action?\nNone\nDismiss\nPreset Messages";
+                        options = 3;
+                    }
+                    showOverlayBanner(banner_message, 30000, options, [](int selected) -> void {
+                        if (selected == 1) {
+                            screen->dismissCurrentFrame();
+                        } else if (selected == 2) {
+                            if (devicestate.rx_text_message.to == NODENUM_BROADCAST) {
+                                cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST,
+                                                                           devicestate.rx_text_message.channel);
+                            } else {
+                                cannedMessageModule->LaunchWithDestination(devicestate.rx_text_message.from);
                             }
-                        },
-                        1);
+                        } else if (selected == 3) {
+                            if (devicestate.rx_text_message.to == NODENUM_BROADCAST) {
+                                cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST,
+                                                                                   devicestate.rx_text_message.channel);
+                            } else {
+                                cannedMessageModule->LaunchFreetextWithDestination(devicestate.rx_text_message.from);
+                            }
+                        }
+                    });
                 } else if (framesetInfo.positions.firstFavorite != 255 &&
                            this->ui->getUiState()->currentFrame >= framesetInfo.positions.firstFavorite &&
                            this->ui->getUiState()->currentFrame <= framesetInfo.positions.lastFavorite) {
-                    showOverlayBanner(
-                        "Send Message To Node?\nYes\nNo", 30000, 2,
-                        [](int selected) -> void {
-                            if (selected == 0) {
-                                cannedMessageModule->LaunchWithDestination(graphics::UIRenderer::currentFavoriteNodeNum);
-                            }
-                        },
-                        1);
+                    const char *banner_message;
+                    int options;
+                    if (kb_found) {
+                        banner_message = "Message Node?\nCancel\nPreset Messages\nFreetype";
+                        options = 3;
+                    } else {
+                        banner_message = "Message Node?\nCancel\nConfirm";
+                        options = 2;
+                    }
+                    showOverlayBanner(banner_message, 30000, options, [](int selected) -> void {
+                        if (selected == 1) {
+                            cannedMessageModule->LaunchWithDestination(graphics::UIRenderer::currentFavoriteNodeNum);
+                        } else if (selected == 2) {
+                            cannedMessageModule->LaunchFreetextWithDestination(graphics::UIRenderer::currentFavoriteNodeNum);
+                        }
+                    });
                 }
             } else if (event->inputEvent == INPUT_BROKER_BACK) {
                 showPrevFrame();
