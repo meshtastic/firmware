@@ -1477,10 +1477,7 @@ int Screen::handleInputEvent(const InputEvent *event)
                         "Send Message To Node?\nYes\nNo", 30000, 2,
                         [](int selected) -> void {
                             if (selected == 0) {
-                                cannedMessageModule->LaunchWithDestination(
-                                    graphics::NodeListRenderer::favoritedNodes[screen->ui->getUiState()->currentFrame -
-                                                                               screen->framesetInfo.positions.firstFavorite]
-                                        ->num);
+                                cannedMessageModule->LaunchWithDestination(graphics::UIRenderer::currentFavoriteNodeNum);
                             }
                         },
                         1);
