@@ -1398,6 +1398,15 @@ int Screen::handleInputEvent(const InputEvent *event)
                             rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
                         }
                     });
+#else
+                } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.memory) {
+                    showOverlayBanner(
+                        "Beeps Mode\nAll Enabled\nDisabled\nNotifications\nSystem Only", 30000, 4,
+                        [](int selected) -> void {
+                            config.device.buzzer_mode = (meshtastic_Config_DeviceConfig_BuzzerMode)selected;
+                            service->reloadConfig(SEGMENT_CONFIG);
+                        },
+                        config.device.buzzer_mode);
 #endif
 #if HAS_GPS
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.gps && gps) {
