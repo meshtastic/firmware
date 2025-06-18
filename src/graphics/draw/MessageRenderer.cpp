@@ -250,24 +250,28 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     // === Set Title
     const char *titleStr = "Messages";
 
-    // === Header Construction ===
-    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(getFrom(&mp));
-    char headerStr[80];
-    const char *sender = "???";
-    if (node && node->has_user) {
-        if (SCREEN_WIDTH >= 200 && strlen(node->user.long_name) > 0) {
-            sender = node->user.long_name;
-        } else {
-            sender = node->user.short_name;
-        }
-    }
-    uint32_t seconds = sinceReceived(&mp), minutes = seconds / 60, hours = minutes / 60, days = hours / 24;
-    uint8_t timestampHours, timestampMinutes;
-    int32_t daysAgo;
-    bool useTimestamp = deltaToTimestamp(seconds, &timestampHours, &timestampMinutes, &daysAgo);
+    // Check if we have more than an empty message to show
+    char messageBuf[237];
+    snprintf(messageBuf, sizeof(messageBuf), "%s", msg);
+    if (strlen(messageBuf) > 0) {
 
-    if (useTimestamp) {
-        if (minutes >= 15 && daysAgo == 0) {
+        // === Header Construction ===
+        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(getFrom(&mp));
+        char headerStr[80];
+        const char *sender = "???";
+        if (node && node->has_user) {
+            if (SCREEN_WIDTH >= 200 && strlen(node->user.long_name) > 0) {
+                sender = node->user.long_name;
+            } else {
+                sender = node->user.short_name;
+            }
+        }
+        uint32_t seconds = sinceReceived(&mp), minutes = seconds / 60, hours = minutes / 60, days = hours / 24;
+        uint8_t timestampHours, timestampMinutes;
+        int32_t daysAgo;
+        bool useTimestamp = deltaToTimestamp(seconds, &timestampHours, &timestampMinutes, &daysAgo);
+
+        if (useTimestamp && minutes >= 15 && daysAgo == 0) {
             std::string prefix = (daysAgo == 1 && SCREEN_WIDTH >= 200) ? "Yesterday" : "At";
             if (config.display.use_12h_clock) {
                 bool isPM = timestampHours >= 12;
@@ -284,155 +288,152 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
             snprintf(headerStr, sizeof(headerStr), "%s ago from %s",
                      UIRenderer::drawTimeDelta(days, hours, minutes, seconds).c_str(), sender);
         }
-    } else {
-        snprintf(headerStr, sizeof(headerStr), "No messages to show");
-    }
 
 #ifndef EXCLUDE_EMOJI
-    // === Bounce animation setup ===
-    static uint32_t lastBounceTime = 0;
-    static int bounceY = 0;
-    const int bounceRange = 2;     // Max pixels to bounce up/down
-    const int bounceInterval = 60; // How quickly to change bounce direction (ms)
+        // === Bounce animation setup ===
+        static uint32_t lastBounceTime = 0;
+        static int bounceY = 0;
+        const int bounceRange = 2;     // Max pixels to bounce up/down
+        const int bounceInterval = 60; // How quickly to change bounce direction (ms)
 
-    uint32_t now = millis();
-    if (now - lastBounceTime >= bounceInterval) {
-        lastBounceTime = now;
-        bounceY = (bounceY + 1) % (bounceRange * 2);
-    }
-    for (int i = 0; i < numEmotes; ++i) {
-        const Emote &e = emotes[i];
-        if (strcmp(msg, e.label) == 0) {
-            display->drawString(x, getTextPositions(display)[2], headerStr);
-
-            // Center the emote below header + apply bounce
-            int remainingHeight = SCREEN_HEIGHT - FONT_HEIGHT_SMALL - navHeight;
-            int emoteY = FONT_HEIGHT_SMALL + (remainingHeight - e.height) / 2 + bounceY - bounceRange;
-            display->drawXbm((SCREEN_WIDTH - e.width) / 2, emoteY, e.width, e.height, e.bitmap);
-            return;
+        uint32_t now = millis();
+        if (now - lastBounceTime >= bounceInterval) {
+            lastBounceTime = now;
+            bounceY = (bounceY + 1) % (bounceRange * 2);
         }
-    }
-#endif
-
-    // === Word-wrap and build line list ===
-    char messageBuf[237];
-    snprintf(messageBuf, sizeof(messageBuf), "%s", msg);
-
-    std::vector<std::string> lines;
-    lines.push_back(std::string(headerStr)); // Header line is always first
-
-    std::string line, word;
-    for (int i = 0; messageBuf[i]; ++i) {
-        char ch = messageBuf[i];
-        if (ch == '\n') {
-            if (!word.empty())
-                line += word;
-            if (!line.empty())
-                lines.push_back(line);
-            line.clear();
-            word.clear();
-        } else if (ch == ' ') {
-            line += word + ' ';
-            word.clear();
-        } else {
-            word += ch;
-            std::string test = line + word;
-            if (display->getStringWidth(test.c_str()) > textWidth + 4) {
-                if (!line.empty())
-                    lines.push_back(line);
-                line = word;
-                word.clear();
-            }
-        }
-    }
-    if (!word.empty())
-        line += word;
-    if (!line.empty())
-        lines.push_back(line);
-
-    // === Scrolling logic ===
-    std::vector<int> rowHeights;
-
-    for (const auto &_line : lines) {
-        int maxHeight = FONT_HEIGHT_SMALL;
         for (int i = 0; i < numEmotes; ++i) {
             const Emote &e = emotes[i];
-            if (_line.find(e.label) != std::string::npos) {
-                if (e.height > maxHeight)
-                    maxHeight = e.height;
+            if (strcmp(msg, e.label) == 0) {
+                display->drawString(x, getTextPositions(display)[2], headerStr);
+
+                // Center the emote below header + apply bounce
+                int remainingHeight = SCREEN_HEIGHT - FONT_HEIGHT_SMALL - navHeight;
+                int emoteY = FONT_HEIGHT_SMALL + (remainingHeight - e.height) / 2 + bounceY - bounceRange;
+                display->drawXbm((SCREEN_WIDTH - e.width) / 2, emoteY, e.width, e.height, e.bitmap);
+                return;
             }
         }
-        rowHeights.push_back(maxHeight);
-    }
-    int totalHeight = 0;
-    for (size_t i = 1; i < rowHeights.size(); ++i) {
-        totalHeight += rowHeights[i];
-    }
-    int usableScrollHeight = usableHeight - rowHeights[0]; // remove header height
-    int scrollStop = std::max(0, totalHeight - usableScrollHeight);
+#endif
 
-    static float scrollY = 0.0f;
-    static uint32_t lastTime = 0, scrollStartDelay = 0, pauseStart = 0;
-    static bool waitingToReset = false, scrollStarted = false;
+        // === Word-wrap and build line list ===
+        std::vector<std::string> lines;
+        lines.push_back(std::string(headerStr)); // Header line is always first
 
-    // === Smooth scrolling adjustment ===
-    // You can tweak this divisor to change how smooth it scrolls.
-    // Lower = smoother, but can feel slow.
-    float delta = (now - lastTime) / 400.0f;
-    lastTime = now;
-
-    const float scrollSpeed = 2.0f; // pixels per second
-
-    // Delay scrolling start by 2 seconds
-    if (scrollStartDelay == 0)
-        scrollStartDelay = now;
-    if (!scrollStarted && now - scrollStartDelay > 2000)
-        scrollStarted = true;
-
-    if (totalHeight > usableHeight) {
-        if (scrollStarted) {
-            if (!waitingToReset) {
-                scrollY += delta * scrollSpeed;
-                if (scrollY >= scrollStop) {
-                    scrollY = scrollStop;
-                    waitingToReset = true;
-                    pauseStart = lastTime;
+        std::string line, word;
+        for (int i = 0; messageBuf[i]; ++i) {
+            char ch = messageBuf[i];
+            if (ch == '\n') {
+                if (!word.empty())
+                    line += word;
+                if (!line.empty())
+                    lines.push_back(line);
+                line.clear();
+                word.clear();
+            } else if (ch == ' ') {
+                line += word + ' ';
+                word.clear();
+            } else {
+                word += ch;
+                std::string test = line + word;
+                if (display->getStringWidth(test.c_str()) > textWidth + 4) {
+                    if (!line.empty())
+                        lines.push_back(line);
+                    line = word;
+                    word.clear();
                 }
-            } else if (lastTime - pauseStart > 3000) {
-                scrollY = 0;
-                waitingToReset = false;
-                scrollStarted = false;
-                scrollStartDelay = lastTime;
             }
         }
-    } else {
-        scrollY = 0;
-    }
+        if (!word.empty())
+            line += word;
+        if (!line.empty())
+            lines.push_back(line);
 
-    int scrollOffset = static_cast<int>(scrollY);
-    int yOffset = -scrollOffset + getTextPositions(display)[1];
-    if (strcmp(headerStr, "No messages to show") != 0) {
+        // === Scrolling logic ===
+        std::vector<int> rowHeights;
+
+        for (const auto &_line : lines) {
+            int maxHeight = FONT_HEIGHT_SMALL;
+            for (int i = 0; i < numEmotes; ++i) {
+                const Emote &e = emotes[i];
+                if (_line.find(e.label) != std::string::npos) {
+                    if (e.height > maxHeight)
+                        maxHeight = e.height;
+                }
+            }
+            rowHeights.push_back(maxHeight);
+        }
+        int totalHeight = 0;
+        for (size_t i = 1; i < rowHeights.size(); ++i) {
+            totalHeight += rowHeights[i];
+        }
+        int usableScrollHeight = usableHeight - rowHeights[0]; // remove header height
+        int scrollStop = std::max(0, totalHeight - usableScrollHeight);
+
+        static float scrollY = 0.0f;
+        static uint32_t lastTime = 0, scrollStartDelay = 0, pauseStart = 0;
+        static bool waitingToReset = false, scrollStarted = false;
+
+        // === Smooth scrolling adjustment ===
+        // You can tweak this divisor to change how smooth it scrolls.
+        // Lower = smoother, but can feel slow.
+        float delta = (now - lastTime) / 400.0f;
+        lastTime = now;
+
+        const float scrollSpeed = 2.0f; // pixels per second
+
+        // Delay scrolling start by 2 seconds
+        if (scrollStartDelay == 0)
+            scrollStartDelay = now;
+        if (!scrollStarted && now - scrollStartDelay > 2000)
+            scrollStarted = true;
+
+        if (totalHeight > usableHeight) {
+            if (scrollStarted) {
+                if (!waitingToReset) {
+                    scrollY += delta * scrollSpeed;
+                    if (scrollY >= scrollStop) {
+                        scrollY = scrollStop;
+                        waitingToReset = true;
+                        pauseStart = lastTime;
+                    }
+                } else if (lastTime - pauseStart > 3000) {
+                    scrollY = 0;
+                    waitingToReset = false;
+                    scrollStarted = false;
+                    scrollStartDelay = lastTime;
+                }
+            }
+        } else {
+            scrollY = 0;
+        }
+
+        int scrollOffset = static_cast<int>(scrollY);
+        int yOffset = -scrollOffset + getTextPositions(display)[1];
         if (SCREEN_WIDTH > 128) {
             display->drawLine(0, yOffset + 20, SCREEN_WIDTH - (SCREEN_WIDTH * 0.1), yOffset + 20);
         } else {
             display->drawLine(0, yOffset + 14, SCREEN_WIDTH - (SCREEN_WIDTH * 0.1), yOffset + 14);
         }
-    }
 
-    // === Render visible lines ===
-    for (size_t i = 0; i < lines.size(); ++i) {
-        int lineY = yOffset;
-        for (size_t j = 0; j < i; ++j)
-            lineY += rowHeights[j];
-        if (lineY > -rowHeights[i] && lineY < scrollBottom) {
-            if (i == 0 && isInverted) {
-                display->drawString(x + 3, lineY, lines[i].c_str());
-                if (isBold)
-                    display->drawString(x + 4, lineY, lines[i].c_str());
-            } else {
-                drawStringWithEmotes(display, x, lineY, lines[i], emotes, numEmotes);
+        // === Render visible lines ===
+        for (size_t i = 0; i < lines.size(); ++i) {
+            int lineY = yOffset;
+            for (size_t j = 0; j < i; ++j)
+                lineY += rowHeights[j];
+            if (lineY > -rowHeights[i] && lineY < scrollBottom) {
+                if (i == 0 && isInverted) {
+                    display->drawString(x + 3, lineY, lines[i].c_str());
+                    if (isBold)
+                        display->drawString(x + 4, lineY, lines[i].c_str());
+                } else {
+                    drawStringWithEmotes(display, x, lineY, lines[i], emotes, numEmotes);
+                }
             }
         }
+    } else {
+        char headerStr[80];
+        snprintf(headerStr, sizeof(headerStr), "No messages to show");
+        display->drawString(x, getTextPositions(display)[2], headerStr);
     }
 
     // === Header ===
