@@ -256,7 +256,9 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     if (strlen(messageBuf) == 0) {
         // === Header ===
         graphics::drawCommonHeader(display, x, y, titleStr);
-        display->drawString(x, getTextPositions(display)[2], "No messages to show");
+        const char *messageString = "No messages to show";
+        int center_text = (SCREEN_WIDTH / 2) - (display->getStringWidth(messageString) / 2);
+        display->drawString(center_text, getTextPositions(display)[2], messageString);
         return;
     }
 
