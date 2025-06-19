@@ -7,6 +7,7 @@
 #include "SPILock.h"
 #include "meshUtils.h"
 #include <FSCommon.h>
+#include <ctype.h> // for better whitespace handling
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH
 #include "BleOta.h"
 #endif
@@ -155,6 +156,28 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
      */
     case meshtastic_AdminMessage_set_owner_tag:
         LOG_DEBUG("Client set owner");
+        // Validate names
+        if (*r->set_owner.long_name) {
+            const char *start = r->set_owner.long_name;
+            // Skip all whitespace (space, tab, newline, etc)
+            while (*start && isspace((unsigned char)*start))
+                start++;
+            if (*start == '\0') {
+                LOG_WARN("Rejected long_name: must contain at least 1 non-whitespace character");
+                myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
+                break;
+            }
+        }
+        if (*r->set_owner.short_name) {
+            const char *start = r->set_owner.short_name;
+            while (*start && isspace((unsigned char)*start))
+                start++;
+            if (*start == '\0') {
+                LOG_WARN("Rejected short_name: must contain at least 1 non-whitespace character");
+                myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
+                break;
+            }
+        }
         handleSetOwner(r->set_owner);
         break;
 
@@ -699,11 +722,16 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         LOG_INFO("Set config: Security");
         config.security = c.payload_variant.security;
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN) && !(MESHTASTIC_EXCLUDE_PKI)
-        // We check for a potentially valid private key, and a blank public key, and regen the public key if needed.
-        if (config.security.private_key.size == 32 && !memfll(config.security.private_key.bytes, 0, 32) &&
-            (config.security.public_key.size == 0 || memfll(config.security.public_key.bytes, 0, 32))) {
-            if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
-                config.security.public_key.size = 32;
+        // If the client set the key to blank, go ahead and regenerate so long as we're not in ham mode
+        if (!owner.is_licensed && config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
+            if (config.security.private_key.size != 32) {
+                crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
+
+            } else if (config.security.public_key.size != 32) {
+                // We check for a potentially valid private key, and a blank public key, and regen the public key if needed.
+                if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
+                    config.security.public_key.size = 32;
+                }
             }
         }
 #endif
@@ -1153,6 +1181,27 @@ void AdminModule::handleStoreDeviceUIConfig(const meshtastic_DeviceUIConfig &uic
 
 void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
 {
+    // Validate ham parameters before setting since this would bypass validation in the owner struct
+    if (*p.call_sign) {
+        const char *start = p.call_sign;
+        // Skip all whitespace
+        while (*start && isspace((unsigned char)*start))
+            start++;
+        if (*start == '\0') {
+            LOG_WARN("Rejected ham call_sign: must contain at least 1 non-whitespace character");
+            return;
+        }
+    }
+    if (*p.short_name) {
+        const char *start = p.short_name;
+        while (*start && isspace((unsigned char)*start))
+            start++;
+        if (*start == '\0') {
+            LOG_WARN("Rejected ham short_name: must contain at least 1 non-whitespace character");
+            return;
+        }
+    }
+
     // Set call sign and override lora limitations for licensed use
     strncpy(owner.long_name, p.call_sign, sizeof(owner.long_name));
     strncpy(owner.short_name, p.short_name, sizeof(owner.short_name));
