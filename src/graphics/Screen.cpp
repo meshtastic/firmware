@@ -1400,16 +1400,18 @@ void Screen::LoraRegionPicker(uint32_t duration)
 {
     showOverlayBanner(
         "Set the LoRa "
-        "region\nCancel\nUS\nEU_433\nEU_868\nCN\nJP\nANZ\nKR\nTW\nRU\nIN\nNZ_865\nTH\nLORA_24\nUA_433\nUA_868\nMY_433\nMY_"
+        "region\nBack\nUS\nEU_433\nEU_868\nCN\nJP\nANZ\nKR\nTW\nRU\nIN\nNZ_865\nTH\nLORA_24\nUA_433\nUA_868\nMY_433\nMY_"
         "919\nSG_"
         "923\nPH_433\nPH_868\nPH_915",
         duration, 22,
         [](int selected) -> void {
             if (selected != 0 && config.lora.region != _meshtastic_Config_LoRaConfig_RegionCode(selected)) {
                 config.lora.region = _meshtastic_Config_LoRaConfig_RegionCode(selected);
+                // This is needed as we wait til picking the LoRa region to generate keys for the first time.
                 if (!owner.is_licensed) {
                     bool keygenSuccess = false;
                     if (config.security.private_key.size == 32) {
+                        // public key is derived from private, so this will always have the same result.
                         if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
                             keygenSuccess = true;
                         }
@@ -1434,7 +1436,7 @@ void Screen::LoraRegionPicker(uint32_t duration)
                 rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
             }
         },
-        config.lora.region);
+        0);
 }
 
 void Screen::TZPicker()
