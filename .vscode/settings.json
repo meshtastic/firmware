@@ -10,5 +10,6 @@
   },
   "[powershell]": {
     "editor.defaultFormatter": "ms-vscode.powershell"
-  }
+  },
+  "idf.pythonInstallPath": "/usr/bin/python3"
 }
