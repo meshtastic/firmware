@@ -49,7 +49,7 @@ void TouchScreenImpl1::onEvent(const TouchEvent &event)
 {
     InputEvent e;
     e.source = event.source;
-
+    e.kbchar = 0;
     e.touchX = event.x;
     e.touchY = event.y;
 
