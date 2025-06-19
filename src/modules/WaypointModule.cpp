@@ -7,10 +7,10 @@
 #if HAS_SCREEN
 #include "gps/RTC.h"
 #include "graphics/Screen.h"
+#include "graphics/TimeFormatters.h"
 #include "graphics/draw/NodeListRenderer.h"
 #include "main.h"
 #endif
-#include <graphics/TimeFormatters.h>
 
 WaypointModule *waypointModule;
 
