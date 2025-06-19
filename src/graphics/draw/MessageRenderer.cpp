@@ -323,7 +323,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     if (!scrollStarted && now - scrollStartDelay > 2000)
         scrollStarted = true;
 
-    if (totalHeight > usableHeight) {
+    if (totalHeight + FONT_HEIGHT_SMALL > usableScrollHeight) {
         if (scrollStarted) {
             if (!waitingToReset) {
                 scrollY += delta * scrollSpeed;
