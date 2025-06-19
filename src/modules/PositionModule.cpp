@@ -265,7 +265,6 @@ meshtastic_MeshPacket *PositionModule::allocPositionPacket()
     }
 
     LOG_INFO("Position packet: time=%i lat=%i lon=%i", p.time, p.latitude_i, p.longitude_i);
-    lastSentToMesh = millis();
 
     // TAK Tracker devices should send their position in a TAK packet over the ATAK port
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER)
