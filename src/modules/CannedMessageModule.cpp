@@ -653,6 +653,8 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
 
         if (valid) {
             lastTouchMillis = millis();
+            runOnce();
+            payload = 0;
             return true; // STOP: We handled a VKB touch
         }
     }
