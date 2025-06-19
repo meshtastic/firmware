@@ -80,7 +80,7 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
     const int MAX_LINES = 23;
 
     uint16_t maxWidth = 0;
-    uint16_t arrowsWidth = display->getStringWidth("-><-", 4, true);
+    uint16_t arrowsWidth = display->getStringWidth(">  <", 4, true);
     uint16_t lineWidths[MAX_LINES] = {0};
     uint16_t lineLengths[MAX_LINES] = {0};
     char *lineStarts[MAX_LINES + 1];
@@ -197,11 +197,11 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
             if (i == curSelected + firstOption) {
                 if (lineLengths[i] > 35)
                     lineLengths[i] = 35;
-                strncpy(lineBuffer, "->", 3);
+                strncpy(lineBuffer, "> ", 3);
                 strncpy(lineBuffer + 2, lineStarts[i], 36);
-                strncpy(lineBuffer + lineLengths[i] + 2, "<-", 3);
+                strncpy(lineBuffer + lineLengths[i] + 2, " <", 3);
                 lineLengths[i] += 4;
-                lineWidths[i] += display->getStringWidth("-><-", 4, true);
+                lineWidths[i] += display->getStringWidth(">  <", 4, true);
                 if (lineLengths[i] > 35)
                     lineBuffer[39] = '\0';
                 else
@@ -226,9 +226,6 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
         }
 
         display->drawString(textX, lineY, lineBuffer);
-        if (SCREEN_WIDTH > 128)
-            display->drawString(textX + 1, lineY, lineBuffer); // Faux bold
-
         lineY += FONT_HEIGHT_SMALL + lineSpacing;
     }
 }
