@@ -265,7 +265,6 @@ meshtastic_MeshPacket *PositionModule::allocPositionPacket()
     }
 
     LOG_INFO("Position packet: time=%i lat=%i lon=%i", p.time, p.latitude_i, p.longitude_i);
-    lastSentToMesh = millis();
 
     // TAK Tracker devices should send their position in a TAK packet over the ATAK port
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER)
@@ -276,13 +275,18 @@ meshtastic_MeshPacket *PositionModule::allocPositionPacket()
 
 meshtastic_MeshPacket *PositionModule::allocReply()
 {
-    if (config.device.role != meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND && lastSentToMesh &&
-        Throttle::isWithinTimespanMs(lastSentToMesh, 3 * 60 * 1000)) {
-        LOG_DEBUG("Skip Position reply since we sent it <3min ago");
+    if (config.device.role != meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND && lastSentReply &&
+        Throttle::isWithinTimespanMs(lastSentReply, 3 * 60 * 1000)) {
+        LOG_DEBUG("Skip Position reply since we sent a reply <3min ago");
         ignoreRequest = true; // Mark it as ignored for MeshModule
         return nullptr;
     }
-    return allocPositionPacket();
+
+    meshtastic_MeshPacket *reply = allocPositionPacket();
+    if (reply) {
+        lastSentReply = millis(); // Track when we sent this reply
+    }
+    return reply;
 }
 
 meshtastic_MeshPacket *PositionModule::allocAtakPli()
