@@ -1,15 +1,7 @@
 name: Pull Request
-<<<<<<< HEAD
-on:
-  pull_request:
-  workflow_dispatch:
 
-=======
-on: 
-  pull_request:
-  workflow_dispatch:
-  
->>>>>>> 4fee34d373f1a372dd3bf2b0b16efc618e005219
+on: [pull_request]
+
 concurrency:
   group: ${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
