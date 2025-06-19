@@ -88,12 +88,12 @@ static const unsigned char mail[] PROGMEM = {
 
 // 📬 Mail / Message
 const uint8_t icon_mail[] PROGMEM = {
-    0b00000000, // (padding)
     0b11111111, // ████████ top border
     0b10000001, // █      █ sides
     0b11000011, // ██    ██ diagonal
     0b10100101, // █ █  █ █ inner M
     0b10011001, // █  ██  █ inner M
+    0b10000001, // █      █ sides
     0b10000001, // █      █ sides
     0b11111111  // ████████ bottom
 };
