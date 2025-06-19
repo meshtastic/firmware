@@ -157,11 +157,11 @@ static int32_t reconnectWiFi()
         isReconnecting = true;
 
         // Make sure we clear old connection credentials
-    #ifdef ARCH_ESP32
+#ifdef ARCH_ESP32
         WiFi.disconnect(false, true);
-    #elif defined(ARCH_RP2040)
+#elif defined(ARCH_RP2040)
         WiFi.disconnect(false);
-    #endif
+#endif
         LOG_INFO("Reconnecting to WiFi access point %s", wifiName);
 
         // Start the non-blocking wait for 5 seconds
@@ -175,11 +175,11 @@ static int32_t reconnectWiFi()
     if (wifiReconnectPending) {
         if (millis() - wifiReconnectStartMillis >= 5000) {
             if (!WiFi.isConnected()) {
-            #ifdef CONFIG_IDF_TARGET_ESP32C3
+#ifdef CONFIG_IDF_TARGET_ESP32C3
                 WiFi.mode(WIFI_MODE_NULL);
                 WiFi.useStaticBuffers(true);
                 WiFi.mode(WIFI_STA);
-            #endif
+#endif
                 WiFi.begin(wifiName, wifiPsw);
             }
             isReconnecting = false;
@@ -209,14 +209,14 @@ static int32_t reconnectWiFi()
 #endif
 
     if (config.network.wifi_enabled && !WiFi.isConnected()) {
-    #ifdef ARCH_RP2040 // (ESP32 handles this in WiFiEvent)
+#ifdef ARCH_RP2040 // (ESP32 handles this in WiFiEvent)
         needReconnect = APStartupComplete;
-    #endif
+#endif
         return 1000; // check once per second
     } else {
-    #ifdef ARCH_RP2040
+#ifdef ARCH_RP2040
         onNetworkConnected(); // will only do anything once
-    #endif
+#endif
         return 300000; // every 5 minutes
     }
 }
