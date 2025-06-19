@@ -271,7 +271,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         } else {
             word += ch;
             std::string test = line + word;
-            if (display->getStringWidth(test.c_str()) > textWidth + 4) {
+            if (display->getStringWidth(test.c_str()) > textWidth) {
                 if (!line.empty())
                     lines.push_back(line);
                 line = word;
@@ -302,7 +302,8 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         // Apply tighter spacing if no emotes on this line
         if (!hasEmote) {
             lineHeight -= 2; // reduce by 2px for tighter spacing
-            if (lineHeight < 8) lineHeight = 8; // minimum safety
+            if (lineHeight < 8)
+                lineHeight = 8; // minimum safety
         }
 
         rowHeights.push_back(lineHeight);
