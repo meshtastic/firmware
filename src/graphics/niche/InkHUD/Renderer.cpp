@@ -224,6 +224,13 @@ void InkHUD::Renderer::render(bool async)
         renderPlaceholders();
         renderSystemApplets();
 
+        // Invert Buffer if set by user
+        if (settings->optionalFeatures.invertScreen) {
+            for (size_t i = 0; i < imageBufferWidth * imageBufferHeight; ++i) {
+                imageBuffer[i] = ~imageBuffer[i];
+            }
+        }
+
         // Tell display to begin process of drawing new image
         LOG_INFO("Updating display");
         driver->update(imageBuffer, updateType);

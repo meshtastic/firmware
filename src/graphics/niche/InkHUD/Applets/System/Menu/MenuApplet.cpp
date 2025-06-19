@@ -184,6 +184,10 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         settings->optionalFeatures.notifications = !settings->optionalFeatures.notifications;
         break;
 
+    case TOGGLE_INVERT_SCREEN:
+        settings->optionalFeatures.invertScreen = !settings->optionalFeatures.invertScreen;
+        break;
+
     case SET_RECENTS:
         // Set value of settings.recentlyActiveSeconds
         // Uses menu cursor to read RECENTS_OPTIONS_MINUTES array (defined at top of this file)
@@ -293,6 +297,8 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
                                  &settings->optionalFeatures.notifications));
         items.push_back(MenuItem("Battery Icon", MenuAction::TOGGLE_BATTERY_ICON, MenuPage::OPTIONS,
                                  &settings->optionalFeatures.batteryIcon));
+        items.push_back(MenuItem("Invert Screen", MenuAction::TOGGLE_INVERT_SCREEN, MenuPage::OPTIONS,
+                                 &settings->optionalFeatures.invertScreen));
         items.push_back(
             MenuItem("12-Hour Clock", MenuAction::TOGGLE_12H_CLOCK, MenuPage::OPTIONS, &config.display.use_12h_clock));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
