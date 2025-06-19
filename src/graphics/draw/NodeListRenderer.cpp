@@ -78,7 +78,7 @@ const char *getCurrentModeTitle(int screenWidth)
 {
     switch (currentMode) {
     case MODE_LAST_HEARD:
-        return "Nodes";
+        return "Last Heard";
     case MODE_HOP_SIGNAL:
         return (screenWidth > 128) ? "Hops/Signal" : "Hops/Sig";
     case MODE_DISTANCE:
@@ -527,7 +527,7 @@ void drawDynamicNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, 
 #ifdef USE_EINK
 void drawLastHeardScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    const char *title = "Nodes";
+    const char *title = "Last Heard";
     drawNodeListScreen(display, state, x, y, title, drawEntryLastHeard);
 }
 

@@ -684,7 +684,7 @@ int32_t Screen::runOnce()
 
 #ifndef DISABLE_WELCOME_UNSET
     if (!NotificationRenderer::isOverlayBannerShowing() && config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
-        LoraRegionPicker();
+        LoraRegionPicker(0);
     }
 #endif
     if (!NotificationRenderer::isOverlayBannerShowing() && rebootAtMsec != 0) {
@@ -1412,6 +1412,10 @@ int Screen::handleInputEvent(const InputEvent *event)
                         banner_message = "Message Action?\nBack\nDismiss\nPreset Messages";
                         options = 3;
                     }
+#ifdef HAS_I2S
+                    banner_message = "Message Action?\nBack\nDismiss\nPreset Messages\nFreetype\nRead Aloud";
+                    options = 5;
+#endif
                     showOverlayBanner(banner_message, 30000, options, [](int selected) -> void {
                         if (selected == 1) {
                             screen->dismissCurrentFrame();
@@ -1430,6 +1434,14 @@ int Screen::handleInputEvent(const InputEvent *event)
                                 cannedMessageModule->LaunchFreetextWithDestination(devicestate.rx_text_message.from);
                             }
                         }
+#ifdef HAS_I2S
+                        else if (selected == 4) {
+                            const meshtastic_MeshPacket &mp = devicestate.rx_text_message;
+                            const char *msg = reinterpret_cast<const char *>(mp.decoded.payload.bytes);
+
+                            audioThread->readAloud(msg);
+                        }
+#endif
                     });
                 } else if (framesetInfo.positions.firstFavorite != 255 &&
                            this->ui->getUiState()->currentFrame >= framesetInfo.positions.firstFavorite &&
@@ -1482,14 +1494,14 @@ bool Screen::isOverlayBannerShowing()
     return NotificationRenderer::isOverlayBannerShowing();
 }
 
-void Screen::LoraRegionPicker()
+void Screen::LoraRegionPicker(uint32_t duration)
 {
     showOverlayBanner(
         "Set the LoRa "
         "region\nCancel\nUS\nEU_433\nEU_868\nCN\nJP\nANZ\nKR\nTW\nRU\nIN\nNZ_865\nTH\nLORA_24\nUA_433\nUA_868\nMY_433\nMY_"
         "919\nSG_"
         "923\nPH_433\nPH_868\nPH_915",
-        0, 22,
+        duration, 22,
         [](int selected) -> void {
             if (selected != 0 && config.lora.region != _meshtastic_Config_LoRaConfig_RegionCode(selected)) {
                 config.lora.region = _meshtastic_Config_LoRaConfig_RegionCode(selected);

@@ -604,7 +604,7 @@ class Screen : public concurrency::OSThread
     void handleShowPrevFrame();
     void handleStartFirmwareUpdateScreen();
     void TZPicker();
-    void LoraRegionPicker();
+    void LoraRegionPicker(uint32_t duration = 30000);
 
     // Info collected by setFrames method.
     // Index location of specific frames.
