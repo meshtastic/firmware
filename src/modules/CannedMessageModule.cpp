@@ -725,6 +725,12 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     // Cancel (dismiss freetext screen)
     if (event->inputEvent == INPUT_BROKER_CANCEL || event->inputEvent == INPUT_BROKER_ALT_LONG) {
         runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+        freetext = "";
+        cursor = 0;
+        payload = 0;
+        currentMessageIndex = -1;
+
+        // Notify UI that we want to redraw/close this screen
         UIFrameEvent e;
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
         notifyObservers(&e);
