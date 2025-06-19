@@ -1414,7 +1414,7 @@ int Screen::handleInputEvent(const InputEvent *event)
                     }
 #ifdef HAS_I2S
                     banner_message = "Message Action?\nBack\nDismiss\nPreset Messages\nFreetype\nRead Aloud";
-                    options++;
+                    options = 5;
 #endif
                     showOverlayBanner(banner_message, 30000, options, [](int selected) -> void {
                         if (selected == 1) {
