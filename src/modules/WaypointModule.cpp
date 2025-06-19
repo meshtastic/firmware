@@ -10,6 +10,7 @@
 #include "graphics/draw/NodeListRenderer.h"
 #include "main.h"
 #endif
+#include <graphics/TimeFormatters.h>
 
 WaypointModule *waypointModule;
 
@@ -108,7 +109,7 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
 
     // Get timestamp info. Will pass as a field to drawColumns
     static char lastStr[20];
-    screen->getTimeAgoStr(sinceReceived(&mp), lastStr, sizeof(lastStr));
+    getTimeAgoStr(sinceReceived(&mp), lastStr, sizeof(lastStr));
 
     // Will contain distance information, passed as a field to drawColumns
     static char distStr[20];

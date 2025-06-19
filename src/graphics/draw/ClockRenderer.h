@@ -28,9 +28,6 @@ void drawVerticalSegment(OLEDDisplay *display, int x, int y, int width, int heig
 void drawWatchFaceToggleButton(OLEDDisplay *display, int16_t x, int16_t y, bool digitalMode = true, float scale = 1);
 void drawBluetoothConnectedIcon(OLEDDisplay *display, int16_t x, int16_t y);
 
-// Utility functions
-bool deltaToTimestamp(uint32_t secondsAgo, uint8_t *hours, uint8_t *minutes, int32_t *daysAgo);
-
 } // namespace ClockRenderer
 
 } // namespace graphics

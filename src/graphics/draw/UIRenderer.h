@@ -81,8 +81,6 @@ class UIRenderer
     static void drawScreensaverOverlay(OLEDDisplay *display, OLEDDisplayUiState *state);
 #endif
 
-    // Time and date utilities
-    static void getTimeAgoStr(uint32_t agoSecs, char *timeStr, uint8_t maxLength);
     static std::string drawTimeDelta(uint32_t days, uint32_t hours, uint32_t minutes, uint32_t seconds);
     static int formatDateTime(char *buffer, size_t bufferSize, uint32_t rtc_sec, OLEDDisplay *display, bool showTime);
 
