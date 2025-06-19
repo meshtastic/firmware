@@ -112,18 +112,19 @@ int CannedMessageModule::splitConfiguredMessages()
 
     String canned_messages = cannedMessageModuleConfig.messages;
 
-#if defined(USE_VIRTUAL_KEYBOARD)
-    // Add a "Free Text" entry at the top if using a virtual keyboard
-    String separator = canned_messages.length() ? "|" : "";
-    canned_messages = "[---- Free Text ----]" + separator + canned_messages;
-#endif
-
     // Copy all message parts into the buffer
     strncpy(this->messageStore, canned_messages.c_str(), sizeof(this->messageStore));
 
     // Temporary array to allow for insertion
     const char *tempMessages[CANNED_MESSAGE_MODULE_MESSAGE_MAX_COUNT + 3] = {0};
     int tempCount = 0;
+    // Insert at position 0 (top)
+    tempMessages[tempCount++] = "[Select Destination]";
+
+#if defined(USE_VIRTUAL_KEYBOARD)
+    // Add a "Free Text" entry at the top if using a keyboard
+    tempMessages[tempCount++] = "[-- Free Text --]";
+#endif
 
     // First message always starts at buffer start
     tempMessages[tempCount++] = this->messageStore;
@@ -139,21 +140,6 @@ int CannedMessageModule::splitConfiguredMessages()
         }
         i += 1;
     }
-
-    // Insert "[Select Destination]" after Free Text if present, otherwise at the top
-#if defined(USE_VIRTUAL_KEYBOARD)
-    // Insert at position 1 (after Free Text)
-    for (int j = tempCount; j > 1; j--)
-        tempMessages[j] = tempMessages[j - 1];
-    tempMessages[1] = "[Select Destination]";
-    tempCount++;
-#else
-    // Insert at position 0 (top)
-    for (int j = tempCount; j > 0; j--)
-        tempMessages[j] = tempMessages[j - 1];
-    tempMessages[0] = "[Select Destination]";
-    tempCount++;
-#endif
 
     // Add [Exit] as the last entry
     tempMessages[tempCount++] = "[Exit]";
@@ -582,7 +568,7 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
 
         // === [Free Text] triggers the free text input (virtual keyboard) ===
 #if defined(USE_VIRTUAL_KEYBOARD)
-        if (currentMessageIndex == 0) {
+        if (strcmp(current, "[-- Free Text --]") == 0) {
             runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
             requestFocus();
             UIFrameEvent e;
@@ -725,6 +711,12 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     // Cancel (dismiss freetext screen)
     if (event->inputEvent == INPUT_BROKER_CANCEL || event->inputEvent == INPUT_BROKER_ALT_LONG) {
         runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+        freetext = "";
+        cursor = 0;
+        payload = 0;
+        currentMessageIndex = -1;
+
+        // Notify UI that we want to redraw/close this screen
         UIFrameEvent e;
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
         notifyObservers(&e);
