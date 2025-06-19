@@ -26,6 +26,7 @@
 #include "graphics/niche/Inputs/TwoButton.h"
 
 #if !defined(INKHUD_BUILDCONF_DRIVER) || !defined(INKHUD_BUILDCONF_DISPLAYRESILIENCE)
+// cppcheck-suppress preprocessorErrorDirective
 #error If not using a DIY preset, display model and resilience must be set manually
 #endif
 
