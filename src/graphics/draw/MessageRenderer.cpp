@@ -288,15 +288,24 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     std::vector<int> rowHeights;
 
     for (const auto &_line : lines) {
-        int maxHeight = FONT_HEIGHT_SMALL;
+        int lineHeight = FONT_HEIGHT_SMALL;
+        bool hasEmote = false;
+
         for (int i = 0; i < numEmotes; ++i) {
             const Emote &e = emotes[i];
             if (_line.find(e.label) != std::string::npos) {
-                if (e.height > maxHeight)
-                    maxHeight = e.height;
+                lineHeight = std::max(lineHeight, e.height);
+                hasEmote = true;
             }
         }
-        rowHeights.push_back(maxHeight);
+
+        // Apply tighter spacing if no emotes on this line
+        if (!hasEmote) {
+            lineHeight -= 2; // reduce by 2px for tighter spacing
+            if (lineHeight < 8) lineHeight = 8; // minimum safety
+        }
+
+        rowHeights.push_back(lineHeight);
     }
     int totalHeight = 0;
     for (size_t i = 1; i < rowHeights.size(); ++i) {
@@ -323,7 +332,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     if (!scrollStarted && now - scrollStartDelay > 2000)
         scrollStarted = true;
 
-    if (totalHeight + FONT_HEIGHT_SMALL > usableScrollHeight) {
+    if (totalHeight > usableScrollHeight) {
         if (scrollStarted) {
             if (!waitingToReset) {
                 scrollY += delta * scrollSpeed;
@@ -346,9 +355,9 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     int scrollOffset = static_cast<int>(scrollY);
     int yOffset = -scrollOffset + getTextPositions(display)[1];
     if (SCREEN_WIDTH > 128) {
-        display->drawLine(0, yOffset + 20, SCREEN_WIDTH - (SCREEN_WIDTH * 0.1), yOffset + 20);
+        display->drawLine(0, yOffset + 19, SCREEN_WIDTH - (SCREEN_WIDTH * 0.1), yOffset + 19);
     } else {
-        display->drawLine(0, yOffset + 14, SCREEN_WIDTH - (SCREEN_WIDTH * 0.1), yOffset + 14);
+        display->drawLine(0, yOffset + 13, SCREEN_WIDTH - (SCREEN_WIDTH * 0.1), yOffset + 13);
     }
 
     // === Render visible lines ===
