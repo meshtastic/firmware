@@ -1412,6 +1412,10 @@ int Screen::handleInputEvent(const InputEvent *event)
                         banner_message = "Message Action?\nBack\nDismiss\nPreset Messages";
                         options = 3;
                     }
+#ifdef HAS_I2S
+                    banner_message = "Message Action?\nBack\nDismiss\nPreset Messages\nFreetype\nRead Aloud";
+                    options++;
+#endif
                     showOverlayBanner(banner_message, 30000, options, [](int selected) -> void {
                         if (selected == 1) {
                             screen->dismissCurrentFrame();
@@ -1430,6 +1434,14 @@ int Screen::handleInputEvent(const InputEvent *event)
                                 cannedMessageModule->LaunchFreetextWithDestination(devicestate.rx_text_message.from);
                             }
                         }
+#ifdef HAS_I2S
+                        else if (selected == 4) {
+                            const meshtastic_MeshPacket &mp = devicestate.rx_text_message;
+                            const char *msg = reinterpret_cast<const char *>(mp.decoded.payload.bytes);
+
+                            audioThread->readAloud(msg);
+                        }
+#endif
                     });
                 } else if (framesetInfo.positions.firstFavorite != 255 &&
                            this->ui->getUiState()->currentFrame >= framesetInfo.positions.firstFavorite &&
