@@ -355,10 +355,8 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
     int scrollOffset = static_cast<int>(scrollY);
     int yOffset = -scrollOffset + getTextPositions(display)[1];
-    if (SCREEN_WIDTH > 128) {
-        display->drawLine(0, yOffset + 19, SCREEN_WIDTH - (SCREEN_WIDTH * 0.1), yOffset + 19);
-    } else {
-        display->drawLine(0, yOffset + 13, SCREEN_WIDTH - (SCREEN_WIDTH * 0.1), yOffset + 13);
+    for (int separatorX = 0; separatorX <= (display->getStringWidth(headerStr) + 3); separatorX += 2) {
+        display->setPixel(separatorX, yOffset + ((SCREEN_WIDTH > 128) ? 19 : 13));
     }
 
     // === Render visible lines ===
