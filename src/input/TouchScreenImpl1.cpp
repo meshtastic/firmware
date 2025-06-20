@@ -70,12 +70,8 @@ void TouchScreenImpl1::onEvent(const TouchEvent &event)
         e.inputEvent = INPUT_BROKER_DOWN;
         break;
     }
-    case TOUCH_ACTION_DOUBLE_TAP: {
-        e.inputEvent = INPUT_BROKER_SELECT;
-        break;
-    }
     case TOUCH_ACTION_LONG_PRESS: {
-        e.inputEvent = INPUT_BROKER_CANCEL;
+        e.inputEvent = INPUT_BROKER_SELECT;
         break;
     }
     case TOUCH_ACTION_TAP: {

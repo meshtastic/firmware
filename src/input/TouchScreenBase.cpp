@@ -95,8 +95,6 @@ int32_t TouchScreenBase::runOnce()
                 if (duration > 0 && duration < TIME_LONG_PRESS) {
                     if (_tapped) {
                         _tapped = false;
-                        e.touchEvent = static_cast<char>(TOUCH_ACTION_DOUBLE_TAP);
-                        LOG_DEBUG("action DOUBLE TAP(%d/%d)", x, y);
                     } else {
                         _tapped = true;
                     }
@@ -126,7 +124,7 @@ int32_t TouchScreenBase::runOnce()
     }
 #else
     // fire TAP event when no 2nd tap occured within time
-    if (_tapped && (time_t(millis()) - _start) > TIME_LONG_PRESS - 50) {
+    if (_tapped) {
         _tapped = false;
         e.touchEvent = static_cast<char>(TOUCH_ACTION_TAP);
         LOG_DEBUG("action TAP(%d/%d)", _last_x, _last_y);
