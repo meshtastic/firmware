@@ -37,6 +37,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 // Additional includes for UI rendering
 #include "UIRenderer.h"
+#include "graphics/TimeFormatters.h"
 
 // Additional includes for dependencies
 #include <string>
@@ -54,77 +55,6 @@ namespace graphics
 {
 namespace MessageRenderer
 {
-
-// Forward declaration from Screen.cpp - this function needs to be accessible
-// For now, we'll implement a local version that matches the Screen.cpp functionality
-bool deltaToTimestamp(uint32_t secondsAgo, uint8_t *hours, uint8_t *minutes, int32_t *daysAgo)
-{
-    // Cache the result - avoid frequent recalculation
-    static uint8_t hoursCached = 0, minutesCached = 0;
-    static uint32_t daysAgoCached = 0;
-    static uint32_t secondsAgoCached = 0;
-    static bool validCached = false;
-
-    // Abort: if timezone not set
-    if (strlen(config.device.tzdef) == 0) {
-        validCached = false;
-        return validCached;
-    }
-
-    // Abort: if invalid pointers passed
-    if (hours == nullptr || minutes == nullptr || daysAgo == nullptr) {
-        validCached = false;
-        return validCached;
-    }
-
-    // Abort: if time seems invalid.. (> 6 months ago, probably seen before RTC set)
-    if (secondsAgo > SEC_PER_DAY * 30UL * 6) {
-        validCached = false;
-        return validCached;
-    }
-
-    // If repeated request, don't bother recalculating
-    if (secondsAgo - secondsAgoCached < 60 && secondsAgoCached != 0) {
-        if (validCached) {
-            *hours = hoursCached;
-            *minutes = minutesCached;
-            *daysAgo = daysAgoCached;
-        }
-        return validCached;
-    }
-
-    // Get local time
-    uint32_t secondsRTC = getValidTime(RTCQuality::RTCQualityDevice, true); // Get local time
-
-    // Abort: if RTC not set
-    if (!secondsRTC) {
-        validCached = false;
-        return validCached;
-    }
-
-    // Get absolute time when last seen
-    uint32_t secondsSeenAt = secondsRTC - secondsAgo;
-
-    // Calculate daysAgo
-    *daysAgo = (secondsRTC / SEC_PER_DAY) - (secondsSeenAt / SEC_PER_DAY); // How many "midnights" have passed
-
-    // Get seconds since midnight
-    uint32_t hms = (secondsRTC - secondsAgo) % SEC_PER_DAY;
-    hms = (hms + SEC_PER_DAY) % SEC_PER_DAY;
-
-    // Tear apart hms into hours and minutes
-    *hours = hms / SEC_PER_HOUR;
-    *minutes = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
-
-    // Cache the result
-    daysAgoCached = *daysAgo;
-    hoursCached = *hours;
-    minutesCached = *minutes;
-    secondsAgoCached = secondsAgo;
-
-    validCached = true;
-    return validCached;
-}
 
 void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string &line, const Emote *emotes, int emoteCount)
 {
@@ -242,7 +172,6 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     const int scrollBottom = SCREEN_HEIGHT - navHeight;
     const int usableHeight = scrollBottom;
     const int textWidth = SCREEN_WIDTH;
-    const int cornerRadius = 2;
 
     bool isInverted = (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED);
     bool isBold = config.display.heading_bold;
@@ -301,7 +230,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     static uint32_t lastBounceTime = 0;
     static int bounceY = 0;
     const int bounceRange = 2;     // Max pixels to bounce up/down
-    const int bounceInterval = 60; // How quickly to change bounce direction (ms)
+    const int bounceInterval = 10; // How quickly to change bounce direction (ms)
 
     uint32_t now = millis();
     if (now - lastBounceTime >= bounceInterval) {
@@ -311,11 +240,19 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     for (int i = 0; i < numEmotes; ++i) {
         const Emote &e = emotes[i];
         if (strcmp(msg, e.label) == 0) {
-            display->drawString(x, getTextPositions(display)[2], headerStr);
+            int headerY = getTextPositions(display)[1]; // same as scrolling header line
+            display->drawString(x + 3, headerY, headerStr);
+            if (isInverted && isBold)
+                display->drawString(x + 4, headerY, headerStr);
 
-            // Center the emote below header + apply bounce
-            int remainingHeight = SCREEN_HEIGHT - FONT_HEIGHT_SMALL - navHeight;
-            int emoteY = FONT_HEIGHT_SMALL + (remainingHeight - e.height) / 2 + bounceY - bounceRange;
+            // Draw separator (same as scroll version)
+            for (int separatorX = 0; separatorX <= (display->getStringWidth(headerStr) + 3); separatorX += 2) {
+                display->setPixel(separatorX, headerY + ((SCREEN_WIDTH > 128) ? 19 : 13));
+            }
+
+            // Center the emote below the header line + separator + nav
+            int remainingHeight = SCREEN_HEIGHT - (headerY + FONT_HEIGHT_SMALL) - navHeight;
+            int emoteY = headerY + FONT_HEIGHT_SMALL + (remainingHeight - e.height) / 2 + bounceY - bounceRange;
             display->drawXbm((SCREEN_WIDTH - e.width) / 2, emoteY, e.width, e.height, e.bitmap);
             return;
         }
@@ -342,7 +279,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         } else {
             word += ch;
             std::string test = line + word;
-            if (display->getStringWidth(test.c_str()) > textWidth + 4) {
+            if (display->getStringWidth(test.c_str()) > textWidth) {
                 if (!line.empty())
                     lines.push_back(line);
                 line = word;
@@ -359,15 +296,25 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     std::vector<int> rowHeights;
 
     for (const auto &_line : lines) {
-        int maxHeight = FONT_HEIGHT_SMALL;
+        int lineHeight = FONT_HEIGHT_SMALL;
+        bool hasEmote = false;
+
         for (int i = 0; i < numEmotes; ++i) {
             const Emote &e = emotes[i];
             if (_line.find(e.label) != std::string::npos) {
-                if (e.height > maxHeight)
-                    maxHeight = e.height;
+                lineHeight = std::max(lineHeight, e.height);
+                hasEmote = true;
             }
         }
-        rowHeights.push_back(maxHeight);
+
+        // Apply tighter spacing if no emotes on this line
+        if (!hasEmote) {
+            lineHeight -= 2; // reduce by 2px for tighter spacing
+            if (lineHeight < 8)
+                lineHeight = 8; // minimum safety
+        }
+
+        rowHeights.push_back(lineHeight);
     }
     int totalHeight = 0;
     for (size_t i = 1; i < rowHeights.size(); ++i) {
@@ -394,7 +341,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     if (!scrollStarted && now - scrollStartDelay > 2000)
         scrollStarted = true;
 
-    if (totalHeight > usableHeight) {
+    if (totalHeight > usableScrollHeight) {
         if (scrollStarted) {
             if (!waitingToReset) {
                 scrollY += delta * scrollSpeed;
@@ -416,10 +363,8 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
     int scrollOffset = static_cast<int>(scrollY);
     int yOffset = -scrollOffset + getTextPositions(display)[1];
-    if (SCREEN_WIDTH > 128) {
-        display->drawLine(0, yOffset + 20, SCREEN_WIDTH - (SCREEN_WIDTH * 0.1), yOffset + 20);
-    } else {
-        display->drawLine(0, yOffset + 14, SCREEN_WIDTH - (SCREEN_WIDTH * 0.1), yOffset + 14);
+    for (int separatorX = 0; separatorX <= (display->getStringWidth(headerStr) + 3); separatorX += 2) {
+        display->setPixel(separatorX, yOffset + ((SCREEN_WIDTH > 128) ? 19 : 13));
     }
 
     // === Render visible lines ===
@@ -438,7 +383,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         }
     }
 
-    // === Header ===
+    // Draw header at the end to sort out overlapping elements
     graphics::drawCommonHeader(display, x, y, titleStr);
 }
 
