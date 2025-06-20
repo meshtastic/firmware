@@ -19,8 +19,8 @@
 #include <OLEDDisplayUi.h>
 
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR_EXTERNAL
-// Sensors
 
+// Sensors
 #include "Sensor/CGRadSensSensor.h"
 #include "Sensor/RCWL9620Sensor.h"
 #include "Sensor/nullSensor.h"
@@ -101,6 +101,13 @@ SHTC3Sensor shtc3Sensor;
 NullSensor shtc3Sensor;
 #endif
 
+#if __has_include("RAK12035_SoilMoisture.h") && defined(RAK_4631) && RAK_4631 == 1
+#include "Sensor/RAK12035Sensor.h"
+RAK12035Sensor rak12035Sensor;
+#else
+NullSensor rak12035Sensor;
+#endif
+
 #if __has_include(<Adafruit_VEML7700.h>)
 #include "Sensor/VEML7700Sensor.h"
 VEML7700Sensor veml7700Sensor;
@@ -173,6 +180,7 @@ NullSensor pct2075Sensor;
 
 RCWL9620Sensor rcwl9620Sensor;
 CGRadSensSensor cgRadSens;
+
 #endif
 #ifdef T1000X_SENSOR_EN
 #include "Sensor/T1000xSensor.h"
@@ -182,6 +190,7 @@ T1000xSensor t1000xSensor;
 #include "Sensor/IndicatorSensor.h"
 IndicatorSensor indicatorSensor;
 #endif
+
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
 
@@ -287,6 +296,11 @@ int32_t EnvironmentTelemetryModule::runOnce()
 #ifdef HAS_RAKPROT
 
             result = rak9154Sensor.runOnce();
+#endif
+#if __has_include("RAK12035_SoilMoisture.h") && defined(RAK_4631) && RAK_4631 == 1
+            if (rak12035Sensor.hasSensor()) {
+                result = rak12035Sensor.runOnce();
+            }
 #endif
 #endif
         }
@@ -625,6 +639,14 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
     valid = valid && rak9154Sensor.getMetrics(m);
     hasSensor = true;
 #endif
+#if __has_include("RAK12035_SoilMoisture.h") && defined(RAK_4631) &&                                                             \
+                  RAK_4631 ==                                                                                                    \
+                      1 // Not really needed, but may as well just skip at a lower level it if no library or not a RAK_4631
+    if (rak12035Sensor.hasSensor()) {
+        valid = valid && rak12035Sensor.getMetrics(m);
+        hasSensor = true;
+    }
+#endif
 #endif
     return valid && hasSensor;
 }
@@ -678,6 +700,9 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
                  m.variant.environment_metrics.wind_direction, m.variant.environment_metrics.weight);
 
         LOG_INFO("Send: radiation=%fµR/h", m.variant.environment_metrics.radiation);
+
+        LOG_INFO("Send: soil_temperature=%f, soil_moisture=%u", m.variant.environment_metrics.soil_temperature,
+                 m.variant.environment_metrics.soil_moisture);
 
         sensor_read_error_count = 0;
 
@@ -850,6 +875,15 @@ AdminMessageHandleResult EnvironmentTelemetryModule::handleAdminMessageForModule
         if (result != AdminMessageHandleResult::NOT_HANDLED)
             return result;
     }
+#if __has_include("RAK12035_SoilMoisture.h") && defined(RAK_4631) &&                                                             \
+                  RAK_4631 ==                                                                                                    \
+                      1 // Not really needed, but may as well just skip it at a lower level if no library or not a RAK_4631
+    if (rak12035Sensor.hasSensor()) {
+        result = rak12035Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+#endif
 #endif
     return result;
 }
