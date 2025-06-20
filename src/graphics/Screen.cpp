@@ -1245,10 +1245,10 @@ int Screen::handleInputEvent(const InputEvent *event)
                     const char *banner_message;
                     int options;
                     if (kb_found) {
-                        banner_message = "Action?\nBack\nSleep Screen\nPreset Messages\nFreetype";
+                        banner_message = "Action?\nBack\nSleep Screen\nNew Preset Msg\nNew Freetext Msg";
                         options = 4;
                     } else {
-                        banner_message = "Action?\nBack\nSleep Screen\nPreset Messages";
+                        banner_message = "Action?\nBack\nSleep Screen\nNew Preset Msg";
                         options = 3;
                     }
                     showOverlayBanner(banner_message, 30000, options, [](int selected) -> void {
@@ -1308,14 +1308,14 @@ int Screen::handleInputEvent(const InputEvent *event)
                     const char *banner_message;
                     int options;
                     if (kb_found) {
-                        banner_message = "Message Action?\nBack\nDismiss\nPreset Messages\nFreetype";
+                        banner_message = "Message Action?\nBack\nDismiss\nReply via Preset\nReply via Freetext";
                         options = 4;
                     } else {
-                        banner_message = "Message Action?\nBack\nDismiss\nPreset Messages";
+                        banner_message = "Message Action?\nBack\nDismiss\nReply via Preset";
                         options = 3;
                     }
 #ifdef HAS_I2S
-                    banner_message = "Message Action?\nBack\nDismiss\nPreset Messages\nFreetype\nRead Aloud";
+                    banner_message = "Message Action?\nBack\nDismiss\nReply via Preset\nReply via Freetext\nRead Aloud";
                     options = 5;
 #endif
                     showOverlayBanner(banner_message, 30000, options, [](int selected) -> void {
@@ -1351,7 +1351,7 @@ int Screen::handleInputEvent(const InputEvent *event)
                     const char *banner_message;
                     int options;
                     if (kb_found) {
-                        banner_message = "Message Node?\nCancel\nPreset Messages\nFreetype";
+                        banner_message = "Message Node?\nCancel\nNew Preset Msg\nNew Freetext Msg";
                         options = 3;
                     } else {
                         banner_message = "Message Node?\nCancel\nConfirm";
