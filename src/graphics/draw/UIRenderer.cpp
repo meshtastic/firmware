@@ -862,73 +862,34 @@ void UIRenderer::drawScreensaverOverlay(OLEDDisplay *display, OLEDDisplayUiState
  */
 void UIRenderer::drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    display->setFont(FONT_SMALL);
-    int r = 3; // corner radius
+    // draw an xbm image.
+    // Please note that everything that should be transitioned
+    // needs to be drawn relative to x and y
 
-    if (SCREEN_WIDTH > 128) {
-        // === ORIGINAL WIDE SCREEN LAYOUT (unchanged) ===
-        int padding = 4;
-        int boxWidth = icon_width + (padding * 2) + 16;
-        int boxHeight = icon_height + (padding * 3);
-        int boxX = x - 1 + (SCREEN_WIDTH - boxWidth) / 2;
-        int boxY = y - 6 + (SCREEN_HEIGHT - boxHeight) / 2;
+    // draw centered icon left to right and centered above the one line of app text
+    display->drawXbm(x + (SCREEN_WIDTH - icon_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - icon_height) / 2 + 2,
+                     icon_width, icon_height, icon_bits);
 
-        display->setColor(WHITE);
-        display->fillRect(boxX + r, boxY, boxWidth - 2 * r, boxHeight);
-        display->fillRect(boxX, boxY + r, boxWidth - 1, boxHeight - 2 * r);
-        display->fillCircle(boxX + r, boxY + r, r);                                // Upper Left
-        display->fillCircle(boxX + boxWidth - r - 1, boxY + r, r);                 // Upper Right
-        display->fillCircle(boxX + r, boxY + boxHeight - r - 1, r);                // Lower Left
-        display->fillCircle(boxX + boxWidth - r - 1, boxY + boxHeight - r - 1, r); // Lower Right
-
-        display->setColor(BLACK);
-        int iconX = boxX + ((boxWidth - icon_width) / 2);
-        int iconY = boxY + ((boxHeight - icon_height) / 2);
-        display->drawXbm(iconX, iconY, icon_width, icon_height, icon_bits);
-
-        int labelY = iconY + icon_height + padding;
-
-    } else {
-        // === TIGHT SMALL SCREEN LAYOUT ===
-        int iconY = y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - icon_height) / 2 + 7;
-        int boxWidth = icon_width + 5;
-        int boxX = x + (SCREEN_WIDTH - boxWidth) / 2;
-        int boxY = iconY - 2;
-        int boxBottom = iconY + icon_height + 2;
-        int boxHeight = boxBottom - boxY;
-
-        display->setColor(WHITE);
-        display->fillRect(boxX + r, boxY, boxWidth - 2 * r, boxHeight);
-        display->fillRect(boxX, boxY + r, boxWidth - 1, boxHeight - 2 * r);
-        display->fillCircle(boxX + r, boxY + r, r);
-        display->fillCircle(boxX + boxWidth - r - 1, boxY + r, r);
-        display->fillCircle(boxX + r, boxY + boxHeight - r - 1, r);
-        display->fillCircle(boxX + boxWidth - r - 1, boxY + boxHeight - r - 1, r);
-
-        display->setColor(BLACK);
-        int iconX = boxX + (boxWidth - icon_width) / 2;
-        display->drawXbm(iconX, iconY, icon_width, icon_height, icon_bits);
-    }
-
-    // === Footer and headers (shared) ===
     display->setFont(FONT_MEDIUM);
-    display->setColor(WHITE);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     const char *title = "meshtastic.org";
     display->drawString(x + getStringCenteredX(title), y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM, title);
-
     display->setFont(FONT_SMALL);
+
+    // Draw region in upper left
     if (upperMsg)
         display->drawString(x + 0, y + 0, upperMsg);
 
+    // Draw version and short name in upper right
     char buf[25];
     snprintf(buf, sizeof(buf), "%s\n%s", xstr(APP_VERSION_SHORT),
              graphics::UIRenderer::haveGlyphs(owner.short_name) ? owner.short_name : "");
+
     display->setTextAlignment(TEXT_ALIGN_RIGHT);
     display->drawString(x + SCREEN_WIDTH, y + 0, buf);
-
     screen->forceDisplay();
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+    display->setTextAlignment(TEXT_ALIGN_LEFT); // Restore left align, just to be kind to any other unsuspecting code
 }
 
 // ****************************
