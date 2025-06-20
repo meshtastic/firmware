@@ -1262,7 +1262,7 @@ int Screen::handleInputEvent(const InputEvent *event)
                     });
 #if HAS_TFT
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.memory) {
-                    showOverlayBanner("Switch to MUI?\nYES\nNO", 30000, 2, [](int selected) -> void {
+                    showOverlayBanner("Switch to MUI?\nYes\nNo", 30000, 2, [](int selected) -> void {
                         if (selected == 0) {
                             config.display.displaymode = meshtastic_Config_DisplayConfig_DisplayMode_COLOR;
                             config.bluetooth.enabled = false;
