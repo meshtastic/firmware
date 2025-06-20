@@ -10,7 +10,7 @@
 
 #include "./Applet.h"
 #include "./SystemApplet.h"
-#include "graphics/niche/FlashData.h"
+#include "graphics/niche/Utils/FlashData.h"
 
 using namespace NicheGraphics;
 
