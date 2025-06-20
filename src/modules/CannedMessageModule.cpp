@@ -604,6 +604,21 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
         return false;
 
 #if defined(USE_VIRTUAL_KEYBOARD)
+    // Cancel (dismiss freetext screen)
+    if (event->inputEvent == INPUT_BROKER_LEFT) {
+        runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+        freetext = "";
+        cursor = 0;
+        payload = 0;
+        currentMessageIndex = -1;
+
+        // Notify UI that we want to redraw/close this screen
+        UIFrameEvent e;
+        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+        notifyObservers(&e);
+        screen->forceDisplay();
+        return true;
+    }
     // Touch input (virtual keyboard) handling
     // Only handle if touch coordinates present (CardKB won't set these)
     if (event->touchX != 0 || event->touchY != 0) {
@@ -653,6 +668,8 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
 
         if (valid) {
             lastTouchMillis = millis();
+            runOnce();
+            payload = 0;
             return true; // STOP: We handled a VKB touch
         }
     }

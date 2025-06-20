@@ -49,17 +49,17 @@ void TouchScreenImpl1::onEvent(const TouchEvent &event)
 {
     InputEvent e;
     e.source = event.source;
-
+    e.kbchar = 0;
     e.touchX = event.x;
     e.touchY = event.y;
 
     switch (event.touchEvent) {
     case TOUCH_ACTION_LEFT: {
-        e.inputEvent = INPUT_BROKER_RIGHT;
+        e.inputEvent = INPUT_BROKER_LEFT;
         break;
     }
     case TOUCH_ACTION_RIGHT: {
-        e.inputEvent = INPUT_BROKER_LEFT;
+        e.inputEvent = INPUT_BROKER_RIGHT;
         break;
     }
     case TOUCH_ACTION_UP: {
@@ -70,12 +70,8 @@ void TouchScreenImpl1::onEvent(const TouchEvent &event)
         e.inputEvent = INPUT_BROKER_DOWN;
         break;
     }
-    case TOUCH_ACTION_DOUBLE_TAP: {
-        e.inputEvent = INPUT_BROKER_SELECT;
-        break;
-    }
     case TOUCH_ACTION_LONG_PRESS: {
-        e.inputEvent = INPUT_BROKER_CANCEL;
+        e.inputEvent = INPUT_BROKER_SELECT;
         break;
     }
     case TOUCH_ACTION_TAP: {
