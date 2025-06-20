@@ -144,12 +144,14 @@ void CannedMessageStore::handleGet(meshtastic_AdminMessage *response)
 {
     // Merge the canned messages back into the delimited format expected
     std::string merged;
-    merged.reserve(201);
-    for (std::string &s : messages) {
-        merged += s;
-        merged += '|';
+    if (!messages.empty()) { // Don't run if no messages: error on pop_back with size=0
+        merged.reserve(201);
+        for (std::string &s : messages) {
+            merged += s;
+            merged += '|';
+        }
+        merged.pop_back(); // Drop the final delimiter (loop added one too many)
     }
-    merged.pop_back(); // Drop the final delimiter (loop added one too many)
 
     // Place the data into the response
     // This response is scoped to AdminModule::handleReceivedProtobuf
