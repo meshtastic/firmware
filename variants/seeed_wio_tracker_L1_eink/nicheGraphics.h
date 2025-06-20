@@ -19,7 +19,7 @@
 // Shared NicheGraphics components
 // --------------------------------
 #include "graphics/niche/Drivers/Backlight/LatchingBacklight.h"
-#include "graphics/niche/Drivers/EInk/GDEY0213B74.h"
+#include "graphics/niche/Drivers/EInk/HINK_E0213A367.h"
 #include "graphics/niche/Inputs/TwoButton.h"
 
 // Special case - fix T-Echo's touch button
@@ -41,7 +41,7 @@ void setupNicheGraphics()
     // E-Ink Driver
     // -----------------------------
 
-    Drivers::EInk *driver = new Drivers::GDEY0213B74;
+    Drivers::EInk *driver = new Drivers::HINK_E0213A367;
     driver->begin(&SPI1, PIN_EINK_DC, PIN_EINK_CS, PIN_EINK_BUSY, PIN_EINK_RES);
 
     // InkHUD
@@ -94,29 +94,6 @@ void setupNicheGraphics()
     buttons->setTiming(0, 75, 500);
     buttons->setHandlerShortPress(0, [inkhud]() { inkhud->shortpress(); });
     buttons->setHandlerLongPress(0, [inkhud]() { inkhud->longpress(); });
-
-    // #1: Aux Button (Capacitive Touch Button)
-    // - short: momentary backlight
-    // - long: latch backlight on
-    buttons->setWiring(1, TB_PRESS);
-    buttons->setTiming(1, 50, 5000); // 5 seconds before latch - limited by T-Echo's capacitive touch IC
-
-    buttons->setHandlerDown(1, [inkhud, backlight]() {
-        // Discard the button press if radio is active
-        // Rare hardware fault: LoRa activity triggers touch button
-        if (!RadioLibInterface::instance || RadioLibInterface::instance->isSending())
-            return;
-
-        // Backlight on (while held)
-        backlight->peek();
-
-        // Handler has run, which confirms touch button wasn't removed as part of DIY build.
-        // No longer need the fallback backlight toggle in menu.
-        inkhud->persistence->settings.optionalMenuItems.backlight = false;
-    });
-
-    buttons->setHandlerLongPress(1, [backlight]() { backlight->latch(); });
-    buttons->setHandlerShortPress(1, [backlight]() { backlight->off(); });
 
     // Begin handling button events
     buttons->start();

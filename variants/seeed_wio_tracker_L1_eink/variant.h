@@ -33,6 +33,11 @@
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  Button Configuration
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+#ifdef BUTTON_PIN
+#undef BUTTON_PIN 
+#endif
+
 #define BUTTON_PIN D13 // This is the Program Button
 // #define BUTTON_NEED_PULLUP   1
 #define BUTTON_ACTIVE_LOW true
@@ -85,7 +90,7 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 
 // SPI Configuration (SX1262)
 
-#define SPI_INTERFACES_COUNT 1
+//#define SPI_INTERFACES_COUNT 1
 #define PIN_SPI_MISO 9  // P0.03 (D9)
 #define PIN_SPI_MOSI 10 // P0.28 (D10)
 #define PIN_SPI_SCK 8   // P0.30 (D8)
@@ -177,16 +182,6 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 
 #define CANNED_MESSAGE_MODULE_ENABLE 1
 
-// trackball
-#define HAS_TRACKBALL 1
-#define TB_UP 25
-#define TB_DOWN 26
-#define TB_LEFT 27
-#define TB_RIGHT 28
-#define TB_PRESS 29
-
-#define BUTTON_PIN_SECONDARY TB_PRESS // P0.30
-#define PIN_BUTTON1 TB_LEFT  // P0.28
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  Compatibility Definitions
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
