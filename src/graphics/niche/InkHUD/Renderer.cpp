@@ -225,7 +225,7 @@ void InkHUD::Renderer::render(bool async)
         renderSystemApplets();
 
         // Invert Buffer if set by user
-        if (settings->optionalFeatures.invertScreen) {
+        if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
             for (size_t i = 0; i < imageBufferWidth * imageBufferHeight; ++i) {
                 imageBuffer[i] = ~imageBuffer[i];
             }

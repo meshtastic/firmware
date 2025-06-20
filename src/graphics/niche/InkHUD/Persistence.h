@@ -29,7 +29,7 @@ class Persistence
 
     // Used to invalidate old settings, if needed
     // Version 0 is reserved for testing, and will always load defaults
-    static constexpr uint32_t SETTINGS_VERSION = 3;
+    static constexpr uint32_t SETTINGS_VERSION = 2;
 
     struct Settings {
         struct Meta {
@@ -70,7 +70,6 @@ class Persistence
         struct OptionalFeatures {
             bool notifications = true;
             bool batteryIcon = false;
-            bool invertScreen = false;
         } optionalFeatures;
 
         // Some menu items may not be required, based on device / configuration

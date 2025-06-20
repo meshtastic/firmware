@@ -184,8 +184,13 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         settings->optionalFeatures.notifications = !settings->optionalFeatures.notifications;
         break;
 
-    case TOGGLE_INVERT_SCREEN:
-        settings->optionalFeatures.invertScreen = !settings->optionalFeatures.invertScreen;
+    case TOGGLE_INVERT_COLOR:
+        if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED)
+            config.display.displaymode = meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT;
+        else
+            config.display.displaymode = meshtastic_Config_DisplayConfig_DisplayMode_INVERTED;
+
+        nodeDB->saveToDisk(SEGMENT_CONFIG);
         break;
 
     case SET_RECENTS:
@@ -297,8 +302,10 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
                                  &settings->optionalFeatures.notifications));
         items.push_back(MenuItem("Battery Icon", MenuAction::TOGGLE_BATTERY_ICON, MenuPage::OPTIONS,
                                  &settings->optionalFeatures.batteryIcon));
-        items.push_back(MenuItem("Invert Screen", MenuAction::TOGGLE_INVERT_SCREEN, MenuPage::OPTIONS,
-                                 &settings->optionalFeatures.invertScreen));
+
+        invertedColors = (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED);
+        items.push_back(MenuItem("Invert Color", MenuAction::TOGGLE_INVERT_COLOR, MenuPage::OPTIONS, &invertedColors));
+
         items.push_back(
             MenuItem("12-Hour Clock", MenuAction::TOGGLE_12H_CLOCK, MenuPage::OPTIONS, &config.display.use_12h_clock));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
