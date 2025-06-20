@@ -605,7 +605,7 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
 
 #if defined(USE_VIRTUAL_KEYBOARD)
     // Cancel (dismiss freetext screen)
-    if (event->inputEvent == INPUT_BROKER_RIGHT) {
+    if (event->inputEvent == INPUT_BROKER_LEFT) {
         runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         freetext = "";
         cursor = 0;

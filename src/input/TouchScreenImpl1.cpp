@@ -55,11 +55,11 @@ void TouchScreenImpl1::onEvent(const TouchEvent &event)
 
     switch (event.touchEvent) {
     case TOUCH_ACTION_LEFT: {
-        e.inputEvent = INPUT_BROKER_RIGHT;
+        e.inputEvent = INPUT_BROKER_LEFT;
         break;
     }
     case TOUCH_ACTION_RIGHT: {
-        e.inputEvent = INPUT_BROKER_LEFT;
+        e.inputEvent = INPUT_BROKER_RIGHT;
         break;
     }
     case TOUCH_ACTION_UP: {
