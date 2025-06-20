@@ -18,12 +18,12 @@ class HINK_E0213A367 : public SSD16XX
 {
   private:
     // Display properties
-    static constexpr uint32_t width = 128;
+    static constexpr uint32_t width = 122;
     static constexpr uint32_t height = 250;
     static constexpr UpdateTypes supported = (UpdateTypes)(FULL | FAST);
 
   public:
-    HINK_E0213A367() : SSD16XX(width, height, supported) {}
+    HINK_E0213A367() : SSD16XX(width, height, supported,2) {}
 
   protected:
     // Overridden methods from SSD16XX base class

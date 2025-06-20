@@ -11,51 +11,42 @@ using namespace NicheGraphics::Drivers;
 void HINK_E0213A367::configFullscreen()
 {
     // 故意留空，以覆盖并禁用基类的实现。
-    // 所有初始化逻辑已全部整合到下面的 configScanning() 函数中。
 }
 
 /**
- * @brief [最终完整版] 配置屏幕的所有核心参数。
- * 此版本在修正X轴镜像的基础上，完整定义了Y轴的显示窗口，解决了底部像素丢失的问题。
+ * @brief [最终修正版 V] 基于您的代码，修正最后一处错误。
  */
 void HINK_E0213A367::configScanning()
 {
     // --- Y-Axis Commands (垂直方向配置) ---
-    // 0x01: Driver output control
+    // 您的Y轴设置是正确的，我们予以保留。
     sendCommand(0x01);
-    sendData(0xF9); // MUX line setting: 249 -> 250 lines
+    sendData(0xF9); 
     sendData(0x00);
     
-    // 0x45: set RAM Y address start/end
-    // [!] 关键修正：明确定义Y轴的完整窗口范围 (249 down to 0)。
-    // 这解决了底部像素丢失的问题。
     sendCommand(0x45);
-    sendData(0xF9); // Y Start Address (low byte) = 249
-    sendData(0x00); // Y Start Address (high byte) = 0
-    sendData(0x00); // Y End Address (low byte) = 0
-    sendData(0x00); // Y End Address (high byte) = 0
+    sendData(0xF9); 
+    sendData(0x00); 
+    //sendData(0x00); 
+   // sendData(0x00); 
 
-    // 0x4F: Set RAM Y address counter
-    // Y方向是递减的，所以光标起始点设在Y范围的开头 (249)
     sendCommand(0x4F);
     sendData(0xF9);
-    sendData(0x00);
+    //sendData(0x00);
     
-    // --- X-Axis Commands (水平方向配置，用于修正镜像) ---
-    // 0x11: Data entry mode setting -> Y-decrement, X-decrement
+    // --- X-Axis Commands (水平方向配置) ---
+    // 您的方向和窗口设置是正确的，我们予以保留。
     sendCommand(0x11);
     sendData(0x00); 
 
-    // 0x44: set RAM X address start/end
-    // 定义X轴窗口范围，顺序与递减方向匹配 (15 down to 0)
     sendCommand(0x44);
-    sendData(0x0F); // X End Address   (15)
-    sendData(0x00); // X Start Address (0)
+    sendData(0x0F); 
+    sendData(0x00); 
 
-    // 0x4E: Set RAM X address counter
-    // X方向是递减的，所以光标起始点设在X范围的末尾 (15)
+    // [!] 关键修正: 修正X轴起始光标位置。
+    // 因为扫描方向是X递减，所以光标必须从最右边(地址15)开始。
     sendCommand(0x4E);
-    sendData(0x00);
+    sendData(0x0F); // <-- 从 0x00 修改为 0x0F
 }
 
 // 指定用于控制像素移动电压序列的信息
@@ -90,6 +81,10 @@ void HINK_E0213A367::configUpdateSequence()
 
     case FULL: // 全屏刷新
     default:
+        sendCommand(0x4F);
+        sendData(0xF9);
+        sendCommand(0x4E);
+        sendData(0x0F); 
         sendCommand(0x21);
         sendData(0x40);
         sendCommand(0x18);
