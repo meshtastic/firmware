@@ -178,7 +178,6 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
     // === Set Title
     const char *titleStr = "Messages";
-    graphics::drawCommonHeader(display, x, y, titleStr);
 
     // Check if we have more than an empty message to show
     char messageBuf[237];
@@ -383,6 +382,9 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
             }
         }
     }
+
+    // Draw header at the end to sort out overlapping elements
+    graphics::drawCommonHeader(display, x, y, titleStr);
 }
 
 } // namespace MessageRenderer
