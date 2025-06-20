@@ -178,6 +178,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
     // === Set Title
     const char *titleStr = "Messages";
+    graphics::drawCommonHeader(display, x, y, titleStr);
 
     // Check if we have more than an empty message to show
     char messageBuf[237];
@@ -230,7 +231,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     static uint32_t lastBounceTime = 0;
     static int bounceY = 0;
     const int bounceRange = 2;     // Max pixels to bounce up/down
-    const int bounceInterval = 60; // How quickly to change bounce direction (ms)
+    const int bounceInterval = 10; // How quickly to change bounce direction (ms)
 
     uint32_t now = millis();
     if (now - lastBounceTime >= bounceInterval) {
@@ -240,11 +241,19 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     for (int i = 0; i < numEmotes; ++i) {
         const Emote &e = emotes[i];
         if (strcmp(msg, e.label) == 0) {
-            display->drawString(x, getTextPositions(display)[2], headerStr);
+            int headerY = getTextPositions(display)[1]; // same as scrolling header line
+            display->drawString(x + 3, headerY, headerStr);
+            if (isInverted && isBold)
+                display->drawString(x + 4, headerY, headerStr);
 
-            // Center the emote below header + apply bounce
-            int remainingHeight = SCREEN_HEIGHT - FONT_HEIGHT_SMALL - navHeight;
-            int emoteY = FONT_HEIGHT_SMALL + (remainingHeight - e.height) / 2 + bounceY - bounceRange;
+            // Draw separator (same as scroll version)
+            for (int separatorX = 0; separatorX <= (display->getStringWidth(headerStr) + 3); separatorX += 2) {
+                display->setPixel(separatorX, headerY + ((SCREEN_WIDTH > 128) ? 19 : 13));
+            }
+
+            // Center the emote below the header line + separator + nav
+            int remainingHeight = SCREEN_HEIGHT - (headerY + FONT_HEIGHT_SMALL) - navHeight;
+            int emoteY = headerY + FONT_HEIGHT_SMALL + (remainingHeight - e.height) / 2 + bounceY - bounceRange;
             display->drawXbm((SCREEN_WIDTH - e.width) / 2, emoteY, e.width, e.height, e.bitmap);
             return;
         }
@@ -374,9 +383,6 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
             }
         }
     }
-
-    // === Header ===
-    graphics::drawCommonHeader(display, x, y, titleStr);
 }
 
 } // namespace MessageRenderer
