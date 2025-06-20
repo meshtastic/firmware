@@ -25,6 +25,11 @@
 #define LORA_DIO1 RADIOLIB_NC // Not really used
 #define LORA_DIO2 RADIOLIB_NC // Not really used
 
+// Enable AXP192 for power management
+#define HAS_AXP192
+#define I2C_SDA 21
+#define I2C_SCL 22
+
 // This board has different GPS pins than all other boards
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
