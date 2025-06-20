@@ -862,16 +862,14 @@ void UIRenderer::drawScreensaverOverlay(OLEDDisplay *display, OLEDDisplayUiState
  */
 void UIRenderer::drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    const char *label = "BaseUI";
     display->setFont(FONT_SMALL);
-    int textWidth = display->getStringWidth(label);
     int r = 3; // corner radius
 
     if (SCREEN_WIDTH > 128) {
         // === ORIGINAL WIDE SCREEN LAYOUT (unchanged) ===
         int padding = 4;
-        int boxWidth = max(icon_width, textWidth) + (padding * 2) + 16;
-        int boxHeight = icon_height + FONT_HEIGHT_SMALL + (padding * 3) - 8;
+        int boxWidth = icon_width + (padding * 2) + 16;
+        int boxHeight = icon_height + (padding * 3);
         int boxX = x - 1 + (SCREEN_WIDTH - boxWidth) / 2;
         int boxY = y - 6 + (SCREEN_HEIGHT - boxHeight) / 2;
 
@@ -884,26 +882,19 @@ void UIRenderer::drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLED
         display->fillCircle(boxX + boxWidth - r - 1, boxY + boxHeight - r - 1, r); // Lower Right
 
         display->setColor(BLACK);
-        int iconX = boxX + (boxWidth - icon_width) / 2;
-        int iconY = boxY + padding - 2;
+        int iconX = boxX + ((boxWidth - icon_width) / 2);
+        int iconY = boxY + ((boxHeight - icon_height) / 2);
         display->drawXbm(iconX, iconY, icon_width, icon_height, icon_bits);
 
         int labelY = iconY + icon_height + padding;
-        display->setTextAlignment(TEXT_ALIGN_CENTER);
-        display->drawString(x + SCREEN_WIDTH / 2 - 3, labelY, label);
-        display->drawString(x + SCREEN_WIDTH / 2 - 2, labelY, label); // faux bold
 
     } else {
         // === TIGHT SMALL SCREEN LAYOUT ===
-        int iconY = y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - icon_height) / 2 + 2;
-        iconY -= 4;
-
-        int labelY = iconY + icon_height - 2;
-
-        int boxWidth = max(icon_width, textWidth) + 4;
+        int iconY = y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - icon_height) / 2 + 7;
+        int boxWidth = icon_width + 5;
         int boxX = x + (SCREEN_WIDTH - boxWidth) / 2;
-        int boxY = iconY - 1;
-        int boxBottom = labelY + FONT_HEIGHT_SMALL - 2;
+        int boxY = iconY - 2;
+        int boxBottom = iconY + icon_height + 2;
         int boxHeight = boxBottom - boxY;
 
         display->setColor(WHITE);
@@ -917,9 +908,6 @@ void UIRenderer::drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLED
         display->setColor(BLACK);
         int iconX = boxX + (boxWidth - icon_width) / 2;
         display->drawXbm(iconX, iconY, icon_width, icon_height, icon_bits);
-
-        display->setTextAlignment(TEXT_ALIGN_CENTER);
-        display->drawString(x + SCREEN_WIDTH / 2, labelY, label);
     }
 
     // === Footer and headers (shared) ===
