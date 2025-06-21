@@ -942,8 +942,10 @@ bool Power::axpChipInit()
         PMU->enablePowerOutput(XPOWERS_DCDC1);
 
         // gnss module power channel -  now turned on in setGpsPower
+        #if !defined(M5STACK_CORE2)
         PMU->setPowerChannelVoltage(XPOWERS_LDO3, 3300);
         // PMU->enablePowerOutput(XPOWERS_LDO3);
+        #endif
 
         // protected oled power source
         PMU->setProtectedChannel(XPOWERS_DCDC1);

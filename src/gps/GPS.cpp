@@ -940,7 +940,9 @@ void GPS::setPowerPMU(bool on)
         }
     } else if (model == XPOWERS_AXP192) {
         // t-beam v1.1 GNSS  power channel
+        #if !defined(M5STACK_CORE2)
         on ? PMU->enablePowerOutput(XPOWERS_LDO3) : PMU->disablePowerOutput(XPOWERS_LDO3);
+        #endif
     }
 #ifdef GPS_DEBUG
     LOG_DEBUG("PMU %s", on ? "on" : "off");
