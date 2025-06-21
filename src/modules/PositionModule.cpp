@@ -332,7 +332,13 @@ void PositionModule::sendOurPosition()
 
     // If we changed channels, ask everyone else for their latest info
     LOG_INFO("Send pos@%x:6 to mesh (wantReplies=%d)", localPosition.timestamp, requestReplies);
-    sendOurPosition(NODENUM_BROADCAST, requestReplies);
+    for (uint8_t channelNum = 0; channelNum < 8; channelNum++) {
+        if (channels.getByIndex(channelNum).settings.has_module_settings &&
+            channels.getByIndex(channelNum).settings.module_settings.position_precision != 0) {
+            sendOurPosition(NODENUM_BROADCAST, requestReplies, channelNum);
+            return;
+        }
+    }
 }
 
 void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t channel)
@@ -344,11 +350,6 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
     // Set's the class precision value for this particular packet
     if (channels.getByIndex(channel).settings.has_module_settings) {
         precision = channels.getByIndex(channel).settings.module_settings.position_precision;
-    } else if (channels.getByIndex(channel).role == meshtastic_Channel_Role_PRIMARY) {
-        // backwards compatibility for Primary channels created before position_precision was set by default
-        precision = 13;
-    } else {
-        precision = 0;
     }
 
     meshtastic_MeshPacket *p = allocPositionPacket();

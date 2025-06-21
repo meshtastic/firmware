@@ -65,6 +65,13 @@ const RegionInfo regions[] = {
     RDEF(ANZ, 915.0f, 928.0f, 100, 0, 30, true, false, false),
 
     /*
+        433.05 - 434.79 MHz, 25mW EIRP max, No duty cycle restrictions
+        AU Low Interference Potential https://www.acma.gov.au/licences/low-interference-potential-devices-lipd-class-licence
+        NZ General User Radio Licence for Short Range Devices https://gazette.govt.nz/notice/id/2022-go3100
+     */
+    RDEF(ANZ_433, 433.05f, 434.79f, 100, 0, 14, true, false, false),
+
+    /*
         https://digital.gov.ru/uploaded/files/prilozhenie-12-k-reshenyu-gkrch-18-46-03-1.pdf
 
         Note:
