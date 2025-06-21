@@ -3,7 +3,9 @@
 #include "./Events.h"
 
 #include "RTC.h"
+#include "buzz.h"
 #include "modules/AdminModule.h"
+#include "modules/ExternalNotificationModule.h"
 #include "modules/TextMessageModule.h"
 #include "sleep.h"
 
@@ -37,6 +39,13 @@ void InkHUD::Events::begin()
 
 void InkHUD::Events::onButtonShort()
 {
+    // Audio feedback (via buzzer)
+    // Short low tone
+    playBoop();
+    // Cancel any beeping, buzzing, blinking
+    // Some button handling suppressed if we are dismissing an external notification (see below)
+    bool dismissedExt = dismissExternalNotification();
+
     // Check which system applet wants to handle the button press (if any)
     SystemApplet *consumer = nullptr;
     for (SystemApplet *sa : inkhud->systemApplets) {
@@ -49,12 +58,16 @@ void InkHUD::Events::onButtonShort()
     // If no system applet is handling input, default behavior instead is to cycle applets
     if (consumer)
         consumer->onButtonShortPress();
-    else
+    else if (!dismissedExt) // Don't change applet if this button press silenced the external notification module
         inkhud->nextApplet();
 }
 
 void InkHUD::Events::onButtonLong()
 {
+    // Audio feedback (via buzzer)
+    // Low tone, longer than playBoop
+    playBeep();
+
     // Check which system applet wants to handle the button press (if any)
     SystemApplet *consumer = nullptr;
     for (SystemApplet *sa : inkhud->systemApplets) {
@@ -101,6 +114,10 @@ int InkHUD::Events::beforeDeepSleep(void *unused)
 
     inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FULL, false);
     delay(1000); // Cooldown, before potentially yanking display power
+
+    // InkHUD shutdown complete
+    // Firmware shutdown continues for several seconds more; flash write still pending
+    playShutdownMelody();
 
     return 0; // We agree: deep sleep now
 }
@@ -203,5 +220,25 @@ int InkHUD::Events::beforeLightSleep(void *unused)
     return 0; // No special status to report. Ignored anyway by this Observable
 }
 #endif
+
+// Silence all ongoing beeping, blinking, buzzing, coming from the external notification module
+// Returns true if an external notification was active, and we dismissed it
+// Button handling changes depending on our result
+bool InkHUD::Events::dismissExternalNotification()
+{
+    // Abort if not using external notifications
+    if (!moduleConfig.external_notification.enabled)
+        return false;
+
+    // Abort if nothing to dismiss
+    if (!externalNotificationModule->nagging())
+        return false;
+
+    // Stop the beep buzz blink
+    externalNotificationModule->stopNow();
+
+    // Inform that we did indeed dismiss an external notification
+    return true;
+}
 
 #endif

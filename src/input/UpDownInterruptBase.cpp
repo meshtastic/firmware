@@ -6,8 +6,9 @@ UpDownInterruptBase::UpDownInterruptBase(const char *name) : concurrency::OSThre
     this->_originName = name;
 }
 
-void UpDownInterruptBase::init(uint8_t pinDown, uint8_t pinUp, uint8_t pinPress, char eventDown, char eventUp, char eventPressed,
-                               void (*onIntDown)(), void (*onIntUp)(), void (*onIntPress)())
+void UpDownInterruptBase::init(uint8_t pinDown, uint8_t pinUp, uint8_t pinPress, input_broker_event eventDown,
+                               input_broker_event eventUp, input_broker_event eventPressed, void (*onIntDown)(),
+                               void (*onIntUp)(), void (*onIntPress)())
 {
     this->_pinDown = pinDown;
     this->_pinUp = pinUp;
@@ -31,7 +32,7 @@ void UpDownInterruptBase::init(uint8_t pinDown, uint8_t pinUp, uint8_t pinPress,
 int32_t UpDownInterruptBase::runOnce()
 {
     InputEvent e;
-    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
+    e.inputEvent = INPUT_BROKER_NONE;
 
     if (this->action == UPDOWN_ACTION_PRESSED) {
         LOG_DEBUG("GPIO event Press");
@@ -44,9 +45,9 @@ int32_t UpDownInterruptBase::runOnce()
         e.inputEvent = this->_eventDown;
     }
 
-    if (e.inputEvent != meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE) {
+    if (e.inputEvent != INPUT_BROKER_NONE) {
         e.source = this->_originName;
-        e.kbchar = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
+        e.kbchar = INPUT_BROKER_NONE;
         this->notifyObservers(&e);
     }
 

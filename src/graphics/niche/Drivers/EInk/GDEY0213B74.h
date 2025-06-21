@@ -5,7 +5,9 @@ E-Ink display driver
     - Manufacturer: Goodisplay
     - Size: 2.13 inch
     - Resolution: 250px x 122px
-    - Flex connector marking: FPC-A002
+    - Flex connector marking (not a unique identifier):
+      - FPC-A002
+      - FPC-A005 20.06.15 TRX
 
 */
 
