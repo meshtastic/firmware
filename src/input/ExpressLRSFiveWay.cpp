@@ -235,7 +235,7 @@ void ExpressLRSFiveWay::shutdown()
 {
     LOG_INFO("Shutdown from long press");
     powerFSM.trigger(EVENT_PRESS);
-    screen->startAlert("Shutting down...");
+    screen->startAlert("Shutting Down...");
     // Don't set alerting = true. We don't want to auto-dismiss this alert.
 
     playShutdownMelody(); // In case user adds a buzzer

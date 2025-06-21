@@ -682,7 +682,7 @@ bool Power::setup()
 
 void Power::shutdown()
 {
-    LOG_INFO("Shutting down");
+    LOG_INFO("Shutting Down");
 
 #if defined(ARCH_NRF52) || defined(ARCH_ESP32) || defined(ARCH_RP2040)
 #ifdef PIN_LED1

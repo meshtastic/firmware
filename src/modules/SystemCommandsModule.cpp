@@ -107,8 +107,8 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
         return true;
     // Power control
     case INPUT_BROKER_SHUTDOWN:
-        LOG_ERROR("Shutting down");
-        IF_SCREEN(screen->showOverlayBanner("Shutting down..."));
+        LOG_ERROR("Shutting Down");
+        IF_SCREEN(screen->showOverlayBanner("Shutting Down..."));
         nodeDB->saveToDisk();
         shutdownAtMsec = millis() + DEFAULT_SHUTDOWN_SECONDS * 1000;
         // runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
