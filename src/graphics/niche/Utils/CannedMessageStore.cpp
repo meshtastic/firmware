@@ -119,7 +119,7 @@ void CannedMessageStore::handleSet(const meshtastic_AdminMessage *request)
     // Copy into the correct struct (for writing to flash as protobuf)
     meshtastic_CannedMessageModuleConfig cannedMessageModuleConfig;
     strncpy(cannedMessageModuleConfig.messages, request->set_canned_message_module_messages,
-            sizeof(request->set_canned_message_module_messages));
+            sizeof(cannedMessageModuleConfig.messages));
 
     // Ensure the directory exists
 #ifdef FSCom
