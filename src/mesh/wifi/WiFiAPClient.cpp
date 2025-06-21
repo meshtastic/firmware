@@ -46,6 +46,10 @@ uint8_t wifiDisconnectReason = 0;
 // Stores our hostname
 char ourHost[16];
 
+// To replace blocking wifi connect delay with a non-blocking sleep
+static unsigned long wifiReconnectStartMillis = 0;
+static bool wifiReconnectPending = false;
+
 bool APStartupComplete = 0;
 
 unsigned long lastrun_ntp = 0;
@@ -160,17 +164,30 @@ static int32_t reconnectWiFi()
 #endif
         LOG_INFO("Reconnecting to WiFi access point %s", wifiName);
 
-        delay(5000);
+        // Start the non-blocking wait for 5 seconds
+        wifiReconnectStartMillis = millis();
+        wifiReconnectPending = true;
+        // Do not attempt to connect yet, wait for the next invocation
+        return 5000; // Schedule next check soon
+    }
 
-        if (!WiFi.isConnected()) {
+    // Check if we are ready to proceed with the WiFi connection after the 5s wait
+    if (wifiReconnectPending) {
+        if (millis() - wifiReconnectStartMillis >= 5000) {
+            if (!WiFi.isConnected()) {
 #ifdef CONFIG_IDF_TARGET_ESP32C3
-            WiFi.mode(WIFI_MODE_NULL);
-            WiFi.useStaticBuffers(true);
-            WiFi.mode(WIFI_STA);
+                WiFi.mode(WIFI_MODE_NULL);
+                WiFi.useStaticBuffers(true);
+                WiFi.mode(WIFI_STA);
 #endif
-            WiFi.begin(wifiName, wifiPsw);
+                WiFi.begin(wifiName, wifiPsw);
+            }
+            isReconnecting = false;
+            wifiReconnectPending = false;
+        } else {
+            // Still waiting for 5s to elapse
+            return 100; // Check again soon
         }
-        isReconnecting = false;
     }
 
 #ifndef DISABLE_NTP
@@ -193,8 +210,6 @@ static int32_t reconnectWiFi()
 
     if (config.network.wifi_enabled && !WiFi.isConnected()) {
 #ifdef ARCH_RP2040 // (ESP32 handles this in WiFiEvent)
-        /* If APStartupComplete, but we're not connected, try again.
-           Shouldn't try again before APStartupComplete. */
         needReconnect = APStartupComplete;
 #endif
         return 1000; // check once per second
@@ -486,4 +501,4 @@ uint8_t getWifiDisconnectReason()
 {
     return wifiDisconnectReason;
 }
-#endif
+#endif // HAS_WIFI

@@ -74,10 +74,12 @@
 //  Communication Interfaces
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  I2C Configuration
-#define HAS_WIRE 1
+// #define HAS_WIRE 1
 #define PIN_WIRE_SDA D14 // P0.09
 #define PIN_WIRE_SCL D15 // P0.10
-#define WIRE_INTERFACES_COUNT 1
+#define WIRE_INTERFACES_COUNT 2
+#define PIN_WIRE1_SDA D18
+#define PIN_WIRE1_SCL D17
 #define I2C_NO_RESCAN
 
 static const uint8_t SDA = PIN_WIRE_SDA;
