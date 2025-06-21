@@ -77,7 +77,7 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
     // Setup font and alignment
     display->setFont(FONT_SMALL);
     display->setTextAlignment(TEXT_ALIGN_LEFT); // We will manually center per line
-    const int MAX_LINES = 23;
+    const int MAX_LINES = 24;
 
     uint16_t maxWidth = 0;
     uint16_t arrowsWidth = display->getStringWidth(">  <", 4, true);

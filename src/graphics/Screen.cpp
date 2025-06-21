@@ -1245,10 +1245,10 @@ int Screen::handleInputEvent(const InputEvent *event)
                     const char *banner_message;
                     int options;
                     if (kb_found) {
-                        banner_message = "Action?\nBack\nSleep Screen\nPreset Messages\nFreetype";
+                        banner_message = "Action?\nBack\nSleep Screen\nNew Preset Msg\nNew Freetext Msg";
                         options = 4;
                     } else {
-                        banner_message = "Action?\nBack\nSleep Screen\nPreset Messages";
+                        banner_message = "Action?\nBack\nSleep Screen\nNew Preset Msg";
                         options = 3;
                     }
                     showOverlayBanner(banner_message, 30000, options, [](int selected) -> void {
@@ -1262,7 +1262,7 @@ int Screen::handleInputEvent(const InputEvent *event)
                     });
 #if HAS_TFT
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.memory) {
-                    showOverlayBanner("Switch to MUI?\nYES\nNO", 30000, 2, [](int selected) -> void {
+                    showOverlayBanner("Switch to MUI?\nYes\nNo", 30000, 2, [](int selected) -> void {
                         if (selected == 0) {
                             config.display.displaymode = meshtastic_Config_DisplayConfig_DisplayMode_COLOR;
                             config.bluetooth.enabled = false;
@@ -1308,14 +1308,14 @@ int Screen::handleInputEvent(const InputEvent *event)
                     const char *banner_message;
                     int options;
                     if (kb_found) {
-                        banner_message = "Message Action?\nBack\nDismiss\nPreset Messages\nFreetype";
+                        banner_message = "Message Action?\nBack\nDismiss\nReply via Preset\nReply via Freetext";
                         options = 4;
                     } else {
-                        banner_message = "Message Action?\nBack\nDismiss\nPreset Messages";
+                        banner_message = "Message Action?\nBack\nDismiss\nReply via Preset";
                         options = 3;
                     }
 #ifdef HAS_I2S
-                    banner_message = "Message Action?\nBack\nDismiss\nPreset Messages\nFreetype\nRead Aloud";
+                    banner_message = "Message Action?\nBack\nDismiss\nReply via Preset\nReply via Freetext\nRead Aloud";
                     options = 5;
 #endif
                     showOverlayBanner(banner_message, 30000, options, [](int selected) -> void {
@@ -1351,7 +1351,7 @@ int Screen::handleInputEvent(const InputEvent *event)
                     const char *banner_message;
                     int options;
                     if (kb_found) {
-                        banner_message = "Message Node?\nCancel\nPreset Messages\nFreetype";
+                        banner_message = "Message Node?\nCancel\nNew Preset Msg\nNew Freetext Msg";
                         options = 3;
                     } else {
                         banner_message = "Message Node?\nCancel\nConfirm";
@@ -1402,8 +1402,8 @@ void Screen::LoraRegionPicker(uint32_t duration)
         "Set the LoRa "
         "region\nBack\nUS\nEU_433\nEU_868\nCN\nJP\nANZ\nKR\nTW\nRU\nIN\nNZ_865\nTH\nLORA_24\nUA_433\nUA_868\nMY_433\nMY_"
         "919\nSG_"
-        "923\nPH_433\nPH_868\nPH_915",
-        duration, 22,
+        "923\nPH_433\nPH_868\nPH_915\nANZ_433",
+        duration, 23,
         [](int selected) -> void {
             if (selected != 0 && config.lora.region != _meshtastic_Config_LoRaConfig_RegionCode(selected)) {
                 config.lora.region = _meshtastic_Config_LoRaConfig_RegionCode(selected);
