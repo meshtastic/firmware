@@ -69,16 +69,12 @@
 #if !MESHTASTIC_EXCLUDE_GENERIC_THREAD_MODULE
 #include "modules/GenericThreadModule.h"
 #endif
-
 #ifdef ARCH_ESP32
 #if defined(USE_SX1280) && !MESHTASTIC_EXCLUDE_AUDIO
 #include "modules/esp32/AudioModule.h"
 #endif
 #if !MESHTASTIC_EXCLUDE_PAXCOUNTER
 #include "modules/esp32/PaxcounterModule.h"
-#endif
-#if !MESHTASTIC_EXCLUDE_STOREFORWARD
-#include "modules/StoreForwardModule.h"
 #endif
 #endif
 #if defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040) || defined(ARCH_PORTDUINO)
@@ -233,7 +229,7 @@ void setupModules()
         paxcounterModule = new PaxcounterModule();
 #endif
 #endif
-#if defined(ARCH_ESP32) || defined(ARCH_PORTDUINO)
+#if defined(ARCH_ESP32) || defined(ARCH_PORTDUINO) || defined(HAS_SDCARD)
 #if !MESHTASTIC_EXCLUDE_STOREFORWARD
         storeForwardModule = new StoreForwardModule();
 #endif
