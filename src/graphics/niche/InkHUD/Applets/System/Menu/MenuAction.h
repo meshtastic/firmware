@@ -19,6 +19,8 @@ namespace NicheGraphics::InkHUD
 enum MenuAction {
     NO_ACTION,
     SEND_PING,
+    STORE_CANNEDMESSAGE_SELECTION,
+    SEND_CANNEDMESSAGE,
     SHUTDOWN,
     NEXT_TILE,
     TOGGLE_BACKLIGHT,
