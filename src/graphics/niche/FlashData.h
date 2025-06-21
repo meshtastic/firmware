@@ -13,6 +13,7 @@ Avoid bloating everyone's protobuf code for our one-off UI implementations
 
 #include "configuration.h"
 
+#include "SPILock.h"
 #include "SafeFile.h"
 
 namespace NicheGraphics
@@ -46,6 +47,9 @@ template <typename T> class FlashData
   public:
     static bool load(T *data, const char *label)
     {
+        // Take firmware's SPI lock
+        concurrency::LockGuard guard(spiLock);
+
         // Set false if we run into issues
         bool okay = true;
 
@@ -103,14 +107,18 @@ template <typename T> class FlashData
         return okay;
     }
 
-    // Save module's custom data (settings?) to flash. Does use protobufs
+    // Save module's custom data (settings?) to flash. Doesn't use protobufs
+    // Takes the firmware's SPI lock, in case the files are stored on SD card
+    // Need to lock and unlock around specific FS methods, as the SafeFile class takes the lock for itself internally.
     static void save(T *data, const char *label)
     {
         // Get a filename based on the label
         std::string filename = getFilename(label);
 
 #ifdef FSCom
+        spiLock->lock();
         FSCom.mkdir("/NicheGraphics");
+        spiLock->unlock();
 
         auto f = SafeFile(filename.c_str(), true); // "true": full atomic. Write new data to temp file, then rename.
 
@@ -119,10 +127,10 @@ template <typename T> class FlashData
         // Calculate a hash of the data
         uint32_t hash = getHash(data);
 
+        spiLock->lock();
         f.write((uint8_t *)data, sizeof(T));     // Write the actual data
         f.write((uint8_t *)&hash, sizeof(hash)); // Append the hash
-
-        // f.flush();
+        spiLock->unlock();
 
         bool writeSucceeded = f.close();
 
@@ -134,6 +142,32 @@ template <typename T> class FlashData
 #endif
     }
 };
+
+// Erase contents of the NicheGraphics data directory
+inline void clearFlashData()
+{
+
+    // Take firmware's SPI lock, in case the files are stored on SD card
+    concurrency::LockGuard guard(spiLock);
+
+#ifdef FSCom
+    File dir = FSCom.open("/NicheGraphics"); // Open the directory
+    File file = dir.openNextFile();          // Attempt to open the first file in the directory
+
+    // While the directory still contains files
+    while (file) {
+        std::string path = "/NicheGraphics/";
+        path += file.name();
+        LOG_DEBUG("Erasing %s", path.c_str());
+        file.close();
+        FSCom.remove(path.c_str());
+
+        file = dir.openNextFile();
+    }
+#else
+    LOG_ERROR("ERROR: Filesystem not implemented\n");
+#endif
+}
 
 } // namespace NicheGraphics
 

@@ -48,6 +48,6 @@
     "require_upload_port": true,
     "wait_for_upload_port": true
   },
-  "url": "FIXME",
+  "url": "https://heltec.org/project/mesh-node-t114/",
   "vendor": "Heltec"
 }

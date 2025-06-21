@@ -24,7 +24,9 @@
 #define SCREEN_TOUCH_USE_I2C1
 #define TOUCH_I2C_PORT 1
 #define TOUCH_SLAVE_ADDRESS 0x38
+#define WAKE_ON_TOUCH
 
+#define USE_POWERSAVE
 #define SLEEP_TIME 180
 
 #define I2C_SDA1 39 // Used for capacitive touch

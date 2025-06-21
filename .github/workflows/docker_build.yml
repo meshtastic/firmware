@@ -26,6 +26,11 @@ on:
         required: false
         type: boolean
         default: false
+      pio_env:
+        description: PlatformIO environment to build
+        required: false
+        type: string
+        default: native
     outputs:
       digest:
         description: Digest of built image
@@ -90,3 +95,5 @@ jobs:
           push: ${{ inputs.push }}
           tags: ${{ steps.meta.outputs.tags }} # Tag is only meant to be consumed by the "manifest" job
           platforms: ${{ inputs.platform }}
+          build-args: |
+            PIO_ENV=${{ inputs.pio_env }}

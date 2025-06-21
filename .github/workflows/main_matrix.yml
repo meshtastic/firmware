@@ -5,14 +5,20 @@ concurrency:
 on:
   # # Triggers the workflow on push but only for the master branch
   push:
-    branches: [master, develop]
+    branches:
+      - master
+      - develop
+      - event/*
     paths-ignore:
       - "**.md"
       - version.properties
 
   # Note: This is different from "pull_request". Need to specify ref when doing checkouts.
   pull_request_target:
-    branches: [master, develop]
+    branches:
+      - master
+      - develop
+      - event/*
     paths-ignore:
       - "**.md"
       #- "**.yml"
@@ -32,12 +38,12 @@ jobs:
         name: Checkout base
       - id: jsonStep
         run: |
-          if [[ "${{ github.head_ref }}" == "" ]]; then
+          if [[ "$GITHUB_HEAD_REF" == "" ]]; then
             TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}})
           else  
             TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}} quick)
           fi
-          echo "Name: ${{ github.ref_name }} Base: ${{ github.base_ref }} } Ref: ${{ github.ref }} Targets: $TARGETS"
+          echo "Name: $GITHUB_REF_NAME Base: $GITHUB_BASE_REF Ref: $GITHUB_REF Targets: $TARGETS"
           echo "${{matrix.arch}}=$(jq -cn --argjson environments "$TARGETS" '{board: $environments}')" >> $GITHUB_OUTPUT
     outputs:
       esp32: ${{ steps.jsonStep.outputs.esp32 }}
@@ -143,9 +149,10 @@ jobs:
     secrets: inherit
 
   test-native:
+    if: ${{ !contains(github.ref_name, 'event/') }}
     uses: ./.github/workflows/test_native.yml
 
-  docker-debian-amd64:
+  docker-deb-amd64:
     uses: ./.github/workflows/docker_build.yml
     with:
       distro: debian
@@ -153,7 +160,16 @@ jobs:
       runs-on: ubuntu-24.04
       push: false
 
-  docker-alpine-amd64:
+  docker-deb-amd64-tft:
+    uses: ./.github/workflows/docker_build.yml
+    with:
+      distro: debian
+      platform: linux/amd64
+      runs-on: ubuntu-24.04
+      push: false
+      pio_env: native-tft
+
+  docker-alp-amd64:
     uses: ./.github/workflows/docker_build.yml
     with:
       distro: alpine
@@ -161,7 +177,16 @@ jobs:
       runs-on: ubuntu-24.04
       push: false
 
-  docker-debian-arm64:
+  docker-alp-amd64-tft:
+    uses: ./.github/workflows/docker_build.yml
+    with:
+      distro: alpine
+      platform: linux/amd64
+      runs-on: ubuntu-24.04
+      push: false
+      pio_env: native-tft
+
+  docker-deb-arm64:
     uses: ./.github/workflows/docker_build.yml
     with:
       distro: debian
@@ -169,24 +194,13 @@ jobs:
       runs-on: ubuntu-24.04-arm
       push: false
 
-  docker-debian-armv7:
+  docker-deb-armv7:
     uses: ./.github/workflows/docker_build.yml
     with:
       distro: debian
       platform: linux/arm/v7
       runs-on: ubuntu-24.04-arm
       push: false
-
-  after-checks:
-    runs-on: ubuntu-latest
-    if: ${{ github.event_name != 'workflow_dispatch' }}
-    needs: [check]
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          ref: ${{github.event.pull_request.head.ref}}
-          repository: ${{github.event.pull_request.head.repo.full_name}}
 
   gather-artifacts:
     permissions:
@@ -332,7 +346,7 @@ jobs:
           merge-multiple: true
           path: ./output/pio-deps-native-tft
 
-      - name: Zip linux sources
+      - name: Zip Linux sources
         working-directory: output
         run: |
           zip -j -9 -r ./meshtasticd-${{ steps.version.outputs.deb }}-src.zip ./debian-src
@@ -342,7 +356,9 @@ jobs:
       - name: Display structure of downloaded files
         run: ls -lR
 
-      - name: Add linux sources to release
+      - name: Add Linux sources to GtiHub Release
+        # Only run when targeting master branch with workflow_dispatch
+        if: ${{ github.ref_name == 'master' }}
         run: |
           gh release upload v${{ steps.version.outputs.long }} ./output/meshtasticd-${{ steps.version.outputs.deb }}-src.zip
           gh release upload v${{ steps.version.outputs.long }} ./output/platformio-deps-native-tft-${{ steps.version.outputs.long }}.zip
@@ -400,9 +416,53 @@ jobs:
       - name: Display structure of downloaded files
         run: ls -lR
 
-      - name: Add bins and debug elfs to release
+      - name: Add bins and debug elfs to GitHub Release
+        # Only run when targeting master branch with workflow_dispatch
+        if: ${{ github.ref_name == 'master' }}
         run: |
           gh release upload v${{ steps.version.outputs.long }} ./firmware-${{matrix.arch}}-${{ steps.version.outputs.long }}.zip
           gh release upload v${{ steps.version.outputs.long }} ./debug-elfs-${{matrix.arch}}-${{ steps.version.outputs.long }}.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-firmware:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    needs: [release-firmware]
+    env:
+      targets: esp32,esp32s3,esp32c3,esp32c6,nrf52840,rp2040,stm32
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.x
+
+      - name: Get release version string
+        run: echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+        id: version
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: firmware-{${{ env.targets }}}-${{ steps.version.outputs.long }}
+          merge-multiple: true
+          path: ./publish
+
+      - name: Publish firmware to meshtastic.github.io
+        uses: peaceiris/actions-gh-pages@v4
+        env:
+          # On event/* branches, use the event name as the destination prefix
+          DEST_PREFIX: ${{ contains(github.ref_name, 'event/') && format('{0}/', github.ref_name) || '' }}
+        with:
+          deploy_key: ${{ secrets.DIST_PAGES_DEPLOY_KEY }}
+          external_repository: meshtastic/meshtastic.github.io
+          publish_branch: master
+          publish_dir: ./publish
+          destination_dir: ${{ env.DEST_PREFIX }}firmware-${{ steps.version.outputs.long }}
+          keep_files: true
+          user_name: github-actions[bot]
+          user_email: github-actions[bot]@users.noreply.github.com
+          commit_message: ${{ steps.version.outputs.long }}
+          enable_jekyll: true

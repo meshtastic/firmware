@@ -1,8 +1,10 @@
-#include "./LCMEN2R13EFC1.h"
-
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
 
+#include "./LCMEN2R13EFC1.h"
+
 #include <assert.h>
+
+#include "SPILock.h"
 
 using namespace NicheGraphics::Drivers;
 
@@ -42,11 +44,10 @@ static const uint8_t LUT_FAST_BW[] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
 };
 
-// Look up table: fash refresh, pixels which change from white to black
+// Look up table: fast refresh, pixels which change from white to black
 static const uint8_t LUT_FAST_WB[] = {
-    0x01, 0x46, 0x42, 0x01, 0x01, 0x01, 0x01, //
-    0x01, 0x46, 0x42, 0x01, 0x01, 0x01, 0x01, //
     0x01, 0x46, 0x43, 0x02, 0x01, 0x01, 0x01, //
+    0x01, 0x46, 0x42, 0x01, 0x01, 0x01, 0x01, //
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
@@ -55,7 +56,7 @@ static const uint8_t LUT_FAST_WB[] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
 };
 
-// Look up table: fash refresh, pixels which remain black
+// Look up table: fast refresh, pixels which remain black
 static const uint8_t LUT_FAST_BB[] = {
     0x01, 0x06, 0x03, 0x42, 0x41, 0x01, 0x01, //
     0x01, 0x06, 0x02, 0x01, 0x01, 0x01, 0x01, //
@@ -151,6 +152,9 @@ void LCMEN213EFC1::reset()
 
 void LCMEN213EFC1::sendCommand(const uint8_t command)
 {
+    // Take firmware's SPI lock
+    spiLock->lock();
+
     spi->beginTransaction(spiSettings);
     digitalWrite(pin_dc, LOW); // DC pin low indicates command
     digitalWrite(pin_cs, LOW);
@@ -158,6 +162,8 @@ void LCMEN213EFC1::sendCommand(const uint8_t command)
     digitalWrite(pin_cs, HIGH);
     digitalWrite(pin_dc, HIGH);
     spi->endTransaction();
+
+    spiLock->unlock();
 }
 
 void LCMEN213EFC1::sendData(uint8_t data)
@@ -167,6 +173,9 @@ void LCMEN213EFC1::sendData(uint8_t data)
 
 void LCMEN213EFC1::sendData(const uint8_t *data, uint32_t size)
 {
+    // Take firmware's SPI lock
+    spiLock->lock();
+
     spi->beginTransaction(spiSettings);
     digitalWrite(pin_dc, HIGH); // DC pin HIGH indicates data, instead of command
     digitalWrite(pin_cs, LOW);
@@ -184,6 +193,8 @@ void LCMEN213EFC1::sendData(const uint8_t *data, uint32_t size)
     digitalWrite(pin_cs, HIGH);
     digitalWrite(pin_dc, HIGH);
     spi->endTransaction();
+
+    spiLock->unlock();
 }
 
 void LCMEN213EFC1::configFull()

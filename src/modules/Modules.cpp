@@ -49,6 +49,7 @@
 #endif
 #if ARCH_PORTDUINO
 #include "input/LinuxInputImpl.h"
+#include "modules/Telemetry/HostMetrics.h"
 #if !MESHTASTIC_EXCLUDE_STOREFORWARD
 #include "modules/StoreForwardModule.h"
 #endif
@@ -195,6 +196,9 @@ void setupModules()
 #endif
 #if HAS_SCREEN && !MESHTASTIC_EXCLUDE_CANNEDMESSAGES
         cannedMessageModule = new CannedMessageModule();
+#endif
+#if ARCH_PORTDUINO
+        new HostMetricsModule();
 #endif
 #if HAS_TELEMETRY
         new DeviceTelemetryModule();

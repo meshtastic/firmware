@@ -21,14 +21,19 @@ Build-Depends: debhelper-compat (= 13),
                openssl,
                libssl-dev,
                libulfius-dev,
-               liborcania-dev
+               liborcania-dev,
+               libx11-dev,
+               libinput-dev,
+               libxkbcommon-x11-dev
 Standards-Version: 4.6.2
 Homepage: https://github.com/meshtastic/firmware
 Rules-Requires-Root: no
 
 Package: meshtasticd
 Architecture: any
-Depends: ${misc:Depends}, ${shlibs:Depends}
+Depends: adduser,
+         ${misc:Depends},
+         ${shlibs:Depends}
 Description: Meshtastic daemon for communicating with Meshtastic devices
  Meshtastic is an off-grid text communication platform that uses inexpensive 
  LoRa radios.

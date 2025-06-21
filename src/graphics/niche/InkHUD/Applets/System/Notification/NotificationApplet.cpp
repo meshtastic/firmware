@@ -33,11 +33,6 @@ int InkHUD::NotificationApplet::onReceiveTextMessage(const meshtastic_MeshPacket
     if (getFrom(p) == nodeDB->getNodeNum())
         return 0;
 
-    // Abort if message was only an "emoji reaction"
-    // Possibly some implementation of this in future?
-    if (p->decoded.emoji)
-        return 0;
-
     Notification n;
     n.timestamp = getValidTime(RTCQuality::RTCQualityDevice, true); // Current RTC time
 
@@ -122,7 +117,7 @@ void InkHUD::NotificationApplet::onRender()
     int16_t textM = divX + padW + (getTextWidth(text) / 2);
 
     // Restrict area for printing
-    // - don't overlap border, or diveder
+    // - don't overlap border, or divider
     setCrop(divX + 1, 1, (width() - (divX + 1) - 1), height() - 2);
 
     // Drop shadow
@@ -218,7 +213,7 @@ std::string InkHUD::NotificationApplet::getNotificationText(uint16_t widthAvaila
 
         // Sender id
         if (node && node->has_user)
-            text += node->user.short_name;
+            text += parseShortName(node);
         else
             text += hexifyNodeNum(message->sender);
 
@@ -232,7 +227,7 @@ std::string InkHUD::NotificationApplet::getNotificationText(uint16_t widthAvaila
 
             // Sender id
             if (node && node->has_user)
-                text += node->user.short_name;
+                text += parseShortName(node);
             else
                 text += hexifyNodeNum(message->sender);
 
@@ -241,7 +236,8 @@ std::string InkHUD::NotificationApplet::getNotificationText(uint16_t widthAvaila
         }
     }
 
-    return text;
+    // Parse any non-ascii characters and return
+    return parse(text);
 }
 
 #endif

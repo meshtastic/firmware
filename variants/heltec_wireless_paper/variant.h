@@ -28,7 +28,6 @@
 #define ADC_MULTIPLIER 2                // Voltage divider is roughly 1:1
 #define BAT_MEASURE_ADC_UNIT 2          // Use ADC2
 #define ADC_ATTENUATION ADC_ATTEN_DB_12 // Voltage divider output is quite high
-#define HAS_32768HZ
 #define ADC_CTRL_ENABLED LOW
 
 #define NO_EXT_GPIO 1

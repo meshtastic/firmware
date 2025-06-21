@@ -46,11 +46,14 @@ jobs:
 
   # Create a PR to bump version when a release is Published
   bump-version:
-    if: ${{ github.event.release.published }}
+    if: github.event.action == 'published'
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
       contents: write
+    defaults:
+      run:
+        shell: bash
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -60,32 +63,44 @@ jobs:
         with:
           python-version: 3.x
 
-      - name: Get release version string
-        run: |
-          echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
-          echo "deb=$(./bin/buildinfo.py deb)" >> $GITHUB_OUTPUT
-        id: version
-        env:
-          BUILD_LOCATION: local
-
       - name: Bump version.properties
-        run: >-
-          bin/bump_version.py
+        run: |
+          # Bump version.properties
+          chmod +x ./bin/bump_version.py
+          ./bin/bump_version.py
+
+      - name: Get new release version string
+        run: |
+          echo "short=$(./bin/buildinfo.py short)" >> $GITHUB_OUTPUT
+        id: new_version
 
       - name: Ensure debian deps are installed
-        shell: bash
         run: |
           sudo apt-get update -y --fix-missing
           sudo apt-get install -y devscripts
 
       - name: Update debian changelog
-        run: >-
-          debian/ci_changelog.sh
+        run: |
+          # Update debian changelog
+          chmod +x ./debian/ci_changelog.sh
+          ./debian/ci_changelog.sh
 
-      - name: Create version.properties pull request
+      - name: Bump org.meshtastic.meshtasticd.metainfo.xml
+        run: |
+          # Bump org.meshtastic.meshtasticd.metainfo.xml
+          pip install -r bin/bump_metainfo/requirements.txt -q
+          chmod +x ./bin/bump_metainfo/bump_metainfo.py
+          ./bin/bump_metainfo/bump_metainfo.py --file bin/org.meshtastic.meshtasticd.metainfo.xml "${{ steps.new_version.outputs.short }}"
+        env:
+          PIP_DISABLE_PIP_VERSION_CHECK: 1
+
+      - name: Create Bumps pull request
         uses: peter-evans/create-pull-request@v7
         with:
-          title: Bump version.properties
+          base: ${{ github.event.repository.default_branch }}
+          title: Bump release version
+          commit-message: automated bumps
           add-paths: |
             version.properties
             debian/changelog
+            bin/org.meshtastic.meshtasticd.metainfo.xml

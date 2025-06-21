@@ -19,50 +19,168 @@
 #include <OLEDDisplayUi.h>
 
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR_EXTERNAL
-// Sensors
-#include "Sensor/AHT10.h"
-#include "Sensor/BME280Sensor.h"
-#include "Sensor/BME680Sensor.h"
-#include "Sensor/BMP085Sensor.h"
-#include "Sensor/BMP280Sensor.h"
-#include "Sensor/BMP3XXSensor.h"
-#include "Sensor/CGRadSensSensor.h"
-#include "Sensor/DFRobotGravitySensor.h"
-#include "Sensor/DFRobotLarkSensor.h"
-#include "Sensor/DPS310Sensor.h"
-#include "Sensor/LPS22HBSensor.h"
-#include "Sensor/MCP9808Sensor.h"
-#include "Sensor/MLX90632Sensor.h"
-#include "Sensor/NAU7802Sensor.h"
-#include "Sensor/OPT3001Sensor.h"
-#include "Sensor/RCWL9620Sensor.h"
-#include "Sensor/SHT31Sensor.h"
-#include "Sensor/SHT4XSensor.h"
-#include "Sensor/SHTC3Sensor.h"
-#include "Sensor/TSL2591Sensor.h"
-#include "Sensor/VEML7700Sensor.h"
 
-BMP085Sensor bmp085Sensor;
-BMP280Sensor bmp280Sensor;
-BME280Sensor bme280Sensor;
-BME680Sensor bme680Sensor;
-DPS310Sensor dps310Sensor;
-MCP9808Sensor mcp9808Sensor;
-SHTC3Sensor shtc3Sensor;
-LPS22HBSensor lps22hbSensor;
-SHT31Sensor sht31Sensor;
-VEML7700Sensor veml7700Sensor;
-TSL2591Sensor tsl2591Sensor;
-OPT3001Sensor opt3001Sensor;
-SHT4XSensor sht4xSensor;
-RCWL9620Sensor rcwl9620Sensor;
+// Sensors
+#include "Sensor/CGRadSensSensor.h"
+#include "Sensor/RCWL9620Sensor.h"
+#include "Sensor/nullSensor.h"
+
+#if __has_include(<Adafruit_AHTX0.h>)
+#include "Sensor/AHT10.h"
 AHT10Sensor aht10Sensor;
+#else
+NullSensor aht10Sensor;
+#endif
+#if __has_include(<Adafruit_BME280.h>)
+#include "Sensor/BME280Sensor.h"
+BME280Sensor bme280Sensor;
+#else
+NullSensor bmp280Sensor;
+#endif
+
+#if __has_include(<Adafruit_BMP085.h>)
+#include "Sensor/BMP085Sensor.h"
+BMP085Sensor bmp085Sensor;
+#else
+NullSensor bmp085Sensor;
+#endif
+
+#if __has_include(<Adafruit_BMP280.h>)
+#include "Sensor/BMP280Sensor.h"
+BMP280Sensor bmp280Sensor;
+#else
+NullSensor bme280Sensor;
+#endif
+
+#if __has_include(<Adafruit_LTR390.h>)
+#include "Sensor/LTR390UVSensor.h"
+LTR390UVSensor ltr390uvSensor;
+#else
+NullSensor ltr390uvSensor;
+#endif
+
+#if __has_include(<bsec2.h>)
+#include "Sensor/BME680Sensor.h"
+BME680Sensor bme680Sensor;
+#else
+NullSensor bme680Sensor;
+#endif
+
+#if __has_include(<Adafruit_DPS310.h>)
+#include "Sensor/DPS310Sensor.h"
+DPS310Sensor dps310Sensor;
+#else
+NullSensor dps310Sensor;
+#endif
+
+#if __has_include(<Adafruit_MCP9808.h>)
+#include "Sensor/MCP9808Sensor.h"
+MCP9808Sensor mcp9808Sensor;
+#else
+NullSensor mcp9808Sensor;
+#endif
+
+#if __has_include(<Adafruit_SHT31.h>)
+#include "Sensor/SHT31Sensor.h"
+SHT31Sensor sht31Sensor;
+#else
+NullSensor sht31Sensor;
+#endif
+
+#if __has_include(<Adafruit_LPS2X.h>)
+#include "Sensor/LPS22HBSensor.h"
+LPS22HBSensor lps22hbSensor;
+#else
+NullSensor lps22hbSensor;
+#endif
+
+#if __has_include(<Adafruit_SHTC3.h>)
+#include "Sensor/SHTC3Sensor.h"
+SHTC3Sensor shtc3Sensor;
+#else
+NullSensor shtc3Sensor;
+#endif
+
+#if __has_include("RAK12035_SoilMoisture.h") && defined(RAK_4631) && RAK_4631 == 1
+#include "Sensor/RAK12035Sensor.h"
+RAK12035Sensor rak12035Sensor;
+#else
+NullSensor rak12035Sensor;
+#endif
+
+#if __has_include(<Adafruit_VEML7700.h>)
+#include "Sensor/VEML7700Sensor.h"
+VEML7700Sensor veml7700Sensor;
+#else
+NullSensor veml7700Sensor;
+#endif
+
+#if __has_include(<Adafruit_TSL2591.h>)
+#include "Sensor/TSL2591Sensor.h"
+TSL2591Sensor tsl2591Sensor;
+#else
+NullSensor tsl2591Sensor;
+#endif
+
+#if __has_include(<ClosedCube_OPT3001.h>)
+#include "Sensor/OPT3001Sensor.h"
+OPT3001Sensor opt3001Sensor;
+#else
+NullSensor opt3001Sensor;
+#endif
+
+#if __has_include(<Adafruit_SHT4x.h>)
+#include "Sensor/SHT4XSensor.h"
+SHT4XSensor sht4xSensor;
+#else
+NullSensor sht4xSensor;
+#endif
+
+#if __has_include(<SparkFun_MLX90632_Arduino_Library.h>)
+#include "Sensor/MLX90632Sensor.h"
 MLX90632Sensor mlx90632Sensor;
+#else
+NullSensor mlx90632Sensor;
+#endif
+
+#if __has_include(<DFRobot_LarkWeatherStation.h>)
+#include "Sensor/DFRobotLarkSensor.h"
 DFRobotLarkSensor dfRobotLarkSensor;
+#else
+NullSensor dfRobotLarkSensor;
+#endif
+
+#if __has_include(<DFRobot_RainfallSensor.h>)
+#include "Sensor/DFRobotGravitySensor.h"
 DFRobotGravitySensor dfRobotGravitySensor;
+#else
+NullSensor dfRobotGravitySensor;
+#endif
+
+#if __has_include(<SparkFun_Qwiic_Scale_NAU7802_Arduino_Library.h>)
+#include "Sensor/NAU7802Sensor.h"
 NAU7802Sensor nau7802Sensor;
+#else
+NullSensor nau7802Sensor;
+#endif
+
+#if __has_include(<Adafruit_BMP3XX.h>)
+#include "Sensor/BMP3XXSensor.h"
 BMP3XXSensor bmp3xxSensor;
+#else
+NullSensor bmp3xxSensor;
+#endif
+
+#if __has_include(<Adafruit_PCT2075.h>)
+#include "Sensor/PCT2075Sensor.h"
+PCT2075Sensor pct2075Sensor;
+#else
+NullSensor pct2075Sensor;
+#endif
+
+RCWL9620Sensor rcwl9620Sensor;
 CGRadSensSensor cgRadSens;
+
 #endif
 #ifdef T1000X_SENSOR_EN
 #include "Sensor/T1000xSensor.h"
@@ -72,6 +190,7 @@ T1000xSensor t1000xSensor;
 #include "Sensor/IndicatorSensor.h"
 IndicatorSensor indicatorSensor;
 #endif
+
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
 
@@ -122,10 +241,14 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = dfRobotGravitySensor.runOnce();
             if (bmp085Sensor.hasSensor())
                 result = bmp085Sensor.runOnce();
+#if __has_include(<Adafruit_BME280.h>)
             if (bmp280Sensor.hasSensor())
                 result = bmp280Sensor.runOnce();
+#endif
             if (bme280Sensor.hasSensor())
                 result = bme280Sensor.runOnce();
+            if (ltr390uvSensor.hasSensor())
+                result = ltr390uvSensor.runOnce();
             if (bmp3xxSensor.hasSensor())
                 result = bmp3xxSensor.runOnce();
             if (bme680Sensor.hasSensor())
@@ -166,11 +289,18 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = max17048Sensor.runOnce();
             if (cgRadSens.hasSensor())
                 result = cgRadSens.runOnce();
+            if (pct2075Sensor.hasSensor())
+                result = pct2075Sensor.runOnce();
                 // this only works on the wismesh hub with the solar option. This is not an I2C sensor, so we don't need the
                 // sensormap here.
 #ifdef HAS_RAKPROT
 
             result = rak9154Sensor.runOnce();
+#endif
+#if __has_include("RAK12035_SoilMoisture.h") && defined(RAK_4631) && RAK_4631 == 1
+            if (rak12035Sensor.hasSensor()) {
+                result = rak12035Sensor.runOnce();
+            }
 #endif
 #endif
         }
@@ -407,12 +537,18 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
         valid = valid && bmp085Sensor.getMetrics(m);
         hasSensor = true;
     }
+#if __has_include(<Adafruit_BME280.h>)
     if (bmp280Sensor.hasSensor()) {
         valid = valid && bmp280Sensor.getMetrics(m);
         hasSensor = true;
     }
+#endif
     if (bme280Sensor.hasSensor()) {
         valid = valid && bme280Sensor.getMetrics(m);
+        hasSensor = true;
+    }
+    if (ltr390uvSensor.hasSensor()) {
+        valid = valid && ltr390uvSensor.getMetrics(m);
         hasSensor = true;
     }
     if (bmp3xxSensor.hasSensor()) {
@@ -495,9 +631,21 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
         valid = valid && cgRadSens.getMetrics(m);
         hasSensor = true;
     }
+    if (pct2075Sensor.hasSensor()) {
+        valid = valid && pct2075Sensor.getMetrics(m);
+        hasSensor = true;
+    }
 #ifdef HAS_RAKPROT
     valid = valid && rak9154Sensor.getMetrics(m);
     hasSensor = true;
+#endif
+#if __has_include("RAK12035_SoilMoisture.h") && defined(RAK_4631) &&                                                             \
+                  RAK_4631 ==                                                                                                    \
+                      1 // Not really needed, but may as well just skip at a lower level it if no library or not a RAK_4631
+    if (rak12035Sensor.hasSensor()) {
+        valid = valid && rak12035Sensor.getMetrics(m);
+        hasSensor = true;
+    }
 #endif
 #endif
     return valid && hasSensor;
@@ -553,6 +701,9 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 
         LOG_INFO("Send: radiation=%fµR/h", m.variant.environment_metrics.radiation);
 
+        LOG_INFO("Send: soil_temperature=%f, soil_moisture=%u", m.variant.environment_metrics.soil_temperature,
+                 m.variant.environment_metrics.soil_moisture);
+
         sensor_read_error_count = 0;
 
         meshtastic_MeshPacket *p = allocDataProtobuf(m);
@@ -575,9 +726,17 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
             service->sendToMesh(p, RX_SRC_LOCAL, true);
 
             if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving) {
-                LOG_DEBUG("Start next execution in 5s, then sleep");
+                meshtastic_ClientNotification *notification = clientNotificationPool.allocZeroed();
+                notification->level = meshtastic_LogRecord_Level_INFO;
+                notification->time = getValidTime(RTCQualityFromNet);
+                sprintf(notification->message, "Sending telemetry and sleeping for %us interval in a moment",
+                        Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval,
+                                                          default_telemetry_broadcast_interval_secs) /
+                            1000U);
+                service->sendClientNotification(notification);
                 sleepOnNextExecution = true;
-                setIntervalFromNow(5000);
+                LOG_DEBUG("Start next execution in 5s, then sleep");
+                setIntervalFromNow(FIVE_SECONDS_MS);
             }
         }
         return true;
@@ -628,6 +787,11 @@ AdminMessageHandleResult EnvironmentTelemetryModule::handleAdminMessageForModule
     }
     if (bme280Sensor.hasSensor()) {
         result = bme280Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (ltr390uvSensor.hasSensor()) {
+        result = ltr390uvSensor.handleAdminMessage(mp, request, response);
         if (result != AdminMessageHandleResult::NOT_HANDLED)
             return result;
     }
@@ -711,6 +875,15 @@ AdminMessageHandleResult EnvironmentTelemetryModule::handleAdminMessageForModule
         if (result != AdminMessageHandleResult::NOT_HANDLED)
             return result;
     }
+#if __has_include("RAK12035_SoilMoisture.h") && defined(RAK_4631) &&                                                             \
+                  RAK_4631 ==                                                                                                    \
+                      1 // Not really needed, but may as well just skip it at a lower level if no library or not a RAK_4631
+    if (rak12035Sensor.hasSensor()) {
+        result = rak12035Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+#endif
 #endif
     return result;
 }

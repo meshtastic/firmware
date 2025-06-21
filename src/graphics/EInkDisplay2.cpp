@@ -181,7 +181,6 @@ bool EInkDisplay::connect()
         // Start HSPI
         hspi = new SPIClass(HSPI);
         hspi->begin(PIN_EINK_SCLK, -1, PIN_EINK_MOSI, PIN_EINK_CS); // SCLK, MISO, MOSI, SS
-
         // VExt already enabled in setup()
         // RTC GPIO hold disabled in setup()
 
@@ -217,6 +216,21 @@ bool EInkDisplay::connect()
         adafruitDisplay->init(115200, true, 40, false, SPI, SPISettings(4000000, MSBFIRST, SPI_MODE0));
         adafruitDisplay->setRotation(1);
         adafruitDisplay->setPartialWindow(0, 0, EINK_WIDTH, EINK_HEIGHT);
+    }
+#elif defined(HELTEC_MESH_POCKET)
+    {
+        spi1 = &SPI1;
+        spi1->begin();
+        // VExt already enabled in setup()
+        // RTC GPIO hold disabled in setup()
+
+        // Create GxEPD2 objects
+        auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY, *spi1);
+        adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(*lowLevel);
+
+        // Init GxEPD2
+        adafruitDisplay->init();
+        adafruitDisplay->setRotation(3);
     }
 #endif
 
