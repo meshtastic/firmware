@@ -58,7 +58,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "mesh/Channels.h"
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
 #include "meshUtils.h"
-#include "modules/AdminModule.h"
 #include "modules/ExternalNotificationModule.h"
 #include "modules/TextMessageModule.h"
 #include "modules/WaypointModule.h"

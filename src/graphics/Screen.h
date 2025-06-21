@@ -78,6 +78,7 @@ class Screen
 #include "concurrency/OSThread.h"
 #include "input/InputBroker.h"
 #include "mesh/MeshModule.h"
+#include "modules/AdminModule.h"
 #include "power.h"
 #include <string>
 #include <vector>
