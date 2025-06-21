@@ -1402,8 +1402,8 @@ void Screen::LoraRegionPicker(uint32_t duration)
         "Set the LoRa "
         "region\nBack\nUS\nEU_433\nEU_868\nCN\nJP\nANZ\nKR\nTW\nRU\nIN\nNZ_865\nTH\nLORA_24\nUA_433\nUA_868\nMY_433\nMY_"
         "919\nSG_"
-        "923\nPH_433\nPH_868\nPH_915",
-        duration, 22,
+        "923\nPH_433\nPH_868\nPH_915\nANZ_433",
+        duration, 23,
         [](int selected) -> void {
             if (selected != 0 && config.lora.region != _meshtastic_Config_LoRaConfig_RegionCode(selected)) {
                 config.lora.region = _meshtastic_Config_LoRaConfig_RegionCode(selected);
