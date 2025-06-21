@@ -73,6 +73,7 @@ class ScanI2C
         RAK12035,
         TCA8418KB,
         PCT2075,
+        CST226SE,
     } DeviceType;
 
     // typedef uint8_t DeviceAddress;
