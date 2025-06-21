@@ -201,7 +201,7 @@ static const uint8_t SCL = PIN_WIRE_SCL;
  * - SX1262X CS on XIAO BLE legacy pinout
  */
 
-#if !defined(GPS_L76K) && !defined(SEEED_XIAO_WIO_BTB) && !defined(XIAO_BLE_OLD_PINOUT)
+#if !defined(GPS_L76K) && !defined(SEEED_XIAO_WIO_BTB) && !defined(XIAO_BLE_LEGACY_PINOUT)
 #define BUTTON_PIN D0
 #endif
 
