@@ -128,10 +128,14 @@ static void onNetworkConnected()
         }
 
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WEBSERVER
-        initWebServer();
+        if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+            initWebServer();
+        }
 #endif
 #if !MESHTASTIC_EXCLUDE_SOCKETAPI
-        initApiServer();
+        if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+            initApiServer();
+        }
 #endif
         APStartupComplete = true;
     }

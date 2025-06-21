@@ -331,7 +331,7 @@ bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passke
         char btPIN[16] = "888888";
         snprintf(btPIN, sizeof(btPIN), "%06u", configuredPasskey);
         int x_offset = display->width() / 2;
-        int y_offset = display->height() <= 80 ? 0 : 32;
+        int y_offset = display->height() <= 80 ? 0 : 12;
         display->setTextAlignment(TEXT_ALIGN_CENTER);
         display->setFont(FONT_MEDIUM);
         display->drawString(x_offset + x, y_offset + y, "Bluetooth");

@@ -5,6 +5,10 @@
 #include "detect/ScanI2C.h"
 #include "mesh/generated/meshtastic/config.pb.h"
 #include <OLEDDisplay.h>
+#include <string>
+#include <vector>
+
+#define getStringCenteredX(s) ((SCREEN_WIDTH - display->getStringWidth(s)) / 2)
 
 #if !HAS_SCREEN
 #include "power.h"
@@ -14,11 +18,18 @@ namespace graphics
 class Screen
 {
   public:
+    enum FrameFocus : uint8_t {
+        FOCUS_DEFAULT,  // No specific frame
+        FOCUS_PRESERVE, // Return to the previous frame
+        FOCUS_FAULT,
+        FOCUS_TEXTMESSAGE,
+        FOCUS_MODULE, // Note: target module should call requestFocus(), otherwise no info about which module to focus
+    };
+
     explicit Screen(ScanI2C::DeviceAddress, meshtastic_Config_DisplayConfig_OledType, OLEDDISPLAY_GEOMETRY);
     void onPress() {}
     void setup() {}
     void setOn(bool) {}
-    void print(const char *) {}
     void doDeepSleep() {}
     void forceDisplay(bool forceUiUpdate = false) {}
     void startFirmwareUpdateScreen() {}
@@ -27,6 +38,11 @@ class Screen
     void setFunctionSymbol(std::string) {}
     void removeFunctionSymbol(std::string) {}
     void startAlert(const char *) {}
+    void showOverlayBanner(const char *message, uint32_t durationMs = 3000, uint8_t options = 0,
+                           std::function<void(int)> bannerCallback = NULL, int8_t InitialSelected = 0)
+    {
+    }
+    void setFrames(FrameFocus focus) {}
     void endAlert() {}
 };
 } // namespace graphics
@@ -64,6 +80,7 @@ class Screen
 #include "mesh/MeshModule.h"
 #include "power.h"
 #include <string>
+#include <vector>
 
 // 0 to 255, though particular variants might define different defaults
 #ifndef BRIGHTNESS_DEFAULT
@@ -90,7 +107,7 @@ class Screen
 
 /// Convert an integer GPS coords to a floating point
 #define DegD(i) (i * 1e-7)
-
+extern bool hasUnreadMessage;
 namespace
 {
 /// A basic 2D point class for drawing
@@ -181,15 +198,35 @@ class Screen : public concurrency::OSThread
 
   public:
     explicit Screen(ScanI2C::DeviceAddress, meshtastic_Config_DisplayConfig_OledType, OLEDDISPLAY_GEOMETRY);
-
+    size_t frameCount = 0; // Total number of active frames
     ~Screen();
 
+    // Which frame we want to be displayed, after we regen the frameset by calling setFrames
+    enum FrameFocus : uint8_t {
+        FOCUS_DEFAULT,  // No specific frame
+        FOCUS_PRESERVE, // Return to the previous frame
+        FOCUS_FAULT,
+        FOCUS_TEXTMESSAGE,
+        FOCUS_MODULE, // Note: target module should call requestFocus(), otherwise no info about which module to focus
+    };
+
+    // Regenerate the normal set of frames, focusing a specific frame if requested
+    // Call when a frame should be added / removed, or custom frames should be cleared
+    void setFrames(FrameFocus focus = FOCUS_DEFAULT);
+
+    std::vector<const uint8_t *> indicatorIcons; // Per-frame custom icon pointers
     Screen(const Screen &) = delete;
     Screen &operator=(const Screen &) = delete;
 
     ScanI2C::DeviceAddress address_found;
     meshtastic_Config_DisplayConfig_OledType model;
     OLEDDISPLAY_GEOMETRY geometry;
+
+    bool isOverlayBannerShowing();
+
+    // Stores the last 4 of our hardware ID, to make finding the device for pairing easier
+    // FIXME: Needs refactoring and getMacAddr needs to be moved to a utility class
+    char ourId[5];
 
     /// Initializes the UI, turns on the display, starts showing boot screen.
     //
@@ -214,20 +251,8 @@ class Screen : public concurrency::OSThread
 
     void blink();
 
-    void drawFrameText(OLEDDisplay *, OLEDDisplayUiState *, int16_t, int16_t, const char *);
-
-    void getTimeAgoStr(uint32_t agoSecs, char *timeStr, uint8_t maxLength);
-
     // Draw north
-    void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t compassY, float myHeading);
-
-    static uint16_t getCompassDiam(uint32_t displayWidth, uint32_t displayHeight);
-
     float estimatedHeading(double lat, double lon);
-
-    void drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t compassY, uint16_t compassDiam, float headingRadian);
-
-    void drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char **fields);
 
     /// Handle button press, trackball or swipe action)
     void onPress() { enqueueCmd(ScreenCmd{.cmd = Cmd::ON_PRESS}); }
@@ -260,6 +285,9 @@ class Screen : public concurrency::OSThread
         enqueueCmd(cmd);
     }
 
+    void showOverlayBanner(const char *message, uint32_t durationMs = 3000, uint8_t options = 0,
+                           std::function<void(int)> bannerCallback = NULL, int8_t InitialSelected = 0);
+
     void startFirmwareUpdateScreen()
     {
         ScreenCmd cmd;
@@ -291,23 +319,6 @@ class Screen : public concurrency::OSThread
 
     /// Stops showing the boot screen.
     void stopBootScreen() { enqueueCmd(ScreenCmd{.cmd = Cmd::STOP_BOOT_SCREEN}); }
-
-    /// Writes a string to the screen.
-    void print(const char *text)
-    {
-        ScreenCmd cmd;
-        cmd.cmd = Cmd::PRINT;
-        // TODO(girts): strdup() here is scary, but we can't use std::string as
-        // FreeRTOS queue is just dumbly copying memory contents. It would be
-        // nice if we had a queue that could copy objects by value.
-        cmd.print_text = strdup(text);
-        if (!enqueueCmd(cmd)) {
-            free(cmd.print_text);
-        }
-    }
-
-    /// generates a very brief time delta display
-    std::string drawTimeDelta(uint32_t days, uint32_t hours, uint32_t minutes, uint32_t seconds);
 
     /// Overrides the default utf8 character conversion, to replace empty space with question marks
     static char customFontTableLookup(const uint8_t ch)
@@ -541,8 +552,6 @@ class Screen : public concurrency::OSThread
     /// Draws our SSL cert screen during boot (called from WebServer)
     void setSSLFrames();
 
-    void setWelcomeFrames();
-
     // Dismiss the currently focussed frame, if possible (e.g. text message, waypoint)
     void dismissCurrentFrame();
 
@@ -591,8 +600,9 @@ class Screen : public concurrency::OSThread
     void handleOnPress();
     void handleShowNextFrame();
     void handleShowPrevFrame();
-    void handlePrint(const char *text);
     void handleStartFirmwareUpdateScreen();
+    void TZPicker();
+    void LoraRegionPicker(uint32_t duration = 30000);
 
     // Info collected by setFrames method.
     // Index location of specific frames.
@@ -600,64 +610,38 @@ class Screen : public concurrency::OSThread
     // - Used to dismiss the currently shown frame (txt; waypoint) by CardKB combo
     struct FramesetInfo {
         struct FramePositions {
-            uint8_t fault = 0;
-            uint8_t textMessage = 0;
-            uint8_t waypoint = 0;
-            uint8_t focusedModule = 0;
-            uint8_t log = 0;
-            uint8_t settings = 0;
-            uint8_t wifi = 0;
+            uint8_t fault = 255;
+            uint8_t textMessage = 255;
+            uint8_t waypoint = 255;
+            uint8_t focusedModule = 255;
+            uint8_t log = 255;
+            uint8_t settings = 255;
+            uint8_t wifi = 255;
+            uint8_t deviceFocused = 255;
+            uint8_t memory = 255;
+            uint8_t gps = 255;
+            uint8_t home = 255;
+            uint8_t clock = 255;
+            uint8_t firstFavorite = 255;
+            uint8_t lastFavorite = 255;
+            uint8_t lora = 255;
         } positions;
 
         uint8_t frameCount = 0;
     } framesetInfo;
 
-    // Which frame we want to be displayed, after we regen the frameset by calling setFrames
-    enum FrameFocus : uint8_t {
-        FOCUS_DEFAULT,  // No specific frame
-        FOCUS_PRESERVE, // Return to the previous frame
-        FOCUS_FAULT,
-        FOCUS_TEXTMESSAGE,
-        FOCUS_MODULE, // Note: target module should call requestFocus(), otherwise no info about which module to focus
-    };
-
-    // Regenerate the normal set of frames, focusing a specific frame if requested
-    // Call when a frame should be added / removed, or custom frames should be cleared
-    void setFrames(FrameFocus focus = FOCUS_DEFAULT);
+    struct DismissedFrames {
+        bool textMessage = false;
+        bool waypoint = false;
+        bool wifi = false;
+        bool memory = false;
+    } dismissedFrames;
 
     /// Try to start drawing ASAP
     void setFastFramerate();
 
     // Sets frame up for immediate drawing
     void setFrameImmediateDraw(FrameCallback *drawFrames);
-
-    /// Called when debug screen is to be drawn, calls through to debugInfo.drawFrame.
-    static void drawDebugInfoTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-
-    static void drawDebugInfoSettingsTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-
-    static void drawDebugInfoWiFiTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-
-#if defined(DISPLAY_CLOCK_FRAME)
-    static void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-
-    static void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-
-    static void drawSegmentedDisplayCharacter(OLEDDisplay *display, int x, int y, uint8_t number, float scale = 1);
-
-    static void drawHorizontalSegment(OLEDDisplay *display, int x, int y, int width, int height);
-
-    static void drawVerticalSegment(OLEDDisplay *display, int x, int y, int width, int height);
-
-    static void drawSegmentedDisplayColon(OLEDDisplay *display, int x, int y, float scale = 1);
-
-    static void drawWatchFaceToggleButton(OLEDDisplay *display, int16_t x, int16_t y, bool digitalMode = true, float scale = 1);
-
-    static void drawBluetoothConnectedIcon(OLEDDisplay *display, int16_t x, int16_t y);
-
-    // Whether we are showing the digital watch face or the analog one
-    bool digitalWatchFace = true;
-#endif
 
     /// callback for current alert frame
     FrameCallback alertFrame;
@@ -690,5 +674,9 @@ class Screen : public concurrency::OSThread
 };
 
 } // namespace graphics
+
+// Extern declarations for function symbols used in UIRenderer
+extern std::vector<std::string> functionSymbol;
+extern std::string functionSymbolString;
 
 #endif

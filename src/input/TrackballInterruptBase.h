@@ -7,9 +7,10 @@ class TrackballInterruptBase : public Observable<const InputEvent *>, public con
 {
   public:
     explicit TrackballInterruptBase(const char *name);
-    void init(uint8_t pinDown, uint8_t pinUp, uint8_t pinLeft, uint8_t pinRight, uint8_t pinPress, char eventDown, char eventUp,
-              char eventLeft, char eventRight, char eventPressed, void (*onIntDown)(), void (*onIntUp)(), void (*onIntLeft)(),
-              void (*onIntRight)(), void (*onIntPress)());
+    void init(uint8_t pinDown, uint8_t pinUp, uint8_t pinLeft, uint8_t pinRight, uint8_t pinPress, input_broker_event eventDown,
+              input_broker_event eventUp, input_broker_event eventLeft, input_broker_event eventRight,
+              input_broker_event eventPressed, void (*onIntDown)(), void (*onIntUp)(), void (*onIntLeft)(), void (*onIntRight)(),
+              void (*onIntPress)());
     void intPressHandler();
     void intDownHandler();
     void intUpHandler();
@@ -35,10 +36,11 @@ class TrackballInterruptBase : public Observable<const InputEvent *>, public con
     uint8_t _pinUp = 0;
     uint8_t _pinLeft = 0;
     uint8_t _pinRight = 0;
-    char _eventDown = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
-    char _eventUp = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
-    char _eventLeft = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
-    char _eventRight = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
-    char _eventPressed = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
+    input_broker_event _eventDown = INPUT_BROKER_NONE;
+    input_broker_event _eventUp = INPUT_BROKER_NONE;
+    input_broker_event _eventLeft = INPUT_BROKER_NONE;
+    input_broker_event _eventRight = INPUT_BROKER_NONE;
+    input_broker_event _eventPressed = INPUT_BROKER_NONE;
     const char *_originName;
+    TrackballInterruptBaseActionType lastEvent = TB_ACTION_NONE;
 };

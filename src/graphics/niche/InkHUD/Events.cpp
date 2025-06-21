@@ -3,6 +3,7 @@
 #include "./Events.h"
 
 #include "RTC.h"
+#include "buzz.h"
 #include "modules/AdminModule.h"
 #include "modules/ExternalNotificationModule.h"
 #include "modules/TextMessageModule.h"
@@ -38,6 +39,9 @@ void InkHUD::Events::begin()
 
 void InkHUD::Events::onButtonShort()
 {
+    // Audio feedback (via buzzer)
+    // Short low tone
+    playBoop();
     // Cancel any beeping, buzzing, blinking
     // Some button handling suppressed if we are dismissing an external notification (see below)
     bool dismissedExt = dismissExternalNotification();
@@ -60,6 +64,10 @@ void InkHUD::Events::onButtonShort()
 
 void InkHUD::Events::onButtonLong()
 {
+    // Audio feedback (via buzzer)
+    // Low tone, longer than playBoop
+    playBeep();
+
     // Check which system applet wants to handle the button press (if any)
     SystemApplet *consumer = nullptr;
     for (SystemApplet *sa : inkhud->systemApplets) {
@@ -106,6 +114,10 @@ int InkHUD::Events::beforeDeepSleep(void *unused)
 
     inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FULL, false);
     delay(1000); // Cooldown, before potentially yanking display power
+
+    // InkHUD shutdown complete
+    // Firmware shutdown continues for several seconds more; flash write still pending
+    playShutdownMelody();
 
     return 0; // We agree: deep sleep now
 }
