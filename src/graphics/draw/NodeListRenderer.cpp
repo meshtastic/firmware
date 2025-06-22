@@ -80,7 +80,11 @@ const char *getCurrentModeTitle(int screenWidth)
     case MODE_LAST_HEARD:
         return "Last Heard";
     case MODE_HOP_SIGNAL:
+#ifdef USE_EINK
+        return "Hops/Sig";
+#else
         return (screenWidth > 128) ? "Hops/Signal" : "Hops/Sig";
+#endif
     case MODE_DISTANCE:
         return "Distance";
     default:
@@ -533,7 +537,12 @@ void drawLastHeardScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 
 void drawHopSignalScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+#ifdef USE_EINK
+    const char *title = "Hops/Sig";
+#else
+
     const char *title = "Hops/Signal";
+#endif
     drawNodeListScreen(display, state, x, y, title, drawEntryHopSignal);
 }
 

@@ -84,6 +84,9 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
     // === Battery State ===
     int chargePercent = powerStatus->getBatteryChargePercent();
     bool isCharging = powerStatus->getIsCharging() == meshtastic::OptionalBool::OptTrue;
+    if (chargePercent == 100) {
+        isCharging = false;
+    }
     uint32_t now = millis();
 
 #ifndef USE_EINK
@@ -99,14 +102,16 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
     // === Battery Icons ===
     if (useHorizontalBattery) {
         int batteryX = 2;
-        int batteryY = HEADER_OFFSET_Y + 2;
-        display->drawXbm(batteryX, batteryY, 29, 15, batteryBitmap_h);
+        int batteryY = HEADER_OFFSET_Y + 3;
+        display->drawXbm(batteryX, batteryY, 9, 13, batteryBitmap_h_bottom);
+        display->drawXbm(batteryX + 9, batteryY, 9, 13, batteryBitmap_h_top);
         if (isCharging && isBoltVisibleShared)
-            display->drawXbm(batteryX + 9, batteryY + 1, 9, 13, lightning_bolt_h);
+            display->drawXbm(batteryX + 4, batteryY, 9, 13, lightning_bolt_h);
         else {
-            display->drawXbm(batteryX + 8, batteryY, 12, 15, batteryBitmap_sidegaps_h);
-            int fillWidth = 24 * chargePercent / 100;
-            display->fillRect(batteryX + 1, batteryY + 1, fillWidth, 13);
+            display->drawLine(batteryX + 5, batteryY, batteryX + 10, batteryY);
+            display->drawLine(batteryX + 5, batteryY + 12, batteryX + 10, batteryY + 12);
+            int fillWidth = 14 * chargePercent / 100;
+            display->fillRect(batteryX + 1, batteryY + 1, fillWidth, 11);
         }
     } else {
         int batteryX = 1;
@@ -129,12 +134,8 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
     char chargeStr[4];
     snprintf(chargeStr, sizeof(chargeStr), "%d", chargePercent);
     int chargeNumWidth = display->getStringWidth(chargeStr);
-    const int batteryOffset = useHorizontalBattery ? 28 : 6;
-#ifdef USE_EINK
-    const int percentX = x + xOffset + batteryOffset - 2;
-#else
-    const int percentX = x + xOffset + batteryOffset;
-#endif
+    const int batteryOffset = useHorizontalBattery ? 19 : 9;
+    const int percentX = x + batteryOffset;
     display->drawString(percentX, textY, chargeStr);
     display->drawString(percentX + chargeNumWidth - 1, textY, "%");
     if (isBold) {
@@ -164,7 +165,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
         }
 
         timeStrWidth = display->getStringWidth(timeStr);
-        timeX = screenW - xOffset - timeStrWidth + 4;
+        timeX = screenW - xOffset - timeStrWidth + 3;
 
         // === Show Mail or Mute Icon to the Left of Time ===
         int iconRightEdge = timeX - 1;
