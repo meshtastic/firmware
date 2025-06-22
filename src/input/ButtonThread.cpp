@@ -328,7 +328,8 @@ void ButtonThread::detachButtonInterrupts()
 // Allows sleep.cpp to configure its own interrupts, which wake the device on user-button press
 int ButtonThread::beforeLightSleep(void *unused)
 {
-    detachButtonInterrupts();
+    // detachButtonInterrupts();
+    // not really needed and stays in conflict with dynamic light sleep
     return 0; // Indicates success
 }
 
