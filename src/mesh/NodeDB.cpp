@@ -511,6 +511,10 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.lora.override_duty_cycle = false;
     config.lora.config_ok_to_mqtt = false;
 
+#if HAS_TFT // For the devices that support MUI, default to that
+    config.display.displaymode = meshtastic_Config_DisplayConfig_DisplayMode_COLOR;
+#endif
+
 #ifdef USERPREFS_CONFIG_DEVICE_ROLE
     // Restrict ROUTER*, LOST AND FOUND, and REPEATER roles for security reasons
     if (IS_ONE_OF(USERPREFS_CONFIG_DEVICE_ROLE, meshtastic_Config_DeviceConfig_Role_ROUTER,
@@ -794,15 +798,7 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.output_ms = 1000;
     moduleConfig.external_notification.nag_timeout = 60;
 #endif
-#ifdef BUTTON_SECONDARY_CANNEDMESSAGES
-    // Use a board's second built-in button as input source for canned messages
-    moduleConfig.canned_message.enabled = true;
-    moduleConfig.canned_message.inputbroker_pin_press = BUTTON_PIN_SECONDARY;
-    strcpy(moduleConfig.canned_message.allow_input_source, "scanAndSelect");
-#endif
-
     moduleConfig.has_canned_message = true;
-
 #if USERPREFS_MQTT_ENABLED && !MESHTASTIC_EXCLUDE_MQTT
     moduleConfig.mqtt.enabled = true;
 #endif
@@ -1551,15 +1547,25 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
         return;
     }
     info->num = contact.node_num;
-    info->last_heard = getValidTime(RTCQualityNTP);
     info->has_user = true;
     info->user = TypeConversions::ConvertToUserLite(contact.user);
-    info->is_favorite = true;
-    // Mark the node's key as manually verified to indicate trustworthiness.
-    info->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
-    updateGUIforNode = info;
-    powerFSM.trigger(EVENT_NODEDB_UPDATED);
-    notifyObservers(true); // Force an update whether or not our node counts have changed
+    if (contact.should_ignore) {
+        // If should_ignore is set,
+        // we need to clear the public key and other cruft, in addition to setting the node as ignored
+        info->is_ignored = true;
+        info->has_device_metrics = false;
+        info->has_position = false;
+        info->user.public_key.size = 0;
+        info->user.public_key.bytes[0] = 0;
+    } else {
+        info->last_heard = getValidTime(RTCQualityNTP);
+        info->is_favorite = true;
+        info->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
+        // Mark the node's key as manually verified to indicate trustworthiness.
+        updateGUIforNode = info;
+        // powerFSM.trigger(EVENT_NODEDB_UPDATED); This event has been retired
+        notifyObservers(true); // Force an update whether or not our node counts have changed
+    }
     saveNodeDatabaseToDisk();
 }
 
@@ -1573,13 +1579,13 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
     }
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
-    if (p.public_key.size == 32) {
+    if (p.public_key.size == 32 && nodeId != nodeDB->getNodeNum()) {
         printBytes("Incoming Pubkey: ", p.public_key.bytes, 32);
 
         // Alert the user if a remote node is advertising public key that matches our own
         if (owner.public_key.size == 32 && memcmp(p.public_key.bytes, owner.public_key.bytes, 32) == 0 && !duplicateWarned) {
             duplicateWarned = true;
-            char warning[] = "Remote device %s has advertised your public key. This may indicate a low-entropy key. You may need "
+            char warning[] = "Remote device %s has advertised your public key. This may indicate a compromised key. You may need "
                              "to regenerate your public keys.";
             LOG_WARN(warning, p.long_name);
             meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
@@ -1616,7 +1622,6 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
 
     if (changed) {
         updateGUIforNode = info;
-        powerFSM.trigger(EVENT_NODEDB_UPDATED);
         notifyObservers(true); // Force an update whether or not our node counts have changed
 
         // We just changed something about a User,
@@ -1769,7 +1774,8 @@ bool NodeDB::checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_pub
         uint8_t keyHash[32] = {0};
         memcpy(keyHash, keyToTest.bytes, keyToTest.size);
         crypto->hash(keyHash, 32);
-        if (memcmp(keyHash, LOW_ENTROPY_HASH1, sizeof(LOW_ENTROPY_HASH1)) == 0 ||
+        if (memcmp(keyHash, LOW_ENTROPY_HASH1, sizeof(LOW_ENTROPY_HASH1)) ==
+                0 || // should become an array that gets looped through rather than this abomination
             memcmp(keyHash, LOW_ENTROPY_HASH2, sizeof(LOW_ENTROPY_HASH2)) == 0 ||
             memcmp(keyHash, LOW_ENTROPY_HASH3, sizeof(LOW_ENTROPY_HASH3)) == 0 ||
             memcmp(keyHash, LOW_ENTROPY_HASH4, sizeof(LOW_ENTROPY_HASH4)) == 0 ||
@@ -1783,7 +1789,12 @@ bool NodeDB::checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_pub
             memcmp(keyHash, LOW_ENTROPY_HASH12, sizeof(LOW_ENTROPY_HASH12)) == 0 ||
             memcmp(keyHash, LOW_ENTROPY_HASH13, sizeof(LOW_ENTROPY_HASH13)) == 0 ||
             memcmp(keyHash, LOW_ENTROPY_HASH14, sizeof(LOW_ENTROPY_HASH14)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH15, sizeof(LOW_ENTROPY_HASH15)) == 0) {
+            memcmp(keyHash, LOW_ENTROPY_HASH15, sizeof(LOW_ENTROPY_HASH15)) == 0 ||
+            memcmp(keyHash, LOW_ENTROPY_HASH16, sizeof(LOW_ENTROPY_HASH16)) == 0 ||
+            memcmp(keyHash, LOW_ENTROPY_HASH17, sizeof(LOW_ENTROPY_HASH17)) == 0 ||
+            memcmp(keyHash, LOW_ENTROPY_HASH18, sizeof(LOW_ENTROPY_HASH18)) == 0 ||
+            memcmp(keyHash, LOW_ENTROPY_HASH19, sizeof(LOW_ENTROPY_HASH19)) == 0 ||
+            memcmp(keyHash, LOW_ENTROPY_HASH20, sizeof(LOW_ENTROPY_HASH20)) == 0) {
             return true;
         }
     }
@@ -1881,10 +1892,6 @@ bool NodeDB::restorePreferences(meshtastic_AdminMessage_BackupLocation location,
 /// Record an error that should be reported via analytics
 void recordCriticalError(meshtastic_CriticalErrorCode code, uint32_t address, const char *filename)
 {
-    // Print error to screen and serial port
-    String lcd = String("Critical error ") + code + "!\n";
-    if (screen)
-        screen->print(lcd.c_str());
     if (filename) {
         LOG_ERROR("NOTE! Record critical error %d at %s:%lu", code, filename, address);
     } else {

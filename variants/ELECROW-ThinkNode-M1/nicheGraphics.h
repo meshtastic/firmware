@@ -22,6 +22,9 @@
 #include "graphics/niche/Drivers/EInk/GDEY0154D67.h"
 #include "graphics/niche/Inputs/TwoButton.h"
 
+// Button feedback
+#include "buzz.h"
+
 void setupNicheGraphics()
 {
     using namespace NicheGraphics;
@@ -98,8 +101,14 @@ void setupNicheGraphics()
     buttons->setWiring(1, PIN_BUTTON1);
     buttons->setTiming(1, 50, 500); // 500ms before latch
     buttons->setHandlerDown(1, [backlight]() { backlight->peek(); });
-    buttons->setHandlerLongPress(1, [backlight]() { backlight->latch(); });
-    buttons->setHandlerShortPress(1, [backlight]() { backlight->off(); });
+    buttons->setHandlerLongPress(1, [backlight]() {
+        backlight->latch();
+        playBeep();
+    });
+    buttons->setHandlerShortPress(1, [backlight]() {
+        backlight->off();
+        playBoop();
+    });
 
     // Begin handling button events
     buttons->start();

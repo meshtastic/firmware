@@ -62,6 +62,9 @@ class Events
     CallbackObserver<Events, void *> lightSleepObserver = CallbackObserver<Events, void *>(this, &Events::beforeLightSleep);
 #endif
 
+    // End any externalNotification beeping, buzzing, blinking etc
+    bool dismissExternalNotification();
+
     // If set, InkHUD's data will be erased during onReboot
     bool eraseOnReboot = false;
 };
