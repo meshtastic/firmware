@@ -22,7 +22,7 @@
 #define EVENT_SHUTDOWN 16        // force a full shutdown now (not just sleep)
 #define EVENT_INPUT 17           // input broker wants something, we need to wake up and enable screen
 
-#if EXCLUDE_POWER_FSM
+#if MESHTASTIC_EXCLUDE_POWER_FSM
 class FakeFsm
 {
   public:
