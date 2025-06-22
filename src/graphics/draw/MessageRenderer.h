@@ -5,13 +5,16 @@
 #include <string>
 #include <vector>
 
-namespace graphics {
-namespace MessageRenderer {
+namespace graphics
+{
+namespace MessageRenderer
+{
 
 // Text and emote rendering
-void drawStringWithEmotes(OLEDDisplay *display, int x, int y,
-                          const std::string &line, const Emote *emotes,
-                          int emoteCount);
+void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string &line, const Emote *emotes, int emoteCount);
+
+/// Draws the text message frame for displaying received messages
+void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 
 // Function to generate lines with word wrapping
 std::vector<std::string> generateLines(OLEDDisplay *display,
@@ -30,10 +33,6 @@ void renderMessageContent(OLEDDisplay *display,
                           int yOffset, int scrollBottom, int scrollOffset,
                           const Emote *emotes, int numEmotes, bool isInverted,
                           bool isBold);
-
-/// Draws the text message frame for displaying received messages
-void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state,
-                          int16_t x, int16_t y);
 
 } // namespace MessageRenderer
 } // namespace graphics
