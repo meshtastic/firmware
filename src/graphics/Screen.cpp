@@ -39,7 +39,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "graphics/ScreenFonts.h"
 #include "graphics/images.h"
 #include "input/ScanAndSelect.h"
-#include "input/TouchScreenCST226SE.h"
 #include "input/TouchScreenImpl1.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
