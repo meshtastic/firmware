@@ -15,11 +15,7 @@
 // Calculate 2^n without calling pow()
 uint32_t pow_of_2(uint32_t n)
 {
-    if (n == 0) {
-        return 1;
-    } else {
-        return 1 << (n - 1);
-    }
+    return 1 << n;
 }
 
 #define RDEF(name, freq_start, freq_end, duty_cycle, spacing, power_limit, audio_permitted, frequency_switching, wide_lora)      \
