@@ -291,31 +291,31 @@ int32_t KbI2cBase::runOnce()
                 break;
             case TCA8418KeyboardBase::ESC:
                 e.inputEvent = INPUT_BROKER_CANCEL;
-                e.kbchar = 0;
+                e.kbchar = 0x00;
                 break;
-            case 0x9E:
-                e.inputEvent = ANYKEY;
-                e.kbchar = INPUT_BROKER_MSG_GPS_TOGGLE;
+            case TCA8418KeyboardBase::GPS_TOGGLE:
+                e.inputEvent = INPUT_BROKER_ANYKEY;
+                e.kbchar = INPUT_BROKER_GPS_TOGGLE;
                 break;
-            case 0xAF:
-                e.inputEvent = ANYKEY;
-                e.kbchar = INPUT_BROKER_MSG_SEND_PING;
+            case TCA8418KeyboardBase::SEND_PING:
+                e.inputEvent = INPUT_BROKER_ANYKEY;
+                e.kbchar = INPUT_BROKER_SEND_PING;
                 break;
-            case 0xAC:
-                e.inputEvent = ANYKEY;
+            case TCA8418KeyboardBase::MUTE_TOGGLE:
+                e.inputEvent = INPUT_BROKER_ANYKEY;
                 e.kbchar = INPUT_BROKER_MSG_MUTE_TOGGLE;
                 break;
-            case 0xAA:
-                e.inputEvent = ANYKEY;
+            case TCA8418KeyboardBase::BT_TOGGLE:
+                e.inputEvent = INPUT_BROKER_ANYKEY;
                 e.kbchar = INPUT_BROKER_MSG_BLUETOOTH_TOGGLE;
                 break;
-            case 0xAB:
-                e.inputEvent = ANYKEY;
+            case TCA8418KeyboardBase::BL_TOGGLE:
+                e.inputEvent = INPUT_BROKER_ANYKEY;
                 e.kbchar = INPUT_BROKER_MSG_BLUETOOTH_TOGGLE;
                 break;
-            case 0x09:
-                e.inputEvent = ANYKEY;
-                e.kbchar = 0x09; // Tab
+            case TCA8418KeyboardBase::TAB:
+                e.inputEvent = INPUT_BROKER_ANYKEY;
+                e.kbchar = INPUT_BROKER_MSG_TAB;
                 break;
             default:
                 if (nextEvent > 127) {
