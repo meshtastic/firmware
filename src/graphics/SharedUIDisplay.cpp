@@ -10,9 +10,23 @@
 namespace graphics
 {
 
+void determineResolution(int16_t screenheight, int16_t screenwidth)
+{
+    if (screenwidth > 128) {
+        isHighResolution = true;
+    }
+
+    // Special case for Heltec 1.1
+    if (screenwidth == 160 && screenheight == 80) {
+        isHighResolution = false;
+    }
+}
+
 // === Shared External State ===
 bool hasUnreadMessage = false;
 bool isMuted = false;
+bool isHighResolution = false;
+determineResolution(160, 80);
 
 // === Internal State ===
 bool isBoltVisibleShared = true;
