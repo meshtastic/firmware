@@ -1,4 +1,5 @@
 #include "MotionSensor.h"
+#include "graphics/draw/CompassRenderer.h"
 
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
 
@@ -34,6 +35,8 @@ ScanI2C::I2CPort MotionSensor::devicePort()
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN) && HAS_SCREEN
 void MotionSensor::drawFrameCalibration(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+    if (screen == nullptr)
+        return;
     // int x_offset = display->width() / 2;
     // int y_offset = display->height() <= 80 ? 0 : 32;
     display->setTextAlignment(TEXT_ALIGN_LEFT);
@@ -46,7 +49,7 @@ void MotionSensor::drawFrameCalibration(OLEDDisplay *display, OLEDDisplayUiState
     display->drawString(x, y + 40, timeRemainingBuffer);
 
     int16_t compassX = 0, compassY = 0;
-    uint16_t compassDiam = graphics::Screen::getCompassDiam(display->getWidth(), display->getHeight());
+    uint16_t compassDiam = graphics::CompassRenderer::getCompassDiam(display->getWidth(), display->getHeight());
 
     // coordinates for the center of the compass/circle
     if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT) {
@@ -57,7 +60,7 @@ void MotionSensor::drawFrameCalibration(OLEDDisplay *display, OLEDDisplayUiState
         compassY = y + FONT_HEIGHT_SMALL + (display->getHeight() - FONT_HEIGHT_SMALL) / 2;
     }
     display->drawCircle(compassX, compassY, compassDiam / 2);
-    screen->drawCompassNorth(display, compassX, compassY, screen->getHeading() * PI / 180);
+    graphics::CompassRenderer::drawCompassNorth(display, compassX, compassY, screen->getHeading() * PI / 180, (compassDiam / 2));
 }
 #endif
 
