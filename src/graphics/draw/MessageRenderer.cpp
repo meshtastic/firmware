@@ -246,7 +246,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 display->drawString(x + 4, headerY, headerStr);
 
             // Draw separator (same as scroll version)
-            for (int separatorX = 0; separatorX <= (display->getStringWidth(headerStr) + 3); separatorX += 2) {
+            for (int separatorX = 1; separatorX <= (display->getStringWidth(headerStr) + 2); separatorX += 2) {
                 display->setPixel(separatorX, headerY + ((SCREEN_WIDTH > 128) ? 19 : 13));
             }
 
@@ -363,7 +363,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
     int scrollOffset = static_cast<int>(scrollY);
     int yOffset = -scrollOffset + getTextPositions(display)[1];
-    for (int separatorX = 0; separatorX <= (display->getStringWidth(headerStr) + 3); separatorX += 2) {
+    for (int separatorX = 1; separatorX <= (display->getStringWidth(headerStr) + 2); separatorX += 2) {
         display->setPixel(separatorX, yOffset + ((SCREEN_WIDTH > 128) ? 19 : 13));
     }
 
@@ -374,9 +374,9 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
             lineY += rowHeights[j];
         if (lineY > -rowHeights[i] && lineY < scrollBottom) {
             if (i == 0 && isInverted) {
-                display->drawString(x + 3, lineY, lines[i].c_str());
+                display->drawString(x, lineY, lines[i].c_str());
                 if (isBold)
-                    display->drawString(x + 4, lineY, lines[i].c_str());
+                    display->drawString(x, lineY, lines[i].c_str());
             } else {
                 drawStringWithEmotes(display, x, lineY, lines[i], emotes, numEmotes);
             }

@@ -60,11 +60,14 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
 
     // === Inverted Header Background ===
     if (isInverted) {
+        display->setColor(BLACK);
+        display->fillRect(0, 0, screenW, highlightHeight + 2);
+        display->setColor(WHITE);
         drawRoundedHighlight(display, x, y, screenW, highlightHeight, 2);
         display->setColor(BLACK);
     } else {
         display->setColor(BLACK);
-        display->fillRect(0, 0, screenW, highlightHeight + 3);
+        display->fillRect(0, 0, screenW, highlightHeight + 2);
         display->setColor(WHITE);
         if (screenW > 128) {
             display->drawLine(0, 20, screenW, 20);
