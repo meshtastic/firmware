@@ -8,7 +8,8 @@ class UpDownInterruptBase : public Observable<const InputEvent *>, public concur
   public:
     explicit UpDownInterruptBase(const char *name);
     void init(uint8_t pinDown, uint8_t pinUp, uint8_t pinPress, input_broker_event eventDown, input_broker_event eventUp,
-              input_broker_event eventPressed, void (*onIntDown)(), void (*onIntUp)(), void (*onIntPress)(), unsigned long updownDebounceMs = 300);
+              input_broker_event eventPressed, void (*onIntDown)(), void (*onIntUp)(), void (*onIntPress)(),
+              unsigned long updownDebounceMs = 50);
     void intPressHandler();
     void intDownHandler();
     void intUpHandler();
@@ -27,10 +28,10 @@ class UpDownInterruptBase : public Observable<const InputEvent *>, public concur
     input_broker_event _eventUp = INPUT_BROKER_NONE;
     input_broker_event _eventPressed = INPUT_BROKER_NONE;
     const char *_originName;
-    
+
     unsigned long lastUpKeyTime = 0;
     unsigned long lastDownKeyTime = 0;
     unsigned long lastPressKeyTime = 0;
-    unsigned long updownDebounceMs = 300;
-    const unsigned long pressDebounceMs = 500;
+    unsigned long updownDebounceMs;
+    const unsigned long pressDebounceMs = 200;
 };
