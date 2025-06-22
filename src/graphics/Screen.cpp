@@ -1351,10 +1351,10 @@ int Screen::handleInputEvent(const InputEvent *event)
                     const char *banner_message;
                     int options;
                     if (kb_found) {
-                        banner_message = "Message Node?\nCancel\nNew Preset Msg\nNew Freetext Msg";
+                        banner_message = "Message Node?\nBack\nNew Preset Msg\nNew Freetext Msg";
                         options = 3;
                     } else {
-                        banner_message = "Message Node?\nCancel\nConfirm";
+                        banner_message = "Message Node?\nBack\nNew Preset Msg";
                         options = 2;
                     }
                     showOverlayBanner(banner_message, 30000, options, [](int selected) -> void {
