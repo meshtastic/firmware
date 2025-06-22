@@ -208,7 +208,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 
             case TDECK_KB_ADDR:
                 // Do we have the T-Deck keyboard or the T-Deck Pro battery sensor?
-                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x40), 2); // MACData
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x04), 1);
                 if (registerValue != 0) {
                     logFoundDevice("BQ27220", (uint8_t)addr.address);
                     type = BQ27220;
