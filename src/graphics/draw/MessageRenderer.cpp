@@ -40,7 +40,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "graphics/TimeFormatters.h"
 
 // Additional includes for dependencies
-#include <functional> // for std::hash
 #include <string>
 #include <vector>
 
@@ -264,157 +263,148 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         }
     }
 #endif
+    // === Generate the cache key ===
+    size_t currentKey = (size_t)mp.from;
+    currentKey ^= ((size_t)mp.to << 8);
+    currentKey ^= ((size_t)mp.rx_time << 16);
+    currentKey ^= ((size_t)mp.id << 24);
+    currentKey ^= ((size_t)mp.decoded.payload.size << 12);
 
-  // === Create a combined string for hashing ===
-  std::string cacheString =
-      std::string(messageBuf) + "||" + std::string(headerStr);
+    if (cachedKey != currentKey) {
+        LOG_INFO("Message cache key is misssed cachedKey=0x%0x, currentKey=0x%x", cachedKey, currentKey);
 
-  // === Use std::hash to generate the cache key ===
-  size_t currentKey = std::hash<std::string>{}(cacheString);
-
-  if (cachedKey != currentKey) {
-    // Cache miss - regenerate lines and heights
-    cachedLines = generateLines(display, headerStr, messageBuf, textWidth);
-    cachedHeights =
-        calculateLineHeights(display, cachedLines, emotes, numEmotes);
-    cachedKey = currentKey;
-  }
-
-  // === Calculate total height and scrolling parameters ===
-  int totalHeight = 0;
-  for (size_t i = 1; i < cachedHeights.size(); ++i) {
-    totalHeight += cachedHeights[i];
-  }
-  int usableScrollHeight =
-      usableHeight - cachedHeights[0]; // remove header height
-  int scrollStop =
-      std::max(0, totalHeight - usableScrollHeight + cachedHeights.back());
-
-  // === Scrolling logic ===
-  static float scrollY = 0.0f;
-  static uint32_t lastTime = 0, scrollStartDelay = 0, pauseStart = 0;
-  static bool waitingToReset = false, scrollStarted = false;
-
-  // === Smooth scrolling adjustment ===
-  uint32_t now = millis();
-  float delta = (now - lastTime) / 400.0f;
-  lastTime = now;
-
-  const float scrollSpeed = 2.0f; // pixels per second
-
-  // Delay scrolling start by 2 seconds
-  if (scrollStartDelay == 0)
-    scrollStartDelay = now;
-  if (!scrollStarted && now - scrollStartDelay > 2000)
-    scrollStarted = true;
-
-  if (totalHeight > usableScrollHeight) {
-    if (scrollStarted) {
-      if (!waitingToReset) {
-        scrollY += delta * scrollSpeed;
-        if (scrollY >= scrollStop) {
-          scrollY = scrollStop;
-          waitingToReset = true;
-          pauseStart = lastTime;
-        }
-      } else if (lastTime - pauseStart > 3000) {
-        scrollY = 0;
-        waitingToReset = false;
-        scrollStarted = false;
-        scrollStartDelay = lastTime;
-      }
+        // Cache miss - regenerate lines and heights
+        cachedLines = generateLines(display, headerStr, messageBuf, textWidth);
+        cachedHeights =
+            calculateLineHeights(display, cachedLines, emotes, numEmotes);
+        cachedKey = currentKey;
     }
-  } else {
-    scrollY = 0;
-  }
 
-  int scrollOffset = static_cast<int>(scrollY);
-  int yOffset = -scrollOffset + getTextPositions(display)[1];
-  for (int separatorX = 0;
-       separatorX <= (display->getStringWidth(headerStr) + 3);
-       separatorX += 2) {
-    display->setPixel(separatorX, yOffset + ((SCREEN_WIDTH > 128) ? 19 : 13));
-  }
+    // === Scrolling logic ===
+    int totalHeight = 0;
+    for (size_t i = 1; i < cachedHeights.size(); ++i) {
+        totalHeight += cachedHeights[i];
+    }
+    int usableScrollHeight = usableHeight - cachedHeights[0]; // remove header height
+    int scrollStop = std::max(0, totalHeight - usableScrollHeight + cachedHeights.back());
 
-  // === Render visible lines ===
-  renderMessageContent(display, cachedLines, cachedHeights, x, yOffset,
-                       scrollBottom, scrollOffset, emotes, numEmotes,
-                       isInverted, isBold);
+    static float scrollY = 0.0f;
+    static uint32_t lastTime = 0, scrollStartDelay = 0, pauseStart = 0;
+    static bool waitingToReset = false, scrollStarted = false;
 
-  // Draw header at the end to sort out overlapping elements
-  graphics::drawCommonHeader(display, x, y, titleStr);
+    // === Smooth scrolling adjustment ===
+    // You can tweak this divisor to change how smooth it scrolls.
+    // Lower = smoother, but can feel slow.
+    uint32_t now = millis();
+    float delta = (now - lastTime) / 400.0f;
+    lastTime = now;
+
+    const float scrollSpeed = 2.0f; // pixels per second
+
+    // Delay scrolling start by 2 seconds
+    if (scrollStartDelay == 0)
+        scrollStartDelay = now;
+    if (!scrollStarted && now - scrollStartDelay > 2000)
+        scrollStarted = true;
+
+    if (totalHeight > usableScrollHeight) {
+        if (scrollStarted) {
+            if (!waitingToReset) {
+                scrollY += delta * scrollSpeed;
+                if (scrollY >= scrollStop) {
+                    scrollY = scrollStop;
+                    waitingToReset = true;
+                    pauseStart = lastTime;
+                }
+            } else if (lastTime - pauseStart > 3000) {
+                scrollY = 0;
+                waitingToReset = false;
+                scrollStarted = false;
+                scrollStartDelay = lastTime;
+            }
+        }
+    } else {
+        scrollY = 0;
+    }
+
+    int scrollOffset = static_cast<int>(scrollY);
+    int yOffset = -scrollOffset + getTextPositions(display)[1];
+    for (int separatorX = 0; separatorX <= (display->getStringWidth(headerStr) + 3); separatorX += 2) {
+        display->setPixel(separatorX, yOffset + ((SCREEN_WIDTH > 128) ? 19 : 13));
+    }
+
+    // === Render visible lines ===
+    renderMessageContent(display, cachedLines, cachedHeights, x, yOffset,
+                        scrollBottom, scrollOffset, emotes, numEmotes,
+                        isInverted, isBold);
+
+    // Draw header at the end to sort out overlapping elements
+    graphics::drawCommonHeader(display, x, y, titleStr);
 }
-
 
 std::vector<std::string> generateLines(OLEDDisplay *display,
                                        const char *headerStr,
                                        const char *messageBuf, int textWidth) {
-  std::vector<std::string> lines;
-  lines.push_back(std::string(headerStr)); // Header line is always first
+    std::vector<std::string> lines;
+    lines.push_back(std::string(headerStr));  // Header line is always first
 
-  std::string line, word;
-  for (int i = 0; messageBuf[i]; ++i) {
-    char ch = messageBuf[i];
-    if (ch == '\n') {
-      if (!word.empty())
-        line += word;
-      if (!line.empty())
-        lines.push_back(line);
-      line.clear();
-      word.clear();
-    } else if (ch == ' ') {
-      line += word + ' ';
-      word.clear();
-    } else {
-      word += ch;
-      std::string test = line + word;
-      if (display->getStringWidth(test.c_str()) > textWidth) {
-        if (!line.empty())
-          lines.push_back(line);
-        line = word;
-        word.clear();
-      }
+    std::string line, word;
+    for (int i = 0; messageBuf[i]; ++i) {
+        char ch = messageBuf[i];
+        if (ch == '\n') {
+            if (!word.empty()) line += word;
+            if (!line.empty()) lines.push_back(line);
+            line.clear();
+            word.clear();
+        } else if (ch == ' ') {
+            line += word + ' ';
+            word.clear();
+        } else {
+            word += ch;
+            std::string test = line + word;
+            if (display->getStringWidth(test.c_str()) > textWidth) {
+                if (!line.empty()) lines.push_back(line);
+                line = word;
+                word.clear();
+            }
+        }
     }
-  }
-  if (!word.empty())
-    line += word;
-  if (!line.empty())
-    lines.push_back(line);
+    if (!word.empty()) line += word;
+    if (!line.empty()) lines.push_back(line);
 
-  return lines;
+    return lines;
 }
 
 std::vector<int> calculateLineHeights(OLEDDisplay *display,
                                       const std::vector<std::string> &lines,
                                       const Emote *emotes, int emoteCount) {
-  std::vector<int> rowHeights;
+    std::vector<int> rowHeights;
 
-  for (const auto &line : lines) {
-    int lineHeight = FONT_HEIGHT_SMALL;
-    bool hasEmote = false;
+    for (const auto &line : lines) {
+        int lineHeight = FONT_HEIGHT_SMALL;
+        bool hasEmote = false;
 
-    for (int i = 0; i < emoteCount; ++i) {
-      const Emote &e = emotes[i];
-      if (line.find(e.label) != std::string::npos) {
-        lineHeight = std::max(lineHeight, e.height);
-        hasEmote = true;
-      }
+        for (int i = 0; i < emoteCount; ++i) {
+            const Emote &e = emotes[i];
+            if (line.find(e.label) != std::string::npos) {
+                lineHeight = std::max(lineHeight, e.height);
+                hasEmote = true;
+            }
+        }
+
+        // Apply tighter spacing if no emotes on this line
+        if (!hasEmote) {
+            lineHeight -= 2;  // reduce by 2px for tighter spacing
+            if (lineHeight < 8) lineHeight = 8;  // minimum safety
+        }
+
+        // Add 1px padding to each line
+        lineHeight += 1;
+
+        rowHeights.push_back(lineHeight);
     }
 
-    // Apply tighter spacing if no emotes on this line
-    if (!hasEmote) {
-      lineHeight -= 2; // reduce by 2px for tighter spacing
-      if (lineHeight < 8)
-        lineHeight = 8; // minimum safety
-    }
-
-    // Add 1px padding to each line
-    lineHeight += 1;
-
-    rowHeights.push_back(lineHeight);
-  }
-
-  return rowHeights;
+    return rowHeights;
 }
 
 void renderMessageContent(OLEDDisplay *display,
@@ -423,23 +413,21 @@ void renderMessageContent(OLEDDisplay *display,
                           int yOffset, int scrollBottom, int scrollOffset,
                           const Emote *emotes, int numEmotes, bool isInverted,
                           bool isBold) {
-  for (size_t i = 0; i < lines.size(); ++i) {
-    int lineY = yOffset;
-    for (size_t j = 0; j < i; ++j)
-      lineY += rowHeights[j];
-    if (lineY > -rowHeights[i] && lineY < scrollBottom) {
-      if (i == 0 && isInverted) {
-        display->drawString(x + 3, lineY, lines[i].c_str());
-        if (isBold)
-          display->drawString(x + 4, lineY, lines[i].c_str());
-      } else {
-        drawStringWithEmotes(display, x, lineY, lines[i], emotes, numEmotes);
-      }
+    for (size_t i = 0; i < lines.size(); ++i) {
+        int lineY = yOffset;
+        for (size_t j = 0; j < i; ++j) lineY += rowHeights[j];
+        if (lineY > -rowHeights[i] && lineY < scrollBottom) {
+            if (i == 0 && isInverted) {
+                display->drawString(x + 3, lineY, lines[i].c_str());
+                if (isBold) display->drawString(x + 4, lineY, lines[i].c_str());
+            } else {
+                drawStringWithEmotes(display, x, lineY, lines[i], emotes,
+                                     numEmotes);
+            }
+        }
     }
-  }
 }
 
 } // namespace MessageRenderer
 } // namespace graphics
 #endif
-
