@@ -809,7 +809,7 @@ void Screen::setFrames(FrameFocus focus)
     fsi.positions.clock = numframes;
     normalFrames[numframes++] = graphics::ClockRenderer::digitalWatchFace ? graphics::ClockRenderer::drawDigitalClockFrame
                                                                           : &graphics::ClockRenderer::drawAnalogClockFrame;
-    indicatorIcons.push_back(icon_clock);
+    indicatorIcons.push_back(digital_icon_clock);
 #endif
 
     // Declare this early so it’s available in FOCUS_PRESERVE block
@@ -860,7 +860,11 @@ void Screen::setFrames(FrameFocus focus)
 #if !defined(DISPLAY_CLOCK_FRAME)
     fsi.positions.clock = numframes;
     normalFrames[numframes++] = graphics::ClockRenderer::drawDigitalClockFrame;
-    indicatorIcons.push_back(icon_clock);
+    indicatorIcons.push_back(digital_icon_clock);
+
+    fsi.positions.clock = numframes;
+    normalFrames[numframes++] = graphics::ClockRenderer::drawAnalogClockFrame;
+    indicatorIcons.push_back(analog_icon_clock);
 #endif
 
     // We don't show the node info of our node (if we have it yet - we should)

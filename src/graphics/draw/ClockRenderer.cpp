@@ -301,7 +301,7 @@ void drawBluetoothConnectedIcon(OLEDDisplay *display, int16_t x, int16_t y)
 void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     display->setTextAlignment(TEXT_ALIGN_LEFT);
-
+#ifdef T_WATCH_S3
     graphics::UIRenderer::drawBattery(display, x, y + 7, imgBattery, powerStatus);
 
     if (powerStatus->getHasBattery()) {
@@ -312,20 +312,28 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
         display->drawString(x + 20, y + 2, batteryPercent);
     }
-#ifdef T_WATCH_S3
+
     if (nimbleBluetooth && nimbleBluetooth->isConnected()) {
         drawBluetoothConnectedIcon(display, display->getWidth() - 18, y + 2);
     }
-#endif
+
     drawWatchFaceToggleButton(display, display->getWidth() - 36, display->getHeight() - 36,
                               graphics::ClockRenderer::digitalWatchFace, 1);
-
+#endif
     // clock face center coordinates
     int16_t centerX = display->getWidth() / 2;
     int16_t centerY = display->getHeight() / 2;
 
     // clock face radius
-    int16_t radius = (display->getWidth() / 2) * 0.8;
+    int16_t radius = 0;
+    if (display->getHeight() < display->getWidth()) {
+        radius = (display->getHeight() / 2) * 0.9;
+    } else {
+        radius = (display->getWidth() / 2) * 0.9;
+    }
+#ifdef T_WATCH_S3
+    radius = (display->getWidth() / 2) * 0.8;
+#endif
 
     // noon (0 deg) coordinates (outermost circle)
     int16_t noonX = centerX;
@@ -338,10 +346,16 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     int16_t tickMarkOuterNoonY = secondHandNoonY;
 
     // seconds tick mark inner y coordinate; (second nested circle)
-    double secondsTickMarkInnerNoonY = (double)noonY + 8;
+    double secondsTickMarkInnerNoonY = (double)noonY + 4;
+    if (isHighResolution) {
+        secondsTickMarkInnerNoonY = (double)noonY + 8;
+    }
 
     // hours tick mark inner y coordinate; (third nested circle)
-    double hoursTickMarkInnerNoonY = (double)noonY + 16;
+    double hoursTickMarkInnerNoonY = (double)noonY + 6;
+    if (isHighResolution) {
+        hoursTickMarkInnerNoonY = (double)noonY + 16;
+    }
 
     // minute hand y coordinate
     int16_t minuteHandNoonY = secondsTickMarkInnerNoonY + 4;
@@ -350,7 +364,10 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     int16_t hourStringNoonY = minuteHandNoonY + 18;
 
     // hour hand radius and y coordinate
-    int16_t hourHandRadius = radius * 0.55;
+    int16_t hourHandRadius = radius * 0.35;
+    if (isHighResolution) {
+        int16_t hourHandRadius = radius * 0.55;
+    }
     int16_t hourHandNoonY = centerY - hourHandRadius;
 
     display->setColor(OLEDDISPLAY_COLOR::WHITE);
@@ -443,16 +460,25 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 double hourStringX = (sineAngleInRadians * (hourStringNoonY - centerY) + noonX) - hourStringXOffset;
                 double hourStringY = (cosineAngleInRadians * (hourStringNoonY - centerY) + centerY) - hourStringYOffset;
 
+#ifdef T_WATCH_S3
                 // draw hour number
                 display->drawStringf(hourStringX, hourStringY, buffer, "%d", hourInt);
+#else
+                if (isHighResolution && (hourInt == 3 || hourInt == 6 || hourInt == 9 || hourInt == 12)) {
+                    // draw hour number
+                    display->drawStringf(hourStringX, hourStringY, buffer, "%d", hourInt);
+                }
+#endif
             }
 
             if (angle % degreesPerMinuteOrSecond == 0) {
                 double startX = sineAngleInRadians * (secondsTickMarkInnerNoonY - centerY) + noonX;
                 double startY = cosineAngleInRadians * (secondsTickMarkInnerNoonY - centerY) + centerY;
 
-                // draw minute tick mark
-                display->drawLine(startX, startY, endX, endY);
+                if (isHighResolution) {
+                    // draw minute tick mark
+                    display->drawLine(startX, startY, endX, endY);
+                }
             }
         }
 
