@@ -23,21 +23,41 @@ void TrackballInterruptImpl1::init(uint8_t pinDown, uint8_t pinUp, uint8_t pinLe
 
 void TrackballInterruptImpl1::handleIntDown()
 {
-    trackballInterruptImpl1->intDownHandler();
+    if (TB_DIRECTION == RISING || millis() > trackballInterruptImpl1->lastTime + 10) {
+        trackballInterruptImpl1->lastTime = millis();
+        trackballInterruptImpl1->intDownHandler();
+        trackballInterruptImpl1->setIntervalFromNow(20);
+    }
 }
 void TrackballInterruptImpl1::handleIntUp()
 {
-    trackballInterruptImpl1->intUpHandler();
+    if (TB_DIRECTION == RISING || millis() > trackballInterruptImpl1->lastTime + 10) {
+        trackballInterruptImpl1->lastTime = millis();
+        trackballInterruptImpl1->intUpHandler();
+        trackballInterruptImpl1->setIntervalFromNow(20);
+    }
 }
 void TrackballInterruptImpl1::handleIntLeft()
 {
-    trackballInterruptImpl1->intLeftHandler();
+    if (TB_DIRECTION == RISING || millis() > trackballInterruptImpl1->lastTime + 10) {
+        trackballInterruptImpl1->lastTime = millis();
+        trackballInterruptImpl1->intLeftHandler();
+        trackballInterruptImpl1->setIntervalFromNow(20);
+    }
 }
 void TrackballInterruptImpl1::handleIntRight()
 {
-    trackballInterruptImpl1->intRightHandler();
+    if (TB_DIRECTION == RISING || millis() > trackballInterruptImpl1->lastTime + 10) {
+        trackballInterruptImpl1->lastTime = millis();
+        trackballInterruptImpl1->intRightHandler();
+        trackballInterruptImpl1->setIntervalFromNow(20);
+    }
 }
 void TrackballInterruptImpl1::handleIntPressed()
 {
-    trackballInterruptImpl1->intPressHandler();
+    if (TB_DIRECTION == RISING || millis() > trackballInterruptImpl1->lastTime + 10) {
+        trackballInterruptImpl1->lastTime = millis();
+        trackballInterruptImpl1->intPressHandler();
+        trackballInterruptImpl1->setIntervalFromNow(20);
+    }
 }
