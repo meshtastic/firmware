@@ -242,15 +242,16 @@ void menuHandler::messageResponseMenu()
 
 void menuHandler::homeBaseMenu()
 {
-    static const char **optionsArrayPtr;
     int options;
-    static const char *optionsArray_kb[] = {"Back", "Sleep Screen", "New Preset Msg", "New Freetext Msg"};
-    static const char *optionsArray_nokb[] = {"Back", "Sleep Screen", "New Preset Msg"};
+    static const char **optionsArrayPtr;
+
     if (kb_found) {
-        optionsArrayPtr = optionsArray_kb;
+        static const char *optionsArray[] = {"Back", "Sleep Screen", "New Preset Msg", "New Freetext Msg"};
+        optionsArrayPtr = optionsArray;
         options = 4;
     } else {
-        optionsArrayPtr = optionsArray_nokb;
+        static const char *optionsArray[] = {"Back", "Sleep Screen", "New Preset Msg"};
+        optionsArrayPtr = optionsArray;
         options = 3;
     }
     screen->showOverlayBanner("Action?", 30000, optionsArrayPtr, options, [](int selected) -> void {
