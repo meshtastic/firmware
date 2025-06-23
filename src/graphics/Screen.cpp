@@ -136,13 +136,14 @@ extern bool hasUnreadMessage;
 // The banner appears in the center of the screen and disappears after the specified duration
 
 // Called to trigger a banner with custom message and duration
-void Screen::showOverlayBanner(const char *message, uint32_t durationMs, uint8_t options, std::function<void(int)> bannerCallback,
-                               int8_t InitialSelected)
+void Screen::showOverlayBanner(const char *message, uint32_t durationMs, const char **optionsArrayPtr, uint8_t options,
+                               std::function<void(int)> bannerCallback, int8_t InitialSelected)
 {
     // Store the message and set the expiration timestamp
     strncpy(NotificationRenderer::alertBannerMessage, message, 255);
     NotificationRenderer::alertBannerMessage[255] = '\0'; // Ensure null termination
     NotificationRenderer::alertBannerUntil = (durationMs == 0) ? 0 : millis() + durationMs;
+    NotificationRenderer::optionsArrayPtr = optionsArrayPtr;
     NotificationRenderer::alertBannerOptions = options;
     NotificationRenderer::alertBannerCallback = bannerCallback;
     NotificationRenderer::curSelected = InitialSelected;
@@ -559,6 +560,7 @@ int32_t Screen::runOnce()
     if (displayHeight == 0) {
         displayHeight = dispdev->getHeight();
     }
+    handleMenuSwitch();
 
     // Show boot screen for first logo_timeout seconds, then switch to normal operation.
     // serialSinceMsec adjusts for additional serial wait time during nRF52 bootup
@@ -1210,6 +1212,8 @@ int Screen::handleInputEvent(const InputEvent *event)
         ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
         setFastFramerate(); // Draw ASAP
         ui->update();
+
+        handleMenuSwitch();
         return 0;
     }
     /*
@@ -1247,16 +1251,18 @@ int Screen::handleInputEvent(const InputEvent *event)
                 showNextFrame();
             } else if (event->inputEvent == INPUT_BROKER_SELECT) {
                 if (this->ui->getUiState()->currentFrame == framesetInfo.positions.home) {
-                    const char *banner_message;
+                    static const char **optionsArrayPtr;
                     int options;
                     if (kb_found) {
-                        banner_message = "Action?\nBack\nSleep Screen\nNew Preset Msg\nNew Freetext Msg";
+                        const char *optionsArray[] = {"Action?", "Back", "Sleep Screen", "New Preset Msg", "New Freetext Msg"};
+                        optionsArrayPtr = optionsArray;
                         options = 4;
                     } else {
-                        banner_message = "Action?\nBack\nSleep Screen\nNew Preset Msg";
+                        const char *optionsArray[] = {"Action?", "Back", "Sleep Screen", "New Preset Msg"};
+                        optionsArrayPtr = optionsArray;
                         options = 3;
                     }
-                    showOverlayBanner(banner_message, 30000, options, [](int selected) -> void {
+                    showOverlayBanner("Action?", 30000, optionsArrayPtr, options, [](int selected) -> void {
                         if (selected == 1) {
                             screen->setOn(false);
                         } else if (selected == 2) {
@@ -1267,7 +1273,8 @@ int Screen::handleInputEvent(const InputEvent *event)
                     });
 #if HAS_TFT
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.memory) {
-                    showOverlayBanner("Switch to MUI?\nYes\nNo", 30000, 2, [](int selected) -> void {
+                    static const char *optionsArray[] = {"Yes", "No"};
+                    showOverlayBanner("Switch to MUI?", 30000, optionsArray, 2, [](int selected) -> void {
                         if (selected == 0) {
                             config.display.displaymode = meshtastic_Config_DisplayConfig_DisplayMode_COLOR;
                             config.bluetooth.enabled = false;
@@ -1277,8 +1284,9 @@ int Screen::handleInputEvent(const InputEvent *event)
                     });
 #else
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.memory) {
+                    static const char *optionsArray[] = {"All Enabled", "Disabled", "Notifications", "System Only"};
                     showOverlayBanner(
-                        "Beeps Mode\nAll Enabled\nDisabled\nNotifications\nSystem Only", 30000, 4,
+                        "Beeps Mode", 30000, optionsArray, 4,
                         [](int selected) -> void {
                             config.device.buzzer_mode = (meshtastic_Config_DeviceConfig_BuzzerMode)selected;
                             service->reloadConfig(SEGMENT_CONFIG);
@@ -1287,8 +1295,9 @@ int Screen::handleInputEvent(const InputEvent *event)
 #endif
 #if HAS_GPS
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.gps && gps) {
+                    static const char *optionsArray[] = {"Back", "Enabled", "Disabled"};
                     showOverlayBanner(
-                        "Toggle GPS\nBack\nEnabled\nDisabled", 30000, 3,
+                        "Toggle GPS", 30000, optionsArray, 3,
                         [](int selected) -> void {
                             if (selected == 1) {
                                 config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
@@ -1306,25 +1315,39 @@ int Screen::handleInputEvent(const InputEvent *event)
                                                                                                      : 2); // set inital selection
 #endif
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.clock) {
-                    TZPicker();
+                    static const char *optionsArray[] = {"Back", "12-hour", "Timezone"};
+                    showOverlayBanner("Clock Menu", 30000, optionsArray, 3, [](int selected) -> void {
+                        if (selected == 1) {
+                            screen->menuQueue = screen->twelve_hour_picker;
+                            screen->setInterval(0);
+                            runASAP = true;
+                        } else if (selected == 2) {
+                            screen->menuQueue = screen->TZ_picker;
+                            screen->setInterval(0);
+                            runASAP = true;
+                        }
+                    });
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.lora) {
                     LoraRegionPicker();
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.textMessage &&
                            devicestate.rx_text_message.from) {
-                    const char *banner_message;
+                    static const char **optionsArrayPtr;
                     int options;
                     if (kb_found) {
-                        banner_message = "Message Action?\nBack\nDismiss\nReply via Preset\nReply via Freetext";
+                        const char *optionsArray[] = {"Back", "Dismiss", "Reply via Preset", "Reply via Freetext"};
+                        optionsArrayPtr = optionsArray;
                         options = 4;
                     } else {
-                        banner_message = "Message Action?\nBack\nDismiss\nReply via Preset";
+                        const char *optionsArray[] = {"Back", "Dismiss", "Reply via Preset"};
+                        optionsArrayPtr = optionsArray;
                         options = 3;
                     }
 #ifdef HAS_I2S
-                    banner_message = "Message Action?\nBack\nDismiss\nReply via Preset\nReply via Freetext\nRead Aloud";
+                    const char *optionsArray[] = {"Back", "Dismiss", "Reply via Preset", "Reply via Freetext", "Read Aloud"};
+                    optionsArrayPtr = optionsArray;
                     options = 5;
 #endif
-                    showOverlayBanner(banner_message, 30000, options, [](int selected) -> void {
+                    showOverlayBanner("Message Action?", 30000, optionsArrayPtr, options, [](int selected) -> void {
                         if (selected == 1) {
                             screen->dismissCurrentFrame();
                         } else if (selected == 2) {
@@ -1354,16 +1377,19 @@ int Screen::handleInputEvent(const InputEvent *event)
                 } else if (framesetInfo.positions.firstFavorite != 255 &&
                            this->ui->getUiState()->currentFrame >= framesetInfo.positions.firstFavorite &&
                            this->ui->getUiState()->currentFrame <= framesetInfo.positions.lastFavorite) {
-                    const char *banner_message;
                     int options;
+                    static const char **optionsArrayPtr;
+
                     if (kb_found) {
-                        banner_message = "Message Node?\nBack\nNew Preset Msg\nNew Freetext Msg";
+                        static const char *optionsArray[] = {"Back", "New Preset Msg", "New Freetext Msg"};
+                        optionsArrayPtr = optionsArray;
                         options = 3;
                     } else {
-                        banner_message = "Message Node?\nBack\nNew Preset Msg";
+                        static const char *optionsArray[] = {"Back", "New Preset Msg"};
+                        optionsArrayPtr = optionsArray;
                         options = 2;
                     }
-                    showOverlayBanner(banner_message, 30000, options, [](int selected) -> void {
+                    showOverlayBanner("Message Node?", 30000, optionsArrayPtr, options, [](int selected) -> void {
                         if (selected == 1) {
                             cannedMessageModule->LaunchWithDestination(graphics::UIRenderer::currentFavoriteNodeNum);
                         } else if (selected == 2) {
@@ -1404,12 +1430,33 @@ bool Screen::isOverlayBannerShowing()
 
 void Screen::LoraRegionPicker(uint32_t duration)
 {
+    static const char *optionsArray[] = {"Back",
+                                         "US",
+                                         "EU_433",
+                                         "EU_868",
+                                         "CN",
+                                         "JP",
+                                         "ANZ",
+                                         "KR",
+                                         "TW",
+                                         "RU",
+                                         "IN",
+                                         "NZ_865",
+                                         "TH",
+                                         "LORA_24",
+                                         "UA_433",
+                                         "UA_868",
+                                         "MY_433",
+                                         "MY_"
+                                         "919",
+                                         "SG_"
+                                         "923",
+                                         "PH_433",
+                                         "PH_868",
+                                         "PH_915",
+                                         "ANZ_433"};
     showOverlayBanner(
-        "Set the LoRa "
-        "region\nBack\nUS\nEU_433\nEU_868\nCN\nJP\nANZ\nKR\nTW\nRU\nIN\nNZ_865\nTH\nLORA_24\nUA_433\nUA_868\nMY_433\nMY_"
-        "919\nSG_"
-        "923\nPH_433\nPH_868\nPH_915\nANZ_433",
-        duration, 23,
+        "Set the LoRa region", duration, optionsArray, 23,
         [](int selected) -> void {
             if (selected != 0 && config.lora.region != _meshtastic_Config_LoRaConfig_RegionCode(selected)) {
                 config.lora.region = _meshtastic_Config_LoRaConfig_RegionCode(selected);
@@ -1445,51 +1492,98 @@ void Screen::LoraRegionPicker(uint32_t duration)
         0);
 }
 
+void Screen::TwelveHourPicker()
+{
+    static const char *optionsArray[] = {"Back", "12-hour", "24-hour"};
+    showOverlayBanner("Pick Timezone", 30000, optionsArray, 3, [](int selected) -> void {
+        if (selected == 0) {
+            return;
+        } else if (selected == 1) {
+            config.display.use_12h_clock = true;
+        } else {
+            config.display.use_12h_clock = false;
+        }
+        service->reloadConfig(SEGMENT_CONFIG);
+    });
+}
+
 void Screen::TZPicker()
 {
-    showOverlayBanner(
-        "Pick "
-        "Timezone\nBack\nUS/Hawaii\nUS/Alaska\nUS/Pacific\nUS/Mountain\nUS/Central\nUS/Eastern\nUTC\nEU/Western\nEU/"
-        "Central\nEU/Eastern\nAsia/Kolkata\nAsia/Hong_Kong\nAU/AWST\nAU/ACST\nAU/AEST\nPacific/NZ",
-        30000, 17, [](int selected) -> void {
-            if (selected == 1) { // Hawaii
-                strncpy(config.device.tzdef, "HST10", sizeof(config.device.tzdef));
-            } else if (selected == 2) { // Alaska
-                strncpy(config.device.tzdef, "AKST9AKDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
-            } else if (selected == 3) { // Pacific
-                strncpy(config.device.tzdef, "PST8PDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
-            } else if (selected == 4) { // Mountain
-                strncpy(config.device.tzdef, "MST7MDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
-            } else if (selected == 5) { // Central
-                strncpy(config.device.tzdef, "CST6CDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
-            } else if (selected == 6) { // Eastern
-                strncpy(config.device.tzdef, "EST5EDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
-            } else if (selected == 7) { // UTC
-                strncpy(config.device.tzdef, "UTC", sizeof(config.device.tzdef));
-            } else if (selected == 8) { // EU/Western
-                strncpy(config.device.tzdef, "GMT0BST,M3.5.0/1,M10.5.0", sizeof(config.device.tzdef));
-            } else if (selected == 9) { // EU/Central
-                strncpy(config.device.tzdef, "CET-1CEST,M3.5.0,M10.5.0/3", sizeof(config.device.tzdef));
-            } else if (selected == 10) { // EU/Eastern
-                strncpy(config.device.tzdef, "EET-2EEST,M3.5.0/3,M10.5.0/4", sizeof(config.device.tzdef));
-            } else if (selected == 11) { // Asia/Kolkata
-                strncpy(config.device.tzdef, "IST-5:30", sizeof(config.device.tzdef));
-            } else if (selected == 12) { // China
-                strncpy(config.device.tzdef, "HKT-8", sizeof(config.device.tzdef));
-            } else if (selected == 13) { // AU/AWST
-                strncpy(config.device.tzdef, "AWST-8", sizeof(config.device.tzdef));
-            } else if (selected == 14) { // AU/ACST
-                strncpy(config.device.tzdef, "ACST-9:30ACDT,M10.1.0,M4.1.0/3", sizeof(config.device.tzdef));
-            } else if (selected == 15) { // AU/AEST
-                strncpy(config.device.tzdef, "AEST-10AEDT,M10.1.0,M4.1.0/3", sizeof(config.device.tzdef));
-            } else if (selected == 16) { // NZ
-                strncpy(config.device.tzdef, "NZST-12NZDT,M9.5.0,M4.1.0/3", sizeof(config.device.tzdef));
-            }
-            if (selected != 0) {
-                setenv("TZ", config.device.tzdef, 1);
-                service->reloadConfig(SEGMENT_CONFIG);
-            }
-        });
+    static const char *optionsArray[] = {"Back",
+                                         "US/Hawaii",
+                                         "US/Alaska",
+                                         "US/Pacific",
+                                         "US/Mountain",
+                                         "US/Central",
+                                         "US/Eastern",
+                                         "UTC",
+                                         "EU/Western",
+                                         "EU/"
+                                         "Central",
+                                         "EU/Eastern",
+                                         "Asia/Kolkata",
+                                         "Asia/Hong_Kong",
+                                         "AU/AWST",
+                                         "AU/ACST",
+                                         "AU/AEST",
+                                         "Pacific/NZ"};
+    showOverlayBanner("Pick Timezone", 30000, optionsArray, 17, [](int selected) -> void {
+        if (selected == 1) { // Hawaii
+            strncpy(config.device.tzdef, "HST10", sizeof(config.device.tzdef));
+        } else if (selected == 2) { // Alaska
+            strncpy(config.device.tzdef, "AKST9AKDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
+        } else if (selected == 3) { // Pacific
+            strncpy(config.device.tzdef, "PST8PDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
+        } else if (selected == 4) { // Mountain
+            strncpy(config.device.tzdef, "MST7MDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
+        } else if (selected == 5) { // Central
+            strncpy(config.device.tzdef, "CST6CDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
+        } else if (selected == 6) { // Eastern
+            strncpy(config.device.tzdef, "EST5EDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
+        } else if (selected == 7) { // UTC
+            strncpy(config.device.tzdef, "UTC", sizeof(config.device.tzdef));
+        } else if (selected == 8) { // EU/Western
+            strncpy(config.device.tzdef, "GMT0BST,M3.5.0/1,M10.5.0", sizeof(config.device.tzdef));
+        } else if (selected == 9) { // EU/Central
+            strncpy(config.device.tzdef, "CET-1CEST,M3.5.0,M10.5.0/3", sizeof(config.device.tzdef));
+        } else if (selected == 10) { // EU/Eastern
+            strncpy(config.device.tzdef, "EET-2EEST,M3.5.0/3,M10.5.0/4", sizeof(config.device.tzdef));
+        } else if (selected == 11) { // Asia/Kolkata
+            strncpy(config.device.tzdef, "IST-5:30", sizeof(config.device.tzdef));
+        } else if (selected == 12) { // China
+            strncpy(config.device.tzdef, "HKT-8", sizeof(config.device.tzdef));
+        } else if (selected == 13) { // AU/AWST
+            strncpy(config.device.tzdef, "AWST-8", sizeof(config.device.tzdef));
+        } else if (selected == 14) { // AU/ACST
+            strncpy(config.device.tzdef, "ACST-9:30ACDT,M10.1.0,M4.1.0/3", sizeof(config.device.tzdef));
+        } else if (selected == 15) { // AU/AEST
+            strncpy(config.device.tzdef, "AEST-10AEDT,M10.1.0,M4.1.0/3", sizeof(config.device.tzdef));
+        } else if (selected == 16) { // NZ
+            strncpy(config.device.tzdef, "NZST-12NZDT,M9.5.0,M4.1.0/3", sizeof(config.device.tzdef));
+        }
+        if (selected != 0) {
+            setenv("TZ", config.device.tzdef, 1);
+            service->reloadConfig(SEGMENT_CONFIG);
+        }
+    });
+}
+
+void Screen::handleMenuSwitch()
+{
+    switch (menuQueue) {
+    case menu_none:
+        break;
+    case lora_picker:
+        LoraRegionPicker();
+        break;
+    case TZ_picker:
+        TZPicker();
+        break;
+    case twelve_hour_picker:
+        TwelveHourPicker();
+        break;
+    }
+    menuQueue = menu_none;
 }
 
 } // namespace graphics

@@ -201,6 +201,9 @@ class Screen : public concurrency::OSThread
     size_t frameCount = 0; // Total number of active frames
     ~Screen();
 
+    enum screenMenus { menu_none, lora_picker, TZ_picker, twelve_hour_picker };
+    screenMenus menuQueue = menu_none;
+
     // Which frame we want to be displayed, after we regen the frameset by calling setFrames
     enum FrameFocus : uint8_t {
         FOCUS_DEFAULT,  // No specific frame
@@ -285,8 +288,8 @@ class Screen : public concurrency::OSThread
         enqueueCmd(cmd);
     }
 
-    void showOverlayBanner(const char *message, uint32_t durationMs = 3000, uint8_t options = 0,
-                           std::function<void(int)> bannerCallback = NULL, int8_t InitialSelected = 0);
+    void showOverlayBanner(const char *message, uint32_t durationMs = 3000, const char **optionsArrayPtr = nullptr,
+                           uint8_t options = 0, std::function<void(int)> bannerCallback = NULL, int8_t InitialSelected = 0);
 
     void startFirmwareUpdateScreen()
     {
@@ -601,7 +604,9 @@ class Screen : public concurrency::OSThread
     void handleShowNextFrame();
     void handleShowPrevFrame();
     void handleStartFirmwareUpdateScreen();
+    void handleMenuSwitch();
     void TZPicker();
+    void TwelveHourPicker();
     void LoraRegionPicker(uint32_t duration = 30000);
 
     // Info collected by setFrames method.

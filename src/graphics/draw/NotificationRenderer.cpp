@@ -31,6 +31,7 @@ int8_t NotificationRenderer::curSelected = 0;
 char NotificationRenderer::alertBannerMessage[256] = {0};
 uint32_t NotificationRenderer::alertBannerUntil = 0;  // 0 is a special case meaning forever
 uint8_t NotificationRenderer::alertBannerOptions = 0; // last x lines are seelctable options
+const char **NotificationRenderer::optionsArrayPtr = nullptr;
 std::function<void(int)> NotificationRenderer::alertBannerCallback = NULL;
 bool NotificationRenderer::pauseBanner = false;
 
@@ -71,20 +72,20 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
     // Search the message to determine if we need the bell added
     bool needs_bell = (strstr(alertBannerMessage, "Alert Received") != nullptr);
 
-    uint8_t firstOption = 0;
     uint8_t firstOptionToShow = 0;
 
     // Setup font and alignment
     display->setFont(FONT_SMALL);
     display->setTextAlignment(TEXT_ALIGN_LEFT); // We will manually center per line
-    const int MAX_LINES = 24;
-
+    const int MAX_LINES = 5;
+    uint16_t optionWidths[alertBannerOptions] = {0};
     uint16_t maxWidth = 0;
     uint16_t arrowsWidth = display->getStringWidth(">  <", 4, true);
     uint16_t lineWidths[MAX_LINES] = {0};
     uint16_t lineLengths[MAX_LINES] = {0};
     char *lineStarts[MAX_LINES + 1];
     uint16_t lineCount = 0;
+    uint16_t totalCount = 0;
     char lineBuffer[40] = {0};
     // pointer to the terminating null
     char *alertEnd = alertBannerMessage + strnlen(alertBannerMessage, sizeof(alertBannerMessage));
@@ -101,14 +102,22 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
         if (lineWidths[lineCount] > maxWidth) {
             maxWidth = lineWidths[lineCount];
         }
-        if (alertBannerOptions > 0 && lineCount > 0 && lineWidths[lineCount] + arrowsWidth > maxWidth) {
-            maxWidth = lineWidths[lineCount] + arrowsWidth;
-        }
         lineCount++;
         // if we are doing a selection, add extra width for arrows
     }
 
     if (alertBannerOptions > 0) {
+        for (int i = 0; i < alertBannerOptions; i++) {
+            optionWidths[i] = display->getStringWidth(optionsArrayPtr[i], strlen(optionsArrayPtr[i]), true);
+            if (optionWidths[i] > maxWidth) {
+                maxWidth = optionWidths[i];
+            }
+            if (optionWidths[i] + arrowsWidth > maxWidth) {
+                maxWidth = optionWidths[i] + arrowsWidth;
+            }
+        }
+        totalCount = lineCount + alertBannerOptions;
+
         // respond to input
         if (inEvent == INPUT_BROKER_UP || inEvent == INPUT_BROKER_ALT_PRESS) {
             curSelected--;
@@ -124,15 +133,11 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
             curSelected = alertBannerOptions - 1;
         if (curSelected == alertBannerOptions)
             curSelected = 0;
-        // compare number of options to number of lines
-        if (lineCount < alertBannerOptions)
-            return;
-        firstOption = lineCount - alertBannerOptions;
         if (curSelected > 1 && alertBannerOptions > 3) {
-            firstOptionToShow = curSelected + firstOption - 1;
+            firstOptionToShow = curSelected - 1;
             // put the selected option in the middle
         } else {
-            firstOptionToShow = firstOption;
+            firstOptionToShow = 0;
         }
     } else { // not in an alert with a callback
         // TODO: check that at least a second has passed since the alert started
@@ -143,7 +148,6 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
     inEvent = INPUT_BROKER_NONE;
     if (alertBannerMessage[0] == '\0')
         return;
-
     // set width from longest line
     uint16_t boxWidth = padding * 2 + maxWidth;
     if (needs_bell) {
@@ -157,8 +161,8 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
     // calculate max lines on screen? for now it's 4
     // set height from line count
     uint16_t boxHeight;
-    if (lineCount <= 4) {
-        boxHeight = vPadding * 2 + lineCount * FONT_HEIGHT_SMALL + (lineCount - 1) * lineSpacing;
+    if (totalCount <= 4) {
+        boxHeight = vPadding * 2 + totalCount * FONT_HEIGHT_SMALL + (totalCount - 1) * lineSpacing;
     } else {
         boxHeight = vPadding * 2 + 4 * FONT_HEIGHT_SMALL + 4 * lineSpacing;
     }
@@ -185,37 +189,11 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
     int16_t lineY = boxTop + vPadding;
 
     for (int i = 0; i < lineCount; i++) {
-        // is this line selected?
-        // if so, start the buffer with -> and strncpy to the 4th location
-        if (i < lineCount - alertBannerOptions || alertBannerOptions == 0) {
-            strncpy(lineBuffer, lineStarts[i], 40);
-            if (lineLengths[i] > 39)
-                lineBuffer[39] = '\0';
-            else
-                lineBuffer[lineLengths[i]] = '\0';
-        } else if (i >= firstOptionToShow && i < firstOptionToShow + 3) {
-            if (i == curSelected + firstOption) {
-                if (lineLengths[i] > 35)
-                    lineLengths[i] = 35;
-                strncpy(lineBuffer, "> ", 3);
-                strncpy(lineBuffer + 2, lineStarts[i], 36);
-                strncpy(lineBuffer + lineLengths[i] + 2, " <", 3);
-                lineLengths[i] += 4;
-                lineWidths[i] += display->getStringWidth(">  <", 4, true);
-                if (lineLengths[i] > 35)
-                    lineBuffer[39] = '\0';
-                else
-                    lineBuffer[lineLengths[i]] = '\0';
-            } else {
-                strncpy(lineBuffer, lineStarts[i], 40);
-                if (lineLengths[i] > 39)
-                    lineBuffer[39] = '\0';
-                else
-                    lineBuffer[lineLengths[i]] = '\0';
-            }
-        } else { // add break for the additional lines
-            continue;
-        }
+        strncpy(lineBuffer, lineStarts[i], 40);
+        if (lineLengths[i] > 39)
+            lineBuffer[39] = '\0';
+        else
+            lineBuffer[lineLengths[i]] = '\0';
 
         int16_t textX = boxLeft + (boxWidth - lineWidths[i]) / 2;
 
@@ -227,6 +205,34 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
 
         display->drawString(textX, lineY, lineBuffer);
         lineY += FONT_HEIGHT_SMALL + lineSpacing;
+    }
+    for (int i = 0; i < alertBannerOptions; i++) {
+        // is this line selected?
+        // if so, start the buffer with -> and strncpy to the 4th location
+        if (i >= firstOptionToShow && i < firstOptionToShow + 3) {
+            if (i == curSelected) {
+                strncpy(lineBuffer, "> ", 3);
+                strncpy(lineBuffer + 2, optionsArrayPtr[i], 36);
+                strncpy(lineBuffer + strlen(optionsArrayPtr[i]) + 2, " <", 3);
+                optionWidths[i] += arrowsWidth;
+                lineBuffer[39] = '\0';
+            } else {
+                strncpy(lineBuffer, optionsArrayPtr[i], 40);
+                lineBuffer[39] = '\0';
+            }
+            int16_t textX = boxLeft + (boxWidth - optionWidths[i]) / 2;
+
+            if (needs_bell && i == 0) {
+                int bellY = lineY + (FONT_HEIGHT_SMALL - 8) / 2;
+                display->drawXbm(textX - 10, bellY, 8, 8, bell_alert);
+                display->drawXbm(textX + optionWidths[i] + 2, bellY, 8, 8, bell_alert);
+            }
+
+            display->drawString(textX, lineY, lineBuffer);
+            lineY += FONT_HEIGHT_SMALL + lineSpacing;
+        } else { // add break for the additional lines
+            continue;
+        }
     }
 }
 
