@@ -564,7 +564,16 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 }
                 break;
 
-            case 0x48: {
+            case 0x48: { // same as ADS1X15 main address
+
+                // ADS1X15 default config register is 8583h
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x01), 2);
+                if (registerValue == 0x8583) {
+                    type = ADS1X15;
+                    logFoundDevice("ADS1X15", (uint8_t)addr.address);
+                    break;
+                }
+
                 i2cBus->beginTransmission(addr.address);
                 uint8_t getInfo[] = {0x5A, 0xC0, 0x00, 0xFF, 0xFC};
                 uint8_t expectedInfo[] = {0xa5, 0xE0, 0x00, 0x3F, 0x19};
@@ -583,6 +592,17 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 }
                 break;
             }
+
+            case ADS1X15_ADDR_ALT1:
+            case ADS1X15_ADDR_ALT2:
+            case ADS1X15_ADDR_ALT3:
+                // ADS1X15 default config register is 8583h
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x01), 2);
+                if (registerValue == 0x8583) {
+                    type = ADS1X15;
+                    logFoundDevice("ADS1X15", (uint8_t)addr.address);
+                    break;
+                }
 
             default:
                 LOG_INFO("Device found at address 0x%x was not able to be enumerated", (uint8_t)addr.address);
