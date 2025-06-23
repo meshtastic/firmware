@@ -861,13 +861,11 @@ void Screen::setFrames(FrameFocus focus)
         indicatorIcons.push_back(icon_memory);
     }
 #if !defined(DISPLAY_CLOCK_FRAME)
+    LOG_INFO("Current state of graphics::ClockRenderer::digitalWatchFace is %s", graphics::ClockRenderer::digitalWatchFace);
     fsi.positions.clock = numframes;
-    normalFrames[numframes++] = graphics::ClockRenderer::drawDigitalClockFrame;
+    normalFrames[numframes++] = graphics::ClockRenderer::digitalWatchFace ? graphics::ClockRenderer::drawDigitalClockFrame
+                                                                          : &graphics::ClockRenderer::drawAnalogClockFrame;
     indicatorIcons.push_back(digital_icon_clock);
-
-    fsi.positions.clock = numframes;
-    normalFrames[numframes++] = graphics::ClockRenderer::drawAnalogClockFrame;
-    indicatorIcons.push_back(analog_icon_clock);
 #endif
 
     // We don't show the node info of our node (if we have it yet - we should)

@@ -5,7 +5,7 @@ namespace graphics
 class menuHandler
 {
   public:
-    enum screenMenus { menu_none, lora_picker, TZ_picker, twelve_hour_picker, clock_menu };
+    enum screenMenus { menu_none, lora_picker, TZ_picker, twelve_hour_picker, clock_face_picker, clock_menu };
     static screenMenus menuQueue;
 
     static void LoraRegionPicker(uint32_t duration = 30000);
@@ -13,6 +13,7 @@ class menuHandler
     static void clockMenu();
     static void TZPicker();
     static void TwelveHourPicker();
+    static void ClockFacePicker();
     static void messageResponseMenu();
 };
 

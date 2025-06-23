@@ -1,5 +1,6 @@
 #include "configuration.h"
 #if HAS_SCREEN
+#include "ClockRenderer.h"
 #include "MenuHandler.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
@@ -91,6 +92,23 @@ void menuHandler::TwelveHourPicker()
     });
 }
 
+void menuHandler::ClockFacePicker()
+{
+    static const char *optionsArray[] = {"Back", "Digital", "Analog"};
+    screen->showOverlayBanner("12/24 display?", 30000, optionsArray, 3, [](int selected) -> void {
+        if (selected == 0) {
+            menuHandler::menuQueue = menuHandler::clock_menu;
+        } else if (selected == 1) {
+            graphics::ClockRenderer::digitalWatchFace = true;
+            screen->setFrames(); // Causes the screens to redraw, but doesn't change the face
+        } else {
+            graphics::ClockRenderer::digitalWatchFace = false;
+            screen->setFrames(); // Causes the screens to redraw, but doesn't change the face
+        }
+        service->reloadConfig(SEGMENT_CONFIG);
+    });
+}
+
 void menuHandler::TZPicker()
 {
     static const char *optionsArray[] = {"Back",
@@ -156,9 +174,13 @@ void menuHandler::TZPicker()
 
 void menuHandler::clockMenu()
 {
-    static const char *optionsArray[] = {"Back", "12-hour", "Timezone"};
+    static const char *optionsArray[] = {"Back", "Clock Face", "12-hour", "Timezone"};
     screen->showOverlayBanner("Clock Menu", 30000, optionsArray, 3, [](int selected) -> void {
         if (selected == 1) {
+            menuHandler::menuQueue = menuHandler::clock_face_picker;
+            screen->setInterval(0);
+            runASAP = true;
+        } else if (selected == 1) {
             menuHandler::menuQueue = menuHandler::twelve_hour_picker;
             screen->setInterval(0);
             runASAP = true;
@@ -229,6 +251,9 @@ void menuHandler::handleMenuSwitch()
         break;
     case twelve_hour_picker:
         TwelveHourPicker();
+        break;
+    case clock_face_picker:
+        ClockFacePicker();
         break;
     case clock_menu:
         clockMenu();
