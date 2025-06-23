@@ -1315,65 +1315,12 @@ int Screen::handleInputEvent(const InputEvent *event)
                                                                                                      : 2); // set inital selection
 #endif
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.clock) {
-                    static const char *optionsArray[] = {"Back", "12-hour", "Timezone"};
-                    showOverlayBanner("Clock Menu", 30000, optionsArray, 3, [](int selected) -> void {
-                        if (selected == 1) {
-                            screen->menuQueue = screen->twelve_hour_picker;
-                            screen->setInterval(0);
-                            runASAP = true;
-                        } else if (selected == 2) {
-                            screen->menuQueue = screen->TZ_picker;
-                            screen->setInterval(0);
-                            runASAP = true;
-                        }
-                    });
+                    clockMenu();
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.lora) {
                     LoraRegionPicker();
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.textMessage &&
                            devicestate.rx_text_message.from) {
-                    static const char **optionsArrayPtr;
-                    int options;
-                    if (kb_found) {
-                        const char *optionsArray[] = {"Back", "Dismiss", "Reply via Preset", "Reply via Freetext"};
-                        optionsArrayPtr = optionsArray;
-                        options = 4;
-                    } else {
-                        const char *optionsArray[] = {"Back", "Dismiss", "Reply via Preset"};
-                        optionsArrayPtr = optionsArray;
-                        options = 3;
-                    }
-#ifdef HAS_I2S
-                    const char *optionsArray[] = {"Back", "Dismiss", "Reply via Preset", "Reply via Freetext", "Read Aloud"};
-                    optionsArrayPtr = optionsArray;
-                    options = 5;
-#endif
-                    showOverlayBanner("Message Action?", 30000, optionsArrayPtr, options, [](int selected) -> void {
-                        if (selected == 1) {
-                            screen->dismissCurrentFrame();
-                        } else if (selected == 2) {
-                            if (devicestate.rx_text_message.to == NODENUM_BROADCAST) {
-                                cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST,
-                                                                           devicestate.rx_text_message.channel);
-                            } else {
-                                cannedMessageModule->LaunchWithDestination(devicestate.rx_text_message.from);
-                            }
-                        } else if (selected == 3) {
-                            if (devicestate.rx_text_message.to == NODENUM_BROADCAST) {
-                                cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST,
-                                                                                   devicestate.rx_text_message.channel);
-                            } else {
-                                cannedMessageModule->LaunchFreetextWithDestination(devicestate.rx_text_message.from);
-                            }
-                        }
-#ifdef HAS_I2S
-                        else if (selected == 4) {
-                            const meshtastic_MeshPacket &mp = devicestate.rx_text_message;
-                            const char *msg = reinterpret_cast<const char *>(mp.decoded.payload.bytes);
-
-                            audioThread->readAloud(msg);
-                        }
-#endif
-                    });
+                    messageResponseMenu();
                 } else if (framesetInfo.positions.firstFavorite != 255 &&
                            this->ui->getUiState()->currentFrame >= framesetInfo.positions.firstFavorite &&
                            this->ui->getUiState()->currentFrame <= framesetInfo.positions.lastFavorite) {
@@ -1497,7 +1444,7 @@ void Screen::TwelveHourPicker()
     static const char *optionsArray[] = {"Back", "12-hour", "24-hour"};
     showOverlayBanner("12/24 display?", 30000, optionsArray, 3, [](int selected) -> void {
         if (selected == 0) {
-            return;
+            screen->menuQueue = screen->clock_menu;
         } else if (selected == 1) {
             config.display.use_12h_clock = true;
         } else {
@@ -1528,7 +1475,9 @@ void Screen::TZPicker()
                                          "AU/AEST",
                                          "Pacific/NZ"};
     showOverlayBanner("Pick Timezone", 30000, optionsArray, 17, [](int selected) -> void {
-        if (selected == 1) { // Hawaii
+        if (selected == 0) {
+            screen->menuQueue = screen->clock_menu;
+        } else if (selected == 1) { // Hawaii
             strncpy(config.device.tzdef, "HST10", sizeof(config.device.tzdef));
         } else if (selected == 2) { // Alaska
             strncpy(config.device.tzdef, "AKST9AKDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
@@ -1568,6 +1517,68 @@ void Screen::TZPicker()
     });
 }
 
+void Screen::clockMenu()
+{
+    static const char *optionsArray[] = {"Back", "12-hour", "Timezone"};
+    showOverlayBanner("Clock Menu", 30000, optionsArray, 3, [](int selected) -> void {
+        if (selected == 1) {
+            screen->menuQueue = screen->twelve_hour_picker;
+            screen->setInterval(0);
+            runASAP = true;
+        } else if (selected == 2) {
+            screen->menuQueue = screen->TZ_picker;
+            screen->setInterval(0);
+            runASAP = true;
+        }
+    });
+}
+
+void Screen::messageResponseMenu()
+{
+
+    static const char **optionsArrayPtr;
+    int options;
+    if (kb_found) {
+        const char *optionsArray[] = {"Back", "Dismiss", "Reply via Preset", "Reply via Freetext"};
+        optionsArrayPtr = optionsArray;
+        options = 4;
+    } else {
+        const char *optionsArray[] = {"Back", "Dismiss", "Reply via Preset"};
+        optionsArrayPtr = optionsArray;
+        options = 3;
+    }
+#ifdef HAS_I2S
+    const char *optionsArray[] = {"Back", "Dismiss", "Reply via Preset", "Reply via Freetext", "Read Aloud"};
+    optionsArrayPtr = optionsArray;
+    options = 5;
+#endif
+    showOverlayBanner("Message Action?", 30000, optionsArrayPtr, options, [](int selected) -> void {
+        if (selected == 1) {
+            screen->dismissCurrentFrame();
+        } else if (selected == 2) {
+            if (devicestate.rx_text_message.to == NODENUM_BROADCAST) {
+                cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST, devicestate.rx_text_message.channel);
+            } else {
+                cannedMessageModule->LaunchWithDestination(devicestate.rx_text_message.from);
+            }
+        } else if (selected == 3) {
+            if (devicestate.rx_text_message.to == NODENUM_BROADCAST) {
+                cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST, devicestate.rx_text_message.channel);
+            } else {
+                cannedMessageModule->LaunchFreetextWithDestination(devicestate.rx_text_message.from);
+            }
+        }
+#ifdef HAS_I2S
+        else if (selected == 4) {
+            const meshtastic_MeshPacket &mp = devicestate.rx_text_message;
+            const char *msg = reinterpret_cast<const char *>(mp.decoded.payload.bytes);
+
+            audioThread->readAloud(msg);
+        }
+#endif
+    });
+}
+
 void Screen::handleMenuSwitch()
 {
     switch (menuQueue) {
@@ -1581,6 +1592,9 @@ void Screen::handleMenuSwitch()
         break;
     case twelve_hour_picker:
         TwelveHourPicker();
+        break;
+    case clock_menu:
+        clockMenu();
         break;
     }
     menuQueue = menu_none;

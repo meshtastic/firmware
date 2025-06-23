@@ -201,7 +201,7 @@ class Screen : public concurrency::OSThread
     size_t frameCount = 0; // Total number of active frames
     ~Screen();
 
-    enum screenMenus { menu_none, lora_picker, TZ_picker, twelve_hour_picker };
+    enum screenMenus { menu_none, lora_picker, TZ_picker, twelve_hour_picker, clock_menu };
     screenMenus menuQueue = menu_none;
 
     // Which frame we want to be displayed, after we regen the frameset by calling setFrames
@@ -605,9 +605,11 @@ class Screen : public concurrency::OSThread
     void handleShowPrevFrame();
     void handleStartFirmwareUpdateScreen();
     void handleMenuSwitch();
+    void clockMenu();
     void TZPicker();
     void TwelveHourPicker();
     void LoraRegionPicker(uint32_t duration = 30000);
+    void messageResponseMenu();
 
     // Info collected by setFrames method.
     // Index location of specific frames.
