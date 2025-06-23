@@ -27,12 +27,20 @@ bool isAllowedPunctuation(char c)
 std::string sanitizeString(const std::string &input)
 {
     std::string output;
+    bool inReplacement = false;
+
     for (char c : input) {
         if (std::isalnum(static_cast<unsigned char>(c)) || isAllowedPunctuation(c)) {
             output += c;
+            inReplacement = false;
+        } else {
+            if (!inReplacement) {
+                output += '¿';
+                inReplacement = true;
+            }
         }
-        // Else: skip (don't append)
     }
+
     return output;
 }
 
