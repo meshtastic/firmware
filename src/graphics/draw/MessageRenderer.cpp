@@ -162,6 +162,190 @@ void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string 
     }
 }
 
+void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    // Clear the unread message indicator when viewing the message
+    hasUnreadMessage = false;
+
+    const meshtastic_MeshPacket &mp = devicestate.rx_text_message;
+    const char *msg = reinterpret_cast<const char *>(mp.decoded.payload.bytes);
+
+    display->clear();
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
+
+    const int navHeight = FONT_HEIGHT_SMALL;
+    const int scrollBottom = SCREEN_HEIGHT - navHeight;
+    const int usableHeight = scrollBottom;
+    const int textWidth = SCREEN_WIDTH;
+
+    bool isInverted = (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED);
+    bool isBold = config.display.heading_bold;
+
+    // === Set Title
+    const char *titleStr = "Messages";
+
+    // Check if we have more than an empty message to show
+    char messageBuf[237];
+    snprintf(messageBuf, sizeof(messageBuf), "%s", msg);
+    if (strlen(messageBuf) == 0) {
+        // === Header ===
+        graphics::drawCommonHeader(display, x, y, titleStr);
+        const char *messageString = "No messages";
+        int center_text = (SCREEN_WIDTH / 2) - (display->getStringWidth(messageString) / 2);
+        display->drawString(center_text, getTextPositions(display)[2], messageString);
+        return;
+    }
+
+    // === Header Construction ===
+    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(getFrom(&mp));
+    char headerStr[80];
+    const char *sender = "???";
+    if (node && node->has_user) {
+        if (SCREEN_WIDTH >= 200 && strlen(node->user.long_name) > 0) {
+            sender = node->user.long_name;
+        } else {
+            sender = node->user.short_name;
+        }
+    }
+    uint32_t seconds = sinceReceived(&mp), minutes = seconds / 60, hours = minutes / 60, days = hours / 24;
+    uint8_t timestampHours, timestampMinutes;
+    int32_t daysAgo;
+    bool useTimestamp = deltaToTimestamp(seconds, &timestampHours, &timestampMinutes, &daysAgo);
+
+    if (useTimestamp && minutes >= 15 && daysAgo == 0) {
+        std::string prefix = (daysAgo == 1 && SCREEN_WIDTH >= 200) ? "Yesterday" : "At";
+        if (config.display.use_12h_clock) {
+            bool isPM = timestampHours >= 12;
+            timestampHours = timestampHours % 12;
+            if (timestampHours == 0)
+                timestampHours = 12;
+            snprintf(headerStr, sizeof(headerStr), "%s %d:%02d%s from %s", prefix.c_str(), timestampHours, timestampMinutes,
+                     isPM ? "p" : "a", sender);
+        } else {
+            snprintf(headerStr, sizeof(headerStr), "%s %d:%02d from %s", prefix.c_str(), timestampHours, timestampMinutes,
+                     sender);
+        }
+    } else {
+        snprintf(headerStr, sizeof(headerStr), "%s ago from %s", UIRenderer::drawTimeDelta(days, hours, minutes, seconds).c_str(),
+                 sender);
+    }
+
+#ifndef EXCLUDE_EMOJI
+    // === Bounce animation setup ===
+    static uint32_t lastBounceTime = 0;
+    static int bounceY = 0;
+    const int bounceRange = 2;     // Max pixels to bounce up/down
+    const int bounceInterval = 10; // How quickly to change bounce direction (ms)
+
+    uint32_t currentTime = millis();
+    if (currentTime - lastBounceTime >= bounceInterval) {
+        lastBounceTime = currentTime;
+        bounceY = (bounceY + 1) % (bounceRange * 2);
+    }
+    for (int i = 0; i < numEmotes; ++i) {
+        const Emote &e = emotes[i];
+        if (strcmp(msg, e.label) == 0) {
+            int headerY = getTextPositions(display)[1]; // same as scrolling header line
+            display->drawString(x + 3, headerY, headerStr);
+            if (isInverted && isBold)
+                display->drawString(x + 4, headerY, headerStr);
+
+            // Draw separator (same as scroll version)
+            for (int separatorX = 0; separatorX <= (display->getStringWidth(headerStr) + 3); separatorX += 2) {
+                display->setPixel(separatorX, headerY + ((SCREEN_WIDTH > 128) ? 19 : 13));
+            }
+
+            // Center the emote below the header line + separator + nav
+            int remainingHeight = SCREEN_HEIGHT - (headerY + FONT_HEIGHT_SMALL) - navHeight;
+            int emoteY = headerY + FONT_HEIGHT_SMALL + (remainingHeight - e.height) / 2 + bounceY - bounceRange;
+            display->drawXbm((SCREEN_WIDTH - e.width) / 2, emoteY, e.width, e.height, e.bitmap);
+            return;
+        }
+    }
+#endif
+
+  // === Create a combined string for hashing ===
+  std::string cacheString =
+      std::string(messageBuf) + "||" + std::string(headerStr);
+
+  // === Use std::hash to generate the cache key ===
+  size_t currentKey = std::hash<std::string>{}(cacheString);
+
+  if (cachedKey != currentKey) {
+    // Cache miss - regenerate lines and heights
+    cachedLines = generateLines(display, headerStr, messageBuf, textWidth);
+    cachedHeights =
+        calculateLineHeights(display, cachedLines, emotes, numEmotes);
+    cachedKey = currentKey;
+  }
+
+  // === Calculate total height and scrolling parameters ===
+  int totalHeight = 0;
+  for (size_t i = 1; i < cachedHeights.size(); ++i) {
+    totalHeight += cachedHeights[i];
+  }
+  int usableScrollHeight =
+      usableHeight - cachedHeights[0]; // remove header height
+  int scrollStop =
+      std::max(0, totalHeight - usableScrollHeight + cachedHeights.back());
+
+  // === Scrolling logic ===
+  static float scrollY = 0.0f;
+  static uint32_t lastTime = 0, scrollStartDelay = 0, pauseStart = 0;
+  static bool waitingToReset = false, scrollStarted = false;
+
+  // === Smooth scrolling adjustment ===
+  uint32_t now = millis();
+  float delta = (now - lastTime) / 400.0f;
+  lastTime = now;
+
+  const float scrollSpeed = 2.0f; // pixels per second
+
+  // Delay scrolling start by 2 seconds
+  if (scrollStartDelay == 0)
+    scrollStartDelay = now;
+  if (!scrollStarted && now - scrollStartDelay > 2000)
+    scrollStarted = true;
+
+  if (totalHeight > usableScrollHeight) {
+    if (scrollStarted) {
+      if (!waitingToReset) {
+        scrollY += delta * scrollSpeed;
+        if (scrollY >= scrollStop) {
+          scrollY = scrollStop;
+          waitingToReset = true;
+          pauseStart = lastTime;
+        }
+      } else if (lastTime - pauseStart > 3000) {
+        scrollY = 0;
+        waitingToReset = false;
+        scrollStarted = false;
+        scrollStartDelay = lastTime;
+      }
+    }
+  } else {
+    scrollY = 0;
+  }
+
+  int scrollOffset = static_cast<int>(scrollY);
+  int yOffset = -scrollOffset + getTextPositions(display)[1];
+  for (int separatorX = 0;
+       separatorX <= (display->getStringWidth(headerStr) + 3);
+       separatorX += 2) {
+    display->setPixel(separatorX, yOffset + ((SCREEN_WIDTH > 128) ? 19 : 13));
+  }
+
+  // === Render visible lines ===
+  renderMessageContent(display, cachedLines, cachedHeights, x, yOffset,
+                       scrollBottom, scrollOffset, emotes, numEmotes,
+                       isInverted, isBold);
+
+  // Draw header at the end to sort out overlapping elements
+  graphics::drawCommonHeader(display, x, y, titleStr);
+}
+
+
 std::vector<std::string> generateLines(OLEDDisplay *display,
                                        const char *headerStr,
                                        const char *messageBuf, int textWidth) {
@@ -255,196 +439,7 @@ void renderMessageContent(OLEDDisplay *display,
   }
 }
 
-void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    // Clear the unread message indicator when viewing the message
-    hasUnreadMessage = false;
-
-    const meshtastic_MeshPacket &mp = devicestate.rx_text_message;
-    const char *msg = reinterpret_cast<const char *>(mp.decoded.payload.bytes);
-
-    display->clear();
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-    display->setFont(FONT_SMALL);
-
-    const int navHeight = FONT_HEIGHT_SMALL;
-    const int scrollBottom = SCREEN_HEIGHT - navHeight;
-    const int usableHeight = scrollBottom;
-    const int textWidth = SCREEN_WIDTH;
-
-    bool isInverted = (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED);
-    bool isBold = config.display.heading_bold;
-
-    // === Set Title
-    const char *titleStr = "Messages";
-
-    // Check if we have more than an empty message to show
-    char messageBuf[237];
-    snprintf(messageBuf, sizeof(messageBuf), "%s", msg);
-    if (strlen(messageBuf) == 0) {
-        // === Header ===
-        graphics::drawCommonHeader(display, x, y, titleStr);
-        const char *messageString = "No messages";
-        int center_text = (SCREEN_WIDTH / 2) - (display->getStringWidth(messageString) / 2);
-        display->drawString(center_text, getTextPositions(display)[2], messageString);
-        return;
-    }
-
-    // === Header Construction ===
-    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(getFrom(&mp));
-    char headerStr[80];
-    const char *sender = "???";
-    if (node && node->has_user) {
-        if (SCREEN_WIDTH >= 200 && strlen(node->user.long_name) > 0) {
-            sender = node->user.long_name;
-        } else {
-            sender = node->user.short_name;
-        }
-    }
-    uint32_t seconds = sinceReceived(&mp), minutes = seconds / 60, hours = minutes / 60, days = hours / 24;
-    uint8_t timestampHours, timestampMinutes;
-    int32_t daysAgo;
-    bool useTimestamp = deltaToTimestamp(seconds, &timestampHours, &timestampMinutes, &daysAgo);
-
-    if (useTimestamp && minutes >= 15 && daysAgo == 0) {
-        std::string prefix = (daysAgo == 1 && SCREEN_WIDTH >= 200) ? "Yesterday" : "At";
-        if (config.display.use_12h_clock) {
-            bool isPM = timestampHours >= 12;
-            timestampHours = timestampHours % 12;
-            if (timestampHours == 0)
-                timestampHours = 12;
-            snprintf(headerStr, sizeof(headerStr), "%s %d:%02d%s from %s", prefix.c_str(), timestampHours, timestampMinutes,
-                     isPM ? "p" : "a", sender);
-        } else {
-            snprintf(headerStr, sizeof(headerStr), "%s %d:%02d from %s", prefix.c_str(), timestampHours, timestampMinutes,
-                     sender);
-        }
-    } else {
-        snprintf(headerStr, sizeof(headerStr), "%s ago from %s", UIRenderer::drawTimeDelta(days, hours, minutes, seconds).c_str(),
-                 sender);
-    }
-
-#ifndef EXCLUDE_EMOJI
-    // === Bounce animation setup ===
-    static uint32_t lastBounceTime = 0;
-    static int bounceY = 0;
-    const int bounceRange = 2;     // Max pixels to bounce up/down
-    const int bounceInterval = 10; // How quickly to change bounce direction (ms)
-
-    uint32_t now = millis();
-    if (now - lastBounceTime >= bounceInterval) {
-        lastBounceTime = now;
-        bounceY = (bounceY + 1) % (bounceRange * 2);
-    }
-    for (int i = 0; i < numEmotes; ++i) {
-        const Emote &e = emotes[i];
-        if (strcmp(msg, e.label) == 0) {
-            int headerY = getTextPositions(display)[1]; // same as scrolling header line
-            display->drawString(x + 3, headerY, headerStr);
-            if (isInverted && isBold)
-                display->drawString(x + 4, headerY, headerStr);
-
-            // Draw separator (same as scroll version)
-            for (int separatorX = 0; separatorX <= (display->getStringWidth(headerStr) + 3); separatorX += 2) {
-                display->setPixel(separatorX, headerY + ((SCREEN_WIDTH > 128) ? 19 : 13));
-            }
-
-            // Center the emote below the header line + separator + nav
-            int remainingHeight = SCREEN_HEIGHT - (headerY + FONT_HEIGHT_SMALL) - navHeight;
-            int emoteY = headerY + FONT_HEIGHT_SMALL + (remainingHeight - e.height) / 2 + bounceY - bounceRange;
-            display->drawXbm((SCREEN_WIDTH - e.width) / 2, emoteY, e.width, e.height, e.bitmap);
-            return;
-        }
-    }
-#endif
-
-  // === Create a combined string for hashing ===
-  std::string cacheString =
-      std::string(messageBuf) + "||" + std::string(headerStr);
-
-  // === Use std::hash to generate the cache key ===
-  size_t currentKey = std::hash<std::string>{}(cacheString);
-
-  if (cachedKey != currentKey) {
-    // Cache miss - regenerate lines and heights
-    cachedLines = generateLines(display, headerStr, messageBuf, textWidth);
-    cachedHeights =
-        calculateLineHeights(display, cachedLines, emotes, numEmotes);
-    cachedKey = currentKey;
-
-    // Reset scroll position for new message
-    static float scrollY = 0.0f;
-    static bool waitingToReset = false, scrollStarted = false;
-    scrollY = 0.0f;
-    waitingToReset = false;
-    scrollStarted = false;
-  }
-
-  // === Calculate total height and scrolling parameters ===
-  int totalHeight = 0;
-  for (size_t i = 1; i < cachedHeights.size(); ++i) {
-    totalHeight += cachedHeights[i];
-  }
-  int usableScrollHeight =
-      usableHeight - cachedHeights[0]; // remove header height
-  int scrollStop =
-      std::max(0, totalHeight - usableScrollHeight + cachedHeights.back());
-
-  // === Scrolling logic ===
-  static float scrollY = 0.0f;
-  static uint32_t lastTime = 0, scrollStartDelay = 0, pauseStart = 0;
-  static bool waitingToReset = false, scrollStarted = false;
-
-  // === Smooth scrolling adjustment ===
-  uint32_t now = millis();
-  float delta = (now - lastTime) / 400.0f;
-  lastTime = now;
-
-  const float scrollSpeed = 2.0f; // pixels per second
-
-  // Delay scrolling start by 2 seconds
-  if (scrollStartDelay == 0)
-    scrollStartDelay = now;
-  if (!scrollStarted && now - scrollStartDelay > 2000)
-    scrollStarted = true;
-
-  if (totalHeight > usableScrollHeight) {
-    if (scrollStarted) {
-      if (!waitingToReset) {
-        scrollY += delta * scrollSpeed;
-        if (scrollY >= scrollStop) {
-          scrollY = scrollStop;
-          waitingToReset = true;
-          pauseStart = lastTime;
-        }
-      } else if (lastTime - pauseStart > 3000) {
-        scrollY = 0;
-        waitingToReset = false;
-        scrollStarted = false;
-        scrollStartDelay = lastTime;
-      }
-    }
-  } else {
-    scrollY = 0;
-  }
-
-  int scrollOffset = static_cast<int>(scrollY);
-  int yOffset = -scrollOffset + getTextPositions(display)[1];
-  for (int separatorX = 0;
-       separatorX <= (display->getStringWidth(headerStr) + 3);
-       separatorX += 2) {
-    display->setPixel(separatorX, yOffset + ((SCREEN_WIDTH > 128) ? 19 : 13));
-  }
-
-  // === Render visible lines ===
-  renderMessageContent(display, cachedLines, cachedHeights, x, yOffset,
-                       scrollBottom, scrollOffset, emotes, numEmotes,
-                       isInverted, isBold);
-
-  // Draw header at the end to sort out overlapping elements
-  graphics::drawCommonHeader(display, x, y, titleStr);
-}
-
 } // namespace MessageRenderer
 } // namespace graphics
 #endif
+
