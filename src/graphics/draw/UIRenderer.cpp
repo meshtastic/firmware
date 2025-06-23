@@ -18,6 +18,24 @@
 #include <RTC.h>
 #include <cstring>
 
+bool isAllowedPunctuation(char c)
+{
+    const std::string allowed = ".,!?;:-_()[]{}'\"@#$/\\&+=%~^ ";
+    return allowed.find(c) != std::string::npos;
+}
+
+std::string sanitizeString(const std::string &input)
+{
+    std::string output;
+    for (char c : input) {
+        if (std::isalnum(static_cast<unsigned char>(c)) || isAllowedPunctuation(c)) {
+            output += c;
+        }
+        // Else: skip (don't append)
+    }
+    return output;
+}
+
 #if !MESHTASTIC_EXCLUDE_GPS
 
 // External variables
@@ -296,7 +314,9 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
 
     // === 1. Long Name (always try to show first) ===
     const char *username = (node->has_user && node->user.long_name[0]) ? node->user.long_name : nullptr;
-    if (username && line < 5) {
+    if (username) {
+        std::string sanitized = sanitizeString(username); // Sanitize the incoming long_name just in case
+        username = sanitized.c_str();
         // Print node's long name (e.g. "Backpack Node")
         display->drawString(x, getTextPositions(display)[line++], username);
     }
@@ -676,12 +696,10 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     const char *longName = nullptr;
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     if (ourNode && ourNode->has_user && strlen(ourNode->user.long_name) > 0) {
-        longName = ourNode->user.long_name;
+        std::string sanitized = sanitizeString(ourNode->user.long_name);
+        longName = sanitized.c_str();
     }
-    uint8_t dmac[6];
     char shortnameble[35];
-    getMacAddr(dmac);
-    snprintf(screen->ourId, sizeof(screen->ourId), "%02x%02x", dmac[4], dmac[5]);
     snprintf(shortnameble, sizeof(shortnameble), "%s",
              graphics::UIRenderer::haveGlyphs(owner.short_name) ? owner.short_name : "");
 
