@@ -311,7 +311,7 @@ void menuHandler::compassNorthMenu()
             config.display.compass_north_top = false;
             service->reloadConfig(SEGMENT_CONFIG);
             screen->setFrames();
-        } else {
+        } else if (selected == 0) {
             menuQueue = position_base_menu;
         }
     });
