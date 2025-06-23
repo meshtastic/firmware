@@ -105,7 +105,6 @@ void menuHandler::ClockFacePicker()
             graphics::ClockRenderer::digitalWatchFace = false;
             screen->setFrames(); // Causes the screens to redraw, but doesn't change the face
         }
-        service->reloadConfig(SEGMENT_CONFIG);
     });
 }
 
@@ -175,7 +174,7 @@ void menuHandler::TZPicker()
 void menuHandler::clockMenu()
 {
     static const char *optionsArray[] = {"Back", "Clock Face", "12-hour", "Timezone"};
-    screen->showOverlayBanner("Clock Menu", 30000, optionsArray, 3, [](int selected) -> void {
+    screen->showOverlayBanner("Clock Menu", 30000, optionsArray, 4, [](int selected) -> void {
         if (selected == 1) {
             menuHandler::menuQueue = menuHandler::clock_face_picker;
             screen->setInterval(0);
@@ -198,16 +197,16 @@ void menuHandler::messageResponseMenu()
     static const char **optionsArrayPtr;
     int options;
     if (kb_found) {
-        const char *optionsArray[] = {"Back", "Dismiss", "Reply via Preset", "Reply via Freetext"};
+        static const char *optionsArray[] = {"Back", "Dismiss", "Reply via Preset", "Reply via Freetext"};
         optionsArrayPtr = optionsArray;
         options = 4;
     } else {
-        const char *optionsArray[] = {"Back", "Dismiss", "Reply via Preset"};
+        static const char *optionsArray[] = {"Back", "Dismiss", "Reply via Preset"};
         optionsArrayPtr = optionsArray;
         options = 3;
     }
 #ifdef HAS_I2S
-    const char *optionsArray[] = {"Back", "Dismiss", "Reply via Preset", "Reply via Freetext", "Read Aloud"};
+    static const char *optionsArray[] = {"Back", "Dismiss", "Reply via Preset", "Reply via Freetext", "Read Aloud"};
     optionsArrayPtr = optionsArray;
     options = 5;
 #endif

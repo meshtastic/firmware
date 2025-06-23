@@ -21,6 +21,7 @@ namespace graphics
 
 namespace ClockRenderer
 {
+bool digitalWatchFace = true;
 
 void drawSegmentedDisplayColon(OLEDDisplay *display, int x, int y, float scale)
 {
