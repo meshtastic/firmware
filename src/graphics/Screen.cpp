@@ -1495,7 +1495,7 @@ void Screen::LoraRegionPicker(uint32_t duration)
 void Screen::TwelveHourPicker()
 {
     static const char *optionsArray[] = {"Back", "12-hour", "24-hour"};
-    showOverlayBanner("Pick Timezone", 30000, optionsArray, 3, [](int selected) -> void {
+    showOverlayBanner("12/24 display?", 30000, optionsArray, 3, [](int selected) -> void {
         if (selected == 0) {
             return;
         } else if (selected == 1) {
