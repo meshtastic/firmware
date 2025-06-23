@@ -383,7 +383,19 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         int minute = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
         int second = (hms % SEC_PER_HOUR) % SEC_PER_MIN; // or hms % SEC_PER_MIN
 
-        hour = hour > 12 ? hour - 12 : hour;
+        bool isPM = hour >= 12;
+        if (config.display.use_12h_clock) {
+            bool isPM = hour >= 12;
+            display->setFont(FONT_SMALL);
+#ifndef T_WATCH_S3
+            if (isHighResolution) {
+                display->drawString(centerX - (display->getStringWidth(isPM ? "pm" : "am") / 2), centerY - 2, isPM ? "pm" : "am");
+            }
+#endif
+        }
+        hour %= 12;
+        if (hour == 0)
+            hour = 12;
 
         int16_t degreesPerHour = 30;
         int16_t degreesPerMinuteOrSecond = 6;
