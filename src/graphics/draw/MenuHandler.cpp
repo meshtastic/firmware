@@ -103,10 +103,10 @@ void menuHandler::ClockFacePicker()
             menuHandler::menuQueue = menuHandler::clock_menu;
         } else if (selected == 1) {
             graphics::ClockRenderer::digitalWatchFace = true;
-            screen->setFrames(); // Causes the screens to redraw, but doesn't change the face
+            screen->setFrames();
         } else {
             graphics::ClockRenderer::digitalWatchFace = false;
-            screen->setFrames(); // Causes the screens to redraw, but doesn't change the face
+            screen->setFrames();
         }
     });
 }
@@ -287,6 +287,36 @@ void menuHandler::favoriteBaseMenu()
     });
 }
 
+void menuHandler::positionBaseMenu()
+{
+    static const char *optionsArray[] = {"Back", "GPS Enable", "Compass Point"};
+    screen->showOverlayBanner("Position Options", 30000, optionsArray, 3, [](int selected) -> void {
+        if (selected == 1) {
+            menuQueue = gps_toggle_menu;
+        } else if (selected == 2) {
+            menuQueue = compass_point_north_menu;
+        }
+    });
+}
+
+void menuHandler::compassNorthMenu()
+{
+    static const char *optionsArray[] = {"Back", "Points Up", "Dynamic"};
+    screen->showOverlayBanner("Needle Direction?", 30000, optionsArray, 3, [](int selected) -> void {
+        if (selected == 1 && config.display.compass_north_top != true) {
+            config.display.compass_north_top = true;
+            service->reloadConfig(SEGMENT_CONFIG);
+            screen->setFrames();
+        } else if (selected == 2 && config.display.compass_north_top != false) {
+            config.display.compass_north_top = false;
+            service->reloadConfig(SEGMENT_CONFIG);
+            screen->setFrames();
+        } else {
+            menuQueue = position_base_menu;
+        }
+    });
+}
+
 void menuHandler::GPSToggleMenu()
 {
     static const char *optionsArray[] = {"Back", "Enabled", "Disabled"};
@@ -303,6 +333,8 @@ void menuHandler::GPSToggleMenu()
                 playGPSDisableBeep();
                 gps->disable();
                 service->reloadConfig(SEGMENT_CONFIG);
+            } else {
+                menuQueue = position_base_menu;
             }
         },
         config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED ? 1 : 2); // set inital selection
@@ -352,6 +384,15 @@ void menuHandler::handleMenuSwitch()
         break;
     case clock_menu:
         clockMenu();
+        break;
+    case position_base_menu:
+        positionBaseMenu();
+        break;
+    case gps_toggle_menu:
+        GPSToggleMenu();
+        break;
+    case compass_point_north_menu:
+        compassNorthMenu();
         break;
     }
     menuQueue = menu_none;

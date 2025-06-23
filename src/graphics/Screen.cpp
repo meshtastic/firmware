@@ -1259,7 +1259,7 @@ int Screen::handleInputEvent(const InputEvent *event)
 #endif
 #if HAS_GPS
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.gps && gps) {
-                    menuHandler::GPSToggleMenu();
+                    menuHandler::positionBaseMenu();
 #endif
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.clock) {
                     menuHandler::clockMenu();
