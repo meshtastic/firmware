@@ -15,6 +15,11 @@ class menuHandler
     static void TwelveHourPicker();
     static void ClockFacePicker();
     static void messageResponseMenu();
+    static void homeBaseMenu();
+    static void favoriteBaseMenu();
+    static void GPSToggleMenu();
+    static void BuzzerModeMenu();
+    static void switchToMUIMenu();
 };
 
 } // namespace graphics

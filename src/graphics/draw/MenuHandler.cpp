@@ -1,11 +1,14 @@
 #include "configuration.h"
 #if HAS_SCREEN
 #include "ClockRenderer.h"
+#include "GPS.h"
 #include "MenuHandler.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "buzz.h"
 #include "graphics/Screen.h"
+#include "graphics/draw/UIRenderer.h"
 #include "main.h"
 #include "modules/CannedMessageModule.h"
 
@@ -234,6 +237,99 @@ void menuHandler::messageResponseMenu()
             audioThread->readAloud(msg);
         }
 #endif
+    });
+}
+
+void menuHandler::homeBaseMenu()
+{
+    static const char **optionsArrayPtr;
+    int options;
+    static const char *optionsArray_kb[] = {"Back", "Sleep Screen", "New Preset Msg", "New Freetext Msg"};
+    static const char *optionsArray_nokb[] = {"Back", "Sleep Screen", "New Preset Msg"};
+    if (kb_found) {
+        optionsArrayPtr = optionsArray_kb;
+        options = 4;
+    } else {
+        optionsArrayPtr = optionsArray_nokb;
+        options = 3;
+    }
+    screen->showOverlayBanner("Action?", 30000, optionsArrayPtr, options, [](int selected) -> void {
+        if (selected == 1) {
+            screen->setOn(false);
+        } else if (selected == 2) {
+            cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST);
+        } else if (selected == 3) {
+            cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST);
+        }
+    });
+}
+
+void menuHandler::favoriteBaseMenu()
+{
+    int options;
+    static const char **optionsArrayPtr;
+
+    if (kb_found) {
+        static const char *optionsArray[] = {"Back", "New Preset Msg", "New Freetext Msg"};
+        optionsArrayPtr = optionsArray;
+        options = 3;
+    } else {
+        static const char *optionsArray[] = {"Back", "New Preset Msg"};
+        optionsArrayPtr = optionsArray;
+        options = 2;
+    }
+    screen->showOverlayBanner("Message Node?", 30000, optionsArrayPtr, options, [](int selected) -> void {
+        if (selected == 1) {
+            cannedMessageModule->LaunchWithDestination(graphics::UIRenderer::currentFavoriteNodeNum);
+        } else if (selected == 2) {
+            cannedMessageModule->LaunchFreetextWithDestination(graphics::UIRenderer::currentFavoriteNodeNum);
+        }
+    });
+}
+
+void menuHandler::GPSToggleMenu()
+{
+    static const char *optionsArray[] = {"Back", "Enabled", "Disabled"};
+    screen->showOverlayBanner(
+        "Toggle GPS", 30000, optionsArray, 3,
+        [](int selected) -> void {
+            if (selected == 1) {
+                config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
+                playGPSEnableBeep();
+                gps->enable();
+                service->reloadConfig(SEGMENT_CONFIG);
+            } else if (selected == 2) {
+                config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_DISABLED;
+                playGPSDisableBeep();
+                gps->disable();
+                service->reloadConfig(SEGMENT_CONFIG);
+            }
+        },
+        config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED ? 1 : 2); // set inital selection
+}
+
+void menuHandler::BuzzerModeMenu()
+{
+    static const char *optionsArray[] = {"All Enabled", "Disabled", "Notifications", "System Only"};
+    screen->showOverlayBanner(
+        "Beeps Mode", 30000, optionsArray, 4,
+        [](int selected) -> void {
+            config.device.buzzer_mode = (meshtastic_Config_DeviceConfig_BuzzerMode)selected;
+            service->reloadConfig(SEGMENT_CONFIG);
+        },
+        config.device.buzzer_mode);
+}
+
+void menuHandler::switchToMUIMenu()
+{
+    static const char *optionsArray[] = {"Yes", "No"};
+    screen->showOverlayBanner("Switch to MUI?", 30000, optionsArray, 2, [](int selected) -> void {
+        if (selected == 0) {
+            config.display.displaymode = meshtastic_Config_DisplayConfig_DisplayMode_COLOR;
+            config.bluetooth.enabled = false;
+            service->reloadConfig(SEGMENT_CONFIG);
+            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+        }
     });
 }
 
