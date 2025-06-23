@@ -26,7 +26,7 @@
 #ifndef SLEEP_TIME
 #define SLEEP_TIME 30
 #endif
-#if EXCLUDE_POWER_FSM
+#if MESHTASTIC_EXCLUDE_POWER_FSM
 FakeFsm powerFSM;
 void PowerFSM_setup(){};
 #else
