@@ -22,6 +22,13 @@
 #include "graphics/ScreenFonts.h"
 #include <Throttle.h>
 
+#if __has_include(<Adafruit_ADS1015.h>)
+#include "Sensor/ADS1X15Sensor.h"
+ADS1X15Sensor ads1x15Sensor;
+#else
+NullSensor ads1x15Sensor;
+#endif
+
 namespace graphics
 {
 extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *titleStr, bool battery_only);
@@ -74,6 +81,8 @@ int32_t PowerTelemetryModule::runOnce()
                 result = ina3221Sensor.isInitialized() ? 0 : ina3221Sensor.runOnce();
             if (max17048Sensor.hasSensor())
                 result = max17048Sensor.isInitialized() ? 0 : max17048Sensor.runOnce();
+            if (ads1x15Sensor.hasSensor())
+                result = ads1x15Sensor.isInitialized() ? 0 : ads1x15Sensor.runOnce();
         }
 
         // it's possible to have this module enabled, only for displaying values on the screen.
@@ -205,6 +214,8 @@ bool PowerTelemetryModule::getPowerTelemetry(meshtastic_Telemetry *m)
         valid = ina3221Sensor.getMetrics(m);
     if (max17048Sensor.hasSensor())
         valid = max17048Sensor.getMetrics(m);
+    if (ads1x15Sensor.hasSensor())
+        valid = ads1x15Sensor.getMetrics(m);
 #endif
 
     return valid;
@@ -246,9 +257,10 @@ bool PowerTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     m.time = getTime();
     if (getPowerTelemetry(&m)) {
         LOG_INFO("Send: ch1_voltage=%f, ch1_current=%f, ch2_voltage=%f, ch2_current=%f, "
-                 "ch3_voltage=%f, ch3_current=%f",
+                 "ch3_voltage=%f, ch3_current=%f, ch4_voltage=%f",
                  m.variant.power_metrics.ch1_voltage, m.variant.power_metrics.ch1_current, m.variant.power_metrics.ch2_voltage,
-                 m.variant.power_metrics.ch2_current, m.variant.power_metrics.ch3_voltage, m.variant.power_metrics.ch3_current);
+                 m.variant.power_metrics.ch2_current, m.variant.power_metrics.ch3_voltage, m.variant.power_metrics.ch3_current,
+                 m.variant.power_metrics.ch4_voltage);
 
         sensor_read_error_count = 0;
 
