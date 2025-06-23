@@ -26,7 +26,6 @@ void determineResolution(int16_t screenheight, int16_t screenwidth)
 bool hasUnreadMessage = false;
 bool isMuted = false;
 bool isHighResolution = false;
-determineResolution(160, 80);
 
 // === Internal State ===
 bool isBoltVisibleShared = true;
