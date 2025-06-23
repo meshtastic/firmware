@@ -116,7 +116,6 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
                 maxWidth = optionWidths[i] + arrowsWidth;
             }
         }
-        totalCount = lineCount + alertBannerOptions;
 
         // respond to input
         if (inEvent == INPUT_BROKER_UP || inEvent == INPUT_BROKER_ALT_PRESS) {
@@ -154,13 +153,14 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
         if (isHighResolution && boxWidth <= 150) {
             boxWidth += 26;
         }
-        if (SCREEN_WIDTH <= 128 && boxWidth <= 100) {
+        if (!isHighResolution && boxWidth <= 100) {
             boxWidth += 20;
         }
     }
     // calculate max lines on screen? for now it's 4
     // set height from line count
     uint16_t boxHeight;
+    totalCount = lineCount + alertBannerOptions;
     if (totalCount <= 4) {
         boxHeight = vPadding * 2 + totalCount * FONT_HEIGHT_SMALL + (totalCount - 1) * lineSpacing;
     } else {
