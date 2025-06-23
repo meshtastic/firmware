@@ -1253,13 +1253,13 @@ int Screen::handleInputEvent(const InputEvent *event)
                 if (this->ui->getUiState()->currentFrame == framesetInfo.positions.home) {
                     static const char **optionsArrayPtr;
                     int options;
+                    static const char *optionsArray_kb[] = {"Back", "Sleep Screen", "New Preset Msg", "New Freetext Msg"};
+                    static const char *optionsArray_nokb[] = {"Back", "Sleep Screen", "New Preset Msg"};
                     if (kb_found) {
-                        const char *optionsArray[] = {"Action?", "Back", "Sleep Screen", "New Preset Msg", "New Freetext Msg"};
-                        optionsArrayPtr = optionsArray;
+                        optionsArrayPtr = optionsArray_kb;
                         options = 4;
                     } else {
-                        const char *optionsArray[] = {"Action?", "Back", "Sleep Screen", "New Preset Msg"};
-                        optionsArrayPtr = optionsArray;
+                        optionsArrayPtr = optionsArray_nokb;
                         options = 3;
                     }
                     showOverlayBanner("Action?", 30000, optionsArrayPtr, options, [](int selected) -> void {
