@@ -154,7 +154,7 @@ int CannedMessageModule::splitConfiguredMessages()
 }
 void CannedMessageModule::drawHeader(OLEDDisplay *display, int16_t x, int16_t y, char *buffer)
 {
-    if (display->getWidth() > 128) {
+    if (graphics::isHighResolution) {
         if (this->dest == NODENUM_BROADCAST) {
             display->drawStringf(x, y, buffer, "To: Broadcast@%s", channels.getName(this->channel));
         } else {

@@ -393,7 +393,7 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     int line = 1;
 
     // === Set Title
-    const char *titleStr = (SCREEN_WIDTH > 128) ? "LoRa Info" : "LoRa";
+    const char *titleStr = (isHighResolution) ? "LoRa Info" : "LoRa";
 
     // === Header ===
     graphics::drawCommonHeader(display, x, y, titleStr);
@@ -444,12 +444,12 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     char chUtilPercentage[10];
     snprintf(chUtilPercentage, sizeof(chUtilPercentage), "%2.0f%%", airTime->channelUtilizationPercent());
 
-    int chUtil_x = (SCREEN_WIDTH > 128) ? display->getStringWidth(chUtil) + 10 : display->getStringWidth(chUtil) + 5;
+    int chUtil_x = (isHighResolution) ? display->getStringWidth(chUtil) + 10 : display->getStringWidth(chUtil) + 5;
     int chUtil_y = getTextPositions(display)[line] + 3;
 
-    int chutil_bar_width = (SCREEN_WIDTH > 128) ? 100 : 50;
-    int chutil_bar_height = (SCREEN_WIDTH > 128) ? 12 : 7;
-    int extraoffset = (SCREEN_WIDTH > 128) ? 6 : 3;
+    int chutil_bar_width = (isHighResolution) ? 100 : 50;
+    int chutil_bar_height = (isHighResolution) ? 12 : 7;
+    int extraoffset = (isHighResolution) ? 6 : 3;
     int chutil_percent = airTime->channelUtilizationPercent();
 
     int centerofscreen = SCREEN_WIDTH / 2;
@@ -516,7 +516,7 @@ void drawMemoryUsage(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     int line = 1;
     const int barHeight = 6;
     const int labelX = x;
-    const int barsOffset = (SCREEN_WIDTH > 128) ? 24 : 0;
+    const int barsOffset = (isHighResolution) ? 24 : 0;
     const int barX = x + 40 + barsOffset;
 
     auto drawUsageRow = [&](const char *label, uint32_t used, uint32_t total, bool isHeap = false) {
@@ -526,7 +526,7 @@ void drawMemoryUsage(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
         int percent = (used * 100) / total;
 
         char combinedStr[24];
-        if (SCREEN_WIDTH > 128) {
+        if (isHighResolution) {
             snprintf(combinedStr, sizeof(combinedStr), "%s%3d%%  %u/%uKB", (percent > 80) ? "! " : "", percent, used / 1024,
                      total / 1024);
         } else {

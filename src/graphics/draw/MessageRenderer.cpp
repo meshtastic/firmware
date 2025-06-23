@@ -247,7 +247,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
             // Draw separator (same as scroll version)
             for (int separatorX = 1; separatorX <= (display->getStringWidth(headerStr) + 2); separatorX += 2) {
-                display->setPixel(separatorX, headerY + ((SCREEN_WIDTH > 128) ? 19 : 13));
+                display->setPixel(separatorX, headerY + ((isHighResolution) ? 19 : 13));
             }
 
             // Center the emote below the header line + separator + nav
@@ -364,7 +364,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     int scrollOffset = static_cast<int>(scrollY);
     int yOffset = -scrollOffset + getTextPositions(display)[1];
     for (int separatorX = 1; separatorX <= (display->getStringWidth(headerStr) + 2); separatorX += 2) {
-        display->setPixel(separatorX, yOffset + ((SCREEN_WIDTH > 128) ? 19 : 13));
+        display->setPixel(separatorX, yOffset + ((isHighResolution) ? 19 : 13));
     }
 
     // === Render visible lines ===

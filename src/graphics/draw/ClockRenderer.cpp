@@ -230,7 +230,7 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
     float scale = 1.5;
 #else
     float scale = 0.75;
-    if (SCREEN_WIDTH > 128) {
+    if (isHighResolution) {
         scale = 1.5;
     }
 #endif
@@ -276,17 +276,17 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
 
     // draw seconds string
     display->setFont(FONT_SMALL);
-    int xOffset = (SCREEN_WIDTH > 128) ? 0 : -1;
+    int xOffset = (isHighResolution) ? 0 : -1;
     if (hour >= 10) {
-        xOffset += (SCREEN_WIDTH > 128) ? 32 : 18;
+        xOffset += (isHighResolution) ? 32 : 18;
     }
-    int yOffset = (SCREEN_WIDTH > 128) ? 3 : 1;
+    int yOffset = (isHighResolution) ? 3 : 1;
     if (config.display.use_12h_clock) {
         display->drawString(startingHourMinuteTextX + xOffset, (display->getHeight() - hourMinuteTextY) - yOffset - 2,
                             isPM ? "pm" : "am");
     }
 #ifndef USE_EINK
-    xOffset = (SCREEN_WIDTH > 128) ? 18 : 10;
+    xOffset = (isHighResolution) ? 18 : 10;
     display->drawString(startingHourMinuteTextX + timeStringWidth - xOffset, (display->getHeight() - hourMinuteTextY) - yOffset,
                         secondString);
 #endif

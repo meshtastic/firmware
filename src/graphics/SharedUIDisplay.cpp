@@ -16,7 +16,7 @@ void determineResolution(int16_t screenheight, int16_t screenwidth)
         isHighResolution = true;
     }
 
-    // Special case for Heltec 1.1
+    // Special case for Heltec Wireless Tracker v1.1
     if (screenwidth == 160 && screenheight == 80) {
         isHighResolution = false;
     }
@@ -69,8 +69,6 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
     const int screenW = display->getWidth();
     const int screenH = display->getHeight();
 
-    const bool useBigIcons = (screenW > 128);
-
     // === Inverted Header Background ===
     if (isInverted) {
         display->setColor(BLACK);
@@ -82,7 +80,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
         display->setColor(BLACK);
         display->fillRect(0, 0, screenW, highlightHeight + 2);
         display->setColor(WHITE);
-        if (screenW > 128) {
+        if (isHighResolution) {
             display->drawLine(0, 20, screenW, 20);
         } else {
             display->drawLine(0, 14, screenW, 14);
@@ -112,7 +110,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
     }
 #endif
 
-    bool useHorizontalBattery = (screenW > 128 && screenW >= screenH);
+    bool useHorizontalBattery = (isHighResolution && screenW >= screenH);
     const int textY = y + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
 
     // === Battery Icons ===
@@ -234,7 +232,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
                 display->drawXbm(iconX, iconY, mail_width, mail_height, mail);
             }
         } else if (isMuted) {
-            if (useBigIcons) {
+            if (isHighResolution) {
                 int iconX = iconRightEdge - mute_symbol_big_width;
                 int iconY = textY + (FONT_HEIGHT_SMALL - mute_symbol_big_height) / 2;
 
@@ -298,7 +296,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
                 display->drawXbm(iconX, iconY, mail_width, mail_height, mail);
             }
         } else if (isMuted) {
-            if (useBigIcons) {
+            if (isHighResolution) {
                 int iconX = iconRightEdge - mute_symbol_big_width;
                 int iconY = textY + (FONT_HEIGHT_SMALL - mute_symbol_big_height) / 2;
                 display->drawXbm(iconX, iconY, mute_symbol_big_width, mute_symbol_big_height, mute_symbol_big);

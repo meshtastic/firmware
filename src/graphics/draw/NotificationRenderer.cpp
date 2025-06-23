@@ -147,7 +147,7 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
     // set width from longest line
     uint16_t boxWidth = padding * 2 + maxWidth;
     if (needs_bell) {
-        if (SCREEN_WIDTH > 128 && boxWidth <= 150) {
+        if (isHighResolution && boxWidth <= 150) {
             boxWidth += 26;
         }
         if (SCREEN_WIDTH <= 128 && boxWidth <= 100) {

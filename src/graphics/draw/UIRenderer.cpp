@@ -38,7 +38,7 @@ NodeNum UIRenderer::currentFavoriteNodeNum = 0;
 void UIRenderer::drawGps(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSStatus *gps)
 {
     // Draw satellite image
-    if (SCREEN_WIDTH > 128) {
+    if (isHighResolution) {
         NodeListRenderer::drawScaledXBitmap16x16(x, y - 2, imgSatellite_width, imgSatellite_height, imgSatellite, display);
     } else {
         display->drawXbm(x + 1, y + 1, imgSatellite_width, imgSatellite_height, imgSatellite);
@@ -58,7 +58,7 @@ void UIRenderer::drawGps(OLEDDisplay *display, int16_t x, int16_t y, const mesht
     } else {
         snprintf(textString, sizeof(textString), "%u sats", gps->getNumSatellites());
     }
-    if (SCREEN_WIDTH > 128) {
+    if (isHighResolution) {
         display->drawString(x + 18, y, textString);
     } else {
         display->drawString(x + 11, y, textString);
@@ -221,19 +221,19 @@ void UIRenderer::drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const mes
      defined(ST7789_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(HX8357_CS)) &&                                  \
     !defined(DISPLAY_FORCE_SMALL_FONTS)
 
-    if (SCREEN_WIDTH > 128) {
+    if (isHighResolution) {
         NodeListRenderer::drawScaledXBitmap16x16(x, y - 1, 8, 8, imgUser, display);
     } else {
         display->drawFastImage(x, y + 3, 8, 8, imgUser);
     }
 #else
-    if (SCREEN_WIDTH > 128) {
+    if (isHighResolution) {
         NodeListRenderer::drawScaledXBitmap16x16(x, y - 1, 8, 8, imgUser, display);
     } else {
         display->drawFastImage(x, y + 1, 8, 8, imgUser);
     }
 #endif
-    int string_offset = (SCREEN_WIDTH > 128) ? 9 : 0;
+    int string_offset = (isHighResolution) ? 9 : 0;
     display->drawString(x + 10 + string_offset, y - 2, usersString);
 }
 
@@ -476,7 +476,7 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
             const int margin = 4;
 // --------- PATCH FOR EINK NAV BAR (ONLY CHANGE BELOW) -----------
 #if defined(USE_EINK)
-            const int iconSize = (SCREEN_WIDTH > 128) ? 16 : 8;
+            const int iconSize = (isHighResolution) ? 16 : 8;
             const int navBarHeight = iconSize + 6;
 #else
             const int navBarHeight = 0;
@@ -570,15 +570,15 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
         } else {
             displayLine = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "No GPS" : "GPS off";
         }
-        int yOffset = (SCREEN_WIDTH > 128) ? 3 : 1;
-        if (SCREEN_WIDTH > 128) {
+        int yOffset = (isHighResolution) ? 3 : 1;
+        if (isHighResolution) {
             NodeListRenderer::drawScaledXBitmap16x16(x, getTextPositions(display)[line] + yOffset - 5, imgSatellite_width,
                                                      imgSatellite_height, imgSatellite, display);
         } else {
             display->drawXbm(x + 1, getTextPositions(display)[line] + yOffset, imgSatellite_width, imgSatellite_height,
                              imgSatellite);
         }
-        int xOffset = (SCREEN_WIDTH > 128) ? 6 : 0;
+        int xOffset = (isHighResolution) ? 6 : 0;
         display->drawString(x + 11 + xOffset, getTextPositions(display)[line], displayLine);
     } else {
         UIRenderer::drawGps(display, 0, getTextPositions(display)[line], gpsStatus);
@@ -602,17 +602,17 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     char chUtilPercentage[10];
     snprintf(chUtilPercentage, sizeof(chUtilPercentage), "%2.0f%%", airTime->channelUtilizationPercent());
 
-    int chUtil_x = (SCREEN_WIDTH > 128) ? display->getStringWidth(chUtil) + 10 : display->getStringWidth(chUtil) + 5;
+    int chUtil_x = (isHighResolution) ? display->getStringWidth(chUtil) + 10 : display->getStringWidth(chUtil) + 5;
     int chUtil_y = getTextPositions(display)[line] + 3;
 
-    int chutil_bar_width = (SCREEN_WIDTH > 128) ? 100 : 50;
+    int chutil_bar_width = (isHighResolution) ? 100 : 50;
     if (!config.bluetooth.enabled) {
-        chutil_bar_width = (SCREEN_WIDTH > 128) ? 80 : 40;
+        chutil_bar_width = (isHighResolution) ? 80 : 40;
     }
-    int chutil_bar_height = (SCREEN_WIDTH > 128) ? 12 : 7;
-    int extraoffset = (SCREEN_WIDTH > 128) ? 6 : 3;
+    int chutil_bar_height = (isHighResolution) ? 12 : 7;
+    int extraoffset = (isHighResolution) ? 6 : 3;
     if (!config.bluetooth.enabled) {
-        extraoffset = (SCREEN_WIDTH > 128) ? 6 : 1;
+        extraoffset = (isHighResolution) ? 6 : 1;
     }
     int chutil_percent = airTime->channelUtilizationPercent();
 
@@ -672,7 +672,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     // === Fourth & Fifth Rows: Node Identity ===
     int textWidth = 0;
     int nameX = 0;
-    int yOffset = (SCREEN_WIDTH > 128) ? 0 : 5;
+    int yOffset = (isHighResolution) ? 0 : 5;
     const char *longName = nullptr;
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     if (ourNode && ourNode->has_user && strlen(ourNode->user.long_name) > 0) {
@@ -920,15 +920,15 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
         } else {
             displayLine = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "No GPS" : "GPS off";
         }
-        int yOffset = (SCREEN_WIDTH > 128) ? 3 : 1;
-        if (SCREEN_WIDTH > 128) {
+        int yOffset = (isHighResolution) ? 3 : 1;
+        if (isHighResolution) {
             NodeListRenderer::drawScaledXBitmap16x16(x, getTextPositions(display)[line] + yOffset - 5, imgSatellite_width,
                                                      imgSatellite_height, imgSatellite, display);
         } else {
             display->drawXbm(x + 1, getTextPositions(display)[line] + yOffset, imgSatellite_width, imgSatellite_height,
                              imgSatellite);
         }
-        int xOffset = (SCREEN_WIDTH > 128) ? 6 : 0;
+        int xOffset = (isHighResolution) ? 6 : 0;
         display->drawString(x + 11 + xOffset, getTextPositions(display)[line++], displayLine);
     } else {
         UIRenderer::drawGps(display, 0, getTextPositions(display)[line++], gpsStatus);
@@ -1141,10 +1141,9 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
         lastFrameChangeTime = millis();
     }
 
-    const bool useBigIcons = (SCREEN_WIDTH > 128);
-    const int iconSize = useBigIcons ? 16 : 8;
-    const int spacing = useBigIcons ? 8 : 4;
-    const int bigOffset = useBigIcons ? 1 : 0;
+    const int iconSize = isHighResolution ? 16 : 8;
+    const int spacing = isHighResolution ? 8 : 4;
+    const int bigOffset = isHighResolution ? 1 : 0;
 
     const size_t totalIcons = screen->indicatorIcons.size();
     if (totalIcons == 0)
@@ -1191,7 +1190,7 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
             display->setColor(BLACK);
         }
 
-        if (useBigIcons) {
+        if (isHighResolution) {
             NodeListRenderer::drawScaledXBitmap16x16(x, y, 8, 8, icon, display);
         } else {
             display->drawXbm(x, y, iconSize, iconSize, icon);
