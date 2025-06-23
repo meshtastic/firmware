@@ -95,7 +95,7 @@ void menuHandler::TwelveHourPicker()
 void menuHandler::ClockFacePicker()
 {
     static const char *optionsArray[] = {"Back", "Digital", "Analog"};
-    screen->showOverlayBanner("12/24 display?", 30000, optionsArray, 3, [](int selected) -> void {
+    screen->showOverlayBanner("Which Face?", 30000, optionsArray, 3, [](int selected) -> void {
         if (selected == 0) {
             menuHandler::menuQueue = menuHandler::clock_menu;
         } else if (selected == 1) {
