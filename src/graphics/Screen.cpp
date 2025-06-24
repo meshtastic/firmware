@@ -930,6 +930,11 @@ void Screen::setFrames(FrameFocus focus)
         // If no module requested focus, will show the first frame instead
         ui->switchToFrame(fsi.positions.focusedModule);
         break;
+    case FOCUS_CLOCK:
+        // Whichever frame was marked by MeshModule::requestFocus(), if any
+        // If no module requested focus, will show the first frame instead
+        ui->switchToFrame(fsi.positions.clock);
+        break;
 
     case FOCUS_PRESERVE:
         //  No more adjustment — force stay on same index

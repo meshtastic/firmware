@@ -24,6 +24,7 @@ class Screen
         FOCUS_FAULT,
         FOCUS_TEXTMESSAGE,
         FOCUS_MODULE, // Note: target module should call requestFocus(), otherwise no info about which module to focus
+        FOCUS_CLOCK,
     };
 
     explicit Screen(ScanI2C::DeviceAddress, meshtastic_Config_DisplayConfig_OledType, OLEDDISPLAY_GEOMETRY);
@@ -208,6 +209,7 @@ class Screen : public concurrency::OSThread
         FOCUS_FAULT,
         FOCUS_TEXTMESSAGE,
         FOCUS_MODULE, // Note: target module should call requestFocus(), otherwise no info about which module to focus
+        FOCUS_CLOCK,
     };
 
     // Regenerate the normal set of frames, focusing a specific frame if requested

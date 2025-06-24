@@ -104,10 +104,10 @@ void menuHandler::ClockFacePicker()
             menuHandler::menuQueue = menuHandler::clock_menu;
         } else if (selected == 1) {
             graphics::ClockRenderer::digitalWatchFace = true;
-            screen->setFrames();
+            screen->setFrames(Screen::FOCUS_CLOCK);
         } else {
             graphics::ClockRenderer::digitalWatchFace = false;
-            screen->setFrames();
+            screen->setFrames(Screen::FOCUS_CLOCK);
         }
     });
 }
