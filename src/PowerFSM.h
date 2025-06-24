@@ -30,11 +30,12 @@
 #define EVENT_RADIO_INTERRUPT 18
 #define EVENT_WEB_REQUEST 19
 
-#if defined(ARCH_ESP32) && !defined(WAKE_TIME_MS)
+#ifdef ARCH_ESP32
 #ifdef CONFIG_FREERTOS_USE_TICKLESS_IDLE
+#define DYNAMIC_LIGHT_SLEEP
 #define WAKE_TIME_MS 500
 #else
-#define WAKE_TIME_MS Default::getConfiguredOrDefaultMs(config.power.min_wake_secs, default_min_wake_secs)
+#define WAKE_TIME_MS (Default::getConfiguredOrDefaultMs(config.power.min_wake_secs, default_min_wake_secs))
 #endif
 #endif
 
@@ -61,7 +62,7 @@ void PowerFSM_setup();
 #else
 #include <Fsm.h>
 extern Fsm powerFSM;
-extern State stateON, statePOWER, stateSERIAL, stateDARK, stateNB, stateLS;
+extern State stateON, statePOWER, stateSERIAL, stateDARK, stateLS;
 
 void PowerFSM_setup();
 #endif

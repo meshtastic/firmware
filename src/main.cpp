@@ -1438,10 +1438,14 @@ void setup()
 #endif
 
 #ifndef ARCH_PORTDUINO
-
-        // Initialize Wifi
 #if HAS_WIFI
+    // Initialize Wifi
     initWifi();
+#endif
+
+#if HAS_BLUETOOTH
+    // Enable Bluetooth
+    setBluetoothEnable(true);
 #endif
 
 #if HAS_ETHERNET
