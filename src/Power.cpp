@@ -1040,12 +1040,20 @@ int32_t Power::runOnce()
 #ifdef ARCH_ESP32
 int Power::beforeLightSleep(void *unused)
 {
-    setInterval(config.power.ls_secs * 1000UL);
+    // ensure we won't run the thread when light sleeping
+    unsigned long interval = config.power.ls_secs;
+
+    if (interval < 20) {
+        interval = 20;
+    }
+
+    setInterval(interval * 1000UL);
     return 0;
 }
 
 int Power::afterLightSleep(esp_sleep_wakeup_cause_t cause)
 {
+    // restore default thread interval after light sleep
     setInterval(20 * 1000UL);
     return 0;
 }
