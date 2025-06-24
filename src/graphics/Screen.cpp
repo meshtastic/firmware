@@ -827,22 +827,27 @@ void Screen::setFrames(FrameFocus focus)
     indicatorIcons.push_back(icon_mail);
 
 #ifndef USE_EINK
+    fsi.positions.nodelist = numframes;
     normalFrames[numframes++] = graphics::NodeListRenderer::drawDynamicNodeListScreen;
     indicatorIcons.push_back(icon_nodes);
 #endif
 
 // Show detailed node views only on E-Ink builds
 #ifdef USE_EINK
+    fsi.positions.nodelist_lastheard = numframes;
     normalFrames[numframes++] = graphics::NodeListRenderer::drawLastHeardScreen;
     indicatorIcons.push_back(icon_nodes);
 
+    fsi.positions.nodelist_hopsignal = numframes;
     normalFrames[numframes++] = graphics::NodeListRenderer::drawHopSignalScreen;
     indicatorIcons.push_back(icon_signal);
 
+    fsi.positions.nodelist_distance = numframes;
     normalFrames[numframes++] = graphics::NodeListRenderer::drawDistanceScreen;
     indicatorIcons.push_back(icon_distance);
 #endif
 #if HAS_GPS
+    fsi.positions.nodelist_bearings = numframes;
     normalFrames[numframes++] = graphics::NodeListRenderer::drawNodeListWithCompasses;
     indicatorIcons.push_back(icon_list);
 
@@ -1272,6 +1277,13 @@ int Screen::handleInputEvent(const InputEvent *event)
                            this->ui->getUiState()->currentFrame >= framesetInfo.positions.firstFavorite &&
                            this->ui->getUiState()->currentFrame <= framesetInfo.positions.lastFavorite) {
                     menuHandler::favoriteBaseMenu();
+                } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist ||
+                           this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_lastheard ||
+                           this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_hopsignal ||
+                           this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_distance ||
+                           this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_hopsignal ||
+                           this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_bearings) {
+                    menuHandler::nodeListMenu();
                 }
             } else if (event->inputEvent == INPUT_BROKER_BACK) {
                 showPrevFrame();

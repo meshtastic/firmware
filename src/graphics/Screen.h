@@ -609,7 +609,6 @@ class Screen : public concurrency::OSThread
     struct FramesetInfo {
         struct FramePositions {
             uint8_t fault = 255;
-            uint8_t textMessage = 255;
             uint8_t waypoint = 255;
             uint8_t focusedModule = 255;
             uint8_t log = 255;
@@ -619,6 +618,12 @@ class Screen : public concurrency::OSThread
             uint8_t memory = 255;
             uint8_t gps = 255;
             uint8_t home = 255;
+            uint8_t textMessage = 255;
+            uint8_t nodelist = 255;
+            uint8_t nodelist_lastheard = 255;
+            uint8_t nodelist_hopsignal = 255;
+            uint8_t nodelist_distance = 255;
+            uint8_t nodelist_bearings = 255;
             uint8_t clock = 255;
             uint8_t firstFavorite = 255;
             uint8_t lastFavorite = 255;

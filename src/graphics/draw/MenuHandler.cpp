@@ -10,6 +10,7 @@
 #include "graphics/Screen.h"
 #include "graphics/draw/UIRenderer.h"
 #include "main.h"
+#include "modules/AdminModule.h"
 #include "modules/CannedMessageModule.h"
 
 namespace graphics
@@ -310,6 +311,29 @@ void menuHandler::positionBaseMenu()
     });
 }
 
+void menuHandler::nodeListMenu()
+{
+    static const char *optionsArray[] = {"Back", "Reset NodeDB"};
+    screen->showOverlayBanner("Node Options", 30000, optionsArray, 2, [](int selected) -> void {
+        if (selected == 1) {
+            menuQueue = reset_node_db_menu;
+        }
+    });
+}
+
+void menuHandler::resetNodeDBMenu()
+{
+    static const char *optionsArray[] = {"Back", "Confirm"};
+    screen->showOverlayBanner("Confirm Reset NodeDB", 30000, optionsArray, 2, [](int selected) -> void {
+        if (selected == 1) {
+            disableBluetooth();
+            LOG_INFO("Initiate node-db reset");
+            nodeDB->resetNodes();
+            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+        }
+    });
+}
+
 void menuHandler::compassNorthMenu()
 {
     static const char *optionsArray[] = {"Back", "Points Up", "Dynamic"};
@@ -404,6 +428,9 @@ void menuHandler::handleMenuSwitch()
         break;
     case compass_point_north_menu:
         compassNorthMenu();
+        break;
+    case reset_node_db_menu:
+        resetNodeDBMenu();
         break;
     }
     menuQueue = menu_none;
