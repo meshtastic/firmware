@@ -500,9 +500,10 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
         // draw minute hand
         display->drawLine(centerX, centerY, minuteX, minuteY);
-
+#ifndef USE_EINK
         // draw second hand
         display->drawLine(centerX, centerY, secondX, secondY);
+#endif
     }
 }
 
