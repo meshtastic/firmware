@@ -56,7 +56,7 @@ void PowerFSM_setup();
 #else
 #include <Fsm.h>
 extern Fsm powerFSM;
-extern State stateON, statePOWER, stateSERIAL, stateDARK, stateNB, stateLS;
+extern State stateON, statePOWER, stateSERIAL, stateDARK, stateLS;
 
 void PowerFSM_setup();
 #endif
