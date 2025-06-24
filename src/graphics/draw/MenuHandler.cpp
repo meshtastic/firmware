@@ -83,7 +83,7 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
 void menuHandler::TwelveHourPicker()
 {
     static const char *optionsArray[] = {"Back", "12-hour", "24-hour"};
-    screen->showOverlayBanner("12/24 display?", 30000, optionsArray, 3, [](int selected) -> void {
+    screen->showOverlayBanner("12- or 24-hour display?", 30000, optionsArray, 3, [](int selected) -> void {
         if (selected == 0) {
             menuHandler::menuQueue = menuHandler::clock_menu;
         } else if (selected == 1) {
@@ -118,6 +118,7 @@ void menuHandler::TZPicker()
                                          "US/Alaska",
                                          "US/Pacific",
                                          "US/Mountain",
+                                         "US/Arizona",
                                          "US/Central",
                                          "US/Eastern",
                                          "UTC",
@@ -142,29 +143,31 @@ void menuHandler::TZPicker()
             strncpy(config.device.tzdef, "PST8PDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
         } else if (selected == 4) { // Mountain
             strncpy(config.device.tzdef, "MST7MDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
-        } else if (selected == 5) { // Central
+        } else if (selected == 5) { // Arizona
+            strncpy(config.device.tzdef, "MST7", sizeof(config.device.tzdef));
+        } else if (selected == 6) { // Central
             strncpy(config.device.tzdef, "CST6CDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
-        } else if (selected == 6) { // Eastern
+        } else if (selected == 7) { // Eastern
             strncpy(config.device.tzdef, "EST5EDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
-        } else if (selected == 7) { // UTC
+        } else if (selected == 8) { // UTC
             strncpy(config.device.tzdef, "UTC", sizeof(config.device.tzdef));
-        } else if (selected == 8) { // EU/Western
+        } else if (selected == 9) { // EU/Western
             strncpy(config.device.tzdef, "GMT0BST,M3.5.0/1,M10.5.0", sizeof(config.device.tzdef));
-        } else if (selected == 9) { // EU/Central
+        } else if (selected == 10) { // EU/Central
             strncpy(config.device.tzdef, "CET-1CEST,M3.5.0,M10.5.0/3", sizeof(config.device.tzdef));
-        } else if (selected == 10) { // EU/Eastern
+        } else if (selected == 11) { // EU/Eastern
             strncpy(config.device.tzdef, "EET-2EEST,M3.5.0/3,M10.5.0/4", sizeof(config.device.tzdef));
-        } else if (selected == 11) { // Asia/Kolkata
+        } else if (selected == 12) { // Asia/Kolkata
             strncpy(config.device.tzdef, "IST-5:30", sizeof(config.device.tzdef));
-        } else if (selected == 12) { // China
+        } else if (selected == 13) { // China
             strncpy(config.device.tzdef, "HKT-8", sizeof(config.device.tzdef));
-        } else if (selected == 13) { // AU/AWST
+        } else if (selected == 14) { // AU/AWST
             strncpy(config.device.tzdef, "AWST-8", sizeof(config.device.tzdef));
-        } else if (selected == 14) { // AU/ACST
+        } else if (selected == 15) { // AU/ACST
             strncpy(config.device.tzdef, "ACST-9:30ACDT,M10.1.0,M4.1.0/3", sizeof(config.device.tzdef));
-        } else if (selected == 15) { // AU/AEST
+        } else if (selected == 16) { // AU/AEST
             strncpy(config.device.tzdef, "AEST-10AEDT,M10.1.0,M4.1.0/3", sizeof(config.device.tzdef));
-        } else if (selected == 16) { // NZ
+        } else if (selected == 17) { // NZ
             strncpy(config.device.tzdef, "NZST-12NZDT,M9.5.0,M4.1.0/3", sizeof(config.device.tzdef));
         }
         if (selected != 0) {
@@ -176,7 +179,7 @@ void menuHandler::TZPicker()
 
 void menuHandler::clockMenu()
 {
-    static const char *optionsArray[] = {"Back", "Clock Face", "12-hour", "Timezone"};
+    static const char *optionsArray[] = {"Back", "Clock Face", "12- or 24-hour", "Timezone"};
     screen->showOverlayBanner("Clock Menu", 30000, optionsArray, 4, [](int selected) -> void {
         if (selected == 1) {
             menuHandler::menuQueue = menuHandler::clock_face_picker;
