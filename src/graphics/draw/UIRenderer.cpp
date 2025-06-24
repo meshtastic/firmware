@@ -702,6 +702,8 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     int nameX = 0;
     int yOffset = (isHighResolution) ? 0 : 5;
     const char *longName = nullptr;
+    std::string sanitized;
+
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     if (ourNode && ourNode->has_user && strlen(ourNode->user.long_name) > 0) {
         std::string sanitized = sanitizeString(ourNode->user.long_name);
@@ -1199,11 +1201,11 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
 
     if (!navBarVisible && navBarPrevVisible) {
         EINK_ADD_FRAMEFLAG(display, DEMAND_FAST); // Fast refresh when hiding nav bar
-        navBarLastShown = millis(); // Mark when it disappeared
+        navBarLastShown = millis();               // Mark when it disappeared
     }
 
     if (!navBarVisible && navBarLastShown != 0 && !cosmeticRefreshDone) {
-        if (millis() - navBarLastShown > 10000) { // 10s after hidden
+        if (millis() - navBarLastShown > 10000) {  // 10s after hidden
             EINK_ADD_FRAMEFLAG(display, COSMETIC); // One-time ghost cleanup
             cosmeticRefreshDone = true;
         }

@@ -249,11 +249,11 @@ void menuHandler::homeBaseMenu()
     static const char **optionsArrayPtr;
 
     if (kb_found) {
-        static const char *optionsArray[] = {"Back", "Sleep Screen", "New Preset Msg", "New Freetext Msg"};
+        static const char *optionsArray[] = {"Back", "Sleep Screen", "Send Adhoc Ping", "New Preset Msg", "New Freetext Msg"};
         optionsArrayPtr = optionsArray;
         options = 4;
     } else {
-        static const char *optionsArray[] = {"Back", "Sleep Screen", "New Preset Msg"};
+        static const char *optionsArray[] = {"Back", "Sleep Screen", "Send Adhoc Ping", "New Preset Msg"};
         optionsArrayPtr = optionsArray;
         options = 3;
     }
@@ -261,8 +261,15 @@ void menuHandler::homeBaseMenu()
         if (selected == 1) {
             screen->setOn(false);
         } else if (selected == 2) {
-            cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST);
+            service->refreshLocalMeshNode();
+            if (service->trySendPosition(NODENUM_BROADCAST, true)) {
+                LOG_INFO("Position Update Sent");
+            } else {
+                LOG_INFO("Node Info Update Sent");
+            }
         } else if (selected == 3) {
+            cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST);
+        } else if (selected == 4) {
             cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST);
         }
     });
