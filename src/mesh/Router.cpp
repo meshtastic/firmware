@@ -230,7 +230,6 @@ void Router::abortSendAndNak(meshtastic_Routing_Error err, meshtastic_MeshPacket
 void Router::setReceivedMessage()
 {
     // LOG_DEBUG("set interval to ASAP");
-    powerFSM.trigger(EVENT_WAKE_TIMER);
     setInterval(0); // Run ASAP, so we can figure out our correct sleep time
     runASAP = true;
 }
