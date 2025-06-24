@@ -250,17 +250,33 @@ void menuHandler::homeBaseMenu()
     static const char **optionsArrayPtr;
 
     if (kb_found) {
+#ifdef PIN_EINK_EN
+        static const char *optionsArray[] = {"Back", "Toggle Backlight", "Send Adhoc Ping", "New Preset Msg", "New Freetext Msg"};
+#else
         static const char *optionsArray[] = {"Back", "Sleep Screen", "Send Adhoc Ping", "New Preset Msg", "New Freetext Msg"};
+#endif
+        optionsArrayPtr = optionsArray;
+        options = 5;
+    } else {
+#ifdef PIN_EINK_EN
+        static const char *optionsArray[] = {"Back", "Toggle Backlight", "Send Adhoc Ping", "New Preset Msg"};
+#else
+        static const char *optionsArray[] = {"Back", "Sleep Screen", "Send Adhoc Ping", "New Preset Msg"};
+#endif
         optionsArrayPtr = optionsArray;
         options = 4;
-    } else {
-        static const char *optionsArray[] = {"Back", "Sleep Screen", "Send Adhoc Ping", "New Preset Msg"};
-        optionsArrayPtr = optionsArray;
-        options = 3;
     }
     screen->showOverlayBanner("Action?", 30000, optionsArrayPtr, options, [](int selected) -> void {
         if (selected == 1) {
+#ifdef PIN_EINK_EN
+            if (digitalRead(PIN_EINK_EN) == HIGH) {
+                digitalWrite(PIN_EINK_EN, LOW);
+            } else {
+                digitalWrite(PIN_EINK_EN, HIGH);
+            }
+#else
             screen->setOn(false);
+#endif
         } else if (selected == 2) {
             service->refreshLocalMeshNode();
             if (service->trySendPosition(NODENUM_BROADCAST, true)) {
