@@ -30,13 +30,10 @@
 #define EVENT_RADIO_INTERRUPT 18
 #define EVENT_WEB_REQUEST 19
 
-#ifdef ARCH_ESP32
-#ifdef CONFIG_FREERTOS_USE_TICKLESS_IDLE
-#define DYNAMIC_LIGHT_SLEEP
+#ifdef HAS_DYNAMIC_LIGHT_SLEEP
 #define WAKE_TIME_MS 500
 #else
 #define WAKE_TIME_MS (Default::getConfiguredOrDefaultMs(config.power.min_wake_secs, default_min_wake_secs))
-#endif
 #endif
 
 #if MESHTASTIC_EXCLUDE_POWER_FSM
