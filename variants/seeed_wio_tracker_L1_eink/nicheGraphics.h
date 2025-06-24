@@ -19,7 +19,7 @@
 // Shared NicheGraphics components
 // --------------------------------
 #include "graphics/niche/Drivers/Backlight/LatchingBacklight.h"
-#include "graphics/niche/Drivers/EInk/HINK_E0213A367.h"
+#include "graphics/niche/Drivers/EInk/GDEY0213B74.h"
 #include "graphics/niche/Inputs/TwoButton.h"
 
 // Special case - fix T-Echo's touch button
@@ -41,7 +41,7 @@ void setupNicheGraphics()
     // E-Ink Driver
     // -----------------------------
 
-    Drivers::EInk *driver = new Drivers::HINK_E0213A367;
+    Drivers::EInk *driver = new Drivers::GDEY0213B74;
     driver->begin(&SPI1, PIN_EINK_DC, PIN_EINK_CS, PIN_EINK_BUSY, PIN_EINK_RES);
 
     // InkHUD
@@ -54,7 +54,7 @@ void setupNicheGraphics()
 
     // Set how many FAST updates per FULL update
     // Set how unhealthy additional FAST updates beyond this number are
-    inkhud->setDisplayResilience(20, 1.5);
+    inkhud->setDisplayResilience(7, 1.5);
 
     // Select fonts
     InkHUD::Applet::fontLarge = FREESANS_9PT_WIN1252;
@@ -62,9 +62,11 @@ void setupNicheGraphics()
 
     // Customize default settings
     inkhud->persistence->settings.userTiles.maxCount = 2;              // Two applets side-by-side
-    inkhud->persistence->settings.rotation = 3;                        // 270 degrees clockwise
+                          // 270 degrees clockwise
     inkhud->persistence->settings.optionalFeatures.batteryIcon = true; // Device definitely has a battery
     inkhud->persistence->settings.optionalMenuItems.backlight = true;  // Until proves capacitive button works by touching it
+    inkhud->persistence->settings.userTiles.count = 1;    // One tile only by default, keep things simple for new users
+    inkhud->persistence->settings.optionalMenuItems.nextTile = false; // Behavior handled by aux button instead
 
     // Setup backlight controller
     // Note: AUX button attached further down
@@ -80,10 +82,13 @@ void setupNicheGraphics()
     inkhud->addApplet("Positions", new InkHUD::PositionsApplet, true);           // Activated
     inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet);            // -
     inkhud->addApplet("Heard", new InkHUD::HeardApplet, true, false, 0);         // Activated, no autoshow, default on tile 0
+    
 
+    inkhud->persistence->settings.rotation = 1;  
+    //inkhud->persistence->printSettings(&inkhud->persistence->settings);
     // Start running InkHUD
     inkhud->begin();
-
+    //inkhud->persistence->printSettings(&inkhud->persistence->settings);
     // Buttons
     // --------------------------
 
@@ -97,6 +102,9 @@ void setupNicheGraphics()
 
     // Begin handling button events
     buttons->start();
+
+    
+
 }
 
 #endif
