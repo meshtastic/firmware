@@ -268,7 +268,6 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     currentKey ^= ((size_t)mp.to << 8);
     currentKey ^= ((size_t)mp.rx_time << 16);
     currentKey ^= ((size_t)mp.id << 24);
-    currentKey ^= ((size_t)mp.decoded.payload.size << 12);
 
     if (cachedKey != currentKey) {
         LOG_INFO("Message cache key is misssed cachedKey=0x%0x, currentKey=0x%x", cachedKey, currentKey);
