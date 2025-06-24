@@ -195,7 +195,7 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
 
 #ifdef T_WATCH_S3
     if (nimbleBluetooth && nimbleBluetooth->isConnected()) {
-        graphics::ClockRenderer::drawBluetoothConnectedIcon(display, display->getWidth() - 18, y + 2);
+        graphics::ClockRenderer::drawBluetoothConnectedIcon(display, display->getWidth() - 18, , display->getHeight() - 14);
     }
 #endif
 
@@ -311,7 +311,7 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
 #ifdef T_WATCH_S3
     if (nimbleBluetooth && nimbleBluetooth->isConnected()) {
-        drawBluetoothConnectedIcon(display, display->getWidth() - 18, y + 2);
+        drawBluetoothConnectedIcon(display, display->getWidth() - 18, display->getHeight() - 14);
     }
 #endif
     // clock face center coordinates
