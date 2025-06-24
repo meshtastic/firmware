@@ -1183,14 +1183,35 @@ void UIRenderer::drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *sta
     const int totalWidth = (pageEnd - pageStart) * iconSize + (pageEnd - pageStart - 1) * spacing;
     const int xStart = (SCREEN_WIDTH - totalWidth) / 2;
 
-    // Only show bar briefly after switching frames (unless on E-Ink)
+    // Only show bar briefly after switching frames
+    static uint32_t navBarLastShown = 0;
+    static bool cosmeticRefreshDone = false;
+
+    bool navBarVisible = millis() - lastFrameChangeTime <= ICON_DISPLAY_DURATION_MS;
+    int y = navBarVisible ? (SCREEN_HEIGHT - iconSize - 1) : SCREEN_HEIGHT;
+
 #if defined(USE_EINK)
-    int y = SCREEN_HEIGHT - iconSize - 1;
-#else
-    int y = SCREEN_HEIGHT - iconSize - 1;
-    if (millis() - lastFrameChangeTime > ICON_DISPLAY_DURATION_MS) {
-        y = SCREEN_HEIGHT;
+    static bool navBarPrevVisible = false;
+
+    if (navBarVisible && !navBarPrevVisible) {
+        EINK_ADD_FRAMEFLAG(display, DEMAND_FAST); // Fast refresh when showing nav bar
+        cosmeticRefreshDone = false;
+        navBarLastShown = millis();
     }
+
+    if (!navBarVisible && navBarPrevVisible) {
+        EINK_ADD_FRAMEFLAG(display, DEMAND_FAST); // Fast refresh when hiding nav bar
+        navBarLastShown = millis(); // Mark when it disappeared
+    }
+
+    if (!navBarVisible && navBarLastShown != 0 && !cosmeticRefreshDone) {
+        if (millis() - navBarLastShown > 10000) { // 10s after hidden
+            EINK_ADD_FRAMEFLAG(display, COSMETIC); // One-time ghost cleanup
+            cosmeticRefreshDone = true;
+        }
+    }
+
+    navBarPrevVisible = navBarVisible;
 #endif
 
     // Pre-calculate bounding rect
