@@ -269,6 +269,11 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     std::string line, word;
     for (int i = 0; messageBuf[i]; ++i) {
         char ch = messageBuf[i];
+        if ((unsigned char)messageBuf[i] == 0xE2 && (unsigned char)messageBuf[i + 1] == 0x80 &&
+            (unsigned char)messageBuf[i + 2] == 0x99) {
+            ch = '\''; // plain apostrophe
+            i += 2;    // skip over the extra UTF-8 bytes
+        }
         if (ch == '\n') {
             if (!word.empty())
                 line += word;
@@ -282,6 +287,9 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         } else {
             word += ch;
             std::string test = line + word;
+            // Keep these lines for diagnostics
+            // LOG_INFO("Char: '%c' (0x%02X)", ch, (unsigned char)ch);
+            // LOG_INFO("Current String: %s", test.c_str());
             if (display->getStringWidth(test.c_str()) > textWidth) {
                 if (!line.empty())
                     lines.push_back(line);
