@@ -29,17 +29,13 @@
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
 
-#ifndef SLEEP_TIME
-#define SLEEP_TIME 30
-#endif
-
 #if MESHTASTIC_EXCLUDE_POWER_FSM
 FakeFsm powerFSM;
 void PowerFSM_setup(){};
 #else
-
 static uint32_t sleepStart;
 static uint32_t sleepTime;
+static uint32_t sleepLeft;
 
 /// Should we behave as if we have AC power now?
 static bool isPowered()
@@ -89,13 +85,24 @@ static void lsEnter()
     sleepStart = -1;
     sleepTime = 0;
 
+#ifdef HAS_ESP32_DYNAMIC_LIGHT_SLEEP
+    if (!doPreflightSleep()) {
+        LOG_DEBUG("Transition to LS state aborted because of tasks pending");
+        powerFSM.trigger(EVENT_WAKE_TIMER);
+        return;
+    }
+
+    sleepStart = millis();
+    doLightSleep(LIGHT_SLEEP_DYNAMIC);
+#endif
+
     powerMon->setState(meshtastic_PowerMon_State_CPU_LightSleep);
 }
 
 static void lsIdle()
 {
     if (!doPreflightSleep()) {
-#ifdef HAS_DYNAMIC_LIGHT_SLEEP
+#ifdef HAS_ESP32_DYNAMIC_LIGHT_SLEEP
         powerFSM.trigger(EVENT_WAKE_TIMER);
 #endif
         return;
@@ -106,16 +113,15 @@ static void lsIdle()
     }
 
     sleepTime = millis() - sleepStart;
-
-#ifdef ARCH_ESP32
-    uint32_t sleepLeft;
-
     sleepLeft = config.power.ls_secs * 1000LL - sleepTime;
-    if (sleepLeft > SLEEP_TIME * 1000LL) {
-        sleepLeft = SLEEP_TIME * 1000LL;
+    if (sleepLeft > SLEEP_TIME_QUANTUM_S * 1000LL) {
+        sleepLeft = SLEEP_TIME_QUANTUM_S * 1000LL;
     }
 
+#ifdef ARCH_ESP32
+#ifndef HAS_ESP32_DYNAMIC_LIGHT_SLEEP
     doLightSleep(sleepLeft);
+#endif
 
     esp_sleep_source_t cause = esp_sleep_get_wakeup_cause();
 
@@ -125,6 +131,11 @@ static void lsIdle()
         powerFSM.trigger(EVENT_INPUT);
         return;
 
+    case ESP_SLEEP_WAKEUP_EXT0:
+        LOG_DEBUG("Wake cause ESP_SLEEP_WAKEUP_EXT0");
+        powerFSM.trigger(EVENT_RADIO_INTERRUPT);
+        return;
+
     case ESP_SLEEP_WAKEUP_EXT1:
         LOG_POWERFSM("Wake cause ESP_SLEEP_WAKEUP_EXT1");
         powerFSM.trigger(EVENT_PRESS);
@@ -132,7 +143,7 @@ static void lsIdle()
 
     case ESP_SLEEP_WAKEUP_GPIO:
         LOG_POWERFSM("Wake cause ESP_SLEEP_WAKEUP_GPIO");
-        powerFSM.trigger(EVENT_WAKE_TIMER);
+        // FSM events should be triggered by interrupt handlers
         return;
 
     default:
@@ -147,7 +158,7 @@ static void lsIdle()
 
 static void lsExit()
 {
-#ifdef ARCH_ESP32
+#ifdef HAS_ESP32_DYNAMIC_LIGHT_SLEEP
     doLightSleep(LIGHT_SLEEP_ABORT);
 #endif
 
@@ -324,7 +335,7 @@ void PowerFSM_setup()
     powerFSM.add_transition(&stateLS, &stateDARK, EVENT_WEB_REQUEST, NULL, "Web request");
     powerFSM.add_transition(&stateDARK, &stateDARK, EVENT_WEB_REQUEST, NULL, "Web request");
 
-#ifdef HAS_DYNAMIC_LIGHT_SLEEP
+#ifdef HAS_ESP32_DYNAMIC_LIGHT_SLEEP
     // it's better to exit dynamic light sleep when packet is received to ensure routing is properly handled
     powerFSM.add_transition(&stateLS, &stateDARK, EVENT_RADIO_INTERRUPT, NULL, "Radio interrupt");
     powerFSM.add_transition(&stateDARK, &stateDARK, EVENT_RADIO_INTERRUPT, NULL, "Radio interrupt");
