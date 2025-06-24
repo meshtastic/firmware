@@ -13,6 +13,7 @@ extern XPowersLibInterface *PMU;
 #include "esp_sleep.h"
 
 #define LIGHT_SLEEP_ABORT 0
+#define LIGHT_SLEEP_DYNAMIC UINT32_MAX
 
 void initLightSleep();
 void doLightSleep(uint32_t msecToWake);
