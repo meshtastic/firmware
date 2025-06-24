@@ -55,7 +55,7 @@ Observable<void *> notifyDeepSleep;
 Observable<void *> notifyReboot;
 
 #ifdef ARCH_ESP32
-// Wake cause when returning from a deep sleep
+// Wake cause when returning from sleep
 esp_sleep_source_t wakeCause;
 
 /// Called to tell observers that light sleep is about to begin
@@ -65,7 +65,7 @@ Observable<void *> notifyLightSleep;
 Observable<esp_sleep_wakeup_cause_t> notifyLightSleepEnd;
 
 #ifdef HAS_ESP32_PM_SUPPORT
-esp_pm_lock_handle_t pmHandle;
+esp_pm_lock_handle_t pmLightSleepLock;
 #endif
 
 // restores GPIO function after sleep
@@ -343,8 +343,10 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
 }
 
 #ifdef ARCH_ESP32
-static bool pmLockAcquired;
-static concurrency::Lock *pmLightSleepLock;
+#ifdef HAS_ESP32_DYNAMIC_LIGHT_SLEEP
+static bool pmLightSleepLockAcquired;
+#endif
+static concurrency::Lock *lightSleepConcurrencyLock;
 
 /**
  * enter light sleep (preserves ram but stops everything about CPU).
@@ -355,48 +357,45 @@ void doLightSleep(uint32_t sleepMsec)
 {
     esp_err_t res;
 
-    assert(pmLightSleepLock);
-    pmLightSleepLock->lock();
+    assert(lightSleepConcurrencyLock);
+    lightSleepConcurrencyLock->lock();
 
-    if (sleepMsec == LIGHT_SLEEP_ABORT) {
-        if (pmLockAcquired) {
-            pmLightSleepLock->unlock();
-            return; // nothing to do
+#ifndef HAS_ESP32_DYNAMIC_LIGHT_SLEEP
+    assert(sleepMsec != LIGHT_SLEEP_ABORT);
+    assert(sleepMsec != LIGHT_SLEEP_DYNAMIC);
+#else
+    if (!pmLightSleepLockAcquired) {
+        if (sleepMsec == LIGHT_SLEEP_DYNAMIC) {
+            lightSleepConcurrencyLock->unlock();
+            return;
         }
 
-#ifdef HAS_ESP32_PM_SUPPORT
-        res = esp_pm_lock_acquire(pmHandle);
+        res = esp_pm_lock_acquire(pmLightSleepLock);
         assert(res == ESP_OK);
-#endif
-        pmLockAcquired = true;
+
+        wakeCause = esp_sleep_get_wakeup_cause();
+
+        pmLightSleepLockAcquired = true;
 
         esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
         gpioReset();
 
-        notifyLightSleepEnd.notifyObservers(esp_sleep_get_wakeup_cause());
-
-        pmLightSleepLock->unlock();
-        return;
+        notifyLightSleepEnd.notifyObservers(wakeCause);
     }
 
-    if (!pmLockAcquired) {
-        console->flush();
-
-#ifndef HAS_DYNAMIC_LIGHT_SLEEP
-        esp_light_sleep_start();
+    if (sleepMsec == LIGHT_SLEEP_ABORT) {
+        lightSleepConcurrencyLock->unlock();
+        return;
+    }
 #endif
-
-        pmLightSleepLock->unlock();
-        return;
-    }
 
     enableLoraInterrupt();
     enableButtonInterrupt();
 
-#ifndef HAS_DYNAMIC_LIGHT_SLEEP
-    res = esp_sleep_enable_timer_wakeup(sleepMsec * 1000LL);
-    assert(res == ESP_OK);
-#endif
+    if (sleepMsec != LIGHT_SLEEP_DYNAMIC) {
+        res = esp_sleep_enable_timer_wakeup(sleepMsec * 1000LL);
+        assert(res == ESP_OK);
+    }
 
     res = uart_set_wakeup_threshold(UART_NUM_0, 3);
     assert(res == ESP_OK);
@@ -407,7 +406,6 @@ void doLightSleep(uint32_t sleepMsec)
 #if defined(VEXT_ENABLE)
     gpio_hold_en((gpio_num_t)VEXT_ENABLE);
 #endif
-
 #if defined(RESET_OLED)
     gpio_hold_en((gpio_num_t)RESET_OLED);
 #endif
@@ -443,17 +441,25 @@ void doLightSleep(uint32_t sleepMsec)
 
     console->flush();
 
-#ifdef HAS_ESP32_PM_SUPPORT
-    res = esp_pm_lock_release(pmHandle);
-    assert(res == ESP_OK);
-#endif
-    pmLockAcquired = false;
+    if (sleepMsec != LIGHT_SLEEP_DYNAMIC) {
+        esp_light_sleep_start();
 
-#ifndef HAS_DYNAMIC_LIGHT_SLEEP
-    esp_light_sleep_start();
-#endif
+        wakeCause = esp_sleep_get_wakeup_cause();
 
-    pmLightSleepLock->unlock();
+        esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
+        gpioReset();
+
+        notifyLightSleepEnd.notifyObservers(wakeCause);
+
+    } else {
+#ifdef HAS_ESP32_DYNAMIC_LIGHT_SLEEP
+        res = esp_pm_lock_release(pmLightSleepLock);
+        assert(res == ESP_OK);
+        pmLightSleepLockAcquired = false;
+#endif
+    }
+
+    lightSleepConcurrencyLock->unlock();
 }
 
 // Initialize power management settings to allow light sleep
@@ -462,16 +468,16 @@ void initLightSleep()
     esp_err_t res;
 
 #ifdef HAS_ESP32_PM_SUPPORT
-    res = esp_pm_lock_create(ESP_PM_NO_LIGHT_SLEEP, 0, "meshtastic", &pmHandle);
+    res = esp_pm_lock_create(ESP_PM_NO_LIGHT_SLEEP, 0, "meshtastic", &pmLightSleepLock);
     assert(res == ESP_OK);
 
-    res = esp_pm_lock_acquire(pmHandle);
+    res = esp_pm_lock_acquire(pmLightSleepLock);
     assert(res == ESP_OK);
 
     esp_pm_config_esp32_t pm_config;
     pm_config.max_freq_mhz = 80;
     pm_config.min_freq_mhz = 20;
-#ifdef HAS_DYNAMIC_LIGHT_SLEEP
+#ifdef HAS_ESP32_DYNAMIC_LIGHT_SLEEP
     pm_config.light_sleep_enable = true;
 #else
     pm_config.light_sleep_enable = false;
@@ -484,8 +490,11 @@ void initLightSleep()
              pm_config.max_freq_mhz, pm_config.light_sleep_enable);
 #endif
 
-    pmLightSleepLock = new concurrency::Lock();
-    pmLockAcquired = true;
+    lightSleepConcurrencyLock = new concurrency::Lock();
+
+#ifdef HAS_ESP32_DYNAMIC_LIGHT_SLEEP
+    pmLightSleepLockAcquired = true;
+#endif
 }
 
 void gpioReset()

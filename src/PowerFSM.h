@@ -30,10 +30,14 @@
 #define EVENT_RADIO_INTERRUPT 18
 #define EVENT_WEB_REQUEST 19
 
-#ifdef HAS_DYNAMIC_LIGHT_SLEEP
+#ifdef HAS_ESP32_DYNAMIC_LIGHT_SLEEP
 #define WAKE_TIME_MS 500
 #else
 #define WAKE_TIME_MS (Default::getConfiguredOrDefaultMs(config.power.min_wake_secs, default_min_wake_secs))
+#endif
+
+#ifndef SLEEP_TIME_QUANTUM_S
+#define SLEEP_TIME_QUANTUM_S 5
 #endif
 
 #if MESHTASTIC_EXCLUDE_POWER_FSM
@@ -55,7 +59,6 @@ class FakeFsm
 };
 extern FakeFsm powerFSM;
 void PowerFSM_setup();
-
 #else
 #include <Fsm.h>
 extern Fsm powerFSM;
