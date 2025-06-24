@@ -18,7 +18,7 @@
 #include "target_specific.h"
 
 #ifdef ARCH_ESP32
-#ifdef CONFIG_PM_ENABLE
+#ifdef HAS_ESP32_PM_SUPPORT
 #include "esp32/pm.h"
 #include "esp_pm.h"
 #endif
@@ -64,7 +64,7 @@ Observable<void *> notifyLightSleep;
 /// Called to tell observers that light sleep has just ended, and why it ended
 Observable<esp_sleep_wakeup_cause_t> notifyLightSleepEnd;
 
-#ifdef CONFIG_PM_ENABLE
+#ifdef HAS_ESP32_PM_SUPPORT
 esp_pm_lock_handle_t pmHandle;
 #endif
 
@@ -94,7 +94,7 @@ void setCPUFast(bool on)
 #if defined(ARCH_ESP32) && !HAS_TFT
 #ifdef HAS_WIFI
     if (isWifiAvailable()) {
-#if !defined(CONFIG_IDF_TARGET_ESP32C3) && defined(WIFI_MAX_PERFORMANCE)
+#if !defined(CONFIG_IDF_TARGET_ESP32C3) && !defined(WIFI_MAX_PERFORMANCE)
         LOG_DEBUG("Set CPU to 240MHz because WiFi is in use");
         setCpuFrequencyMhz(240);
         return;
@@ -362,7 +362,7 @@ void doLightSleep(uint32_t sleepMsec)
             return; // nothing to do
         }
 
-#ifdef CONFIG_PM_ENABLE
+#ifdef HAS_ESP32_PM_SUPPORT
         res = esp_pm_lock_acquire(pmHandle);
         assert(res == ESP_OK);
 #endif
@@ -380,7 +380,7 @@ void doLightSleep(uint32_t sleepMsec)
     if (!pmLockAcquired) {
         console->flush();
 
-#ifndef CONFIG_FREERTOS_USE_TICKLESS_IDLE
+#ifndef HAS_DYNAMIC_LIGHT_SLEEP
         esp_light_sleep_start();
 #endif
 
@@ -391,7 +391,7 @@ void doLightSleep(uint32_t sleepMsec)
     enableLoraInterrupt();
     enableButtonInterrupt();
 
-#ifndef CONFIG_FREERTOS_USE_TICKLESS_IDLE
+#ifndef HAS_DYNAMIC_LIGHT_SLEEP
     res = esp_sleep_enable_timer_wakeup(sleepMsec * 1000LL);
     assert(res == ESP_OK);
 #endif
@@ -442,13 +442,13 @@ void doLightSleep(uint32_t sleepMsec)
 
     console->flush();
 
-#ifdef CONFIG_PM_ENABLE
+#ifdef HAS_ESP32_PM_SUPPORT
     res = esp_pm_lock_release(pmHandle);
     assert(res == ESP_OK);
 #endif
     pmLockAcquired = false;
 
-#ifndef CONFIG_FREERTOS_USE_TICKLESS_IDLE
+#ifndef HAS_DYNAMIC_LIGHT_SLEEP
     esp_light_sleep_start();
 #endif
 
@@ -460,7 +460,7 @@ void initLightSleep()
 {
     esp_err_t res;
 
-#ifdef CONFIG_PM_ENABLE
+#ifdef HAS_ESP32_PM_SUPPORT
     res = esp_pm_lock_create(ESP_PM_NO_LIGHT_SLEEP, 0, "meshtastic", &pmHandle);
     assert(res == ESP_OK);
 
@@ -470,7 +470,7 @@ void initLightSleep()
     esp_pm_config_esp32_t pm_config;
     pm_config.max_freq_mhz = 80;
     pm_config.min_freq_mhz = 20;
-#ifdef CONFIG_FREERTOS_USE_TICKLESS_IDLE
+#ifdef HAS_DYNAMIC_LIGHT_SLEEP
     pm_config.light_sleep_enable = true;
 #else
     pm_config.light_sleep_enable = false;

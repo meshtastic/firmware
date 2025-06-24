@@ -102,7 +102,7 @@ static void lsEnter()
 static void lsIdle()
 {
     if (!doPreflightSleep()) {
-#ifdef DYNAMIC_LIGHT_SLEEP
+#ifdef HAS_DYNAMIC_LIGHT_SLEEP
         powerFSM.trigger(EVENT_WAKE_TIMER);
 #endif
         return;
@@ -332,7 +332,7 @@ void PowerFSM_setup()
     powerFSM.add_transition(&stateLS, &stateDARK, EVENT_WEB_REQUEST, NULL, "Web request");
     powerFSM.add_transition(&stateDARK, &stateDARK, EVENT_WEB_REQUEST, NULL, "Web request");
 
-#ifdef DYNAMIC_LIGHT_SLEEP
+#ifdef HAS_DYNAMIC_LIGHT_SLEEP
     // it's better to exit dynamic light sleep when packet is received to ensure routing is properly handled
     powerFSM.add_transition(&stateLS, &stateDARK, EVENT_RADIO_INTERRUPT, NULL, "Radio interrupt");
     powerFSM.add_transition(&stateDARK, &stateDARK, EVENT_RADIO_INTERRUPT, NULL, "Radio interrupt");
