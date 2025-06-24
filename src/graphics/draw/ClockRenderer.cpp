@@ -147,6 +147,7 @@ void drawVerticalSegment(OLEDDisplay *display, int x, int y, int width, int heig
     display->fillTriangle(x, y + width, x + height - 1, y + width, x + halfHeight, y + width + halfHeight);
 }
 
+/*
 void drawWatchFaceToggleButton(OLEDDisplay *display, int16_t x, int16_t y, bool digitalMode, float scale)
 {
     uint16_t segmentWidth = SEGMENT_WIDTH * scale;
@@ -180,7 +181,7 @@ void drawWatchFaceToggleButton(OLEDDisplay *display, int16_t x, int16_t y, bool 
         drawVerticalSegment(display, segmentFourX, segmentFourY, segmentWidth, segmentHeight);
     }
 }
-
+*/
 // Draw a digital clock
 void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
@@ -192,9 +193,6 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
     if (nimbleBluetooth && nimbleBluetooth->isConnected()) {
         graphics::ClockRenderer::drawBluetoothConnectedIcon(display, display->getWidth() - 18, y + 2);
     }
-
-    drawWatchFaceToggleButton(display, display->getWidth() - 36, display->getHeight() - 36,
-                              graphics::ClockRenderer::digitalWatchFace, 1);
 #endif
 
     uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true); // Display local timezone
@@ -317,9 +315,6 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     if (nimbleBluetooth && nimbleBluetooth->isConnected()) {
         drawBluetoothConnectedIcon(display, display->getWidth() - 18, y + 2);
     }
-
-    drawWatchFaceToggleButton(display, display->getWidth() - 36, display->getHeight() - 36,
-                              graphics::ClockRenderer::digitalWatchFace, 1);
 #endif
     // clock face center coordinates
     int16_t centerX = display->getWidth() / 2;

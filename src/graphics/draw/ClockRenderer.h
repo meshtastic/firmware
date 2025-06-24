@@ -25,7 +25,7 @@ void drawHorizontalSegment(OLEDDisplay *display, int x, int y, int width, int he
 void drawVerticalSegment(OLEDDisplay *display, int x, int y, int width, int height);
 
 // UI elements for clock displays
-void drawWatchFaceToggleButton(OLEDDisplay *display, int16_t x, int16_t y, bool digitalMode = true, float scale = 1);
+// void drawWatchFaceToggleButton(OLEDDisplay *display, int16_t x, int16_t y, bool digitalMode = true, float scale = 1);
 void drawBluetoothConnectedIcon(OLEDDisplay *display, int16_t x, int16_t y);
 
 } // namespace ClockRenderer
