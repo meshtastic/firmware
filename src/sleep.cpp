@@ -503,11 +503,13 @@ void gpioReset()
 
     // deinitialize RTC GPIOs and holds
     for (uint8_t i = 0; i <= GPIO_NUM_MAX; i++) {
+#ifdef SOC_PM_SUPPORT_EXT_WAKEUP
         if (rtc_gpio_is_valid_gpio((gpio_num_t)i)) {
             rtc_gpio_hold_dis((gpio_num_t)i);
             rtc_gpio_deinit((gpio_num_t)i);
-
-        } else if (GPIO_IS_VALID_OUTPUT_GPIO((gpio_num_t)i)) {
+        }
+#endif
+        if (GPIO_IS_VALID_OUTPUT_GPIO((gpio_num_t)i)) {
             gpio_hold_dis((gpio_num_t)i);
         }
     }
