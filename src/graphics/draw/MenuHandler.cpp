@@ -182,11 +182,11 @@ void menuHandler::clockMenu()
             menuHandler::menuQueue = menuHandler::clock_face_picker;
             screen->setInterval(0);
             runASAP = true;
-        } else if (selected == 1) {
+        } else if (selected == 2) {
             menuHandler::menuQueue = menuHandler::twelve_hour_picker;
             screen->setInterval(0);
             runASAP = true;
-        } else if (selected == 2) {
+        } else if (selected == 3) {
             menuHandler::menuQueue = menuHandler::TZ_picker;
             screen->setInterval(0);
             runASAP = true;
