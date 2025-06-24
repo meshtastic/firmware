@@ -12,6 +12,7 @@ void TrackballInterruptBase::init(uint8_t pinDown, uint8_t pinUp, uint8_t pinLef
     this->_pinUp = pinUp;
     this->_pinLeft = pinLeft;
     this->_pinRight = pinRight;
+    this->_pinPress = pinPress;
     this->_eventDown = eventDown;
     this->_eventUp = eventUp;
     this->_eventLeft = eventLeft;
@@ -20,23 +21,23 @@ void TrackballInterruptBase::init(uint8_t pinDown, uint8_t pinUp, uint8_t pinLef
 
     if (pinPress != 255) {
         pinMode(pinPress, INPUT_PULLUP);
-        attachInterrupt(pinPress, onIntPress, RISING);
+        attachInterrupt(pinPress, onIntPress, TB_DIRECTION);
     }
     if (this->_pinDown != 255) {
         pinMode(this->_pinDown, INPUT_PULLUP);
-        attachInterrupt(this->_pinDown, onIntDown, RISING);
+        attachInterrupt(this->_pinDown, onIntDown, TB_DIRECTION);
     }
     if (this->_pinUp != 255) {
         pinMode(this->_pinUp, INPUT_PULLUP);
-        attachInterrupt(this->_pinUp, onIntUp, RISING);
+        attachInterrupt(this->_pinUp, onIntUp, TB_DIRECTION);
     }
     if (this->_pinLeft != 255) {
         pinMode(this->_pinLeft, INPUT_PULLUP);
-        attachInterrupt(this->_pinLeft, onIntLeft, RISING);
+        attachInterrupt(this->_pinLeft, onIntLeft, TB_DIRECTION);
     }
     if (this->_pinRight != 255) {
         pinMode(this->_pinRight, INPUT_PULLUP);
-        attachInterrupt(this->_pinRight, onIntRight, RISING);
+        attachInterrupt(this->_pinRight, onIntRight, TB_DIRECTION);
     }
 
     LOG_DEBUG("Trackball GPIO initialized (%d, %d, %d, %d, %d)", this->_pinUp, this->_pinDown, this->_pinLeft, this->_pinRight,
@@ -67,19 +68,19 @@ int32_t TrackballInterruptBase::runOnce()
         e.inputEvent = this->_eventRight;
     }
 #else
-    if (this->action == TB_ACTION_PRESSED) {
+    if (this->action == TB_ACTION_PRESSED && !digitalRead(_pinPress)) {
         // LOG_DEBUG("Trackball event Press");
         e.inputEvent = this->_eventPressed;
-    } else if (this->action == TB_ACTION_UP) {
+    } else if (this->action == TB_ACTION_UP && !digitalRead(_pinUp)) {
         // LOG_DEBUG("Trackball event UP");
         e.inputEvent = this->_eventUp;
-    } else if (this->action == TB_ACTION_DOWN) {
+    } else if (this->action == TB_ACTION_DOWN && !digitalRead(_pinDown)) {
         // LOG_DEBUG("Trackball event DOWN");
         e.inputEvent = this->_eventDown;
-    } else if (this->action == TB_ACTION_LEFT) {
+    } else if (this->action == TB_ACTION_LEFT && !digitalRead(_pinLeft)) {
         // LOG_DEBUG("Trackball event LEFT");
         e.inputEvent = this->_eventLeft;
-    } else if (this->action == TB_ACTION_RIGHT) {
+    } else if (this->action == TB_ACTION_RIGHT && !digitalRead(_pinRight)) {
         // LOG_DEBUG("Trackball event RIGHT");
         e.inputEvent = this->_eventRight;
     }
