@@ -32,8 +32,6 @@ class UIRenderer
 {
   public:
     // Common UI elements
-    static void drawBattery(OLEDDisplay *display, int16_t x, int16_t y, uint8_t *imgBuffer,
-                            const meshtastic::PowerStatus *powerStatus);
     static void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::NodeStatus *nodeStatus,
                           int node_offset = 0, bool show_total = true, String additional_words = "");
 

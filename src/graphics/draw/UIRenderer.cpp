@@ -189,46 +189,6 @@ void UIRenderer::drawGpsCoordinates(OLEDDisplay *display, int16_t x, int16_t y, 
     }
 }
 
-void UIRenderer::drawBattery(OLEDDisplay *display, int16_t x, int16_t y, uint8_t *imgBuffer,
-                             const meshtastic::PowerStatus *powerStatus)
-{
-    static const uint8_t powerBar[3] = {0x81, 0xBD, 0xBD};
-    static const uint8_t lightning[8] = {0xA1, 0xA1, 0xA5, 0xAD, 0xB5, 0xA5, 0x85, 0x85};
-
-    // Clear the bar area inside the battery image
-    for (int i = 1; i < 14; i++) {
-        imgBuffer[i] = 0x81;
-    }
-
-    // Fill with lightning or power bars
-    if (powerStatus->getIsCharging()) {
-        memcpy(imgBuffer + 3, lightning, 8);
-    } else {
-        for (int i = 0; i < 4; i++) {
-            if (powerStatus->getBatteryChargePercent() >= 25 * i)
-                memcpy(imgBuffer + 1 + (i * 3), powerBar, 3);
-        }
-    }
-
-    // Slightly more conservative scaling based on screen width
-    int scale = 1;
-
-    if (SCREEN_WIDTH >= 200)
-        scale = 2;
-    if (SCREEN_WIDTH >= 300)
-        scale = 2; // Do NOT go higher than 2
-
-    // Draw scaled battery image (16 columns × 8 rows)
-    for (int col = 0; col < 16; col++) {
-        uint8_t colBits = imgBuffer[col];
-        for (int row = 0; row < 8; row++) {
-            if (colBits & (1 << row)) {
-                display->fillRect(x + col * scale, y + row * scale, scale, scale);
-            }
-        }
-    }
-}
-
 // Draw nodes status
 void UIRenderer::drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::NodeStatus *nodeStatus, int node_offset,
                            bool show_total, String additional_words)

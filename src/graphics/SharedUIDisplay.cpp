@@ -53,7 +53,7 @@ void drawRoundedHighlight(OLEDDisplay *display, int16_t x, int16_t y, int16_t w,
 // *************************
 // * Common Header Drawing *
 // *************************
-void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *titleStr)
+void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *titleStr, bool battery_only)
 {
     constexpr int HEADER_OFFSET_Y = 1;
     y += HEADER_OFFSET_Y;
@@ -69,29 +69,31 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
     const int screenW = display->getWidth();
     const int screenH = display->getHeight();
 
-    // === Inverted Header Background ===
-    if (isInverted) {
-        display->setColor(BLACK);
-        display->fillRect(0, 0, screenW, highlightHeight + 2);
-        display->setColor(WHITE);
-        drawRoundedHighlight(display, x, y, screenW, highlightHeight, 2);
-        display->setColor(BLACK);
-    } else {
-        display->setColor(BLACK);
-        display->fillRect(0, 0, screenW, highlightHeight + 2);
-        display->setColor(WHITE);
-        if (isHighResolution) {
-            display->drawLine(0, 20, screenW, 20);
+    if (!battery_only) {
+        // === Inverted Header Background ===
+        if (isInverted) {
+            display->setColor(BLACK);
+            display->fillRect(0, 0, screenW, highlightHeight + 2);
+            display->setColor(WHITE);
+            drawRoundedHighlight(display, x, y, screenW, highlightHeight, 2);
+            display->setColor(BLACK);
         } else {
-            display->drawLine(0, 14, screenW, 14);
+            display->setColor(BLACK);
+            display->fillRect(0, 0, screenW, highlightHeight + 2);
+            display->setColor(WHITE);
+            if (isHighResolution) {
+                display->drawLine(0, 20, screenW, 20);
+            } else {
+                display->drawLine(0, 14, screenW, 14);
+            }
         }
-    }
 
-    // === Screen Title ===
-    display->setTextAlignment(TEXT_ALIGN_CENTER);
-    display->drawString(SCREEN_WIDTH / 2, y, titleStr);
-    if (config.display.heading_bold) {
-        display->drawString((SCREEN_WIDTH / 2) + 1, y, titleStr);
+        // === Screen Title ===
+        display->setTextAlignment(TEXT_ALIGN_CENTER);
+        display->drawString(SCREEN_WIDTH / 2, y, titleStr);
+        if (config.display.heading_bold) {
+            display->drawString((SCREEN_WIDTH / 2) + 1, y, titleStr);
+        }
     }
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
@@ -163,7 +165,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
     int timeStrWidth = display->getStringWidth("12:34"); // Default alignment
     int timeX = screenW - xOffset - timeStrWidth + 4;
 
-    if (rtc_sec > 0) {
+    if (rtc_sec > 0 && !battery_only) {
         // === Build Time String ===
         long hms = (rtc_sec % SEC_PER_DAY + SEC_PER_DAY) % SEC_PER_DAY;
         int hour = hms / SEC_PER_HOUR;

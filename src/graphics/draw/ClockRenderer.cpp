@@ -188,6 +188,10 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
     display->clear();
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     int line = 1;
+    // === Set Title, Blank for Clock
+    const char *titleStr = "";
+    // === Header ===
+    graphics::drawCommonHeader(display, x, y, titleStr, true);
 
 #ifdef T_WATCH_S3
     if (nimbleBluetooth && nimbleBluetooth->isConnected()) {
@@ -300,18 +304,12 @@ void drawBluetoothConnectedIcon(OLEDDisplay *display, int16_t x, int16_t y)
 void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     display->setTextAlignment(TEXT_ALIGN_LEFT);
+    // === Set Title, Blank for Clock
+    const char *titleStr = "";
+    // === Header ===
+    graphics::drawCommonHeader(display, x, y, titleStr, true);
+
 #ifdef T_WATCH_S3
-    graphics::UIRenderer::drawBattery(display, x, y + 7, imgBattery, powerStatus);
-
-    if (powerStatus->getHasBattery()) {
-        char batteryPercent[8];
-        snprintf(batteryPercent, sizeof(batteryPercent), "%d%%", powerStatus->getBatteryChargePercent());
-
-        display->setFont(FONT_SMALL);
-
-        display->drawString(x + 20, y + 2, batteryPercent);
-    }
-
     if (nimbleBluetooth && nimbleBluetooth->isConnected()) {
         drawBluetoothConnectedIcon(display, display->getWidth() - 18, y + 2);
     }

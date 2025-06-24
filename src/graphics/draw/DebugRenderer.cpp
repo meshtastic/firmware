@@ -67,21 +67,6 @@ void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16
 
     char channelStr[20];
     snprintf(channelStr, sizeof(channelStr), "#%s", channels.getName(channels.getPrimaryIndex()));
-
-    // Display power status
-    if (powerStatus->getHasBattery()) {
-        if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT) {
-            UIRenderer::drawBattery(display, x, y + 2, imgBattery, powerStatus);
-        } else {
-            UIRenderer::drawBattery(display, x + 1, y + 3, imgBattery, powerStatus);
-        }
-    } else if (powerStatus->knowsUSB()) {
-        if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT) {
-            display->drawFastImage(x, y + 2, 16, 8, powerStatus->getHasUSB() ? imgUSB : imgPower);
-        } else {
-            display->drawFastImage(x + 1, y + 3, 16, 8, powerStatus->getHasUSB() ? imgUSB : imgPower);
-        }
-    }
     // Display nodes status
     if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT) {
         UIRenderer::drawNodes(display, x + (SCREEN_WIDTH * 0.25), y + 2, nodeStatus);

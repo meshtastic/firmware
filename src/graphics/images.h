@@ -23,9 +23,6 @@ const uint8_t bluetoothConnectedIcon[36] PROGMEM = {0xfe, 0x01, 0xff, 0x03, 0x03
                                                     0xf3, 0x3f, 0x33, 0x30, 0x33, 0x33, 0x33, 0x33, 0x03, 0x33, 0xff, 0x33,
                                                     0xfe, 0x31, 0x00, 0x30, 0x30, 0x30, 0x30, 0x30, 0xf0, 0x3f, 0xe0, 0x1f};
 
-// This image definition is here instead of images.h because it's modified dynamically by the drawBattery function
-static uint8_t imgBattery[16] = {0xFF, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0xE7, 0x3C};
-
 #if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) ||      \
      defined(ST7789_CS) || defined(USE_ST7789) || defined(HX8357_CS) || defined(ILI9488_CS) || ARCH_PORTDUINO) &&                \
     !defined(DISPLAY_FORCE_SMALL_FONTS)
