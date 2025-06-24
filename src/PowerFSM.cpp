@@ -16,6 +16,7 @@
 #include "graphics/Screen.h"
 #include "main.h"
 #include "modules/StatusLEDModule.h"
+#include "power.h"
 #include "sleep.h"
 #include "target_specific.h"
 
@@ -36,6 +37,10 @@
 FakeFsm powerFSM;
 void PowerFSM_setup(){};
 #else
+
+static uint32_t sleepStart;
+static uint32_t sleepTime;
+
 /// Should we behave as if we have AC power now?
 static bool isPowered()
 {
@@ -61,30 +66,18 @@ static bool isPowered()
     return !isPowerSavingMode && powerStatus && (!powerStatus->getHasBattery() || powerStatus->getHasUSB());
 }
 
-static void sdsEnter()
-{
-    LOG_POWERFSM("State: sdsEnter");
-    // FIXME - make sure GPS and LORA radio are off first - because we want close to zero current draw
-    doDeepSleep(Default::getConfiguredOrDefaultMs(config.power.sds_secs), false, false);
-}
-
 static void lowBattSDSEnter()
 {
-    LOG_POWERFSM("State: lowBattSDSEnter");
+    LOG_POWERFSM("State: Lower batt SDS");
+    // FIXME - make sure GPS and LORA radio are off first - because we want close to zero current draw
     doDeepSleep(Default::getConfiguredOrDefaultMs(config.power.sds_secs), false, true);
 }
-extern Power *power;
 
 static void shutdownEnter()
 {
     LOG_POWERFSM("State: shutdownEnter");
     shutdownAtMsec = millis();
 }
-
-#include "error.h"
-
-uint32_t sleepStart;
-uint32_t sleepTime;
 
 static void lsEnter()
 {
@@ -242,7 +235,6 @@ static void bootEnter()
 }
 
 State stateSHUTDOWN(shutdownEnter, NULL, NULL, "SHUTDOWN");
-State stateSDS(sdsEnter, NULL, NULL, "SDS");
 State stateLowBattSDS(lowBattSDSEnter, NULL, NULL, "SDS");
 State stateLS(lsEnter, lsIdle, lsExit, "LS");
 State stateDARK(darkEnter, NULL, NULL, "DARK");
@@ -257,7 +249,7 @@ void PowerFSM_setup()
     bool isRouter = (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ? 1 : 0);
     bool hasPower = isPowered();
 
-    LOG_INFO("PowerFSM init, USB power=%d, is_power_saving=%d, wake_time_ms=%d", hasPower ? 1 : 0,
+    LOG_INFO("PowerFSM init, has_power=%d, is_power_saving=%d, wake_time_ms=%d", hasPower ? 1 : 0,
              config.power.is_power_saving ? 1 : 0, WAKE_TIME_MS);
 
     powerFSM.add_timed_transition(&stateBOOT, hasPower ? &statePOWER : &stateON, 3 * 1000, NULL, "boot timeout");

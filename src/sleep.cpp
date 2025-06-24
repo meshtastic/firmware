@@ -68,11 +68,13 @@ Observable<esp_sleep_wakeup_cause_t> notifyLightSleepEnd;
 esp_pm_lock_handle_t pmHandle;
 #endif
 
-// internal helper functions
-void gpioResetHold(void);
+// restores GPIO function after sleep
+void gpioReset(void);
+// enables button wake-up interrupt
 void enableButtonInterrupt(void);
-
+// enables LoRa wake-up-interrupt
 void enableLoraInterrupt(void);
+
 bool shouldLoraWake(uint32_t msecToWake);
 #endif
 
@@ -164,7 +166,7 @@ void initDeepSleep()
 
 #ifdef ARCH_ESP32
     if (wakeCause != ESP_SLEEP_WAKEUP_UNDEFINED) {
-        gpioResetHold();
+        gpioReset();
     }
 #endif
 #endif
@@ -341,8 +343,8 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
 }
 
 #ifdef ARCH_ESP32
-bool pmLockAcquired;
-concurrency::Lock *pmLightSleepLock;
+static bool pmLockAcquired;
+static concurrency::Lock *pmLightSleepLock;
 
 /**
  * enter light sleep (preserves ram but stops everything about CPU).
@@ -369,7 +371,7 @@ void doLightSleep(uint32_t sleepMsec)
         pmLockAcquired = true;
 
         esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
-        gpioResetHold();
+        gpioReset();
 
         notifyLightSleepEnd.notifyObservers(esp_sleep_get_wakeup_cause());
 
@@ -402,14 +404,6 @@ void doLightSleep(uint32_t sleepMsec)
     res = esp_sleep_enable_uart_wakeup(UART_NUM_0);
     assert(res == ESP_OK);
 
-#ifdef PMU_IRQ
-    // wake due to PMU can happen repeatedly if there is no battery installed or the battery fills
-    if (pmu_found) {
-        res = gpio_wakeup_enable((gpio_num_t)PMU_IRQ, GPIO_INTR_LOW_LEVEL); // pmu irq
-        assert(res == ESP_OK);
-    }
-#endif
-
 #if defined(VEXT_ENABLE)
     gpio_hold_en((gpio_num_t)VEXT_ENABLE);
 #endif
@@ -430,9 +424,16 @@ void doLightSleep(uint32_t sleepMsec)
     res = gpio_wakeup_enable((gpio_num_t)INPUTDRIVER_ENCODER_BTN, GPIO_INTR_LOW_LEVEL);
     assert(res == ESP_OK);
 #endif
-#if defined(T_WATCH_S3) || defined(ELECROW)
+#ifdef WAKE_ON_TOUCH
     res = gpio_wakeup_enable((gpio_num_t)SCREEN_TOUCH_INT, GPIO_INTR_LOW_LEVEL);
     assert(res == ESP_OK);
+#endif
+#ifdef PMU_IRQ
+    // wake due to PMU can happen repeatedly if there is no battery installed or the battery fills
+    if (pmu_found) {
+        res = gpio_wakeup_enable((gpio_num_t)PMU_IRQ, GPIO_INTR_LOW_LEVEL); // pmu irq
+        assert(res == ESP_OK);
+    }
 #endif
 
     res = esp_sleep_enable_gpio_wakeup();
@@ -487,15 +488,79 @@ void initLightSleep()
     pmLockAcquired = true;
 }
 
-void gpioResetHold()
+void gpioReset()
 {
+    esp_err_t res;
+
+    // deinitialize RTC GPIOs and holds
     for (uint8_t i = 0; i <= GPIO_NUM_MAX; i++) {
         if (rtc_gpio_is_valid_gpio((gpio_num_t)i)) {
             rtc_gpio_hold_dis((gpio_num_t)i);
             rtc_gpio_deinit((gpio_num_t)i);
 
-        } else if (GPIO_IS_VALID_OUTPUT_GPIO((gpio_num_t)i))
+        } else if (GPIO_IS_VALID_OUTPUT_GPIO((gpio_num_t)i)) {
             gpio_hold_dis((gpio_num_t)i);
+        }
+    }
+
+    // restore negative-edge interrupt triggers for input pins
+#ifdef INPUTDRIVER_ENCODER_BTN
+    res = gpio_set_intr_type((gpio_num_t)INPUTDRIVER_ENCODER_BTN, GPIO_INTR_NEGEDGE);
+    assert(res == ESP_OK);
+#endif
+#ifdef WAKE_ON_TOUCH
+    res = gpio_set_intr_type((gpio_num_t)SCREEN_TOUCH_INT, GPIO_INTR_NEGEDGE);
+    assert(res == ESP_OK);
+#endif
+#ifdef PMU_IRQ
+    if (pmu_found) {
+        res = gpio_set_intr_type((gpio_num_t)PMU_IRQ, GPIO_INTR_NEGEDGE);
+        assert(res == ESP_OK);
+    }
+#endif
+
+    gpio_num_t pin = GPIO_NUM_NC;
+
+#if defined(LORA_DIO1) && (LORA_DIO1 != GPIO_NUM_NC)
+    pin = (gpio_num_t)LORA_DIO1;
+#elif defined(RF95_IRQ) && (RF95_IRQ != GPIO_NUM_NC)
+    pin = (gpio_num_t)RF95_IRQ;
+#endif
+
+    // need to restore original GPIO interrupt trigger when it's not RTC GPIO or we don't support EXT wakeup
+    if (pin != GPIO_NUM_NC) {
+#ifdef SOC_PM_SUPPORT_EXT_WAKEUP
+        if (!rtc_gpio_is_valid_gpio(pin)) {
+#endif
+            res = gpio_set_intr_type(pin, GPIO_INTR_POSEDGE);
+            assert(res == ESP_OK);
+#ifdef SOC_PM_SUPPORT_EXT_WAKEUP
+        }
+#endif
+    }
+
+    pin = GPIO_NUM_NC;
+
+    if (config.device.button_gpio) {
+        pin = (gpio_num_t)config.device.button_gpio;
+    }
+
+#ifdef BUTTON_PIN
+    if (pin == GPIO_NUM_NC) {
+        pin = (gpio_num_t)BUTTON_PIN;
+    }
+#endif
+
+    // need to restore original GPIO interrupt trigger when it's not RTC GPIO or we don't support EXT wakeup
+    if (pin != GPIO_NUM_NC) {
+#ifdef SOC_PM_SUPPORT_EXT_WAKEUP
+        if (!rtc_gpio_is_valid_gpio(pin)) {
+#endif
+            res = gpio_set_intr_type(pin, GPIO_INTR_ANYEDGE);
+            assert(res == ESP_OK);
+#ifdef SOC_PM_SUPPORT_EXT_WAKEUP
+        }
+#endif
     }
 }
 
@@ -504,8 +569,22 @@ void enableButtonInterrupt()
     esp_err_t res;
     gpio_num_t pin;
 
+    pin = GPIO_NUM_NC;
+
+    if (config.device.button_gpio) {
+        pin = (gpio_num_t)config.device.button_gpio;
+    }
+
 #ifdef BUTTON_PIN
-    pin = (gpio_num_t)(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN);
+    if (pin == GPIO_NUM_NC) {
+        pin = (gpio_num_t)BUTTON_PIN;
+    }
+#endif
+
+    if (pin == GPIO_NUM_NC) {
+        return;
+    }
+
 #ifdef SOC_PM_SUPPORT_EXT_WAKEUP
     if (rtc_gpio_is_valid_gpio(pin)) {
         LOG_DEBUG("Setup button pin (GPIO%02d) with wakeup by ext1 source", pin);
@@ -515,29 +594,38 @@ void enableButtonInterrupt()
 #endif
         res = rtc_gpio_hold_en((gpio_num_t)pin);
         assert(res == ESP_OK);
+#ifdef CONFIG_IDF_TARGET_ESP32
+        res = esp_sleep_enable_ext1_wakeup(1ULL << pin, ESP_EXT1_WAKEUP_ALL_LOW);
+#else
         res = esp_sleep_enable_ext1_wakeup(1ULL << pin, ESP_EXT1_WAKEUP_ANY_LOW);
+#endif
+        assert(res == ESP_OK);
 
     } else {
         LOG_DEBUG("Setup button pin (GPIO%02d) with wakeup by GPIO interrupt", pin);
 #ifdef BUTTON_NEED_PULLUP
-        gpio_pullup_en(pin);
+        res = gpio_pullup_en(pin);
         assert(res == ESP_OK);
 #endif
-        res = gpio_hold_en((gpio_num_t)pin);
-        assert(res == ESP_OK);
         res = gpio_wakeup_enable(pin, GPIO_INTR_LOW_LEVEL);
+        assert(res == ESP_OK);
+        if (GPIO_IS_VALID_OUTPUT_GPIO(pin)) {
+            res = gpio_hold_en((gpio_num_t)pin);
+            assert(res == ESP_OK);
+        }
     }
 #else
 #ifdef BUTTON_NEED_PULLUP
-    gpio_pullup_en(pin);
+    res = gpio_pullup_en(pin);
     assert(res == ESP_OK);
 #endif
-    res = gpio_hold_en((gpio_num_t)pin);
-    assert(res == ESP_OK);
     res = gpio_wakeup_enable(pin, GPIO_INTR_LOW_LEVEL);
-    LOG_DEBUG("Setup button pin (GPIO%02d) with wakeup by GPIO interrupt", pin);
-#endif
     assert(res == ESP_OK);
+    LOG_DEBUG("Setup button pin (GPIO%02d) with wakeup by GPIO interrupt", pin);
+    if (GPIO_IS_VALID_OUTPUT_GPIO(pin)) {
+        res = gpio_hold_en((gpio_num_t)pin);
+        assert(res == ESP_OK);
+    }
 #endif
 }
 
@@ -554,9 +642,11 @@ void enableLoraInterrupt()
     pin = (gpio_num_t)RF95_IRQ;
 #endif
 
-    assert(pin != GPIO_NUM_NC);
+    if (pin == GPIO_NUM_NC) {
+        return;
+    }
 
-#if defined(LORA_RESET) && (LORA_RESET != RADIOLIB_NC)
+#if defined(LORA_RESET) && (LORA_RESET != GPIO_NUM_NC)
     gpio_hold_en((gpio_num_t)LORA_RESET);
 #endif
 
@@ -568,24 +658,29 @@ void enableLoraInterrupt()
         res = rtc_gpio_hold_en((gpio_num_t)pin);
         assert(res == ESP_OK);
         res = esp_sleep_enable_ext0_wakeup(pin, HIGH);
-
+        assert(res == ESP_OK);
     } else {
         LOG_DEBUG("Setup radio interrupt (GPIO%02d) with wakeup by GPIO interrupt", pin);
         res = gpio_pulldown_en((gpio_num_t)pin);
         assert(res == ESP_OK);
-        res = gpio_hold_en((gpio_num_t)pin);
-        assert(res == ESP_OK);
         res = gpio_wakeup_enable(pin, GPIO_INTR_HIGH_LEVEL);
+        assert(res == ESP_OK);
+        if (GPIO_IS_VALID_OUTPUT_GPIO(pin)) {
+            res = gpio_hold_en((gpio_num_t)pin);
+            assert(res == ESP_OK);
+        }
     }
 #else
     LOG_DEBUG("Setup radio interrupt (GPIO%02d) with wakeup by GPIO interrupt", pin);
     res = gpio_pulldown_en((gpio_num_t)pin);
     assert(res == ESP_OK);
-    res = gpio_hold_en((gpio_num_t)pin);
-    assert(res == ESP_OK);
     res = gpio_wakeup_enable(pin, GPIO_INTR_HIGH_LEVEL);
-#endif
     assert(res == ESP_OK);
+    if (GPIO_IS_VALID_OUTPUT_GPIO(pin)) {
+        res = gpio_hold_en((gpio_num_t)pin);
+        assert(res == ESP_OK);
+    }
+#endif
 }
 
 bool shouldLoraWake(uint32_t msecToWake)
