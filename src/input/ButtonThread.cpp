@@ -266,6 +266,11 @@ int32_t ButtonThread::runOnce()
 
             break;
         }
+
+        // doesn't handle BUTTON_EVENT_PRESSED_SCREEN BUTTON_EVENT_TOUCH_LONG_PRESSED BUTTON_EVENT_COMBO_SHORT_LONG
+        default: {
+            break;
+        }
         }
     }
     btnEvent = BUTTON_EVENT_NONE;

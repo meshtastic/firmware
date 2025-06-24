@@ -35,7 +35,7 @@ std::string sanitizeString(const std::string &input)
             inReplacement = false;
         } else {
             if (!inReplacement) {
-                output += '¿';
+                output += 0xbf; // ISO-8859-1 for inverted question mark
                 inReplacement = true;
             }
         }

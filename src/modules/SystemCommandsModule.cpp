@@ -113,6 +113,10 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
         shutdownAtMsec = millis() + DEFAULT_SHUTDOWN_SECONDS * 1000;
         // runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         return true;
+
+    default:
+        // No other input events handled here
+        break;
     }
     return false;
 }
