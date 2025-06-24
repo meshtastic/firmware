@@ -470,10 +470,17 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 // draw hour number
                 display->drawStringf(hourStringX, hourStringY, buffer, "%d", hourInt);
 #else
+#ifdef USE_EINK
+                if (isHighResolution) {
+                    // draw hour number
+                    display->drawStringf(hourStringX, hourStringY, buffer, "%d", hourInt);
+                }
+#else
                 if (isHighResolution && (hourInt == 3 || hourInt == 6 || hourInt == 9 || hourInt == 12)) {
                     // draw hour number
                     display->drawStringf(hourStringX, hourStringY, buffer, "%d", hourInt);
                 }
+#endif
 #endif
             }
 
