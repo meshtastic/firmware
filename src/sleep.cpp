@@ -427,6 +427,7 @@ void doLightSleep(uint32_t sleepMsec)
 #ifdef HAS_ESP32_DYNAMIC_LIGHT_SLEEP
         res = esp_pm_lock_release(pmLightSleepLock);
         assert(res == ESP_OK);
+
         pmLightSleepLockAcquired = false;
 #endif
     }
