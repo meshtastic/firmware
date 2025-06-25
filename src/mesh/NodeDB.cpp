@@ -884,6 +884,7 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
     } else if (role == meshtastic_Config_DeviceConfig_Role_TRACKER) {
         owner.has_is_unmessagable = true;
         owner.is_unmessagable = true;
+        moduleConfig.telemetry.device_update_interval = default_telemetry_broadcast_interval_secs;
     } else if (role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER) {
         owner.has_is_unmessagable = true;
         owner.is_unmessagable = true;
