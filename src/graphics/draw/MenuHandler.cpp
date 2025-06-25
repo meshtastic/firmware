@@ -180,7 +180,7 @@ void menuHandler::TZPicker()
 
 void menuHandler::clockMenu()
 {
-    static const char *optionsArray[] = {"Back", "Clock Face", "12- or 24-hour", "Timezone"};
+    static const char *optionsArray[] = {"Back", "Clock Face", "Time Format", "Timezone"};
     screen->showOverlayBanner("Clock Menu", 30000, optionsArray, 4, [](int selected) -> void {
         if (selected == 1) {
             menuHandler::menuQueue = menuHandler::clock_face_picker;
