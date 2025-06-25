@@ -137,14 +137,10 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
     if (ourNode && (nodeDB->hasValidPosition(ourNode) || screen->hasHeading())) {
         const meshtastic_PositionLite &op = ourNode->position;
         float myHeading;
-        if (config.display.compass_north_top) {
-            myHeading = 0;
-        } else {
-            if (screen->hasHeading())
-                myHeading = (screen->getHeading()) * PI / 180; // gotta convert compass degrees to Radians
-            else
-                myHeading = screen->estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
-        }
+        if (screen->hasHeading())
+            myHeading = (screen->getHeading()) * PI / 180; // gotta convert compass degrees to Radians
+        else
+            myHeading = screen->estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
         graphics::CompassRenderer::drawCompassNorth(display, compassX, compassY, myHeading, (compassDiam / 2));
 
         // Compass bearing to waypoint
