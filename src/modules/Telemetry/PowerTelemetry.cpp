@@ -22,7 +22,15 @@
 #include "graphics/ScreenFonts.h"
 #include <Throttle.h>
 
-#if __has_include(<Adafruit_ADS1015.h>)
+namespace graphics
+{
+extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *titleStr);
+}
+
+
+#include "Sensor/nullSensor.h"
+
+#if __has_include(<Adafruit_ADS1X15.h>)
 #include "Sensor/ADS1X15Sensor.h"
 ADS1X15Sensor ads1x15Sensor;
 #else
@@ -49,8 +57,8 @@ int32_t PowerTelemetryModule::runOnce()
         without having to configure it from the PythonAPI or WebUI.
     */
 
-    // moduleConfig.telemetry.power_measurement_enabled = 1;
-    // moduleConfig.telemetry.power_screen_enabled = 1;
+    moduleConfig.telemetry.power_measurement_enabled = 1;
+    moduleConfig.telemetry.power_screen_enabled = 1;
     // moduleConfig.telemetry.power_update_interval = 45;
 
     if (!(moduleConfig.telemetry.power_measurement_enabled)) {
@@ -83,6 +91,9 @@ int32_t PowerTelemetryModule::runOnce()
                 result = max17048Sensor.isInitialized() ? 0 : max17048Sensor.runOnce();
             if (ads1x15Sensor.hasSensor())
                 result = ads1x15Sensor.isInitialized() ? 0 : ads1x15Sensor.runOnce();
+            if (!ads1x15Sensor.hasSensor()) {
+                LOG_INFO("ADS1X15 not found");
+            }
         }
 
         // it's possible to have this module enabled, only for displaying values on the screen.
@@ -215,6 +226,7 @@ bool PowerTelemetryModule::getPowerTelemetry(meshtastic_Telemetry *m)
     if (max17048Sensor.hasSensor())
         valid = max17048Sensor.getMetrics(m);
     if (ads1x15Sensor.hasSensor())
+        LOG_INFO("Getting ADS1X15 sensor");
         valid = ads1x15Sensor.getMetrics(m);
 #endif
 
