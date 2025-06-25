@@ -278,7 +278,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         // Cache miss - regenerate lines and heights
         cachedLines = generateLines(display, headerStr, messageBuf, textWidth);
         cachedHeights =
-            calculateLineHeights(display, cachedLines, emotes, numEmotes);
+            calculateLineHeights(cachedLines, emotes);
         cachedKey = currentKey;
     }
 
@@ -345,7 +345,9 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
 std::vector<std::string> generateLines(OLEDDisplay *display,
                                        const char *headerStr,
-                                       const char *messageBuf, int textWidth) {
+                                       const char *messageBuf,
+                                       int textWidth)
+{
     std::vector<std::string> lines;
     lines.push_back(std::string(headerStr)); // Header line is always first
 
@@ -390,9 +392,9 @@ std::vector<std::string> generateLines(OLEDDisplay *display,
     return lines;
 }
 
-std::vector<int> calculateLineHeights(OLEDDisplay *display,
-                                      const std::vector<std::string> &lines,
-                                      const Emote *emotes, int emoteCount) {
+std::vector<int> calculateLineHeights(const std::vector<std::string>& lines,
+                                      const Emote *emotes)
+{
     std::vector<int> rowHeights;
 
     for (const auto &_line : lines) {
@@ -421,15 +423,16 @@ std::vector<int> calculateLineHeights(OLEDDisplay *display,
 }
 
 void renderMessageContent(OLEDDisplay *display,
-                          const std::vector<std::string> &lines,
-                          const std::vector<int> &rowHeights,
+                          const std::vector<std::string>& lines,
+                          const std::vector<int>& rowHeights,
                           int x,
                           int yOffset,
                           int scrollBottom,
                           const Emote *emotes,
                           int numEmotes,
                           bool isInverted,
-                          bool isBold) {
+                          bool isBold)
+{
     for (size_t i = 0; i < lines.size(); ++i) {
         int lineY = yOffset;
         for (size_t j = 0; j < i; ++j)

@@ -19,17 +19,17 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 // Function to generate lines with word wrapping
 std::vector<std::string> generateLines(OLEDDisplay *display,
                                        const char *headerStr,
-                                       const char *messageBuf, int textWidth);
+                                       const char *messageBuf,
+                                       int textWidth);
 
 // Function to calculate heights for each line
-std::vector<int> calculateLineHeights(OLEDDisplay *display,
-                                      const std::vector<std::string> &lines,
-                                      const Emote *emotes, int emoteCount);
+std::vector<int> calculateLineHeights(const std::vector<std::string>& lines,
+                                      const Emote *emotes);
 
 // Function to render the message content
 void renderMessageContent(OLEDDisplay *display,
-                          const std::vector<std::string> &lines,
-                          const std::vector<int> &rowHeights,
+                          const std::vector<std::string>& lines,
+                          const std::vector<int>& rowHeights,
                           int x,
                           int yOffset,
                           int scrollBottom,
