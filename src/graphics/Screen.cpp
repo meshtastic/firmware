@@ -59,7 +59,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "mesh/Channels.h"
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
 #include "meshUtils.h"
-#include "modules/AdminModule.h"
 #include "modules/ExternalNotificationModule.h"
 #include "modules/TextMessageModule.h"
 #include "modules/WaypointModule.h"
@@ -1308,12 +1307,13 @@ int Screen::handleInputEvent(const InputEvent *event)
     return 0;
 }
 
-int Screen::handleAdminMessage(const meshtastic_AdminMessage *arg)
+int Screen::handleAdminMessage(AdminModule_ObserverData *arg)
 {
-    switch (arg->which_payload_variant) {
+    switch (arg->request->which_payload_variant) {
     // Node removed manually (i.e. via app)
     case meshtastic_AdminMessage_remove_by_nodenum_tag:
         setFrames(FOCUS_PRESERVE);
+        *arg->result = AdminMessageHandleResult::HANDLED;
         break;
 
     // Default no-op, in case the admin message observable gets used by other classes in future
