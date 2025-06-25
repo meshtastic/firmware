@@ -467,18 +467,27 @@ class LGFX : public lgfx::LGFX_Device
 
             // The following setting values ​​are general initial values ​​for each panel, so please comment out any
             // unknown items and try them.
-
-            cfg.memory_width = TFT_WIDTH;                 // Maximum width supported by the driver IC
-            cfg.memory_height = TFT_HEIGHT;               // Maximum height supported by the driver IC
-            cfg.panel_width = TFT_WIDTH;                  // actual displayable width
-            cfg.panel_height = TFT_HEIGHT;                // actual displayable height
-            cfg.offset_x = TFT_OFFSET_X;                  // Panel offset amount in X direction
-            cfg.offset_y = TFT_OFFSET_Y;                  // Panel offset amount in Y direction
-            cfg.offset_rotation = TFT_OFFSET_ROTATION;    // Rotation direction value offset 0~7 (4~7 is mirrored)
+#if defined(T_WATCH_S3)
+            cfg.panel_width = 240;
+            cfg.panel_height = 240;
+            cfg.memory_width = 240;
+            cfg.memory_height = 320;
+            cfg.offset_x = 0;
+            cfg.offset_y = 0;                             // No vertical shift needed — panel is top-aligned
+            cfg.offset_rotation = 2;                      // Rotate 180° to correct upside-down layout
+#else
+            cfg.memory_width = TFT_WIDTH;              // Maximum width supported by the driver IC
+            cfg.memory_height = TFT_HEIGHT;            // Maximum height supported by the driver IC
+            cfg.panel_width = TFT_WIDTH;               // actual displayable width
+            cfg.panel_height = TFT_HEIGHT;             // actual displayable height
+            cfg.offset_x = TFT_OFFSET_X;               // Panel offset amount in X direction
+            cfg.offset_y = TFT_OFFSET_Y;               // Panel offset amount in Y direction
+            cfg.offset_rotation = TFT_OFFSET_ROTATION; // Rotation direction value offset 0~7 (4~7 is mirrored)
+#endif
 #ifdef TFT_DUMMY_READ_PIXELS
             cfg.dummy_read_pixel = TFT_DUMMY_READ_PIXELS; // Number of bits for dummy read before pixel readout
 #else
-            cfg.dummy_read_pixel = 9; // Number of bits for dummy read before pixel readout
+            cfg.dummy_read_pixel = 9;                  // Number of bits for dummy read before pixel readout
 #endif
             cfg.dummy_read_bits = 1;                      // Number of bits for dummy read before non-pixel data read
             cfg.readable = true;                          // Set to true if data can be read
@@ -653,7 +662,7 @@ static LGFX *tft = nullptr;
 #include <TFT_eSPI.h> // Graphics and font library for ILI9342 driver chip
 
 static TFT_eSPI *tft = nullptr; // Invoke library, pins defined in User_Setup.h
-#elif ARCH_PORTDUINO && HAS_SCREEN != 0 && !HAS_TFT
+#elif ARCH_PORTDUINO
 #include <LovyanGFX.hpp> // Graphics and font library for ST7735 driver chip
 
 class LGFX : public lgfx::LGFX_Device
@@ -697,11 +706,16 @@ class LGFX : public lgfx::LGFX_Device
         _panel_instance->setBus(&_bus_instance); // set the bus on the panel.
 
         auto cfg = _panel_instance->config(); // Gets a structure for display panel settings.
-        LOG_DEBUG("Height: %d, Width: %d ", settingsMap[displayHeight], settingsMap[displayWidth]);
+        LOG_DEBUG("Width: %d, Height: %d", settingsMap[displayWidth], settingsMap[displayHeight]);
         cfg.pin_cs = settingsMap[displayCS]; // Pin number where CS is connected (-1 = disable)
         cfg.pin_rst = settingsMap[displayReset];
-        cfg.panel_width = settingsMap[displayWidth];            // actual displayable width
-        cfg.panel_height = settingsMap[displayHeight];          // actual displayable height
+        if (settingsMap[displayRotate]) {
+            cfg.panel_width = settingsMap[displayHeight]; // actual displayable width
+            cfg.panel_height = settingsMap[displayWidth]; // actual displayable height
+        } else {
+            cfg.panel_width = settingsMap[displayWidth];   // actual displayable width
+            cfg.panel_height = settingsMap[displayHeight]; // actual displayable height
+        }
         cfg.offset_x = settingsMap[displayOffsetX];             // Panel offset amount in X direction
         cfg.offset_y = settingsMap[displayOffsetY];             // Panel offset amount in Y direction
         cfg.offset_rotation = settingsMap[displayOffsetRotate]; // Rotation direction value offset 0~7 (4~7 is mirrored)
@@ -978,9 +992,9 @@ TFTDisplay::TFTDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY g
 
 #if ARCH_PORTDUINO
     if (settingsMap[displayRotate]) {
-        setGeometry(GEOMETRY_RAWMODE, settingsMap[configNames::displayHeight], settingsMap[configNames::displayWidth]);
-    } else {
         setGeometry(GEOMETRY_RAWMODE, settingsMap[configNames::displayWidth], settingsMap[configNames::displayHeight]);
+    } else {
+        setGeometry(GEOMETRY_RAWMODE, settingsMap[configNames::displayHeight], settingsMap[configNames::displayWidth]);
     }
 
 #elif defined(SCREEN_ROTATE)
@@ -1169,6 +1183,8 @@ bool TFTDisplay::connect()
     tft->setRotation(1); // T-Deck has the TFT in landscape
 #elif defined(T_WATCH_S3) || defined(SENSECAP_INDICATOR)
     tft->setRotation(2); // T-Watch S3 left-handed orientation
+#elif ARCH_PORTDUINO
+    tft->setRotation(0); // use config.yaml to set rotation
 #else
     tft->setRotation(3); // Orient horizontal and wide underneath the silkscreen name label
 #endif

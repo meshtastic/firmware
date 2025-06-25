@@ -147,7 +147,6 @@ TCA8418Keyboard::TCA8418Keyboard() : m_wire(nullptr), m_addr(0), readCallback(nu
 {
     state = Init;
     last_key = -1;
-    next_key = -1;
     should_backspace = false;
     last_tap = 0L;
     char_idx = 0;
