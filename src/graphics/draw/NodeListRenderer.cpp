@@ -418,7 +418,9 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     int totalColumns = 2;
 
     int startIndex = scrollIndex * visibleNodeRows * totalColumns;
-    startIndex++; // skip own node
+    if (scrollIndex == 0) {
+        startIndex++; // skip own node
+    }
     int endIndex = std::min(startIndex + visibleNodeRows * totalColumns, totalEntries);
 
     int yOffset = 0;
