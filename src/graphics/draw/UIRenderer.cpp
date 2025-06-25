@@ -279,14 +279,14 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
 
     // List of available macro Y positions in order, from top to bottom.
     int line = 1; // which slot to use next
+    std::string usernameStr;
 
     // === 1. Long Name (always try to show first) ===
     const char *username = (node->has_user && node->user.long_name[0]) ? node->user.long_name : nullptr;
     if (username) {
-        std::string sanitized = sanitizeString(username); // Sanitize the incoming long_name just in case
-        username = sanitized.c_str();
+        usernameStr = sanitizeString(username); // Sanitize the incoming long_name just in case
         // Print node's long name (e.g. "Backpack Node")
-        display->drawString(x, getTextPositions(display)[line++], username);
+        display->drawString(x, getTextPositions(display)[line++], usernameStr.c_str());
     }
 
     // === 2. Signal and Hops (combined on one line, if available) ===
@@ -662,19 +662,18 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
     int nameX = 0;
     int yOffset = (isHighResolution) ? 0 : 5;
     const char *longName = nullptr;
-    std::string sanitized;
+    std::string longNameStr;
 
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     if (ourNode && ourNode->has_user && strlen(ourNode->user.long_name) > 0) {
-        std::string sanitized = sanitizeString(ourNode->user.long_name);
-        longName = sanitized.c_str();
+        longNameStr = sanitizeString(ourNode->user.long_name);
     }
     char shortnameble[35];
     snprintf(shortnameble, sizeof(shortnameble), "%s",
              graphics::UIRenderer::haveGlyphs(owner.short_name) ? owner.short_name : "");
 
     char combinedName[50];
-    snprintf(combinedName, sizeof(combinedName), "%s (%s)", longName, shortnameble);
+    snprintf(combinedName, sizeof(combinedName), "%s (%s)", longNameStr.empty() ? "" : longNameStr.c_str(), shortnameble);
     if (SCREEN_WIDTH - (display->getStringWidth(longName) + display->getStringWidth(shortnameble)) > 10) {
         size_t len = strlen(combinedName);
         if (len >= 3 && strcmp(combinedName + len - 3, " ()") == 0) {
@@ -688,7 +687,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
         // === LongName Centered ===
         textWidth = display->getStringWidth(longName);
         nameX = (SCREEN_WIDTH - textWidth) / 2;
-        display->drawString(nameX, getTextPositions(display)[line++], longName);
+        display->drawString(nameX, getTextPositions(display)[line++], longNameStr.c_str());
 
         // === ShortName Centered ===
         textWidth = display->getStringWidth(shortnameble);
