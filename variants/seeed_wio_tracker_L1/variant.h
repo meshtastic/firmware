@@ -169,6 +169,7 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 #define TB_LEFT 27
 #define TB_RIGHT 28
 #define TB_PRESS 29
+#define TB_DIRECTION FALLING
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  Compatibility Definitions
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

@@ -1288,12 +1288,13 @@ int Screen::handleInputEvent(const InputEvent *event)
                                 config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
                                 playGPSEnableBeep();
                                 gps->enable();
+                                service->reloadConfig(SEGMENT_CONFIG);
                             } else if (selected == 2) {
                                 config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_DISABLED;
                                 playGPSDisableBeep();
                                 gps->disable();
+                                service->reloadConfig(SEGMENT_CONFIG);
                             }
-                            service->reloadConfig(SEGMENT_CONFIG);
                         },
                         config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED ? 1
                                                                                                      : 2); // set inital selection
@@ -1479,9 +1480,10 @@ void Screen::TZPicker()
             } else if (selected == 16) { // NZ
                 strncpy(config.device.tzdef, "NZST-12NZDT,M9.5.0,M4.1.0/3", sizeof(config.device.tzdef));
             }
-
-            setenv("TZ", config.device.tzdef, 1);
-            service->reloadConfig(SEGMENT_CONFIG);
+            if (selected != 0) {
+                setenv("TZ", config.device.tzdef, 1);
+                service->reloadConfig(SEGMENT_CONFIG);
+            }
         });
 }
 

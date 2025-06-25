@@ -1153,7 +1153,7 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
 #endif
 #endif
     conn.has_serial = true; // No serial-less devices
-#if !EXCLUDE_POWER_FSM
+#if !MESHTASTIC_EXCLUDE_POWER_FSM
     conn.serial.is_connected = powerFSM.getState() == &stateSERIAL;
 #else
     conn.serial.is_connected = powerFSM.getState();
