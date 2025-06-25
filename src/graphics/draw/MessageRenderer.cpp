@@ -230,6 +230,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                  sender);
     }
 
+    uint32_t now = millis();
 #ifndef EXCLUDE_EMOJI
     // === Bounce animation setup ===
     static uint32_t lastBounceTime = 0;
@@ -237,9 +238,8 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     const int bounceRange = 2;     // Max pixels to bounce up/down
     const int bounceInterval = 10; // How quickly to change bounce direction (ms)
 
-    uint32_t currentTime = millis();
-    if (currentTime - lastBounceTime >= bounceInterval) {
-        lastBounceTime = currentTime;
+    if (now - lastBounceTime >= bounceInterval) {
+        lastBounceTime = now;
         bounceY = (bounceY + 1) % (bounceRange * 2);
     }
     for (int i = 0; i < numEmotes; ++i) {
@@ -251,14 +251,17 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 display->drawString(x + 4, headerY, headerStr);
 
             // Draw separator (same as scroll version)
-            for (int separatorX = 0; separatorX <= (display->getStringWidth(headerStr) + 3); separatorX += 2) {
-                display->setPixel(separatorX, headerY + ((SCREEN_WIDTH > 128) ? 19 : 13));
+            for (int separatorX = 1; separatorX <= (display->getStringWidth(headerStr) + 2); separatorX += 2) {
+                display->setPixel(separatorX, headerY + ((isHighResolution) ? 19 : 13));
             }
 
             // Center the emote below the header line + separator + nav
             int remainingHeight = SCREEN_HEIGHT - (headerY + FONT_HEIGHT_SMALL) - navHeight;
-            int emoteY = headerY + FONT_HEIGHT_SMALL + (remainingHeight - e.height) / 2 + bounceY - bounceRange;
+            int emoteY = headerY + 6 + FONT_HEIGHT_SMALL + (remainingHeight - e.height) / 2 + bounceY - bounceRange;
             display->drawXbm((SCREEN_WIDTH - e.width) / 2, emoteY, e.width, e.height, e.bitmap);
+
+            // Draw header at the end to sort out overlapping elements
+            graphics::drawCommonHeader(display, x, y, titleStr);
             return;
         }
     }
@@ -294,7 +297,6 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     // === Smooth scrolling adjustment ===
     // You can tweak this divisor to change how smooth it scrolls.
     // Lower = smoother, but can feel slow.
-    uint32_t now = millis();
     float delta = (now - lastTime) / 400.0f;
     lastTime = now;
 
@@ -328,13 +330,13 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
     int scrollOffset = static_cast<int>(scrollY);
     int yOffset = -scrollOffset + getTextPositions(display)[1];
-    for (int separatorX = 0; separatorX <= (display->getStringWidth(headerStr) + 3); separatorX += 2) {
-        display->setPixel(separatorX, yOffset + ((SCREEN_WIDTH > 128) ? 19 : 13));
+    for (int separatorX = 1; separatorX <= (display->getStringWidth(headerStr) + 2); separatorX += 2) {
+        display->setPixel(separatorX, yOffset + ((isHighResolution) ? 19 : 13));
     }
 
     // === Render visible lines ===
     renderMessageContent(display, cachedLines, cachedHeights, x, yOffset,
-                        scrollBottom, scrollOffset, emotes, numEmotes,
+                        scrollBottom, emotes, numEmotes,
                         isInverted, isBold);
 
     // Draw header at the end to sort out overlapping elements
@@ -345,14 +347,21 @@ std::vector<std::string> generateLines(OLEDDisplay *display,
                                        const char *headerStr,
                                        const char *messageBuf, int textWidth) {
     std::vector<std::string> lines;
-    lines.push_back(std::string(headerStr));  // Header line is always first
+    lines.push_back(std::string(headerStr)); // Header line is always first
 
     std::string line, word;
     for (int i = 0; messageBuf[i]; ++i) {
         char ch = messageBuf[i];
+        if ((unsigned char)messageBuf[i] == 0xE2 && (unsigned char)messageBuf[i + 1] == 0x80 &&
+            (unsigned char)messageBuf[i + 2] == 0x99) {
+            ch = '\''; // plain apostrophe
+            i += 2;    // skip over the extra UTF-8 bytes
+        }
         if (ch == '\n') {
-            if (!word.empty()) line += word;
-            if (!line.empty()) lines.push_back(line);
+            if (!word.empty())
+                line += word;
+            if (!line.empty())
+                lines.push_back(line);
             line.clear();
             word.clear();
         } else if (ch == ' ') {
@@ -361,15 +370,22 @@ std::vector<std::string> generateLines(OLEDDisplay *display,
         } else {
             word += ch;
             std::string test = line + word;
+            // Keep these lines for diagnostics
+            // LOG_INFO("Char: '%c' (0x%02X)", ch, (unsigned char)ch);
+            // LOG_INFO("Current String: %s", test.c_str());
             if (display->getStringWidth(test.c_str()) > textWidth) {
-                if (!line.empty()) lines.push_back(line);
+                if (!line.empty())
+                    lines.push_back(line);
                 line = word;
                 word.clear();
             }
         }
     }
-    if (!word.empty()) line += word;
-    if (!line.empty()) lines.push_back(line);
+
+    if (!word.empty())
+        line += word;
+    if (!line.empty())
+        lines.push_back(line);
 
     return lines;
 }
@@ -379,13 +395,13 @@ std::vector<int> calculateLineHeights(OLEDDisplay *display,
                                       const Emote *emotes, int emoteCount) {
     std::vector<int> rowHeights;
 
-    for (const auto &line : lines) {
+    for (const auto &_line : lines) {
         int lineHeight = FONT_HEIGHT_SMALL;
         bool hasEmote = false;
 
-        for (int i = 0; i < emoteCount; ++i) {
+        for (int i = 0; i < numEmotes; ++i) {
             const Emote &e = emotes[i];
-            if (line.find(e.label) != std::string::npos) {
+            if (_line.find(e.label) != std::string::npos) {
                 lineHeight = std::max(lineHeight, e.height);
                 hasEmote = true;
             }
@@ -393,12 +409,10 @@ std::vector<int> calculateLineHeights(OLEDDisplay *display,
 
         // Apply tighter spacing if no emotes on this line
         if (!hasEmote) {
-            lineHeight -= 2;  // reduce by 2px for tighter spacing
-            if (lineHeight < 8) lineHeight = 8;  // minimum safety
+            lineHeight -= 2; // reduce by 2px for tighter spacing
+            if (lineHeight < 8)
+                lineHeight = 8; // minimum safety
         }
-
-        // Add 1px padding to each line
-        lineHeight += 1;
 
         rowHeights.push_back(lineHeight);
     }
@@ -408,20 +422,25 @@ std::vector<int> calculateLineHeights(OLEDDisplay *display,
 
 void renderMessageContent(OLEDDisplay *display,
                           const std::vector<std::string> &lines,
-                          const std::vector<int> &rowHeights, int x,
-                          int yOffset, int scrollBottom, int scrollOffset,
-                          const Emote *emotes, int numEmotes, bool isInverted,
+                          const std::vector<int> &rowHeights,
+                          int x,
+                          int yOffset,
+                          int scrollBottom,
+                          const Emote *emotes,
+                          int numEmotes,
+                          bool isInverted,
                           bool isBold) {
     for (size_t i = 0; i < lines.size(); ++i) {
         int lineY = yOffset;
-        for (size_t j = 0; j < i; ++j) lineY += rowHeights[j];
+        for (size_t j = 0; j < i; ++j)
+            lineY += rowHeights[j];
         if (lineY > -rowHeights[i] && lineY < scrollBottom) {
             if (i == 0 && isInverted) {
-                display->drawString(x + 3, lineY, lines[i].c_str());
-                if (isBold) display->drawString(x + 4, lineY, lines[i].c_str());
+                display->drawString(x, lineY, lines[i].c_str());
+                if (isBold)
+                    display->drawString(x, lineY, lines[i].c_str());
             } else {
-                drawStringWithEmotes(display, x, lineY, lines[i], emotes,
-                                     numEmotes);
+                drawStringWithEmotes(display, x, lineY, lines[i], emotes, numEmotes);
             }
         }
     }

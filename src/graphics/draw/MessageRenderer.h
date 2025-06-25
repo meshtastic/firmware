@@ -29,9 +29,13 @@ std::vector<int> calculateLineHeights(OLEDDisplay *display,
 // Function to render the message content
 void renderMessageContent(OLEDDisplay *display,
                           const std::vector<std::string> &lines,
-                          const std::vector<int> &rowHeights, int x,
-                          int yOffset, int scrollBottom, int scrollOffset,
-                          const Emote *emotes, int numEmotes, bool isInverted,
+                          const std::vector<int> &rowHeights,
+                          int x,
+                          int yOffset,
+                          int scrollBottom,
+                          const Emote *emotes,
+                          int numEmotes,
+                          bool isInverted,
                           bool isBold);
 
 } // namespace MessageRenderer
