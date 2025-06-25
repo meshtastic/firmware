@@ -849,15 +849,16 @@ void Screen::setFrames(FrameFocus focus)
     indicatorIcons.push_back(digital_icon_clock);
 #endif
 
+    // Beware of what changes you make in this code!
+    // We pass numfames into GetMeshModulesWithUIFrames() which is highly important!
+    // Inside of that callback, goes over to MeshModule.cpp and we run
+    // modulesWithUIFrames.resize(startIndex, nullptr), to insert nullptr
+    // entries until we're ready to start building the matching entries.
+    // We are doing our best to keep the normalFrames vector
+    // and the moduleFrames vector in lock step.
     moduleFrames = MeshModule::GetMeshModulesWithUIFrames(numframes);
     LOG_DEBUG("Show %d module frames", moduleFrames.size());
 
-    // put all of the module frames first.
-    // this is a little bit of a dirty hack; since we're going to call
-    // the same drawModuleFrame handler here for all of these module frames
-    // and then we'll just assume that the state->currentFrame value
-    // is the same offset into the moduleFrames vector
-    // so that we can invoke the module's callback
     for (auto i = moduleFrames.begin(); i != moduleFrames.end(); ++i) {
         // Draw the module frame, using the hack described above
         if (*i != nullptr) {
