@@ -446,9 +446,7 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
 
     int totalEntries = nodeList.size();
     int totalRowsAvailable = (display->getHeight() - y) / rowYOffset;
-#ifdef USE_EINK
-    totalRowsAvailable -= 1;
-#endif
+
     int visibleNodeRows = totalRowsAvailable;
     int totalColumns = 2;
 
