@@ -200,7 +200,7 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
             lineY += (effectiveLineHeight - 2 - background_yOffset);
         } else {
             // Pop-up
-            display->drawString(textX, lineY, lineBuffer);
+            display->drawString(textX, lineY - 2, lineBuffer);
             lineY += (effectiveLineHeight);
         }
     }
