@@ -277,8 +277,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
         // Cache miss - regenerate lines and heights
         cachedLines = generateLines(display, headerStr, messageBuf, textWidth);
-        cachedHeights =
-            calculateLineHeights(cachedLines, emotes);
+        cachedHeights = calculateLineHeights(cachedLines, emotes);
         cachedKey = currentKey;
     }
 
@@ -335,18 +334,13 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     }
 
     // === Render visible lines ===
-    renderMessageContent(display, cachedLines, cachedHeights, x, yOffset,
-                        scrollBottom, emotes, numEmotes,
-                        isInverted, isBold);
+    renderMessageContent(display, cachedLines, cachedHeights, x, yOffset, scrollBottom, emotes, numEmotes, isInverted, isBold);
 
     // Draw header at the end to sort out overlapping elements
     graphics::drawCommonHeader(display, x, y, titleStr);
 }
 
-std::vector<std::string> generateLines(OLEDDisplay *display,
-                                       const char *headerStr,
-                                       const char *messageBuf,
-                                       int textWidth)
+std::vector<std::string> generateLines(OLEDDisplay *display, const char *headerStr, const char *messageBuf, int textWidth)
 {
     std::vector<std::string> lines;
     lines.push_back(std::string(headerStr)); // Header line is always first
@@ -392,8 +386,7 @@ std::vector<std::string> generateLines(OLEDDisplay *display,
     return lines;
 }
 
-std::vector<int> calculateLineHeights(const std::vector<std::string>& lines,
-                                      const Emote *emotes)
+std::vector<int> calculateLineHeights(const std::vector<std::string> &lines, const Emote *emotes)
 {
     std::vector<int> rowHeights;
 
@@ -422,16 +415,8 @@ std::vector<int> calculateLineHeights(const std::vector<std::string>& lines,
     return rowHeights;
 }
 
-void renderMessageContent(OLEDDisplay *display,
-                          const std::vector<std::string>& lines,
-                          const std::vector<int>& rowHeights,
-                          int x,
-                          int yOffset,
-                          int scrollBottom,
-                          const Emote *emotes,
-                          int numEmotes,
-                          bool isInverted,
-                          bool isBold)
+void renderMessageContent(OLEDDisplay *display, const std::vector<std::string> &lines, const std::vector<int> &rowHeights, int x,
+                          int yOffset, int scrollBottom, const Emote *emotes, int numEmotes, bool isInverted, bool isBold)
 {
     for (size_t i = 0; i < lines.size(); ++i) {
         int lineY = yOffset;
