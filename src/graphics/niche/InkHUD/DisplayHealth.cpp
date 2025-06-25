@@ -10,7 +10,7 @@ using namespace NicheGraphics;
 
 #ifdef SEEED_WIO_TRACKER_L1
 static constexpr uint32_t MAINTENANCE_MS_INITIAL = 5 * 1000UL;
-#elif
+#else
 static constexpr uint32_t MAINTENANCE_MS_INITIAL = 60 * 1000UL;
 #endif
 static constexpr uint32_t MAINTENANCE_MS = 60 * 60 * 1000UL;
