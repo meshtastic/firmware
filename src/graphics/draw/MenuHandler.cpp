@@ -118,8 +118,8 @@ void menuHandler::TZPicker()
                                          "US/Hawaii",
                                          "US/Alaska",
                                          "US/Pacific",
-                                         "US/Mountain",
                                          "US/Arizona",
+                                         "US/Mountain",
                                          "US/Central",
                                          "US/Eastern",
                                          "UTC",
@@ -142,10 +142,10 @@ void menuHandler::TZPicker()
             strncpy(config.device.tzdef, "AKST9AKDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
         } else if (selected == 3) { // Pacific
             strncpy(config.device.tzdef, "PST8PDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
-        } else if (selected == 4) { // Mountain
-            strncpy(config.device.tzdef, "MST7MDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
-        } else if (selected == 5) { // Arizona
+        } else if (selected == 4) { // Arizona
             strncpy(config.device.tzdef, "MST7", sizeof(config.device.tzdef));
+        } else if (selected == 5) { // Mountain
+            strncpy(config.device.tzdef, "MST7MDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
         } else if (selected == 6) { // Central
             strncpy(config.device.tzdef, "CST6CDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
         } else if (selected == 7) { // Eastern
