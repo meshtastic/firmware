@@ -381,11 +381,7 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         if (config.display.use_12h_clock) {
             bool isPM = hour >= 12;
             display->setFont(FONT_SMALL);
-#ifndef T_WATCH_S3
-            if (isHighResolution) {
-                display->drawString(centerX - (display->getStringWidth(isPM ? "pm" : "am") / 2), centerY - 2, isPM ? "pm" : "am");
-            }
-#endif
+            display->drawString(centerX - (display->getStringWidth(isPM ? "pm" : "am") / 2), centerY - 2, isPM ? "pm" : "am");
         }
         hour %= 12;
         if (hour == 0)
