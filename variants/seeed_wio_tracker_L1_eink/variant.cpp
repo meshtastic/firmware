@@ -83,7 +83,7 @@ const uint32_t g_ADigitalPinMap[] = {
     16, // D34 EINK_DC
     17, // D35 EINK_BUSY
     19, // D36 EINK_CS
-    
+
 };
 }
 
