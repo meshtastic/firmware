@@ -279,6 +279,14 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         cachedLines = generateLines(display, headerStr, messageBuf, textWidth);
         cachedHeights = calculateLineHeights(cachedLines, emotes);
         cachedKey = currentKey;
+    } else {
+        // Cache hit but update the header line with current time information
+        cachedLines[0] = std::string(headerStr);
+        // The header always has a fixed height since it doesn't contain emotes
+        // As per calculateLineHeights logic for lines without emotes:
+        cachedHeights[0] = FONT_HEIGHT_SMALL - 2;
+        if (cachedHeights[0] < 8)
+            cachedHeights[0] = 8; // minimum safety
     }
 
     // === Scrolling logic ===
