@@ -310,6 +310,7 @@ class NodeDB
     bool saveChannelsToDisk();
     bool saveDeviceStateToDisk();
     bool saveNodeDatabaseToDisk();
+    void sortMeshDB();
 };
 
 extern NodeDB *nodeDB;

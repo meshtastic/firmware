@@ -113,35 +113,6 @@ int calculateMaxScroll(int totalEntries, int visibleRows)
     return std::max(0, (totalEntries - 1) / (visibleRows * 2));
 }
 
-void retrieveAndSortNodes(std::vector<NodeEntry> &nodeList)
-{
-    size_t numNodes = nodeDB->getNumMeshNodes();
-    for (size_t i = 0; i < numNodes; i++) {
-        meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
-        if (!node || node->num == nodeDB->getNodeNum())
-            continue;
-
-        NodeEntry entry;
-        entry.node = node;
-        entry.sortValue = sinceLastSeen(node);
-
-        nodeList.push_back(entry);
-    }
-
-    // Sort nodes: favorites first, then by last heard (most recent first)
-    std::sort(nodeList.begin(), nodeList.end(), [](const NodeEntry &a, const NodeEntry &b) {
-        bool aFav = a.node->is_favorite;
-        bool bFav = b.node->is_favorite;
-        if (aFav != bFav)
-            return aFav;
-        if (a.sortValue == 0 || a.sortValue == UINT32_MAX)
-            return false;
-        if (b.sortValue == 0 || b.sortValue == UINT32_MAX)
-            return true;
-        return a.sortValue < b.sortValue;
-    });
-}
-
 void drawColumnSeparator(OLEDDisplay *display, int16_t x, int16_t yStart, int16_t yEnd)
 {
     int columnWidth = display->getWidth() / 2;
@@ -440,17 +411,14 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     // Space below header
     y += COMMON_HEADER_HEIGHT;
 
-    // Fetch and display sorted node list
-    std::vector<NodeEntry> nodeList;
-    retrieveAndSortNodes(nodeList);
-
-    int totalEntries = nodeList.size();
+    int totalEntries = nodeDB->getNumMeshNodes();
     int totalRowsAvailable = (display->getHeight() - y) / rowYOffset;
 
     int visibleNodeRows = totalRowsAvailable;
     int totalColumns = 2;
 
     int startIndex = scrollIndex * visibleNodeRows * totalColumns;
+    startIndex++; // skip own node
     int endIndex = std::min(startIndex + visibleNodeRows * totalColumns, totalEntries);
 
     int yOffset = 0;
@@ -462,10 +430,10 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     for (int i = startIndex; i < endIndex; ++i) {
         int xPos = x + (col * columnWidth);
         int yPos = y + yOffset;
-        renderer(display, nodeList[i].node, xPos, yPos, columnWidth);
+        renderer(display, nodeDB->getMeshNodeByIndex(i), xPos, yPos, columnWidth);
 
         if (extras) {
-            extras(display, nodeList[i].node, xPos, yPos, columnWidth, heading, lat, lon);
+            extras(display, nodeDB->getMeshNodeByIndex(i), xPos, yPos, columnWidth, heading, lat, lon);
         }
 
         lastNodeY = std::max(lastNodeY, yPos + FONT_HEIGHT_SMALL);

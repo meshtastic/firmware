@@ -23,12 +23,6 @@ namespace NodeListRenderer
 typedef void (*EntryRenderer)(OLEDDisplay *, meshtastic_NodeInfoLite *, int16_t, int16_t, int);
 typedef void (*NodeExtrasRenderer)(OLEDDisplay *, meshtastic_NodeInfoLite *, int16_t, int16_t, int, float, double, double);
 
-// Node entry structure
-struct NodeEntry {
-    meshtastic_NodeInfoLite *node;
-    uint32_t sortValue;
-};
-
 // Node list mode enumeration
 enum NodeListMode { MODE_LAST_HEARD = 0, MODE_HOP_SIGNAL = 1, MODE_DISTANCE = 2, MODE_COUNT = 3 };
 
@@ -57,7 +51,6 @@ void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, 
 
 // Utility functions
 const char *getCurrentModeTitle(int screenWidth);
-void retrieveAndSortNodes(std::vector<NodeEntry> &nodeList);
 const char *getSafeNodeName(meshtastic_NodeInfoLite *node);
 void drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char **fields);
 

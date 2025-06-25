@@ -1337,6 +1337,24 @@ bool NodeDB::saveNodeDatabaseToDisk()
     return saveProto(nodeDatabaseFileName, nodeDatabaseSize, &meshtastic_NodeDatabase_msg, &nodeDatabase, false);
 }
 
+void NodeDB::sortMeshDB()
+{
+    std::sort(meshNodes->begin(), meshNodes->end(), [](const meshtastic_NodeInfoLite a, const meshtastic_NodeInfoLite b) {
+        if (a.num == myNodeInfo.my_node_num) {
+            return true;
+        }
+        bool aFav = a.is_favorite;
+        bool bFav = b.is_favorite;
+        if (aFav != bFav)
+            return aFav;
+        if (a.last_heard == 0 || a.last_heard == UINT32_MAX)
+            return false;
+        if (b.last_heard == 0 || b.last_heard == UINT32_MAX)
+            return true;
+        return a.last_heard > b.last_heard;
+    });
+}
+
 bool NodeDB::saveToDiskNoRetry(int saveWhat)
 {
     bool success = true;
@@ -1558,6 +1576,7 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
         // Mark the node's key as manually verified to indicate trustworthiness.
         updateGUIforNode = info;
         // powerFSM.trigger(EVENT_NODEDB_UPDATED); This event has been retired
+        sortMeshDB();
         notifyObservers(true); // Force an update whether or not our node counts have changed
     }
     saveNodeDatabaseToDisk();
@@ -1661,6 +1680,7 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
             info->has_hops_away = true;
             info->hops_away = mp.hop_start - mp.hop_limit;
         }
+        sortMeshDB();
     }
 }
 
