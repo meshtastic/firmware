@@ -78,6 +78,7 @@ class Screen
 #include "concurrency/OSThread.h"
 #include "input/InputBroker.h"
 #include "mesh/MeshModule.h"
+#include "modules/AdminModule.h"
 #include "power.h"
 #include <string>
 #include <vector>
@@ -193,8 +194,8 @@ class Screen : public concurrency::OSThread
         CallbackObserver<Screen, const UIFrameEvent *>(this, &Screen::handleUIFrameEvent); // Sent by Mesh Modules
     CallbackObserver<Screen, const InputEvent *> inputObserver =
         CallbackObserver<Screen, const InputEvent *>(this, &Screen::handleInputEvent);
-    CallbackObserver<Screen, const meshtastic_AdminMessage *> adminMessageObserver =
-        CallbackObserver<Screen, const meshtastic_AdminMessage *>(this, &Screen::handleAdminMessage);
+    CallbackObserver<Screen, AdminModule_ObserverData *> adminMessageObserver =
+        CallbackObserver<Screen, AdminModule_ObserverData *>(this, &Screen::handleAdminMessage);
 
   public:
     explicit Screen(ScanI2C::DeviceAddress, meshtastic_Config_DisplayConfig_OledType, OLEDDISPLAY_GEOMETRY);
@@ -544,7 +545,7 @@ class Screen : public concurrency::OSThread
     int handleTextMessage(const meshtastic_MeshPacket *arg);
     int handleUIFrameEvent(const UIFrameEvent *arg);
     int handleInputEvent(const InputEvent *arg);
-    int handleAdminMessage(const meshtastic_AdminMessage *arg);
+    int handleAdminMessage(AdminModule_ObserverData *arg);
 
     /// Used to force (super slow) eink displays to draw critical frames
     void forceDisplay(bool forceUiUpdate = false);
