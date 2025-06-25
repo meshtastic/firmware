@@ -214,12 +214,7 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
         if (i == lineCount - 1) {
             const uint8_t extraOffset = 4; // you can tweak this value (e.g. 5 or 6 for more space)
             int16_t separatorY = lineY + extraOffset - 1;
-            display->drawLine(
-                boxLeft + padding,
-                separatorY,
-                boxLeft + boxWidth - padding,
-                separatorY
-            );
+            display->drawLine(boxLeft + padding, separatorY, boxLeft + boxWidth - padding, separatorY);
             lineY = separatorY + 1; // ensure options appear below the line
         }
     }
