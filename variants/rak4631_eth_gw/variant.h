@@ -90,6 +90,8 @@ static const uint8_t A7 = PIN_A7;
 // Other pins
 #define PIN_AREF (2)
 #define PIN_NFC1 (9)
+#define WB_IO5 PIN_NFC1
+#define WB_IO4 (4)
 #define PIN_NFC2 (10)
 
 static const uint8_t AREF = PIN_AREF;
@@ -217,6 +219,7 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 // enables 3.3V periphery like GPS or IO Module
 // Do not toggle this for GPS power savings
 #define PIN_3V3_EN (34)
+#define WB_IO2 PIN_3V3_EN
 
 // RAK1910 GPS module
 // If using the wisblock GPS module and pluged into Port A on WisBlock base
