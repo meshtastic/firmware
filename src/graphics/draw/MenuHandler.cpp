@@ -181,7 +181,7 @@ void menuHandler::TZPicker()
 void menuHandler::clockMenu()
 {
     static const char *optionsArray[] = {"Back", "Clock Face", "Time Format", "Timezone"};
-    screen->showOverlayBanner("Clock Menu", 30000, optionsArray, 4, [](int selected) -> void {
+    screen->showOverlayBanner("Clock Action", 30000, optionsArray, 4, [](int selected) -> void {
         if (selected == 1) {
             menuHandler::menuQueue = menuHandler::clock_face_picker;
             screen->setInterval(0);
@@ -217,7 +217,7 @@ void menuHandler::messageResponseMenu()
     optionsArrayPtr = optionsArray;
     options = 5;
 #endif
-    screen->showOverlayBanner("Message Action?", 30000, optionsArrayPtr, options, [](int selected) -> void {
+    screen->showOverlayBanner("Message Action", 30000, optionsArrayPtr, options, [](int selected) -> void {
         if (selected == 1) {
             screen->dismissCurrentFrame();
         } else if (selected == 2) {
@@ -266,7 +266,7 @@ void menuHandler::homeBaseMenu()
         optionsArrayPtr = optionsArray;
         options = 4;
     }
-    screen->showOverlayBanner("Action?", 30000, optionsArrayPtr, options, [](int selected) -> void {
+    screen->showOverlayBanner("Home Action", 30000, optionsArrayPtr, options, [](int selected) -> void {
         if (selected == 1) {
 #ifdef PIN_EINK_EN
             if (digitalRead(PIN_EINK_EN) == HIGH) {
@@ -306,7 +306,7 @@ void menuHandler::favoriteBaseMenu()
         optionsArrayPtr = optionsArray;
         options = 2;
     }
-    screen->showOverlayBanner("Message Node?", 30000, optionsArrayPtr, options, [](int selected) -> void {
+    screen->showOverlayBanner("Favorites Action", 30000, optionsArrayPtr, options, [](int selected) -> void {
         if (selected == 1) {
             cannedMessageModule->LaunchWithDestination(graphics::UIRenderer::currentFavoriteNodeNum);
         } else if (selected == 2) {
@@ -318,7 +318,7 @@ void menuHandler::favoriteBaseMenu()
 void menuHandler::positionBaseMenu()
 {
     static const char *optionsArray[] = {"Back", "GPS Toggle", "Compass Point"};
-    screen->showOverlayBanner("Position Options", 30000, optionsArray, 3, [](int selected) -> void {
+    screen->showOverlayBanner("Position Action", 30000, optionsArray, 3, [](int selected) -> void {
         if (selected == 1) {
             menuQueue = gps_toggle_menu;
         } else if (selected == 2) {
@@ -330,7 +330,7 @@ void menuHandler::positionBaseMenu()
 void menuHandler::nodeListMenu()
 {
     static const char *optionsArray[] = {"Back", "Reset NodeDB"};
-    screen->showOverlayBanner("Node Options", 30000, optionsArray, 2, [](int selected) -> void {
+    screen->showOverlayBanner("Node Action", 30000, optionsArray, 2, [](int selected) -> void {
         if (selected == 1) {
             menuQueue = reset_node_db_menu;
         }
@@ -395,7 +395,7 @@ void menuHandler::BuzzerModeMenu()
 {
     static const char *optionsArray[] = {"All Enabled", "Disabled", "Notifications", "System Only"};
     screen->showOverlayBanner(
-        "Beeps Mode", 30000, optionsArray, 4,
+        "Beep Action", 30000, optionsArray, 4,
         [](int selected) -> void {
             config.device.buzzer_mode = (meshtastic_Config_DeviceConfig_BuzzerMode)selected;
             service->reloadConfig(SEGMENT_CONFIG);
