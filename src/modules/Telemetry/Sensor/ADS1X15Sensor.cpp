@@ -1,11 +1,11 @@
 #include "configuration.h"
 
-#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && __has_include(<Adafruit_ADS1015.h>)
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && __has_include(<Adafruit_ADS1X15.h>)
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "ADS1X15Sensor.h"
 #include "TelemetrySensor.h"
-#include <Adafruit_ADS1015.h>
+#include <Adafruit_ADS1X15.h>
 
 ADS1X15Sensor::ADS1X15Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_ADS1X15, "ADS1X15") {}
 
@@ -23,7 +23,7 @@ int32_t ADS1X15Sensor::runOnce()
 
 void ADS1X15Sensor::setup() {}
 
-struct _ADS1X15Measurement ADS1X15Sensor::getMeasurement(ads1x15_ch_t ch)
+struct _ADS1X15Measurement ADS1X15Sensor::getMeasurement(uint8_t ch)
 {
     struct _ADS1X15Measurement measurement;
 
@@ -32,7 +32,7 @@ struct _ADS1X15Measurement ADS1X15Sensor::getMeasurement(ads1x15_ch_t ch)
     double voltage_range = 6.144;
 
     // Get value with full range
-    uint16_t value = ads.readADC_SingleEnded(ch);
+    uint16_t value = ads1x15.readADC_SingleEnded(ch);
 
     // Dynamic gain, to increase resolution of low voltage values
     // If value is under 4.096v increase the gain depending on voltage
@@ -72,8 +72,7 @@ struct _ADS1X15Measurement ADS1X15Sensor::getMeasurement(ads1x15_ch_t ch)
         value = ads1x15.readADC_SingleEnded(ch);
     }
 
-    reading = (float)value / 32768 * voltage_range;
-    measurement.voltage = reading;
+    measurement.voltage = (float)value / 32768 * voltage_range;
 
     return measurement;
 }
@@ -84,7 +83,7 @@ struct _ADS1X15Measurements ADS1X15Sensor::getMeasurements()
 
     // ADS1X15 has 4 channels starting from 0
     for (int i = 0; i < 4; i++) {
-        measurements.measurements[i] = getMeasurement((ads1x15_ch_t)i);
+        measurements.measurements[i] = getMeasurement(i);
     }
 
     return measurements;
