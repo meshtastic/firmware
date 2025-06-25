@@ -251,17 +251,17 @@ void menuHandler::homeBaseMenu()
 
     if (kb_found) {
 #ifdef PIN_EINK_EN
-        static const char *optionsArray[] = {"Back", "Toggle Backlight", "Send Adhoc Ping", "New Preset Msg", "New Freetext Msg"};
+        static const char *optionsArray[] = {"Back", "Toggle Backlight", "Send Position", "New Preset Msg", "New Freetext Msg"};
 #else
-        static const char *optionsArray[] = {"Back", "Sleep Screen", "Send Adhoc Ping", "New Preset Msg", "New Freetext Msg"};
+        static const char *optionsArray[] = {"Back", "Sleep Screen", "Send Position", "New Preset Msg", "New Freetext Msg"};
 #endif
         optionsArrayPtr = optionsArray;
         options = 5;
     } else {
 #ifdef PIN_EINK_EN
-        static const char *optionsArray[] = {"Back", "Toggle Backlight", "Send Adhoc Ping", "New Preset Msg"};
+        static const char *optionsArray[] = {"Back", "Toggle Backlight", "Send Position", "New Preset Msg"};
 #else
-        static const char *optionsArray[] = {"Back", "Sleep Screen", "Send Adhoc Ping", "New Preset Msg"};
+        static const char *optionsArray[] = {"Back", "Sleep Screen", "Send Position", "New Preset Msg"};
 #endif
         optionsArrayPtr = optionsArray;
         options = 4;
@@ -280,9 +280,9 @@ void menuHandler::homeBaseMenu()
         } else if (selected == 2) {
             service->refreshLocalMeshNode();
             if (service->trySendPosition(NODENUM_BROADCAST, true)) {
-                LOG_INFO("Position Update Sent");
+                LOG_INFO("Position Sent");
             } else {
-                LOG_INFO("Node Info Update Sent");
+                LOG_INFO("Node Info Sent");
             }
         } else if (selected == 3) {
             cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST);
@@ -317,7 +317,7 @@ void menuHandler::favoriteBaseMenu()
 
 void menuHandler::positionBaseMenu()
 {
-    static const char *optionsArray[] = {"Back", "GPS Enable", "Compass Point"};
+    static const char *optionsArray[] = {"Back", "GPS Toggle", "Compass Point"};
     screen->showOverlayBanner("Position Options", 30000, optionsArray, 3, [](int selected) -> void {
         if (selected == 1) {
             menuQueue = gps_toggle_menu;

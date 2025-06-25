@@ -100,9 +100,9 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
     case INPUT_BROKER_SEND_PING:
         service->refreshLocalMeshNode();
         if (service->trySendPosition(NODENUM_BROADCAST, true)) {
-            IF_SCREEN(screen->showOverlayBanner("Position\nUpdate Sent", 3000));
+            IF_SCREEN(screen->showOverlayBanner("Position\nSent", 3000));
         } else {
-            IF_SCREEN(screen->showOverlayBanner("Node Info\nUpdate Sent", 3000));
+            IF_SCREEN(screen->showOverlayBanner("Node Info\nSent", 3000));
         }
         return true;
     // Power control
