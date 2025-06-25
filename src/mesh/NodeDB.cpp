@@ -1339,7 +1339,7 @@ bool NodeDB::saveNodeDatabaseToDisk()
 
 void NodeDB::sortMeshDB()
 {
-    std::sort(meshNodes->begin(), meshNodes->end(), [](const meshtastic_NodeInfoLite a, const meshtastic_NodeInfoLite b) {
+    std::sort(meshNodes->begin(), meshNodes->end(), [](const meshtastic_NodeInfoLite &a, const meshtastic_NodeInfoLite &b) {
         if (a.num == myNodeInfo.my_node_num) {
             return true;
         }
