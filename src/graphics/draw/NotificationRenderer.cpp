@@ -182,8 +182,27 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
             display->drawXbm(textX + lineWidths[i] + 2, bellY, 8, 8, bell_alert);
         }
 
-        display->drawString(textX, lineY, lineBuffer);
-        lineY += effectiveLineHeight;
+        // Determine if this is a pop-up or a pick list
+        if (alertBannerOptions > 0) {
+            // Pick List
+            display->setColor(WHITE);
+            int background_yOffset = 1;
+            // Determine if we have low hanging characters
+            if (strchr(lineBuffer, 'p') || strchr(lineBuffer, 'g') || strchr(lineBuffer, 'y') || strchr(lineBuffer, 'j')) {
+                background_yOffset = -1;
+            }
+            display->fillRect(boxLeft, boxTop + 1, boxWidth, effectiveLineHeight - background_yOffset);
+            display->setColor(BLACK);
+            int yOffset = 3;
+            display->drawString(textX, lineY - yOffset, lineBuffer);
+            display->setColor(WHITE);
+
+            lineY += (effectiveLineHeight - 2 - background_yOffset);
+        } else {
+            // Pop-up
+            display->drawString(textX, lineY, lineBuffer);
+            lineY += (effectiveLineHeight);
+        }
     }
 
     uint8_t firstOptionToShow = 0;
