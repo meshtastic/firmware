@@ -1343,6 +1343,9 @@ void NodeDB::sortMeshDB()
         if (a.num == myNodeInfo.my_node_num) {
             return true;
         }
+        if (b.num == myNodeInfo.my_node_num) {
+            return false;
+        }
         bool aFav = a.is_favorite;
         bool bFav = b.is_favorite;
         if (aFav != bFav)
