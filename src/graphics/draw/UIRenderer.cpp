@@ -1099,18 +1099,6 @@ void UIRenderer::drawOEMBootScreen(OLEDDisplay *display, OLEDDisplayUiState *sta
 
 #endif
 
-// Function overlay for showing mute/buzzer modifiers etc.
-void UIRenderer::drawFunctionOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
-{
-    // LOG_DEBUG("Draw function overlay");
-    if (functionSymbol.begin() != functionSymbol.end()) {
-        char buf[64];
-        display->setFont(FONT_SMALL);
-        snprintf(buf, sizeof(buf), "%s", functionSymbolString.c_str());
-        display->drawString(SCREEN_WIDTH - display->getStringWidth(buf), SCREEN_HEIGHT - FONT_HEIGHT_SMALL, buf);
-    }
-}
-
 // Navigation bar overlay implementation
 static int8_t lastFrameIndex = -1;
 static uint32_t lastFrameChangeTime = 0;

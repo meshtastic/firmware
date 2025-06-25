@@ -418,7 +418,6 @@ void Screen::setup()
 
     // === Set custom overlay callbacks ===
     static OverlayCallback overlays[] = {
-        graphics::UIRenderer::drawFunctionOverlay, // For mute/buzzer modifiers etc.
         graphics::UIRenderer::drawNavigationBar    // Custom indicator icons for each frame
     };
     ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));

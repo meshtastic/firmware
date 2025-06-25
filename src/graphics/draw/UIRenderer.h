@@ -47,9 +47,6 @@ class UIRenderer
     // Overlay and special screens
     static void drawFrameText(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *text);
 
-    // Function overlay for showing mute/buzzer modifiers etc.
-    static void drawFunctionOverlay(OLEDDisplay *display, OLEDDisplayUiState *state);
-
     // Navigation bar overlay
     static void drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *state);
 
