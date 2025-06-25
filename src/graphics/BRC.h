@@ -6,10 +6,10 @@
 
 using namespace meshtastic;
 
-const int32_t BRC_LATI= (40.786969 * 1e7);
-const int32_t BRC_LONI = (-119.204101 * 1e7);
-const double BRC_LATF = 40.786969;
-const double BRC_LONF = -119.204101;
+const int32_t BRC_LATI= (40.786958 * 1e7);
+const int32_t BRC_LONI = (-119.202994 * 1e7);
+const double BRC_LATF = 40.786958;
+const double BRC_LONF = -119.202994;
 const double BRC_NOON = 1.5;
 const double RAD_TO_HOUR = (6.0/3.14159);
 const double METER_TO_FEET = 3.28084;
