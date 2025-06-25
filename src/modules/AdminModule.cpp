@@ -470,21 +470,37 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             setPassKey(&res);
             myReply = allocDataProtobuf(res);
         } else if (mp.decoded.want_response) {
-            LOG_DEBUG("Did not responded to a request that wanted a respond. req.variant=%d", r->which_payload_variant);
+            LOG_DEBUG("Module API did not respond to admin message. req.variant=%d", r->which_payload_variant);
         } else if (handleResult != AdminMessageHandleResult::HANDLED) {
             // Probably a message sent by us or sent to our local node.  FIXME, we should avoid scanning these messages
-            LOG_DEBUG("Ignore irrelevant admin %d", r->which_payload_variant);
+            LOG_DEBUG("Module API did not handle admin message %d", r->which_payload_variant);
         }
         break;
+    }
+
+    // Allow any observers (e.g. the UI) to handle/respond
+    AdminMessageHandleResult observerResult = AdminMessageHandleResult::NOT_HANDLED;
+    meshtastic_AdminMessage observerResponse = meshtastic_AdminMessage_init_default;
+    AdminModule_ObserverData observerData = {
+        .request = r,
+        .response = &observerResponse,
+        .result = &observerResult,
+    };
+
+    notifyObservers(&observerData);
+
+    if (observerResult == AdminMessageHandleResult::HANDLED_WITH_RESPONSE) {
+        setPassKey(&observerResponse);
+        myReply = allocDataProtobuf(observerResponse);
+        LOG_DEBUG("Observer responded to admin message");
+    } else if (observerResult == AdminMessageHandleResult::HANDLED) {
+        LOG_DEBUG("Observer handled admin message");
     }
 
     // If asked for a response and it is not yet set, generate an 'ACK' response
     if (mp.decoded.want_response && !myReply) {
         myReply = allocErrorResponse(meshtastic_Routing_Error_NONE, &mp);
     }
-
-    // Allow any observers (e.g. the UI) to respond to this event
-    notifyObservers(r);
 
     return handled;
 }
@@ -1137,7 +1153,7 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
 #endif
 #endif
     conn.has_serial = true; // No serial-less devices
-#if !EXCLUDE_POWER_FSM
+#if !MESHTASTIC_EXCLUDE_POWER_FSM
     conn.serial.is_connected = powerFSM.getState() == &stateSERIAL;
 #else
     conn.serial.is_connected = powerFSM.getState();
