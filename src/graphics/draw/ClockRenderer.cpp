@@ -195,7 +195,7 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
 
 #ifdef T_WATCH_S3
     if (nimbleBluetooth && nimbleBluetooth->isConnected()) {
-        graphics::ClockRenderer::drawBluetoothConnectedIcon(display, display->getWidth() - 18, , display->getHeight() - 14);
+        graphics::ClockRenderer::drawBluetoothConnectedIcon(display, display->getWidth() - 18, display->getHeight() - 14);
     }
 #endif
 
