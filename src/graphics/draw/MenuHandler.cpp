@@ -84,7 +84,7 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
 void menuHandler::TwelveHourPicker()
 {
     static const char *optionsArray[] = {"Back", "12-hour", "24-hour"};
-    screen->showOverlayBanner("12- or 24-hour display?", 30000, optionsArray, 3, [](int selected) -> void {
+    screen->showOverlayBanner("Time Format", 30000, optionsArray, 3, [](int selected) -> void {
         if (selected == 0) {
             menuHandler::menuQueue = menuHandler::clock_menu;
         } else if (selected == 1) {
