@@ -20,16 +20,17 @@ set -e
 
 case "$1" in
     configure|reconfigure)
-    # create spi group (for udev rules)
-    # this group already exists on Raspberry Pi OS
+    # create spi, gpio groups (for udev rules)
+    # these groups already exist on Raspberry Pi OS
         getent group spi >/dev/null 2>/dev/null || addgroup --system spi
+        getent group gpio >/dev/null 2>/dev/null || addgroup --system gpio
     # create a meshtasticd group and user
         getent passwd meshtasticd >/dev/null 2>/dev/null || adduser --system --home /var/lib/meshtasticd --no-create-home meshtasticd
         getent group meshtasticd >/dev/null 2>/dev/null || addgroup --system meshtasticd
         adduser meshtasticd meshtasticd >/dev/null 2>/dev/null
         adduser meshtasticd spi >/dev/null 2>/dev/null
+        adduser meshtasticd gpio >/dev/null 2>/dev/null
     # add meshtasticd user to appropriate groups (if they exist)
-        getent group gpio >/dev/null 2>/dev/null && adduser meshtasticd gpio >/dev/null 2>/dev/null
         getent group plugdev >/dev/null 2>/dev/null && adduser meshtasticd plugdev >/dev/null 2>/dev/null
         getent group dialout >/dev/null 2>/dev/null && adduser meshtasticd dialout >/dev/null 2>/dev/null
         getent group i2c >/dev/null 2>/dev/null && adduser meshtasticd i2c >/dev/null 2>/dev/null

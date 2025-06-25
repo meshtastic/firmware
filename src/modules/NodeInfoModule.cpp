@@ -14,16 +14,12 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
 {
     auto p = *pptr;
 
+    // Coerce user.id to be derived from the node number
+    snprintf(p.id, sizeof(p.id), "!%08x", getFrom(&mp));
+
     bool hasChanged = nodeDB->updateUser(getFrom(&mp), p, mp.channel);
 
     bool wasBroadcast = isBroadcast(mp.to);
-
-    // Show new nodes on LCD screen
-    if (wasBroadcast) {
-        String lcd = String("Joined: ") + p.long_name + "\n";
-        if (screen)
-            screen->print(lcd.c_str());
-    }
 
     // if user has changed while packet was not for us, inform phone
     if (hasChanged && !wasBroadcast && !isToUs(&mp))

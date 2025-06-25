@@ -65,6 +65,13 @@ const RegionInfo regions[] = {
     RDEF(ANZ, 915.0f, 928.0f, 100, 0, 30, true, false, false),
 
     /*
+        433.05 - 434.79 MHz, 25mW EIRP max, No duty cycle restrictions
+        AU Low Interference Potential https://www.acma.gov.au/licences/low-interference-potential-devices-lipd-class-licence
+        NZ General User Radio Licence for Short Range Devices https://gazette.govt.nz/notice/id/2022-go3100
+     */
+    RDEF(ANZ_433, 433.05f, 434.79f, 100, 0, 14, true, false, false),
+
+    /*
         https://digital.gov.ru/uploaded/files/prilozhenie-12-k-reshenyu-gkrch-18-46-03-1.pdf
 
         Note:
@@ -528,8 +535,8 @@ void RadioInterface::applyModemConfig()
 
     power = loraConfig.tx_power;
 
-    if ((power == 0) || ((power + REGULATORY_GAIN_LORA > myRegion->powerLimit) && !devicestate.owner.is_licensed))
-        power = myRegion->powerLimit - REGULATORY_GAIN_LORA;
+    if ((power == 0) || ((power > myRegion->powerLimit) && !devicestate.owner.is_licensed))
+        power = myRegion->powerLimit;
 
     if (power == 0)
         power = 17; // Default to this power level if we don't have a valid regional power limit (powerLimit of myRegion defaults
@@ -616,7 +623,12 @@ void RadioInterface::limitPower()
         power = maxPower;
     }
 
-    LOG_INFO("Set radio: final power level=%d", power);
+    if (TX_GAIN_LORA > 0) {
+        LOG_INFO("Requested Tx power: %d dBm; Device LoRa Tx gain: %d dB", power, TX_GAIN_LORA);
+        power -= TX_GAIN_LORA;
+    }
+
+    LOG_INFO("Final Tx power: %d dBm", power);
 }
 
 void RadioInterface::deliverToReceiver(meshtastic_MeshPacket *p)
