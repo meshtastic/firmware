@@ -1339,23 +1339,26 @@ bool NodeDB::saveNodeDatabaseToDisk()
 
 void NodeDB::sortMeshDB()
 {
-    std::sort(meshNodes->begin(), meshNodes->end(), [](const meshtastic_NodeInfoLite &a, const meshtastic_NodeInfoLite &b) {
-        if (a.num == myNodeInfo.my_node_num) {
-            return true;
-        }
-        if (b.num == myNodeInfo.my_node_num) {
-            return false;
-        }
-        bool aFav = a.is_favorite;
-        bool bFav = b.is_favorite;
-        if (aFav != bFav)
-            return aFav;
-        if (a.last_heard == 0 || a.last_heard == UINT32_MAX)
-            return false;
-        if (b.last_heard == 0 || b.last_heard == UINT32_MAX)
-            return true;
-        return a.last_heard > b.last_heard;
-    });
+    if (!Throttle::isWithinTimespanMs(lastSort, 1000 * 5)) {
+        lastSort = millis();
+        std::sort(meshNodes->begin(), meshNodes->end(), [](const meshtastic_NodeInfoLite &a, const meshtastic_NodeInfoLite &b) {
+            if (a.num == myNodeInfo.my_node_num) {
+                return true;
+            }
+            if (b.num == myNodeInfo.my_node_num) {
+                return false;
+            }
+            bool aFav = a.is_favorite;
+            bool bFav = b.is_favorite;
+            if (aFav != bFav)
+                return aFav;
+            if (a.last_heard == 0 || a.last_heard == UINT32_MAX)
+                return false;
+            if (b.last_heard == 0 || b.last_heard == UINT32_MAX)
+                return true;
+            return a.last_heard > b.last_heard;
+        });
+    }
 }
 
 bool NodeDB::saveToDiskNoRetry(int saveWhat)
