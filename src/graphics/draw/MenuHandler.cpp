@@ -278,12 +278,8 @@ void menuHandler::homeBaseMenu()
             screen->setOn(false);
 #endif
         } else if (selected == 2) {
-            service->refreshLocalMeshNode();
-            if (service->trySendPosition(NODENUM_BROADCAST, true)) {
-                LOG_INFO("Position Sent");
-            } else {
-                LOG_INFO("Node Info Sent");
-            }
+            InputEvent event = {.inputEvent = (input_broker_event)175, .kbchar = 175, .touchX = 0, .touchY = 0};
+            inputBroker->injectInputEvent(&event);
         } else if (selected == 3) {
             cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST);
         } else if (selected == 4) {
