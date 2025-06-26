@@ -5,7 +5,7 @@ E-Ink display driver
     - Manufacturer: Wisevast
     - Size: 2.13 inch
     - Resolution: 122px x 250px
-    - Flex connector marking: HINK-E0213A162-FPC-A0 (Hidden, printed on back-side)
+    - Flex connector marking (not a unique identifier): HINK-E0213A162-FPC-A0 (Hidden, printed on back-side)
 
 Note: this display uses an uncommon controller IC, Fitipower JD79656.
 It is implemented as a "one-off", directly inheriting the EInk base class, unlike SSD16XX displays.

@@ -1,6 +1,7 @@
+#ifndef HAS_TFT
 #define BUTTON_PIN 0
-#define BUTTON_PIN_SECONDARY 21         // Second built-in button
-#define BUTTON_SECONDARY_CANNEDMESSAGES // By default, use the secondary button as canned message input
+#define PIN_BUTTON2 21             // Second built-in button
+#define ALT_BUTTON_PIN PIN_BUTTON2 // Send the up event
 
 // I2C
 #define I2C_SDA SDA
@@ -69,3 +70,4 @@
 
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
+#endif // HAS_TFT

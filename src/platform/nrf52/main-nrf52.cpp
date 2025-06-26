@@ -308,6 +308,9 @@ void cpuDeepSleep(uint32_t msecToWake)
     nrf_gpio_cfg_default(SCREEN_TOUCH_INT);
     nrf_gpio_cfg_default(WB_I2C1_SCL);
     nrf_gpio_cfg_default(WB_I2C1_SDA);
+
+    // nrf_gpio_cfg_default(WB_I2C2_SCL);
+    // nrf_gpio_cfg_default(WB_I2C2_SDA);
 #endif
 #endif
 #ifdef MESHLINK
