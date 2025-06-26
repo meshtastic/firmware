@@ -444,8 +444,11 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
                 GeoCoord::latLongToMeter(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
             */
             float bearing = GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(p.latitude_i), DegD(p.longitude_i));
-            if (!config.display.compass_north_top)
+            if (config.display.compass_north_top) {
+                myHeading = 0;
+            } else {
                 bearing -= myHeading;
+            }
 
             display->drawCircle(compassX, compassY, compassRadius);
             CompassRenderer::drawCompassNorth(display, compassX, compassY, myHeading, compassRadius);
@@ -485,8 +488,11 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
             int compassY = yBelowContent + availableHeight / 2;
 
             const auto &op = ourNode->position;
-            float myHeading = screen->hasHeading() ? screen->getHeading() * PI / 180
-                                                   : screen->estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
+            float myHeading = 0;
+            if (!config.display.compass_north_top) {
+                myHeading = screen->hasHeading() ? screen->getHeading() * PI / 180
+                                                 : screen->estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
+            }
             graphics::CompassRenderer::drawCompassNorth(display, compassX, compassY, myHeading, compassRadius);
 
             const auto &p = node->position;
@@ -926,15 +932,18 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
                           int32_t(gpsStatus->getAltitude()));
 
     // === Determine Compass Heading ===
-    float heading;
+    float heading = 0;
     bool validHeading = false;
-
-    if (screen->hasHeading()) {
-        heading = radians(screen->getHeading());
+    if (config.display.compass_north_top) {
         validHeading = true;
     } else {
-        heading = screen->estimatedHeading(geoCoord.getLatitude() * 1e-7, geoCoord.getLongitude() * 1e-7);
-        validHeading = !isnan(heading);
+        if (screen->hasHeading()) {
+            heading = radians(screen->getHeading());
+            validHeading = true;
+        } else {
+            heading = screen->estimatedHeading(geoCoord.getLatitude() * 1e-7, geoCoord.getLongitude() * 1e-7);
+            validHeading = !isnan(heading);
+        }
     }
 
     // If GPS is off, no need to display these parts

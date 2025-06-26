@@ -528,19 +528,20 @@ void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, 
     double lat = 0;
     double lon = 0;
 
+    if (!config.display.compass_north_top) {
 #if HAS_GPS
-    if (screen->hasHeading()) {
-        heading = screen->getHeading(); // degrees
-        validHeading = true;
-    } else {
-        heading = screen->estimatedHeading(lat, lon);
-        validHeading = !isnan(heading);
-    }
+        if (screen->hasHeading()) {
+            heading = screen->getHeading(); // degrees
+            validHeading = true;
+        } else {
+            heading = screen->estimatedHeading(lat, lon);
+            validHeading = !isnan(heading);
+        }
 #endif
 
-    if (!validHeading)
-        return;
-
+        if (!validHeading)
+            return;
+    }
     drawNodeListScreen(display, state, x, y, "Bearings", drawEntryCompass, drawCompassArrow, heading, lat, lon);
 }
 
