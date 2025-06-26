@@ -334,13 +334,8 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         }
         // Printable char (ASCII) opens free text compose
         if (event->kbchar >= 32 && event->kbchar <= 126) {
-            runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
-            requestFocus();
-            UIFrameEvent e;
-            e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
-            notifyObservers(&e);
-            // Immediately process the input in the new state (freetext)
-            return handleFreeTextInput(event);
+            LaunchFreetextWithDestination(NODENUM_BROADCAST);
+            return 1;
         }
         break;
 

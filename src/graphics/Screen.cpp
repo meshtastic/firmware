@@ -775,33 +775,6 @@ void Screen::setFrames(FrameFocus focus)
 
     size_t numframes = 0;
 
-    moduleFrames = MeshModule::GetMeshModulesWithUIFrames();
-    LOG_DEBUG("Show %d module frames", moduleFrames.size());
-
-    // put all of the module frames first.
-    // this is a little bit of a dirty hack; since we're going to call
-    // the same drawModuleFrame handler here for all of these module frames
-    // and then we'll just assume that the state->currentFrame value
-    // is the same offset into the moduleFrames vector
-    // so that we can invoke the module's callback
-    for (auto i = moduleFrames.begin(); i != moduleFrames.end(); ++i) {
-        // Draw the module frame, using the hack described above
-        normalFrames[numframes] = drawModuleFrame;
-
-        // Check if the module being drawn has requested focus
-        // We will honor this request later, if setFrames was triggered by a UIFrameEvent
-        MeshModule *m = *i;
-        if (m->isRequestingFocus())
-            fsi.positions.focusedModule = numframes;
-        if (m == waypointModule)
-            fsi.positions.waypoint = numframes;
-
-        indicatorIcons.push_back(icon_module);
-        numframes++;
-    }
-
-    LOG_DEBUG("Added modules.  numframes: %d", numframes);
-
     // If we have a critical fault, show it first
     fsi.positions.fault = numframes;
     if (error_code) {
@@ -897,6 +870,36 @@ void Screen::setFrames(FrameFocus focus)
         indicatorIcons.push_back(icon_wifi);
     }
 #endif
+
+    // Beware of what changes you make in this code!
+    // We pass numfames into GetMeshModulesWithUIFrames() which is highly important!
+    // Inside of that callback, goes over to MeshModule.cpp and we run
+    // modulesWithUIFrames.resize(startIndex, nullptr), to insert nullptr
+    // entries until we're ready to start building the matching entries.
+    // We are doing our best to keep the normalFrames vector
+    // and the moduleFrames vector in lock step.
+    moduleFrames = MeshModule::GetMeshModulesWithUIFrames(numframes);
+    LOG_DEBUG("Show %d module frames", moduleFrames.size());
+
+    for (auto i = moduleFrames.begin(); i != moduleFrames.end(); ++i) {
+        // Draw the module frame, using the hack described above
+        if (*i != nullptr) {
+            normalFrames[numframes] = drawModuleFrame;
+
+            // Check if the module being drawn has requested focus
+            // We will honor this request later, if setFrames was triggered by a UIFrameEvent
+            MeshModule *m = *i;
+            if (m && m->isRequestingFocus())
+                fsi.positions.focusedModule = numframes;
+            if (m && m == waypointModule)
+                fsi.positions.waypoint = numframes;
+
+            indicatorIcons.push_back(icon_module);
+            numframes++;
+        }
+    }
+
+    LOG_DEBUG("Added modules.  numframes: %d", numframes);
 
     fsi.frameCount = numframes;   // Total framecount is used to apply FOCUS_PRESERVE
     this->frameCount = numframes; // ✅ Save frame count for use in custom overlay
@@ -1249,7 +1252,7 @@ int Screen::handleInputEvent(const InputEvent *event)
         // Ask any MeshModules if they're handling keyboard input right now
         bool inputIntercepted = false;
         for (MeshModule *module : moduleFrames) {
-            if (module->interceptingKeyboardInput())
+            if (module && module->interceptingKeyboardInput())
                 inputIntercepted = true;
         }
 
