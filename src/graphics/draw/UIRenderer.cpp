@@ -1000,7 +1000,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
 
             // "N" label
             float northAngle = 0;
-            if (config.display.compass_north_top)
+            if (!config.display.compass_north_top)
                 northAngle = -heading;
             float radius = compassRadius;
             int16_t nX = compassX + (radius - 1) * sin(northAngle);
@@ -1043,7 +1043,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
 
             // "N" label
             float northAngle = 0;
-            if (config.display.compass_north_top)
+            if (!config.display.compass_north_top)
                 northAngle = -heading;
             float radius = compassRadius;
             int16_t nX = compassX + (radius - 1) * sin(northAngle);
