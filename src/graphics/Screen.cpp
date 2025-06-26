@@ -208,7 +208,7 @@ float Screen::estimatedHeading(double lat, double lon)
     if (d < 10) // haven't moved enough, just keep current bearing
         return b;
 
-    b = GeoCoord::bearing(oldLat, oldLon, lat, lon);
+    b = GeoCoord::bearing(oldLat, oldLon, lat, lon) * RAD_TO_DEG;
     oldLat = lat;
     oldLon = lon;
 

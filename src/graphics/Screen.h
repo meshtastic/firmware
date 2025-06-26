@@ -305,7 +305,7 @@ class Screen : public concurrency::OSThread
     void setHeading(long _heading)
     {
         hasCompass = true;
-        compassHeading = _heading;
+        compassHeading = fmod(_heading, 360);
     }
 
     bool hasHeading() { return hasCompass; }
