@@ -276,6 +276,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
 
         bool showMail = false;
 
+#ifndef USE_EINK
         if (hasUnreadMessage) {
             if (now - lastMailBlink > 500) {
                 isMailIconVisible = !isMailIconVisible;
@@ -283,6 +284,11 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
             }
             showMail = isMailIconVisible;
         }
+#else
+        if (hasUnreadMessage) {
+            showMail = true;
+        }
+#endif
 
         if (showMail) {
             if (useHorizontalBattery) {
