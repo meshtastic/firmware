@@ -129,14 +129,5 @@ uint16_t getCompassDiam(uint32_t displayWidth, uint32_t displayHeight)
     return maxDiam;
 }
 
-float calculateBearing(double lat1, double lon1, double lat2, double lon2)
-{
-    double dLon = (lon2 - lon1) * DEG_TO_RAD;
-    double y = sin(dLon) * cos(lat2 * DEG_TO_RAD);
-    double x = cos(lat1 * DEG_TO_RAD) * sin(lat2 * DEG_TO_RAD) - sin(lat1 * DEG_TO_RAD) * cos(lat2 * DEG_TO_RAD) * cos(dLon);
-    double bearing = atan2(y, x) * RAD_TO_DEG;
-    return fmod(bearing + 360.0, 360.0);
-}
-
 } // namespace CompassRenderer
 } // namespace graphics

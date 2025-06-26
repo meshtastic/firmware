@@ -98,16 +98,6 @@ unsigned long getModeCycleIntervalMs()
     return 3000;
 }
 
-// Calculate bearing between two lat/lon points
-float calculateBearing(double lat1, double lon1, double lat2, double lon2)
-{
-    double dLon = (lon2 - lon1) * DEG_TO_RAD;
-    double y = sin(dLon) * cos(lat2 * DEG_TO_RAD);
-    double x = cos(lat1 * DEG_TO_RAD) * sin(lat2 * DEG_TO_RAD) - sin(lat1 * DEG_TO_RAD) * cos(lat2 * DEG_TO_RAD) * cos(dLon);
-    double bearing = atan2(y, x) * RAD_TO_DEG;
-    return fmod(bearing + 360.0, 360.0);
-}
-
 int calculateMaxScroll(int totalEntries, int visibleRows)
 {
     return std::max(0, (totalEntries - 1) / (visibleRows * 2));
@@ -359,7 +349,7 @@ void drawCompassArrow(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
 
     double nodeLat = node->position.latitude_i * 1e-7;
     double nodeLon = node->position.longitude_i * 1e-7;
-    float bearingToNode = calculateBearing(userLat, userLon, nodeLat, nodeLon);
+    float bearingToNode = GeoCoord::bearing(DegD(userLat), DegD(userLon), DegD(nodeLat), DegD(nodeLon));
     float relativeBearing = fmod((myHeading - bearingToNode + 360), 360);
     float angle = relativeBearing * DEG_TO_RAD;
 
