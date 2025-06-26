@@ -349,7 +349,7 @@ void drawCompassArrow(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
 
     double nodeLat = node->position.latitude_i * 1e-7;
     double nodeLon = node->position.longitude_i * 1e-7;
-    float bearingToNode = GeoCoord::bearing(DegD(userLat), DegD(userLon), DegD(nodeLat), DegD(nodeLon));
+    float bearingToNode = GeoCoord::bearing(userLat, userLon, nodeLat, nodeLon);
     float relativeBearing = fmod((myHeading - bearingToNode + 360), 360);
     float angle = relativeBearing * DEG_TO_RAD;
 
@@ -515,8 +515,9 @@ void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, 
 {
     float heading = 0;
     bool validHeading = false;
-    double lat = 0;
-    double lon = 0;
+    auto ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    double lat = DegD(ourNode->position.latitude_i);
+    double lon = DegD(ourNode->position.longitude_i);
 
     if (!screen->ignoreCompass) {
 #if HAS_GPS
