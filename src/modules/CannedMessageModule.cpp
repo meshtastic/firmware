@@ -245,12 +245,15 @@ void CannedMessageModule::updateDestinationSelectionList()
         }
     }
 
+    /* As the nodeDB is sorted, can skip this step
     // Sort by favorite, then last heard
     std::sort(this->filteredNodes.begin(), this->filteredNodes.end(), [](const NodeEntry &a, const NodeEntry &b) {
         if (a.node->is_favorite != b.node->is_favorite)
             return a.node->is_favorite > b.node->is_favorite;
         return a.lastHeard < b.lastHeard;
     });
+    */
+
     scrollIndex = 0; // Show first result at the top
     destIndex = 0;   // Highlight the first entry
     if (nodesChanged && runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) {
