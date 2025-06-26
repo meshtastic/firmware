@@ -157,6 +157,24 @@ void Screen::showOverlayBanner(const char *message, uint32_t durationMs, const c
     ui->update();
 }
 
+// Called to trigger a banner with custom message and duration
+void Screen::showNodePicker(const char *message, uint32_t durationMs, std::function<void(int)> bannerCallback)
+{
+#ifdef USE_EINK
+    EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Skip full refresh for all overlay menus
+#endif
+    // Store the message and set the expiration timestamp
+    strncpy(NotificationRenderer::alertBannerMessage, message, 255);
+    NotificationRenderer::alertBannerMessage[255] = '\0'; // Ensure null termination
+    NotificationRenderer::alertBannerUntil = (durationMs == 0) ? 0 : millis() + durationMs;
+    NotificationRenderer::alertBannerCallback = bannerCallback;
+    NotificationRenderer::pauseBanner = false;
+    static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawAlertBannerOverlay};
+    ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
+    setFastFramerate(); // Draw ASAP
+    ui->update();
+}
+
 static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     uint8_t module_frame;

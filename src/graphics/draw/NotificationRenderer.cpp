@@ -61,11 +61,7 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
         return;
 
     // === Layout Configuration ===
-    constexpr uint16_t hPadding = 5;
     constexpr uint16_t vPadding = 2;
-    constexpr uint8_t lineSpacing = 1;
-
-    bool needs_bell = (strstr(alertBannerMessage, "Alert Received") != nullptr);
 
     // Setup font and alignment
     display->setFont(FONT_SMALL);
@@ -137,6 +133,12 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
     uint8_t effectiveLineHeight = FONT_HEIGHT_SMALL - 3;
     uint8_t visibleTotalLines = std::min<uint8_t>(totalLines, (screenHeight - vPadding * 2) / effectiveLineHeight);
     uint8_t linesShown = lineCount;
+    const char *linePointers[visibleTotalLines]; // this is sort of a dynamic allocation
+
+    // copy the linestarts to display to the linePointers holder
+    for (int i = 0; i < lineCount; i++) {
+        linePointers[i] = lineStarts[i];
+    }
 
     uint8_t firstOptionToShow = 0;
     if (alertBannerOptions > 0) {
@@ -156,19 +158,19 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
             strncpy(lineBuffer + 2, optionsArrayPtr[i], 36);
             strncpy(lineBuffer + strlen(optionsArrayPtr[i]) + 2, " <", 3);
             lineBuffer[39] = '\0';
-            lineStarts[linesShown] = lineBuffer;
+            linePointers[linesShown] = lineBuffer;
         } else {
-            lineStarts[linesShown] = optionsArrayPtr[i];
+            linePointers[linesShown] = optionsArrayPtr[i];
         }
     }
     if (alertBannerOptions > 0) {
-        drawNotificationBox(display, state, lineStarts, totalLines, firstOptionToShow, maxWidth);
+        drawNotificationBox(display, state, linePointers, totalLines, firstOptionToShow, maxWidth);
     } else {
-        drawNotificationBox(display, state, lineStarts, totalLines, firstOptionToShow);
+        drawNotificationBox(display, state, linePointers, totalLines, firstOptionToShow);
     }
 }
 
-void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplayUiState *state, const char *lines[MAX_LINES + 1],
+void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplayUiState *state, const char *lines[],
                                                uint16_t totalLines, uint8_t firstOptionToShow, uint16_t maxWidth)
 {
     bool is_picker = false;
@@ -176,15 +178,14 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
     // === Layout Configuration ===
     constexpr uint16_t hPadding = 5;
     constexpr uint16_t vPadding = 2;
-    constexpr uint8_t lineSpacing = 1;
     bool needs_bell = false;
-    uint16_t lineWidths[MAX_LINES] = {0};
+    uint16_t lineWidths[totalLines] = {0};
 
     if (maxWidth != 0)
         is_picker = true;
     // seelction box
 
-    while (lineCount < MAX_LINES) {
+    while (lineCount < totalLines) {
         if (lines[lineCount] != nullptr) {
             lineWidths[lineCount] = display->getStringWidth(lines[lineCount], strlen(lines[lineCount]), true);
             if (!is_picker) {
