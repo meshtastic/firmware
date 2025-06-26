@@ -356,21 +356,21 @@ void menuHandler::compassNorthMenu()
                 service->reloadConfig(SEGMENT_CONFIG);
             }
             screen->ignoreCompass = false;
-            screen->setFrames();
+            screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
         } else if (selected == 2) {
             if (config.display.compass_north_top != true) {
                 config.display.compass_north_top = true;
                 service->reloadConfig(SEGMENT_CONFIG);
             }
             screen->ignoreCompass = false;
-            screen->setFrames();
+            screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
         } else if (selected == 3) {
             if (config.display.compass_north_top != true) {
                 config.display.compass_north_top = true;
                 service->reloadConfig(SEGMENT_CONFIG);
             }
             screen->ignoreCompass = true;
-            screen->setFrames();
+            screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
         } else if (selected == 0) {
             menuQueue = position_base_menu;
         }
