@@ -313,7 +313,7 @@ void menuHandler::favoriteBaseMenu()
 
 void menuHandler::positionBaseMenu()
 {
-    static const char *optionsArray[] = {"Back", "GPS Toggle", "Compass Point"};
+    static const char *optionsArray[] = {"Back", "GPS Toggle", "Compass"};
     screen->showOverlayBanner("Position Action", 30000, optionsArray, 3, [](int selected) -> void {
         if (selected == 1) {
             menuQueue = gps_toggle_menu;
@@ -348,7 +348,7 @@ void menuHandler::resetNodeDBMenu()
 
 void menuHandler::compassNorthMenu()
 {
-    static const char *optionsArray[] = {"Back", "Dynamic", "Fixed Ring", "Ignore Compass"};
+    static const char *optionsArray[] = {"Back", "Dynamic", "Fixed Ring", "Freeze Heading"};
     screen->showOverlayBanner("North Directions?", 30000, optionsArray, 4, [](int selected) -> void {
         if (selected == 1) {
             if (config.display.compass_north_top != false) {
