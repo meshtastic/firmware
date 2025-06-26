@@ -349,7 +349,7 @@ void drawCompassArrow(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
 
     double nodeLat = node->position.latitude_i * 1e-7;
     double nodeLon = node->position.longitude_i * 1e-7;
-    float bearingToNode = GeoCoord::bearing(userLat, userLon, nodeLat, nodeLon);
+    float bearingToNode = RAD_TO_DEG * GeoCoord::bearing(userLat, userLon, nodeLat, nodeLon);
     float relativeBearing = fmod((myHeading - bearingToNode + 360), 360);
     float angle = relativeBearing * DEG_TO_RAD;
 
