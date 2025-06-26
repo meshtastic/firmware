@@ -418,7 +418,7 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     int totalColumns = 2;
 
     int startIndex = scrollIndex * visibleNodeRows * totalColumns;
-    if (scrollIndex == 0) {
+    if (nodeDB->getMeshNodeByIndex(startIndex)->num == nodeDB->getNodeNum()) {
         startIndex++; // skip own node
     }
     int endIndex = std::min(startIndex + visibleNodeRows * totalColumns, totalEntries);
