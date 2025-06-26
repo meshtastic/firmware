@@ -1345,30 +1345,6 @@ bool NodeDB::saveNodeDatabaseToDisk()
     return saveProto(nodeDatabaseFileName, nodeDatabaseSize, &meshtastic_NodeDatabase_msg, &nodeDatabase, false);
 }
 
-void NodeDB::sortMeshDB()
-{
-    if (!Throttle::isWithinTimespanMs(lastSort, 1000 * 5)) {
-        lastSort = millis();
-        std::sort(meshNodes->begin(), meshNodes->end(), [](const meshtastic_NodeInfoLite &a, const meshtastic_NodeInfoLite &b) {
-            if (a.num == myNodeInfo.my_node_num) {
-                return true;
-            }
-            if (b.num == myNodeInfo.my_node_num) {
-                return false;
-            }
-            bool aFav = a.is_favorite;
-            bool bFav = b.is_favorite;
-            if (aFav != bFav)
-                return aFav;
-            if (a.last_heard == 0 || a.last_heard == UINT32_MAX)
-                return false;
-            if (b.last_heard == 0 || b.last_heard == UINT32_MAX)
-                return true;
-            return a.last_heard > b.last_heard;
-        });
-    }
-}
-
 bool NodeDB::saveToDiskNoRetry(int saveWhat)
 {
     bool success = true;
@@ -1695,6 +1671,30 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
             info->hops_away = mp.hop_start - mp.hop_limit;
         }
         sortMeshDB();
+    }
+}
+
+void NodeDB::sortMeshDB()
+{
+    if (!Throttle::isWithinTimespanMs(lastSort, 1000 * 5)) {
+        lastSort = millis();
+        std::sort(meshNodes->begin(), meshNodes->end(), [](const meshtastic_NodeInfoLite &a, const meshtastic_NodeInfoLite &b) {
+            if (a.num == myNodeInfo.my_node_num) {
+                return true;
+            }
+            if (b.num == myNodeInfo.my_node_num) {
+                return false;
+            }
+            bool aFav = a.is_favorite;
+            bool bFav = b.is_favorite;
+            if (aFav != bFav)
+                return aFav;
+            if (a.last_heard == 0 || a.last_heard == UINT32_MAX)
+                return false;
+            if (b.last_heard == 0 || b.last_heard == UINT32_MAX)
+                return true;
+            return a.last_heard > b.last_heard;
+        });
     }
 }
 
