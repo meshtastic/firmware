@@ -34,7 +34,7 @@ const uint32_t g_ADigitalPinMap[] = {
     // D0 .. D10 - Peripheral control pins
     41, // D0  P1.09    GNSS_WAKEUP
     7,  // D1  P0.07     LORA_DIO1
-    39, // D2  P1,07     LORA_RESET
+    39, // D2  P1.07     LORA_RESET
     42, // D3  P1.10     LORA_BUSY
     46, // D4  P1.14 (A4/SDA) LORA_CS
     40, // D5  P1.08 (A5/SCL) LORA_SW
@@ -46,7 +46,7 @@ const uint32_t g_ADigitalPinMap[] = {
 
     // D11-D12 - LED outputs
     33, // D11 P1.1 User LED
-    // Buzzzer
+    // Buzzer
     32, // D12 P1.0 Buzzer
 
     // D13 - User input
@@ -100,5 +100,4 @@ void initVariant()
     digitalWrite(PIN_LED1, LOW);
     pinMode(PIN_LED2, OUTPUT);
     digitalWrite(PIN_LED2, LOW);
-    pinMode(PIN_LED2, OUTPUT);
 }
