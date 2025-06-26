@@ -3,14 +3,14 @@
 #include "./Events.h"
 
 #include "RTC.h"
-#include "modules/AdminModule.h"
+#include "buzz.h"
 #include "modules/ExternalNotificationModule.h"
 #include "modules/TextMessageModule.h"
 #include "sleep.h"
 
 #include "./Applet.h"
 #include "./SystemApplet.h"
-#include "graphics/niche/FlashData.h"
+#include "graphics/niche/Utils/FlashData.h"
 
 using namespace NicheGraphics;
 
@@ -29,7 +29,7 @@ void InkHUD::Events::begin()
     rebootObserver.observe(&notifyReboot);
     textMessageObserver.observe(textMessageModule);
 #if !MESHTASTIC_EXCLUDE_ADMIN
-    adminMessageObserver.observe(adminModule);
+    adminMessageObserver.observe((Observable<AdminModule_ObserverData *> *)adminModule);
 #endif
 #ifdef ARCH_ESP32
     lightSleepObserver.observe(&notifyLightSleep);
@@ -38,6 +38,9 @@ void InkHUD::Events::begin()
 
 void InkHUD::Events::onButtonShort()
 {
+    // Audio feedback (via buzzer)
+    // Short low tone
+    playBoop();
     // Cancel any beeping, buzzing, blinking
     // Some button handling suppressed if we are dismissing an external notification (see below)
     bool dismissedExt = dismissExternalNotification();
@@ -60,6 +63,10 @@ void InkHUD::Events::onButtonShort()
 
 void InkHUD::Events::onButtonLong()
 {
+    // Audio feedback (via buzzer)
+    // Low tone, longer than playBoop
+    playBeep();
+
     // Check which system applet wants to handle the button press (if any)
     SystemApplet *consumer = nullptr;
     for (SystemApplet *sa : inkhud->systemApplets) {
@@ -106,6 +113,10 @@ int InkHUD::Events::beforeDeepSleep(void *unused)
 
     inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FULL, false);
     delay(1000); // Cooldown, before potentially yanking display power
+
+    // InkHUD shutdown complete
+    // Firmware shutdown continues for several seconds more; flash write still pending
+    playShutdownMelody();
 
     return 0; // We agree: deep sleep now
 }
@@ -181,14 +192,15 @@ int InkHUD::Events::onReceiveTextMessage(const meshtastic_MeshPacket *packet)
     return 0; // Tell caller to continue notifying other observers. (No reason to abort this event)
 }
 
-int InkHUD::Events::onAdminMessage(const meshtastic_AdminMessage *message)
+int InkHUD::Events::onAdminMessage(AdminModule_ObserverData *data)
 {
-    switch (message->which_payload_variant) {
+    switch (data->request->which_payload_variant) {
     // Factory reset
     // Two possible messages. One preserves BLE bonds, other wipes. Both should clear InkHUD data.
     case meshtastic_AdminMessage_factory_reset_device_tag:
     case meshtastic_AdminMessage_factory_reset_config_tag:
         eraseOnReboot = true;
+        *data->result = AdminMessageHandleResult::HANDLED;
         break;
 
     default:

@@ -40,13 +40,13 @@ class ExpressLRSFiveWay : public Observable<const InputEvent *>, public concurre
     // This merged an enum used by the ExpressLRS code, with meshtastic canned message values
     // Key names are kept simple, to allow user customizaton
     typedef enum {
-        UP = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP,
-        DOWN = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN,
-        LEFT = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT,
-        RIGHT = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT,
-        OK = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT,
-        CANCEL = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL,
-        NO_PRESS = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE
+        UP = INPUT_BROKER_UP,
+        DOWN = INPUT_BROKER_DOWN,
+        LEFT = INPUT_BROKER_LEFT,
+        RIGHT = INPUT_BROKER_RIGHT,
+        OK = INPUT_BROKER_SELECT,
+        CANCEL = INPUT_BROKER_CANCEL,
+        NO_PRESS = INPUT_BROKER_NONE
     } KeyType;
 
     typedef enum { SHORT, LONG } PressLength;
@@ -63,7 +63,7 @@ class ExpressLRSFiveWay : public Observable<const InputEvent *>, public concurre
 
     // Meshtastic code
     void determineAction(KeyType key, PressLength length);
-    void sendKey(KeyType key);
+    void sendKey(input_broker_event key);
     inline bool inCannedMessageMenu() { return cannedMessageModule->shouldDraw(); }
     int32_t runOnce() override;
 

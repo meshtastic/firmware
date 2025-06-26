@@ -121,10 +121,6 @@
 #define BUTTON_PIN PIN_BUTTON1
 #endif
 
-#ifdef PIN_BUTTON2
-#define BUTTON_PIN_ALT PIN_BUTTON2
-#endif
-
 #ifdef PIN_BUTTON_TOUCH
 #define BUTTON_PIN_TOUCH PIN_BUTTON_TOUCH
 #endif

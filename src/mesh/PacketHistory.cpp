@@ -8,11 +8,13 @@
 #include "Throttle.h"
 
 #define PACKETHISTORY_MAX                                                                                                        \
-    max((int)(MAX_NUM_NODES * 2.0), 100) // x2..3  Should suffice. Empirical setup. 16B per record malloc'ed, but no less than 100
+    max((u_int32_t)(MAX_NUM_NODES * 2.0),                                                                                        \
+        (u_int32_t)100) // x2..3  Should suffice. Empirical setup. 16B per record malloc'ed, but no less than 100
 
 #define RECENT_WARN_AGE (10 * 60 * 1000L) // Warn if the packet that gets removed was more recent than 10 min
 
-#define VERBOSE_PACKET_HISTORY 0 // Set to 1 for verbose logging, 2 for heavy debugging
+#define VERBOSE_PACKET_HISTORY 0     // Set to 1 for verbose logging, 2 for heavy debugging
+#define PACKET_HISTORY_TRACE_AGING 1 // Set to 1 to enable logging of the age of re/used history slots
 
 PacketHistory::PacketHistory(uint32_t size) : recentPacketsCapacity(0), recentPackets(NULL) // Initialize members
 {
@@ -254,6 +256,16 @@ void PacketHistory::insert(PacketRecord &r)
 #endif
         }
     }
+
+#if PACKET_HISTORY_TRACE_AGING
+    if (tu->rxTimeMsec != 0) {
+        LOG_INFO("Packet History - insert: Reusing slot aged %.3fs TRACE %s", OldtrxTimeMsec / 1000.,
+                 (tu->id == r.id && tu->sender == r.sender) ? "MATCHED PACKET" : "OLDEST SLOT");
+    } else {
+        LOG_INFO("Packet History - insert: Using new slot @uptime %.3fs TRACE NEW", millis() / 1000.);
+    }
+#endif
+
 #endif
 
 #if VERBOSE_PACKET_HISTORY
