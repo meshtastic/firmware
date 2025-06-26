@@ -5,7 +5,7 @@
 #define ONE_DAY 24 * 60 * 60
 #define ONE_MINUTE_MS 60 * 1000
 #define THIRTY_SECONDS_MS 30 * 1000
-#define ONE_AND_HALF_SECONDS_MS 1500
+#define ONE_AND_HALF_SECONDS_MS (1.5 * 1000) // 1.5 seconds in milliseconds
 #define FIVE_SECONDS_MS 5 * 1000
 #define TEN_SECONDS_MS 10 * 1000
 
