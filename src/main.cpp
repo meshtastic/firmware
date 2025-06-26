@@ -1016,7 +1016,8 @@ void setup()
                 BaseType_t higherWake = 0;
                 mainDelay.interruptFromISR(&higherWake);
             },
-            INPUT_BROKER_USER_PRESS, INPUT_BROKER_SHUTDOWN, 5000, INPUT_BROKER_SEND_PING, INPUT_BROKER_GPS_TOGGLE);
+            INPUT_BROKER_USER_PRESS, INPUT_BROKER_SHUTDOWN, 5000, INPUT_BROKER_SEND_PING, INPUT_BROKER_NONE, 0,
+            INPUT_BROKER_GPS_TOGGLE);
 #endif
 
 #endif
