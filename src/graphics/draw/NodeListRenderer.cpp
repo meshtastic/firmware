@@ -360,7 +360,7 @@ void drawCompassArrow(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     double nodeLat = node->position.latitude_i * 1e-7;
     double nodeLon = node->position.longitude_i * 1e-7;
     float bearingToNode = calculateBearing(userLat, userLon, nodeLat, nodeLon);
-    float relativeBearing = fmod((bearingToNode - myHeading + 360), 360);
+    float relativeBearing = fmod((myHeading - bearingToNode + 360), 360);
     float angle = relativeBearing * DEG_TO_RAD;
 
     // Shrink size by 2px
