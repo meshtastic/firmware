@@ -388,6 +388,7 @@ bool CannedMessageModule::handleTabSwitch(const InputEvent *event)
 
     UIFrameEvent e;
     e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+    requestFocus();
     notifyObservers(&e);
     screen->forceDisplay();
     return true;
