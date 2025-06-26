@@ -348,15 +348,28 @@ void menuHandler::resetNodeDBMenu()
 
 void menuHandler::compassNorthMenu()
 {
-    static const char *optionsArray[] = {"Back", "Points Up", "Dynamic"};
-    screen->showOverlayBanner("Needle Direction?", 30000, optionsArray, 3, [](int selected) -> void {
-        if (selected == 1 && config.display.compass_north_top != true) {
-            config.display.compass_north_top = true;
-            service->reloadConfig(SEGMENT_CONFIG);
+    static const char *optionsArray[] = {"Back", "Dynamic", "Fixed Ring", "Ignore Compass"};
+    screen->showOverlayBanner("North Directions?", 30000, optionsArray, 4, [](int selected) -> void {
+        if (selected == 1) {
+            if (config.display.compass_north_top != false) {
+                config.display.compass_north_top = false;
+                service->reloadConfig(SEGMENT_CONFIG);
+            }
+            screen->ignoreCompass = false;
             screen->setFrames();
-        } else if (selected == 2 && config.display.compass_north_top != false) {
-            config.display.compass_north_top = false;
-            service->reloadConfig(SEGMENT_CONFIG);
+        } else if (selected == 2) {
+            if (config.display.compass_north_top != true) {
+                config.display.compass_north_top = true;
+                service->reloadConfig(SEGMENT_CONFIG);
+            }
+            screen->ignoreCompass = false;
+            screen->setFrames();
+        } else if (selected == 3) {
+            if (config.display.compass_north_top != true) {
+                config.display.compass_north_top = true;
+                service->reloadConfig(SEGMENT_CONFIG);
+            }
+            screen->ignoreCompass = true;
             screen->setFrames();
         } else if (selected == 0) {
             menuQueue = position_base_menu;

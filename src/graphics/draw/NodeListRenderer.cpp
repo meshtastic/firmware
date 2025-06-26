@@ -528,7 +528,7 @@ void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, 
     double lat = 0;
     double lon = 0;
 
-    if (!config.display.compass_north_top) {
+    if (!screen->ignoreCompass) {
 #if HAS_GPS
         if (screen->hasHeading()) {
             heading = screen->getHeading(); // degrees

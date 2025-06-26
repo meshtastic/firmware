@@ -225,6 +225,8 @@ class Screen : public concurrency::OSThread
     meshtastic_Config_DisplayConfig_OledType model;
     OLEDDISPLAY_GEOMETRY geometry;
 
+    bool ignoreCompass = false;
+
     bool isOverlayBannerShowing();
 
     // Stores the last 4 of our hardware ID, to make finding the device for pairing easier

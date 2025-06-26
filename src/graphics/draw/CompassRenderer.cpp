@@ -50,7 +50,8 @@ void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t compassY, 
         radius += 4;
     }
     Point north(0, -radius);
-    north.rotate(-myHeading);
+    if (!config.display.compass_north_top)
+        north.rotate(-myHeading);
     north.translate(compassX, compassY);
 
     display->setFont(FONT_SMALL);
