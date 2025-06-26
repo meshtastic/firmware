@@ -35,7 +35,6 @@
 #define TFT_OFFSET_Y 0
 #define TFT_OFFSET_ROTATION 0
 #define TFT_BL 45
-#define SCREEN_ROTATE
 #define SCREEN_TRANSITION_FRAMERATE 5 // fps
 
 #define HAS_TOUCHSCREEN 1
