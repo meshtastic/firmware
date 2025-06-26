@@ -196,7 +196,6 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
             int yOffset = 3;
             display->drawString(textX, lineY - yOffset, lineBuffer);
             display->setColor(WHITE);
-
             lineY += (effectiveLineHeight - 2 - background_yOffset);
         } else {
             // Pop-up
@@ -227,6 +226,24 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
         int16_t textX = boxLeft + (boxWidth - optionWidths[i] - (i == curSelected ? arrowsWidth : 0)) / 2;
         display->drawString(textX, lineY, lineBuffer);
         lineY += effectiveLineHeight;
+    }
+
+    // === Scroll Bar (Thicker, inside box, not over title) ===
+    if (totalLines > visibleTotalLines) {
+        const uint8_t scrollBarWidth = 5;
+        const uint8_t scrollPadding = 2;
+
+        int16_t scrollBarX = boxLeft + boxWidth - scrollBarWidth - 2;
+        int16_t scrollBarY = boxTop + vPadding + effectiveLineHeight; // start after title line
+        uint16_t scrollBarHeight = boxHeight - vPadding * 2 - effectiveLineHeight;
+
+        float ratio = (float)visibleTotalLines / totalLines;
+        uint16_t indicatorHeight = std::max((int)(scrollBarHeight * ratio), 4);
+        float scrollRatio = (float)(firstOptionToShow + linesShown - visibleTotalLines) / (totalLines - visibleTotalLines);
+        uint16_t indicatorY = scrollBarY + scrollRatio * (scrollBarHeight - indicatorHeight);
+
+        display->drawRect(scrollBarX, scrollBarY, scrollBarWidth, scrollBarHeight);
+        display->fillRect(scrollBarX + 1, indicatorY, scrollBarWidth - 2, indicatorHeight);
     }
 }
 
