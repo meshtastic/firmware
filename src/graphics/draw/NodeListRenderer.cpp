@@ -349,12 +349,14 @@ void drawCompassArrow(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
 
     double nodeLat = node->position.latitude_i * 1e-7;
     double nodeLon = node->position.longitude_i * 1e-7;
-    float bearingToNode = RAD_TO_DEG * GeoCoord::bearing(userLat, userLon, nodeLat, nodeLon);
-    float relativeBearing = fmod((myHeading - bearingToNode + 360), 360);
+    float bearing = GeoCoord::bearing(userLat, userLon, nodeLat, nodeLon);
+    float bearingToNode = RAD_TO_DEG * bearing;
+    float relativeBearing = fmod((bearingToNode - myHeading + 360), 360);
     float angle = relativeBearing * DEG_TO_RAD;
-
     // Shrink size by 2px
     int size = FONT_HEIGHT_SMALL - 5;
+    CompassRenderer::drawArrowToNode(display, centerX, centerY, size, relativeBearing);
+    /*
     float halfSize = size / 2.0;
 
     // Point of the arrow
@@ -379,6 +381,7 @@ void drawCompassArrow(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     // Draw the chevron-style arrowhead
     display->fillTriangle(tipX, tipY, leftX, leftY, notchX, notchY);
     display->fillTriangle(tipX, tipY, notchX, notchY, rightX, rightY);
+    */
 }
 
 // =============================

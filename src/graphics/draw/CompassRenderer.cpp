@@ -93,18 +93,22 @@ void drawArrowToNode(OLEDDisplay *display, int16_t x, int16_t y, int16_t size, f
     float radians = bearing * DEG_TO_RAD;
 
     Point tip(0, -size / 2);
-    Point left(-size / 4, size / 4);
-    Point right(size / 4, size / 4);
+    Point left(-size / 6, size / 4);
+    Point right(size / 6, size / 4);
+    Point tail(0, size / 4.5);
 
     tip.rotate(radians);
     left.rotate(radians);
     right.rotate(radians);
+    tail.rotate(radians);
 
     tip.translate(x, y);
     left.translate(x, y);
     right.translate(x, y);
+    tail.translate(x, y);
 
-    display->drawTriangle(tip.x, tip.y, left.x, left.y, right.x, right.y);
+    display->fillTriangle(tip.x, tip.y, left.x, left.y, tail.x, tail.y);
+    display->fillTriangle(tip.x, tip.y, right.x, right.y, tail.x, tail.y);
 }
 
 float estimatedHeading(double lat, double lon)
