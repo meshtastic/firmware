@@ -133,7 +133,7 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
     uint8_t effectiveLineHeight = FONT_HEIGHT_SMALL - 3;
     uint8_t visibleTotalLines = std::min<uint8_t>(totalLines, (screenHeight - vPadding * 2) / effectiveLineHeight);
     uint8_t linesShown = lineCount;
-    const char *linePointers[visibleTotalLines]; // this is sort of a dynamic allocation
+    const char *linePointers[visibleTotalLines + 1] = {0}; // this is sort of a dynamic allocation
 
     // copy the linestarts to display to the linePointers holder
     for (int i = 0; i < lineCount; i++) {
@@ -186,23 +186,19 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
         is_picker = true;
     // seelction box
 
-    while (lineCount < totalLines) {
-        if (lines[lineCount] != nullptr) {
-            auto newlinePointer = strchr(lines[lineCount], '\n');
-            if (newlinePointer)
-                lineLengths[lineCount] = (newlinePointer - lines[lineCount]); // Check for newlines first
-            else // if the newline wasn't found, then pull string length from strlen
-                lineLengths[lineCount] = strlen(lines[lineCount]);
-            lineWidths[lineCount] = display->getStringWidth(lines[lineCount], lineLengths[lineCount], true);
-            if (!is_picker) {
-                needs_bell |= (strstr(alertBannerMessage, "Alert Received") != nullptr);
-                if (lineWidths[lineCount] > maxWidth)
-                    maxWidth = lineWidths[lineCount];
-            }
-            lineCount++;
-        } else {
-            break;
+    while (lines[lineCount] != nullptr) {
+        auto newlinePointer = strchr(lines[lineCount], '\n');
+        if (newlinePointer)
+            lineLengths[lineCount] = (newlinePointer - lines[lineCount]); // Check for newlines first
+        else // if the newline wasn't found, then pull string length from strlen
+            lineLengths[lineCount] = strlen(lines[lineCount]);
+        lineWidths[lineCount] = display->getStringWidth(lines[lineCount], lineLengths[lineCount], true);
+        if (!is_picker) {
+            needs_bell |= (strstr(alertBannerMessage, "Alert Received") != nullptr);
+            if (lineWidths[lineCount] > maxWidth)
+                maxWidth = lineWidths[lineCount];
         }
+        lineCount++;
     }
     // count lines
 
