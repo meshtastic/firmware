@@ -314,7 +314,9 @@ void NRF52Bluetooth::onConnectionSecured(uint16_t conn_handle)
 }
 bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passkey[6], bool match_request)
 {
-    LOG_INFO("BLE pair process started with passkey %.3s %.3s", passkey, passkey + 3);
+    char passkey1[4] = {passkey[0], passkey[1], passkey[2], '\0'};
+    char passkey2[4] = {passkey[3], passkey[4], passkey[5], '\0'};
+    LOG_INFO("BLE pair process started with passkey %s %s", passkey1, passkey2);
     powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
 
     // Get passkey as string
@@ -394,8 +396,7 @@ void NRF52Bluetooth::onPairingCompleted(uint16_t conn_handle, uint8_t auth_statu
 {
     if (auth_status == BLE_GAP_SEC_STATUS_SUCCESS) {
         LOG_INFO("BLE pair success");
-        bluetoothStatus->updateStatus(
-            new meshtastic::BluetoothStatus(meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED));
+        bluetoothStatus->updateStatus(new meshtastic::BluetoothStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED));
     } else {
         LOG_INFO("BLE pair failed");
         // Notify UI (or any other interested firmware components)
