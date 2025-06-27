@@ -12,7 +12,8 @@ class NotificationRenderer
     static char inEvent;
     static int8_t curSelected;
     static char alertBannerMessage[256];
-    static uint32_t alertBannerUntil;  // 0 is a special case meaning forever
+    static uint32_t alertBannerUntil; // 0 is a special case meaning forever
+    static const char **optionsArrayPtr;
     static uint8_t alertBannerOptions; // last x lines are seelctable options
     static std::function<void(int)> alertBannerCallback;
 
