@@ -59,14 +59,14 @@ bool ButtonThread::initButton(const ButtonConfig &config)
             [](void *callerThread) -> void {
                 ButtonThread *thread = (ButtonThread *)callerThread;
                 // if (millis() > 30000) // hold off 30s after boot
-                //     thread->btnEvent = BUTTON_EVENT_LONG_PRESSED;
+                thread->btnEvent = BUTTON_EVENT_LONG_PRESSED;
             },
             this);
         userButton.attachLongPressStop(
             [](void *callerThread) -> void {
                 ButtonThread *thread = (ButtonThread *)callerThread;
                 // if (millis() > 30000) // hold off 30s after boot
-                //     thread->btnEvent = BUTTON_EVENT_LONG_RELEASED;
+                thread->btnEvent = BUTTON_EVENT_LONG_RELEASED;
             },
             this);
     }
