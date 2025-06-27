@@ -79,10 +79,10 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
             memset(message, 0, sizeof(message));
             sprintf(message, "Verification: \n");
             generateVerificationCode(message + 15);
-            sprintf(message + 24, "\nACCEPT\nREJECT");
+            static const char *optionsArray[] = {"ACCEPT", "REJECT"};
             LOG_INFO("Hash1 matches!");
             if (screen) {
-                screen->showOverlayBanner(message, 30000, 2, [=](int selected) {
+                screen->showOverlayBanner(message, 30000, optionsArray, 2, [=](int selected) {
                     if (selected == 0) {
                         auto remoteNodePtr = nodeDB->getMeshNode(currentRemoteNode);
                         remoteNodePtr->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;

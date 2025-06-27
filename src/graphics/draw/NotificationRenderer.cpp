@@ -31,6 +31,7 @@ int8_t NotificationRenderer::curSelected = 0;
 char NotificationRenderer::alertBannerMessage[256] = {0};
 uint32_t NotificationRenderer::alertBannerUntil = 0;  // 0 is a special case meaning forever
 uint8_t NotificationRenderer::alertBannerOptions = 0; // last x lines are seelctable options
+const char **NotificationRenderer::optionsArrayPtr = nullptr;
 std::function<void(int)> NotificationRenderer::alertBannerCallback = NULL;
 bool NotificationRenderer::pauseBanner = false;
 
@@ -56,29 +57,22 @@ void NotificationRenderer::drawSSLScreen(OLEDDisplay *display, OLEDDisplayUiStat
 
 void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
-    // Exit if no message is active or duration has passed
-    if (!isOverlayBannerShowing())
-        return;
-
-    if (pauseBanner)
+    if (!isOverlayBannerShowing() || pauseBanner)
         return;
 
     // === Layout Configuration ===
-    constexpr uint16_t padding = 5;    // Padding around text inside the box
-    constexpr uint16_t vPadding = 2;   // Padding around text inside the box
-    constexpr uint8_t lineSpacing = 1; // Extra space between lines
+    constexpr uint16_t hPadding = 5;
+    constexpr uint16_t vPadding = 2;
+    constexpr uint8_t lineSpacing = 1;
 
-    // Search the message to determine if we need the bell added
     bool needs_bell = (strstr(alertBannerMessage, "Alert Received") != nullptr);
-
-    uint8_t firstOption = 0;
-    uint8_t firstOptionToShow = 0;
 
     // Setup font and alignment
     display->setFont(FONT_SMALL);
-    display->setTextAlignment(TEXT_ALIGN_LEFT); // We will manually center per line
-    const int MAX_LINES = 24;
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
 
+    constexpr int MAX_LINES = 5;
+    uint16_t optionWidths[alertBannerOptions] = {0};
     uint16_t maxWidth = 0;
     uint16_t arrowsWidth = display->getStringWidth(">  <", 4, true);
     uint16_t lineWidths[MAX_LINES] = {0};
@@ -86,30 +80,33 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
     char *lineStarts[MAX_LINES + 1];
     uint16_t lineCount = 0;
     char lineBuffer[40] = {0};
-    // pointer to the terminating null
+
+    // Parse lines
     char *alertEnd = alertBannerMessage + strnlen(alertBannerMessage, sizeof(alertBannerMessage));
     lineStarts[lineCount] = alertBannerMessage;
 
-    // loop through lines finding \n characters
     while ((lineCount < MAX_LINES) && (lineStarts[lineCount] < alertEnd)) {
         lineStarts[lineCount + 1] = std::find(lineStarts[lineCount], alertEnd, '\n');
         lineLengths[lineCount] = lineStarts[lineCount + 1] - lineStarts[lineCount];
-        if (lineStarts[lineCount + 1][0] == '\n') {
-            lineStarts[lineCount + 1] += 1; // Move the start pointer beyond the \n
-        }
+        if (lineStarts[lineCount + 1][0] == '\n')
+            lineStarts[lineCount + 1] += 1;
         lineWidths[lineCount] = display->getStringWidth(lineStarts[lineCount], lineLengths[lineCount], true);
-        if (lineWidths[lineCount] > maxWidth) {
+        if (lineWidths[lineCount] > maxWidth)
             maxWidth = lineWidths[lineCount];
-        }
-        if (alertBannerOptions > 0 && lineCount > 0 && lineWidths[lineCount] + arrowsWidth > maxWidth) {
-            maxWidth = lineWidths[lineCount] + arrowsWidth;
-        }
         lineCount++;
-        // if we are doing a selection, add extra width for arrows
     }
 
+    // Measure option widths
+    for (int i = 0; i < alertBannerOptions; i++) {
+        optionWidths[i] = display->getStringWidth(optionsArrayPtr[i], strlen(optionsArrayPtr[i]), true);
+        if (optionWidths[i] > maxWidth)
+            maxWidth = optionWidths[i];
+        if (optionWidths[i] + arrowsWidth > maxWidth)
+            maxWidth = optionWidths[i] + arrowsWidth;
+    }
+
+    // Handle input
     if (alertBannerOptions > 0) {
-        // respond to input
         if (inEvent == INPUT_BROKER_UP || inEvent == INPUT_BROKER_ALT_PRESS) {
             curSelected--;
         } else if (inEvent == INPUT_BROKER_DOWN || inEvent == INPUT_BROKER_USER_PRESS) {
@@ -120,113 +117,133 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
         } else if ((inEvent == INPUT_BROKER_CANCEL || inEvent == INPUT_BROKER_ALT_LONG) && alertBannerUntil != 0) {
             alertBannerMessage[0] = '\0';
         }
+
         if (curSelected == -1)
             curSelected = alertBannerOptions - 1;
         if (curSelected == alertBannerOptions)
             curSelected = 0;
-        // compare number of options to number of lines
-        if (lineCount < alertBannerOptions)
-            return;
-        firstOption = lineCount - alertBannerOptions;
-        if (curSelected > 1 && alertBannerOptions > 3) {
-            firstOptionToShow = curSelected + firstOption - 1;
-            // put the selected option in the middle
-        } else {
-            firstOptionToShow = firstOption;
-        }
-    } else { // not in an alert with a callback
-        // TODO: check that at least a second has passed since the alert started
+    } else {
         if (inEvent == INPUT_BROKER_SELECT || inEvent == INPUT_BROKER_ALT_LONG || inEvent == INPUT_BROKER_CANCEL) {
-            alertBannerMessage[0] = '\0'; // end the alert early
+            alertBannerMessage[0] = '\0';
         }
     }
+
     inEvent = INPUT_BROKER_NONE;
     if (alertBannerMessage[0] == '\0')
         return;
 
-    // set width from longest line
-    uint16_t boxWidth = padding * 2 + maxWidth;
+    // === Box Size Calculation ===
+    uint16_t boxWidth = hPadding * 2 + maxWidth;
     if (needs_bell) {
-        if (SCREEN_WIDTH > 128 && boxWidth <= 150) {
+        if (isHighResolution && boxWidth <= 150)
             boxWidth += 26;
-        }
-        if (SCREEN_WIDTH <= 128 && boxWidth <= 100) {
+        if (!isHighResolution && boxWidth <= 100)
             boxWidth += 20;
-        }
     }
-    // calculate max lines on screen? for now it's 4
-    // set height from line count
-    uint16_t boxHeight;
-    if (lineCount <= 4) {
-        boxHeight = vPadding * 2 + lineCount * FONT_HEIGHT_SMALL + (lineCount - 1) * lineSpacing;
-    } else {
-        boxHeight = vPadding * 2 + 4 * FONT_HEIGHT_SMALL + 4 * lineSpacing;
-    }
+
+    uint16_t totalLines = lineCount + alertBannerOptions;
+    uint16_t screenHeight = display->height();
+    uint8_t effectiveLineHeight = FONT_HEIGHT_SMALL - 3;
+    uint8_t visibleTotalLines = std::min<uint8_t>(totalLines, (screenHeight - vPadding * 2) / effectiveLineHeight);
+    uint16_t contentHeight = visibleTotalLines * effectiveLineHeight;
+    uint16_t boxHeight = contentHeight + vPadding * 2;
 
     int16_t boxLeft = (display->width() / 2) - (boxWidth / 2);
     int16_t boxTop = (display->height() / 2) - (boxHeight / 2);
-    // === Draw background box ===
+
+    // === Draw Box ===
     display->setColor(BLACK);
-    display->fillRect(boxLeft - 1, boxTop - 1, boxWidth + 2, boxHeight + 2); // Slightly oversized box
-    display->fillRect(boxLeft, boxTop - 2, boxWidth, 1);                     // Top Line
-    display->fillRect(boxLeft, boxTop + boxHeight + 1, boxWidth, 1);         // Bottom Line
-    display->fillRect(boxLeft - 2, boxTop, 1, boxHeight);                    // Left Line
-    display->fillRect(boxLeft + boxWidth + 1, boxTop, 1, boxHeight);         // Right Line
+    display->fillRect(boxLeft - 1, boxTop - 1, boxWidth + 2, boxHeight + 2);
+    display->fillRect(boxLeft, boxTop - 2, boxWidth, 1);
+    display->fillRect(boxLeft, boxTop + boxHeight + 1, boxWidth, 1);
+    display->fillRect(boxLeft - 2, boxTop, 1, boxHeight);
+    display->fillRect(boxLeft + boxWidth + 1, boxTop, 1, boxHeight);
     display->setColor(WHITE);
-    display->drawRect(boxLeft, boxTop, boxWidth, boxHeight); // Border
+    display->drawRect(boxLeft, boxTop, boxWidth, boxHeight);
     display->setColor(BLACK);
-    display->fillRect(boxLeft, boxTop, 1, 1);                                // Top Left
-    display->fillRect(boxLeft + boxWidth - 1, boxTop, 1, 1);                 // Top Right
-    display->fillRect(boxLeft, boxTop + boxHeight - 1, 1, 1);                // Bottom Left
-    display->fillRect(boxLeft + boxWidth - 1, boxTop + boxHeight - 1, 1, 1); // Bottom Right
+    display->fillRect(boxLeft, boxTop, 1, 1);
+    display->fillRect(boxLeft + boxWidth - 1, boxTop, 1, 1);
+    display->fillRect(boxLeft, boxTop + boxHeight - 1, 1, 1);
+    display->fillRect(boxLeft + boxWidth - 1, boxTop + boxHeight - 1, 1, 1);
     display->setColor(WHITE);
 
-    // === Draw each line centered in the box ===
+    // === Draw Content ===
     int16_t lineY = boxTop + vPadding;
+    uint8_t linesShown = 0;
 
-    for (int i = 0; i < lineCount; i++) {
-        // is this line selected?
-        // if so, start the buffer with -> and strncpy to the 4th location
-        if (i < lineCount - alertBannerOptions || alertBannerOptions == 0) {
-            strncpy(lineBuffer, lineStarts[i], 40);
-            if (lineLengths[i] > 39)
-                lineBuffer[39] = '\0';
-            else
-                lineBuffer[lineLengths[i]] = '\0';
-        } else if (i >= firstOptionToShow && i < firstOptionToShow + 3) {
-            if (i == curSelected + firstOption) {
-                if (lineLengths[i] > 35)
-                    lineLengths[i] = 35;
-                strncpy(lineBuffer, "> ", 3);
-                strncpy(lineBuffer + 2, lineStarts[i], 36);
-                strncpy(lineBuffer + lineLengths[i] + 2, " <", 3);
-                lineLengths[i] += 4;
-                lineWidths[i] += display->getStringWidth(">  <", 4, true);
-                if (lineLengths[i] > 35)
-                    lineBuffer[39] = '\0';
-                else
-                    lineBuffer[lineLengths[i]] = '\0';
-            } else {
-                strncpy(lineBuffer, lineStarts[i], 40);
-                if (lineLengths[i] > 39)
-                    lineBuffer[39] = '\0';
-                else
-                    lineBuffer[lineLengths[i]] = '\0';
-            }
-        } else { // add break for the additional lines
-            continue;
-        }
+    for (int i = 0; i < lineCount && linesShown < visibleTotalLines; i++, linesShown++) {
+        strncpy(lineBuffer, lineStarts[i], 40);
+        lineBuffer[lineLengths[i] > 39 ? 39 : lineLengths[i]] = '\0';
 
         int16_t textX = boxLeft + (boxWidth - lineWidths[i]) / 2;
-
         if (needs_bell && i == 0) {
             int bellY = lineY + (FONT_HEIGHT_SMALL - 8) / 2;
             display->drawXbm(textX - 10, bellY, 8, 8, bell_alert);
             display->drawXbm(textX + lineWidths[i] + 2, bellY, 8, 8, bell_alert);
         }
 
+        // Determine if this is a pop-up or a pick list
+        if (alertBannerOptions > 0) {
+            // Pick List
+            display->setColor(WHITE);
+            int background_yOffset = 1;
+            // Determine if we have low hanging characters
+            if (strchr(lineBuffer, 'p') || strchr(lineBuffer, 'g') || strchr(lineBuffer, 'y') || strchr(lineBuffer, 'j')) {
+                background_yOffset = -1;
+            }
+            display->fillRect(boxLeft, boxTop + 1, boxWidth, effectiveLineHeight - background_yOffset);
+            display->setColor(BLACK);
+            int yOffset = 3;
+            display->drawString(textX, lineY - yOffset, lineBuffer);
+            display->setColor(WHITE);
+            lineY += (effectiveLineHeight - 2 - background_yOffset);
+        } else {
+            // Pop-up
+            display->drawString(textX, lineY - 2, lineBuffer);
+            lineY += (effectiveLineHeight);
+        }
+    }
+
+    uint8_t firstOptionToShow = 0;
+    if (alertBannerOptions > 0) {
+        if (curSelected > 1 && alertBannerOptions > visibleTotalLines - lineCount)
+            firstOptionToShow = curSelected - 1;
+        else
+            firstOptionToShow = 0;
+    }
+
+    for (int i = firstOptionToShow; i < alertBannerOptions && linesShown < visibleTotalLines; i++, linesShown++) {
+        if (i == curSelected) {
+            strncpy(lineBuffer, "> ", 3);
+            strncpy(lineBuffer + 2, optionsArrayPtr[i], 36);
+            strncpy(lineBuffer + strlen(optionsArrayPtr[i]) + 2, " <", 3);
+            lineBuffer[39] = '\0';
+        } else {
+            strncpy(lineBuffer, optionsArrayPtr[i], 40);
+            lineBuffer[39] = '\0';
+        }
+
+        int16_t textX = boxLeft + (boxWidth - optionWidths[i] - (i == curSelected ? arrowsWidth : 0)) / 2;
         display->drawString(textX, lineY, lineBuffer);
-        lineY += FONT_HEIGHT_SMALL + lineSpacing;
+        lineY += effectiveLineHeight;
+    }
+
+    // === Scroll Bar (Thicker, inside box, not over title) ===
+    if (totalLines > visibleTotalLines) {
+        const uint8_t scrollBarWidth = 5;
+        const uint8_t scrollPadding = 2;
+
+        int16_t scrollBarX = boxLeft + boxWidth - scrollBarWidth - 2;
+        int16_t scrollBarY = boxTop + vPadding + effectiveLineHeight; // start after title line
+        uint16_t scrollBarHeight = boxHeight - vPadding * 2 - effectiveLineHeight;
+
+        float ratio = (float)visibleTotalLines / totalLines;
+        uint16_t indicatorHeight = std::max((int)(scrollBarHeight * ratio), 4);
+        float scrollRatio = (float)(firstOptionToShow + linesShown - visibleTotalLines) / (totalLines - visibleTotalLines);
+        uint16_t indicatorY = scrollBarY + scrollRatio * (scrollBarHeight - indicatorHeight);
+
+        display->drawRect(scrollBarX, scrollBarY, scrollBarWidth, scrollBarHeight);
+        display->fillRect(scrollBarX + 1, indicatorY, scrollBarWidth - 2, indicatorHeight);
     }
 }
 

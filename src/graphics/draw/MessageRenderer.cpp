@@ -56,6 +56,11 @@ namespace graphics
 namespace MessageRenderer
 {
 
+// Simple cache based on text hash
+static size_t cachedKey = 0;
+static std::vector<std::string> cachedLines;
+static std::vector<int> cachedHeights;
+
 void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string &line, const Emote *emotes, int emoteCount)
 {
     int cursorX = x;
@@ -225,6 +230,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                  sender);
     }
 
+    uint32_t now = millis();
 #ifndef EXCLUDE_EMOJI
     // === Bounce animation setup ===
     static uint32_t lastBounceTime = 0;
@@ -232,7 +238,6 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     const int bounceRange = 2;     // Max pixels to bounce up/down
     const int bounceInterval = 10; // How quickly to change bounce direction (ms)
 
-    uint32_t now = millis();
     if (now - lastBounceTime >= bounceInterval) {
         lastBounceTime = now;
         bounceY = (bounceY + 1) % (bounceRange * 2);
@@ -246,82 +251,51 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 display->drawString(x + 4, headerY, headerStr);
 
             // Draw separator (same as scroll version)
-            for (int separatorX = 0; separatorX <= (display->getStringWidth(headerStr) + 3); separatorX += 2) {
-                display->setPixel(separatorX, headerY + ((SCREEN_WIDTH > 128) ? 19 : 13));
+            for (int separatorX = 1; separatorX <= (display->getStringWidth(headerStr) + 2); separatorX += 2) {
+                display->setPixel(separatorX, headerY + ((isHighResolution) ? 19 : 13));
             }
 
             // Center the emote below the header line + separator + nav
             int remainingHeight = SCREEN_HEIGHT - (headerY + FONT_HEIGHT_SMALL) - navHeight;
-            int emoteY = headerY + FONT_HEIGHT_SMALL + (remainingHeight - e.height) / 2 + bounceY - bounceRange;
+            int emoteY = headerY + 6 + FONT_HEIGHT_SMALL + (remainingHeight - e.height) / 2 + bounceY - bounceRange;
             display->drawXbm((SCREEN_WIDTH - e.width) / 2, emoteY, e.width, e.height, e.bitmap);
+
+            // Draw header at the end to sort out overlapping elements
+            graphics::drawCommonHeader(display, x, y, titleStr);
             return;
         }
     }
 #endif
+    // === Generate the cache key ===
+    size_t currentKey = (size_t)mp.from;
+    currentKey ^= ((size_t)mp.to << 8);
+    currentKey ^= ((size_t)mp.rx_time << 16);
+    currentKey ^= ((size_t)mp.id << 24);
 
-    // === Word-wrap and build line list ===
-    std::vector<std::string> lines;
-    lines.push_back(std::string(headerStr)); // Header line is always first
+    if (cachedKey != currentKey) {
+        LOG_INFO("Message cache key is misssed cachedKey=0x%0x, currentKey=0x%x", cachedKey, currentKey);
 
-    std::string line, word;
-    for (int i = 0; messageBuf[i]; ++i) {
-        char ch = messageBuf[i];
-        if (ch == '\n') {
-            if (!word.empty())
-                line += word;
-            if (!line.empty())
-                lines.push_back(line);
-            line.clear();
-            word.clear();
-        } else if (ch == ' ') {
-            line += word + ' ';
-            word.clear();
-        } else {
-            word += ch;
-            std::string test = line + word;
-            if (display->getStringWidth(test.c_str()) > textWidth) {
-                if (!line.empty())
-                    lines.push_back(line);
-                line = word;
-                word.clear();
-            }
-        }
+        // Cache miss - regenerate lines and heights
+        cachedLines = generateLines(display, headerStr, messageBuf, textWidth);
+        cachedHeights = calculateLineHeights(cachedLines, emotes);
+        cachedKey = currentKey;
+    } else {
+        // Cache hit but update the header line with current time information
+        cachedLines[0] = std::string(headerStr);
+        // The header always has a fixed height since it doesn't contain emotes
+        // As per calculateLineHeights logic for lines without emotes:
+        cachedHeights[0] = FONT_HEIGHT_SMALL - 2;
+        if (cachedHeights[0] < 8)
+            cachedHeights[0] = 8; // minimum safety
     }
-    if (!word.empty())
-        line += word;
-    if (!line.empty())
-        lines.push_back(line);
 
     // === Scrolling logic ===
-    std::vector<int> rowHeights;
-
-    for (const auto &_line : lines) {
-        int lineHeight = FONT_HEIGHT_SMALL;
-        bool hasEmote = false;
-
-        for (int i = 0; i < numEmotes; ++i) {
-            const Emote &e = emotes[i];
-            if (_line.find(e.label) != std::string::npos) {
-                lineHeight = std::max(lineHeight, e.height);
-                hasEmote = true;
-            }
-        }
-
-        // Apply tighter spacing if no emotes on this line
-        if (!hasEmote) {
-            lineHeight -= 2; // reduce by 2px for tighter spacing
-            if (lineHeight < 8)
-                lineHeight = 8; // minimum safety
-        }
-
-        rowHeights.push_back(lineHeight);
-    }
     int totalHeight = 0;
-    for (size_t i = 1; i < rowHeights.size(); ++i) {
-        totalHeight += rowHeights[i];
+    for (size_t i = 1; i < cachedHeights.size(); ++i) {
+        totalHeight += cachedHeights[i];
     }
-    int usableScrollHeight = usableHeight - rowHeights[0]; // remove header height
-    int scrollStop = std::max(0, totalHeight - usableScrollHeight + rowHeights.back());
+    int usableScrollHeight = usableHeight - cachedHeights[0]; // remove header height
+    int scrollStop = std::max(0, totalHeight - usableScrollHeight + cachedHeights.back());
 
     static float scrollY = 0.0f;
     static uint32_t lastTime = 0, scrollStartDelay = 0, pauseStart = 0;
@@ -363,28 +337,109 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
     int scrollOffset = static_cast<int>(scrollY);
     int yOffset = -scrollOffset + getTextPositions(display)[1];
-    for (int separatorX = 0; separatorX <= (display->getStringWidth(headerStr) + 3); separatorX += 2) {
-        display->setPixel(separatorX, yOffset + ((SCREEN_WIDTH > 128) ? 19 : 13));
+    for (int separatorX = 1; separatorX <= (display->getStringWidth(headerStr) + 2); separatorX += 2) {
+        display->setPixel(separatorX, yOffset + ((isHighResolution) ? 19 : 13));
     }
 
     // === Render visible lines ===
+    renderMessageContent(display, cachedLines, cachedHeights, x, yOffset, scrollBottom, emotes, numEmotes, isInverted, isBold);
+
+    // Draw header at the end to sort out overlapping elements
+    graphics::drawCommonHeader(display, x, y, titleStr);
+}
+
+std::vector<std::string> generateLines(OLEDDisplay *display, const char *headerStr, const char *messageBuf, int textWidth)
+{
+    std::vector<std::string> lines;
+    lines.push_back(std::string(headerStr)); // Header line is always first
+
+    std::string line, word;
+    for (int i = 0; messageBuf[i]; ++i) {
+        char ch = messageBuf[i];
+        if ((unsigned char)messageBuf[i] == 0xE2 && (unsigned char)messageBuf[i + 1] == 0x80 &&
+            (unsigned char)messageBuf[i + 2] == 0x99) {
+            ch = '\''; // plain apostrophe
+            i += 2;    // skip over the extra UTF-8 bytes
+        }
+        if (ch == '\n') {
+            if (!word.empty())
+                line += word;
+            if (!line.empty())
+                lines.push_back(line);
+            line.clear();
+            word.clear();
+        } else if (ch == ' ') {
+            line += word + ' ';
+            word.clear();
+        } else {
+            word += ch;
+            std::string test = line + word;
+            // Keep these lines for diagnostics
+            // LOG_INFO("Char: '%c' (0x%02X)", ch, (unsigned char)ch);
+            // LOG_INFO("Current String: %s", test.c_str());
+            if (display->getStringWidth(test.c_str()) > textWidth) {
+                if (!line.empty())
+                    lines.push_back(line);
+                line = word;
+                word.clear();
+            }
+        }
+    }
+
+    if (!word.empty())
+        line += word;
+    if (!line.empty())
+        lines.push_back(line);
+
+    return lines;
+}
+
+std::vector<int> calculateLineHeights(const std::vector<std::string> &lines, const Emote *emotes)
+{
+    std::vector<int> rowHeights;
+
+    for (const auto &_line : lines) {
+        int lineHeight = FONT_HEIGHT_SMALL;
+        bool hasEmote = false;
+
+        for (int i = 0; i < numEmotes; ++i) {
+            const Emote &e = emotes[i];
+            if (_line.find(e.label) != std::string::npos) {
+                lineHeight = std::max(lineHeight, e.height);
+                hasEmote = true;
+            }
+        }
+
+        // Apply tighter spacing if no emotes on this line
+        if (!hasEmote) {
+            lineHeight -= 2; // reduce by 2px for tighter spacing
+            if (lineHeight < 8)
+                lineHeight = 8; // minimum safety
+        }
+
+        rowHeights.push_back(lineHeight);
+    }
+
+    return rowHeights;
+}
+
+void renderMessageContent(OLEDDisplay *display, const std::vector<std::string> &lines, const std::vector<int> &rowHeights, int x,
+                          int yOffset, int scrollBottom, const Emote *emotes, int numEmotes, bool isInverted, bool isBold)
+{
     for (size_t i = 0; i < lines.size(); ++i) {
         int lineY = yOffset;
         for (size_t j = 0; j < i; ++j)
             lineY += rowHeights[j];
         if (lineY > -rowHeights[i] && lineY < scrollBottom) {
             if (i == 0 && isInverted) {
-                display->drawString(x + 3, lineY, lines[i].c_str());
+                display->drawString(x, lineY, lines[i].c_str());
                 if (isBold)
-                    display->drawString(x + 4, lineY, lines[i].c_str());
+                    display->drawString(x, lineY, lines[i].c_str());
             } else {
                 drawStringWithEmotes(display, x, lineY, lines[i], emotes, numEmotes);
             }
         }
     }
-
-    // Draw header at the end to sort out overlapping elements
-    graphics::drawCommonHeader(display, x, y, titleStr);
 }
 
 } // namespace MessageRenderer

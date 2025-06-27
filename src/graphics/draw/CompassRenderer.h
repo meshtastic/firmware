@@ -28,9 +28,6 @@ void drawArrowToNode(OLEDDisplay *display, int16_t x, int16_t y, int16_t size, f
 float estimatedHeading(double lat, double lon);
 uint16_t getCompassDiam(uint32_t displayWidth, uint32_t displayHeight);
 
-// Utility functions for bearing calculations
-float calculateBearing(double lat1, double lon1, double lat2, double lon2);
-
 } // namespace CompassRenderer
 
 } // namespace graphics
