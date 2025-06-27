@@ -180,6 +180,7 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
     constexpr uint16_t vPadding = 2;
     bool needs_bell = false;
     uint16_t lineWidths[totalLines] = {0};
+    uint16_t lineLengths[totalLines] = {0};
 
     if (maxWidth != 0)
         is_picker = true;
@@ -187,7 +188,12 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
 
     while (lineCount < totalLines) {
         if (lines[lineCount] != nullptr) {
-            lineWidths[lineCount] = display->getStringWidth(lines[lineCount], strlen(lines[lineCount]), true);
+            auto newlinePointer = strchr(lines[lineCount], '\n');
+            if (newlinePointer)
+                lineLengths[lineCount] = (newlinePointer - lines[lineCount]); // Check for newlines first
+            else // if the newline wasn't found, then pull string length from strlen
+                lineLengths[lineCount] = strlen(lines[lineCount]);
+            lineWidths[lineCount] = display->getStringWidth(lines[lineCount], lineLengths[lineCount], true);
             if (!is_picker) {
                 needs_bell |= (strstr(alertBannerMessage, "Alert Received") != nullptr);
                 if (lineWidths[lineCount] > maxWidth)
@@ -242,26 +248,27 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
             display->drawXbm(textX - 10, bellY, 8, 8, bell_alert);
             display->drawXbm(textX + lineWidths[i] + 2, bellY, 8, 8, bell_alert);
         }
-
+        char lineBuffer[lineLengths[i] + 1];
+        strncpy(lineBuffer, lines[i], lineLengths[i]);
+        lineBuffer[lineLengths[i]] = '\0';
         // Determine if this is a pop-up or a pick list
         if (alertBannerOptions > 0 && i == 0) {
             // Pick List
             display->setColor(WHITE);
             int background_yOffset = 1;
             // Determine if we have low hanging characters
-            if (strchr(lines[i], 'p') || strchr(lines[i], 'g') || strchr(lines[i], 'y') || strchr(lines[i], 'j')) {
+            if (strchr(lineBuffer, 'p') || strchr(lineBuffer, 'g') || strchr(lineBuffer, 'y') || strchr(lineBuffer, 'j')) {
                 background_yOffset = -1;
             }
             display->fillRect(boxLeft, boxTop + 1, boxWidth, effectiveLineHeight - background_yOffset);
             display->setColor(BLACK);
             int yOffset = 3;
-            display->drawString(textX, lineY - yOffset, lines[i]);
+            display->drawString(textX, lineY - yOffset, lineBuffer);
             display->setColor(WHITE);
             lineY += (effectiveLineHeight - 2 - background_yOffset);
         } else {
             // Pop-up
-            LOG_WARN("x%u y%u %s", textX, lineY, lines[i]);
-            display->drawString(textX, lineY, lines[i]);
+            display->drawString(textX, lineY, lineBuffer);
             lineY += (effectiveLineHeight);
         }
     }
