@@ -1705,11 +1705,9 @@ void NodeDB::sortMeshDB()
             bool bFav = b.is_favorite;
             if (aFav != bFav)
                 return aFav;
-            if (a.last_heard == 0 || a.last_heard == UINT32_MAX)
-                return false;
-            if (b.last_heard == 0 || b.last_heard == UINT32_MAX)
-                return true;
-            return a.last_heard > b.last_heard;
+            if (a.last_heard != b.last_heard)
+                return a.last_heard > b.last_heard;
+            return a.num > b.num;
         });
     }
 }
