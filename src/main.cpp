@@ -260,8 +260,15 @@ static int32_t ledBlinker()
 
     ledBlink.set(ledOn);
 
+    // we don't have much control over timing when light-sleeping, so let's ensure we don't keep LED on for too long
+#if MESHTASTIC_EXCLUDE_POWER_FSM
+    bool isSleeping = false;
+#else
+    bool isSleeping = powerFSM.getState() == &stateLS;
+#endif
+
     // have a very sparse duty cycle of LED being on, unless charging, then blink 0.5Hz square wave rate to indicate that
-    return (powerStatus->getIsCharging() && powerFSM.getState() != &stateLS) ? 1000 : (ledOn ? 1 : 1000);
+    return (powerStatus->getIsCharging() && !isSleeping) ? 1000 : (ledOn ? 1 : 1000);
 }
 
 uint32_t timeLastPowered = 0;
