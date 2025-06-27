@@ -1016,7 +1016,8 @@ void setup()
                 BaseType_t higherWake = 0;
                 mainDelay.interruptFromISR(&higherWake);
             },
-            INPUT_BROKER_USER_PRESS, INPUT_BROKER_SHUTDOWN, 5000, INPUT_BROKER_SEND_PING, INPUT_BROKER_GPS_TOGGLE);
+            INPUT_BROKER_USER_PRESS, INPUT_BROKER_SHUTDOWN, 5000, INPUT_BROKER_SEND_PING, INPUT_BROKER_NONE, 0,
+            INPUT_BROKER_GPS_TOGGLE);
 #endif
 
 #endif
@@ -1422,7 +1423,7 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_AUDIO_CONFIG;
 #endif
 // Option to explicitly include canned messages for edge cases, e.g. niche graphics
-#if (!HAS_SCREEN || NO_EXT_GPIO) || MESHTASTIC_EXCLUDE_CANNEDMESSAGES
+#if ((!HAS_SCREEN || NO_EXT_GPIO) || MESHTASTIC_EXCLUDE_CANNEDMESSAGES) && !defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_CANNEDMSG_CONFIG;
 #endif
 #if NO_EXT_GPIO

@@ -7,9 +7,18 @@
 #endif
 
 /**
+ * Datatype passed to Observers by AdminModule, to allow external handling of admin messages
+ */
+struct AdminModule_ObserverData {
+    const meshtastic_AdminMessage *request;
+    meshtastic_AdminMessage *response;
+    AdminMessageHandleResult *result;
+};
+
+/**
  * Admin module for admin messages
  */
-class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Observable<const meshtastic_AdminMessage *>
+class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Observable<AdminModule_ObserverData *>
 {
   public:
     /** Constructor
