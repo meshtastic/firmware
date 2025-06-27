@@ -33,15 +33,15 @@
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  Button Configuration
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#define BUTTON_PIN D13 // This is the Program Button
+#define CANCEL_BUTTON_PIN D13 // This is the Program Button
 // #define BUTTON_NEED_PULLUP   1
-#define BUTTON_ACTIVE_LOW true
-#define BUTTON_ACTIVE_PULLUP false
+#define CANCEL_BUTTON_ACTIVE_LOW true
+#define CANCEL_BUTTON_ACTIVE_PULLUP false
 
-#define BUTTON_PIN_TOUCH 13 // Touch button
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  Digital Pin Mapping (D0-D10)
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// #define BUTTON_PIN_TOUCH 13 // Touch button
+//  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//   Digital Pin Mapping (D0-D10)
+//  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #define D0 0   // P1.06 GNSS_WAKEUP/IO0
 #define D1 1   // P0.07 LORA_DIO1
 #define D2 2   // P1.07 LORA_RESET
@@ -169,6 +169,7 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 #define TB_LEFT 27
 #define TB_RIGHT 28
 #define TB_PRESS 29
+#define TB_DIRECTION FALLING
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  Compatibility Definitions
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

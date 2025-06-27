@@ -96,9 +96,9 @@ Lora:
 ### Some devices, like the pinedio, may require spidev0.1 as a workaround.
 #  spidev: spidev0.0
 
-### Define GPIO buttons here:
+### Deprecated location for User Button:
 
-GPIO:
+#GPIO:
 #  User: 6
 
 ### Define GPS
@@ -114,17 +114,6 @@ I2C:
 ### Set up SPI displays here. Note that I2C displays are generally auto-detected.
 
 Display:
-
-### Waveshare 1.44inch LCD HAT
-#  Panel: ST7735S
-#  CS: 8         #Chip Select
-#  DC: 25        # Data/Command pin
-#  Backlight: 24
-#  Width: 128
-#  Height: 128
-#  Reset: 27
-#  OffsetX: 0
-#  OffsetY: 0
 
 ### Adafruit PiTFT 2.8 TFT+Touchscreen
 #  Panel: ILI9341
@@ -179,6 +168,16 @@ Input:
 ### Configure device for direct keyboard input
 
 #  KeyboardDevice: /dev/input/by-id/usb-_Raspberry_Pi_Internal_Keyboard-event-kbd
+
+### Standard User Button Config
+#  UserButton: 6
+
+### Trackball/Joystick input
+#  TrackballUp: 6
+#  TrackballDown: 19
+#  TrackballLeft: 5
+#  TrackballRight: 26
+#  TrackballPress: 13
 
 ###
 

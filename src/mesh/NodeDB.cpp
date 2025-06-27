@@ -339,6 +339,22 @@ NodeDB::NodeDB()
         moduleConfig.telemetry.health_update_interval = Default::getConfiguredOrMinimumValue(
             moduleConfig.telemetry.health_update_interval, min_default_telemetry_interval_secs);
     }
+    // FIXME: UINT32_MAX intervals overflows Apple clients until they are fully patched
+    if (config.device.node_info_broadcast_secs > MAX_INTERVAL)
+        config.device.node_info_broadcast_secs = MAX_INTERVAL;
+    if (config.position.position_broadcast_secs > MAX_INTERVAL)
+        config.position.position_broadcast_secs = MAX_INTERVAL;
+    if (moduleConfig.neighbor_info.update_interval > MAX_INTERVAL)
+        moduleConfig.neighbor_info.update_interval = MAX_INTERVAL;
+    if (moduleConfig.telemetry.device_update_interval > MAX_INTERVAL)
+        moduleConfig.telemetry.device_update_interval = MAX_INTERVAL;
+    if (moduleConfig.telemetry.environment_update_interval > MAX_INTERVAL)
+        moduleConfig.telemetry.environment_update_interval = MAX_INTERVAL;
+    if (moduleConfig.telemetry.air_quality_interval > MAX_INTERVAL)
+        moduleConfig.telemetry.air_quality_interval = MAX_INTERVAL;
+    if (moduleConfig.telemetry.health_update_interval > MAX_INTERVAL)
+        moduleConfig.telemetry.health_update_interval = MAX_INTERVAL;
+
     if (moduleConfig.mqtt.has_map_report_settings &&
         moduleConfig.mqtt.map_report_settings.publish_interval_secs < default_map_publish_interval_secs) {
         moduleConfig.mqtt.map_report_settings.publish_interval_secs = default_map_publish_interval_secs;
@@ -510,6 +526,10 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
         true; // FIXME: maybe false in the future, and setting region to enable it. (unset region forces it off)
     config.lora.override_duty_cycle = false;
     config.lora.config_ok_to_mqtt = false;
+
+#if HAS_TFT // For the devices that support MUI, default to that
+    config.display.displaymode = meshtastic_Config_DisplayConfig_DisplayMode_COLOR;
+#endif
 
 #ifdef USERPREFS_CONFIG_DEVICE_ROLE
     // Restrict ROUTER*, LOST AND FOUND, and REPEATER roles for security reasons
@@ -788,15 +808,7 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.output_ms = 1000;
     moduleConfig.external_notification.nag_timeout = 60;
 #endif
-#ifdef BUTTON_SECONDARY_CANNEDMESSAGES
-    // Use a board's second built-in button as input source for canned messages
-    moduleConfig.canned_message.enabled = true;
-    moduleConfig.canned_message.inputbroker_pin_press = BUTTON_PIN_SECONDARY;
-    strcpy(moduleConfig.canned_message.allow_input_source, "scanAndSelect");
-#endif
-
     moduleConfig.has_canned_message = true;
-
 #if USERPREFS_MQTT_ENABLED && !MESHTASTIC_EXCLUDE_MQTT
     moduleConfig.mqtt.enabled = true;
 #endif
@@ -854,10 +866,12 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
     if (role == meshtastic_Config_DeviceConfig_Role_ROUTER) {
         initConfigIntervals();
         initModuleConfigIntervals();
+        moduleConfig.telemetry.device_update_interval = default_telemetry_broadcast_interval_secs;
         config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY;
         owner.has_is_unmessagable = true;
         owner.is_unmessagable = true;
     } else if (role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE) {
+        moduleConfig.telemetry.device_update_interval = ONE_DAY;
         owner.has_is_unmessagable = true;
         owner.is_unmessagable = true;
     } else if (role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
@@ -868,6 +882,7 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
     } else if (role == meshtastic_Config_DeviceConfig_Role_SENSOR) {
         owner.has_is_unmessagable = true;
         owner.is_unmessagable = true;
+        moduleConfig.telemetry.device_update_interval = default_telemetry_broadcast_interval_secs;
         moduleConfig.telemetry.environment_measurement_enabled = true;
         moduleConfig.telemetry.environment_update_interval = 300;
     } else if (role == meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND) {
@@ -885,6 +900,7 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
     } else if (role == meshtastic_Config_DeviceConfig_Role_TRACKER) {
         owner.has_is_unmessagable = true;
         owner.is_unmessagable = true;
+        moduleConfig.telemetry.device_update_interval = default_telemetry_broadcast_interval_secs;
     } else if (role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER) {
         owner.has_is_unmessagable = true;
         owner.is_unmessagable = true;
@@ -900,21 +916,25 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
         moduleConfig.telemetry.device_update_interval = ONE_DAY;
     } else if (role == meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN) {
         config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY;
-        config.device.node_info_broadcast_secs = UINT32_MAX;
+        config.device.node_info_broadcast_secs = MAX_INTERVAL;
         config.position.position_broadcast_smart_enabled = false;
-        config.position.position_broadcast_secs = UINT32_MAX;
-        moduleConfig.neighbor_info.update_interval = UINT32_MAX;
-        moduleConfig.telemetry.device_update_interval = UINT32_MAX;
-        moduleConfig.telemetry.environment_update_interval = UINT32_MAX;
-        moduleConfig.telemetry.air_quality_interval = UINT32_MAX;
-        moduleConfig.telemetry.health_update_interval = UINT32_MAX;
+        config.position.position_broadcast_secs = MAX_INTERVAL;
+        moduleConfig.neighbor_info.update_interval = MAX_INTERVAL;
+        moduleConfig.telemetry.device_update_interval = MAX_INTERVAL;
+        moduleConfig.telemetry.environment_update_interval = MAX_INTERVAL;
+        moduleConfig.telemetry.air_quality_interval = MAX_INTERVAL;
+        moduleConfig.telemetry.health_update_interval = MAX_INTERVAL;
     }
 }
 
 void NodeDB::initModuleConfigIntervals()
 {
     // Zero out telemetry intervals so that they coalesce to defaults in Default.h
-    moduleConfig.telemetry.device_update_interval = 0;
+#ifdef USERPREFS_CONFIG_DEVICE_TELEM_UPDATE_INTERVAL
+    moduleConfig.telemetry.device_update_interval = USERPREFS_CONFIG_DEVICE_TELEM_UPDATE_INTERVAL;
+#else
+    moduleConfig.telemetry.device_update_interval = MAX_INTERVAL;
+#endif
     moduleConfig.telemetry.environment_update_interval = 0;
     moduleConfig.telemetry.air_quality_interval = 0;
     moduleConfig.telemetry.power_update_interval = 0;
@@ -1136,7 +1156,7 @@ void NodeDB::loadFromDisk()
         LOG_WARN("Node count %d exceeds MAX_NUM_NODES %d, truncating", numMeshNodes, MAX_NUM_NODES);
         numMeshNodes = MAX_NUM_NODES;
     }
-    meshNodes->resize(MAX_NUM_NODES);
+    meshNodes->resize(MAX_NUM_NODES + 1); // The rp2040, rp2035, and maybe other targets, have a problem doing a sort() when full
 
     // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
     state = loadProto(deviceStateFileName, meshtastic_DeviceState_size, sizeof(meshtastic_DeviceState),
@@ -1561,7 +1581,8 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
         info->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
         // Mark the node's key as manually verified to indicate trustworthiness.
         updateGUIforNode = info;
-        powerFSM.trigger(EVENT_NODEDB_UPDATED);
+        // powerFSM.trigger(EVENT_NODEDB_UPDATED); This event has been retired
+        sortMeshDB();
         notifyObservers(true); // Force an update whether or not our node counts have changed
     }
     saveNodeDatabaseToDisk();
@@ -1620,7 +1641,6 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
 
     if (changed) {
         updateGUIforNode = info;
-        powerFSM.trigger(EVENT_NODEDB_UPDATED);
         notifyObservers(true); // Force an update whether or not our node counts have changed
 
         // We just changed something about a User,
@@ -1666,6 +1686,31 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
             info->has_hops_away = true;
             info->hops_away = mp.hop_start - mp.hop_limit;
         }
+        sortMeshDB();
+    }
+}
+
+void NodeDB::sortMeshDB()
+{
+    if (!Throttle::isWithinTimespanMs(lastSort, 1000 * 5)) {
+        lastSort = millis();
+        std::sort(meshNodes->begin(), meshNodes->end(), [](const meshtastic_NodeInfoLite &a, const meshtastic_NodeInfoLite &b) {
+            if (a.num == myNodeInfo.my_node_num) {
+                return true;
+            }
+            if (b.num == myNodeInfo.my_node_num) {
+                return false;
+            }
+            bool aFav = a.is_favorite;
+            bool bFav = b.is_favorite;
+            if (aFav != bFav)
+                return aFav;
+            if (a.last_heard == 0 || a.last_heard == UINT32_MAX)
+                return false;
+            if (b.last_heard == 0 || b.last_heard == UINT32_MAX)
+                return true;
+            return a.last_heard > b.last_heard;
+        });
     }
 }
 
@@ -1891,10 +1936,6 @@ bool NodeDB::restorePreferences(meshtastic_AdminMessage_BackupLocation location,
 /// Record an error that should be reported via analytics
 void recordCriticalError(meshtastic_CriticalErrorCode code, uint32_t address, const char *filename)
 {
-    // Print error to screen and serial port
-    String lcd = String("Critical error ") + code + "!\n";
-    if (screen)
-        screen->print(lcd.c_str());
     if (filename) {
         LOG_ERROR("NOTE! Record critical error %d at %s:%lu", code, filename, address);
     } else {
