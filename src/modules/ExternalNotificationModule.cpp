@@ -188,7 +188,7 @@ int32_t ExternalNotificationModule::runOnce()
 
         // Play RTTTL over i2s audio interface if enabled as buzzer
 #ifdef HAS_I2S
-        if (moduleConfig.external_notification.use_i2s_as_buzzer) {
+        if (moduleConfig.external_notification.use_i2s_as_buzzer && canBuzz()) {
             if (audioThread->isPlaying()) {
                 // Continue playing
             } else if (isNagging && (nagCycleCutoff >= millis())) {
@@ -197,7 +197,7 @@ int32_t ExternalNotificationModule::runOnce()
         }
 #endif
         // now let the PWM buzzer play
-        if (moduleConfig.external_notification.use_pwm && config.device.buzzer_gpio) {
+        if (moduleConfig.external_notification.use_pwm && config.device.buzzer_gpio && canBuzz()) {
             if (rtttl::isPlaying()) {
                 rtttl::play();
             } else if (isNagging && (nagCycleCutoff >= millis())) {
@@ -208,6 +208,18 @@ int32_t ExternalNotificationModule::runOnce()
 
         return EXT_NOTIFICATION_DEFAULT_THREAD_MS;
     }
+}
+
+/**
+ * Based on buzzer mode, return true if we can buzz.
+ */
+bool ExternalNotificationModule::canBuzz()
+{
+    if (config.device.buzzer_mode != meshtastic_Config_DeviceConfig_BuzzerMode_DISABLED &&
+        config.device.buzzer_mode != meshtastic_Config_DeviceConfig_BuzzerMode_SYSTEM_ONLY) {
+        return true;
+    }
+    return false;
 }
 
 bool ExternalNotificationModule::wantPacket(const meshtastic_MeshPacket *p)
@@ -293,6 +305,12 @@ bool ExternalNotificationModule::getExternal(uint8_t index)
     return externalCurrentState[index];
 }
 
+// Allow other firmware components to determine whether a notification is ongoing
+bool ExternalNotificationModule::nagging()
+{
+    return isNagging;
+}
+
 void ExternalNotificationModule::stopNow()
 {
     rtttl::stop();
@@ -338,6 +356,9 @@ ExternalNotificationModule::ExternalNotificationModule()
     // moduleConfig.external_notification.alert_message_buzzer = true;
 
     if (moduleConfig.external_notification.enabled) {
+        if (inputBroker) // put our callback in the inputObserver list
+            inputObserver.observe(inputBroker);
+
         if (nodeDB->loadProto(rtttlConfigFile, meshtastic_RTTTLConfig_size, sizeof(meshtastic_RTTTLConfig),
                               &meshtastic_RTTTLConfig_msg, &rtttlConfig) != LoadFileResult::LOAD_SUCCESS) {
             memset(rtttlConfig.ringtone, 0, sizeof(rtttlConfig.ringtone));
@@ -364,7 +385,7 @@ ExternalNotificationModule::ExternalNotificationModule()
             setExternalState(1, false);
             externalTurnedOn[1] = 0;
         }
-        if (moduleConfig.external_notification.output_buzzer) {
+        if (moduleConfig.external_notification.output_buzzer && canBuzz()) {
             if (!moduleConfig.external_notification.use_pwm) {
                 LOG_INFO("Use Pin %i for buzzer", moduleConfig.external_notification.output_buzzer);
                 pinMode(moduleConfig.external_notification.output_buzzer, OUTPUT);
@@ -454,7 +475,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 }
             }
 
-            if (moduleConfig.external_notification.alert_bell_buzzer) {
+            if (moduleConfig.external_notification.alert_bell_buzzer && canBuzz()) {
                 if (containsBell) {
                     LOG_INFO("externalNotificationModule - Notification Bell (Buzzer)");
                     isNagging = true;
@@ -583,4 +604,13 @@ void ExternalNotificationModule::handleSetRingtone(const char *from_msg)
     if (changed) {
         nodeDB->saveProto(rtttlConfigFile, meshtastic_RTTTLConfig_size, &meshtastic_RTTTLConfig_msg, &rtttlConfig);
     }
+}
+
+int ExternalNotificationModule::handleInputEvent(const InputEvent *event)
+{
+    if (nagCycleCutoff != UINT32_MAX) {
+        stopNow();
+        return 1;
+    }
+    return 0;
 }

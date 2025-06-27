@@ -78,8 +78,8 @@ extern NullSensor ina3221Sensor;
 #endif
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(ARCH_STM32WL)
-#include "modules/Telemetry/Sensor/MAX17048Sensor.h"
 #if __has_include(<Adafruit_MAX1704X.h>)
+#include "modules/Telemetry/Sensor/MAX17048Sensor.h"
 extern MAX17048Sensor max17048Sensor;
 #else
 extern NullSensor max17048Sensor;

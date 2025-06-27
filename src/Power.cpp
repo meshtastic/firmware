@@ -734,12 +734,14 @@ bool Power::analogInit()
  */
 bool Power::setup()
 {
-    // initialise one power sensor (only)
-    bool found = axpChipInit();
-    if (!found)
-        found = lipoInit();
-    if (!found)
-        found = analogInit();
+    bool found = false;
+    if (axpChipInit()) {
+        found = true;
+    } else if (lipoInit()) {
+        found = true;
+    } else if (analogInit()) {
+        found = true;
+    }
 
 #ifdef NRF_APM
     found = true;
@@ -753,7 +755,7 @@ bool Power::setup()
 
 void Power::shutdown()
 {
-    LOG_INFO("Shutting down");
+    LOG_INFO("Shutting Down");
 
 #if defined(ARCH_NRF52) || defined(ARCH_ESP32) || defined(ARCH_RP2040)
 #ifdef PIN_LED1
@@ -926,7 +928,8 @@ int32_t Power::runOnce()
 #ifndef T_WATCH_S3 // FIXME - why is this triggering on the T-Watch S3?
         if (PMU->isPekeyLongPressIrq()) {
             LOG_DEBUG("PEK long button press");
-            screen->setOn(false);
+            if (screen)
+                screen->setOn(false);
         }
 #endif
 

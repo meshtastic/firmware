@@ -5,13 +5,13 @@ TITLE Meshtastic device-install
 SET "SCRIPT_NAME=%~nx0"
 SET "DEBUG=0"
 SET "PYTHON="
-SET "WEB_APP=0"
 SET "TFT_BUILD=0"
 SET "BIGDB8=0"
 SET "BIGDB16=0"
 SET "ESPTOOL_BAUD=115200"
 SET "ESPTOOL_CMD="
 SET "LOGCOUNTER=0"
+SET "BPS_RESET=0"
 
 @REM FIXME: Determine mcu from PlatformIO variant, this is unmaintainable.
 SET "S3=s3 v3 t-deck wireless-paper wireless-tracker station-g2 unphone"
@@ -24,7 +24,7 @@ GOTO getopts
 :help
 ECHO Flash image file to device, but first erasing and writing system information.
 ECHO.
-ECHO Usage: %SCRIPT_NAME% -f filename [-p PORT] [-P python] (--web)
+ECHO Usage: %SCRIPT_NAME% -f filename [-p PORT] [-P python] [--1200bps-reset]
 ECHO.
 ECHO Options:
 ECHO     -f filename      The firmware .bin file to flash.  Custom to your device type and region. (required)
@@ -34,14 +34,16 @@ ECHO                      If not set, ESPTOOL iterates all ports (Dangerous).
 ECHO     -P python        Specify alternate python interpreter to use to invoke esptool. (default: python)
 ECHO                      If supplied the script will use python.
 ECHO                      If not supplied the script will try to find esptool in Path.
-ECHO     --web            Enable WebUI. (default: false)
+ECHO     --1200bps-reset  Attempt to place the device in correct mode. (1200bps Reset)
+ECHO                      Some hardware requires this twice.
 ECHO.
+ECHO Example: %SCRIPT_NAME% -p COM17 --1200bps-reset
 ECHO Example: %SCRIPT_NAME% -f firmware-t-deck-tft-2.6.0.0b106d4.bin -p COM11
-ECHO Example: %SCRIPT_NAME% -f firmware-unphone-2.6.0.0b106d4.bin -p COM11 --web
+ECHO Example: %SCRIPT_NAME% -f firmware-unphone-2.6.0.0b106d4.bin -p COM11
 GOTO eof
 
 :version
-ECHO %SCRIPT_NAME% [Version 2.6.1]
+ECHO %SCRIPT_NAME% [Version 2.6.2]
 ECHO Meshtastic
 GOTO eof
 
@@ -57,10 +59,12 @@ IF /I "%~1"=="-f" SET "FILENAME=%~2" & SHIFT
 IF "%~1"=="-p" SET "ESPTOOL_PORT=%~2" & SHIFT
 IF /I "%~1"=="--port" SET "ESPTOOL_PORT=%~2" & SHIFT
 IF "%~1"=="-P" SET "PYTHON=%~2" & SHIFT
-IF /I "%~1"=="--web" SET "WEB_APP=1"
+IF /I "%~1"=="--1200bps-reset" SET "BPS_RESET=1"
 SHIFT
 GOTO getopts
 :endopts
+
+IF %BPS_RESET% EQU 1 GOTO skip-filename
 
 CALL :LOG_MESSAGE DEBUG "Checking FILENAME parameter..."
 IF "__!FILENAME!__"=="____" (
@@ -94,6 +98,9 @@ IF NOT "!FILENAME:update=!"=="!FILENAME!" (
 ) ELSE (
     CALL :LOG_MESSAGE DEBUG "We are NOT working with a *update* file. !FILENAME!"
 )
+
+:skip-filename
+SET "ESPTOOL_BAUD=1200"
 
 CALL :LOG_MESSAGE DEBUG "Determine the correct esptool command to use..."
 IF NOT "__%PYTHON%__"=="____" (
@@ -133,13 +140,16 @@ IF "__!ESPTOOL_PORT!__" == "____" (
 )
 CALL :LOG_MESSAGE INFO "Using esptool baud: !ESPTOOL_BAUD!."
 
+IF %BPS_RESET% EQU 1 (
+    @REM Attempt to change mode via 1200bps Reset.
+    CALL :RUN_ESPTOOL !ESPTOOL_BAUD! --after no_reset read_flash_status
+    GOTO eof
+)
+
 @REM Check if FILENAME contains "-tft-" and set target partitionScheme accordingly.
 @REM https://github.com/meshtastic/web-flasher/blob/main/types/resources.ts#L3
 IF NOT "!FILENAME:-tft-=!"=="!FILENAME!" (
     CALL :LOG_MESSAGE DEBUG "We are working with a *-tft-* file. !FILENAME!"
-    IF %WEB_APP% EQU 1 (
-        CALL :LOG_MESSAGE ERROR "Cannot enable WebUI (--web) and MUI." & GOTO eof
-    )
     SET "TFT_BUILD=1"
 ) ELSE (
     CALL :LOG_MESSAGE DEBUG "We are NOT working with a *-tft-* file. !FILENAME!"
@@ -193,13 +203,8 @@ SET "OTA_FILENAME=bleota.bin"
 :end_loop_c3
 CALL :LOG_MESSAGE DEBUG "Set OTA_FILENAME to: !OTA_FILENAME!"
 
-@REM Check if (--web) is enabled and prefix BASENAME with "littlefswebui-" else "littlefs-".
-IF %WEB_APP% EQU 1 (
-    CALL :LOG_MESSAGE INFO "WebUI selected."
-    SET "SPIFFS_FILENAME=littlefswebui-%BASENAME%"
-) ELSE (
-    SET "SPIFFS_FILENAME=littlefs-%BASENAME%"
-)
+@REM Set SPIFFS filename with "littlefs-" prefix.
+SET "SPIFFS_FILENAME=littlefs-%BASENAME%"
 CALL :LOG_MESSAGE DEBUG "Set SPIFFS_FILENAME to: !SPIFFS_FILENAME!"
 
 @REM Default offsets.
@@ -254,6 +259,7 @@ EXIT /B %ERRORLEVEL%
 IF %DEBUG% EQU 1 CALL :LOG_MESSAGE DEBUG "About to run command: !ESPTOOL_CMD! --baud %~1 %~2 %~3 %~4"
 CALL :RESET_ERROR
 !ESPTOOL_CMD! --baud %~1 %~2 %~3 %~4
+IF %BPS_RESET% EQU 1 GOTO :eof
 IF %ERRORLEVEL% NEQ 0 (
     CALL :LOG_MESSAGE ERROR "Error running command: !ESPTOOL_CMD! --baud %~1 %~2 %~3 %~4"
     EXIT /B %ERRORLEVEL%

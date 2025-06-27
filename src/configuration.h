@@ -80,10 +80,46 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Override user saved region, for producing region-locked builds
 // #define REGULATORY_LORA_REGIONCODE meshtastic_Config_LoRaConfig_RegionCode_SG_923
 
-// Total system gain in dBm to subtract from Tx power to remain within regulatory ERP limit for non-licensed operators
-// This value should be set in variant.h and is PA gain + antenna gain (if system ships with an antenna)
-#ifndef REGULATORY_GAIN_LORA
-#define REGULATORY_GAIN_LORA 0
+// Total system gain in dBm to subtract from Tx power to remain within regulatory and Tx PA limits
+// The value consists of PA gain + antenna gain (if variant has a non-removable antenna)
+// TX_GAIN_LORA should be set with definitions below for common modules, or in variant.h.
+
+// Gain for common modules with transmit PAs
+#ifdef EBYTE_E22_900M30S
+// 10dB PA gain and 30dB rated output; based on measurements from
+// https://github.com/S5NC/EBYTE_ESP32-S3/blob/main/E22-900M30S%20power%20output%20testing.txt
+#define TX_GAIN_LORA 7
+#define SX126X_MAX_POWER 22
+#endif
+
+#ifdef EBYTE_E22_900M33S
+// 25dB PA gain and 33dB rated output; based on TX Power Curve from E22-900M33S_UserManual_EN_v1.0.pdf
+#define TX_GAIN_LORA 25
+#define SX126X_MAX_POWER 8
+#endif
+
+#ifdef NICERF_MINIF27
+// Note that datasheet power level of 9 corresponds with SX1262 at 22dBm
+// Maximum output power of 29dBm with VCC_PA = 5V
+#define TX_GAIN_LORA 7
+#define SX126X_MAX_POWER 22
+#endif
+
+#ifdef NICERF_F30_HF
+// Maximum output power of 29.6dBm with VCC = 5V and SX1262 at 22dBm
+#define TX_GAIN_LORA 8
+#define SX126X_MAX_POWER 22
+#endif
+
+#ifdef NICERF_F30_LF
+// Maximum output power of 32.0dBm with VCC = 5V and SX1262 at 22dBm
+#define TX_GAIN_LORA 10
+#define SX126X_MAX_POWER 22
+#endif
+
+// Default system gain to 0 if not defined
+#ifndef TX_GAIN_LORA
+#define TX_GAIN_LORA 0
 #endif
 
 // -----------------------------------------------------------------------------
@@ -99,8 +135,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 // OLED & Input
 // -----------------------------------------------------------------------------
-
+#if defined(SEEED_WIO_TRACKER_L1)
+#define SSD1306_ADDRESS 0x3D
+#define USE_SH1106
+#else
 #define SSD1306_ADDRESS 0x3C
+#endif
 #define ST7567_ADDRESS 0x3F
 
 // The SH1106 controller is almost, but not quite, the same as SSD1306
@@ -153,6 +193,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define CGRADSENS_ADDR 0x66
 #define LTR390UV_ADDR 0x53
 #define XPOWERS_AXP192_AXP2101_ADDRESS 0x34 // same adress as TCA8418
+#define PCT2075_ADDR 0x37
 
 // -----------------------------------------------------------------------------
 // ACCELEROMETER
@@ -166,6 +207,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define BMX160_ADDR 0x69
 #define ICM20948_ADDR 0x69
 #define ICM20948_ADDR_ALT 0x68
+#define BMM150_ADDR 0x13
 
 // -----------------------------------------------------------------------------
 // LED
@@ -187,6 +229,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Touchscreen
 // -----------------------------------------------------------------------------
 #define FT6336U_ADDR 0x48
+
+// -----------------------------------------------------------------------------
+// RAK12035VB Soil Monitor (using RAK12023 up to 3 RAK12035 monitors can be connected)
+// - the default i2c address for this sensor is 0x20, and users are instructed to
+// set 0x21 and 0x22 for the second and third sensor if present.
+// -----------------------------------------------------------------------------
+#define RAK120351_ADDR 0x20
+#define RAK120352_ADDR 0x21
+#define RAK120353_ADDR 0x22
 
 // -----------------------------------------------------------------------------
 // BIAS-T Generator
@@ -297,9 +348,39 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #error HW_VENDOR must be defined
 #endif
 
+#ifndef TB_DOWN
+#define TB_DOWN 255
+#endif
+#ifndef TB_UP
+#define TB_UP 255
+#endif
+#ifndef TB_LEFT
+#define TB_LEFT 255
+#endif
+#ifndef TB_RIGHT
+#define TB_RIGHT 255
+#endif
+#ifndef TB_PRESS
+#define TB_PRESS 255
+#endif
+
 // Support multiple RGB LED configuration
 #if defined(HAS_NCP5623) || defined(HAS_LP5562) || defined(RGBLED_RED) || defined(HAS_NEOPIXEL) || defined(UNPHONE)
 #define HAS_RGB_LED
+#endif
+
+// default mapping of pins
+#if defined(PIN_BUTTON2) && !defined(CANCEL_BUTTON_PIN)
+#define ALT_BUTTON_PIN PIN_BUTTON2
+#endif
+#if defined ALT_BUTTON_PIN
+
+#ifndef ALT_BUTTON_ACTIVE_LOW
+#define ALT_BUTTON_ACTIVE_LOW true
+#endif
+#ifndef ALT_BUTTON_ACTIVE_PULLUP
+#define ALT_BUTTON_ACTIVE_PULLUP true
+#endif
 #endif
 
 // -----------------------------------------------------------------------------

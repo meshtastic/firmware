@@ -7,7 +7,12 @@ using namespace NicheGraphics;
 
 // Timing for "maintenance"
 // Paying off full-refresh debt with unprovoked updates, if the display is not very active
+
+#ifdef SEEED_WIO_TRACKER_L1
+static constexpr uint32_t MAINTENANCE_MS_INITIAL = 5 * 1000UL;
+#else
 static constexpr uint32_t MAINTENANCE_MS_INITIAL = 60 * 1000UL;
+#endif
 static constexpr uint32_t MAINTENANCE_MS = 60 * 60 * 1000UL;
 
 InkHUD::DisplayHealth::DisplayHealth() : concurrency::OSThread("Mediator")

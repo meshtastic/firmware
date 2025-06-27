@@ -1,7 +1,5 @@
 
 #define TFT_CS 12
-#ifndef HAS_TFT // for TFT-UI the definitions are in device-ui
-#define BUTTON_PIN 0
 
 // ST7789 TFT LCD
 #define ST7789_CS TFT_CS
@@ -24,7 +22,6 @@
 #define SCREEN_ROTATE
 #define SCREEN_TRANSITION_FRAMERATE 5
 #define BRIGHTNESS_DEFAULT 130 // Medium Low Brightness
-#endif
 
 #define HAS_TOUCHSCREEN 1
 #define SCREEN_TOUCH_INT 16
@@ -34,10 +31,10 @@
 #define USE_POWERSAVE
 #define SLEEP_TIME 120
 
-#ifndef HAS_TFT
-#define BUTTON_PIN 0
-// #define BUTTON_NEED_PULLUP
-#endif
+#define TB_PRESS 0
+#define BUTTON_ACTIVE_LOW true
+#define BUTTON_ACTIVE_PULLUP true
+
 #define GPS_DEFAULT_NOT_PRESENT 1
 #define GPS_RX_PIN 44
 #define GPS_TX_PIN 43
