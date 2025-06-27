@@ -24,6 +24,7 @@ class Screen
         FOCUS_FAULT,
         FOCUS_TEXTMESSAGE,
         FOCUS_MODULE, // Note: target module should call requestFocus(), otherwise no info about which module to focus
+        FOCUS_CLOCK,
     };
 
     explicit Screen(ScanI2C::DeviceAddress, meshtastic_Config_DisplayConfig_OledType, OLEDDISPLAY_GEOMETRY);
@@ -38,8 +39,8 @@ class Screen
     void setFunctionSymbol(std::string) {}
     void removeFunctionSymbol(std::string) {}
     void startAlert(const char *) {}
-    void showOverlayBanner(const char *message, uint32_t durationMs = 3000, uint8_t options = 0,
-                           std::function<void(int)> bannerCallback = NULL, int8_t InitialSelected = 0)
+    void showOverlayBanner(const char *message, uint32_t durationMs = 3000, const char **optionsArrayPtr = nullptr,
+                           uint8_t options = 0, std::function<void(int)> bannerCallback = NULL, int8_t InitialSelected = 0)
     {
     }
     void setFrames(FrameFocus focus) {}
@@ -211,6 +212,7 @@ class Screen : public concurrency::OSThread
         FOCUS_FAULT,
         FOCUS_TEXTMESSAGE,
         FOCUS_MODULE, // Note: target module should call requestFocus(), otherwise no info about which module to focus
+        FOCUS_CLOCK,
     };
 
     // Regenerate the normal set of frames, focusing a specific frame if requested
@@ -224,6 +226,8 @@ class Screen : public concurrency::OSThread
     ScanI2C::DeviceAddress address_found;
     meshtastic_Config_DisplayConfig_OledType model;
     OLEDDISPLAY_GEOMETRY geometry;
+
+    bool ignoreCompass = false;
 
     bool isOverlayBannerShowing();
 
@@ -288,8 +292,8 @@ class Screen : public concurrency::OSThread
         enqueueCmd(cmd);
     }
 
-    void showOverlayBanner(const char *message, uint32_t durationMs = 3000, uint8_t options = 0,
-                           std::function<void(int)> bannerCallback = NULL, int8_t InitialSelected = 0);
+    void showOverlayBanner(const char *message, uint32_t durationMs = 3000, const char **optionsArrayPtr = nullptr,
+                           uint8_t options = 0, std::function<void(int)> bannerCallback = NULL, int8_t InitialSelected = 0);
 
     void startFirmwareUpdateScreen()
     {
@@ -303,7 +307,7 @@ class Screen : public concurrency::OSThread
     void setHeading(long _heading)
     {
         hasCompass = true;
-        compassHeading = _heading;
+        compassHeading = fmod(_heading, 360);
     }
 
     bool hasHeading() { return hasCompass; }
@@ -604,8 +608,6 @@ class Screen : public concurrency::OSThread
     void handleShowNextFrame();
     void handleShowPrevFrame();
     void handleStartFirmwareUpdateScreen();
-    void TZPicker();
-    void LoraRegionPicker(uint32_t duration = 30000);
 
     // Info collected by setFrames method.
     // Index location of specific frames.
@@ -614,7 +616,6 @@ class Screen : public concurrency::OSThread
     struct FramesetInfo {
         struct FramePositions {
             uint8_t fault = 255;
-            uint8_t textMessage = 255;
             uint8_t waypoint = 255;
             uint8_t focusedModule = 255;
             uint8_t log = 255;
@@ -624,6 +625,12 @@ class Screen : public concurrency::OSThread
             uint8_t memory = 255;
             uint8_t gps = 255;
             uint8_t home = 255;
+            uint8_t textMessage = 255;
+            uint8_t nodelist = 255;
+            uint8_t nodelist_lastheard = 255;
+            uint8_t nodelist_hopsignal = 255;
+            uint8_t nodelist_distance = 255;
+            uint8_t nodelist_bearings = 255;
             uint8_t clock = 255;
             uint8_t firstFavorite = 255;
             uint8_t lastFavorite = 255;
@@ -681,5 +688,6 @@ class Screen : public concurrency::OSThread
 // Extern declarations for function symbols used in UIRenderer
 extern std::vector<std::string> functionSymbol;
 extern std::string functionSymbolString;
+extern graphics::Screen *screen;
 
 #endif

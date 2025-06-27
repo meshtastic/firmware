@@ -10,9 +10,22 @@
 namespace graphics
 {
 
+void determineResolution(int16_t screenheight, int16_t screenwidth)
+{
+    if (screenwidth > 128) {
+        isHighResolution = true;
+    }
+
+    // Special case for Heltec Wireless Tracker v1.1
+    if (screenwidth == 160 && screenheight == 80) {
+        isHighResolution = false;
+    }
+}
+
 // === Shared External State ===
 bool hasUnreadMessage = false;
 bool isMuted = false;
+bool isHighResolution = false;
 
 // === Internal State ===
 bool isBoltVisibleShared = true;
@@ -40,7 +53,7 @@ void drawRoundedHighlight(OLEDDisplay *display, int16_t x, int16_t y, int16_t w,
 // *************************
 // * Common Header Drawing *
 // *************************
-void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *titleStr)
+void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *titleStr, bool battery_only)
 {
     constexpr int HEADER_OFFSET_Y = 1;
     y += HEADER_OFFSET_Y;
@@ -56,34 +69,40 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
     const int screenW = display->getWidth();
     const int screenH = display->getHeight();
 
-    const bool useBigIcons = (screenW > 128);
-
-    // === Inverted Header Background ===
-    if (isInverted) {
-        drawRoundedHighlight(display, x, y, screenW, highlightHeight, 2);
-        display->setColor(BLACK);
-    } else {
-        display->setColor(BLACK);
-        display->fillRect(0, 0, screenW, highlightHeight + 3);
-        display->setColor(WHITE);
-        if (screenW > 128) {
-            display->drawLine(0, 20, screenW, 20);
+    if (!battery_only) {
+        // === Inverted Header Background ===
+        if (isInverted) {
+            display->setColor(BLACK);
+            display->fillRect(0, 0, screenW, highlightHeight + 2);
+            display->setColor(WHITE);
+            drawRoundedHighlight(display, x, y, screenW, highlightHeight, 2);
+            display->setColor(BLACK);
         } else {
-            display->drawLine(0, 14, screenW, 14);
+            display->setColor(BLACK);
+            display->fillRect(0, 0, screenW, highlightHeight + 2);
+            display->setColor(WHITE);
+            if (isHighResolution) {
+                display->drawLine(0, 20, screenW, 20);
+            } else {
+                display->drawLine(0, 14, screenW, 14);
+            }
         }
-    }
 
-    // === Screen Title ===
-    display->setTextAlignment(TEXT_ALIGN_CENTER);
-    display->drawString(SCREEN_WIDTH / 2, y, titleStr);
-    if (config.display.heading_bold) {
-        display->drawString((SCREEN_WIDTH / 2) + 1, y, titleStr);
+        // === Screen Title ===
+        display->setTextAlignment(TEXT_ALIGN_CENTER);
+        display->drawString(SCREEN_WIDTH / 2, y, titleStr);
+        if (config.display.heading_bold) {
+            display->drawString((SCREEN_WIDTH / 2) + 1, y, titleStr);
+        }
     }
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
     // === Battery State ===
     int chargePercent = powerStatus->getBatteryChargePercent();
     bool isCharging = powerStatus->getIsCharging() == meshtastic::OptionalBool::OptTrue;
+    if (chargePercent == 100) {
+        isCharging = false;
+    }
     uint32_t now = millis();
 
 #ifndef USE_EINK
@@ -93,20 +112,22 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
     }
 #endif
 
-    bool useHorizontalBattery = (screenW > 128 && screenW >= screenH);
+    bool useHorizontalBattery = (isHighResolution && screenW >= screenH);
     const int textY = y + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
 
     // === Battery Icons ===
     if (useHorizontalBattery) {
         int batteryX = 2;
-        int batteryY = HEADER_OFFSET_Y + 2;
-        display->drawXbm(batteryX, batteryY, 29, 15, batteryBitmap_h);
+        int batteryY = HEADER_OFFSET_Y + 3;
+        display->drawXbm(batteryX, batteryY, 9, 13, batteryBitmap_h_bottom);
+        display->drawXbm(batteryX + 9, batteryY, 9, 13, batteryBitmap_h_top);
         if (isCharging && isBoltVisibleShared)
-            display->drawXbm(batteryX + 9, batteryY + 1, 9, 13, lightning_bolt_h);
+            display->drawXbm(batteryX + 4, batteryY, 9, 13, lightning_bolt_h);
         else {
-            display->drawXbm(batteryX + 8, batteryY, 12, 15, batteryBitmap_sidegaps_h);
-            int fillWidth = 24 * chargePercent / 100;
-            display->fillRect(batteryX + 1, batteryY + 1, fillWidth, 13);
+            display->drawLine(batteryX + 5, batteryY, batteryX + 10, batteryY);
+            display->drawLine(batteryX + 5, batteryY + 12, batteryX + 10, batteryY + 12);
+            int fillWidth = 14 * chargePercent / 100;
+            display->fillRect(batteryX + 1, batteryY + 1, fillWidth, 11);
         }
     } else {
         int batteryX = 1;
@@ -129,12 +150,8 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
     char chargeStr[4];
     snprintf(chargeStr, sizeof(chargeStr), "%d", chargePercent);
     int chargeNumWidth = display->getStringWidth(chargeStr);
-    const int batteryOffset = useHorizontalBattery ? 28 : 6;
-#ifdef USE_EINK
-    const int percentX = x + xOffset + batteryOffset - 2;
-#else
-    const int percentX = x + xOffset + batteryOffset;
-#endif
+    const int batteryOffset = useHorizontalBattery ? 19 : 9;
+    const int percentX = x + batteryOffset;
     display->drawString(percentX, textY, chargeStr);
     display->drawString(percentX + chargeNumWidth - 1, textY, "%");
     if (isBold) {
@@ -148,7 +165,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
     int timeStrWidth = display->getStringWidth("12:34"); // Default alignment
     int timeX = screenW - xOffset - timeStrWidth + 4;
 
-    if (rtc_sec > 0) {
+    if (rtc_sec > 0 && !battery_only) {
         // === Build Time String ===
         long hms = (rtc_sec % SEC_PER_DAY + SEC_PER_DAY) % SEC_PER_DAY;
         int hour = hms / SEC_PER_HOUR;
@@ -164,7 +181,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
         }
 
         timeStrWidth = display->getStringWidth(timeStr);
-        timeX = screenW - xOffset - timeStrWidth + 4;
+        timeX = screenW - xOffset - timeStrWidth + 3;
 
         // === Show Mail or Mute Icon to the Left of Time ===
         int iconRightEdge = timeX - 1;
@@ -217,7 +234,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
                 display->drawXbm(iconX, iconY, mail_width, mail_height, mail);
             }
         } else if (isMuted) {
-            if (useBigIcons) {
+            if (isHighResolution) {
                 int iconX = iconRightEdge - mute_symbol_big_width;
                 int iconY = textY + (FONT_HEIGHT_SMALL - mute_symbol_big_height) / 2;
 
@@ -259,6 +276,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
 
         bool showMail = false;
 
+#ifndef USE_EINK
         if (hasUnreadMessage) {
             if (now - lastMailBlink > 500) {
                 isMailIconVisible = !isMailIconVisible;
@@ -266,6 +284,11 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
             }
             showMail = isMailIconVisible;
         }
+#else
+        if (hasUnreadMessage) {
+            showMail = true;
+        }
+#endif
 
         if (showMail) {
             if (useHorizontalBattery) {
@@ -281,7 +304,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
                 display->drawXbm(iconX, iconY, mail_width, mail_height, mail);
             }
         } else if (isMuted) {
-            if (useBigIcons) {
+            if (isHighResolution) {
                 int iconX = iconRightEdge - mute_symbol_big_width;
                 int iconY = textY + (FONT_HEIGHT_SMALL - mute_symbol_big_height) / 2;
                 display->drawXbm(iconX, iconY, mute_symbol_big_width, mute_symbol_big_height, mute_symbol_big);
@@ -300,7 +323,7 @@ const int *getTextPositions(OLEDDisplay *display)
 {
     static int textPositions[7]; // Static array that persists beyond function scope
 
-    if (display->getHeight() > 64) {
+    if (isHighResolution) {
         textPositions[0] = textZeroLine;
         textPositions[1] = textFirstLine_medium;
         textPositions[2] = textSecondLine_medium;

@@ -154,7 +154,7 @@ int CannedMessageModule::splitConfiguredMessages()
 }
 void CannedMessageModule::drawHeader(OLEDDisplay *display, int16_t x, int16_t y, char *buffer)
 {
-    if (display->getWidth() > 128) {
+    if (graphics::isHighResolution) {
         if (this->dest == NODENUM_BROADCAST) {
             display->drawStringf(x, y, buffer, "To: Broadcast@%s", channels.getName(this->channel));
         } else {
@@ -245,12 +245,15 @@ void CannedMessageModule::updateDestinationSelectionList()
         }
     }
 
+    /* As the nodeDB is sorted, can skip this step
     // Sort by favorite, then last heard
     std::sort(this->filteredNodes.begin(), this->filteredNodes.end(), [](const NodeEntry &a, const NodeEntry &b) {
         if (a.node->is_favorite != b.node->is_favorite)
             return a.node->is_favorite > b.node->is_favorite;
         return a.lastHeard < b.lastHeard;
     });
+    */
+
     scrollIndex = 0; // Show first result at the top
     destIndex = 0;   // Highlight the first entry
     if (nodesChanged && runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) {
@@ -387,6 +390,7 @@ bool CannedMessageModule::handleTabSwitch(const InputEvent *event)
     // RESTORE THIS!
     if (runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION)
         updateDestinationSelectionList();
+    requestFocus();
 
     UIFrameEvent e;
     e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
@@ -986,6 +990,7 @@ int32_t CannedMessageModule::runOnce()
             default:
                 // Only insert ASCII printable characters (32–126)
                 if (this->payload >= 32 && this->payload <= 126) {
+                    requestFocus();
                     if (this->cursor == this->freetext.length()) {
                         this->freetext += (char)this->payload;
                     } else {
