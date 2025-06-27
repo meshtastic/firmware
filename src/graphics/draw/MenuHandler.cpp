@@ -313,8 +313,19 @@ void menuHandler::favoriteBaseMenu()
 
 void menuHandler::positionBaseMenu()
 {
-    static const char *optionsArray[] = {"Back", "GPS Toggle", "Compass", "Compass Calibrate"};
-    screen->showOverlayBanner("Position Action", 30000, optionsArray, 4, [](int selected) -> void {
+    int options;
+    static const char **optionsArrayPtr;
+    static const char *optionsArray[] = {"Back", "GPS Toggle", "Compass"};
+    static const char *optionsArrayCalibrate[] = {"Back", "GPS Toggle", "Compass", "Compass Calibrate"};
+
+    if (accelerometerThread) {
+        optionsArrayPtr = optionsArrayCalibrate;
+        options = 4;
+    } else {
+        optionsArrayPtr = optionsArray;
+        options = 3;
+    }
+    screen->showOverlayBanner("Position Action", 30000, optionsArrayPtr, options, [](int selected) -> void {
         if (selected == 1) {
             menuQueue = gps_toggle_menu;
         } else if (selected == 2) {
