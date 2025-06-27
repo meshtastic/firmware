@@ -44,7 +44,7 @@ class UdpMulticastHandler final
         meshtastic_MeshPacket mp;
         LOG_DEBUG("Decoding MeshPacket from UDP len=%u", packetLength);
         bool isPacketDecoded = pb_decode_from_bytes(packet.data(), packetLength, &meshtastic_MeshPacket_msg, &mp);
-        if (isPacketDecoded && router) {
+        if (isPacketDecoded && router && mp.which_payload_variant == meshtastic_MeshPacket_encrypted_tag) {
             UniquePacketPoolPacket p = packetPool.allocUniqueCopy(mp);
             // Unset received SNR/RSSI
             p->rx_snr = 0;

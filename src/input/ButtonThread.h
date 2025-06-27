@@ -7,6 +7,26 @@
 
 typedef void (*voidFuncPtr)(void);
 
+struct ButtonConfig {
+    uint8_t pinNumber;
+    bool activeLow = true;
+    bool activePullup = true;
+    uint32_t pullupSense = 0;
+    voidFuncPtr intRoutine = nullptr;
+    input_broker_event singlePress = INPUT_BROKER_NONE;
+    input_broker_event longPress = INPUT_BROKER_NONE;
+    uint16_t longPressTime = 500;
+    input_broker_event doublePress = INPUT_BROKER_NONE;
+    input_broker_event longLongPress = INPUT_BROKER_NONE;
+    uint16_t longLongPressTime = 5000;
+    input_broker_event triplePress = INPUT_BROKER_NONE;
+    input_broker_event shortLong = INPUT_BROKER_NONE;
+    bool touchQuirk = false;
+
+    // Constructor to set required parameter
+    ButtonConfig(uint8_t pin = 0) : pinNumber(pin) {}
+};
+
 #ifndef BUTTON_CLICK_MS
 #define BUTTON_CLICK_MS 250
 #endif
@@ -28,12 +48,7 @@ class ButtonThread : public Observable<const InputEvent *>, public concurrency::
   public:
     const char *_originName;
     static const uint32_t c_holdOffTime = 30000; // hold off 30s after boot
-    bool initButton(uint8_t pinNumber, bool activeLow, bool activePullup, uint32_t pullupSense, voidFuncPtr intRoutine,
-                    input_broker_event singlePress, input_broker_event longPress = INPUT_BROKER_NONE,
-                    uint16_t longPressTime = 500, input_broker_event doublePress = INPUT_BROKER_NONE,
-                    input_broker_event longLongPress = INPUT_BROKER_NONE, uint16_t longLongPressTime = 5000,
-                    input_broker_event triplePress = INPUT_BROKER_NONE, input_broker_event shortLong = INPUT_BROKER_NONE,
-                    bool touchQuirk = false);
+    bool initButton(const ButtonConfig &config);
 
     enum ButtonEventType {
         BUTTON_EVENT_NONE,
