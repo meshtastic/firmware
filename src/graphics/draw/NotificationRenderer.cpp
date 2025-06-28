@@ -154,9 +154,15 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
 
     for (int i = firstOptionToShow; i < alertBannerOptions && linesShown < visibleTotalLines; i++, linesShown++) {
         if (i == curSelected) {
-            strncpy(lineBuffer, "> ", 3);
-            strncpy(lineBuffer + 2, optionsArrayPtr[i], 36);
-            strncpy(lineBuffer + strlen(optionsArrayPtr[i]) + 2, " <", 3);
+            if (isHighResolution) {
+                strncpy(lineBuffer, "> ", 3);
+                strncpy(lineBuffer + 2, optionsArrayPtr[i], 36);
+                strncpy(lineBuffer + strlen(optionsArrayPtr[i]) + 2, " <", 3);
+            } else {
+                strncpy(lineBuffer, ">", 2);
+                strncpy(lineBuffer + 1, optionsArrayPtr[i], 37);
+                strncpy(lineBuffer + strlen(optionsArrayPtr[i]) + 1, "<", 2);
+            }
             lineBuffer[39] = '\0';
             linePointers[linesShown] = lineBuffer;
         } else {
@@ -217,6 +223,9 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
     uint16_t boxHeight = contentHeight + vPadding * 2;
 
     int16_t boxLeft = (display->width() / 2) - (boxWidth / 2);
+    if (totalLines > visibleTotalLines) {
+        boxWidth += (isHighResolution) ? 4 : 2;
+    }
     int16_t boxTop = (display->height() / 2) - (boxHeight / 2);
 
     // === Draw Box ===

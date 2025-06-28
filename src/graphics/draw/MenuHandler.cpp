@@ -251,20 +251,22 @@ void menuHandler::homeBaseMenu()
 
     if (kb_found) {
 #ifdef PIN_EINK_EN
-        static const char *optionsArray[] = {"Back", "Toggle Backlight", "Send Position", "New Preset Msg", "New Freetext Msg"};
+        static const char *optionsArray[] = {"Back",           "Toggle Backlight", "Send Position",
+                                             "New Preset Msg", "New Freetext Msg", "Bluetooth Toggle"};
 #else
-        static const char *optionsArray[] = {"Back", "Sleep Screen", "Send Position", "New Preset Msg", "New Freetext Msg"};
+        static const char *optionsArray[] = {"Back",           "Sleep Screen",     "Send Position",
+                                             "New Preset Msg", "New Freetext Msg", "Bluetooth Toggle"};
+#endif
+        optionsArrayPtr = optionsArray;
+        options = 6;
+    } else {
+#ifdef PIN_EINK_EN
+        static const char *optionsArray[] = {"Back", "Toggle Backlight", "Send Position", "New Preset Msg", "Bluetooth Toggle"};
+#else
+        static const char *optionsArray[] = {"Back", "Sleep Screen", "Send Position", "New Preset Msg", "Bluetooth Toggle"};
 #endif
         optionsArrayPtr = optionsArray;
         options = 5;
-    } else {
-#ifdef PIN_EINK_EN
-        static const char *optionsArray[] = {"Back", "Toggle Backlight", "Send Position", "New Preset Msg"};
-#else
-        static const char *optionsArray[] = {"Back", "Sleep Screen", "Send Position", "New Preset Msg"};
-#endif
-        optionsArrayPtr = optionsArray;
-        options = 4;
     }
     screen->showOverlayBanner("Home Action", 30000, optionsArrayPtr, options, [](int selected) -> void {
         if (selected == 1) {
@@ -283,7 +285,15 @@ void menuHandler::homeBaseMenu()
         } else if (selected == 3) {
             cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST);
         } else if (selected == 4) {
-            cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST);
+            if (kb_found) {
+                cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST);
+            } else {
+                InputEvent event = {.inputEvent = (input_broker_event)170, .kbchar = 170, .touchX = 0, .touchY = 0};
+                inputBroker->injectInputEvent(&event);
+            }
+        } else if (selected == 5) {
+            InputEvent event = {.inputEvent = (input_broker_event)170, .kbchar = 170, .touchX = 0, .touchY = 0};
+            inputBroker->injectInputEvent(&event);
         }
     });
 }
