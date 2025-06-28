@@ -58,15 +58,15 @@ bool ButtonThread::initButton(const ButtonConfig &config)
         userButton.attachLongPressStart(
             [](void *callerThread) -> void {
                 ButtonThread *thread = (ButtonThread *)callerThread;
-                if (millis() > 30000) // hold off 30s after boot
-                    thread->btnEvent = BUTTON_EVENT_LONG_PRESSED;
+                // if (millis() > 30000) // hold off 30s after boot
+                thread->btnEvent = BUTTON_EVENT_LONG_PRESSED;
             },
             this);
         userButton.attachLongPressStop(
             [](void *callerThread) -> void {
                 ButtonThread *thread = (ButtonThread *)callerThread;
-                if (millis() > 30000) // hold off 30s after boot
-                    thread->btnEvent = BUTTON_EVENT_LONG_RELEASED;
+                // if (millis() > 30000) // hold off 30s after boot
+                thread->btnEvent = BUTTON_EVENT_LONG_RELEASED;
             },
             this);
     }
@@ -254,7 +254,8 @@ int32_t ButtonThread::runOnce()
         case BUTTON_EVENT_LONG_RELEASED: {
 
             LOG_INFO("LONG PRESS RELEASE");
-            if (_longLongPress != INPUT_BROKER_NONE && (millis() - buttonPressStartTime) >= _longLongPressTime) {
+            if (millis() > 30000 && _longLongPress != INPUT_BROKER_NONE &&
+                (millis() - buttonPressStartTime) >= _longLongPressTime) {
                 evt.inputEvent = _longLongPress;
                 this->notifyObservers(&evt);
             }
