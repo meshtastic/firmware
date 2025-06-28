@@ -33,8 +33,10 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #if __has_include(<Adafruit_ADS1X15.h>)
 #include "Sensor/ADS1X15Sensor.h"
 ADS1X15Sensor ads1x15Sensor;
+ADS1X15Sensor ads1x15Sensor_alt(meshtastic_TelemetrySensorType_ADS1X15_ALT);
 #else
 NullSensor ads1x15Sensor;
+NullSensor ads1x15Sensor_alt;
 #endif
 
 namespace graphics
@@ -57,8 +59,8 @@ int32_t PowerTelemetryModule::runOnce()
         without having to configure it from the PythonAPI or WebUI.
     */
 
-    moduleConfig.telemetry.power_measurement_enabled = 1;
-    moduleConfig.telemetry.power_screen_enabled = 1;
+    // moduleConfig.telemetry.power_measurement_enabled = 1;
+    // moduleConfig.telemetry.power_screen_enabled = 1;
     // moduleConfig.telemetry.power_update_interval = 45;
 
     if (!(moduleConfig.telemetry.power_measurement_enabled)) {
@@ -91,9 +93,8 @@ int32_t PowerTelemetryModule::runOnce()
                 result = max17048Sensor.isInitialized() ? 0 : max17048Sensor.runOnce();
             if (ads1x15Sensor.hasSensor())
                 result = ads1x15Sensor.isInitialized() ? 0 : ads1x15Sensor.runOnce();
-            if (!ads1x15Sensor.hasSensor()) {
-                LOG_INFO("ADS1X15 not found");
-            }
+            if (ads1x15Sensor_alt.hasSensor())
+                result = ads1x15Sensor_alt.isInitialized() ? 0 : ads1x15Sensor_alt.runOnce();
         }
 
         // it's possible to have this module enabled, only for displaying values on the screen.
@@ -226,8 +227,9 @@ bool PowerTelemetryModule::getPowerTelemetry(meshtastic_Telemetry *m)
     if (max17048Sensor.hasSensor())
         valid = max17048Sensor.getMetrics(m);
     if (ads1x15Sensor.hasSensor())
-        LOG_INFO("Getting ADS1X15 sensor");
         valid = ads1x15Sensor.getMetrics(m);
+    if (ads1x15Sensor_alt.hasSensor())
+        valid = ads1x15Sensor_alt.getMetrics(m);
 #endif
 
     return valid;
@@ -268,6 +270,7 @@ bool PowerTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     m.which_variant = meshtastic_Telemetry_power_metrics_tag;
     m.time = getTime();
     if (getPowerTelemetry(&m)) {
+        // TODO - Consider adding all 8 channels here - seems a bit much?
         LOG_INFO("Send: ch1_voltage=%f, ch1_current=%f, ch2_voltage=%f, ch2_current=%f, "
                  "ch3_voltage=%f, ch3_current=%f, ch4_voltage=%f",
                  m.variant.power_metrics.ch1_voltage, m.variant.power_metrics.ch1_current, m.variant.power_metrics.ch2_voltage,
