@@ -74,6 +74,7 @@ class ScanI2C
         TCA8418KB,
         PCT2075,
         BMM150,
+        CST226SE,
     } DeviceType;
 
     // typedef uint8_t DeviceAddress;
