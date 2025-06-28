@@ -1156,7 +1156,7 @@ void NodeDB::loadFromDisk()
         LOG_WARN("Node count %d exceeds MAX_NUM_NODES %d, truncating", numMeshNodes, MAX_NUM_NODES);
         numMeshNodes = MAX_NUM_NODES;
     }
-    meshNodes->resize(MAX_NUM_NODES);
+    meshNodes->resize(MAX_NUM_NODES + 1); // The rp2040, rp2035, and maybe other targets, have a problem doing a sort() when full
 
     // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
     state = loadProto(deviceStateFileName, meshtastic_DeviceState_size, sizeof(meshtastic_DeviceState),
