@@ -7,7 +7,7 @@
 #include "TelemetrySensor.h"
 #include <Adafruit_ADS1X15.h>
 
-ADS1X15Sensor::ADS1X15Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_ADS1X15, "ADS1X15") {}
+ADS1X15Sensor::ADS1X15Sensor(meshtastic_TelemetrySensorType sensorType) : TelemetrySensor(sensorType, "ADS1X15") {}
 
 int32_t ADS1X15Sensor::runOnce()
 {
@@ -94,16 +94,48 @@ bool ADS1X15Sensor::getMetrics(meshtastic_Telemetry *measurement)
 
     struct _ADS1X15Measurements m = getMeasurements();
 
-    measurement->variant.power_metrics.has_ch1_voltage = true;
-    measurement->variant.power_metrics.has_ch2_voltage = true;
-    measurement->variant.power_metrics.has_ch3_voltage = true;
-    measurement->variant.power_metrics.has_ch4_voltage = true;
+    switch (sensorType)
+    {
+        case meshtastic_TelemetrySensorType_ADS1X15:
+            {
+                measurement->variant.power_metrics.has_ch1_voltage = true;
+                measurement->variant.power_metrics.has_ch2_voltage = true;
+                measurement->variant.power_metrics.has_ch3_voltage = true;
+                measurement->variant.power_metrics.has_ch4_voltage = true;
 
-    measurement->variant.power_metrics.ch1_voltage = m.measurements[0].voltage;
-    measurement->variant.power_metrics.ch2_voltage = m.measurements[1].voltage;
-    measurement->variant.power_metrics.ch3_voltage = m.measurements[2].voltage;
-    measurement->variant.power_metrics.ch4_voltage = m.measurements[3].voltage;
+                measurement->variant.power_metrics.ch1_voltage = m.measurements[0].voltage;
+                measurement->variant.power_metrics.ch2_voltage = m.measurements[1].voltage;
+                measurement->variant.power_metrics.ch3_voltage = m.measurements[2].voltage;
+                measurement->variant.power_metrics.ch4_voltage = m.measurements[3].voltage;
+                break;
+            }
+        case meshtastic_TelemetrySensorType_ADS1X15_ALT:
+            {
+                measurement->variant.power_metrics.has_ch5_voltage = true;
+                measurement->variant.power_metrics.has_ch6_voltage = true;
+                measurement->variant.power_metrics.has_ch7_voltage = true;
+                measurement->variant.power_metrics.has_ch8_voltage = true;
 
+                measurement->variant.power_metrics.ch5_voltage = m.measurements[0].voltage;
+                measurement->variant.power_metrics.ch6_voltage = m.measurements[1].voltage;
+                measurement->variant.power_metrics.ch7_voltage = m.measurements[2].voltage;
+                measurement->variant.power_metrics.ch8_voltage = m.measurements[3].voltage;
+                break;
+            }
+        default:
+            {
+                measurement->variant.power_metrics.has_ch1_voltage = true;
+                measurement->variant.power_metrics.has_ch2_voltage = true;
+                measurement->variant.power_metrics.has_ch3_voltage = true;
+                measurement->variant.power_metrics.has_ch4_voltage = true;
+
+                measurement->variant.power_metrics.ch1_voltage = m.measurements[0].voltage;
+                measurement->variant.power_metrics.ch2_voltage = m.measurements[1].voltage;
+                measurement->variant.power_metrics.ch3_voltage = m.measurements[2].voltage;
+                measurement->variant.power_metrics.ch4_voltage = m.measurements[3].voltage;
+                break;
+            }
+   }
     return true;
 }
 

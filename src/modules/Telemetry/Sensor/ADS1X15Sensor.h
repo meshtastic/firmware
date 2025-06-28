@@ -21,7 +21,7 @@ class ADS1X15Sensor : public TelemetrySensor
     virtual void setup() override;
 
   public:
-    ADS1X15Sensor();
+    ADS1X15Sensor(meshtastic_TelemetrySensorType sensorType = meshtastic_TelemetrySensorType_ADS1X15);
     virtual int32_t runOnce() override;
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
 };

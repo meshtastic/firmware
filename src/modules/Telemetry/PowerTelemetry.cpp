@@ -33,8 +33,10 @@ extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const c
 #if __has_include(<Adafruit_ADS1X15.h>)
 #include "Sensor/ADS1X15Sensor.h"
 ADS1X15Sensor ads1x15Sensor;
+ADS1X15Sensor ads1x15Sensor_alt(meshtastic_TelemetrySensorType_ADS1X15_ALT);
 #else
 NullSensor ads1x15Sensor;
+NullSensor ads1x15Sensor_alt;
 #endif
 
 int32_t PowerTelemetryModule::runOnce()
@@ -86,9 +88,8 @@ int32_t PowerTelemetryModule::runOnce()
                 result = max17048Sensor.isInitialized() ? 0 : max17048Sensor.runOnce();
             if (ads1x15Sensor.hasSensor())
                 result = ads1x15Sensor.isInitialized() ? 0 : ads1x15Sensor.runOnce();
-            if (!ads1x15Sensor.hasSensor()) {
-                LOG_INFO("ADS1X15 not found");
-            }
+            if (ads1x15Sensor_alt.hasSensor())
+                result = ads1x15Sensor_alt.isInitialized() ? 0 : ads1x15Sensor_alt.runOnce();
         }
 
         // it's possible to have this module enabled, only for displaying values on the screen.
@@ -221,8 +222,9 @@ bool PowerTelemetryModule::getPowerTelemetry(meshtastic_Telemetry *m)
     if (max17048Sensor.hasSensor())
         valid = max17048Sensor.getMetrics(m);
     if (ads1x15Sensor.hasSensor())
-        LOG_INFO("Getting ADS1X15 sensor");
         valid = ads1x15Sensor.getMetrics(m);
+    if (ads1x15Sensor_alt.hasSensor())
+        valid = ads1x15Sensor_alt.getMetrics(m);
 #endif
 
     return valid;
