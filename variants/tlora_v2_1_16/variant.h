@@ -8,7 +8,10 @@
 #define I2C_SDA 21 // I2C pins for this board
 #define I2C_SCL 22
 
-#define LED_PIN 25 // If defined we will blink this LED
+#define LED_PIN 25    // If defined we will blink this LED
+#define BUTTON_PIN 12 // If defined, this will be used for user button presses,
+
+#define BUTTON_NEED_PULLUP
 
 #define USE_RF95
 #define LORA_DIO0 26 // a No connect on the SX1262 module
