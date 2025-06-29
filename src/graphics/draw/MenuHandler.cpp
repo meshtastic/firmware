@@ -465,13 +465,13 @@ void menuHandler::systemActionMenu()
 
 void menuHandler::contrastActionMenu()
 {
-    static const char *optionsArray[] = {"Back", "Low", "Medium", "High", "Very High"};
+    static const char *optionsArray[] = {"Back", "Very Low", "Low", "Medium", "High", "Very High"};
     screen->showOverlayBanner(
-        "Brightness", 30000, optionsArray, 5,
+        "Brightness", 30000, optionsArray, 6,
         [](int selected) -> void {
             if (selected > 0) {
-                // Map selection to brightness values: 1->64, 2->128, 3->192, 4->255
-                uint8_t brightnessValues[] = {0, 64, 128, 192, 255};
+                // Map selection to brightness values: 1->1, 2->64, 3->128, 4->192, 5->255
+                uint8_t brightnessValues[] = {0, 1, 64, 128, 192, 255};
                 uint8_t newBrightness = brightnessValues[selected];
                 
                 // Set screen brightness
@@ -483,9 +483,10 @@ void menuHandler::contrastActionMenu()
             }
         },
         // Find current brightness level for initial selection based on saved config
-        uiconfig.screen_brightness <= 64 ? 1 : 
-        uiconfig.screen_brightness <= 128 ? 2 : 
-        uiconfig.screen_brightness <= 192 ? 3 : 4);
+        uiconfig.screen_brightness <= 1 ? 1 :
+        uiconfig.screen_brightness <= 64 ? 2 : 
+        uiconfig.screen_brightness <= 128 ? 3 : 
+        uiconfig.screen_brightness <= 192 ? 4 : 5);
 }
 
 void menuHandler::switchToMUIMenu()
