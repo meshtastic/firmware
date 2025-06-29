@@ -13,6 +13,8 @@
 #include "modules/AdminModule.h"
 #include "modules/CannedMessageModule.h"
 
+extern uint16_t TFT_MESH;
+
 namespace graphics
 {
 menuHandler::screenMenus menuHandler::menuQueue = menu_none;
@@ -298,6 +300,37 @@ void menuHandler::homeBaseMenu()
     });
 }
 
+void menuHandler::systemBaseMenu()
+{
+    int options;
+    static const char **optionsArrayPtr;
+#if HAS_TFT
+    static const char *optionsArray[] = {"Back", "Beeps Action", "Switch to MUI"};
+    options = 3;
+#endif
+#ifdef HELTEC_MESH_NODE_T114
+    static const char *optionsArray[] = {"Back", "Beeps Action", "Screen Color"};
+    options = 3;
+#endif
+    optionsArrayPtr = optionsArray;
+    screen->showOverlayBanner("System Action", 30000, optionsArrayPtr, options, [](int selected) -> void {
+        if (selected == 1) {
+            menuHandler::menuQueue = menuHandler::buzzermodemenupicker;
+            screen->setInterval(0);
+            runASAP = true;
+        } else if (selected == 2) {
+#if HAS_TFT
+            menuHandler::menuQueue = menuHandler::mui_picker;
+#endif
+#ifdef HELTEC_MESH_NODE_T114
+            menuHandler::menuQueue = menuHandler::tftcolormenupicker;
+#endif
+            screen->setInterval(0);
+            runASAP = true;
+        }
+    });
+}
+
 void menuHandler::favoriteBaseMenu()
 {
     int options;
@@ -448,6 +481,38 @@ void menuHandler::switchToMUIMenu()
     });
 }
 
+void menuHandler::TFTColorPickerMenu()
+{
+    static const char *optionsArray[] = {"Back", "Default", "Meshtastic Green", "Red", "Orange", "Purple", "Teal"};
+    screen->showOverlayBanner("Current Screen Color?", 30000, optionsArray, 7, [](int selected) -> void {
+        // auto *tft = static_cast<ST7789Spi *>(dispdev);
+        if (selected == 1) {
+            LOG_INFO("Setting color to soft yellow");
+            TFT_MESH = COLOR565(255, 255, 128);
+        } else if (selected == 2) {
+            LOG_INFO("Setting color to Meshtastic Green");
+            TFT_MESH = COLOR565(0x67, 0xEA, 0x94);
+        } else if (selected == 3) {
+            LOG_INFO("Setting color to Red");
+            TFT_MESH = COLOR565(255, 64, 64);
+        } else if (selected == 4) {
+            LOG_INFO("Setting color to orange");
+            TFT_MESH = COLOR565(255, 165, 0);
+        } else if (selected == 5) {
+            LOG_INFO("Setting color to purple");
+            TFT_MESH = COLOR565(192, 128, 192);
+        } else if (selected == 6) {
+            LOG_INFO("Setting color to teal");
+            TFT_MESH = COLOR565(64, 224, 208);
+        }
+
+        if (selected != 0) {
+            static_cast<ST7789Spi *>(screen->getDisplayDevice())->setRGB(TFT_MESH);
+            screen->setFrames(graphics::Screen::FOCUS_SYSTEM);
+        }
+    });
+}
+
 void menuHandler::handleMenuSwitch()
 {
     switch (menuQueue) {
@@ -479,6 +544,15 @@ void menuHandler::handleMenuSwitch()
         break;
     case reset_node_db_menu:
         resetNodeDBMenu();
+        break;
+    case buzzermodemenupicker:
+        BuzzerModeMenu();
+        break;
+    case mui_picker:
+        switchToMUIMenu();
+        break;
+    case tftcolormenupicker:
+        TFTColorPickerMenu();
         break;
     }
     menuQueue = menu_none;

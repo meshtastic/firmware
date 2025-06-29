@@ -15,7 +15,10 @@ class menuHandler
         position_base_menu,
         gps_toggle_menu,
         compass_point_north_menu,
-        reset_node_db_menu
+        reset_node_db_menu,
+        buzzermodemenupicker,
+        mui_picker,
+        tftcolormenupicker
     };
     static screenMenus menuQueue;
 
@@ -27,12 +30,14 @@ class menuHandler
     static void ClockFacePicker();
     static void messageResponseMenu();
     static void homeBaseMenu();
+    static void systemBaseMenu();
     static void favoriteBaseMenu();
     static void positionBaseMenu();
     static void compassNorthMenu();
     static void GPSToggleMenu();
     static void BuzzerModeMenu();
     static void switchToMUIMenu();
+    static void TFTColorPickerMenu();
     static void nodeListMenu();
     static void resetNodeDBMenu();
 };
