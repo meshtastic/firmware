@@ -307,10 +307,12 @@ void menuHandler::systemBaseMenu()
 #if HAS_TFT
     static const char *optionsArray[] = {"Back", "Beeps Action", "Switch to MUI"};
     options = 3;
-#endif
-#ifdef HELTEC_MESH_NODE_T114
+#ifelse defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
     static const char *optionsArray[] = {"Back", "Beeps Action", "Screen Color"};
     options = 3;
+#else
+    static const char *optionsArray[] = {"Back", "Beeps Action"};
+    options = 2;
 #endif
     optionsArrayPtr = optionsArray;
     screen->showOverlayBanner("System Action", 30000, optionsArrayPtr, options, [](int selected) -> void {
@@ -322,7 +324,7 @@ void menuHandler::systemBaseMenu()
 #if HAS_TFT
             menuHandler::menuQueue = menuHandler::mui_picker;
 #endif
-#ifdef HELTEC_MESH_NODE_T114
+#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
             menuHandler::menuQueue = menuHandler::tftcolormenupicker;
 #endif
             screen->setInterval(0);
@@ -485,7 +487,6 @@ void menuHandler::TFTColorPickerMenu()
 {
     static const char *optionsArray[] = {"Back", "Default", "Meshtastic Green", "Red", "Orange", "Purple", "Teal"};
     screen->showOverlayBanner("Current Screen Color?", 30000, optionsArray, 7, [](int selected) -> void {
-        // auto *tft = static_cast<ST7789Spi *>(dispdev);
         if (selected == 1) {
             LOG_INFO("Setting color to soft yellow");
             TFT_MESH = COLOR565(255, 255, 128);
@@ -506,10 +507,13 @@ void menuHandler::TFTColorPickerMenu()
             TFT_MESH = COLOR565(64, 224, 208);
         }
 
+#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
         if (selected != 0) {
+
             static_cast<ST7789Spi *>(screen->getDisplayDevice())->setRGB(TFT_MESH);
             screen->setFrames(graphics::Screen::FOCUS_SYSTEM);
         }
+#endif
     });
 }
 
