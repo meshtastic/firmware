@@ -31,6 +31,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "TimeFormatters.h"
 #include "draw/ClockRenderer.h"
 #include "draw/DebugRenderer.h"
+#include "draw/MenuHandler.h"
 #include "draw/MessageRenderer.h"
 #include "draw/NodeListRenderer.h"
 #include "draw/NotificationRenderer.h"
@@ -58,7 +59,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "mesh/Channels.h"
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
 #include "meshUtils.h"
-#include "modules/AdminModule.h"
 #include "modules/ExternalNotificationModule.h"
 #include "modules/TextMessageModule.h"
 #include "modules/WaypointModule.h"
@@ -136,13 +136,17 @@ extern bool hasUnreadMessage;
 // The banner appears in the center of the screen and disappears after the specified duration
 
 // Called to trigger a banner with custom message and duration
-void Screen::showOverlayBanner(const char *message, uint32_t durationMs, uint8_t options, std::function<void(int)> bannerCallback,
-                               int8_t InitialSelected)
+void Screen::showOverlayBanner(const char *message, uint32_t durationMs, const char **optionsArrayPtr, uint8_t options,
+                               std::function<void(int)> bannerCallback, int8_t InitialSelected)
 {
+#ifdef USE_EINK
+    EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Skip full refresh for all overlay menus
+#endif
     // Store the message and set the expiration timestamp
     strncpy(NotificationRenderer::alertBannerMessage, message, 255);
     NotificationRenderer::alertBannerMessage[255] = '\0'; // Ensure null termination
     NotificationRenderer::alertBannerUntil = (durationMs == 0) ? 0 : millis() + durationMs;
+    NotificationRenderer::optionsArrayPtr = optionsArrayPtr;
     NotificationRenderer::alertBannerOptions = options;
     NotificationRenderer::alertBannerCallback = bannerCallback;
     NotificationRenderer::curSelected = InitialSelected;
@@ -204,7 +208,7 @@ float Screen::estimatedHeading(double lat, double lon)
     if (d < 10) // haven't moved enough, just keep current bearing
         return b;
 
-    b = GeoCoord::bearing(oldLat, oldLon, lat, lon);
+    b = GeoCoord::bearing(oldLat, oldLon, lat, lon) * RAD_TO_DEG;
     oldLat = lat;
     oldLon = lon;
 
@@ -414,8 +418,7 @@ void Screen::setup()
 
     // === Set custom overlay callbacks ===
     static OverlayCallback overlays[] = {
-        graphics::UIRenderer::drawFunctionOverlay, // For mute/buzzer modifiers etc.
-        graphics::UIRenderer::drawNavigationBar    // Custom indicator icons for each frame
+        graphics::UIRenderer::drawNavigationBar // Custom indicator icons for each frame
     };
     ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
 
@@ -472,6 +475,7 @@ void Screen::setup()
 
     // === Turn on display and trigger first draw ===
     handleSetOn(true);
+    determineResolution(dispdev->height(), dispdev->width());
     ui->update();
 #ifndef USE_EINK
     ui->update(); // Some SSD1306 clones drop the first draw, so run twice
@@ -558,6 +562,7 @@ int32_t Screen::runOnce()
     if (displayHeight == 0) {
         displayHeight = dispdev->getHeight();
     }
+    menuHandler::handleMenuSwitch();
 
     // Show boot screen for first logo_timeout seconds, then switch to normal operation.
     // serialSinceMsec adjusts for additional serial wait time during nRF52 bootup
@@ -586,7 +591,7 @@ int32_t Screen::runOnce()
 
 #ifndef DISABLE_WELCOME_UNSET
     if (!NotificationRenderer::isOverlayBannerShowing() && config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
-        LoraRegionPicker(0);
+        menuHandler::LoraRegionPicker(0);
     }
 #endif
     if (!NotificationRenderer::isOverlayBannerShowing() && rebootAtMsec != 0) {
@@ -769,32 +774,6 @@ void Screen::setFrames(FrameFocus focus)
     indicatorIcons.clear();
 
     size_t numframes = 0;
-    moduleFrames = MeshModule::GetMeshModulesWithUIFrames();
-    LOG_DEBUG("Show %d module frames", moduleFrames.size());
-
-    // put all of the module frames first.
-    // this is a little bit of a dirty hack; since we're going to call
-    // the same drawModuleFrame handler here for all of these module frames
-    // and then we'll just assume that the state->currentFrame value
-    // is the same offset into the moduleFrames vector
-    // so that we can invoke the module's callback
-    for (auto i = moduleFrames.begin(); i != moduleFrames.end(); ++i) {
-        // Draw the module frame, using the hack described above
-        normalFrames[numframes] = drawModuleFrame;
-
-        // Check if the module being drawn has requested focus
-        // We will honor this request later, if setFrames was triggered by a UIFrameEvent
-        MeshModule *m = *i;
-        if (m->isRequestingFocus())
-            fsi.positions.focusedModule = numframes;
-        if (m == waypointModule)
-            fsi.positions.waypoint = numframes;
-
-        indicatorIcons.push_back(icon_module);
-        numframes++;
-    }
-
-    LOG_DEBUG("Added modules.  numframes: %d", numframes);
 
     // If we have a critical fault, show it first
     fsi.positions.fault = numframes;
@@ -808,7 +787,7 @@ void Screen::setFrames(FrameFocus focus)
     fsi.positions.clock = numframes;
     normalFrames[numframes++] = graphics::ClockRenderer::digitalWatchFace ? graphics::ClockRenderer::drawDigitalClockFrame
                                                                           : &graphics::ClockRenderer::drawAnalogClockFrame;
-    indicatorIcons.push_back(icon_clock);
+    indicatorIcons.push_back(digital_icon_clock);
 #endif
 
     // Declare this early so it’s available in FOCUS_PRESERVE block
@@ -823,22 +802,27 @@ void Screen::setFrames(FrameFocus focus)
     indicatorIcons.push_back(icon_mail);
 
 #ifndef USE_EINK
+    fsi.positions.nodelist = numframes;
     normalFrames[numframes++] = graphics::NodeListRenderer::drawDynamicNodeListScreen;
     indicatorIcons.push_back(icon_nodes);
 #endif
 
 // Show detailed node views only on E-Ink builds
 #ifdef USE_EINK
+    fsi.positions.nodelist_lastheard = numframes;
     normalFrames[numframes++] = graphics::NodeListRenderer::drawLastHeardScreen;
     indicatorIcons.push_back(icon_nodes);
 
+    fsi.positions.nodelist_hopsignal = numframes;
     normalFrames[numframes++] = graphics::NodeListRenderer::drawHopSignalScreen;
     indicatorIcons.push_back(icon_signal);
 
+    fsi.positions.nodelist_distance = numframes;
     normalFrames[numframes++] = graphics::NodeListRenderer::drawDistanceScreen;
     indicatorIcons.push_back(icon_distance);
 #endif
 #if HAS_GPS
+    fsi.positions.nodelist_bearings = numframes;
     normalFrames[numframes++] = graphics::NodeListRenderer::drawNodeListWithCompasses;
     indicatorIcons.push_back(icon_list);
 
@@ -858,8 +842,9 @@ void Screen::setFrames(FrameFocus focus)
     }
 #if !defined(DISPLAY_CLOCK_FRAME)
     fsi.positions.clock = numframes;
-    normalFrames[numframes++] = graphics::ClockRenderer::drawDigitalClockFrame;
-    indicatorIcons.push_back(icon_clock);
+    normalFrames[numframes++] = graphics::ClockRenderer::digitalWatchFace ? graphics::ClockRenderer::drawDigitalClockFrame
+                                                                          : graphics::ClockRenderer::drawAnalogClockFrame;
+    indicatorIcons.push_back(digital_icon_clock);
 #endif
 
     // We don't show the node info of our node (if we have it yet - we should)
@@ -885,6 +870,36 @@ void Screen::setFrames(FrameFocus focus)
         indicatorIcons.push_back(icon_wifi);
     }
 #endif
+
+    // Beware of what changes you make in this code!
+    // We pass numfames into GetMeshModulesWithUIFrames() which is highly important!
+    // Inside of that callback, goes over to MeshModule.cpp and we run
+    // modulesWithUIFrames.resize(startIndex, nullptr), to insert nullptr
+    // entries until we're ready to start building the matching entries.
+    // We are doing our best to keep the normalFrames vector
+    // and the moduleFrames vector in lock step.
+    moduleFrames = MeshModule::GetMeshModulesWithUIFrames(numframes);
+    LOG_DEBUG("Show %d module frames", moduleFrames.size());
+
+    for (auto i = moduleFrames.begin(); i != moduleFrames.end(); ++i) {
+        // Draw the module frame, using the hack described above
+        if (*i != nullptr) {
+            normalFrames[numframes] = drawModuleFrame;
+
+            // Check if the module being drawn has requested focus
+            // We will honor this request later, if setFrames was triggered by a UIFrameEvent
+            MeshModule *m = *i;
+            if (m && m->isRequestingFocus())
+                fsi.positions.focusedModule = numframes;
+            if (m && m == waypointModule)
+                fsi.positions.waypoint = numframes;
+
+            indicatorIcons.push_back(icon_module);
+            numframes++;
+        }
+    }
+
+    LOG_DEBUG("Added modules.  numframes: %d", numframes);
 
     fsi.frameCount = numframes;   // Total framecount is used to apply FOCUS_PRESERVE
     this->frameCount = numframes; // ✅ Save frame count for use in custom overlay
@@ -916,6 +931,11 @@ void Screen::setFrames(FrameFocus focus)
         // Whichever frame was marked by MeshModule::requestFocus(), if any
         // If no module requested focus, will show the first frame instead
         ui->switchToFrame(fsi.positions.focusedModule);
+        break;
+    case FOCUS_CLOCK:
+        // Whichever frame was marked by MeshModule::requestFocus(), if any
+        // If no module requested focus, will show the first frame instead
+        ui->switchToFrame(fsi.positions.clock);
         break;
 
     case FOCUS_PRESERVE:
@@ -1205,6 +1225,8 @@ int Screen::handleInputEvent(const InputEvent *event)
         ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
         setFastFramerate(); // Draw ASAP
         ui->update();
+
+        menuHandler::handleMenuSwitch();
         return 0;
     }
     /*
@@ -1230,7 +1252,7 @@ int Screen::handleInputEvent(const InputEvent *event)
         // Ask any MeshModules if they're handling keyboard input right now
         bool inputIntercepted = false;
         for (MeshModule *module : moduleFrames) {
-            if (module->interceptingKeyboardInput())
+            if (module && module->interceptingKeyboardInput())
                 inputIntercepted = true;
         }
 
@@ -1242,129 +1264,36 @@ int Screen::handleInputEvent(const InputEvent *event)
                 showNextFrame();
             } else if (event->inputEvent == INPUT_BROKER_SELECT) {
                 if (this->ui->getUiState()->currentFrame == framesetInfo.positions.home) {
-                    const char *banner_message;
-                    int options;
-                    if (kb_found) {
-                        banner_message = "Action?\nBack\nSleep Screen\nNew Preset Msg\nNew Freetext Msg";
-                        options = 4;
-                    } else {
-                        banner_message = "Action?\nBack\nSleep Screen\nNew Preset Msg";
-                        options = 3;
-                    }
-                    showOverlayBanner(banner_message, 30000, options, [](int selected) -> void {
-                        if (selected == 1) {
-                            screen->setOn(false);
-                        } else if (selected == 2) {
-                            cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST);
-                        } else if (selected == 3) {
-                            cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST);
-                        }
-                    });
+                    menuHandler::homeBaseMenu();
 #if HAS_TFT
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.memory) {
-                    showOverlayBanner("Switch to MUI?\nYes\nNo", 30000, 2, [](int selected) -> void {
-                        if (selected == 0) {
-                            config.display.displaymode = meshtastic_Config_DisplayConfig_DisplayMode_COLOR;
-                            config.bluetooth.enabled = false;
-                            service->reloadConfig(SEGMENT_CONFIG);
-                            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
-                        }
-                    });
+                    menuHandler::switchToMUIMenu();
 #else
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.memory) {
-                    showOverlayBanner(
-                        "Beeps Mode\nAll Enabled\nDisabled\nNotifications\nSystem Only", 30000, 4,
-                        [](int selected) -> void {
-                            config.device.buzzer_mode = (meshtastic_Config_DeviceConfig_BuzzerMode)selected;
-                            service->reloadConfig(SEGMENT_CONFIG);
-                        },
-                        config.device.buzzer_mode);
+                    menuHandler::BuzzerModeMenu();
 #endif
 #if HAS_GPS
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.gps && gps) {
-                    showOverlayBanner(
-                        "Toggle GPS\nBack\nEnabled\nDisabled", 30000, 3,
-                        [](int selected) -> void {
-                            if (selected == 1) {
-                                config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
-                                playGPSEnableBeep();
-                                gps->enable();
-                                service->reloadConfig(SEGMENT_CONFIG);
-                            } else if (selected == 2) {
-                                config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_DISABLED;
-                                playGPSDisableBeep();
-                                gps->disable();
-                                service->reloadConfig(SEGMENT_CONFIG);
-                            }
-                        },
-                        config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED ? 1
-                                                                                                     : 2); // set inital selection
+                    menuHandler::positionBaseMenu();
 #endif
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.clock) {
-                    TZPicker();
+                    menuHandler::clockMenu();
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.lora) {
-                    LoraRegionPicker();
+                    menuHandler::LoraRegionPicker();
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.textMessage &&
                            devicestate.rx_text_message.from) {
-                    const char *banner_message;
-                    int options;
-                    if (kb_found) {
-                        banner_message = "Message Action?\nBack\nDismiss\nReply via Preset\nReply via Freetext";
-                        options = 4;
-                    } else {
-                        banner_message = "Message Action?\nBack\nDismiss\nReply via Preset";
-                        options = 3;
-                    }
-#ifdef HAS_I2S
-                    banner_message = "Message Action?\nBack\nDismiss\nReply via Preset\nReply via Freetext\nRead Aloud";
-                    options = 5;
-#endif
-                    showOverlayBanner(banner_message, 30000, options, [](int selected) -> void {
-                        if (selected == 1) {
-                            screen->dismissCurrentFrame();
-                        } else if (selected == 2) {
-                            if (devicestate.rx_text_message.to == NODENUM_BROADCAST) {
-                                cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST,
-                                                                           devicestate.rx_text_message.channel);
-                            } else {
-                                cannedMessageModule->LaunchWithDestination(devicestate.rx_text_message.from);
-                            }
-                        } else if (selected == 3) {
-                            if (devicestate.rx_text_message.to == NODENUM_BROADCAST) {
-                                cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST,
-                                                                                   devicestate.rx_text_message.channel);
-                            } else {
-                                cannedMessageModule->LaunchFreetextWithDestination(devicestate.rx_text_message.from);
-                            }
-                        }
-#ifdef HAS_I2S
-                        else if (selected == 4) {
-                            const meshtastic_MeshPacket &mp = devicestate.rx_text_message;
-                            const char *msg = reinterpret_cast<const char *>(mp.decoded.payload.bytes);
-
-                            audioThread->readAloud(msg);
-                        }
-#endif
-                    });
+                    menuHandler::messageResponseMenu();
                 } else if (framesetInfo.positions.firstFavorite != 255 &&
                            this->ui->getUiState()->currentFrame >= framesetInfo.positions.firstFavorite &&
                            this->ui->getUiState()->currentFrame <= framesetInfo.positions.lastFavorite) {
-                    const char *banner_message;
-                    int options;
-                    if (kb_found) {
-                        banner_message = "Message Node?\nCancel\nNew Preset Msg\nNew Freetext Msg";
-                        options = 3;
-                    } else {
-                        banner_message = "Message Node?\nCancel\nConfirm";
-                        options = 2;
-                    }
-                    showOverlayBanner(banner_message, 30000, options, [](int selected) -> void {
-                        if (selected == 1) {
-                            cannedMessageModule->LaunchWithDestination(graphics::UIRenderer::currentFavoriteNodeNum);
-                        } else if (selected == 2) {
-                            cannedMessageModule->LaunchFreetextWithDestination(graphics::UIRenderer::currentFavoriteNodeNum);
-                        }
-                    });
+                    menuHandler::favoriteBaseMenu();
+                } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist ||
+                           this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_lastheard ||
+                           this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_hopsignal ||
+                           this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_distance ||
+                           this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_hopsignal ||
+                           this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_bearings) {
+                    menuHandler::nodeListMenu();
                 }
             } else if (event->inputEvent == INPUT_BROKER_BACK) {
                 showPrevFrame();
@@ -1377,12 +1306,13 @@ int Screen::handleInputEvent(const InputEvent *event)
     return 0;
 }
 
-int Screen::handleAdminMessage(const meshtastic_AdminMessage *arg)
+int Screen::handleAdminMessage(AdminModule_ObserverData *arg)
 {
-    switch (arg->which_payload_variant) {
+    switch (arg->request->which_payload_variant) {
     // Node removed manually (i.e. via app)
     case meshtastic_AdminMessage_remove_by_nodenum_tag:
         setFrames(FOCUS_PRESERVE);
+        *arg->result = AdminMessageHandleResult::HANDLED;
         break;
 
     // Default no-op, in case the admin message observable gets used by other classes in future
@@ -1395,96 +1325,6 @@ int Screen::handleAdminMessage(const meshtastic_AdminMessage *arg)
 bool Screen::isOverlayBannerShowing()
 {
     return NotificationRenderer::isOverlayBannerShowing();
-}
-
-void Screen::LoraRegionPicker(uint32_t duration)
-{
-    showOverlayBanner(
-        "Set the LoRa "
-        "region\nBack\nUS\nEU_433\nEU_868\nCN\nJP\nANZ\nKR\nTW\nRU\nIN\nNZ_865\nTH\nLORA_24\nUA_433\nUA_868\nMY_433\nMY_"
-        "919\nSG_"
-        "923\nPH_433\nPH_868\nPH_915\nANZ_433",
-        duration, 23,
-        [](int selected) -> void {
-            if (selected != 0 && config.lora.region != _meshtastic_Config_LoRaConfig_RegionCode(selected)) {
-                config.lora.region = _meshtastic_Config_LoRaConfig_RegionCode(selected);
-                // This is needed as we wait til picking the LoRa region to generate keys for the first time.
-                if (!owner.is_licensed) {
-                    bool keygenSuccess = false;
-                    if (config.security.private_key.size == 32) {
-                        // public key is derived from private, so this will always have the same result.
-                        if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
-                            keygenSuccess = true;
-                        }
-                    } else {
-                        LOG_INFO("Generate new PKI keys");
-                        crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
-                        keygenSuccess = true;
-                    }
-                    if (keygenSuccess) {
-                        config.security.public_key.size = 32;
-                        config.security.private_key.size = 32;
-                        owner.public_key.size = 32;
-                        memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
-                    }
-                }
-                config.lora.tx_enabled = true;
-                initRegion();
-                if (myRegion->dutyCycle < 100) {
-                    config.lora.ignore_mqtt = true; // Ignore MQTT by default if region has a duty cycle limit
-                }
-                service->reloadConfig(SEGMENT_CONFIG);
-                rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
-            }
-        },
-        0);
-}
-
-void Screen::TZPicker()
-{
-    showOverlayBanner(
-        "Pick "
-        "Timezone\nBack\nUS/Hawaii\nUS/Alaska\nUS/Pacific\nUS/Mountain\nUS/Central\nUS/Eastern\nUTC\nEU/Western\nEU/"
-        "Central\nEU/Eastern\nAsia/Kolkata\nAsia/Hong_Kong\nAU/AWST\nAU/ACST\nAU/AEST\nPacific/NZ",
-        30000, 17, [](int selected) -> void {
-            if (selected == 1) { // Hawaii
-                strncpy(config.device.tzdef, "HST10", sizeof(config.device.tzdef));
-            } else if (selected == 2) { // Alaska
-                strncpy(config.device.tzdef, "AKST9AKDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
-            } else if (selected == 3) { // Pacific
-                strncpy(config.device.tzdef, "PST8PDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
-            } else if (selected == 4) { // Mountain
-                strncpy(config.device.tzdef, "MST7MDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
-            } else if (selected == 5) { // Central
-                strncpy(config.device.tzdef, "CST6CDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
-            } else if (selected == 6) { // Eastern
-                strncpy(config.device.tzdef, "EST5EDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
-            } else if (selected == 7) { // UTC
-                strncpy(config.device.tzdef, "UTC", sizeof(config.device.tzdef));
-            } else if (selected == 8) { // EU/Western
-                strncpy(config.device.tzdef, "GMT0BST,M3.5.0/1,M10.5.0", sizeof(config.device.tzdef));
-            } else if (selected == 9) { // EU/Central
-                strncpy(config.device.tzdef, "CET-1CEST,M3.5.0,M10.5.0/3", sizeof(config.device.tzdef));
-            } else if (selected == 10) { // EU/Eastern
-                strncpy(config.device.tzdef, "EET-2EEST,M3.5.0/3,M10.5.0/4", sizeof(config.device.tzdef));
-            } else if (selected == 11) { // Asia/Kolkata
-                strncpy(config.device.tzdef, "IST-5:30", sizeof(config.device.tzdef));
-            } else if (selected == 12) { // China
-                strncpy(config.device.tzdef, "HKT-8", sizeof(config.device.tzdef));
-            } else if (selected == 13) { // AU/AWST
-                strncpy(config.device.tzdef, "AWST-8", sizeof(config.device.tzdef));
-            } else if (selected == 14) { // AU/ACST
-                strncpy(config.device.tzdef, "ACST-9:30ACDT,M10.1.0,M4.1.0/3", sizeof(config.device.tzdef));
-            } else if (selected == 15) { // AU/AEST
-                strncpy(config.device.tzdef, "AEST-10AEDT,M10.1.0,M4.1.0/3", sizeof(config.device.tzdef));
-            } else if (selected == 16) { // NZ
-                strncpy(config.device.tzdef, "NZST-12NZDT,M9.5.0,M4.1.0/3", sizeof(config.device.tzdef));
-            }
-            if (selected != 0) {
-                setenv("TZ", config.device.tzdef, 1);
-                service->reloadConfig(SEGMENT_CONFIG);
-            }
-        });
 }
 
 } // namespace graphics
