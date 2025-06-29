@@ -230,7 +230,7 @@ class RadioInterface
      * Some regulatory regions limit xmit power.
      * This function should be called by subclasses after setting their desired power.  It might lower it
      */
-    void limitPower();
+    void limitPower(int8_t MAX_POWER);
 
     /**
      * Save the frequency we selected for later reuse.

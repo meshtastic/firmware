@@ -69,10 +69,11 @@ template <typename T> bool SX126xInterface<T>::init()
 
     RadioLibInterface::init();
 
-    limitPower();
+    limitPower(SX126X_MAX_POWER);
 
-    if (power > SX126X_MAX_POWER) // Clamp power to maximum defined level
-        power = SX126X_MAX_POWER;
+    // Set power in config
+    config.lora.tx_power = power;
+    LOG_INFO("Final Tx power: %d dBm", power);
 
     int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage, useRegulatorLDO);
     // \todo Display actual typename of the adapter, not just `SX126x`

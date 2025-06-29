@@ -611,7 +611,7 @@ uint32_t RadioInterface::computeSlotTimeMsec()
  * Some regulatory regions limit xmit power.
  * This function should be called by subclasses after setting their desired power.  It might lower it
  */
-void RadioInterface::limitPower()
+void RadioInterface::limitPower(int8_t loraMaxPower)
 {
     uint8_t maxPower = 255; // No limit
 
@@ -626,6 +626,13 @@ void RadioInterface::limitPower()
     if (TX_GAIN_LORA > 0) {
         LOG_INFO("Requested Tx power: %d dBm; Device LoRa Tx gain: %d dB", power, TX_GAIN_LORA);
         power -= TX_GAIN_LORA;
+    }
+
+    if (power > loraMaxPower) // Clamp power to maximum defined level
+        power = loraMaxPower;
+
+    if (TX_GAIN_LORA == 0) { // Setting power in config with defined TX_GAIN_LORA will cause decreasing power on each reboot
+        config.lora.tx_power = power; // Set limited power in config
     }
 
     LOG_INFO("Final Tx power: %d dBm", power);
