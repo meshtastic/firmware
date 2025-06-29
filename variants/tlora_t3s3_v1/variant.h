@@ -1,5 +1,5 @@
 #define HAS_SDCARD
-#define SDCARD_USE_SPI1
+#define SDCARD_USE_HSPI
 
 #define USE_SSD1306
 
@@ -76,4 +76,4 @@
 #endif
 
 #define HAS_SDCARD // Have SPI interface SD card slot
-#define SDCARD_USE_SPI1
+#define SDCARD_USE_HSPI
