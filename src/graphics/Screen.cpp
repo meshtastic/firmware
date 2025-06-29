@@ -475,6 +475,12 @@ void Screen::setup()
 
     // === Turn on display and trigger first draw ===
     handleSetOn(true);
+    
+    // === Restore saved brightness from UI config ===
+    if (uiconfig.screen_brightness > 0) {
+        setBrightness(uiconfig.screen_brightness);
+    }
+    
     determineResolution(dispdev->height(), dispdev->width());
     ui->update();
 #ifndef USE_EINK

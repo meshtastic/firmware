@@ -472,13 +472,20 @@ void menuHandler::contrastActionMenu()
             if (selected > 0) {
                 // Map selection to brightness values: 1->64, 2->128, 3->192, 4->255
                 uint8_t brightnessValues[] = {0, 64, 128, 192, 255};
-                screen->setBrightness(brightnessValues[selected]);
+                uint8_t newBrightness = brightnessValues[selected];
+                
+                // Set screen brightness
+                screen->setBrightness(newBrightness);
+                
+                // Save to persistent configuration
+                uiconfig.screen_brightness = newBrightness;
+                nodeDB->saveProto(uiconfigFileName, meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg, &uiconfig);
             }
         },
-        // Find current brightness level for initial selection
-        screen->getBrightness() <= 64 ? 1 : 
-        screen->getBrightness() <= 128 ? 2 : 
-        screen->getBrightness() <= 192 ? 3 : 4);
+        // Find current brightness level for initial selection based on saved config
+        uiconfig.screen_brightness <= 64 ? 1 : 
+        uiconfig.screen_brightness <= 128 ? 2 : 
+        uiconfig.screen_brightness <= 192 ? 3 : 4);
 }
 
 void menuHandler::switchToMUIMenu()
