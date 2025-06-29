@@ -487,25 +487,28 @@ void menuHandler::switchToMUIMenu()
 
 void menuHandler::TFTColorPickerMenu()
 {
-    static const char *optionsArray[] = {"Back", "Default", "Meshtastic Green", "Red", "Orange", "Purple", "Teal"};
-    screen->showOverlayBanner("Current Screen Color?", 30000, optionsArray, 7, [](int selected) -> void {
+    static const char *optionsArray[] = {"Back", "Default", "Meshtastic Green", "Yellow", "Red", "Orange", "Purple", "Teal"};
+    screen->showOverlayBanner("Select Screen Color", 30000, optionsArray, 8, [](int selected) -> void {
         if (selected == 1) {
-            LOG_INFO("Setting color to soft yellow");
-            TFT_MESH = COLOR565(255, 255, 128);
+            LOG_INFO("Setting color to system default or defined variant");
+            // Insert unset protobuf code here
         } else if (selected == 2) {
             LOG_INFO("Setting color to Meshtastic Green");
             TFT_MESH = COLOR565(0x67, 0xEA, 0x94);
         } else if (selected == 3) {
+            LOG_INFO("Setting color to Yellow");
+            TFT_MESH = COLOR565(255, 255, 128);
+        } else if (selected == 4) {
             LOG_INFO("Setting color to Red");
             TFT_MESH = COLOR565(255, 64, 64);
-        } else if (selected == 4) {
-            LOG_INFO("Setting color to orange");
-            TFT_MESH = COLOR565(255, 165, 0);
         } else if (selected == 5) {
-            LOG_INFO("Setting color to purple");
-            TFT_MESH = COLOR565(192, 128, 192);
+            LOG_INFO("Setting color to Orange");
+            TFT_MESH = COLOR565(255, 165, 0);
         } else if (selected == 6) {
-            LOG_INFO("Setting color to teal");
+            LOG_INFO("Setting color to Purple");
+            TFT_MESH = COLOR565(204, 153, 255);
+        } else if (selected == 7) {
+            LOG_INFO("Setting color to Teal");
             TFT_MESH = COLOR565(64, 224, 208);
         }
 
@@ -514,6 +517,8 @@ void menuHandler::TFTColorPickerMenu()
 
             static_cast<ST7789Spi *>(screen->getDisplayDevice())->setRGB(TFT_MESH);
             screen->setFrames(graphics::Screen::FOCUS_SYSTEM);
+            // I think we need a saveToDisk to commit a protobuf change?
+            // nodeDB->saveToDisk(SEGMENT_CONFIG);
         }
 #endif
     });
