@@ -425,6 +425,62 @@ void menuHandler::BuzzerModeMenu()
         config.device.buzzer_mode);
 }
 
+void menuHandler::systemActionMenu()
+{
+#ifdef USE_SSD1306
+    static const char *optionsArray[] = {"Back", "Beep Action", "Brightness"};
+    screen->showOverlayBanner(
+        "System Action", 30000, optionsArray, 3,
+        [](int selected) -> void {
+            switch (selected) {
+            case 0:
+                // Back - do nothing, menu will close
+                break;
+            case 1:
+                menuQueue = beep_action_menu;
+                break;
+            case 2:
+                menuQueue = contrast_action_menu;
+                break;
+            }
+        },
+        0);
+#else
+    static const char *optionsArray[] = {"Back", "Beep Action"};
+    screen->showOverlayBanner(
+        "System Action", 30000, optionsArray, 2,
+        [](int selected) -> void {
+            switch (selected) {
+            case 0:
+                // Back - do nothing, menu will close
+                break;
+            case 1:
+                menuQueue = beep_action_menu;
+                break;
+            }
+        },
+        0);
+#endif
+}
+
+void menuHandler::contrastActionMenu()
+{
+    static const char *optionsArray[] = {"Back", "Low", "Medium", "High", "Very High"};
+    screen->showOverlayBanner(
+        "Brightness", 30000, optionsArray, 5,
+        [](int selected) -> void {
+            if (selected > 0) {
+                // Map selection to brightness values: 1->64, 2->128, 3->192, 4->255
+                uint8_t brightnessValues[] = {0, 64, 128, 192, 255};
+                screen->setBrightness(brightnessValues[selected]);
+            }
+        },
+        // Find current brightness level for initial selection
+        screen->getBrightness() <= 64 ? 1 : 
+        screen->getBrightness() <= 128 ? 2 : 
+        screen->getBrightness() <= 192 ? 3 : 4);
+}
+
 void menuHandler::switchToMUIMenu()
 {
     static const char *optionsArray[] = {"Yes", "No"};
@@ -469,6 +525,15 @@ void menuHandler::handleMenuSwitch()
         break;
     case reset_node_db_menu:
         resetNodeDBMenu();
+        break;
+    case system_action_menu:
+        systemActionMenu();
+        break;
+    case beep_action_menu:
+        BuzzerModeMenu();
+        break;
+    case contrast_action_menu:
+        contrastActionMenu();
         break;
     }
     menuQueue = menu_none;

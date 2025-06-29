@@ -318,6 +318,8 @@ class Screen : public concurrency::OSThread
     // functions for display brightness
     void increaseBrightness();
     void decreaseBrightness();
+    void setBrightness(uint8_t _brightness);
+    uint8_t getBrightness();
 
     void setFunctionSymbol(std::string sym);
     void removeFunctionSymbol(std::string sym);

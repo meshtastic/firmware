@@ -1046,6 +1046,22 @@ void Screen::decreaseBrightness()
     /* TO DO: add little popup in center of screen saying what brightness level it is set to*/
 }
 
+void Screen::setBrightness(uint8_t _brightness)
+{
+    brightness = _brightness;
+
+#if defined(ST7789_CS)
+    static_cast<TFTDisplay *>(dispdev)->setDisplayBrightness(brightness);
+#else
+    dispdev->setBrightness(brightness);
+#endif
+}
+
+uint8_t Screen::getBrightness()
+{
+    return brightness;
+}
+
 void Screen::setFunctionSymbol(std::string sym)
 {
     if (std::find(functionSymbol.begin(), functionSymbol.end(), sym) == functionSymbol.end()) {
@@ -1270,7 +1286,7 @@ int Screen::handleInputEvent(const InputEvent *event)
                     menuHandler::switchToMUIMenu();
 #else
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.memory) {
-                    menuHandler::BuzzerModeMenu();
+                    menuHandler::systemActionMenu();
 #endif
 #if HAS_GPS
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.gps && gps) {
