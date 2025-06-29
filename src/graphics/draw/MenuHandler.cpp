@@ -307,10 +307,12 @@ void menuHandler::systemBaseMenu()
 #if HAS_TFT
     static const char *optionsArray[] = {"Back", "Beeps Action", "Switch to MUI"};
     options = 3;
-#ifelse defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
+#endif
+#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
     static const char *optionsArray[] = {"Back", "Beeps Action", "Screen Color"};
     options = 3;
-#else
+#endif
+#if !defined(HELTEC_MESH_NODE_T114) && !defined(HELTEC_VISION_MASTER_T190) && !HAS_TFT
     static const char *optionsArray[] = {"Back", "Beeps Action"};
     options = 2;
 #endif
