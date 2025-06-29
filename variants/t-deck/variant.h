@@ -19,7 +19,6 @@
 #define TFT_OFFSET_X 0
 #define TFT_OFFSET_Y 0
 #define TFT_OFFSET_ROTATION 0
-#define SCREEN_ROTATE
 #define SCREEN_TRANSITION_FRAMERATE 5
 #define BRIGHTNESS_DEFAULT 130 // Medium Low Brightness
 

@@ -131,3 +131,43 @@ for lb in env.GetLibBuilders():
     if lb.name == "meshtastic-device-ui":
         lb.env.Append(CPPDEFINES=[("APP_VERSION", verObj["long"])])
         break
+
+# Get the display resolution from macros
+def get_display_resolution(build_flags):
+    flat_flags = [flag[0] for flag in build_flags if isinstance(flag, tuple)] + [flag for flag in build_flags if isinstance(flag, str)]
+    # Check "LGFX_SCREEN_HEIGHT" and "LGFX_SCREEN_WIDTH" to determine the screen resolution
+    if "LGFX_SCREEN_WIDTH" in flat_flags and "LGFX_SCREEN_HEIGHT" in flat_flags:
+        for flag in build_flags:
+            if isinstance(flag, tuple) and flag[0] == "LGFX_SCREEN_HEIGHT":
+                screen_height = flag[1]
+            elif isinstance(flag, tuple) and flag[0] == "LGFX_SCREEN_WIDTH":
+                screen_width = flag[1]
+        # For rotated devices, swap width and height
+        if "SCREEN_ROTATE" in flat_flags: # Other forms of rotation can be added to this condition
+            return int(screen_height), int(screen_width)
+        # Otherwise, return the width and height as is
+        else:
+            return int(screen_width), int(screen_height)
+    else:
+        print("No screen resolution defined in build_flags. Please define LGFX_SCREEN_WIDTH and LGFX_SCREEN_HEIGHT.")
+        exit(1)
+
+def load_boot_logo(source, target, env):
+    build_flags = env.get("CPPDEFINES", [])
+    logo_w, logo_h = get_display_resolution(build_flags)
+    print(f"TFT build with {logo_w}x{logo_h} resolution detected")
+
+    # Load the boot logo from `branding/logo_<width>x<height>.png` if it exists
+    source_path = join(env["PROJECT_DIR"], "branding", f"logo_{logo_w}x{logo_h}.png")
+    dest_dir = join(env["PROJECT_DIR"], "data", "boot")
+    dest_path = join(dest_dir, "logo.png")
+    if env.File(source_path).exists():
+        print(f"Loading boot logo from {source_path}")
+        # Prepare the destination
+        env.Execute(f"mkdir -p {dest_dir} && rm -f {dest_path}")
+        # Copy the logo to the `data/boot` directory
+        env.Execute(f"cp {source_path} {dest_path}")
+
+# Load the boot logo on TFT builds
+if ("HAS_TFT", 1) in env.get("CPPDEFINES", []):
+    env.AddPreAction("buildfs", load_boot_logo)
