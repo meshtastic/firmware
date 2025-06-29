@@ -79,7 +79,6 @@ template <typename T> bool LR11x0Interface<T>::init()
         preambleLength = 12; // 12 is the default for operation above 2GHz
     }
 
-
 #ifdef LR11X0_RF_SWITCH_SUBGHZ
     pinMode(LR11X0_RF_SWITCH_SUBGHZ, OUTPUT);
     digitalWrite(LR11X0_RF_SWITCH_SUBGHZ, getFreq() < 1e9 ? HIGH : LOW);
