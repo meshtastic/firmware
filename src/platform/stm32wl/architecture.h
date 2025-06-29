@@ -12,6 +12,9 @@
 #ifndef HAS_TELEMETRY
 #define HAS_TELEMETRY 1
 #endif
+#ifndef HAS_WIRE
+#define HAS_WIRE 1
+#endif
 
 //
 // set HW_VENDOR
