@@ -66,10 +66,10 @@ const char *getSafeNodeName(meshtastic_NodeInfoLite *node)
             strncpy(nodeName, name, sizeof(nodeName) - 1);
             nodeName[sizeof(nodeName) - 1] = '\0';
         } else {
-            snprintf(nodeName, sizeof(nodeName), "%04X", (uint16_t)(node->num & 0xFFFF));
+            snprintf(nodeName, sizeof(nodeName), "(%04X)", (uint16_t)(node->num & 0xFFFF));
         }
     } else {
-        strcpy(nodeName, "?");
+        snprintf(nodeName, sizeof(nodeName), "(%04X)", (uint16_t)(node->num & 0xFFFF));
     }
     return nodeName;
 }
