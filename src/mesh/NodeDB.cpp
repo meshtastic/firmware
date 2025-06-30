@@ -1712,6 +1712,8 @@ void NodeDB::sortMeshDB()
                 } else if (meshNodes->at(i).is_favorite && !meshNodes->at(i - 1).is_favorite) {
                     std::swap(meshNodes->at(i), meshNodes->at(i - 1));
                     changed = true;
+                } else if (!meshNodes->at(i).is_favorite && meshNodes->at(i - 1).is_favorite) {
+                    // noop
                 } else if (meshNodes->at(i).last_heard > meshNodes->at(i - 1).last_heard) {
                     std::swap(meshNodes->at(i), meshNodes->at(i - 1));
                     changed = true;
