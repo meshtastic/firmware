@@ -63,7 +63,7 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
     void sendLostAndFoundText();
     bool hasQualityTimesource();
     bool hasGPS();
-    uint32_t lastSentToMesh = 0; // Last time we sent our position to the mesh
+    uint32_t lastSentReply = 0; // Last time we sent a position reply (used for reply throttling only)
 
     const uint32_t minimumTimeThreshold =
         Default::getConfiguredOrDefaultMs(config.position.broadcast_smart_minimum_interval_secs, 30);

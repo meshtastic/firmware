@@ -257,7 +257,6 @@ jobs:
             ./device-*.sh
             ./device-*.bat
             ./littlefs-*.bin
-            ./littlefswebui-*.bin
             ./bleota*bin
             ./Meshtastic_nRF52_factory_erase*.uf2
           retention-days: 30

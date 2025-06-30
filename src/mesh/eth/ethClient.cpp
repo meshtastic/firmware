@@ -64,7 +64,9 @@ static int32_t reconnectETH()
             }
 
 #if !MESHTASTIC_EXCLUDE_SOCKETAPI
-            initApiServer();
+            if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+                initApiServer();
+            }
 #endif
 
             ethStartupComplete = true;
