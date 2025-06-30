@@ -4,7 +4,6 @@
 #include <Arduino.h>
 #include <algorithm>
 #include <assert.h>
-#include <mutex>
 #include <pb_encode.h>
 #include <vector>
 
@@ -151,7 +150,6 @@ class NodeDB
     meshtastic_NodeInfoLite *updateGUIforNode = NULL; // if currently showing this node, we think you should update the GUI
     Observable<const meshtastic::NodeStatus *> newStatus;
     pb_size_t numMeshNodes;
-    std::mutex nodeDB_mutex;
 
     bool keyIsLowEntropy = false;
     bool hasWarned = false;
