@@ -34,6 +34,9 @@
 #if !MESHTASTIC_EXCLUDE_NODEINFO
 #include "modules/NodeInfoModule.h"
 #endif
+#if !MESHTASTIC_EXCLUDE_TIPS
+#include "modules/MeshTipsModule.h"
+#endif
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "modules/PositionModule.h"
 #endif
@@ -120,6 +123,10 @@ void setupModules()
 #endif
 #if !MESHTASTIC_EXCLUDE_NODEINFO
         nodeInfoModule = new NodeInfoModule();
+#endif
+#if !MESHTASTIC_EXCLUDE_TIPS
+        meshTipsNodeInfoModule = new MeshTipsNodeInfoModule();
+        meshTipsMessageModule = new MeshTipsMessageModule();
 #endif
 #if !MESHTASTIC_EXCLUDE_GPS
         positionModule = new PositionModule();

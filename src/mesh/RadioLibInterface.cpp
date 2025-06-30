@@ -8,6 +8,9 @@
 #include "error.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
+#if !MESHTASTIC_EXCLUDE_TIPS
+#include "modules/MeshTipsModule.h"
+#endif
 #include <pb_decode.h>
 #include <pb_encode.h>
 
@@ -248,6 +251,9 @@ void RadioLibInterface::onNotify(uint32_t notification)
     switch (notification) {
     case ISR_TX:
         handleTransmitInterrupt();
+#if !MESHTASTIC_EXCLUDE_TIPS
+        MeshTipsModule::configureRadioForPacket(this, txQueue.getFront());
+#endif
         startReceive();
         setTransmitDelay();
         break;
@@ -270,9 +276,16 @@ void RadioLibInterface::onNotify(uint32_t notification)
                 if (delay_remaining > 0) {
                     // There's still some delay pending on this packet, so resume waiting for it to elapse
                     notifyLater(delay_remaining, TRANSMIT_DELAY_COMPLETED, false);
+#if !MESHTASTIC_EXCLUDE_TIPS
+                } else if (MeshTipsModule::configureRadioForPacket(this, txp)) {
+                    // We just switched radio config, so wait to ensure the new channel is available
+                    setTransmitDelay();
+#endif
                 } else {
                     if (isChannelActive()) { // check if there is currently a LoRa packet on the channel
-                        startReceive();      // try receiving this packet, afterwards we'll be trying to transmit again
+                        if (!txp->nonstandard_radio_config) {
+                            startReceive(); // try receiving this packet, afterwards we'll be trying to transmit again
+                        }
                         setTransmitDelay();
                     } else {
                         // Send any outgoing packets we have ready as fast as possible to keep the time between channel scan and
