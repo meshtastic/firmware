@@ -487,8 +487,9 @@ void menuHandler::switchToMUIMenu()
 
 void menuHandler::TFTColorPickerMenu()
 {
-    static const char *optionsArray[] = {"Back", "Default", "Meshtastic Green", "Yellow", "Red", "Orange", "Purple", "Teal"};
-    screen->showOverlayBanner("Select Screen Color", 30000, optionsArray, 8, [](int selected) -> void {
+    static const char *optionsArray[] = {"Back", "Default", "Meshtastic Green", "Yellow", "Red", "Orange", "Purple", "Teal",
+                                         "Pink", "White"};
+    screen->showOverlayBanner("Select Screen Color", 30000, optionsArray, 10, [](int selected) -> void {
         if (selected == 1) {
             LOG_INFO("Setting color to system default or defined variant");
             // Insert unset protobuf code here
@@ -503,13 +504,19 @@ void menuHandler::TFTColorPickerMenu()
             TFT_MESH = COLOR565(255, 64, 64);
         } else if (selected == 5) {
             LOG_INFO("Setting color to Orange");
-            TFT_MESH = COLOR565(255, 165, 0);
+            TFT_MESH = COLOR565(255, 160, 20);
         } else if (selected == 6) {
             LOG_INFO("Setting color to Purple");
             TFT_MESH = COLOR565(204, 153, 255);
         } else if (selected == 7) {
             LOG_INFO("Setting color to Teal");
             TFT_MESH = COLOR565(64, 224, 208);
+        } else if (selected == 8) {
+            LOG_INFO("Setting color to Pink");
+            TFT_MESH = COLOR565(255, 105, 180);
+        } else if (selected == 9) {
+            LOG_INFO("Setting color to White");
+            TFT_MESH = COLOR565(255, 255, 255);
         }
 
 #if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
