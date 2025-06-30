@@ -1694,22 +1694,20 @@ void NodeDB::sortMeshDB()
 {
     if (!Throttle::isWithinTimespanMs(lastSort, 1000 * 5)) {
         lastSort = millis();
-        std::sort(meshNodes->begin(), meshNodes->begin() + numMeshNodes,
-                  [](const meshtastic_NodeInfoLite &a, const meshtastic_NodeInfoLite &b) {
-                      if (a.num == myNodeInfo.my_node_num && b.num == myNodeInfo.my_node_num) // in theory impossible
-                          return false;
-                      if (a.num == myNodeInfo.my_node_num) {
-                          return true;
-                      }
-                      if (b.num == myNodeInfo.my_node_num) {
-                          return false;
-                      }
-                      bool aFav = a.is_favorite;
-                      bool bFav = b.is_favorite;
-                      if (aFav != bFav)
-                          return aFav;
-                      return a.last_heard > b.last_heard;
-                  });
+        bool changed = true;
+        while (changed) { // dumb reverse bubble sort, but probably not bad for what we're doing
+            changed = false;
+            for (int i = numMeshNodes - 1; i > 1; i--) { // lowest case this should examine is i == 2
+                if (meshNodes->at(i).is_favorite && !meshNodes->at(i - 1).is_favorite) {
+                    std::swap(meshNodes->at(i), meshNodes->at(i - 1));
+                    changed = true;
+                } else if (meshNodes->at(i).last_heard > meshNodes->at(i - 1).last_heard) {
+                    std::swap(meshNodes->at(i), meshNodes->at(i - 1));
+                    changed = true;
+                }
+            }
+        }
+        LOG_WARN("Sort took %u milliseconds", millis() - lastSort);
     }
 }
 
