@@ -1000,7 +1000,8 @@ void NodeDB::cleanupMeshDB()
                     meshNodes->at(i).user.public_key.size = 0;
                 }
             }
-            meshNodes->at(newPos++) = meshNodes->at(i);
+            if (newPos != i)
+                meshNodes->at(newPos++) = meshNodes->at(i);
         } else {
             removed++;
         }
@@ -1087,8 +1088,8 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
     if (f) {
         LOG_INFO("Load %s", filename);
         pb_istream_t stream = {&readcb, &f, protoSize};
-
-        memset(dest_struct, 0, objSize);
+        if (fields != &meshtastic_NodeDatabase_msg) // contains a vector object
+            memset(dest_struct, 0, objSize);
         if (!pb_decode(&stream, fields, dest_struct)) {
             LOG_ERROR("Error: can't decode protobuf %s", PB_GET_ERROR(&stream));
             state = LoadFileResult::DECODE_FAILED;
@@ -1156,7 +1157,7 @@ void NodeDB::loadFromDisk()
         LOG_WARN("Node count %d exceeds MAX_NUM_NODES %d, truncating", numMeshNodes, MAX_NUM_NODES);
         numMeshNodes = MAX_NUM_NODES;
     }
-    meshNodes->resize(MAX_NUM_NODES + 1); // The rp2040, rp2035, and maybe other targets, have a problem doing a sort() when full
+    meshNodes->resize(MAX_NUM_NODES);
 
     // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
     state = loadProto(deviceStateFileName, meshtastic_DeviceState_size, sizeof(meshtastic_DeviceState),
@@ -1694,22 +1695,20 @@ void NodeDB::sortMeshDB()
 {
     if (!Throttle::isWithinTimespanMs(lastSort, 1000 * 5)) {
         lastSort = millis();
-        std::sort(meshNodes->begin(), meshNodes->begin() + numMeshNodes,
-                  [](const meshtastic_NodeInfoLite &a, const meshtastic_NodeInfoLite &b) {
-                      if (a.num == myNodeInfo.my_node_num && b.num == myNodeInfo.my_node_num) // in theory impossible
-                          return false;
-                      if (a.num == myNodeInfo.my_node_num) {
-                          return true;
-                      }
-                      if (b.num == myNodeInfo.my_node_num) {
-                          return false;
-                      }
-                      bool aFav = a.is_favorite;
-                      bool bFav = b.is_favorite;
-                      if (aFav != bFav)
-                          return aFav;
-                      return a.last_heard > b.last_heard;
-                  });
+        bool changed = true;
+        while (changed) { // dumb reverse bubble sort, but probably not bad for what we're doing
+            changed = false;
+            for (int i = numMeshNodes - 1; i > 1; i--) { // lowest case this should examine is i == 2
+                if (meshNodes->at(i).is_favorite && !meshNodes->at(i - 1).is_favorite) {
+                    std::swap(meshNodes->at(i), meshNodes->at(i - 1));
+                    changed = true;
+                } else if (meshNodes->at(i).last_heard > meshNodes->at(i - 1).last_heard) {
+                    std::swap(meshNodes->at(i), meshNodes->at(i - 1));
+                    changed = true;
+                }
+            }
+        }
+        LOG_INFO("Sort took %u milliseconds", millis() - lastSort);
     }
 }
 
