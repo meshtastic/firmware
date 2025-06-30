@@ -305,16 +305,16 @@ void menuHandler::systemBaseMenu()
     int options;
     static const char **optionsArrayPtr;
 #if HAS_TFT
-    static const char *optionsArray[] = {"Back", "Beeps Action", "Switch to MUI"};
-    options = 3;
+    static const char *optionsArray[] = {"Back", "Beeps Action", "Reboot", "Switch to MUI"};
+    options = 4;
 #endif
 #if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
-    static const char *optionsArray[] = {"Back", "Beeps Action", "Screen Color"};
-    options = 3;
+    static const char *optionsArray[] = {"Back", "Beeps Action", "Reboot", "Screen Color"};
+    options = 4;
 #endif
 #if !defined(HELTEC_MESH_NODE_T114) && !defined(HELTEC_VISION_MASTER_T190) && !HAS_TFT
-    static const char *optionsArray[] = {"Back", "Beeps Action"};
-    options = 2;
+    static const char *optionsArray[] = {"Back", "Beeps Action", "Reboot"};
+    options = 3;
 #endif
     optionsArrayPtr = optionsArray;
     screen->showOverlayBanner("System Action", 30000, optionsArrayPtr, options, [](int selected) -> void {
@@ -323,6 +323,10 @@ void menuHandler::systemBaseMenu()
             screen->setInterval(0);
             runASAP = true;
         } else if (selected == 2) {
+            menuHandler::menuQueue = menuHandler::reboot_menu;
+            screen->setInterval(0);
+            runASAP = true;
+        } else if (selected == 3) {
 #if HAS_TFT
             menuHandler::menuQueue = menuHandler::mui_picker;
 #endif
@@ -531,6 +535,18 @@ void menuHandler::TFTColorPickerMenu()
     });
 }
 
+void menuHandler::rebootMenu()
+{
+    static const char *optionsArray[] = {"Yes", "No"};
+    screen->showOverlayBanner("Reboot Device?", 30000, optionsArray, 2, [](int selected) -> void {
+        if (selected == 0) {
+            IF_SCREEN(screen->showOverlayBanner("Rebooting...", 0));
+            nodeDB->saveToDisk();
+            rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+        }
+    });
+}
+
 void menuHandler::handleMenuSwitch()
 {
     switch (menuQueue) {
@@ -571,6 +587,9 @@ void menuHandler::handleMenuSwitch()
         break;
     case tftcolormenupicker:
         TFTColorPickerMenu();
+        break;
+    case reboot_menu:
+        rebootMenu();
         break;
     }
     menuQueue = menu_none;
