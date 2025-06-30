@@ -407,6 +407,7 @@ NodeDB::NodeDB()
 #endif
     }
 #endif
+    sortMeshDB();
     saveToDisk(saveWhat);
 }
 
@@ -1002,6 +1003,8 @@ void NodeDB::cleanupMeshDB()
             }
             if (newPos != i)
                 meshNodes->at(newPos++) = meshNodes->at(i);
+            else
+                newPos++;
         } else {
             removed++;
         }
@@ -1693,13 +1696,20 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
 
 void NodeDB::sortMeshDB()
 {
-    if (!Throttle::isWithinTimespanMs(lastSort, 1000 * 5)) {
+    if (lastSort == 0 || !Throttle::isWithinTimespanMs(lastSort, 1000 * 5)) {
         lastSort = millis();
         bool changed = true;
         while (changed) { // dumb reverse bubble sort, but probably not bad for what we're doing
             changed = false;
-            for (int i = numMeshNodes - 1; i > 1; i--) { // lowest case this should examine is i == 2
-                if (meshNodes->at(i).is_favorite && !meshNodes->at(i - 1).is_favorite) {
+            for (int i = numMeshNodes - 1; i > 0; i--) { // lowest case this should examine is i == 1
+                if (meshNodes->at(i - 1).num == getNodeNum()) {
+                    // noop
+                } else if (meshNodes->at(i).num ==
+                           getNodeNum()) { // in the oddball case our own node num is not at location 0, put it there
+                    // TODO: Look for at(i-1) also matching own node num, and throw the DB in the trash
+                    std::swap(meshNodes->at(i), meshNodes->at(i - 1));
+                    changed = true;
+                } else if (meshNodes->at(i).is_favorite && !meshNodes->at(i - 1).is_favorite) {
                     std::swap(meshNodes->at(i), meshNodes->at(i - 1));
                     changed = true;
                 } else if (meshNodes->at(i).last_heard > meshNodes->at(i - 1).last_heard) {
