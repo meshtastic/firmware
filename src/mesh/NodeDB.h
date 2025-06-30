@@ -208,9 +208,6 @@ class NodeDB
     their denial?)
     */
 
-    /// pick a provisional nodenum we hope no one is using
-    void pickNewNodeNum();
-
     // get channel channel index we heard a nodeNum on, defaults to 0 if not found
     uint8_t getMeshNodeChannel(NodeNum n);
 
@@ -285,6 +282,9 @@ class NodeDB
     uint32_t lastSort = 0;          // When last sorted the nodeDB
     /// Find a node in our DB, create an empty NodeInfoLite if missing
     meshtastic_NodeInfoLite *getOrCreateMeshNode(NodeNum n);
+
+    /// pick a provisional nodenum we hope no one is using
+    void pickNewNodeNum();
 
     /// Notify observers of changes to the DB
     void notifyObservers(bool forceUpdate = false)
