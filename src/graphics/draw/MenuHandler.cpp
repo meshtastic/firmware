@@ -8,6 +8,7 @@
 #include "NodeDB.h"
 #include "buzz.h"
 #include "graphics/Screen.h"
+#include "graphics/TFTDisplay.h"
 #include "graphics/draw/UIRenderer.h"
 #include "main.h"
 #include "modules/AdminModule.h"
@@ -304,29 +305,85 @@ void menuHandler::systemBaseMenu()
 {
     int options;
     static const char **optionsArrayPtr;
+    
+    // Check if brightness is supported
+    bool hasSupportBrightness = false;
+#if defined(ST7789_CS) || defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) || defined(USE_SH1107) || HAS_TFT
+    hasSupportBrightness = true;
+#endif
+
+    if (hasSupportBrightness) {
 #if HAS_TFT
-    static const char *optionsArray[] = {"Back", "Beeps Action", "Reboot", "Switch to MUI"};
-    options = 4;
+        static const char *optionsArray[] = {"Back", "Beeps Action", "Brightness", "Reboot", "Switch to MUI"};
+        options = 5;
 #endif
 #if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
-    static const char *optionsArray[] = {"Back", "Beeps Action", "Reboot", "Screen Color"};
-    options = 4;
+        static const char *optionsArray[] = {"Back", "Beeps Action", "Brightness", "Reboot", "Screen Color"};
+        options = 5;
 #endif
 #if !defined(HELTEC_MESH_NODE_T114) && !defined(HELTEC_VISION_MASTER_T190) && !HAS_TFT
-    static const char *optionsArray[] = {"Back", "Beeps Action", "Reboot"};
-    options = 3;
+        static const char *optionsArray[] = {"Back", "Beeps Action", "Brightness", "Reboot"};
+        options = 4;
 #endif
-    optionsArrayPtr = optionsArray;
+        optionsArrayPtr = optionsArray;
+    } else {
+#if HAS_TFT
+        static const char *optionsArray[] = {"Back", "Beeps Action", "Reboot", "Switch to MUI"};
+        options = 4;
+#endif
+#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
+        static const char *optionsArray[] = {"Back", "Beeps Action", "Reboot", "Screen Color"};
+        options = 4;
+#endif
+#if !defined(HELTEC_MESH_NODE_T114) && !defined(HELTEC_VISION_MASTER_T190) && !HAS_TFT
+        static const char *optionsArray[] = {"Back", "Beeps Action", "Reboot"};
+        options = 3;
+#endif
+        optionsArrayPtr = optionsArray;
+    }
+    
     screen->showOverlayBanner("System Action", 30000, optionsArrayPtr, options, [](int selected) -> void {
         if (selected == 1) {
             menuHandler::menuQueue = menuHandler::buzzermodemenupicker;
             screen->setInterval(0);
             runASAP = true;
         } else if (selected == 2) {
-            menuHandler::menuQueue = menuHandler::reboot_menu;
-            screen->setInterval(0);
-            runASAP = true;
+            // Check if brightness is supported to determine the correct mapping
+            bool hasSupportBrightness = false;
+#if defined(ST7789_CS) || defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) || defined(USE_SH1107) || HAS_TFT
+            hasSupportBrightness = true;
+#endif
+            if (hasSupportBrightness) {
+                menuHandler::menuQueue = menuHandler::brightness_picker;
+                screen->setInterval(0);
+                runASAP = true;
+            } else {
+                menuHandler::menuQueue = menuHandler::reboot_menu;
+                screen->setInterval(0);
+                runASAP = true;
+            }
         } else if (selected == 3) {
+            // Check if brightness is supported to determine the correct mapping
+            bool hasSupportBrightness = false;
+#if defined(ST7789_CS) || defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) || defined(USE_SH1107) || HAS_TFT
+            hasSupportBrightness = true;
+#endif
+            if (hasSupportBrightness) {
+                menuHandler::menuQueue = menuHandler::reboot_menu;
+                screen->setInterval(0);
+                runASAP = true;
+            } else {
+#if HAS_TFT
+                menuHandler::menuQueue = menuHandler::mui_picker;
+#endif
+#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
+                menuHandler::menuQueue = menuHandler::tftcolormenupicker;
+#endif
+                screen->setInterval(0);
+                runASAP = true;
+            }
+        } else if (selected == 4) {
+            // This is only available when brightness is supported
 #if HAS_TFT
             menuHandler::menuQueue = menuHandler::mui_picker;
 #endif
@@ -476,6 +533,52 @@ void menuHandler::BuzzerModeMenu()
         config.device.buzzer_mode);
 }
 
+void menuHandler::BrightnessPickerMenu()
+{
+    static const char *optionsArray[] = {"Back", "Low", "Medium", "High", "Very High"};
+    
+    // Get current brightness level to set initial selection
+    int currentSelection = 1; // Default to Low
+    if (uiconfig.screen_brightness >= 255) {
+        currentSelection = 4; // Very High
+    } else if (uiconfig.screen_brightness >= 128) {
+        currentSelection = 3; // High  
+    } else if (uiconfig.screen_brightness >= 64) {
+        currentSelection = 2; // Medium
+    } else {
+        currentSelection = 1; // Low
+    }
+    
+    screen->showOverlayBanner(
+        "Screen Brightness", 30000, optionsArray, 5,
+        [](int selected) -> void {
+            if (selected == 1) { // Low
+                uiconfig.screen_brightness = 1;
+            } else if (selected == 2) { // Medium
+                uiconfig.screen_brightness = 64;
+            } else if (selected == 3) { // High
+                uiconfig.screen_brightness = 128;
+            } else if (selected == 4) { // Very High
+                uiconfig.screen_brightness = 255;
+            }
+            
+            if (selected != 0) { // Not "Back"
+                // Apply brightness immediately
+#if defined(ST7789_CS)
+                static_cast<TFTDisplay *>(screen->getDisplayDevice())->setDisplayBrightness(uiconfig.screen_brightness);
+#elif defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) || defined(USE_SH1107)
+                screen->getDisplayDevice()->setBrightness(uiconfig.screen_brightness);
+#endif
+                
+                // Save to device
+                nodeDB->saveProto("/prefs/uiconfig.proto", meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg, &uiconfig);
+                
+                LOG_INFO("Screen brightness set to %d", uiconfig.screen_brightness);
+            }
+        },
+        currentSelection); // Set initial selection
+}
+
 void menuHandler::switchToMUIMenu()
 {
     static const char *optionsArray[] = {"Yes", "No"};
@@ -587,6 +690,9 @@ void menuHandler::handleMenuSwitch()
         break;
     case tftcolormenupicker:
         TFTColorPickerMenu();
+        break;
+    case brightness_picker:
+        BrightnessPickerMenu();
         break;
     case reboot_menu:
         rebootMenu();

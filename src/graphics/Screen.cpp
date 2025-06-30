@@ -409,6 +409,18 @@ void Screen::setup()
     // === Enable display rendering ===
     useDisplay = true;
 
+    // === Load saved brightness from UI config ===
+    // For OLED displays (SSD1306), default brightness is 255 if not set
+    if (uiconfig.screen_brightness == 0) {
+#if defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) || defined(USE_SH1107)
+        brightness = 255; // Default for OLED
+#else
+        brightness = BRIGHTNESS_DEFAULT;
+#endif
+    } else {
+        brightness = uiconfig.screen_brightness;
+    }
+
     // === Detect OLED subtype (if supported by board variant) ===
 #ifdef AutoOLEDWire_h
     if (isAUTOOled)
@@ -435,6 +447,14 @@ void Screen::setup()
     ui->setFrameAnimation(SLIDE_LEFT);     // Used only when indicators are active
     ui->disableAllIndicators();            // Disable page indicator dots
     ui->getUiState()->userData = this;     // Allow static callbacks to access Screen instance
+
+    // === Apply loaded brightness ===
+#if defined(ST7789_CS)
+    static_cast<TFTDisplay *>(dispdev)->setDisplayBrightness(brightness);
+#elif defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) || defined(USE_SH1107)
+    dispdev->setBrightness(brightness);
+#endif
+    LOG_INFO("Applied screen brightness: %d", brightness);
 
     // === Set custom overlay callbacks ===
     static OverlayCallback overlays[] = {
