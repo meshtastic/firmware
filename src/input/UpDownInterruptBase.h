@@ -32,6 +32,6 @@ class UpDownInterruptBase : public Observable<const InputEvent *>, public concur
     unsigned long lastUpKeyTime = 0;
     unsigned long lastDownKeyTime = 0;
     unsigned long lastPressKeyTime = 0;
-    unsigned long updownDebounceMs;
+    unsigned long updownDebounceMs = 50;
     const unsigned long pressDebounceMs = 200;
 };

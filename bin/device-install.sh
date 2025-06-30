@@ -1,14 +1,18 @@
 #!/bin/bash
 
 PYTHON=${PYTHON:-$(which python3 python | head -n 1)}
-WEB_APP=false
 BPS_RESET=false
 TFT_BUILD=false
 MCU=""
 
 # Variant groups
 BIGDB_8MB=(
-	"picomputer-s3"
+	# Check if FILENAME contains "-tft-" and set target partitionScheme accordingly.
+if [[ $FILENAME == *"-tft-"* ]]; then
+    TFT_BUILD=true
+fi
+
+# Extract BASENAME from %FILENAME% for later use.r-s3"
 	"unphone"
 	"seeed-sensecap-indicator"
 	"crowpanel-esp32s3"
@@ -76,14 +80,13 @@ set -e
 # Usage info
 show_help() {
     cat <<EOF
-Usage: $(basename "$0") [-h] [-p ESPTOOL_PORT] [-P PYTHON] [-f FILENAME] [--web] [--1200bps-reset]
+Usage: $(basename "$0") [-h] [-p ESPTOOL_PORT] [-P PYTHON] [-f FILENAME] [--1200bps-reset]
 Flash image file to device, but first erasing and writing system information.
 
     -h               Display this help and exit.
     -p ESPTOOL_PORT  Set the environment variable for ESPTOOL_PORT.  If not set, ESPTOOL iterates all ports (Dangerous).
     -P PYTHON        Specify alternate python interpreter to use to invoke esptool. (Default: "$PYTHON")
     -f FILENAME      The firmware .bin file to flash.  Custom to your device type and region.
-    --web            Enable WebUI. (Default: false)
     --1200bps-reset  Attempt to place the device in correct mode. Some hardware requires this twice. (1200bps Reset)
 
 EOF
@@ -106,9 +109,6 @@ while [ $# -gt 0 ]; do
     -f)
         FILENAME="$2"
         shift
-        ;;
-    --web)
-        WEB_APP=true
         ;;
     --1200bps-reset)
 		    BPS_RESET=true
@@ -140,20 +140,16 @@ if [[ "$FILENAME" != firmware-* ]]; then
   exit 1
 fi
 
-# Check if FILENAME contains "-tft-" and prevent web/mui comingling.
+# Check if FILENAME contains "-tft-" and set target partitionScheme accordingly.
 if [[ "${FILENAME//-tft-/}" != "$FILENAME" ]]; then
     TFT_BUILD=true
-    if [[ $WEB_APP == true ]] && [[ $TFT_BUILD == true ]]; then
-        echo "Cannot enable WebUI (--web) and MUI."
-        exit 1
-    fi
 fi
 
 # Extract BASENAME from %FILENAME% for later use.
 BASENAME="${FILENAME/firmware-/}"
 
 if [ -f "${FILENAME}" ] && [ -n "${FILENAME##*"update"*}" ]; then
-    # Default littlefs* offset (--web).
+    # Default littlefs* offset.
     OFFSET=0x300000
 
     # Default OTA Offset
@@ -193,12 +189,8 @@ if [ -f "${FILENAME}" ] && [ -n "${FILENAME##*"update"*}" ]; then
         OTAFILE=bleota-s3.bin
     fi
 
-    # Check if WEB_APP (--web) is enabled and add "littlefswebui-" to BASENAME else "littlefs-".
-    if [ "$WEB_APP" = true ]; then
-        SPIFFSFILE=littlefswebui-${BASENAME}
-    else
-        SPIFFSFILE=littlefs-${BASENAME}
-    fi
+    # Set SPIFFS filename with "littlefs-" prefix.
+    SPIFFSFILE=littlefs-${BASENAME}
 
     if [[ ! -f "$FILENAME" ]]; then
         echo "Error: file ${FILENAME} wasn't found. Terminating."

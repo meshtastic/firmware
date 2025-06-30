@@ -10,8 +10,8 @@
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  Pin Capacity Definitions
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#define PINS_COUNT (33u)       // Total GPIO pins
-#define NUM_DIGITAL_PINS (33u) // Digital I/O pins
+#define PINS_COUNT (38u)       // Total GPIO pins
+#define NUM_DIGITAL_PINS (38u) // Digital I/O pins
 #define NUM_ANALOG_INPUTS (8u) // Analog inputs (A0-A5 + VBAT + AREF)
 #define NUM_ANALOG_OUTPUTS (0u)
 
@@ -33,15 +33,20 @@
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  Button Configuration
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#define CANCEL_BUTTON_PIN D13 // This is the Program Button
-// #define BUTTON_NEED_PULLUP   1
-#define CANCEL_BUTTON_ACTIVE_LOW true
-#define CANCEL_BUTTON_ACTIVE_PULLUP false
 
-// #define BUTTON_PIN_TOUCH 13 // Touch button
-//  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//   Digital Pin Mapping (D0-D10)
-//  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#ifdef BUTTON_PIN
+#undef BUTTON_PIN
+#endif
+
+#define BUTTON_PIN D13 // This is the Program Button
+// #define BUTTON_NEED_PULLUP   1
+#define BUTTON_ACTIVE_LOW true
+#define BUTTON_ACTIVE_PULLUP false
+
+#define BUTTON_PIN_TOUCH 13 // Touch button
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  Digital Pin Mapping (D0-D10)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #define D0 0   // P1.06 GNSS_WAKEUP/IO0
 #define D1 1   // P0.07 LORA_DIO1
 #define D2 2   // P1.07 LORA_RESET
@@ -74,23 +79,17 @@
 //  Communication Interfaces
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  I2C Configuration
-// #define HAS_WIRE 1
-#define PIN_WIRE_SDA D14 // P0.09
-#define PIN_WIRE_SCL D15 // P0.10
-#define WIRE_INTERFACES_COUNT 2
-#define PIN_WIRE1_SDA D18
-#define PIN_WIRE1_SCL D17
-#define I2C_NO_RESCAN
+#define HAS_WIRE 1
+#define PIN_WIRE_SDA D18 // P0.09
+#define PIN_WIRE_SCL D17 // P0.10
+#define WIRE_INTERFACES_COUNT 1
 
 static const uint8_t SDA = PIN_WIRE_SDA;
 static const uint8_t SCL = PIN_WIRE_SCL;
 
-#define HAS_SCREEN 1
-#define USE_SSD1306 1
-
 // SPI Configuration (SX1262)
 
-#define SPI_INTERFACES_COUNT 1
+// #define SPI_INTERFACES_COUNT 1
 #define PIN_SPI_MISO 9  // P0.03 (D9)
 #define PIN_SPI_MOSI 10 // P0.28 (D10)
 #define PIN_SPI_SCK 8   // P0.30 (D8)
@@ -105,6 +104,22 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 #define SX126X_RXEN D5               // RX enable control
 #define SX126X_TXEN RADIOLIB_NC
 #define SX126X_DIO2_AS_RF_SWITCH // This Line is really necessary for SX1262  to work with RF switch or will loss TX power
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  EINK
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#define SPI_INTERFACES_COUNT 2
+#define PIN_EINK_CS 36
+#define PIN_EINK_BUSY 35
+#define PIN_EINK_DC 34
+#define PIN_EINK_RES 32
+#define PIN_EINK_SCLK 31
+#define PIN_EINK_MOSI 33
+#define PIN_EINK_EN 14   // unused
+#define PIN_SPI1_MISO 15 // unused
+#define PIN_SPI1_MOSI PIN_EINK_MOSI
+#define PIN_SPI1_SCK PIN_EINK_SCLK
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  Power Management
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -162,14 +177,6 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 
 #define CANNED_MESSAGE_MODULE_ENABLE 1
 
-// trackball
-#define HAS_TRACKBALL 1
-#define TB_UP 25
-#define TB_DOWN 26
-#define TB_LEFT 27
-#define TB_RIGHT 28
-#define TB_PRESS 29
-#define TB_DIRECTION FALLING
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  Compatibility Definitions
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -184,4 +191,4 @@ extern "C" {
 }
 #endif
 
-#endif //  _SEEED_SOLAR_NODE_H_
+#endif //  _SEEED_TRACKER_L1_H_
