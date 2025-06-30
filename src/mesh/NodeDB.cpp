@@ -966,6 +966,7 @@ void NodeDB::resetNodes()
 
 void NodeDB::removeNodeByNum(NodeNum nodeNum)
 {
+    std::lock_guard<std::mutex> guard(nodeDB_mutex);
     int newPos = 0, removed = 0;
     for (int i = 0; i < numMeshNodes; i++) {
         if (meshNodes->at(i).num != nodeNum)
@@ -1473,6 +1474,7 @@ uint32_t sinceReceived(const meshtastic_MeshPacket *p)
 
 size_t NodeDB::getNumOnlineMeshNodes(bool localOnly)
 {
+    std::lock_guard<std::mutex> guard(nodeDB_mutex);
     size_t numseen = 0;
 
     // FIXME this implementation is kinda expensive
@@ -1494,6 +1496,7 @@ size_t NodeDB::getNumOnlineMeshNodes(bool localOnly)
 void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSource src)
 {
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(nodeId);
+    std::unique_lock<std::mutex> guard(nodeDB_mutex);
     if (!info) {
         return;
     }
@@ -1530,6 +1533,7 @@ void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSou
     }
     info->has_position = true;
     updateGUIforNode = info;
+    guard.unlock();
     notifyObservers(true); // Force an update whether or not our node counts have changed
 }
 
@@ -1539,6 +1543,7 @@ void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSou
 void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxSource src)
 {
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(nodeId);
+    std::unique_lock<std::mutex> guard(nodeDB_mutex);
     // Environment metrics should never go to NodeDb but we'll safegaurd anyway
     if (!info || t.which_variant != meshtastic_Telemetry_device_metrics_tag) {
         return;
@@ -1553,6 +1558,7 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
     info->device_metrics = t.variant.device_metrics;
     info->has_device_metrics = true;
     updateGUIforNode = info;
+    guard.unlock();
     notifyObservers(true); // Force an update whether or not our node counts have changed
 }
 
@@ -1562,6 +1568,7 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
 void NodeDB::addFromContact(meshtastic_SharedContact contact)
 {
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(contact.node_num);
+    std::lock_guard<std::mutex> guard(nodeDB_mutex);
     if (!info) {
         return;
     }
@@ -1594,6 +1601,7 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
 bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelIndex)
 {
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(nodeId);
+    std::unique_lock<std::mutex> guard(nodeDB_mutex);
     if (!info) {
         return false;
     }
@@ -1642,7 +1650,6 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
 
     if (changed) {
         updateGUIforNode = info;
-        notifyObservers(true); // Force an update whether or not our node counts have changed
 
         // We just changed something about a User,
         // store our DB unless we just did so less than a minute ago
@@ -1653,6 +1660,8 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
         } else {
             LOG_DEBUG("Defer NodeDB saveToDisk for now");
         }
+        guard.unlock();
+        notifyObservers(true); // Force an update whether or not our node counts have changed
     }
 
     return changed;
@@ -1670,6 +1679,7 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
         LOG_DEBUG("Update DB node 0x%x, rx_time=%u", mp.from, mp.rx_time);
 
         meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getFrom(&mp));
+        std::lock_guard<std::mutex> guard(nodeDB_mutex);
         if (!info) {
             return;
         }
@@ -1725,9 +1735,12 @@ uint8_t NodeDB::getMeshNodeChannel(NodeNum n)
 /// NOTE: This function might be called from an ISR
 meshtastic_NodeInfoLite *NodeDB::getMeshNode(NodeNum n)
 {
-    for (int i = 0; i < numMeshNodes; i++)
-        if (meshNodes->at(i).num == n)
+    std::lock_guard<std::mutex> guard(nodeDB_mutex);
+    for (int i = 0; i < numMeshNodes; i++) {
+        if (meshNodes->at(i).num == n) {
             return &meshNodes->at(i);
+        }
+    }
 
     return NULL;
 }
@@ -1742,6 +1755,7 @@ bool NodeDB::isFull()
 meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
 {
     meshtastic_NodeInfoLite *lite = getMeshNode(n);
+    std::lock_guard<std::mutex> guard(nodeDB_mutex);
 
     if (!lite) {
         if (isFull()) {
