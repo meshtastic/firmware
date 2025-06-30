@@ -69,6 +69,8 @@ using graphics::Emote;
 using graphics::emotes;
 using graphics::numEmotes;
 
+extern uint16_t TFT_MESH;
+
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
@@ -150,6 +152,24 @@ void Screen::showOverlayBanner(const char *message, uint32_t durationMs, const c
     NotificationRenderer::alertBannerOptions = options;
     NotificationRenderer::alertBannerCallback = bannerCallback;
     NotificationRenderer::curSelected = InitialSelected;
+    NotificationRenderer::pauseBanner = false;
+    static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawAlertBannerOverlay};
+    ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
+    setFastFramerate(); // Draw ASAP
+    ui->update();
+}
+
+// Called to trigger a banner with custom message and duration
+void Screen::showNodePicker(const char *message, uint32_t durationMs, std::function<void(int)> bannerCallback)
+{
+#ifdef USE_EINK
+    EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Skip full refresh for all overlay menus
+#endif
+    // Store the message and set the expiration timestamp
+    strncpy(NotificationRenderer::alertBannerMessage, message, 255);
+    NotificationRenderer::alertBannerMessage[255] = '\0'; // Ensure null termination
+    NotificationRenderer::alertBannerUntil = (durationMs == 0) ? 0 : millis() + durationMs;
+    NotificationRenderer::alertBannerCallback = bannerCallback;
     NotificationRenderer::pauseBanner = false;
     static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawAlertBannerOverlay};
     ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
@@ -239,7 +259,7 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
                             ST7789_MISO, ST7789_SCK);
 #else
     dispdev = new ST7789Spi(&SPI1, ST7789_RESET, ST7789_RS, ST7789_NSS, GEOMETRY_RAWMODE, TFT_WIDTH, TFT_HEIGHT);
-    static_cast<ST7789Spi *>(dispdev)->setRGB(COLOR565(255, 255, 128));
+    static_cast<ST7789Spi *>(dispdev)->setRGB(TFT_MESH);
 #endif
 #elif defined(USE_SSD1306)
     dispdev = new SSD1306Wire(address.address, -1, -1, geometry,
@@ -937,6 +957,9 @@ void Screen::setFrames(FrameFocus focus)
         // If no module requested focus, will show the first frame instead
         ui->switchToFrame(fsi.positions.clock);
         break;
+    case FOCUS_SYSTEM:
+        ui->switchToFrame(fsi.positions.memory);
+        break;
 
     case FOCUS_PRESERVE:
         //  No more adjustment — force stay on same index
@@ -1265,13 +1288,8 @@ int Screen::handleInputEvent(const InputEvent *event)
             } else if (event->inputEvent == INPUT_BROKER_SELECT) {
                 if (this->ui->getUiState()->currentFrame == framesetInfo.positions.home) {
                     menuHandler::homeBaseMenu();
-#if HAS_TFT
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.memory) {
-                    menuHandler::switchToMUIMenu();
-#else
-                } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.memory) {
-                    menuHandler::BuzzerModeMenu();
-#endif
+                    menuHandler::systemBaseMenu();
 #if HAS_GPS
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.gps && gps) {
                     menuHandler::positionBaseMenu();

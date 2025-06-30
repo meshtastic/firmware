@@ -2,6 +2,7 @@
 
 #include "OLEDDisplay.h"
 #include "OLEDDisplayUi.h"
+#define MAX_LINES 5
 
 namespace graphics
 {
@@ -20,6 +21,9 @@ class NotificationRenderer
     static bool pauseBanner;
 
     static void drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisplayUiState *state);
+    static void drawNotificationBox(OLEDDisplay *display, OLEDDisplayUiState *state, const char *lines[MAX_LINES + 1],
+                                    uint16_t totalLines, uint8_t firstOptionToShow, uint16_t maxWidth = 0);
+
     static void drawCriticalFaultFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
     static void drawSSLScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
     static void drawFrameFirmware(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);

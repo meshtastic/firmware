@@ -13,6 +13,8 @@
 #include "modules/AdminModule.h"
 #include "modules/CannedMessageModule.h"
 
+extern uint16_t TFT_MESH;
+
 namespace graphics
 {
 menuHandler::screenMenus menuHandler::menuQueue = menu_none;
@@ -251,20 +253,22 @@ void menuHandler::homeBaseMenu()
 
     if (kb_found) {
 #ifdef PIN_EINK_EN
-        static const char *optionsArray[] = {"Back", "Toggle Backlight", "Send Position", "New Preset Msg", "New Freetext Msg"};
+        static const char *optionsArray[] = {"Back",           "Toggle Backlight", "Send Position",
+                                             "New Preset Msg", "New Freetext Msg", "Bluetooth Toggle"};
 #else
-        static const char *optionsArray[] = {"Back", "Sleep Screen", "Send Position", "New Preset Msg", "New Freetext Msg"};
+        static const char *optionsArray[] = {"Back",           "Sleep Screen",     "Send Position",
+                                             "New Preset Msg", "New Freetext Msg", "Bluetooth Toggle"};
+#endif
+        optionsArrayPtr = optionsArray;
+        options = 6;
+    } else {
+#ifdef PIN_EINK_EN
+        static const char *optionsArray[] = {"Back", "Toggle Backlight", "Send Position", "New Preset Msg", "Bluetooth Toggle"};
+#else
+        static const char *optionsArray[] = {"Back", "Sleep Screen", "Send Position", "New Preset Msg", "Bluetooth Toggle"};
 #endif
         optionsArrayPtr = optionsArray;
         options = 5;
-    } else {
-#ifdef PIN_EINK_EN
-        static const char *optionsArray[] = {"Back", "Toggle Backlight", "Send Position", "New Preset Msg"};
-#else
-        static const char *optionsArray[] = {"Back", "Sleep Screen", "Send Position", "New Preset Msg"};
-#endif
-        optionsArrayPtr = optionsArray;
-        options = 4;
     }
     screen->showOverlayBanner("Home Action", 30000, optionsArrayPtr, options, [](int selected) -> void {
         if (selected == 1) {
@@ -283,7 +287,50 @@ void menuHandler::homeBaseMenu()
         } else if (selected == 3) {
             cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST);
         } else if (selected == 4) {
-            cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST);
+            if (kb_found) {
+                cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST);
+            } else {
+                InputEvent event = {.inputEvent = (input_broker_event)170, .kbchar = 170, .touchX = 0, .touchY = 0};
+                inputBroker->injectInputEvent(&event);
+            }
+        } else if (selected == 5) {
+            InputEvent event = {.inputEvent = (input_broker_event)170, .kbchar = 170, .touchX = 0, .touchY = 0};
+            inputBroker->injectInputEvent(&event);
+        }
+    });
+}
+
+void menuHandler::systemBaseMenu()
+{
+    int options;
+    static const char **optionsArrayPtr;
+#if HAS_TFT
+    static const char *optionsArray[] = {"Back", "Beeps Action", "Switch to MUI"};
+    options = 3;
+#endif
+#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
+    static const char *optionsArray[] = {"Back", "Beeps Action", "Screen Color"};
+    options = 3;
+#endif
+#if !defined(HELTEC_MESH_NODE_T114) && !defined(HELTEC_VISION_MASTER_T190) && !HAS_TFT
+    static const char *optionsArray[] = {"Back", "Beeps Action"};
+    options = 2;
+#endif
+    optionsArrayPtr = optionsArray;
+    screen->showOverlayBanner("System Action", 30000, optionsArrayPtr, options, [](int selected) -> void {
+        if (selected == 1) {
+            menuHandler::menuQueue = menuHandler::buzzermodemenupicker;
+            screen->setInterval(0);
+            runASAP = true;
+        } else if (selected == 2) {
+#if HAS_TFT
+            menuHandler::menuQueue = menuHandler::mui_picker;
+#endif
+#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
+            menuHandler::menuQueue = menuHandler::tftcolormenupicker;
+#endif
+            screen->setInterval(0);
+            runASAP = true;
         }
     });
 }
@@ -438,6 +485,52 @@ void menuHandler::switchToMUIMenu()
     });
 }
 
+void menuHandler::TFTColorPickerMenu()
+{
+    static const char *optionsArray[] = {"Back", "Default", "Meshtastic Green", "Yellow", "Red", "Orange", "Purple", "Teal",
+                                         "Pink", "White"};
+    screen->showOverlayBanner("Select Screen Color", 30000, optionsArray, 10, [](int selected) -> void {
+        if (selected == 1) {
+            LOG_INFO("Setting color to system default or defined variant");
+            // Insert unset protobuf code here
+        } else if (selected == 2) {
+            LOG_INFO("Setting color to Meshtastic Green");
+            TFT_MESH = COLOR565(0x67, 0xEA, 0x94);
+        } else if (selected == 3) {
+            LOG_INFO("Setting color to Yellow");
+            TFT_MESH = COLOR565(255, 255, 128);
+        } else if (selected == 4) {
+            LOG_INFO("Setting color to Red");
+            TFT_MESH = COLOR565(255, 64, 64);
+        } else if (selected == 5) {
+            LOG_INFO("Setting color to Orange");
+            TFT_MESH = COLOR565(255, 160, 20);
+        } else if (selected == 6) {
+            LOG_INFO("Setting color to Purple");
+            TFT_MESH = COLOR565(204, 153, 255);
+        } else if (selected == 7) {
+            LOG_INFO("Setting color to Teal");
+            TFT_MESH = COLOR565(64, 224, 208);
+        } else if (selected == 8) {
+            LOG_INFO("Setting color to Pink");
+            TFT_MESH = COLOR565(255, 105, 180);
+        } else if (selected == 9) {
+            LOG_INFO("Setting color to White");
+            TFT_MESH = COLOR565(255, 255, 255);
+        }
+
+#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
+        if (selected != 0) {
+
+            static_cast<ST7789Spi *>(screen->getDisplayDevice())->setRGB(TFT_MESH);
+            screen->setFrames(graphics::Screen::FOCUS_SYSTEM);
+            // I think we need a saveToDisk to commit a protobuf change?
+            // nodeDB->saveToDisk(SEGMENT_CONFIG);
+        }
+#endif
+    });
+}
+
 void menuHandler::handleMenuSwitch()
 {
     switch (menuQueue) {
@@ -469,6 +562,15 @@ void menuHandler::handleMenuSwitch()
         break;
     case reset_node_db_menu:
         resetNodeDBMenu();
+        break;
+    case buzzermodemenupicker:
+        BuzzerModeMenu();
+        break;
+    case mui_picker:
+        switchToMUIMenu();
+        break;
+    case tftcolormenupicker:
+        TFTColorPickerMenu();
         break;
     }
     menuQueue = menu_none;

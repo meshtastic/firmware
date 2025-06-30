@@ -601,7 +601,11 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
 
     int chutil_bar_width = (isHighResolution) ? 100 : 50;
     if (!config.bluetooth.enabled) {
+#if defined(USE_EINK)
+        chutil_bar_width = (isHighResolution) ? 50 : 30;
+#else
         chutil_bar_width = (isHighResolution) ? 80 : 40;
+#endif
     }
     int chutil_bar_height = (isHighResolution) ? 12 : 7;
     int extraoffset = (isHighResolution) ? 6 : 3;
