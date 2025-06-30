@@ -427,40 +427,56 @@ void menuHandler::BuzzerModeMenu()
 
 void menuHandler::systemActionMenu()
 {
-#ifdef USE_SSD1306
-    static const char *optionsArray[] = {"Back", "Beep Action", "Brightness"};
-    screen->showOverlayBanner(
-        "System Action", 30000, optionsArray, 3,
-        [](int selected) -> void {
-            switch (selected) {
-            case 0:
-                // Back - do nothing, menu will close
-                break;
-            case 1:
-                menuQueue = beep_action_menu;
-                break;
-            case 2:
-                menuQueue = contrast_action_menu;
-                break;
-            }
-        },
-        0);
-#else
-    static const char *optionsArray[] = {"Back", "Beep Action"};
-    screen->showOverlayBanner(
-        "System Action", 30000, optionsArray, 2,
-        [](int selected) -> void {
-            switch (selected) {
-            case 0:
-                // Back - do nothing, menu will close
-                break;
-            case 1:
-                menuQueue = beep_action_menu;
-                break;
-            }
-        },
-        0);
+    // Check if current display supports brightness adjustment
+    // This includes SSD1306 (detected at runtime), TFT displays, and ST7789 displays
+    bool supportsBrightness = false;
+    
+    // Runtime detection for SSD1306/SH1106 displays
+    if (screen && (screen->model == meshtastic_Config_DisplayConfig_OledType_OLED_SSD1306 ||
+        screen->model == meshtastic_Config_DisplayConfig_OledType_OLED_SH1106 ||
+        screen->model == meshtastic_Config_DisplayConfig_OledType_OLED_AUTO)) {
+        supportsBrightness = true;
+    }
+    
+    // Compile-time detection for displays that definitely support brightness
+#if defined(USE_SSD1306) || defined(ST7789_CS) || defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(HX8357_CS) || defined(ILI9488_CS) || defined(RAK14014)
+    supportsBrightness = true;
 #endif
+
+    if (supportsBrightness) {
+        static const char *optionsArray[] = {"Back", "Beep Action", "Brightness"};
+        screen->showOverlayBanner(
+            "System Action", 30000, optionsArray, 3,
+            [](int selected) -> void {
+                switch (selected) {
+                case 0:
+                    // Back - do nothing, menu will close
+                    break;
+                case 1:
+                    menuQueue = beep_action_menu;
+                    break;
+                case 2:
+                    menuQueue = contrast_action_menu;
+                    break;
+                }
+            },
+            0);
+    } else {
+        static const char *optionsArray[] = {"Back", "Beep Action"};
+        screen->showOverlayBanner(
+            "System Action", 30000, optionsArray, 2,
+            [](int selected) -> void {
+                switch (selected) {
+                case 0:
+                    // Back - do nothing, menu will close
+                    break;
+                case 1:
+                    menuQueue = beep_action_menu;
+                    break;
+                }
+            },
+            0);
+    }
 }
 
 void menuHandler::contrastActionMenu()
