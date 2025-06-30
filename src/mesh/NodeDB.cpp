@@ -1718,7 +1718,7 @@ void NodeDB::sortMeshDB()
                 }
             }
         }
-        LOG_WARN("Sort took %u milliseconds", millis() - lastSort);
+        LOG_INFO("Sort took %u milliseconds", millis() - lastSort);
     }
 }
 
