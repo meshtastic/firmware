@@ -1000,7 +1000,8 @@ void NodeDB::cleanupMeshDB()
                     meshNodes->at(i).user.public_key.size = 0;
                 }
             }
-            meshNodes->at(newPos++) = meshNodes->at(i);
+            if (newPos != i)
+                meshNodes->at(newPos++) = meshNodes->at(i);
         } else {
             removed++;
         }
