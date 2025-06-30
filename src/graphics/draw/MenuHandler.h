@@ -15,7 +15,10 @@ class menuHandler
         position_base_menu,
         gps_toggle_menu,
         compass_point_north_menu,
-        reset_node_db_menu
+        reset_node_db_menu,
+        system_action_menu,
+        beep_action_menu,
+        contrast_action_menu
     };
     static screenMenus menuQueue;
 
@@ -35,6 +38,8 @@ class menuHandler
     static void switchToMUIMenu();
     static void nodeListMenu();
     static void resetNodeDBMenu();
+    static void systemActionMenu();
+    static void contrastActionMenu();
 };
 
 } // namespace graphics

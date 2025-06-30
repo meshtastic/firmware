@@ -86,7 +86,11 @@ class Screen
 
 // 0 to 255, though particular variants might define different defaults
 #ifndef BRIGHTNESS_DEFAULT
+#ifdef USE_SSD1306
+#define BRIGHTNESS_DEFAULT 255
+#else
 #define BRIGHTNESS_DEFAULT 150
+#endif
 #endif
 
 // Meters to feet conversion
@@ -318,6 +322,8 @@ class Screen : public concurrency::OSThread
     // functions for display brightness
     void increaseBrightness();
     void decreaseBrightness();
+    void setBrightness(uint8_t _brightness);
+    uint8_t getBrightness();
 
     void setFunctionSymbol(std::string sym);
     void removeFunctionSymbol(std::string sym);

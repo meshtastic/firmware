@@ -63,7 +63,11 @@ EXT_RAM_BSS_ATTR meshtastic_DeviceState devicestate;
 meshtastic_MyNodeInfo &myNodeInfo = devicestate.my_node;
 meshtastic_NodeDatabase nodeDatabase;
 meshtastic_LocalConfig config;
+#ifdef USE_SSD1306
+meshtastic_DeviceUIConfig uiconfig{.screen_brightness = 255, .screen_timeout = 30};
+#else
 meshtastic_DeviceUIConfig uiconfig{.screen_brightness = 153, .screen_timeout = 30};
+#endif
 meshtastic_LocalModuleConfig moduleConfig;
 meshtastic_ChannelFile channelFile;
 
