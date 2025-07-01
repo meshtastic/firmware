@@ -5,7 +5,10 @@
 #define ONE_DAY 24 * 60 * 60
 #define ONE_MINUTE_MS 60 * 1000
 #define THIRTY_SECONDS_MS 30 * 1000
+#define TWO_SECONDS_MS 2 * 1000
 #define FIVE_SECONDS_MS 5 * 1000
+#define TEN_SECONDS_MS 10 * 1000
+#define MAX_INTERVAL INT32_MAX // FIXME: INT32_MAX to avoid overflow issues with Apple clients but should be UINT32_MAX
 
 #define min_default_telemetry_interval_secs 30 * 60
 #define default_gps_update_interval IF_ROUTER(ONE_DAY, 2 * 60)
@@ -20,11 +23,14 @@
 #define default_neighbor_info_broadcast_secs 6 * 60 * 60
 #define min_node_info_broadcast_secs 60 * 60 // No regular broadcasts of more than once an hour
 #define min_neighbor_info_broadcast_secs 4 * 60 * 60
+#define default_map_publish_interval_secs 60 * 60
 
 #define default_mqtt_address "mqtt.meshtastic.org"
 #define default_mqtt_username "meshdev"
 #define default_mqtt_password "large4cats"
 #define default_mqtt_root "msh"
+#define default_mqtt_encryption_enabled true
+#define default_mqtt_tls_enabled false
 
 #define IF_ROUTER(routerVal, normalVal)                                                                                          \
     ((config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER) ? (routerVal) : (normalVal))
@@ -57,12 +63,17 @@ class Default
                 throttlingFactor = 0.04;
             else if (config.lora.use_preset && config.lora.modem_preset == meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST)
                 throttlingFactor = 0.02;
-            else if (config.lora.use_preset && config.lora.modem_preset == meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW)
-                throttlingFactor = 0.01;
             else if (config.lora.use_preset &&
                      IS_ONE_OF(config.lora.modem_preset, meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST,
-                               meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO))
-                return 1.0; // Don't bother throttling for highest bandwidth presets
+                               meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO,
+                               meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW))
+                throttlingFactor = 0.01;
+
+#if USERPREFS_EVENT_MODE
+            // If we are in event mode, scale down the throttling factor
+            throttlingFactor = 0.04;
+#endif
+
             // Scaling up traffic based on number of nodes over 40
             int nodesOverForty = (numOnlineNodes - 40);
             return 1.0 + (nodesOverForty * throttlingFactor); // Each number of online node scales by 0.075 (default)

@@ -1,6 +1,9 @@
+#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+
 #include "./SSD16XX.h"
 
-#ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+#include "SPILock.h"
+
 using namespace NicheGraphics::Drivers;
 
 SSD16XX::SSD16XX(uint16_t width, uint16_t height, UpdateTypes supported, uint8_t bufferOffsetX)
@@ -82,6 +85,9 @@ void SSD16XX::sendCommand(const uint8_t command)
     if (failed)
         return;
 
+    // Take firmware's SPI lock
+    spiLock->lock();
+
     spi->beginTransaction(spiSettings);
     digitalWrite(pin_dc, LOW); // DC pin low indicates command
     digitalWrite(pin_cs, LOW);
@@ -89,6 +95,8 @@ void SSD16XX::sendCommand(const uint8_t command)
     digitalWrite(pin_cs, HIGH);
     digitalWrite(pin_dc, HIGH);
     spi->endTransaction();
+
+    spiLock->unlock();
 }
 
 void SSD16XX::sendData(uint8_t data)
@@ -102,6 +110,9 @@ void SSD16XX::sendData(const uint8_t *data, uint32_t size)
     // This will unlock again once we have failed-through the entire process
     if (failed)
         return;
+
+    // Take firmware's SPI lock
+    spiLock->lock();
 
     spi->beginTransaction(spiSettings);
     digitalWrite(pin_dc, HIGH); // DC pin HIGH indicates data, instead of command
@@ -119,6 +130,8 @@ void SSD16XX::sendData(const uint8_t *data, uint32_t size)
     digitalWrite(pin_cs, HIGH);
     digitalWrite(pin_dc, HIGH);
     spi->endTransaction();
+
+    spiLock->unlock();
 }
 
 void SSD16XX::configFullscreen()

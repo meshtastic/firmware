@@ -1,6 +1,6 @@
 #include "configuration.h"
 
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && __has_include("Adafruit_PM25AQI.h")
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "AirQualityTelemetry.h"
@@ -23,6 +23,12 @@
 
 SCD4XSensor scd4xSensor;
 PMSA0031Sensor pmsa0031Sensor;
+#ifndef PMSA003I_WARMUP_MS
+// from the PMSA003I datasheet:
+// "Stable data should be got at least 30 seconds after the sensor wakeup
+// from the sleep mode because of the fan’s performance."
+#define PMSA003I_WARMUP_MS 30000
+#endif
 
 int32_t AirQualityTelemetryModule::runOnce()
 {
@@ -53,7 +59,15 @@ int32_t AirQualityTelemetryModule::runOnce()
 
         if (moduleConfig.telemetry.air_quality_enabled) {
             LOG_INFO("Air quality Telemetry: init");
+         
+#ifdef PMSA003I_ENABLE_PIN
+            // put the sensor to sleep on startup
+            pinMode(PMSA003I_ENABLE_PIN, OUTPUT);
+            digitalWrite(PMSA003I_ENABLE_PIN, LOW);
+#endif /* PMSA003I_ENABLE_PIN */
             if (aqi_found.address == 0x00) {
+
+
 #ifndef I2C_NO_RESCAN
                 LOG_WARN("Rescan for I2C AQI Sensor");
                 // rescan for late arriving sensors. AQI Module starts about 10 seconds into the boot so this is plenty.
@@ -112,18 +126,43 @@ int32_t AirQualityTelemetryModule::runOnce()
         if (!moduleConfig.telemetry.air_quality_enabled)
             return disable();
 
-        if (((lastSentToMesh == 0) ||
-             !Throttle::isWithinTimespanMs(lastSentToMesh, Default::getConfiguredOrDefaultMsScaled(
-                                                               moduleConfig.telemetry.air_quality_interval,
-                                                               default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
-            airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
-            airTime->isTxAllowedAirUtil()) {
-            sendTelemetry();
-            lastSentToMesh = millis();
-        } else if (service->isToPhoneQueueEmpty()) {
-            // Just send to phone when it's not our time to send to mesh yet
-            // Only send while queue is empty (phone assumed connected)
-            sendTelemetry(NODENUM_BROADCAST, true);
+        switch (state) {
+#ifdef PMSA003I_ENABLE_PIN
+        case State::IDLE:
+            // sensor is in standby; fire it up and sleep
+            LOG_DEBUG("runOnce(): state = idle");
+            digitalWrite(PMSA003I_ENABLE_PIN, HIGH);
+            state = State::ACTIVE;
+
+            return PMSA003I_WARMUP_MS;
+#endif /* PMSA003I_ENABLE_PIN */
+        case State::ACTIVE:
+            // sensor is already warmed up; grab telemetry and send it
+            LOG_DEBUG("runOnce(): state = active");
+
+            if (((lastSentToMesh == 0) ||
+                 !Throttle::isWithinTimespanMs(lastSentToMesh, Default::getConfiguredOrDefaultMsScaled(
+                                                                   moduleConfig.telemetry.air_quality_interval,
+                                                                   default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
+                airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
+                airTime->isTxAllowedAirUtil()) {
+                sendTelemetry();
+                lastSentToMesh = millis();
+            } else if (service->isToPhoneQueueEmpty()) {
+                // Just send to phone when it's not our time to send to mesh yet
+                // Only send while queue is empty (phone assumed connected)
+                sendTelemetry(NODENUM_BROADCAST, true);
+            }
+
+#ifdef PMSA003I_ENABLE_PIN
+            // put sensor back to sleep
+            digitalWrite(PMSA003I_ENABLE_PIN, LOW);
+            state = State::IDLE;
+#endif /* PMSA003I_ENABLE_PIN */
+
+            return sendToPhoneIntervalMs;
+        default:
+            return disable();
         }
         return min(sendToPhoneIntervalMs, result);
     }

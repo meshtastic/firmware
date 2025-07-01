@@ -99,13 +99,30 @@ NRF52Bluetooth *nrf52Bluetooth = nullptr;
 #endif
 
 #if HAS_BUTTON || defined(ARCH_PORTDUINO)
-#include "ButtonThread.h"
+#include "input/ButtonThread.h"
+
+#if defined(BUTTON_PIN_TOUCH)
+ButtonThread *TouchButtonThread = nullptr;
+#endif
+
+#if defined(BUTTON_PIN) || defined(ARCH_PORTDUINO)
+ButtonThread *UserButtonThread = nullptr;
+#endif
+
+#if defined(ALT_BUTTON_PIN)
+ButtonThread *BackButtonThread = nullptr;
+#endif
+
+#if defined(CANCEL_BUTTON_PIN)
+ButtonThread *CancelButtonThread = nullptr;
+#endif
+
 #endif
 
 #include "AmbientLightingThread.h"
 #include "PowerFSMThread.h"
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
 #include "motion/AccelerometerThread.h"
 AccelerometerThread *accelerometerThread = nullptr;
 #endif
@@ -115,13 +132,17 @@ AccelerometerThread *accelerometerThread = nullptr;
 AudioThread *audioThread = nullptr;
 #endif
 
+#ifdef USE_PCA9557
+PCA9557 IOEXP;
+#endif
+
 #if HAS_TFT
 extern void tftSetup(void);
 #endif
 
 #ifdef HAS_UDP_MULTICAST
-#include "mesh/udp/UdpMulticastThread.h"
-UdpMulticastThread *udpThread = nullptr;
+#include "mesh/udp/UdpMulticastHandler.h"
+UdpMulticastHandler *udpHandler = nullptr;
 #endif
 
 #if defined(TCXO_OPTIONAL)
@@ -131,6 +152,10 @@ float tcxoVoltage = SX126X_DIO3_TCXO_VOLTAGE; // if TCXO is optional, put this h
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
 void setupNicheGraphics();
 #include "nicheGraphics.h"
+#endif
+
+#if defined(HW_SPI1_DEVICE) && defined(ARCH_ESP32)
+SPIClass SPI1(HSPI);
 #endif
 
 using namespace concurrency;
@@ -161,6 +186,8 @@ ScanI2C::DeviceAddress screen_found = ScanI2C::ADDRESS_NONE;
 ScanI2C::DeviceAddress cardkb_found = ScanI2C::ADDRESS_NONE;
 // 0x02 for RAK14004, 0x00 for cardkb, 0x10 for T-Deck
 uint8_t kb_model;
+// global bool to record that a kb is present
+bool kb_found = false;
 
 // The I2C address of the RTC Module (if found)
 ScanI2C::DeviceAddress rtc_found = ScanI2C::ADDRESS_NONE;
@@ -214,64 +241,6 @@ const char *getDeviceName()
     return name;
 }
 
-#if defined(ELECROW_ThinkNode_M1) || defined(ELECROW_ThinkNode_M2)
-static int32_t ledBlinkCount = 0;
-
-static int32_t elecrowLedBlinker()
-{
-    // are we in alert buzzer mode?
-#if HAS_BUTTON
-    if (buttonThread->isBuzzing()) {
-        // blink LED three times for 3 seconds, then 3 times for a second, with one second pause
-        if (ledBlinkCount % 2) { // odd means LED OFF
-            ledBlink.set(false);
-            ledBlinkCount++;
-            if (ledBlinkCount >= 12)
-                ledBlinkCount = 0;
-            noTone(PIN_BUZZER);
-            return 1000;
-        } else {
-            if (ledBlinkCount < 6) {
-                ledBlink.set(true);
-                tone(PIN_BUZZER, 4000, 3000);
-                ledBlinkCount++;
-                return 3000;
-            } else {
-                ledBlink.set(true);
-                tone(PIN_BUZZER, 4000, 1000);
-                ledBlinkCount++;
-                return 1000;
-            }
-        }
-    } else {
-#endif
-        ledBlinkCount = 0;
-        if (config.device.led_heartbeat_disabled)
-            return 1000;
-
-        static bool ledOn;
-        // remain on when fully charged or discharging above 10%
-        if ((powerStatus->getIsCharging() && powerStatus->getBatteryChargePercent() >= 100) ||
-            (!powerStatus->getIsCharging() && powerStatus->getBatteryChargePercent() >= 10)) {
-            ledOn = true;
-        } else {
-            ledOn ^= 1;
-        }
-        ledBlink.set(ledOn);
-        // when charging, blink 0.5Hz square wave rate to indicate that
-        if (powerStatus->getIsCharging()) {
-            return 500;
-        }
-        // Blink rapidly when almost empty or if battery is not connected
-        if ((!powerStatus->getIsCharging() && powerStatus->getBatteryChargePercent() < 10) || !powerStatus->getHasBattery()) {
-            return 250;
-        }
-#if HAS_BUTTON
-    }
-#endif
-    return 1000;
-}
-#else
 static int32_t ledBlinker()
 {
     // Still set up the blinking (heartbeat) interval but skip code path below, so LED will blink if
@@ -287,7 +256,6 @@ static int32_t ledBlinker()
     // have a very sparse duty cycle of LED being on, unless charging, then blink 0.5Hz square wave rate to indicate that
     return powerStatus->getIsCharging() ? 1000 : (ledOn ? 1 : 1000);
 }
-#endif
 
 uint32_t timeLastPowered = 0;
 
@@ -331,12 +299,22 @@ void setup()
 
 #ifdef LED_POWER
     pinMode(LED_POWER, OUTPUT);
-    digitalWrite(LED_POWER, HIGH);
+    digitalWrite(LED_POWER, LED_STATE_ON);
 #endif
 
 #ifdef USER_LED
     pinMode(USER_LED, OUTPUT);
-    digitalWrite(USER_LED, LOW);
+    digitalWrite(USER_LED, HIGH ^ LED_STATE_ON);
+#endif
+
+#ifdef WIFI_LED
+    pinMode(WIFI_LED, OUTPUT);
+    digitalWrite(WIFI_LED, LOW);
+#endif
+
+#ifdef BLE_LED
+    pinMode(BLE_LED, OUTPUT);
+    digitalWrite(BLE_LED, LOW);
 #endif
 
 #if defined(T_DECK)
@@ -457,6 +435,10 @@ void setup()
     gpio_pullup_en((gpio_num_t)(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN));
     delay(10);
 #endif
+#ifdef BUTTON_NEED_PULLUP2
+    gpio_pullup_en((gpio_num_t)BUTTON_NEED_PULLUP2);
+    delay(10);
+#endif
 #endif
 #endif
 #endif
@@ -467,25 +449,12 @@ void setup()
 
 #if defined(ELECROW_ThinkNode_M1) || defined(ELECROW_ThinkNode_M2)
     // The ThinkNodes have their own blink logic
-    ledPeriodic = new Periodic("Blink", elecrowLedBlinker);
+    // ledPeriodic = new Periodic("Blink", elecrowLedBlinker);
 #else
     ledPeriodic = new Periodic("Blink", ledBlinker);
 #endif
 
     fsInit();
-
-#if defined(_SEEED_XIAO_NRF52840_SENSE_H_)
-
-    pinMode(CHARGE_LED, INPUT); // sets to detect if charge LED is on or off to see if USB is plugged in
-
-    pinMode(HICHG, OUTPUT);
-    digitalWrite(HICHG, LOW); // 100 mA charging current if set to LOW and 50mA (actually about 20mA) if set to HIGH
-
-    pinMode(BAT_READ, OUTPUT);
-    digitalWrite(BAT_READ, LOW); // This is pin P0_14 = 14 and by pullling low to GND it provices path to read on pin 32 (P0,31)
-                                 // PIN_VBAT the voltage from divider on XIAO board
-
-#endif
 
 #if !MESHTASTIC_EXCLUDE_I2C
 #if defined(I2C_SDA1) && defined(ARCH_RP2040)
@@ -529,10 +498,6 @@ void setup()
     // RAK-12039 set pin for Air quality sensor. Detectable on I2C after ~3 seconds, so we need to rescan later
     pinMode(AQ_SET_PIN, OUTPUT);
     digitalWrite(AQ_SET_PIN, HIGH);
-#endif
-
-#if HAS_TFT
-    tftSetup();
 #endif
 
     // Currently only the tbeam has a PMU
@@ -616,13 +581,16 @@ void setup()
     }
 
 #define UPDATE_FROM_SCANNER(FIND_FN)
-
+#if defined(USE_VIRTUAL_KEYBOARD)
+    kb_found = true;
+#endif
     auto rtc_info = i2cScanner->firstRTC();
     rtc_found = rtc_info.type != ScanI2C::DeviceType::NONE ? rtc_info.address : rtc_found;
 
     auto kb_info = i2cScanner->firstKeyboard();
 
     if (kb_info.type != ScanI2C::DeviceType::NONE) {
+        kb_found = true;
         cardkb_found = kb_info.address;
         switch (kb_info.type) {
         case ScanI2C::DeviceType::RAK14004:
@@ -685,7 +653,7 @@ void setup()
     }
 #endif
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+#if !defined(ARCH_STM32WL)
     auto acc_info = i2cScanner->firstAccelerometer();
     accelerometer_found = acc_info.type != ScanI2C::DeviceType::NONE ? acc_info.address : accelerometer_found;
     LOG_DEBUG("acc_info = %i", acc_info.type);
@@ -726,6 +694,8 @@ void setup()
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::LTR390UV, meshtastic_TelemetrySensorType_LTR390UV);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::DPS310, meshtastic_TelemetrySensorType_DPS310);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::SCD4X, meshtastic_TelemetrySensorType_SCD4X);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::RAK12035, meshtastic_TelemetrySensorType_RAK12035);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::PCT2075, meshtastic_TelemetrySensorType_PCT2075);
 
     i2cScanner.reset();
 #endif
@@ -763,6 +733,12 @@ void setup()
     // but we need to do this after main cpu init (esp32setup), because we need the random seed set
     nodeDB = new NodeDB;
 
+#if HAS_TFT
+    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+        tftSetup();
+    }
+#endif
+
     // If we're taking on the repeater role, use NextHopRouter and turn off 3V3_S rail because peripherals are not needed
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
         router = new NextHopRouter();
@@ -771,11 +747,6 @@ void setup()
 #endif
     } else
         router = new ReliableRouter();
-
-#if HAS_BUTTON || defined(ARCH_PORTDUINO)
-    // Buttons. Moved here cause we need NodeDB to be initialized
-    buttonThread = new ButtonThread();
-#endif
 
     // only play start melody when role is not tracker or sensor
     if (config.power.is_power_saving == true &&
@@ -799,7 +770,7 @@ void setup()
 #endif
 
 #if !MESHTASTIC_EXCLUDE_I2C
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+#if !defined(ARCH_STM32WL)
     if (acc_info.type != ScanI2C::DeviceType::NONE) {
         accelerometerThread = new AccelerometerThread(acc_info.type);
     }
@@ -843,16 +814,37 @@ void setup()
 #elif !defined(ARCH_ESP32) // ARCH_RP2040
     SPI.begin();
 #else
-    // ESP32
+        // ESP32
+#if defined(HW_SPI1_DEVICE)
+    SPI1.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
+    LOG_DEBUG("SPI1.begin(SCK=%d, MISO=%d, MOSI=%d, NSS=%d)", LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
+    SPI1.setFrequency(4000000);
+#else
     SPI.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
     LOG_DEBUG("SPI.begin(SCK=%d, MISO=%d, MOSI=%d, NSS=%d)", LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
     SPI.setFrequency(4000000);
 #endif
+#endif
 
     // Initialize the screen first so we can show the logo while we start up everything else.
 #if HAS_SCREEN
-    screen = new graphics::Screen(screen_found, screen_model, screen_geometry);
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+
+#if defined(ST7701_CS) || defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) ||       \
+    defined(ST7789_CS) || defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS)
+        screen = new graphics::Screen(screen_found, screen_model, screen_geometry);
+#elif defined(ARCH_PORTDUINO)
+        if ((screen_found.port != ScanI2C::I2CPort::NO_I2C || settingsMap[displayPanel]) &&
+            config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+            screen = new graphics::Screen(screen_found, screen_model, screen_geometry);
+        }
+#else
+        if (screen_found.port != ScanI2C::I2CPort::NO_I2C)
+            screen = new graphics::Screen(screen_found, screen_model, screen_geometry);
 #endif
+    }
+#endif // HAS_SCREEN
+
     // setup TZ prior to time actions.
 #if !MESHTASTIC_EXCLUDE_TZ
     LOG_DEBUG("Use compiled/slipstreamed %s", slipstreamTZString); // important, removing this clobbers our magic string
@@ -904,20 +896,175 @@ void setup()
 
 #ifdef HAS_UDP_MULTICAST
     LOG_DEBUG("Start multicast thread");
-    udpThread = new UdpMulticastThread();
+    udpHandler = new UdpMulticastHandler();
 #ifdef ARCH_PORTDUINO
     // FIXME: portduino does not ever call onNetworkConnected so call it here because I don't know what happen if I call
     // onNetworkConnected there
     if (config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST) {
-        udpThread->start();
+        udpHandler->start();
     }
 #endif
 #endif
     service = new MeshService();
     service->init();
 
+    if (nodeDB->keyIsLowEntropy) {
+        service->reloadConfig(SEGMENT_CONFIG);
+        rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+    }
+
     // Now that the mesh service is created, create any modules
     setupModules();
+
+// buttons are now inputBroker, so have to come after setupModules
+#if HAS_BUTTON
+    int pullup_sense = 0;
+#ifdef INPUT_PULLUP_SENSE
+    // Some platforms (nrf52) have a SENSE variant which allows wake from sleep - override what OneButton did
+#ifdef BUTTON_SENSE_TYPE
+    pullup_sense = BUTTON_SENSE_TYPE;
+#else
+    pullup_sense = INPUT_PULLUP_SENSE;
+#endif
+#endif
+#if defined(ARCH_PORTDUINO)
+
+    if (settingsMap.count(userButtonPin) != 0 && settingsMap[userButtonPin] != RADIOLIB_NC) {
+
+        LOG_DEBUG("Use GPIO%02d for button", settingsMap[userButtonPin]);
+        UserButtonThread = new ButtonThread("UserButton");
+        if (screen) {
+            ButtonConfig config;
+            config.pinNumber = (uint8_t)settingsMap[userButtonPin];
+            config.activeLow = true;
+            config.activePullup = true;
+            config.pullupSense = INPUT_PULLUP;
+            config.intRoutine = []() {
+                UserButtonThread->userButton.tick();
+                runASAP = true;
+                BaseType_t higherWake = 0;
+                mainDelay.interruptFromISR(&higherWake);
+            };
+            config.singlePress = INPUT_BROKER_USER_PRESS;
+            config.longPress = INPUT_BROKER_SELECT;
+            UserButtonThread->initButton(config);
+        }
+    }
+#endif
+
+#ifdef BUTTON_PIN_TOUCH
+    TouchButtonThread = new ButtonThread("BackButton");
+    ButtonConfig touchConfig;
+    touchConfig.pinNumber = BUTTON_PIN_TOUCH;
+    touchConfig.activeLow = true;
+    touchConfig.activePullup = true;
+    touchConfig.pullupSense = pullup_sense;
+    touchConfig.intRoutine = []() {
+        TouchButtonThread->userButton.tick();
+        runASAP = true;
+        BaseType_t higherWake = 0;
+        mainDelay.interruptFromISR(&higherWake);
+    };
+    touchConfig.singlePress = INPUT_BROKER_NONE;
+    touchConfig.longPress = INPUT_BROKER_BACK;
+    TouchButtonThread->initButton(touchConfig);
+#endif
+
+#if defined(CANCEL_BUTTON_PIN)
+    // Buttons. Moved here cause we need NodeDB to be initialized
+    CancelButtonThread = new ButtonThread("CancelButton");
+    ButtonConfig cancelConfig;
+    cancelConfig.pinNumber = CANCEL_BUTTON_PIN;
+    cancelConfig.activeLow = CANCEL_BUTTON_ACTIVE_LOW;
+    cancelConfig.activePullup = CANCEL_BUTTON_ACTIVE_PULLUP;
+    cancelConfig.pullupSense = pullup_sense;
+    cancelConfig.intRoutine = []() {
+        CancelButtonThread->userButton.tick();
+        runASAP = true;
+        BaseType_t higherWake = 0;
+        mainDelay.interruptFromISR(&higherWake);
+    };
+    cancelConfig.singlePress = INPUT_BROKER_CANCEL;
+    cancelConfig.longPress = INPUT_BROKER_SHUTDOWN;
+    cancelConfig.longPressTime = 4000;
+    CancelButtonThread->initButton(cancelConfig);
+#endif
+
+#if defined(ALT_BUTTON_PIN)
+    // Buttons. Moved here cause we need NodeDB to be initialized
+    BackButtonThread = new ButtonThread("BackButton");
+    ButtonConfig backConfig;
+    backConfig.pinNumber = ALT_BUTTON_PIN;
+    backConfig.activeLow = ALT_BUTTON_ACTIVE_LOW;
+    backConfig.activePullup = ALT_BUTTON_ACTIVE_PULLUP;
+    backConfig.pullupSense = pullup_sense;
+    backConfig.intRoutine = []() {
+        BackButtonThread->userButton.tick();
+        runASAP = true;
+        BaseType_t higherWake = 0;
+        mainDelay.interruptFromISR(&higherWake);
+    };
+    backConfig.singlePress = INPUT_BROKER_ALT_PRESS;
+    backConfig.longPress = INPUT_BROKER_ALT_LONG;
+    backConfig.longPressTime = 500;
+    BackButtonThread->initButton(backConfig);
+#endif
+
+#if defined(BUTTON_PIN)
+#if defined(USERPREFS_BUTTON_PIN)
+    int _pinNum = config.device.button_gpio ? config.device.button_gpio : USERPREFS_BUTTON_PIN;
+#else
+    int _pinNum = config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN;
+#endif
+#ifndef BUTTON_ACTIVE_LOW
+#define BUTTON_ACTIVE_LOW true
+#endif
+#ifndef BUTTON_ACTIVE_PULLUP
+#define BUTTON_ACTIVE_PULLUP true
+#endif
+
+    // Buttons. Moved here cause we need NodeDB to be initialized
+    // If your variant.h has a BUTTON_PIN defined, go ahead and define BUTTON_ACTIVE_LOW and BUTTON_ACTIVE_PULLUP
+    UserButtonThread = new ButtonThread("UserButton");
+    if (screen) {
+        ButtonConfig userConfig;
+        userConfig.pinNumber = (uint8_t)_pinNum;
+        userConfig.activeLow = BUTTON_ACTIVE_LOW;
+        userConfig.activePullup = BUTTON_ACTIVE_PULLUP;
+        userConfig.pullupSense = pullup_sense;
+        userConfig.intRoutine = []() {
+            UserButtonThread->userButton.tick();
+            runASAP = true;
+            BaseType_t higherWake = 0;
+            mainDelay.interruptFromISR(&higherWake);
+        };
+        userConfig.singlePress = INPUT_BROKER_USER_PRESS;
+        userConfig.longPress = INPUT_BROKER_SELECT;
+        userConfig.longPressTime = 500;
+        userConfig.longLongPress = INPUT_BROKER_SHUTDOWN;
+        UserButtonThread->initButton(userConfig);
+    } else {
+        ButtonConfig userConfigNoScreen;
+        userConfigNoScreen.pinNumber = (uint8_t)_pinNum;
+        userConfigNoScreen.activeLow = BUTTON_ACTIVE_LOW;
+        userConfigNoScreen.activePullup = BUTTON_ACTIVE_PULLUP;
+        userConfigNoScreen.pullupSense = pullup_sense;
+        userConfigNoScreen.intRoutine = []() {
+            UserButtonThread->userButton.tick();
+            runASAP = true;
+            BaseType_t higherWake = 0;
+            mainDelay.interruptFromISR(&higherWake);
+        };
+        userConfigNoScreen.singlePress = INPUT_BROKER_USER_PRESS;
+        userConfigNoScreen.longPress = INPUT_BROKER_SHUTDOWN;
+        userConfigNoScreen.longPressTime = 5000;
+        userConfigNoScreen.doublePress = INPUT_BROKER_SEND_PING;
+        userConfigNoScreen.triplePress = INPUT_BROKER_GPS_TOGGLE;
+        UserButtonThread->initButton(userConfigNoScreen);
+    }
+#endif
+
+#endif
 
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
     // After modules are setup, so we can observe modules
@@ -940,19 +1087,19 @@ void setup()
 // Don't call screen setup until after nodedb is setup (because we need
 // the current region name)
 #if defined(ST7701_CS) || defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) ||       \
-    defined(ST7789_CS) || defined(HX8357_CS) || defined(USE_ST7789)
-    screen->setup();
+    defined(ST7789_CS) || defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS)
+    if (screen)
+        screen->setup();
 #elif defined(ARCH_PORTDUINO)
-    if (screen_found.port != ScanI2C::I2CPort::NO_I2C || settingsMap[displayPanel]) {
+    if ((screen_found.port != ScanI2C::I2CPort::NO_I2C || settingsMap[displayPanel]) &&
+        config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
         screen->setup();
     }
 #else
-    if (screen_found.port != ScanI2C::I2CPort::NO_I2C)
+    if (screen_found.port != ScanI2C::I2CPort::NO_I2C && screen)
         screen->setup();
 #endif
 #endif
-
-    screen->print("Started...\n");
 
 #ifdef PIN_PWR_DELAY_MS
     // This may be required to give the peripherals time to power up.
@@ -1212,9 +1359,12 @@ void setup()
         LOG_WARN("LoRa chip does not support 2.4GHz. Revert to unset");
         config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
         nodeDB->saveToDisk(SEGMENT_CONFIG);
+
         if (!rIf->reconfigure()) {
             LOG_WARN("Reconfigure failed, rebooting");
-            screen->startAlert("Rebooting...");
+            if (screen) {
+                screen->showOverlayBanner("Rebooting...");
+            }
             rebootAtMsec = millis() + 5000;
         }
     }
@@ -1287,6 +1437,7 @@ void setup()
     LOG_DEBUG("Free PSRAM : %7d bytes", ESP.getFreePsram());
 #endif
 }
+
 #endif
 uint32_t rebootAtMsec;   // If not zero we will reboot at this time (used to reboot shortly after the update completes)
 uint32_t shutdownAtMsec; // If not zero we will shutdown at this time (used to shutdown from python or mobile client)
@@ -1316,7 +1467,7 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_AUDIO_CONFIG;
 #endif
 // Option to explicitly include canned messages for edge cases, e.g. niche graphics
-#if (!HAS_SCREEN && NO_EXT_GPIO) && !MESHTASTIC_INCLUDE_CANNEDMSG
+#if ((!HAS_SCREEN || NO_EXT_GPIO) || MESHTASTIC_EXCLUDE_CANNEDMESSAGES) && !defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_CANNEDMSG_CONFIG;
 #endif
 #if NO_EXT_GPIO
@@ -1324,11 +1475,11 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 #endif
 // Only edge case here is if we apply this a device with built in Accelerometer and want to detect interrupts
 // We'll have to macro guard against those targets potentially
-#if NO_EXT_GPIO
+#if NO_EXT_GPIO || MESHTASTIC_EXCLUDE_DETECTIONSENSOR
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_DETECTIONSENSOR_CONFIG;
 #endif
-// If we don't have any GPIO and we don't have GPS, no purpose in having serial config
-#if NO_EXT_GPIO && NO_GPS
+// If we don't have any GPIO and we don't have GPS OR we don't want too - no purpose in having serial config
+#if NO_EXT_GPIO && NO_GPS || MESHTASTIC_EXCLUDE_SERIAL
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_SERIAL_CONFIG;
 #endif
 #ifndef ARCH_ESP32

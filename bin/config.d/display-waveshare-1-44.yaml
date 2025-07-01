@@ -1,0 +1,26 @@
+### Waveshare 1.44inch LCD HAT
+Display:
+  Panel: ST7735S
+  spidev: spidev0.0  # Specify either the spidev here, or the CS below
+#  CS: 8         #Chip Select # Optional, as this is the default pin for spidev0.0
+  DC: 25        # Data/Command pin
+  Backlight: 24
+  Width: 128
+  Height: 128
+  Reset: 27
+  OffsetX: 2
+  OffsetY: 1
+
+
+#  OffsetY: 31  # These two options are used to properly flip the screen 180 degrees
+#  OffsetRotate: 3
+
+
+Input:
+  TrackballUp: 6
+  TrackballDown: 19
+  TrackballLeft: 5
+  TrackballRight: 26
+  TrackballPress: 13
+
+#  User: 21

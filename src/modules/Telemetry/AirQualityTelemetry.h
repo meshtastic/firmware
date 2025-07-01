@@ -1,6 +1,6 @@
 #include "configuration.h"
 
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && __has_include("Adafruit_PM25AQI.h")
 
 #pragma once
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
@@ -23,6 +23,14 @@ class AirQualityTelemetryModule : private concurrency::OSThread, public Protobuf
         lastMeasurementPacket = nullptr;
         nodeStatusObserver.observe(&nodeStatus->onNewStatus);
         setIntervalFromNow(10 * 1000);
+
+#ifdef PMSA003I_ENABLE_PIN
+        // the PMSA003I sensor uses about 300mW on its own; support powering it off when it's not actively taking
+        // a reading
+        state = State::IDLE;
+#else
+        state = State::ACTIVE;
+#endif
     }
     virtual bool wantUIFrame() override;
 #if !HAS_SCREEN
@@ -48,6 +56,14 @@ class AirQualityTelemetryModule : private concurrency::OSThread, public Protobuf
     bool sendTelemetry(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
 
   private:
+    enum State {
+        IDLE = 0,
+        ACTIVE = 1,
+    };
+
+    State state;
+    Adafruit_PM25AQI aqi;
+    PM25_AQI_Data data = {0};
     bool firstTime = true;
     meshtastic_MeshPacket *lastMeasurementPacket;
     uint32_t sendToPhoneIntervalMs = SECONDS_IN_MINUTE * 1000; // Send to phone every minute

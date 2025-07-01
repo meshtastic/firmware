@@ -31,6 +31,7 @@ extern HardwareSPI *LoraSPI;
 extern ScanI2C::DeviceAddress screen_found;
 extern ScanI2C::DeviceAddress cardkb_found;
 extern uint8_t kb_model;
+extern bool kb_found;
 extern ScanI2C::DeviceAddress rtc_found;
 extern ScanI2C::DeviceAddress accelerometer_found;
 extern ScanI2C::FoundDevice rgb_found;
@@ -38,7 +39,6 @@ extern ScanI2C::DeviceAddress aqi_found;
 
 extern bool eink_found;
 extern bool pmu_found;
-extern bool isCharging;
 extern bool isUSBPowered;
 
 #ifdef T_WATCH_S3
@@ -52,14 +52,14 @@ extern AudioThread *audioThread;
 #endif
 
 #ifdef HAS_UDP_MULTICAST
-#include "mesh/udp/UdpMulticastThread.h"
-extern UdpMulticastThread *udpThread;
+#include "mesh/udp/UdpMulticastHandler.h"
+extern UdpMulticastHandler *udpHandler;
 #endif
 
 // Global Screen singleton.
 extern graphics::Screen *screen;
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
 #include "motion/AccelerometerThread.h"
 extern AccelerometerThread *accelerometerThread;
 #endif
