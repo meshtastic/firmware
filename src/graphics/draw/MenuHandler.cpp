@@ -579,7 +579,7 @@ void menuHandler::TFTColorPickerMenu(OLEDDisplay *display)
     bannerOptions.message = "Select Screen Color";
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 10;
-    bannerOptions.bannerCallback = [](int selected) -> void {
+    bannerOptions.bannerCallback = [display](int selected) -> void {
         if (selected == 1) {
             LOG_INFO("Setting color to system default or defined variant");
             // Insert unset protobuf code here
