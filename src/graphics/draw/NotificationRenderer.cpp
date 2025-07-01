@@ -407,7 +407,7 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
     // === Scroll Bar (Thicker, inside box, not over title) ===
     if (totalLines > visibleTotalLines) {
         const uint8_t scrollBarWidth = 5;
-        const uint8_t scrollPadding = 2;
+        // const uint8_t scrollPadding = 2;
 
         int16_t scrollBarX = boxLeft + boxWidth - scrollBarWidth - 2;
         int16_t scrollBarY = boxTop + vPadding + effectiveLineHeight; // start after title line
