@@ -188,7 +188,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define DFROBOT_LARK_ADDR 0x42
 #define DFROBOT_RAIN_ADDR 0x1d
 #define NAU7802_ADDR 0x2A
-#define SCD4X_ADDR 0x62
 #define MAX30102_ADDR 0x57
 #define SCD4X_ADDR 0x62
 #define MLX90614_ADDR_DEF 0x5A
