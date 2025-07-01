@@ -216,11 +216,7 @@ void setupModules()
 // TODO: How to improve this?
 #if HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
         new EnvironmentTelemetryModule();
-#if __has_include("Adafruit_PM25AQI.h")
-        if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_PMSA003I].first > 0) {
-            new AirQualityTelemetryModule();
-        }
-#endif
+        new AirQualityTelemetryModule();
 #if !MESHTASTIC_EXCLUDE_HEALTH_TELEMETRY
         if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_MAX30102].first > 0 ||
             nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_MLX90614].first > 0) {
