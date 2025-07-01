@@ -1430,6 +1430,9 @@ void setup()
     LOG_DEBUG("Free heap  : %7d bytes", ESP.getFreeHeap());
     LOG_DEBUG("Free PSRAM : %7d bytes", ESP.getFreePsram());
 #endif
+
+    // We manually run this to update the NodeStatus
+    nodeDB->notifyObservers(true);
 }
 
 #endif
