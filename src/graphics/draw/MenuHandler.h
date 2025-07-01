@@ -26,7 +26,7 @@ class menuHandler
     static screenMenus menuQueue;
 
     static void LoraRegionPicker(uint32_t duration = 30000);
-    static void handleMenuSwitch();
+    static void handleMenuSwitch(OLEDDisplay *display);
     static void clockMenu();
     static void TZPicker();
     static void TwelveHourPicker();
@@ -40,7 +40,7 @@ class menuHandler
     static void GPSToggleMenu();
     static void BuzzerModeMenu();
     static void switchToMUIMenu();
-    static void TFTColorPickerMenu();
+    static void TFTColorPickerMenu(OLEDDisplay *display);
     static void nodeListMenu();
     static void resetNodeDBMenu();
     static void rebootMenu();

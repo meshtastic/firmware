@@ -571,7 +571,7 @@ void menuHandler::switchToMUIMenu()
     screen->showOverlayBanner(bannerOptions);
 }
 
-void menuHandler::TFTColorPickerMenu()
+void menuHandler::TFTColorPickerMenu(OLEDDisplay *display)
 {
     static const char *optionsArray[] = {"Back", "Default", "Meshtastic Green", "Yellow", "Red", "Orange", "Purple", "Teal",
                                          "Pink", "White"};
@@ -674,7 +674,7 @@ void menuHandler::removeFavoriteMenu()
     screen->showOverlayBanner(bannerOptions);
 }
 
-void menuHandler::handleMenuSwitch()
+void menuHandler::handleMenuSwitch(OLEDDisplay *display)
 {
     switch (menuQueue) {
     case menu_none:
@@ -713,7 +713,7 @@ void menuHandler::handleMenuSwitch()
         switchToMUIMenu();
         break;
     case tftcolormenupicker:
-        TFTColorPickerMenu();
+        TFTColorPickerMenu(display);
         break;
     case reboot_menu:
         rebootMenu();

@@ -596,7 +596,7 @@ int32_t Screen::runOnce()
     if (displayHeight == 0) {
         displayHeight = dispdev->getHeight();
     }
-    menuHandler::handleMenuSwitch();
+    menuHandler::handleMenuSwitch(dispdev);
 
     // Show boot screen for first logo_timeout seconds, then switch to normal operation.
     // serialSinceMsec adjusts for additional serial wait time during nRF52 bootup
@@ -1262,7 +1262,7 @@ int Screen::handleInputEvent(const InputEvent *event)
         setFastFramerate(); // Draw ASAP
         ui->update();
 
-        menuHandler::handleMenuSwitch();
+        menuHandler::handleMenuSwitch(dispdev);
         return 0;
     }
     /*
