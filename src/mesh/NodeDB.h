@@ -191,6 +191,16 @@ class NodeDB
      */
     bool updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelIndex = 0);
 
+    /*
+     * Sets a node either favorite or unfavorite
+     */
+    void set_favorite(bool is_favorite, uint32_t nodeId);
+
+    /**
+     * Other functions like the node picker can request a pause in the node sorting
+     */
+    void pause_sort(bool paused);
+
     /// @return our node number
     NodeNum getNodeNum() { return myNodeInfo.my_node_num; }
 
@@ -282,6 +292,11 @@ class NodeDB
     uint32_t lastSort = 0;          // When last sorted the nodeDB
     /// Find a node in our DB, create an empty NodeInfoLite if missing
     meshtastic_NodeInfoLite *getOrCreateMeshNode(NodeNum n);
+
+    /*
+     * Internal boolean to track sorting paused
+     */
+    bool sortingIsPaused = false;
 
     /// pick a provisional nodenum we hope no one is using
     void pickNewNodeNum();

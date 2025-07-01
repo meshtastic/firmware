@@ -8,6 +8,7 @@
 #include "NodeDB.h"
 #include "buzz.h"
 #include "graphics/Screen.h"
+#include "graphics/SharedUIDisplay.h"
 #include "graphics/draw/UIRenderer.h"
 #include "main.h"
 #include "modules/AdminModule.h"
@@ -384,13 +385,13 @@ void menuHandler::favoriteBaseMenu()
     static const char **optionsArrayPtr;
 
     if (kb_found) {
-        static const char *optionsArray[] = {"Back", "New Preset Msg", "New Freetext Msg"};
+        static const char *optionsArray[] = {"Back", "New Preset Msg", "New Freetext Msg", "Remove Favorite"};
+        optionsArrayPtr = optionsArray;
+        options = 4;
+    } else {
+        static const char *optionsArray[] = {"Back", "New Preset Msg", "Remove Favorite"};
         optionsArrayPtr = optionsArray;
         options = 3;
-    } else {
-        static const char *optionsArray[] = {"Back", "New Preset Msg"};
-        optionsArrayPtr = optionsArray;
-        options = 2;
     }
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Favorites Action";
@@ -399,8 +400,12 @@ void menuHandler::favoriteBaseMenu()
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 1) {
             cannedMessageModule->LaunchWithDestination(graphics::UIRenderer::currentFavoriteNodeNum);
-        } else if (selected == 2) {
+        } else if (selected == 2 && kb_found) {
             cannedMessageModule->LaunchFreetextWithDestination(graphics::UIRenderer::currentFavoriteNodeNum);
+        } else if ((!kb_found && selected == 2) || (selected == 3 && kb_found)) {
+            menuHandler::menuQueue = menuHandler::remove_favorite;
+            screen->setInterval(0);
+            runASAP = true;
         }
     };
     screen->showOverlayBanner(bannerOptions);
@@ -438,13 +443,15 @@ void menuHandler::positionBaseMenu()
 
 void menuHandler::nodeListMenu()
 {
-    static const char *optionsArray[] = {"Back", "Reset NodeDB"};
+    static const char *optionsArray[] = {"Back", "Add Favorite", "Reset NodeDB"};
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Node Action";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 2;
+    bannerOptions.optionsCount = 3;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 1) {
+            menuQueue = add_favorite;
+        } else if (selected == 2) {
             menuQueue = reset_node_db_menu;
         }
     };
@@ -618,16 +625,47 @@ void menuHandler::TFTColorPickerMenu()
 
 void menuHandler::rebootMenu()
 {
-    static const char *optionsArray[] = {"Yes", "No"};
+    static const char *optionsArray[] = {"Back", "Confirm"};
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Reboot Device?";
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 2;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == 0) {
+        if (selected == 1) {
             IF_SCREEN(screen->showSimpleBanner("Rebooting...", 0));
             nodeDB->saveToDisk();
             rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::addFavoriteMenu()
+{
+    screen->showNodePicker("Node To Favorite", 30000, [](int nodenum) -> void {
+        LOG_WARN("Nodenum: %u", nodenum);
+        nodeDB->set_favorite(true, nodenum);
+        screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
+    });
+}
+
+void menuHandler::removeFavoriteMenu()
+{
+
+    static const char *optionsArray[] = {"Back", "Yes"};
+    BannerOverlayOptions bannerOptions;
+    std::string message = "Unfavorite This Node?\n";
+    auto node = nodeDB->getMeshNode(graphics::UIRenderer::currentFavoriteNodeNum);
+    if (node && node->has_user) {
+        message += sanitizeString(node->user.long_name).substr(0, 15);
+    }
+    bannerOptions.message = message.c_str();
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 2;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == 1) {
+            nodeDB->set_favorite(false, graphics::UIRenderer::currentFavoriteNodeNum);
+            screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
         }
     };
     screen->showOverlayBanner(bannerOptions);
@@ -676,6 +714,12 @@ void menuHandler::handleMenuSwitch()
         break;
     case reboot_menu:
         rebootMenu();
+        break;
+    case add_favorite:
+        addFavoriteMenu();
+        break;
+    case remove_favorite:
+        removeFavoriteMenu();
         break;
     }
     menuQueue = menu_none;

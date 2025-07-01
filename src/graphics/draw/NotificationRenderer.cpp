@@ -60,11 +60,125 @@ void NotificationRenderer::resetBanner()
 {
     alertBannerMessage[0] = '\0';
     current_notification_type = notificationTypeEnum::none;
+    nodeDB->pause_sort(false);
 }
 
 void NotificationRenderer::drawBannercallback(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
-    drawAlertBannerOverlay(display, state);
+    switch (current_notification_type) {
+    case notificationTypeEnum::text_banner:
+    case notificationTypeEnum::selection_picker:
+        drawAlertBannerOverlay(display, state);
+        break;
+    case notificationTypeEnum::node_picker:
+        drawNodePicker(display, state);
+        break;
+    }
+}
+
+void NotificationRenderer::drawNodePicker(OLEDDisplay *display, OLEDDisplayUiState *state)
+{
+    static uint32_t selectedNodenum = 0;
+
+    if (!isOverlayBannerShowing() || pauseBanner)
+        return;
+
+    // === Layout Configuration ===
+    constexpr uint16_t vPadding = 2;
+    alertBannerOptions = nodeDB->getNumMeshNodes() - 1;
+
+    // let the box drawing function calculate the widths?
+
+    const char *lineStarts[MAX_LINES + 1] = {0};
+    uint16_t lineCount = 0;
+
+    // Parse lines
+    char *alertEnd = alertBannerMessage + strnlen(alertBannerMessage, sizeof(alertBannerMessage));
+    lineStarts[lineCount] = alertBannerMessage;
+
+    while ((lineCount < MAX_LINES) && (lineStarts[lineCount] < alertEnd)) {
+        lineStarts[lineCount + 1] = std::find((char *)lineStarts[lineCount], alertEnd, '\n');
+        if (lineStarts[lineCount + 1][0] == '\n')
+            lineStarts[lineCount + 1] += 1;
+        lineCount++;
+    }
+
+    // Handle input
+    if (inEvent == INPUT_BROKER_UP || inEvent == INPUT_BROKER_ALT_PRESS) {
+        curSelected--;
+    } else if (inEvent == INPUT_BROKER_DOWN || inEvent == INPUT_BROKER_USER_PRESS) {
+        curSelected++;
+    } else if (inEvent == INPUT_BROKER_SELECT) {
+        resetBanner();
+        alertBannerCallback(selectedNodenum);
+
+    } else if ((inEvent == INPUT_BROKER_CANCEL || inEvent == INPUT_BROKER_ALT_LONG) && alertBannerUntil != 0) {
+        resetBanner();
+    }
+
+    if (curSelected == -1)
+        curSelected = alertBannerOptions - 1;
+    if (curSelected == alertBannerOptions)
+        curSelected = 0;
+
+    inEvent = INPUT_BROKER_NONE;
+    if (alertBannerMessage[0] == '\0')
+        return;
+
+    uint16_t totalLines = lineCount + alertBannerOptions;
+    uint16_t screenHeight = display->height();
+    uint8_t effectiveLineHeight = FONT_HEIGHT_SMALL - 3;
+    uint8_t visibleTotalLines = std::min<uint8_t>(totalLines, (screenHeight - vPadding * 2) / effectiveLineHeight);
+    uint8_t linesShown = lineCount;
+    const char *linePointers[visibleTotalLines + 1] = {0}; // this is sort of a dynamic allocation
+
+    // copy the linestarts to display to the linePointers holder
+    for (int i = 0; i < lineCount; i++) {
+        linePointers[i] = lineStarts[i];
+    }
+    char scratchLineBuffer[visibleTotalLines - lineCount][40];
+    LOG_WARN("Requestion %u buffers", visibleTotalLines - lineCount);
+
+    uint8_t firstOptionToShow = 0;
+    if (curSelected > 1 && alertBannerOptions > visibleTotalLines - lineCount) {
+        if (curSelected > alertBannerOptions - visibleTotalLines + lineCount)
+            firstOptionToShow = alertBannerOptions - visibleTotalLines + lineCount;
+        else
+            firstOptionToShow = curSelected - 1;
+    } else {
+        firstOptionToShow = 0;
+    }
+    int scratchLineNum = 0;
+    for (int i = firstOptionToShow; i < alertBannerOptions && linesShown < visibleTotalLines; i++, linesShown++) {
+        char temp_name[16] = {0};
+        if (nodeDB->getMeshNodeByIndex(i + 1)->has_user) {
+            std::string sanitized = sanitizeString(nodeDB->getMeshNodeByIndex(i + 1)->user.long_name);
+            strncpy(temp_name, sanitized.c_str(), sizeof(temp_name) - 1);
+
+        } else {
+            snprintf(temp_name, sizeof(temp_name), "(%04X)", (uint16_t)(nodeDB->getMeshNodeByIndex(i + 1)->num & 0xFFFF));
+        }
+        // make temp buffer for name
+        // fi
+        if (i == curSelected) {
+            selectedNodenum = nodeDB->getMeshNodeByIndex(i + 1)->num;
+            if (isHighResolution) {
+                strncpy(scratchLineBuffer[scratchLineNum], "> ", 3);
+                strncpy(scratchLineBuffer[scratchLineNum] + 2, temp_name, 36);
+                strncpy(scratchLineBuffer[scratchLineNum] + strlen(temp_name) + 2, " <", 3);
+            } else {
+                strncpy(scratchLineBuffer[scratchLineNum], ">", 2);
+                strncpy(scratchLineBuffer[scratchLineNum] + 1, temp_name, 37);
+                strncpy(scratchLineBuffer[scratchLineNum] + strlen(temp_name) + 1, "<", 2);
+            }
+            scratchLineBuffer[scratchLineNum][39] = '\0';
+        } else {
+            strncpy(scratchLineBuffer[scratchLineNum], temp_name, 36);
+        }
+        linePointers[linesShown] = scratchLineBuffer[scratchLineNum++];
+        LOG_WARN("Using buffer %u", scratchLineNum);
+    }
+    drawNotificationBox(display, state, linePointers, totalLines, firstOptionToShow);
 }
 
 void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
@@ -74,10 +188,6 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
 
     // === Layout Configuration ===
     constexpr uint16_t vPadding = 2;
-
-    // Setup font and alignment
-    display->setFont(FONT_SMALL);
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
 
     uint16_t optionWidths[alertBannerOptions] = {0};
     uint16_t maxWidth = 0;
@@ -191,6 +301,7 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
 void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplayUiState *state, const char *lines[],
                                                uint16_t totalLines, uint8_t firstOptionToShow, uint16_t maxWidth)
 {
+
     bool is_picker = false;
     uint16_t lineCount = 0;
     // === Layout Configuration ===
@@ -202,7 +313,10 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
 
     if (maxWidth != 0)
         is_picker = true;
-    // seelction box
+
+    // Setup font and alignment
+    display->setFont(FONT_SMALL);
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
 
     while (lines[lineCount] != nullptr) {
         auto newlinePointer = strchr(lines[lineCount], '\n');
