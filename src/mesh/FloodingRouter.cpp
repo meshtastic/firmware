@@ -72,10 +72,11 @@ void FloodingRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
 
                 tosend->hop_limit--; // bump down the hop count
 #if USERPREFS_EVENT_MODE
-                if (tosend->hop_limit > 2) {
+                // BURNING MESH!
+                if (tosend->hop_limit > 3) {
                     // if we are "correcting" the hop_limit, "correct" the hop_start by the same amount to preserve hops away.
-                    tosend->hop_start -= (tosend->hop_limit - 2);
-                    tosend->hop_limit = 2;
+                    tosend->hop_start -= (tosend->hop_limit - 3);
+                    tosend->hop_limit = 3;
                 }
 #endif
                 tosend->next_hop = NO_NEXT_HOP_PREFERENCE; // this should already be the case, but just in case
