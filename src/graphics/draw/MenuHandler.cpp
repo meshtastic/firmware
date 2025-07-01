@@ -339,15 +339,15 @@ void menuHandler::systemBaseMenu()
 {
     int options;
     static const char **optionsArrayPtr;
-#if HAS_TFT
-    static const char *optionsArray[] = {"Back", "Beeps Action", "Reboot", "Switch to MUI"};
-    options = 4;
+#if HAS_TFT && defined(T_DECK)
+    static const char *optionsArray[] = {"Back", "Beeps Action", "Reboot", "Screen Color", "Switch to MUI"};
+    options = 5;
 #endif
 #if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
     static const char *optionsArray[] = {"Back", "Beeps Action", "Reboot", "Screen Color"};
     options = 4;
 #endif
-#if !defined(HELTEC_MESH_NODE_T114) && !defined(HELTEC_VISION_MASTER_T190) && !HAS_TFT
+#if !defined(HELTEC_MESH_NODE_T114) && !defined(HELTEC_VISION_MASTER_T190) && !defined(T_DECK) && !HAS_TFT
     static const char *optionsArray[] = {"Back", "Beeps Action", "Reboot"};
     options = 3;
 #endif
@@ -366,12 +366,11 @@ void menuHandler::systemBaseMenu()
             screen->setInterval(0);
             runASAP = true;
         } else if (selected == 3) {
-#if HAS_TFT
-            menuHandler::menuQueue = menuHandler::mui_picker;
-#endif
-#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
             menuHandler::menuQueue = menuHandler::tftcolormenupicker;
-#endif
+            screen->setInterval(0);
+            runASAP = true;
+        } else if (selected == 4) {
+            menuHandler::menuQueue = menuHandler::mui_picker;
             screen->setInterval(0);
             runASAP = true;
         }
@@ -609,12 +608,14 @@ void menuHandler::TFTColorPickerMenu(OLEDDisplay *display)
             TFT_MESH = COLOR565(255, 255, 255);
         }
 
-#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
+#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || defined(T_DECK)
         if (selected != 0) {
             display->setColor(BLACK);
             display->fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
             display->setColor(WHITE);
+#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
             static_cast<ST7789Spi *>(screen->getDisplayDevice())->setRGB(TFT_MESH);
+#endif
 
             screen->setFrames(graphics::Screen::FOCUS_SYSTEM);
             // I think we need a saveToDisk to commit a protobuf change?
