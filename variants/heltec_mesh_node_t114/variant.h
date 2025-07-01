@@ -58,7 +58,7 @@ extern "C" {
 #define TFT_OFFSET_Y 0
 
 // T114 gets a muted yellow on black display
-#define TFT_MESH_OVERRIDE COLOR565(255, 255, 128)
+#define TFT_MESH_OVERRIDE COLOR565(255, 255, 255)
 
 // #define TFT_OFFSET_ROTATION 0
 // #define SCREEN_ROTATE

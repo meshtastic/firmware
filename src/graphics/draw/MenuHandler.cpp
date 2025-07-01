@@ -588,7 +588,7 @@ void menuHandler::TFTColorPickerMenu()
             TFT_MESH = COLOR565(0x67, 0xEA, 0x94);
         } else if (selected == 3) {
             LOG_INFO("Setting color to Yellow");
-            TFT_MESH = COLOR565(255, 255, 128);
+            TFT_MESH = COLOR565(255, 255, 102);
         } else if (selected == 4) {
             LOG_INFO("Setting color to Red");
             TFT_MESH = COLOR565(255, 64, 64);
