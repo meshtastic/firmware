@@ -625,7 +625,7 @@ void setup()
     pmu_found = i2cScanner->exists(ScanI2C::DeviceType::PMU_AXP192_AXP2101);
 
     auto aqiInfo = i2cScanner->firstAQI();
-    aqi_found = aqiInfo.type != ScanI2C::DeviceType::NONE ? screenInfo.address : ScanI2C::ADDRESS_NONE;
+    aqi_found = aqiInfo.type != ScanI2C::DeviceType::NONE ? aqiInfo.address : ScanI2C::ADDRESS_NONE;
 
 /*
  * There are a bunch of sensors that have no further logic than to be found and stuffed into the
