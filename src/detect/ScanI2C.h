@@ -127,6 +127,8 @@ class ScanI2C
 
     FoundDevice firstAccelerometer() const;
 
+    FoundDevice firstAQI() const;
+
     FoundDevice firstRGBLED() const;
 
     virtual FoundDevice find(DeviceType) const;
