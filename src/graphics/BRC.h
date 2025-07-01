@@ -14,9 +14,32 @@ const double BRC_NOON = 1.5;
 const double RAD_TO_HOUR = (6.0/3.14159);
 const double METER_TO_FEET = 3.28084;
 
+// Pre-calculated street data for performance
+struct StreetInfo {
+    float center;
+    float width;
+    const char* name;
+};
+
+static const StreetInfo streets[] = {
+    {2500, 50, "Esp"},
+    {2940, 220, "A"},
+    {2940+290, 145, "B"},
+    {2940+290*2, 145, "C"},
+    {2940+290*3, 145, "D"},
+    {2940+290*4, 145, "E"},
+    {2940+290*4+490, 245, "F"},
+    {2940+290*5+490, 145, "G"},
+    {2940+290*6+490, 145, "H"},
+    {2940+290*7+490, 145, "I"},
+    {2940+290*7+490+190, 95, "J"},
+    {2940+290*7+490+190*2, 95, "K"},
+    {2940+290*7+490+190*2+75, 0, nullptr}
+};
+
 static char* BRCAddress(int32_t lat, int32_t lon)
 {
-    static char addrStr[20];
+    thread_local static char addrStr[20];
 
     double unitMultiplier = 1.0 / METER_TO_FEET;
     const char* unit = "m";
@@ -39,28 +62,13 @@ static char* BRCAddress(int32_t lat, int32_t lon)
                 GeoCoord::latLongToMeter(BRC_LATF, BRC_LONF, DegD(lat), DegD(lon)) * METER_TO_FEET;
 
     if (bearingToMan > 1.75  && bearingToMan < 10.25) {
-        const char* street = NULL;
+        const char* street = nullptr;
         float dist = 0;
-        // tuple of center of street, width to count as on the street, street name
-        for (auto&& m : {
-                        std::tuple<const float, const float, const char*>{2500,50, "Esp"}, // Esp's center is 2500ft  from man, start showing Esp 50ft from center of street.
-                        std::tuple<const float, const float, const char*>{2940,220, "A"}, // Streets are 40ft wide; ESP to A is 400ft
-                        std::tuple<const float, const float, const char*>{2940+290,145, "B"}, // A->B is 250ft block + 40ft street
-                        std::tuple<const float, const float, const char*>{2940+290*2,145, "C"},
-                        std::tuple<const float, const float, const char*>{2940+290*3,145, "D"},
-                        std::tuple<const float, const float, const char*>{2940+290*4,145, "E"},
-                        std::tuple<const float, const float, const char*>{2940+290*4+490,245, "F"}, // E->F is 450ft
-                        std::tuple<const float, const float, const char*>{2940+290*5+490,145, "G"},
-                        std::tuple<const float, const float, const char*>{2940+290*6+490,145, "H"},
-                        std::tuple<const float, const float, const char*>{2940+290*7+490,145, "I"},
-                        std::tuple<const float, const float, const char*>{2940+290*7+490+190,95, "J"}, // I-J & J-K are 150ft
-                        std::tuple<const float, const float, const char*>{2940+290*7+490+190*2,95, "K"},
-                        std::tuple<const float, const float, const char*>{2940+290*7+490+190*2+75,0, 0} }) {
-            float c = std::get<0>(m);
-            float w = std::get<1>(m);
-            if (d > c-w) {
-                street = std::get<2>(m);
-                dist = d -c;
+        // Find the appropriate street based on distance
+        for (const auto& s : streets) {
+            if (d > s.center - s.width) {
+                street = s.name;
+                dist = d - s.center;
             } else {
                 break;
             }
