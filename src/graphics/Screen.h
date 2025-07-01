@@ -5,10 +5,25 @@
 #include "detect/ScanI2C.h"
 #include "mesh/generated/meshtastic/config.pb.h"
 #include <OLEDDisplay.h>
+#include <functional>
 #include <string>
 #include <vector>
 
 #define getStringCenteredX(s) ((SCREEN_WIDTH - display->getStringWidth(s)) / 2)
+namespace graphics
+{
+enum notificationTypeEnum { none, text_banner, selection_picker, node_picker, number_picker };
+
+struct BannerOverlayOptions {
+    const char *message;
+    uint32_t durationMs = 30000;
+    const char **optionsArrayPtr = nullptr;
+    uint8_t optionsCount = 0;
+    std::function<void(int)> bannerCallback = nullptr;
+    int8_t InitialSelected = 0;
+    notificationTypeEnum notificationType = notificationTypeEnum::text_banner;
+};
+} // namespace graphics
 
 #if !HAS_SCREEN
 #include "power.h"
@@ -40,10 +55,8 @@ class Screen
     void setFunctionSymbol(std::string) {}
     void removeFunctionSymbol(std::string) {}
     void startAlert(const char *) {}
-    void showOverlayBanner(const char *message, uint32_t durationMs = 3000, const char **optionsArrayPtr = nullptr,
-                           uint8_t options = 0, std::function<void(int)> bannerCallback = NULL, int8_t InitialSelected = 0)
-    {
-    }
+    void showSimpleBanner(const char *message, uint32_t durationMs = 0) {}
+    void showOverlayBanner(BannerOverlayOptions) {}
     void setFrames(FrameFocus focus) {}
     void endAlert() {}
 };
@@ -293,8 +306,8 @@ class Screen : public concurrency::OSThread
         enqueueCmd(cmd);
     }
 
-    void showOverlayBanner(const char *message, uint32_t durationMs = 3000, const char **optionsArrayPtr = nullptr,
-                           uint8_t options = 0, std::function<void(int)> bannerCallback = NULL, int8_t InitialSelected = 0);
+    void showSimpleBanner(const char *message, uint32_t durationMs = 0);
+    void showOverlayBanner(BannerOverlayOptions);
 
     void showNodePicker(const char *message, uint32_t durationMs, std::function<void(int)> bannerCallback);
 

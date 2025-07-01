@@ -46,47 +46,55 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
                                          "PH_868",
                                          "PH_915",
                                          "ANZ_433"};
-    screen->showOverlayBanner(
-        "Set the LoRa region", duration, optionsArray, 23,
-        [](int selected) -> void {
-            if (selected != 0 && config.lora.region != _meshtastic_Config_LoRaConfig_RegionCode(selected)) {
-                config.lora.region = _meshtastic_Config_LoRaConfig_RegionCode(selected);
-                // This is needed as we wait til picking the LoRa region to generate keys for the first time.
-                if (!owner.is_licensed) {
-                    bool keygenSuccess = false;
-                    if (config.security.private_key.size == 32) {
-                        // public key is derived from private, so this will always have the same result.
-                        if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
-                            keygenSuccess = true;
-                        }
-                    } else {
-                        LOG_INFO("Generate new PKI keys");
-                        crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Set the LoRa region";
+    bannerOptions.durationMs = duration;
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 23;
+    bannerOptions.InitialSelected = 0;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected != 0 && config.lora.region != _meshtastic_Config_LoRaConfig_RegionCode(selected)) {
+            config.lora.region = _meshtastic_Config_LoRaConfig_RegionCode(selected);
+            // This is needed as we wait til picking the LoRa region to generate keys for the first time.
+            if (!owner.is_licensed) {
+                bool keygenSuccess = false;
+                if (config.security.private_key.size == 32) {
+                    // public key is derived from private, so this will always have the same result.
+                    if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
                         keygenSuccess = true;
                     }
-                    if (keygenSuccess) {
-                        config.security.public_key.size = 32;
-                        config.security.private_key.size = 32;
-                        owner.public_key.size = 32;
-                        memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
-                    }
+                } else {
+                    LOG_INFO("Generate new PKI keys");
+                    crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
+                    keygenSuccess = true;
                 }
-                config.lora.tx_enabled = true;
-                initRegion();
-                if (myRegion->dutyCycle < 100) {
-                    config.lora.ignore_mqtt = true; // Ignore MQTT by default if region has a duty cycle limit
+                if (keygenSuccess) {
+                    config.security.public_key.size = 32;
+                    config.security.private_key.size = 32;
+                    owner.public_key.size = 32;
+                    memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
                 }
-                service->reloadConfig(SEGMENT_CONFIG);
-                rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
             }
-        },
-        0);
+            config.lora.tx_enabled = true;
+            initRegion();
+            if (myRegion->dutyCycle < 100) {
+                config.lora.ignore_mqtt = true; // Ignore MQTT by default if region has a duty cycle limit
+            }
+            service->reloadConfig(SEGMENT_CONFIG);
+            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
 }
 
 void menuHandler::TwelveHourPicker()
 {
     static const char *optionsArray[] = {"Back", "12-hour", "24-hour"};
-    screen->showOverlayBanner("Time Format", 30000, optionsArray, 3, [](int selected) -> void {
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Time Format";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 3;
+    bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 0) {
             menuHandler::menuQueue = menuHandler::clock_menu;
         } else if (selected == 1) {
@@ -95,13 +103,18 @@ void menuHandler::TwelveHourPicker()
             config.display.use_12h_clock = false;
         }
         service->reloadConfig(SEGMENT_CONFIG);
-    });
+    };
+    screen->showOverlayBanner(bannerOptions);
 }
 
 void menuHandler::ClockFacePicker()
 {
     static const char *optionsArray[] = {"Back", "Digital", "Analog"};
-    screen->showOverlayBanner("Which Face?", 30000, optionsArray, 3, [](int selected) -> void {
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Which Face?";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 3;
+    bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 0) {
             menuHandler::menuQueue = menuHandler::clock_menu;
         } else if (selected == 1) {
@@ -111,7 +124,8 @@ void menuHandler::ClockFacePicker()
             graphics::ClockRenderer::digitalWatchFace = false;
             screen->setFrames(Screen::FOCUS_CLOCK);
         }
-    });
+    };
+    screen->showOverlayBanner(bannerOptions);
 }
 
 void menuHandler::TZPicker()
@@ -135,7 +149,11 @@ void menuHandler::TZPicker()
                                          "AU/ACST",
                                          "AU/AEST",
                                          "Pacific/NZ"};
-    screen->showOverlayBanner("Pick Timezone", 30000, optionsArray, 17, [](int selected) -> void {
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Pick Timezone";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 17;
+    bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 0) {
             menuHandler::menuQueue = menuHandler::clock_menu;
         } else if (selected == 1) { // Hawaii
@@ -177,13 +195,18 @@ void menuHandler::TZPicker()
             setenv("TZ", config.device.tzdef, 1);
             service->reloadConfig(SEGMENT_CONFIG);
         }
-    });
+    };
+    screen->showOverlayBanner(bannerOptions);
 }
 
 void menuHandler::clockMenu()
 {
     static const char *optionsArray[] = {"Back", "Clock Face", "Time Format", "Timezone"};
-    screen->showOverlayBanner("Clock Action", 30000, optionsArray, 4, [](int selected) -> void {
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Clock Action";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 4;
+    bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 1) {
             menuHandler::menuQueue = menuHandler::clock_face_picker;
             screen->setInterval(0);
@@ -197,7 +220,8 @@ void menuHandler::clockMenu()
             screen->setInterval(0);
             runASAP = true;
         }
-    });
+    };
+    screen->showOverlayBanner(bannerOptions);
 }
 
 void menuHandler::messageResponseMenu()
@@ -219,7 +243,11 @@ void menuHandler::messageResponseMenu()
     optionsArrayPtr = optionsArray;
     options = 5;
 #endif
-    screen->showOverlayBanner("Message Action", 30000, optionsArrayPtr, options, [](int selected) -> void {
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Message Action";
+    bannerOptions.optionsArrayPtr = optionsArrayPtr;
+    bannerOptions.optionsCount = options;
+    bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 1) {
             screen->dismissCurrentFrame();
         } else if (selected == 2) {
@@ -243,7 +271,8 @@ void menuHandler::messageResponseMenu()
             audioThread->readAloud(msg);
         }
 #endif
-    });
+    };
+    screen->showOverlayBanner(bannerOptions);
 }
 
 void menuHandler::homeBaseMenu()
@@ -270,7 +299,11 @@ void menuHandler::homeBaseMenu()
         optionsArrayPtr = optionsArray;
         options = 5;
     }
-    screen->showOverlayBanner("Home Action", 30000, optionsArrayPtr, options, [](int selected) -> void {
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Home Action";
+    bannerOptions.optionsArrayPtr = optionsArrayPtr;
+    bannerOptions.optionsCount = options;
+    bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 1) {
 #ifdef PIN_EINK_EN
             if (digitalRead(PIN_EINK_EN) == HIGH) {
@@ -282,7 +315,7 @@ void menuHandler::homeBaseMenu()
             screen->setOn(false);
 #endif
         } else if (selected == 2) {
-            InputEvent event = {.inputEvent = (input_broker_event)175, .kbchar = 175, .touchX = 0, .touchY = 0};
+            InputEvent event = {.inputEvent = (input_broker_event)INPUT_BROKER_SEND_PING, .kbchar = 0, .touchX = 0, .touchY = 0};
             inputBroker->injectInputEvent(&event);
         } else if (selected == 3) {
             cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST);
@@ -297,7 +330,8 @@ void menuHandler::homeBaseMenu()
             InputEvent event = {.inputEvent = (input_broker_event)170, .kbchar = 170, .touchX = 0, .touchY = 0};
             inputBroker->injectInputEvent(&event);
         }
-    });
+    };
+    screen->showOverlayBanner(bannerOptions);
 }
 
 void menuHandler::systemBaseMenu()
@@ -317,7 +351,11 @@ void menuHandler::systemBaseMenu()
     options = 3;
 #endif
     optionsArrayPtr = optionsArray;
-    screen->showOverlayBanner("System Action", 30000, optionsArrayPtr, options, [](int selected) -> void {
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "System Action";
+    bannerOptions.optionsArrayPtr = optionsArrayPtr;
+    bannerOptions.optionsCount = options;
+    bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 1) {
             menuHandler::menuQueue = menuHandler::buzzermodemenupicker;
             screen->setInterval(0);
@@ -336,7 +374,8 @@ void menuHandler::systemBaseMenu()
             screen->setInterval(0);
             runASAP = true;
         }
-    });
+    };
+    screen->showOverlayBanner(bannerOptions);
 }
 
 void menuHandler::favoriteBaseMenu()
@@ -353,13 +392,18 @@ void menuHandler::favoriteBaseMenu()
         optionsArrayPtr = optionsArray;
         options = 2;
     }
-    screen->showOverlayBanner("Favorites Action", 30000, optionsArrayPtr, options, [](int selected) -> void {
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Favorites Action";
+    bannerOptions.optionsArrayPtr = optionsArrayPtr;
+    bannerOptions.optionsCount = options;
+    bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 1) {
             cannedMessageModule->LaunchWithDestination(graphics::UIRenderer::currentFavoriteNodeNum);
         } else if (selected == 2) {
             cannedMessageModule->LaunchFreetextWithDestination(graphics::UIRenderer::currentFavoriteNodeNum);
         }
-    });
+    };
+    screen->showOverlayBanner(bannerOptions);
 }
 
 void menuHandler::positionBaseMenu()
@@ -376,7 +420,11 @@ void menuHandler::positionBaseMenu()
         optionsArrayPtr = optionsArray;
         options = 3;
     }
-    screen->showOverlayBanner("Position Action", 30000, optionsArrayPtr, options, [](int selected) -> void {
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Position Action";
+    bannerOptions.optionsArrayPtr = optionsArrayPtr;
+    bannerOptions.optionsCount = options;
+    bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 1) {
             menuQueue = gps_toggle_menu;
         } else if (selected == 2) {
@@ -384,36 +432,51 @@ void menuHandler::positionBaseMenu()
         } else if (selected == 3) {
             accelerometerThread->calibrate(30);
         }
-    });
+    };
+    screen->showOverlayBanner(bannerOptions);
 }
 
 void menuHandler::nodeListMenu()
 {
     static const char *optionsArray[] = {"Back", "Reset NodeDB"};
-    screen->showOverlayBanner("Node Action", 30000, optionsArray, 2, [](int selected) -> void {
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Node Action";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 2;
+    bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 1) {
             menuQueue = reset_node_db_menu;
         }
-    });
+    };
+    screen->showOverlayBanner(bannerOptions);
 }
 
 void menuHandler::resetNodeDBMenu()
 {
     static const char *optionsArray[] = {"Back", "Confirm"};
-    screen->showOverlayBanner("Confirm Reset NodeDB", 30000, optionsArray, 2, [](int selected) -> void {
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Confirm Reset NodeDB";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 2;
+    bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 1) {
             disableBluetooth();
             LOG_INFO("Initiate node-db reset");
             nodeDB->resetNodes();
             rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
         }
-    });
+    };
+    screen->showOverlayBanner(bannerOptions);
 }
 
 void menuHandler::compassNorthMenu()
 {
     static const char *optionsArray[] = {"Back", "Dynamic", "Fixed Ring", "Freeze Heading"};
-    screen->showOverlayBanner("North Directions?", 30000, optionsArray, 4, [](int selected) -> void {
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "North Directions?";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 4;
+    bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 1) {
             if (config.display.compass_north_top != false) {
                 config.display.compass_north_top = false;
@@ -438,62 +501,78 @@ void menuHandler::compassNorthMenu()
         } else if (selected == 0) {
             menuQueue = position_base_menu;
         }
-    });
+    };
+    screen->showOverlayBanner(bannerOptions);
 }
 
 void menuHandler::GPSToggleMenu()
 {
     static const char *optionsArray[] = {"Back", "Enabled", "Disabled"};
-    screen->showOverlayBanner(
-        "Toggle GPS", 30000, optionsArray, 3,
-        [](int selected) -> void {
-            if (selected == 1) {
-                config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
-                playGPSEnableBeep();
-                gps->enable();
-                service->reloadConfig(SEGMENT_CONFIG);
-            } else if (selected == 2) {
-                config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_DISABLED;
-                playGPSDisableBeep();
-                gps->disable();
-                service->reloadConfig(SEGMENT_CONFIG);
-            } else {
-                menuQueue = position_base_menu;
-            }
-        },
-        config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED ? 1 : 2); // set inital selection
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Toggle GPS";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 3;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == 1) {
+            config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
+            playGPSEnableBeep();
+            gps->enable();
+            service->reloadConfig(SEGMENT_CONFIG);
+        } else if (selected == 2) {
+            config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_DISABLED;
+            playGPSDisableBeep();
+            gps->disable();
+            service->reloadConfig(SEGMENT_CONFIG);
+        } else {
+            menuQueue = position_base_menu;
+        }
+    };
+    bannerOptions.InitialSelected = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED ? 1 : 2;
+    screen->showOverlayBanner(bannerOptions);
 }
 
 void menuHandler::BuzzerModeMenu()
 {
     static const char *optionsArray[] = {"All Enabled", "Disabled", "Notifications", "System Only"};
-    screen->showOverlayBanner(
-        "Beep Action", 30000, optionsArray, 4,
-        [](int selected) -> void {
-            config.device.buzzer_mode = (meshtastic_Config_DeviceConfig_BuzzerMode)selected;
-            service->reloadConfig(SEGMENT_CONFIG);
-        },
-        config.device.buzzer_mode);
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Beep Action";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 4;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        config.device.buzzer_mode = (meshtastic_Config_DeviceConfig_BuzzerMode)selected;
+        service->reloadConfig(SEGMENT_CONFIG);
+    };
+    bannerOptions.InitialSelected = config.device.buzzer_mode;
+    screen->showOverlayBanner(bannerOptions);
 }
 
 void menuHandler::switchToMUIMenu()
 {
     static const char *optionsArray[] = {"Yes", "No"};
-    screen->showOverlayBanner("Switch to MUI?", 30000, optionsArray, 2, [](int selected) -> void {
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Switch to MUI?";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 2;
+    bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 0) {
             config.display.displaymode = meshtastic_Config_DisplayConfig_DisplayMode_COLOR;
             config.bluetooth.enabled = false;
             service->reloadConfig(SEGMENT_CONFIG);
             rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
         }
-    });
+    };
+    screen->showOverlayBanner(bannerOptions);
 }
 
 void menuHandler::TFTColorPickerMenu()
 {
     static const char *optionsArray[] = {"Back", "Default", "Meshtastic Green", "Yellow", "Red", "Orange", "Purple", "Teal",
                                          "Pink", "White"};
-    screen->showOverlayBanner("Select Screen Color", 30000, optionsArray, 10, [](int selected) -> void {
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Select Screen Color";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 10;
+    bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 1) {
             LOG_INFO("Setting color to system default or defined variant");
             // Insert unset protobuf code here
@@ -529,22 +608,29 @@ void menuHandler::TFTColorPickerMenu()
             static_cast<ST7789Spi *>(screen->getDisplayDevice())->setRGB(TFT_MESH);
             screen->setFrames(graphics::Screen::FOCUS_SYSTEM);
             // I think we need a saveToDisk to commit a protobuf change?
+            // There isn't a protobuf for this setting yet, so no save
             // nodeDB->saveToDisk(SEGMENT_CONFIG);
         }
 #endif
-    });
+    };
+    screen->showOverlayBanner(bannerOptions);
 }
 
 void menuHandler::rebootMenu()
 {
     static const char *optionsArray[] = {"Yes", "No"};
-    screen->showOverlayBanner("Reboot Device?", 30000, optionsArray, 2, [](int selected) -> void {
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Reboot Device?";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 2;
+    bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 0) {
-            IF_SCREEN(screen->showOverlayBanner("Rebooting...", 0));
+            IF_SCREEN(screen->showSimpleBanner("Rebooting...", 0));
             nodeDB->saveToDisk();
             rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
         }
-    });
+    };
+    screen->showOverlayBanner(bannerOptions);
 }
 
 void menuHandler::handleMenuSwitch()

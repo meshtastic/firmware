@@ -34,6 +34,7 @@ uint8_t NotificationRenderer::alertBannerOptions = 0; // last x lines are seelct
 const char **NotificationRenderer::optionsArrayPtr = nullptr;
 std::function<void(int)> NotificationRenderer::alertBannerCallback = NULL;
 bool NotificationRenderer::pauseBanner = false;
+notificationTypeEnum NotificationRenderer::current_notification_type = notificationTypeEnum::none;
 
 // Used on boot when a certificate is being created
 void NotificationRenderer::drawSSLScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -53,6 +54,17 @@ void NotificationRenderer::drawSSLScreen(OLEDDisplay *display, OLEDDisplayUiStat
     } else {
         display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, "Please wait . .  ");
     }
+}
+
+void NotificationRenderer::resetBanner()
+{
+    alertBannerMessage[0] = '\0';
+    current_notification_type = notificationTypeEnum::none;
+}
+
+void NotificationRenderer::drawBannercallback(OLEDDisplay *display, OLEDDisplayUiState *state)
+{
+    drawAlertBannerOverlay(display, state);
 }
 
 void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
@@ -108,9 +120,9 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
             curSelected++;
         } else if (inEvent == INPUT_BROKER_SELECT) {
             alertBannerCallback(curSelected);
-            alertBannerMessage[0] = '\0';
+            resetBanner();
         } else if ((inEvent == INPUT_BROKER_CANCEL || inEvent == INPUT_BROKER_ALT_LONG) && alertBannerUntil != 0) {
-            alertBannerMessage[0] = '\0';
+            resetBanner();
         }
 
         if (curSelected == -1)
@@ -119,7 +131,7 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
             curSelected = 0;
     } else {
         if (inEvent == INPUT_BROKER_SELECT || inEvent == INPUT_BROKER_ALT_LONG || inEvent == INPUT_BROKER_CANCEL) {
-            alertBannerMessage[0] = '\0';
+            resetBanner();
         }
     }
 

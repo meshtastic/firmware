@@ -1357,7 +1357,7 @@ void setup()
         if (!rIf->reconfigure()) {
             LOG_WARN("Reconfigure failed, rebooting");
             if (screen) {
-                screen->showOverlayBanner("Rebooting...");
+                screen->showSimpleBanner("Rebooting...");
             }
             rebootAtMsec = millis() + 5000;
         }

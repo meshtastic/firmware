@@ -137,23 +137,33 @@ extern bool hasUnreadMessage;
 // Displays a temporary centered banner message (e.g., warning, status, etc.)
 // The banner appears in the center of the screen and disappears after the specified duration
 
+void Screen::showSimpleBanner(const char *message, uint32_t durationMs)
+{
+    BannerOverlayOptions options;
+    options.message = message;
+    options.durationMs = durationMs;
+    options.notificationType = notificationTypeEnum::text_banner;
+    showOverlayBanner(options);
+}
+
 // Called to trigger a banner with custom message and duration
-void Screen::showOverlayBanner(const char *message, uint32_t durationMs, const char **optionsArrayPtr, uint8_t options,
-                               std::function<void(int)> bannerCallback, int8_t InitialSelected)
+void Screen::showOverlayBanner(BannerOverlayOptions banner_overlay_options)
 {
 #ifdef USE_EINK
     EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Skip full refresh for all overlay menus
 #endif
     // Store the message and set the expiration timestamp
-    strncpy(NotificationRenderer::alertBannerMessage, message, 255);
+    strncpy(NotificationRenderer::alertBannerMessage, banner_overlay_options.message, 255);
     NotificationRenderer::alertBannerMessage[255] = '\0'; // Ensure null termination
-    NotificationRenderer::alertBannerUntil = (durationMs == 0) ? 0 : millis() + durationMs;
-    NotificationRenderer::optionsArrayPtr = optionsArrayPtr;
-    NotificationRenderer::alertBannerOptions = options;
-    NotificationRenderer::alertBannerCallback = bannerCallback;
-    NotificationRenderer::curSelected = InitialSelected;
+    NotificationRenderer::alertBannerUntil =
+        (banner_overlay_options.durationMs == 0) ? 0 : millis() + banner_overlay_options.durationMs;
+    NotificationRenderer::optionsArrayPtr = banner_overlay_options.optionsArrayPtr;
+    NotificationRenderer::alertBannerOptions = banner_overlay_options.optionsCount;
+    NotificationRenderer::alertBannerCallback = banner_overlay_options.bannerCallback;
+    NotificationRenderer::curSelected = banner_overlay_options.InitialSelected;
     NotificationRenderer::pauseBanner = false;
-    static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawAlertBannerOverlay};
+    NotificationRenderer::current_notification_type = notificationTypeEnum::selection_picker;
+    static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
     ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
     setFastFramerate(); // Draw ASAP
     ui->update();
@@ -171,7 +181,9 @@ void Screen::showNodePicker(const char *message, uint32_t durationMs, std::funct
     NotificationRenderer::alertBannerUntil = (durationMs == 0) ? 0 : millis() + durationMs;
     NotificationRenderer::alertBannerCallback = bannerCallback;
     NotificationRenderer::pauseBanner = false;
-    static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawAlertBannerOverlay};
+    NotificationRenderer::current_notification_type = notificationTypeEnum::node_picker;
+
+    static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
     ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
     setFastFramerate(); // Draw ASAP
     ui->update();
@@ -615,7 +627,7 @@ int32_t Screen::runOnce()
     }
 #endif
     if (!NotificationRenderer::isOverlayBannerShowing() && rebootAtMsec != 0) {
-        showOverlayBanner("Rebooting...", 0);
+        showSimpleBanner("Rebooting...", 0);
     }
 
     // Process incoming commands.
@@ -929,7 +941,7 @@ void Screen::setFrames(FrameFocus focus)
     ui->disableAllIndicators();
 
     // Add overlays: frame icons and alert banner)
-    static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawAlertBannerOverlay};
+    static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
     ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
 
     prevFrame = -1; // Force drawNodeInfo to pick a new node (because our list
@@ -1203,7 +1215,7 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
                 }
             }
 
-            screen->showOverlayBanner(banner, 3000);
+            screen->showSimpleBanner(banner, 3000);
         }
     }
 
@@ -1243,8 +1255,7 @@ int Screen::handleInputEvent(const InputEvent *event)
 #endif
     if (NotificationRenderer::isOverlayBannerShowing()) {
         NotificationRenderer::inEvent = event->inputEvent;
-        static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar,
-                                             NotificationRenderer::drawAlertBannerOverlay};
+        static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
         ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
         setFastFramerate(); // Draw ASAP
         ui->update();
