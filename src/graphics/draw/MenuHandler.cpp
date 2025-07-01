@@ -611,8 +611,11 @@ void menuHandler::TFTColorPickerMenu()
 
 #if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
         if (selected != 0) {
-
+            display->setColor(BLACK);
+            display->fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+            display->setColor(WHITE);
             static_cast<ST7789Spi *>(screen->getDisplayDevice())->setRGB(TFT_MESH);
+
             screen->setFrames(graphics::Screen::FOCUS_SYSTEM);
             // I think we need a saveToDisk to commit a protobuf change?
             // There isn't a protobuf for this setting yet, so no save
