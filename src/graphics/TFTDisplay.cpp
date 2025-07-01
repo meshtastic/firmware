@@ -1,5 +1,6 @@
 #include "configuration.h"
 #include "main.h"
+
 #if ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
 #endif
@@ -14,10 +15,8 @@
 extern SX1509 gpioExtender;
 #endif
 
-#ifndef TFT_MESH
 // Legacy Color: 0x67, 0xEA, 0x94
 uint16_t TFT_MESH = COLOR565(255, 255, 128);
-#endif
 
 #if defined(ST7735S)
 #include <LovyanGFX.hpp> // Graphics and font library for ST7735 driver chip

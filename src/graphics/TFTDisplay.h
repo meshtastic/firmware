@@ -19,10 +19,9 @@ class TFTDisplay : public OLEDDisplay
     FIXME - the parameters are not used, just a temporary hack to keep working like the old displays
     */
     TFTDisplay(uint8_t, int, int, OLEDDISPLAY_GEOMETRY, HW_I2C);
-#ifndef TFT_MESH
+
     // Legacy Color: 0x67, 0xEA, 0x94
     uint16_t TFT_MESH = COLOR565(255, 255, 128);
-#endif
 
     // Write the buffer to the display memory
     virtual void display() override { display(false); };
