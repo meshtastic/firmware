@@ -18,32 +18,6 @@
 #include <RTC.h>
 #include <cstring>
 
-bool isAllowedPunctuation(char c)
-{
-    const std::string allowed = ".,!?;:-_()[]{}'\"@#$/\\&+=%~^ ";
-    return allowed.find(c) != std::string::npos;
-}
-
-std::string sanitizeString(const std::string &input)
-{
-    std::string output;
-    bool inReplacement = false;
-
-    for (char c : input) {
-        if (std::isalnum(static_cast<unsigned char>(c)) || isAllowedPunctuation(c)) {
-            output += c;
-            inReplacement = false;
-        } else {
-            if (!inReplacement) {
-                output += 0xbf; // ISO-8859-1 for inverted question mark
-                inReplacement = true;
-            }
-        }
-    }
-
-    return output;
-}
-
 #if !MESHTASTIC_EXCLUDE_GPS
 
 // External variables

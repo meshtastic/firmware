@@ -20,7 +20,9 @@ class menuHandler
         mui_picker,
         tftcolormenupicker,
         brightness_picker,
-        reboot_menu
+        reboot_menu,
+        add_favorite,
+        remove_favorite
     };
     static screenMenus menuQueue;
 
@@ -44,6 +46,8 @@ class menuHandler
     static void resetNodeDBMenu();
     static void BrightnessPickerMenu();
     static void rebootMenu();
+    static void addFavoriteMenu();
+    static void removeFavoriteMenu();
 };
 
 } // namespace graphics

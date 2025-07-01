@@ -1694,9 +1694,24 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
     }
 }
 
+void NodeDB::set_favorite(bool is_favorite, uint32_t nodeId)
+{
+    meshtastic_NodeInfoLite *lite = getMeshNode(nodeId);
+    if (lite && lite->is_favorite != is_favorite) {
+        lite->is_favorite = is_favorite;
+        sortMeshDB();
+        saveNodeDatabaseToDisk();
+    }
+}
+
+void NodeDB::pause_sort(bool paused)
+{
+    sortingIsPaused = paused;
+}
+
 void NodeDB::sortMeshDB()
 {
-    if (lastSort == 0 || !Throttle::isWithinTimespanMs(lastSort, 1000 * 5)) {
+    if (!sortingIsPaused && (lastSort == 0 || !Throttle::isWithinTimespanMs(lastSort, 1000 * 5))) {
         lastSort = millis();
         bool changed = true;
         while (changed) { // dumb reverse bubble sort, but probably not bad for what we're doing

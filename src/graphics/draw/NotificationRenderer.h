@@ -24,6 +24,7 @@ class NotificationRenderer
     static void resetBanner();
     static void drawBannercallback(OLEDDisplay *display, OLEDDisplayUiState *state);
     static void drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisplayUiState *state);
+    static void drawNodePicker(OLEDDisplay *display, OLEDDisplayUiState *state);
     static void drawNotificationBox(OLEDDisplay *display, OLEDDisplayUiState *state, const char *lines[MAX_LINES + 1],
                                     uint16_t totalLines, uint8_t firstOptionToShow, uint16_t maxWidth = 0);
 
