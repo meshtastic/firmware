@@ -61,6 +61,7 @@ class ScanI2C
         FT6336U,
         STK8BAXX,
         ICM20948,
+        SCD4X,
         MAX30102,
         TPS65233,
         MPR121KB,
