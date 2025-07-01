@@ -285,6 +285,14 @@ class NodeDB
     bool restorePreferences(meshtastic_AdminMessage_BackupLocation location,
                             int restoreWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
 
+    /// Notify observers of changes to the DB
+    void notifyObservers(bool forceUpdate = false)
+    {
+        // Notify observers of the current node state
+        const meshtastic::NodeStatus status = meshtastic::NodeStatus(getNumOnlineMeshNodes(), getNumMeshNodes(), forceUpdate);
+        newStatus.notifyObservers(&status);
+    }
+
   private:
     bool duplicateWarned = false;
     uint32_t lastNodeDbSave = 0;    // when we last saved our db to flash
@@ -300,14 +308,6 @@ class NodeDB
 
     /// pick a provisional nodenum we hope no one is using
     void pickNewNodeNum();
-
-    /// Notify observers of changes to the DB
-    void notifyObservers(bool forceUpdate = false)
-    {
-        // Notify observers of the current node state
-        const meshtastic::NodeStatus status = meshtastic::NodeStatus(getNumOnlineMeshNodes(), getNumMeshNodes(), forceUpdate);
-        newStatus.notifyObservers(&status);
-    }
 
     /// read our db from flash
     void loadFromDisk();

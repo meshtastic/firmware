@@ -195,6 +195,8 @@ ScanI2C::DeviceAddress rtc_found = ScanI2C::ADDRESS_NONE;
 ScanI2C::DeviceAddress accelerometer_found = ScanI2C::ADDRESS_NONE;
 // The I2C address of the RGB LED (if found)
 ScanI2C::FoundDevice rgb_found = ScanI2C::FoundDevice(ScanI2C::DeviceType::NONE, ScanI2C::ADDRESS_NONE);
+/// The I2C address of our Air Quality Indicator (if found)
+ScanI2C::DeviceAddress aqi_found = ScanI2C::ADDRESS_NONE;
 
 #ifdef T_WATCH_S3
 Adafruit_DRV2605 drv;
@@ -622,6 +624,9 @@ void setup()
 
     pmu_found = i2cScanner->exists(ScanI2C::DeviceType::PMU_AXP192_AXP2101);
 
+    auto aqiInfo = i2cScanner->firstAQI();
+    aqi_found = aqiInfo.type != ScanI2C::DeviceType::NONE ? aqiInfo.address : ScanI2C::ADDRESS_NONE;
+
 /*
  * There are a bunch of sensors that have no further logic than to be found and stuffed into the
  * nodeTelemetrySensorsMap singleton. This wraps that logic in a temporary scope to declare the temporary field
@@ -690,6 +695,7 @@ void setup()
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::DPS310, meshtastic_TelemetrySensorType_DPS310);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::RAK12035, meshtastic_TelemetrySensorType_RAK12035);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::PCT2075, meshtastic_TelemetrySensorType_PCT2075);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::SCD4X, meshtastic_TelemetrySensorType_SCD4X);
 
     i2cScanner.reset();
 #endif
@@ -1430,6 +1436,9 @@ void setup()
     LOG_DEBUG("Free heap  : %7d bytes", ESP.getFreeHeap());
     LOG_DEBUG("Free PSRAM : %7d bytes", ESP.getFreePsram());
 #endif
+
+    // We manually run this to update the NodeStatus
+    nodeDB->notifyObservers(true);
 }
 
 #endif

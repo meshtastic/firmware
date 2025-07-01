@@ -679,7 +679,7 @@ void menuHandler::switchToMUIMenu()
     screen->showOverlayBanner(bannerOptions);
 }
 
-void menuHandler::TFTColorPickerMenu()
+void menuHandler::TFTColorPickerMenu(OLEDDisplay *display)
 {
     static const char *optionsArray[] = {"Back", "Default", "Meshtastic Green", "Yellow", "Red", "Orange", "Purple", "Teal",
                                          "Pink", "White"};
@@ -687,7 +687,7 @@ void menuHandler::TFTColorPickerMenu()
     bannerOptions.message = "Select Screen Color";
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 10;
-    bannerOptions.bannerCallback = [](int selected) -> void {
+    bannerOptions.bannerCallback = [display](int selected) -> void {
         if (selected == 1) {
             LOG_INFO("Setting color to system default or defined variant");
             // Insert unset protobuf code here
@@ -719,8 +719,11 @@ void menuHandler::TFTColorPickerMenu()
 
 #if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
         if (selected != 0) {
-
+            display->setColor(BLACK);
+            display->fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+            display->setColor(WHITE);
             static_cast<ST7789Spi *>(screen->getDisplayDevice())->setRGB(TFT_MESH);
+
             screen->setFrames(graphics::Screen::FOCUS_SYSTEM);
             // I think we need a saveToDisk to commit a protobuf change?
             // There isn't a protobuf for this setting yet, so no save
@@ -779,7 +782,7 @@ void menuHandler::removeFavoriteMenu()
     screen->showOverlayBanner(bannerOptions);
 }
 
-void menuHandler::handleMenuSwitch()
+void menuHandler::handleMenuSwitch(OLEDDisplay *display)
 {
     switch (menuQueue) {
     case menu_none:
@@ -818,7 +821,7 @@ void menuHandler::handleMenuSwitch()
         switchToMUIMenu();
         break;
     case tftcolormenupicker:
-        TFTColorPickerMenu();
+        TFTColorPickerMenu(display);
         break;
     case brightness_picker:
         BrightnessPickerMenu();
