@@ -15,8 +15,11 @@
 extern SX1509 gpioExtender;
 #endif
 
-// Legacy Color: 0x67, 0xEA, 0x94
-uint16_t TFT_MESH = COLOR565(255, 255, 128);
+#ifdef TFT_MESH_OVERRIDE
+uint16_t TFT_MESH = TFT_MESH_OVERRIDE;
+#else
+uint16_t TFT_MESH = COLOR565(0x67, 0xEA, 0x94);
+#endif
 
 #if defined(ST7735S)
 #include <LovyanGFX.hpp> // Graphics and font library for ST7735 driver chip
