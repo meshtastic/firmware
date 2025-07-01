@@ -100,19 +100,23 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
     case INPUT_BROKER_SEND_PING:
         service->refreshLocalMeshNode();
         if (service->trySendPosition(NODENUM_BROADCAST, true)) {
-            IF_SCREEN(screen->showOverlayBanner("Position\nUpdate Sent", 3000));
+            IF_SCREEN(screen->showOverlayBanner("Position\nSent", 3000));
         } else {
-            IF_SCREEN(screen->showOverlayBanner("Node Info\nUpdate Sent", 3000));
+            IF_SCREEN(screen->showOverlayBanner("Node Info\nSent", 3000));
         }
         return true;
     // Power control
     case INPUT_BROKER_SHUTDOWN:
-        LOG_ERROR("Shutting down");
-        IF_SCREEN(screen->showOverlayBanner("Shutting down..."));
+        LOG_ERROR("Shutting Down");
+        IF_SCREEN(screen->showOverlayBanner("Shutting Down..."));
         nodeDB->saveToDisk();
         shutdownAtMsec = millis() + DEFAULT_SHUTDOWN_SECONDS * 1000;
         // runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         return true;
+
+    default:
+        // No other input events handled here
+        break;
     }
     return false;
 }

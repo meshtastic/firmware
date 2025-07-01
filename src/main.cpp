@@ -936,58 +936,81 @@ void setup()
 
         LOG_DEBUG("Use GPIO%02d for button", settingsMap[userButtonPin]);
         UserButtonThread = new ButtonThread("UserButton");
-        if (screen)
-            UserButtonThread->initButton(
-                settingsMap[userButtonPin], true, true, INPUT_PULLUP, // pull up bias
-                []() {
-                    UserButtonThread->userButton.tick();
-                    runASAP = true;
-                    BaseType_t higherWake = 0;
-                    mainDelay.interruptFromISR(&higherWake);
-                },
-                INPUT_BROKER_USER_PRESS, INPUT_BROKER_SELECT);
+        if (screen) {
+            ButtonConfig config;
+            config.pinNumber = (uint8_t)settingsMap[userButtonPin];
+            config.activeLow = true;
+            config.activePullup = true;
+            config.pullupSense = INPUT_PULLUP;
+            config.intRoutine = []() {
+                UserButtonThread->userButton.tick();
+                runASAP = true;
+                BaseType_t higherWake = 0;
+                mainDelay.interruptFromISR(&higherWake);
+            };
+            config.singlePress = INPUT_BROKER_USER_PRESS;
+            config.longPress = INPUT_BROKER_SELECT;
+            UserButtonThread->initButton(config);
+        }
     }
 #endif
 
 #ifdef BUTTON_PIN_TOUCH
     TouchButtonThread = new ButtonThread("BackButton");
-    TouchButtonThread->initButton(
-        BUTTON_PIN_TOUCH, true, true, pullup_sense,
-        []() {
-            TouchButtonThread->userButton.tick();
-            runASAP = true;
-            BaseType_t higherWake = 0;
-            mainDelay.interruptFromISR(&higherWake);
-        },
-        INPUT_BROKER_NONE, INPUT_BROKER_BACK);
+    ButtonConfig touchConfig;
+    touchConfig.pinNumber = BUTTON_PIN_TOUCH;
+    touchConfig.activeLow = true;
+    touchConfig.activePullup = true;
+    touchConfig.pullupSense = pullup_sense;
+    touchConfig.intRoutine = []() {
+        TouchButtonThread->userButton.tick();
+        runASAP = true;
+        BaseType_t higherWake = 0;
+        mainDelay.interruptFromISR(&higherWake);
+    };
+    touchConfig.singlePress = INPUT_BROKER_NONE;
+    touchConfig.longPress = INPUT_BROKER_BACK;
+    TouchButtonThread->initButton(touchConfig);
 #endif
 
 #if defined(CANCEL_BUTTON_PIN)
     // Buttons. Moved here cause we need NodeDB to be initialized
     CancelButtonThread = new ButtonThread("CancelButton");
-    CancelButtonThread->initButton(
-        CANCEL_BUTTON_PIN, CANCEL_BUTTON_ACTIVE_LOW, CANCEL_BUTTON_ACTIVE_PULLUP, pullup_sense,
-        []() {
-            CancelButtonThread->userButton.tick();
-            runASAP = true;
-            BaseType_t higherWake = 0;
-            mainDelay.interruptFromISR(&higherWake);
-        },
-        INPUT_BROKER_CANCEL, INPUT_BROKER_SHUTDOWN, 4000);
+    ButtonConfig cancelConfig;
+    cancelConfig.pinNumber = CANCEL_BUTTON_PIN;
+    cancelConfig.activeLow = CANCEL_BUTTON_ACTIVE_LOW;
+    cancelConfig.activePullup = CANCEL_BUTTON_ACTIVE_PULLUP;
+    cancelConfig.pullupSense = pullup_sense;
+    cancelConfig.intRoutine = []() {
+        CancelButtonThread->userButton.tick();
+        runASAP = true;
+        BaseType_t higherWake = 0;
+        mainDelay.interruptFromISR(&higherWake);
+    };
+    cancelConfig.singlePress = INPUT_BROKER_CANCEL;
+    cancelConfig.longPress = INPUT_BROKER_SHUTDOWN;
+    cancelConfig.longPressTime = 4000;
+    CancelButtonThread->initButton(cancelConfig);
 #endif
 
 #if defined(ALT_BUTTON_PIN)
     // Buttons. Moved here cause we need NodeDB to be initialized
     BackButtonThread = new ButtonThread("BackButton");
-    BackButtonThread->initButton(
-        ALT_BUTTON_PIN, ALT_BUTTON_ACTIVE_LOW, ALT_BUTTON_ACTIVE_PULLUP, pullup_sense,
-        []() {
-            BackButtonThread->userButton.tick();
-            runASAP = true;
-            BaseType_t higherWake = 0;
-            mainDelay.interruptFromISR(&higherWake);
-        },
-        INPUT_BROKER_ALT_PRESS, INPUT_BROKER_ALT_LONG, 500);
+    ButtonConfig backConfig;
+    backConfig.pinNumber = ALT_BUTTON_PIN;
+    backConfig.activeLow = ALT_BUTTON_ACTIVE_LOW;
+    backConfig.activePullup = ALT_BUTTON_ACTIVE_PULLUP;
+    backConfig.pullupSense = pullup_sense;
+    backConfig.intRoutine = []() {
+        BackButtonThread->userButton.tick();
+        runASAP = true;
+        BaseType_t higherWake = 0;
+        mainDelay.interruptFromISR(&higherWake);
+    };
+    backConfig.singlePress = INPUT_BROKER_ALT_PRESS;
+    backConfig.longPress = INPUT_BROKER_ALT_LONG;
+    backConfig.longPressTime = 500;
+    BackButtonThread->initButton(backConfig);
 #endif
 
 #if defined(BUTTON_PIN)
@@ -1006,26 +1029,42 @@ void setup()
     // Buttons. Moved here cause we need NodeDB to be initialized
     // If your variant.h has a BUTTON_PIN defined, go ahead and define BUTTON_ACTIVE_LOW and BUTTON_ACTIVE_PULLUP
     UserButtonThread = new ButtonThread("UserButton");
-    if (screen)
-        UserButtonThread->initButton(
-            _pinNum, BUTTON_ACTIVE_LOW, BUTTON_ACTIVE_PULLUP, pullup_sense,
-            []() {
-                UserButtonThread->userButton.tick();
-                runASAP = true;
-                BaseType_t higherWake = 0;
-                mainDelay.interruptFromISR(&higherWake);
-            },
-            INPUT_BROKER_USER_PRESS, INPUT_BROKER_SELECT, 500, INPUT_BROKER_NONE, INPUT_BROKER_SHUTDOWN);
-    else
-        UserButtonThread->initButton(
-            _pinNum, BUTTON_ACTIVE_LOW, BUTTON_ACTIVE_PULLUP, pullup_sense,
-            []() {
-                UserButtonThread->userButton.tick();
-                runASAP = true;
-                BaseType_t higherWake = 0;
-                mainDelay.interruptFromISR(&higherWake);
-            },
-            INPUT_BROKER_USER_PRESS, INPUT_BROKER_SHUTDOWN, 5000, INPUT_BROKER_SEND_PING, INPUT_BROKER_GPS_TOGGLE);
+    if (screen) {
+        ButtonConfig userConfig;
+        userConfig.pinNumber = (uint8_t)_pinNum;
+        userConfig.activeLow = BUTTON_ACTIVE_LOW;
+        userConfig.activePullup = BUTTON_ACTIVE_PULLUP;
+        userConfig.pullupSense = pullup_sense;
+        userConfig.intRoutine = []() {
+            UserButtonThread->userButton.tick();
+            runASAP = true;
+            BaseType_t higherWake = 0;
+            mainDelay.interruptFromISR(&higherWake);
+        };
+        userConfig.singlePress = INPUT_BROKER_USER_PRESS;
+        userConfig.longPress = INPUT_BROKER_SELECT;
+        userConfig.longPressTime = 500;
+        userConfig.longLongPress = INPUT_BROKER_SHUTDOWN;
+        UserButtonThread->initButton(userConfig);
+    } else {
+        ButtonConfig userConfigNoScreen;
+        userConfigNoScreen.pinNumber = (uint8_t)_pinNum;
+        userConfigNoScreen.activeLow = BUTTON_ACTIVE_LOW;
+        userConfigNoScreen.activePullup = BUTTON_ACTIVE_PULLUP;
+        userConfigNoScreen.pullupSense = pullup_sense;
+        userConfigNoScreen.intRoutine = []() {
+            UserButtonThread->userButton.tick();
+            runASAP = true;
+            BaseType_t higherWake = 0;
+            mainDelay.interruptFromISR(&higherWake);
+        };
+        userConfigNoScreen.singlePress = INPUT_BROKER_USER_PRESS;
+        userConfigNoScreen.longPress = INPUT_BROKER_SHUTDOWN;
+        userConfigNoScreen.longPressTime = 5000;
+        userConfigNoScreen.doublePress = INPUT_BROKER_SEND_PING;
+        userConfigNoScreen.triplePress = INPUT_BROKER_GPS_TOGGLE;
+        UserButtonThread->initButton(userConfigNoScreen);
+    }
 #endif
 
 #endif
@@ -1431,7 +1470,7 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_AUDIO_CONFIG;
 #endif
 // Option to explicitly include canned messages for edge cases, e.g. niche graphics
-#if (!HAS_SCREEN || NO_EXT_GPIO) || MESHTASTIC_EXCLUDE_CANNEDMESSAGES
+#if ((!HAS_SCREEN || NO_EXT_GPIO) || MESHTASTIC_EXCLUDE_CANNEDMESSAGES) && !defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_CANNEDMSG_CONFIG;
 #endif
 #if NO_EXT_GPIO
