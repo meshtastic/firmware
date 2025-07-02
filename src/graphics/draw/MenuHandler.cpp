@@ -579,33 +579,52 @@ void menuHandler::TFTColorPickerMenu(OLEDDisplay *display)
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 10;
     bannerOptions.bannerCallback = [display](int selected) -> void {
+        uint8_t r = 0;
+        uint8_t g = 0;
+        uint8_t b = 0;
         if (selected == 1) {
             LOG_INFO("Setting color to system default or defined variant");
-            // Insert unset protobuf code here
+            // Given just before we set all these to zero, we will allow this to go through
         } else if (selected == 2) {
             LOG_INFO("Setting color to Meshtastic Green");
-            TFT_MESH = COLOR565(0x67, 0xEA, 0x94);
+            r = 103;
+            g = 234;
+            b = 148;
         } else if (selected == 3) {
             LOG_INFO("Setting color to Yellow");
-            TFT_MESH = COLOR565(255, 255, 128);
+            r = 255;
+            g = 255;
+            b = 128;
         } else if (selected == 4) {
             LOG_INFO("Setting color to Red");
-            TFT_MESH = COLOR565(255, 64, 64);
+            r = 255;
+            g = 64;
+            b = 64;
         } else if (selected == 5) {
             LOG_INFO("Setting color to Orange");
-            TFT_MESH = COLOR565(255, 160, 20);
+            r = 255;
+            g = 160;
+            b = 20;
         } else if (selected == 6) {
             LOG_INFO("Setting color to Purple");
-            TFT_MESH = COLOR565(204, 153, 255);
+            r = 204;
+            g = 153;
+            b = 255;
         } else if (selected == 7) {
             LOG_INFO("Setting color to Teal");
-            TFT_MESH = COLOR565(64, 224, 208);
+            r = 64;
+            g = 224;
+            b = 208;
         } else if (selected == 8) {
             LOG_INFO("Setting color to Pink");
-            TFT_MESH = COLOR565(255, 105, 180);
+            r = 255;
+            g = 105;
+            b = 180;
         } else if (selected == 9) {
             LOG_INFO("Setting color to White");
-            TFT_MESH = COLOR565(255, 255, 255);
+            r = 255;
+            g = 255;
+            b = 255;
         }
 
 #if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || defined(T_DECK)
@@ -613,14 +632,29 @@ void menuHandler::TFTColorPickerMenu(OLEDDisplay *display)
             display->setColor(BLACK);
             display->fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
             display->setColor(WHITE);
+
+            if (r == 0 && g == 0 && b == 0) {
+#ifdef TFT_MESH_OVERRIDE
+                TFT_MESH = TFT_MESH_OVERRIDE;
+#else
+                TFT_MESH = COLOR565(0x67, 0xEA, 0x94);
+#endif
+            } else {
+                TFT_MESH = COLOR565(r, g, b);
+            }
+
 #if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
             static_cast<ST7789Spi *>(screen->getDisplayDevice())->setRGB(TFT_MESH);
 #endif
 
             screen->setFrames(graphics::Screen::FOCUS_SYSTEM);
-            // I think we need a saveToDisk to commit a protobuf change?
-            // There isn't a protobuf for this setting yet, so no save
-            // nodeDB->saveToDisk(SEGMENT_CONFIG);
+            if (r == 0 && g == 0 && b == 0) {
+                uiconfig.screen_rgb_color = 0;
+            } else {
+                uiconfig.screen_rgb_color = (r << 16) | (g << 8) | b;
+            }
+            LOG_INFO("Storing Value of %d to uiconfig.screen_rgb_color", uiconfig.screen_rgb_color);
+            nodeDB->saveProto("/prefs/uiconfig.proto", meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg, &uiconfig);
         }
 #endif
     };

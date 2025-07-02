@@ -264,6 +264,20 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
     : concurrency::OSThread("Screen"), address_found(address), model(screenType), geometry(geometry), cmdQueue(32)
 {
     graphics::normalFrames = new FrameCallback[MAX_NUM_NODES + NUM_EXTRA_FRAMES];
+
+    LOG_INFO("Protobuf Value uiconfig.screen_rgb_color: %d", uiconfig.screen_rgb_color);
+    int32_t rawRGB = uiconfig.screen_rgb_color;
+    if (rawRGB > 0 && rawRGB <= 255255255) {
+        uint8_t r = (rawRGB >> 16) & 0xFF;
+        uint8_t g = (rawRGB >> 8) & 0xFF;
+        uint8_t b = rawRGB & 0xFF;
+        LOG_INFO("Values of r,g,b: %d, %d, %d", r, g, b);
+
+        if (r <= 255 && g <= 255 && b <= 255) {
+            TFT_MESH = COLOR565(r, g, b);
+        }
+    }
+
 #if defined(USE_SH1106) || defined(USE_SH1107) || defined(USE_SH1107_128_64)
     dispdev = new SH1106Wire(address.address, -1, -1, geometry,
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
@@ -420,6 +434,7 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 
 void Screen::setup()
 {
+
     // === Enable display rendering ===
     useDisplay = true;
 
