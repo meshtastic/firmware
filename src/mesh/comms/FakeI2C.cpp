@@ -4,7 +4,7 @@
 
 #ifdef SENSECAP_INDICATOR
 
-FakeI2C *FakeWire;
+FakeI2C *FakeWire = new FakeI2C();
 
 void FakeI2C::begin() {}
 
