@@ -66,7 +66,6 @@ void setupNicheGraphics()
     inkhud->persistence->settings.optionalFeatures.batteryIcon = true; // Device definitely has a battery
     inkhud->persistence->settings.optionalMenuItems.backlight = true;  // Until proves capacitive button works by touching it
     inkhud->persistence->settings.userTiles.count = 1; // One tile only by default, keep things simple for new users
-    inkhud->persistence->settings.optionalMenuItems.nextTile = false; // Behavior handled by aux button instead
 
     // Setup backlight controller
     // Note: AUX button attached further down

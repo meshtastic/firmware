@@ -327,7 +327,11 @@ void menuHandler::positionBaseMenu()
     }
     screen->showOverlayBanner("Position Action", 30000, optionsArrayPtr, options, [](int selected) -> void {
         if (selected == 1) {
+#if MESHTASTIC_EXCLUDE_GPS
+            menuQueue = menu_none;
+#else
             menuQueue = gps_toggle_menu;
+#endif
         } else if (selected == 2) {
             menuQueue = compass_point_north_menu;
         } else if (selected == 3) {
@@ -390,6 +394,7 @@ void menuHandler::compassNorthMenu()
     });
 }
 
+#if !MESHTASTIC_EXCLUDE_GPS
 void menuHandler::GPSToggleMenu()
 {
     static const char *optionsArray[] = {"Back", "Enabled", "Disabled"};
@@ -412,6 +417,7 @@ void menuHandler::GPSToggleMenu()
         },
         config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED ? 1 : 2); // set inital selection
 }
+#endif
 
 void menuHandler::BuzzerModeMenu()
 {
@@ -461,9 +467,11 @@ void menuHandler::handleMenuSwitch()
     case position_base_menu:
         positionBaseMenu();
         break;
+#if !MESHTASTIC_EXCLUDE_GPS
     case gps_toggle_menu:
         GPSToggleMenu();
         break;
+#endif
     case compass_point_north_menu:
         compassNorthMenu();
         break;
