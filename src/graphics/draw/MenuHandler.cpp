@@ -644,7 +644,7 @@ void menuHandler::TFTColorPickerMenu(OLEDDisplay *display)
             TFT_MESH = COLOR565(255, 255, 255);
         }
 
-#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || defined(T_DECK)
+#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || HAS_TFT
         if (selected != 0) {
             display->setColor(BLACK);
             display->fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
@@ -736,7 +736,8 @@ void menuHandler::numberTest()
 
 void menuHandler::handleMenuSwitch(OLEDDisplay *display)
 {
-    test_count = 0;
+    if (menuQueue != menu_none)
+        test_count = 0;
     switch (menuQueue) {
     case menu_none:
         break;

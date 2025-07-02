@@ -109,7 +109,7 @@ void NotificationRenderer::drawNumberPicker(OLEDDisplay *display, OLEDDisplayUiS
         lineCount++;
     }
     // modulo to extract
-    uint8_t this_digit = (currentNumber % (pow_of_10(numDigits - curSelected))) / (10 ^ (numDigits - curSelected - 1));
+    uint8_t this_digit = (currentNumber % (pow_of_10(numDigits - curSelected))) / (pow_of_10(numDigits - curSelected - 1));
     // Handle input
     if (inEvent == INPUT_BROKER_UP || inEvent == INPUT_BROKER_ALT_PRESS) {
         if (this_digit == 9) {
