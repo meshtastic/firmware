@@ -310,6 +310,7 @@ class Screen : public concurrency::OSThread
     void showOverlayBanner(BannerOverlayOptions);
 
     void showNodePicker(const char *message, uint32_t durationMs, std::function<void(int)> bannerCallback);
+    void showNumberPicker(const char *message, uint32_t durationMs, uint8_t digits, std::function<void(uint32_t)> bannerCallback);
 
     void startFirmwareUpdateScreen()
     {

@@ -21,7 +21,9 @@ class menuHandler
         tftcolormenupicker,
         reboot_menu,
         add_favorite,
-        remove_favorite
+        remove_favorite,
+        test_menu,
+        number_test
     };
     static screenMenus menuQueue;
 
@@ -46,6 +48,8 @@ class menuHandler
     static void rebootMenu();
     static void addFavoriteMenu();
     static void removeFavoriteMenu();
+    static void testMenu();
+    static void numberTest();
 };
 
 } // namespace graphics

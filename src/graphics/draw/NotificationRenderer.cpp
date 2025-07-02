@@ -35,6 +35,17 @@ const char **NotificationRenderer::optionsArrayPtr = nullptr;
 std::function<void(int)> NotificationRenderer::alertBannerCallback = NULL;
 bool NotificationRenderer::pauseBanner = false;
 notificationTypeEnum NotificationRenderer::current_notification_type = notificationTypeEnum::none;
+uint32_t NotificationRenderer::numDigits = 0;
+uint32_t NotificationRenderer::currentNumber = 0;
+
+uint32_t pow_of_10(uint32_t n)
+{
+    uint32_t ret = 1;
+    for (int i = 0; i < n; i++) {
+        ret *= 10;
+    }
+    return ret;
+}
 
 // Used on boot when a certificate is being created
 void NotificationRenderer::drawSSLScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -65,6 +76,8 @@ void NotificationRenderer::resetBanner()
 
 void NotificationRenderer::drawBannercallback(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
+    if (!isOverlayBannerShowing() || pauseBanner)
+        return;
     switch (current_notification_type) {
     case notificationTypeEnum::text_banner:
     case notificationTypeEnum::selection_picker:
@@ -73,15 +86,87 @@ void NotificationRenderer::drawBannercallback(OLEDDisplay *display, OLEDDisplayU
     case notificationTypeEnum::node_picker:
         drawNodePicker(display, state);
         break;
+    case notificationTypeEnum::number_picker:
+        drawNumberPicker(display, state);
+        break;
     }
+}
+
+void NotificationRenderer::drawNumberPicker(OLEDDisplay *display, OLEDDisplayUiState *state)
+{
+    const char *lineStarts[MAX_LINES + 1] = {0};
+    uint16_t lineCount = 0;
+
+    // Parse lines
+    char *alertEnd = alertBannerMessage + strnlen(alertBannerMessage, sizeof(alertBannerMessage));
+    lineStarts[lineCount] = alertBannerMessage;
+
+    // Find lines
+    while ((lineCount < MAX_LINES) && (lineStarts[lineCount] < alertEnd)) {
+        lineStarts[lineCount + 1] = std::find((char *)lineStarts[lineCount], alertEnd, '\n');
+        if (lineStarts[lineCount + 1][0] == '\n')
+            lineStarts[lineCount + 1] += 1;
+        lineCount++;
+    }
+    // modulo to extract
+    uint8_t this_digit = (currentNumber % (pow_of_10(numDigits - curSelected))) / (10 ^ (numDigits - curSelected - 1));
+    // Handle input
+    if (inEvent == INPUT_BROKER_UP || inEvent == INPUT_BROKER_ALT_PRESS) {
+        if (this_digit == 9) {
+            currentNumber -= 9 * (pow_of_10(numDigits - curSelected - 1));
+        } else {
+            currentNumber += (pow_of_10(numDigits - curSelected - 1));
+        }
+    } else if (inEvent == INPUT_BROKER_DOWN || inEvent == INPUT_BROKER_USER_PRESS) {
+        if (this_digit == 0) {
+            currentNumber += 9 * (pow_of_10(numDigits - curSelected - 1));
+        } else {
+            currentNumber -= (pow_of_10(numDigits - curSelected - 1));
+        }
+    } else if (inEvent == INPUT_BROKER_SELECT || inEvent == INPUT_BROKER_RIGHT) {
+        curSelected++;
+    } else if (inEvent == INPUT_BROKER_SELECT || inEvent == INPUT_BROKER_LEFT) {
+        curSelected--;
+    } else if ((inEvent == INPUT_BROKER_CANCEL || inEvent == INPUT_BROKER_ALT_LONG) && alertBannerUntil != 0) {
+        resetBanner();
+    }
+    if (curSelected == numDigits) {
+        resetBanner();
+        alertBannerCallback(currentNumber);
+    }
+
+    inEvent = INPUT_BROKER_NONE;
+    if (alertBannerMessage[0] == '\0')
+        return;
+
+    uint16_t totalLines = lineCount + 2;
+    const char *linePointers[totalLines + 1] = {0}; // this is sort of a dynamic allocation
+
+    // copy the linestarts to display to the linePointers holder
+    for (int i = 0; i < lineCount; i++) {
+        linePointers[i] = lineStarts[i];
+    }
+    std::string digits = " ";
+    std::string arrowPointer = " ";
+    for (int i = 0; i < numDigits; i++) {
+        // Modulo minus modulo to return just the current number
+        digits += std::to_string((currentNumber % (pow_of_10(numDigits - i))) / (pow_of_10(numDigits - i - 1))) + " ";
+        if (curSelected == i) {
+            arrowPointer += "^ ";
+        } else {
+            arrowPointer += "_ ";
+        }
+    }
+
+    linePointers[lineCount++] = digits.c_str();
+    linePointers[lineCount++] = arrowPointer.c_str();
+
+    drawNotificationBox(display, state, linePointers, totalLines, 0);
 }
 
 void NotificationRenderer::drawNodePicker(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
     static uint32_t selectedNodenum = 0;
-
-    if (!isOverlayBannerShowing() || pauseBanner)
-        return;
 
     // === Layout Configuration ===
     constexpr uint16_t vPadding = 2;
@@ -137,7 +222,6 @@ void NotificationRenderer::drawNodePicker(OLEDDisplay *display, OLEDDisplayUiSta
         linePointers[i] = lineStarts[i];
     }
     char scratchLineBuffer[visibleTotalLines - lineCount][40];
-    LOG_WARN("Requestion %u buffers", visibleTotalLines - lineCount);
 
     uint8_t firstOptionToShow = 0;
     if (curSelected > 1 && alertBannerOptions > visibleTotalLines - lineCount) {
@@ -176,16 +260,12 @@ void NotificationRenderer::drawNodePicker(OLEDDisplay *display, OLEDDisplayUiSta
             strncpy(scratchLineBuffer[scratchLineNum], temp_name, 36);
         }
         linePointers[linesShown] = scratchLineBuffer[scratchLineNum++];
-        LOG_WARN("Using buffer %u", scratchLineNum);
     }
     drawNotificationBox(display, state, linePointers, totalLines, firstOptionToShow);
 }
 
 void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
-    if (!isOverlayBannerShowing() || pauseBanner)
-        return;
-
     // === Layout Configuration ===
     constexpr uint16_t vPadding = 2;
 
@@ -407,7 +487,6 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
     // === Scroll Bar (Thicker, inside box, not over title) ===
     if (totalLines > visibleTotalLines) {
         const uint8_t scrollBarWidth = 5;
-        const uint8_t scrollPadding = 2;
 
         int16_t scrollBarX = boxLeft + boxWidth - scrollBarWidth - 2;
         int16_t scrollBarY = boxTop + vPadding + effectiveLineHeight; // start after title line
