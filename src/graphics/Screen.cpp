@@ -165,7 +165,7 @@ void Screen::showOverlayBanner(BannerOverlayOptions banner_overlay_options)
     NotificationRenderer::current_notification_type = notificationTypeEnum::selection_picker;
     static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
     ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
-    setFastFramerate(); // Draw ASAP
+    ui->setTargetFPS(60);
     ui->update();
 }
 
@@ -187,7 +187,32 @@ void Screen::showNodePicker(const char *message, uint32_t durationMs, std::funct
 
     static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
     ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
-    setFastFramerate(); // Draw ASAP
+    ui->setTargetFPS(60);
+    ui->update();
+}
+
+// Called to trigger a banner with custom message and duration
+void Screen::showNumberPicker(const char *message, uint32_t durationMs, uint8_t digits,
+                              std::function<void(uint32_t)> bannerCallback)
+{
+    LOG_WARN("Show Number Picker");
+#ifdef USE_EINK
+    EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Skip full refresh for all overlay menus
+#endif
+    // Store the message and set the expiration timestamp
+    strncpy(NotificationRenderer::alertBannerMessage, message, 255);
+    NotificationRenderer::alertBannerMessage[255] = '\0'; // Ensure null termination
+    NotificationRenderer::alertBannerUntil = (durationMs == 0) ? 0 : millis() + durationMs;
+    NotificationRenderer::alertBannerCallback = bannerCallback;
+    NotificationRenderer::pauseBanner = false;
+    NotificationRenderer::curSelected = 0;
+    NotificationRenderer::current_notification_type = notificationTypeEnum::number_picker;
+    NotificationRenderer::numDigits = digits;
+    NotificationRenderer::currentNumber = 0;
+
+    static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
+    ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
+    ui->setTargetFPS(60);
     ui->update();
 }
 
@@ -264,6 +289,20 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
     : concurrency::OSThread("Screen"), address_found(address), model(screenType), geometry(geometry), cmdQueue(32)
 {
     graphics::normalFrames = new FrameCallback[MAX_NUM_NODES + NUM_EXTRA_FRAMES];
+
+    LOG_INFO("Protobuf Value uiconfig.screen_rgb_color: %d", uiconfig.screen_rgb_color);
+    int32_t rawRGB = uiconfig.screen_rgb_color;
+    if (rawRGB > 0 && rawRGB <= 255255255) {
+        uint8_t r = (rawRGB >> 16) & 0xFF;
+        uint8_t g = (rawRGB >> 8) & 0xFF;
+        uint8_t b = rawRGB & 0xFF;
+        LOG_INFO("Values of r,g,b: %d, %d, %d", r, g, b);
+
+        if (r <= 255 && g <= 255 && b <= 255) {
+            TFT_MESH = COLOR565(r, g, b);
+        }
+    }
+
 #if defined(USE_SH1106) || defined(USE_SH1107) || defined(USE_SH1107_128_64)
     dispdev = new SH1106Wire(address.address, -1, -1, geometry,
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
@@ -420,6 +459,7 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 
 void Screen::setup()
 {
+
     // === Enable display rendering ===
     useDisplay = true;
 
@@ -696,6 +736,8 @@ int32_t Screen::runOnce()
             EINK_ADD_FRAMEFLAG(dispdev, COSMETIC); // E-Ink: Explicitly use full-refresh for next frame
             setFrames();
             break;
+        case Cmd::NOOP:
+            break;
         default:
             LOG_ERROR("Invalid screen cmd");
         }
@@ -839,8 +881,8 @@ void Screen::setFrames(FrameFocus focus)
 
 #if defined(DISPLAY_CLOCK_FRAME)
     fsi.positions.clock = numframes;
-    normalFrames[numframes++] = graphics::ClockRenderer::digitalWatchFace ? graphics::ClockRenderer::drawDigitalClockFrame
-                                                                          : &graphics::ClockRenderer::drawAnalogClockFrame;
+    normalFrames[numframes++] = uiconfig.is_clockface_analog ? graphics::ClockRenderer::drawAnalogClockFrame
+                                                             : graphics::ClockRenderer::drawDigitalClockFrame;
     indicatorIcons.push_back(digital_icon_clock);
 #endif
 
@@ -896,8 +938,8 @@ void Screen::setFrames(FrameFocus focus)
     }
 #if !defined(DISPLAY_CLOCK_FRAME)
     fsi.positions.clock = numframes;
-    normalFrames[numframes++] = graphics::ClockRenderer::digitalWatchFace ? graphics::ClockRenderer::drawDigitalClockFrame
-                                                                          : graphics::ClockRenderer::drawAnalogClockFrame;
+    normalFrames[numframes++] = uiconfig.is_clockface_analog ? graphics::ClockRenderer::drawAnalogClockFrame
+                                                             : graphics::ClockRenderer::drawDigitalClockFrame;
     indicatorIcons.push_back(digital_icon_clock);
 #endif
 
@@ -1285,21 +1327,6 @@ int Screen::handleInputEvent(const InputEvent *event)
         menuHandler::handleMenuSwitch(dispdev);
         return 0;
     }
-    /*
-    #if defined(DISPLAY_CLOCK_FRAME)
-        // For the T-Watch, intercept touches to the 'toggle digital/analog watch face' button
-        uint8_t watchFaceFrame = error_code ? 1 : 0;
-
-        if (this->ui->getUiState()->currentFrame == watchFaceFrame && event->touchX >= 204 && event->touchX <= 240 &&
-            event->touchY >= 204 && event->touchY <= 240) {
-            screen->digitalWatchFace = !screen->digitalWatchFace;
-
-            setFrames();
-
-            return 0;
-        }
-    #endif
-    */
 
     // Use left or right input from a keyboard to move between frames,
     // so long as a mesh module isn't using these events for some other purpose

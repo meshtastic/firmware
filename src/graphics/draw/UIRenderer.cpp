@@ -18,21 +18,19 @@
 #include <RTC.h>
 #include <cstring>
 
-#if !MESHTASTIC_EXCLUDE_GPS
-
 // External variables
 extern graphics::Screen *screen;
 
 namespace graphics
 {
+NodeNum UIRenderer::currentFavoriteNodeNum = 0;
 
+#if !MESHTASTIC_EXCLUDE_GPS
 // GeoCoord object for coordinate conversions
 extern GeoCoord geoCoord;
 
 // Threshold values for the GPS lock accuracy bar display
 extern uint32_t dopThresholds[5];
-
-NodeNum UIRenderer::currentFavoriteNodeNum = 0;
 
 // Draw GPS status summary
 void UIRenderer::drawGps(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSStatus *gps)
@@ -162,6 +160,7 @@ void UIRenderer::drawGpsCoordinates(OLEDDisplay *display, int16_t x, int16_t y, 
         }
     }
 }
+#endif // !MESHTASTIC_EXCLUDE_GPS
 
 // Draw nodes status
 void UIRenderer::drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::NodeStatus *nodeStatus, int node_offset,
@@ -418,7 +417,7 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
                 GeoCoord::latLongToMeter(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
             */
             float bearing = GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(p.latitude_i), DegD(p.longitude_i));
-            if (screen->ignoreCompass) {
+            if (uiconfig.compass_mode == meshtastic_CompassMode_FREEZE_HEADING) {
                 myHeading = 0;
             } else {
                 bearing -= myHeading;
@@ -463,7 +462,7 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
 
             const auto &op = ourNode->position;
             float myHeading = 0;
-            if (!screen->ignoreCompass) {
+            if (uiconfig.compass_mode != meshtastic_CompassMode_FREEZE_HEADING) {
                 myHeading = screen->hasHeading() ? screen->getHeading() * PI / 180
                                                  : screen->estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
             }
@@ -475,7 +474,7 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
                 GeoCoord::latLongToMeter(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
             */
             float bearing = GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(p.latitude_i), DegD(p.longitude_i));
-            if (!screen->ignoreCompass)
+            if (uiconfig.compass_mode != meshtastic_CompassMode_FREEZE_HEADING)
                 bearing -= myHeading;
             graphics::CompassRenderer::drawNodeHeading(display, compassX, compassY, compassRadius * 2, bearing);
 
@@ -912,7 +911,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
     // === Determine Compass Heading ===
     float heading = 0;
     bool validHeading = false;
-    if (screen->ignoreCompass) {
+    if (uiconfig.compass_mode == meshtastic_CompassMode_FREEZE_HEADING) {
         validHeading = true;
     } else {
         if (screen->hasHeading()) {
@@ -978,7 +977,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
 
             // "N" label
             float northAngle = 0;
-            if (!config.display.compass_north_top)
+            if (uiconfig.compass_mode != meshtastic_CompassMode_FIXED_RING)
                 northAngle = -heading;
             float radius = compassRadius;
             int16_t nX = compassX + (radius - 1) * sin(northAngle);
@@ -1021,7 +1020,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
 
             // "N" label
             float northAngle = 0;
-            if (!config.display.compass_north_top)
+            if (uiconfig.compass_mode != meshtastic_CompassMode_FIXED_RING)
                 northAngle = -heading;
             float radius = compassRadius;
             int16_t nX = compassX + (radius - 1) * sin(northAngle);
@@ -1229,5 +1228,4 @@ std::string UIRenderer::drawTimeDelta(uint32_t days, uint32_t hours, uint32_t mi
 
 } // namespace graphics
 
-#endif // !MESHTASTIC_EXCLUDE_GPS
 #endif // HAS_SCREEN

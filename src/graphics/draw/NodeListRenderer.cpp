@@ -522,7 +522,7 @@ void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, 
     double lat = DegD(ourNode->position.latitude_i);
     double lon = DegD(ourNode->position.longitude_i);
 
-    if (!screen->ignoreCompass) {
+    if (uiconfig.compass_mode != meshtastic_CompassMode_FREEZE_HEADING) {
 #if HAS_GPS
         if (screen->hasHeading()) {
             heading = screen->getHeading(); // degrees

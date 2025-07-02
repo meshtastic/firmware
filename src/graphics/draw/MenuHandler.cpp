@@ -19,6 +19,8 @@ extern uint16_t TFT_MESH;
 namespace graphics
 {
 menuHandler::screenMenus menuHandler::menuQueue = menu_none;
+bool test_enabled = false;
+uint8_t test_count = 0;
 
 void menuHandler::LoraRegionPicker(uint32_t duration)
 {
@@ -98,6 +100,7 @@ void menuHandler::TwelveHourPicker()
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 0) {
             menuHandler::menuQueue = menuHandler::clock_menu;
+            screen->runNow();
         } else if (selected == 1) {
             config.display.use_12h_clock = true;
         } else {
@@ -118,11 +121,14 @@ void menuHandler::ClockFacePicker()
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 0) {
             menuHandler::menuQueue = menuHandler::clock_menu;
+            screen->runNow();
         } else if (selected == 1) {
-            graphics::ClockRenderer::digitalWatchFace = true;
+            uiconfig.is_clockface_analog = false;
+            nodeDB->saveProto("/prefs/uiconfig.proto", meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg, &uiconfig);
             screen->setFrames(Screen::FOCUS_CLOCK);
         } else {
-            graphics::ClockRenderer::digitalWatchFace = false;
+            uiconfig.is_clockface_analog = true;
+            nodeDB->saveProto("/prefs/uiconfig.proto", meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg, &uiconfig);
             screen->setFrames(Screen::FOCUS_CLOCK);
         }
     };
@@ -157,6 +163,7 @@ void menuHandler::TZPicker()
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 0) {
             menuHandler::menuQueue = menuHandler::clock_menu;
+            screen->runNow();
         } else if (selected == 1) { // Hawaii
             strncpy(config.device.tzdef, "HST10", sizeof(config.device.tzdef));
         } else if (selected == 2) { // Alaska
@@ -210,16 +217,13 @@ void menuHandler::clockMenu()
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 1) {
             menuHandler::menuQueue = menuHandler::clock_face_picker;
-            screen->setInterval(0);
-            runASAP = true;
+            screen->runNow();
         } else if (selected == 2) {
             menuHandler::menuQueue = menuHandler::twelve_hour_picker;
-            screen->setInterval(0);
-            runASAP = true;
+            screen->runNow();
         } else if (selected == 3) {
             menuHandler::menuQueue = menuHandler::TZ_picker;
-            screen->setInterval(0);
-            runASAP = true;
+            screen->runNow();
         }
     };
     screen->showOverlayBanner(bannerOptions);
@@ -339,6 +343,7 @@ void menuHandler::systemBaseMenu()
 {
     int options;
     static const char **optionsArrayPtr;
+    static const char *optionsArrayTest;
     
     // Check if brightness is supported
     bool hasSupportBrightness = false;
@@ -349,31 +354,43 @@ void menuHandler::systemBaseMenu()
     if (hasSupportBrightness) {
 #if HAS_TFT
         static const char *optionsArray[] = {"Back", "Beeps Action", "Brightness", "Reboot", "Switch to MUI"};
+        static const char *optionsArrayTestArray[] = {"Back", "Beeps Action", "Brightness", "Reboot", "Switch to MUI", "Test Menu"};
         options = 5;
-#endif
-#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
+#elif defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
         static const char *optionsArray[] = {"Back", "Beeps Action", "Brightness", "Reboot", "Screen Color"};
+        static const char *optionsArrayTestArray[] = {"Back", "Beeps Action", "Brightness", "Reboot", "Screen Color", "Test Menu"};
         options = 5;
-#endif
-#if !defined(HELTEC_MESH_NODE_T114) && !defined(HELTEC_VISION_MASTER_T190) && !HAS_TFT
+#else
         static const char *optionsArray[] = {"Back", "Beeps Action", "Brightness", "Reboot"};
+        static const char *optionsArrayTestArray[] = {"Back", "Beeps Action", "Brightness", "Reboot", "Test Menu"};
         options = 4;
 #endif
-        optionsArrayPtr = optionsArray;
+        if (test_enabled) {
+            optionsArrayPtr = optionsArrayTestArray;
+            options++;
+        } else {
+            optionsArrayPtr = optionsArray;
+        }
     } else {
 #if HAS_TFT
         static const char *optionsArray[] = {"Back", "Beeps Action", "Reboot", "Switch to MUI"};
+        static const char *optionsArrayTestArray[] = {"Back", "Beeps Action", "Reboot", "Switch to MUI", "Test Menu"};
         options = 4;
-#endif
-#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
+#elif defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
         static const char *optionsArray[] = {"Back", "Beeps Action", "Reboot", "Screen Color"};
+        static const char *optionsArrayTestArray[] = {"Back", "Beeps Action", "Reboot", "Screen Color", "Test Menu"};
         options = 4;
-#endif
-#if !defined(HELTEC_MESH_NODE_T114) && !defined(HELTEC_VISION_MASTER_T190) && !HAS_TFT
+#else
         static const char *optionsArray[] = {"Back", "Beeps Action", "Reboot"};
+        static const char *optionsArrayTestArray[] = {"Back", "Beeps Action", "Reboot", "Test Menu"};
         options = 3;
 #endif
-        optionsArrayPtr = optionsArray;
+        if (test_enabled) {
+            optionsArrayPtr = optionsArrayTestArray;
+            options++;
+        } else {
+            optionsArrayPtr = optionsArray;
+        }
     }
     
     BannerOverlayOptions bannerOptions;
@@ -381,55 +398,75 @@ void menuHandler::systemBaseMenu()
     bannerOptions.optionsArrayPtr = optionsArrayPtr;
     bannerOptions.optionsCount = options;
     bannerOptions.bannerCallback = [](int selected) -> void {
+        // Check if brightness is supported to determine the correct mapping
+        bool hasSupportBrightness = false;
+#if defined(ST7789_CS) || defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) || defined(USE_SH1107) || HAS_TFT
+        hasSupportBrightness = true;
+#endif
+
         if (selected == 1) {
             menuHandler::menuQueue = menuHandler::buzzermodemenupicker;
-            screen->setInterval(0);
-            runASAP = true;
+            screen->runNow();
         } else if (selected == 2) {
-            // Check if brightness is supported to determine the correct mapping
-            bool hasSupportBrightness = false;
-#if defined(ST7789_CS) || defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) || defined(USE_SH1107) || HAS_TFT
-            hasSupportBrightness = true;
-#endif
             if (hasSupportBrightness) {
                 menuHandler::menuQueue = menuHandler::brightness_picker;
-                screen->setInterval(0);
-                runASAP = true;
+                screen->runNow();
             } else {
                 menuHandler::menuQueue = menuHandler::reboot_menu;
-                screen->setInterval(0);
-                runASAP = true;
+                screen->runNow();
             }
         } else if (selected == 3) {
-            // Check if brightness is supported to determine the correct mapping
-            bool hasSupportBrightness = false;
-#if defined(ST7789_CS) || defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) || defined(USE_SH1107) || HAS_TFT
-            hasSupportBrightness = true;
-#endif
             if (hasSupportBrightness) {
                 menuHandler::menuQueue = menuHandler::reboot_menu;
-                screen->setInterval(0);
-                runASAP = true;
+                screen->runNow();
             } else {
 #if HAS_TFT
                 menuHandler::menuQueue = menuHandler::mui_picker;
-#endif
-#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
+                screen->runNow();
+#elif defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
                 menuHandler::menuQueue = menuHandler::tftcolormenupicker;
+                screen->runNow();
+#else
+                if (test_enabled) {
+                    menuHandler::menuQueue = menuHandler::test_menu;
+                    screen->runNow();
+                }
 #endif
-                screen->setInterval(0);
-                runASAP = true;
             }
         } else if (selected == 4) {
-            // This is only available when brightness is supported
+            if (hasSupportBrightness) {
 #if HAS_TFT
-            menuHandler::menuQueue = menuHandler::mui_picker;
+                menuHandler::menuQueue = menuHandler::mui_picker;
+                screen->runNow();
+#elif defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
+                menuHandler::menuQueue = menuHandler::tftcolormenupicker;
+                screen->runNow();
+#else
+                if (test_enabled) {
+                    menuHandler::menuQueue = menuHandler::test_menu;
+                    screen->runNow();
+                }
 #endif
-#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
-            menuHandler::menuQueue = menuHandler::tftcolormenupicker;
+            } else {
+#if HAS_TFT || defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
+                if (test_enabled) {
+                    menuHandler::menuQueue = menuHandler::test_menu;
+                    screen->runNow();
+                }
 #endif
-            screen->setInterval(0);
-            runASAP = true;
+            }
+        } else if (selected == 5) {
+            if (hasSupportBrightness && test_enabled) {
+                menuHandler::menuQueue = menuHandler::test_menu;
+                screen->runNow();
+            }
+        } else if (selected == 0) {
+            // Back button - do nothing, menu will close
+        } else if (!test_enabled) {
+            test_count++;
+            if (test_count > 4) {
+                test_enabled = true;
+            }
         }
     };
     screen->showOverlayBanner(bannerOptions);
@@ -460,8 +497,7 @@ void menuHandler::favoriteBaseMenu()
             cannedMessageModule->LaunchFreetextWithDestination(graphics::UIRenderer::currentFavoriteNodeNum);
         } else if ((!kb_found && selected == 2) || (selected == 3 && kb_found)) {
             menuHandler::menuQueue = menuHandler::remove_favorite;
-            screen->setInterval(0);
-            runASAP = true;
+            screen->runNow();
         }
     };
     screen->showOverlayBanner(bannerOptions);
@@ -487,9 +523,15 @@ void menuHandler::positionBaseMenu()
     bannerOptions.optionsCount = options;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 1) {
+#if MESHTASTIC_EXCLUDE_GPS
+            menuQueue = menu_none;
+#else
             menuQueue = gps_toggle_menu;
+            screen->runNow();
+#endif
         } else if (selected == 2) {
             menuQueue = compass_point_north_menu;
+            screen->runNow();
         } else if (selected == 3) {
             accelerometerThread->calibrate(30);
         }
@@ -507,8 +549,10 @@ void menuHandler::nodeListMenu()
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 1) {
             menuQueue = add_favorite;
+            screen->runNow();
         } else if (selected == 2) {
             menuQueue = reset_node_db_menu;
+            screen->runNow();
         }
     };
     screen->showOverlayBanner(bannerOptions);
@@ -539,35 +583,38 @@ void menuHandler::compassNorthMenu()
     bannerOptions.message = "North Directions?";
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 4;
+    bannerOptions.InitialSelected = uiconfig.compass_mode + 1;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 1) {
-            if (config.display.compass_north_top != false) {
-                config.display.compass_north_top = false;
-                service->reloadConfig(SEGMENT_CONFIG);
+            if (uiconfig.compass_mode != meshtastic_CompassMode_DYNAMIC) {
+                uiconfig.compass_mode = meshtastic_CompassMode_DYNAMIC;
+                nodeDB->saveProto("/prefs/uiconfig.proto", meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg,
+                                  &uiconfig);
+                screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
             }
-            screen->ignoreCompass = false;
-            screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
         } else if (selected == 2) {
-            if (config.display.compass_north_top != true) {
-                config.display.compass_north_top = true;
-                service->reloadConfig(SEGMENT_CONFIG);
+            if (uiconfig.compass_mode != meshtastic_CompassMode_FIXED_RING) {
+                uiconfig.compass_mode = meshtastic_CompassMode_FIXED_RING;
+                nodeDB->saveProto("/prefs/uiconfig.proto", meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg,
+                                  &uiconfig);
+                screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
             }
-            screen->ignoreCompass = false;
-            screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
         } else if (selected == 3) {
-            if (config.display.compass_north_top != true) {
-                config.display.compass_north_top = true;
-                service->reloadConfig(SEGMENT_CONFIG);
+            if (uiconfig.compass_mode != meshtastic_CompassMode_FREEZE_HEADING) {
+                uiconfig.compass_mode = meshtastic_CompassMode_FREEZE_HEADING;
+                nodeDB->saveProto("/prefs/uiconfig.proto", meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg,
+                                  &uiconfig);
+                screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
             }
-            screen->ignoreCompass = true;
-            screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
         } else if (selected == 0) {
             menuQueue = position_base_menu;
+            screen->runNow();
         }
     };
     screen->showOverlayBanner(bannerOptions);
 }
 
+#if !MESHTASTIC_EXCLUDE_GPS
 void menuHandler::GPSToggleMenu()
 {
     static const char *optionsArray[] = {"Back", "Enabled", "Disabled"};
@@ -588,11 +635,13 @@ void menuHandler::GPSToggleMenu()
             service->reloadConfig(SEGMENT_CONFIG);
         } else {
             menuQueue = position_base_menu;
+            screen->runNow();
         }
     };
     bannerOptions.InitialSelected = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED ? 1 : 2;
     screen->showOverlayBanner(bannerOptions);
 }
+#endif
 
 void menuHandler::BuzzerModeMenu()
 {
@@ -688,46 +737,82 @@ void menuHandler::TFTColorPickerMenu(OLEDDisplay *display)
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 10;
     bannerOptions.bannerCallback = [display](int selected) -> void {
+        uint8_t r = 0;
+        uint8_t g = 0;
+        uint8_t b = 0;
         if (selected == 1) {
             LOG_INFO("Setting color to system default or defined variant");
-            // Insert unset protobuf code here
+            // Given just before we set all these to zero, we will allow this to go through
         } else if (selected == 2) {
             LOG_INFO("Setting color to Meshtastic Green");
-            TFT_MESH = COLOR565(0x67, 0xEA, 0x94);
+            r = 103;
+            g = 234;
+            b = 148;
         } else if (selected == 3) {
             LOG_INFO("Setting color to Yellow");
-            TFT_MESH = COLOR565(255, 255, 128);
+            r = 255;
+            g = 255;
+            b = 128;
         } else if (selected == 4) {
             LOG_INFO("Setting color to Red");
-            TFT_MESH = COLOR565(255, 64, 64);
+            r = 255;
+            g = 64;
+            b = 64;
         } else if (selected == 5) {
             LOG_INFO("Setting color to Orange");
-            TFT_MESH = COLOR565(255, 160, 20);
+            r = 255;
+            g = 160;
+            b = 20;
         } else if (selected == 6) {
             LOG_INFO("Setting color to Purple");
-            TFT_MESH = COLOR565(204, 153, 255);
+            r = 204;
+            g = 153;
+            b = 255;
         } else if (selected == 7) {
             LOG_INFO("Setting color to Teal");
-            TFT_MESH = COLOR565(64, 224, 208);
+            r = 64;
+            g = 224;
+            b = 208;
         } else if (selected == 8) {
             LOG_INFO("Setting color to Pink");
-            TFT_MESH = COLOR565(255, 105, 180);
+            r = 255;
+            g = 105;
+            b = 180;
         } else if (selected == 9) {
             LOG_INFO("Setting color to White");
-            TFT_MESH = COLOR565(255, 255, 255);
+            r = 255;
+            g = 255;
+            b = 255;
         }
 
-#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
+#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || HAS_TFT
         if (selected != 0) {
             display->setColor(BLACK);
             display->fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
             display->setColor(WHITE);
+
+            if (r == 0 && g == 0 && b == 0) {
+#ifdef TFT_MESH_OVERRIDE
+                TFT_MESH = TFT_MESH_OVERRIDE;
+#else
+                TFT_MESH = COLOR565(0x67, 0xEA, 0x94);
+#endif
+            } else {
+                TFT_MESH = COLOR565(r, g, b);
+            }
+
+#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
             static_cast<ST7789Spi *>(screen->getDisplayDevice())->setRGB(TFT_MESH);
+#endif
 
             screen->setFrames(graphics::Screen::FOCUS_SYSTEM);
-            // I think we need a saveToDisk to commit a protobuf change?
-            // There isn't a protobuf for this setting yet, so no save
-            // nodeDB->saveToDisk(SEGMENT_CONFIG);
+            if (r == 0 && g == 0 && b == 0) {
+                uiconfig.screen_rgb_color = 0;
+            } else {
+                uiconfig.screen_rgb_color = (r << 16) | (g << 8) | b;
+            }
+            LOG_INFO("Storing Value of %d to uiconfig.screen_rgb_color", uiconfig.screen_rgb_color);
+            nodeDB->saveProto("/prefs/uiconfig.proto", meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg, &uiconfig);
         }
 #endif
     };
@@ -782,8 +867,34 @@ void menuHandler::removeFavoriteMenu()
     screen->showOverlayBanner(bannerOptions);
 }
 
+void menuHandler::testMenu()
+{
+
+    static const char *optionsArray[] = {"Back", "Number Picker"};
+    BannerOverlayOptions bannerOptions;
+    std::string message = "Test to Run?\n";
+    bannerOptions.message = message.c_str();
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 2;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == 1) {
+            menuQueue = number_test;
+            screen->runNow();
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::numberTest()
+{
+    screen->showNumberPicker("Pick a number\n ", 30000, 4,
+                             [](int number_picked) -> void { LOG_WARN("Nodenum: %u", number_picked); });
+}
+
 void menuHandler::handleMenuSwitch(OLEDDisplay *display)
 {
+    if (menuQueue != menu_none)
+        test_count = 0;
     switch (menuQueue) {
     case menu_none:
         break;
@@ -805,9 +916,11 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
     case position_base_menu:
         positionBaseMenu();
         break;
+#if !MESHTASTIC_EXCLUDE_GPS
     case gps_toggle_menu:
         GPSToggleMenu();
         break;
+#endif
     case compass_point_north_menu:
         compassNorthMenu();
         break;
@@ -834,6 +947,12 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case remove_favorite:
         removeFavoriteMenu();
+        break;
+    case test_menu:
+        testMenu();
+        break;
+    case number_test:
+        numberTest();
         break;
     }
     menuQueue = menu_none;
