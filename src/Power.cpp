@@ -125,6 +125,10 @@ RAK9154Sensor rak9154Sensor;
 #include <XPowersLib.h>
 #endif
 
+#ifdef HAS_BQ27220
+#include "BQ27220.h"
+#endif
+
 #ifdef HAS_PMU
 XPowersLibInterface *PMU = NULL;
 #else
@@ -1249,12 +1253,13 @@ bool Power::lipoInit()
 #if defined(HAS_PPM) && HAS_PPM
 
 /**
- * Adapter class for BQ25896 Lipo battery charger.
+ * Adapter class for BQ25896/BQ27220 Lipo battery charger.
  */
 class LipoCharger : public HasBatteryLevel
 {
   private:
     XPowersPPM *ppm = nullptr;
+    BQ27220 *bq = nullptr;
 
   public:
     /**
@@ -1293,11 +1298,23 @@ class LipoCharger : public HasBatteryLevel
                 // Turn on charging function
                 // If there is no battery connected, do not turn on the charging function
                 ppm->enableCharge();
-                return true;
             } else {
                 LOG_WARN("PPM BQ25896 init failed");
                 delete ppm;
                 ppm = nullptr;
+                return false;
+            }
+        }
+        if (bq == nullptr) {
+            bq = new BQ27220;
+            bool result = bq->init(&Wire, BQ27220_I2C_SDA, BQ27220_I2C_SCL);
+            if (result) {
+                return true;
+            } else {
+                LOG_WARN("BQ27220 init failed");
+                delete bq;
+                bq = nullptr;
+                return false;
             }
         }
         return false;
@@ -1306,12 +1323,12 @@ class LipoCharger : public HasBatteryLevel
     /**
      * Battery state of charge, from 0 to 100 or -1 for unknown
      */
-    virtual int getBatteryPercent() override { return -1; }
+    virtual int getBatteryPercent() override { return bq->getChargePcnt(); }
 
     /**
      * The raw voltage of the battery in millivolts, or NAN if unknown
      */
-    virtual uint16_t getBattVoltage() override { return ppm->getBattVoltage(); }
+    virtual uint16_t getBattVoltage() override { return bq->getVolt(BQ27220::VOLT); }
 
     /**
      * return true if there is a battery installed in this unit

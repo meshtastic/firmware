@@ -61,6 +61,11 @@
 #define HAS_PPM 1
 #define XPOWERS_CHIP_BQ25896
 
+// battery quality management BQ27220
+#define HAS_BQ27220 1
+#define BQ27220_I2C_SDA SDA
+#define BQ27220_I2C_SCL SCL
+
 // LoRa
 #define USE_SX1262
 #define USE_SX1268
