@@ -88,8 +88,8 @@ static const uint8_t A7 = PIN_A7;
 #define ADC_RESOLUTION 14
 
 // Other pins
- #define WB_I2C1_SDA (13) // SENSOR_SLOT IO_SLOT
- #define WB_I2C1_SCL (14) // SENSOR_SLOT IO_SLOT
+#define WB_I2C1_SDA (13) // SENSOR_SLOT IO_SLOT
+#define WB_I2C1_SCL (14) // SENSOR_SLOT IO_SLOT
 
 #define PIN_AREF (2)
 #define PIN_NFC1 (9)

@@ -21,6 +21,7 @@ namespace graphics
 
 namespace ClockRenderer
 {
+bool digitalWatchFace = true;
 
 void drawSegmentedDisplayColon(OLEDDisplay *display, int x, int y, float scale)
 {
@@ -146,6 +147,7 @@ void drawVerticalSegment(OLEDDisplay *display, int x, int y, int width, int heig
     display->fillTriangle(x, y + width, x + height - 1, y + width, x + halfHeight, y + width + halfHeight);
 }
 
+/*
 void drawWatchFaceToggleButton(OLEDDisplay *display, int16_t x, int16_t y, bool digitalMode, float scale)
 {
     uint16_t segmentWidth = SEGMENT_WIDTH * scale;
@@ -179,21 +181,22 @@ void drawWatchFaceToggleButton(OLEDDisplay *display, int16_t x, int16_t y, bool 
         drawVerticalSegment(display, segmentFourX, segmentFourY, segmentWidth, segmentHeight);
     }
 }
-
+*/
 // Draw a digital clock
 void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     display->clear();
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     int line = 1;
+    // === Set Title, Blank for Clock
+    const char *titleStr = "";
+    // === Header ===
+    graphics::drawCommonHeader(display, x, y, titleStr, true);
 
 #ifdef T_WATCH_S3
     if (nimbleBluetooth && nimbleBluetooth->isConnected()) {
-        graphics::ClockRenderer::drawBluetoothConnectedIcon(display, display->getWidth() - 18, y + 2);
+        graphics::ClockRenderer::drawBluetoothConnectedIcon(display, display->getWidth() - 18, display->getHeight() - 14);
     }
-
-    drawWatchFaceToggleButton(display, display->getWidth() - 36, display->getHeight() - 36,
-                              graphics::ClockRenderer::digitalWatchFace, 1);
 #endif
 
     uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true); // Display local timezone
@@ -230,7 +233,7 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
     float scale = 1.5;
 #else
     float scale = 0.75;
-    if (SCREEN_WIDTH > 128) {
+    if (isHighResolution) {
         scale = 1.5;
     }
 #endif
@@ -276,17 +279,17 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
 
     // draw seconds string
     display->setFont(FONT_SMALL);
-    int xOffset = (SCREEN_WIDTH > 128) ? 0 : -1;
+    int xOffset = (isHighResolution) ? 0 : -1;
     if (hour >= 10) {
-        xOffset += (SCREEN_WIDTH > 128) ? 32 : 18;
+        xOffset += (isHighResolution) ? 32 : 18;
     }
-    int yOffset = (SCREEN_WIDTH > 128) ? 3 : 1;
+    int yOffset = (isHighResolution) ? 3 : 1;
     if (config.display.use_12h_clock) {
         display->drawString(startingHourMinuteTextX + xOffset, (display->getHeight() - hourMinuteTextY) - yOffset - 2,
                             isPM ? "pm" : "am");
     }
 #ifndef USE_EINK
-    xOffset = (SCREEN_WIDTH > 128) ? 18 : 10;
+    xOffset = (isHighResolution) ? 18 : 10;
     display->drawString(startingHourMinuteTextX + timeStringWidth - xOffset, (display->getHeight() - hourMinuteTextY) - yOffset,
                         secondString);
 #endif
@@ -301,31 +304,30 @@ void drawBluetoothConnectedIcon(OLEDDisplay *display, int16_t x, int16_t y)
 void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     display->setTextAlignment(TEXT_ALIGN_LEFT);
+    // === Set Title, Blank for Clock
+    const char *titleStr = "";
+    // === Header ===
+    graphics::drawCommonHeader(display, x, y, titleStr, true);
 
-    graphics::UIRenderer::drawBattery(display, x, y + 7, imgBattery, powerStatus);
-
-    if (powerStatus->getHasBattery()) {
-        char batteryPercent[8];
-        snprintf(batteryPercent, sizeof(batteryPercent), "%d%%", powerStatus->getBatteryChargePercent());
-
-        display->setFont(FONT_SMALL);
-
-        display->drawString(x + 20, y + 2, batteryPercent);
-    }
 #ifdef T_WATCH_S3
     if (nimbleBluetooth && nimbleBluetooth->isConnected()) {
-        drawBluetoothConnectedIcon(display, display->getWidth() - 18, y + 2);
+        drawBluetoothConnectedIcon(display, display->getWidth() - 18, display->getHeight() - 14);
     }
 #endif
-    drawWatchFaceToggleButton(display, display->getWidth() - 36, display->getHeight() - 36,
-                              graphics::ClockRenderer::digitalWatchFace, 1);
-
     // clock face center coordinates
     int16_t centerX = display->getWidth() / 2;
     int16_t centerY = display->getHeight() / 2;
 
     // clock face radius
-    int16_t radius = (display->getWidth() / 2) * 0.8;
+    int16_t radius = 0;
+    if (display->getHeight() < display->getWidth()) {
+        radius = (display->getHeight() / 2) * 0.9;
+    } else {
+        radius = (display->getWidth() / 2) * 0.9;
+    }
+#ifdef T_WATCH_S3
+    radius = (display->getWidth() / 2) * 0.8;
+#endif
 
     // noon (0 deg) coordinates (outermost circle)
     int16_t noonX = centerX;
@@ -338,10 +340,16 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     int16_t tickMarkOuterNoonY = secondHandNoonY;
 
     // seconds tick mark inner y coordinate; (second nested circle)
-    double secondsTickMarkInnerNoonY = (double)noonY + 8;
+    double secondsTickMarkInnerNoonY = (double)noonY + 4;
+    if (isHighResolution) {
+        secondsTickMarkInnerNoonY = (double)noonY + 8;
+    }
 
     // hours tick mark inner y coordinate; (third nested circle)
-    double hoursTickMarkInnerNoonY = (double)noonY + 16;
+    double hoursTickMarkInnerNoonY = (double)noonY + 6;
+    if (isHighResolution) {
+        hoursTickMarkInnerNoonY = (double)noonY + 16;
+    }
 
     // minute hand y coordinate
     int16_t minuteHandNoonY = secondsTickMarkInnerNoonY + 4;
@@ -350,7 +358,10 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     int16_t hourStringNoonY = minuteHandNoonY + 18;
 
     // hour hand radius and y coordinate
-    int16_t hourHandRadius = radius * 0.55;
+    int16_t hourHandRadius = radius * 0.35;
+    if (isHighResolution) {
+        int16_t hourHandRadius = radius * 0.55;
+    }
     int16_t hourHandNoonY = centerY - hourHandRadius;
 
     display->setColor(OLEDDISPLAY_COLOR::WHITE);
@@ -366,7 +377,20 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         int minute = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
         int second = (hms % SEC_PER_HOUR) % SEC_PER_MIN; // or hms % SEC_PER_MIN
 
-        hour = hour > 12 ? hour - 12 : hour;
+        bool isPM = hour >= 12;
+        if (config.display.use_12h_clock) {
+            bool isPM = hour >= 12;
+            display->setFont(FONT_SMALL);
+            int yOffset = isHighResolution ? 1 : 0;
+#ifdef USE_EINK
+            yOffset += 3;
+#endif
+            display->drawString(centerX - (display->getStringWidth(isPM ? "pm" : "am") / 2), centerY + yOffset,
+                                isPM ? "pm" : "am");
+        }
+        hour %= 12;
+        if (hour == 0)
+            hour = 12;
 
         int16_t degreesPerHour = 30;
         int16_t degreesPerMinuteOrSecond = 6;
@@ -443,16 +467,32 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                 double hourStringX = (sineAngleInRadians * (hourStringNoonY - centerY) + noonX) - hourStringXOffset;
                 double hourStringY = (cosineAngleInRadians * (hourStringNoonY - centerY) + centerY) - hourStringYOffset;
 
+#ifdef T_WATCH_S3
                 // draw hour number
                 display->drawStringf(hourStringX, hourStringY, buffer, "%d", hourInt);
+#else
+#ifdef USE_EINK
+                if (isHighResolution) {
+                    // draw hour number
+                    display->drawStringf(hourStringX, hourStringY, buffer, "%d", hourInt);
+                }
+#else
+                if (isHighResolution && (hourInt == 3 || hourInt == 6 || hourInt == 9 || hourInt == 12)) {
+                    // draw hour number
+                    display->drawStringf(hourStringX, hourStringY, buffer, "%d", hourInt);
+                }
+#endif
+#endif
             }
 
             if (angle % degreesPerMinuteOrSecond == 0) {
                 double startX = sineAngleInRadians * (secondsTickMarkInnerNoonY - centerY) + noonX;
                 double startY = cosineAngleInRadians * (secondsTickMarkInnerNoonY - centerY) + centerY;
 
-                // draw minute tick mark
-                display->drawLine(startX, startY, endX, endY);
+                if (isHighResolution) {
+                    // draw minute tick mark
+                    display->drawLine(startX, startY, endX, endY);
+                }
             }
         }
 
@@ -461,9 +501,10 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
         // draw minute hand
         display->drawLine(centerX, centerY, minuteX, minuteY);
-
+#ifndef USE_EINK
         // draw second hand
         display->drawLine(centerX, centerY, secondX, secondY);
+#endif
     }
 }
 
