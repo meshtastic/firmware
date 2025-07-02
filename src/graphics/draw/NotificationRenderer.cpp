@@ -427,6 +427,9 @@ void NotificationRenderer::drawNotificationBox(OLEDDisplay *display, OLEDDisplay
     uint8_t visibleTotalLines = std::min<uint8_t>(lineCount, (screenHeight - vPadding * 2) / effectiveLineHeight);
     uint16_t contentHeight = visibleTotalLines * effectiveLineHeight;
     uint16_t boxHeight = contentHeight + vPadding * 2;
+    if (visibleTotalLines == 1) {
+        boxHeight += (isHighResolution) ? 4 : 3;
+    }
 
     int16_t boxLeft = (display->width() / 2) - (boxWidth / 2);
     if (totalLines > visibleTotalLines) {
