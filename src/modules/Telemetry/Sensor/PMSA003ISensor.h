@@ -38,13 +38,13 @@ class PMSA003ISensor : public TelemetrySensor
     // the PMSA003I sensor uses about 300mW on its own; support powering it off when it's not actively taking
     // a reading
     // put the sensor to sleep on startup
-    pinMode(PMSA003I_ENABLE_PIN, OUTPUT);
     State state = State::IDLE;
 #else
     State state = State::ACTIVE;
 #endif
 
     PMSA003ISensor();
+    bool isActive();
     virtual int32_t runOnce() override;
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
 };
