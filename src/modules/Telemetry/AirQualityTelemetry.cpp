@@ -74,7 +74,7 @@ int32_t AirQualityTelemetryModule::runOnce()
 
         // Wake up the sensors that need it
 #ifdef PMSA003I_ENABLE_PIN
-        if (pmsa003iSensor.hasSensor() && pmsa003iSensor.state == pmsa003iSensor::State::IDLE)
+        if (pmsa003iSensor.hasSensor() && !pmsa003iSensor.isActive())
             return pmsa003iSensor.wakeUp();
 #endif /* PMSA003I_ENABLE_PIN */
 
