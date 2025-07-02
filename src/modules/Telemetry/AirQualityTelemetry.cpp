@@ -22,6 +22,14 @@
 // Sensors
 PMSA003ISensor pmsa003iSensor;
 
+
+#if __has_include(<SensirionI2cScd4x.h>)
+#include "Sensor/SCD4XSensor.h"
+SCD4XSensor scd4xSensor;
+#else
+NullSensor scd4xSensor;
+#endif
+
 #include "graphics/ScreenFonts.h"
 
 int32_t AirQualityTelemetryModule::runOnce()
@@ -61,6 +69,9 @@ int32_t AirQualityTelemetryModule::runOnce()
 
             if (pmsa003iSensor.hasSensor())
                 result = pmsa003iSensor.runOnce();
+
+            if (scd4xSensor.hasSensor())
+                result = scd4xSensor.runOnce();
         }
 
         // it's possible to have this module enabled, only for displaying values on the screen.
@@ -143,7 +154,7 @@ void AirQualityTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSta
 
     // Check if any telemetry field has valid data
     bool hasAny = m.has_pm10_standard || m.has_pm25_standard || m.has_pm100_standard  || m.has_pm10_environmental || m.has_pm25_environmental ||
-                  m.has_pm100_environmental;
+                  m.has_pm100_environmental || m.has_co2;
 
     if (!hasAny) {
         display->drawString(x, currentY, "No Telemetry");
@@ -170,6 +181,9 @@ void AirQualityTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSta
         entries.push_back("PM2.5: " + String(m.pm25_standard) + "ug/m3");
     if (m.has_pm100_standard)
         entries.push_back("PM10.0: " + String(m.pm100_standard) + "ug/m3");
+    if (m.has_co2)
+        entries.push_back("CO2: " + String(m.co2, 0) + "ppm");
+
 
     // === Show first available metric on top-right of first line ===
     if (!entries.empty()) {
@@ -210,6 +224,10 @@ bool AirQualityTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPack
         LOG_INFO("                  | PM1.0(Environmental)=%i, PM2.5(Environmental)=%i, PM10.0(Environmental)=%i",
                  t->variant.air_quality_metrics.pm10_environmental, t->variant.air_quality_metrics.pm25_environmental,
                  t->variant.air_quality_metrics.pm100_environmental);
+
+        LOG_INFO("                  | CO2=%i, CO2_T=%f, CO2_H=%f",
+                 t->variant.air_quality_metrics.co2, t->variant.air_quality_metrics.co2_temperature,
+                 t->variant.air_quality_metrics.co2_humidity);
 #endif
         // release previous packet before occupying a new spot
         if (lastMeasurementPacket != nullptr)
@@ -233,6 +251,11 @@ bool AirQualityTelemetryModule::getAirQualityTelemetry(meshtastic_Telemetry *m)
         // TODO - Should we check for sensor state here?
         // If a sensor is sleeping, we should know and check to wake it up
         valid = valid && pmsa003iSensor.getMetrics(m);
+        hasSensor = true;
+    }
+
+    if (scd4xSensor.hasSensor()) {
+        valid = valid && scd4xSensor.getMetrics(m);
         hasSensor = true;
     }
 
@@ -273,11 +296,25 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     m.which_variant = meshtastic_Telemetry_air_quality_metrics_tag;
     m.time = getTime();
     if (getAirQualityTelemetry(&m)) {
-        LOG_INFO("Send: pm10_standard=%u, pm25_standard=%u, pm100_standard=%u, \
+
+        bool hasAnyPM = m.variant.air_quality_metrics.has_pm10_standard || m.variant.air_quality_metrics.has_pm25_standard || m.variant.air_quality_metrics.has_pm100_standard  || m.variant.air_quality_metrics.has_pm10_environmental || m.variant.air_quality_metrics.has_pm25_environmental ||
+                    m.variant.air_quality_metrics.has_pm100_environmental;
+
+        if (hasAnyPM) {
+            LOG_INFO("Send: pm10_standard=%u, pm25_standard=%u, pm100_standard=%u, \
                     pm10_environmental=%u, pm25_environmental=%u, pm100_environmental=%u", \
                     m.variant.air_quality_metrics.pm10_standard, m.variant.air_quality_metrics.pm25_standard, \
                     m.variant.air_quality_metrics.pm100_standard, m.variant.air_quality_metrics.pm10_environmental, \
-                    m.variant.air_quality_metrics.pm25_environmental, m.variant.air_quality_metrics.pm100_environmental);
+                 m.variant.air_quality_metrics.pm25_environmental, m.variant.air_quality_metrics.pm100_environmental);
+        }
+
+        bool hasAnyCO2 = m.variant.air_quality_metrics.has_co2 || m.variant.air_quality_metrics.has_co2_temperature || m.variant.air_quality_metrics.has_co2_humidity;
+
+        if (hasAnyCO2) {
+            LOG_INFO("Send: co2=%i, co2_t=%f, co2_rh=%f",
+                    m.variant.air_quality_metrics.co2, m.variant.air_quality_metrics.co2_temperature,
+                    m.variant.air_quality_metrics.co2_humidity);
+        }
 
         meshtastic_MeshPacket *p = allocDataProtobuf(m);
         p->to = dest;
@@ -333,6 +370,11 @@ AdminMessageHandleResult AirQualityTelemetryModule::handleAdminMessageForModule(
             return result;
     }
 
+    if (scd4xSensor.hasSensor()) {
+        result = scd4xSensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
 
 #endif
     return result;
