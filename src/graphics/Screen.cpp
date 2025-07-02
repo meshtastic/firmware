@@ -859,8 +859,8 @@ void Screen::setFrames(FrameFocus focus)
 
 #if defined(DISPLAY_CLOCK_FRAME)
     fsi.positions.clock = numframes;
-    normalFrames[numframes++] = graphics::ClockRenderer::digitalWatchFace ? graphics::ClockRenderer::drawDigitalClockFrame
-                                                                          : &graphics::ClockRenderer::drawAnalogClockFrame;
+    normalFrames[numframes++] = uiconfig.is_clockface_analog ? graphics::ClockRenderer::drawAnalogClockFrame
+                                                             : graphics::ClockRenderer::drawDigitalClockFrame;
     indicatorIcons.push_back(digital_icon_clock);
 #endif
 
@@ -916,8 +916,8 @@ void Screen::setFrames(FrameFocus focus)
     }
 #if !defined(DISPLAY_CLOCK_FRAME)
     fsi.positions.clock = numframes;
-    normalFrames[numframes++] = graphics::ClockRenderer::digitalWatchFace ? graphics::ClockRenderer::drawDigitalClockFrame
-                                                                          : graphics::ClockRenderer::drawAnalogClockFrame;
+    normalFrames[numframes++] = uiconfig.is_clockface_analog ? graphics::ClockRenderer::drawAnalogClockFrame
+                                                             : graphics::ClockRenderer::drawDigitalClockFrame;
     indicatorIcons.push_back(digital_icon_clock);
 #endif
 
@@ -1305,21 +1305,6 @@ int Screen::handleInputEvent(const InputEvent *event)
         menuHandler::handleMenuSwitch(dispdev);
         return 0;
     }
-    /*
-    #if defined(DISPLAY_CLOCK_FRAME)
-        // For the T-Watch, intercept touches to the 'toggle digital/analog watch face' button
-        uint8_t watchFaceFrame = error_code ? 1 : 0;
-
-        if (this->ui->getUiState()->currentFrame == watchFaceFrame && event->touchX >= 204 && event->touchX <= 240 &&
-            event->touchY >= 204 && event->touchY <= 240) {
-            screen->digitalWatchFace = !screen->digitalWatchFace;
-
-            setFrames();
-
-            return 0;
-        }
-    #endif
-    */
 
     // Use left or right input from a keyboard to move between frames,
     // so long as a mesh module isn't using these events for some other purpose

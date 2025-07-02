@@ -121,10 +121,12 @@ void menuHandler::ClockFacePicker()
         if (selected == 0) {
             menuHandler::menuQueue = menuHandler::clock_menu;
         } else if (selected == 1) {
-            graphics::ClockRenderer::digitalWatchFace = true;
+            uiconfig.is_clockface_analog = false;
+            nodeDB->saveProto("/prefs/uiconfig.proto", meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg, &uiconfig);
             screen->setFrames(Screen::FOCUS_CLOCK);
         } else {
-            graphics::ClockRenderer::digitalWatchFace = false;
+            uiconfig.is_clockface_analog = true;
+            nodeDB->saveProto("/prefs/uiconfig.proto", meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg, &uiconfig);
             screen->setFrames(Screen::FOCUS_CLOCK);
         }
     };
