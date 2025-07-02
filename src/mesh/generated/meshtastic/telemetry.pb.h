@@ -281,6 +281,12 @@ typedef struct _meshtastic_AirQualityMetrics {
     /* CO2 concentration in ppm */
     bool has_co2;
     uint32_t co2;
+    /* CO2 sensor temperature in degC */
+    bool has_co2_temperature;
+    float co2_temperature;
+    /* CO2 sensor relative humidity in % */
+    bool has_co2_humidity;
+    float co2_humidity;
 } meshtastic_AirQualityMetrics;
 
 /* Local device mesh statistics */
@@ -409,7 +415,7 @@ extern "C" {
 #define meshtastic_DeviceMetrics_init_default    {false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_EnvironmentMetrics_init_default {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_PowerMetrics_init_default     {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
-#define meshtastic_AirQualityMetrics_init_default {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
+#define meshtastic_AirQualityMetrics_init_default {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_LocalStats_init_default       {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_HealthMetrics_init_default    {false, 0, false, 0, false, 0}
 #define meshtastic_HostMetrics_init_default      {0, 0, 0, false, 0, false, 0, 0, 0, 0, false, ""}
@@ -418,7 +424,7 @@ extern "C" {
 #define meshtastic_DeviceMetrics_init_zero       {false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_EnvironmentMetrics_init_zero  {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_PowerMetrics_init_zero        {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
-#define meshtastic_AirQualityMetrics_init_zero   {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
+#define meshtastic_AirQualityMetrics_init_zero   {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_LocalStats_init_zero          {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_HealthMetrics_init_zero       {false, 0, false, 0, false, 0}
 #define meshtastic_HostMetrics_init_zero         {0, 0, 0, false, 0, false, 0, 0, 0, 0, false, ""}
@@ -482,6 +488,8 @@ extern "C" {
 #define meshtastic_AirQualityMetrics_particles_50um_tag 11
 #define meshtastic_AirQualityMetrics_particles_100um_tag 12
 #define meshtastic_AirQualityMetrics_co2_tag     13
+#define meshtastic_AirQualityMetrics_co2_temperature_tag 14
+#define meshtastic_AirQualityMetrics_co2_humidity_tag 15
 #define meshtastic_LocalStats_uptime_seconds_tag 1
 #define meshtastic_LocalStats_channel_utilization_tag 2
 #define meshtastic_LocalStats_air_util_tx_tag    3
@@ -587,7 +595,9 @@ X(a, STATIC,   OPTIONAL, UINT32,   particles_10um,    9) \
 X(a, STATIC,   OPTIONAL, UINT32,   particles_25um,   10) \
 X(a, STATIC,   OPTIONAL, UINT32,   particles_50um,   11) \
 X(a, STATIC,   OPTIONAL, UINT32,   particles_100um,  12) \
-X(a, STATIC,   OPTIONAL, UINT32,   co2,              13)
+X(a, STATIC,   OPTIONAL, UINT32,   co2,              13) \
+X(a, STATIC,   OPTIONAL, FLOAT,    co2_temperature,  14) \
+X(a, STATIC,   OPTIONAL, FLOAT,    co2_humidity,     15)
 #define meshtastic_AirQualityMetrics_CALLBACK NULL
 #define meshtastic_AirQualityMetrics_DEFAULT NULL
 
@@ -676,7 +686,7 @@ extern const pb_msgdesc_t meshtastic_Nau7802Config_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_TELEMETRY_PB_H_MAX_SIZE meshtastic_Telemetry_size
-#define meshtastic_AirQualityMetrics_size        78
+#define meshtastic_AirQualityMetrics_size        88
 #define meshtastic_DeviceMetrics_size            27
 #define meshtastic_EnvironmentMetrics_size       113
 #define meshtastic_HealthMetrics_size            11
