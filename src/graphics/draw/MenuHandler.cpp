@@ -19,6 +19,8 @@ extern uint16_t TFT_MESH;
 namespace graphics
 {
 menuHandler::screenMenus menuHandler::menuQueue = menu_none;
+bool test_enabled = false;
+uint8_t test_count = 0;
 
 void menuHandler::LoraRegionPicker(uint32_t duration)
 {
@@ -339,19 +341,25 @@ void menuHandler::systemBaseMenu()
 {
     int options;
     static const char **optionsArrayPtr;
-#if HAS_TFT && defined(T_DECK)
-    static const char *optionsArray[] = {"Back", "Beeps Action", "Reboot", "Screen Color", "Switch to MUI"};
-    options = 5;
-#endif
 #if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
     static const char *optionsArray[] = {"Back", "Beeps Action", "Reboot", "Screen Color"};
+    static const char *optionsArrayTest[] = {"Back", "Beeps Action", "Reboot", "Screen Color", "Test Menu"};
     options = 4;
-#endif
-#if !defined(HELTEC_MESH_NODE_T114) && !defined(HELTEC_VISION_MASTER_T190) && !defined(T_DECK) && !HAS_TFT
+#elif HAS_TFT
+    static const char *optionsArrayTest[] = {"Back", "Beeps Action", "Reboot", "Screen Color", "Switch to MUI", "Test Menu"};
+    static const char *optionsArray[] = {"Back", "Beeps Action", "Reboot", "Screen Color", "Switch to MUI"};
+    options = 5;
+#else
     static const char *optionsArray[] = {"Back", "Beeps Action", "Reboot"};
+    static const char *optionsArrayTest[] = {"Back", "Beeps Action", "Reboot", "Test Menu"};
     options = 3;
 #endif
-    optionsArrayPtr = optionsArray;
+    if (test_enabled) {
+        optionsArrayPtr = optionsArrayTest;
+        options++;
+    } else {
+        optionsArrayPtr = optionsArray;
+    }
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "System Action";
     bannerOptions.optionsArrayPtr = optionsArrayPtr;
@@ -361,10 +369,22 @@ void menuHandler::systemBaseMenu()
             menuHandler::menuQueue = menuHandler::buzzermodemenupicker;
             screen->setInterval(0);
             runASAP = true;
+            test_count = 0;
         } else if (selected == 2) {
             menuHandler::menuQueue = menuHandler::reboot_menu;
             screen->setInterval(0);
             runASAP = true;
+            test_count = 0;
+#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
+        } else if (selected == 3) {
+            menuHandler::menuQueue = menuHandler::tftcolormenupicker;
+            screen->setInterval(0);
+            runASAP = true;
+        } else if (test_enabled && selected == 4) {
+            menuHandler::menuQueue = menuHandler::test_menu;
+            screen->setInterval(0);
+            runASAP = true;
+#elif HAS_TFT
         } else if (selected == 3) {
             menuHandler::menuQueue = menuHandler::tftcolormenupicker;
             screen->setInterval(0);
@@ -373,6 +393,22 @@ void menuHandler::systemBaseMenu()
             menuHandler::menuQueue = menuHandler::mui_picker;
             screen->setInterval(0);
             runASAP = true;
+        } else if (test_enabled && selected == 5) {
+            menuHandler::menuQueue = menuHandler::test_menu;
+            screen->setInterval(0);
+            runASAP = true;
+
+#else
+        } else if (test_enabled && selected == 3) {
+            menuHandler::menuQueue = menuHandler::test_menu;
+            screen->setInterval(0);
+            runASAP = true;
+#endif
+        } else if (!test_enabled) {
+            test_count++;
+            if (test_count > 4) {
+                test_enabled = true;
+            }
         }
     };
     screen->showOverlayBanner(bannerOptions);
@@ -627,7 +663,7 @@ void menuHandler::TFTColorPickerMenu(OLEDDisplay *display)
             b = 255;
         }
 
-#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || defined(T_DECK)
+#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || HAS_TFT
         if (selected != 0) {
             display->setColor(BLACK);
             display->fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
@@ -709,8 +745,33 @@ void menuHandler::removeFavoriteMenu()
     screen->showOverlayBanner(bannerOptions);
 }
 
+void menuHandler::testMenu()
+{
+
+    static const char *optionsArray[] = {"Back", "Number Picker"};
+    BannerOverlayOptions bannerOptions;
+    std::string message = "Test to Run?\n";
+    bannerOptions.message = message.c_str();
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 2;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == 1) {
+            menuQueue = number_test;
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::numberTest()
+{
+    screen->showNumberPicker("Pick a number\n ", 30000, 4,
+                             [](int number_picked) -> void { LOG_WARN("Nodenum: %u", number_picked); });
+}
+
 void menuHandler::handleMenuSwitch(OLEDDisplay *display)
 {
+    if (menuQueue != menu_none)
+        test_count = 0;
     switch (menuQueue) {
     case menu_none:
         break;
@@ -758,6 +819,12 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case remove_favorite:
         removeFavoriteMenu();
+        break;
+    case test_menu:
+        testMenu();
+        break;
+    case number_test:
+        numberTest();
         break;
     }
     menuQueue = menu_none;

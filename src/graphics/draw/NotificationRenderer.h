@@ -18,12 +18,15 @@ class NotificationRenderer
     static const char **optionsArrayPtr;
     static uint8_t alertBannerOptions; // last x lines are seelctable options
     static std::function<void(int)> alertBannerCallback;
+    static uint32_t numDigits;
+    static uint32_t currentNumber;
 
     static bool pauseBanner;
 
     static void resetBanner();
     static void drawBannercallback(OLEDDisplay *display, OLEDDisplayUiState *state);
     static void drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisplayUiState *state);
+    static void drawNumberPicker(OLEDDisplay *display, OLEDDisplayUiState *state);
     static void drawNodePicker(OLEDDisplay *display, OLEDDisplayUiState *state);
     static void drawNotificationBox(OLEDDisplay *display, OLEDDisplayUiState *state, const char *lines[MAX_LINES + 1],
                                     uint16_t totalLines, uint8_t firstOptionToShow, uint16_t maxWidth = 0);
