@@ -47,6 +47,12 @@ ScanI2C::FoundDevice ScanI2C::firstINA() const
     return firstOfOrNONE(4, types);
 }
 
+ScanI2C::FoundDevice ScanI2C::firstAQI() const
+{
+    ScanI2C::DeviceType types[] = {PMSA0031, SCD4X};
+    return firstOfOrNONE(2, types);
+}
+
 ScanI2C::FoundDevice ScanI2C::firstRGBLED() const
 {
     ScanI2C::DeviceType types[] = {NCP5623, LP5562};

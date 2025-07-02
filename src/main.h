@@ -37,6 +37,7 @@ extern ScanI2C::DeviceAddress accelerometer_found;
 extern ScanI2C::FoundDevice rgb_found;
 // extern ScanI2C::DeviceAddress ina_Address;
 extern ScanI2C::FoundDevice ina_found;
+extern ScanI2C::DeviceAddress aqi_found;
 
 extern bool eink_found;
 extern bool pmu_found;
