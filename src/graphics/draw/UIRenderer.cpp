@@ -18,8 +18,6 @@
 #include <RTC.h>
 #include <cstring>
 
-#if !MESHTASTIC_EXCLUDE_GPS
-
 // External variables
 extern graphics::Screen *screen;
 
