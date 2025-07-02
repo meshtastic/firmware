@@ -13,7 +13,9 @@ class menuHandler
         clock_face_picker,
         clock_menu,
         position_base_menu,
+#if !MESHTASTIC_EXCLUDE_GPS
         gps_toggle_menu,
+#endif
         compass_point_north_menu,
         reset_node_db_menu,
         buzzermodemenupicker,
