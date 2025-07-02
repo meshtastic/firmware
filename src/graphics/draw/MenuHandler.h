@@ -21,6 +21,7 @@ class menuHandler
         buzzermodemenupicker,
         mui_picker,
         tftcolormenupicker,
+        brightness_picker,
         reboot_menu,
         add_favorite,
         remove_favorite,
@@ -47,6 +48,7 @@ class menuHandler
     static void TFTColorPickerMenu(OLEDDisplay *display);
     static void nodeListMenu();
     static void resetNodeDBMenu();
+    static void BrightnessPickerMenu();
     static void rebootMenu();
     static void addFavoriteMenu();
     static void removeFavoriteMenu();

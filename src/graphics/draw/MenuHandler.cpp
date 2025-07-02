@@ -343,61 +343,125 @@ void menuHandler::systemBaseMenu()
 {
     int options;
     static const char **optionsArrayPtr;
-#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
-    static const char *optionsArray[] = {"Back", "Reboot", "Beeps Action", "Screen Color"};
-    static const char *optionsArrayTest[] = {"Back", "Reboot", "Beeps Action", "Screen Color", "Test Menu"};
-    options = 4;
-#elif HAS_TFT
-    static const char *optionsArrayTest[] = {"Back", "Reboot", "Beeps Action", "Screen Color", "Switch to MUI", "Test Menu"};
-    static const char *optionsArray[] = {"Back", "Reboot", "Beeps Action", "Screen Color", "Switch to MUI"};
-    options = 5;
-#else
-    static const char *optionsArray[] = {"Back", "Reboot", "Beeps Action"};
-    static const char *optionsArrayTest[] = {"Back", "Reboot", "Beeps Action", "Test Menu"};
-    options = 3;
+    static const char *optionsArrayTest;
+    
+    // Check if brightness is supported
+    bool hasSupportBrightness = false;
+#if defined(ST7789_CS) || defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) || defined(USE_SH1107) || HAS_TFT
+    hasSupportBrightness = true;
 #endif
-    if (test_enabled) {
-        optionsArrayPtr = optionsArrayTest;
-        options++;
+
+    if (hasSupportBrightness) {
+#if HAS_TFT
+        static const char *optionsArray[] = {"Back", "Beeps Action", "Brightness", "Reboot", "Switch to MUI"};
+        static const char *optionsArrayTestArray[] = {"Back", "Beeps Action", "Brightness", "Reboot", "Switch to MUI", "Test Menu"};
+        options = 5;
+#elif defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
+        static const char *optionsArray[] = {"Back", "Beeps Action", "Brightness", "Reboot", "Screen Color"};
+        static const char *optionsArrayTestArray[] = {"Back", "Beeps Action", "Brightness", "Reboot", "Screen Color", "Test Menu"};
+        options = 5;
+#else
+        static const char *optionsArray[] = {"Back", "Beeps Action", "Brightness", "Reboot"};
+        static const char *optionsArrayTestArray[] = {"Back", "Beeps Action", "Brightness", "Reboot", "Test Menu"};
+        options = 4;
+#endif
+        if (test_enabled) {
+            optionsArrayPtr = optionsArrayTestArray;
+            options++;
+        } else {
+            optionsArrayPtr = optionsArray;
+        }
     } else {
-        optionsArrayPtr = optionsArray;
+#if HAS_TFT
+        static const char *optionsArray[] = {"Back", "Beeps Action", "Reboot", "Switch to MUI"};
+        static const char *optionsArrayTestArray[] = {"Back", "Beeps Action", "Reboot", "Switch to MUI", "Test Menu"};
+        options = 4;
+#elif defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
+        static const char *optionsArray[] = {"Back", "Beeps Action", "Reboot", "Screen Color"};
+        static const char *optionsArrayTestArray[] = {"Back", "Beeps Action", "Reboot", "Screen Color", "Test Menu"};
+        options = 4;
+#else
+        static const char *optionsArray[] = {"Back", "Beeps Action", "Reboot"};
+        static const char *optionsArrayTestArray[] = {"Back", "Beeps Action", "Reboot", "Test Menu"};
+        options = 3;
+#endif
+        if (test_enabled) {
+            optionsArrayPtr = optionsArrayTestArray;
+            options++;
+        } else {
+            optionsArrayPtr = optionsArray;
+        }
     }
+    
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "System Action";
     bannerOptions.optionsArrayPtr = optionsArrayPtr;
     bannerOptions.optionsCount = options;
     bannerOptions.bannerCallback = [](int selected) -> void {
+        // Check if brightness is supported to determine the correct mapping
+        bool hasSupportBrightness = false;
+#if defined(ST7789_CS) || defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) || defined(USE_SH1107) || HAS_TFT
+        hasSupportBrightness = true;
+#endif
+
         if (selected == 1) {
-            menuHandler::menuQueue = menuHandler::reboot_menu;
-            screen->runNow();
-            test_count = 0;
-        } else if (selected == 2) {
             menuHandler::menuQueue = menuHandler::buzzermodemenupicker;
             screen->runNow();
-            test_count = 0;
-#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
+        } else if (selected == 2) {
+            if (hasSupportBrightness) {
+                menuHandler::menuQueue = menuHandler::brightness_picker;
+                screen->runNow();
+            } else {
+                menuHandler::menuQueue = menuHandler::reboot_menu;
+                screen->runNow();
+            }
         } else if (selected == 3) {
-            menuHandler::menuQueue = menuHandler::tftcolormenupicker;
-            screen->runNow();
-        } else if (test_enabled && selected == 4) {
-            menuHandler::menuQueue = menuHandler::test_menu;
-            screen->runNow();
-#elif HAS_TFT
-        } else if (selected == 3) {
-            menuHandler::menuQueue = menuHandler::tftcolormenupicker;
-            screen->runNow();
-        } else if (selected == 4) {
-            menuHandler::menuQueue = menuHandler::mui_picker;
-            screen->runNow();
-        } else if (test_enabled && selected == 5) {
-            menuHandler::menuQueue = menuHandler::test_menu;
-            screen->runNow();
-
+            if (hasSupportBrightness) {
+                menuHandler::menuQueue = menuHandler::reboot_menu;
+                screen->runNow();
+            } else {
+#if HAS_TFT
+                menuHandler::menuQueue = menuHandler::mui_picker;
+                screen->runNow();
+#elif defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
+                menuHandler::menuQueue = menuHandler::tftcolormenupicker;
+                screen->runNow();
 #else
-        } else if (test_enabled && selected == 3) {
-            menuHandler::menuQueue = menuHandler::test_menu;
-            screen->runNow();
+                if (test_enabled) {
+                    menuHandler::menuQueue = menuHandler::test_menu;
+                    screen->runNow();
+                }
 #endif
+            }
+        } else if (selected == 4) {
+            if (hasSupportBrightness) {
+#if HAS_TFT
+                menuHandler::menuQueue = menuHandler::mui_picker;
+                screen->runNow();
+#elif defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
+                menuHandler::menuQueue = menuHandler::tftcolormenupicker;
+                screen->runNow();
+#else
+                if (test_enabled) {
+                    menuHandler::menuQueue = menuHandler::test_menu;
+                    screen->runNow();
+                }
+#endif
+            } else {
+#if HAS_TFT || defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
+                if (test_enabled) {
+                    menuHandler::menuQueue = menuHandler::test_menu;
+                    screen->runNow();
+                }
+#endif
+            }
+        } else if (selected == 5) {
+            if (hasSupportBrightness && test_enabled) {
+                menuHandler::menuQueue = menuHandler::test_menu;
+                screen->runNow();
+            }
+        } else if (selected == 0) {
+            // Back button - do nothing, menu will close
         } else if (!test_enabled) {
             test_count++;
             if (test_count > 4) {
@@ -591,6 +655,58 @@ void menuHandler::BuzzerModeMenu()
         service->reloadConfig(SEGMENT_CONFIG);
     };
     bannerOptions.InitialSelected = config.device.buzzer_mode;
+    screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::BrightnessPickerMenu()
+{
+    static const char *optionsArray[] = {"Back", "Low", "Medium", "High", "Very High"};
+    
+    // Get current brightness level to set initial selection
+    int currentSelection = 1; // Default to Low
+    if (uiconfig.screen_brightness >= 255) {
+        currentSelection = 4; // Very High
+    } else if (uiconfig.screen_brightness >= 128) {
+        currentSelection = 3; // High  
+    } else if (uiconfig.screen_brightness >= 64) {
+        currentSelection = 2; // Medium
+    } else {
+        currentSelection = 1; // Low
+    }
+    
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Brightness";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 5;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == 1) { // Low
+            uiconfig.screen_brightness = 1;
+        } else if (selected == 2) { // Medium
+            uiconfig.screen_brightness = 64;
+        } else if (selected == 3) { // High
+            uiconfig.screen_brightness = 128;
+        } else if (selected == 4) { // Very High
+            uiconfig.screen_brightness = 255;
+        }
+        
+        if (selected != 0) { // Not "Back"
+            // Apply brightness immediately  
+#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || defined(HELTEC_VISION_MASTER_E213) || defined(HELTEC_VISION_MASTER_E290)
+            // For HELTEC devices, use analogWrite to control backlight
+            analogWrite(VTFT_LEDA, uiconfig.screen_brightness);
+#elif defined(ST7789_CS)
+            static_cast<TFTDisplay *>(screen->getDisplayDevice())->setDisplayBrightness(uiconfig.screen_brightness);
+#elif defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) || defined(USE_SH1107)
+            screen->getDisplayDevice()->setBrightness(uiconfig.screen_brightness);
+#endif
+            
+            // Save to device
+            nodeDB->saveProto("/prefs/uiconfig.proto", meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg, &uiconfig);
+            
+            LOG_INFO("Screen brightness set to %d", uiconfig.screen_brightness);
+        }
+    };
+    bannerOptions.InitialSelected = currentSelection;
     screen->showOverlayBanner(bannerOptions);
 }
 
@@ -819,6 +935,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case tftcolormenupicker:
         TFTColorPickerMenu(display);
+        break;
+    case brightness_picker:
+        BrightnessPickerMenu();
         break;
     case reboot_menu:
         rebootMenu();
