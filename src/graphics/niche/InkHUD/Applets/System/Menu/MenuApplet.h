@@ -91,6 +91,8 @@ class MenuApplet : public SystemApplet, public concurrency::OSThread
     } cm;
 
     Applet *borrowedTileOwner = nullptr; // Which applet we have temporarily replaced while displaying menu
+
+    bool invertedColors = false; // Helper to display current state of config.display.displaymode in InkHUD options
 };
 
 } // namespace NicheGraphics::InkHUD

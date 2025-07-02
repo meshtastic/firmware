@@ -213,6 +213,7 @@ void setupModules()
 #if HAS_TELEMETRY
         new DeviceTelemetryModule();
 #endif
+// TODO: How to improve this?
 #if HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
         new EnvironmentTelemetryModule();
         new AirQualityTelemetryModule();

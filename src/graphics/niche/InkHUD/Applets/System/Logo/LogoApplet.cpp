@@ -14,9 +14,10 @@ InkHUD::LogoApplet::LogoApplet() : concurrency::OSThread("LogoApplet")
     // During onboarding, show the default short name as well as the version string
     // This behavior assists manufacturers during mass production, and should not be modified without good reason
     if (!settings->tips.safeShutdownSeen) {
+        meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
         fontTitle = fontLarge;
         textLeft = xstr(APP_VERSION_SHORT);
-        textRight = owner.short_name;
+        textRight = parseShortName(ourNode);
         textTitle = "Meshtastic";
     } else {
         fontTitle = fontSmall;
