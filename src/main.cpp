@@ -464,7 +464,7 @@ void setup()
 #if !MESHTASTIC_EXCLUDE_I2C
 // The Sensecap Indicator hast I2C on the secondary MCU. Tunnel this as wire1
 #if defined(SENSECAP_INDICATOR)
-    FakeI2C Wire1 = *FakeWire;
+    FakeI2C& Wire1 = *FakeWire;
     Wire1.begin();
 #elif defined(I2C_SDA1) && defined(ARCH_RP2040)
     Wire1.setSDA(I2C_SDA1);
