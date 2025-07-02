@@ -2,7 +2,7 @@
 
 #ifdef SENSECAP_INDICATOR
 
-FakeUART *FakeSerial;
+FakeUART *FakeSerial = new FakeUART();
 
 FakeUART::FakeUART() {}
 
