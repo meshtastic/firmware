@@ -25,10 +25,7 @@ bool STM32WLE5JCInterface::init()
 
     lora.setRfSwitchTable(rfswitch_pins, rfswitch_table);
 
-    limitPower();
-
-    if (power > STM32WLx_MAX_POWER) // This chip has lower power limits than some
-        power = STM32WLx_MAX_POWER;
+    limitPower(STM32WLx_MAX_POWER);
 
     int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
 

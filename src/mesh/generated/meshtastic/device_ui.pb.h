@@ -10,6 +10,15 @@
 #endif
 
 /* Enum definitions */
+typedef enum _meshtastic_CompassMode {
+    /* Compass with dynamic ring and heading */
+    meshtastic_CompassMode_DYNAMIC = 0,
+    /* Compass with fixed ring and heading */
+    meshtastic_CompassMode_FIXED_RING = 1,
+    /* Compass with heading and freeze option */
+    meshtastic_CompassMode_FREEZE_HEADING = 2
+} meshtastic_CompassMode;
+
 typedef enum _meshtastic_Theme {
     /* Dark */
     meshtastic_Theme_DARK = 0,
@@ -144,6 +153,14 @@ typedef struct _meshtastic_DeviceUIConfig {
     /* Map related data */
     bool has_map_data;
     meshtastic_Map map_data;
+    /* Compass mode */
+    meshtastic_CompassMode compass_mode;
+    /* RGB color for BaseUI
+ 0xRRGGBB format, e.g. 0xFF0000 for red */
+    uint32_t screen_rgb_color;
+    /* Clockface analog style
+ true for analog clockface, false for digital clockface */
+    bool is_clockface_analog;
 } meshtastic_DeviceUIConfig;
 
 
@@ -152,6 +169,10 @@ extern "C" {
 #endif
 
 /* Helper constants for enums */
+#define _meshtastic_CompassMode_MIN meshtastic_CompassMode_DYNAMIC
+#define _meshtastic_CompassMode_MAX meshtastic_CompassMode_FREEZE_HEADING
+#define _meshtastic_CompassMode_ARRAYSIZE ((meshtastic_CompassMode)(meshtastic_CompassMode_FREEZE_HEADING+1))
+
 #define _meshtastic_Theme_MIN meshtastic_Theme_DARK
 #define _meshtastic_Theme_MAX meshtastic_Theme_RED
 #define _meshtastic_Theme_ARRAYSIZE ((meshtastic_Theme)(meshtastic_Theme_RED+1))
@@ -162,6 +183,7 @@ extern "C" {
 
 #define meshtastic_DeviceUIConfig_theme_ENUMTYPE meshtastic_Theme
 #define meshtastic_DeviceUIConfig_language_ENUMTYPE meshtastic_Language
+#define meshtastic_DeviceUIConfig_compass_mode_ENUMTYPE meshtastic_CompassMode
 
 
 
@@ -169,12 +191,12 @@ extern "C" {
 
 
 /* Initializer values for message structs */
-#define meshtastic_DeviceUIConfig_init_default   {0, 0, 0, 0, 0, 0, _meshtastic_Theme_MIN, 0, 0, 0, _meshtastic_Language_MIN, false, meshtastic_NodeFilter_init_default, false, meshtastic_NodeHighlight_init_default, {0, {0}}, false, meshtastic_Map_init_default}
+#define meshtastic_DeviceUIConfig_init_default   {0, 0, 0, 0, 0, 0, _meshtastic_Theme_MIN, 0, 0, 0, _meshtastic_Language_MIN, false, meshtastic_NodeFilter_init_default, false, meshtastic_NodeHighlight_init_default, {0, {0}}, false, meshtastic_Map_init_default, _meshtastic_CompassMode_MIN, 0, 0}
 #define meshtastic_NodeFilter_init_default       {0, 0, 0, 0, 0, "", 0}
 #define meshtastic_NodeHighlight_init_default    {0, 0, 0, 0, ""}
 #define meshtastic_GeoPoint_init_default         {0, 0, 0}
 #define meshtastic_Map_init_default              {false, meshtastic_GeoPoint_init_default, "", 0}
-#define meshtastic_DeviceUIConfig_init_zero      {0, 0, 0, 0, 0, 0, _meshtastic_Theme_MIN, 0, 0, 0, _meshtastic_Language_MIN, false, meshtastic_NodeFilter_init_zero, false, meshtastic_NodeHighlight_init_zero, {0, {0}}, false, meshtastic_Map_init_zero}
+#define meshtastic_DeviceUIConfig_init_zero      {0, 0, 0, 0, 0, 0, _meshtastic_Theme_MIN, 0, 0, 0, _meshtastic_Language_MIN, false, meshtastic_NodeFilter_init_zero, false, meshtastic_NodeHighlight_init_zero, {0, {0}}, false, meshtastic_Map_init_zero, _meshtastic_CompassMode_MIN, 0, 0}
 #define meshtastic_NodeFilter_init_zero          {0, 0, 0, 0, 0, "", 0}
 #define meshtastic_NodeHighlight_init_zero       {0, 0, 0, 0, ""}
 #define meshtastic_GeoPoint_init_zero            {0, 0, 0}
@@ -214,6 +236,9 @@ extern "C" {
 #define meshtastic_DeviceUIConfig_node_highlight_tag 13
 #define meshtastic_DeviceUIConfig_calibration_data_tag 14
 #define meshtastic_DeviceUIConfig_map_data_tag   15
+#define meshtastic_DeviceUIConfig_compass_mode_tag 16
+#define meshtastic_DeviceUIConfig_screen_rgb_color_tag 17
+#define meshtastic_DeviceUIConfig_is_clockface_analog_tag 18
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_DeviceUIConfig_FIELDLIST(X, a) \
@@ -231,7 +256,10 @@ X(a, STATIC,   SINGULAR, UENUM,    language,         11) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  node_filter,      12) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  node_highlight,   13) \
 X(a, STATIC,   SINGULAR, BYTES,    calibration_data,  14) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  map_data,         15)
+X(a, STATIC,   OPTIONAL, MESSAGE,  map_data,         15) \
+X(a, STATIC,   SINGULAR, UENUM,    compass_mode,     16) \
+X(a, STATIC,   SINGULAR, UINT32,   screen_rgb_color,  17) \
+X(a, STATIC,   SINGULAR, BOOL,     is_clockface_analog,  18)
 #define meshtastic_DeviceUIConfig_CALLBACK NULL
 #define meshtastic_DeviceUIConfig_DEFAULT NULL
 #define meshtastic_DeviceUIConfig_node_filter_MSGTYPE meshtastic_NodeFilter
@@ -288,7 +316,7 @@ extern const pb_msgdesc_t meshtastic_Map_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_DEVICE_UI_PB_H_MAX_SIZE meshtastic_DeviceUIConfig_size
-#define meshtastic_DeviceUIConfig_size           188
+#define meshtastic_DeviceUIConfig_size           201
 #define meshtastic_GeoPoint_size                 33
 #define meshtastic_Map_size                      58
 #define meshtastic_NodeFilter_size               47
