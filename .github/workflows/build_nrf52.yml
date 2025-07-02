@@ -7,24 +7,55 @@ on:
         required: true
         type: string
 
-permissions: read-all
-
 jobs:
-  build-nrf52:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build NRF52
-        id: build
-        uses: ./.github/actions/build-variant
+      - name: Cache PlatformIO dependencies
+        uses: actions/cache@v4
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          board: ${{ inputs.board }}
-          build-script-path: bin/build-nrf52.sh
-          artifact-paths: |
-            release/*.hex
-            release/*.uf2
-            release/*.elf
-            release/*.zip
-          arch: nrf52840
+          path: |
+            ~/.platformio
+            .pio
+          key: ${{ runner.os }}-pio-nrf52-${{ inputs.board }}-${{ hashFiles('**/platformio.ini') }}
+          restore-keys: |
+            ${{ runner.os }}-pio-nrf52-${{ inputs.board }}-
+            ${{ runner.os }}-pio-nrf52-
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install platformio
+
+      - name: Build firmware
+        run: |
+          platformio run -e ${{ inputs.board }}
+          mkdir -p artifacts
+          # Copy main firmware files
+          cp .pio/build/${{ inputs.board }}/*.hex artifacts/ || true
+          cp .pio/build/${{ inputs.board }}/*.elf artifacts/ || true
+          # Copy OTA and bootloader files if they exist
+          cp .pio/build/${{ inputs.board }}/*-ota.zip artifacts/ || true
+          cp .pio/build/${{ inputs.board }}/bleota*.bin artifacts/ || true
+          # Copy factory erase file if it exists
+          cp .pio/build/${{ inputs.board }}/Meshtastic_nRF52_factory_erase*.uf2 artifacts/ || true
+
+      - name: Get version info
+        id: version
+        run: echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-nrf52-${{ inputs.board }}-${{ steps.version.outputs.long }}
+          path: artifacts/
+          retention-days: 30
+          if-no-files-found: error

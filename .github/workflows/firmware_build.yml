@@ -1,0 +1,242 @@
+name: Firmware Build
+
+concurrency:
+  group: firmware-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches:
+      - master
+      - develop
+      - event/*
+    paths-ignore:
+      - "**.md"
+      - version.properties
+  pull_request_target:
+    branches:
+      - master
+      - develop
+      - event/*
+    paths-ignore:
+      - "**.md"
+  workflow_dispatch:
+
+env:
+  PLATFORMIO_CACHE_DIR: ~/.platformio
+  ARTIFACT_RETENTION_DAYS: 30
+
+jobs:
+  setup:
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [esp32, esp32s3, esp32c3, esp32c6, nrf52840, rp2040, stm32, check]
+    runs-on: ubuntu-latest
+    outputs:
+      matrix_data: ${{ steps.setup_matrix.outputs.matrix_data }}
+      version_long: ${{ steps.version.outputs.long }}
+      version_deb: ${{ steps.version.outputs.deb }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Cache PlatformIO dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            .pio
+          key: ${{ runner.os }}-pio-${{ hashFiles('**/platformio.ini') }}
+          restore-keys: |
+            ${{ runner.os }}-pio-
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+          cache: 'pip'
+
+      - name: Generate build matrix
+        id: setup_matrix
+        run: |
+          if [[ "$GITHUB_HEAD_REF" == "" ]]; then
+            TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}})
+          else  
+            TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}} quick)
+          fi
+          echo "Name: $GITHUB_REF_NAME Base: $GITHUB_BASE_REF Ref: $GITHUB_REF Targets: $TARGETS"
+          echo "matrix_data=$(jq -cn --argjson environments "$TARGETS" '{board: $environments}')" >> $GITHUB_OUTPUT
+
+      - name: Get version info
+        id: version
+        run: |
+          echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+          echo "deb=$(./bin/buildinfo.py deb)" >> $GITHUB_OUTPUT
+
+  build:
+    needs: setup
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.setup.outputs.matrix_data) }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache PlatformIO dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            .pio
+          key: ${{ runner.os }}-pio-${{ matrix.board }}-${{ hashFiles('**/platformio.ini') }}
+          restore-keys: |
+            ${{ runner.os }}-pio-${{ matrix.board }}-
+            ${{ runner.os }}-pio-
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+          cache: 'pip'
+
+      - name: Install PlatformIO
+        run: |
+          python -m pip install --upgrade pip
+          pip install platformio
+
+      - name: Build firmware
+        run: platformio run -e ${{ matrix.board }}
+
+      - name: Collect build artifacts
+        run: |
+          mkdir -p artifacts
+          cp .pio/build/${{ matrix.board }}/*.{bin,elf,hex,uf2} artifacts/ 2>/dev/null || true
+          ls -la artifacts/
+
+      - name: Check firmware size
+        run: |
+          echo "Firmware size analysis for ${{ matrix.board }}"
+          platformio run --target size -e ${{ matrix.board }}
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ matrix.board }}-${{ needs.setup.outputs.version_long }}
+          path: artifacts/
+          retention-days: ${{ env.ARTIFACT_RETENTION_DAYS }}
+          if-no-files-found: error
+
+  gather-artifacts:
+    needs: [setup, build]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [esp32, esp32s3, esp32c3, esp32c6, nrf52840, rp2040, stm32]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./firmware
+          pattern: firmware-*-${{ needs.setup.outputs.version_long }}
+          merge-multiple: true
+
+      - name: Prepare release artifacts
+        run: |
+          mkdir -p release
+          cp -r ./bin/device-*.sh ./bin/device-*.bat release/
+          chmod +x release/device-*.sh
+          find ./firmware -type f -name "*.bin" -o -name "*.hex" -o -name "*.uf2" | xargs -I {} cp {} release/
+          find ./firmware -type f -name "*.elf" -exec cp {} release/ \;
+
+      - name: Create firmware package
+        run: |
+          cd release
+          zip -j -9 ../firmware-${{ matrix.arch }}-${{ needs.setup.outputs.version_long }}.zip *
+          cd ..
+          zip -j -9 debug-elfs-${{ matrix.arch }}-${{ needs.setup.outputs.version_long }}.zip release/*.elf
+
+      - name: Upload firmware package
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ matrix.arch }}-package-${{ needs.setup.outputs.version_long }}
+          path: |
+            firmware-${{ matrix.arch }}-${{ needs.setup.outputs.version_long }}.zip
+            debug-elfs-${{ matrix.arch }}-${{ needs.setup.outputs.version_long }}.zip
+          retention-days: ${{ env.ARTIFACT_RETENTION_DAYS }}
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const name = 'firmware-${{ matrix.arch }}-${{ needs.setup.outputs.version_long }}';
+            const body = `📦 Build artifacts for ${{ matrix.arch }} are ready!\n` +
+                        `Download: ${name}.zip\n` +
+                        `Debug symbols: debug-elfs-${{ matrix.arch }}-${{ needs.setup.outputs.version_long }}.zip\n` +
+                        `These artifacts will be available for ${process.env.ARTIFACT_RETENTION_DAYS} days.`;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+  create-release:
+    needs: [setup, gather-artifacts]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./release-artifacts
+          pattern: firmware-*-package-${{ needs.setup.outputs.version_long }}
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create v${{ needs.setup.outputs.version_long }} \
+            --title "Meshtastic Firmware ${{ needs.setup.outputs.version_long }}" \
+            --draft \
+            --prerelease \
+            --notes "## Release Notes
+            
+            This release includes firmware builds for all supported hardware platforms.
+            
+            Please test thoroughly and report any issues.
+            
+            ### Included Architectures
+            - ESP32 variants
+            - NRF52840
+            - RP2040
+            - STM32
+            
+            ### Installation
+            See [installation instructions](https://meshtastic.org/docs/installation) for your device." \
+            ./release-artifacts/*.zip
+
+      - name: Publish to meshtastic.github.io
+        uses: peaceiris/actions-gh-pages@v4
+        env:
+          DEST_PREFIX: ${{ contains(github.ref_name, 'event/') && format('{0}/', github.ref_name) || '' }}
+        with:
+          deploy_key: ${{ secrets.DIST_PAGES_DEPLOY_KEY }}
+          external_repository: meshtastic/meshtastic.github.io
+          publish_branch: master
+          publish_dir: ./release-artifacts
+          destination_dir: ${{ env.DEST_PREFIX }}firmware-${{ needs.setup.outputs.version_long }}
+          keep_files: true
+          user_name: github-actions[bot]
+          user_email: github-actions[bot]@users.noreply.github.com
+          commit_message: "Release ${{ needs.setup.outputs.version_long }}"
+          enable_jekyll: true

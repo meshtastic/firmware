@@ -1,4 +1,4 @@
-name: Build RPI2040
+name: Build RP2040
 
 on:
   workflow_call:
@@ -7,22 +7,61 @@ on:
         required: true
         type: string
 
-permissions: read-all
-
 jobs:
-  build-rpi2040:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build Raspberry Pi 2040
-        id: build
-        uses: ./.github/actions/build-variant
+      - name: Cache PlatformIO dependencies
+        uses: actions/cache@v4
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          board: ${{ inputs.board }}
-          build-script-path: bin/build-rpi2040.sh
-          artifact-paths: |
-            release/*.uf2
-            release/*.elf
-          arch: rp2040
+          path: |
+            ~/.platformio
+            .pio
+          key: ${{ runner.os }}-pio-rp2040-${{ inputs.board }}-${{ hashFiles('**/platformio.ini') }}
+          restore-keys: |
+            ${{ runner.os }}-pio-rp2040-${{ inputs.board }}-
+            ${{ runner.os }}-pio-rp2040-
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install platformio
+
+      - name: Build firmware
+        run: |
+          platformio run -e ${{ inputs.board }}
+          mkdir -p artifacts
+          # Copy UF2 and ELF files
+          cp .pio/build/${{ inputs.board }}/*.uf2 artifacts/ || true
+          cp .pio/build/${{ inputs.board }}/*.elf artifacts/ || true
+          # Also copy any bin files if they exist
+          cp .pio/build/${{ inputs.board }}/*.bin artifacts/ || true
+          # Copy littlefs image if it exists
+          cp .pio/build/${{ inputs.board }}/littlefs*.bin artifacts/ || true
+
+      - name: Check firmware size
+        run: |
+          echo "Firmware size analysis for ${{ inputs.board }}"
+          platformio run --target size -e ${{ inputs.board }}
+          echo "Available flash: $(platformio device list --json-output | jq -r '.[0].properties.flash')"
+          echo "Available RAM: $(platformio device list --json-output | jq -r '.[0].properties.ram')"
+
+      - name: Get version info
+        id: version
+        run: echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-rp2040-${{ inputs.board }}-${{ steps.version.outputs.long }}
+          path: artifacts/
+          retention-days: 30
+          if-no-files-found: error
