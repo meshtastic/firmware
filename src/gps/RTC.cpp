@@ -244,11 +244,15 @@ bool perhapsSetRTC(RTCQuality q, struct tm &t)
  */
 int32_t getTZOffset()
 {
+#if MESHTASTIC_EXCLUDE_TZ
+    return 0;
+#else
     time_t now = getTime(false);
     struct tm *gmt;
     gmt = gmtime(&now);
     gmt->tm_isdst = -1;
     return (int32_t)difftime(now, mktime(gmt));
+#endif
 }
 
 /**

@@ -1,6 +1,6 @@
 # InkHUD
 
-This document is intended as a reference for maintainers. A haphazard collection of notes which _might_ be helpful.
+A haphazard collection of notes which _might_ be helpful for developers.
 
 <img src="disclaimer.jpg" width="250" alt="self deprecating meme" />
 
@@ -109,7 +109,7 @@ The display image does not update "automatically". Individual applets are respon
 
 (animated diagram)
 
-<img src="rendering.gif" alt="animated process diagram of InkHUD rendering" height="480" width="auto" />
+<img src="rendering.gif" alt="animated process diagram of InkHUD rendering" height="480" width="480" />
 
 An overview:
 
@@ -337,6 +337,8 @@ std::string parsed = parse(greeting);
 ```
 
 This will re-encode the characters to match whichever extended-ASCII font InkHUD has been built with.
+
+A limited set of emoji have been [wedged into unused code points within the font](#emoji).
 
 ### Localization
 
@@ -734,3 +736,36 @@ Some fonts may have a handful of especially tall characters, especially extended
 // -2 px of padding above, +1 px of padding below
 InkHUD::AppletFont(FreeSans9pt7b, ASCII, -2, 1);
 ```
+
+#### Emoji
+
+AdafruitGFX fonts are limited to 255 characters. InkHUD supports a restricted set of emoji, which are stored in the unused code points of the ASCII control characters (`'\x01'`, `'\x02'`, etc).
+
+Standard AdafruitGFX fonts contain no glyphs below `'\x20'`, so will ignore these attempts to parse emoji.
+
+This mapping of emoji to control characters is fairly arbitrary. Selection was influenced by [PR #3940 Oled screen emojis](https://github.com/meshtastic/firmware/pull/3940) and [Emoji Frequency Spreadsheet](https://docs.google.com/spreadsheets/d/1Zs13WJYdZL1pNZP0dCIXkWau_tZOjK3mmJz0KNq4I30/).
+
+| Code Point | Emoji                                          |
+| ---------- | ---------------------------------------------- |
+| ~~`0x00`~~ | (null term, unused)                            |
+| `0x01`     | 👍                                             |
+| `0x02`     | 👎                                             |
+| `0x03`     | 🙂                                             |
+| `0x04`     | 😆                                             |
+| `0x05`     | 👋                                             |
+| `0x06`     | ☀                                             |
+| ~~`0x07`~~ | (bell char, unused)                            |
+| `0x08`     | 🌧                                             |
+| `0x09`     | ☁                                             |
+| ~~`0x0A`~~ | (line feed, unused)                            |
+| `0x0B`     | ♥                                             |
+| `0x0C`     | 💩                                             |
+| ~~`0x0D`~~ | (carriage return, unused)                      |
+| `0x0E`     | 🔔                                             |
+| `0x0F`     | 😭                                             |
+| `0x1A`     | (substitution "⍰", used for unprintable chars) |
+| `0x1B`     | 🤗                                             |
+| `0x1C`     | 😉                                             |
+| `0x1D`     | 😏                                             |
+| `0x1E`     | 🫡 (saluting face)                             |
+| `0x1F`     | 👌                                             |

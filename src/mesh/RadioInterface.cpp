@@ -12,6 +12,12 @@
 #include <pb_decode.h>
 #include <pb_encode.h>
 
+// Calculate 2^n without calling pow()
+uint32_t pow_of_2(uint32_t n)
+{
+    return 1 << n;
+}
+
 #define RDEF(name, freq_start, freq_end, duty_cycle, spacing, power_limit, audio_permitted, frequency_switching, wide_lora)      \
     {                                                                                                                            \
         meshtastic_Config_LoRaConfig_RegionCode_##name, freq_start, freq_end, duty_cycle, spacing, power_limit, audio_permitted, \
@@ -63,6 +69,13 @@ const RegionInfo regions[] = {
         https://iotalliance.org.nz/wp-content/uploads/sites/4/2019/05/IoT-Spectrum-in-NZ-Briefing-Paper.pdf
      */
     RDEF(ANZ, 915.0f, 928.0f, 100, 0, 30, true, false, false),
+
+    /*
+        433.05 - 434.79 MHz, 25mW EIRP max, No duty cycle restrictions
+        AU Low Interference Potential https://www.acma.gov.au/licences/low-interference-potential-devices-lipd-class-licence
+        NZ General User Radio Licence for Short Range Devices https://gazette.govt.nz/notice/id/2022-go3100
+     */
+    RDEF(ANZ_433, 433.05f, 434.79f, 100, 0, 14, true, false, false),
 
     /*
         https://digital.gov.ru/uploaded/files/prilozhenie-12-k-reshenyu-gkrch-18-46-03-1.pdf
@@ -239,7 +252,7 @@ uint32_t RadioInterface::getRetransmissionMsec(const meshtastic_MeshPacket *p)
     float channelUtil = airTime->channelUtilizationPercent();
     uint8_t CWsize = map(channelUtil, 0, 100, CWmin, CWmax);
     // Assuming we pick max. of CWsize and there will be a client with SNR at half the range
-    return 2 * packetAirtime + (pow(2, CWsize) + 2 * CWmax + pow(2, int((CWmax + CWmin) / 2))) * slotTimeMsec +
+    return 2 * packetAirtime + (pow_of_2(CWsize) + 2 * CWmax + pow_of_2(int((CWmax + CWmin) / 2))) * slotTimeMsec +
            PROCESSING_TIME_MSEC;
 }
 
@@ -252,7 +265,7 @@ uint32_t RadioInterface::getTxDelayMsec()
     float channelUtil = airTime->channelUtilizationPercent();
     uint8_t CWsize = map(channelUtil, 0, 100, CWmin, CWmax);
     // LOG_DEBUG("Current channel utilization is %f so setting CWsize to %d", channelUtil, CWsize);
-    return random(0, pow(2, CWsize)) * slotTimeMsec;
+    return random(0, pow_of_2(CWsize)) * slotTimeMsec;
 }
 
 /** The CW size to use when calculating SNR_based delays */
@@ -272,7 +285,7 @@ uint32_t RadioInterface::getTxDelayMsecWeightedWorst(float snr)
 {
     uint8_t CWsize = getCWsize(snr);
     // offset the maximum delay for routers: (2 * CWmax * slotTimeMsec)
-    return (2 * CWmax * slotTimeMsec) + pow(2, CWsize) * slotTimeMsec;
+    return (2 * CWmax * slotTimeMsec) + pow_of_2(CWsize) * slotTimeMsec;
 }
 
 /** The delay to use when we want to flood a message */
@@ -289,7 +302,7 @@ uint32_t RadioInterface::getTxDelayMsecWeighted(float snr)
         LOG_DEBUG("rx_snr found in packet. Router: setting tx delay:%d", delay);
     } else {
         // offset the maximum delay for routers: (2 * CWmax * slotTimeMsec)
-        delay = (2 * CWmax * slotTimeMsec) + random(0, pow(2, CWsize)) * slotTimeMsec;
+        delay = (2 * CWmax * slotTimeMsec) + random(0, pow_of_2(CWsize)) * slotTimeMsec;
         LOG_DEBUG("rx_snr found in packet. Setting tx delay:%d", delay);
     }
 
@@ -589,7 +602,7 @@ void RadioInterface::applyModemConfig()
 uint32_t RadioInterface::computeSlotTimeMsec()
 {
     float sumPropagationTurnaroundMACTime = 0.2 + 0.4 + 7; // in milliseconds
-    float symbolTime = pow(2, sf) / bw;                    // in milliseconds
+    float symbolTime = pow_of_2(sf) / bw;                  // in milliseconds
 
     if (myRegion->wideLora) {
         // CAD duration derived from AN1200.22 of SX1280
@@ -604,7 +617,7 @@ uint32_t RadioInterface::computeSlotTimeMsec()
  * Some regulatory regions limit xmit power.
  * This function should be called by subclasses after setting their desired power.  It might lower it
  */
-void RadioInterface::limitPower()
+void RadioInterface::limitPower(int8_t loraMaxPower)
 {
     uint8_t maxPower = 255; // No limit
 
@@ -619,6 +632,13 @@ void RadioInterface::limitPower()
     if (TX_GAIN_LORA > 0) {
         LOG_INFO("Requested Tx power: %d dBm; Device LoRa Tx gain: %d dB", power, TX_GAIN_LORA);
         power -= TX_GAIN_LORA;
+    }
+
+    if (power > loraMaxPower) // Clamp power to maximum defined level
+        power = loraMaxPower;
+
+    if (TX_GAIN_LORA == 0) { // Setting power in config with defined TX_GAIN_LORA will cause decreasing power on each reboot
+        config.lora.tx_power = power; // Set limited power in config
     }
 
     LOG_INFO("Final Tx power: %d dBm", power);

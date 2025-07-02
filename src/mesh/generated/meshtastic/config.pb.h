@@ -88,6 +88,23 @@ typedef enum _meshtastic_Config_DeviceConfig_RebroadcastMode {
     meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY = 5
 } meshtastic_Config_DeviceConfig_RebroadcastMode;
 
+/* Defines buzzer behavior for audio feedback */
+typedef enum _meshtastic_Config_DeviceConfig_BuzzerMode {
+    /* Default behavior.
+ Buzzer is enabled for all audio feedback including button presses and alerts. */
+    meshtastic_Config_DeviceConfig_BuzzerMode_ALL_ENABLED = 0,
+    /* Disabled.
+ All buzzer audio feedback is disabled. */
+    meshtastic_Config_DeviceConfig_BuzzerMode_DISABLED = 1,
+    /* Notifications Only.
+ Buzzer is enabled only for notifications and alerts, but not for button presses.
+ External notification config determines the specifics of the notification behavior. */
+    meshtastic_Config_DeviceConfig_BuzzerMode_NOTIFICATIONS_ONLY = 2,
+    /* Non-notification system buzzer tones only.
+ Buzzer is enabled only for non-notification tones such as button presses, startup, shutdown, but not for alerts. */
+    meshtastic_Config_DeviceConfig_BuzzerMode_SYSTEM_ONLY = 3
+} meshtastic_Config_DeviceConfig_BuzzerMode;
+
 /* Bit field of boolean configuration options, indicating which optional
  fields to include when assembling POSITION messages.
  Longitude, latitude, altitude, speed, heading, and DOP
@@ -266,7 +283,9 @@ typedef enum _meshtastic_Config_LoRaConfig_RegionCode {
     /* Philippines 868mhz */
     meshtastic_Config_LoRaConfig_RegionCode_PH_868 = 20,
     /* Philippines 915mhz */
-    meshtastic_Config_LoRaConfig_RegionCode_PH_915 = 21
+    meshtastic_Config_LoRaConfig_RegionCode_PH_915 = 21,
+    /* Australia / New Zealand 433MHz */
+    meshtastic_Config_LoRaConfig_RegionCode_ANZ_433 = 22
 } meshtastic_Config_LoRaConfig_RegionCode;
 
 /* Standard predefined channel settings
@@ -335,6 +354,9 @@ typedef struct _meshtastic_Config_DeviceConfig {
     char tzdef[65];
     /* If true, disable the default blinking LED (LED_PIN) behavior on the device */
     bool led_heartbeat_disabled;
+    /* Controls buzzer behavior for audio feedback
+ Defaults to ENABLED */
+    meshtastic_Config_DeviceConfig_BuzzerMode buzzer_mode;
 } meshtastic_Config_DeviceConfig;
 
 /* Position Config */
@@ -618,6 +640,10 @@ extern "C" {
 #define _meshtastic_Config_DeviceConfig_RebroadcastMode_MAX meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY
 #define _meshtastic_Config_DeviceConfig_RebroadcastMode_ARRAYSIZE ((meshtastic_Config_DeviceConfig_RebroadcastMode)(meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY+1))
 
+#define _meshtastic_Config_DeviceConfig_BuzzerMode_MIN meshtastic_Config_DeviceConfig_BuzzerMode_ALL_ENABLED
+#define _meshtastic_Config_DeviceConfig_BuzzerMode_MAX meshtastic_Config_DeviceConfig_BuzzerMode_SYSTEM_ONLY
+#define _meshtastic_Config_DeviceConfig_BuzzerMode_ARRAYSIZE ((meshtastic_Config_DeviceConfig_BuzzerMode)(meshtastic_Config_DeviceConfig_BuzzerMode_SYSTEM_ONLY+1))
+
 #define _meshtastic_Config_PositionConfig_PositionFlags_MIN meshtastic_Config_PositionConfig_PositionFlags_UNSET
 #define _meshtastic_Config_PositionConfig_PositionFlags_MAX meshtastic_Config_PositionConfig_PositionFlags_SPEED
 #define _meshtastic_Config_PositionConfig_PositionFlags_ARRAYSIZE ((meshtastic_Config_PositionConfig_PositionFlags)(meshtastic_Config_PositionConfig_PositionFlags_SPEED+1))
@@ -655,8 +681,8 @@ extern "C" {
 #define _meshtastic_Config_DisplayConfig_CompassOrientation_ARRAYSIZE ((meshtastic_Config_DisplayConfig_CompassOrientation)(meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270_INVERTED+1))
 
 #define _meshtastic_Config_LoRaConfig_RegionCode_MIN meshtastic_Config_LoRaConfig_RegionCode_UNSET
-#define _meshtastic_Config_LoRaConfig_RegionCode_MAX meshtastic_Config_LoRaConfig_RegionCode_PH_915
-#define _meshtastic_Config_LoRaConfig_RegionCode_ARRAYSIZE ((meshtastic_Config_LoRaConfig_RegionCode)(meshtastic_Config_LoRaConfig_RegionCode_PH_915+1))
+#define _meshtastic_Config_LoRaConfig_RegionCode_MAX meshtastic_Config_LoRaConfig_RegionCode_ANZ_433
+#define _meshtastic_Config_LoRaConfig_RegionCode_ARRAYSIZE ((meshtastic_Config_LoRaConfig_RegionCode)(meshtastic_Config_LoRaConfig_RegionCode_ANZ_433+1))
 
 #define _meshtastic_Config_LoRaConfig_ModemPreset_MIN meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST
 #define _meshtastic_Config_LoRaConfig_ModemPreset_MAX meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO
@@ -669,6 +695,7 @@ extern "C" {
 
 #define meshtastic_Config_DeviceConfig_role_ENUMTYPE meshtastic_Config_DeviceConfig_Role
 #define meshtastic_Config_DeviceConfig_rebroadcast_mode_ENUMTYPE meshtastic_Config_DeviceConfig_RebroadcastMode
+#define meshtastic_Config_DeviceConfig_buzzer_mode_ENUMTYPE meshtastic_Config_DeviceConfig_BuzzerMode
 
 #define meshtastic_Config_PositionConfig_gps_mode_ENUMTYPE meshtastic_Config_PositionConfig_GpsMode
 
@@ -692,7 +719,7 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define meshtastic_Config_init_default           {0, {meshtastic_Config_DeviceConfig_init_default}}
-#define meshtastic_Config_DeviceConfig_init_default {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0, 0, 0, "", 0}
+#define meshtastic_Config_DeviceConfig_init_default {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0, 0, 0, "", 0, _meshtastic_Config_DeviceConfig_BuzzerMode_MIN}
 #define meshtastic_Config_PositionConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _meshtastic_Config_PositionConfig_GpsMode_MIN}
 #define meshtastic_Config_PowerConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Config_NetworkConfig_init_default {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_default, "", 0, 0}
@@ -703,7 +730,7 @@ extern "C" {
 #define meshtastic_Config_SecurityConfig_init_default {{0, {0}}, {0, {0}}, 0, {{0, {0}}, {0, {0}}, {0, {0}}}, 0, 0, 0, 0}
 #define meshtastic_Config_SessionkeyConfig_init_default {0}
 #define meshtastic_Config_init_zero              {0, {meshtastic_Config_DeviceConfig_init_zero}}
-#define meshtastic_Config_DeviceConfig_init_zero {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0, 0, 0, "", 0}
+#define meshtastic_Config_DeviceConfig_init_zero {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0, 0, 0, "", 0, _meshtastic_Config_DeviceConfig_BuzzerMode_MIN}
 #define meshtastic_Config_PositionConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _meshtastic_Config_PositionConfig_GpsMode_MIN}
 #define meshtastic_Config_PowerConfig_init_zero  {0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Config_NetworkConfig_init_zero {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_zero, "", 0, 0}
@@ -726,6 +753,7 @@ extern "C" {
 #define meshtastic_Config_DeviceConfig_disable_triple_click_tag 10
 #define meshtastic_Config_DeviceConfig_tzdef_tag 11
 #define meshtastic_Config_DeviceConfig_led_heartbeat_disabled_tag 12
+#define meshtastic_Config_DeviceConfig_buzzer_mode_tag 13
 #define meshtastic_Config_PositionConfig_position_broadcast_secs_tag 1
 #define meshtastic_Config_PositionConfig_position_broadcast_smart_enabled_tag 2
 #define meshtastic_Config_PositionConfig_fixed_position_tag 3
@@ -849,7 +877,8 @@ X(a, STATIC,   SINGULAR, BOOL,     double_tap_as_button_press,   8) \
 X(a, STATIC,   SINGULAR, BOOL,     is_managed,        9) \
 X(a, STATIC,   SINGULAR, BOOL,     disable_triple_click,  10) \
 X(a, STATIC,   SINGULAR, STRING,   tzdef,            11) \
-X(a, STATIC,   SINGULAR, BOOL,     led_heartbeat_disabled,  12)
+X(a, STATIC,   SINGULAR, BOOL,     led_heartbeat_disabled,  12) \
+X(a, STATIC,   SINGULAR, UENUM,    buzzer_mode,      13)
 #define meshtastic_Config_DeviceConfig_CALLBACK NULL
 #define meshtastic_Config_DeviceConfig_DEFAULT NULL
 
@@ -995,7 +1024,7 @@ extern const pb_msgdesc_t meshtastic_Config_SessionkeyConfig_msg;
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_CONFIG_PB_H_MAX_SIZE meshtastic_Config_size
 #define meshtastic_Config_BluetoothConfig_size   10
-#define meshtastic_Config_DeviceConfig_size      98
+#define meshtastic_Config_DeviceConfig_size      100
 #define meshtastic_Config_DisplayConfig_size     32
 #define meshtastic_Config_LoRaConfig_size        85
 #define meshtastic_Config_NetworkConfig_IpV4Config_size 20
