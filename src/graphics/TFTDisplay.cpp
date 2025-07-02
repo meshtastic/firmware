@@ -428,6 +428,8 @@ class LGFX : public lgfx::LGFX_Device
 #if HAS_TOUCHSCREEN
 #if defined(T_WATCH_S3) || defined(ELECROW)
     lgfx::Touch_FT5x06 _touch_instance;
+#elif defined(TOUCH_CS)
+    lgfx::Touch_XPT2046 _touch_instance;
 #else
     lgfx::Touch_GT911 _touch_instance;
 #endif
@@ -491,8 +493,17 @@ class LGFX : public lgfx::LGFX_Device
 #endif
             cfg.dummy_read_bits = 1;                      // Number of bits for dummy read before non-pixel data read
             cfg.readable = true;                          // Set to true if data can be read
+#ifndef TFT_INVERSION_OFF
             cfg.invert = true;                            // Set to true if the light/darkness of the panel is reversed
+#else
+            cfg.invert = false;
+#endif
+
+#if !defined(TFT_RGB_ORDER) || (TFT_RGB_ORDER == TFT_BGR)
             cfg.rgb_order = false;                        // Set to true if the panel's red and blue are swapped
+#else
+            cfg.rgb_order = true;
+#endif
             cfg.dlen_16bit =
                 false;             // Set to true for panels that transmit data length in 16-bit units with 16-bit parallel or SPI
             cfg.bus_shared = true; // If the bus is shared with the SD card, set to true (bus control with drawJpgFile etc.)
@@ -519,6 +530,7 @@ class LGFX : public lgfx::LGFX_Device
 #endif
 
 #if HAS_TOUCHSCREEN
+#if !defined(TOUCH_CS)
         // Configure settings for touch screen control.
         {
             auto cfg = _touch_instance.config();
@@ -551,6 +563,30 @@ class LGFX : public lgfx::LGFX_Device
             _touch_instance.config(cfg);
             _panel_instance.setTouch(&_touch_instance);
         }
+#else // if defined(TOUCH_CS)
+        {
+            // Configure settings for touch control.
+            auto touch_cfg = _touch_instance.config();
+
+            touch_cfg.x_min = TFT_TOUCH_X_MIN;
+            touch_cfg.x_max = TFT_TOUCH_X_MAX;
+            touch_cfg.y_min = TFT_TOUCH_Y_MIN;
+            touch_cfg.y_max = TFT_TOUCH_Y_MAX;
+            touch_cfg.pin_int = -1;
+            touch_cfg.bus_shared = true;
+            touch_cfg.offset_rotation = TFT_TOUCH_OFFSET_ROTATION;
+            // SPI configuration
+            touch_cfg.spi_host = ST7789_SPI_HOST;
+            touch_cfg.freq = SPI_TOUCH_FREQUENCY;
+            touch_cfg.pin_sclk = ST7789_SCK;
+            touch_cfg.pin_mosi = ST7789_SDA;
+            touch_cfg.pin_miso = ST7789_MISO;
+            touch_cfg.pin_cs = TOUCH_CS;
+
+            _touch_instance.config(touch_cfg);
+            _panel_instance.setTouch(&_touch_instance);
+        }
+#endif
 #endif
 
         setPanel(&_panel_instance); // Sets the panel to use.
