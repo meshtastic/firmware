@@ -1696,6 +1696,8 @@ void NodeDB::sortMeshDB()
         lastSort = millis();
         std::sort(meshNodes->begin(), meshNodes->begin() + numMeshNodes,
                   [](const meshtastic_NodeInfoLite &a, const meshtastic_NodeInfoLite &b) {
+                      if (a.num == myNodeInfo.my_node_num && b.num == myNodeInfo.my_node_num) // in theory impossible
+                          return false;
                       if (a.num == myNodeInfo.my_node_num) {
                           return true;
                       }
@@ -1706,9 +1708,7 @@ void NodeDB::sortMeshDB()
                       bool bFav = b.is_favorite;
                       if (aFav != bFav)
                           return aFav;
-                      if (a.last_heard != b.last_heard)
-                          return a.last_heard > b.last_heard;
-                      return a.num > b.num;
+                      return a.last_heard > b.last_heard;
                   });
     }
 }
