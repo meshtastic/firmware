@@ -28,7 +28,6 @@ int32_t AirQualityTelemetryModule::runOnce()
 {
     if (sleepOnNextExecution == true) {
         sleepOnNextExecution = false;
-        // uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval,
         uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.air_quality_interval,
                                                                    default_telemetry_broadcast_interval_secs);
         LOG_DEBUG("Sleeping for %ims, then awaking to send metrics again.", nightyNightMs);
@@ -222,7 +221,6 @@ bool AirQualityTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPack
     return false; // Let others look at this message also if they want
 }
 
-// CHECKED
 bool AirQualityTelemetryModule::getAirQualityTelemetry(meshtastic_Telemetry *m)
 {
     bool valid = true;
