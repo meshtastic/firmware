@@ -267,6 +267,12 @@ typedef enum _meshtastic_HardwareModel {
     /* *
  GAT562 Mesh Trial Tracker */
     meshtastic_HardwareModel_GAT562_MESH_TRIAL_TRACKER = 104,
+    /* *
+ RAKwireless WisMesh Tag */
+    meshtastic_HardwareModel_WISMESH_TAG = 105,
+    /* *
+ RAKwireless WisBlock Core RAK3312 https://docs.rakwireless.com/product-categories/wisduo/rak3112-module/overview/ */
+    meshtastic_HardwareModel_RAK3312 = 106,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
