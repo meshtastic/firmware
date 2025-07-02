@@ -165,7 +165,7 @@ void Screen::showOverlayBanner(BannerOverlayOptions banner_overlay_options)
     NotificationRenderer::current_notification_type = notificationTypeEnum::selection_picker;
     static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
     ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
-    setFastFramerate(); // Draw ASAP
+    ui->setTargetFPS(60);
     ui->update();
 }
 
@@ -187,7 +187,7 @@ void Screen::showNodePicker(const char *message, uint32_t durationMs, std::funct
 
     static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
     ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
-    setFastFramerate(); // Draw ASAP
+    ui->setTargetFPS(60);
     ui->update();
 }
 
@@ -212,7 +212,7 @@ void Screen::showNumberPicker(const char *message, uint32_t durationMs, uint8_t 
 
     static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
     ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
-    setFastFramerate(); // Draw ASAP
+    ui->setTargetFPS(60);
     ui->update();
 }
 
@@ -715,6 +715,8 @@ int32_t Screen::runOnce()
         case Cmd::STOP_BOOT_SCREEN:
             EINK_ADD_FRAMEFLAG(dispdev, COSMETIC); // E-Ink: Explicitly use full-refresh for next frame
             setFrames();
+            break;
+        case Cmd::NOOP:
             break;
         default:
             LOG_ERROR("Invalid screen cmd");

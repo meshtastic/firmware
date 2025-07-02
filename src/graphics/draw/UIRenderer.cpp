@@ -418,7 +418,7 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
                 GeoCoord::latLongToMeter(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
             */
             float bearing = GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(p.latitude_i), DegD(p.longitude_i));
-            if (screen->ignoreCompass) {
+            if (uiconfig.compass_mode == meshtastic_CompassMode_FREEZE_HEADING) {
                 myHeading = 0;
             } else {
                 bearing -= myHeading;
@@ -463,7 +463,7 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
 
             const auto &op = ourNode->position;
             float myHeading = 0;
-            if (!screen->ignoreCompass) {
+            if (uiconfig.compass_mode != meshtastic_CompassMode_FREEZE_HEADING) {
                 myHeading = screen->hasHeading() ? screen->getHeading() * PI / 180
                                                  : screen->estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
             }
@@ -475,7 +475,7 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
                 GeoCoord::latLongToMeter(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
             */
             float bearing = GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(p.latitude_i), DegD(p.longitude_i));
-            if (!screen->ignoreCompass)
+            if (uiconfig.compass_mode != meshtastic_CompassMode_FREEZE_HEADING)
                 bearing -= myHeading;
             graphics::CompassRenderer::drawNodeHeading(display, compassX, compassY, compassRadius * 2, bearing);
 
@@ -912,7 +912,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
     // === Determine Compass Heading ===
     float heading = 0;
     bool validHeading = false;
-    if (screen->ignoreCompass) {
+    if (uiconfig.compass_mode == meshtastic_CompassMode_FREEZE_HEADING) {
         validHeading = true;
     } else {
         if (screen->hasHeading()) {
@@ -978,7 +978,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
 
             // "N" label
             float northAngle = 0;
-            if (!config.display.compass_north_top)
+            if (uiconfig.compass_mode != meshtastic_CompassMode_FIXED_RING)
                 northAngle = -heading;
             float radius = compassRadius;
             int16_t nX = compassX + (radius - 1) * sin(northAngle);
@@ -1021,7 +1021,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
 
             // "N" label
             float northAngle = 0;
-            if (!config.display.compass_north_top)
+            if (uiconfig.compass_mode != meshtastic_CompassMode_FIXED_RING)
                 northAngle = -heading;
             float radius = compassRadius;
             int16_t nX = compassX + (radius - 1) * sin(northAngle);

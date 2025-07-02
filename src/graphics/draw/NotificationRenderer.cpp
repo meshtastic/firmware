@@ -125,7 +125,7 @@ void NotificationRenderer::drawNumberPicker(OLEDDisplay *display, OLEDDisplayUiS
         }
     } else if (inEvent == INPUT_BROKER_SELECT || inEvent == INPUT_BROKER_RIGHT) {
         curSelected++;
-    } else if (inEvent == INPUT_BROKER_SELECT || inEvent == INPUT_BROKER_LEFT) {
+    } else if (inEvent == INPUT_BROKER_LEFT) {
         curSelected--;
     } else if ((inEvent == INPUT_BROKER_CANCEL || inEvent == INPUT_BROKER_ALT_LONG) && alertBannerUntil != 0) {
         resetBanner();

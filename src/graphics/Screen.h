@@ -241,8 +241,6 @@ class Screen : public concurrency::OSThread
     meshtastic_Config_DisplayConfig_OledType model;
     OLEDDISPLAY_GEOMETRY geometry;
 
-    bool ignoreCompass = false;
-
     bool isOverlayBannerShowing();
 
     // Stores the last 4 of our hardware ID, to make finding the device for pairing easier
@@ -343,6 +341,12 @@ class Screen : public concurrency::OSThread
 
     /// Stops showing the boot screen.
     void stopBootScreen() { enqueueCmd(ScreenCmd{.cmd = Cmd::STOP_BOOT_SCREEN}); }
+
+    void runNow()
+    {
+        setFastFramerate();
+        enqueueCmd(ScreenCmd{.cmd = Cmd::NOOP});
+    }
 
     /// Overrides the default utf8 character conversion, to replace empty space with question marks
     static char customFontTableLookup(const uint8_t ch)

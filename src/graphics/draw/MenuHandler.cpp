@@ -100,6 +100,7 @@ void menuHandler::TwelveHourPicker()
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 0) {
             menuHandler::menuQueue = menuHandler::clock_menu;
+            screen->runNow();
         } else if (selected == 1) {
             config.display.use_12h_clock = true;
         } else {
@@ -120,6 +121,7 @@ void menuHandler::ClockFacePicker()
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 0) {
             menuHandler::menuQueue = menuHandler::clock_menu;
+            screen->runNow();
         } else if (selected == 1) {
             uiconfig.is_clockface_analog = false;
             nodeDB->saveProto("/prefs/uiconfig.proto", meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg, &uiconfig);
@@ -161,6 +163,7 @@ void menuHandler::TZPicker()
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 0) {
             menuHandler::menuQueue = menuHandler::clock_menu;
+            screen->runNow();
         } else if (selected == 1) { // Hawaii
             strncpy(config.device.tzdef, "HST10", sizeof(config.device.tzdef));
         } else if (selected == 2) { // Alaska
@@ -214,16 +217,13 @@ void menuHandler::clockMenu()
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 1) {
             menuHandler::menuQueue = menuHandler::clock_face_picker;
-            screen->setInterval(0);
-            runASAP = true;
+            screen->runNow();
         } else if (selected == 2) {
             menuHandler::menuQueue = menuHandler::twelve_hour_picker;
-            screen->setInterval(0);
-            runASAP = true;
+            screen->runNow();
         } else if (selected == 3) {
             menuHandler::menuQueue = menuHandler::TZ_picker;
-            screen->setInterval(0);
-            runASAP = true;
+            screen->runNow();
         }
     };
     screen->showOverlayBanner(bannerOptions);
@@ -369,42 +369,34 @@ void menuHandler::systemBaseMenu()
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 1) {
             menuHandler::menuQueue = menuHandler::reboot_menu;
-            screen->setInterval(0);
-            runASAP = true;
+            screen->runNow();
             test_count = 0;
         } else if (selected == 2) {
             menuHandler::menuQueue = menuHandler::buzzermodemenupicker;
-            screen->setInterval(0);
-            runASAP = true;
+            screen->runNow();
             test_count = 0;
 #if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
         } else if (selected == 3) {
             menuHandler::menuQueue = menuHandler::tftcolormenupicker;
-            screen->setInterval(0);
-            runASAP = true;
+            screen->runNow();
         } else if (test_enabled && selected == 4) {
             menuHandler::menuQueue = menuHandler::test_menu;
-            screen->setInterval(0);
-            runASAP = true;
+            screen->runNow();
 #elif HAS_TFT
         } else if (selected == 3) {
             menuHandler::menuQueue = menuHandler::tftcolormenupicker;
-            screen->setInterval(0);
-            runASAP = true;
+            screen->runNow();
         } else if (selected == 4) {
             menuHandler::menuQueue = menuHandler::mui_picker;
-            screen->setInterval(0);
-            runASAP = true;
+            screen->runNow();
         } else if (test_enabled && selected == 5) {
             menuHandler::menuQueue = menuHandler::test_menu;
-            screen->setInterval(0);
-            runASAP = true;
+            screen->runNow();
 
 #else
         } else if (test_enabled && selected == 3) {
             menuHandler::menuQueue = menuHandler::test_menu;
-            screen->setInterval(0);
-            runASAP = true;
+            screen->runNow();
 #endif
         } else if (!test_enabled) {
             test_count++;
@@ -441,8 +433,7 @@ void menuHandler::favoriteBaseMenu()
             cannedMessageModule->LaunchFreetextWithDestination(graphics::UIRenderer::currentFavoriteNodeNum);
         } else if ((!kb_found && selected == 2) || (selected == 3 && kb_found)) {
             menuHandler::menuQueue = menuHandler::remove_favorite;
-            screen->setInterval(0);
-            runASAP = true;
+            screen->runNow();
         }
     };
     screen->showOverlayBanner(bannerOptions);
@@ -469,8 +460,10 @@ void menuHandler::positionBaseMenu()
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 1) {
             menuQueue = gps_toggle_menu;
+            screen->runNow();
         } else if (selected == 2) {
             menuQueue = compass_point_north_menu;
+            screen->runNow();
         } else if (selected == 3) {
             accelerometerThread->calibrate(30);
         }
@@ -488,8 +481,10 @@ void menuHandler::nodeListMenu()
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 1) {
             menuQueue = add_favorite;
+            screen->runNow();
         } else if (selected == 2) {
             menuQueue = reset_node_db_menu;
+            screen->runNow();
         }
     };
     screen->showOverlayBanner(bannerOptions);
@@ -520,30 +515,32 @@ void menuHandler::compassNorthMenu()
     bannerOptions.message = "North Directions?";
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 4;
+    bannerOptions.InitialSelected = uiconfig.compass_mode + 1;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 1) {
-            if (config.display.compass_north_top != false) {
-                config.display.compass_north_top = false;
-                service->reloadConfig(SEGMENT_CONFIG);
+            if (uiconfig.compass_mode != meshtastic_CompassMode_DYNAMIC) {
+                uiconfig.compass_mode = meshtastic_CompassMode_DYNAMIC;
+                nodeDB->saveProto("/prefs/uiconfig.proto", meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg,
+                                  &uiconfig);
+                screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
             }
-            screen->ignoreCompass = false;
-            screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
         } else if (selected == 2) {
-            if (config.display.compass_north_top != true) {
-                config.display.compass_north_top = true;
-                service->reloadConfig(SEGMENT_CONFIG);
+            if (uiconfig.compass_mode != meshtastic_CompassMode_FIXED_RING) {
+                uiconfig.compass_mode = meshtastic_CompassMode_FIXED_RING;
+                nodeDB->saveProto("/prefs/uiconfig.proto", meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg,
+                                  &uiconfig);
+                screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
             }
-            screen->ignoreCompass = false;
-            screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
         } else if (selected == 3) {
-            if (config.display.compass_north_top != true) {
-                config.display.compass_north_top = true;
-                service->reloadConfig(SEGMENT_CONFIG);
+            if (uiconfig.compass_mode != meshtastic_CompassMode_FREEZE_HEADING) {
+                uiconfig.compass_mode = meshtastic_CompassMode_FREEZE_HEADING;
+                nodeDB->saveProto("/prefs/uiconfig.proto", meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg,
+                                  &uiconfig);
+                screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
             }
-            screen->ignoreCompass = true;
-            screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
         } else if (selected == 0) {
             menuQueue = position_base_menu;
+            screen->runNow();
         }
     };
     screen->showOverlayBanner(bannerOptions);
@@ -569,6 +566,7 @@ void menuHandler::GPSToggleMenu()
             service->reloadConfig(SEGMENT_CONFIG);
         } else {
             menuQueue = position_base_menu;
+            screen->runNow();
         }
     };
     bannerOptions.InitialSelected = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED ? 1 : 2;
@@ -759,6 +757,7 @@ void menuHandler::testMenu()
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 1) {
             menuQueue = number_test;
+            screen->runNow();
         }
     };
     screen->showOverlayBanner(bannerOptions);
