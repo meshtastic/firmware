@@ -44,21 +44,19 @@ std::string sanitizeString(const std::string &input)
     return output;
 }
 
-#if !MESHTASTIC_EXCLUDE_GPS
-
 // External variables
 extern graphics::Screen *screen;
 
 namespace graphics
 {
+NodeNum UIRenderer::currentFavoriteNodeNum = 0;
 
+#if !MESHTASTIC_EXCLUDE_GPS
 // GeoCoord object for coordinate conversions
 extern GeoCoord geoCoord;
 
 // Threshold values for the GPS lock accuracy bar display
 extern uint32_t dopThresholds[5];
-
-NodeNum UIRenderer::currentFavoriteNodeNum = 0;
 
 // Draw GPS status summary
 void UIRenderer::drawGps(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::GPSStatus *gps)
@@ -188,6 +186,7 @@ void UIRenderer::drawGpsCoordinates(OLEDDisplay *display, int16_t x, int16_t y, 
         }
     }
 }
+#endif // !MESHTASTIC_EXCLUDE_GPS
 
 // Draw nodes status
 void UIRenderer::drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::NodeStatus *nodeStatus, int node_offset,
@@ -1242,5 +1241,4 @@ std::string UIRenderer::drawTimeDelta(uint32_t days, uint32_t hours, uint32_t mi
 
 } // namespace graphics
 
-#endif // !MESHTASTIC_EXCLUDE_GPS
 #endif // HAS_SCREEN
