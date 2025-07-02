@@ -344,16 +344,16 @@ void menuHandler::systemBaseMenu()
     int options;
     static const char **optionsArrayPtr;
 #if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
-    static const char *optionsArray[] = {"Back", "Beeps Action", "Reboot", "Screen Color"};
-    static const char *optionsArrayTest[] = {"Back", "Beeps Action", "Reboot", "Screen Color", "Test Menu"};
+    static const char *optionsArray[] = {"Back", "Reboot", "Beeps Action", "Screen Color"};
+    static const char *optionsArrayTest[] = {"Back", "Reboot", "Beeps Action", "Screen Color", "Test Menu"};
     options = 4;
 #elif HAS_TFT
-    static const char *optionsArrayTest[] = {"Back", "Beeps Action", "Reboot", "Screen Color", "Switch to MUI", "Test Menu"};
-    static const char *optionsArray[] = {"Back", "Beeps Action", "Reboot", "Screen Color", "Switch to MUI"};
+    static const char *optionsArrayTest[] = {"Back", "Reboot", "Beeps Action", "Screen Color", "Switch to MUI", "Test Menu"};
+    static const char *optionsArray[] = {"Back", "Reboot", "Beeps Action", "Screen Color", "Switch to MUI"};
     options = 5;
 #else
-    static const char *optionsArray[] = {"Back", "Beeps Action", "Reboot"};
-    static const char *optionsArrayTest[] = {"Back", "Beeps Action", "Reboot", "Test Menu"};
+    static const char *optionsArray[] = {"Back", "Reboot", "Beeps Action"};
+    static const char *optionsArrayTest[] = {"Back", "Reboot", "Beeps Action", "Test Menu"};
     options = 3;
 #endif
     if (test_enabled) {
@@ -368,12 +368,12 @@ void menuHandler::systemBaseMenu()
     bannerOptions.optionsCount = options;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 1) {
-            menuHandler::menuQueue = menuHandler::buzzermodemenupicker;
+            menuHandler::menuQueue = menuHandler::reboot_menu;
             screen->setInterval(0);
             runASAP = true;
             test_count = 0;
         } else if (selected == 2) {
-            menuHandler::menuQueue = menuHandler::reboot_menu;
+            menuHandler::menuQueue = menuHandler::buzzermodemenupicker;
             screen->setInterval(0);
             runASAP = true;
             test_count = 0;
