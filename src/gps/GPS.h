@@ -12,7 +12,7 @@
 #include "modules/PositionModule.h"
 
 #ifdef SENSECAP_INDICATOR
-#include "FakeUART.h"
+#include "mesh/comms/FakeUART.h"
 #endif
 
 // Allow defining the polarity of the ENABLE output.  default is active high

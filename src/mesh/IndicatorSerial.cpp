@@ -1,24 +1,20 @@
 #ifdef SENSECAP_INDICATOR
 
 #include "IndicatorSerial.h"
-#include "../modules/Telemetry/Sensor/IndicatorSensor.h"
-#include "FakeUART.h"
+#include "mesh/comms/FakeUART.h"
+#include "mesh/comms/FakeI2C.h"
 #include <HardwareSerial.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
 
-extern IndicatorSensor indicatorSensor;
+SensecapIndicator *sensecapIndicator;
 
-SensecapIndicator sensecapIndicator;
-
-SensecapIndicator::SensecapIndicator() : OSThread("SensecapIndicator") {}
-
-void SensecapIndicator::begin(HardwareSerial serial)
-{
+SensecapIndicator::SensecapIndicator(HardwareSerial &serial) : OSThread("SensecapIndicator") {
     if (!running) {
-        _serial = serial;
-        _serial.setRxBufferSize(PB_BUFSIZE);
-        _serial.begin(115200);
+        _serial = &serial;
+        _serial->setRxBufferSize(PB_BUFSIZE);
+        _serial->setPins(SENSOR_RP2040_RXD, SENSOR_RP2040_TXD);
+        _serial->begin(SENSOR_BAUD_RATE);
         running = true;
         LOG_DEBUG("Start communication thread");
     }
@@ -66,8 +62,8 @@ bool SensecapIndicator::send_uplink(meshtastic_InterdeviceMessage message)
 size_t SensecapIndicator::serial_check(char *buf, size_t space_left)
 {
     size_t bytes_read = 0;
-    while (_serial.available()) {
-        char c = _serial.read();
+    while (_serial->available()) {
+        char c = _serial->read();
         *buf++ = c;
         if (++bytes_read >= space_left) {
             LOG_DEBUG("Serial overflow: %d > %d", bytes_read, space_left);
@@ -124,8 +120,13 @@ bool SensecapIndicator::handle_packet(size_t payload_len)
         return false;
     }
     switch (message.which_data) {
-    case meshtastic_InterdeviceMessage_sensor_tag:
-        indicatorSensor.stuff_buffer(message.data.sensor);
+        case meshtastic_InterdeviceMessage_i2c_response_tag:
+        if (message.data.i2c_response.status != meshtastic_I2CResponse_Status_OK) {
+            LOG_DEBUG("I2C response error: %d", message.data.i2c_response.status);
+            return false;
+        }
+        // send I2C response to FakeI2C
+        FakeWire->ingest(message.data.i2c_response);
         return true;
         break;
     case meshtastic_InterdeviceMessage_nmea_tag:
@@ -142,7 +143,7 @@ bool SensecapIndicator::handle_packet(size_t payload_len)
 
 bool SensecapIndicator::send(const char *buf, size_t len)
 {
-    size_t wrote = _serial.write(buf, len);
+    size_t wrote = _serial->write(buf, len);
     if (wrote == len)
         return true;
     return false;

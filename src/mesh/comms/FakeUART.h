@@ -21,7 +21,7 @@ class FakeUART : public Stream
     int available();
     int peek();
     int read();
-    void flush();
+    void flush(bool wait = true);
     uint32_t baudRate();
     void updateBaudRate(unsigned long speed);
     size_t setRxBufferSize(size_t size);

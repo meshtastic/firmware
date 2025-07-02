@@ -2,6 +2,8 @@
 
 #ifdef SENSECAP_INDICATOR
 
+FakeUART *FakeSerial;
+
 FakeUART::FakeUART() {}
 
 void FakeUART::begin(unsigned long baud, uint32_t config, int8_t rxPin, int8_t txPin, bool invert, unsigned long timeout_ms,
@@ -9,6 +11,7 @@ void FakeUART::begin(unsigned long baud, uint32_t config, int8_t rxPin, int8_t t
 {
     baudrate = baud;
     FakeBuf.clear();
+    LOG_DEBUG("FakeUART::begin(%lu)", baud);
 }
 
 void FakeUART::end()
@@ -37,7 +40,7 @@ int FakeUART::read()
     return -1;
 }
 
-void FakeUART::flush()
+void FakeUART::flush(bool wait)
 {
     FakeBuf.clear();
 }
@@ -74,7 +77,7 @@ size_t FakeUART::write(char *buffer, size_t size)
         size = sizeof(message.data.nmea); // Truncate if buffer is too large
     }
     memcpy(message.data.nmea, buffer, size);
-    sensecapIndicator.send_uplink(message);
+    sensecapIndicator->send_uplink(message);
     return size;
 }
 
@@ -89,6 +92,4 @@ size_t FakeUART::stuff_buffer(const char *buffer, size_t size)
     return size;
 }
 
-FakeUART *FakeSerial;
-
-#endif
+#endif // SENSECAP_INDICATOR
