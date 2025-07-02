@@ -48,24 +48,31 @@ int32_t PMSA003ISensor::runOnce()
 
 void PMSA003ISensor::setup()
 {
+#ifdef PMSA003I_ENABLE_PIN
+    pinMode(PMSA003I_ENABLE_PIN, OUTPUT);
+#endif /* PMSA003I_ENABLE_PIN */
 }
 
 #ifdef PMSA003I_ENABLE_PIN
-void sleep() {
+void PMSA003ISensor::sleep() {
     digitalWrite(PMSA003I_ENABLE_PIN, LOW);
     state = State::IDLE;
 }
 
-uint32_t wakeUp() {
+uint32_t PMSA003ISensor::wakeUp() {
     digitalWrite(PMSA003I_ENABLE_PIN, HIGH);
     state = State::ACTIVE;
 }
 #endif /* PMSA003I_ENABLE_PIN */
 
+bool PMSA003ISensor::isActive() {
+    return state == State::ACTIVE;
+}
+
 bool PMSA003ISensor::getMetrics(meshtastic_Telemetry *measurement)
 {
     if (!pmsa003i.read(&pmsa003iData)) {
-        LOG_WARN("Skip send measurements. Could not read AQIn");
+        LOG_WARN("Skip send measurements. Could not read AQI");
         return false;
     }
 
