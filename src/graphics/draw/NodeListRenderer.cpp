@@ -66,10 +66,10 @@ const char *getSafeNodeName(meshtastic_NodeInfoLite *node)
             strncpy(nodeName, name, sizeof(nodeName) - 1);
             nodeName[sizeof(nodeName) - 1] = '\0';
         } else {
-            snprintf(nodeName, sizeof(nodeName), "%04X", (uint16_t)(node->num & 0xFFFF));
+            snprintf(nodeName, sizeof(nodeName), "(%04X)", (uint16_t)(node->num & 0xFFFF));
         }
     } else {
-        strcpy(nodeName, "?");
+        snprintf(nodeName, sizeof(nodeName), "(%04X)", (uint16_t)(node->num & 0xFFFF));
     }
     return nodeName;
 }
@@ -522,7 +522,7 @@ void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, 
     double lat = DegD(ourNode->position.latitude_i);
     double lon = DegD(ourNode->position.longitude_i);
 
-    if (!screen->ignoreCompass) {
+    if (uiconfig.compass_mode != meshtastic_CompassMode_FREEZE_HEADING) {
 #if HAS_GPS
         if (screen->hasHeading()) {
             heading = screen->getHeading(); // degrees

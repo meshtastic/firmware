@@ -56,8 +56,9 @@ void setupNicheGraphics()
     // Set how many FAST updates per FULL update.
     inkhud->setDisplayResilience(INKHUD_BUILDCONF_DISPLAYRESILIENCE); // Suggest roughly ten
 
-    // Prepare fonts
-    InkHUD::Applet::fontLarge = FREESANS_9PT_WIN1252;
+    // Select fonts
+    InkHUD::Applet::fontLarge = FREESANS_12PT_WIN1252;
+    InkHUD::Applet::fontMedium = FREESANS_9PT_WIN1252;
     InkHUD::Applet::fontSmall = FREESANS_6PT_WIN1252;
 
     // Init settings, and customize defaults
