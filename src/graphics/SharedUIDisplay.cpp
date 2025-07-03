@@ -171,15 +171,17 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
         }
     }
 
-    // === Battery % Display ===
-    char chargeStr[4];
-    snprintf(chargeStr, sizeof(chargeStr), "%d", chargePercent);
-    int chargeNumWidth = display->getStringWidth(chargeStr);
-    display->drawString(batteryX, textY, chargeStr);
-    display->drawString(batteryX + chargeNumWidth - 1, textY, "%");
-    if (isBold) {
-        display->drawString(batteryX + 1, textY, chargeStr);
-        display->drawString(batteryX + chargeNumWidth, textY, "%");
+    if (chargePercent != 101) {
+        // === Battery % Display ===
+        char chargeStr[4];
+        snprintf(chargeStr, sizeof(chargeStr), "%d", chargePercent);
+        int chargeNumWidth = display->getStringWidth(chargeStr);
+        display->drawString(batteryX, textY, chargeStr);
+        display->drawString(batteryX + chargeNumWidth - 1, textY, "%");
+        if (isBold) {
+            display->drawString(batteryX + 1, textY, chargeStr);
+            display->drawString(batteryX + chargeNumWidth, textY, "%");
+        }
     }
 
     // === Time and Right-aligned Icons ===
