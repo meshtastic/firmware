@@ -4,7 +4,12 @@
 #include "mesh/NodeDB.h"
 
 #ifndef TB_DIRECTION
+#if ARCH_PORTDUINO
+#include "PortduinoGlue.h"
+#define TB_DIRECTION (PinStatus) settingsMap[tbDirection]
+#else
 #define TB_DIRECTION RISING
+#endif
 #endif
 
 class TrackballInterruptBase : public Observable<const InputEvent *>, public concurrency::OSThread
