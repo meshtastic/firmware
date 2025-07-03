@@ -352,8 +352,8 @@ void menuHandler::systemBaseMenu()
 #endif
 
     enum optionsNumbers { Back, Beeps, Brightness, Reboot, Color, MUI, Test };
-    static const char *optionsArray[6] = {"Back"};
-    static int optionsEnumArray[6] = {Back};
+    static const char *optionsArray[7] = {"Back"};
+    static int optionsEnumArray[7] = {Back};
     int options = 1;
 
     optionsArray[options] = "Beeps Action";
