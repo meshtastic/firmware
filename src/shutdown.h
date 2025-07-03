@@ -42,7 +42,7 @@ void powerCommandsCheck()
 
 #if defined(ARCH_ESP32) || defined(ARCH_NRF52)
     if (shutdownAtMsec && screen) {
-        screen->showOverlayBanner("Shutting Down...", 0); // stays on screen
+        screen->showSimpleBanner("Shutting Down...", 0); // stays on screen
     }
 #endif
 

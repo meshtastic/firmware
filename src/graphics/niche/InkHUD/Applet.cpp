@@ -8,8 +8,9 @@
 
 using namespace NicheGraphics;
 
-InkHUD::AppletFont InkHUD::Applet::fontLarge;      // General purpose font. Set by setDefaultFonts
-InkHUD::AppletFont InkHUD::Applet::fontSmall;      // General purpose font. Set by setDefaultFonts
+InkHUD::AppletFont InkHUD::Applet::fontLarge; // General purpose fonts. Set in nicheGraphics.h
+InkHUD::AppletFont InkHUD::Applet::fontMedium;
+InkHUD::AppletFont InkHUD::Applet::fontSmall;
 constexpr float InkHUD::Applet::LOGO_ASPECT_RATIO; // Ratio of the Meshtastic logo
 
 InkHUD::Applet::Applet() : GFX(0, 0)

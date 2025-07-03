@@ -1190,7 +1190,7 @@ void AdminModule::reboot(int32_t seconds)
 {
     LOG_INFO("Reboot in %d seconds", seconds);
     if (screen)
-        screen->showOverlayBanner("Rebooting...", 0); // stays on screen
+        screen->showSimpleBanner("Rebooting...", 0); // stays on screen
     rebootAtMsec = (seconds < 0) ? 0 : (millis() + seconds * 1000);
 }
 

@@ -312,18 +312,19 @@ As a general overview:
 
 ## Fonts
 
-InkHUD uses AdafruitGFX fonts. The large and small font which are shared by all applets are set in nicheGraphics.h.
+InkHUD uses AdafruitGFX fonts. Three shared fonts (small, medium, large) are available for use by all applets. These are set per-variant in nicheGraphics.h.
 
 ```cpp
 // Prepare fonts
-InkHUD::Applet::fontLarge = FREESANS_9PT_WIN1252;
+InkHUD::Applet::fontLarge = FREESANS_12PT_WIN1252;
+InkHUD::Applet::fontMedium = FREESANS_9PT_WIN1252;
 InkHUD::Applet::fontSmall = FREESANS_6PT_WIN1252;
 
 // Using a generic AdafruitGFX font instead:
-// InkHUD::Applet::fontLarge = FreeSerif9pt7b;
+// InkHUD::Applet::fontLarge = FreeSerif18pt7b;
 ```
 
-Any generic AdafruitGFX font may be used, but the fonts which are bundled with InkHUD have been customized with extended-ASCII character sets.
+Any generic AdafruitGFX font may be used, but the fonts which are bundled with InkHUD have been customized with extended-ASCII character sets and emoji.
 
 ### Parsing Unicode Text
 
@@ -351,10 +352,12 @@ InkHUD is bundled with extended-ASCII fonts for:
 The default builds use Windows-1252 encoding. This can be changed in nicheGraphics.h.
 
 ```cpp
-InkHUD::Applet::fontLarge = FREESANS_9PT_WIN1250;
+InkHUD::Applet::fontLarge = FREESANS_12PT_WIN1250;
+InkHUD::Applet::fontMedium = FREESANS_9PT_WIN1250;
 InkHUD::Applet::fontSmall = FREESANS_6PT_WIN1250;
 
-InkHUD::Applet::fontLarge = FREESANS_9PT_WIN1251;
+InkHUD::Applet::fontLarge = FREESANS_12PT_WIN1251;
+InkHUD::Applet::fontMedium = FREESANS_9PT_WIN1251;
 InkHUD::Applet::fontSmall = FREESANS_6PT_WIN1251;
 ```
 

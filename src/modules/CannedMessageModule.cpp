@@ -442,9 +442,13 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
         return 1;
     }
 
-    // UP
-    if (isUp && destIndex > 0) {
-        destIndex--;
+    if (isUp) {
+        if (destIndex > 0) {
+            destIndex--;
+        } else if (totalEntries > 0) {
+            destIndex = totalEntries - 1;
+        }
+
         if ((destIndex / columns) < scrollIndex)
             scrollIndex = destIndex / columns;
         else if ((destIndex / columns) >= (scrollIndex + visibleRows))
@@ -454,9 +458,14 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
         return 1;
     }
 
-    // DOWN
-    if (isDown && destIndex + 1 < totalEntries) {
-        destIndex++;
+    if (isDown) {
+        if (destIndex + 1 < totalEntries) {
+            destIndex++;
+        } else if (totalEntries > 0) {
+            destIndex = 0;
+            scrollIndex = 0;
+        }
+
         if ((destIndex / columns) >= (scrollIndex + visibleRows))
             scrollIndex = (destIndex / columns) - visibleRows + 1;
 

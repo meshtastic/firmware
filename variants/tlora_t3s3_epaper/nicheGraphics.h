@@ -51,7 +51,8 @@ void setupNicheGraphics()
     inkhud->setDisplayResilience(15, 1.5);
 
     // Select fonts
-    InkHUD::Applet::fontLarge = FREESANS_9PT_WIN1252;
+    InkHUD::Applet::fontLarge = FREESANS_12PT_WIN1252;
+    InkHUD::Applet::fontMedium = FREESANS_9PT_WIN1252;
     InkHUD::Applet::fontSmall = FREESANS_6PT_WIN1252;
 
     // Customize default settings

@@ -137,7 +137,7 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
     if (ourNode && (nodeDB->hasValidPosition(ourNode) || screen->hasHeading())) {
         const meshtastic_PositionLite &op = ourNode->position;
         float myHeading;
-        if (screen->ignoreCompass) {
+        if (uiconfig.compass_mode == meshtastic_CompassMode_FREEZE_HEADING) {
             myHeading = 0;
         } else {
             if (screen->hasHeading())
@@ -152,7 +152,7 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
             GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(wp.latitude_i), DegD(wp.longitude_i));
         // If the top of the compass is a static north then bearingToOther can be drawn on the compass directly
         // If the top of the compass is not a static north we need adjust bearingToOther based on heading
-        if (!screen->ignoreCompass)
+        if (uiconfig.compass_mode != meshtastic_CompassMode_FREEZE_HEADING)
             bearingToOther -= myHeading;
         graphics::CompassRenderer::drawNodeHeading(display, compassX, compassY, compassDiam, bearingToOther);
 

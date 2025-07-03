@@ -1,6 +1,7 @@
 #pragma once
 
 #include <OLEDDisplay.h>
+#include <string>
 
 namespace graphics
 {
@@ -51,5 +52,9 @@ void drawRoundedHighlight(OLEDDisplay *display, int16_t x, int16_t y, int16_t w,
 void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *titleStr = "", bool battery_only = false);
 
 const int *getTextPositions(OLEDDisplay *display);
+
+bool isAllowedPunctuation(char c);
+
+std::string sanitizeString(const std::string &input);
 
 } // namespace graphics

@@ -1,5 +1,6 @@
 #include "configuration.h"
 #include "main.h"
+
 #if ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
 #endif
@@ -14,8 +15,10 @@
 extern SX1509 gpioExtender;
 #endif
 
-#ifndef TFT_MESH
-#define TFT_MESH COLOR565(0x67, 0xEA, 0x94)
+#ifdef TFT_MESH_OVERRIDE
+uint16_t TFT_MESH = TFT_MESH_OVERRIDE;
+#else
+uint16_t TFT_MESH = COLOR565(0x67, 0xEA, 0x94);
 #endif
 
 #if defined(ST7735S)
