@@ -407,6 +407,7 @@ NodeDB::NodeDB()
 #endif
     }
 #endif
+    sortMeshDB();
     saveToDisk(saveWhat);
 }
 
@@ -777,7 +778,7 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.output_ms = 500;
     moduleConfig.external_notification.nag_timeout = 2;
 #endif
-#if defined(RAK4630) || defined(RAK11310)
+#if defined(RAK4630) || defined(RAK11310) || defined(RAK3312)
     // Default to RAK led pin 2 (blue)
     moduleConfig.external_notification.enabled = true;
     moduleConfig.external_notification.output = PIN_LED2;
@@ -1006,7 +1007,10 @@ void NodeDB::cleanupMeshDB()
                     meshNodes->at(i).user.public_key.size = 0;
                 }
             }
-            meshNodes->at(newPos++) = meshNodes->at(i);
+            if (newPos != i)
+                meshNodes->at(newPos++) = meshNodes->at(i);
+            else
+                newPos++;
         } else {
             removed++;
         }
@@ -1093,8 +1097,8 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
     if (f) {
         LOG_INFO("Load %s", filename);
         pb_istream_t stream = {&readcb, &f, protoSize};
-
-        memset(dest_struct, 0, objSize);
+        if (fields != &meshtastic_NodeDatabase_msg) // contains a vector object
+            memset(dest_struct, 0, objSize);
         if (!pb_decode(&stream, fields, dest_struct)) {
             LOG_ERROR("Error: can't decode protobuf %s", PB_GET_ERROR(&stream));
             state = LoadFileResult::DECODE_FAILED;
@@ -1162,7 +1166,7 @@ void NodeDB::loadFromDisk()
         LOG_WARN("Node count %d exceeds MAX_NUM_NODES %d, truncating", numMeshNodes, MAX_NUM_NODES);
         numMeshNodes = MAX_NUM_NODES;
     }
-    meshNodes->resize(MAX_NUM_NODES + 1); // The rp2040, rp2035, and maybe other targets, have a problem doing a sort() when full
+    meshNodes->resize(MAX_NUM_NODES);
 
     // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
     state = loadProto(deviceStateFileName, meshtastic_DeviceState_size, sizeof(meshtastic_DeviceState),
@@ -1696,26 +1700,48 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
     }
 }
 
+void NodeDB::set_favorite(bool is_favorite, uint32_t nodeId)
+{
+    meshtastic_NodeInfoLite *lite = getMeshNode(nodeId);
+    if (lite && lite->is_favorite != is_favorite) {
+        lite->is_favorite = is_favorite;
+        sortMeshDB();
+        saveNodeDatabaseToDisk();
+    }
+}
+
+void NodeDB::pause_sort(bool paused)
+{
+    sortingIsPaused = paused;
+}
+
 void NodeDB::sortMeshDB()
 {
-    if (!Throttle::isWithinTimespanMs(lastSort, 1000 * 5)) {
+    if (!sortingIsPaused && (lastSort == 0 || !Throttle::isWithinTimespanMs(lastSort, 1000 * 5))) {
         lastSort = millis();
-        std::sort(meshNodes->begin(), meshNodes->begin() + numMeshNodes,
-                  [](const meshtastic_NodeInfoLite &a, const meshtastic_NodeInfoLite &b) {
-                      if (a.num == myNodeInfo.my_node_num && b.num == myNodeInfo.my_node_num) // in theory impossible
-                          return false;
-                      if (a.num == myNodeInfo.my_node_num) {
-                          return true;
-                      }
-                      if (b.num == myNodeInfo.my_node_num) {
-                          return false;
-                      }
-                      bool aFav = a.is_favorite;
-                      bool bFav = b.is_favorite;
-                      if (aFav != bFav)
-                          return aFav;
-                      return a.last_heard > b.last_heard;
-                  });
+        bool changed = true;
+        while (changed) { // dumb reverse bubble sort, but probably not bad for what we're doing
+            changed = false;
+            for (int i = numMeshNodes - 1; i > 0; i--) { // lowest case this should examine is i == 1
+                if (meshNodes->at(i - 1).num == getNodeNum()) {
+                    // noop
+                } else if (meshNodes->at(i).num ==
+                           getNodeNum()) { // in the oddball case our own node num is not at location 0, put it there
+                    // TODO: Look for at(i-1) also matching own node num, and throw the DB in the trash
+                    std::swap(meshNodes->at(i), meshNodes->at(i - 1));
+                    changed = true;
+                } else if (meshNodes->at(i).is_favorite && !meshNodes->at(i - 1).is_favorite) {
+                    std::swap(meshNodes->at(i), meshNodes->at(i - 1));
+                    changed = true;
+                } else if (!meshNodes->at(i).is_favorite && meshNodes->at(i - 1).is_favorite) {
+                    // noop
+                } else if (meshNodes->at(i).last_heard > meshNodes->at(i - 1).last_heard) {
+                    std::swap(meshNodes->at(i), meshNodes->at(i - 1));
+                    changed = true;
+                }
+            }
+        }
+        LOG_INFO("Sort took %u milliseconds", millis() - lastSort);
     }
 }
 
