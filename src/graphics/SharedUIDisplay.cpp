@@ -133,11 +133,11 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
         batteryX += 1;
         batteryY += 2;
         if (isHighResolution) {
-            display->drawXbm(batteryX, batteryY, 24, 12, imgUSB_HighResolution);
-            batteryX += 26; // Icon + 2 pixels
+            display->drawXbm(batteryX, batteryY, 19, 12, imgUSB_HighResolution);
+            batteryX += 20; // Icon + 1 pixel
         } else {
             display->drawXbm(batteryX, batteryY, 14, 8, imgUSB);
-            batteryX += 14; // Icon + 2 pixels
+            batteryX += 16; // Icon + 2 pixels
         }
     } else {
         if (useHorizontalBattery) {
