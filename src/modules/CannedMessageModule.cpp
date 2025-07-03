@@ -448,7 +448,7 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
         } else if (totalEntries > 0) {
             destIndex = totalEntries - 1;
         }
-        
+
         if ((destIndex / columns) < scrollIndex)
             scrollIndex = destIndex / columns;
         else if ((destIndex / columns) >= (scrollIndex + visibleRows))
@@ -465,7 +465,7 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
             destIndex = 0;
             scrollIndex = 0;
         }
-        
+
         if ((destIndex / columns) >= (scrollIndex + visibleRows))
             scrollIndex = (destIndex / columns) - visibleRows + 1;
 
@@ -788,12 +788,12 @@ int CannedMessageModule::handleEmotePickerInput(const InputEvent *event)
 
     // Scroll emote list
     if (isUp && emotePickerIndex > 0) {
-            emotePickerIndex--;
+        emotePickerIndex--;
         screen->forceDisplay();
         return 1;
     }
     if (isDown && emotePickerIndex < numEmotes - 1) {
-            emotePickerIndex++;
+        emotePickerIndex++;
         screen->forceDisplay();
         return 1;
     }
