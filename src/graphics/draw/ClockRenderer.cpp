@@ -230,7 +230,7 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
 
 #ifdef T_WATCH_S3
     float scale = 1.5;
-#elif CHATTER_2
+#elif defined(CHATTER_2)
     float scale = 1.1;
 #else
     float scale = 0.75;
