@@ -72,10 +72,15 @@ void FloodingRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
 
                 tosend->hop_limit--; // bump down the hop count
 #if USERPREFS_EVENT_MODE
-                if (tosend->hop_limit > 2) {
+#if USERPREFS_LORACONFIG_MODEM_PRESET == meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO
+                static const uint8_t correctionLimit = 3; // For SHORT_TURBO events, correct to 3 additional hops
+#else
+                static const uint8_t correctionLimit = 2; // For event mode, correct to 2 additional hops
+#endif
+                if (tosend->hop_limit > correctionLimit) {
                     // if we are "correcting" the hop_limit, "correct" the hop_start by the same amount to preserve hops away.
-                    tosend->hop_start -= (tosend->hop_limit - 2);
-                    tosend->hop_limit = 2;
+                    tosend->hop_start -= (tosend->hop_limit - correctionLimit);
+                    tosend->hop_limit = correctionLimit;
                 }
 #endif
                 tosend->next_hop = NO_NEXT_HOP_PREFERENCE; // this should already be the case, but just in case

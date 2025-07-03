@@ -37,8 +37,12 @@ enum RxSource {
  **/
 #define HOP_MAX 7
 
-/// We normally just use max 3 hops for sending reliable messages
+// Use 4 hops for EVENT_MODE SHORT_TURBO.
+#if USERPREFS_EVENT_MODE && USERPREFS_LORACONFIG_MODEM_PRESET == meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO
+#define HOP_RELIABLE 4
+#else // We normally just use max 3 hops for sending reliable messages
 #define HOP_RELIABLE 3
+#endif
 
 // For old firmware or when falling back to flooding, there is no next-hop preference
 #define NO_NEXT_HOP_PREFERENCE 0

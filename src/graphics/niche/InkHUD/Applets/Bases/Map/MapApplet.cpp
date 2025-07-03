@@ -46,7 +46,7 @@ void InkHUD::MapApplet::onRender()
         constexpr uint16_t csMax = 12;
 
         // Too many hops away
-        if (m.hasHopsAway && m.hopsAway > config.lora.hop_limit) // Too many mops
+        if (m.hasHopsAway && m.hopsAway > config.lora.hop_limit) // Too many hops
             printAt(x, y, "!", CENTER, MIDDLE);
         else if (!m.hasHopsAway) // Unknown hops
             drawCross(x, y, csMin);
