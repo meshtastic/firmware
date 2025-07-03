@@ -104,9 +104,15 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
     bool usbPowered = powerStatus->getHasUSB() ? true : false;
     LOG_INFO("Current state of hasBattery: %s", hasBattery ? "true" : "false");
     LOG_INFO("Current state of usbPowered: %s", usbPowered ? "true" : "false");
-    if (chargePercent == 100) {
+
+    if (chargePercent >= 100) {
         isCharging = false;
     }
+    if (chargePercent == 101) {
+        usbPowered = true; // Forcing this flag on for the express purpose that some devices have no concept of having a USB cable
+                           // plugged in
+    }
+
     uint32_t now = millis();
 
 #ifndef USE_EINK
@@ -119,34 +125,49 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
     bool useHorizontalBattery = (isHighResolution && screenW >= screenH);
     const int textY = y + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
 
+    int batteryX = 1;
+    int batteryY = HEADER_OFFSET_Y + 1;
+
     // === Battery Icons ===
-    if (useHorizontalBattery) {
-        int batteryX = 2;
-        int batteryY = HEADER_OFFSET_Y + 3;
-        display->drawXbm(batteryX, batteryY, 9, 13, batteryBitmap_h_bottom);
-        display->drawXbm(batteryX + 9, batteryY, 9, 13, batteryBitmap_h_top);
-        if (isCharging && isBoltVisibleShared)
-            display->drawXbm(batteryX + 4, batteryY, 9, 13, lightning_bolt_h);
-        else {
-            display->drawLine(batteryX + 5, batteryY, batteryX + 10, batteryY);
-            display->drawLine(batteryX + 5, batteryY + 12, batteryX + 10, batteryY + 12);
-            int fillWidth = 14 * chargePercent / 100;
-            display->fillRect(batteryX + 1, batteryY + 1, fillWidth, 11);
+    if (usbPowered) { // This is a basic check to determine USB Powered is flagged
+        batteryX += 1;
+        batteryY += 2;
+        if (isHighResolution) {
+            display->drawXbm(batteryX, batteryY, 24, 12, imgUSB_HighResolution);
+            batteryX += 26; // Icon + 2 pixels
+        } else {
+            display->drawXbm(batteryX, batteryY, 14, 8, imgUSB);
+            batteryX += 14; // Icon + 2 pixels
         }
     } else {
-        int batteryX = 1;
-        int batteryY = HEADER_OFFSET_Y + 1;
+        if (useHorizontalBattery) {
+            batteryX += 1;
+            batteryY += 2;
+            display->drawXbm(batteryX, batteryY, 9, 13, batteryBitmap_h_bottom);
+            display->drawXbm(batteryX + 9, batteryY, 9, 13, batteryBitmap_h_top);
+            if (isCharging && isBoltVisibleShared)
+                display->drawXbm(batteryX + 4, batteryY, 9, 13, lightning_bolt_h);
+            else {
+                display->drawLine(batteryX + 5, batteryY, batteryX + 10, batteryY);
+                display->drawLine(batteryX + 5, batteryY + 12, batteryX + 10, batteryY + 12);
+                int fillWidth = 14 * chargePercent / 100;
+                display->fillRect(batteryX + 1, batteryY + 1, fillWidth, 11);
+            }
+            batteryX += 18; // Icon + 2 pixels
+        } else {
 #ifdef USE_EINK
-        batteryY += 2;
+            batteryY += 2;
 #endif
-        display->drawXbm(batteryX, batteryY, 7, 11, batteryBitmap_v);
-        if (isCharging && isBoltVisibleShared)
-            display->drawXbm(batteryX + 1, batteryY + 3, 5, 5, lightning_bolt_v);
-        else {
-            display->drawXbm(batteryX - 1, batteryY + 4, 8, 3, batteryBitmap_sidegaps_v);
-            int fillHeight = 8 * chargePercent / 100;
-            int fillY = batteryY - fillHeight;
-            display->fillRect(batteryX + 1, fillY + 10, 5, fillHeight);
+            display->drawXbm(batteryX, batteryY, 7, 11, batteryBitmap_v);
+            if (isCharging && isBoltVisibleShared)
+                display->drawXbm(batteryX + 1, batteryY + 3, 5, 5, lightning_bolt_v);
+            else {
+                display->drawXbm(batteryX - 1, batteryY + 4, 8, 3, batteryBitmap_sidegaps_v);
+                int fillHeight = 8 * chargePercent / 100;
+                int fillY = batteryY - fillHeight;
+                display->fillRect(batteryX + 1, fillY + 10, 5, fillHeight);
+            }
+            batteryX += 7; // Icon + 2 pixels
         }
     }
 
@@ -154,13 +175,11 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
     char chargeStr[4];
     snprintf(chargeStr, sizeof(chargeStr), "%d", chargePercent);
     int chargeNumWidth = display->getStringWidth(chargeStr);
-    const int batteryOffset = useHorizontalBattery ? 19 : 9;
-    const int percentX = x + batteryOffset;
-    display->drawString(percentX, textY, chargeStr);
-    display->drawString(percentX + chargeNumWidth - 1, textY, "%");
+    display->drawString(batteryX, textY, chargeStr);
+    display->drawString(batteryX + chargeNumWidth - 1, textY, "%");
     if (isBold) {
-        display->drawString(percentX + 1, textY, chargeStr);
-        display->drawString(percentX + chargeNumWidth, textY, "%");
+        display->drawString(batteryX + 1, textY, chargeStr);
+        display->drawString(batteryX + chargeNumWidth, textY, "%");
     }
 
     // === Time and Right-aligned Icons ===
