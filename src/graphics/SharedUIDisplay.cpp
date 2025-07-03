@@ -99,9 +99,8 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
 
     // === Battery State ===
     int chargePercent = powerStatus->getBatteryChargePercent();
-    bool isCharging = powerStatus->getIsCharging() == meshtastic::OptionalBool::OptTrue;
-    bool hasBattery = powerStatus->getHasBattery() ? true : false;
-    bool usbPowered = powerStatus->getHasUSB() ? true : false;
+    bool isCharging = powerStatus->getIsCharging();
+    bool usbPowered = powerStatus->getHasUSB();
 
     if (chargePercent >= 100) {
         isCharging = false;
