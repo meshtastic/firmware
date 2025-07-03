@@ -52,6 +52,40 @@ void InkHUD::LogoApplet::onRender()
         setTextColor(WHITE);
     }
 
+#ifdef USERPREFS_OEM_IMAGE_DATA // Custom boot screen, if defined in userPrefs.jsonc
+
+    // Only show the custom screen at startup
+    // This allows us to draw the usual Meshtastic logo at shutdown
+    // The effect is similar to the two-stage userPrefs boot screen used by BaseUI
+    if (millis() < 10 * 1000UL) {
+
+        // Draw the custom logo
+        const uint8_t logo[] = USERPREFS_OEM_IMAGE_DATA;
+        drawXBitmap(logoCX - (USERPREFS_OEM_IMAGE_WIDTH / 2),  //  Left
+                    logoCY - (USERPREFS_OEM_IMAGE_HEIGHT / 2), // Top
+                    logo,                                      // XBM data
+                    USERPREFS_OEM_IMAGE_WIDTH,                 // Width
+                    USERPREFS_OEM_IMAGE_HEIGHT,                // Height
+                    inverted ? WHITE : BLACK                   // Color
+        );
+
+        // Select the largest font which will still comfortably fit the custom text
+        setFont(fontLarge);
+        if (getTextWidth(USERPREFS_OEM_TEXT) > 0.8 * width())
+            setFont(fontMedium);
+        if (getTextWidth(USERPREFS_OEM_TEXT) > 0.8 * width())
+            setFont(fontSmall);
+
+        // Draw custom text below logo
+        int16_t logoB = logoCY + (USERPREFS_OEM_IMAGE_HEIGHT / 2); // Bottom of the logo
+        printAt(X(0.5), logoB + Y(0.1), USERPREFS_OEM_TEXT, CENTER, TOP);
+
+        // Don't draw the normal boot screen, we've already drawn our custom version
+        return;
+    }
+
+#endif
+
     drawLogo(logoCX, logoCY, logoW, logoH, inverted ? WHITE : BLACK);
 
     if (!textLeft.empty()) {

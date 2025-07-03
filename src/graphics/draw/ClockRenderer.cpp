@@ -285,6 +285,9 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
         xOffset += (isHighResolution) ? 32 : 18;
     }
     int yOffset = (isHighResolution) ? 3 : 1;
+#ifdef SENSECAP_INDICATOR
+    yOffset -= 3;
+#endif
     if (config.display.use_12h_clock) {
         display->drawString(startingHourMinuteTextX + xOffset, (display->getHeight() - hourMinuteTextY) - yOffset - 2,
                             isPM ? "pm" : "am");
