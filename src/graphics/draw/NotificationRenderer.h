@@ -16,6 +16,7 @@ class NotificationRenderer
     static char alertBannerMessage[256];
     static uint32_t alertBannerUntil; // 0 is a special case meaning forever
     static const char **optionsArrayPtr;
+    static const int *optionsEnumPtr;
     static uint8_t alertBannerOptions; // last x lines are seelctable options
     static std::function<void(int)> alertBannerCallback;
     static uint32_t numDigits;

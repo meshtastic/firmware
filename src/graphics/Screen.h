@@ -18,6 +18,7 @@ struct BannerOverlayOptions {
     const char *message;
     uint32_t durationMs = 30000;
     const char **optionsArrayPtr = nullptr;
+    const int *optionsEnumPtr = nullptr;
     uint8_t optionsCount = 0;
     std::function<void(int)> bannerCallback = nullptr;
     int8_t InitialSelected = 0;

@@ -32,6 +32,7 @@ char NotificationRenderer::alertBannerMessage[256] = {0};
 uint32_t NotificationRenderer::alertBannerUntil = 0;  // 0 is a special case meaning forever
 uint8_t NotificationRenderer::alertBannerOptions = 0; // last x lines are seelctable options
 const char **NotificationRenderer::optionsArrayPtr = nullptr;
+const int *NotificationRenderer::optionsEnumPtr = nullptr;
 std::function<void(int)> NotificationRenderer::alertBannerCallback = NULL;
 bool NotificationRenderer::pauseBanner = false;
 notificationTypeEnum NotificationRenderer::current_notification_type = notificationTypeEnum::none;
@@ -309,7 +310,12 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
         } else if (inEvent == INPUT_BROKER_DOWN || inEvent == INPUT_BROKER_USER_PRESS) {
             curSelected++;
         } else if (inEvent == INPUT_BROKER_SELECT) {
-            alertBannerCallback(curSelected);
+            if (optionsEnumPtr != nullptr) {
+                alertBannerCallback(optionsEnumPtr[curSelected]);
+                optionsEnumPtr = nullptr;
+            } else {
+                alertBannerCallback(curSelected);
+            }
             resetBanner();
         } else if ((inEvent == INPUT_BROKER_CANCEL || inEvent == INPUT_BROKER_ALT_LONG) && alertBannerUntil != 0) {
             resetBanner();

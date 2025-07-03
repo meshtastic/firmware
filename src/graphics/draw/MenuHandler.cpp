@@ -93,15 +93,16 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
 void menuHandler::TwelveHourPicker()
 {
     static const char *optionsArray[] = {"Back", "12-hour", "24-hour"};
+    enum optionsNumbers { Back = 0, twelve = 1, twentyfour = 2 };
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Time Format";
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 3;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == 0) {
+        if (selected == Back) {
             menuHandler::menuQueue = menuHandler::clock_menu;
             screen->runNow();
-        } else if (selected == 1) {
+        } else if (selected == twelve) {
             config.display.use_12h_clock = true;
         } else {
             config.display.use_12h_clock = false;
@@ -114,15 +115,16 @@ void menuHandler::TwelveHourPicker()
 void menuHandler::ClockFacePicker()
 {
     static const char *optionsArray[] = {"Back", "Digital", "Analog"};
+    enum optionsNumbers { Back = 0, Digital = 1, Analog = 2 };
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Which Face?";
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 3;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == 0) {
+        if (selected == Back) {
             menuHandler::menuQueue = menuHandler::clock_menu;
             screen->runNow();
-        } else if (selected == 1) {
+        } else if (selected == Digital) {
             uiconfig.is_clockface_analog = false;
             nodeDB->saveProto("/prefs/uiconfig.proto", meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg, &uiconfig);
             screen->setFrames(Screen::FOCUS_CLOCK);
@@ -210,18 +212,19 @@ void menuHandler::TZPicker()
 void menuHandler::clockMenu()
 {
     static const char *optionsArray[] = {"Back", "Clock Face", "Time Format", "Timezone"};
+    enum optionsNumbers { Back = 0, Clock = 1, Time = 2, Timezone = 3 };
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Clock Action";
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 4;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == 1) {
+        if (selected == Clock) {
             menuHandler::menuQueue = menuHandler::clock_face_picker;
             screen->runNow();
-        } else if (selected == 2) {
+        } else if (selected == Time) {
             menuHandler::menuQueue = menuHandler::twelve_hour_picker;
             screen->runNow();
-        } else if (selected == 3) {
+        } else if (selected == Timezone) {
             menuHandler::menuQueue = menuHandler::TZ_picker;
             screen->runNow();
         }
@@ -234,6 +237,7 @@ void menuHandler::messageResponseMenu()
 
     static const char **optionsArrayPtr;
     int options;
+    enum optionsNumbers { Back = 0, Dismiss = 1, Preset = 2, Freetext = 3 };
     if (kb_found) {
         static const char *optionsArray[] = {"Back", "Dismiss", "Reply via Preset", "Reply via Freetext"};
         optionsArrayPtr = optionsArray;
@@ -253,15 +257,15 @@ void menuHandler::messageResponseMenu()
     bannerOptions.optionsArrayPtr = optionsArrayPtr;
     bannerOptions.optionsCount = options;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == 1) {
+        if (selected == Dismiss) {
             screen->dismissCurrentFrame();
-        } else if (selected == 2) {
+        } else if (selected == Preset) {
             if (devicestate.rx_text_message.to == NODENUM_BROADCAST) {
                 cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST, devicestate.rx_text_message.channel);
             } else {
                 cannedMessageModule->LaunchWithDestination(devicestate.rx_text_message.from);
             }
-        } else if (selected == 3) {
+        } else if (selected == Freetext) {
             if (devicestate.rx_text_message.to == NODENUM_BROADCAST) {
                 cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST, devicestate.rx_text_message.channel);
             } else {
@@ -282,56 +286,55 @@ void menuHandler::messageResponseMenu()
 
 void menuHandler::homeBaseMenu()
 {
-    int options;
-    static const char **optionsArrayPtr;
+    enum optionsNumbers { Back, Backlight, Position, Preset, Freetext, Bluetooth, Sleep };
 
+    static const char *optionsArray[6] = {"Back"};
+    static int optionsEnumArray[6] = {Back};
+    int options = 1;
+
+#ifdef PIN_EINK_EN
+    optionsArray[options] = "Toggle Backlight";
+    optionsEnumArray[options++] = Backlight;
+#else
+    optionsArray[options] = "Sleep Screen";
+    optionsEnumArray[options++] = Sleep;
+#endif
+
+    optionsArray[options] = "Send Position";
+    optionsEnumArray[options++] = Position;
+    optionsArray[options] = "New Preset Msg";
+    optionsEnumArray[options++] = Preset;
     if (kb_found) {
-#ifdef PIN_EINK_EN
-        static const char *optionsArray[] = {"Back",           "Toggle Backlight", "Send Position",
-                                             "New Preset Msg", "New Freetext Msg", "Bluetooth Toggle"};
-#else
-        static const char *optionsArray[] = {"Back",           "Sleep Screen",     "Send Position",
-                                             "New Preset Msg", "New Freetext Msg", "Bluetooth Toggle"};
-#endif
-        optionsArrayPtr = optionsArray;
-        options = 6;
-    } else {
-#ifdef PIN_EINK_EN
-        static const char *optionsArray[] = {"Back", "Toggle Backlight", "Send Position", "New Preset Msg", "Bluetooth Toggle"};
-#else
-        static const char *optionsArray[] = {"Back", "Sleep Screen", "Send Position", "New Preset Msg", "Bluetooth Toggle"};
-#endif
-        optionsArrayPtr = optionsArray;
-        options = 5;
+        optionsArray[options] = "New Freetext Msg";
+        optionsEnumArray[options++] = Freetext;
     }
+    optionsArray[options] = "Bluetooth Toggle";
+    optionsEnumArray[options++] = Bluetooth;
+
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Home Action";
-    bannerOptions.optionsArrayPtr = optionsArrayPtr;
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.optionsCount = options;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == 1) {
+        if (selected == Backlight) {
 #ifdef PIN_EINK_EN
             if (digitalRead(PIN_EINK_EN) == HIGH) {
                 digitalWrite(PIN_EINK_EN, LOW);
             } else {
                 digitalWrite(PIN_EINK_EN, HIGH);
             }
-#else
-            screen->setOn(false);
 #endif
-        } else if (selected == 2) {
+        } else if (selected == Sleep) {
+            screen->setOn(false);
+        } else if (selected == Position) {
             InputEvent event = {.inputEvent = (input_broker_event)INPUT_BROKER_SEND_PING, .kbchar = 0, .touchX = 0, .touchY = 0};
             inputBroker->injectInputEvent(&event);
-        } else if (selected == 3) {
+        } else if (selected == Preset) {
             cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST);
-        } else if (selected == 4) {
-            if (kb_found) {
-                cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST);
-            } else {
-                InputEvent event = {.inputEvent = (input_broker_event)170, .kbchar = 170, .touchX = 0, .touchY = 0};
-                inputBroker->injectInputEvent(&event);
-            }
-        } else if (selected == 5) {
+        } else if (selected == Freetext) {
+            cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST);
+        } else if (selected == Bluetooth) {
             InputEvent event = {.inputEvent = (input_broker_event)170, .kbchar = 170, .touchX = 0, .touchY = 0};
             inputBroker->injectInputEvent(&event);
         }
@@ -341,128 +344,67 @@ void menuHandler::homeBaseMenu()
 
 void menuHandler::systemBaseMenu()
 {
-    int options;
-    static const char **optionsArrayPtr;
-    static const char *optionsArrayTest;
-    
+
     // Check if brightness is supported
     bool hasSupportBrightness = false;
 #if defined(ST7789_CS) || defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) || defined(USE_SH1107) || HAS_TFT
     hasSupportBrightness = true;
 #endif
 
+    enum optionsNumbers { Back, Beeps, Brightness, Reboot, Color, MUI, Test };
+    static const char *optionsArray[6] = {"Back"};
+    static int optionsEnumArray[6] = {Back};
+    int options = 1;
+
+    optionsArray[options] = "Beeps Action";
+    optionsEnumArray[options++] = Beeps;
+
     if (hasSupportBrightness) {
-#if HAS_TFT
-        static const char *optionsArray[] = {"Back", "Beeps Action", "Brightness", "Reboot", "Switch to MUI"};
-        static const char *optionsArrayTestArray[] = {"Back", "Beeps Action", "Brightness", "Reboot", "Switch to MUI", "Test Menu"};
-        options = 5;
-#elif defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
-        static const char *optionsArray[] = {"Back", "Beeps Action", "Brightness", "Reboot", "Screen Color"};
-        static const char *optionsArrayTestArray[] = {"Back", "Beeps Action", "Brightness", "Reboot", "Screen Color", "Test Menu"};
-        options = 5;
-#else
-        static const char *optionsArray[] = {"Back", "Beeps Action", "Brightness", "Reboot"};
-        static const char *optionsArrayTestArray[] = {"Back", "Beeps Action", "Brightness", "Reboot", "Test Menu"};
-        options = 4;
-#endif
-        if (test_enabled) {
-            optionsArrayPtr = optionsArrayTestArray;
-            options++;
-        } else {
-            optionsArrayPtr = optionsArray;
-        }
-    } else {
-#if HAS_TFT
-        static const char *optionsArray[] = {"Back", "Beeps Action", "Reboot", "Switch to MUI"};
-        static const char *optionsArrayTestArray[] = {"Back", "Beeps Action", "Reboot", "Switch to MUI", "Test Menu"};
-        options = 4;
-#elif defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
-        static const char *optionsArray[] = {"Back", "Beeps Action", "Reboot", "Screen Color"};
-        static const char *optionsArrayTestArray[] = {"Back", "Beeps Action", "Reboot", "Screen Color", "Test Menu"};
-        options = 4;
-#else
-        static const char *optionsArray[] = {"Back", "Beeps Action", "Reboot"};
-        static const char *optionsArrayTestArray[] = {"Back", "Beeps Action", "Reboot", "Test Menu"};
-        options = 3;
-#endif
-        if (test_enabled) {
-            optionsArrayPtr = optionsArrayTestArray;
-            options++;
-        } else {
-            optionsArrayPtr = optionsArray;
-        }
+        optionsArray[options] = "Brightness";
+        optionsEnumArray[options++] = Brightness;
     }
-    
+
+    optionsArray[options] = "Reboot";
+    optionsEnumArray[options++] = Reboot;
+
+#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || HAS_TFT
+    optionsArray[options] = "Screen Color";
+    optionsEnumArray[options++] = Color;
+#endif
+#if HAS_TFT
+    optionsArray[options] = "Switch to MUI";
+    optionsEnumArray[options++] = MUI;
+#endif
+    if (test_enabled) {
+        optionsArray[options] = "Test Menu";
+        optionsEnumArray[options++] = Test;
+    }
+
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "System Action";
-    bannerOptions.optionsArrayPtr = optionsArrayPtr;
+    bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = options;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        // Check if brightness is supported to determine the correct mapping
-        bool hasSupportBrightness = false;
-#if defined(ST7789_CS) || defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) || defined(USE_SH1107) || HAS_TFT
-        hasSupportBrightness = true;
-#endif
-
-        if (selected == 1) {
+        if (selected == Beeps) {
             menuHandler::menuQueue = menuHandler::buzzermodemenupicker;
             screen->runNow();
-        } else if (selected == 2) {
-            if (hasSupportBrightness) {
-                menuHandler::menuQueue = menuHandler::brightness_picker;
-                screen->runNow();
-            } else {
-                menuHandler::menuQueue = menuHandler::reboot_menu;
-                screen->runNow();
-            }
-        } else if (selected == 3) {
-            if (hasSupportBrightness) {
-                menuHandler::menuQueue = menuHandler::reboot_menu;
-                screen->runNow();
-            } else {
-#if HAS_TFT
-                menuHandler::menuQueue = menuHandler::mui_picker;
-                screen->runNow();
-#elif defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
-                menuHandler::menuQueue = menuHandler::tftcolormenupicker;
-                screen->runNow();
-#else
-                if (test_enabled) {
-                    menuHandler::menuQueue = menuHandler::test_menu;
-                    screen->runNow();
-                }
-#endif
-            }
-        } else if (selected == 4) {
-            if (hasSupportBrightness) {
-#if HAS_TFT
-                menuHandler::menuQueue = menuHandler::mui_picker;
-                screen->runNow();
-#elif defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
-                menuHandler::menuQueue = menuHandler::tftcolormenupicker;
-                screen->runNow();
-#else
-                if (test_enabled) {
-                    menuHandler::menuQueue = menuHandler::test_menu;
-                    screen->runNow();
-                }
-#endif
-            } else {
-#if HAS_TFT || defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
-                if (test_enabled) {
-                    menuHandler::menuQueue = menuHandler::test_menu;
-                    screen->runNow();
-                }
-#endif
-            }
-        } else if (selected == 5) {
-            if (hasSupportBrightness && test_enabled) {
-                menuHandler::menuQueue = menuHandler::test_menu;
-                screen->runNow();
-            }
-        } else if (selected == 0) {
-            // Back button - do nothing, menu will close
-        } else if (!test_enabled) {
+        } else if (selected == Brightness) {
+            menuHandler::menuQueue = menuHandler::brightness_picker;
+            screen->runNow();
+        } else if (selected == Reboot) {
+            menuHandler::menuQueue = menuHandler::reboot_menu;
+            screen->runNow();
+        } else if (selected == MUI) {
+            menuHandler::menuQueue = menuHandler::mui_picker;
+            screen->runNow();
+        } else if (selected == Color) {
+            menuHandler::menuQueue = menuHandler::tftcolormenupicker;
+            screen->runNow();
+        } else if (selected == Test) {
+            menuHandler::menuQueue = menuHandler::test_menu;
+            screen->runNow();
+        } else if (selected == Back && !test_enabled) {
             test_count++;
             if (test_count > 4) {
                 test_enabled = true;
@@ -661,19 +603,19 @@ void menuHandler::BuzzerModeMenu()
 void menuHandler::BrightnessPickerMenu()
 {
     static const char *optionsArray[] = {"Back", "Low", "Medium", "High", "Very High"};
-    
+
     // Get current brightness level to set initial selection
     int currentSelection = 1; // Default to Low
     if (uiconfig.screen_brightness >= 255) {
         currentSelection = 4; // Very High
     } else if (uiconfig.screen_brightness >= 128) {
-        currentSelection = 3; // High  
+        currentSelection = 3; // High
     } else if (uiconfig.screen_brightness >= 64) {
         currentSelection = 2; // Medium
     } else {
         currentSelection = 1; // Low
     }
-    
+
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Brightness";
     bannerOptions.optionsArrayPtr = optionsArray;
@@ -688,10 +630,11 @@ void menuHandler::BrightnessPickerMenu()
         } else if (selected == 4) { // Very High
             uiconfig.screen_brightness = 255;
         }
-        
+
         if (selected != 0) { // Not "Back"
-            // Apply brightness immediately  
-#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || defined(HELTEC_VISION_MASTER_E213) || defined(HELTEC_VISION_MASTER_E290)
+                             // Apply brightness immediately
+#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || defined(HELTEC_VISION_MASTER_E213) ||                \
+    defined(HELTEC_VISION_MASTER_E290)
             // For HELTEC devices, use analogWrite to control backlight
             analogWrite(VTFT_LEDA, uiconfig.screen_brightness);
 #elif defined(ST7789_CS)
@@ -699,10 +642,10 @@ void menuHandler::BrightnessPickerMenu()
 #elif defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) || defined(USE_SH1107)
             screen->getDisplayDevice()->setBrightness(uiconfig.screen_brightness);
 #endif
-            
+
             // Save to device
             nodeDB->saveProto("/prefs/uiconfig.proto", meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg, &uiconfig);
-            
+
             LOG_INFO("Screen brightness set to %d", uiconfig.screen_brightness);
         }
     };

@@ -158,6 +158,7 @@ void Screen::showOverlayBanner(BannerOverlayOptions banner_overlay_options)
     NotificationRenderer::alertBannerUntil =
         (banner_overlay_options.durationMs == 0) ? 0 : millis() + banner_overlay_options.durationMs;
     NotificationRenderer::optionsArrayPtr = banner_overlay_options.optionsArrayPtr;
+    NotificationRenderer::optionsEnumPtr = banner_overlay_options.optionsEnumPtr;
     NotificationRenderer::alertBannerOptions = banner_overlay_options.optionsCount;
     NotificationRenderer::alertBannerCallback = banner_overlay_options.bannerCallback;
     NotificationRenderer::curSelected = banner_overlay_options.InitialSelected;
