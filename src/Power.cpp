@@ -1276,13 +1276,13 @@ class LipoCharger : public HasBatteryLevel
                 ppm->setSysPowerDownVoltage(3100);
 
                 // Set input current limit, default is 500mA
-                ppm->setInputCurrentLimit(3250);
+                ppm->setInputCurrentLimit(800);
 
                 // Disable current limit pin
                 ppm->disableCurrentLimitPin();
 
                 // Set the charging target voltage, Range:3840 ~ 4608mV ,step:16 mV
-                ppm->setChargeTargetVoltage(4208);
+                ppm->setChargeTargetVoltage(4288);
 
                 // Set the precharge current , Range: 64mA ~ 1024mA ,step:64mA
                 ppm->setPrechargeCurr(64);
