@@ -15,7 +15,7 @@ InkHUD::LogoApplet::LogoApplet() : concurrency::OSThread("LogoApplet")
     // This behavior assists manufacturers during mass production, and should not be modified without good reason
     if (!settings->tips.safeShutdownSeen) {
         meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
-        fontTitle = fontLarge;
+        fontTitle = fontMedium;
         textLeft = xstr(APP_VERSION_SHORT);
         textRight = parseShortName(ourNode);
         textTitle = "Meshtastic";
@@ -116,7 +116,7 @@ void InkHUD::LogoApplet::onShutdown()
     textLeft = "";
     textRight = "";
     textTitle = parseShortName(ourNode);
-    fontTitle = fontLarge;
+    fontTitle = fontMedium;
 
     // This is then drawn by InkHUD::Events::onShutdown, with a blocking FULL update, after InkHUD's flash write is complete
 }
