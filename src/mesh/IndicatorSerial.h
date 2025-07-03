@@ -25,7 +25,7 @@
 class SensecapIndicator : public concurrency::OSThread
 {
   public:
-    SensecapIndicator(HardwareSerial& serial);
+    SensecapIndicator(HardwareSerial &serial);
     int32_t runOnce() override;
     bool send_uplink(meshtastic_InterdeviceMessage message);
 
@@ -33,7 +33,7 @@ class SensecapIndicator : public concurrency::OSThread
     pb_byte_t pb_tx_buf[PB_BUFSIZE];
     pb_byte_t pb_rx_buf[PB_BUFSIZE];
     size_t pb_rx_size = 0; // Number of bytes currently in the buffer
-    HardwareSerial* _serial = &Serial2;
+    HardwareSerial *_serial = &Serial2;
     bool running = false;
     size_t serial_check(char *buf, size_t space_left);
     void check_packet();

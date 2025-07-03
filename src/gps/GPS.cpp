@@ -1078,6 +1078,7 @@ void GPS::publishUpdate()
 
 int32_t GPS::runOnce()
 {
+#if !defined(SENSECAP_INDICATOR)
     if (!GPSInitFinished) {
         if (!_serial_gps || config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
             LOG_INFO("GPS set to not-present. Skip probe");
@@ -1093,6 +1094,7 @@ int32_t GPS::runOnce()
         GPSInitFinished = true;
         publishUpdate();
     }
+#endif
 
     // Repeaters have no need for GPS
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
@@ -1411,8 +1413,10 @@ GPS *GPS::createGps()
     if (!settingsMap[has_gps])
         return nullptr;
 #endif
+#if !defined(SENSECAP_INDICATOR)
     if (!_rx_gpio || !_serial_gps) // Configured to have no GPS at all
         return nullptr;
+#endif
 
     GPS *new_gps = new GPS;
     new_gps->rx_gpio = _rx_gpio;

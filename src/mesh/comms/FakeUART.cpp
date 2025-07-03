@@ -77,6 +77,8 @@ size_t FakeUART::write(char *buffer, size_t size)
         size = sizeof(message.data.nmea); // Truncate if buffer is too large
     }
     memcpy(message.data.nmea, buffer, size);
+    message.which_data = meshtastic_InterdeviceMessage_nmea_tag;
+    LOG_DEBUG("FakeUART::write(%s)", message.data.nmea);
     sensecapIndicator->send_uplink(message);
     return size;
 }

@@ -1,22 +1,23 @@
 #ifdef SENSECAP_INDICATOR
 
 #include "IndicatorSerial.h"
-#include "mesh/comms/FakeUART.h"
 #include "mesh/comms/FakeI2C.h"
+#include "mesh/comms/FakeUART.h"
 #include <HardwareSerial.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
 
 SensecapIndicator *sensecapIndicator;
 
-SensecapIndicator::SensecapIndicator(HardwareSerial &serial) : OSThread("SensecapIndicator") {
+SensecapIndicator::SensecapIndicator(HardwareSerial &serial) : OSThread("SensecapIndicator")
+{
     if (!running) {
         _serial = &serial;
         _serial->setRxBufferSize(PB_BUFSIZE);
         _serial->setPins(SENSOR_RP2040_RXD, SENSOR_RP2040_TXD);
         _serial->begin(SENSOR_BAUD_RATE);
         running = true;
-        LOG_DEBUG("Start communication thread");
+        LOG_DEBUG("Start indicator communication thread");
     }
 }
 
@@ -120,7 +121,8 @@ bool SensecapIndicator::handle_packet(size_t payload_len)
         return false;
     }
     switch (message.which_data) {
-        case meshtastic_InterdeviceMessage_i2c_response_tag:
+    case meshtastic_InterdeviceMessage_i2c_response_tag:
+        LOG_DEBUG("Got I2C response");
         if (message.data.i2c_response.status != meshtastic_I2CResponse_Status_OK) {
             LOG_DEBUG("I2C response error: %d", message.data.i2c_response.status);
             return false;
