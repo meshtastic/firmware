@@ -102,8 +102,6 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
     bool isCharging = powerStatus->getIsCharging() == meshtastic::OptionalBool::OptTrue;
     bool hasBattery = powerStatus->getHasBattery() ? true : false;
     bool usbPowered = powerStatus->getHasUSB() ? true : false;
-    LOG_INFO("Current state of hasBattery: %s", hasBattery ? "true" : "false");
-    LOG_INFO("Current state of usbPowered: %s", usbPowered ? "true" : "false");
 
     if (chargePercent >= 100) {
         isCharging = false;
