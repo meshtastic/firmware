@@ -602,32 +602,28 @@ void menuHandler::BuzzerModeMenu()
 
 void menuHandler::BrightnessPickerMenu()
 {
-    static const char *optionsArray[] = {"Back", "Low", "Medium", "High", "Very High"};
+    static const char *optionsArray[] = {"Back", "Low", "Medium", "High"};
 
     // Get current brightness level to set initial selection
-    int currentSelection = 1; // Default to Low
+    int currentSelection = 1; // Default to Medium
     if (uiconfig.screen_brightness >= 255) {
-        currentSelection = 4; // Very High
+        currentSelection = 3; // Very High
     } else if (uiconfig.screen_brightness >= 128) {
-        currentSelection = 3; // High
-    } else if (uiconfig.screen_brightness >= 64) {
-        currentSelection = 2; // Medium
+        currentSelection = 2; // High
     } else {
-        currentSelection = 1; // Low
+        currentSelection = 1; // Medium
     }
 
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Brightness";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 5;
+    bannerOptions.optionsCount = 4;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == 1) { // Low
-            uiconfig.screen_brightness = 1;
-        } else if (selected == 2) { // Medium
+        if (selected == 1) { // Medium
             uiconfig.screen_brightness = 64;
-        } else if (selected == 3) { // High
+        } else if (selected == 2) { // High
             uiconfig.screen_brightness = 128;
-        } else if (selected == 4) { // Very High
+        } else if (selected == 3) { // Very High
             uiconfig.screen_brightness = 255;
         }
 
