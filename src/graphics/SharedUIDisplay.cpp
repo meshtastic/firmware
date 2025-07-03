@@ -126,15 +126,15 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
     int batteryY = HEADER_OFFSET_Y + 1;
 
     // === Battery Icons ===
-    if (usbPowered) { // This is a basic check to determine USB Powered is flagged
+    if (usbPowered && !isCharging) { // This is a basic check to determine USB Powered is flagged but not charging
         batteryX += 1;
         batteryY += 2;
         if (isHighResolution) {
             display->drawXbm(batteryX, batteryY, 19, 12, imgUSB_HighResolution);
             batteryX += 20; // Icon + 1 pixel
         } else {
-            display->drawXbm(batteryX, batteryY, 14, 8, imgUSB);
-            batteryX += 16; // Icon + 2 pixels
+            display->drawXbm(batteryX, batteryY, 10, 8, imgUSB);
+            batteryX += 11; // Icon + 1 pixel
         }
     } else {
         if (useHorizontalBattery) {
@@ -164,7 +164,7 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
                 int fillY = batteryY - fillHeight;
                 display->fillRect(batteryX + 1, fillY + 10, 5, fillHeight);
             }
-            batteryX += 7; // Icon + 2 pixels
+            batteryX += 9; // Icon + 2 pixels
         }
     }
 
