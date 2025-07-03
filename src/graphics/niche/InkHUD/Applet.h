@@ -95,7 +95,7 @@ class Applet : public GFX
 
     static uint16_t getHeaderHeight(); // How tall the "standard" applet header is
 
-    static AppletFont fontSmall, fontLarge; // The general purpose fonts, used by all applets
+    static AppletFont fontSmall, fontMedium, fontLarge; // The general purpose fonts, used by all applets
 
     const char *name = nullptr; // Shown in applet selection menu. Also used as an identifier by InkHUD::getSystemApplet
 

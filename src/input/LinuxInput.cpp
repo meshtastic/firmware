@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/input.h>
+#include <main.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string>
@@ -50,6 +51,7 @@ int32_t LinuxInput::runOnce()
             perror("unable to epoll add");
             return disable();
         }
+        kb_found = true;
         // This is the first time the OSThread library has called this function, so do port setup
         firstTime = 0;
     }
@@ -72,7 +74,7 @@ int32_t LinuxInput::runOnce()
         assert(rd > ((signed int)sizeof(struct input_event)));
         for (int j = 0; j < rd / ((signed int)sizeof(struct input_event)); j++) {
             InputEvent e;
-            e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
+            e.inputEvent = INPUT_BROKER_NONE;
             e.source = this->_originName;
             e.kbchar = 0;
             unsigned int type, code;
@@ -131,36 +133,36 @@ int32_t LinuxInput::runOnce()
                         mod = 0x08;
                         break;
                     case KEY_ESC: // ESC
-                        e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL;
+                        e.inputEvent = INPUT_BROKER_CANCEL;
                         break;
                     case KEY_BACK: // Back
-                        e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_BACK;
+                        e.inputEvent = INPUT_BROKER_BACK;
                         // e.kbchar = key;
                         break;
 
                     case KEY_UP: // Up
-                        e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP;
+                        e.inputEvent = INPUT_BROKER_UP;
                         break;
                     case KEY_DOWN: // Down
-                        e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN;
+                        e.inputEvent = INPUT_BROKER_DOWN;
                         break;
                     case KEY_LEFT: // Left
-                        e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT;
+                        e.inputEvent = INPUT_BROKER_LEFT;
                         break;
-                        e.kbchar = INPUT_BROKER_MSG_LEFT;
+                        e.kbchar = INPUT_BROKER_LEFT;
                     case KEY_RIGHT: // Right
-                        e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT;
+                        e.inputEvent = INPUT_BROKER_RIGHT;
                         break;
-                        e.kbchar = INPUT_BROKER_MSG_RIGHT;
+                        e.kbchar = 0;
                     case KEY_ENTER: // Enter
-                        e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT;
+                        e.inputEvent = INPUT_BROKER_SELECT;
                         break;
                     case KEY_POWER:
                         system("poweroff");
                         break;
                     default: // all other keys
                         if (keymap[code]) {
-                            e.inputEvent = ANYKEY;
+                            e.inputEvent = INPUT_BROKER_ANYKEY;
                             e.kbchar = keymap[code];
                         }
                         break;
@@ -173,8 +175,8 @@ int32_t LinuxInput::runOnce()
                 }
                 report[0] = modifiers;
             }
-            if (e.inputEvent != meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE) {
-                if (e.inputEvent == ANYKEY && (modifiers && 0x22))
+            if (e.inputEvent != INPUT_BROKER_NONE) {
+                if (e.inputEvent == INPUT_BROKER_ANYKEY && (modifiers && 0x22))
                     e.kbchar = uppers[e.kbchar]; // doesn't get punctuation. Meh.
                 this->notifyObservers(&e);
             }

@@ -12,13 +12,13 @@ InkHUD::PairingApplet::PairingApplet()
 void InkHUD::PairingApplet::onRender()
 {
     // Header
-    setFont(fontLarge);
+    setFont(fontMedium);
     printAt(X(0.5), Y(0.25), "Bluetooth", CENTER, BOTTOM);
     setFont(fontSmall);
     printAt(X(0.5), Y(0.25), "Enter this code", CENTER, TOP);
 
     // Passkey
-    setFont(fontLarge);
+    setFont(fontMedium);
     printThick(X(0.5), Y(0.5), passkey.substr(0, 3) + " " + passkey.substr(3), 3, 2);
 
     // Device's bluetooth name, if it will fit

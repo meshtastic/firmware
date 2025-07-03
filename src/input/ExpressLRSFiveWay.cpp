@@ -146,31 +146,31 @@ void ExpressLRSFiveWay::determineAction(KeyType key, PressLength length)
 {
     switch (key) {
     case LEFT:
-        if (inCannedMessageMenu()) // If in canned message menu
-            sendKey(CANCEL);       // exit the menu (press imaginary cancel key)
+        if (inCannedMessageMenu())        // If in canned message menu
+            sendKey(INPUT_BROKER_CANCEL); // exit the menu (press imaginary cancel key)
         else
-            sendKey(LEFT);
+            sendKey(INPUT_BROKER_LEFT);
         break;
 
     case RIGHT:
-        if (inCannedMessageMenu()) // If in canned message menu:
-            sendKey(CANCEL);       // exit the menu (press imaginary cancel key)
+        if (inCannedMessageMenu())        // If in canned message menu:
+            sendKey(INPUT_BROKER_CANCEL); // exit the menu (press imaginary cancel key)
         else
-            sendKey(RIGHT);
+            sendKey(INPUT_BROKER_RIGHT);
         break;
 
     case UP:
         if (length == LONG)
             toggleGPS();
         else
-            sendKey(UP);
+            sendKey(INPUT_BROKER_UP);
         break;
 
     case DOWN:
         if (length == LONG)
             sendAdhocPing();
         else
-            sendKey(DOWN);
+            sendKey(INPUT_BROKER_DOWN);
         break;
 
     case OK:
@@ -186,7 +186,7 @@ void ExpressLRSFiveWay::determineAction(KeyType key, PressLength length)
 }
 
 // Feed input to the canned messages module
-void ExpressLRSFiveWay::sendKey(KeyType key)
+void ExpressLRSFiveWay::sendKey(input_broker_event key)
 {
     InputEvent e;
     e.source = inputSourceName;
@@ -235,7 +235,7 @@ void ExpressLRSFiveWay::shutdown()
 {
     LOG_INFO("Shutdown from long press");
     powerFSM.trigger(EVENT_PRESS);
-    screen->startAlert("Shutting down...");
+    screen->startAlert("Shutting Down...");
     // Don't set alerting = true. We don't want to auto-dismiss this alert.
 
     playShutdownMelody(); // In case user adds a buzzer
@@ -243,15 +243,9 @@ void ExpressLRSFiveWay::shutdown()
     shutdownAtMsec = millis() + 3000;
 }
 
-// Emulate user button, or canned message SELECT
-// This is necessary as canned message module doesn't translate SELECT to user button presses if the module is disabled
-// Contained as one method for easier remapping of buttons by user
 void ExpressLRSFiveWay::click()
 {
-    if (!moduleConfig.canned_message.enabled)
-        powerFSM.trigger(EVENT_PRESS);
-    else
-        sendKey(OK);
+    sendKey(INPUT_BROKER_SELECT);
 }
 
 ExpressLRSFiveWay *expressLRSFiveWayInput = nullptr;

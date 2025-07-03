@@ -221,8 +221,8 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
 #endif
 
     powerMon->setState(meshtastic_PowerMon_State_CPU_DeepSleep);
-
-    screen->doDeepSleep(); // datasheet says this will draw only 10ua
+    if (screen)
+        screen->doDeepSleep(); // datasheet says this will draw only 10ua
 
     if (!skipSaveNodeDb) {
         nodeDB->saveToDisk();
@@ -332,7 +332,7 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
     }
 #endif
 
-#if defined(ARCH_ESP32) && defined(I2C_SDA)
+#if !MESHTASTIC_EXCLUDE_I2C && defined(ARCH_ESP32) && defined(I2C_SDA)
     // Added by https://github.com/meshtastic/firmware/pull/4418
     // Possibly to support Heltec Capsule Sensor?
     Wire.end();

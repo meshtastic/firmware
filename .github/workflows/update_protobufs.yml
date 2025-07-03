@@ -33,6 +33,7 @@ jobs:
       - name: Create pull request
         uses: peter-evans/create-pull-request@v7
         with:
+          branch: create-pull-request/update-protobufs
           title: Update protobufs and classes
           add-paths: |
             protobufs

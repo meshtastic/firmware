@@ -27,10 +27,10 @@ inputs:
     description: A newline separated list of paths to store as artifacts
     required: false
     default: ""
-  include-web-ui:
-    description: Include the web UI in the build
-    required: false
-    default: "false"
+  # include-web-ui:
+  #   description: Include the web UI in the build
+  #   required: false
+  #   default: "false"
   arch:
     description: Processor arch name
     required: true
@@ -43,29 +43,29 @@ runs:
       id: base
       uses: ./.github/actions/setup-base
 
-    - name: Get web ui version
-      if: inputs.include-web-ui == 'true'
-      id: webver
-      shell: bash
-      run: |
-        echo "ver=$(cat bin/web.version)" >> $GITHUB_OUTPUT
+    # - name: Get web ui version
+    #   if: inputs.include-web-ui == 'true'
+    #   id: webver
+    #   shell: bash
+    #   run: |
+    #     echo "ver=$(cat bin/web.version)" >> $GITHUB_OUTPUT
 
-    - name: Pull web ui
-      if: inputs.include-web-ui == 'true'
-      uses: dsaltares/fetch-gh-release-asset@master
-      with:
-        repo: meshtastic/web
-        file: build.tar
-        target: build.tar
-        token: ${{ inputs.github_token }}
-        version: tags/v${{ steps.webver.outputs.ver }}
+    # - name: Pull web ui
+    #   if: inputs.include-web-ui == 'true'
+    #   uses: dsaltares/fetch-gh-release-asset@master
+    #   with:
+    #     repo: meshtastic/web
+    #     file: build.tar
+    #     target: build.tar
+    #     token: ${{ inputs.github_token }}
+    #     version: tags/v${{ steps.webver.outputs.ver }}
 
-    - name: Unpack web ui
-      if: inputs.include-web-ui == 'true'
-      shell: bash
-      run: |
-        tar -xf build.tar -C data/static
-        rm build.tar
+    # - name: Unpack web ui
+    #   if: inputs.include-web-ui == 'true'
+    #   shell: bash
+    #   run: |
+    #     tar -xf build.tar -C data/static
+    #     rm build.tar
 
     - name: Remove debug flags for release
       shell: bash

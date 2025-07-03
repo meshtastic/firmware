@@ -34,9 +34,9 @@ const uint32_t g_ADigitalPinMap[] = {
     11, // D18 is P0.11 (6D_INT1)
 
     // MIC
-    42, // 17,//42,  // D19 is P1.10 (MIC_PWR)
-    32, // 26,//32,  // D20 is P1.00 (PDM_CLK)
-    16, // 25,//16,  // D21 is P0.16 (PDM_DATA)
+    42, // D19 is P1.10 (MIC_PWR)
+    32, // D20 is P1.00 (PDM_CLK)
+    16, // D21 is P0.16 (PDM_DATA)
 
     // BQ25100
     13, // D22 is P0.13 (HICHG)
@@ -80,13 +80,17 @@ const uint32_t g_ADigitalPinMap[] = {
 
 void initVariant()
 {
-    // LED1 & LED2
-    pinMode(21, OUTPUT);
-    digitalWrite(21, LOW);
-    // LED1 & LED2
-    pinMode(22, OUTPUT);
-    digitalWrite(22, LOW);
+    // Set BQ25101 ISET to 100mA instead of 50mA
+    pinMode(HICHG, OUTPUT);
+    digitalWrite(HICHG, LOW);
 
-    pinMode(PIN_WIRE_SDA, INPUT_PULLUP);
-    pinMode(PIN_WIRE_SCL, INPUT_PULLUP);
+    // LEDs
+    pinMode(PIN_LED1, OUTPUT);
+    ledOff(PIN_LED1);
+
+    pinMode(PIN_LED2, OUTPUT);
+    ledOff(PIN_LED2);
+
+    pinMode(PIN_LED3, OUTPUT);
+    ledOff(PIN_LED3);
 }

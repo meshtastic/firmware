@@ -15,8 +15,8 @@ The save / load mechanism is a shared NicheGraphics feature.
 #include "configuration.h"
 
 #include "./InkHUD.h"
-#include "graphics/niche/FlashData.h"
 #include "graphics/niche/InkHUD/MessageStore.h"
+#include "graphics/niche/Utils/FlashData.h"
 
 namespace NicheGraphics::InkHUD
 {

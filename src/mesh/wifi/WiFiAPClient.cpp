@@ -46,6 +46,10 @@ uint8_t wifiDisconnectReason = 0;
 // Stores our hostname
 char ourHost[16];
 
+// To replace blocking wifi connect delay with a non-blocking sleep
+static unsigned long wifiReconnectStartMillis = 0;
+static bool wifiReconnectPending = false;
+
 bool APStartupComplete = 0;
 
 unsigned long lastrun_ntp = 0;
@@ -83,16 +87,18 @@ static void onNetworkConnected()
 
         // start mdns
         if (!MDNS.begin("Meshtastic")) {
-            LOG_ERROR("Error setting up MDNS responder!");
+            LOG_ERROR("Error setting up mDNS responder!");
         } else {
             LOG_INFO("mDNS Host: Meshtastic.local");
             MDNS.addService("meshtastic", "tcp", SERVER_API_DEFAULT_PORT);
+// ESPmDNS (ESP32) and SimpleMDNS (RP2040) have slightly different APIs for adding TXT records
 #ifdef ARCH_ESP32
-            MDNS.addService("http", "tcp", 80);
-            MDNS.addService("https", "tcp", 443);
+            MDNS.addServiceTxt("meshtastic", "tcp", "shortname", String(owner.short_name));
+            MDNS.addServiceTxt("meshtastic", "tcp", "id", String(owner.id));
             // ESP32 prints obtained IP address in WiFiEvent
 #elif defined(ARCH_RP2040)
-            // ARCH_RP2040 does not support HTTPS
+            MDNS.addServiceTxt("meshtastic", "shortname", owner.short_name);
+            MDNS.addServiceTxt("meshtastic", "id", owner.id);
             LOG_INFO("Obtained IP address: %s", WiFi.localIP().toString().c_str());
 #endif
         }
@@ -124,10 +130,14 @@ static void onNetworkConnected()
         }
 
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WEBSERVER
-        initWebServer();
+        if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+            initWebServer();
+        }
 #endif
 #if !MESHTASTIC_EXCLUDE_SOCKETAPI
-        initApiServer();
+        if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+            initApiServer();
+        }
 #endif
         APStartupComplete = true;
     }
@@ -160,17 +170,30 @@ static int32_t reconnectWiFi()
 #endif
         LOG_INFO("Reconnecting to WiFi access point %s", wifiName);
 
-        delay(5000);
+        // Start the non-blocking wait for 5 seconds
+        wifiReconnectStartMillis = millis();
+        wifiReconnectPending = true;
+        // Do not attempt to connect yet, wait for the next invocation
+        return 5000; // Schedule next check soon
+    }
 
-        if (!WiFi.isConnected()) {
+    // Check if we are ready to proceed with the WiFi connection after the 5s wait
+    if (wifiReconnectPending) {
+        if (millis() - wifiReconnectStartMillis >= 5000) {
+            if (!WiFi.isConnected()) {
 #ifdef CONFIG_IDF_TARGET_ESP32C3
-            WiFi.mode(WIFI_MODE_NULL);
-            WiFi.useStaticBuffers(true);
-            WiFi.mode(WIFI_STA);
+                WiFi.mode(WIFI_MODE_NULL);
+                WiFi.useStaticBuffers(true);
+                WiFi.mode(WIFI_STA);
 #endif
-            WiFi.begin(wifiName, wifiPsw);
+                WiFi.begin(wifiName, wifiPsw);
+            }
+            isReconnecting = false;
+            wifiReconnectPending = false;
+        } else {
+            // Still waiting for 5s to elapse
+            return 100; // Check again soon
         }
-        isReconnecting = false;
     }
 
 #ifndef DISABLE_NTP
@@ -193,8 +216,6 @@ static int32_t reconnectWiFi()
 
     if (config.network.wifi_enabled && !WiFi.isConnected()) {
 #ifdef ARCH_RP2040 // (ESP32 handles this in WiFiEvent)
-        /* If APStartupComplete, but we're not connected, try again.
-           Shouldn't try again before APStartupComplete. */
         needReconnect = APStartupComplete;
 #endif
         return 1000; // check once per second
@@ -327,9 +348,15 @@ static void WiFiEvent(WiFiEvent_t event)
         break;
     case ARDUINO_EVENT_WIFI_STA_CONNECTED:
         LOG_INFO("Connected to access point");
+#ifdef WIFI_LED
+        digitalWrite(WIFI_LED, HIGH);
+#endif
         break;
     case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
         LOG_INFO("Disconnected from WiFi access point");
+#ifdef WIFI_LED
+        digitalWrite(WIFI_LED, LOW);
+#endif
         if (!isReconnecting) {
             WiFi.disconnect(false, true);
             syslog.disable();
@@ -378,9 +405,15 @@ static void WiFiEvent(WiFiEvent_t event)
         break;
     case ARDUINO_EVENT_WIFI_AP_START:
         LOG_INFO("WiFi access point started");
+#ifdef WIFI_LED
+        digitalWrite(WIFI_LED, HIGH);
+#endif
         break;
     case ARDUINO_EVENT_WIFI_AP_STOP:
         LOG_INFO("WiFi access point stopped");
+#ifdef WIFI_LED
+        digitalWrite(WIFI_LED, LOW);
+#endif
         break;
     case ARDUINO_EVENT_WIFI_AP_STACONNECTED:
         LOG_INFO("Client connected");
@@ -474,4 +507,4 @@ uint8_t getWifiDisconnectReason()
 {
     return wifiDisconnectReason;
 }
-#endif
+#endif // HAS_WIFI

@@ -19,6 +19,8 @@ namespace NicheGraphics::InkHUD
 enum MenuAction {
     NO_ACTION,
     SEND_PING,
+    STORE_CANNEDMESSAGE_SELECTION,
+    SEND_CANNEDMESSAGE,
     SHUTDOWN,
     NEXT_TILE,
     TOGGLE_BACKLIGHT,
@@ -31,6 +33,7 @@ enum MenuAction {
     LAYOUT,
     TOGGLE_BATTERY_ICON,
     TOGGLE_NOTIFICATIONS,
+    TOGGLE_INVERT_COLOR,
     TOGGLE_12H_CLOCK,
 };
 

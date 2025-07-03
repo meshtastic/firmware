@@ -30,7 +30,7 @@ namespace NicheGraphics::InkHUD
 
 class Applet;
 
-class ThreadedMessageApplet : public Applet
+class ThreadedMessageApplet : public Applet, public SinglePortModule
 {
   public:
     explicit ThreadedMessageApplet(uint8_t channelIndex);
@@ -41,16 +41,11 @@ class ThreadedMessageApplet : public Applet
     void onActivate() override;
     void onDeactivate() override;
     void onShutdown() override;
-    int onReceiveTextMessage(const meshtastic_MeshPacket *p);
+    ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
 
     bool approveNotification(Notification &n) override; // Which notifications to suppress
 
   protected:
-    // Used to register our text message callback
-    CallbackObserver<ThreadedMessageApplet, const meshtastic_MeshPacket *> textMessageObserver =
-        CallbackObserver<ThreadedMessageApplet, const meshtastic_MeshPacket *>(this,
-                                                                               &ThreadedMessageApplet::onReceiveTextMessage);
-
     void saveMessagesToFlash();
     void loadMessagesFromFlash();
 

@@ -61,8 +61,12 @@ extern "C" {
  * Buttons
  */
 #define PIN_BUTTON1 (32 + 10)
+#define BUTTON_ACTIVE_LOW true
+#define BUTTON_ACTIVE_PULLUP true
 #define PIN_BUTTON2 (0 + 18)      // 0.18 is labeled on the board as RESET but we configure it in the bootloader as a regular GPIO
 #define PIN_BUTTON_TOUCH (0 + 11) // 0.11 is the soft touch button on T-Echo
+#define BUTTON_TOUCH_ACTIVE_LOW true
+#define BUTTON_TOUCH_ACTIVE_PULLUP true
 
 #define BUTTON_CLICK_MS 400
 #define BUTTON_TOUCH_MS 200
@@ -139,6 +143,7 @@ External serial flash WP25R1635FZUIL0
 // Not really an E22 but TTGO seems to be trying to clone that
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
+#define TCXO_OPTIONAL
 // Internally the TTGO module hooks the SX1262-DIO2 in to control the TX/RX switch (which is the default for the sx1262interface
 // code)
 
@@ -214,7 +219,7 @@ External serial flash WP25R1635FZUIL0
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
 #define ADC_MULTIPLIER (2.0F)
 
-#define NO_EXT_GPIO 1
+// #define NO_EXT_GPIO 1
 
 #define HAS_RTC 1
 

@@ -352,8 +352,8 @@ void RedirectablePrint::hexDump(const char *logLevel, unsigned char *buf, uint16
     for (uint16_t i = 0; i < len; i += 16) {
         if (i % 128 == 0)
             log(logLevel, "    +------------------------------------------------+ +----------------+");
-        char s[] = "|                                                | |                |\n";
-        uint8_t ix = 1, iy = 52;
+        char s[] = "     |                                                | |                |\n";
+        uint8_t ix = 5, iy = 56;
         for (uint8_t j = 0; j < 16; j++) {
             if (i + j < len) {
                 uint8_t c = buf[i + j];
@@ -367,10 +367,8 @@ void RedirectablePrint::hexDump(const char *logLevel, unsigned char *buf, uint16
             }
         }
         uint8_t index = i / 16;
-        if (i < 256)
-            log(logLevel, " ");
-        log(logLevel, "%02x", index);
-        log(logLevel, ".");
+        sprintf(s, "%03x", index);
+        s[3] = '.';
         log(logLevel, s);
     }
     log(logLevel, "    +------------------------------------------------+ +----------------+");

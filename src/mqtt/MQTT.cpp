@@ -355,7 +355,7 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
         // if another "/" was added, parse string up to that character
         channelName = strtok(channelName, "/") ? strtok(channelName, "/") : channelName;
         // We allow downlink JSON packets only on a channel named "mqtt"
-        meshtastic_Channel &sendChannel = channels.getByName(channelName);
+        const meshtastic_Channel &sendChannel = channels.getByName(channelName);
         if (!(strncasecmp(channels.getGlobalId(sendChannel.index), Channels::mqttChannel, strlen(Channels::mqttChannel)) == 0 &&
               sendChannel.settings.downlink_enabled)) {
             LOG_WARN("JSON downlink received on channel not called 'mqtt' or without downlink enabled");
@@ -491,7 +491,7 @@ void MQTT::reconnect()
             return; // Don't try to connect directly to the server
         }
 #if HAS_NETWORKING
-        const PubSubConfig config(moduleConfig.mqtt);
+        const PubSubConfig ps_config(moduleConfig.mqtt);
         MQTTClient *clientConnection = mqttClient.get();
 #if MQTT_SUPPORTS_TLS
         if (moduleConfig.mqtt.tls_enabled) {
@@ -502,7 +502,7 @@ void MQTT::reconnect()
             LOG_INFO("Use non-TLS-encrypted session");
         }
 #endif
-        if (connectPubSub(config, pubSub, *clientConnection)) {
+        if (connectPubSub(ps_config, pubSub, *clientConnection)) {
             enabled = true; // Start running background process again
             runASAP = true;
             reconnectCount = 0;
@@ -763,7 +763,10 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
         }
         entry->topic = std::move(topic);
         entry->envBytes.assign(bytes, numBytes);
-        assert(mqttQueue.enqueue(entry, 0));
+        if (mqttQueue.enqueue(entry, 0) == false) {
+            LOG_CRIT("Failed to add a message to mqttQueue!");
+            abort();
+        }
     }
 }
 

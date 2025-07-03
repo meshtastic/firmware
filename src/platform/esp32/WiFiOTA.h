@@ -12,7 +12,7 @@ bool isUpdated();
 void recoverConfig(meshtastic_Config_NetworkConfig *network);
 void saveConfig(meshtastic_Config_NetworkConfig *network);
 bool trySwitchToOTA();
-String getVersion();
+const char *getVersion();
 } // namespace WiFiOTA
 
 #endif // WIFIOTA_H

@@ -59,8 +59,8 @@ const uint32_t g_ADigitalPinMap[] = {
     // D16 - Battery voltage ADC input
     31, // D16 P0.31 VBAT_ADC
     // GROVE
-    0, // D17 P0.00 GROVESDA
-    1, // D18 P0.01 GROVESCL
+    43, // D17 P0.00 GROVESDA
+    44, // D18 P0.01 GROVESCL
 
     // FLASH
     21, // D19 P0.21 (QSPI_SCK)

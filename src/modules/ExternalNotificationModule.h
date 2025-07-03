@@ -3,6 +3,8 @@
 #include "SinglePortModule.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
+#include "input/InputBroker.h"
+
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !defined(CONFIG_IDF_TARGET_ESP32C6)
 #include <NonBlockingRtttl.h>
 #else
@@ -27,10 +29,14 @@ class rtttl
  */
 class ExternalNotificationModule : public SinglePortModule, private concurrency::OSThread
 {
+    CallbackObserver<ExternalNotificationModule, const InputEvent *> inputObserver =
+        CallbackObserver<ExternalNotificationModule, const InputEvent *>(this, &ExternalNotificationModule::handleInputEvent);
     uint32_t output = 0;
 
   public:
     ExternalNotificationModule();
+
+    int handleInputEvent(const InputEvent *arg);
 
     uint32_t nagCycleCutoff = 1;
 
@@ -39,6 +45,9 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
 
     void setMute(bool mute) { isMuted = mute; }
     bool getMute() { return isMuted; }
+
+    bool canBuzz();
+    bool nagging();
 
     void stopNow();
 

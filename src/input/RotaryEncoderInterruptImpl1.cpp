@@ -16,9 +16,9 @@ bool RotaryEncoderInterruptImpl1::init()
     uint8_t pinA = moduleConfig.canned_message.inputbroker_pin_a;
     uint8_t pinB = moduleConfig.canned_message.inputbroker_pin_b;
     uint8_t pinPress = moduleConfig.canned_message.inputbroker_pin_press;
-    char eventCw = static_cast<char>(moduleConfig.canned_message.inputbroker_event_cw);
-    char eventCcw = static_cast<char>(moduleConfig.canned_message.inputbroker_event_ccw);
-    char eventPressed = static_cast<char>(moduleConfig.canned_message.inputbroker_event_press);
+    input_broker_event eventCw = static_cast<input_broker_event>(moduleConfig.canned_message.inputbroker_event_cw);
+    input_broker_event eventCcw = static_cast<input_broker_event>(moduleConfig.canned_message.inputbroker_event_ccw);
+    input_broker_event eventPressed = static_cast<input_broker_event>(moduleConfig.canned_message.inputbroker_event_press);
 
     // moduleConfig.canned_message.ext_notification_module_output
     RotaryEncoderInterruptBase::init(pinA, pinB, pinPress, eventCw, eventCcw, eventPressed,
