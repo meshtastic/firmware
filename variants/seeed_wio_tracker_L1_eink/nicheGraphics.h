@@ -67,6 +67,7 @@ void setupNicheGraphics()
     inkhud->persistence->settings.optionalFeatures.batteryIcon = true; // Device definitely has a battery
     inkhud->persistence->settings.optionalMenuItems.backlight = true;  // Until proves capacitive button works by touching it
     inkhud->persistence->settings.userTiles.count = 1; // One tile only by default, keep things simple for new users
+    inkhud->persistence->settings.optionalFeatures.notifications = false; // No notifications. Busy mesh.
 
     // Setup backlight controller
     // Note: AUX button attached further down
@@ -74,14 +75,16 @@ void setupNicheGraphics()
     backlight->setPin(PIN_EINK_EN);
 
     // Pick applets
-    // Note: order of applets determines priority of "auto-show" feature
-    inkhud->addApplet("All Messages", new InkHUD::AllMessageApplet, true, true); // Activated, autoshown
-    inkhud->addApplet("DMs", new InkHUD::DMApplet);                              // -
-    inkhud->addApplet("Channel 0", new InkHUD::ThreadedMessageApplet(0));        // -
-    inkhud->addApplet("Channel 1", new InkHUD::ThreadedMessageApplet(1));        // -
-    inkhud->addApplet("Positions", new InkHUD::PositionsApplet, true);           // Activated
-    inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet);            // -
-    inkhud->addApplet("Heard", new InkHUD::HeardApplet, true, false, 0);         // Activated, no autoshow, default on tile 0
+    // Custom selection for OpenSauce
+    inkhud->addApplet("Channel 0", new InkHUD::ThreadedMessageApplet(0), true, false, 0); // Default tile 0
+    inkhud->addApplet("Channel 1", new InkHUD::ThreadedMessageApplet(1), true);
+    inkhud->addApplet("Channel 2", new InkHUD::ThreadedMessageApplet(2), true);
+    inkhud->addApplet("DMs", new InkHUD::DMApplet, true, true);          // Autoshown if new message
+    inkhud->addApplet("Heard", new InkHUD::HeardApplet, true, false, 1); // Default tile 1
+    // Disabled by default
+    inkhud->addApplet("All Messages", new InkHUD::AllMessageApplet);
+    inkhud->addApplet("Positions", new InkHUD::PositionsApplet);
+    inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet);
 
     inkhud->persistence->settings.rotation = 1;
     // inkhud->persistence->printSettings(&inkhud->persistence->settings);
