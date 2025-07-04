@@ -831,6 +831,44 @@ void menuHandler::numberTest()
                              [](int number_picked) -> void { LOG_WARN("Nodenum: %u", number_picked); });
 }
 
+void menuHandler::wifiBaseMenu()
+{
+    enum optionsNumbers { Back, Wifi_toggle };
+
+    static const char *optionsArray[] = {"Back", "WiFi Toggle"};
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "WiFi Menu";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 2;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Wifi_toggle) {
+            menuQueue = wifi_toggle_menu;
+            screen->runNow();
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::wifiToggleMenu()
+{
+    enum optionsNumbers { Back, Wifi_toggle };
+
+    static const char *optionsArray[] = {"Back", "Disable"};
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Disable Wifi and\nEnable Bluetooth?";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 2;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Wifi_toggle) {
+            config.network.wifi_enabled = false;
+            config.bluetooth.enabled = true;
+            service->reloadConfig(SEGMENT_CONFIG);
+            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
 void menuHandler::handleMenuSwitch(OLEDDisplay *display)
 {
     if (menuQueue != menu_none)
@@ -893,6 +931,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case number_test:
         numberTest();
+        break;
+    case wifi_toggle_menu:
+        wifiToggleMenu();
         break;
     }
     menuQueue = menu_none;
