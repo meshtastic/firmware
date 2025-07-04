@@ -195,6 +195,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define LTR390UV_ADDR 0x53
 #define XPOWERS_AXP192_AXP2101_ADDRESS 0x34 // same adress as TCA8418
 #define PCT2075_ADDR 0x37
+#define ADS1X15_ADDR 0x48 // same address as FT6336U
+#define ADS1X15_ADDR_ALT1 0x49
+#define ADS1X15_ADDR_ALT2 0x4A
+#define ADS1X15_ADDR_ALT3 0x4B
 
 // -----------------------------------------------------------------------------
 // ACCELEROMETER
