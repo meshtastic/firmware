@@ -40,7 +40,9 @@ template <typename T, std::size_t N> std::size_t array_count(const T (&)[N])
 }
 
 #if defined(NRF52840_XXAA) || defined(NRF52833_XXAA) || defined(ARCH_ESP32) || defined(ARCH_PORTDUINO)
-#if defined(RAK2560)
+#if defined(SENSECAP_INDICATOR)
+FakeUART *GPS::_serial_gps = FakeSerial;
+#elif defined(RAK2560)
 HardwareSerial *GPS::_serial_gps = &Serial2;
 #else
 HardwareSerial *GPS::_serial_gps = &Serial1;
@@ -1076,6 +1078,7 @@ void GPS::publishUpdate()
 
 int32_t GPS::runOnce()
 {
+#if !defined(SENSECAP_INDICATOR)
     if (!GPSInitFinished) {
         if (!_serial_gps || config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
             LOG_INFO("GPS set to not-present. Skip probe");
@@ -1091,6 +1094,7 @@ int32_t GPS::runOnce()
         GPSInitFinished = true;
         publishUpdate();
     }
+#endif
 
     // Repeaters have no need for GPS
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
@@ -1409,8 +1413,10 @@ GPS *GPS::createGps()
     if (!settingsMap[has_gps])
         return nullptr;
 #endif
+#if !defined(SENSECAP_INDICATOR)
     if (!_rx_gpio || !_serial_gps) // Configured to have no GPS at all
         return nullptr;
+#endif
 
     GPS *new_gps = new GPS;
     new_gps->rx_gpio = _rx_gpio;
