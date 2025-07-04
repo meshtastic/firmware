@@ -48,12 +48,14 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
                                          "PH_433",
                                          "PH_868",
                                          "PH_915",
-                                         "ANZ_433"};
+                                         "ANZ_433",
+                                         "KZ_433",
+                                         "KZ_863"};
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Set the LoRa region";
     bannerOptions.durationMs = duration;
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 23;
+    bannerOptions.optionsCount = 25;
     bannerOptions.InitialSelected = 0;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected != 0 && config.lora.region != _meshtastic_Config_LoRaConfig_RegionCode(selected)) {
@@ -352,8 +354,8 @@ void menuHandler::systemBaseMenu()
 #endif
 
     enum optionsNumbers { Back, Beeps, Brightness, Reboot, Color, MUI, Test };
-    static const char *optionsArray[6] = {"Back"};
-    static int optionsEnumArray[6] = {Back};
+    static const char *optionsArray[7] = {"Back"};
+    static int optionsEnumArray[7] = {Back};
     int options = 1;
 
     optionsArray[options] = "Beeps Action";
@@ -602,39 +604,34 @@ void menuHandler::BuzzerModeMenu()
 
 void menuHandler::BrightnessPickerMenu()
 {
-    static const char *optionsArray[] = {"Back", "Low", "Medium", "High", "Very High"};
+    static const char *optionsArray[] = {"Back", "Low", "Medium", "High"};
 
     // Get current brightness level to set initial selection
-    int currentSelection = 1; // Default to Low
+    int currentSelection = 1; // Default to Medium
     if (uiconfig.screen_brightness >= 255) {
-        currentSelection = 4; // Very High
+        currentSelection = 3; // Very High
     } else if (uiconfig.screen_brightness >= 128) {
-        currentSelection = 3; // High
-    } else if (uiconfig.screen_brightness >= 64) {
-        currentSelection = 2; // Medium
+        currentSelection = 2; // High
     } else {
-        currentSelection = 1; // Low
+        currentSelection = 1; // Medium
     }
 
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Brightness";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 5;
+    bannerOptions.optionsCount = 4;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == 1) { // Low
-            uiconfig.screen_brightness = 1;
-        } else if (selected == 2) { // Medium
+        if (selected == 1) { // Medium
             uiconfig.screen_brightness = 64;
-        } else if (selected == 3) { // High
+        } else if (selected == 2) { // High
             uiconfig.screen_brightness = 128;
-        } else if (selected == 4) { // Very High
+        } else if (selected == 3) { // Very High
             uiconfig.screen_brightness = 255;
         }
 
         if (selected != 0) { // Not "Back"
                              // Apply brightness immediately
-#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || defined(HELTEC_VISION_MASTER_E213) ||                \
-    defined(HELTEC_VISION_MASTER_E290)
+#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
             // For HELTEC devices, use analogWrite to control backlight
             analogWrite(VTFT_LEDA, uiconfig.screen_brightness);
 #elif defined(ST7789_CS)

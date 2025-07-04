@@ -162,6 +162,14 @@ const RegionInfo regions[] = {
     RDEF(PH_915, 915.0f, 918.0f, 100, 0, 24, true, false, false),
 
     /*
+        Kazakhstan
+                433.075 - 434.775 MHz <10 mW EIRP, Low Powered Devices (LPD)
+                863 - 868 MHz <25 mW EIRP, 500kHz channels allowed, must not be used at airfields
+                                https://github.com/meshtastic/firmware/issues/7204
+    */
+    RDEF(KZ_433, 433.075f, 434.775f, 100, 0, 10, true, false, false), RDEF(KZ_863, 863.0f, 868.0f, 100, 0, 30, true, false, true),
+
+    /*
        2.4 GHZ WLAN Band equivalent. Only for SX128x chips.
     */
     RDEF(LORA_24, 2400.0f, 2483.5f, 100, 0, 10, true, false, true),
