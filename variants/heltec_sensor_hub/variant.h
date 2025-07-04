@@ -1,6 +1,8 @@
 #define EXT_PWR_DETECT 20
 
 #define BUTTON_PIN 17
+#define BUTTON_ACTIVE_LOW false
+#define BUTTON_ACTIVE_PULLUP false
 
 #define BATTERY_PIN 7 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 #define ADC_CHANNEL ADC1_GPIO7_CHANNEL

@@ -7,7 +7,8 @@ RotaryEncoderInterruptBase::RotaryEncoderInterruptBase(const char *name) : concu
 }
 
 void RotaryEncoderInterruptBase::init(
-    uint8_t pinA, uint8_t pinB, uint8_t pinPress, char eventCw, char eventCcw, char eventPressed,
+    uint8_t pinA, uint8_t pinB, uint8_t pinPress, input_broker_event eventCw, input_broker_event eventCcw,
+    input_broker_event eventPressed,
     //    std::function<void(void)> onIntA, std::function<void(void)> onIntB, std::function<void(void)> onIntPress) :
     void (*onIntA)(), void (*onIntB)(), void (*onIntPress)())
 {
@@ -34,7 +35,7 @@ void RotaryEncoderInterruptBase::init(
 int32_t RotaryEncoderInterruptBase::runOnce()
 {
     InputEvent e;
-    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
+    e.inputEvent = INPUT_BROKER_NONE;
     e.source = this->_originName;
 
     if (this->action == ROTARY_ACTION_PRESSED) {
@@ -48,7 +49,7 @@ int32_t RotaryEncoderInterruptBase::runOnce()
         e.inputEvent = this->_eventCcw;
     }
 
-    if (e.inputEvent != meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE) {
+    if (e.inputEvent != INPUT_BROKER_NONE) {
         this->notifyObservers(&e);
     }
 

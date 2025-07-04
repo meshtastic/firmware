@@ -28,7 +28,6 @@ class TouchScreenBase : public Observable<const InputEvent *>, public concurrenc
         TOUCH_ACTION_LEFT,
         TOUCH_ACTION_RIGHT,
         TOUCH_ACTION_TAP,
-        TOUCH_ACTION_DOUBLE_TAP,
         TOUCH_ACTION_LONG_PRESS
     };
 

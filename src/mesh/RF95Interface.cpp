@@ -122,10 +122,7 @@ bool RF95Interface::init()
     power = dacDbValues.db;
 #endif
 
-    limitPower();
-
-    if (power > RF95_MAX_POWER) // This chip has lower power limits than some
-        power = RF95_MAX_POWER;
+    limitPower(RF95_MAX_POWER);
 
     iface = lora = new RadioLibRF95(&module);
 

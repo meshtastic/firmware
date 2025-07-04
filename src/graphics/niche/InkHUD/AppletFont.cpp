@@ -616,9 +616,116 @@ char InkHUD::AppletFont::applyEncoding(std::string utf8)
         }
     }
 
-    // If not handled, return DEL
-    // Todo: swap this to SUB, and modify the fonts
-    return '\x7F';
+    else /*ASCII or Unhandled*/ {
+        if (utf8.length() == 1)
+            return utf8.at(0);
+    }
+
+    // All single-byte (ASCII) characters should have been handled by now
+    // Only unhandled multi-byte UTF8 characters should remain
+    assert(utf8.length() > 1);
+
+    // Parse emoji
+    // Strip emoji modifiers
+    switch (toUtf32(utf8)) {
+        REMAP(0x1F44D, 0x01) // 👍 Thumbs Up
+        REMAP(0x1F44E, 0x02) // 👎 Thumbs Down
+
+        REMAP(0x1F60A, 0x03) // 😊 Smiling Face with Smiling Eyes
+        REMAP(0x1F642, 0x03) // 🙂 Slightly Smiling Face
+        REMAP(0x1F601, 0x03) // 😁 Grinning Face with Smiling Eye
+
+        REMAP(0x1F602, 0x04) // 😂 Face with Tears of Joy
+        REMAP(0x1F923, 0x04) // 🤣 Rolling on the Floor Laughing
+        REMAP(0x1F606, 0x04) // 😆 Smiling with Open Mouth and Closed Eyes
+
+        REMAP(0x1F44B, 0x05) // 👋 Waving Hand
+
+        REMAP(0x02600, 0x06) // ☀ Sun
+        REMAP(0x1F31E, 0x06) // 🌞 Sun with Face
+
+        // 0x07 - Bell character (unused)
+        REMAP(0x1F327, 0x08) // 🌧️ Cloud with Rain
+
+        REMAP(0x02601, 0x09) // ☁️ Cloud
+        REMAP(0x1F32B, 0x09) // Fog
+
+        REMAP(0x1F9E1, 0x0B) // 🧡 Orange Heart
+        REMAP(0x02763, 0x0B) // ❣ Heart Exclamation
+        REMAP(0x02764, 0x0B) // ❤ Heart
+        REMAP(0x1F495, 0x0B) // 💕 Two Hearts
+        REMAP(0x1F496, 0x0B) // 💖 Sparkling Heart
+        REMAP(0x1F497, 0x0B) // 💗 Growing Heart
+        REMAP(0x1F498, 0x0B) // 💘 Heart with Arrow
+
+        REMAP(0x1F4A9, 0x0C) // 💩 Pile of Poo
+        // 0x0D - Carriage return (unused)
+        REMAP(0x1F514, 0x0E) // 🔔 Bell
+
+        REMAP(0x1F62D, 0x0F) // 😭 Loudly Crying Face
+        REMAP(0x1F622, 0x0F) // 😢 Crying Face
+
+        REMAP(0x1F64F, 0x10) // 🙏 Person with Folded Hands
+        REMAP(0x1F618, 0x11) // 😘 Face Throwing a Kiss
+        REMAP(0x1F389, 0x12) // 🎉 Party Popper
+
+        REMAP(0x1F600, 0x13) // 😀 Grinning Face
+        REMAP(0x1F603, 0x13) // 😃 Smiling Face with Open Mouth
+        REMAP(0x1F604, 0x13) // 😄 Smiling Face with Open Mouth and Smiling Eyes
+
+        REMAP(0x1F97A, 0x14) // 🥺 Face with Pleading Eyes
+        REMAP(0x1F605, 0x15) // 😅 Smiling with Sweat
+        REMAP(0x1F525, 0x16) // 🔥 Fire
+        REMAP(0x1F926, 0x17) // 🤦 Face Palm
+        REMAP(0x1F937, 0x18) // 🤷 Shrug
+        REMAP(0x1F644, 0x19) // 🙄 Face with Rolling Eyes
+        // 0x1A Substitution (unused)
+        REMAP(0x1F917, 0x1B) // 🤗 Hugging Face
+
+        REMAP(0x1F609, 0x1C) // 😉 Winking Face
+        REMAP(0x1F61C, 0x1C) // 😜 Face with Stuck-Out Tongue and Winking Eye
+        REMAP(0x1F60F, 0x1C) // 😏 Smirking Face
+
+        REMAP(0x1F914, 0x1D) // 🤔 Thinking Face
+        REMAP(0x1FAE1, 0x1E) // 🫡 Saluting Face
+        REMAP(0x1F44C, 0x1F) // 👌 OK Hand Sign
+
+        REMAP(0x02755, '!') // ❕
+        REMAP(0x02757, '!') // ❗
+        REMAP(0x0203C, '!') // ‼
+        REMAP(0x02753, '?') // ❓
+        REMAP(0x02754, '?') // ❔
+        REMAP(0x02049, '?') // ⁉
+
+        // Modifiers (deleted)
+        REMAP(0x02640, 0x7F) // Gender
+        REMAP(0x02642, 0x7F)
+        REMAP(0x1F3FB, 0x7F) // Skin Tones
+        REMAP(0x1F3FC, 0x7F)
+        REMAP(0x1F3FD, 0x7F)
+        REMAP(0x1F3FE, 0x7F)
+        REMAP(0x1F3FF, 0x7F)
+        REMAP(0x0FE00, 0x7F) // Variation Selectors
+        REMAP(0x0FE01, 0x7F)
+        REMAP(0x0FE02, 0x7F)
+        REMAP(0x0FE03, 0x7F)
+        REMAP(0x0FE04, 0x7F)
+        REMAP(0x0FE05, 0x7F)
+        REMAP(0x0FE06, 0x7F)
+        REMAP(0x0FE07, 0x7F)
+        REMAP(0x0FE08, 0x7F)
+        REMAP(0x0FE09, 0x7F)
+        REMAP(0x0FE0A, 0x7F)
+        REMAP(0x0FE0B, 0x7F)
+        REMAP(0x0FE0C, 0x7F)
+        REMAP(0x0FE0D, 0x7F)
+        REMAP(0x0FE0E, 0x7F)
+        REMAP(0x0FE0F, 0x7F)
+        REMAP(0x0200D, 0x7F) // Zero Width Joiner
+    }
+
+    // If not handled, return SUB
+    return '\x1A';
 
 // Sweep up the syntactic sugar
 // Don't want ants in the house

@@ -88,8 +88,13 @@ static const uint8_t A7 = PIN_A7;
 #define ADC_RESOLUTION 14
 
 // Other pins
+#define WB_I2C1_SDA (13) // SENSOR_SLOT IO_SLOT
+#define WB_I2C1_SCL (14) // SENSOR_SLOT IO_SLOT
+
 #define PIN_AREF (2)
 #define PIN_NFC1 (9)
+#define WB_IO5 PIN_NFC1
+#define WB_IO4 (4)
 #define PIN_NFC2 (10)
 
 static const uint8_t AREF = PIN_AREF;
@@ -143,8 +148,8 @@ static const uint8_t SCK = PIN_SPI_SCK;
  */
 #define WIRE_INTERFACES_COUNT 1
 
-#define PIN_WIRE_SDA (13)
-#define PIN_WIRE_SCL (14)
+#define PIN_WIRE_SDA (WB_I2C1_SDA)
+#define PIN_WIRE_SCL (WB_I2C1_SCL)
 
 // QSPI Pins
 #define PIN_QSPI_SCK 3
@@ -219,10 +224,15 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 
 // Testing USB detection
 #define NRF_APM
+// If using a power chip like the INA3221 you can override the default battery voltage channel below
+// and comment out NRF_APM to use the INA3221 instead of the USB detection for charging
+// #define INA3221_BAT_CH INA3221_CH2
+// #define INA3221_ENV_CH INA3221_CH1
 
 // enables 3.3V periphery like GPS or IO Module
 // Do not toggle this for GPS power savings
 #define PIN_3V3_EN (34)
+#define WB_IO2 PIN_3V3_EN
 
 // RAK1910 GPS module
 // If using the wisblock GPS module and pluged into Port A on WisBlock base

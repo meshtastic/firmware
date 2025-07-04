@@ -31,6 +31,7 @@
   // "USERPREFS_CONFIG_SMART_POSITION_ENABLED": "false",
   // "USERPREFS_CONFIG_GPS_UPDATE_INTERVAL": "600",
   // "USERPREFS_CONFIG_POSITION_BROADCAST_INTERVAL": "1800",
+  // "USERPREFS_CONFIG_DEVICE_TELEM_UPDATE_INTERVAL": "900", // Device telemetry update interval in seconds
   // "USERPREFS_LORACONFIG_CHANNEL_NUM": "31",
   // "USERPREFS_LORACONFIG_MODEM_PRESET": "meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST",
   // "USERPREFS_USE_ADMIN_KEY_0": "{ 0xcd, 0xc0, 0xb4, 0x3c, 0x53, 0x24, 0xdf, 0x13, 0xca, 0x5a, 0xa6, 0x0c, 0x0d, 0xec, 0x85, 0x5a, 0x4c, 0xf6, 0x1a, 0x96, 0x04, 0x1a, 0x3e, 0xfc, 0xbb, 0x8e, 0x33, 0x71, 0xe5, 0xfc, 0xff, 0x3c }",

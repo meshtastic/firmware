@@ -244,10 +244,13 @@ void setReplyTo(meshtastic_MeshPacket *p, const meshtastic_MeshPacket &to)
     p->decoded.request_id = to.id;
 }
 
-std::vector<MeshModule *> MeshModule::GetMeshModulesWithUIFrames()
+std::vector<MeshModule *> MeshModule::GetMeshModulesWithUIFrames(int startIndex)
 {
-
     std::vector<MeshModule *> modulesWithUIFrames;
+
+    // Fill with nullptr up to startIndex
+    modulesWithUIFrames.resize(startIndex, nullptr);
+
     if (modules) {
         for (auto i = modules->begin(); i != modules->end(); ++i) {
             auto &pi = **i;

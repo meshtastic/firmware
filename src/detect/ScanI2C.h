@@ -61,6 +61,7 @@ class ScanI2C
         FT6336U,
         STK8BAXX,
         ICM20948,
+        SCD4X,
         MAX30102,
         TPS65233,
         MPR121KB,
@@ -70,8 +71,10 @@ class ScanI2C
         DFROBOT_RAIN,
         DPS310,
         LTR390UV,
+        RAK12035,
         TCA8418KB,
         PCT2075,
+        BMM150,
     } DeviceType;
 
     // typedef uint8_t DeviceAddress;
@@ -123,6 +126,8 @@ class ScanI2C
     FoundDevice firstKeyboard() const;
 
     FoundDevice firstAccelerometer() const;
+
+    FoundDevice firstAQI() const;
 
     FoundDevice firstRGBLED() const;
 

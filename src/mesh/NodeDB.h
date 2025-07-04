@@ -64,7 +64,22 @@ static const uint8_t LOW_ENTROPY_HASH14[] = {0x39, 0x39, 0x84, 0xe0, 0x22, 0x2f,
 static const uint8_t LOW_ENTROPY_HASH15[] = {0x0a, 0xda, 0x5f, 0xec, 0xff, 0x5c, 0xc0, 0x2e, 0x5f, 0xc4, 0x8d,
                                              0x03, 0xe5, 0x80, 0x59, 0xd3, 0x5d, 0x49, 0x86, 0xe9, 0x8d, 0xf6,
                                              0xf6, 0x16, 0x35, 0x3d, 0xf9, 0x9b, 0x29, 0x55, 0x9e, 0x64};
-static const char LOW_ENTROPY_WARNING[] = "Your Device is configured with a low entropy key. Suggest regenerating DM keys";
+static const uint8_t LOW_ENTROPY_HASH16[] = {0x08, 0x56, 0xF0, 0xD7, 0xEF, 0x77, 0xD6, 0x11, 0x1C, 0x8F, 0x95,
+                                             0x2D, 0x3C, 0xDF, 0xB1, 0x22, 0xBF, 0x60, 0x9B, 0xE5, 0xA9, 0xC0,
+                                             0x6E, 0x4B, 0x01, 0xDC, 0xD1, 0x57, 0x44, 0xB2, 0xA5, 0xCF};
+static const uint8_t LOW_ENTROPY_HASH17[] = {0x2C, 0xB2, 0x77, 0x85, 0xD6, 0xB7, 0x48, 0x9C, 0xFE, 0xBC, 0x80,
+                                             0x26, 0x60, 0xF4, 0x6D, 0xCE, 0x11, 0x31, 0xA2, 0x1E, 0x33, 0x0A,
+                                             0x6D, 0x2B, 0x00, 0xFA, 0x0C, 0x90, 0x95, 0x8F, 0x5C, 0x6B};
+static const uint8_t LOW_ENTROPY_HASH18[] = {0xFA, 0x59, 0xC8, 0x6E, 0x94, 0xEE, 0x75, 0xC9, 0x9A, 0xB0, 0xFE,
+                                             0x89, 0x36, 0x40, 0xC9, 0x99, 0x4A, 0x3B, 0xF4, 0xAA, 0x12, 0x24,
+                                             0xA2, 0x0F, 0xF9, 0xD1, 0x08, 0xCB, 0x78, 0x19, 0xAA, 0xE5};
+static const uint8_t LOW_ENTROPY_HASH19[] = {0x6E, 0x42, 0x7A, 0x4A, 0x8C, 0x61, 0x62, 0x22, 0xA1, 0x89, 0xD3,
+                                             0xA4, 0xC2, 0x19, 0xA3, 0x83, 0x53, 0xA7, 0x7A, 0x0A, 0x89, 0xE2,
+                                             0x54, 0x52, 0x62, 0x3D, 0xE7, 0xCA, 0x8C, 0xF6, 0x6A, 0x60};
+static const uint8_t LOW_ENTROPY_HASH20[] = {0x20, 0x27, 0x2F, 0xBA, 0x0C, 0x99, 0xD7, 0x29, 0xF3, 0x11, 0x35,
+                                             0x89, 0x9D, 0x0E, 0x24, 0xA1, 0xC3, 0xCB, 0xDF, 0x8A, 0xF1, 0xC6,
+                                             0xFE, 0xD0, 0xD7, 0x9F, 0x92, 0xD6, 0x8F, 0x59, 0xBF, 0xE4};
+static const char LOW_ENTROPY_WARNING[] = "Compromised keys detected, please regenerate.";
 #endif
 /*
 DeviceState versions used to be defined in the .proto file but really only this function cares.  So changed to a
@@ -176,6 +191,16 @@ class NodeDB
      */
     bool updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelIndex = 0);
 
+    /*
+     * Sets a node either favorite or unfavorite
+     */
+    void set_favorite(bool is_favorite, uint32_t nodeId);
+
+    /**
+     * Other functions like the node picker can request a pause in the node sorting
+     */
+    void pause_sort(bool paused);
+
     /// @return our node number
     NodeNum getNodeNum() { return myNodeInfo.my_node_num; }
 
@@ -192,9 +217,6 @@ class NodeDB
     level mesh sw does if it does conflict?  would it be better for people who are replying with denynode num to just broadcast
     their denial?)
     */
-
-    /// pick a provisional nodenum we hope no one is using
-    void pickNewNodeNum();
 
     // get channel channel index we heard a nodeNum on, defaults to 0 if not found
     uint8_t getMeshNodeChannel(NodeNum n);
@@ -263,13 +285,6 @@ class NodeDB
     bool restorePreferences(meshtastic_AdminMessage_BackupLocation location,
                             int restoreWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
 
-  private:
-    bool duplicateWarned = false;
-    uint32_t lastNodeDbSave = 0;    // when we last saved our db to flash
-    uint32_t lastBackupAttempt = 0; // when we last tried a backup automatically or manually
-    /// Find a node in our DB, create an empty NodeInfoLite if missing
-    meshtastic_NodeInfoLite *getOrCreateMeshNode(NodeNum n);
-
     /// Notify observers of changes to the DB
     void notifyObservers(bool forceUpdate = false)
     {
@@ -277,6 +292,22 @@ class NodeDB
         const meshtastic::NodeStatus status = meshtastic::NodeStatus(getNumOnlineMeshNodes(), getNumMeshNodes(), forceUpdate);
         newStatus.notifyObservers(&status);
     }
+
+  private:
+    bool duplicateWarned = false;
+    uint32_t lastNodeDbSave = 0;    // when we last saved our db to flash
+    uint32_t lastBackupAttempt = 0; // when we last tried a backup automatically or manually
+    uint32_t lastSort = 0;          // When last sorted the nodeDB
+    /// Find a node in our DB, create an empty NodeInfoLite if missing
+    meshtastic_NodeInfoLite *getOrCreateMeshNode(NodeNum n);
+
+    /*
+     * Internal boolean to track sorting paused
+     */
+    bool sortingIsPaused = false;
+
+    /// pick a provisional nodenum we hope no one is using
+    void pickNewNodeNum();
 
     /// read our db from flash
     void loadFromDisk();
@@ -295,6 +326,7 @@ class NodeDB
     bool saveChannelsToDisk();
     bool saveDeviceStateToDisk();
     bool saveNodeDatabaseToDisk();
+    void sortMeshDB();
 };
 
 extern NodeDB *nodeDB;

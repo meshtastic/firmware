@@ -1,0 +1,21 @@
+Lora:
+
+  ### RAK13300in Slot 1
+  Module: sx1262
+  IRQ: 22 #IO6
+  Reset: 16 # IO4
+  Busy: 24 # IO5
+  # Ant_sw: 13 # IO3 
+  DIO3_TCXO_VOLTAGE: true
+  DIO2_AS_RF_SWITCH: true
+  spidev: spidev0.0
+  # CS: 8
+
+
+  ### RAK13300in Slot 2 pins
+#  IRQ: 18 #IO6
+#  Reset: 24 # IO4
+#  Busy: 19 # IO5
+#  # Ant_sw: 23 # IO3 
+#  spidev: spidev0.1
+#  # CS: 7

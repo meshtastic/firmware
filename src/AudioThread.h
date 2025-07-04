@@ -47,6 +47,20 @@ class AudioThread : public concurrency::OSThread
         setCPUFast(false);
     }
 
+    void readAloud(const char *text)
+    {
+        if (i2sRtttl != nullptr) {
+            i2sRtttl->stop();
+            delete i2sRtttl;
+            i2sRtttl = nullptr;
+        }
+
+        ESP8266SAM *sam = new ESP8266SAM;
+        sam->Say(audioOut, text);
+        delete sam;
+        setCPUFast(false);
+    }
+
   protected:
     int32_t runOnce() override
     {

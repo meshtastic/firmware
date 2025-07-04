@@ -118,10 +118,10 @@ meshtastic_MeshPacket *MeshPacketQueue::remove(NodeNum from, PacketId id, bool t
 }
 
 /* Attempt to find a packet from this queue. Return true if it was found. */
-bool MeshPacketQueue::find(NodeNum from, PacketId id)
+bool MeshPacketQueue::find(const NodeNum from, const PacketId id)
 {
     for (auto it = queue.begin(); it != queue.end(); it++) {
-        auto p = (*it);
+        const auto p = (*it);
         if (getFrom(p) == from && p->id == id) {
             return true;
         }

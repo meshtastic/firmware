@@ -12,7 +12,8 @@ class RotaryEncoderInterruptBase : public Observable<const InputEvent *>, public
 {
   public:
     explicit RotaryEncoderInterruptBase(const char *name);
-    void init(uint8_t pinA, uint8_t pinB, uint8_t pinPress, char eventCw, char eventCcw, char eventPressed,
+    void init(uint8_t pinA, uint8_t pinB, uint8_t pinPress, input_broker_event eventCw, input_broker_event eventCcw,
+              input_broker_event eventPressed,
               //        std::function<void(void)> onIntA, std::function<void(void)> onIntB, std::function<void(void)> onIntPress);
               void (*onIntA)(), void (*onIntB)(), void (*onIntPress)());
     void intPressHandler();
@@ -34,8 +35,8 @@ class RotaryEncoderInterruptBase : public Observable<const InputEvent *>, public
   private:
     uint8_t _pinA = 0;
     uint8_t _pinB = 0;
-    char _eventCw = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
-    char _eventCcw = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
-    char _eventPressed = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
+    input_broker_event _eventCw = INPUT_BROKER_NONE;
+    input_broker_event _eventCcw = INPUT_BROKER_NONE;
+    input_broker_event _eventPressed = INPUT_BROKER_NONE;
     const char *_originName;
 };

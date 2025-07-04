@@ -4,8 +4,8 @@
 #define I2C_SCL 22
 
 #define BUTTON_PIN 38 // The middle button GPIO on the T-Beam
-// #define BUTTON_PIN_ALT 13 // Alternate GPIO for an external button if needed. Does anyone use this? It is not documented
-//  anywhere.
+#define BUTTON_ACTIVE_LOW true
+#define BUTTON_ACTIVE_PULLUP true
 #define EXT_NOTIFY_OUT 13 // Default pin to use for Ext Notify Module.
 
 #define LED_STATE_ON 0 // State when LED is lit

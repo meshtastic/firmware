@@ -30,7 +30,7 @@ SerialKeyboard::SerialKeyboard(const char *name) : concurrency::OSThread(name)
 void SerialKeyboard::erase()
 {
     InputEvent e;
-    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_BACK;
+    e.inputEvent = INPUT_BROKER_BACK;
     e.kbchar = 0x08;
     e.source = this->_originName;
     this->notifyObservers(&e);
@@ -81,18 +81,18 @@ int32_t SerialKeyboard::runOnce()
         if (keys < prevKeys) { // a new key has been pressed (and not released), doesn't works for multiple presses at once but
                                // shouldn't be a limitation
             InputEvent e;
-            e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
+            e.inputEvent = INPUT_BROKER_NONE;
             e.source = this->_originName;
             // SELECT OR SEND OR CANCEL EVENT
             if (!(shiftRegister2 & (1 << 3))) {
-                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP;
+                e.inputEvent = INPUT_BROKER_UP;
             } else if (!(shiftRegister2 & (1 << 2))) {
-                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT;
-                e.kbchar = INPUT_BROKER_MSG_RIGHT;
+                e.inputEvent = INPUT_BROKER_RIGHT;
+                e.kbchar = 0;
             } else if (!(shiftRegister2 & (1 << 1))) {
-                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT;
+                e.inputEvent = INPUT_BROKER_SELECT;
             } else if (!(shiftRegister2 & (1 << 0))) {
-                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL;
+                e.inputEvent = INPUT_BROKER_CANCEL;
             }
 
             // TEXT INPUT EVENT
@@ -120,10 +120,10 @@ int32_t SerialKeyboard::runOnce()
             // BACKSPACE or TAB
             else if (!(shiftRegister1 & (1 << 7))) {
                 if (shift == 0 || shift == 2) { // BACKSPACE
-                    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_BACK;
+                    e.inputEvent = INPUT_BROKER_BACK;
                     e.kbchar = 0x08;
                 } else { // shift = 1 => TAB
-                    e.inputEvent = ANYKEY;
+                    e.inputEvent = INPUT_BROKER_ANYKEY;
                     e.kbchar = 0x09;
                 }
             }
@@ -146,7 +146,7 @@ int32_t SerialKeyboard::runOnce()
                     if (keyPressed == lastKeyPressed && millis() - lastPressTime < 500) {
                         erase();
                     }
-                    e.inputEvent = ANYKEY;
+                    e.inputEvent = INPUT_BROKER_ANYKEY;
                     e.kbchar = char(KeyMap[shift][quickPress][keyPressed]);
                 } else { // then it's shift
                     shift += 1;
@@ -159,7 +159,7 @@ int32_t SerialKeyboard::runOnce()
                 keyPressed = 13;
             }
 
-            if (e.inputEvent != meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE) {
+            if (e.inputEvent != INPUT_BROKER_NONE) {
                 this->notifyObservers(&e);
             }
         }

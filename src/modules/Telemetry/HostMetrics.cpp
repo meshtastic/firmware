@@ -29,13 +29,15 @@ bool HostMetricsModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, 
     if (t->which_variant == meshtastic_Telemetry_host_metrics_tag) {
 #ifdef DEBUG_PORT
         const char *sender = getSenderShortName(mp);
+        if (t->variant.host_metrics.has_user_string)
+            t->variant.host_metrics.user_string[sizeof(t->variant.host_metrics.user_string) - 1] = '\0';
 
-        LOG_INFO("(Received Host Metrics from %s): uptime=%u, diskfree=%lu, memory free=%lu, load=%04.2f, %04.2f, %04.2f, %s",
-                 sender, t->variant.host_metrics.uptime_seconds, t->variant.host_metrics.diskfree1_bytes,
+        LOG_INFO("(Received Host Metrics from %s): uptime=%u, diskfree=%lu, memory free=%lu, load=%04.2f, %04.2f, %04.2f", sender,
+                 t->variant.host_metrics.uptime_seconds, t->variant.host_metrics.diskfree1_bytes,
                  t->variant.host_metrics.freemem_bytes, static_cast<float>(t->variant.host_metrics.load1) / 100,
                  static_cast<float>(t->variant.host_metrics.load5) / 100,
-                 static_cast<float>(t->variant.host_metrics.load15) / 100,
-                 t->variant.host_metrics.has_user_string ? t->variant.host_metrics.user_string : "");
+                 static_cast<float>(t->variant.host_metrics.load15) / 100);
+        // t->variant.host_metrics.has_user_string ? t->variant.host_metrics.user_string : "");
 #endif
     }
     return false; // Let others look at this message also if they want
@@ -111,7 +113,8 @@ meshtastic_Telemetry HostMetricsModule::getHostMetrics()
     if (settingsStrings[hostMetrics_user_command] != "") {
         std::string userCommandResult = exec(settingsStrings[hostMetrics_user_command].c_str());
         if (userCommandResult.length() > 1) {
-            strncpy(t.variant.host_metrics.user_string, userCommandResult.c_str(), 200);
+            strncpy(t.variant.host_metrics.user_string, userCommandResult.c_str(), sizeof(t.variant.host_metrics.user_string));
+            t.variant.host_metrics.user_string[sizeof(t.variant.host_metrics.user_string) - 1] = '\0';
             t.variant.host_metrics.has_user_string = true;
         }
     }
@@ -121,12 +124,12 @@ meshtastic_Telemetry HostMetricsModule::getHostMetrics()
 bool HostMetricsModule::sendMetrics()
 {
     meshtastic_Telemetry telemetry = getHostMetrics();
-    LOG_INFO("Send: uptime=%u, diskfree=%lu, memory free=%lu, load=%04.2f, %04.2f, %04.2f %s",
+    LOG_INFO("Send: uptime=%u, diskfree=%lu, memory free=%lu, load=%04.2f, %04.2f, %04.2f",
              telemetry.variant.host_metrics.uptime_seconds, telemetry.variant.host_metrics.diskfree1_bytes,
              telemetry.variant.host_metrics.freemem_bytes, static_cast<float>(telemetry.variant.host_metrics.load1) / 100,
              static_cast<float>(telemetry.variant.host_metrics.load5) / 100,
-             static_cast<float>(telemetry.variant.host_metrics.load15) / 100,
-             telemetry.variant.host_metrics.has_user_string ? telemetry.variant.host_metrics.user_string : "");
+             static_cast<float>(telemetry.variant.host_metrics.load15) / 100);
+    // telemetry.variant.host_metrics.has_user_string ? telemetry.variant.host_metrics.user_string : "");
 
     meshtastic_MeshPacket *p = allocDataProtobuf(telemetry);
     p->to = NODENUM_BROADCAST;

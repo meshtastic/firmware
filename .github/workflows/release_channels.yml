@@ -98,6 +98,7 @@ jobs:
         uses: peter-evans/create-pull-request@v7
         with:
           base: ${{ github.event.repository.default_branch }}
+          branch: create-pull-request/bump-version
           title: Bump release version
           commit-message: automated bumps
           add-paths: |

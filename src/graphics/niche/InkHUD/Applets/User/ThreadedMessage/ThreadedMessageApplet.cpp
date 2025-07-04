@@ -13,7 +13,8 @@ using namespace NicheGraphics;
 constexpr uint8_t MAX_MESSAGES_SAVED = 10;
 constexpr uint32_t MAX_MESSAGE_SIZE = 250;
 
-InkHUD::ThreadedMessageApplet::ThreadedMessageApplet(uint8_t channelIndex) : channelIndex(channelIndex)
+InkHUD::ThreadedMessageApplet::ThreadedMessageApplet(uint8_t channelIndex)
+    : SinglePortModule("ThreadedMessageApplet", meshtastic_PortNum_TEXT_MESSAGE_APP), channelIndex(channelIndex)
 {
     // Create the message store
     // Will shortly attempt to load messages from RAM, if applet is active
@@ -69,9 +70,8 @@ void InkHUD::ThreadedMessageApplet::onRender()
 
         // Grab data for message
         MessageStore::Message &m = store->messages.at(i);
-        bool outgoing = (m.sender == 0);
-        meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(m.sender);
-        std::string bodyText = parse(m.text); // Parse any non-ascii chars in the message
+        bool outgoing = (m.sender == 0) || (m.sender == myNodeInfo.my_node_num); // Own NodeNum if canned message
+        std::string bodyText = parse(m.text);                                    // Parse any non-ascii chars in the message
 
         // Cache bottom Y of message text
         // - Used when drawing vertical line alongside
@@ -171,54 +171,54 @@ void InkHUD::ThreadedMessageApplet::onRender()
 void InkHUD::ThreadedMessageApplet::onActivate()
 {
     loadMessagesFromFlash();
-    textMessageObserver.observe(textMessageModule); // Begin handling any new text messages with onReceiveTextMessage
+    loopbackOk = true; // Allow us to handle messages generated on the node (canned messages)
 }
 
 // Code which runs when the applet stop running
-// This might be happen at shutdown, or if user disables the applet at run-time
+// This might be at shutdown, or if the user disables the applet at run-time, via the menu
 void InkHUD::ThreadedMessageApplet::onDeactivate()
 {
-    textMessageObserver.unobserve(textMessageModule); // Stop handling any new text messages with onReceiveTextMessage
+    loopbackOk = false; // Slightly reduce our impact if the applet is disabled
 }
 
 // Handle new text messages
 // These might be incoming, from the mesh, or outgoing from phone
 // Each instance of the ThreadMessageApplet will only listen on one specific channel
-// Method should return 0, to indicate general success to TextMessageModule
-int InkHUD::ThreadedMessageApplet::onReceiveTextMessage(const meshtastic_MeshPacket *p)
+ProcessMessage InkHUD::ThreadedMessageApplet::handleReceived(const meshtastic_MeshPacket &mp)
 {
     // Abort if applet fully deactivated
-    // Already handled by onActivate and onDeactivate, but good practice for all applets
     if (!isActive())
-        return 0;
+        return ProcessMessage::CONTINUE;
 
     // Abort if wrong channel
-    if (p->channel != this->channelIndex)
-        return 0;
+    if (mp.channel != this->channelIndex)
+        return ProcessMessage::CONTINUE;
 
     // Abort if message was a DM
-    if (p->to != NODENUM_BROADCAST)
-        return 0;
+    if (mp.to != NODENUM_BROADCAST)
+        return ProcessMessage::CONTINUE;
 
     // Extract info into our slimmed-down "StoredMessage" type
     MessageStore::Message newMessage;
     newMessage.timestamp = getValidTime(RTCQuality::RTCQualityDevice, true); // Current RTC time
-    newMessage.sender = p->from;
-    newMessage.channelIndex = p->channel;
-    newMessage.text = std::string(&p->decoded.payload.bytes[0], &p->decoded.payload.bytes[p->decoded.payload.size]);
+    newMessage.sender = mp.from;
+    newMessage.channelIndex = mp.channel;
+    newMessage.text = std::string((const char *)mp.decoded.payload.bytes, mp.decoded.payload.size);
 
     // Store newest message at front
     // These records are used when rendering, and also stored in flash at shutdown
     store->messages.push_front(newMessage);
 
     // If this was an incoming message, suggest that our applet becomes foreground, if permitted
-    if (getFrom(p) != nodeDB->getNodeNum())
+    if (getFrom(&mp) != nodeDB->getNodeNum())
         requestAutoshow();
 
     // Redraw the applet, perhaps.
     requestUpdate(); // Want to update display, if applet is foreground
 
-    return 0;
+    // Tell Module API to continue informing other firmware components about this message
+    // We're not the only component which is interested in new text messages
+    return ProcessMessage::CONTINUE;
 }
 
 // Don't show notifications for text messages broadcast to our channel, when the applet is displayed
