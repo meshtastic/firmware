@@ -65,16 +65,19 @@ void setupNicheGraphics()
     inkhud->persistence->settings.rotation = (driver->height > driver->width ? 1 : 0); // Rotate 90deg to landscape, if needed
     inkhud->persistence->settings.userTiles.maxCount = 4;
     inkhud->persistence->settings.optionalFeatures.batteryIcon = true;
+    inkhud->persistence->settings.optionalFeatures.notifications = false; // No notifications. Busy mesh.
 
     // Pick applets
-    // Note: order of applets determines priority of "auto-show" feature
+    // Custom selection for OpenSauce
+    inkhud->addApplet("Channel 0", new InkHUD::ThreadedMessageApplet(0), true, false, 0); // Default tile 0
+    inkhud->addApplet("Channel 1", new InkHUD::ThreadedMessageApplet(1), true);
+    inkhud->addApplet("Channel 2", new InkHUD::ThreadedMessageApplet(2), true);
+    inkhud->addApplet("DMs", new InkHUD::DMApplet, true, true);          // Autoshown if new message
+    inkhud->addApplet("Heard", new InkHUD::HeardApplet, true, false, 1); // Default tile 1
+    // Disabled by default
     inkhud->addApplet("All Messages", new InkHUD::AllMessageApplet);
-    inkhud->addApplet("DMs", new InkHUD::DMApplet, true, false, 3);                       // Default on tile 3
-    inkhud->addApplet("Channel 0", new InkHUD::ThreadedMessageApplet(0), true, false, 2); // Default on tile 2
-    inkhud->addApplet("Channel 1", new InkHUD::ThreadedMessageApplet(1));
-    inkhud->addApplet("Positions", new InkHUD::PositionsApplet, true, false, 1);      // Default on tile 1
-    inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet, true, false, 0); // Default on tile 0
-    inkhud->addApplet("Heard", new InkHUD::HeardApplet, true);                        // Background
+    inkhud->addApplet("Positions", new InkHUD::PositionsApplet);
+    inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet);
 
     // Start running InkHUD
     inkhud->begin();
