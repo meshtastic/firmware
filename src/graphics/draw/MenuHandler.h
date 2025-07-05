@@ -1,5 +1,5 @@
 #pragma once
-
+#if HAS_SCREEN
 #include "configuration.h"
 namespace graphics
 {
@@ -64,3 +64,4 @@ class menuHandler
 };
 
 } // namespace graphics
+#endif
