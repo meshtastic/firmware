@@ -77,6 +77,8 @@ void NotificationRenderer::resetBanner()
 
 void NotificationRenderer::drawBannercallback(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
+    if (!isOverlayBannerShowing() && alertBannerMessage[0] != '\0')
+        resetBanner();
     if (!isOverlayBannerShowing() || pauseBanner)
         return;
     switch (current_notification_type) {
