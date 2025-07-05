@@ -21,8 +21,8 @@
 static int constant_time_compare(const void *a_, const void *b_, size_t len)
 {
     /* Cast to volatile to prevent the compiler from optimizing out their comparison. */
-    const volatile uint8_t *volatile a = (const volatile uint8_t *volatile) a_;
-    const volatile uint8_t *volatile b = (const volatile uint8_t *volatile) b_;
+    const volatile uint8_t *volatile a = (const volatile uint8_t *volatile)a_;
+    const volatile uint8_t *volatile b = (const volatile uint8_t *volatile)b_;
     if (len == 0)
         return 0;
     if (a == NULL || b == NULL)
