@@ -54,6 +54,12 @@ HardwareSerial *GPS::_serial_gps = nullptr;
 GPS *gps = nullptr;
 
 static GPSUpdateScheduling scheduling;
+#ifdef GPS_SLEEP_DELAY_TIME
+static uint32_t gps_start_time=0;
+static bool gps_first_lock=false;
+static uint32_t gps_first_lock_time=0;
+static bool gps_need_sleep_delay=false;
+#endif
 
 /// Multiple GPS instances might use the same serial port (in sequence), but we can
 /// only init that port once.
@@ -845,6 +851,11 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
         setPowerUBLOX(true);                                      // Standby (UBLOX): awake
 #ifdef GNSS_AIROHA
         lastFixStartMsec = 0;
+#endif
+#ifdef GPS_SLEEP_DELAY_TIME
+        gps_need_sleep_delay=false;
+        gps_first_lock=false;
+        gps_start_time=millis();
 #endif
         break;
 
@@ -1713,6 +1724,22 @@ bool GPS::hasLock()
 {
     // Using GPGGA fix quality indicator
     if (fixQual >= 1 && fixQual <= 5) {
+#ifdef GPS_SLEEP_DELAY_TIME
+        if(gps_first_lock==false)
+        {
+            gps_first_lock=true;
+            gps_first_lock_time=millis(); // get first gps lock time
+            if( (gps_first_lock_time-gps_start_time) > (GPS_ENABLE_SLEEP_DELAY_FIX_TIME *1000))
+            {
+                gps_need_sleep_delay=true;
+            }
+        }
+
+        if( gps_need_sleep_delay && (millis()-gps_first_lock_time) < (GPS_SLEEP_DELAY_TIME*1000)) // wait for gps backup info
+        {
+            return false;
+        }
+#endif
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
         // Use GPGSA fix type 2D/3D (better) if available
         if (fixType == 3 || fixType == 0) // zero means "no data received"
