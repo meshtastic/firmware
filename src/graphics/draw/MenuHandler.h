@@ -1,3 +1,5 @@
+#pragma once
+
 #include "configuration.h"
 namespace graphics
 {
@@ -25,7 +27,9 @@ class menuHandler
         remove_favorite,
         test_menu,
         number_test,
-        wifi_toggle_menu
+        wifi_toggle_menu,
+        key_verification_init,
+        key_verification_final_prompt
     };
     static screenMenus menuQueue;
 
@@ -55,6 +59,8 @@ class menuHandler
     static void numberTest();
     static void wifiBaseMenu();
     static void wifiToggleMenu();
+    static void keyVerificationInitMenu();
+    static void keyVerificationFinalPrompt();
 };
 
 } // namespace graphics

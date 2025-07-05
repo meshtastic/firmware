@@ -171,7 +171,7 @@ void Screen::showOverlayBanner(BannerOverlayOptions banner_overlay_options)
 }
 
 // Called to trigger a banner with custom message and duration
-void Screen::showNodePicker(const char *message, uint32_t durationMs, std::function<void(int)> bannerCallback)
+void Screen::showNodePicker(const char *message, uint32_t durationMs, std::function<void(uint32_t)> bannerCallback)
 {
 #ifdef USE_EINK
     EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Skip full refresh for all overlay menus

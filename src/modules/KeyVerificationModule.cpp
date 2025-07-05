@@ -2,6 +2,7 @@
 #include "KeyVerificationModule.h"
 #include "MeshService.h"
 #include "RTC.h"
+#include "graphics/draw/MenuHandler.h"
 #include "main.h"
 #include "modules/AdminModule.h"
 #include <SHA256.h>
@@ -48,18 +49,24 @@ AdminMessageHandleResult KeyVerificationModule::handleAdminMessageForModule(cons
 bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_KeyVerification *r)
 {
     updateState();
-    if (mp.pki_encrypted == false)
+    if (mp.pki_encrypted == false) {
         return false;
-    if (mp.from != currentRemoteNode) // because the inital connection request is handled in allocReply()
+    }
+    if (mp.from != currentRemoteNode) { // because the inital connection request is handled in allocReply()
         return false;
+    }
     if (currentState == KEY_VERIFICATION_IDLE) {
         return false; // if we're idle, the only acceptable message is an init, which should be handled by allocReply()
+    }
 
-    } else if (currentState == KEY_VERIFICATION_SENDER_HAS_INITIATED && r->nonce == currentNonce && r->hash2.size == 32 &&
-               r->hash1.size == 0) {
+    if (currentState == KEY_VERIFICATION_SENDER_HAS_INITIATED && r->nonce == currentNonce && r->hash2.size == 32 &&
+        r->hash1.size == 0) {
         memcpy(hash2, r->hash2.bytes, 32);
-        if (screen)
-            screen->showSimpleBanner("Enter Security Number", 30000);
+        if (screen) {
+            screen->showNumberPicker("Enter Security Number", 60000, 6, [](int number_picked) -> void {
+                keyVerificationModule->processSecurityNumber(number_picked);
+            });
+        }
 
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
         cn->level = meshtastic_LogRecord_Level_WARNING;
@@ -258,12 +265,7 @@ void KeyVerificationModule::processSecurityNumber(uint32_t incomingNumber)
     p->priority = meshtastic_MeshPacket_Priority_HIGH;
     service->sendToMesh(p, RX_SRC_LOCAL, true);
     currentState = KEY_VERIFICATION_SENDER_AWAITING_USER;
-    memset(message, 0, sizeof(message));
-    sprintf(message, "Verification: \n");
-    generateVerificationCode(message + 15); // send the toPhone packet
-    if (screen) {
-        screen->showSimpleBanner(message, 30000);
-    }
+    screen->requestMenu(graphics::menuHandler::key_verification_final_prompt);
     meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
     cn->level = meshtastic_LogRecord_Level_WARNING;
     sprintf(cn->message, "Final confirmation for outgoing manual key verification %s", message);
@@ -282,7 +284,7 @@ void KeyVerificationModule::processSecurityNumber(uint32_t incomingNumber)
 void KeyVerificationModule::updateState()
 {
     if (currentState != KEY_VERIFICATION_IDLE) {
-        // check for the 30 second timeout
+        // check for the 60 second timeout
         if (currentNonceTimestamp < getTime() - 60) {
             resetToIdle();
         } else {
