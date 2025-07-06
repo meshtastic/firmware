@@ -294,13 +294,13 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
     LOG_INFO("Protobuf Value uiconfig.screen_rgb_color: %d", uiconfig.screen_rgb_color);
     int32_t rawRGB = uiconfig.screen_rgb_color;
     if (rawRGB > 0 && rawRGB <= 255255255) {
-        uint8_t r = (rawRGB >> 16) & 0xFF;
-        uint8_t g = (rawRGB >> 8) & 0xFF;
-        uint8_t b = rawRGB & 0xFF;
-        LOG_INFO("Values of r,g,b: %d, %d, %d", r, g, b);
+        uint8_t TFT_MESH_r = (rawRGB >> 16) & 0xFF;
+        uint8_t TFT_MESH_g = (rawRGB >> 8) & 0xFF;
+        uint8_t TFT_MESH_b = rawRGB & 0xFF;
+        LOG_INFO("Values of r,g,b: %d, %d, %d", TFT_MESH_r, TFT_MESH_g, TFT_MESH_b);
 
-        if (r <= 255 && g <= 255 && b <= 255) {
-            TFT_MESH = COLOR565(r, g, b);
+        if (TFT_MESH_r <= 255 && TFT_MESH_g <= 255 && TFT_MESH_b <= 255) {
+            TFT_MESH = COLOR565(TFT_MESH_r, TFT_MESH_g, TFT_MESH_b);
         }
     }
 

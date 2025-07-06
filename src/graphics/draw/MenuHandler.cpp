@@ -677,52 +677,52 @@ void menuHandler::TFTColorPickerMenu(OLEDDisplay *display)
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 10;
     bannerOptions.bannerCallback = [display](int selected) -> void {
-        uint8_t r = 0;
-        uint8_t g = 0;
-        uint8_t b = 0;
+        uint8_t TFT_MESH_r = 0;
+        uint8_t TFT_MESH_g = 0;
+        uint8_t TFT_MESH_b = 0;
         if (selected == 1) {
             LOG_INFO("Setting color to system default or defined variant");
             // Given just before we set all these to zero, we will allow this to go through
         } else if (selected == 2) {
             LOG_INFO("Setting color to Meshtastic Green");
-            r = 103;
-            g = 234;
-            b = 148;
+            TFT_MESH_r = 103;
+            TFT_MESH_g = 234;
+            TFT_MESH_b = 148;
         } else if (selected == 3) {
             LOG_INFO("Setting color to Yellow");
-            r = 255;
-            g = 255;
-            b = 128;
+            TFT_MESH_r = 255;
+            TFT_MESH_g = 255;
+            TFT_MESH_b = 128;
         } else if (selected == 4) {
             LOG_INFO("Setting color to Red");
-            r = 255;
-            g = 64;
-            b = 64;
+            TFT_MESH_r = 255;
+            TFT_MESH_g = 64;
+            TFT_MESH_b = 64;
         } else if (selected == 5) {
             LOG_INFO("Setting color to Orange");
-            r = 255;
-            g = 160;
-            b = 20;
+            TFT_MESH_r = 255;
+            TFT_MESH_g = 160;
+            TFT_MESH_b = 20;
         } else if (selected == 6) {
             LOG_INFO("Setting color to Purple");
-            r = 204;
-            g = 153;
-            b = 255;
+            TFT_MESH_r = 204;
+            TFT_MESH_g = 153;
+            TFT_MESH_b = 255;
         } else if (selected == 7) {
             LOG_INFO("Setting color to Teal");
-            r = 64;
-            g = 224;
-            b = 208;
+            TFT_MESH_r = 64;
+            TFT_MESH_g = 224;
+            TFT_MESH_b = 208;
         } else if (selected == 8) {
             LOG_INFO("Setting color to Pink");
-            r = 255;
-            g = 105;
-            b = 180;
+            TFT_MESH_r = 255;
+            TFT_MESH_g = 105;
+            TFT_MESH_b = 180;
         } else if (selected == 9) {
             LOG_INFO("Setting color to White");
-            r = 255;
-            g = 255;
-            b = 255;
+            TFT_MESH_r = 255;
+            TFT_MESH_g = 255;
+            TFT_MESH_b = 255;
         }
 
 #if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || HAS_TFT
@@ -731,14 +731,14 @@ void menuHandler::TFTColorPickerMenu(OLEDDisplay *display)
             display->fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
             display->setColor(WHITE);
 
-            if (r == 0 && g == 0 && b == 0) {
+            if (TFT_MESH_r == 0 && TFT_MESH_g == 0 && TFT_MESH_b == 0) {
 #ifdef TFT_MESH_OVERRIDE
                 TFT_MESH = TFT_MESH_OVERRIDE;
 #else
                 TFT_MESH = COLOR565(0x67, 0xEA, 0x94);
 #endif
             } else {
-                TFT_MESH = COLOR565(r, g, b);
+                TFT_MESH = COLOR565(TFT_MESH_r, TFT_MESH_g, TFT_MESH_b);
             }
 
 #if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
@@ -746,10 +746,10 @@ void menuHandler::TFTColorPickerMenu(OLEDDisplay *display)
 #endif
 
             screen->setFrames(graphics::Screen::FOCUS_SYSTEM);
-            if (r == 0 && g == 0 && b == 0) {
+            if (TFT_MESH_r == 0 && TFT_MESH_g == 0 && TFT_MESH_b == 0) {
                 uiconfig.screen_rgb_color = 0;
             } else {
-                uiconfig.screen_rgb_color = (r << 16) | (g << 8) | b;
+                uiconfig.screen_rgb_color = (TFT_MESH_r << 16) | (TFT_MESH_g << 8) | TFT_MESH_b;
             }
             LOG_INFO("Storing Value of %d to uiconfig.screen_rgb_color", uiconfig.screen_rgb_color);
             nodeDB->saveProto("/prefs/uiconfig.proto", meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg, &uiconfig);
