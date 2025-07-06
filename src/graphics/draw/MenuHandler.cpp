@@ -358,6 +358,9 @@ void menuHandler::systemBaseMenu()
     static int optionsEnumArray[7] = {Back};
     int options = 1;
 
+    optionsArray[options] = "Reboot";
+    optionsEnumArray[options++] = Reboot;
+
     optionsArray[options] = "Beeps Action";
     optionsEnumArray[options++] = Beeps;
 
@@ -365,9 +368,6 @@ void menuHandler::systemBaseMenu()
         optionsArray[options] = "Brightness";
         optionsEnumArray[options++] = Brightness;
     }
-
-    optionsArray[options] = "Reboot";
-    optionsEnumArray[options++] = Reboot;
 
 #if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || HAS_TFT
     optionsArray[options] = "Screen Color";
