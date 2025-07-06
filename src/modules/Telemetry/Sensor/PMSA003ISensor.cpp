@@ -62,7 +62,7 @@ void PMSA003ISensor::sleep() {
 uint32_t PMSA003ISensor::wakeUp() {
     digitalWrite(PMSA003I_ENABLE_PIN, HIGH);
     state = State::ACTIVE;
-    return PMSA003I_WARMUP_MS
+    return PMSA003I_WARMUP_MS;
 }
 #endif /* PMSA003I_ENABLE_PIN */
 
