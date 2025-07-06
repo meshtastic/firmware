@@ -8,6 +8,11 @@
 #endif
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
 #include "meshUtils.h" // vformat
+
+#define SEN50_NAME 48
+#define SEN54_NAME 52
+#define SEN55_NAME 53
+
 #endif
 
 bool in_array(uint8_t *array, int size, uint8_t lookfor)
@@ -563,8 +568,9 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 }
                 break;
 
-            case ICM20948_ADDR:     // same as BMX160_ADDR
+            case ICM20948_ADDR:     // same as BMX160_ADDR and SEN5X_ADDR
             case ICM20948_ADDR_ALT: // same as MPU6050_ADDR
+                // ICM20948 Register check
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 1);
 #ifdef HAS_ICM20948
                 type = ICM20948;
@@ -575,14 +581,45 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     type = ICM20948;
                     logFoundDevice("ICM20948", (uint8_t)addr.address);
                     break;
-                } else if (addr.address == BMX160_ADDR) {
-                    type = BMX160;
-                    logFoundDevice("BMX160", (uint8_t)addr.address);
-                    break;
                 } else {
-                    type = MPU6050;
-                    logFoundDevice("MPU6050", (uint8_t)addr.address);
-                    break;
+                    // TODO refurbish to find the model
+                    // Just a hack for the hackathon
+                    if (addr.address == SEN5X_ADDR) {
+                        type = SEN5X;
+                        logFoundDevice("SEN5X", (uint8_t)addr.address);
+                        break;
+                    }
+
+                    // We can get the 0xD014 register to find the model. This is not a simple task
+                    // There is a buffer returned - getRegisterValue is not enough (maybe)
+                    // registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xD014), 6);
+                    // Important to leave delay
+                    // delay(50);
+
+                    // const uint8_t nameSize = 48;
+                    // uint8_t name[nameSize] = &registerValue;
+
+                    // switch(name[4]){
+                    //     case SEN50_NAME:
+                    //         type = SEN50;
+                    //         break;
+                    //     case SEN54_NAME:
+                    //         type = SEN54;
+                    //         break;
+                    //     case SEN55_NAME:
+                    //         type = SEN55;
+                    //         break;
+                    // }
+
+                    if (addr.address == BMX160_ADDR) {
+                        type = BMX160;
+                        logFoundDevice("BMX160", (uint8_t)addr.address);
+                        break;
+                    } else {
+                        type = MPU6050;
+                        logFoundDevice("MPU6050", (uint8_t)addr.address);
+                        break;
+                    }
                 }
                 break;
 

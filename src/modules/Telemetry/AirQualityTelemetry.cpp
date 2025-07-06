@@ -45,6 +45,13 @@ void AirQualityTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
     addSensor<PMSA003ISensor>(i2cScanner, ScanI2C::DeviceType::PMSA003I);
 }
 
+#if __has_include(<SensirionI2CSen5x.h>)
+#include "Sensor/SEN5XSensor.h"
+SEN5XSensor sen5xSensor;
+#else
+NullSensor sen5xSensor;
+#endif
+
 int32_t AirQualityTelemetryModule::runOnce()
 {
     if (sleepOnNextExecution == true) {
@@ -352,6 +359,13 @@ AdminMessageHandleResult AirQualityTelemetryModule::handleAdminMessageForModule(
             return result;
     }
 
+    if (sen5xSensor.hasSensor()) {
+        result = sen5xSensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+
+#endif
     return result;
 }
 
