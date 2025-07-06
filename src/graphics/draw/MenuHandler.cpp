@@ -13,6 +13,7 @@
 #include "main.h"
 #include "modules/AdminModule.h"
 #include "modules/CannedMessageModule.h"
+#include "modules/KeyVerificationModule.h"
 
 extern uint16_t TFT_MESH;
 
@@ -485,16 +486,20 @@ void menuHandler::positionBaseMenu()
 
 void menuHandler::nodeListMenu()
 {
-    static const char *optionsArray[] = {"Back", "Add Favorite", "Reset NodeDB"};
+    enum optionsNumbers { Back, Favorite, Verify, Reset };
+    static const char *optionsArray[] = {"Back", "Add Favorite", "Key Verification", "Reset NodeDB"};
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Node Action";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 3;
+    bannerOptions.optionsCount = 4;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == 1) {
+        if (selected == Favorite) {
             menuQueue = add_favorite;
             screen->runNow();
-        } else if (selected == 2) {
+        } else if (selected == Verify) {
+            menuQueue = key_verification_init;
+            screen->runNow();
+        } else if (selected == Reset) {
             menuQueue = reset_node_db_menu;
             screen->runNow();
         }
@@ -778,7 +783,7 @@ void menuHandler::rebootMenu()
 
 void menuHandler::addFavoriteMenu()
 {
-    screen->showNodePicker("Node To Favorite", 30000, [](int nodenum) -> void {
+    screen->showNodePicker("Node To Favorite", 30000, [](uint32_t nodenum) -> void {
         LOG_WARN("Nodenum: %u", nodenum);
         nodeDB->set_favorite(true, nodenum);
         screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
@@ -869,6 +874,39 @@ void menuHandler::wifiToggleMenu()
     screen->showOverlayBanner(bannerOptions);
 }
 
+void menuHandler::keyVerificationInitMenu()
+{
+    std::function<void(uint32_t)> callbackFun = [](uint32_t selected) -> void {
+        keyVerificationModule->sendInitialRequest(selected);
+    };
+    screen->showNodePicker("Node to Verify", 30000, callbackFun);
+}
+
+void menuHandler::keyVerificationFinalPrompt()
+{
+    char message[40] = {0};
+    memset(message, 0, sizeof(message));
+    sprintf(message, "Verification: \n");
+    keyVerificationModule->generateVerificationCode(message + 15); // send the toPhone packet
+
+    if (screen) {
+        static const char *optionsArray[] = {"REJECT", "ACCEPT"};
+        graphics::BannerOverlayOptions options;
+        options.message = message;
+        options.durationMs = 30000;
+        options.optionsArrayPtr = optionsArray;
+        options.optionsCount = 2;
+        options.notificationType = graphics::notificationTypeEnum::selection_picker;
+        options.bannerCallback = [=](int selected) {
+            if (selected == 1) {
+                auto remoteNodePtr = nodeDB->getMeshNode(keyVerificationModule->getCurrentRemoteNode());
+                remoteNodePtr->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
+            }
+        };
+        screen->showOverlayBanner(options);
+    }
+}
+
 void menuHandler::handleMenuSwitch(OLEDDisplay *display)
 {
     if (menuQueue != menu_none)
@@ -934,6 +972,12 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case wifi_toggle_menu:
         wifiToggleMenu();
+        break;
+    case key_verification_init:
+        keyVerificationInitMenu();
+        break;
+    case key_verification_final_prompt:
+        keyVerificationFinalPrompt();
         break;
     }
     menuQueue = menu_none;
