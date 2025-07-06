@@ -25,6 +25,13 @@ NullSensor pmsa003iSensor;
 #endif
 #include "graphics/ScreenFonts.h"
 
+#if __has_include(<SensirionI2CSen5x.h>)
+#include "Sensor/SEN5XSensor.h"
+SEN5XSensor sen5xSensor;
+#else
+NullSensor sen5xSensor;
+#endif
+
 int32_t AirQualityTelemetryModule::runOnce()
 {
     if (sleepOnNextExecution == true) {
@@ -62,6 +69,9 @@ int32_t AirQualityTelemetryModule::runOnce()
 
             if (pmsa003iSensor.hasSensor())
                 result = pmsa003iSensor.runOnce();
+
+            if (sen5xSensor.hasSensor())
+                result = sen5xSensor.runOnce();
         }
 
         // it's possible to have this module enabled, only for displaying values on the screen.
@@ -78,6 +88,11 @@ int32_t AirQualityTelemetryModule::runOnce()
         if (pmsa003iSensor.hasSensor() && !pmsa003iSensor.isActive())
             return pmsa003iSensor.wakeUp();
 #endif /* PMSA003I_ENABLE_PIN */
+
+#ifdef SEN5X_ENABLE_PIN
+        if (sen5xSensor.hasSensor() && !sen5xSensor.isActive())
+            return sen5xSensor.wakeUp();
+#endif /* SEN5X_ENABLE_PIN */
 
         if (((lastSentToMesh == 0) ||
             !Throttle::isWithinTimespanMs(lastSentToMesh, Default::getConfiguredOrDefaultMsScaled(
@@ -98,6 +113,10 @@ int32_t AirQualityTelemetryModule::runOnce()
 #ifdef PMSA003I_ENABLE_PIN
         pmsa003iSensor.sleep();
 #endif /* PMSA003I_ENABLE_PIN */
+
+#ifdef SEN5X_ENABLE_PIN
+        sen5xSensor.sleep();
+#endif /* SEN5X_ENABLE_PIN */
 
     }
     return min(sendToPhoneIntervalMs, result);
@@ -237,6 +256,13 @@ bool AirQualityTelemetryModule::getAirQualityTelemetry(meshtastic_Telemetry *m)
         hasSensor = true;
     }
 
+    if (sen5xSensor.hasSensor()) {
+        // TODO - Should we check for sensor state here?
+        // If a sensor is sleeping, we should know and check to wake it up
+        valid = valid && sen5xSensor.getMetrics(m);
+        hasSensor = true;
+    }
+
     return valid && hasSensor;
 }
 
@@ -330,6 +356,11 @@ AdminMessageHandleResult AirQualityTelemetryModule::handleAdminMessageForModule(
             return result;
     }
 
+    if (sen5xSensor.hasSensor()) {
+        result = sen5xSensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
 
 #endif
     return result;
