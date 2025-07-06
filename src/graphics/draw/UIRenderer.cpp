@@ -18,32 +18,6 @@
 #include <RTC.h>
 #include <cstring>
 
-bool isAllowedPunctuation(char c)
-{
-    const std::string allowed = ".,!?;:-_()[]{}'\"@#$/\\&+=%~^ ";
-    return allowed.find(c) != std::string::npos;
-}
-
-std::string sanitizeString(const std::string &input)
-{
-    std::string output;
-    bool inReplacement = false;
-
-    for (char c : input) {
-        if (std::isalnum(static_cast<unsigned char>(c)) || isAllowedPunctuation(c)) {
-            output += c;
-            inReplacement = false;
-        } else {
-            if (!inReplacement) {
-                output += 0xbf; // ISO-8859-1 for inverted question mark
-                inReplacement = true;
-            }
-        }
-    }
-
-    return output;
-}
-
 // External variables
 extern graphics::Screen *screen;
 
@@ -443,7 +417,7 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
                 GeoCoord::latLongToMeter(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
             */
             float bearing = GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(p.latitude_i), DegD(p.longitude_i));
-            if (screen->ignoreCompass) {
+            if (uiconfig.compass_mode == meshtastic_CompassMode_FREEZE_HEADING) {
                 myHeading = 0;
             } else {
                 bearing -= myHeading;
@@ -488,7 +462,7 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
 
             const auto &op = ourNode->position;
             float myHeading = 0;
-            if (!screen->ignoreCompass) {
+            if (uiconfig.compass_mode != meshtastic_CompassMode_FREEZE_HEADING) {
                 myHeading = screen->hasHeading() ? screen->getHeading() * PI / 180
                                                  : screen->estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
             }
@@ -500,7 +474,7 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
                 GeoCoord::latLongToMeter(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
             */
             float bearing = GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(p.latitude_i), DegD(p.longitude_i));
-            if (!screen->ignoreCompass)
+            if (uiconfig.compass_mode != meshtastic_CompassMode_FREEZE_HEADING)
                 bearing -= myHeading;
             graphics::CompassRenderer::drawNodeHeading(display, compassX, compassY, compassRadius * 2, bearing);
 
@@ -600,7 +574,11 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
 
     int chutil_bar_width = (isHighResolution) ? 100 : 50;
     if (!config.bluetooth.enabled) {
+#if defined(USE_EINK)
+        chutil_bar_width = (isHighResolution) ? 50 : 30;
+#else
         chutil_bar_width = (isHighResolution) ? 80 : 40;
+#endif
     }
     int chutil_bar_height = (isHighResolution) ? 12 : 7;
     int extraoffset = (isHighResolution) ? 6 : 3;
@@ -933,7 +911,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
     // === Determine Compass Heading ===
     float heading = 0;
     bool validHeading = false;
-    if (screen->ignoreCompass) {
+    if (uiconfig.compass_mode == meshtastic_CompassMode_FREEZE_HEADING) {
         validHeading = true;
     } else {
         if (screen->hasHeading()) {
@@ -999,7 +977,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
 
             // "N" label
             float northAngle = 0;
-            if (!config.display.compass_north_top)
+            if (uiconfig.compass_mode != meshtastic_CompassMode_FIXED_RING)
                 northAngle = -heading;
             float radius = compassRadius;
             int16_t nX = compassX + (radius - 1) * sin(northAngle);
@@ -1042,7 +1020,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
 
             // "N" label
             float northAngle = 0;
-            if (!config.display.compass_north_top)
+            if (uiconfig.compass_mode != meshtastic_CompassMode_FIXED_RING)
                 northAngle = -heading;
             float radius = compassRadius;
             int16_t nX = compassX + (radius - 1) * sin(northAngle);
@@ -1066,9 +1044,16 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
 void UIRenderer::drawOEMIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     static const uint8_t xbm[] = USERPREFS_OEM_IMAGE_DATA;
-    display->drawXbm(x + (SCREEN_WIDTH - USERPREFS_OEM_IMAGE_WIDTH) / 2,
-                     y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - USERPREFS_OEM_IMAGE_HEIGHT) / 2 + 2, USERPREFS_OEM_IMAGE_WIDTH,
-                     USERPREFS_OEM_IMAGE_HEIGHT, xbm);
+    if (isHighResolution) {
+        display->drawXbm(x + (SCREEN_WIDTH - USERPREFS_OEM_IMAGE_WIDTH) / 2,
+                         y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - USERPREFS_OEM_IMAGE_HEIGHT) / 2 + 2, USERPREFS_OEM_IMAGE_WIDTH,
+                         USERPREFS_OEM_IMAGE_HEIGHT, xbm);
+    } else {
+
+        display->drawXbm(x + (SCREEN_WIDTH - USERPREFS_OEM_IMAGE_WIDTH) / 2,
+                         y + (SCREEN_HEIGHT - USERPREFS_OEM_IMAGE_HEIGHT) / 2 + 2, USERPREFS_OEM_IMAGE_WIDTH,
+                         USERPREFS_OEM_IMAGE_HEIGHT, xbm);
+    }
 
     switch (USERPREFS_OEM_FONT_SIZE) {
     case 0:
@@ -1084,7 +1069,9 @@ void UIRenderer::drawOEMIconScreen(const char *upperMsg, OLEDDisplay *display, O
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     const char *title = USERPREFS_OEM_TEXT;
-    display->drawString(x + getStringCenteredX(title), y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM, title);
+    if (isHighResolution) {
+        display->drawString(x + getStringCenteredX(title), y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM, title);
+    }
     display->setFont(FONT_SMALL);
 
     // Draw region in upper left

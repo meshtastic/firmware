@@ -1383,7 +1383,7 @@ void setup()
         if (!rIf->reconfigure()) {
             LOG_WARN("Reconfigure failed, rebooting");
             if (screen) {
-                screen->showOverlayBanner("Rebooting...");
+                screen->showSimpleBanner("Rebooting...");
             }
             rebootAtMsec = millis() + 5000;
         }
@@ -1456,6 +1456,9 @@ void setup()
     LOG_DEBUG("Free heap  : %7d bytes", ESP.getFreeHeap());
     LOG_DEBUG("Free PSRAM : %7d bytes", ESP.getFreePsram());
 #endif
+
+    // We manually run this to update the NodeStatus
+    nodeDB->notifyObservers(true);
 }
 
 #endif

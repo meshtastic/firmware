@@ -443,7 +443,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
 
         if (isOwnTelemetry && bannerMsg && isCooldownOver) {
             LOG_INFO("drawFrame: IAQ %d (own) — showing banner: %s", m.iaq, bannerMsg);
-            screen->showOverlayBanner(bannerMsg, 3000);
+            screen->showSimpleBanner(bannerMsg, 3000);
 
             // Only buzz if IAQ is over 200
             if (m.iaq > 200 && moduleConfig.external_notification.enabled && !externalNotificationModule->getMute()) {

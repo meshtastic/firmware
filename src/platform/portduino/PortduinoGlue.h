@@ -63,6 +63,7 @@ enum configNames {
     tbLeftPin,
     tbRightPin,
     tbPressPin,
+    tbDirection,
     spidev,
     spiSpeed,
     i2cdev,

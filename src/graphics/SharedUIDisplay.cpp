@@ -99,10 +99,17 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
 
     // === Battery State ===
     int chargePercent = powerStatus->getBatteryChargePercent();
-    bool isCharging = powerStatus->getIsCharging() == meshtastic::OptionalBool::OptTrue;
-    if (chargePercent == 100) {
+    bool isCharging = powerStatus->getIsCharging();
+    bool usbPowered = powerStatus->getHasUSB();
+
+    if (chargePercent >= 100) {
         isCharging = false;
     }
+    if (chargePercent == 101) {
+        usbPowered = true; // Forcing this flag on for the express purpose that some devices have no concept of having a USB cable
+                           // plugged in
+    }
+
     uint32_t now = millis();
 
 #ifndef USE_EINK
@@ -115,48 +122,63 @@ void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *ti
     bool useHorizontalBattery = (isHighResolution && screenW >= screenH);
     const int textY = y + (highlightHeight - FONT_HEIGHT_SMALL) / 2;
 
+    int batteryX = 1;
+    int batteryY = HEADER_OFFSET_Y + 1;
+
     // === Battery Icons ===
-    if (useHorizontalBattery) {
-        int batteryX = 2;
-        int batteryY = HEADER_OFFSET_Y + 3;
-        display->drawXbm(batteryX, batteryY, 9, 13, batteryBitmap_h_bottom);
-        display->drawXbm(batteryX + 9, batteryY, 9, 13, batteryBitmap_h_top);
-        if (isCharging && isBoltVisibleShared)
-            display->drawXbm(batteryX + 4, batteryY, 9, 13, lightning_bolt_h);
-        else {
-            display->drawLine(batteryX + 5, batteryY, batteryX + 10, batteryY);
-            display->drawLine(batteryX + 5, batteryY + 12, batteryX + 10, batteryY + 12);
-            int fillWidth = 14 * chargePercent / 100;
-            display->fillRect(batteryX + 1, batteryY + 1, fillWidth, 11);
+    if (usbPowered && !isCharging) { // This is a basic check to determine USB Powered is flagged but not charging
+        batteryX += 1;
+        batteryY += 2;
+        if (isHighResolution) {
+            display->drawXbm(batteryX, batteryY, 19, 12, imgUSB_HighResolution);
+            batteryX += 20; // Icon + 1 pixel
+        } else {
+            display->drawXbm(batteryX, batteryY, 10, 8, imgUSB);
+            batteryX += 11; // Icon + 1 pixel
         }
     } else {
-        int batteryX = 1;
-        int batteryY = HEADER_OFFSET_Y + 1;
+        if (useHorizontalBattery) {
+            batteryX += 1;
+            batteryY += 2;
+            display->drawXbm(batteryX, batteryY, 9, 13, batteryBitmap_h_bottom);
+            display->drawXbm(batteryX + 9, batteryY, 9, 13, batteryBitmap_h_top);
+            if (isCharging && isBoltVisibleShared)
+                display->drawXbm(batteryX + 4, batteryY, 9, 13, lightning_bolt_h);
+            else {
+                display->drawLine(batteryX + 5, batteryY, batteryX + 10, batteryY);
+                display->drawLine(batteryX + 5, batteryY + 12, batteryX + 10, batteryY + 12);
+                int fillWidth = 14 * chargePercent / 100;
+                display->fillRect(batteryX + 1, batteryY + 1, fillWidth, 11);
+            }
+            batteryX += 18; // Icon + 2 pixels
+        } else {
 #ifdef USE_EINK
-        batteryY += 2;
+            batteryY += 2;
 #endif
-        display->drawXbm(batteryX, batteryY, 7, 11, batteryBitmap_v);
-        if (isCharging && isBoltVisibleShared)
-            display->drawXbm(batteryX + 1, batteryY + 3, 5, 5, lightning_bolt_v);
-        else {
-            display->drawXbm(batteryX - 1, batteryY + 4, 8, 3, batteryBitmap_sidegaps_v);
-            int fillHeight = 8 * chargePercent / 100;
-            int fillY = batteryY - fillHeight;
-            display->fillRect(batteryX + 1, fillY + 10, 5, fillHeight);
+            display->drawXbm(batteryX, batteryY, 7, 11, batteryBitmap_v);
+            if (isCharging && isBoltVisibleShared)
+                display->drawXbm(batteryX + 1, batteryY + 3, 5, 5, lightning_bolt_v);
+            else {
+                display->drawXbm(batteryX - 1, batteryY + 4, 8, 3, batteryBitmap_sidegaps_v);
+                int fillHeight = 8 * chargePercent / 100;
+                int fillY = batteryY - fillHeight;
+                display->fillRect(batteryX + 1, fillY + 10, 5, fillHeight);
+            }
+            batteryX += 9; // Icon + 2 pixels
         }
     }
 
-    // === Battery % Display ===
-    char chargeStr[4];
-    snprintf(chargeStr, sizeof(chargeStr), "%d", chargePercent);
-    int chargeNumWidth = display->getStringWidth(chargeStr);
-    const int batteryOffset = useHorizontalBattery ? 19 : 9;
-    const int percentX = x + batteryOffset;
-    display->drawString(percentX, textY, chargeStr);
-    display->drawString(percentX + chargeNumWidth - 1, textY, "%");
-    if (isBold) {
-        display->drawString(percentX + 1, textY, chargeStr);
-        display->drawString(percentX + chargeNumWidth, textY, "%");
+    if (chargePercent != 101) {
+        // === Battery % Display ===
+        char chargeStr[4];
+        snprintf(chargeStr, sizeof(chargeStr), "%d", chargePercent);
+        int chargeNumWidth = display->getStringWidth(chargeStr);
+        display->drawString(batteryX, textY, chargeStr);
+        display->drawString(batteryX + chargeNumWidth - 1, textY, "%");
+        if (isBold) {
+            display->drawString(batteryX + 1, textY, chargeStr);
+            display->drawString(batteryX + chargeNumWidth, textY, "%");
+        }
     }
 
     // === Time and Right-aligned Icons ===
@@ -341,6 +363,32 @@ const int *getTextPositions(OLEDDisplay *display)
         textPositions[6] = textSixthLine;
     }
     return textPositions;
+}
+
+bool isAllowedPunctuation(char c)
+{
+    const std::string allowed = ".,!?;:-_()[]{}'\"@#$/\\&+=%~^ ";
+    return allowed.find(c) != std::string::npos;
+}
+
+std::string sanitizeString(const std::string &input)
+{
+    std::string output;
+    bool inReplacement = false;
+
+    for (char c : input) {
+        if (std::isalnum(static_cast<unsigned char>(c)) || isAllowedPunctuation(c)) {
+            output += c;
+            inReplacement = false;
+        } else {
+            if (!inReplacement) {
+                output += 0xbf; // ISO-8859-1 for inverted question mark
+                inReplacement = true;
+            }
+        }
+    }
+
+    return output;
 }
 
 } // namespace graphics

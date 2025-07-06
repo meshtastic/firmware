@@ -59,7 +59,7 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
                r->hash1.size == 0) {
         memcpy(hash2, r->hash2.bytes, 32);
         if (screen)
-            screen->showOverlayBanner("Enter Security Number", 30000);
+            screen->showSimpleBanner("Enter Security Number", 30000);
 
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
         cn->level = meshtastic_LogRecord_Level_WARNING;
@@ -82,12 +82,19 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
             static const char *optionsArray[] = {"ACCEPT", "REJECT"};
             LOG_INFO("Hash1 matches!");
             if (screen) {
-                screen->showOverlayBanner(message, 30000, optionsArray, 2, [=](int selected) {
+                graphics::BannerOverlayOptions options;
+                options.message = message;
+                options.durationMs = 30000;
+                options.optionsArrayPtr = optionsArray;
+                options.optionsCount = 2;
+                options.notificationType = graphics::notificationTypeEnum::selection_picker;
+                options.bannerCallback = [=](int selected) {
                     if (selected == 0) {
                         auto remoteNodePtr = nodeDB->getMeshNode(currentRemoteNode);
                         remoteNodePtr->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
                     }
-                });
+                };
+                screen->showOverlayBanner(options);
             }
             meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
             cn->level = meshtastic_LogRecord_Level_WARNING;
@@ -185,7 +192,7 @@ meshtastic_MeshPacket *KeyVerificationModule::allocReply()
     responsePacket->pki_encrypted = true;
     if (screen) {
         snprintf(message, 25, "Security Number \n%03u %03u", currentSecurityNumber / 1000, currentSecurityNumber % 1000);
-        screen->showOverlayBanner(message, 30000);
+        screen->showSimpleBanner(message, 30000);
         LOG_WARN("%s", message);
     }
     meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
@@ -255,7 +262,7 @@ void KeyVerificationModule::processSecurityNumber(uint32_t incomingNumber)
     sprintf(message, "Verification: \n");
     generateVerificationCode(message + 15); // send the toPhone packet
     if (screen) {
-        screen->showOverlayBanner(message, 30000);
+        screen->showSimpleBanner(message, 30000);
     }
     meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
     cn->level = meshtastic_LogRecord_Level_WARNING;
