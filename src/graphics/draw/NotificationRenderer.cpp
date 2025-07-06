@@ -26,7 +26,7 @@ extern bool hasUnreadMessage;
 namespace graphics
 {
 
-char NotificationRenderer::inEvent = INPUT_BROKER_NONE;
+InputEvent NotificationRenderer::inEvent;
 int8_t NotificationRenderer::curSelected = 0;
 char NotificationRenderer::alertBannerMessage[256] = {0};
 uint32_t NotificationRenderer::alertBannerUntil = 0;  // 0 is a special case meaning forever
@@ -114,23 +114,30 @@ void NotificationRenderer::drawNumberPicker(OLEDDisplay *display, OLEDDisplayUiS
     // modulo to extract
     uint8_t this_digit = (currentNumber % (pow_of_10(numDigits - curSelected))) / (pow_of_10(numDigits - curSelected - 1));
     // Handle input
-    if (inEvent == INPUT_BROKER_UP || inEvent == INPUT_BROKER_ALT_PRESS) {
+    if (inEvent.inputEvent == INPUT_BROKER_UP || inEvent.inputEvent == INPUT_BROKER_ALT_PRESS) {
         if (this_digit == 9) {
             currentNumber -= 9 * (pow_of_10(numDigits - curSelected - 1));
         } else {
             currentNumber += (pow_of_10(numDigits - curSelected - 1));
         }
-    } else if (inEvent == INPUT_BROKER_DOWN || inEvent == INPUT_BROKER_USER_PRESS) {
+    } else if (inEvent.inputEvent == INPUT_BROKER_DOWN || inEvent.inputEvent == INPUT_BROKER_USER_PRESS) {
         if (this_digit == 0) {
             currentNumber += 9 * (pow_of_10(numDigits - curSelected - 1));
         } else {
             currentNumber -= (pow_of_10(numDigits - curSelected - 1));
         }
-    } else if (inEvent == INPUT_BROKER_SELECT || inEvent == INPUT_BROKER_RIGHT) {
+    } else if (inEvent.inputEvent == INPUT_BROKER_ANYKEY) {
+        if (inEvent.kbchar > 47 && inEvent.kbchar < 58) { // have a digit
+            currentNumber -= this_digit * (pow_of_10(numDigits - curSelected - 1));
+            currentNumber += (inEvent.kbchar - 48) * (pow_of_10(numDigits - curSelected - 1));
+            curSelected++;
+        }
+    } else if (inEvent.inputEvent == INPUT_BROKER_SELECT || inEvent.inputEvent == INPUT_BROKER_RIGHT) {
         curSelected++;
-    } else if (inEvent == INPUT_BROKER_LEFT) {
+    } else if (inEvent.inputEvent == INPUT_BROKER_LEFT) {
         curSelected--;
-    } else if ((inEvent == INPUT_BROKER_CANCEL || inEvent == INPUT_BROKER_ALT_LONG) && alertBannerUntil != 0) {
+    } else if ((inEvent.inputEvent == INPUT_BROKER_CANCEL || inEvent.inputEvent == INPUT_BROKER_ALT_LONG) &&
+               alertBannerUntil != 0) {
         resetBanner();
     }
     if (curSelected == numDigits) {
@@ -138,7 +145,7 @@ void NotificationRenderer::drawNumberPicker(OLEDDisplay *display, OLEDDisplayUiS
         alertBannerCallback(currentNumber);
     }
 
-    inEvent = INPUT_BROKER_NONE;
+    inEvent.inputEvent = INPUT_BROKER_NONE;
     if (alertBannerMessage[0] == '\0')
         return;
 
@@ -192,15 +199,16 @@ void NotificationRenderer::drawNodePicker(OLEDDisplay *display, OLEDDisplayUiSta
     }
 
     // Handle input
-    if (inEvent == INPUT_BROKER_UP || inEvent == INPUT_BROKER_ALT_PRESS) {
+    if (inEvent.inputEvent == INPUT_BROKER_UP || inEvent.inputEvent == INPUT_BROKER_ALT_PRESS) {
         curSelected--;
-    } else if (inEvent == INPUT_BROKER_DOWN || inEvent == INPUT_BROKER_USER_PRESS) {
+    } else if (inEvent.inputEvent == INPUT_BROKER_DOWN || inEvent.inputEvent == INPUT_BROKER_USER_PRESS) {
         curSelected++;
-    } else if (inEvent == INPUT_BROKER_SELECT) {
+    } else if (inEvent.inputEvent == INPUT_BROKER_SELECT) {
         resetBanner();
         alertBannerCallback(selectedNodenum);
 
-    } else if ((inEvent == INPUT_BROKER_CANCEL || inEvent == INPUT_BROKER_ALT_LONG) && alertBannerUntil != 0) {
+    } else if ((inEvent.inputEvent == INPUT_BROKER_CANCEL || inEvent.inputEvent == INPUT_BROKER_ALT_LONG) &&
+               alertBannerUntil != 0) {
         resetBanner();
     }
 
@@ -209,7 +217,7 @@ void NotificationRenderer::drawNodePicker(OLEDDisplay *display, OLEDDisplayUiSta
     if (curSelected == alertBannerOptions)
         curSelected = 0;
 
-    inEvent = INPUT_BROKER_NONE;
+    inEvent.inputEvent = INPUT_BROKER_NONE;
     if (alertBannerMessage[0] == '\0')
         return;
 
@@ -307,11 +315,11 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
 
     // Handle input
     if (alertBannerOptions > 0) {
-        if (inEvent == INPUT_BROKER_UP || inEvent == INPUT_BROKER_ALT_PRESS) {
+        if (inEvent.inputEvent == INPUT_BROKER_UP || inEvent.inputEvent == INPUT_BROKER_ALT_PRESS) {
             curSelected--;
-        } else if (inEvent == INPUT_BROKER_DOWN || inEvent == INPUT_BROKER_USER_PRESS) {
+        } else if (inEvent.inputEvent == INPUT_BROKER_DOWN || inEvent.inputEvent == INPUT_BROKER_USER_PRESS) {
             curSelected++;
-        } else if (inEvent == INPUT_BROKER_SELECT) {
+        } else if (inEvent.inputEvent == INPUT_BROKER_SELECT) {
             if (optionsEnumPtr != nullptr) {
                 alertBannerCallback(optionsEnumPtr[curSelected]);
                 optionsEnumPtr = nullptr;
@@ -319,7 +327,8 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
                 alertBannerCallback(curSelected);
             }
             resetBanner();
-        } else if ((inEvent == INPUT_BROKER_CANCEL || inEvent == INPUT_BROKER_ALT_LONG) && alertBannerUntil != 0) {
+        } else if ((inEvent.inputEvent == INPUT_BROKER_CANCEL || inEvent.inputEvent == INPUT_BROKER_ALT_LONG) &&
+                   alertBannerUntil != 0) {
             resetBanner();
         }
 
@@ -328,12 +337,13 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
         if (curSelected == alertBannerOptions)
             curSelected = 0;
     } else {
-        if (inEvent == INPUT_BROKER_SELECT || inEvent == INPUT_BROKER_ALT_LONG || inEvent == INPUT_BROKER_CANCEL) {
+        if (inEvent.inputEvent == INPUT_BROKER_SELECT || inEvent.inputEvent == INPUT_BROKER_ALT_LONG ||
+            inEvent.inputEvent == INPUT_BROKER_CANCEL) {
             resetBanner();
         }
     }
 
-    inEvent = INPUT_BROKER_NONE;
+    inEvent.inputEvent = INPUT_BROKER_NONE;
     if (alertBannerMessage[0] == '\0')
         return;
 
