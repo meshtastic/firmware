@@ -696,7 +696,7 @@ void setup()
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::RAK12035, meshtastic_TelemetrySensorType_RAK12035);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::PCT2075, meshtastic_TelemetrySensorType_PCT2075);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::SCD4X, meshtastic_TelemetrySensorType_SCD4X);
-
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::SEN5X, meshtastic_TelemetrySensorType_SEN5X);
     i2cScanner.reset();
 #endif
 
