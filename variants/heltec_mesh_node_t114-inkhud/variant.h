@@ -163,6 +163,9 @@ No longer populated on PCB
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
 #define ADC_MULTIPLIER (4.90F)
 
+#define GPS_ENABLE_SLEEP_DELAY_FIX_TIME 20  //time in seconds enable gps delay sleep. If gps lock time greater than GPS_ENABLE_SLEEP_DELAY_FIX_TIME, delay GPS_SLEEP_DELAY_TIME before gps sleep
+#define GPS_SLEEP_DELAY_TIME 20             //time in seconds wait for gps module backup info after locked before sleep
+
 #define HAS_RTC 0
 #ifdef __cplusplus
 }
