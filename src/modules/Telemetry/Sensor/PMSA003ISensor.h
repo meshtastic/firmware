@@ -20,11 +20,6 @@ class PMSA003ISensor : public TelemetrySensor
     Adafruit_PM25AQI pmsa003i = Adafruit_PM25AQI();
     PM25_AQI_Data pmsa003iData = {0};
 
-#ifdef PMSA003I_ENABLE_PIN
-    void sleep();
-    uint32_t wakeUp();
-#endif
-
   protected:
     virtual void setup() override;
 
@@ -35,6 +30,8 @@ class PMSA003ISensor : public TelemetrySensor
     };
 
 #ifdef PMSA003I_ENABLE_PIN
+    void sleep();
+    uint32_t wakeUp();
     // the PMSA003I sensor uses about 300mW on its own; support powering it off when it's not actively taking
     // a reading
     // put the sensor to sleep on startup
