@@ -9,10 +9,6 @@
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
 #include "meshUtils.h" // vformat
 
-#define SEN50_NAME 48
-#define SEN54_NAME 52
-#define SEN55_NAME 53
-
 #endif
 
 bool in_array(uint8_t *array, int size, uint8_t lookfor)
@@ -132,6 +128,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
     DeviceAddress addr(port, 0x00);
 
     uint16_t registerValue = 0x00;
+    String prod = "";
     ScanI2C::DeviceType type;
     TwoWire *i2cBus;
 #ifdef RV3028_RTC
@@ -577,40 +574,25 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 logFoundDevice("ICM20948", (uint8_t)addr.address);
                 break;
 #endif
+                prod = readSEN5xProductName(i2cBus, addr.address);
                 if (registerValue == 0xEA) {
                     type = ICM20948;
                     logFoundDevice("ICM20948", (uint8_t)addr.address);
                     break;
                 } else {
-                    // TODO refurbish to find the model
-                    // Just a hack for the hackathon
-                    if (addr.address == SEN5X_ADDR) {
+                    if (prod.startsWith("SEN55")) {
                         type = SEN5X;
-                        logFoundDevice("SEN5X", (uint8_t)addr.address);
+                        logFoundDevice("Sensirion SEN55", addr.address);
+                        break;
+                    } else if (prod.startsWith("SEN54")) {
+                        type = SEN5X;
+                        logFoundDevice("Sensirion SEN54", addr.address);
+                        break;
+                    } else if (prod.startsWith("SEN50")) {
+                        type = SEN5X;
+                        logFoundDevice("Sensirion SEN50", addr.address);
                         break;
                     }
-
-                    // We can get the 0xD014 register to find the model. This is not a simple task
-                    // There is a buffer returned - getRegisterValue is not enough (maybe)
-                    // registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xD014), 6);
-                    // Important to leave delay
-                    // delay(50);
-
-                    // const uint8_t nameSize = 48;
-                    // uint8_t name[nameSize] = &registerValue;
-
-                    // switch(name[4]){
-                    //     case SEN50_NAME:
-                    //         type = SEN50;
-                    //         break;
-                    //     case SEN54_NAME:
-                    //         type = SEN54;
-                    //         break;
-                    //     case SEN55_NAME:
-                    //         type = SEN55;
-                    //         break;
-                    // }
-
                     if (addr.address == BMX160_ADDR) {
                         type = BMX160;
                         logFoundDevice("BMX160", (uint8_t)addr.address);
