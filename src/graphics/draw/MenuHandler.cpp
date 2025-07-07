@@ -353,13 +353,16 @@ void menuHandler::systemBaseMenu()
     hasSupportBrightness = true;
 #endif
 
-    enum optionsNumbers { Back, Beeps, Brightness, Reboot, Color, MUI, Test };
-    static const char *optionsArray[7] = {"Back"};
-    static int optionsEnumArray[7] = {Back};
+    enum optionsNumbers { Back, Beeps, ScreenWakeup, Brightness, Reboot, Color, MUI, Test };
+    static const char *optionsArray[8] = {"Back"};
+    static int optionsEnumArray[8] = {Back};
     int options = 1;
 
     optionsArray[options] = "Beeps Action";
     optionsEnumArray[options++] = Beeps;
+    
+    optionsArray[options] = "Screen Wakeup";
+    optionsEnumArray[options++] = ScreenWakeup;
 
     if (hasSupportBrightness) {
         optionsArray[options] = "Brightness";
@@ -390,6 +393,9 @@ void menuHandler::systemBaseMenu()
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == Beeps) {
             menuHandler::menuQueue = menuHandler::buzzermodemenupicker;
+            screen->runNow();
+        } else if (selected == ScreenWakeup) {
+            menuHandler::menuQueue = menuHandler::screen_wakeup_menu;
             screen->runNow();
         } else if (selected == Brightness) {
             menuHandler::menuQueue = menuHandler::brightness_picker;
@@ -591,7 +597,7 @@ void menuHandler::BuzzerModeMenu()
 {
     static const char *optionsArray[] = {"All Enabled", "Disabled", "Notifications", "System Only"};
     BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "Beep Action";
+    bannerOptions.message = "Buzzer Mode";
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 4;
     bannerOptions.bannerCallback = [](int selected) -> void {
@@ -599,6 +605,28 @@ void menuHandler::BuzzerModeMenu()
         service->reloadConfig(SEGMENT_CONFIG);
     };
     bannerOptions.InitialSelected = config.device.buzzer_mode;
+    screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::ScreenWakeupMenu()
+{
+    static const char *optionsArray[] = {"Back", "On Msg", "By Key"};
+    enum optionsNumbers { Back = 0, OnMsg = 1, ByKey = 2 };
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Screen Wakeup";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 3;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == OnMsg) {
+            config.display.wake_on_received_message = true;
+            service->reloadConfig(SEGMENT_CONFIG);
+        } else if (selected == ByKey) {
+            config.display.wake_on_received_message = false;
+            service->reloadConfig(SEGMENT_CONFIG);
+        }
+    };
+    // Set initial selection based on current config
+    bannerOptions.InitialSelected = config.display.wake_on_received_message ? OnMsg : ByKey;
     screen->showOverlayBanner(bannerOptions);
 }
 
@@ -934,6 +962,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case wifi_toggle_menu:
         wifiToggleMenu();
+        break;
+    case screen_wakeup_menu:
+        ScreenWakeupMenu();
         break;
     }
     menuQueue = menu_none;
