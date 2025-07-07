@@ -128,11 +128,11 @@ void menuHandler::ClockFacePicker()
             screen->runNow();
         } else if (selected == Digital) {
             uiconfig.is_clockface_analog = false;
-            nodeDB->saveProto("/prefs/uiconfig.proto", meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg, &uiconfig);
+            saveUIConfig();
             screen->setFrames(Screen::FOCUS_CLOCK);
         } else {
             uiconfig.is_clockface_analog = true;
-            nodeDB->saveProto("/prefs/uiconfig.proto", meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg, &uiconfig);
+            saveUIConfig();
             screen->setFrames(Screen::FOCUS_CLOCK);
         }
     };
@@ -538,22 +538,19 @@ void menuHandler::compassNorthMenu()
         if (selected == 1) {
             if (uiconfig.compass_mode != meshtastic_CompassMode_DYNAMIC) {
                 uiconfig.compass_mode = meshtastic_CompassMode_DYNAMIC;
-                nodeDB->saveProto("/prefs/uiconfig.proto", meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg,
-                                  &uiconfig);
+                saveUIConfig();
                 screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
             }
         } else if (selected == 2) {
             if (uiconfig.compass_mode != meshtastic_CompassMode_FIXED_RING) {
                 uiconfig.compass_mode = meshtastic_CompassMode_FIXED_RING;
-                nodeDB->saveProto("/prefs/uiconfig.proto", meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg,
-                                  &uiconfig);
+                saveUIConfig();
                 screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
             }
         } else if (selected == 3) {
             if (uiconfig.compass_mode != meshtastic_CompassMode_FREEZE_HEADING) {
                 uiconfig.compass_mode = meshtastic_CompassMode_FREEZE_HEADING;
-                nodeDB->saveProto("/prefs/uiconfig.proto", meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg,
-                                  &uiconfig);
+                saveUIConfig();
                 screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
             }
         } else if (selected == 0) {
@@ -618,15 +615,15 @@ void menuHandler::ScreenWakeupMenu()
     bannerOptions.optionsCount = 3;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == OnMsg) {
-            config.display.wake_on_received_message = true;
-            service->reloadConfig(SEGMENT_CONFIG);
+            uiconfig.wake_on_received_message = true;
+            saveUIConfig();
         } else if (selected == ByKey) {
-            config.display.wake_on_received_message = false;
-            service->reloadConfig(SEGMENT_CONFIG);
+            uiconfig.wake_on_received_message = false;
+            saveUIConfig();
         }
     };
     // Set initial selection based on current config
-    bannerOptions.InitialSelected = config.display.wake_on_received_message ? OnMsg : ByKey;
+    bannerOptions.InitialSelected = uiconfig.wake_on_received_message ? OnMsg : ByKey;
     screen->showOverlayBanner(bannerOptions);
 }
 
@@ -669,7 +666,7 @@ void menuHandler::BrightnessPickerMenu()
 #endif
 
             // Save to device
-            nodeDB->saveProto("/prefs/uiconfig.proto", meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg, &uiconfig);
+            saveUIConfig();
 
             LOG_INFO("Screen brightness set to %d", uiconfig.screen_brightness);
         }
@@ -780,7 +777,7 @@ void menuHandler::TFTColorPickerMenu(OLEDDisplay *display)
                 uiconfig.screen_rgb_color = (r << 16) | (g << 8) | b;
             }
             LOG_INFO("Storing Value of %d to uiconfig.screen_rgb_color", uiconfig.screen_rgb_color);
-            nodeDB->saveProto("/prefs/uiconfig.proto", meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg, &uiconfig);
+            saveUIConfig();
         }
 #endif
     };
@@ -968,6 +965,11 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     }
     menuQueue = menu_none;
+}
+
+void menuHandler::saveUIConfig()
+{
+    nodeDB->saveProto("/prefs/uiconfig.proto", meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg, &uiconfig);
 }
 
 } // namespace graphics

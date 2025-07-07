@@ -1249,7 +1249,7 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
             setFrames(FOCUS_PRESERVE);              // Refresh frame list without switching view
             
             // Only wake/force display if the configuration allows it
-            if (config.display.wake_on_received_message) {
+            if (uiconfig.wake_on_received_message) {
                 setOn(true);                            // Wake up the screen first
                 forceDisplay();                         // Forces screen redraw
 

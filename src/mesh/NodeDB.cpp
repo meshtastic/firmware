@@ -63,7 +63,7 @@ EXT_RAM_BSS_ATTR meshtastic_DeviceState devicestate;
 meshtastic_MyNodeInfo &myNodeInfo = devicestate.my_node;
 meshtastic_NodeDatabase nodeDatabase;
 meshtastic_LocalConfig config;
-meshtastic_DeviceUIConfig uiconfig{.screen_brightness = 153, .screen_timeout = 30};
+meshtastic_DeviceUIConfig uiconfig{.screen_brightness = 153, .screen_timeout = 30, .wake_on_received_message = true};
 meshtastic_LocalModuleConfig moduleConfig;
 meshtastic_ChannelFile channelFile;
 
@@ -753,7 +753,6 @@ void NodeDB::initConfigIntervals()
     config.power.wait_bluetooth_secs = default_wait_bluetooth_secs;
 
     config.display.screen_on_secs = default_screen_on_secs;
-    config.display.wake_on_received_message = true;
 
 #if defined(USE_POWERSAVE)
     config.power.is_power_saving = true;

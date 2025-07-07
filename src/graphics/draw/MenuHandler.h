@@ -57,6 +57,9 @@ class menuHandler
     static void wifiBaseMenu();
     static void wifiToggleMenu();
     static void ScreenWakeupMenu();
+    
+  private:
+    static void saveUIConfig();
 };
 
 } // namespace graphics
