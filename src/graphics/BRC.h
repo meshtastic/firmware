@@ -13,6 +13,7 @@ const double BRC_LONF = -119.202994;
 const double BRC_NOON = 1.5;
 const double RAD_TO_HOUR = (6.0/3.14159);
 const double METER_TO_FEET = 3.28084;
+const double FEET_TO_METER = 1.0 / METER_TO_FEET;
 
 // Pre-calculated street data for performance
 struct StreetInfo {
@@ -75,64 +76,70 @@ static const StreetInfo streets[] = {
     {5830, 0, nullptr},	// +75ft
 };
 
-static char* BRCAddress(int32_t lat, int32_t lon)
-{
-    thread_local static char addrStr[20];
-
-    double unitMultiplier = 1.0 / METER_TO_FEET;
-    const char* unit = "m";
-    if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
-        unitMultiplier = 1.0;
-        unit = "ft";
-    }
-
-    float bearingToMan =
+class BRCAddress {
+private:
+    float bearing;
+    float distance;
+public:
+    BRCAddress(int32_t lat, int32_t lon) {
+        bearing =
                 GeoCoord::bearing(BRC_LATF, BRC_LONF, DegD(lat), DegD(lon)) * RAD_TO_HOUR;
-    bearingToMan += 12.0 - BRC_NOON;
-    while (bearingToMan > 12.0) {bearingToMan -= 12.0;}
-    uint8_t hour = (uint8_t)(bearingToMan);
-    uint8_t minute = (uint8_t)((bearingToMan - hour) * 60.0);
-    hour %= 12;
-    if (hour == 0) {hour = 12;}
+        bearing += 12.0 - BRC_NOON;
+        while (bearing > 12.0) {bearing -= 12.0;}
 
-    // In imperial units because that is how golden spike data is provided.
-    float d =
-                GeoCoord::latLongToMeter(BRC_LATF, BRC_LONF, DegD(lat), DegD(lon)) * METER_TO_FEET;
 
-    if (bearingToMan > 1.75  && bearingToMan < 10.25) {
-        const char* street = nullptr;
-        float dist = 0;
-        // Find the appropriate street based on distance
-        for (const auto& s : streets) {
-            if (d > s.center - s.width) {
-                street = s.name;
-                dist = d - s.center;
-            } else {
-                break;
+        // In imperial units because that is how golden spike data is provided.
+        distance =
+                    GeoCoord::latLongToMeter(BRC_LATF, BRC_LONF, DegD(lat), DegD(lon)) * METER_TO_FEET;
+    };
+
+
+    int radial(char *buf, size_t len) {
+        uint8_t hour = (uint8_t)(bearing);
+        uint8_t minute = (uint8_t)((bearing - hour) * 60.0);
+        hour %= 12;
+        if (hour == 0) {hour = 12;}
+        return snprintf(buf, len, "%d:%02d", hour, minute);
+    };
+
+    int annular(char *buf, size_t len) {
+        const char* unit = "m";
+        float unitMultiplier = FEET_TO_METER;
+        if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
+            unitMultiplier = 1.0;
+            unit = "ft";
+        }
+
+
+        if (bearing > 1.75  && bearing < 10.25) {
+            const char* street = nullptr;
+            float dist = 0;
+            // Find the appropriate street based on distance
+            for (const auto& s : streets) {
+                if (distance > s.center - s.width) {
+                    street = s.name;
+                    dist = distance - s.center;
+                } else {
+                    break;
+                }
             }
+            if (street) {
+                return snprintf(buf, len, "%s %d%s", street, int(dist * unitMultiplier), unit);
+            }
+
         }
-        if (street) {
-            snprintf(addrStr, sizeof(addrStr), "%d:%02d & %s %d%s", hour, minute, street, int(dist * unitMultiplier), unit);
-            return addrStr;
-        }
 
-    }
+        return snprintf(buf, len, "%d%s", int(distance * unitMultiplier), unit);
+    };
 
-    snprintf(addrStr, sizeof(addrStr), "%d:%02d & %d%s", hour, minute, int(d * unitMultiplier), unit);
-    return addrStr;
-}
-
-
-static void drawBRCAddress(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
-{
-    if (!gps->getIsConnected() && !config.position.fixed_position) {
-        // displayLine = "No GPS Module";
-        // display->drawString(x + (display->getWidth() - (display->getStringWidth(displayLine))) / 2, y, displayLine);
-    } else if (!gps->getHasLock() && !config.position.fixed_position) {
-        // displayLine = "No GPS Lock";
-        // display->drawString(x + (display->getWidth() - (display->getStringWidth(displayLine))) / 2, y, displayLine);
-    } else {
-        auto displayLine = BRCAddress(int32_t(gps->getLatitude()), int32_t(gps->getLongitude()));
-        display->drawString(x + (display->getWidth() - (display->getStringWidth(displayLine))) / 2, y, displayLine);
-    }
-}
+    int full(char *buf, size_t len) {
+        auto l = radial(buf, len-4);
+        buf += l;
+        *(buf++) = ' ';
+        *(buf++) = '&';
+        *(buf++) = ' ';
+        buf += annular(buf, len-l-4);
+        buf[l] = 0; // always null terminated
+        return l;
+    };
+};
