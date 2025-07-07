@@ -183,15 +183,9 @@ int32_t SEN5XSensor::runOnce()
     }
 
     bus = nodeTelemetrySensorsMap[sensorType].second;
-    address = (uint8_t)nodeTelemetrySensorsMap[sensorType].first;
     // sen5x.begin(*bus);
 
-    if (!I2Cdetect(bus, address)) {
-        LOG_INFO("SEN5X ERROR no device found on adress");
-        return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
-    }
-
-    delay(25);
+    delay(50); // without this there is an error on the deviceReset function
 
     if (!sendCommand(SEN5X_RESET)) {
         LOG_ERROR("SEN5X: Error reseting device");
@@ -210,6 +204,44 @@ int32_t SEN5XSensor::runOnce()
         LOG_ERROR("SEN5X: error firmware is too old and will not work with this implementation");
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
+    delay(200); // From Sensirion Arduino library
+
+    if (!findModel()) {
+        LOG_ERROR("SEN5X: error finding sensor model");
+        return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
+    }
+
+    // Check if firmware version allows The direct switch between Measurement and RHT/Gas-Only Measurement mode
+    if (!getVersion()) return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
+    if (firmwareVer < 2) {
+        LOG_ERROR("SEN5X: error firmware is too old and will not work with this implementation");
+        return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
+    }
+
+    // Detection succeeded
+    state = SEN5X_IDLE;
+    status = 1;
+    LOG_INFO("SEN5X Enabled");
+
+    // uint16_t error;
+    // char errorMessage[256];
+    // error = sen5x.deviceReset();
+    // if (error) {
+    //     LOG_INFO("Error trying to execute deviceReset(): ");
+    //     errorToString(error, errorMessage, 256);
+    //     LOG_INFO(errorMessage);
+    //     return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
+    // }
+
+    // error = sen5x.startMeasurement();
+    // if (error) {
+    //     LOG_INFO("Error trying to execute startMeasurement(): ");
+    //     errorToString(error, errorMessage, 256);
+    //     LOG_INFO(errorMessage);
+    //     return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
+    // } else {
+    //     status = 1;
+    // }
 
     // Detection succeeded
     state = SEN5X_IDLE;
