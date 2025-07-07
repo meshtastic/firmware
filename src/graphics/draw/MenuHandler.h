@@ -13,9 +13,7 @@ class menuHandler
         clock_face_picker,
         clock_menu,
         position_base_menu,
-#if !MESHTASTIC_EXCLUDE_GPS
         gps_toggle_menu,
-#endif
         compass_point_north_menu,
         reset_node_db_menu,
         buzzermodemenupicker,
@@ -26,7 +24,8 @@ class menuHandler
         add_favorite,
         remove_favorite,
         test_menu,
-        number_test
+        number_test,
+        wifi_toggle_menu
     };
     static screenMenus menuQueue;
 
@@ -54,6 +53,8 @@ class menuHandler
     static void removeFavoriteMenu();
     static void testMenu();
     static void numberTest();
+    static void wifiBaseMenu();
+    static void wifiToggleMenu();
 };
 
 } // namespace graphics

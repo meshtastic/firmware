@@ -1373,6 +1373,8 @@ int Screen::handleInputEvent(const InputEvent *event)
                            this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_hopsignal ||
                            this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_bearings) {
                     menuHandler::nodeListMenu();
+                } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.wifi) {
+                    menuHandler::wifiBaseMenu();
                 }
             } else if (event->inputEvent == INPUT_BROKER_BACK) {
                 showPrevFrame();
