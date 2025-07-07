@@ -76,21 +76,17 @@ static const StreetInfo streets[] = {
     {5830, 0, nullptr},	// +75ft
 };
 
-class BRCAddress {
-private:
-    float bearing;
-    float distance;
-public:
+class BRCAddress
+{
+  public:
     BRCAddress(int32_t lat, int32_t lon) {
-        bearing =
-                GeoCoord::bearing(BRC_LATF, BRC_LONF, DegD(lat), DegD(lon)) * RAD_TO_HOUR;
+        bearing = GeoCoord::bearing(BRC_LATF, BRC_LONF, DegD(lat), DegD(lon)) * RAD_TO_HOUR;
         bearing += 12.0 - BRC_NOON;
         while (bearing > 12.0) {bearing -= 12.0;}
 
 
         // In imperial units because that is how golden spike data is provided.
-        distance =
-                    GeoCoord::latLongToMeter(BRC_LATF, BRC_LONF, DegD(lat), DegD(lon)) * METER_TO_FEET;
+        distance = GeoCoord::latLongToMeter(BRC_LATF, BRC_LONF, DegD(lat), DegD(lon)) * METER_TO_FEET;
     };
 
 
@@ -142,4 +138,7 @@ public:
         buf[l] = 0; // always null terminated
         return l;
     };
+  private:
+    float bearing;
+    float distance;
 };
