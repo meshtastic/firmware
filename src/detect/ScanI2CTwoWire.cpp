@@ -574,12 +574,12 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 logFoundDevice("ICM20948", (uint8_t)addr.address);
                 break;
 #endif
+                prod = readSEN5xProductName(i2cBus, addr.address);
                 if (registerValue == 0xEA) {
                     type = ICM20948;
                     logFoundDevice("ICM20948", (uint8_t)addr.address);
                     break;
                 } else {
-                    prod = readSEN5xProductName(i2cBus, addr.address);
                     if (prod.startsWith("SEN55")) {
                         type = SEN5X;
                         logFoundDevice("Sensirion SEN55", addr.address);
