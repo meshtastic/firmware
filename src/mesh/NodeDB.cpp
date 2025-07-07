@@ -745,6 +745,7 @@ void NodeDB::initConfigIntervals()
     config.power.wait_bluetooth_secs = default_wait_bluetooth_secs;
 
     config.display.screen_on_secs = default_screen_on_secs;
+    config.display.wake_on_received_message = true;
 
 #if defined(USE_POWERSAVE)
     config.power.is_power_saving = true;

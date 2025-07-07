@@ -1247,40 +1247,44 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
             devicestate.has_rx_text_message = true; // Needed to include the message frame
             hasUnreadMessage = true;                // Enables mail icon in the header
             setFrames(FOCUS_PRESERVE);              // Refresh frame list without switching view
-            forceDisplay();                         // Forces screen redraw
+            
+            // Only wake/force display if the configuration allows it
+            if (config.display.wake_on_received_message) {
+                forceDisplay();                         // Forces screen redraw
 
-            // === Prepare banner content ===
-            const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(packet->from);
-            const char *longName = (node && node->has_user) ? node->user.long_name : nullptr;
+                // === Prepare banner content ===
+                const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(packet->from);
+                const char *longName = (node && node->has_user) ? node->user.long_name : nullptr;
 
-            const char *msgRaw = reinterpret_cast<const char *>(packet->decoded.payload.bytes);
+                const char *msgRaw = reinterpret_cast<const char *>(packet->decoded.payload.bytes);
 
-            char banner[256];
+                char banner[256];
 
-            // Check for bell character in message to determine alert type
-            bool isAlert = false;
-            for (size_t i = 0; i < packet->decoded.payload.size && i < 100; i++) {
-                if (msgRaw[i] == '\x07') {
-                    isAlert = true;
-                    break;
+                // Check for bell character in message to determine alert type
+                bool isAlert = false;
+                for (size_t i = 0; i < packet->decoded.payload.size && i < 100; i++) {
+                    if (msgRaw[i] == '\x07') {
+                        isAlert = true;
+                        break;
+                    }
                 }
-            }
 
-            if (isAlert) {
-                if (longName && longName[0]) {
-                    snprintf(banner, sizeof(banner), "Alert Received from\n%s", longName);
+                if (isAlert) {
+                    if (longName && longName[0]) {
+                        snprintf(banner, sizeof(banner), "Alert Received from\n%s", longName);
+                    } else {
+                        strcpy(banner, "Alert Received");
+                    }
                 } else {
-                    strcpy(banner, "Alert Received");
+                    if (longName && longName[0]) {
+                        snprintf(banner, sizeof(banner), "New Message from\n%s", longName);
+                    } else {
+                        strcpy(banner, "New Message");
+                    }
                 }
-            } else {
-                if (longName && longName[0]) {
-                    snprintf(banner, sizeof(banner), "New Message from\n%s", longName);
-                } else {
-                    strcpy(banner, "New Message");
-                }
-            }
 
-            screen->showSimpleBanner(banner, 3000);
+                screen->showSimpleBanner(banner, 3000);
+            }
         }
     }
 
