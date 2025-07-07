@@ -24,7 +24,12 @@ PMSA003ISensor pmsa003iSensor;
 NullSensor pmsa003iSensor;
 #endif
 
-#if __has_include(<SensirionI2CSen5x.h>)
+// Small hack
+#ifndef INCLUDE_SEN5X
+#define INCLUDE_SEN5X 1
+#endif
+
+#ifdef INCLUDE_SEN5X
 #include "Sensor/SEN5XSensor.h"
 SEN5XSensor sen5xSensor;
 #else
