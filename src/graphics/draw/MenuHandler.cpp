@@ -136,6 +136,7 @@ void menuHandler::ClockFacePicker()
             screen->setFrames(Screen::FOCUS_CLOCK);
         }
     };
+    bannerOptions.InitialSelected = uiconfig.is_clockface_analog ? 2 : 1;
     screen->showOverlayBanner(bannerOptions);
 }
 
