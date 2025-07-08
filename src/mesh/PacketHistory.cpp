@@ -246,8 +246,10 @@ void PacketHistory::insert(PacketRecord &r)
 #if RECENT_WARN_AGE > 0
     if (tu->rxTimeMsec && (OldtrxTimeMsec < RECENT_WARN_AGE)) {
         if (!(tu->id == r.id && tu->sender == r.sender)) {
+#if VERBOSE_PACKET_HISTORY
             LOG_WARN("Packet History - insert: Reusing slot aged %ds < %ds RECENT_WARN_AGE", OldtrxTimeMsec / 1000,
                      RECENT_WARN_AGE / 1000);
+#endif
         } else {
             // debug only
 #if VERBOSE_PACKET_HISTORY
@@ -275,7 +277,9 @@ void PacketHistory::insert(PacketRecord &r)
 #endif
 
     if (r.rxTimeMsec == 0) {
+#if VERBOSE_PACKET_HISTORY
         LOG_WARN("Packet History - insert: I will not store packet with rxTimeMsec = 0.");
+#endif
         return; // Return early if we can't update the history
     }
 
