@@ -944,22 +944,6 @@ void Screen::setFrames(FrameFocus focus)
     indicatorIcons.push_back(digital_icon_clock);
 #endif
 
-    // We don't show the node info of our node (if we have it yet - we should)
-    size_t numMeshNodes = nodeDB->getNumMeshNodes();
-    if (numMeshNodes > 0)
-        numMeshNodes--;
-
-    for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
-        const meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(i);
-        if (n && n->num != nodeDB->getNodeNum() && n->is_favorite) {
-            if (fsi.positions.firstFavorite == 255)
-                fsi.positions.firstFavorite = numframes;
-            fsi.positions.lastFavorite = numframes;
-            normalFrames[numframes++] = graphics::UIRenderer::drawNodeInfo;
-            indicatorIcons.push_back(icon_node);
-        }
-    }
-
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
     if (!dismissedFrames.wifi && isWifiAvailable()) {
         fsi.positions.wifi = numframes;
@@ -969,7 +953,7 @@ void Screen::setFrames(FrameFocus focus)
 #endif
 
     // Beware of what changes you make in this code!
-    // We pass numfames into GetMeshModulesWithUIFrames() which is highly important!
+    // We pass numframes into GetMeshModulesWithUIFrames() which is highly important!
     // Inside of that callback, goes over to MeshModule.cpp and we run
     // modulesWithUIFrames.resize(startIndex, nullptr), to insert nullptr
     // entries until we're ready to start building the matching entries.
@@ -998,6 +982,34 @@ void Screen::setFrames(FrameFocus focus)
 
     LOG_DEBUG("Added modules.  numframes: %d", numframes);
 
+    // We don't show the node info of our node (if we have it yet - we should)
+    size_t numMeshNodes = nodeDB->getNumMeshNodes();
+    if (numMeshNodes > 0)
+        numMeshNodes--;
+
+    // Temporary array to hold favorite node frames
+    std::vector<FrameCallback> favoriteFrames;
+
+    for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
+        const meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(i);
+        if (n && n->num != nodeDB->getNodeNum() && n->is_favorite) {
+            favoriteFrames.push_back(graphics::UIRenderer::drawNodeInfo);
+        }
+    }
+
+    // Insert favorite frames *after* collecting them all
+    if (!favoriteFrames.empty()) {
+        fsi.positions.firstFavorite = numframes;
+        for (auto &f : favoriteFrames) {
+            normalFrames[numframes++] = f;
+            indicatorIcons.push_back(icon_node);
+        }
+        fsi.positions.lastFavorite = numframes - 1;
+    } else {
+        fsi.positions.firstFavorite = 255;
+        fsi.positions.lastFavorite = 255;
+    }
+
     fsi.frameCount = numframes;   // Total framecount is used to apply FOCUS_PRESERVE
     this->frameCount = numframes; // ✅ Save frame count for use in custom overlay
     LOG_DEBUG("Finished build frames. numframes: %d", numframes);
@@ -1009,8 +1021,7 @@ void Screen::setFrames(FrameFocus focus)
     static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
     ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
 
-    prevFrame = -1; // Force drawNodeInfo to pick a new node (because our list
-                    // just changed)
+    prevFrame = -1; // Force drawNodeInfo to pick a new node (because our list just changed)
 
     // Focus on a specific frame, in the frame set we just created
     switch (focus) {
