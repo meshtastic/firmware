@@ -11,7 +11,7 @@
 inline const std::unordered_map<std::string, std::string> configProducts = {{"MESHTOAD", "lora-usb-meshtoad-e22.yaml"},
                                                                             {"MESHSTICK", "lora-meshstick-1262.yaml"},
                                                                             {"MESHADV-PI", "lora-MeshAdv-900M30S.yaml"},
-                                                                            {"MESHADV-MINI", "lora-MeshAdv-Mini-900M22S.yaml"},
+                                                                            {"MeshAdv Mini", "lora-MeshAdv-Mini-900M22S.yaml"},
                                                                             {"POWERPI", "lora-MeshAdv-900M30S.yaml"}};
 
 enum configNames {
@@ -57,7 +57,13 @@ enum configNames {
     lora_usb_serial_num,
     lora_usb_pid,
     lora_usb_vid,
-    user,
+    userButtonPin,
+    tbUpPin,
+    tbDownPin,
+    tbLeftPin,
+    tbRightPin,
+    tbPressPin,
+    tbDirection,
     spidev,
     spiSpeed,
     i2cdev,

@@ -1,5 +1,5 @@
-#ifndef _SEEED_XIAO_NRF52840_SENSE_H_
-#define _SEEED_XIAO_NRF52840_SENSE_H_
+#ifndef _SEEED_XIAO_NRF52840_KIT_H_
+#define _SEEED_XIAO_NRF52840_KIT_H_
 
 /** Master clock frequency */
 #define VARIANT_MCK (64000000ul)
@@ -79,9 +79,8 @@ static const uint8_t A5 = PIN_A5;
  */
 
 /*
- *  D0 is shared with PIN_GPS_STANDBY on the L76K GNSS Module.
- *  There are some technical solutions that can solve this problem, and we are
- *  currently exploring and researching them.
+ * D0 is shared with PIN_GPS_STANDBY on the L76K GNSS Module, so refer to
+ * GPS_L76K definition preventing this conflict
  */
 
 // #define BUTTON_PIN D0
@@ -93,60 +92,71 @@ static const uint8_t A5 = PIN_A5;
 #define PIN_SERIAL2_TX (-1)
 
 /*
- * SPI Interfaces
+ * Pinout for SX126x
  */
-#define SPI_INTERFACES_COUNT 1
-
-#define PIN_SPI_MISO (9)
-#define PIN_SPI_MOSI (10)
-#define PIN_SPI_SCK (8)
-
-static const uint8_t SS = D4;
-static const uint8_t MOSI = PIN_SPI_MOSI;
-static const uint8_t MISO = PIN_SPI_MISO;
-static const uint8_t SCK = PIN_SPI_SCK;
-
 #define USE_SX1262
 
-// Pinout for SX126X
+#ifdef XIAO_BLE_LEGACY_PINOUT
+// Legacy xiao_ble variant pinout for third-party SX126x modules e.g. EBYTE E22
+#define SX126X_CS D0
+#define SX126X_DIO1 D1
+#define SX126X_BUSY D2
+#define SX126X_RESET D3
+#define SX126X_RXEN D7
+
+#elif defined(SEEED_XIAO_WIO_BTB)
+// Wio-SX1262 for XIAO with 30-pin board-to-board connector
+// https://files.seeedstudio.com/products/SenseCAP/Wio_SX1262/Schematic_Diagram_Wio-SX1262_for_XIAO.pdf
+#define SX126X_CS D3
+#define SX126X_DIO1 D0
+#define SX126X_BUSY D1
+#define SX126X_RESET D2
+#define SX126X_RXEN D4
+#else
+// Wio-SX1262 for XIAO (standalone SKU 113010003 or nRF52840 kit SKU 102010710)
+// https://files.seeedstudio.com/products/SenseCAP/Wio_SX1262/Wio-SX1262%20for%20XIAO%20V1.0_SCH.pdf
 #define SX126X_CS D4
 #define SX126X_DIO1 D1
 #define SX126X_BUSY D3
 #define SX126X_RESET D2
+#define SX126X_RXEN D5
+#endif
 
+// Common pinouts for all SX126x pinouts above
 #define SX126X_TXEN RADIOLIB_NC
-
-#define SX126X_RXEN D5           // This is used to control the RX side of the RF switch
 #define SX126X_DIO2_AS_RF_SWITCH // DIO2 is used to control the TX side of the RF switch
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 
 /*
- * Wire Interfaces
+ * SPI Interfaces
+ * Defined after pinout for SX1262x to factor in CS pinout variations
  */
-#define I2C_NO_RESCAN           // I2C is a bit finicky, don't scan too much
-#define WIRE_INTERFACES_COUNT 1 // 2
+#define SPI_INTERFACES_COUNT 1
 
-// LSM6DS3TR on XIAO nRF52840 Series
-#define PIN_WIRE_SDA (17)
-#define PIN_WIRE_SCL (16)
+#define PIN_SPI_MISO D9
+#define PIN_SPI_MOSI D10
+#define PIN_SPI_SCK D8
 
-static const uint8_t SDA = PIN_WIRE_SDA;
-static const uint8_t SCL = PIN_WIRE_SCL;
+static const uint8_t SS = SX126X_CS;
+static const uint8_t MOSI = PIN_SPI_MOSI;
+static const uint8_t MISO = PIN_SPI_MISO;
+static const uint8_t SCK = PIN_SPI_SCK;
 
 /*
  * GPS
  */
-// GPS L76KB
-#define GPS_L76K
+// GPS L76K
 #ifdef GPS_L76K
 #define PIN_GPS_RX D6
 #define PIN_GPS_TX D7
 #define HAS_GPS 1
-#define GPS_BAUDRATE 9600
 #define GPS_THREAD_INTERVAL 50
 #define PIN_SERIAL1_RX PIN_GPS_TX
 #define PIN_SERIAL1_TX PIN_GPS_RX
 #define PIN_GPS_STANDBY D0
+#else
+#define PIN_SERIAL1_RX (-1)
+#define PIN_SERIAL1_TX (-1)
 #endif
 
 /*
@@ -161,6 +171,43 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 #define HICHG (22)                // P0.13: BQ25101 ISET 100mA instead of 50mA
 
 #define BATTERY_SENSE_RESOLUTION_BITS (10)
+
+/*
+ * Wire Interfaces
+ * Keep this section after potentially conflicting pin definitions
+ */
+#define I2C_NO_RESCAN // I2C is a bit finicky, don't scan too much
+#define WIRE_INTERFACES_COUNT 1
+
+#if defined(XIAO_BLE_LEGACY_PINOUT)
+// Used for I2C by DIY xiao_ble variant
+#define PIN_WIRE_SDA D4
+#define PIN_WIRE_SCL D5
+#elif !defined(GPS_L76K)
+// If D6 and D7 are free, I2C is probably the most versatile assignment
+#define PIN_WIRE_SDA D6
+#define PIN_WIRE_SCL D7
+#else
+// Internal LSM6DS3TR on XIAO nRF52840 Series
+#define PIN_WIRE_SDA (17)
+#define PIN_WIRE_SCL (16)
+#endif
+
+static const uint8_t SDA = PIN_WIRE_SDA;
+static const uint8_t SCL = PIN_WIRE_SCL;
+
+/*
+ * Buttons
+ * Keep this section after potentially conflicting pin definitions
+ * because D0 has multiple possible conflicts with various XIAO modules:
+ * - PIN_GPS_STANDBY on the L76K GNSS Module
+ * - DIO1 on the Wio-SX1262 - 30-pin board-to-board connector version
+ * - SX1262X CS on XIAO BLE legacy pinout
+ */
+
+#if !defined(GPS_L76K) && !defined(SEEED_XIAO_WIO_BTB) && !defined(XIAO_BLE_LEGACY_PINOUT)
+#define BUTTON_PIN D0
+#endif
 
 #ifdef __cplusplus
 }

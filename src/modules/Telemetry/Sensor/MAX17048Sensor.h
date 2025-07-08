@@ -5,7 +5,7 @@
 
 #include "configuration.h"
 
-#if !MESHTASTIC_EXCLUDE_I2C && !defined(ARCH_STM32WL) && __has_include(<Adafruit_MAX1704X.h>)
+#if !MESHTASTIC_EXCLUDE_I2C && __has_include(<Adafruit_MAX1704X.h>)
 
 // Samples to store in a buffer to determine if the battery is charging or discharging
 #define MAX17048_CHARGING_SAMPLES 3

@@ -131,3 +131,33 @@ for lb in env.GetLibBuilders():
     if lb.name == "meshtastic-device-ui":
         lb.env.Append(CPPDEFINES=[("APP_VERSION", verObj["long"])])
         break
+
+# Get the display resolution from macros
+def get_display_resolution(build_flags):
+    # Check "DISPLAY_SIZE" to determine the screen resolution
+    for flag in build_flags:
+        if isinstance(flag, tuple) and flag[0] == "DISPLAY_SIZE":
+            screen_width, screen_height = map(int, flag[1].split("x"))
+            return screen_width, screen_height
+    print("No screen resolution defined in build_flags. Please define DISPLAY_SIZE.")
+    exit(1)
+
+def load_boot_logo(source, target, env):
+    build_flags = env.get("CPPDEFINES", [])
+    logo_w, logo_h = get_display_resolution(build_flags)
+    print(f"TFT build with {logo_w}x{logo_h} resolution detected")
+
+    # Load the boot logo from `branding/logo_<width>x<height>.png` if it exists
+    source_path = join(env["PROJECT_DIR"], "branding", f"logo_{logo_w}x{logo_h}.png")
+    dest_dir = join(env["PROJECT_DIR"], "data", "boot")
+    dest_path = join(dest_dir, "logo.png")
+    if env.File(source_path).exists():
+        print(f"Loading boot logo from {source_path}")
+        # Prepare the destination
+        env.Execute(f"mkdir -p {dest_dir} && rm -f {dest_path}")
+        # Copy the logo to the `data/boot` directory
+        env.Execute(f"cp {source_path} {dest_path}")
+
+# Load the boot logo on TFT builds
+if ("HAS_TFT", 1) in env.get("CPPDEFINES", []):
+    env.AddPreAction('$BUILD_DIR/littlefs.bin', load_boot_logo)
