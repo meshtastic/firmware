@@ -101,6 +101,7 @@ bool SEN5XSensor::sendCommand(uint16_t command, uint8_t* buffer, uint8_t byteNum
     }
 
     // Transmit the data
+    LOG_INFO("Beginning connection to SEN5X: 0x%x", address);
     bus->beginTransmission(address);
     size_t writtenBytes = bus->write(toSend, bufferSize);
     uint8_t i2c_error = bus->endTransmission();
@@ -164,17 +165,33 @@ uint8_t SEN5XSensor::CRC(uint8_t* buffer)
     return crc;
 }
 
+bool SEN5XSensor::I2Cdetect(TwoWire *_Wire, uint8_t address)
+{
+    _Wire->beginTransmission(address);
+    byte error = _Wire->endTransmission();
+
+    if (error == 0) return true;
+    else return false;
+}
+
 int32_t SEN5XSensor::runOnce()
 {
+    state = SEN5X_NOT_DETECTED;
     LOG_INFO("Init sensor: %s", sensorName);
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
 
     bus = nodeTelemetrySensorsMap[sensorType].second;
+    address = (uint8_t)nodeTelemetrySensorsMap[sensorType].first;
     // sen5x.begin(*bus);
 
-    delay(50); // without this there is an error on the deviceReset function
+    if (!I2Cdetect(bus, address)) {
+        LOG_INFO("SEN5X ERROR no device found on adress");
+        return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
+    }
+
+    delay(25);
 
     if (!sendCommand(SEN5X_RESET)) {
         LOG_ERROR("SEN5X: Error reseting device");
