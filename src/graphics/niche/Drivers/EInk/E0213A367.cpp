@@ -79,8 +79,6 @@ void E0213A367::detachFromUpdate()
     default:
         return beginPolling(100, 1500); // At least 1.5 seconds for full refresh
     }
-
-    deepSleep();
 }
 
 #endif // MESHTASTIC_INCLUDE_NICHE_GRAPHICS
