@@ -13,6 +13,10 @@
 #include "main.h"
 #include "modules/AdminModule.h"
 #include "modules/CannedMessageModule.h"
+#include "modules/TraceRouteModule.h"
+#include "mesh/generated/meshtastic/mesh.pb.h"
+#include "Router.h"
+#include <pb_encode.h>
 
 extern uint16_t TFT_MESH;
 
@@ -422,13 +426,13 @@ void menuHandler::favoriteBaseMenu()
     static const char **optionsArrayPtr;
 
     if (kb_found) {
-        static const char *optionsArray[] = {"Back", "New Preset Msg", "New Freetext Msg", "Remove Favorite"};
+        static const char *optionsArray[] = {"Back", "Trace Route", "New Preset Msg", "New Freetext Msg", "Remove Favorite"};
+        optionsArrayPtr = optionsArray;
+        options = 5;
+    } else {
+        static const char *optionsArray[] = {"Back", "Trace Route", "New Preset Msg", "Remove Favorite"};
         optionsArrayPtr = optionsArray;
         options = 4;
-    } else {
-        static const char *optionsArray[] = {"Back", "New Preset Msg", "Remove Favorite"};
-        optionsArrayPtr = optionsArray;
-        options = 3;
     }
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Favorites Action";
@@ -436,10 +440,12 @@ void menuHandler::favoriteBaseMenu()
     bannerOptions.optionsCount = options;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 1) {
+            menuHandler::sendTraceRoute(graphics::UIRenderer::currentFavoriteNodeNum);
+        } else if (selected == 2) {
             cannedMessageModule->LaunchWithDestination(graphics::UIRenderer::currentFavoriteNodeNum);
-        } else if (selected == 2 && kb_found) {
+        } else if (selected == 3 && kb_found) {
             cannedMessageModule->LaunchFreetextWithDestination(graphics::UIRenderer::currentFavoriteNodeNum);
-        } else if ((!kb_found && selected == 2) || (selected == 3 && kb_found)) {
+        } else if ((!kb_found && selected == 3) || (selected == 4 && kb_found)) {
             menuHandler::menuQueue = menuHandler::remove_favorite;
             screen->runNow();
         }
@@ -937,6 +943,44 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     }
     menuQueue = menu_none;
+}
+
+void menuHandler::sendTraceRoute(NodeNum nodeNum)
+{
+    if (nodeNum == 0 || nodeNum == nodeDB->getNodeNum()) {
+        // Can't trace route to ourselves or invalid node
+        return;
+    }
+
+    // Create empty RouteDiscovery packet
+    meshtastic_RouteDiscovery routeDiscovery = meshtastic_RouteDiscovery_init_zero;
+    
+    // Allocate a packet directly from router
+    meshtastic_MeshPacket *p = router->allocForSending();
+    if (p) {
+        // Set destination and port
+        p->to = nodeNum;
+        p->decoded.portnum = meshtastic_PortNum_TRACEROUTE_APP;
+        p->decoded.want_response = true;
+        
+        // Manually encode the RouteDiscovery payload
+        p->decoded.payload.size = pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), 
+                                                    &meshtastic_RouteDiscovery_msg, &routeDiscovery);
+        
+        // Send to mesh
+        service->sendToMesh(p, RX_SRC_USER);
+        
+        LOG_INFO("Trace route packet sent to node: %08X", nodeNum);
+    }
+    
+    // Show confirmation message
+    if (screen) {
+        BannerOverlayOptions bannerOptions;
+        bannerOptions.message = "Trace Route Started";
+        bannerOptions.durationMs = 3000; // 3 seconds
+        bannerOptions.notificationType = graphics::notificationTypeEnum::text_banner;
+        screen->showOverlayBanner(bannerOptions);
+    }
 }
 
 } // namespace graphics

@@ -1,13 +1,32 @@
 #include "TraceRouteModule.h"
 #include "MeshService.h"
 #include "meshUtils.h"
+#include "NodeDB.h"
+#if HAS_SCREEN
+#include "graphics/Screen.h"
+#endif
 
 TraceRouteModule *traceRouteModule;
 
 bool TraceRouteModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_RouteDiscovery *r)
 {
-    // We only alter the packet in alterReceivedProtobuf()
-    return false; // let it be handled by RoutingModule
+    LOG_INFO("TraceRoute packet: request_id=%u, from=0x%x, to=0x%x, ourNode=0x%x", 
+             mp.decoded.request_id, mp.from, mp.to, nodeDB->getNodeNum());
+    
+    // Additional debug: check route arrays to understand packet direction
+    LOG_INFO("Route debug: route_count=%d, route_back_count=%d", r->route_count, r->route_back_count);
+    
+    if (mp.decoded.request_id && 
+        mp.from != nodeDB->getNodeNum() && 
+        mp.to == nodeDB->getNodeNum()) {
+        
+        LOG_INFO("Displaying trace route result - this is a response to our request");
+        displayTraceRouteResult(&mp, r);
+    } else {
+        LOG_INFO("NOT displaying trace route - this is not a response to our request");
+    }
+    
+    return false; 
 }
 
 void TraceRouteModule::alterReceivedProtobuf(meshtastic_MeshPacket &p, meshtastic_RouteDiscovery *r)
@@ -177,4 +196,130 @@ TraceRouteModule::TraceRouteModule()
 {
     ourPortNum = meshtastic_PortNum_TRACEROUTE_APP;
     isPromiscuous = true; // We need to update the route even if it is not destined to us
+}
+
+void TraceRouteModule::displayTraceRouteResult(const meshtastic_MeshPacket *mp, meshtastic_RouteDiscovery *r)
+{
+#if HAS_SCREEN
+    LOG_INFO("SNR Debug - snr_towards_count: %d, snr_back_count: %d", r->snr_towards_count, r->snr_back_count);
+
+    String routeText = "";
+    
+    // Get node names for origin and destination
+    auto getNodeName = [](NodeNum nodeNum) -> String {
+        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeNum);
+        if (node && node->has_user && strlen(node->user.short_name) > 0) {
+            return String(node->user.short_name);
+        } else if (node && node->has_user && strlen(node->user.long_name) > 0) {
+            return String(node->user.long_name);
+        } else {
+            char hex[16];
+            snprintf(hex, sizeof(hex), "!%08x", nodeNum);
+            return String(hex);
+        }
+    };
+    
+    // Forward route: OUR_NODE -> ... -> DESTINATION
+    // mp->from is the destination (response sender)
+    NodeNum destination = mp->from;
+    NodeNum origin = nodeDB->getNodeNum();
+    
+    routeText += getNodeName(origin);
+    
+    // For direct connection (no intermediate hops in route array)
+    if (r->route_count == 0) {
+        routeText += " > ";
+        routeText += getNodeName(destination);
+        
+        // For direct connection, the first SNR in snr_towards should be the forward SNR
+        if (r->snr_towards_count > 0 && r->snr_towards[0] != INT8_MIN) {
+            routeText += "(";
+            routeText += String((float)r->snr_towards[0] / 4.0, 1);
+            routeText += "dB)";
+        }
+    } else {
+        // Add intermediate hops from the route array with SNR
+        for (uint8_t i = 0; i < r->route_count; i++) {
+            routeText += " > ";
+            routeText += getNodeName(r->route[i]);
+            // Add SNR if available
+            if (i < r->snr_towards_count && r->snr_towards[i] != INT8_MIN) {
+                routeText += "(";
+                routeText += String((float)r->snr_towards[i] / 4.0, 1);
+                routeText += "dB)";
+            }
+        }
+        
+        // Add final destination with SNR
+        routeText += " > ";
+        routeText += getNodeName(destination);
+        // Add final hop SNR
+        if (r->snr_towards_count > 0 && r->snr_towards[r->snr_towards_count - 1] != INT8_MIN) {
+            routeText += "(";
+            routeText += String((float)r->snr_towards[r->snr_towards_count - 1] / 4.0, 1);
+            routeText += "dB)";
+        }
+    }
+    
+    // Add return route if available
+    if (r->route_back_count > 0 || r->snr_back_count > 0 || r->route_count == 0) {
+        routeText += "\n";
+        routeText += getNodeName(destination);
+        
+        // For direct connection return
+        if (r->route_back_count == 0) {
+            routeText += " > ";
+            routeText += getNodeName(origin);
+            
+            // For direct connection, try multiple sources for return SNR
+            if (r->snr_back_count > 0 && r->snr_back[0] != INT8_MIN) {
+                routeText += "(";
+                routeText += String((float)r->snr_back[0] / 4.0, 1);
+                routeText += "dB)";
+            } else if (mp->rx_snr != 0) {
+                // Fallback to packet rx_snr if no snr_back data
+                routeText += "(";
+                routeText += String(mp->rx_snr, 1);
+                routeText += "dB)";
+            } else if (r->snr_back_count > 0 && r->snr_back[r->snr_back_count - 1] != INT8_MIN) {
+                // Try last SNR in snr_back array
+                routeText += "(";
+                routeText += String((float)r->snr_back[r->snr_back_count - 1] / 4.0, 1);
+                routeText += "dB)";
+            }
+        } else {
+            // Add intermediate return hops with SNR
+            for (uint8_t i = 0; i < r->route_back_count; i++) {
+                routeText += " > ";
+                routeText += getNodeName(r->route_back[i]);
+                // Add SNR if available
+                if (i < r->snr_back_count && r->snr_back[i] != INT8_MIN) {
+                    routeText += "(";
+                    routeText += String((float)r->snr_back[i] / 4.0, 1);
+                    routeText += "dB)";
+                }
+            }
+            
+            // Add final hop back to our node with SNR
+            routeText += " > ";
+            routeText += getNodeName(origin);
+            // The return SNR should be at the last index of snr_back array
+            if (r->snr_back_count > 0 && r->snr_back[r->snr_back_count - 1] != INT8_MIN) {
+                routeText += "(";
+                routeText += String((float)r->snr_back[r->snr_back_count - 1] / 4.0, 1);
+                routeText += "dB)";
+            }
+        }
+    }
+
+    LOG_INFO("Trace route result: %s", routeText.c_str());
+
+    if (screen) {
+        graphics::BannerOverlayOptions bannerOptions;
+        bannerOptions.message = routeText.c_str();
+        bannerOptions.durationMs = 5000; // Show for 8 seconds (longer for more complex routes)
+        bannerOptions.notificationType = graphics::notificationTypeEnum::text_banner;
+        screen->showOverlayBanner(bannerOptions);
+    }
+#endif
 }

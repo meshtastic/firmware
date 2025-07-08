@@ -31,6 +31,9 @@ class TraceRouteModule : public ProtobufModule<meshtastic_RouteDiscovery>
        Set origin to where the request came from.
        Set dest to the ID of its destination, or NODENUM_BROADCAST if it has not yet arrived there. */
     void printRoute(meshtastic_RouteDiscovery *r, uint32_t origin, uint32_t dest, bool isTowardsDestination);
+    
+    // Display trace route result on screen
+    void displayTraceRouteResult(const meshtastic_MeshPacket *mp, meshtastic_RouteDiscovery *r);
 };
 
 extern TraceRouteModule *traceRouteModule;
