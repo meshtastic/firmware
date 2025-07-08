@@ -42,7 +42,7 @@ uint32_t NotificationRenderer::currentNumber = 0;
 uint32_t pow_of_10(uint32_t n)
 {
     uint32_t ret = 1;
-    for (int i = 0; i < n; i++) {
+    for (uint32_t i = 0; i < n; i++) {
         ret *= 10;
     }
     return ret;
@@ -82,6 +82,9 @@ void NotificationRenderer::drawBannercallback(OLEDDisplay *display, OLEDDisplayU
     if (!isOverlayBannerShowing() || pauseBanner)
         return;
     switch (current_notification_type) {
+    case notificationTypeEnum::none:
+        // Do nothing - no notification to display
+        break;
     case notificationTypeEnum::text_banner:
     case notificationTypeEnum::selection_picker:
         drawAlertBannerOverlay(display, state);
@@ -153,12 +156,12 @@ void NotificationRenderer::drawNumberPicker(OLEDDisplay *display, OLEDDisplayUiS
     const char *linePointers[totalLines + 1] = {0}; // this is sort of a dynamic allocation
 
     // copy the linestarts to display to the linePointers holder
-    for (int i = 0; i < lineCount; i++) {
+    for (uint16_t i = 0; i < lineCount; i++) {
         linePointers[i] = lineStarts[i];
     }
     std::string digits = " ";
     std::string arrowPointer = " ";
-    for (int i = 0; i < numDigits; i++) {
+    for (uint16_t i = 0; i < numDigits; i++) {
         // Modulo minus modulo to return just the current number
         digits += std::to_string((currentNumber % (pow_of_10(numDigits - i))) / (pow_of_10(numDigits - i - 1))) + " ";
         if (curSelected == i) {
