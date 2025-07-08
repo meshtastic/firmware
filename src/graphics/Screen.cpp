@@ -294,13 +294,13 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
     LOG_INFO("Protobuf Value uiconfig.screen_rgb_color: %d", uiconfig.screen_rgb_color);
     int32_t rawRGB = uiconfig.screen_rgb_color;
     if (rawRGB > 0 && rawRGB <= 255255255) {
-        uint8_t r = (rawRGB >> 16) & 0xFF;
-        uint8_t g = (rawRGB >> 8) & 0xFF;
-        uint8_t b = rawRGB & 0xFF;
-        LOG_INFO("Values of r,g,b: %d, %d, %d", r, g, b);
+        uint8_t TFT_MESH_r = (rawRGB >> 16) & 0xFF;
+        uint8_t TFT_MESH_g = (rawRGB >> 8) & 0xFF;
+        uint8_t TFT_MESH_b = rawRGB & 0xFF;
+        LOG_INFO("Values of r,g,b: %d, %d, %d", TFT_MESH_r, TFT_MESH_g, TFT_MESH_b);
 
-        if (r <= 255 && g <= 255 && b <= 255) {
-            TFT_MESH = COLOR565(r, g, b);
+        if (TFT_MESH_r <= 255 && TFT_MESH_g <= 255 && TFT_MESH_b <= 255) {
+            TFT_MESH = COLOR565(TFT_MESH_r, TFT_MESH_g, TFT_MESH_b);
         }
     }
 
@@ -313,8 +313,8 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
                             ST7789_MISO, ST7789_SCK);
 #else
     dispdev = new ST7789Spi(&SPI1, ST7789_RESET, ST7789_RS, ST7789_NSS, GEOMETRY_RAWMODE, TFT_WIDTH, TFT_HEIGHT);
-    static_cast<ST7789Spi *>(dispdev)->setRGB(TFT_MESH);
 #endif
+    static_cast<ST7789Spi *>(dispdev)->setRGB(TFT_MESH);
 #elif defined(USE_SSD1306)
     dispdev = new SSD1306Wire(address.address, -1, -1, geometry,
                               (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
