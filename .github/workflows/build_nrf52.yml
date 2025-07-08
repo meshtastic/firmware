@@ -15,24 +15,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Get release version string
-        shell: bash
-        run: echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
-        id: version
-
       - name: Build NRF52
         id: build
-        uses: meshtastic/gh-action-firmware@main
+        uses: ./.github/actions/build-variant
         with:
-          pio_platform: nrf52
-          pio_env: ${{ inputs.board }}
-          pio_target: build
-
-      - name: Store binaries as an artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: firmware-nrf52840-${{ inputs.board }}-${{ steps.version.outputs.long }}.zip
-          overwrite: true
-          path: |
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          board: ${{ inputs.board }}
+          build-script-path: bin/build-nrf52.sh
+          artifact-paths: |
+            release/*.hex
             release/*.uf2
             release/*.elf
+            release/*.zip
+          arch: nrf52840
