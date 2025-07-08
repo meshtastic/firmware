@@ -26,7 +26,8 @@ class menuHandler
         test_menu,
         number_test,
         wifi_toggle_menu,
-        screen_wakeup_menu
+        screen_wakeup_menu,
+        bluetooth_toggle_menu
     };
     static screenMenus menuQueue;
 
@@ -60,6 +61,7 @@ class menuHandler
     
   private:
     static void saveUIConfig();
+    static void BluetoothToggleMenu();
 };
 
 } // namespace graphics

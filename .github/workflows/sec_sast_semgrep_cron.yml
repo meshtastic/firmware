@@ -13,6 +13,7 @@ permissions:
 
 jobs:
   semgrep-full:
+    if: github.repository == 'meshtastic/firmware'
     runs-on: ubuntu-24.04
     container:
       image: semgrep/semgrep
