@@ -5,10 +5,26 @@
 #include "detect/ScanI2C.h"
 #include "mesh/generated/meshtastic/config.pb.h"
 #include <OLEDDisplay.h>
+#include <functional>
 #include <string>
 #include <vector>
 
 #define getStringCenteredX(s) ((SCREEN_WIDTH - display->getStringWidth(s)) / 2)
+namespace graphics
+{
+enum notificationTypeEnum { none, text_banner, selection_picker, node_picker, number_picker };
+
+struct BannerOverlayOptions {
+    const char *message;
+    uint32_t durationMs = 30000;
+    const char **optionsArrayPtr = nullptr;
+    const int *optionsEnumPtr = nullptr;
+    uint8_t optionsCount = 0;
+    std::function<void(int)> bannerCallback = nullptr;
+    int8_t InitialSelected = 0;
+    notificationTypeEnum notificationType = notificationTypeEnum::text_banner;
+};
+} // namespace graphics
 
 #if !HAS_SCREEN
 #include "power.h"
@@ -25,6 +41,7 @@ class Screen
         FOCUS_TEXTMESSAGE,
         FOCUS_MODULE, // Note: target module should call requestFocus(), otherwise no info about which module to focus
         FOCUS_CLOCK,
+        FOCUS_SYSTEM,
     };
 
     explicit Screen(ScanI2C::DeviceAddress, meshtastic_Config_DisplayConfig_OledType, OLEDDISPLAY_GEOMETRY);
@@ -39,10 +56,8 @@ class Screen
     void setFunctionSymbol(std::string) {}
     void removeFunctionSymbol(std::string) {}
     void startAlert(const char *) {}
-    void showOverlayBanner(const char *message, uint32_t durationMs = 3000, const char **optionsArrayPtr = nullptr,
-                           uint8_t options = 0, std::function<void(int)> bannerCallback = NULL, int8_t InitialSelected = 0)
-    {
-    }
+    void showSimpleBanner(const char *message, uint32_t durationMs = 0) {}
+    void showOverlayBanner(BannerOverlayOptions) {}
     void setFrames(FrameFocus focus) {}
     void endAlert() {}
 };
@@ -201,6 +216,7 @@ class Screen : public concurrency::OSThread
         CallbackObserver<Screen, AdminModule_ObserverData *>(this, &Screen::handleAdminMessage);
 
   public:
+    OLEDDisplay *getDisplayDevice() { return dispdev; }
     explicit Screen(ScanI2C::DeviceAddress, meshtastic_Config_DisplayConfig_OledType, OLEDDISPLAY_GEOMETRY);
     size_t frameCount = 0; // Total number of active frames
     ~Screen();
@@ -213,6 +229,7 @@ class Screen : public concurrency::OSThread
         FOCUS_TEXTMESSAGE,
         FOCUS_MODULE, // Note: target module should call requestFocus(), otherwise no info about which module to focus
         FOCUS_CLOCK,
+        FOCUS_SYSTEM,
     };
 
     // Regenerate the normal set of frames, focusing a specific frame if requested
@@ -226,8 +243,6 @@ class Screen : public concurrency::OSThread
     ScanI2C::DeviceAddress address_found;
     meshtastic_Config_DisplayConfig_OledType model;
     OLEDDISPLAY_GEOMETRY geometry;
-
-    bool ignoreCompass = false;
 
     bool isOverlayBannerShowing();
 
@@ -292,8 +307,11 @@ class Screen : public concurrency::OSThread
         enqueueCmd(cmd);
     }
 
-    void showOverlayBanner(const char *message, uint32_t durationMs = 3000, const char **optionsArrayPtr = nullptr,
-                           uint8_t options = 0, std::function<void(int)> bannerCallback = NULL, int8_t InitialSelected = 0);
+    void showSimpleBanner(const char *message, uint32_t durationMs = 0);
+    void showOverlayBanner(BannerOverlayOptions);
+
+    void showNodePicker(const char *message, uint32_t durationMs, std::function<void(int)> bannerCallback);
+    void showNumberPicker(const char *message, uint32_t durationMs, uint8_t digits, std::function<void(uint32_t)> bannerCallback);
 
     void startFirmwareUpdateScreen()
     {
@@ -326,6 +344,12 @@ class Screen : public concurrency::OSThread
 
     /// Stops showing the boot screen.
     void stopBootScreen() { enqueueCmd(ScreenCmd{.cmd = Cmd::STOP_BOOT_SCREEN}); }
+
+    void runNow()
+    {
+        setFastFramerate();
+        enqueueCmd(ScreenCmd{.cmd = Cmd::NOOP});
+    }
 
     /// Overrides the default utf8 character conversion, to replace empty space with question marks
     static char customFontTableLookup(const uint8_t ch)

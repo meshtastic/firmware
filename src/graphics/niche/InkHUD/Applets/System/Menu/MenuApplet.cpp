@@ -667,11 +667,11 @@ void InkHUD::MenuApplet::drawSystemInfoPanel(int16_t left, int16_t top, uint16_t
     // ====================
     std::string clockString = getTimeString();
     if (clockString.length() > 0) {
-        setFont(fontLarge);
+        setFont(fontMedium);
         printAt(width / 2, top, clockString, CENTER, TOP);
 
-        height += fontLarge.lineHeight();
-        height += fontLarge.lineHeight() * 0.1; // Padding below clock
+        height += fontMedium.lineHeight();
+        height += fontMedium.lineHeight() * 0.1; // Padding below clock
     }
 
     // Stats

@@ -642,6 +642,11 @@ bool loadConfig(const char *configPath)
             settingsMap[tbLeftPin] = yamlConfig["Input"]["TrackballLeft"].as<int>(RADIOLIB_NC);
             settingsMap[tbRightPin] = yamlConfig["Input"]["TrackballRight"].as<int>(RADIOLIB_NC);
             settingsMap[tbPressPin] = yamlConfig["Input"]["TrackballPress"].as<int>(RADIOLIB_NC);
+            if (yamlConfig["Input"]["TrackballDirection"].as<std::string>("RISING") == "RISING") {
+                settingsMap[tbDirection] = 4;
+            } else if (yamlConfig["Input"]["TrackballDirection"].as<std::string>("RISING") == "FALLING") {
+                settingsMap[tbDirection] = 3;
+            }
         }
 
         if (yamlConfig["Webserver"]) {

@@ -22,13 +22,22 @@ enum RTCQuality {
     RTCQualityGPS = 4
 };
 
+/// The RTC set result codes
+/// Used to indicate the result of an attempt to set the RTC.
+enum RTCSetResult {
+    RTCSetResultNotSet = 0,      ///< RTC was set successfully
+    RTCSetResultSuccess = 1,     ///< RTC was set successfully
+    RTCSetResultInvalidTime = 3, ///< The provided time was invalid (e.g., before the build epoch)
+    RTCSetResultError = 4        ///< An error occurred while setting the RTC
+};
+
 RTCQuality getRTCQuality();
 
 extern uint32_t lastSetFromPhoneNtpOrGps;
 
 /// If we haven't yet set our RTC this boot, set it from a GPS derived time
-bool perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpdate = false);
-bool perhapsSetRTC(RTCQuality q, struct tm &t);
+RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpdate = false);
+RTCSetResult perhapsSetRTC(RTCQuality q, struct tm &t);
 
 /// Return a string name for the quality
 const char *RtcName(RTCQuality quality);
