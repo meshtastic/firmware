@@ -539,12 +539,12 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
             case ICM20948_ADDR_ALT: // same as MPU6050_ADDR
                 // ICM20948 Register check
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 1);
-                prod = readSEN5xProductName(i2cBus, addr.address);
                 if (registerValue == 0xEA) {
                     type = ICM20948;
                     logFoundDevice("ICM20948", (uint8_t)addr.address);
                     break;
                 } else {
+                    prod = readSEN5xProductName(i2cBus, addr.address);
                     if (prod.startsWith("SEN55")) {
                         type = SEN5X;
                         logFoundDevice("Sensirion SEN55", addr.address);
