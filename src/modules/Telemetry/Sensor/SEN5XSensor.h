@@ -49,6 +49,7 @@ class SEN5XSensor : public TelemetrySensor
     bool sendCommand(uint16_t wichCommand, uint8_t* buffer, uint8_t byteNumber=0);
     uint8_t readBuffer(uint8_t* buffer, uint8_t byteNumber); // Return number of bytes received
     uint8_t CRC(uint8_t* buffer);
+    bool I2Cdetect(TwoWire *_Wire, uint8_t address);
 
   protected:
     virtual void setup() override;
