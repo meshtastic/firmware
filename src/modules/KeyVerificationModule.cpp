@@ -84,14 +84,14 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
             memset(message, 0, sizeof(message));
             sprintf(message, "Verification: \n");
             generateVerificationCode(message + 15);
-            static const char *optionsArray[] = {"ACCEPT", "REJECT"};
+            static const char *optionsArray[] = {"Reject", "Accept"};
             LOG_INFO("Hash1 matches!");
             IF_SCREEN(graphics::BannerOverlayOptions options; options.message = message; options.durationMs = 30000;
                       options.optionsArrayPtr = optionsArray; options.optionsCount = 2;
                       options.notificationType = graphics::notificationTypeEnum::selection_picker;
                       options.bannerCallback =
                           [=](int selected) {
-                              if (selected == 0) {
+                              if (selected == 1) {
                                   auto remoteNodePtr = nodeDB->getMeshNode(currentRemoteNode);
                                   remoteNodePtr->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
                               }

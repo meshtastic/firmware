@@ -890,7 +890,7 @@ void menuHandler::keyVerificationFinalPrompt()
     keyVerificationModule->generateVerificationCode(message + 15); // send the toPhone packet
 
     if (screen) {
-        static const char *optionsArray[] = {"REJECT", "ACCEPT"};
+        static const char *optionsArray[] = {"Reject", "Accept"};
         graphics::BannerOverlayOptions options;
         options.message = message;
         options.durationMs = 30000;
