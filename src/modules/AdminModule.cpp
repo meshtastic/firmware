@@ -630,6 +630,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
 #if USERPREFS_EVENT_MODE
         // If we're in event mode, nobody is a Router or Repeater
         if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
+            config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE ||
             config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
             config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
         }
@@ -1190,7 +1191,7 @@ void AdminModule::reboot(int32_t seconds)
 {
     LOG_INFO("Reboot in %d seconds", seconds);
     if (screen)
-        screen->showOverlayBanner("Rebooting...", 0); // stays on screen
+        screen->showSimpleBanner("Rebooting...", 0); // stays on screen
     rebootAtMsec = (seconds < 0) ? 0 : (millis() + seconds * 1000);
 }
 

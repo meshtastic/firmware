@@ -69,6 +69,8 @@ using graphics::Emote;
 using graphics::emotes;
 using graphics::numEmotes;
 
+extern uint16_t TFT_MESH;
+
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
@@ -135,10 +137,66 @@ extern bool hasUnreadMessage;
 // Displays a temporary centered banner message (e.g., warning, status, etc.)
 // The banner appears in the center of the screen and disappears after the specified duration
 
-// Called to trigger a banner with custom message and duration
-void Screen::showOverlayBanner(const char *message, uint32_t durationMs, const char **optionsArrayPtr, uint8_t options,
-                               std::function<void(int)> bannerCallback, int8_t InitialSelected)
+void Screen::showSimpleBanner(const char *message, uint32_t durationMs)
 {
+    BannerOverlayOptions options;
+    options.message = message;
+    options.durationMs = durationMs;
+    options.notificationType = notificationTypeEnum::text_banner;
+    showOverlayBanner(options);
+}
+
+// Called to trigger a banner with custom message and duration
+void Screen::showOverlayBanner(BannerOverlayOptions banner_overlay_options)
+{
+#ifdef USE_EINK
+    EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Skip full refresh for all overlay menus
+#endif
+    // Store the message and set the expiration timestamp
+    strncpy(NotificationRenderer::alertBannerMessage, banner_overlay_options.message, 255);
+    NotificationRenderer::alertBannerMessage[255] = '\0'; // Ensure null termination
+    NotificationRenderer::alertBannerUntil =
+        (banner_overlay_options.durationMs == 0) ? 0 : millis() + banner_overlay_options.durationMs;
+    NotificationRenderer::optionsArrayPtr = banner_overlay_options.optionsArrayPtr;
+    NotificationRenderer::optionsEnumPtr = banner_overlay_options.optionsEnumPtr;
+    NotificationRenderer::alertBannerOptions = banner_overlay_options.optionsCount;
+    NotificationRenderer::alertBannerCallback = banner_overlay_options.bannerCallback;
+    NotificationRenderer::curSelected = banner_overlay_options.InitialSelected;
+    NotificationRenderer::pauseBanner = false;
+    NotificationRenderer::current_notification_type = notificationTypeEnum::selection_picker;
+    static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
+    ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
+    ui->setTargetFPS(60);
+    ui->update();
+}
+
+// Called to trigger a banner with custom message and duration
+void Screen::showNodePicker(const char *message, uint32_t durationMs, std::function<void(int)> bannerCallback)
+{
+#ifdef USE_EINK
+    EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Skip full refresh for all overlay menus
+#endif
+    nodeDB->pause_sort(true);
+    // Store the message and set the expiration timestamp
+    strncpy(NotificationRenderer::alertBannerMessage, message, 255);
+    NotificationRenderer::alertBannerMessage[255] = '\0'; // Ensure null termination
+    NotificationRenderer::alertBannerUntil = (durationMs == 0) ? 0 : millis() + durationMs;
+    NotificationRenderer::alertBannerCallback = bannerCallback;
+    NotificationRenderer::pauseBanner = false;
+    NotificationRenderer::curSelected = 0;
+    NotificationRenderer::current_notification_type = notificationTypeEnum::node_picker;
+
+    static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
+    ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
+    ui->setTargetFPS(60);
+    ui->update();
+}
+
+// Called to trigger a banner with custom message and duration
+void Screen::showNumberPicker(const char *message, uint32_t durationMs, uint8_t digits,
+                              std::function<void(uint32_t)> bannerCallback)
+{
+    LOG_WARN("Show Number Picker");
 #ifdef USE_EINK
     EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Skip full refresh for all overlay menus
 #endif
@@ -146,14 +204,16 @@ void Screen::showOverlayBanner(const char *message, uint32_t durationMs, const c
     strncpy(NotificationRenderer::alertBannerMessage, message, 255);
     NotificationRenderer::alertBannerMessage[255] = '\0'; // Ensure null termination
     NotificationRenderer::alertBannerUntil = (durationMs == 0) ? 0 : millis() + durationMs;
-    NotificationRenderer::optionsArrayPtr = optionsArrayPtr;
-    NotificationRenderer::alertBannerOptions = options;
     NotificationRenderer::alertBannerCallback = bannerCallback;
-    NotificationRenderer::curSelected = InitialSelected;
     NotificationRenderer::pauseBanner = false;
-    static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawAlertBannerOverlay};
+    NotificationRenderer::curSelected = 0;
+    NotificationRenderer::current_notification_type = notificationTypeEnum::number_picker;
+    NotificationRenderer::numDigits = digits;
+    NotificationRenderer::currentNumber = 0;
+
+    static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
     ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
-    setFastFramerate(); // Draw ASAP
+    ui->setTargetFPS(60);
     ui->update();
 }
 
@@ -230,6 +290,20 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
     : concurrency::OSThread("Screen"), address_found(address), model(screenType), geometry(geometry), cmdQueue(32)
 {
     graphics::normalFrames = new FrameCallback[MAX_NUM_NODES + NUM_EXTRA_FRAMES];
+
+    LOG_INFO("Protobuf Value uiconfig.screen_rgb_color: %d", uiconfig.screen_rgb_color);
+    int32_t rawRGB = uiconfig.screen_rgb_color;
+    if (rawRGB > 0 && rawRGB <= 255255255) {
+        uint8_t TFT_MESH_r = (rawRGB >> 16) & 0xFF;
+        uint8_t TFT_MESH_g = (rawRGB >> 8) & 0xFF;
+        uint8_t TFT_MESH_b = rawRGB & 0xFF;
+        LOG_INFO("Values of r,g,b: %d, %d, %d", TFT_MESH_r, TFT_MESH_g, TFT_MESH_b);
+
+        if (TFT_MESH_r <= 255 && TFT_MESH_g <= 255 && TFT_MESH_b <= 255) {
+            TFT_MESH = COLOR565(TFT_MESH_r, TFT_MESH_g, TFT_MESH_b);
+        }
+    }
+
 #if defined(USE_SH1106) || defined(USE_SH1107) || defined(USE_SH1107_128_64)
     dispdev = new SH1106Wire(address.address, -1, -1, geometry,
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
@@ -239,8 +313,8 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
                             ST7789_MISO, ST7789_SCK);
 #else
     dispdev = new ST7789Spi(&SPI1, ST7789_RESET, ST7789_RS, ST7789_NSS, GEOMETRY_RAWMODE, TFT_WIDTH, TFT_HEIGHT);
-    static_cast<ST7789Spi *>(dispdev)->setRGB(COLOR565(255, 255, 128));
 #endif
+    static_cast<ST7789Spi *>(dispdev)->setRGB(TFT_MESH);
 #elif defined(USE_SSD1306)
     dispdev = new SSD1306Wire(address.address, -1, -1, geometry,
                               (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
@@ -386,8 +460,21 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 
 void Screen::setup()
 {
+
     // === Enable display rendering ===
     useDisplay = true;
+
+    // === Load saved brightness from UI config ===
+    // For OLED displays (SSD1306), default brightness is 255 if not set
+    if (uiconfig.screen_brightness == 0) {
+#if defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) || defined(USE_SH1107)
+        brightness = 255; // Default for OLED
+#else
+        brightness = BRIGHTNESS_DEFAULT;
+#endif
+    } else {
+        brightness = uiconfig.screen_brightness;
+    }
 
     // === Detect OLED subtype (if supported by board variant) ===
 #ifdef AutoOLEDWire_h
@@ -415,6 +502,14 @@ void Screen::setup()
     ui->setFrameAnimation(SLIDE_LEFT);     // Used only when indicators are active
     ui->disableAllIndicators();            // Disable page indicator dots
     ui->getUiState()->userData = this;     // Allow static callbacks to access Screen instance
+
+    // === Apply loaded brightness ===
+#if defined(ST7789_CS)
+    static_cast<TFTDisplay *>(dispdev)->setDisplayBrightness(brightness);
+#elif defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) || defined(USE_SH1107)
+    dispdev->setBrightness(brightness);
+#endif
+    LOG_INFO("Applied screen brightness: %d", brightness);
 
     // === Set custom overlay callbacks ===
     static OverlayCallback overlays[] = {
@@ -562,7 +657,7 @@ int32_t Screen::runOnce()
     if (displayHeight == 0) {
         displayHeight = dispdev->getHeight();
     }
-    menuHandler::handleMenuSwitch();
+    menuHandler::handleMenuSwitch(dispdev);
 
     // Show boot screen for first logo_timeout seconds, then switch to normal operation.
     // serialSinceMsec adjusts for additional serial wait time during nRF52 bootup
@@ -595,7 +690,7 @@ int32_t Screen::runOnce()
     }
 #endif
     if (!NotificationRenderer::isOverlayBannerShowing() && rebootAtMsec != 0) {
-        showOverlayBanner("Rebooting...", 0);
+        showSimpleBanner("Rebooting...", 0);
     }
 
     // Process incoming commands.
@@ -641,6 +736,8 @@ int32_t Screen::runOnce()
         case Cmd::STOP_BOOT_SCREEN:
             EINK_ADD_FRAMEFLAG(dispdev, COSMETIC); // E-Ink: Explicitly use full-refresh for next frame
             setFrames();
+            break;
+        case Cmd::NOOP:
             break;
         default:
             LOG_ERROR("Invalid screen cmd");
@@ -785,8 +882,8 @@ void Screen::setFrames(FrameFocus focus)
 
 #if defined(DISPLAY_CLOCK_FRAME)
     fsi.positions.clock = numframes;
-    normalFrames[numframes++] = graphics::ClockRenderer::digitalWatchFace ? graphics::ClockRenderer::drawDigitalClockFrame
-                                                                          : &graphics::ClockRenderer::drawAnalogClockFrame;
+    normalFrames[numframes++] = uiconfig.is_clockface_analog ? graphics::ClockRenderer::drawAnalogClockFrame
+                                                             : graphics::ClockRenderer::drawDigitalClockFrame;
     indicatorIcons.push_back(digital_icon_clock);
 #endif
 
@@ -842,26 +939,10 @@ void Screen::setFrames(FrameFocus focus)
     }
 #if !defined(DISPLAY_CLOCK_FRAME)
     fsi.positions.clock = numframes;
-    normalFrames[numframes++] = graphics::ClockRenderer::digitalWatchFace ? graphics::ClockRenderer::drawDigitalClockFrame
-                                                                          : graphics::ClockRenderer::drawAnalogClockFrame;
+    normalFrames[numframes++] = uiconfig.is_clockface_analog ? graphics::ClockRenderer::drawAnalogClockFrame
+                                                             : graphics::ClockRenderer::drawDigitalClockFrame;
     indicatorIcons.push_back(digital_icon_clock);
 #endif
-
-    // We don't show the node info of our node (if we have it yet - we should)
-    size_t numMeshNodes = nodeDB->getNumMeshNodes();
-    if (numMeshNodes > 0)
-        numMeshNodes--;
-
-    for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
-        const meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(i);
-        if (n && n->num != nodeDB->getNodeNum() && n->is_favorite) {
-            if (fsi.positions.firstFavorite == 255)
-                fsi.positions.firstFavorite = numframes;
-            fsi.positions.lastFavorite = numframes;
-            normalFrames[numframes++] = graphics::UIRenderer::drawNodeInfo;
-            indicatorIcons.push_back(icon_node);
-        }
-    }
 
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
     if (!dismissedFrames.wifi && isWifiAvailable()) {
@@ -872,7 +953,7 @@ void Screen::setFrames(FrameFocus focus)
 #endif
 
     // Beware of what changes you make in this code!
-    // We pass numfames into GetMeshModulesWithUIFrames() which is highly important!
+    // We pass numframes into GetMeshModulesWithUIFrames() which is highly important!
     // Inside of that callback, goes over to MeshModule.cpp and we run
     // modulesWithUIFrames.resize(startIndex, nullptr), to insert nullptr
     // entries until we're ready to start building the matching entries.
@@ -901,6 +982,34 @@ void Screen::setFrames(FrameFocus focus)
 
     LOG_DEBUG("Added modules.  numframes: %d", numframes);
 
+    // We don't show the node info of our node (if we have it yet - we should)
+    size_t numMeshNodes = nodeDB->getNumMeshNodes();
+    if (numMeshNodes > 0)
+        numMeshNodes--;
+
+    // Temporary array to hold favorite node frames
+    std::vector<FrameCallback> favoriteFrames;
+
+    for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
+        const meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(i);
+        if (n && n->num != nodeDB->getNodeNum() && n->is_favorite) {
+            favoriteFrames.push_back(graphics::UIRenderer::drawNodeInfo);
+        }
+    }
+
+    // Insert favorite frames *after* collecting them all
+    if (!favoriteFrames.empty()) {
+        fsi.positions.firstFavorite = numframes;
+        for (auto &f : favoriteFrames) {
+            normalFrames[numframes++] = f;
+            indicatorIcons.push_back(icon_node);
+        }
+        fsi.positions.lastFavorite = numframes - 1;
+    } else {
+        fsi.positions.firstFavorite = 255;
+        fsi.positions.lastFavorite = 255;
+    }
+
     fsi.frameCount = numframes;   // Total framecount is used to apply FOCUS_PRESERVE
     this->frameCount = numframes; // ✅ Save frame count for use in custom overlay
     LOG_DEBUG("Finished build frames. numframes: %d", numframes);
@@ -909,11 +1018,10 @@ void Screen::setFrames(FrameFocus focus)
     ui->disableAllIndicators();
 
     // Add overlays: frame icons and alert banner)
-    static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawAlertBannerOverlay};
+    static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
     ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
 
-    prevFrame = -1; // Force drawNodeInfo to pick a new node (because our list
-                    // just changed)
+    prevFrame = -1; // Force drawNodeInfo to pick a new node (because our list just changed)
 
     // Focus on a specific frame, in the frame set we just created
     switch (focus) {
@@ -936,6 +1044,9 @@ void Screen::setFrames(FrameFocus focus)
         // Whichever frame was marked by MeshModule::requestFocus(), if any
         // If no module requested focus, will show the first frame instead
         ui->switchToFrame(fsi.positions.clock);
+        break;
+    case FOCUS_SYSTEM:
+        ui->switchToFrame(fsi.positions.memory);
         break;
 
     case FOCUS_PRESERVE:
@@ -1180,7 +1291,7 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
                 }
             }
 
-            screen->showOverlayBanner(banner, 3000);
+            screen->showSimpleBanner(banner, 3000);
         }
     }
 
@@ -1220,30 +1331,14 @@ int Screen::handleInputEvent(const InputEvent *event)
 #endif
     if (NotificationRenderer::isOverlayBannerShowing()) {
         NotificationRenderer::inEvent = event->inputEvent;
-        static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar,
-                                             NotificationRenderer::drawAlertBannerOverlay};
+        static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
         ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
         setFastFramerate(); // Draw ASAP
         ui->update();
 
-        menuHandler::handleMenuSwitch();
+        menuHandler::handleMenuSwitch(dispdev);
         return 0;
     }
-    /*
-    #if defined(DISPLAY_CLOCK_FRAME)
-        // For the T-Watch, intercept touches to the 'toggle digital/analog watch face' button
-        uint8_t watchFaceFrame = error_code ? 1 : 0;
-
-        if (this->ui->getUiState()->currentFrame == watchFaceFrame && event->touchX >= 204 && event->touchX <= 240 &&
-            event->touchY >= 204 && event->touchY <= 240) {
-            screen->digitalWatchFace = !screen->digitalWatchFace;
-
-            setFrames();
-
-            return 0;
-        }
-    #endif
-    */
 
     // Use left or right input from a keyboard to move between frames,
     // so long as a mesh module isn't using these events for some other purpose
@@ -1265,13 +1360,8 @@ int Screen::handleInputEvent(const InputEvent *event)
             } else if (event->inputEvent == INPUT_BROKER_SELECT) {
                 if (this->ui->getUiState()->currentFrame == framesetInfo.positions.home) {
                     menuHandler::homeBaseMenu();
-#if HAS_TFT
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.memory) {
-                    menuHandler::switchToMUIMenu();
-#else
-                } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.memory) {
-                    menuHandler::BuzzerModeMenu();
-#endif
+                    menuHandler::systemBaseMenu();
 #if HAS_GPS
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.gps && gps) {
                     menuHandler::positionBaseMenu();
@@ -1294,6 +1384,8 @@ int Screen::handleInputEvent(const InputEvent *event)
                            this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_hopsignal ||
                            this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_bearings) {
                     menuHandler::nodeListMenu();
+                } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.wifi) {
+                    menuHandler::wifiBaseMenu();
                 }
             } else if (event->inputEvent == INPUT_BROKER_BACK) {
                 showPrevFrame();
