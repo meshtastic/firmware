@@ -77,8 +77,10 @@ void E0213A367::detachFromUpdate()
         return beginPolling(50, 500); // At least 500ms for fast refresh
     case FULL:
     default:
-        return beginPolling(100, 2000); // At least 2 seconds for full refresh
+        return beginPolling(100, 1500); // At least 1.5 seconds for full refresh
     }
+
+    deepSleep();
 }
 
 #endif // MESHTASTIC_INCLUDE_NICHE_GRAPHICS

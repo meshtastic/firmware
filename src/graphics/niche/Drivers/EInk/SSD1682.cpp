@@ -38,4 +38,14 @@ void SSD1682::configFullscreen()
     sendData(sy);
 }
 
+// Enter a lower-power state
+// May only save a few µA
+// Not: this is *not* deep sleep mode 2
+// According to Heltec, SSD1682 only supports one deep sleep mode, requiring this exact sequence
+void SSD1682::deepSleep()
+{
+    sendCommand(0x10);
+    sendData(0x11);
+}
+
 #endif
