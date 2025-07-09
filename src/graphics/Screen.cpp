@@ -1271,7 +1271,6 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
 
             // Only wake/force display if the configuration allows it
             wake_on_received_message = shouldWakeOnReceivedMessage();
-            LOG_INFO("SCREEN.CPP wake_on_received_message is %s", (wake_on_received_message) ? "true" : "false");
             if (wake_on_received_message) {
                 setOn(true);    // Wake up the screen first
                 forceDisplay(); // Forces screen redraw
