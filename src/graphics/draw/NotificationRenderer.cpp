@@ -72,6 +72,18 @@ void NotificationRenderer::resetBanner()
 {
     alertBannerMessage[0] = '\0';
     current_notification_type = notificationTypeEnum::none;
+
+    inEvent.inputEvent = INPUT_BROKER_NONE;
+    inEvent.kbchar = 0;
+    curSelected = 0;
+    alertBannerOptions = 0; // last x lines are seelctable options
+    optionsArrayPtr = nullptr;
+    optionsEnumPtr = nullptr;
+    alertBannerCallback = NULL;
+    pauseBanner = false;
+    numDigits = 0;
+    currentNumber = 0;
+
     nodeDB->pause_sort(false);
 }
 
