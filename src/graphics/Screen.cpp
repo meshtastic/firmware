@@ -1258,11 +1258,11 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
             devicestate.has_rx_text_message = true; // Needed to include the message frame
             hasUnreadMessage = true;                // Enables mail icon in the header
             setFrames(FOCUS_PRESERVE);              // Refresh frame list without switching view
-            
+
             // Only wake/force display if the configuration allows it
             if (uiconfig.wake_on_received_message) {
-                setOn(true);                            // Wake up the screen first
-                forceDisplay();                         // Forces screen redraw
+                setOn(true);    // Wake up the screen first
+                forceDisplay(); // Forces screen redraw
 
                 // === Prepare banner content ===
                 const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(packet->from);
