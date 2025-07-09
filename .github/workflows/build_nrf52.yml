@@ -36,3 +36,5 @@ jobs:
           path: |
             release/*.uf2
             release/*.elf
+            release/*.hex
+            release/*-ota.zip
