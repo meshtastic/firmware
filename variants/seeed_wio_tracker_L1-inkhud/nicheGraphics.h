@@ -54,10 +54,10 @@ void setupNicheGraphics()
     InkHUD::Applet::fontSmall = FREESANS_6PT_WIN1252;
 
     // Customize default settings
-    inkhud->persistence->settings.userTiles.maxCount = 2;              // Two applets side-by-side
-                                                                       // 270 degrees clockwise
+    inkhud->persistence->settings.rotation = 1;                        // 90 degrees clockwise
     inkhud->persistence->settings.optionalFeatures.batteryIcon = true; // Device definitely has a battery
-    inkhud->persistence->settings.userTiles.count = 1; // One tile only by default, keep things simple for new users
+    inkhud->persistence->settings.userTiles.count = 1;    // One tile only by default, keep things simple for new users
+    inkhud->persistence->settings.userTiles.maxCount = 2; // Two applets side-by-side
 
     // Pick applets
     // Note: order of applets determines priority of "auto-show" feature
@@ -69,11 +69,9 @@ void setupNicheGraphics()
     inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet);            // -
     inkhud->addApplet("Heard", new InkHUD::HeardApplet, true, false, 0);         // Activated, no autoshow, default on tile 0
 
-    inkhud->persistence->settings.rotation = 1;
-    // inkhud->persistence->printSettings(&inkhud->persistence->settings);
     //  Start running InkHUD
     inkhud->begin();
-    // inkhud->persistence->printSettings(&inkhud->persistence->settings);
+
     //  Buttons
     //  --------------------------
 
