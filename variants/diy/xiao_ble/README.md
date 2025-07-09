@@ -133,9 +133,17 @@ The schematic (`xiao-ble-e22-schematic.png`) in the `eagle-project` directory us
 
 ## 5. Notes
 
-- There are several anecdotal recommendations regarding the Tx power the E22's internal SX1262 should be set to in order to achieve the advertised output of 30 dBm, ranging from 4 (per [this article](https://github.com/jgromes/RadioLib/wiki/High-power-Radio-Modules-Guide) in the RadioLib github repo) to 22 (per [this conversation](https://discord.com/channels/867578229534359593/871539930852130866/976472577545490482) from the Meshtastic Discord). When paired with the Xiao BLE in the configurations described above, I observed that the output is at its maximum when Tx power is set to 22.
-- To achieve its full output, the E22 should have a bypass capacitor from its 5V supply to ground. 100 µF works well.
-- The E22 will happily run on voltages lower than 5V, but the full output power will not be realized. For example, with a fully charged LiPo at 4.2V, Tx power appears to max out around 26-27 dBm.
+- **Transmit Power**
+  - There is a power amplifier after the SX1262's Tx, so the actual Tx power is just over 7 dB greater than the SX1262's set Tx power (the E22-900M30S actually tops out just over 29dB at 5V according to the datasheet)
+  - Meshtastic firmware is aware of the gain of the E22-900M30S module, so the Meshtastic clients' Tx power setting reflects the actual output power, i.e. setting 30 dBm in the Meshtastic app programs the E22 module to correctly output 30 dBm, setting 24 dBm will output 24 dBm, etc.
+- **Adequate 5V Power Supply to the E22 Module**
+  - Have a bypass capacitor from its 5V supply to ground; 100 µF works well
+  - Voltage must be between 5V–5.5V, lower supply voltage results in less output power; for example, with a fully charged LiPo at 4.2V, Tx power appears to max out around 26-27 dBm
+
+### Additional Reading
+
+- [S5NC/CDEBYTE_Modules](https://github.com/S5NC/CDEBYTE_Modules) has additional information about EBYTE E22 modules' internal workings, including photographs
+- [RadioLib High power Radio Modules Guide](https://github.com/jgromes/RadioLib/wiki/High-power-Radio-Modules-Guide)
 
 ## 6. Testing Methodology
 
