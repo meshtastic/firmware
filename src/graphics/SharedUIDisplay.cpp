@@ -3,7 +3,6 @@
 #include "graphics/ScreenFonts.h"
 #include "main.h"
 #include "meshtastic/config.pb.h"
-#include "modules/ExternalNotificationModule.h"
 #include "power.h"
 #include <OLEDDisplay.h>
 #include <graphics/images.h>
