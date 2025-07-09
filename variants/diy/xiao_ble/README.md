@@ -21,10 +21,6 @@ Please take the conclusions here as a tentative work in progress, representing m
 
 This guide and all associated content is for informational purposes only. The information presented is intended for consumption only by persons having appropriate technical skill and judgement, to be used entirely at their own discretion and risk. The authors of this guide in no way provide any warranty, express or implied, toward the content herein, nor its correctness, safety, or suitability to any particular purpose. By following the instructions in this guide in part or in full, you assume all responsibility for all potential risks, including but not limited to fire, property damage, bodily injury, and death.
 
-### Note
-
-These instructions assume you are running macOS or Linux, but it should be relatively easy to translate each command for Windows. (In this case, in step 2 below, each line of `xiao_ble.sh` would also need to be converted to the equivalent Windows CLI command and run individually.)
-
 ## 1. Wire the board
 
 Connecting the E22 to the XIAO nrf52840 is straightforward, but there are a few gotchas to be mindful of.
