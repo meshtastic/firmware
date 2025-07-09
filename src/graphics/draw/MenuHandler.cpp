@@ -347,9 +347,9 @@ void menuHandler::homeBaseMenu()
 
 void menuHandler::systemBaseMenu()
 {
-    enum optionsNumbers { Back, Notifications, ScreenOptions, Reboot, Test };
-    static const char *optionsArray[5] = {"Back"};
-    static int optionsEnumArray[5] = {Back};
+    enum optionsNumbers { Back, MUI, Notifications, ScreenOptions, Reboot, Test };
+    static const char *optionsArray[6] = {"Back"};
+    static int optionsEnumArray[6] = {Back};
     int options = 1;
 
     #if HAS_TFT
@@ -377,7 +377,10 @@ void menuHandler::systemBaseMenu()
     bannerOptions.optionsCount = options;
     bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == Notifications) {
+        if (selected == MUI) {
+            menuHandler::menuQueue = menuHandler::mui_picker;
+            screen->runNow();
+        } else if (selected == Notifications) {
             menuHandler::menuQueue = menuHandler::notifications_menu;
             screen->runNow();
         } else if (selected == ScreenOptions) {
