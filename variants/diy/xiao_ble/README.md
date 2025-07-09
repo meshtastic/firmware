@@ -12,11 +12,9 @@
 
 This guide will walk you through everything needed to get the Xiao BLE (or BLE Sense) running Meshtastic using an Ebyte E22-900M30S LoRa module. The combination of the E22 with an nRF52840 MCU is desirable because it allows for both very low idle (Rx) power draw <i>and</i> high transmit power. The Xiao BLE is a small but surprisingly well-appointed nRF52840 board, with enough GPIO for most Meshtastic applications and a built-in LiPo charger. The E22, on the other hand, is a famously inscrutable and mysterious beast. It is one of the more readily available LoRa modules capable of transmitting at 30 dBm, and includes an LNA to boost its Rx sensitivity a few dB beyond that of the SX1262. However, its documentation is relatively sparse overall, and seems to merely hint at (or completely omit) several key details regarding its functionality. Thus, much of what follows is a synthesis of my observations and inferences over the course of many hours of trial and error.
 
-<h3>Acknowledgement and friendly disclaimer</h3>
+### Acknowledgement and friendly disclaimer
 
 Huge thanks to those in the community who have forged the way with the E22, without whose hard work none of this would have been possible! (thebentern, riddick, rainer_vie, beegee-tokyo, geeksville, caveman99, Der_Bear, PlumRugOfDoom, BigCorvus, and many others.)
-
-<br>
 
 Please take the conclusions here as a tentative work in progress, representing my current (and fairly limited) understanding of the E22 when paired with this particular MCU. It is my hope that this guide will be helpful to others who are interested in trying a DIY Meshtastic build, and also be subject to revision by folks with more experience and better test equipment.
 
@@ -28,57 +26,15 @@ This guide and all associated content is for informational purposes only. The in
 
 These instructions assume you are running macOS or Linux, but it should be relatively easy to translate each command for Windows. (In this case, in step 2 below, each line of `xiao_ble.sh` would also need to be converted to the equivalent Windows CLI command and run individually.)
 
-## 1. Update Bootloader
+## 1. Build Meshtastic
 
-The first thing you will need to do is update the Xiao BLE's bootloader. The stock bootloader is functionally very similar to the Adafruit nRF52 UF2 bootloader, but apparently not quite enough so to work with Meshtastic out of the box.
+1. Follow the [Building Meshtastic Firmware](https://meshtastic.org/docs/development/firmware/build/) documentation, stop after **Build** → **Step 2**
+2. For **Build** → **Step 3**, select `xiao_ble` as your target
+3. Follow **Build** → **Step 4** to build the firmware
+4. Stop here, because the **PlatformIO: Upload** step does not work for factory-fresh XIAO BLE (the automatic reset to bootloader only works if Meshtastic firmware is already running)
+5. The built `firmware.uf2` binary can be found in the folder `.pio/build/xiao_ble/firmware.uf2` (relative to where you cloned the Git repository to), we will need it for [flashing the firmware](#3-flash-the-firmware-to-the-xiao-ble) (manually)
 
-1. Connect the Xiao BLE to your computer via USB-C.
-
-2. Install `adafruit-nrfutil` by following the instructions <a href="https://github.com/adafruit/Adafruit_nRF52_nrfutil">here</a>.
-
-3. Open a terminal window and navigate to `firmware/variants/xiao_ble` (where `firmware` is the directory into which you have cloned the <a href="https://github.com/meshtastic/firmware">Meshtastic firmware repo</a>).
-
-4. Run the following command, replacing `/dev/cu.usbmodem2101` with the serial port your Xiao BLE is connected to:
-
-   ```bash
-   adafruit-nrfutil --verbose dfu serial --package xiao_nrf52840_ble_bootloader-0.7.0-22-g277a0c8_s140_7.3.0.zip --port /dev/cu.usbmodem2101 -b 115200 --singlebank --touch 1200
-   ```
-
-5. If all goes well, the Xiao BLE's red LED should start to pulse slowly, and you should see a new USB storage device called `XIAO-BOOT` appear under `Locations` in Finder.
-
-&nbsp;
-
-## 2. PlatformIO Environment Preparation
-
-Before building Meshtastic for the Xiao BLE + E22, it is necessary to pull in SoftDevice 7.3.0 and its associated linker script (nrf52840_s140_v7.ld) from Seeed Studio's Arduino core. The `xiao_ble.sh` script does this.
-
-1. In your terminal window, run the following command:
-
-   ```bash
-   sudo ./xiao_ble.sh
-   ```
-
-&nbsp;
-
-## 3. Build Meshtastic
-
-At this point, you should be able to build the firmware successfully.
-
-1. In VS Code, press `Command Shift P` to bring up the command palette.
-
-2. Search for and run the `Developer: Reload Window` command.
-
-3. Bring up the command palette again with `Command Shift P`. Search for and run the `PlatformIO: Pick Project Environment` command.
-
-4. In the list of environments, select `env:xiao_ble`. PlatformIO may update itself for a minute or two, and should let you know once done.
-
-5. Return to the command palette once again (`Command Shift P`). Search for and run the `PlatformIO: Build` command.
-
-6. PlatformIO will build the project. After a few minutes you should see a green `SUCCESS` message.
-
-&nbsp;
-
-## 4. Wire the board
+## 2. Wire the board
 
 Connecting the E22 to the Xiao BLE is straightforward, but there are a few gotchas to be mindful of.
 
@@ -167,34 +123,18 @@ The schematic (`xiao-ble-e22-schematic.png`) in the `eagle-project` directory us
 
 &nbsp;
 
-## 5. Flash the firmware to the Xiao BLE
+## 3. Flash the firmware to the XIAO BLE
 
-1. Double press the Xiao's `reset` button to put it in bootloader mode.
-2. In a terminal window, navigate to the Meshtastic firmware repo's root directory, and from there to `.pio/build/xiao_ble`.
-3. Convert the generated `.hex` file into a `.uf2` file:
+1. Double press the XIAO BLE's `reset` button to put it in bootloader mode, and a USB volume named `XIAO SENSE` will appear
+2. Copy the `firmware.uf2` file to the `XIAO SENSE` volume (refer to the last step of [Build Meshtastic](#1-build-meshtastic))
+3. The XIAO BLE's red LED will flash for several seconds as the firmware is copied
+4. Once Meshtastic firmware succesfully boots, the:
+   1. Green LED will turn on
+   2. Red LED will flash several times to indicate flash memory writes during initial settings file creation
+   3. Green LED will blink every second once the firmware is running normally
+5. If you do not see the above LED patters, proceed to [Troubleshooting](#4-troubleshooting)
 
-   ```bash
-   ../../../bin/uf2conv.py firmware.hex -c -o firmware.uf2 -f 0xADA52840
-   ```
-
-4. Copy the new `.uf2` file to the Xiao's mass storage volume:
-
-   ```bash
-   cp firmware.uf2 /Volumes/XIAO-BOOT
-   ```
-
-5. The Xiao's red LED will flash for several seconds as the firmware is copied.
-6. Once the firmware is copied, to verify it is running, run the following command:
-
-   ```bash
-   meshtastic --noproto
-   ```
-
-7. Then, press the Xiao's `reset` button again. You should see a lot of debug output logged in the terminal window.
-
-&nbsp;
-
-## 6. Troubleshooting
+## 4. Troubleshooting
 
 - If after flashing Meshtastic, the Xiao is bootlooped, look at the serial output (you can see this by running `meshtastic --noproto` with the device connected to your computer via USB).
 
@@ -202,19 +142,12 @@ The schematic (`xiao-ble-e22-schematic.png`) in the `eagle-project` directory us
 
   - If you see an error mentioning tinyFS, this may mean you need to reformat the Xiao's storage:
 
-    1. Double press the `reset` button to put the Xiao in bootloader mode.
+    1. Open the [Meshtastic web flasher](https://flasher.meshtastic.org/)
+    2. Select the ***Seeed Xiao NRF52840 Kit***
+    3. Click the ***trash can icon*** to the right of ***Flash***
+    4. Follow the instructions on the screen
 
-    2. In a terminal window, navigate to the Meshtastic firmware repo's root directory, and from there to `variants/xiao_ble`.
-
-    3. Run the following command: &nbsp;`cp xiao-ble-internal-format.uf2 /Volumes/XIAO-BOOT`
-
-    4. The Xiao's red LED will flash briefly as the filesystem format firmware is copied.
-
-    5. Run the following command: &nbsp;`meshtastic --noproto`
-
-    6. In the output of the above command, you should see a message saying "Formatting...done".
-
-    7. To flash Meshtastic again, repeat the steps in section 5 above.
+    **Do not flash the Seeed Xiao NRF52840 Kit firmware** if you have wired the LoRa module according to this variant, as the Seeed Xiao NRF52840 Kit uses different wiring for the SX1262 LoRa chip
 
   - If you don't see any specific error message, but the boot process is stuck or not proceeding as expected, this might also mean there is a conflict in `variant.h`. If you have made any changes to the pin mapping, ensure they do not result in a conflict. If all else fails, try reverting your changes and using the known-good configuration included here.
 
@@ -225,7 +158,7 @@ The schematic (`xiao-ble-e22-schematic.png`) in the `eagle-project` directory us
 
 &nbsp;
 
-## 7. Notes
+## 5. Notes
 
 - There are several anecdotal recommendations regarding the Tx power the E22's internal SX1262 should be set to in order to achieve the advertised output of 30 dBm, ranging from 4 (per <a href="https://github.com/jgromes/RadioLib/wiki/High-power-Radio-Modules-Guide">this article</a> in the RadioLib github repo) to 22 (per <a href="https://discord.com/channels/867578229534359593/871539930852130866/976472577545490482">this conversation</a> from the Meshtastic Discord). When paired with the Xiao BLE in the configurations described above, I observed that the output is at its maximum when Tx power is set to 22.
 
@@ -235,7 +168,7 @@ The schematic (`xiao-ble-e22-schematic.png`) in the `eagle-project` directory us
 
 &nbsp;
 
-## 8. Testing Methodology
+## 6. Testing Methodology
 
 During what became a fairly long trial-and-error process, I did a lot of careful testing of Tx power and Rx sensitivity. My methodology in these tests was as follows:
 
