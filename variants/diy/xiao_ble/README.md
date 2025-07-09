@@ -25,15 +25,7 @@ This guide and all associated content is for informational purposes only. The in
 
 These instructions assume you are running macOS or Linux, but it should be relatively easy to translate each command for Windows. (In this case, in step 2 below, each line of `xiao_ble.sh` would also need to be converted to the equivalent Windows CLI command and run individually.)
 
-## 1. Build Meshtastic
-
-1. Follow the [Building Meshtastic Firmware](https://meshtastic.org/docs/development/firmware/build/) documentation, stop after **Build** → **Step 2**
-2. For **Build** → **Step 3**, select `xiao_ble` as your target
-3. Follow **Build** → **Step 4** to build the firmware
-4. Stop here, because the **PlatformIO: Upload** step does not work for factory-fresh XIAO BLE (the automatic reset to bootloader only works if Meshtastic firmware is already running)
-5. The built `firmware.uf2` binary can be found in the folder `.pio/build/xiao_ble/firmware.uf2` (relative to where you cloned the Git repository to), we will need it for [flashing the firmware](#3-flash-the-firmware-to-the-xiao-ble) (manually)
-
-## 2. Wire the board
+## 1. Wire the board
 
 Connecting the E22 to the Xiao BLE is straightforward, but there are a few gotchas to be mindful of.
 
@@ -104,6 +96,21 @@ The schematic (`xiao-ble-e22-schematic.png`) in the `eagle-project` directory us
 #### E22 -> E22 connections
 
 *(none)*
+
+## 2. Build Meshtastic
+
+1. Follow the [Building Meshtastic Firmware](https://meshtastic.org/docs/development/firmware/build/) documentation, stop after **Build** → **Step 2**
+2. For **Build** → **Step 3**, select `xiao_ble` as your target
+3. Adjust source code if you:
+   - Wired your board for Manual Tx/Rx Switching Mode: see [Wire the Board](#1-wire-the-board)
+   - Used an E22-900M33S module  
+     (this step is important to avoid **damaging the power amplifier** in the M33S module and **transmitting power above legal limits**!):
+     1. Open `variants/diy/platformio.ini`
+     2. Search for `[env:xiao_ble]`
+     3. In the line starting with `build_flags` within this section, change `-DEBYTE_E22_900M30S` to `-DEBYTE_E22_900M33S`
+4. Follow **Build** → **Step 4** to build the firmware
+5. Stop here, because the **PlatformIO: Upload** step does not work for factory-fresh XIAO BLE (the automatic reset to bootloader only works if Meshtastic firmware is already running)
+6. The built `firmware.uf2` binary can be found in the folder `.pio/build/xiao_ble/firmware.uf2` (relative to where you cloned the Git repository to), we will need it for [flashing the firmware](#3-flash-the-firmware-to-the-xiao-ble) (manually)
 
 ## 3. Flash the Firmware to the Xiao Ble
 
