@@ -1,4 +1,5 @@
 #include "TextMessageModule.h"
+#include "../graphics/Screen.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
@@ -18,7 +19,7 @@ ProcessMessage TextMessageModule::handleReceived(const meshtastic_MeshPacket &mp
     devicestate.has_rx_text_message = true;
 
     // Only trigger screen wake if configuration allows it
-    if (uiconfig.wake_on_received_message) {
+    if (wake_on_received_message) {
         powerFSM.trigger(EVENT_RECEIVED_MSG);
     }
     notifyObservers(&mp);

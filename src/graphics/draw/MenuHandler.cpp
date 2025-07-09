@@ -597,28 +597,6 @@ void menuHandler::BuzzerModeMenu()
     screen->showOverlayBanner(bannerOptions);
 }
 
-void menuHandler::ScreenWakeupMenu()
-{
-    static const char *optionsArray[] = {"Back", "With Notification", "User Only"};
-    enum optionsNumbers { Back = 0, withNotification = 1, userOnly = 2 };
-    BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "Screen Wakes";
-    bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 3;
-    bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == withNotification) {
-            uiconfig.wake_on_received_message = true;
-            saveUIConfig();
-        } else if (selected == userOnly) {
-            uiconfig.wake_on_received_message = false;
-            saveUIConfig();
-        }
-    };
-    // Set initial selection based on current config
-    bannerOptions.InitialSelected = uiconfig.wake_on_received_message ? withNotification : userOnly;
-    screen->showOverlayBanner(bannerOptions);
-}
-
 void menuHandler::BrightnessPickerMenu()
 {
     static const char *optionsArray[] = {"Back", "Low", "Medium", "High"};
@@ -937,9 +915,6 @@ void menuHandler::screenOptionsMenu()
     static int optionsEnumArray[4] = {Back};
     int options = 1;
 
-    optionsArray[options] = "Wakeup";
-    optionsEnumArray[options++] = Wakeup;
-
     // Only show brightness for B&W displays
     if (hasSupportBrightness && !HAS_TFT) {
         optionsArray[options] = "Brightness";
@@ -958,10 +933,7 @@ void menuHandler::screenOptionsMenu()
     bannerOptions.optionsCount = options;
     bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == Wakeup) {
-            menuHandler::menuQueue = menuHandler::screen_wakeup_menu;
-            screen->runNow();
-        } else if (selected == Brightness) {
+        if (selected == Brightness) {
             menuHandler::menuQueue = menuHandler::brightness_picker;
             screen->runNow();
         } else if (selected == ScreenColor) {
@@ -1079,9 +1051,6 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case wifi_toggle_menu:
         wifiToggleMenu();
-        break;
-    case screen_wakeup_menu:
-        ScreenWakeupMenu();
         break;
     case bluetooth_toggle_menu:
         BluetoothToggleMenu();
