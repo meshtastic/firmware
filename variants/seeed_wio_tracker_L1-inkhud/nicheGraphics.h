@@ -18,7 +18,7 @@
 
 // Shared NicheGraphics components
 // --------------------------------
-#include "graphics/niche/Drivers/EInk/GDEY0213B74.h"
+#include "graphics/niche/Drivers/EInk/ZJY122250_0213BAAMFGN.h"
 #include "graphics/niche/Inputs/TwoButton.h"
 
 void setupNicheGraphics()
@@ -34,7 +34,7 @@ void setupNicheGraphics()
     // E-Ink Driver
     // -----------------------------
 
-    Drivers::EInk *driver = new Drivers::GDEY0213B74;
+    Drivers::EInk *driver = new Drivers::ZJY122250_0213BAAMFGN;
     driver->begin(&SPI1, PIN_EINK_DC, PIN_EINK_CS, PIN_EINK_BUSY, PIN_EINK_RES);
 
     // InkHUD
@@ -46,8 +46,7 @@ void setupNicheGraphics()
     inkhud->setDriver(driver);
 
     // Set how many FAST updates per FULL update
-    // Set how unhealthy additional FAST updates beyond this number are
-    inkhud->setDisplayResilience(7, 1.5);
+    inkhud->setDisplayResilience(15);
 
     // Select fonts
     InkHUD::Applet::fontLarge = FREESANS_12PT_WIN1252;
