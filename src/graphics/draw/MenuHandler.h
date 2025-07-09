@@ -29,7 +29,7 @@ class menuHandler
         number_test,
         wifi_toggle_menu,
         key_verification_init,
-        key_verification_final_prompt
+        key_verification_final_prompt,
         bluetooth_toggle_menu
     };
     static screenMenus menuQueue;
