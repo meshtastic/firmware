@@ -122,9 +122,7 @@ class Screen
 #define SEGMENT_WIDTH 16
 #define SEGMENT_HEIGHT 4
 
-#ifndef wake_on_received_message
-#define wake_on_received_message true
-#endif
+extern bool wake_on_received_message;
 
 /// Convert an integer GPS coords to a floating point
 #define DegD(i) (i * 1e-7)

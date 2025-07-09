@@ -83,6 +83,17 @@ extern uint16_t TFT_MESH;
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 
+bool shouldWakeOnReceivedMessage()
+{
+    if (moduleConfig.external_notification.enabled) {
+        // This never seems to fire; the intent is correct, but need to troubleshoot why
+        return false;
+    }
+    return true;
+}
+
+bool wake_on_received_message = shouldWakeOnReceivedMessage(); // Master Switch to enable here
+
 using namespace meshtastic; /** @todo remove */
 
 namespace graphics
@@ -1260,6 +1271,7 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
             setFrames(FOCUS_PRESERVE);              // Refresh frame list without switching view
 
             // Only wake/force display if the configuration allows it
+            LOG_INFO("wake_on_received_message is %s", (wake_on_received_message) ? "true" : "false");
             if (wake_on_received_message) {
                 setOn(true);    // Wake up the screen first
                 forceDisplay(); // Forces screen redraw
