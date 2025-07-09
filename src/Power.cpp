@@ -126,7 +126,7 @@ RAK9154Sensor rak9154Sensor;
 #endif
 
 #ifdef HAS_BQ27220
-#include "BQ27220.h"
+#include "bq27220.h"
 #endif
 
 #ifdef HAS_PMU
@@ -1306,8 +1306,13 @@ class LipoCharger : public HasBatteryLevel
         }
         if (bq == nullptr) {
             bq = new BQ27220;
-            bool result = bq->init(&Wire, BQ27220_I2C_SDA, BQ27220_I2C_SCL);
+            bq->setDefaultCapacity(BQ27220_DESIGN_CAPACITY);
+
+            bool result = bq->init();
             if (result) {
+                LOG_DEBUG("BQ27220 design capacity: %d", bq->getDesignCapacity());
+                LOG_DEBUG("BQ27220 fullCharge capacity: %d", bq->getFullChargeCapacity());
+                LOG_DEBUG("BQ27220 remaining capacity: %d", bq->getRemainingCapacity());
                 return true;
             } else {
                 LOG_WARN("BQ27220 init failed");
@@ -1322,12 +1327,12 @@ class LipoCharger : public HasBatteryLevel
     /**
      * Battery state of charge, from 0 to 100 or -1 for unknown
      */
-    virtual int getBatteryPercent() override { return bq->getChargePcnt(); }
+    virtual int getBatteryPercent() override { return bq->getChargePercent(); }
 
     /**
      * The raw voltage of the battery in millivolts, or NAN if unknown
      */
-    virtual uint16_t getBattVoltage() override { return bq->getVolt(BQ27220::VOLT); }
+    virtual uint16_t getBattVoltage() override { return bq->getVoltage(); } // BQ27220::VOLT
 
     /**
      * return true if there is a battery installed in this unit
@@ -1342,7 +1347,18 @@ class LipoCharger : public HasBatteryLevel
     /**
      * return true if the battery is currently charging
      */
-    virtual bool isCharging() override { return ppm->isCharging(); }
+    virtual bool isCharging() override
+    {
+        bool isCharging = ppm->isCharging();
+        if (isCharging) {
+            LOG_DEBUG("BQ27220 time to full charge: %d min", bq->getTimeToFull());
+        } else {
+            if (!ppm->isVbusIn()) {
+                LOG_DEBUG("BQ27220 time to empty: %d min (%d mAh)", bq->getTimeToEmpty(), bq->getRemainingCapacity());
+            }
+        }
+        return isCharging;
+    }
 };
 
 LipoCharger lipoCharger;
