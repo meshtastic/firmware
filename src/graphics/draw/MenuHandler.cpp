@@ -137,6 +137,7 @@ void menuHandler::ClockFacePicker()
             screen->setFrames(Screen::FOCUS_CLOCK);
         }
     };
+    bannerOptions.InitialSelected = uiconfig.is_clockface_analog ? 2 : 1;
     screen->showOverlayBanner(bannerOptions);
 }
 
@@ -338,8 +339,8 @@ void menuHandler::homeBaseMenu()
         } else if (selected == Freetext) {
             cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST);
         } else if (selected == Bluetooth) {
-            InputEvent event = {.inputEvent = (input_broker_event)170, .kbchar = 170, .touchX = 0, .touchY = 0};
-            inputBroker->injectInputEvent(&event);
+            menuQueue = bluetooth_toggle_menu;
+            screen->runNow();
         }
     };
     screen->showOverlayBanner(bannerOptions);
@@ -591,6 +592,23 @@ void menuHandler::GPSToggleMenu()
     screen->showOverlayBanner(bannerOptions);
 }
 #endif
+
+void menuHandler::BluetoothToggleMenu()
+{
+    static const char *optionsArray[] = {"Back", "Enabled", "Disabled"};
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Toggle Bluetooth";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 3;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == 1 || selected == 2) {
+            InputEvent event = {.inputEvent = (input_broker_event)170, .kbchar = 170, .touchX = 0, .touchY = 0};
+            inputBroker->injectInputEvent(&event);
+        }
+    };
+    bannerOptions.InitialSelected = config.bluetooth.enabled ? 1 : 2;
+    screen->showOverlayBanner(bannerOptions);
+}
 
 void menuHandler::BuzzerModeMenu()
 {
@@ -978,6 +996,8 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case key_verification_final_prompt:
         keyVerificationFinalPrompt();
+    case bluetooth_toggle_menu:
+        BluetoothToggleMenu();
         break;
     }
     menuQueue = menu_none;
