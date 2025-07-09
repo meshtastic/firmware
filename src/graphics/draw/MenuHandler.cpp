@@ -48,12 +48,14 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
                                          "PH_433",
                                          "PH_868",
                                          "PH_915",
-                                         "ANZ_433"};
+                                         "ANZ_433",
+                                         "KZ_433",
+                                         "KZ_863"};
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Set the LoRa region";
     bannerOptions.durationMs = duration;
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 23;
+    bannerOptions.optionsCount = 25;
     bannerOptions.InitialSelected = 0;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected != 0 && config.lora.region != _meshtastic_Config_LoRaConfig_RegionCode(selected)) {
@@ -134,6 +136,7 @@ void menuHandler::ClockFacePicker()
             screen->setFrames(Screen::FOCUS_CLOCK);
         }
     };
+    bannerOptions.InitialSelected = uiconfig.is_clockface_analog ? 2 : 1;
     screen->showOverlayBanner(bannerOptions);
 }
 
@@ -335,8 +338,8 @@ void menuHandler::homeBaseMenu()
         } else if (selected == Freetext) {
             cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST);
         } else if (selected == Bluetooth) {
-            InputEvent event = {.inputEvent = (input_broker_event)170, .kbchar = 170, .touchX = 0, .touchY = 0};
-            inputBroker->injectInputEvent(&event);
+            menuQueue = bluetooth_toggle_menu;
+            screen->runNow();
         }
     };
     screen->showOverlayBanner(bannerOptions);
@@ -356,6 +359,9 @@ void menuHandler::systemBaseMenu()
     static int optionsEnumArray[7] = {Back};
     int options = 1;
 
+    optionsArray[options] = "Reboot";
+    optionsEnumArray[options++] = Reboot;
+
     optionsArray[options] = "Beeps Action";
     optionsEnumArray[options++] = Beeps;
 
@@ -363,9 +369,6 @@ void menuHandler::systemBaseMenu()
         optionsArray[options] = "Brightness";
         optionsEnumArray[options++] = Brightness;
     }
-
-    optionsArray[options] = "Reboot";
-    optionsEnumArray[options++] = Reboot;
 
 #if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || HAS_TFT
     optionsArray[options] = "Screen Color";
@@ -585,6 +588,23 @@ void menuHandler::GPSToggleMenu()
 }
 #endif
 
+void menuHandler::BluetoothToggleMenu()
+{
+    static const char *optionsArray[] = {"Back", "Enabled", "Disabled"};
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Toggle Bluetooth";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 3;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == 1 || selected == 2) {
+            InputEvent event = {.inputEvent = (input_broker_event)170, .kbchar = 170, .touchX = 0, .touchY = 0};
+            inputBroker->injectInputEvent(&event);
+        }
+    };
+    bannerOptions.InitialSelected = config.bluetooth.enabled ? 1 : 2;
+    screen->showOverlayBanner(bannerOptions);
+}
+
 void menuHandler::BuzzerModeMenu()
 {
     static const char *optionsArray[] = {"All Enabled", "Disabled", "Notifications", "System Only"};
@@ -602,32 +622,28 @@ void menuHandler::BuzzerModeMenu()
 
 void menuHandler::BrightnessPickerMenu()
 {
-    static const char *optionsArray[] = {"Back", "Low", "Medium", "High", "Very High"};
+    static const char *optionsArray[] = {"Back", "Low", "Medium", "High"};
 
     // Get current brightness level to set initial selection
-    int currentSelection = 1; // Default to Low
+    int currentSelection = 1; // Default to Medium
     if (uiconfig.screen_brightness >= 255) {
-        currentSelection = 4; // Very High
+        currentSelection = 3; // Very High
     } else if (uiconfig.screen_brightness >= 128) {
-        currentSelection = 3; // High
-    } else if (uiconfig.screen_brightness >= 64) {
-        currentSelection = 2; // Medium
+        currentSelection = 2; // High
     } else {
-        currentSelection = 1; // Low
+        currentSelection = 1; // Medium
     }
 
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Brightness";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 5;
+    bannerOptions.optionsCount = 4;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == 1) { // Low
-            uiconfig.screen_brightness = 1;
-        } else if (selected == 2) { // Medium
+        if (selected == 1) { // Medium
             uiconfig.screen_brightness = 64;
-        } else if (selected == 3) { // High
+        } else if (selected == 2) { // High
             uiconfig.screen_brightness = 128;
-        } else if (selected == 4) { // Very High
+        } else if (selected == 3) { // Very High
             uiconfig.screen_brightness = 255;
         }
 
@@ -679,52 +695,52 @@ void menuHandler::TFTColorPickerMenu(OLEDDisplay *display)
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 10;
     bannerOptions.bannerCallback = [display](int selected) -> void {
-        uint8_t r = 0;
-        uint8_t g = 0;
-        uint8_t b = 0;
+        uint8_t TFT_MESH_r = 0;
+        uint8_t TFT_MESH_g = 0;
+        uint8_t TFT_MESH_b = 0;
         if (selected == 1) {
             LOG_INFO("Setting color to system default or defined variant");
             // Given just before we set all these to zero, we will allow this to go through
         } else if (selected == 2) {
             LOG_INFO("Setting color to Meshtastic Green");
-            r = 103;
-            g = 234;
-            b = 148;
+            TFT_MESH_r = 103;
+            TFT_MESH_g = 234;
+            TFT_MESH_b = 148;
         } else if (selected == 3) {
             LOG_INFO("Setting color to Yellow");
-            r = 255;
-            g = 255;
-            b = 128;
+            TFT_MESH_r = 255;
+            TFT_MESH_g = 255;
+            TFT_MESH_b = 128;
         } else if (selected == 4) {
             LOG_INFO("Setting color to Red");
-            r = 255;
-            g = 64;
-            b = 64;
+            TFT_MESH_r = 255;
+            TFT_MESH_g = 64;
+            TFT_MESH_b = 64;
         } else if (selected == 5) {
             LOG_INFO("Setting color to Orange");
-            r = 255;
-            g = 160;
-            b = 20;
+            TFT_MESH_r = 255;
+            TFT_MESH_g = 160;
+            TFT_MESH_b = 20;
         } else if (selected == 6) {
             LOG_INFO("Setting color to Purple");
-            r = 204;
-            g = 153;
-            b = 255;
+            TFT_MESH_r = 204;
+            TFT_MESH_g = 153;
+            TFT_MESH_b = 255;
         } else if (selected == 7) {
             LOG_INFO("Setting color to Teal");
-            r = 64;
-            g = 224;
-            b = 208;
+            TFT_MESH_r = 64;
+            TFT_MESH_g = 224;
+            TFT_MESH_b = 208;
         } else if (selected == 8) {
             LOG_INFO("Setting color to Pink");
-            r = 255;
-            g = 105;
-            b = 180;
+            TFT_MESH_r = 255;
+            TFT_MESH_g = 105;
+            TFT_MESH_b = 180;
         } else if (selected == 9) {
             LOG_INFO("Setting color to White");
-            r = 255;
-            g = 255;
-            b = 255;
+            TFT_MESH_r = 255;
+            TFT_MESH_g = 255;
+            TFT_MESH_b = 255;
         }
 
 #if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || HAS_TFT
@@ -733,14 +749,14 @@ void menuHandler::TFTColorPickerMenu(OLEDDisplay *display)
             display->fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
             display->setColor(WHITE);
 
-            if (r == 0 && g == 0 && b == 0) {
+            if (TFT_MESH_r == 0 && TFT_MESH_g == 0 && TFT_MESH_b == 0) {
 #ifdef TFT_MESH_OVERRIDE
                 TFT_MESH = TFT_MESH_OVERRIDE;
 #else
                 TFT_MESH = COLOR565(0x67, 0xEA, 0x94);
 #endif
             } else {
-                TFT_MESH = COLOR565(r, g, b);
+                TFT_MESH = COLOR565(TFT_MESH_r, TFT_MESH_g, TFT_MESH_b);
             }
 
 #if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
@@ -748,10 +764,10 @@ void menuHandler::TFTColorPickerMenu(OLEDDisplay *display)
 #endif
 
             screen->setFrames(graphics::Screen::FOCUS_SYSTEM);
-            if (r == 0 && g == 0 && b == 0) {
+            if (TFT_MESH_r == 0 && TFT_MESH_g == 0 && TFT_MESH_b == 0) {
                 uiconfig.screen_rgb_color = 0;
             } else {
-                uiconfig.screen_rgb_color = (r << 16) | (g << 8) | b;
+                uiconfig.screen_rgb_color = (TFT_MESH_r << 16) | (TFT_MESH_g << 8) | TFT_MESH_b;
             }
             LOG_INFO("Storing Value of %d to uiconfig.screen_rgb_color", uiconfig.screen_rgb_color);
             nodeDB->saveProto("/prefs/uiconfig.proto", meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg, &uiconfig);
@@ -833,6 +849,44 @@ void menuHandler::numberTest()
                              [](int number_picked) -> void { LOG_WARN("Nodenum: %u", number_picked); });
 }
 
+void menuHandler::wifiBaseMenu()
+{
+    enum optionsNumbers { Back, Wifi_toggle };
+
+    static const char *optionsArray[] = {"Back", "WiFi Toggle"};
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "WiFi Menu";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 2;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Wifi_toggle) {
+            menuQueue = wifi_toggle_menu;
+            screen->runNow();
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::wifiToggleMenu()
+{
+    enum optionsNumbers { Back, Wifi_toggle };
+
+    static const char *optionsArray[] = {"Back", "Disable"};
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Disable Wifi and\nEnable Bluetooth?";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 2;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Wifi_toggle) {
+            config.network.wifi_enabled = false;
+            config.bluetooth.enabled = true;
+            service->reloadConfig(SEGMENT_CONFIG);
+            rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
 void menuHandler::handleMenuSwitch(OLEDDisplay *display)
 {
     if (menuQueue != menu_none)
@@ -895,6 +949,12 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case number_test:
         numberTest();
+        break;
+    case wifi_toggle_menu:
+        wifiToggleMenu();
+        break;
+    case bluetooth_toggle_menu:
+        BluetoothToggleMenu();
         break;
     }
     menuQueue = menu_none;
