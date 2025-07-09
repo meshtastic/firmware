@@ -18,15 +18,8 @@
 
 // Shared NicheGraphics components
 // --------------------------------
-#include "graphics/niche/Drivers/Backlight/LatchingBacklight.h"
 #include "graphics/niche/Drivers/EInk/GDEY0213B74.h"
 #include "graphics/niche/Inputs/TwoButton.h"
-
-// Special case - fix T-Echo's touch button
-// ----------------------------------------
-// On a handful of T-Echos, LoRa TX triggers the capacitive touch
-// To avoid this, we lockout the button during TX
-#include "mesh/RadioLibInterface.h"
 
 void setupNicheGraphics()
 {
@@ -65,13 +58,7 @@ void setupNicheGraphics()
     inkhud->persistence->settings.userTiles.maxCount = 2;              // Two applets side-by-side
                                                                        // 270 degrees clockwise
     inkhud->persistence->settings.optionalFeatures.batteryIcon = true; // Device definitely has a battery
-    inkhud->persistence->settings.optionalMenuItems.backlight = true;  // Until proves capacitive button works by touching it
     inkhud->persistence->settings.userTiles.count = 1; // One tile only by default, keep things simple for new users
-
-    // Setup backlight controller
-    // Note: AUX button attached further down
-    Drivers::LatchingBacklight *backlight = Drivers::LatchingBacklight::getInstance();
-    backlight->setPin(PIN_EINK_EN);
 
     // Pick applets
     // Note: order of applets determines priority of "auto-show" feature
