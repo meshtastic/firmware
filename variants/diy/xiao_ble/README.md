@@ -53,7 +53,13 @@ Connecting the E22 to the Xiao BLE is straightforward, but there are a few gotch
 
 #### Note
 
-The default pin mapping in `variant.h` uses "Automatic Tx/Rx switching" mode. If you wire your board for Manual Tx/Rx Switching Mode, make sure to update `variant.h` accordingly by commenting/uncommenting the necessary lines in the "E22 Tx/Rx control options" section.
+The default pin mapping in `variant.h` uses "Automatic Tx/Rx switching" mode.
+
+If you wire your board for Manual Tx/Rx Switching Mode, `SX126X_TXEN` must be defined (`#define #define SX126X_TXEN D6`) in `variants/seeed_xiao_nrf52840_kit/variant.h` in the code block following:
+```
+#ifdef XIAO_BLE_LEGACY_PINOUT
+// Legacy xiao_ble variant pinout for third-party SX126x modules e.g. EBYTE E22
+```
 
 ### Example Wiring for Automatic Tx/Rx Switching Mode
 
