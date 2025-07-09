@@ -86,7 +86,6 @@ extern uint16_t TFT_MESH;
 bool shouldWakeOnReceivedMessage()
 {
     if (moduleConfig.external_notification.enabled) {
-        // This never seems to fire; the intent is correct, but need to troubleshoot why
         return false;
     }
     return true;
@@ -1271,7 +1270,8 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
             setFrames(FOCUS_PRESERVE);              // Refresh frame list without switching view
 
             // Only wake/force display if the configuration allows it
-            LOG_INFO("wake_on_received_message is %s", (wake_on_received_message) ? "true" : "false");
+            wake_on_received_message = shouldWakeOnReceivedMessage();
+            LOG_INFO("SCREEN.CPP wake_on_received_message is %s", (wake_on_received_message) ? "true" : "false");
             if (wake_on_received_message) {
                 setOn(true);    // Wake up the screen first
                 forceDisplay(); // Forces screen redraw
