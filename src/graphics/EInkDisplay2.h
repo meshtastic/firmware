@@ -5,6 +5,10 @@
 #include "GxEPD2_BW.h"
 #include <OLEDDisplay.h>
 
+#ifdef GXEPD2_DRIVER_0 // If variant has multiple possible display models
+#include "GxEPD2Multi.h"
+#endif
+
 /**
  * An adapter class that allows using the GxEPD2 library as if it was an OLEDDisplay implementation.
  *
@@ -63,8 +67,15 @@ class EInkDisplay : public OLEDDisplay
     // Connect to the display
     virtual bool connect() override;
 
-    // AdafruitGFX display object - instantiated in connect(), variant specific
+#ifdef GXEPD2_DRIVER_0
+    // AdafruitGFX display object - wrapper for multiple drivers
+    // Allows runtime detection of multiple displays
+    // Avoid this situation if possible!
+    GxEPD2_Multi<GXEPD2_DRIVER_0, GXEPD2_DRIVER_1> *adafruitDisplay = NULL;
+#else
+    // AdafruitGFX display object (for single display model) - instantiated in connect(), variant specific
     GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT> *adafruitDisplay = NULL;
+#endif
 
     // If display uses HSPI
 #if defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_WIRELESS_PAPER_V1_0) || defined(HELTEC_VISION_MASTER_E213) ||               \
