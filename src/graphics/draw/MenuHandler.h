@@ -21,6 +21,7 @@ class menuHandler
         tftcolormenupicker,
         brightness_picker,
         reboot_menu,
+        shutdown_menu,
         add_favorite,
         remove_favorite,
         test_menu,
@@ -29,7 +30,8 @@ class menuHandler
         screen_wakeup_menu,
         bluetooth_toggle_menu,
         notifications_menu,
-        screen_options_menu
+        screen_options_menu,
+        power_menu
     };
     static screenMenus menuQueue;
 
@@ -53,6 +55,7 @@ class menuHandler
     static void resetNodeDBMenu();
     static void BrightnessPickerMenu();
     static void rebootMenu();
+    static void shutdownMenu();
     static void addFavoriteMenu();
     static void removeFavoriteMenu();
     static void testMenu();
@@ -62,7 +65,8 @@ class menuHandler
     static void ScreenWakeupMenu();
     static void notificationsMenu();
     static void screenOptionsMenu();
-    
+    static void powerMenu();
+
   private:
     static void saveUIConfig();
     static void BluetoothToggleMenu();

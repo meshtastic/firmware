@@ -347,24 +347,19 @@ void menuHandler::homeBaseMenu()
 
 void menuHandler::systemBaseMenu()
 {
-    enum optionsNumbers { Back, MUI, Notifications, ScreenOptions, Reboot, Test };
+    enum optionsNumbers { Back, MUI, Notifications, ScreenOptions, PowerMenu, Test };
     static const char *optionsArray[6] = {"Back"};
     static int optionsEnumArray[6] = {Back};
     int options = 1;
 
-    #if HAS_TFT
-        optionsArray[options] = "Switch to MUI";
-        optionsEnumArray[options++] = MUI;
-    #endif
-    
     optionsArray[options] = "Notifications";
     optionsEnumArray[options++] = Notifications;
 
     optionsArray[options] = "Screen Options";
     optionsEnumArray[options++] = ScreenOptions;
 
-    optionsArray[options] = "Reboot";
-    optionsEnumArray[options++] = Reboot;
+    optionsArray[options] = "Reboot/Shutdown";
+    optionsEnumArray[options++] = PowerMenu;
 
     if (test_enabled) {
         optionsArray[options] = "Test Menu";
@@ -386,8 +381,8 @@ void menuHandler::systemBaseMenu()
         } else if (selected == ScreenOptions) {
             menuHandler::menuQueue = menuHandler::screen_options_menu;
             screen->runNow();
-        } else if (selected == Reboot) {
-            menuHandler::menuQueue = menuHandler::reboot_menu;
+        } else if (selected == PowerMenu) {
+            menuHandler::menuQueue = menuHandler::power_menu;
             screen->runNow();
         } else if (selected == Test) {
             menuHandler::menuQueue = menuHandler::test_menu;
@@ -798,6 +793,23 @@ void menuHandler::rebootMenu()
     screen->showOverlayBanner(bannerOptions);
 }
 
+void menuHandler::shutdownMenu()
+{
+    static const char *optionsArray[] = {"Back", "Confirm"};
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Shutdown Device?";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 2;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == 1) {
+            IF_SCREEN(screen->showSimpleBanner("Shutting Down...", 0));
+            nodeDB->saveToDisk();
+            power->shutdown();
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
 void menuHandler::addFavoriteMenu()
 {
     screen->showNodePicker("Node To Favorite", 30000, [](int nodenum) -> void {
@@ -960,6 +972,45 @@ void menuHandler::screenOptionsMenu()
     screen->showOverlayBanner(bannerOptions);
 }
 
+void menuHandler::powerMenu()
+{
+
+    enum optionsNumbers { Back, Reboot, Shutdown, MUI };
+    static const char *optionsArray[4] = {"Back"};
+    static int optionsEnumArray[4] = {Back};
+    int options = 1;
+
+    optionsArray[options] = "Reboot";
+    optionsEnumArray[options++] = Reboot;
+
+    optionsArray[options] = "Shutdown";
+    optionsEnumArray[options++] = Shutdown;
+
+#if HAS_TFT
+    optionsArray[options] = "Switch to MUI";
+    optionsEnumArray[options++] = MUI;
+#endif
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Reboot / Shutdown";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = options;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Reboot) {
+            menuHandler::menuQueue = menuHandler::reboot_menu;
+            screen->runNow();
+        } else if (selected == Shutdown) {
+            menuHandler::menuQueue = menuHandler::shutdown_menu;
+            screen->runNow();
+        } else if (selected == MUI) {
+            menuHandler::menuQueue = menuHandler::mui_picker;
+            screen->runNow();
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
 void menuHandler::handleMenuSwitch(OLEDDisplay *display)
 {
     if (menuQueue != menu_none)
@@ -1011,6 +1062,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
     case reboot_menu:
         rebootMenu();
         break;
+    case shutdown_menu:
+        shutdownMenu();
+        break;
     case add_favorite:
         addFavoriteMenu();
         break;
@@ -1037,6 +1091,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case screen_options_menu:
         screenOptionsMenu();
+        break;
+    case power_menu:
+        powerMenu();
         break;
     }
     menuQueue = menu_none;
