@@ -347,40 +347,25 @@ void menuHandler::homeBaseMenu()
 
 void menuHandler::systemBaseMenu()
 {
-
-    // Check if brightness is supported
-    bool hasSupportBrightness = false;
-#if defined(ST7789_CS) || defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) || defined(USE_SH1107) || HAS_TFT
-    hasSupportBrightness = true;
-#endif
-
-    enum optionsNumbers { Back, Beeps, ScreenWakeup, Brightness, Reboot, Color, MUI, Test };
-    static const char *optionsArray[8] = {"Back"};
-    static int optionsEnumArray[8] = {Back};
+    enum optionsNumbers { Back, Notifications, ScreenOptions, Reboot, Test };
+    static const char *optionsArray[5] = {"Back"};
+    static int optionsEnumArray[5] = {Back};
     int options = 1;
+
+    #if HAS_TFT
+        optionsArray[options] = "Switch to MUI";
+        optionsEnumArray[options++] = MUI;
+    #endif
+    
+    optionsArray[options] = "Notifications";
+    optionsEnumArray[options++] = Notifications;
+
+    optionsArray[options] = "Screen Options";
+    optionsEnumArray[options++] = ScreenOptions;
 
     optionsArray[options] = "Reboot";
     optionsEnumArray[options++] = Reboot;
 
-    optionsArray[options] = "Beeps Action";
-    optionsEnumArray[options++] = Beeps;
-    
-    optionsArray[options] = "Screen Wakeup";
-    optionsEnumArray[options++] = ScreenWakeup;
-
-    if (hasSupportBrightness) {
-        optionsArray[options] = "Brightness";
-        optionsEnumArray[options++] = Brightness;
-    }
-
-#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || HAS_TFT
-    optionsArray[options] = "Screen Color";
-    optionsEnumArray[options++] = Color;
-#endif
-#if HAS_TFT
-    optionsArray[options] = "Switch to MUI";
-    optionsEnumArray[options++] = MUI;
-#endif
     if (test_enabled) {
         optionsArray[options] = "Test Menu";
         optionsEnumArray[options++] = Test;
@@ -392,23 +377,14 @@ void menuHandler::systemBaseMenu()
     bannerOptions.optionsCount = options;
     bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == Beeps) {
-            menuHandler::menuQueue = menuHandler::buzzermodemenupicker;
+        if (selected == Notifications) {
+            menuHandler::menuQueue = menuHandler::notifications_menu;
             screen->runNow();
-        } else if (selected == ScreenWakeup) {
-            menuHandler::menuQueue = menuHandler::screen_wakeup_menu;
-            screen->runNow();
-        } else if (selected == Brightness) {
-            menuHandler::menuQueue = menuHandler::brightness_picker;
+        } else if (selected == ScreenOptions) {
+            menuHandler::menuQueue = menuHandler::screen_options_menu;
             screen->runNow();
         } else if (selected == Reboot) {
             menuHandler::menuQueue = menuHandler::reboot_menu;
-            screen->runNow();
-        } else if (selected == MUI) {
-            menuHandler::menuQueue = menuHandler::mui_picker;
-            screen->runNow();
-        } else if (selected == Color) {
-            menuHandler::menuQueue = menuHandler::tftcolormenupicker;
             screen->runNow();
         } else if (selected == Test) {
             menuHandler::menuQueue = menuHandler::test_menu;
@@ -625,23 +601,23 @@ void menuHandler::BuzzerModeMenu()
 
 void menuHandler::ScreenWakeupMenu()
 {
-    static const char *optionsArray[] = {"Back", "On Msg", "By Key"};
-    enum optionsNumbers { Back = 0, OnMsg = 1, ByKey = 2 };
+    static const char *optionsArray[] = {"Back", "With Notification", "User Only"};
+    enum optionsNumbers { Back = 0, withNotification = 1, userOnly = 2 };
     BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "Screen Wakeup";
+    bannerOptions.message = "Screen Wakes";
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 3;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == OnMsg) {
+        if (selected == withNotification) {
             uiconfig.wake_on_received_message = true;
             saveUIConfig();
-        } else if (selected == ByKey) {
+        } else if (selected == userOnly) {
             uiconfig.wake_on_received_message = false;
             saveUIConfig();
         }
     };
     // Set initial selection based on current config
-    bannerOptions.InitialSelected = uiconfig.wake_on_received_message ? OnMsg : ByKey;
+    bannerOptions.InitialSelected = uiconfig.wake_on_received_message ? withNotification : userOnly;
     screen->showOverlayBanner(bannerOptions);
 }
 
@@ -912,6 +888,75 @@ void menuHandler::wifiToggleMenu()
     screen->showOverlayBanner(bannerOptions);
 }
 
+void menuHandler::notificationsMenu()
+{
+    enum optionsNumbers { Back, BeepActions };
+    static const char *optionsArray[] = {"Back", "Beep Actions"};
+    static int optionsEnumArray[] = {Back, BeepActions};
+    int options = 2;
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Notifications";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = options;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == BeepActions) {
+            menuHandler::menuQueue = menuHandler::buzzermodemenupicker;
+            screen->runNow();
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::screenOptionsMenu()
+{
+    // Check if brightness is supported
+    bool hasSupportBrightness = false;
+#if defined(ST7789_CS) || defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) || defined(USE_SH1107) || HAS_TFT
+    hasSupportBrightness = true;
+#endif
+
+    enum optionsNumbers { Back, Wakeup, Brightness, ScreenColor };
+    static const char *optionsArray[4] = {"Back"};
+    static int optionsEnumArray[4] = {Back};
+    int options = 1;
+
+    optionsArray[options] = "Wakeup";
+    optionsEnumArray[options++] = Wakeup;
+
+    // Only show brightness for B&W displays
+    if (hasSupportBrightness && !HAS_TFT) {
+        optionsArray[options] = "Brightness";
+        optionsEnumArray[options++] = Brightness;
+    }
+
+    // Only show screen color for TFT displays
+#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || HAS_TFT
+    optionsArray[options] = "Screen Color";
+    optionsEnumArray[options++] = ScreenColor;
+#endif
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Screen Options";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = options;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Wakeup) {
+            menuHandler::menuQueue = menuHandler::screen_wakeup_menu;
+            screen->runNow();
+        } else if (selected == Brightness) {
+            menuHandler::menuQueue = menuHandler::brightness_picker;
+            screen->runNow();
+        } else if (selected == ScreenColor) {
+            menuHandler::menuQueue = menuHandler::tftcolormenupicker;
+            screen->runNow();
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
 void menuHandler::handleMenuSwitch(OLEDDisplay *display)
 {
     if (menuQueue != menu_none)
@@ -983,6 +1028,12 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case bluetooth_toggle_menu:
         BluetoothToggleMenu();
+        break;
+    case notifications_menu:
+        notificationsMenu();
+        break;
+    case screen_options_menu:
+        screenOptionsMenu();
         break;
     }
     menuQueue = menu_none;
