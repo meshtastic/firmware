@@ -1,9 +1,10 @@
 # XIAO nrf52840/nrf52840 Sense + Ebyte E22-900M30S
-*A step-by-step guide for macOS and Linux.*
+
+_A step-by-step guide for macOS and Linux._
 
 ## Introduction
 
-This guide will walk you through everything needed to get the XIAO nrf52840 (or XIAO nrf52840 Sense) running Meshtastic using an Ebyte E22-900M30S LoRa module. The combination of the E22 with an nRF52840 MCU is desirable because it allows for both very low idle (Rx) power draw *and* high transmit power.
+This guide will walk you through everything needed to get the XIAO nrf52840 (or XIAO nrf52840 Sense) running Meshtastic using an Ebyte E22-900M30S LoRa module. The combination of the E22 with an nRF52840 MCU is desirable because it allows for both very low idle (Rx) power draw _and_ high transmit power.
 
 The XIAO nrf52840 is a small but surprisingly well-appointed nRF52840 board, with enough GPIO for most Meshtastic applications and a built-in LiPo charger.
 
@@ -44,7 +45,8 @@ Connecting the E22 to the XIAO nrf52840 is straightforward, but there are a few 
 The default pin mapping in `variant.h` uses "Automatic Tx/Rx switching" mode.
 
 If you wire your board for Manual Tx/Rx Switching Mode, `SX126X_TXEN` must be defined (`#define #define SX126X_TXEN D6`) in `variants/seeed_xiao_nrf52840_kit/variant.h` in the code block following:
-```
+
+```c
 #ifdef XIAO_BLE_LEGACY_PINOUT
 // Legacy xiao_ble variant pinout for third-party SX126x modules e.g. EBYTE E22
 ```
@@ -54,15 +56,16 @@ If you wire your board for Manual Tx/Rx Switching Mode, `SX126X_TXEN` must be de
 #### MCU -> E22 Connections
 
 | XIAO nrf52840 pin | variant.h definition | E22 pin   | Notes                                                                                                                |
-| :----------- | :------------------- | :-------- | :------------------------------------------------------------------------------------------------------------------- |
-| D0           | SX126X_CS            | 19 (NSS)  |                                                                                                                      |
-| D1           | SX126X_DIO1          | 13 (DIO1) |                                                                                                                      |
-| D2           | SX126X_BUSY          | 14 (BUSY) |                                                                                                                      |
-| D3           | SX126X_RESET         | 15 (NRST) |                                                                                                                      |
-| D7           | SX126X_RXEN          | 6 (RXEN)  | These pins must still be connected, and `SX126X_RXEN` defined in `variant.h`, otherwise Rx sensitivity will be poor. |
-| D8           | PIN_SPI_SCK          | 18 (SCK)  |                                                                                                                      |
-| D9           | PIN_SPI_MISO         | 16 (MISO) |                                                                                                                      |
-| D10          | PIN_SPI_MOSI         | 17 (MOSI) |                                                                                                                      |
+| :---------------- | :------------------- | :-------- | :------------------------------------------------------------------------------------------------------------------- |
+| D0                | SX126X_CS            | 19 (NSS)  |                                                                                                                      |
+| D1                | SX126X_DIO1          | 13 (DIO1) |                                                                                                                      |
+| D2                | SX126X_BUSY          | 14 (BUSY) |                                                                                                                      |
+| D3                | SX126X_RESET         | 15 (NRST) |                                                                                                                      |
+| D7                | SX126X_RXEN          | 6 (RXEN)  | These pins must still be connected, and `SX126X_RXEN` defined in `variant.h`, otherwise Rx sensitivity will be poor. |
+| D8                | PIN_SPI_SCK          | 18 (SCK)  |                                                                                                                      |
+| D9                | PIN_SPI_MISO         | 16 (MISO) |                                                                                                                      |
+| D10               | PIN_SPI_MOSI         | 17 (MOSI) |                                                                                                                      |
+
 #### E22 -> E22 Connections
 
 | E22 pin | E22 pin | Notes                                                                     |
@@ -78,20 +81,20 @@ The schematic (`xiao-ble-e22-schematic.png`) in the `eagle-project` directory us
 #### MCU -> E22 Connections
 
 | XIAO nrf52840 pin | variant.h definition | E22 pin   | Notes |
-| :----------- | :------------------- | :-------- | :---- |
-| D0           | SX126X_CS            | 19 (NSS)  |       |
-| D1           | SX126X_DIO1          | 13 (DIO1) |       |
-| D2           | SX126X_BUSY          | 14 (BUSY) |       |
-| D3           | SX126X_RESET         | 15 (NRST) |       |
-| D6           | SX126X_TXEN          | 7 (TXEN)  |       |
-| D7           | SX126X_RXEN          | 6 (RXEN)  |       |
-| D8           | PIN_SPI_SCK          | 18 (SCK)  |       |
-| D9           | PIN_SPI_MISO         | 16 (MISO) |       |
-| D10          | PIN_SPI_MOSI         | 17 (MOSI) |       |
+| :---------------- | :------------------- | :-------- | :---- |
+| D0                | SX126X_CS            | 19 (NSS)  |       |
+| D1                | SX126X_DIO1          | 13 (DIO1) |       |
+| D2                | SX126X_BUSY          | 14 (BUSY) |       |
+| D3                | SX126X_RESET         | 15 (NRST) |       |
+| D6                | SX126X_TXEN          | 7 (TXEN)  |       |
+| D7                | SX126X_RXEN          | 6 (RXEN)  |       |
+| D8                | PIN_SPI_SCK          | 18 (SCK)  |       |
+| D9                | PIN_SPI_MISO         | 16 (MISO) |       |
+| D10               | PIN_SPI_MOSI         | 17 (MOSI) |       |
 
 #### E22 -> E22 connections
 
-*(none)*
+_(none)_
 
 ## 2. Build Meshtastic
 
@@ -106,12 +109,12 @@ The schematic (`xiao-ble-e22-schematic.png`) in the `eagle-project` directory us
      3. In the line starting with `build_flags` within this section, change `-DEBYTE_E22_900M30S` to `-DEBYTE_E22_900M33S`
 4. Follow **Build** → **Step 4** to build the firmware
 5. Stop here, because the **PlatformIO: Upload** step does not work for factory-fresh XIAO nrf52840 (the automatic reset to bootloader only works if Meshtastic firmware is already running)
-6. The built `firmware.uf2` binary can be found in the folder `.pio/build/xiao_ble/firmware.uf2` (relative to where you cloned the Git repository to), we will need it for [flashing the firmware](#3-flash-the-firmware-to-the-xiao-ble) (manually)
+6. The built `firmware.uf2` binary can be found in the folder `.pio/build/xiao_ble/firmware.uf2` (relative to where you cloned the Git repository to), we will need it for [flashing the firmware](#3-flash-the-firmware-to-the-xiao-nrf52840) (manually)
 
 ## 3. Flash the Firmware to the XIAO nrf52840
 
 1. Double press the XIAO nrf52840's `reset` button to put it in bootloader mode, and a USB volume named `XIAO SENSE` will appear
-2. Copy the `firmware.uf2` file to the `XIAO SENSE` volume (refer to the last step of [Build Meshtastic](#1-build-meshtastic))
+2. Copy the `firmware.uf2` file to the `XIAO SENSE` volume (refer to the last step of [Build Meshtastic](#2-build-meshtastic))
 3. The XIAO nrf52840's red LED will flash for several seconds as the firmware is copied
 4. Once Meshtastic firmware succesfully boots, the:
    1. Green LED will turn on
@@ -125,10 +128,10 @@ The schematic (`xiao-ble-e22-schematic.png`) in the `eagle-project` directory us
   - If you see that the SX1262 init result was -2, this likely indicates a wiring problem; double check your wiring and pin mapping in `variant.h`.
   - If you see an error mentioning tinyFS, this may mean you need to reformat the XIAO's storage:
     1. Open the [Meshtastic web flasher](https://flasher.meshtastic.org/)
-    2. Select the ***Seeed XIAO NRF52840 Kit***
-    3. Click the ***trash can icon*** to the right of ***Flash***
+    2. Select the **_Seeed XIAO NRF52840 Kit_**
+    3. Click the **_trash can icon_** to the right of **_Flash_**
     4. Follow the instructions on the screen
-    **Do not flash the Seeed XIAO NRF52840 Kit firmware** if you have wired the LoRa module according to this variant, as the Seeed XIAO NRF52840 Kit uses different wiring for the SX1262 LoRa chip
+       **Do not flash the Seeed XIAO NRF52840 Kit firmware** if you have wired the LoRa module according to this variant, as the Seeed XIAO NRF52840 Kit uses different wiring for the SX1262 LoRa chip
   - If you don't see any specific error message, but the boot process is stuck or not proceeding as expected, this might also mean there is a conflict in `variant.h`. If you have made any changes to the pin mapping, ensure they do not result in a conflict. If all else fails, try reverting your changes and using the known-good configuration included here.
   - The above might also mean something is wired incorrectly. Try reverting to one of the known-good example wirings in section 4.
 - If the E22 gets hot to the touch:
@@ -162,4 +165,4 @@ During what became a fairly long trial-and-error process, I did a lot of careful
 - All testing was done by sending single-character messages between nodes and observing the received RSSI reported in the message acknowledgement. Messages were sent one by one, waiting for each to be acknowledged or time out before sending the next.
 - The E22's Tx power was observed by sending messages from the RAK to the XIAO nrf52840 + E22 and recording the received RSSI.
 - The opposite was done to observe the E22's Rx sensitivity: messages were sent from the XIAO nrf52840 + E22 to the RAK, and the received RSSI was recorded.
-While this cannot match the level of accuracy achievable with actual test equipment in a lab setting, it was nonetheless sufficient to demonstrate the (sometimes very large) differences in Tx power and Rx sensitivity between various configurations.
+  While this cannot match the level of accuracy achievable with actual test equipment in a lab setting, it was nonetheless sufficient to demonstrate the (sometimes very large) differences in Tx power and Rx sensitivity between various configurations.
