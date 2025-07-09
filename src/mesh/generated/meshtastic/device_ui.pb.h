@@ -161,9 +161,6 @@ typedef struct _meshtastic_DeviceUIConfig {
     /* Clockface analog style
  true for analog clockface, false for digital clockface */
     bool is_clockface_analog;
-    /* If true (default), the screen will automatically turn on when a message is received.
- If false, the screen will only turn on via button press or other manual input. */
-    bool wake_on_received_message;
 } meshtastic_DeviceUIConfig;
 
 
@@ -194,7 +191,7 @@ extern "C" {
 
 
 /* Initializer values for message structs */
-#define meshtastic_DeviceUIConfig_init_default   {0, 0, 0, 0, 0, 0, _meshtastic_Theme_MIN, 0, 0, 0, _meshtastic_Language_MIN, false, meshtastic_NodeFilter_init_default, false, meshtastic_NodeHighlight_init_default, {0, {0}}, false, meshtastic_Map_init_default, _meshtastic_CompassMode_MIN, 0, 0, 1}
+#define meshtastic_DeviceUIConfig_init_default   {0, 0, 0, 0, 0, 0, _meshtastic_Theme_MIN, 0, 0, 0, _meshtastic_Language_MIN, false, meshtastic_NodeFilter_init_default, false, meshtastic_NodeHighlight_init_default, {0, {0}}, false, meshtastic_Map_init_default, _meshtastic_CompassMode_MIN, 0, 0}
 #define meshtastic_NodeFilter_init_default       {0, 0, 0, 0, 0, "", 0}
 #define meshtastic_NodeHighlight_init_default    {0, 0, 0, 0, ""}
 #define meshtastic_GeoPoint_init_default         {0, 0, 0}
@@ -242,7 +239,6 @@ extern "C" {
 #define meshtastic_DeviceUIConfig_compass_mode_tag 16
 #define meshtastic_DeviceUIConfig_screen_rgb_color_tag 17
 #define meshtastic_DeviceUIConfig_is_clockface_analog_tag 18
-#define meshtastic_DeviceUIConfig_wake_on_received_message_tag 19
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_DeviceUIConfig_FIELDLIST(X, a) \
@@ -263,8 +259,7 @@ X(a, STATIC,   SINGULAR, BYTES,    calibration_data,  14) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  map_data,         15) \
 X(a, STATIC,   SINGULAR, UENUM,    compass_mode,     16) \
 X(a, STATIC,   SINGULAR, UINT32,   screen_rgb_color,  17) \
-X(a, STATIC,   SINGULAR, BOOL,     is_clockface_analog,  18) \
-X(a, STATIC,   SINGULAR, BOOL,     wake_on_received_message,  19)
+X(a, STATIC,   SINGULAR, BOOL,     is_clockface_analog,  18)
 #define meshtastic_DeviceUIConfig_CALLBACK NULL
 #define meshtastic_DeviceUIConfig_DEFAULT NULL
 #define meshtastic_DeviceUIConfig_node_filter_MSGTYPE meshtastic_NodeFilter

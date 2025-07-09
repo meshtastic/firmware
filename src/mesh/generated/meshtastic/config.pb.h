@@ -501,9 +501,6 @@ typedef struct _meshtastic_Config_DisplayConfig {
     /* If false (default), the device will display the time in 24-hour format on screen.
  If true, the device will display the time in 12-hour format on screen. */
     bool use_12h_clock;
-    /* If true (default), the screen will automatically turn on when a message is received.
- If false, the screen will only turn on via button press or other manual input. */
-    bool wake_on_received_message;
 } meshtastic_Config_DisplayConfig;
 
 /* Lora Config */
@@ -809,7 +806,6 @@ extern "C" {
 #define meshtastic_Config_DisplayConfig_wake_on_tap_or_motion_tag 10
 #define meshtastic_Config_DisplayConfig_compass_orientation_tag 11
 #define meshtastic_Config_DisplayConfig_use_12h_clock_tag 12
-#define meshtastic_Config_DisplayConfig_wake_on_received_message_tag 13
 #define meshtastic_Config_LoRaConfig_use_preset_tag 1
 #define meshtastic_Config_LoRaConfig_modem_preset_tag 2
 #define meshtastic_Config_LoRaConfig_bandwidth_tag 3
