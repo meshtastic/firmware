@@ -463,6 +463,7 @@ void menuHandler::positionBaseMenu()
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Position Action";
     bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.optionsCount = options;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == GPSToggle) {
@@ -889,10 +890,8 @@ void menuHandler::wifiToggleMenu()
 
 void menuHandler::keyVerificationInitMenu()
 {
-    std::function<void(uint32_t)> callbackFun = [](uint32_t selected) -> void {
-        keyVerificationModule->sendInitialRequest(selected);
-    };
-    screen->showNodePicker("Node to Verify", 30000, callbackFun);
+    screen->showNodePicker("Node to Verify", 30000,
+                           [](uint32_t selected) -> void { keyVerificationModule->sendInitialRequest(selected); });
 }
 
 void menuHandler::keyVerificationFinalPrompt()
@@ -991,6 +990,7 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case key_verification_final_prompt:
         keyVerificationFinalPrompt();
+        break;
     case bluetooth_toggle_menu:
         BluetoothToggleMenu();
         break;

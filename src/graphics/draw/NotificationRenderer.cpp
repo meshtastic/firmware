@@ -156,8 +156,8 @@ void NotificationRenderer::drawNumberPicker(OLEDDisplay *display, OLEDDisplayUiS
         resetBanner();
     }
     if (curSelected == numDigits) {
-        resetBanner();
         alertBannerCallback(currentNumber);
+        resetBanner();
     }
 
     inEvent.inputEvent = INPUT_BROKER_NONE;
@@ -219,9 +219,8 @@ void NotificationRenderer::drawNodePicker(OLEDDisplay *display, OLEDDisplayUiSta
     } else if (inEvent.inputEvent == INPUT_BROKER_DOWN || inEvent.inputEvent == INPUT_BROKER_USER_PRESS) {
         curSelected++;
     } else if (inEvent.inputEvent == INPUT_BROKER_SELECT) {
-        resetBanner();
         alertBannerCallback(selectedNodenum);
-
+        resetBanner();
     } else if ((inEvent.inputEvent == INPUT_BROKER_CANCEL || inEvent.inputEvent == INPUT_BROKER_ALT_LONG) &&
                alertBannerUntil != 0) {
         resetBanner();
