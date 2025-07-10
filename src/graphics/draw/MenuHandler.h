@@ -67,7 +67,6 @@ class menuHandler
     static void numberTest();
     static void wifiBaseMenu();
     static void wifiToggleMenu();
-    static void ScreenWakeupMenu();
     static void notificationsMenu();
     static void screenOptionsMenu();
     static void powerMenu();

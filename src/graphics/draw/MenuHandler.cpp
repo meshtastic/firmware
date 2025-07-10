@@ -775,6 +775,9 @@ void menuHandler::rebootMenu()
             IF_SCREEN(screen->showSimpleBanner("Rebooting...", 0));
             nodeDB->saveToDisk();
             rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+        } else {
+            menuQueue = power_menu;
+            screen->runNow();
         }
     };
     screen->showOverlayBanner(bannerOptions);
@@ -792,6 +795,9 @@ void menuHandler::shutdownMenu()
             IF_SCREEN(screen->showSimpleBanner("Shutting Down...", 0));
             nodeDB->saveToDisk();
             power->shutdown();
+        } else {
+            menuQueue = power_menu;
+            screen->runNow();
         }
     };
     screen->showOverlayBanner(bannerOptions);
@@ -892,9 +898,9 @@ void menuHandler::wifiToggleMenu()
 
 void menuHandler::notificationsMenu()
 {
-    enum optionsNumbers { Back, BeepActions };
-    static const char *optionsArray[] = {"Back", "Beep Actions"};
-    static int optionsEnumArray[] = {Back, BeepActions};
+    enum optionsNumbers { Back, BuzzerActions };
+    static const char *optionsArray[] = {"Back", "Buzzer Actions"};
+    static int optionsEnumArray[] = {Back, BuzzerActions};
     int options = 2;
 
     BannerOverlayOptions bannerOptions;
@@ -903,7 +909,7 @@ void menuHandler::notificationsMenu()
     bannerOptions.optionsCount = options;
     bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == BeepActions) {
+        if (selected == BuzzerActions) {
             menuHandler::menuQueue = menuHandler::buzzermodemenupicker;
             screen->runNow();
         } else {
