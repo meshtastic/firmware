@@ -86,9 +86,11 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
             sprintf(message, "Verification: \n");
             generateVerificationCode(message + 15);
             LOG_INFO("Hash1 matches!");
-            IF_SCREEN(static const char *optionsArray[] = {"Reject", "Accept"}; graphics::BannerOverlayOptions options;
-                      options.message = message; options.durationMs = 30000; options.optionsArrayPtr = optionsArray;
-                      options.optionsCount = 2; options.notificationType = graphics::notificationTypeEnum::selection_picker;
+            static const char *optionsArray[] = {"Reject", "Accept"};
+            // Don't try to put the array definition in the macro. Does not work with curly braces.
+            IF_SCREEN(graphics::BannerOverlayOptions options; options.message = message; options.durationMs = 30000;
+                      options.optionsArrayPtr = optionsArray; options.optionsCount = 2;
+                      options.notificationType = graphics::notificationTypeEnum::selection_picker;
                       options.bannerCallback =
                           [=](int selected) {
                               if (selected == 1) {
