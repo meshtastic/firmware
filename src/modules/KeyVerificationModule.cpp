@@ -84,11 +84,10 @@ bool KeyVerificationModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
             memset(message, 0, sizeof(message));
             sprintf(message, "Verification: \n");
             generateVerificationCode(message + 15);
-            static const char *optionsArray[] = {"Reject", "Accept"};
             LOG_INFO("Hash1 matches!");
-            IF_SCREEN(graphics::BannerOverlayOptions options; options.message = message; options.durationMs = 30000;
-                      options.optionsArrayPtr = optionsArray; options.optionsCount = 2;
-                      options.notificationType = graphics::notificationTypeEnum::selection_picker;
+            IF_SCREEN(static const char *optionsArray[] = {"Reject", "Accept"}; graphics::BannerOverlayOptions options;
+                      options.message = message; options.durationMs = 30000; options.optionsArrayPtr = optionsArray;
+                      options.optionsCount = 2; options.notificationType = graphics::notificationTypeEnum::selection_picker;
                       options.bannerCallback =
                           [=](int selected) {
                               if (selected == 1) {
@@ -121,7 +120,7 @@ bool KeyVerificationModule::sendInitialRequest(NodeNum remoteNode)
     // generate nonce
     updateState();
     if (currentState != KEY_VERIFICATION_IDLE) {
-        graphics::menuHandler::menuQueue = graphics::menuHandler::throttle_message;
+        IF_SCREEN(graphics::menuHandler::menuQueue = graphics::menuHandler::throttle_message;)
         return false;
     }
     currentNonce = random();
