@@ -26,7 +26,8 @@ class menuHandler
         trace_route_picker,
         test_menu,
         number_test,
-        wifi_toggle_menu
+        wifi_toggle_menu,
+        bluetooth_toggle_menu
     };
     static screenMenus menuQueue;
 
@@ -58,6 +59,7 @@ class menuHandler
     static void numberTest();
     static void wifiBaseMenu();
     static void wifiToggleMenu();
+    static void BluetoothToggleMenu();
 };
 
 } // namespace graphics
