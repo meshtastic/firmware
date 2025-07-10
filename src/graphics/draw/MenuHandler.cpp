@@ -420,10 +420,10 @@ void menuHandler::systemBaseMenu()
 
 void menuHandler::favoriteBaseMenu()
 {
-    enum optionsNumbers { Back, Preset, Freetext, Remove, enumEnd };
-    static const char *optionsArray[enumEnd] = {"Back", "New Preset Msg"};
-    static int optionsEnumArray[enumEnd] = {Back, Preset};
-    int options = 2;
+    enum optionsNumbers { Back, Trace, Preset, Freetext, Remove, enumEnd };
+    static const char *optionsArray[enumEnd] = {"Back", "Trace Route", "New Preset Msg"};
+    static int optionsEnumArray[enumEnd] = {Back, Trace, Preset};
+    int options = 3;
 
     if (kb_found) {
         optionsArray[options] = "New Freetext Msg";
@@ -438,15 +438,15 @@ void menuHandler::favoriteBaseMenu()
     bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.optionsCount = options;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == 1) {
+        if (selected == Trace) {
             if (traceRouteModule) {
                 traceRouteModule->sendTraceRoute(graphics::UIRenderer::currentFavoriteNodeNum);
             }
-        } else if (selected == 2) {
+        } else if (selected == Preset) {
             cannedMessageModule->LaunchWithDestination(graphics::UIRenderer::currentFavoriteNodeNum);
-        } else if (selected == 3 && kb_found) {
+        } else if (selected == Freetext && kb_found) {
             cannedMessageModule->LaunchFreetextWithDestination(graphics::UIRenderer::currentFavoriteNodeNum);
-        } else if ((!kb_found && selected == 3) || (selected == 4 && kb_found)) {
+        } else if (selected == Remove) {
             menuHandler::menuQueue = menuHandler::remove_favorite;
             screen->runNow();
         }
@@ -492,7 +492,7 @@ void menuHandler::nodeListMenu()
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Node Action";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 4;
+    bannerOptions.optionsCount = 5;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == Favorite) {
             menuQueue = add_favorite;
@@ -842,7 +842,6 @@ void menuHandler::traceRoutePickerMenu()
         if (traceRouteModule) {
             traceRouteModule->sendTraceRoute(nodenum);
         }
-        screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
     });
 }
 
