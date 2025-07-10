@@ -13,6 +13,7 @@
 #include "main.h"
 #include "modules/AdminModule.h"
 #include "modules/CannedMessageModule.h"
+#include "modules/KeyVerificationModule.h"
 
 extern uint16_t TFT_MESH;
 
@@ -237,27 +238,25 @@ void menuHandler::clockMenu()
 
 void menuHandler::messageResponseMenu()
 {
+    enum optionsNumbers { Back = 0, Dismiss = 1, Preset = 2, Freetext = 3, Aloud = 4, enumEnd = 5 };
 
-    static const char **optionsArrayPtr;
-    int options;
-    enum optionsNumbers { Back = 0, Dismiss = 1, Preset = 2, Freetext = 3 };
+    static const char *optionsArray[enumEnd] = {"Back", "Dismiss", "Reply via Preset"};
+    static int optionsEnumArray[enumEnd] = {Back, Dismiss, Preset};
+    int options = 3;
+
     if (kb_found) {
-        static const char *optionsArray[] = {"Back", "Dismiss", "Reply via Preset", "Reply via Freetext"};
-        optionsArrayPtr = optionsArray;
-        options = 4;
-    } else {
-        static const char *optionsArray[] = {"Back", "Dismiss", "Reply via Preset"};
-        optionsArrayPtr = optionsArray;
-        options = 3;
+        optionsArray[options] = "Reply via Freetext";
+        optionsEnumArray[options++] = Freetext;
     }
+
 #ifdef HAS_I2S
-    static const char *optionsArray[] = {"Back", "Dismiss", "Reply via Preset", "Reply via Freetext", "Read Aloud"};
-    optionsArrayPtr = optionsArray;
-    options = 5;
+    optionsArray[options] = "Read Aloud";
+    optionsEnumArray[options++] = Aloud;
 #endif
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Message Action";
-    bannerOptions.optionsArrayPtr = optionsArrayPtr;
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.optionsCount = options;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == Dismiss) {
@@ -276,7 +275,7 @@ void menuHandler::messageResponseMenu()
             }
         }
 #ifdef HAS_I2S
-        else if (selected == 4) {
+        else if (selected == Aloud) {
             const meshtastic_MeshPacket &mp = devicestate.rx_text_message;
             const char *msg = reinterpret_cast<const char *>(mp.decoded.payload.bytes);
 
@@ -289,10 +288,10 @@ void menuHandler::messageResponseMenu()
 
 void menuHandler::homeBaseMenu()
 {
-    enum optionsNumbers { Back, Backlight, Position, Preset, Freetext, Bluetooth, Sleep };
+    enum optionsNumbers { Back, Backlight, Position, Preset, Freetext, Bluetooth, Sleep, enumEnd };
 
-    static const char *optionsArray[6] = {"Back"};
-    static int optionsEnumArray[6] = {Back};
+    static const char *optionsArray[enumEnd] = {"Back"};
+    static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
 
 #ifdef PIN_EINK_EN
@@ -347,9 +346,15 @@ void menuHandler::homeBaseMenu()
 
 void menuHandler::systemBaseMenu()
 {
-    enum optionsNumbers { Back, MUI, Notifications, ScreenOptions, PowerMenu, Test };
-    static const char *optionsArray[6] = {"Back"};
-    static int optionsEnumArray[6] = {Back};
+    // Check if brightness is supported
+    bool hasSupportBrightness = false;
+#if defined(ST7789_CS) || defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) || defined(USE_SH1107) || HAS_TFT
+    hasSupportBrightness = true;
+#endif
+
+    enum optionsNumbers { Back, Beeps, Brightness, Reboot, Color, MUI, Test, enumEnd };
+    static const char *optionsArray[enumEnd] = {"Back"};
+    static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
 
     optionsArray[options] = "Notifications";
@@ -401,21 +406,22 @@ void menuHandler::systemBaseMenu()
 
 void menuHandler::favoriteBaseMenu()
 {
-    int options;
-    static const char **optionsArrayPtr;
+    enum optionsNumbers { Back, Preset, Freetext, Remove, enumEnd };
+    static const char *optionsArray[enumEnd] = {"Back", "New Preset Msg"};
+    static int optionsEnumArray[enumEnd] = {Back, Preset};
+    int options = 2;
 
     if (kb_found) {
-        static const char *optionsArray[] = {"Back", "New Preset Msg", "New Freetext Msg", "Remove Favorite"};
-        optionsArrayPtr = optionsArray;
-        options = 4;
-    } else {
-        static const char *optionsArray[] = {"Back", "New Preset Msg", "Remove Favorite"};
-        optionsArrayPtr = optionsArray;
-        options = 3;
+        optionsArray[options] = "New Freetext Msg";
+        optionsEnumArray[options++] = Freetext;
     }
+    optionsArray[options] = "Remove Favorite";
+    optionsEnumArray[options++] = Remove;
+
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Favorites Action";
-    bannerOptions.optionsArrayPtr = optionsArrayPtr;
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.optionsCount = options;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 1) {
@@ -432,34 +438,29 @@ void menuHandler::favoriteBaseMenu()
 
 void menuHandler::positionBaseMenu()
 {
-    int options;
-    static const char **optionsArrayPtr;
-    static const char *optionsArray[] = {"Back", "GPS Toggle", "Compass"};
-    static const char *optionsArrayCalibrate[] = {"Back", "GPS Toggle", "Compass", "Compass Calibrate"};
+    enum optionsNumbers { Back, GPSToggle, CompassMenu, CompassCalibrate, enumEnd };
+
+    static const char *optionsArray[enumEnd] = {"Back", "GPS Toggle", "Compass"};
+    static int optionsEnumArray[enumEnd] = {Back, GPSToggle, CompassMenu};
+    int options = 3;
 
     if (accelerometerThread) {
-        optionsArrayPtr = optionsArrayCalibrate;
-        options = 4;
-    } else {
-        optionsArrayPtr = optionsArray;
-        options = 3;
+        optionsArray[options] = "Compass Calibrate";
+        optionsEnumArray[options++] = CompassCalibrate;
     }
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Position Action";
-    bannerOptions.optionsArrayPtr = optionsArrayPtr;
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.optionsCount = options;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == 1) {
-#if MESHTASTIC_EXCLUDE_GPS
-            menuQueue = menu_none;
-#else
+        if (selected == GPSToggle) {
             menuQueue = gps_toggle_menu;
             screen->runNow();
-#endif
-        } else if (selected == 2) {
+        } else if (selected == CompassMenu) {
             menuQueue = compass_point_north_menu;
             screen->runNow();
-        } else if (selected == 3) {
+        } else if (selected == CompassCalibrate) {
             accelerometerThread->calibrate(30);
         }
     };
@@ -468,16 +469,20 @@ void menuHandler::positionBaseMenu()
 
 void menuHandler::nodeListMenu()
 {
-    static const char *optionsArray[] = {"Back", "Add Favorite", "Reset NodeDB"};
+    enum optionsNumbers { Back, Favorite, Verify, Reset };
+    static const char *optionsArray[] = {"Back", "Add Favorite", "Key Verification", "Reset NodeDB"};
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Node Action";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 3;
+    bannerOptions.optionsCount = 4;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == 1) {
+        if (selected == Favorite) {
             menuQueue = add_favorite;
             screen->runNow();
-        } else if (selected == 2) {
+        } else if (selected == Verify) {
+            menuQueue = key_verification_init;
+            screen->runNow();
+        } else if (selected == Reset) {
             menuQueue = reset_node_db_menu;
             screen->runNow();
         }
@@ -505,6 +510,7 @@ void menuHandler::resetNodeDBMenu()
 
 void menuHandler::compassNorthMenu()
 {
+    enum optionsNumbers { Back, Dynamic, Fixed, Freeze };
     static const char *optionsArray[] = {"Back", "Dynamic", "Fixed Ring", "Freeze Heading"};
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "North Directions?";
@@ -512,25 +518,25 @@ void menuHandler::compassNorthMenu()
     bannerOptions.optionsCount = 4;
     bannerOptions.InitialSelected = uiconfig.compass_mode + 1;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == 1) {
+        if (selected == Dynamic) {
             if (uiconfig.compass_mode != meshtastic_CompassMode_DYNAMIC) {
                 uiconfig.compass_mode = meshtastic_CompassMode_DYNAMIC;
                 saveUIConfig();
                 screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
             }
-        } else if (selected == 2) {
+        } else if (selected == Fixed) {
             if (uiconfig.compass_mode != meshtastic_CompassMode_FIXED_RING) {
                 uiconfig.compass_mode = meshtastic_CompassMode_FIXED_RING;
                 saveUIConfig();
                 screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
             }
-        } else if (selected == 3) {
+        } else if (selected == Freeze) {
             if (uiconfig.compass_mode != meshtastic_CompassMode_FREEZE_HEADING) {
                 uiconfig.compass_mode = meshtastic_CompassMode_FREEZE_HEADING;
                 saveUIConfig();
                 screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
             }
-        } else if (selected == 0) {
+        } else if (selected == Back) {
             menuQueue = position_base_menu;
             screen->runNow();
         }
@@ -541,6 +547,7 @@ void menuHandler::compassNorthMenu()
 #if !MESHTASTIC_EXCLUDE_GPS
 void menuHandler::GPSToggleMenu()
 {
+
     static const char *optionsArray[] = {"Back", "Enabled", "Disabled"};
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Toggle GPS";
@@ -795,7 +802,7 @@ void menuHandler::shutdownMenu()
 
 void menuHandler::addFavoriteMenu()
 {
-    screen->showNodePicker("Node To Favorite", 30000, [](int nodenum) -> void {
+    screen->showNodePicker("Node To Favorite", 30000, [](uint32_t nodenum) -> void {
         LOG_WARN("Nodenum: %u", nodenum);
         nodeDB->set_favorite(true, nodenum);
         screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
@@ -995,6 +1002,37 @@ void menuHandler::powerMenu()
         }
     };
     screen->showOverlayBanner(bannerOptions);
+
+void menuHandler::keyVerificationInitMenu()
+{
+    screen->showNodePicker("Node to Verify", 30000,
+                           [](uint32_t selected) -> void { keyVerificationModule->sendInitialRequest(selected); });
+}
+
+void menuHandler::keyVerificationFinalPrompt()
+{
+    char message[40] = {0};
+    memset(message, 0, sizeof(message));
+    sprintf(message, "Verification: \n");
+    keyVerificationModule->generateVerificationCode(message + 15); // send the toPhone packet
+
+    if (screen) {
+        static const char *optionsArray[] = {"Reject", "Accept"};
+        graphics::BannerOverlayOptions options;
+        options.message = message;
+        options.durationMs = 30000;
+        options.optionsArrayPtr = optionsArray;
+        options.optionsCount = 2;
+        options.notificationType = graphics::notificationTypeEnum::selection_picker;
+        options.bannerCallback = [=](int selected) {
+            if (selected == 1) {
+                auto remoteNodePtr = nodeDB->getMeshNode(keyVerificationModule->getCurrentRemoteNode());
+                remoteNodePtr->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
+            }
+        };
+        screen->showOverlayBanner(options);
+    }
+
 }
 
 void menuHandler::handleMenuSwitch(OLEDDisplay *display)
@@ -1069,6 +1107,12 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
     case wifi_toggle_menu:
         wifiToggleMenu();
         break;
+    case key_verification_init:
+        keyVerificationInitMenu();
+        break;
+    case key_verification_final_prompt:
+        keyVerificationFinalPrompt();
+        break;
     case bluetooth_toggle_menu:
         BluetoothToggleMenu();
         break;
@@ -1080,6 +1124,8 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case power_menu:
         powerMenu();
+    case throttle_message:
+        screen->showSimpleBanner("Too Many Attempts\nTry again in 60 seconds.", 5000);
         break;
     }
     menuQueue = menu_none;

@@ -1,3 +1,5 @@
+#pragma once
+#if HAS_SCREEN
 #include "configuration.h"
 namespace graphics
 {
@@ -33,6 +35,10 @@ class menuHandler
         screen_options_menu,
         power_menu,
         system_base_menu
+        key_verification_init,
+        key_verification_final_prompt,
+        bluetooth_toggle_menu,
+        throttle_message
     };
     static screenMenus menuQueue;
 
@@ -70,7 +76,10 @@ class menuHandler
 
   private:
     static void saveUIConfig();
+    static void keyVerificationInitMenu();
+    static void keyVerificationFinalPrompt();
     static void BluetoothToggleMenu();
 };
 
 } // namespace graphics
+#endif
