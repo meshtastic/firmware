@@ -653,13 +653,13 @@ void menuHandler::BrightnessPickerMenu()
 
 void menuHandler::switchToMUIMenu()
 {
-    static const char *optionsArray[] = {"Yes", "No"};
+    static const char *optionsArray[] = {"No", "Yes"};
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Switch to MUI?";
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 2;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == 0) {
+        if (selected == 1) {
             config.display.displaymode = meshtastic_Config_DisplayConfig_DisplayMode_COLOR;
             config.bluetooth.enabled = false;
             service->reloadConfig(SEGMENT_CONFIG);
