@@ -492,6 +492,10 @@ static const int rareSerialSpeeds[3] = {4800, 57600, GPS_BAUDRATE};
  */
 bool GPS::setup()
 {
+    if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_DISABLED) {
+        return true;
+    }
+
     if (!didSerialInit) {
         int msglen = 0;
         if (tx_gpio && gnssModel == GNSS_MODEL_UNKNOWN) {
