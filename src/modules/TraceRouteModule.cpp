@@ -334,12 +334,6 @@ bool TraceRouteModule::sendTraceRoute(NodeNum nodeNum)
         return false;
     }
 
-#if HAS_SCREEN
-    if (screen) {
-        screen->showSimpleBanner("Tracing...", 2000);
-    }
-#endif
-
     // Create empty RouteDiscovery packet
     meshtastic_RouteDiscovery routeDiscovery = meshtastic_RouteDiscovery_init_zero;
     
