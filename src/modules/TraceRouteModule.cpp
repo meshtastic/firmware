@@ -2,6 +2,8 @@
 #include "MeshService.h"
 #include "meshUtils.h"
 #include "NodeDB.h"
+#include "Router.h"
+#include <pb_encode.h>
 #if HAS_SCREEN
 #include "graphics/Screen.h"
 #endif
@@ -322,4 +324,49 @@ void TraceRouteModule::displayTraceRouteResult(const meshtastic_MeshPacket *mp, 
         screen->showOverlayBanner(bannerOptions);
     }
 #endif
+}
+
+bool TraceRouteModule::sendTraceRoute(NodeNum nodeNum)
+{
+    if (nodeNum == 0 || nodeNum == nodeDB->getNodeNum()) {
+        // Can't trace route to ourselves or invalid node
+        LOG_WARN("Invalid trace route target: 0x%08X", nodeNum);
+        return false;
+    }
+
+    // Create empty RouteDiscovery packet
+    meshtastic_RouteDiscovery routeDiscovery = meshtastic_RouteDiscovery_init_zero;
+    
+    // Allocate a packet directly from router
+    meshtastic_MeshPacket *p = router->allocForSending();
+    if (p) {
+        // Set destination and port
+        p->to = nodeNum;
+        p->decoded.portnum = meshtastic_PortNum_TRACEROUTE_APP;
+        p->decoded.want_response = true;
+        
+        // Manually encode the RouteDiscovery payload
+        p->decoded.payload.size = pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), 
+                                                    &meshtastic_RouteDiscovery_msg, &routeDiscovery);
+        
+        // Send to mesh
+        service->sendToMesh(p, RX_SRC_USER);
+        
+        LOG_INFO("Trace route packet sent to node: 0x%08X", nodeNum);
+        
+#if HAS_SCREEN
+        // Show confirmation message
+        if (screen) {
+            graphics::BannerOverlayOptions bannerOptions;
+            bannerOptions.message = "Trace Route Started";
+            bannerOptions.durationMs = 3000; // 3 seconds
+            bannerOptions.notificationType = graphics::notificationTypeEnum::text_banner;
+            screen->showOverlayBanner(bannerOptions);
+        }
+#endif
+        return true;
+    }
+    
+    LOG_ERROR("Failed to allocate packet for trace route");
+    return false;
 }

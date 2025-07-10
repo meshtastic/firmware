@@ -54,7 +54,6 @@ class menuHandler
     static void addFavoriteMenu();
     static void removeFavoriteMenu();
     static void traceRoutePickerMenu();
-    static void sendTraceRoute(NodeNum nodeNum);
     static void testMenu();
     static void numberTest();
     static void wifiBaseMenu();

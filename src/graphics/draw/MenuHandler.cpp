@@ -15,8 +15,6 @@
 #include "modules/CannedMessageModule.h"
 #include "modules/TraceRouteModule.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
-#include "Router.h"
-#include <pb_encode.h>
 
 extern uint16_t TFT_MESH;
 
@@ -441,7 +439,9 @@ void menuHandler::favoriteBaseMenu()
     bannerOptions.optionsCount = options;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 1) {
-            menuHandler::sendTraceRoute(graphics::UIRenderer::currentFavoriteNodeNum);
+            if (traceRouteModule) {
+                traceRouteModule->sendTraceRoute(graphics::UIRenderer::currentFavoriteNodeNum);
+            }
         } else if (selected == 2) {
             cannedMessageModule->LaunchWithDestination(graphics::UIRenderer::currentFavoriteNodeNum);
         } else if (selected == 3 && kb_found) {
@@ -838,7 +838,9 @@ void menuHandler::traceRoutePickerMenu()
 {
     screen->showNodePicker("Node To Trace", 30000, [](int nodenum) -> void {
         LOG_INFO("Trace route to node: %u", nodenum);
-        sendTraceRoute(nodenum);
+        if (traceRouteModule) {
+            traceRouteModule->sendTraceRoute(nodenum);
+        }
         screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
     });
 }
@@ -979,44 +981,6 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     }
     menuQueue = menu_none;
-}
-
-void menuHandler::sendTraceRoute(NodeNum nodeNum)
-{
-    if (nodeNum == 0 || nodeNum == nodeDB->getNodeNum()) {
-        // Can't trace route to ourselves or invalid node
-        return;
-    }
-
-    // Create empty RouteDiscovery packet
-    meshtastic_RouteDiscovery routeDiscovery = meshtastic_RouteDiscovery_init_zero;
-    
-    // Allocate a packet directly from router
-    meshtastic_MeshPacket *p = router->allocForSending();
-    if (p) {
-        // Set destination and port
-        p->to = nodeNum;
-        p->decoded.portnum = meshtastic_PortNum_TRACEROUTE_APP;
-        p->decoded.want_response = true;
-        
-        // Manually encode the RouteDiscovery payload
-        p->decoded.payload.size = pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), 
-                                                    &meshtastic_RouteDiscovery_msg, &routeDiscovery);
-        
-        // Send to mesh
-        service->sendToMesh(p, RX_SRC_USER);
-        
-        LOG_INFO("Trace route packet sent to node: %08X", nodeNum);
-    }
-    
-    // Show confirmation message
-    if (screen) {
-        BannerOverlayOptions bannerOptions;
-        bannerOptions.message = "Trace Route Started";
-        bannerOptions.durationMs = 3000; // 3 seconds
-        bannerOptions.notificationType = graphics::notificationTypeEnum::text_banner;
-        screen->showOverlayBanner(bannerOptions);
-    }
 }
 
 } // namespace graphics

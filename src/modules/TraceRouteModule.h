@@ -10,6 +10,9 @@ class TraceRouteModule : public ProtobufModule<meshtastic_RouteDiscovery>
 {
   public:
     TraceRouteModule();
+    
+    // Send a trace route request to a specific node
+    bool sendTraceRoute(NodeNum nodeNum);
 
   protected:
     bool handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_RouteDiscovery *r) override;
