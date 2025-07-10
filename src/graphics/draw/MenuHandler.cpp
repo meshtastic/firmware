@@ -452,7 +452,6 @@ void menuHandler::positionBaseMenu()
 {
     enum optionsNumbers { Back, GPSToggle, CompassMenu, CompassCalibrate, enumEnd };
 
-    static const char **optionsArrayPtr;
     static const char *optionsArray[enumEnd] = {"Back", "GPS Toggle", "Compass"};
     static int optionsEnumArray[enumEnd] = {Back, GPSToggle, CompassMenu};
     int options = 3;
@@ -463,7 +462,7 @@ void menuHandler::positionBaseMenu()
     }
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Position Action";
-    bannerOptions.optionsArrayPtr = optionsArrayPtr;
+    bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = options;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == GPSToggle) {
