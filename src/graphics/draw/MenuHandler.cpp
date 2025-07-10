@@ -491,16 +491,19 @@ void menuHandler::positionBaseMenu()
 
 void menuHandler::nodeListMenu()
 {
-    static const char *optionsArray[] = {"Back", "Add Favorite", "Reset NodeDB"};
+    static const char *optionsArray[] = {"Back", "Add Favorite", "Trace Route", "Reset NodeDB"};
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Node Action";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 3;
+    bannerOptions.optionsCount = 4;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 1) {
             menuQueue = add_favorite;
             screen->runNow();
         } else if (selected == 2) {
+            menuQueue = trace_route_picker;
+            screen->runNow();
+        } else if (selected == 3) {
             menuQueue = reset_node_db_menu;
             screen->runNow();
         }
@@ -813,6 +816,15 @@ void menuHandler::removeFavoriteMenu()
     screen->showOverlayBanner(bannerOptions);
 }
 
+void menuHandler::traceRoutePickerMenu()
+{
+    screen->showNodePicker("Node To Trace", 30000, [](int nodenum) -> void {
+        LOG_INFO("Trace route to node: %u", nodenum);
+        sendTraceRoute(nodenum);
+        screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
+    });
+}
+
 void menuHandler::testMenu()
 {
 
@@ -931,6 +943,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case remove_favorite:
         removeFavoriteMenu();
+        break;
+    case trace_route_picker:
+        traceRoutePickerMenu();
         break;
     case test_menu:
         testMenu();

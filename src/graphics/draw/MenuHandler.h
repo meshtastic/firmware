@@ -23,6 +23,7 @@ class menuHandler
         reboot_menu,
         add_favorite,
         remove_favorite,
+        trace_route_picker,
         test_menu,
         number_test,
         wifi_toggle_menu
@@ -51,6 +52,7 @@ class menuHandler
     static void rebootMenu();
     static void addFavoriteMenu();
     static void removeFavoriteMenu();
+    static void traceRoutePickerMenu();
     static void sendTraceRoute(NodeNum nodeNum);
     static void testMenu();
     static void numberTest();
