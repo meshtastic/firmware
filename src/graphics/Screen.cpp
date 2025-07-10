@@ -85,7 +85,19 @@ extern uint16_t TFT_MESH;
 
 bool shouldWakeOnReceivedMessage()
 {
+    /*
+    The goal here is to determine when we do NOT wake up the screen on message received:
+    - Any ext. notifications are turned on
+    - If role is not client / client_mute
+    - If the battery level is very low
+    */
     if (moduleConfig.external_notification.enabled) {
+        return false;
+    }
+    if (!meshtastic_Config_DeviceConfig_Role_CLIENT && !meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE) {
+        return false;
+    }
+    if (powerStatus->getBatteryChargePercent() < 10) {
         return false;
     }
     return true;

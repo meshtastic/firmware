@@ -31,7 +31,8 @@ class menuHandler
         bluetooth_toggle_menu,
         notifications_menu,
         screen_options_menu,
-        power_menu
+        power_menu,
+        system_base_menu
     };
     static screenMenus menuQueue;
 
