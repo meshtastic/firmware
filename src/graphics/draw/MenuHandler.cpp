@@ -994,6 +994,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
     case bluetooth_toggle_menu:
         BluetoothToggleMenu();
         break;
+    case throttle_message:
+        screen->showSimpleBanner("Too Many Attempts\nTry again in 60 seconds.", 5000);
+        break;
     }
     menuQueue = menu_none;
 }

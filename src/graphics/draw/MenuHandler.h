@@ -30,7 +30,8 @@ class menuHandler
         wifi_toggle_menu,
         key_verification_init,
         key_verification_final_prompt,
-        bluetooth_toggle_menu
+        bluetooth_toggle_menu,
+        throttle_message
     };
     static screenMenus menuQueue;
 

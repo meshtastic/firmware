@@ -121,6 +121,7 @@ bool KeyVerificationModule::sendInitialRequest(NodeNum remoteNode)
     // generate nonce
     updateState();
     if (currentState != KEY_VERIFICATION_IDLE) {
+        graphics::menuHandler::menuQueue = graphics::menuHandler::throttle_message;
         return false;
     }
     currentNonce = random();
