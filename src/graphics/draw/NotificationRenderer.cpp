@@ -154,10 +154,12 @@ void NotificationRenderer::drawNumberPicker(OLEDDisplay *display, OLEDDisplayUiS
     } else if ((inEvent.inputEvent == INPUT_BROKER_CANCEL || inEvent.inputEvent == INPUT_BROKER_ALT_LONG) &&
                alertBannerUntil != 0) {
         resetBanner();
+        return;
     }
     if (curSelected == numDigits) {
         alertBannerCallback(currentNumber);
         resetBanner();
+        return;
     }
 
     inEvent.inputEvent = INPUT_BROKER_NONE;
@@ -221,9 +223,11 @@ void NotificationRenderer::drawNodePicker(OLEDDisplay *display, OLEDDisplayUiSta
     } else if (inEvent.inputEvent == INPUT_BROKER_SELECT) {
         alertBannerCallback(selectedNodenum);
         resetBanner();
+        return;
     } else if ((inEvent.inputEvent == INPUT_BROKER_CANCEL || inEvent.inputEvent == INPUT_BROKER_ALT_LONG) &&
                alertBannerUntil != 0) {
         resetBanner();
+        return;
     }
 
     if (curSelected == -1)
@@ -341,9 +345,11 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
                 alertBannerCallback(curSelected);
             }
             resetBanner();
+            return;
         } else if ((inEvent.inputEvent == INPUT_BROKER_CANCEL || inEvent.inputEvent == INPUT_BROKER_ALT_LONG) &&
                    alertBannerUntil != 0) {
             resetBanner();
+            return;
         }
 
         if (curSelected == -1)
@@ -354,6 +360,7 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
         if (inEvent.inputEvent == INPUT_BROKER_SELECT || inEvent.inputEvent == INPUT_BROKER_ALT_LONG ||
             inEvent.inputEvent == INPUT_BROKER_CANCEL) {
             resetBanner();
+            return;
         }
     }
 
