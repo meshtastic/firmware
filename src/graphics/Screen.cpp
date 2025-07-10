@@ -196,7 +196,6 @@ void Screen::showNodePicker(const char *message, uint32_t durationMs, std::funct
 void Screen::showNumberPicker(const char *message, uint32_t durationMs, uint8_t digits,
                               std::function<void(uint32_t)> bannerCallback)
 {
-    LOG_WARN("Show Number Picker");
 #ifdef USE_EINK
     EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Skip full refresh for all overlay menus
 #endif
