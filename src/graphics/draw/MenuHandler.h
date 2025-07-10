@@ -29,15 +29,13 @@ class menuHandler
         test_menu,
         number_test,
         wifi_toggle_menu,
-        screen_wakeup_menu,
         bluetooth_toggle_menu,
         notifications_menu,
         screen_options_menu,
         power_menu,
-        system_base_menu
+        system_base_menu,
         key_verification_init,
         key_verification_final_prompt,
-        bluetooth_toggle_menu,
         throttle_message
     };
     static screenMenus menuQueue;

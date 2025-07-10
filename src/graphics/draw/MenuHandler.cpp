@@ -352,7 +352,7 @@ void menuHandler::systemBaseMenu()
     hasSupportBrightness = true;
 #endif
 
-    enum optionsNumbers { Back, Beeps, Brightness, Reboot, Color, MUI, Test, enumEnd };
+    enum optionsNumbers { Back, Notifications, ScreenOptions, PowerMenu, Test, enumEnd };
     static const char *optionsArray[enumEnd] = {"Back"};
     static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
@@ -379,10 +379,7 @@ void menuHandler::systemBaseMenu()
     bannerOptions.optionsCount = options;
     bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == MUI) {
-            menuHandler::menuQueue = menuHandler::mui_picker;
-            screen->runNow();
-        } else if (selected == Notifications) {
+        if (selected == Notifications) {
             menuHandler::menuQueue = menuHandler::notifications_menu;
             screen->runNow();
         } else if (selected == ScreenOptions) {
@@ -1002,6 +999,7 @@ void menuHandler::powerMenu()
         }
     };
     screen->showOverlayBanner(bannerOptions);
+}
 
 void menuHandler::keyVerificationInitMenu()
 {
@@ -1032,7 +1030,6 @@ void menuHandler::keyVerificationFinalPrompt()
         };
         screen->showOverlayBanner(options);
     }
-
 }
 
 void menuHandler::handleMenuSwitch(OLEDDisplay *display)
