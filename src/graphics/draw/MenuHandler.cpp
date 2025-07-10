@@ -928,7 +928,7 @@ void menuHandler::screenOptionsMenu()
     hasSupportBrightness = true;
 #endif
 
-    enum optionsNumbers { Back, Wakeup, Brightness, ScreenColor };
+    enum optionsNumbers { Back, Brightness, ScreenColor };
     static const char *optionsArray[4] = {"Back"};
     static int optionsEnumArray[4] = {Back};
     int options = 1;
