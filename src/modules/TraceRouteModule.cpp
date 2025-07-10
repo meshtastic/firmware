@@ -319,7 +319,7 @@ void TraceRouteModule::displayTraceRouteResult(const meshtastic_MeshPacket *mp, 
     if (screen) {
         graphics::BannerOverlayOptions bannerOptions;
         bannerOptions.message = routeText.c_str();
-        bannerOptions.durationMs = 5000; // Show for 8 seconds (longer for more complex routes)
+        bannerOptions.durationMs = 5000;
         bannerOptions.notificationType = graphics::notificationTypeEnum::text_banner;
         screen->showOverlayBanner(bannerOptions);
     }
