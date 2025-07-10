@@ -334,6 +334,12 @@ bool TraceRouteModule::sendTraceRoute(NodeNum nodeNum)
         return false;
     }
 
+#if HAS_SCREEN
+    if (screen) {
+        screen->showSimpleBanner("Tracing...", 2000);
+    }
+#endif
+
     // Create empty RouteDiscovery packet
     meshtastic_RouteDiscovery routeDiscovery = meshtastic_RouteDiscovery_init_zero;
     
@@ -353,17 +359,6 @@ bool TraceRouteModule::sendTraceRoute(NodeNum nodeNum)
         service->sendToMesh(p, RX_SRC_USER);
         
         LOG_INFO("Trace route packet sent to node: 0x%08X", nodeNum);
-        
-#if HAS_SCREEN
-        // Show confirmation message
-        if (screen) {
-            graphics::BannerOverlayOptions bannerOptions;
-            bannerOptions.message = "Trace Route Started";
-            bannerOptions.durationMs = 3000; // 3 seconds
-            bannerOptions.notificationType = graphics::notificationTypeEnum::text_banner;
-            screen->showOverlayBanner(bannerOptions);
-        }
-#endif
         return true;
     }
     
