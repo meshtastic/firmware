@@ -925,7 +925,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
     }
 
     // If GPS is off, no need to display these parts
-    if (strcmp(displayLine, "GPS off") != 0 && strcmp(displayLine, "No GPS") != 0 && gpsStatus->getHasLock() ) {
+    if (strcmp(displayLine, "GPS off") != 0 && strcmp(displayLine, "No GPS") != 0 && gpsStatus->getHasLock()) {
 
         // === Second Row: Date ===
         uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true);
@@ -955,7 +955,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
         // from cell phone?
         if (nodeDB->hasValidPosition(ourNode)) {
             char addrStr[32];
-            BRCAddress(ourNode->position.latitude_i , ourNode->position.longitude_i ).full(addrStr, sizeof(addrStr));
+            BRCAddress(ourNode->position.latitude_i, ourNode->position.longitude_i).full(addrStr, sizeof(addrStr));
             display->drawString(x, getTextPositions(display)[line++], addrStr);
         }
     }
