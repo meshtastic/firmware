@@ -97,7 +97,7 @@ bool shouldWakeOnReceivedMessage()
     if (!meshtastic_Config_DeviceConfig_Role_CLIENT && !meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE) {
         return false;
     }
-    if (powerStatus->getBatteryChargePercent() < 10) {
+    if (powerStatus && powerStatus->getBatteryChargePercent() < 10) {
         return false;
     }
     return true;
