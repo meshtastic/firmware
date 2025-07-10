@@ -1,3 +1,5 @@
+#pragma once
+#if HAS_SCREEN
 #include "configuration.h"
 namespace graphics
 {
@@ -27,7 +29,10 @@ class menuHandler
         test_menu,
         number_test,
         wifi_toggle_menu,
-        bluetooth_toggle_menu
+        key_verification_init,
+        key_verification_final_prompt,
+        bluetooth_toggle_menu,
+        throttle_message
     };
     static screenMenus menuQueue;
 
@@ -58,7 +63,10 @@ class menuHandler
     static void numberTest();
     static void wifiBaseMenu();
     static void wifiToggleMenu();
+    static void keyVerificationInitMenu();
+    static void keyVerificationFinalPrompt();
     static void BluetoothToggleMenu();
 };
 
 } // namespace graphics
+#endif
