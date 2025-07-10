@@ -4,6 +4,7 @@
 #include "RTC.h"
 #include "graphics/draw/MenuHandler.h"
 #include "main.h"
+#include "meshUtils.h"
 #include "modules/AdminModule.h"
 #include <SHA256.h>
 
