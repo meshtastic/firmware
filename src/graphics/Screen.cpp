@@ -94,7 +94,8 @@ bool shouldWakeOnReceivedMessage()
     if (moduleConfig.external_notification.enabled) {
         return false;
     }
-    if (config.device.role != ROLE_CLIENT && config.device.role != ROLE_CLIENT_MUTE) {
+    if (config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT &&
+        config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE) {
         return false;
     }
     if (powerStatus && powerStatus->getBatteryChargePercent() < 10) {
