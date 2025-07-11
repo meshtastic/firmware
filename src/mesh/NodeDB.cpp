@@ -474,6 +474,9 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
     if (FSCom.exists("/static/rangetest.csv") && !FSCom.remove("/static/rangetest.csv")) {
         LOG_ERROR("Could not remove rangetest.csv file");
     }
+    if (FSCom.exists("/prefs/ringtone.proto") && !FSCom.remove("/prefs/ringtone.proto")) {
+        LOG_ERROR("Could not remove ringtone.proto file");
+    }
 #endif
     spiLock->unlock();
     // second, install default state (this will deal with the duplicate mac address issue)
