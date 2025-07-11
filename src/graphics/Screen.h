@@ -26,6 +26,8 @@ struct BannerOverlayOptions {
 };
 } // namespace graphics
 
+bool shouldWakeOnReceivedMessage();
+
 #if !HAS_SCREEN
 #include "power.h"
 namespace graphics
