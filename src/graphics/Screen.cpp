@@ -919,7 +919,7 @@ void Screen::setFrames(FrameFocus focus)
 #endif
 #if HAS_GPS
     fsi.positions.nodelist_bearings = numframes;
-    normalFrames[numframes++] = graphics::NodeListRenderer::drawNodeListWithCompasses;
+    normalFrames[numframes++] = graphics::NodeListRenderer::drawBRCListWithCompasses;
     indicatorIcons.push_back(icon_list);
 
     fsi.positions.gps = numframes;

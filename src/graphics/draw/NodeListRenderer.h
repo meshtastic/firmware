@@ -29,7 +29,7 @@ enum NodeListMode { MODE_LAST_HEARD = 0, MODE_HOP_SIGNAL = 1, MODE_DISTANCE = 2,
 // Main node list screen function
 void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *title,
                         EntryRenderer renderer, NodeExtrasRenderer extras = nullptr, float heading = 0, double lat = 0,
-                        double lon = 0);
+                        double lon = 0, int totalColumns = 2);
 
 // Entry renderers
 void drawEntryLastHeard(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth);
@@ -48,6 +48,7 @@ void drawHopSignalScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 void drawDistanceScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 void drawDynamicNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+void drawBRCListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 
 // Utility functions
 const char *getCurrentModeTitle(int screenWidth);
