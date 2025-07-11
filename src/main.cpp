@@ -472,6 +472,7 @@ void setup()
     Wire.setSCL(I2C_SCL);
     Wire.begin();
 #elif defined(I2C_SDA) && !defined(ARCH_RP2040)
+    LOG_INFO("Starting Bus with (SDA) %d and (SCL) %d: ", I2C_SDA, I2C_SCL);
     Wire.begin(I2C_SDA, I2C_SCL);
 #elif defined(ARCH_PORTDUINO)
     if (settingsStrings[i2cdev] != "") {
@@ -542,6 +543,26 @@ void setup()
     }
 #elif HAS_WIRE
     i2cScanner->scanPort(ScanI2C::I2CPort::WIRE);
+#endif
+
+#ifdef I2C_CLOCK_SPEED
+    uint32_t currentClock;
+    currentClock = i2cScanner->getClockSpeed(ScanI2C::I2CPort::WIRE);
+    LOG_INFO("Clock speed: %uHz on WIRE", currentClock);
+    LOG_DEBUG("Setting Wire with defined clock speed, %uHz...", I2C_CLOCK_SPEED);
+    if(!i2cScanner->setClockSpeed(ScanI2C::I2CPort::WIRE, I2C_CLOCK_SPEED)) {
+        LOG_ERROR("Unable to set clock speed on WIRE");
+    } else {
+
+        currentClock = i2cScanner->getClockSpeed(ScanI2C::I2CPort::WIRE);
+        LOG_INFO("Set clock speed: %uHz on WIRE", currentClock);
+    }
+    // LOG_DEBUG("Starting Wire with defined clock speed, %d...", I2C_CLOCK_SPEED);
+    // if(!i2cScanner->setClockSpeed(ScanI2C::I2CPort::WIRE1, I2C_CLOCK_SPEED)) {
+    //     LOG_ERROR("Unable to set clock speed on WIRE1");
+    // } else {
+    //     LOG_INFO("Set clock speed: %d on WIRE1", I2C_CLOCK_SPEED);
+    // }
 #endif
 
     auto i2cCount = i2cScanner->countDevices();
