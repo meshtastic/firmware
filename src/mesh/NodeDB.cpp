@@ -1309,6 +1309,13 @@ void NodeDB::loadFromDisk()
 
         saveToDisk(SEGMENT_MODULECONFIG);
     }
+#if ARCH_PORTDUINO
+    // set any config overrides
+    if (settingsMap[has_configDisplayMode]) {
+        config.display.displaymode = (_meshtastic_Config_DisplayConfig_DisplayMode)settingsMap[configDisplayMode];
+    }
+
+#endif
 }
 
 /** Save a protobuf from a file, return true for success */

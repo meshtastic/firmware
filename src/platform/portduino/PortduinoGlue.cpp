@@ -665,6 +665,21 @@ bool loadConfig(const char *configPath)
             settingsStrings[hostMetrics_user_command] = (yamlConfig["HostMetrics"]["UserStringCommand"]).as<std::string>("");
         }
 
+        if (yamlConfig["Config"]) {
+            if (yamlConfig["Config"]["DisplayMode"]) {
+                settingsMap[has_configDisplayMode] = true;
+                if ((yamlConfig["Config"]["DisplayMode"]).as<std::string>("") == "TWOCOLOR") {
+                    settingsMap[configDisplayMode] = meshtastic_Config_DisplayConfig_DisplayMode_TWOCOLOR;
+                } else if ((yamlConfig["Config"]["DisplayMode"]).as<std::string>("") == "INVERTED") {
+                    settingsMap[configDisplayMode] = meshtastic_Config_DisplayConfig_DisplayMode_INVERTED;
+                } else if ((yamlConfig["Config"]["DisplayMode"]).as<std::string>("") == "COLOR") {
+                    settingsMap[configDisplayMode] = meshtastic_Config_DisplayConfig_DisplayMode_COLOR;
+                } else {
+                    settingsMap[configDisplayMode] = meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT;
+                }
+            }
+        }
+
         if (yamlConfig["General"]) {
             settingsMap[maxnodes] = (yamlConfig["General"]["MaxNodes"]).as<int>(200);
             settingsMap[maxtophone] = (yamlConfig["General"]["MaxMessageQueue"]).as<int>(100);
