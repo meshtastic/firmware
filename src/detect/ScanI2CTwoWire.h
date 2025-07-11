@@ -29,6 +29,9 @@ class ScanI2CTwoWire : public ScanI2C
 
     size_t countDevices() const override;
 
+    bool setClockSpeed(ScanI2C::I2CPort, uint32_t);
+    uint32_t getClockSpeed(ScanI2C::I2CPort);
+
   protected:
     FoundDevice firstOfOrNONE(size_t, DeviceType[]) const override;
 

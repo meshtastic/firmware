@@ -110,26 +110,43 @@ uint16_t ScanI2CTwoWire::getRegisterValue(const ScanI2CTwoWire::RegisterLocation
     return value;
 }
 
-/// for SEN5X detection
-bool probeSEN5X(const ScanI2C::DeviceAddress& addr, TwoWire* i2cBus) {
-    uint8_t cmd[] = { 0xD0, 0x33 };  // Read Serial Number command
-    uint8_t rxBuf[9] = {0};
+bool ScanI2CTwoWire::setClockSpeed(I2CPort port, uint32_t speed) {
 
-    i2cBus->beginTransmission(addr.address);
-    i2cBus->write(cmd, 2);
-    if (i2cBus->endTransmission() != 0)
-        return false;
+    DeviceAddress addr(port, 0x00);
+    TwoWire *i2cBus;
 
-    delay(20);  // wait for response
+#if WIRE_INTERFACES_COUNT == 2
+    if (port == I2CPort::WIRE1) {
+        i2cBus = &Wire1;
+    } else {
+#endif
+        i2cBus = &Wire;
+#if WIRE_INTERFACES_COUNT == 2
+    }
+#endif
 
-    if (i2cBus->requestFrom(addr.address, (uint8_t)9) != 9)
-        return false;
-
-    for (int i = 0; i < 9 && i2cBus->available(); ++i)
-        rxBuf[i] = i2cBus->read();
-
-    return true;
+    return i2cBus->setClock(speed);
 }
+
+uint32_t ScanI2CTwoWire::getClockSpeed(I2CPort port) {
+
+    DeviceAddress addr(port, 0x00);
+    TwoWire *i2cBus;
+
+#if WIRE_INTERFACES_COUNT == 2
+    if (port == I2CPort::WIRE1) {
+        i2cBus = &Wire1;
+    } else {
+#endif
+        i2cBus = &Wire;
+#if WIRE_INTERFACES_COUNT == 2
+    }
+#endif
+
+    return i2cBus->getClock();
+}
+
+/// for SEN5X detection
 String readSEN5xProductName(TwoWire* i2cBus, uint8_t address) {
     uint8_t cmd[] = { 0xD0, 0x14 };
     uint8_t response[48] = {0};
