@@ -8,6 +8,7 @@
 #include "airtime.h"
 #include "configuration.h"
 #include "gps/GeoCoord.h"
+#include "graphics/BRC.h"
 #include "graphics/Screen.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
@@ -308,23 +309,12 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
         display->drawString(x, getTextPositions(display)[line++], seenStr);
     }
 
-    // === 4. Uptime (only show if metric is present) ===
-    char uptimeStr[32] = "";
-    if (node->has_device_metrics && node->device_metrics.has_uptime_seconds) {
-        uint32_t uptime = node->device_metrics.uptime_seconds;
-        uint32_t days = uptime / 86400;
-        uint32_t hours = (uptime % 86400) / 3600;
-        uint32_t mins = (uptime % 3600) / 60;
-        // Show as "Up: 2d 3h", "Up: 5h 14m", or "Up: 37m"
-        if (days)
-            snprintf(uptimeStr, sizeof(uptimeStr), " Uptime: %ud %uh", days, hours);
-        else if (hours)
-            snprintf(uptimeStr, sizeof(uptimeStr), " Uptime: %uh %um", hours, mins);
-        else
-            snprintf(uptimeStr, sizeof(uptimeStr), " Uptime: %um", mins);
-    }
-    if (uptimeStr[0] && line < 5) {
-        display->drawString(x, getTextPositions(display)[line++], uptimeStr);
+    // === 4. Burning Man location (only show if their position is known) ===
+    char brcStr[32] = "";
+    if (nodeDB->hasValidPosition(node) && line < 5) {
+        brcStr[0] = 32; // Space before the address to align with other rows.
+        BRCAddress(node->position.latitude_i, node->position.longitude_i).full(brcStr + 1, sizeof(brcStr) - 1);
+        display->drawString(x, getTextPositions(display)[line++], brcStr);
     }
 
     // === 5. Distance (only if both nodes have GPS position) ===
@@ -921,7 +911,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
     }
 
     // If GPS is off, no need to display these parts
-    if (strcmp(displayLine, "GPS off") != 0 && strcmp(displayLine, "No GPS") != 0) {
+    if (strcmp(displayLine, "GPS off") != 0 && strcmp(displayLine, "No GPS") != 0 && gpsStatus->getHasLock()) {
 
         // === Second Row: Date ===
         uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true);
@@ -942,14 +932,18 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
         snprintf(lonStr, sizeof(lonStr), " Lon: %.5f", geoCoord.getLongitude() * 1e-7);
         display->drawString(x, getTextPositions(display)[line++], lonStr);
 
-        // === Fifth Row: Altitude ===
-        char DisplayLineTwo[32] = {0};
-        if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
-            snprintf(DisplayLineTwo, sizeof(DisplayLineTwo), " Alt: %.0fft", geoCoord.getAltitude() * METERS_TO_FEET);
-        } else {
-            snprintf(DisplayLineTwo, sizeof(DisplayLineTwo), " Alt: %.0im", geoCoord.getAltitude());
+        // === Fifth Row: Burning Man! ===
+        char addrStr[32];
+        BRCAddress(geoCoord.getLatitude(), geoCoord.getLongitude()).full(addrStr, sizeof(addrStr));
+        display->drawString(x, getTextPositions(display)[line++], addrStr);
+    } else {
+        meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+        // from cell phone?
+        if (nodeDB->hasValidPosition(ourNode)) {
+            char addrStr[32];
+            BRCAddress(ourNode->position.latitude_i, ourNode->position.longitude_i).full(addrStr, sizeof(addrStr));
+            display->drawString(x, getTextPositions(display)[line++], addrStr);
         }
-        display->drawString(x, getTextPositions(display)[line++], DisplayLineTwo);
     }
 
     // === Draw Compass if heading is valid ===
