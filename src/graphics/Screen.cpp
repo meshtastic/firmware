@@ -83,29 +83,6 @@ extern uint16_t TFT_MESH;
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 
-bool shouldWakeOnReceivedMessage()
-{
-    /*
-    The goal here is to determine when we do NOT wake up the screen on message received:
-    - Any ext. notifications are turned on
-    - If role is not client / client_mute
-    - If the battery level is very low
-    */
-    if (moduleConfig.external_notification.enabled) {
-        return false;
-    }
-    if (config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT &&
-        config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE) {
-        return false;
-    }
-    if (powerStatus && powerStatus->getBatteryChargePercent() < 10) {
-        return false;
-    }
-    return true;
-}
-
-bool wake_on_received_message = shouldWakeOnReceivedMessage(); // Master Switch to enable here
-
 using namespace meshtastic; /** @todo remove */
 
 namespace graphics
@@ -1282,8 +1259,7 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
             setFrames(FOCUS_PRESERVE);              // Refresh frame list without switching view
 
             // Only wake/force display if the configuration allows it
-            wake_on_received_message = shouldWakeOnReceivedMessage();
-            if (wake_on_received_message) {
+            if (shouldWakeOnReceivedMessage()) {
                 setOn(true);    // Wake up the screen first
                 forceDisplay(); // Forces screen redraw
 
@@ -1452,3 +1428,23 @@ bool Screen::isOverlayBannerShowing()
 #else
 graphics::Screen::Screen(ScanI2C::DeviceAddress, meshtastic_Config_DisplayConfig_OledType, OLEDDISPLAY_GEOMETRY) {}
 #endif // HAS_SCREEN
+
+bool shouldWakeOnReceivedMessage()
+{
+    /*
+    The goal here is to determine when we do NOT wake up the screen on message received:
+    - Any ext. notifications are turned on
+    - If role is not client / client_mute
+    - If the battery level is very low
+    */
+    if (moduleConfig.external_notification.enabled) {
+        return false;
+    }
+    if (!meshtastic_Config_DeviceConfig_Role_CLIENT && !meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE) {
+        return false;
+    }
+    if (powerStatus && powerStatus->getBatteryChargePercent() < 10) {
+        return false;
+    }
+    return true;
+}

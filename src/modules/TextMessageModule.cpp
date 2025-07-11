@@ -18,9 +18,8 @@ ProcessMessage TextMessageModule::handleReceived(const meshtastic_MeshPacket &mp
     devicestate.rx_text_message = mp;
     devicestate.has_rx_text_message = true;
 
-    wake_on_received_message = shouldWakeOnReceivedMessage();
     // Only trigger screen wake if configuration allows it
-    if (wake_on_received_message) {
+    if (shouldWakeOnReceivedMessage()) {
         powerFSM.trigger(EVENT_RECEIVED_MSG);
     }
     notifyObservers(&mp);
