@@ -26,6 +26,8 @@ struct BannerOverlayOptions {
 };
 } // namespace graphics
 
+bool shouldWakeOnReceivedMessage();
+
 #if !HAS_SCREEN
 #include "power.h"
 namespace graphics
@@ -122,6 +124,8 @@ class Screen
 // Base segment dimensions for T-Watch segmented display
 #define SEGMENT_WIDTH 16
 #define SEGMENT_HEIGHT 4
+
+extern bool wake_on_received_message;
 
 /// Convert an integer GPS coords to a floating point
 #define DegD(i) (i * 1e-7)
