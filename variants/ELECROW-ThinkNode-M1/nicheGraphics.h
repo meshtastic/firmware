@@ -104,11 +104,11 @@ void setupNicheGraphics()
     buttons->setHandlerDown(1, [backlight]() { backlight->peek(); });
     buttons->setHandlerLongPress(1, [backlight]() {
         backlight->latch();
-        playBeep();
+        playBoop();
     });
     buttons->setHandlerShortPress(1, [backlight]() {
         backlight->off();
-        playBoop();
+        playChirp();
     });
 
     // Begin handling button events

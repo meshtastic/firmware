@@ -1536,7 +1536,10 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
         if (t.tm_mon > -1) {
             LOG_DEBUG("NMEA GPS time %02d-%02d-%02d %02d:%02d:%02d age %d", d.year(), d.month(), t.tm_mday, t.tm_hour, t.tm_min,
                       t.tm_sec, ti.age());
-            perhapsSetRTC(RTCQualityGPS, t);
+            if (perhapsSetRTC(RTCQualityGPS, t) == RTCSetResultInvalidTime) {
+                // Clear the GPS buffer if we got an invalid time
+                clearBuffer();
+            }
             return true;
         } else
             return false;

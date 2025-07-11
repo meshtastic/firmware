@@ -7,12 +7,7 @@ MCU=""
 
 # Variant groups
 BIGDB_8MB=(
-	# Check if FILENAME contains "-tft-" and set target partitionScheme accordingly.
-if [[ $FILENAME == *"-tft-"* ]]; then
-    TFT_BUILD=true
-fi
-
-# Extract BASENAME from %FILENAME% for later use.r-s3"
+	"picomputer-s3"
 	"unphone"
 	"seeed-sensecap-indicator"
 	"crowpanel-esp32s3"

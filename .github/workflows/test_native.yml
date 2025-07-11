@@ -143,7 +143,7 @@ jobs:
           merge-multiple: true
 
       - name: Test Report
-        uses: dorny/test-reporter@v2.1.0
+        uses: dorny/test-reporter@v2.1.1
         with:
           name: PlatformIO Tests
           path: testreport.xml

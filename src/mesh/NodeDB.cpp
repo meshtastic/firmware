@@ -369,6 +369,14 @@ NodeDB::NodeDB()
         config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY;
     }
 
+#if !HAS_TFT
+    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+        // On a device without MUI, this display mode makes no sense, and will break logic.
+        config.display.displaymode = meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT;
+        config.bluetooth.enabled = true;
+    }
+#endif
+
     if (devicestateCRC != crc32Buffer(&devicestate, sizeof(devicestate)))
         saveWhat |= SEGMENT_DEVICESTATE;
     if (nodeDatabaseCRC != crc32Buffer(&nodeDatabase, sizeof(nodeDatabase)))

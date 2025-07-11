@@ -11,7 +11,8 @@ namespace graphics
 class NotificationRenderer
 {
   public:
-    static char inEvent;
+    static InputEvent inEvent;
+    static char inKeypress;
     static int8_t curSelected;
     static char alertBannerMessage[256];
     static uint32_t alertBannerUntil; // 0 is a special case meaning forever
