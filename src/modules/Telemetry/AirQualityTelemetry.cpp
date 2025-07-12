@@ -23,6 +23,7 @@ PMSA003ISensor pmsa003iSensor;
 #else
 NullSensor pmsa003iSensor;
 #endif
+#include "graphics/ScreenFonts.h"
 
 int32_t AirQualityTelemetryModule::runOnce()
 {
