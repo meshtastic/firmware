@@ -35,6 +35,8 @@ char *configPath = nullptr;
 char *optionMac = nullptr;
 bool forceSimulated = false;
 
+const char *argp_program_version = optstr(APP_VERSION);
+
 // FIXME - move setBluetoothEnable into a HALPlatform class
 void setBluetoothEnable(bool enable)
 {
@@ -663,6 +665,21 @@ bool loadConfig(const char *configPath)
             settingsMap[hostMetrics_channel] = (yamlConfig["HostMetrics"]["Channel"]).as<int>(0);
             settingsMap[hostMetrics_interval] = (yamlConfig["HostMetrics"]["ReportInterval"]).as<int>(0);
             settingsStrings[hostMetrics_user_command] = (yamlConfig["HostMetrics"]["UserStringCommand"]).as<std::string>("");
+        }
+
+        if (yamlConfig["Config"]) {
+            if (yamlConfig["Config"]["DisplayMode"]) {
+                settingsMap[has_configDisplayMode] = true;
+                if ((yamlConfig["Config"]["DisplayMode"]).as<std::string>("") == "TWOCOLOR") {
+                    settingsMap[configDisplayMode] = meshtastic_Config_DisplayConfig_DisplayMode_TWOCOLOR;
+                } else if ((yamlConfig["Config"]["DisplayMode"]).as<std::string>("") == "INVERTED") {
+                    settingsMap[configDisplayMode] = meshtastic_Config_DisplayConfig_DisplayMode_INVERTED;
+                } else if ((yamlConfig["Config"]["DisplayMode"]).as<std::string>("") == "COLOR") {
+                    settingsMap[configDisplayMode] = meshtastic_Config_DisplayConfig_DisplayMode_COLOR;
+                } else {
+                    settingsMap[configDisplayMode] = meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT;
+                }
+            }
         }
 
         if (yamlConfig["General"]) {
