@@ -1,0 +1,26 @@
+#define ARDUINO_ARCH_AVR
+
+#define HAS_SCREEN 0
+
+#undef BATTERY_PIN
+#define BATTERY_SENSE_RESOLUTION_BITS ADC_RESOLUTION
+
+#undef LORA_SCK
+#undef LORA_MISO
+#undef LORA_MOSI
+#undef LORA_CS
+
+#define USE_RF95 // RFM95/SX127x
+#define RF95_MAX_POWER 10
+#define RF95_PA_EN 1 
+#define LORA_SCK PIN_SPI0_SCK
+#define LORA_MISO PIN_SPI0_MISO
+#define LORA_MOSI PIN_SPI0_MOSI
+#define LORA_CS PIN_SPI0_SS
+
+#define LORA_DIO0 1
+#define LORA_DIO1 RADIOLIB_NC
+#define LORA_DIO2 RADIOLIB_NC
+#define LORA_RESET RADIOLIB_NC
+
+#define ledOff(pin) pinMode(pin, INPUT)
