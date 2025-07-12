@@ -156,6 +156,18 @@ const uint8_t icon_list[] PROGMEM = {
     0x82  // Row 7: #.....#.
 };
 
+// ➤ The Man Icon (8x8)
+const uint8_t icon_bm[] PROGMEM = {
+    0x42, // Row 0: .#....#.
+    0x3C, // Row 1: ..####..
+    0x3C, // Row 2: ..####..
+    0x18, // Row 3: ...##...
+    0x18, // Row 4: ...##...
+    0x24, // Row 5: ..#..#..
+    0x24, // Row 6: ..#..#..
+    0x42  // Row 7: .#....#.
+};
+
 // 📶 Signal Bars Icon (left to right, small to large with spacing)
 const uint8_t icon_signal[] PROGMEM = {
     0b00000000, // ░░░░░░░

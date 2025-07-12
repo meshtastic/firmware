@@ -567,7 +567,7 @@ void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, 
     drawNodeListScreen(display, state, x, y, "Bearings", drawEntryCompass, drawCompassArrow, heading, lat, lon);
 }
 
-void drawBRCListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+void drawBRCList(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     float heading = 0;
     bool validHeading = false;
