@@ -1,6 +1,8 @@
 #include "buzz.h"
 #include "configuration.h"
+#if !MESHTASTIC_EXCLUDE_SCREEN
 #include "graphics/Screen.h"
+#endif
 #include "main.h"
 #include "power.h"
 #include "sleep.h"
