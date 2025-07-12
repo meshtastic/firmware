@@ -88,6 +88,8 @@ const char *getCurrentModeTitle(int screenWidth)
 #endif
     case MODE_DISTANCE:
         return "Distance";
+    case MODE_BEARING:
+        return "Bearing";
     default:
         return "Nodes";
     }
@@ -309,6 +311,9 @@ void drawEntryDynamic(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
         break;
     case MODE_DISTANCE:
         drawNodeDistance(display, node, x, y, columnWidth);
+        break;
+    case MODE_BEARING:
+        drawEntryCompass(display, node, x, y, columnWidth);
         break;
     default:
         break;

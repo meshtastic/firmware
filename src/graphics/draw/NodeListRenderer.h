@@ -24,7 +24,7 @@ typedef void (*EntryRenderer)(OLEDDisplay *, meshtastic_NodeInfoLite *, int16_t,
 typedef void (*NodeExtrasRenderer)(OLEDDisplay *, meshtastic_NodeInfoLite *, int16_t, int16_t, int, float, double, double);
 
 // Node list mode enumeration
-enum NodeListMode { MODE_LAST_HEARD = 0, MODE_HOP_SIGNAL = 1, MODE_DISTANCE = 2, MODE_COUNT = 3 };
+enum NodeListMode { MODE_LAST_HEARD = 0, MODE_HOP_SIGNAL = 1, MODE_DISTANCE = 2, MODE_BEARING = 3, MODE_COUNT = 4 };
 
 // Main node list screen function
 void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *title,
