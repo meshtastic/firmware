@@ -35,6 +35,8 @@ char *configPath = nullptr;
 char *optionMac = nullptr;
 bool forceSimulated = false;
 
+const char *argp_program_version = optstr(APP_VERSION);
+
 // FIXME - move setBluetoothEnable into a HALPlatform class
 void setBluetoothEnable(bool enable)
 {
