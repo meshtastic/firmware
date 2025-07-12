@@ -345,15 +345,16 @@ void drawEntryBRC(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x
     int nameMaxWidth = columnWidth - (isHighResolution ? (isLeftCol ? 25 : 28) : (isLeftCol ? 20 : 22));
 
     const char *nodeName = getSafeNodeName(node);
-    auto nameWidth = display->getStringWidth("XXXXX");
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
     auto xText = x + ((isHighResolution) ? 6 : 3);
-    display->drawStringMaxWidth(xText, y, nameMaxWidth, nodeName);
+    display->drawString(xText, y, nodeName);
 
-    char buf[32] = "";
-    BRCAddress(node->position.latitude_i, node->position.longitude_i).full(buf, 32);
-    display->drawStringMaxWidth(xText + nameWidth, y, nameMaxWidth - nameWidth + 20, buf);
+    char buf[14] = "";
+    BRCAddress(node->position.latitude_i, node->position.longitude_i).compact(buf, 14);
+    auto nameWidth = display->getStringWidth("WWWW"); // Fixed width so they are aligned.
+    display->drawString(xText + nameWidth, y, buf);
+
 
     if (node->is_favorite) {
         if (isHighResolution) {
@@ -411,6 +412,34 @@ void drawCompassArrow(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     display->fillTriangle(tipX, tipY, leftX, leftY, notchX, notchY);
     display->fillTriangle(tipX, tipY, notchX, notchY, rightX, rightY);
     */
+}
+
+void drawLastSeenExtra(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth,
+                       float /*myHeading*/, double /*userLat*/, double /*userLon*/)
+{
+    char timeStr[10];
+    uint32_t seconds = sinceLastSeen(node);
+    if (seconds == 0 || seconds == UINT32_MAX) {
+        snprintf(timeStr, sizeof(timeStr), "?");
+    } else {
+        uint32_t minutes = seconds / 60, hours = minutes / 60, days = hours / 24;
+        snprintf(timeStr, sizeof(timeStr), (days > 99 ? "?" : "%d%c"),
+                 (days    ? days
+                  : hours ? hours
+                          : minutes),
+                 (days    ? 'd'
+                  : hours ? 'h'
+                          : 'm'));
+    }
+
+    bool isLeftCol = (x < SCREEN_WIDTH / 2);
+    int timeOffset = (isHighResolution) ? (isLeftCol ? 7 : 10) : (isLeftCol ? 3 : 7);
+    int rightEdge = x + columnWidth - timeOffset;
+    if (timeStr[strlen(timeStr) - 1] == 'm') // Fix the fact that our fonts don't line up well all the time
+        rightEdge -= 1;
+    //display->setTextAlignment(TEXT_ALIGN_RIGHT);
+    int textWidth = display->getStringWidth(timeStr);
+    display->drawString(rightEdge - textWidth, y, timeStr);
 }
 
 // =============================
@@ -569,27 +598,11 @@ void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, 
 
 void drawBRCList(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    float heading = 0;
-    bool validHeading = false;
     auto ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     double lat = DegD(ourNode->position.latitude_i);
     double lon = DegD(ourNode->position.longitude_i);
 
-    if (uiconfig.compass_mode != meshtastic_CompassMode_FREEZE_HEADING) {
-#if HAS_GPS
-        if (screen->hasHeading()) {
-            heading = screen->getHeading(); // degrees
-            validHeading = true;
-        } else {
-            heading = screen->estimatedHeading(lat, lon);
-            validHeading = !isnan(heading);
-        }
-#endif
-
-        if (!validHeading)
-            return;
-    }
-    drawNodeListScreen(display, state, x, y, "Black Rock City", drawEntryBRC, drawCompassArrow, heading, lat, lon, 1);
+    drawNodeListScreen(display, state, x, y, "BRC", drawEntryBRC, drawLastSeenExtra, 0, lat, lon, 1);
 }
 
 /// Draw a series of fields in a column, wrapping to multiple columns if needed

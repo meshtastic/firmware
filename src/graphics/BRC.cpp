@@ -98,7 +98,7 @@ int BRCAddress::radial(char *buf, size_t len)
     return snprintf(buf, len, "%d:%02d", hour, minute);
 };
 
-int BRCAddress::annular(char *buf, size_t len)
+int BRCAddress::annular(char *buf, size_t len, bool noUnit)
 {
     const char *unit = "m";
     float unitMultiplier = FEET_TO_METER;
@@ -106,6 +106,7 @@ int BRCAddress::annular(char *buf, size_t len)
         unitMultiplier = 1.0;
         unit = "ft";
     }
+    if (noUnit) unit = "";
 
     if (bearing > 1.75 && bearing < 10.25) {
         const char *street = nullptr;
@@ -134,7 +135,17 @@ int BRCAddress::full(char *buf, size_t len)
     *(buf++) = ' ';
     *(buf++) = '&';
     *(buf++) = ' ';
-    buf += annular(buf, len - l - 4);
+    buf += annular(buf, len - l - 4, false);
+    buf[l] = 0; // always null terminated
+    return l;
+};
+
+int BRCAddress::compact(char *buf, size_t len)
+{
+    auto l = radial(buf, len - 2);
+    buf += l;
+    *(buf++) = '&';
+    buf += annular(buf, len - l - 2, true);
     buf[l] = 0; // always null terminated
     return l;
 };
