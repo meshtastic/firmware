@@ -344,6 +344,22 @@ NodeDB::NodeDB()
         config.device.node_info_broadcast_secs = MAX_INTERVAL;
     if (config.position.position_broadcast_secs > MAX_INTERVAL)
         config.position.position_broadcast_secs = MAX_INTERVAL;
+    if (config.position.gps_update_interval > MAX_INTERVAL)
+        config.position.gps_update_interval = MAX_INTERVAL;
+    if (config.position.gps_attempt_time > MAX_INTERVAL)
+        config.position.gps_attempt_time = MAX_INTERVAL;
+    if (config.position.position_flags > MAX_INTERVAL)
+        config.position.position_flags = MAX_INTERVAL;
+    if (config.position.rx_gpio > MAX_INTERVAL)
+        config.position.rx_gpio = MAX_INTERVAL;
+    if (config.position.tx_gpio > MAX_INTERVAL)
+        config.position.tx_gpio = MAX_INTERVAL;
+    if (config.position.broadcast_smart_minimum_distance > MAX_INTERVAL)
+        config.position.broadcast_smart_minimum_distance = MAX_INTERVAL;
+    if (config.position.broadcast_smart_minimum_interval_secs > MAX_INTERVAL)
+        config.position.broadcast_smart_minimum_interval_secs = MAX_INTERVAL;
+    if (config.position.gps_en_gpio > MAX_INTERVAL)
+        config.position.gps_en_gpio = MAX_INTERVAL;
     if (moduleConfig.neighbor_info.update_interval > MAX_INTERVAL)
         moduleConfig.neighbor_info.update_interval = MAX_INTERVAL;
     if (moduleConfig.telemetry.device_update_interval > MAX_INTERVAL)
