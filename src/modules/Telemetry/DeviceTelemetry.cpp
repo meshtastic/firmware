@@ -10,8 +10,10 @@
 #include "configuration.h"
 #include "main.h"
 #include "memGet.h"
+#if !MESHTASTIC_EXCLUDE_SCREEN
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
+#endif
 #include <meshUtils.h>
 
 #define MAGIC_USB_BATTERY_LEVEL 101

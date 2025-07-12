@@ -4,7 +4,11 @@
 #include "PowerFSM.h"
 #include "buzz.h"
 #include "configuration.h"
+#if !MESHTASTIC_EXCLUDE_SCREEN
 #include "graphics/Screen.h"
+#else
+#include "FakeScreen.h"
+#endif
 TextMessageModule *textMessageModule;
 
 ProcessMessage TextMessageModule::handleReceived(const meshtastic_MeshPacket &mp)

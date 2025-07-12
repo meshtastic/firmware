@@ -2,8 +2,10 @@
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "NodeDB.h"
 #include "ProtobufModule.h"
+#if !MESHTASTIC_EXCLUDE_SCREEN
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
+#endif
 
 class DeviceTelemetryModule : private concurrency::OSThread, public ProtobufModule<meshtastic_Telemetry>
 {

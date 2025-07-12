@@ -14,7 +14,11 @@
 #include "NodeDB.h"
 #include "PowerMon.h"
 #include "configuration.h"
+#if !MESHTASTIC_EXCLUDE_SCREEN
 #include "graphics/Screen.h"
+#else
+#include "FakeScreen.h"
+#endif
 #include "main.h"
 #include "sleep.h"
 #include "target_specific.h"

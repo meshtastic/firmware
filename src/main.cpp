@@ -28,7 +28,11 @@
 #endif
 #include "detect/einkScan.h"
 #include "graphics/RAKled.h"
+#if !MESHTASTIC_EXCLUDE_SCREEN
 #include "graphics/Screen.h"
+#else
+#include "FakeScreen.h"
+#endif
 #include "main.h"
 #include "mesh/generated/meshtastic/config.pb.h"
 #include "meshUtils.h"
@@ -352,9 +356,11 @@ void setup()
     SPISettings spiSettings(4000000, MSBFIRST, SPI_MODE0);
 #endif
 
+#if !MESHTASTIC_EXCLUDE_SCREEN
     meshtastic_Config_DisplayConfig_OledType screen_model =
         meshtastic_Config_DisplayConfig_OledType::meshtastic_Config_DisplayConfig_OledType_OLED_AUTO;
     OLEDDISPLAY_GEOMETRY screen_geometry = GEOMETRY_128_64;
+#endif
 
 #ifdef USE_SEGGER
     auto mode = false ? SEGGER_RTT_MODE_BLOCK_IF_FIFO_FULL : SEGGER_RTT_MODE_NO_BLOCK_TRIM;
@@ -750,6 +756,7 @@ void setup()
     else
         playStartMelody();
 
+#if !MESHTASTIC_EXCLUDE_SCREEN
     // fixed screen override?
     if (config.display.oled != meshtastic_Config_DisplayConfig_OledType_OLED_AUTO)
         screen_model = config.display.oled;
@@ -762,6 +769,7 @@ void setup()
 #if defined(USE_SH1107_128_64)
     screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // keep dimension of 128x64
 #endif
+#endif // MESHTASTIC_EXCLUDE_SCREEN
 
 #if !MESHTASTIC_EXCLUDE_I2C
 #if !defined(ARCH_STM32WL)
