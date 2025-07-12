@@ -109,6 +109,7 @@ class Power : private concurrency::OSThread
     Observable<const meshtastic::PowerStatus *> newStatus;
 
     Power();
+    ~Power();
 
     void shutdown();
     void readPowerStatus();
@@ -132,6 +133,16 @@ class Power : private concurrency::OSThread
     uint8_t low_voltage_counter;
 #ifdef DEBUG_HEAP
     uint32_t lastheap;
+#endif
+
+#ifdef ARCH_ESP32
+    // Get notified when lightsleep begins and ends to set power refresh interval
+    CallbackObserver<Power, void *> lsObserver = CallbackObserver<Power, void *>(this, &Power::beforeLightSleep);
+    CallbackObserver<Power, esp_sleep_wakeup_cause_t> lsEndObserver =
+        CallbackObserver<Power, esp_sleep_wakeup_cause_t>(this, &Power::afterLightSleep);
+
+    int beforeLightSleep(void *unused);
+    int afterLightSleep(esp_sleep_wakeup_cause_t cause);
 #endif
 };
 
