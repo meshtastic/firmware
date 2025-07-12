@@ -1,22 +1,6 @@
-#include "SeesawRotary.h"
-#include "meshUtils.h"
-
-#include "configuration.h"
-#if !MESHTASTIC_EXCLUDE_GPS
-#include "GPS.h"
-#endif
-#include "MeshService.h"
-#include "RadioLibInterface.h"
-#include "buzz.h"
-#include "input/InputBroker.h"
-#include "main.h"
-#include "modules/CannedMessageModule.h"
-#include "modules/ExternalNotificationModule.h"
-#include "power.h"
-#include "sleep.h"
 #ifdef ARCH_PORTDUINO
-#include "platform/portduino/PortduinoGlue.h"
-#endif
+#include "SeesawRotary.h"
+#include "input/InputBroker.h"
 
 using namespace concurrency;
 
@@ -56,7 +40,6 @@ bool SeesawRotary::init()
     // get starting position
     encoder_position = ss.getEncoderPosition();
 
-    LOG_INFO("Turning on interrupts");
     ss.setGPIOInterrupts((uint32_t)1 << SS_SWITCH, 1);
     ss.enableEncoderInterrupt();
     canSleep = true; // Assume we should not keep the board awake
@@ -66,15 +49,35 @@ bool SeesawRotary::init()
 
 int32_t SeesawRotary::runOnce()
 {
-    if (!ss.digitalRead(SS_SWITCH)) {
-        LOG_WARN("Button pressed!");
+    InputEvent e;
+    e.inputEvent = INPUT_BROKER_NONE;
+    bool currentlyPressed = !ss.digitalRead(SS_SWITCH);
+
+    if (currentlyPressed && !wasPressed) {
+        e.inputEvent = INPUT_BROKER_SELECT;
     }
+    wasPressed = currentlyPressed;
+
     int32_t new_position = ss.getEncoderPosition();
     // did we move arounde?
     if (encoder_position != new_position) {
-        LOG_WARN("Old position: %u, New Position: %u", encoder_position, new_position);
+        if (encoder_position == 0 && new_position != 1) {
+            e.inputEvent = INPUT_BROKER_ALT_PRESS;
+        } else if (new_position == 0 && encoder_position != 1) {
+            e.inputEvent = INPUT_BROKER_USER_PRESS;
+        } else if (new_position > encoder_position) {
+            e.inputEvent = INPUT_BROKER_USER_PRESS;
+        } else {
+            e.inputEvent = INPUT_BROKER_ALT_PRESS;
+        }
         encoder_position = new_position;
+    }
+    if (e.inputEvent != INPUT_BROKER_NONE) {
+        e.source = this->_originName;
+        e.kbchar = 0x00;
+        this->notifyObservers(&e);
     }
 
     return 50;
 }
+#endif
