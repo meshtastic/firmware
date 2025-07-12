@@ -53,6 +53,7 @@
 #endif
 #if ARCH_PORTDUINO
 #include "input/LinuxInputImpl.h"
+#include "input/SeesawRotary.h"
 #include "modules/Telemetry/HostMetrics.h"
 #if !MESHTASTIC_EXCLUDE_STOREFORWARD
 #include "modules/StoreForwardModule.h"
@@ -163,6 +164,12 @@ void setupModules()
         // Example: Put your module here
         // new ReplyModule();
 #if (HAS_BUTTON || ARCH_PORTDUINO) && !MESHTASTIC_EXCLUDE_INPUTBROKER
+
+        seesawRotary = new SeesawRotary("SeesawRotary");
+        if (!seesawRotary->init()) {
+            delete seesawRotary;
+            seesawRotary = nullptr;
+        }
 
         if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
             rotaryEncoderInterruptImpl1 = new RotaryEncoderInterruptImpl1();
