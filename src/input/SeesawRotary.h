@@ -4,6 +4,7 @@
 #include "Adafruit_seesaw.h"
 #include "InputBroker.h"
 #include "concurrency/OSThread.h"
+#include "configuration.h"
 
 #define SS_SWITCH 24
 #define SS_NEOPIX 6
