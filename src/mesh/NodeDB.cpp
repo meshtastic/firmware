@@ -778,7 +778,7 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.output_buzzer = PIN_BUZZER;
     moduleConfig.external_notification.use_pwm = true;
     moduleConfig.external_notification.alert_message_buzzer = true;
-    moduleConfig.external_notification.nag_timeout = 60;
+    moduleConfig.external_notification.nag_timeout = default_ringtone_nag_secs;
 #endif
 #if defined(RAK4630) || defined(RAK11310) || defined(RAK3312)
     // Default to RAK led pin 2 (blue)
@@ -787,7 +787,7 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.active = true;
     moduleConfig.external_notification.alert_message = true;
     moduleConfig.external_notification.output_ms = 1000;
-    moduleConfig.external_notification.nag_timeout = 60;
+    moduleConfig.external_notification.nag_timeout = default_ringtone_nag_secs;
 #endif
 
 #ifdef HAS_I2S
@@ -796,10 +796,10 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.use_i2s_as_buzzer = true;
     moduleConfig.external_notification.alert_message_buzzer = true;
 #if HAS_TFT
-    if (moduleConfig.external_notification.nag_timeout == 60)
+    if (moduleConfig.external_notification.nag_timeout == default_ringtone_nag_secs)
         moduleConfig.external_notification.nag_timeout = 0;
 #else
-    moduleConfig.external_notification.nag_timeout = 60;
+    moduleConfig.external_notification.nag_timeout = default_ringtone_nag_secs;
 #endif
 #endif
 #ifdef NANO_G2_ULTRA

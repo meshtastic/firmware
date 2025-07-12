@@ -363,7 +363,7 @@ ExternalNotificationModule::ExternalNotificationModule()
                               &meshtastic_RTTTLConfig_msg, &rtttlConfig) != LoadFileResult::LOAD_SUCCESS) {
             memset(rtttlConfig.ringtone, 0, sizeof(rtttlConfig.ringtone));
             // The default ringtone is always loaded from userPrefs.jsonc
-            strncpy(rtttlConfig.ringtone, USERPREFS_RINGTONE, sizeof(rtttlConfig.ringtone));
+            strncpy(rtttlConfig.ringtone, USERPREFS_RINGTONE_RTTTL, sizeof(rtttlConfig.ringtone));
         }
 
         LOG_INFO("Init External Notification Module");
