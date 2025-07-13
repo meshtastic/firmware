@@ -30,7 +30,7 @@
 
 namespace graphics
 {
-extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *titleStr);
+extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *titleStr, bool battery_only);
 }
 #if __has_include(<Adafruit_AHTX0.h>)
 #include "Sensor/AHT10.h"
@@ -358,7 +358,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
     int line = 1;
 
     // === Set Title
-    const char *titleStr = (SCREEN_WIDTH > 128) ? "Environment" : "Env.";
+    const char *titleStr = (graphics::isHighResolution) ? "Environment" : "Env.";
 
     // === Header ===
     graphics::drawCommonHeader(display, x, y, titleStr);
@@ -450,7 +450,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
 
         if (isOwnTelemetry && bannerMsg && isCooldownOver) {
             LOG_INFO("drawFrame: IAQ %d (own) — showing banner: %s", m.iaq, bannerMsg);
-            screen->showOverlayBanner(bannerMsg, 3000);
+            screen->showSimpleBanner(bannerMsg, 3000);
 
             // Only buzz if IAQ is over 200
             if (m.iaq > 200 && moduleConfig.external_notification.enabled && !externalNotificationModule->getMute()) {

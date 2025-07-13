@@ -27,28 +27,25 @@ ButtonThread::ButtonThread(const char *name) : OSThread(name)
     _originName = name;
 }
 
-bool ButtonThread::initButton(uint8_t pinNumber, bool activeLow, bool activePullup, uint32_t pullupSense, voidFuncPtr intRoutine,
-                              input_broker_event singlePress, input_broker_event longPress, uint16_t longPressTime,
-                              input_broker_event doublePress, input_broker_event longLongPress, uint16_t longLongPressTime,
-                              input_broker_event triplePress, input_broker_event shortLong, bool touchQuirk)
+bool ButtonThread::initButton(const ButtonConfig &config)
 {
     if (inputBroker)
         inputBroker->registerSource(this);
-    _longPressTime = longPressTime;
-    _longLongPressTime = longLongPressTime;
-    _pinNum = pinNumber;
-    _activeLow = activeLow;
-    _touchQuirk = touchQuirk;
-    _intRoutine = intRoutine;
-    _longLongPress = longLongPress;
+    _longPressTime = config.longPressTime;
+    _longLongPressTime = config.longLongPressTime;
+    _pinNum = config.pinNumber;
+    _activeLow = config.activeLow;
+    _touchQuirk = config.touchQuirk;
+    _intRoutine = config.intRoutine;
+    _longLongPress = config.longLongPress;
 
-    userButton = OneButton(pinNumber, activeLow, activePullup);
+    userButton = OneButton(config.pinNumber, config.activeLow, config.activePullup);
 
-    if (pullupSense != 0) {
-        pinMode(pinNumber, pullupSense);
+    if (config.pullupSense != 0) {
+        pinMode(config.pinNumber, config.pullupSense);
     }
 
-    _singlePress = singlePress;
+    _singlePress = config.singlePress;
     userButton.attachClick(
         [](void *callerThread) -> void {
             ButtonThread *thread = (ButtonThread *)callerThread;
@@ -56,26 +53,26 @@ bool ButtonThread::initButton(uint8_t pinNumber, bool activeLow, bool activePull
         },
         this);
 
-    if (longPress != INPUT_BROKER_NONE) {
-        _longPress = longPress;
+    if (config.longPress != INPUT_BROKER_NONE) {
+        _longPress = config.longPress;
         userButton.attachLongPressStart(
             [](void *callerThread) -> void {
                 ButtonThread *thread = (ButtonThread *)callerThread;
-                if (millis() > 30000) // hold off 30s after boot
-                    thread->btnEvent = BUTTON_EVENT_LONG_PRESSED;
+                // if (millis() > 30000) // hold off 30s after boot
+                thread->btnEvent = BUTTON_EVENT_LONG_PRESSED;
             },
             this);
         userButton.attachLongPressStop(
             [](void *callerThread) -> void {
                 ButtonThread *thread = (ButtonThread *)callerThread;
-                if (millis() > 30000) // hold off 30s after boot
-                    thread->btnEvent = BUTTON_EVENT_LONG_RELEASED;
+                // if (millis() > 30000) // hold off 30s after boot
+                thread->btnEvent = BUTTON_EVENT_LONG_RELEASED;
             },
             this);
     }
 
-    if (doublePress != INPUT_BROKER_NONE) {
-        _doublePress = doublePress;
+    if (config.doublePress != INPUT_BROKER_NONE) {
+        _doublePress = config.doublePress;
         userButton.attachDoubleClick(
             [](void *callerThread) -> void {
                 ButtonThread *thread = (ButtonThread *)callerThread;
@@ -84,8 +81,8 @@ bool ButtonThread::initButton(uint8_t pinNumber, bool activeLow, bool activePull
             this);
     }
 
-    if (triplePress != INPUT_BROKER_NONE) {
-        _triplePress = triplePress;
+    if (config.triplePress != INPUT_BROKER_NONE) {
+        _triplePress = config.triplePress;
         userButton.attachMultiClick(
             [](void *callerThread) -> void {
                 ButtonThread *thread = (ButtonThread *)callerThread;
@@ -94,8 +91,8 @@ bool ButtonThread::initButton(uint8_t pinNumber, bool activeLow, bool activePull
             },
             this);
     }
-    if (shortLong != INPUT_BROKER_NONE) {
-        _shortLong = shortLong;
+    if (config.shortLong != INPUT_BROKER_NONE) {
+        _shortLong = config.shortLong;
     }
 
     userButton.setDebounceMs(1);
@@ -257,13 +254,19 @@ int32_t ButtonThread::runOnce()
         case BUTTON_EVENT_LONG_RELEASED: {
 
             LOG_INFO("LONG PRESS RELEASE");
-            if (_longLongPress != INPUT_BROKER_NONE && (millis() - buttonPressStartTime) >= _longLongPressTime) {
+            if (millis() > 30000 && _longLongPress != INPUT_BROKER_NONE &&
+                (millis() - buttonPressStartTime) >= _longLongPressTime) {
                 evt.inputEvent = _longLongPress;
                 this->notifyObservers(&evt);
             }
             // Reset combination tracking
             waitingForLongPress = false;
 
+            break;
+        }
+
+        // doesn't handle BUTTON_EVENT_PRESSED_SCREEN BUTTON_EVENT_TOUCH_LONG_PRESSED BUTTON_EVENT_COMBO_SHORT_LONG
+        default: {
             break;
         }
         }

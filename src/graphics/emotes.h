@@ -22,9 +22,25 @@ extern const int numEmotes;
 extern const unsigned char thumbup[] PROGMEM;
 extern const unsigned char thumbdown[] PROGMEM;
 
-#define smiley_height 30
-#define smiley_width 30
-extern const unsigned char smiley[] PROGMEM;
+#define Smiling_Eyes_height 30
+#define Smiling_Eyes_width 30
+extern const unsigned char Smiling_Eyes[] PROGMEM;
+
+#define Grinning_height 30
+#define Grinning_width 30
+extern const unsigned char Grinning[] PROGMEM;
+
+#define Slightly_Smiling_height 30
+#define Slightly_Smiling_width 30
+extern const unsigned char Slightly_Smiling[] PROGMEM;
+
+#define Winking_Face_height 30
+#define Winking_Face_width 30
+extern const unsigned char Winking_Face[] PROGMEM;
+
+#define Grinning_Smiling_Eyes_height 30
+#define Grinning_Smiling_Eyes_width 30
+extern const unsigned char Grinning_Smiling_Eyes[] PROGMEM;
 
 #define question_height 25
 #define question_width 25
@@ -37,6 +53,18 @@ extern const unsigned char bang[] PROGMEM;
 #define haha_height 30
 #define haha_width 30
 extern const unsigned char haha[] PROGMEM;
+
+#define ROFL_height 30
+#define ROFL_width 30
+extern const unsigned char ROFL[] PROGMEM;
+
+#define Smiling_Closed_Eyes_height 30
+#define Smiling_Closed_Eyes_width 30
+extern const unsigned char Smiling_Closed_Eyes[] PROGMEM;
+
+#define Grinning_SmilingEyes2_height 30
+#define Grinning_SmilingEyes2_width 30
+extern const unsigned char Grinning_SmilingEyes2[] PROGMEM;
 
 #define wave_icon_height 30
 #define wave_icon_width 30

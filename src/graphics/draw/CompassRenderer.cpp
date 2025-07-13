@@ -4,6 +4,7 @@
 #include "configuration.h"
 #include "gps/GeoCoord.h"
 #include "graphics/ScreenFonts.h"
+#include "graphics/SharedUIDisplay.h"
 #include <cmath>
 
 namespace graphics
@@ -45,17 +46,18 @@ void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t compassY, 
     // This could draw a "N" indicator or north arrow
     // For now, we'll draw a simple north indicator
     // const float radius = 17.0f;
-    if (display->width() > 128) {
+    if (isHighResolution) {
         radius += 4;
     }
     Point north(0, -radius);
-    north.rotate(-myHeading);
+    if (uiconfig.compass_mode != meshtastic_CompassMode_FIXED_RING)
+        north.rotate(-myHeading);
     north.translate(compassX, compassY);
 
     display->setFont(FONT_SMALL);
     display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->setColor(BLACK);
-    if (display->width() > 128) {
+    if (isHighResolution) {
         display->fillRect(north.x - 8, north.y - 1, display->getStringWidth("N") + 3, FONT_HEIGHT_SMALL - 6);
     } else {
         display->fillRect(north.x - 4, north.y - 1, display->getStringWidth("N") + 2, FONT_HEIGHT_SMALL - 6);
@@ -91,18 +93,22 @@ void drawArrowToNode(OLEDDisplay *display, int16_t x, int16_t y, int16_t size, f
     float radians = bearing * DEG_TO_RAD;
 
     Point tip(0, -size / 2);
-    Point left(-size / 4, size / 4);
-    Point right(size / 4, size / 4);
+    Point left(-size / 6, size / 4);
+    Point right(size / 6, size / 4);
+    Point tail(0, size / 4.5);
 
     tip.rotate(radians);
     left.rotate(radians);
     right.rotate(radians);
+    tail.rotate(radians);
 
     tip.translate(x, y);
     left.translate(x, y);
     right.translate(x, y);
+    tail.translate(x, y);
 
-    display->drawTriangle(tip.x, tip.y, left.x, left.y, right.x, right.y);
+    display->fillTriangle(tip.x, tip.y, left.x, left.y, tail.x, tail.y);
+    display->fillTriangle(tip.x, tip.y, right.x, right.y, tail.x, tail.y);
 }
 
 float estimatedHeading(double lat, double lon)
@@ -125,15 +131,6 @@ uint16_t getCompassDiam(uint32_t displayWidth, uint32_t displayHeight)
         maxDiam = 64;
 
     return maxDiam;
-}
-
-float calculateBearing(double lat1, double lon1, double lat2, double lon2)
-{
-    double dLon = (lon2 - lon1) * DEG_TO_RAD;
-    double y = sin(dLon) * cos(lat2 * DEG_TO_RAD);
-    double x = cos(lat1 * DEG_TO_RAD) * sin(lat2 * DEG_TO_RAD) - sin(lat1 * DEG_TO_RAD) * cos(lat2 * DEG_TO_RAD) * cos(dLon);
-    double bearing = atan2(y, x) * RAD_TO_DEG;
-    return fmod(bearing + 360.0, 360.0);
 }
 
 } // namespace CompassRenderer

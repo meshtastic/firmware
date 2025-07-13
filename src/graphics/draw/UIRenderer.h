@@ -32,8 +32,6 @@ class UIRenderer
 {
   public:
     // Common UI elements
-    static void drawBattery(OLEDDisplay *display, int16_t x, int16_t y, uint8_t *imgBuffer,
-                            const meshtastic::PowerStatus *powerStatus);
     static void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const meshtastic::NodeStatus *nodeStatus,
                           int node_offset = 0, bool show_total = true, String additional_words = "");
 
@@ -48,9 +46,6 @@ class UIRenderer
 
     // Overlay and special screens
     static void drawFrameText(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *text);
-
-    // Function overlay for showing mute/buzzer modifiers etc.
-    static void drawFunctionOverlay(OLEDDisplay *display, OLEDDisplayUiState *state);
 
     // Navigation bar overlay
     static void drawNavigationBar(OLEDDisplay *display, OLEDDisplayUiState *state);

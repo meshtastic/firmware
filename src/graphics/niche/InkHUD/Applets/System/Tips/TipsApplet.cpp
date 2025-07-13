@@ -50,11 +50,11 @@ void InkHUD::TipsApplet::onRender()
         break;
 
     case Tip::FINISH_SETUP: {
-        setFont(fontLarge);
+        setFont(fontMedium);
         printAt(0, 0, "Tip: Finish Setup");
 
         setFont(fontSmall);
-        int16_t cursorY = fontLarge.lineHeight() * 1.5;
+        int16_t cursorY = fontMedium.lineHeight() * 1.5;
         printAt(0, cursorY, "- connect antenna");
 
         cursorY += fontSmall.lineHeight() * 1.2;
@@ -80,7 +80,7 @@ void InkHUD::TipsApplet::onRender()
     } break;
 
     case Tip::SAFE_SHUTDOWN: {
-        setFont(fontLarge);
+        setFont(fontMedium);
         printAt(0, 0, "Tip: Shutdown");
 
         setFont(fontSmall);
@@ -88,29 +88,29 @@ void InkHUD::TipsApplet::onRender()
         shutdown += "Before removing power, please shut down from InkHUD menu, or a client app. \n";
         shutdown += "\n";
         shutdown += "This ensures data is saved.";
-        printWrapped(0, fontLarge.lineHeight() * 1.5, width(), shutdown);
+        printWrapped(0, fontMedium.lineHeight() * 1.5, width(), shutdown);
 
         printAt(0, Y(1.0), "Press button to continue", LEFT, BOTTOM);
 
     } break;
 
     case Tip::CUSTOMIZATION: {
-        setFont(fontLarge);
+        setFont(fontMedium);
         printAt(0, 0, "Tip: Customization");
 
         setFont(fontSmall);
-        printWrapped(0, fontLarge.lineHeight() * 1.5, width(),
+        printWrapped(0, fontMedium.lineHeight() * 1.5, width(),
                      "Configure & control display with the InkHUD menu. Optional features, layout, rotation, and more.");
 
         printAt(0, Y(1.0), "Press button to continue", LEFT, BOTTOM);
     } break;
 
     case Tip::BUTTONS: {
-        setFont(fontLarge);
+        setFont(fontMedium);
         printAt(0, 0, "Tip: Buttons");
 
         setFont(fontSmall);
-        int16_t cursorY = fontLarge.lineHeight() * 1.5;
+        int16_t cursorY = fontMedium.lineHeight() * 1.5;
 
         printAt(0, cursorY, "User Button");
         cursorY += fontSmall.lineHeight() * 1.2;
@@ -123,11 +123,11 @@ void InkHUD::TipsApplet::onRender()
     } break;
 
     case Tip::ROTATION: {
-        setFont(fontLarge);
+        setFont(fontMedium);
         printAt(0, 0, "Tip: Rotation");
 
         setFont(fontSmall);
-        printWrapped(0, fontLarge.lineHeight() * 1.5, width(),
+        printWrapped(0, fontMedium.lineHeight() * 1.5, width(),
                      "To rotate the display, use the InkHUD menu. Long-press the user button > Options > Rotate.");
 
         printAt(0, Y(1.0), "Press button to continue", LEFT, BOTTOM);
@@ -155,7 +155,7 @@ void InkHUD::TipsApplet::renderWelcome()
     uint16_t logoH = getLogoHeight(logoWLimit, logoHLimit);
 
     // Title size
-    setFont(fontLarge);
+    setFont(fontMedium);
     std::string title;
     if (width() >= 200) // Future proofing: hide if *tiny* display
         title = "meshtastic.org";
