@@ -454,7 +454,7 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
         else if ((destIndex / columns) >= (scrollIndex + visibleRows))
             scrollIndex = (destIndex / columns) - visibleRows + 1;
 
-        screen->forceDisplay();
+        screen->forceDisplay(true);
         return 1;
     }
 
@@ -469,7 +469,7 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
         if ((destIndex / columns) >= (scrollIndex + visibleRows))
             scrollIndex = (destIndex / columns) - visibleRows + 1;
 
-        screen->forceDisplay();
+        screen->forceDisplay(true);
         return 1;
     }
 
@@ -491,7 +491,7 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
 
         runState = returnToCannedList ? CANNED_MESSAGE_RUN_STATE_ACTIVE : CANNED_MESSAGE_RUN_STATE_FREETEXT;
         returnToCannedList = false;
-        screen->forceDisplay();
+        screen->forceDisplay(true);
         return 1;
     }
 
@@ -504,7 +504,7 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
         // UIFrameEvent e;
         // e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
         // notifyObservers(&e);
-        screen->forceDisplay();
+        screen->forceDisplay(true);
         return 1;
     }
 
