@@ -1,7 +1,7 @@
+#include "BRC.h"
 #include "GPSStatus.h"
 #include "gps/GeoCoord.h"
 #include "graphics/Screen.h"
-#include "BRC.h"
 
 using namespace meshtastic;
 
@@ -106,7 +106,8 @@ int BRCAddress::annular(char *buf, size_t len, bool noUnit)
         unitMultiplier = 1.0;
         unit = "ft";
     }
-    if (noUnit) unit = "";
+    if (noUnit)
+        unit = "";
 
     if (bearing > 1.75 && bearing < 10.25) {
         const char *street = nullptr;

@@ -6,10 +6,10 @@
 #include "UIRenderer.h"
 #include "gps/GeoCoord.h"
 #include "gps/RTC.h" // for getTime() function
+#include "graphics/BRC.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/images.h"
-#include "graphics/BRC.h"
 #include "meshUtils.h"
 #include <algorithm>
 
@@ -341,7 +341,6 @@ void drawEntryCompass(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     }
 }
 
-
 void drawEntryBRC(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth)
 {
     bool isLeftCol = (x < SCREEN_WIDTH / 2);
@@ -359,7 +358,6 @@ void drawEntryBRC(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x
     BRCAddress(node->position.latitude_i, node->position.longitude_i).compact(buf, 14);
     auto nameWidth = display->getStringWidth("WWWW"); // Fixed width so they are aligned.
     display->drawString(xText + nameWidth, y, buf);
-
 
     if (node->is_favorite) {
         if (isHighResolution) {
@@ -442,7 +440,7 @@ void drawLastSeenExtra(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int1
     int rightEdge = x + columnWidth - timeOffset;
     if (timeStr[strlen(timeStr) - 1] == 'm') // Fix the fact that our fonts don't line up well all the time
         rightEdge -= 1;
-    //display->setTextAlignment(TEXT_ALIGN_RIGHT);
+    // display->setTextAlignment(TEXT_ALIGN_RIGHT);
     int textWidth = display->getStringWidth(timeStr);
     display->drawString(rightEdge - textWidth, y, timeStr);
 }
@@ -452,7 +450,8 @@ void drawLastSeenExtra(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int1
 // =============================
 
 void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *title,
-                        EntryRenderer renderer, NodeExtrasRenderer extras, float heading, double lat, double lon, int totalColumns)
+                        EntryRenderer renderer, NodeExtrasRenderer extras, float heading, double lat, double lon,
+                        int totalColumns)
 {
     const int COMMON_HEADER_HEIGHT = FONT_HEIGHT_SMALL - 1;
     const int rowYOffset = FONT_HEIGHT_SMALL - 3;
