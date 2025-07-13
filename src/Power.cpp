@@ -1272,19 +1272,19 @@ class LipoCharger : public HasBatteryLevel
             if (result) {
                 LOG_INFO("PPM BQ25896 init succeeded");
                 // Set the minimum operating voltage. Below this voltage, the PPM will protect
-                ppm->setSysPowerDownVoltage(3100);
+                // ppm->setSysPowerDownVoltage(3100);
 
                 // Set input current limit, default is 500mA
-                ppm->setInputCurrentLimit(800);
+                // ppm->setInputCurrentLimit(800);
 
                 // Disable current limit pin
-                ppm->disableCurrentLimitPin();
+                // ppm->disableCurrentLimitPin();
 
                 // Set the charging target voltage, Range:3840 ~ 4608mV ,step:16 mV
                 ppm->setChargeTargetVoltage(4288);
 
                 // Set the precharge current , Range: 64mA ~ 1024mA ,step:64mA
-                ppm->setPrechargeCurr(64);
+                // ppm->setPrechargeCurr(64);
 
                 // The premise is that limit pin is disabled, or it will
                 // only follow the maximum charging current set by limit pin.
@@ -1327,12 +1327,16 @@ class LipoCharger : public HasBatteryLevel
     /**
      * Battery state of charge, from 0 to 100 or -1 for unknown
      */
-    virtual int getBatteryPercent() override { return bq->getChargePercent(); }
+    virtual int getBatteryPercent() override
+    {
+        return -1;
+        // return bq->getChargePercent(); // don't use BQ27220 for battery percent, it is not calibrated
+    }
 
     /**
      * The raw voltage of the battery in millivolts, or NAN if unknown
      */
-    virtual uint16_t getBattVoltage() override { return bq->getVoltage(); } // BQ27220::VOLT
+    virtual uint16_t getBattVoltage() override { return bq->getVoltage(); }
 
     /**
      * return true if there is a battery installed in this unit
