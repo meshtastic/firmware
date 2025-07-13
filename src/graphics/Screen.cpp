@@ -640,6 +640,9 @@ void Screen::forceDisplay(bool forceUiUpdate)
 
     // Tell EInk class to update the display
     static_cast<EInkDisplay *>(dispdev)->forceDisplay();
+#else
+    // No delay between UI frame rendering
+    setFastFramerate();
 #endif
 }
 
