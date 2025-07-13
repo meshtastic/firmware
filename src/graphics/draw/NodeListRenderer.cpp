@@ -544,7 +544,31 @@ void drawDynamicNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, 
 
     // Render screen based on currentMode
     const char *title = getCurrentModeTitle(display->getWidth());
-    drawNodeListScreen(display, state, x, y, title, drawEntryDynamic);
+
+    if (currentMode == MODE_BEARING) {
+        float heading = 0;
+        bool validHeading = false;
+        auto ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+        double lat = DegD(ourNode->position.latitude_i);
+        double lon = DegD(ourNode->position.longitude_i);
+
+        if (uiconfig.compass_mode != meshtastic_CompassMode_FREEZE_HEADING) {
+            if (screen->hasHeading()) {
+                heading = screen->getHeading(); // degrees
+                validHeading = true;
+            } else {
+                heading = screen->estimatedHeading(lat, lon);
+                validHeading = !isnan(heading);
+            }
+            if (!validHeading) {
+                lastRenderedMode = MODE_COUNT;
+                return;
+            }
+        }
+        drawNodeListScreen(display, state, x, y, title, drawEntryCompass, drawCompassArrow, heading, lat, lon);
+    } else {
+        drawNodeListScreen(display, state, x, y, title, drawEntryDynamic);
+    }
 
     // Track the last mode to avoid reinitializing modeStartTime
     lastRenderedMode = currentMode;
