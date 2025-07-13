@@ -142,16 +142,18 @@ void InkHUD::NodeListApplet::onRender()
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeNum);
 
         // -- Shortname --
-        // use "?" if unknown
-        if (node && node->has_user)
-            shortName = node->user.short_name;
+        // Parse special chars in the short name
+        // Use "?" if unknown
+        if (node)
+            shortName = parseShortName(node);
         else
             shortName = "?";
 
         // -- Longname --
-        // use node id if unknown
+        // Parse special chars in long name
+        // Use node id if unknown
         if (node && node->has_user)
-            longName = node->user.long_name; // Found in nodeDB
+            longName = parse(node->user.long_name); // Found in nodeDB
         else {
             // Not found in nodeDB, show a hex nodeid instead
             longName = hexifyNodeNum(nodeNum);
@@ -166,11 +168,11 @@ void InkHUD::NodeListApplet::onRender()
 
         // Define two lines of text for the card
         // We will center our text on these lines
-        uint16_t lineAY = cardTopY + (fontLarge.lineHeight() / 2);
-        uint16_t lineBY = cardTopY + fontLarge.lineHeight() + (fontSmall.lineHeight() / 2);
+        uint16_t lineAY = cardTopY + (fontMedium.lineHeight() / 2);
+        uint16_t lineBY = cardTopY + fontMedium.lineHeight() + (fontSmall.lineHeight() / 2);
 
         // Print the short name
-        setFont(fontLarge);
+        setFont(fontMedium);
         printAt(0, lineAY, shortName, LEFT, MIDDLE);
 
         // Print the distance
@@ -180,8 +182,8 @@ void InkHUD::NodeListApplet::onRender()
         // If we have a direct connection to the node, draw the signal indicator
         if (hopsAway == 0 && signal != SIGNAL_UNKNOWN) {
             uint16_t signalW = getTextWidth("Xkm"); // Indicator should be similar width to distance label
-            uint16_t signalH = fontLarge.lineHeight() * 0.75;
-            int16_t signalY = lineAY + (fontLarge.lineHeight() / 2) - (fontLarge.lineHeight() * 0.75);
+            uint16_t signalH = fontMedium.lineHeight() * 0.75;
+            int16_t signalY = lineAY + (fontMedium.lineHeight() / 2) - (fontMedium.lineHeight() * 0.75);
             int16_t signalX = width() - signalW;
             drawSignalIndicator(signalX, signalY, signalW, signalH, signal);
         }

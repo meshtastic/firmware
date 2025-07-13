@@ -28,6 +28,10 @@
 #include <graphics/RAKled.h>
 #endif
 
+#ifdef HAS_LP5562
+#include <graphics/NomadStarLED.h>
+#endif
+
 #ifdef HAS_NEOPIXEL
 #include <graphics/NeoPixel.h>
 #endif
@@ -37,10 +41,11 @@
 extern unPhone unphone;
 #endif
 
-#if defined(HAS_NCP5623) || defined(RGBLED_RED) || defined(HAS_NEOPIXEL) || defined(UNPHONE)
+#if defined(HAS_RGB_LED)
 uint8_t red = 0;
 uint8_t green = 0;
 uint8_t blue = 0;
+uint8_t white = 0;
 uint8_t colorState = 1;
 uint8_t brightnessIndex = 0;
 uint8_t brightnessValues[] = {0, 10, 20, 30, 50, 90, 160, 170}; // blue gets multiplied by 1.5
@@ -128,13 +133,19 @@ int32_t ExternalNotificationModule::runOnce()
                           millis());
                 setExternalState(2, !getExternal(2));
             }
-#if defined(HAS_NCP5623) || defined(RGBLED_RED) || defined(HAS_NEOPIXEL) || defined(UNPHONE)
+#if defined(HAS_RGB_LED)
             red = (colorState & 4) ? brightnessValues[brightnessIndex] : 0;          // Red enabled on colorState = 4,5,6,7
             green = (colorState & 2) ? brightnessValues[brightnessIndex] : 0;        // Green enabled on colorState = 2,3,6,7
             blue = (colorState & 1) ? (brightnessValues[brightnessIndex] * 1.5) : 0; // Blue enabled on colorState = 1,3,5,7
+            white = (colorState & 12) ? brightnessValues[brightnessIndex] : 0;
 #ifdef HAS_NCP5623
             if (rgb_found.type == ScanI2C::NCP5623) {
                 rgb.setColor(red, green, blue);
+            }
+#endif
+#ifdef HAS_LP5562
+            if (rgb_found.type == ScanI2C::LP5562) {
+                rgbw.setColor(red, green, blue, white);
             }
 #endif
 #ifdef RGBLED_CA
@@ -177,7 +188,7 @@ int32_t ExternalNotificationModule::runOnce()
 
         // Play RTTTL over i2s audio interface if enabled as buzzer
 #ifdef HAS_I2S
-        if (moduleConfig.external_notification.use_i2s_as_buzzer) {
+        if (moduleConfig.external_notification.use_i2s_as_buzzer && canBuzz()) {
             if (audioThread->isPlaying()) {
                 // Continue playing
             } else if (isNagging && (nagCycleCutoff >= millis())) {
@@ -186,7 +197,7 @@ int32_t ExternalNotificationModule::runOnce()
         }
 #endif
         // now let the PWM buzzer play
-        if (moduleConfig.external_notification.use_pwm && config.device.buzzer_gpio) {
+        if (moduleConfig.external_notification.use_pwm && config.device.buzzer_gpio && canBuzz()) {
             if (rtttl::isPlaying()) {
                 rtttl::play();
             } else if (isNagging && (nagCycleCutoff >= millis())) {
@@ -197,6 +208,18 @@ int32_t ExternalNotificationModule::runOnce()
 
         return EXT_NOTIFICATION_DEFAULT_THREAD_MS;
     }
+}
+
+/**
+ * Based on buzzer mode, return true if we can buzz.
+ */
+bool ExternalNotificationModule::canBuzz()
+{
+    if (config.device.buzzer_mode != meshtastic_Config_DeviceConfig_BuzzerMode_DISABLED &&
+        config.device.buzzer_mode != meshtastic_Config_DeviceConfig_BuzzerMode_SYSTEM_ONLY) {
+        return true;
+    }
+    return false;
 }
 
 bool ExternalNotificationModule::wantPacket(const meshtastic_MeshPacket *p)
@@ -233,17 +256,23 @@ void ExternalNotificationModule::setExternalState(uint8_t index, bool on)
         break;
     }
 
-#if defined(HAS_NCP5623) || defined(RGBLED_RED) || defined(HAS_NEOPIXEL) || defined(UNPHONE)
+#if defined(HAS_RGB_LED)
     if (!on) {
         red = 0;
         green = 0;
         blue = 0;
+        white = 0;
     }
 #endif
 
 #ifdef HAS_NCP5623
     if (rgb_found.type == ScanI2C::NCP5623) {
         rgb.setColor(red, green, blue);
+    }
+#endif
+#ifdef HAS_LP5562
+    if (rgb_found.type == ScanI2C::LP5562) {
+        rgbw.setColor(red, green, blue, white);
     }
 #endif
 #ifdef RGBLED_CA
@@ -274,6 +303,12 @@ void ExternalNotificationModule::setExternalState(uint8_t index, bool on)
 bool ExternalNotificationModule::getExternal(uint8_t index)
 {
     return externalCurrentState[index];
+}
+
+// Allow other firmware components to determine whether a notification is ongoing
+bool ExternalNotificationModule::nagging()
+{
+    return isNagging;
 }
 
 void ExternalNotificationModule::stopNow()
@@ -321,12 +356,14 @@ ExternalNotificationModule::ExternalNotificationModule()
     // moduleConfig.external_notification.alert_message_buzzer = true;
 
     if (moduleConfig.external_notification.enabled) {
+        if (inputBroker) // put our callback in the inputObserver list
+            inputObserver.observe(inputBroker);
+
         if (nodeDB->loadProto(rtttlConfigFile, meshtastic_RTTTLConfig_size, sizeof(meshtastic_RTTTLConfig),
                               &meshtastic_RTTTLConfig_msg, &rtttlConfig) != LoadFileResult::LOAD_SUCCESS) {
             memset(rtttlConfig.ringtone, 0, sizeof(rtttlConfig.ringtone));
-            strncpy(rtttlConfig.ringtone,
-                    "24:d=32,o=5,b=565:f6,p,f6,4p,p,f6,p,f6,2p,p,b6,p,b6,p,b6,p,b6,p,b,p,b,p,b,p,b,p,b,p,b,p,b,p,b,1p.,2p.,p",
-                    sizeof(rtttlConfig.ringtone));
+            // The default ringtone is always loaded from userPrefs.jsonc
+            strncpy(rtttlConfig.ringtone, USERPREFS_RINGTONE_RTTTL, sizeof(rtttlConfig.ringtone));
         }
 
         LOG_INFO("Init External Notification Module");
@@ -347,7 +384,7 @@ ExternalNotificationModule::ExternalNotificationModule()
             setExternalState(1, false);
             externalTurnedOn[1] = 0;
         }
-        if (moduleConfig.external_notification.output_buzzer) {
+        if (moduleConfig.external_notification.output_buzzer && canBuzz()) {
             if (!moduleConfig.external_notification.use_pwm) {
                 LOG_INFO("Use Pin %i for buzzer", moduleConfig.external_notification.output_buzzer);
                 pinMode(moduleConfig.external_notification.output_buzzer, OUTPUT);
@@ -363,6 +400,12 @@ ExternalNotificationModule::ExternalNotificationModule()
         if (rgb_found.type == ScanI2C::NCP5623) {
             rgb.begin();
             rgb.setCurrent(10);
+        }
+#endif
+#ifdef HAS_LP5562
+        if (rgb_found.type == ScanI2C::LP5562) {
+            rgbw.begin();
+            rgbw.setCurrent(20);
         }
 #endif
 #ifdef RGBLED_RED
@@ -431,7 +474,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 }
             }
 
-            if (moduleConfig.external_notification.alert_bell_buzzer) {
+            if (moduleConfig.external_notification.alert_bell_buzzer && canBuzz()) {
                 if (containsBell) {
                     LOG_INFO("externalNotificationModule - Notification Bell (Buzzer)");
                     isNagging = true;
@@ -560,4 +603,13 @@ void ExternalNotificationModule::handleSetRingtone(const char *from_msg)
     if (changed) {
         nodeDB->saveProto(rtttlConfigFile, meshtastic_RTTTLConfig_size, &meshtastic_RTTTLConfig_msg, &rtttlConfig);
     }
+}
+
+int ExternalNotificationModule::handleInputEvent(const InputEvent *event)
+{
+    if (nagCycleCutoff != UINT32_MAX) {
+        stopNow();
+        return 1;
+    }
+    return 0;
 }

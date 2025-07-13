@@ -210,17 +210,8 @@ void NRF52Bluetooth::shutdown()
 {
     // Shutdown bluetooth for minimum power draw
     LOG_INFO("Disable NRF52 bluetooth");
-    uint8_t connection_num = Bluefruit.connected();
-    if (connection_num) {
-        for (uint8_t i = 0; i < connection_num; i++) {
-            LOG_INFO("NRF52 bluetooth disconnecting handle %d", i);
-            Bluefruit.disconnect(i);
-        }
-        // Wait for disconnection
-        while (Bluefruit.connected())
-            yield();
-        LOG_INFO("All bluetooth connections ended");
-    }
+    Bluefruit.Security.setPairPasskeyCallback(NRF52Bluetooth::onUnwantedPairing); // Actively refuse (during factory reset)
+    disconnect();
     Bluefruit.Advertising.stop();
 }
 void NRF52Bluetooth::startDisabled()
@@ -323,7 +314,9 @@ void NRF52Bluetooth::onConnectionSecured(uint16_t conn_handle)
 }
 bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passkey[6], bool match_request)
 {
-    LOG_INFO("BLE pair process started with passkey %.3s %.3s", passkey, passkey + 3);
+    char passkey1[4] = {passkey[0], passkey[1], passkey[2], '\0'};
+    char passkey2[4] = {passkey[3], passkey[4], passkey[5], '\0'};
+    LOG_INFO("BLE pair process started with passkey %s %s", passkey1, passkey2);
     powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
 
     // Get passkey as string
@@ -336,31 +329,33 @@ bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passke
     bluetoothStatus->updateStatus(new meshtastic::BluetoothStatus(textkey));
 
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN) // Todo: migrate this display code back into Screen class, and observe bluetoothStatus
-    screen->startAlert([](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
-        char btPIN[16] = "888888";
-        snprintf(btPIN, sizeof(btPIN), "%06u", configuredPasskey);
-        int x_offset = display->width() / 2;
-        int y_offset = display->height() <= 80 ? 0 : 32;
-        display->setTextAlignment(TEXT_ALIGN_CENTER);
-        display->setFont(FONT_MEDIUM);
-        display->drawString(x_offset + x, y_offset + y, "Bluetooth");
+    if (screen) {
+        screen->startAlert([](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
+            char btPIN[16] = "888888";
+            snprintf(btPIN, sizeof(btPIN), "%06u", configuredPasskey);
+            int x_offset = display->width() / 2;
+            int y_offset = display->height() <= 80 ? 0 : 12;
+            display->setTextAlignment(TEXT_ALIGN_CENTER);
+            display->setFont(FONT_MEDIUM);
+            display->drawString(x_offset + x, y_offset + y, "Bluetooth");
 
-        display->setFont(FONT_SMALL);
-        y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_MEDIUM - 4 : y_offset + FONT_HEIGHT_MEDIUM + 5;
-        display->drawString(x_offset + x, y_offset + y, "Enter this code");
+            display->setFont(FONT_SMALL);
+            y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_MEDIUM - 4 : y_offset + FONT_HEIGHT_MEDIUM + 5;
+            display->drawString(x_offset + x, y_offset + y, "Enter this code");
 
-        display->setFont(FONT_LARGE);
-        String displayPin(btPIN);
-        String pin = displayPin.substring(0, 3) + " " + displayPin.substring(3, 6);
-        y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_SMALL - 5 : y_offset + FONT_HEIGHT_SMALL + 5;
-        display->drawString(x_offset + x, y_offset + y, pin);
+            display->setFont(FONT_LARGE);
+            String displayPin(btPIN);
+            String pin = displayPin.substring(0, 3) + " " + displayPin.substring(3, 6);
+            y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_SMALL - 5 : y_offset + FONT_HEIGHT_SMALL + 5;
+            display->drawString(x_offset + x, y_offset + y, pin);
 
-        display->setFont(FONT_SMALL);
-        String deviceName = "Name: ";
-        deviceName.concat(getDeviceName());
-        y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_LARGE - 6 : y_offset + FONT_HEIGHT_LARGE + 5;
-        display->drawString(x_offset + x, y_offset + y, deviceName);
-    });
+            display->setFont(FONT_SMALL);
+            String deviceName = "Name: ";
+            deviceName.concat(getDeviceName());
+            y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_LARGE - 6 : y_offset + FONT_HEIGHT_LARGE + 5;
+            display->drawString(x_offset + x, y_offset + y, deviceName);
+        });
+    }
 #endif
     if (match_request) {
         uint32_t start_time = millis();
@@ -372,12 +367,38 @@ bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passke
     LOG_INFO("BLE passkey pair: match_request=%i", match_request);
     return true;
 }
+
+// Actively refuse new BLE pairings
+// After clearing bonds (at factory reset), clients seem initially able to attempt to re-pair, even with advertising disabled.
+// On NRF52Bluetooth::shutdown, we change the pairing callback to this method, to aggressively refuse any connection attempts.
+bool NRF52Bluetooth::onUnwantedPairing(uint16_t conn_handle, uint8_t const passkey[6], bool match_request)
+{
+    NRF52Bluetooth::disconnect();
+    return false;
+}
+
+// Disconnect any BLE connections
+void NRF52Bluetooth::disconnect()
+{
+    uint8_t connection_num = Bluefruit.connected();
+    if (connection_num) {
+        // Close all connections. We're only expecting one.
+        for (uint8_t i = 0; i < connection_num; i++)
+            Bluefruit.disconnect(i);
+
+        // Wait for disconnection
+        while (Bluefruit.connected())
+            yield();
+
+        LOG_INFO("Ended BLE connection");
+    }
+}
+
 void NRF52Bluetooth::onPairingCompleted(uint16_t conn_handle, uint8_t auth_status)
 {
     if (auth_status == BLE_GAP_SEC_STATUS_SUCCESS) {
         LOG_INFO("BLE pair success");
-        bluetoothStatus->updateStatus(
-            new meshtastic::BluetoothStatus(meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED));
+        bluetoothStatus->updateStatus(new meshtastic::BluetoothStatus(meshtastic::BluetoothStatus::ConnectionState::CONNECTED));
     } else {
         LOG_INFO("BLE pair failed");
         // Notify UI (or any other interested firmware components)
@@ -386,7 +407,9 @@ void NRF52Bluetooth::onPairingCompleted(uint16_t conn_handle, uint8_t auth_statu
     }
 
     // Todo: migrate this display code back into Screen class, and observe bluetoothStatus
-    screen->endAlert();
+    if (screen) {
+        screen->endAlert();
+    }
 }
 
 void NRF52Bluetooth::sendLog(const uint8_t *logMessage, size_t length)

@@ -1,14 +1,16 @@
 // Status
-#define LED_PIN_POWER 1
-#define BIAS_T_ENABLE LED_PIN_POWER
-#define BIAS_T_VALUE HIGH
+#define LED_PIN 1
 
 #define PIN_BUTTON1 47 // 功能键
 #define PIN_BUTTON2 4  // 电源键
+#define ALT_BUTTON_PIN PIN_BUTTON2
+#define ALT_BUTTON_ACTIVE_LOW false
+#define ALT_BUTTON_ACTIVE_PULLUP false
 
-#define POWER_CFG
-#define POWER_CHRG 6
-#define POWER_FULL 42
+#define LED_POWER 6
+#define ADC_V 42
+// USB_CHECK
+#define EXT_PWR_DETECT 7
 
 #define PIN_BUZZER 5
 
@@ -61,4 +63,3 @@
 #define HAS_GPS 0
 
 #define BUTTON_PIN PIN_BUTTON1
-#define BUTTON_PIN_ALT PIN_BUTTON2

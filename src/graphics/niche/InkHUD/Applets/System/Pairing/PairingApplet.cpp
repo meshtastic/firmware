@@ -12,20 +12,20 @@ InkHUD::PairingApplet::PairingApplet()
 void InkHUD::PairingApplet::onRender()
 {
     // Header
-    setFont(fontLarge);
+    setFont(fontMedium);
     printAt(X(0.5), Y(0.25), "Bluetooth", CENTER, BOTTOM);
     setFont(fontSmall);
     printAt(X(0.5), Y(0.25), "Enter this code", CENTER, TOP);
 
     // Passkey
-    setFont(fontLarge);
+    setFont(fontMedium);
     printThick(X(0.5), Y(0.5), passkey.substr(0, 3) + " " + passkey.substr(3), 3, 2);
 
     // Device's bluetooth name, if it will fit
     setFont(fontSmall);
-    std::string name = "Name: " + std::string(getDeviceName());
+    std::string name = "Name: " + parse(getDeviceName());
     if (getTextWidth(name) > width()) // Too wide, try without the leading "Name: "
-        name = std::string(getDeviceName());
+        name = parse(getDeviceName());
     if (getTextWidth(name) < width()) // Does it fit?
         printAt(X(0.5), Y(0.75), name, CENTER, MIDDLE);
 }

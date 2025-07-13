@@ -4,6 +4,8 @@
 
 #include "RTC.h"
 
+#include "MeshService.h"
+#include "Router.h"
 #include "airtime.h"
 #include "main.h"
 #include "power.h"
@@ -30,6 +32,12 @@ InkHUD::MenuApplet::MenuApplet() : concurrency::OSThread("MenuApplet")
     if (settings->optionalMenuItems.backlight) {
         backlight = Drivers::LatchingBacklight::getInstance();
     }
+
+    // Initialize the Canned Message store
+    // This is a shared nicheGraphics component
+    // - handles loading & parsing the canned messages
+    // - handles setting / getting of canned messages via apps (Client API Admin Messages)
+    cm.store = CannedMessageStore::getInstance();
 }
 
 void InkHUD::MenuApplet::onForeground()
@@ -64,6 +72,10 @@ void InkHUD::MenuApplet::onForeground()
 
 void InkHUD::MenuApplet::onBackground()
 {
+    // Discard any data we generated while selecting a canned message
+    // Frees heap mem
+    freeCannedMessageResources();
+
     // If device has a backlight which isn't controlled by aux button:
     // Item in options submenu allows keeping backlight on after menu is closed
     // If this item is deselected we will turn backlight off again, now that menu is closing
@@ -144,6 +156,24 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         inkhud->nextTile();
         break;
 
+    case SEND_PING:
+        service->refreshLocalMeshNode();
+        service->trySendPosition(NODENUM_BROADCAST, true);
+
+        // Force the next refresh to use FULL, to protect the display, as some users will probably spam this button
+        inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FULL);
+        break;
+
+    case STORE_CANNEDMESSAGE_SELECTION:
+        cm.selectedMessageItem = &cm.messageItems.at(cursor - 1); // Minus one: offset for the initial "Send Ping" entry
+        break;
+
+    case SEND_CANNEDMESSAGE:
+        cm.selectedRecipientItem = &cm.recipientItems.at(cursor);
+        sendText(cm.selectedRecipientItem->dest, cm.selectedRecipientItem->channelIndex, cm.selectedMessageItem->rawText.c_str());
+        inkhud->forceUpdate(Drivers::EInk::UpdateTypes::FULL); // Next refresh should be FULL. Lots of button pressing to get here
+        break;
+
     case ROTATE:
         inkhud->rotate();
         break;
@@ -173,6 +203,15 @@ void InkHUD::MenuApplet::execute(MenuItem item)
 
     case TOGGLE_NOTIFICATIONS:
         settings->optionalFeatures.notifications = !settings->optionalFeatures.notifications;
+        break;
+
+    case TOGGLE_INVERT_COLOR:
+        if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED)
+            config.display.displaymode = meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT;
+        else
+            config.display.displaymode = meshtastic_Config_DisplayConfig_DisplayMode_INVERTED;
+
+        nodeDB->saveToDisk(SEGMENT_CONFIG);
         break;
 
     case SET_RECENTS:
@@ -235,6 +274,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
 void InkHUD::MenuApplet::showPage(MenuPage page)
 {
     items.clear();
+    items.shrink_to_fit();
 
     switch (page) {
     case ROOT:
@@ -242,7 +282,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         if (settings->optionalMenuItems.nextTile && settings->userTiles.count > 1)
             items.push_back(MenuItem("Next Tile", MenuAction::NEXT_TILE, MenuPage::ROOT)); // Only if multiple applets shown
 
-        // items.push_back(MenuItem("Send", MenuPage::SEND)); // TODO
+        items.push_back(MenuItem("Send", MenuPage::SEND));
         items.push_back(MenuItem("Options", MenuPage::OPTIONS));
         // items.push_back(MenuItem("Display Off", MenuPage::EXIT)); // TODO
         items.push_back(MenuItem("Save & Shut Down", MenuAction::SHUTDOWN));
@@ -250,10 +290,11 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         break;
 
     case SEND:
-        items.push_back(MenuItem("Send Message", MenuPage::EXIT));
-        items.push_back(MenuItem("Send NodeInfo", MenuAction::SEND_NODEINFO));
-        items.push_back(MenuItem("Send Position", MenuAction::SEND_POSITION));
-        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        populateSendPage();
+        break;
+
+    case CANNEDMESSAGE_RECIPIENT:
+        populateRecipientPage();
         break;
 
     case OPTIONS:
@@ -284,6 +325,10 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
                                  &settings->optionalFeatures.notifications));
         items.push_back(MenuItem("Battery Icon", MenuAction::TOGGLE_BATTERY_ICON, MenuPage::OPTIONS,
                                  &settings->optionalFeatures.batteryIcon));
+
+        invertedColors = (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED);
+        items.push_back(MenuItem("Invert Color", MenuAction::TOGGLE_INVERT_COLOR, MenuPage::OPTIONS, &invertedColors));
+
         items.push_back(
             MenuItem("12-Hour Clock", MenuAction::TOGGLE_12H_CLOCK, MenuPage::OPTIONS, &config.display.use_12h_clock));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
@@ -389,11 +434,14 @@ void InkHUD::MenuApplet::onRender()
         // Center-line for the text
         int16_t center = itemT + (itemH / 2);
 
+        // Box, if currently selected
         if (cursorShown && i == cursor)
             drawRect(itemL, itemT, itemW, itemH, BLACK);
+
+        // Item's text
         printAt(itemL + X(padding), center, item.label, LEFT, MIDDLE);
 
-        // Testing only: circle instead of check box
+        // Checkbox, if relevant
         if (item.checkState) {
             const uint16_t cbWH = fontSmall.lineHeight();  // Checkbox: width / height
             const int16_t cbL = itemR - X(padding) - cbWH; // Checkbox: left
@@ -485,6 +533,8 @@ void InkHUD::MenuApplet::populateAutoshowPage()
     }
 }
 
+// Create MenuItem entries to select our definition of "Recent"
+// Controls how long data will remain in any "Recents" flavored applets
 void InkHUD::MenuApplet::populateRecentsPage()
 {
     // How many values are shown for use to choose from
@@ -496,6 +546,112 @@ void InkHUD::MenuApplet::populateRecentsPage()
         std::string label = to_string(RECENTS_OPTIONS_MINUTES[i]) + " mins";
         items.push_back(MenuItem(label.c_str(), MenuAction::SET_RECENTS, MenuPage::EXIT));
     }
+}
+
+// MenuItem entries for the "send" page
+// Dynamically creates menu items based on available canned messages
+void InkHUD::MenuApplet::populateSendPage()
+{
+    // Position / NodeInfo packet
+    items.push_back(MenuItem("Ping", MenuAction::SEND_PING, MenuPage::EXIT));
+
+    // One menu item for each canned message
+    uint8_t count = cm.store->size();
+    for (uint8_t i = 0; i < count; i++) {
+        // Gather the information for this item
+        CannedMessages::MessageItem messageItem;
+        messageItem.rawText = cm.store->at(i);
+        messageItem.label = parse(messageItem.rawText);
+
+        // Store the item (until the menu closes)
+        cm.messageItems.push_back(messageItem);
+
+        // Create a menu item
+        const char *itemText = cm.messageItems.back().label.c_str();
+        items.push_back(MenuItem(itemText, MenuAction::STORE_CANNEDMESSAGE_SELECTION, MenuPage::CANNEDMESSAGE_RECIPIENT));
+    }
+
+    items.push_back(MenuItem("Exit", MenuPage::EXIT));
+}
+
+// Dynamically create MenuItem entries for possible canned message destinations
+// All available channels are shown
+// Favorite nodes are shown, provided we don't have an *excessive* amount
+void InkHUD::MenuApplet::populateRecipientPage()
+{
+    // Create recipient data (and menu items) for any channels
+    // --------------------------------------------------------
+
+    for (uint8_t i = 0; i < MAX_NUM_CHANNELS; i++) {
+        // Get the channel, and check if it's enabled
+        meshtastic_Channel &channel = channels.getByIndex(i);
+        if (!channel.has_settings || channel.role == meshtastic_Channel_Role_DISABLED)
+            continue;
+
+        CannedMessages::RecipientItem r;
+
+        // Set index
+        r.channelIndex = channel.index;
+
+        // Set a label for the menu item
+        r.label = "Ch " + to_string(i) + ": ";
+        if (channel.role == meshtastic_Channel_Role_PRIMARY)
+            r.label += "Primary";
+        else
+            r.label += parse(channel.settings.name);
+
+        // Add to the list of recipients
+        cm.recipientItems.push_back(r);
+
+        // Add a menu item for this recipient
+        const char *itemText = cm.recipientItems.back().label.c_str();
+        items.push_back(MenuItem(itemText, SEND_CANNEDMESSAGE, MenuPage::EXIT));
+    }
+
+    // Create recipient data (and menu items) for favorite nodes
+    // ---------------------------------------------------------
+
+    uint32_t nodeCount = nodeDB->getNumMeshNodes();
+    uint32_t favoriteCount = 0;
+
+    // Count favorites
+    for (uint32_t i = 0; i < nodeCount; i++) {
+        if (nodeDB->getMeshNodeByIndex(i)->is_favorite)
+            favoriteCount++;
+    }
+
+    // Only add favorites if the number is reasonable
+    // Don't want some monstrous list that takes 100 clicks to reach exit
+    if (favoriteCount < 20) {
+        for (uint32_t i = 0; i < nodeCount; i++) {
+            meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(i);
+
+            // Skip node if not a favorite
+            if (!node->is_favorite)
+                continue;
+
+            CannedMessages::RecipientItem r;
+
+            r.dest = node->num;
+            r.channelIndex = nodeDB->getMeshNodeChannel(node->num); // Channel index only relevant if encrypted DM not possible(?)
+
+            // Set a label for the menu item
+            r.label = "DM: ";
+            if (node->has_user)
+                r.label += parse(node->user.long_name);
+            else
+                r.label += hexifyNodeNum(node->num); // Unsure if it's possible to favorite a node without NodeInfo?
+
+            // Add to the list of recipients
+            cm.recipientItems.push_back(r);
+
+            // Add a menu item for this recipient
+            const char *itemText = cm.recipientItems.back().label.c_str();
+            items.push_back(MenuItem(itemText, SEND_CANNEDMESSAGE, MenuPage::EXIT));
+        }
+    }
+
+    items.push_back(MenuItem("Exit", MenuPage::EXIT));
 }
 
 // Renders the panel shown at the top of the root menu.
@@ -511,11 +667,11 @@ void InkHUD::MenuApplet::drawSystemInfoPanel(int16_t left, int16_t top, uint16_t
     // ====================
     std::string clockString = getTimeString();
     if (clockString.length() > 0) {
-        setFont(fontLarge);
+        setFont(fontMedium);
         printAt(width / 2, top, clockString, CENTER, TOP);
 
-        height += fontLarge.lineHeight();
-        height += fontLarge.lineHeight() * 0.1; // Padding below clock
+        height += fontMedium.lineHeight();
+        height += fontMedium.lineHeight() * 0.1; // Padding below clock
     }
 
     // Stats
@@ -605,6 +761,39 @@ uint16_t InkHUD::MenuApplet::getSystemInfoPanelHeight()
     drawSystemInfoPanel(INT16_MIN, INT16_MIN, 1, &height);
 
     return height;
+}
+
+// Send a text message to the mesh
+// Used to send our canned messages
+void InkHUD::MenuApplet::sendText(NodeNum dest, ChannelIndex channel, const char *message)
+{
+    meshtastic_MeshPacket *p = router->allocForSending();
+    p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+    p->to = dest;
+    p->channel = channel;
+    p->want_ack = true;
+    p->decoded.payload.size = strlen(message);
+    memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
+
+    // Tack on a bell character if requested
+    if (moduleConfig.canned_message.send_bell && p->decoded.payload.size < meshtastic_Constants_DATA_PAYLOAD_LEN) {
+        p->decoded.payload.bytes[p->decoded.payload.size] = 7;        // Bell character
+        p->decoded.payload.bytes[p->decoded.payload.size + 1] = '\0'; // Append Null Terminator
+        p->decoded.payload.size++;
+    }
+
+    LOG_INFO("Send message id=%d, dest=%x, msg=%.*s", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
+
+    service->sendToMesh(p, RX_SRC_LOCAL, true); // Send to mesh, cc to phone
+}
+
+// Free up any heap mmemory we'd used while selecting / sending canned messages
+void InkHUD::MenuApplet::freeCannedMessageResources()
+{
+    cm.selectedMessageItem = nullptr;
+    cm.selectedRecipientItem = nullptr;
+    cm.messageItems.clear();
+    cm.recipientItems.clear();
 }
 
 #endif

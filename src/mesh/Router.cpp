@@ -283,11 +283,6 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
             abortSendAndNak(encodeResult, p);
             return encodeResult; // FIXME - this isn't a valid ErrorCode
         }
-#if HAS_UDP_MULTICAST
-        if (udpThread && config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST) {
-            udpThread->onSend(const_cast<meshtastic_MeshPacket *>(p));
-        }
-#endif
 #if !MESHTASTIC_EXCLUDE_MQTT
         // Only publish to MQTT if we're the original transmitter of the packet
         if (moduleConfig.mqtt.enabled && isFromUs(p) && mqtt) {
@@ -296,6 +291,12 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
 #endif
         packetPool.release(p_decoded);
     }
+
+#if HAS_UDP_MULTICAST
+    if (udpHandler && config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST) {
+        udpHandler->onSend(const_cast<meshtastic_MeshPacket *>(p));
+    }
+#endif
 
     assert(iface); // This should have been detected already in sendLocal (or we just received a packet from outside)
     return iface->send(p);
@@ -547,6 +548,20 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             numbytes += MESHTASTIC_PKC_OVERHEAD;
             p->channel = 0;
             p->pki_encrypted = true;
+
+            // warn the user about a low entropy key
+            if (nodeDB->keyIsLowEntropy) {
+                LOG_WARN(LOW_ENTROPY_WARNING);
+                if (!nodeDB->hasWarned) {
+                    meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+                    cn->which_payload_variant = meshtastic_ClientNotification_low_entropy_key_tag;
+                    cn->level = meshtastic_LogRecord_Level_WARNING;
+                    cn->time = getValidTime(RTCQualityFromNet);
+                    sprintf(cn->message, LOW_ENTROPY_WARNING);
+                    service->sendClientNotification(cn);
+                    nodeDB->hasWarned = true;
+                }
+            }
         } else {
             if (p->pki_encrypted == true) {
                 // Client specifically requested PKI encryption

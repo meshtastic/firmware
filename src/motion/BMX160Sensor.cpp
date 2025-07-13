@@ -1,10 +1,10 @@
 #include "BMX160Sensor.h"
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
+#if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
 
 BMX160Sensor::BMX160Sensor(ScanI2C::FoundDevice foundDevice) : MotionSensor::MotionSensor(foundDevice) {}
 
-#if defined(RAK_4631) && !defined(RAK2560)
+#if !defined(RAK2560) && __has_include(<Rak_BMX160.h>)
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN)
 
 // screen is defined in main.cpp
@@ -37,7 +37,8 @@ int32_t BMX160Sensor::runOnce()
         if (!showingScreen) {
             powerFSM.trigger(EVENT_PRESS); // keep screen alive during calibration
             showingScreen = true;
-            screen->startAlert((FrameCallback)drawFrameCalibration);
+            if (screen)
+                screen->startAlert((FrameCallback)drawFrameCalibration);
         }
 
         if (magAccel.x > highestX)
@@ -58,7 +59,8 @@ int32_t BMX160Sensor::runOnce()
             doCalibration = false;
             endCalibrationAt = 0;
             showingScreen = false;
-            screen->endAlert();
+            if (screen)
+                screen->endAlert();
         }
 
         // LOG_DEBUG("BMX160 min_x: %.4f, max_X: %.4f, min_Y: %.4f, max_Y: %.4f, min_Z: %.4f, max_Z: %.4f", lowestX, highestX,
@@ -103,8 +105,8 @@ int32_t BMX160Sensor::runOnce()
         heading += 270;
         break;
     }
-
-    screen->setHeading(heading);
+    if (screen)
+        screen->setHeading(heading);
 #endif
 
     return MOTION_SENSOR_CHECK_INTERVAL_MS;
@@ -118,7 +120,8 @@ void BMX160Sensor::calibrate(uint16_t forSeconds)
     doCalibration = true;
     uint16_t calibrateFor = forSeconds * 1000; // calibrate for seconds provided
     endCalibrationAt = millis() + calibrateFor;
-    screen->setEndCalibration(endCalibrationAt);
+    if (screen)
+        screen->setEndCalibration(endCalibrationAt);
 #endif
 }
 

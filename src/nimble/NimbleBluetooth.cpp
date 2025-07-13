@@ -9,6 +9,7 @@
 #include "mesh/mesh-pb-constants.h"
 #include "sleep.h"
 #include <NimBLEDevice.h>
+#include <mutex>
 
 NimBLECharacteristic *fromNumCharacteristic;
 NimBLECharacteristic *BatteryCharacteristic;
@@ -17,8 +18,37 @@ NimBLEServer *bleServer;
 
 static bool passkeyShowing;
 
-class BluetoothPhoneAPI : public PhoneAPI
+class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
 {
+  public:
+    BluetoothPhoneAPI() : concurrency::OSThread("NimbleBluetooth") { nimble_queue.resize(3); }
+    std::vector<NimBLEAttValue> nimble_queue;
+    std::mutex nimble_mutex;
+    uint8_t queue_size = 0;
+    bool has_fromRadio = false;
+    uint8_t fromRadioBytes[meshtastic_FromRadio_size] = {0};
+    size_t numBytes = 0;
+    bool hasChecked = false;
+    bool phoneWants = false;
+
+  protected:
+    virtual int32_t runOnce() override
+    {
+        std::lock_guard<std::mutex> guard(nimble_mutex);
+        if (queue_size > 0) {
+            for (uint8_t i = 0; i < queue_size; i++) {
+                handleToRadio(nimble_queue.at(i).data(), nimble_queue.at(i).length());
+            }
+            LOG_DEBUG("Queue_size %u", queue_size);
+            queue_size = 0;
+        }
+        if (hasChecked == false && phoneWants == true) {
+            numBytes = getFromRadio(fromRadioBytes);
+            hasChecked = true;
+        }
+
+        return 100;
+    }
     /**
      * Subclasses can use this as a hook to provide custom notifications for their transport (i.e. bluetooth notifies)
      */
@@ -51,15 +81,16 @@ class NimbleBluetoothToRadioCallback : public NimBLECharacteristicCallbacks
 {
     virtual void onWrite(NimBLECharacteristic *pCharacteristic)
     {
-        LOG_DEBUG("To Radio onwrite");
         auto val = pCharacteristic->getValue();
 
         if (memcmp(lastToRadio, val.data(), val.length()) != 0) {
-            LOG_DEBUG("New ToRadio packet");
-            memcpy(lastToRadio, val.data(), val.length());
-            bluetoothPhoneAPI->handleToRadio(val.data(), val.length());
-        } else {
-            LOG_DEBUG("Drop dup ToRadio packet we just saw");
+            if (bluetoothPhoneAPI->queue_size < 3) {
+                memcpy(lastToRadio, val.data(), val.length());
+                std::lock_guard<std::mutex> guard(bluetoothPhoneAPI->nimble_mutex);
+                bluetoothPhoneAPI->nimble_queue.at(bluetoothPhoneAPI->queue_size) = val;
+                bluetoothPhoneAPI->queue_size++;
+                bluetoothPhoneAPI->setIntervalFromNow(0);
+            }
         }
     }
 };
@@ -68,12 +99,23 @@ class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
 {
     virtual void onRead(NimBLECharacteristic *pCharacteristic)
     {
-        uint8_t fromRadioBytes[meshtastic_FromRadio_size];
-        size_t numBytes = bluetoothPhoneAPI->getFromRadio(fromRadioBytes);
-
-        std::string fromRadioByteString(fromRadioBytes, fromRadioBytes + numBytes);
-
+        int tries = 0;
+        bluetoothPhoneAPI->phoneWants = true;
+        while (!bluetoothPhoneAPI->hasChecked && tries < 100) {
+            bluetoothPhoneAPI->setIntervalFromNow(0);
+            delay(20);
+            tries++;
+        }
+        std::lock_guard<std::mutex> guard(bluetoothPhoneAPI->nimble_mutex);
+        std::string fromRadioByteString(bluetoothPhoneAPI->fromRadioBytes,
+                                        bluetoothPhoneAPI->fromRadioBytes + bluetoothPhoneAPI->numBytes);
         pCharacteristic->setValue(fromRadioByteString);
+
+        if (bluetoothPhoneAPI->numBytes != 0) // if we did send something, queue it up right away to reload
+            bluetoothPhoneAPI->setIntervalFromNow(0);
+        bluetoothPhoneAPI->numBytes = 0;
+        bluetoothPhoneAPI->hasChecked = false;
+        bluetoothPhoneAPI->phoneWants = false;
     }
 };
 
@@ -94,31 +136,33 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
         bluetoothStatus->updateStatus(new meshtastic::BluetoothStatus(std::to_string(passkey)));
 
 #if HAS_SCREEN // Todo: migrate this display code back into Screen class, and observe bluetoothStatus
-        screen->startAlert([passkey](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
-            char btPIN[16] = "888888";
-            snprintf(btPIN, sizeof(btPIN), "%06u", passkey);
-            int x_offset = display->width() / 2;
-            int y_offset = display->height() <= 80 ? 0 : 32;
-            display->setTextAlignment(TEXT_ALIGN_CENTER);
-            display->setFont(FONT_MEDIUM);
-            display->drawString(x_offset + x, y_offset + y, "Bluetooth");
+        if (screen) {
+            screen->startAlert([passkey](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
+                char btPIN[16] = "888888";
+                snprintf(btPIN, sizeof(btPIN), "%06u", passkey);
+                int x_offset = display->width() / 2;
+                int y_offset = display->height() <= 80 ? 0 : 12;
+                display->setTextAlignment(TEXT_ALIGN_CENTER);
+                display->setFont(FONT_MEDIUM);
+                display->drawString(x_offset + x, y_offset + y, "Bluetooth");
 
-            display->setFont(FONT_SMALL);
-            y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_MEDIUM - 4 : y_offset + FONT_HEIGHT_MEDIUM + 5;
-            display->drawString(x_offset + x, y_offset + y, "Enter this code");
+                display->setFont(FONT_SMALL);
+                y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_MEDIUM - 4 : y_offset + FONT_HEIGHT_MEDIUM + 5;
+                display->drawString(x_offset + x, y_offset + y, "Enter this code");
 
-            display->setFont(FONT_LARGE);
-            String displayPin(btPIN);
-            String pin = displayPin.substring(0, 3) + " " + displayPin.substring(3, 6);
-            y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_SMALL - 5 : y_offset + FONT_HEIGHT_SMALL + 5;
-            display->drawString(x_offset + x, y_offset + y, pin);
+                display->setFont(FONT_LARGE);
+                char pin[8];
+                snprintf(pin, sizeof(pin), "%.3s %.3s", btPIN, btPIN + 3);
+                y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_SMALL - 5 : y_offset + FONT_HEIGHT_SMALL + 5;
+                display->drawString(x_offset + x, y_offset + y, pin);
 
-            display->setFont(FONT_SMALL);
-            String deviceName = "Name: ";
-            deviceName.concat(getDeviceName());
-            y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_LARGE - 6 : y_offset + FONT_HEIGHT_LARGE + 5;
-            display->drawString(x_offset + x, y_offset + y, deviceName);
-        });
+                display->setFont(FONT_SMALL);
+                char deviceName[64];
+                snprintf(deviceName, sizeof(deviceName), "Name: %s", getDeviceName());
+                y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_LARGE - 6 : y_offset + FONT_HEIGHT_LARGE + 5;
+                display->drawString(x_offset + x, y_offset + y, deviceName);
+            });
+        }
 #endif
         passkeyShowing = true;
 
@@ -134,7 +178,8 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
         // Todo: migrate this display code back into Screen class, and observe bluetoothStatus
         if (passkeyShowing) {
             passkeyShowing = false;
-            screen->endAlert();
+            if (screen)
+                screen->endAlert();
         }
     }
 
@@ -146,7 +191,12 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
             new meshtastic::BluetoothStatus(meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED));
 
         if (bluetoothPhoneAPI) {
+            std::lock_guard<std::mutex> guard(bluetoothPhoneAPI->nimble_mutex);
             bluetoothPhoneAPI->close();
+            bluetoothPhoneAPI->hasChecked = false;
+            bluetoothPhoneAPI->phoneWants = false;
+            bluetoothPhoneAPI->numBytes = 0;
+            bluetoothPhoneAPI->queue_size = 0;
         }
     }
 };
@@ -171,6 +221,11 @@ void NimbleBluetooth::deinit()
 {
 #ifdef ARCH_ESP32
     LOG_INFO("Disable bluetooth until reboot");
+
+#ifdef BLE_LED
+    digitalWrite(BLE_LED, LOW);
+#endif
+
     NimBLEDevice::deinit();
 #endif
 }

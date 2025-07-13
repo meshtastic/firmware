@@ -16,21 +16,22 @@
 #include "graphics/niche/InkHUD/Applets/User/RecentsList/RecentsListApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/ThreadedMessage/ThreadedMessageApplet.h"
 
-// #include "graphics/niche/InkHUD/Applets/Examples/BasicExample/BasicExampleApplet.h"
-// #include "graphics/niche/InkHUD/Applets/Examples/NewMsgExample/NewMsgExampleApplet.h"
-
 // Shared NicheGraphics components
 // --------------------------------
+#include "graphics/niche/Drivers/EInk/E0213A367.h"
 #include "graphics/niche/Drivers/EInk/LCMEN2R13EFC1.h"
 #include "graphics/niche/Inputs/TwoButton.h"
 
-#include "graphics/niche/Fonts/FreeSans6pt7b.h"
-#include "graphics/niche/Fonts/FreeSans6pt8bCyrillic.h"
-#include <Fonts/FreeSans9pt7b.h>
+#include "einkDetect.h" // Detect display model at runtime
 
 void setupNicheGraphics()
 {
     using namespace NicheGraphics;
+
+    // Detect E-Ink Model
+    // -------------------
+
+    EInkDetectionResult displayModel = detectEInk();
 
     // SPI
     // -----------------------------
@@ -42,8 +43,13 @@ void setupNicheGraphics()
     // E-Ink Driver
     // -----------------------------
 
-    // Use E-Ink driver
-    Drivers::EInk *driver = new Drivers::LCMEN213EFC1;
+    Drivers::EInk *driver;
+
+    if (displayModel == EInkDetectionResult::LCMEN213EFC1) // V1.1
+        driver = new Drivers::LCMEN213EFC1;
+    else if (displayModel == EInkDetectionResult::E0213A367) // V1.1.1, V1.2
+        driver = new Drivers::E0213A367;
+
     driver->begin(hspi, PIN_EINK_DC, PIN_EINK_CS, PIN_EINK_BUSY, PIN_EINK_RES);
 
     // InkHUD
@@ -51,21 +57,21 @@ void setupNicheGraphics()
 
     InkHUD::InkHUD *inkhud = InkHUD::InkHUD::getInstance();
 
-    // Set the driver
+    // Set the E-Ink driver
     inkhud->setDriver(driver);
 
     // Set how many FAST updates per FULL update
     // Set how unhealthy additional FAST updates beyond this number are
-    inkhud->setDisplayResilience(10, 1.5);
 
-    // Prepare fonts
-    InkHUD::Applet::fontLarge = InkHUD::AppletFont(FreeSans9pt7b);
-    InkHUD::Applet::fontSmall = InkHUD::AppletFont(FreeSans6pt7b);
-    /*
-    // Font localization demo: Cyrillic
-    InkHUD::Applet::fontSmall = InkHUD::AppletFont(FreeSans6pt8bCyrillic);
-    InkHUD::Applet::fontSmall.addSubstitutionsWin1251();
-    */
+    if (displayModel == EInkDetectionResult::LCMEN213EFC1) // V1.1 (unmarked)
+        inkhud->setDisplayResilience(10, 1.5);
+    else if (displayModel == EInkDetectionResult::E0213A367) // V1.1.1, V1.2
+        inkhud->setDisplayResilience(15, 3);
+
+    // Select fonts
+    InkHUD::Applet::fontLarge = FREESANS_12PT_WIN1252;
+    InkHUD::Applet::fontMedium = FREESANS_9PT_WIN1252;
+    InkHUD::Applet::fontSmall = FREESANS_6PT_WIN1252;
 
     // Customize default settings
     inkhud->persistence->settings.userTiles.maxCount = 2; // How many tiles can the display handle?
@@ -73,15 +79,14 @@ void setupNicheGraphics()
     inkhud->persistence->settings.userTiles.count = 1;    // One tile only by default, keep things simple for new users
 
     // Pick applets
+    // Note: order of applets determines priority of "auto-show" feature
     inkhud->addApplet("All Messages", new InkHUD::AllMessageApplet, true, true); // Activated, autoshown
-    inkhud->addApplet("DMs", new InkHUD::DMApplet);                              // Inactive
-    inkhud->addApplet("Channel 0", new InkHUD::ThreadedMessageApplet(0));        // Inactive
-    inkhud->addApplet("Channel 1", new InkHUD::ThreadedMessageApplet(1));        // Inactive
+    inkhud->addApplet("DMs", new InkHUD::DMApplet);                              // -
+    inkhud->addApplet("Channel 0", new InkHUD::ThreadedMessageApplet(0));        // -
+    inkhud->addApplet("Channel 1", new InkHUD::ThreadedMessageApplet(1));        // -
     inkhud->addApplet("Positions", new InkHUD::PositionsApplet, true);           // Activated
-    inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet);            // Inactive
+    inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet);            // -
     inkhud->addApplet("Heard", new InkHUD::HeardApplet, true, false, 0);         // Activated, not autoshown, default on tile 0
-    // inkhud->addApplet("Basic", new InkHUD::BasicExampleApplet);
-    // inkhud->addApplet("NewMsg", new InkHUD::NewMsgExampleApplet);
 
     // Start running InkHUD
     inkhud->begin();
@@ -90,15 +95,15 @@ void setupNicheGraphics()
     // --------------------------
 
     Inputs::TwoButton *buttons = Inputs::TwoButton::getInstance(); // Shared NicheGraphics component
-    constexpr uint8_t MAIN_BUTTON = 0;
 
-    // Setup the main user button
-    buttons->setWiring(MAIN_BUTTON, BUTTON_PIN);
-    buttons->setHandlerShortPress(MAIN_BUTTON, []() { InkHUD::InkHUD::getInstance()->shortpress(); });
-    buttons->setHandlerLongPress(MAIN_BUTTON, []() { InkHUD::InkHUD::getInstance()->longpress(); });
+    // #0: Main User Button
+    buttons->setWiring(0, Inputs::TwoButton::getUserButtonPin());
+    buttons->setHandlerShortPress(0, [inkhud]() { inkhud->shortpress(); });
+    buttons->setHandlerLongPress(0, [inkhud]() { inkhud->longpress(); });
 
     // No aux button on this board
 
+    // Begin handling button events
     buttons->start();
 }
 

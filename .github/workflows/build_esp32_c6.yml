@@ -11,27 +11,30 @@ permissions: read-all
 
 jobs:
   build-esp32-c6:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
+      - name: Get release version string
+        shell: bash
+        run: echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+        id: version
+
       - name: Build ESP32-C6
         id: build
-        uses: ./.github/actions/build-variant
+        uses: meshtastic/gh-action-firmware@main
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          board: ${{ inputs.board }}
-          remove-debug-flags: >-
-            ./arch/esp32/esp32.ini
-            ./arch/esp32/esp32s2.ini
-            ./arch/esp32/esp32s3.ini
-            ./arch/esp32/esp32c3.ini
-            ./arch/esp32/esp32c6.ini
-          build-script-path: bin/build-esp32.sh
-          ota-firmware-source: firmware-c3.bin
-          ota-firmware-target: release/bleota-c3.bin
-          artifact-paths: |
+          pio_platform: esp32
+          pio_env: ${{ inputs.board }}
+          pio_target: build
+          ota_firmware_source: firmware-c3.bin
+          ota_firmware_target: release/bleota-c3.bin
+
+      - name: Store binaries as an artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-esp32c6-${{ inputs.board }}-${{ steps.version.outputs.long }}.zip
+          overwrite: true
+          path: |
             release/*.bin
             release/*.elf
-          include-web-ui: true
-          arch: esp32c6

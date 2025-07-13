@@ -90,6 +90,8 @@ static const uint8_t A7 = PIN_A7;
 // Other pins
 #define PIN_AREF (2)
 #define PIN_NFC1 (9)
+#define WB_IO5 PIN_NFC1
+#define WB_IO4 (4)
 #define PIN_NFC2 (10)
 
 static const uint8_t AREF = PIN_AREF;
@@ -176,11 +178,11 @@ static const uint8_t SCK = PIN_SPI_SCK;
 // No reason not to have the RAK Wireless pin defs here too.  This allows code from example RAK sketches to run without
 // modification.
 
-static const uint8_t WB_IO1 = 17;      // SLOT_A SLOT_B
-static const uint8_t WB_IO2 = 34;      // SLOT_A SLOT_B
-static const uint8_t WB_IO3 = 21;      // SLOT_C
-static const uint8_t WB_IO4 = 4;       // SLOT_C
-static const uint8_t WB_IO5 = 9;       // SLOT_D
+static const uint8_t WB_IO1 = 17; // SLOT_A SLOT_B
+static const uint8_t WB_IO2 = 34; // SLOT_A SLOT_B
+static const uint8_t WB_IO3 = 21; // SLOT_C
+// static const uint8_t WB_IO4 = 4;       // SLOT_C <- already defined above (ln. 94)
+// static const uint8_t WB_IO5 = 9;       // SLOT_D <- already defined above (ln. 93)
 static const uint8_t WB_IO6 = 10;      // SLOT_D
 static const uint8_t WB_SW1 = 33;      // IO_SLOT
 static const uint8_t WB_A0 = 5;        // IO_SLOT
@@ -304,6 +306,9 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 
 #define HAS_TOUCHSCREEN 1
 #define SCREEN_TOUCH_INT WB_IO6
+
+#define USE_POWERSAVE
+#define SLEEP_TIME 120
 
 #define CANNED_MESSAGE_MODULE_ENABLE 1
 #define USE_VIRTUAL_KEYBOARD 1

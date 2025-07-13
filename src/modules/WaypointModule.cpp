@@ -2,9 +2,13 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "configuration.h"
+#include "graphics/draw/CompassRenderer.h"
+
 #if HAS_SCREEN
 #include "gps/RTC.h"
 #include "graphics/Screen.h"
+#include "graphics/TimeFormatters.h"
+#include "graphics/draw/NodeListRenderer.h"
 #include "main.h"
 #endif
 
@@ -48,6 +52,8 @@ ProcessMessage WaypointModule::handleReceived(const meshtastic_MeshPacket &mp)
 bool WaypointModule::shouldDraw()
 {
 #if !MESHTASTIC_EXCLUDE_WAYPOINT
+    if (screen == nullptr)
+        return false;
     // If no waypoint to show
     if (!devicestate.has_rx_waypoint)
         return false;
@@ -79,13 +85,15 @@ bool WaypointModule::shouldDraw()
 /// Draw the last waypoint we received
 void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+    if (screen == nullptr)
+        return;
     // Prepare to draw
     display->setFont(FONT_SMALL);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
     // Handle inverted display
     // Unsure of expected behavior: for now, copy drawNodeInfo
-    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED)
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED)
         display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
 
     // Decode the waypoint
@@ -101,7 +109,7 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
 
     // Get timestamp info. Will pass as a field to drawColumns
     static char lastStr[20];
-    screen->getTimeAgoStr(sinceReceived(&mp), lastStr, sizeof(lastStr));
+    getTimeAgoStr(sinceReceived(&mp), lastStr, sizeof(lastStr));
 
     // Will contain distance information, passed as a field to drawColumns
     static char distStr[20];
@@ -115,7 +123,7 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
 
     // Dimensions / co-ordinates for the compass/circle
     int16_t compassX = 0, compassY = 0;
-    uint16_t compassDiam = graphics::Screen::getCompassDiam(display->getWidth(), display->getHeight());
+    uint16_t compassDiam = graphics::CompassRenderer::getCompassDiam(display->getWidth(), display->getHeight());
 
     if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT) {
         compassX = x + display->getWidth() - compassDiam / 2 - 5;
@@ -129,20 +137,24 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
     if (ourNode && (nodeDB->hasValidPosition(ourNode) || screen->hasHeading())) {
         const meshtastic_PositionLite &op = ourNode->position;
         float myHeading;
-        if (screen->hasHeading())
-            myHeading = (screen->getHeading()) * PI / 180; // gotta convert compass degrees to Radians
-        else
-            myHeading = screen->estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
-        screen->drawCompassNorth(display, compassX, compassY, myHeading);
+        if (uiconfig.compass_mode == meshtastic_CompassMode_FREEZE_HEADING) {
+            myHeading = 0;
+        } else {
+            if (screen->hasHeading())
+                myHeading = (screen->getHeading()) * PI / 180; // gotta convert compass degrees to Radians
+            else
+                myHeading = screen->estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
+        }
+        graphics::CompassRenderer::drawCompassNorth(display, compassX, compassY, myHeading, (compassDiam / 2));
 
         // Compass bearing to waypoint
         float bearingToOther =
             GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(wp.latitude_i), DegD(wp.longitude_i));
         // If the top of the compass is a static north then bearingToOther can be drawn on the compass directly
         // If the top of the compass is not a static north we need adjust bearingToOther based on heading
-        if (!config.display.compass_north_top)
+        if (uiconfig.compass_mode != meshtastic_CompassMode_FREEZE_HEADING)
             bearingToOther -= myHeading;
-        screen->drawNodeHeading(display, compassX, compassY, compassDiam, bearingToOther);
+        graphics::CompassRenderer::drawNodeHeading(display, compassX, compassY, compassDiam, bearingToOther);
 
         float bearingToOtherDegrees = (bearingToOther < 0) ? bearingToOther + 2 * PI : bearingToOther;
         bearingToOtherDegrees = bearingToOtherDegrees * 180 / PI;
@@ -180,11 +192,11 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
 
     // Undo color-inversion, if set prior to drawing header
     // Unsure of expected behavior? For now: copy drawNodeInfo
-    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
         display->setColor(BLACK);
     }
 
     // Must be after distStr is populated
-    screen->drawColumns(display, x, y, fields);
+    graphics::NodeListRenderer::drawColumns(display, x, y, fields);
 }
 #endif

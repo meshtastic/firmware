@@ -76,23 +76,47 @@ static const uint8_t ext_chrg_detect_value = EXT_CHRG_DETECT_VALUE;
 #endif
 #endif
 
-#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(ARCH_PORTDUINO)
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#if __has_include(<Adafruit_INA219.h>)
 INA219Sensor ina219Sensor;
-INA226Sensor ina226Sensor;
-INA260Sensor ina260Sensor;
-INA3221Sensor ina3221Sensor;
+#else
+NullSensor ina219Sensor;
 #endif
 
-#if !MESHTASTIC_EXCLUDE_I2C && !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+#if __has_include(<INA226.h>)
+INA226Sensor ina226Sensor;
+#else
+NullSensor ina226Sensor;
+#endif
+
+#if __has_include(<Adafruit_INA260.h>)
+INA260Sensor ina260Sensor;
+#else
+NullSensor ina260Sensor;
+#endif
+
+#if __has_include(<INA3221.h>)
+INA3221Sensor ina3221Sensor;
+#else
+NullSensor ina3221Sensor;
+#endif
+
+#endif
+
+#if !MESHTASTIC_EXCLUDE_I2C
 #include "modules/Telemetry/Sensor/MAX17048Sensor.h"
 #include <utility>
 extern std::pair<uint8_t, TwoWire *> nodeTelemetrySensorsMap[_meshtastic_TelemetrySensorType_MAX + 1];
 #if HAS_TELEMETRY && (!MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR || !MESHTASTIC_EXCLUDE_POWER_TELEMETRY)
+#if __has_include(<Adafruit_MAX1704X.h>)
 MAX17048Sensor max17048Sensor;
+#else
+NullSensor max17048Sensor;
+#endif
 #endif
 #endif
 
-#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && HAS_RAKPROT && !defined(ARCH_PORTDUINO)
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && HAS_RAKPROT
 RAK9154Sensor rak9154Sensor;
 #endif
 
@@ -203,7 +227,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
      */
     virtual int getBatteryPercent() override
     {
-#if defined(HAS_RAKPROT) && !defined(ARCH_PORTDUINO) && !defined(HAS_PMU)
+#if defined(HAS_RAKPROT) && !defined(HAS_PMU)
         if (hasRAK()) {
             return rak9154Sensor.getBusBatteryPercent();
         }
@@ -248,15 +272,13 @@ class AnalogBatteryLevel : public HasBatteryLevel
     virtual uint16_t getBattVoltage() override
     {
 
-#if HAS_TELEMETRY && defined(HAS_RAKPROT) && !defined(ARCH_PORTDUINO) && !defined(HAS_PMU) &&                                    \
-    !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#if HAS_TELEMETRY && defined(HAS_RAKPROT) && !defined(HAS_PMU) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
         if (hasRAK()) {
             return getRAKVoltage();
         }
 #endif
 
-#if HAS_TELEMETRY && !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !defined(HAS_PMU) &&                                  \
-    !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#if HAS_TELEMETRY && !defined(HAS_PMU) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
         if (hasINA()) {
             return getINAVoltage();
         }
@@ -380,6 +402,20 @@ class AnalogBatteryLevel : public HasBatteryLevel
     // if we have a integrated device with a battery, we can assume that the battery is always connected
 #ifdef BATTERY_IMMUTABLE
     virtual bool isBatteryConnect() override { return true; }
+#elif defined(ADC_V)
+    virtual bool isBatteryConnect() override
+    {
+        int lastReading = digitalRead(ADC_V);
+        // 判断值是否变化
+        for (int i = 2; i < 500; i++) {
+            int reading = digitalRead(ADC_V);
+            if (reading != lastReading) {
+                return false; // 有变化，USB供电, 没接电池
+            }
+        }
+
+        return true;
+    }
 #else
     virtual bool isBatteryConnect() override { return getBatteryPercent() != -1; }
 #endif
@@ -412,8 +448,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
     /// we can't be smart enough to say 'full'?
     virtual bool isCharging() override
     {
-#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && defined(HAS_RAKPROT) && !defined(ARCH_PORTDUINO) &&             \
-    !defined(HAS_PMU)
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && defined(HAS_RAKPROT) && !defined(HAS_PMU)
         if (hasRAK()) {
             return (rak9154Sensor.isCharging()) ? OptTrue : OptFalse;
         }
@@ -421,8 +456,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
 #ifdef EXT_CHRG_DETECT
         return digitalRead(EXT_CHRG_DETECT) == ext_chrg_detect_value;
 #else
-#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) &&           \
-    !defined(DISABLE_INA_CHARGING_DETECTION)
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(DISABLE_INA_CHARGING_DETECTION)
         if (hasINA()) {
             // get current flow from INA sensor - negative value means power flowing into the battery
             // default assuming  BATTERY+  <--> INA_VIN+ <--> SHUNT RESISTOR <--> INA_VIN- <--> LOAD
@@ -436,6 +470,8 @@ class AnalogBatteryLevel : public HasBatteryLevel
         return isBatteryConnect() && isVbusIn();
 #endif
 #endif
+        // by default, we check the battery voltage only
+        return isVbusIn();
     }
 
   private:
@@ -466,7 +502,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
     }
 #endif
 
-#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
     uint16_t getINAVoltage()
     {
         if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA219].first == config.power.device_battery_ina_address) {
@@ -533,9 +569,6 @@ Power::Power() : OSThread("Power")
 {
     statusHandler = {};
     low_voltage_counter = 0;
-#if defined(ELECROW_ThinkNode_M1) || defined(POWER_CFG)
-    low_voltage_counter_led3 = 0;
-#endif
 #ifdef DEBUG_HEAP
     lastheap = memGet.getFreeHeap();
 #endif
@@ -627,12 +660,14 @@ bool Power::analogInit()
  */
 bool Power::setup()
 {
-    // initialise one power sensor (only)
-    bool found = axpChipInit();
-    if (!found)
-        found = lipoInit();
-    if (!found)
-        found = analogInit();
+    bool found = false;
+    if (axpChipInit()) {
+        found = true;
+    } else if (lipoInit()) {
+        found = true;
+    } else if (analogInit()) {
+        found = true;
+    }
 
 #ifdef NRF_APM
     found = true;
@@ -646,7 +681,7 @@ bool Power::setup()
 
 void Power::shutdown()
 {
-    LOG_INFO("Shutting down");
+    LOG_INFO("Shutting Down");
 
 #if defined(ARCH_NRF52) || defined(ARCH_ESP32) || defined(ARCH_RP2040)
 #ifdef PIN_LED1
@@ -716,9 +751,6 @@ void Power::readPowerStatus()
     const PowerStatus powerStatus2 = PowerStatus(hasBattery, usbPowered, isChargingNow, batteryVoltageMv, batteryChargePercent);
     LOG_DEBUG("Battery: usbPower=%d, isCharging=%d, batMv=%d, batPct=%d", powerStatus2.getHasUSB(), powerStatus2.getIsCharging(),
               powerStatus2.getBatteryVoltageMv(), powerStatus2.getBatteryChargePercent());
-#if defined(ELECROW_ThinkNode_M1) || defined(POWER_CFG)
-    power_num = powerStatus2.getBatteryVoltageMv();
-#endif
     newStatus.notifyObservers(&powerStatus2);
 #ifdef DEBUG_HEAP
     if (lastheap != memGet.getFreeHeap()) {
@@ -766,9 +798,6 @@ void Power::readPowerStatus()
     if (batteryLevel && powerStatus2.getHasBattery() && !powerStatus2.getHasUSB()) {
         if (batteryLevel->getBattVoltage() < OCV[NUM_OCV_POINTS - 1]) {
             low_voltage_counter++;
-#if defined(ELECROW_ThinkNode_M1)
-            low_voltage_counter_led3 = low_voltage_counter;
-#endif
             LOG_DEBUG("Low voltage counter: %d/10", low_voltage_counter);
             if (low_voltage_counter > 10) {
 #ifdef ARCH_NRF52
@@ -781,13 +810,7 @@ void Power::readPowerStatus()
             }
         } else {
             low_voltage_counter = 0;
-#if defined(ELECROW_ThinkNode_M1)
-            low_voltage_counter_led3 = low_voltage_counter;
-#endif
         }
-#ifdef POWER_CFG
-        low_voltage_counter_led3 = low_voltage_counter;
-#endif
     }
 }
 
@@ -831,7 +854,8 @@ int32_t Power::runOnce()
 #ifndef T_WATCH_S3 // FIXME - why is this triggering on the T-Watch S3?
         if (PMU->isPekeyLongPressIrq()) {
             LOG_DEBUG("PEK long button press");
-            screen->setOn(false);
+            if (screen)
+                screen->setOn(false);
         }
 #endif
 
@@ -1136,7 +1160,7 @@ bool Power::axpChipInit()
 #endif
 }
 
-#if !MESHTASTIC_EXCLUDE_I2C && !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+#if !MESHTASTIC_EXCLUDE_I2C && __has_include(<Adafruit_MAX1704X.h>)
 
 /**
  * Wrapper class for an I2C MAX17048 Lipo battery sensor.

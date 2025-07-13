@@ -1,7 +1,7 @@
 name: Daily Packaging
 on:
   schedule:
-    - cron: 0 9 * * *
+    - cron: 0 2 * * *
   workflow_dispatch:
   push:
     branches:
@@ -30,7 +30,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        series: [plucky, oracular, noble, jammy]
+        series: [plucky, noble, jammy]
     uses: ./.github/workflows/package_ppa.yml
     with:
       ppa_repo: ppa:meshtastic/daily

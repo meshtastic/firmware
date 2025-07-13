@@ -11,6 +11,7 @@
 inline const std::unordered_map<std::string, std::string> configProducts = {{"MESHTOAD", "lora-usb-meshtoad-e22.yaml"},
                                                                             {"MESHSTICK", "lora-meshstick-1262.yaml"},
                                                                             {"MESHADV-PI", "lora-MeshAdv-900M30S.yaml"},
+                                                                            {"MeshAdv Mini", "lora-MeshAdv-Mini-900M22S.yaml"},
                                                                             {"POWERPI", "lora-MeshAdv-900M30S.yaml"}};
 
 enum configNames {
@@ -56,7 +57,13 @@ enum configNames {
     lora_usb_serial_num,
     lora_usb_pid,
     lora_usb_vid,
-    user,
+    userButtonPin,
+    tbUpPin,
+    tbDownPin,
+    tbLeftPin,
+    tbRightPin,
+    tbPressPin,
+    tbDirection,
     spidev,
     spiSpeed,
     i2cdev,
@@ -98,9 +105,15 @@ enum configNames {
     maxnodes,
     ascii_logs,
     config_directory,
-    mac_address
+    available_directory,
+    mac_address,
+    hostMetrics_interval,
+    hostMetrics_channel,
+    hostMetrics_user_command,
+    configDisplayMode,
+    has_configDisplayMode
 };
-enum { no_screen, x11, st7789, st7735, st7735s, st7796, ili9341, ili9342, ili9486, ili9488, hx8357d };
+enum { no_screen, x11, fb, st7789, st7735, st7735s, st7796, ili9341, ili9342, ili9486, ili9488, hx8357d };
 enum { no_touchscreen, xpt2046, stmpe610, gt911, ft5x06 };
 enum { level_error, level_warn, level_info, level_debug, level_trace };
 
@@ -113,3 +126,4 @@ bool loadConfig(const char *configPath);
 static bool ends_with(std::string_view str, std::string_view suffix);
 void getMacAddr(uint8_t *dmac);
 bool MAC_from_string(std::string mac_str, uint8_t *dmac);
+std::string exec(const char *cmd);
