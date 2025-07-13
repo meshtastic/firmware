@@ -30,7 +30,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        series: [plucky, oracular, noble, jammy]
+        series: [plucky, noble, jammy]
     uses: ./.github/workflows/package_ppa.yml
     with:
       ppa_repo: ppa:meshtastic/daily

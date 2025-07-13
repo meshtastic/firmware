@@ -154,7 +154,7 @@ int CannedMessageModule::splitConfiguredMessages()
 }
 void CannedMessageModule::drawHeader(OLEDDisplay *display, int16_t x, int16_t y, char *buffer)
 {
-    if (display->getWidth() > 128) {
+    if (graphics::isHighResolution) {
         if (this->dest == NODENUM_BROADCAST) {
             display->drawStringf(x, y, buffer, "To: Broadcast@%s", channels.getName(this->channel));
         } else {
@@ -245,12 +245,15 @@ void CannedMessageModule::updateDestinationSelectionList()
         }
     }
 
+    /* As the nodeDB is sorted, can skip this step
     // Sort by favorite, then last heard
     std::sort(this->filteredNodes.begin(), this->filteredNodes.end(), [](const NodeEntry &a, const NodeEntry &b) {
         if (a.node->is_favorite != b.node->is_favorite)
             return a.node->is_favorite > b.node->is_favorite;
         return a.lastHeard < b.lastHeard;
     });
+    */
+
     scrollIndex = 0; // Show first result at the top
     destIndex = 0;   // Highlight the first entry
     if (nodesChanged && runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION) {
@@ -387,6 +390,7 @@ bool CannedMessageModule::handleTabSwitch(const InputEvent *event)
     // RESTORE THIS!
     if (runState == CANNED_MESSAGE_RUN_STATE_DESTINATION_SELECTION)
         updateDestinationSelectionList();
+    requestFocus();
 
     UIFrameEvent e;
     e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
@@ -438,25 +442,34 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
         return 1;
     }
 
-    // UP
-    if (isUp && destIndex > 0) {
-        destIndex--;
+    if (isUp) {
+        if (destIndex > 0) {
+            destIndex--;
+        } else if (totalEntries > 0) {
+            destIndex = totalEntries - 1;
+        }
+
         if ((destIndex / columns) < scrollIndex)
             scrollIndex = destIndex / columns;
         else if ((destIndex / columns) >= (scrollIndex + visibleRows))
             scrollIndex = (destIndex / columns) - visibleRows + 1;
 
-        screen->forceDisplay();
+        screen->forceDisplay(true);
         return 1;
     }
 
-    // DOWN
-    if (isDown && destIndex + 1 < totalEntries) {
-        destIndex++;
+    if (isDown) {
+        if (destIndex + 1 < totalEntries) {
+            destIndex++;
+        } else if (totalEntries > 0) {
+            destIndex = 0;
+            scrollIndex = 0;
+        }
+
         if ((destIndex / columns) >= (scrollIndex + visibleRows))
             scrollIndex = (destIndex / columns) - visibleRows + 1;
 
-        screen->forceDisplay();
+        screen->forceDisplay(true);
         return 1;
     }
 
@@ -478,7 +491,7 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
 
         runState = returnToCannedList ? CANNED_MESSAGE_RUN_STATE_ACTIVE : CANNED_MESSAGE_RUN_STATE_FREETEXT;
         returnToCannedList = false;
-        screen->forceDisplay();
+        screen->forceDisplay(true);
         return 1;
     }
 
@@ -491,7 +504,7 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
         // UIFrameEvent e;
         // e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
         // notifyObservers(&e);
-        screen->forceDisplay();
+        screen->forceDisplay(true);
         return 1;
     }
 
@@ -703,7 +716,7 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     }
 
     // Backspace
-    if (event->inputEvent == INPUT_BROKER_BACK) {
+    if (event->inputEvent == INPUT_BROKER_BACK && this->freetext.length() > 0) {
         payload = 0x08;
         lastTouchMillis = millis();
         runOnce();
@@ -726,7 +739,8 @@ bool CannedMessageModule::handleFreeTextInput(const InputEvent *event)
     }
 
     // Cancel (dismiss freetext screen)
-    if (event->inputEvent == INPUT_BROKER_CANCEL || event->inputEvent == INPUT_BROKER_ALT_LONG) {
+    if (event->inputEvent == INPUT_BROKER_CANCEL || event->inputEvent == INPUT_BROKER_ALT_LONG ||
+        (event->inputEvent == INPUT_BROKER_BACK && this->freetext.length() == 0)) {
         runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         freetext = "";
         cursor = 0;
@@ -976,6 +990,7 @@ int32_t CannedMessageModule::runOnce()
                         }
                         this->cursor--;
                     }
+                } else {
                 }
                 break;
             case INPUT_BROKER_MSG_TAB: // Tab key: handled by input handler
@@ -986,6 +1001,7 @@ int32_t CannedMessageModule::runOnce()
             default:
                 // Only insert ASCII printable characters (32–126)
                 if (this->payload >= 32 && this->payload <= 126) {
+                    requestFocus();
                     if (this->cursor == this->freetext.length()) {
                         this->freetext += (char)this->payload;
                     } else {

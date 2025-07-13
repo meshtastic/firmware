@@ -12,7 +12,10 @@ const uint8_t imgSatellite[] PROGMEM = {
     0b00000000, 0b00000000, 0b00000000, 0b00011000, 0b11011011, 0b11111111, 0b11011011, 0b00011000,
 };
 
-const uint8_t imgUSB[] PROGMEM = {0x60, 0x60, 0x30, 0x18, 0x18, 0x18, 0x24, 0x42, 0x42, 0x42, 0x42, 0x7E, 0x24, 0x24, 0x24, 0x3C};
+const uint8_t imgUSB[] PROGMEM = {0x00, 0xfc, 0xf0, 0xfc, 0x88, 0xff, 0x86, 0xfe, 0x85, 0xfe, 0x89, 0xff, 0xf1, 0xfc, 0x00, 0xfc};
+const uint8_t imgUSB_HighResolution[] PROGMEM = {0x00, 0x3e, 0xf8, 0x80, 0x43, 0xf8, 0xc0, 0xc2, 0xff, 0x60, 0x42, 0xfc,
+                                                 0x3c, 0xc2, 0xff, 0x22, 0x42, 0xf8, 0x3d, 0x42, 0xf8, 0x22, 0xc2, 0xff,
+                                                 0x61, 0x42, 0xfc, 0xc0, 0xc2, 0xff, 0x80, 0x43, 0xf8, 0x00, 0x3e, 0xf8};
 const uint8_t imgPower[] PROGMEM = {0x40, 0x40, 0x40, 0x58, 0x48, 0x08, 0x08, 0x08,
                                     0x1C, 0x22, 0x22, 0x41, 0x7F, 0x22, 0x22, 0x22};
 const uint8_t imgUser[] PROGMEM = {0x3C, 0x42, 0x99, 0xA5, 0xA5, 0x99, 0x42, 0x3C};
@@ -22,9 +25,6 @@ const uint8_t imgPositionSolid[] PROGMEM = {0x20, 0x30, 0x38, 0x3C, 0x7E, 0xFF};
 const uint8_t bluetoothConnectedIcon[36] PROGMEM = {0xfe, 0x01, 0xff, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x00, 0xe3, 0x1f,
                                                     0xf3, 0x3f, 0x33, 0x30, 0x33, 0x33, 0x33, 0x33, 0x03, 0x33, 0xff, 0x33,
                                                     0xfe, 0x31, 0x00, 0x30, 0x30, 0x30, 0x30, 0x30, 0xf0, 0x3f, 0xe0, 0x1f};
-
-// This image definition is here instead of images.h because it's modified dynamically by the drawBattery function
-static uint8_t imgBattery[16] = {0xFF, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0xE7, 0x3C};
 
 #if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) ||      \
      defined(ST7789_CS) || defined(USE_ST7789) || defined(HX8357_CS) || defined(ILI9488_CS) || ARCH_PORTDUINO) &&                \
@@ -45,19 +45,15 @@ const uint8_t imgSF[] PROGMEM = {0xd2, 0xb7, 0xad, 0xbb, 0x92, 0x01, 0xfd, 0xfd,
 
 // === Horizontal battery  ===
 // Basic battery design and all related pieces
-const unsigned char batteryBitmap_h[] PROGMEM = {
-    0b11111110, 0b00000000, 0b11110000, 0b00000111, 0b00000001, 0b00000000, 0b00000000, 0b00001000, 0b00000001, 0b00000000,
-    0b00000000, 0b00001000, 0b00000001, 0b00000000, 0b00000000, 0b00001000, 0b00000001, 0b00000000, 0b00000000, 0b00001000,
-    0b00000001, 0b00000000, 0b00000000, 0b00011000, 0b00000001, 0b00000000, 0b00000000, 0b00011000, 0b00000001, 0b00000000,
-    0b00000000, 0b00011000, 0b00000001, 0b00000000, 0b00000000, 0b00011000, 0b00000001, 0b00000000, 0b00000000, 0b00011000,
-    0b00000001, 0b00000000, 0b00000000, 0b00001000, 0b00000001, 0b00000000, 0b00000000, 0b00001000, 0b00000001, 0b00000000,
-    0b00000000, 0b00001000, 0b00000001, 0b00000000, 0b00000000, 0b00001000, 0b11111110, 0b00000000, 0b11110000, 0b00000111};
+const unsigned char batteryBitmap_h_bottom[] PROGMEM = {
+    0b00011110, 0b00000000, 0b00000001, 0b00000000, 0b00000001, 0b00000000, 0b00000001, 0b00000000, 0b00000001,
+    0b00000000, 0b00000001, 0b00000000, 0b00000001, 0b00000000, 0b00000001, 0b00000000, 0b00000001, 0b00000000,
+    0b00000001, 0b00000000, 0b00000001, 0b00000000, 0b00000001, 0b00000000, 0b00011110, 0b00000000};
 
-// This is the left and right bars for the fill in
-const unsigned char batteryBitmap_sidegaps_h[] PROGMEM = {
-    0b11111111, 0b00001111, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000,
-    0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000,
-    0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b11111111, 0b00001111};
+const unsigned char batteryBitmap_h_top[] PROGMEM = {
+    0b00111100, 0b00000000, 0b01000000, 0b00000000, 0b01000000, 0b00000000, 0b01000000, 0b00000000, 0b01000000,
+    0b00000000, 0b11000000, 0b00000000, 0b11000000, 0b00000000, 0b11000000, 0b00000000, 0b01000000, 0b00000000,
+    0b01000000, 0b00000000, 0b01000000, 0b00000000, 0b01000000, 0b00000000, 0b00111100, 0b00000000};
 
 // Lightning Bolt
 const unsigned char lightning_bolt_h[] PROGMEM = {
@@ -280,11 +276,16 @@ const uint8_t bluetoothdisabled[] PROGMEM = {0b11101100, 0b01010100, 0b01001100,
 const uint8_t smallbulletpoint[] PROGMEM = {0b00000011, 0b00000011, 0b00000000, 0b00000000,
                                             0b00000000, 0b00000000, 0b00000000, 0b00000000};
 
-// Clock
-#define icon_clock_width 8
-#define icon_clock_height 8
-const uint8_t icon_clock[] PROGMEM = {0b00111100, 0b01000010, 0b10000101, 0b10101001,
-                                      0b10010001, 0b10000001, 0b01000010, 0b00111100};
+// Digital Clock
+#define digital_icon_clock_width 8
+#define digital_icon_clock_height 8
+const uint8_t digital_icon_clock[] PROGMEM = {0b00111100, 0b01000010, 0b10000101, 0b10101001,
+                                              0b10010001, 0b10000001, 0b01000010, 0b00111100};
+// Analog Clock
+#define analog_icon_clock_width 8
+#define analog_icon_clock_height 8
+const uint8_t analog_icon_clock[] PROGMEM = {0b11111111, 0b01000010, 0b00100100, 0b00011000,
+                                             0b00100100, 0b01000010, 0b01000010, 0b11111111};
 
 #include "img/icon.xbm"
 static_assert(sizeof(icon_bits) >= 0, "Silence unused variable warning");

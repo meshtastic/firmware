@@ -135,6 +135,7 @@ jobs:
       board: ${{ matrix.board }}
 
   build-debian-src:
+    if: github.repository == 'meshtastic/firmware'
     uses: ./.github/workflows/build_debian_src.yml
     with:
       series: UNRELEASED
@@ -257,7 +258,6 @@ jobs:
             ./device-*.sh
             ./device-*.bat
             ./littlefs-*.bin
-            ./littlefswebui-*.bin
             ./bleota*bin
             ./Meshtastic_nRF52_factory_erase*.uf2
           retention-days: 30
@@ -426,7 +426,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   publish-firmware:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: ${{ github.event_name == 'workflow_dispatch' }}
     needs: [release-firmware]
     env:
