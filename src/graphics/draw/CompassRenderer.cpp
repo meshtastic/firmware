@@ -50,7 +50,7 @@ void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t compassY, 
         radius += 4;
     }
     Point north(0, -radius);
-    if (!config.display.compass_north_top)
+    if (uiconfig.compass_mode != meshtastic_CompassMode_FIXED_RING)
         north.rotate(-myHeading);
     north.translate(compassX, compassY);
 

@@ -11,8 +11,6 @@ class Screen;
 
 namespace ClockRenderer
 {
-// Whether we are showing the digital watch face or the analog one
-extern bool digitalWatchFace;
 
 // Clock frame functions
 void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);

@@ -57,7 +57,8 @@ void setupNicheGraphics()
     inkhud->setDisplayResilience(7, 1.5);
 
     // Select fonts
-    InkHUD::Applet::fontLarge = FREESANS_9PT_WIN1252;
+    InkHUD::Applet::fontLarge = FREESANS_12PT_WIN1252;
+    InkHUD::Applet::fontMedium = FREESANS_9PT_WIN1252;
     InkHUD::Applet::fontSmall = FREESANS_6PT_WIN1252;
 
     // Customize default settings
@@ -66,7 +67,6 @@ void setupNicheGraphics()
     inkhud->persistence->settings.optionalFeatures.batteryIcon = true; // Device definitely has a battery
     inkhud->persistence->settings.optionalMenuItems.backlight = true;  // Until proves capacitive button works by touching it
     inkhud->persistence->settings.userTiles.count = 1; // One tile only by default, keep things simple for new users
-    inkhud->persistence->settings.optionalMenuItems.nextTile = false; // Behavior handled by aux button instead
 
     // Setup backlight controller
     // Note: AUX button attached further down
