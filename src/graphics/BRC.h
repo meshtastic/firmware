@@ -1,5 +1,10 @@
 #pragma once
 
+// For size_t/int32_t types on some platforms.
+#include <cstdint>
+// For size_t
+#include <cstddef>
+
 class BRCAddress
 {
   public:
