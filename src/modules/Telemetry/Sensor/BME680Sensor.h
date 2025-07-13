@@ -34,7 +34,7 @@ class BME680Sensor : public TelemetrySensor
                                 BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY};
     void loadState();
     void updateState();
-    void checkStatus(String functionName);
+    void checkStatus(const char *functionName);
 
   public:
     BME680Sensor();

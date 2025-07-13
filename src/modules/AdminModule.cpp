@@ -5,8 +5,10 @@
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "SPILock.h"
+#include "input/InputBroker.h"
 #include "meshUtils.h"
 #include <FSCommon.h>
+#include <ctype.h> // for better whitespace handling
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH
 #include "BleOta.h"
 #endif
@@ -155,6 +157,28 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
      */
     case meshtastic_AdminMessage_set_owner_tag:
         LOG_DEBUG("Client set owner");
+        // Validate names
+        if (*r->set_owner.long_name) {
+            const char *start = r->set_owner.long_name;
+            // Skip all whitespace (space, tab, newline, etc)
+            while (*start && isspace((unsigned char)*start))
+                start++;
+            if (*start == '\0') {
+                LOG_WARN("Rejected long_name: must contain at least 1 non-whitespace character");
+                myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
+                break;
+            }
+        }
+        if (*r->set_owner.short_name) {
+            const char *start = r->set_owner.short_name;
+            while (*start && isspace((unsigned char)*start))
+                start++;
+            if (*start == '\0') {
+                LOG_WARN("Rejected short_name: must contain at least 1 non-whitespace character");
+                myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
+                break;
+            }
+        }
         handleSetOwner(r->set_owner);
         break;
 
@@ -200,14 +224,16 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 #if defined(ARCH_ESP32)
 #if !MESHTASTIC_EXCLUDE_BLUETOOTH
         if (!BleOta::getOtaAppVersion().isEmpty()) {
-            screen->startFirmwareUpdateScreen();
+            if (screen)
+                screen->startFirmwareUpdateScreen();
             BleOta::switchToOtaApp();
             LOG_INFO("Rebooting to BLE OTA");
         }
 #endif
 #if !MESHTASTIC_EXCLUDE_WIFI
         if (WiFiOTA::trySwitchToOTA()) {
-            screen->startFirmwareUpdateScreen();
+            if (screen)
+                screen->startFirmwareUpdateScreen();
             WiFiOTA::saveConfig(&config.network);
             LOG_INFO("Rebooting to WiFi OTA");
         }
@@ -297,6 +323,8 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         if (node != NULL) {
             node->is_favorite = true;
             saveChanges(SEGMENT_NODEDATABASE, false);
+            if (screen)
+                screen->setFrames(graphics::Screen::FOCUS_PRESERVE); // <-- Rebuild screens
         }
         break;
     }
@@ -306,6 +334,8 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         if (node != NULL) {
             node->is_favorite = false;
             saveChanges(SEGMENT_NODEDATABASE, false);
+            if (screen)
+                screen->setFrames(graphics::Screen::FOCUS_PRESERVE); // <-- Rebuild screens
         }
         break;
     }
@@ -420,6 +450,11 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 #endif
         break;
     }
+    case meshtastic_AdminMessage_send_input_event_tag: {
+        LOG_INFO("Client requesting to send input event");
+        handleSendInputEvent(r->send_input_event);
+        break;
+    }
 #ifdef ARCH_PORTDUINO
     case meshtastic_AdminMessage_exit_simulator_tag:
         LOG_INFO("Exiting simulator");
@@ -435,21 +470,37 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             setPassKey(&res);
             myReply = allocDataProtobuf(res);
         } else if (mp.decoded.want_response) {
-            LOG_DEBUG("Did not responded to a request that wanted a respond. req.variant=%d", r->which_payload_variant);
+            LOG_DEBUG("Module API did not respond to admin message. req.variant=%d", r->which_payload_variant);
         } else if (handleResult != AdminMessageHandleResult::HANDLED) {
             // Probably a message sent by us or sent to our local node.  FIXME, we should avoid scanning these messages
-            LOG_DEBUG("Ignore irrelevant admin %d", r->which_payload_variant);
+            LOG_DEBUG("Module API did not handle admin message %d", r->which_payload_variant);
         }
         break;
+    }
+
+    // Allow any observers (e.g. the UI) to handle/respond
+    AdminMessageHandleResult observerResult = AdminMessageHandleResult::NOT_HANDLED;
+    meshtastic_AdminMessage observerResponse = meshtastic_AdminMessage_init_default;
+    AdminModule_ObserverData observerData = {
+        .request = r,
+        .response = &observerResponse,
+        .result = &observerResult,
+    };
+
+    notifyObservers(&observerData);
+
+    if (observerResult == AdminMessageHandleResult::HANDLED_WITH_RESPONSE) {
+        setPassKey(&observerResponse);
+        myReply = allocDataProtobuf(observerResponse);
+        LOG_DEBUG("Observer responded to admin message");
+    } else if (observerResult == AdminMessageHandleResult::HANDLED) {
+        LOG_DEBUG("Observer handled admin message");
     }
 
     // If asked for a response and it is not yet set, generate an 'ACK' response
     if (mp.decoded.want_response && !myReply) {
         myReply = allocErrorResponse(meshtastic_Routing_Error_NONE, &mp);
     }
-
-    // Allow any observers (e.g. the UI) to respond to this event
-    notifyObservers(r);
 
     return handled;
 }
@@ -507,7 +558,7 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
     if (owner.has_is_unmessagable != o.has_is_unmessagable ||
         (o.has_is_unmessagable && owner.is_unmessagable != o.is_unmessagable)) {
         changed = 1;
-        owner.has_is_unmessagable = o.has_is_unmessagable || o.has_is_unmessagable;
+        owner.has_is_unmessagable = owner.has_is_unmessagable || o.has_is_unmessagable;
         owner.is_unmessagable = o.is_unmessagable;
     }
 
@@ -579,6 +630,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
 #if USERPREFS_EVENT_MODE
         // If we're in event mode, nobody is a Router or Repeater
         if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
+            config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE ||
             config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
             config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
         }
@@ -620,8 +672,12 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         config.has_display = true;
         if (config.display.screen_on_secs == c.payload_variant.display.screen_on_secs &&
             config.display.flip_screen == c.payload_variant.display.flip_screen &&
-            config.display.oled == c.payload_variant.display.oled) {
+            config.display.oled == c.payload_variant.display.oled &&
+            config.display.displaymode == c.payload_variant.display.displaymode) {
             requiresReboot = false;
+        } else if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR &&
+                   c.payload_variant.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+            config.bluetooth.enabled = false;
         }
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
         if (config.display.wake_on_tap_or_motion == false && c.payload_variant.display.wake_on_tap_or_motion == true &&
@@ -699,11 +755,16 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         LOG_INFO("Set config: Security");
         config.security = c.payload_variant.security;
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN) && !(MESHTASTIC_EXCLUDE_PKI)
-        // We check for a potentially valid private key, and a blank public key, and regen the public key if needed.
-        if (config.security.private_key.size == 32 && !memfll(config.security.private_key.bytes, 0, 32) &&
-            (config.security.public_key.size == 0 || memfll(config.security.public_key.bytes, 0, 32))) {
-            if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
-                config.security.public_key.size = 32;
+        // If the client set the key to blank, go ahead and regenerate so long as we're not in ham mode
+        if (!owner.is_licensed && config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
+            if (config.security.private_key.size != 32) {
+                crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
+
+            } else if (config.security.public_key.size != 32) {
+                // We check for a potentially valid private key, and a blank public key, and regen the public key if needed.
+                if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
+                    config.security.public_key.size = 32;
+                }
             }
         }
 #endif
@@ -1093,7 +1154,7 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
 #endif
 #endif
     conn.has_serial = true; // No serial-less devices
-#if !EXCLUDE_POWER_FSM
+#if !MESHTASTIC_EXCLUDE_POWER_FSM
     conn.serial.is_connected = powerFSM.getState() == &stateSERIAL;
 #else
     conn.serial.is_connected = powerFSM.getState();
@@ -1129,7 +1190,8 @@ void AdminModule::handleGetDeviceUIConfig(const meshtastic_MeshPacket &req)
 void AdminModule::reboot(int32_t seconds)
 {
     LOG_INFO("Reboot in %d seconds", seconds);
-    screen->startAlert("Rebooting...");
+    if (screen)
+        screen->showSimpleBanner("Rebooting...", 0); // stays on screen
     rebootAtMsec = (seconds < 0) ? 0 : (millis() + seconds * 1000);
 }
 
@@ -1153,6 +1215,27 @@ void AdminModule::handleStoreDeviceUIConfig(const meshtastic_DeviceUIConfig &uic
 
 void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
 {
+    // Validate ham parameters before setting since this would bypass validation in the owner struct
+    if (*p.call_sign) {
+        const char *start = p.call_sign;
+        // Skip all whitespace
+        while (*start && isspace((unsigned char)*start))
+            start++;
+        if (*start == '\0') {
+            LOG_WARN("Rejected ham call_sign: must contain at least 1 non-whitespace character");
+            return;
+        }
+    }
+    if (*p.short_name) {
+        const char *start = p.short_name;
+        while (*start && isspace((unsigned char)*start))
+            start++;
+        if (*start == '\0') {
+            LOG_WARN("Rejected ham short_name: must contain at least 1 non-whitespace character");
+            return;
+        }
+    }
+
     // Set call sign and override lora limitations for licensed use
     strncpy(owner.long_name, p.call_sign, sizeof(owner.long_name));
     strncpy(owner.short_name, p.short_name, sizeof(owner.short_name));
@@ -1237,6 +1320,33 @@ bool AdminModule::messageIsRequest(const meshtastic_AdminMessage *r)
         return true;
     else
         return false;
+}
+
+void AdminModule::handleSendInputEvent(const meshtastic_AdminMessage_InputEvent &inputEvent)
+{
+    LOG_DEBUG("Processing input event: event_code=%u, kb_char=%u, touch_x=%u, touch_y=%u", inputEvent.event_code,
+              inputEvent.kb_char, inputEvent.touch_x, inputEvent.touch_y);
+
+    // Create InputEvent for injection
+    InputEvent event = {.inputEvent = (input_broker_event)inputEvent.event_code,
+                        .kbchar = (unsigned char)inputEvent.kb_char,
+                        .touchX = inputEvent.touch_x,
+                        .touchY = inputEvent.touch_y};
+
+    // Log the event being injected
+    LOG_INFO("Injecting input event from admin: source=%s, event=%u, char=%c(%u), touch=(%u,%u)", event.source, event.inputEvent,
+             (event.kbchar >= 32 && event.kbchar <= 126) ? event.kbchar : '?', event.kbchar, event.touchX, event.touchY);
+
+    // Wake the device if asleep
+    powerFSM.trigger(EVENT_INPUT);
+#if !defined(MESHTASTIC_EXCLUDE_INPUTBROKER)
+    // Inject the event through InputBroker
+    if (inputBroker) {
+        inputBroker->injectInputEvent(&event);
+    } else {
+        LOG_ERROR("InputBroker not available for event injection");
+    }
+#endif
 }
 
 void AdminModule::sendWarning(const char *message)

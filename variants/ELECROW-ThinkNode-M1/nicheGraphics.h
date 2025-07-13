@@ -22,6 +22,9 @@
 #include "graphics/niche/Drivers/EInk/GDEY0154D67.h"
 #include "graphics/niche/Inputs/TwoButton.h"
 
+// Button feedback
+#include "buzz.h"
+
 void setupNicheGraphics()
 {
     using namespace NicheGraphics;
@@ -53,7 +56,8 @@ void setupNicheGraphics()
     inkhud->setDisplayResilience(10, 1.5);
 
     // Select fonts
-    InkHUD::Applet::fontLarge = FREESANS_9PT_WIN1252;
+    InkHUD::Applet::fontLarge = FREESANS_12PT_WIN1252;
+    InkHUD::Applet::fontMedium = FREESANS_9PT_WIN1252;
     InkHUD::Applet::fontSmall = FREESANS_6PT_WIN1252;
 
     // Customize default settings
@@ -98,8 +102,14 @@ void setupNicheGraphics()
     buttons->setWiring(1, PIN_BUTTON1);
     buttons->setTiming(1, 50, 500); // 500ms before latch
     buttons->setHandlerDown(1, [backlight]() { backlight->peek(); });
-    buttons->setHandlerLongPress(1, [backlight]() { backlight->latch(); });
-    buttons->setHandlerShortPress(1, [backlight]() { backlight->off(); });
+    buttons->setHandlerLongPress(1, [backlight]() {
+        backlight->latch();
+        playBoop();
+    });
+    buttons->setHandlerShortPress(1, [backlight]() {
+        backlight->off();
+        playChirp();
+    });
 
     // Begin handling button events
     buttons->start();

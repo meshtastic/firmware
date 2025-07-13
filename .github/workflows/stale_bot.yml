@@ -11,6 +11,7 @@ permissions:
 
 jobs:
   stale_issues:
+    if: github.repository == 'meshtastic/firmware'
     name: Close Stale Issues
     runs-on: ubuntu-latest
 
