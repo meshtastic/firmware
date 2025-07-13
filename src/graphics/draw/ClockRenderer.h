@@ -11,8 +11,6 @@ class Screen;
 
 namespace ClockRenderer
 {
-// Whether we are showing the digital watch face or the analog one
-static bool digitalWatchFace = true;
 
 // Clock frame functions
 void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
@@ -25,7 +23,7 @@ void drawHorizontalSegment(OLEDDisplay *display, int x, int y, int width, int he
 void drawVerticalSegment(OLEDDisplay *display, int x, int y, int width, int height);
 
 // UI elements for clock displays
-void drawWatchFaceToggleButton(OLEDDisplay *display, int16_t x, int16_t y, bool digitalMode = true, float scale = 1);
+// void drawWatchFaceToggleButton(OLEDDisplay *display, int16_t x, int16_t y, bool digitalMode = true, float scale = 1);
 void drawBluetoothConnectedIcon(OLEDDisplay *display, int16_t x, int16_t y);
 
 } // namespace ClockRenderer

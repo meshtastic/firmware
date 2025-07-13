@@ -11,7 +11,7 @@
 inline const std::unordered_map<std::string, std::string> configProducts = {{"MESHTOAD", "lora-usb-meshtoad-e22.yaml"},
                                                                             {"MESHSTICK", "lora-meshstick-1262.yaml"},
                                                                             {"MESHADV-PI", "lora-MeshAdv-900M30S.yaml"},
-                                                                            {"MESHADV-MINI", "lora-MeshAdv-Mini-900M22S.yaml"},
+                                                                            {"MeshAdv Mini", "lora-MeshAdv-Mini-900M22S.yaml"},
                                                                             {"POWERPI", "lora-MeshAdv-900M30S.yaml"}};
 
 enum configNames {
@@ -63,6 +63,7 @@ enum configNames {
     tbLeftPin,
     tbRightPin,
     tbPressPin,
+    tbDirection,
     spidev,
     spiSpeed,
     i2cdev,
@@ -108,7 +109,9 @@ enum configNames {
     mac_address,
     hostMetrics_interval,
     hostMetrics_channel,
-    hostMetrics_user_command
+    hostMetrics_user_command,
+    configDisplayMode,
+    has_configDisplayMode
 };
 enum { no_screen, x11, fb, st7789, st7735, st7735s, st7796, ili9341, ili9342, ili9486, ili9488, hx8357d };
 enum { no_touchscreen, xpt2046, stmpe610, gt911, ft5x06 };

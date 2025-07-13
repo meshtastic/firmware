@@ -7,7 +7,10 @@
     "cpu": "cortex-m4",
     "extra_flags": "-DARDUINO_MDBT50Q_RX -DNRF52840_XXAA",
     "f_cpu": "64000000L",
-    "hwids": [["0x2886", "0x1668"]],
+    "hwids": [
+      ["0x2886", "0x1668"],
+      ["0x2886", "0x1667"]
+    ],
     "usb_product": "TRACKER L1",
     "mcu": "nrf52840",
     "variant": "seeed_wio_tracker_L1",

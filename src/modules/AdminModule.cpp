@@ -630,6 +630,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
 #if USERPREFS_EVENT_MODE
         // If we're in event mode, nobody is a Router or Repeater
         if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
+            config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE ||
             config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
             config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
         }
@@ -1190,7 +1191,7 @@ void AdminModule::reboot(int32_t seconds)
 {
     LOG_INFO("Reboot in %d seconds", seconds);
     if (screen)
-        screen->showOverlayBanner("Rebooting...", 0); // stays on screen
+        screen->showSimpleBanner("Rebooting...", 0); // stays on screen
     rebootAtMsec = (seconds < 0) ? 0 : (millis() + seconds * 1000);
 }
 
@@ -1325,12 +1326,6 @@ void AdminModule::handleSendInputEvent(const meshtastic_AdminMessage_InputEvent 
 {
     LOG_DEBUG("Processing input event: event_code=%u, kb_char=%u, touch_x=%u, touch_y=%u", inputEvent.event_code,
               inputEvent.kb_char, inputEvent.touch_x, inputEvent.touch_y);
-
-    // Validate input parameters
-    if (inputEvent.event_code > INPUT_BROKER_ANYKEY) {
-        LOG_WARN("Invalid input event code: %u", inputEvent.event_code);
-        return;
-    }
 
     // Create InputEvent for injection
     InputEvent event = {.inputEvent = (input_broker_event)inputEvent.event_code,

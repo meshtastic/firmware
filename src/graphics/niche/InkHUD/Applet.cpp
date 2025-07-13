@@ -8,8 +8,9 @@
 
 using namespace NicheGraphics;
 
-InkHUD::AppletFont InkHUD::Applet::fontLarge;      // General purpose font. Set by setDefaultFonts
-InkHUD::AppletFont InkHUD::Applet::fontSmall;      // General purpose font. Set by setDefaultFonts
+InkHUD::AppletFont InkHUD::Applet::fontLarge; // General purpose fonts. Set in nicheGraphics.h
+InkHUD::AppletFont InkHUD::Applet::fontMedium;
+InkHUD::AppletFont InkHUD::Applet::fontSmall;
 constexpr float InkHUD::Applet::LOGO_ASPECT_RATIO; // Ratio of the Meshtastic logo
 
 InkHUD::Applet::Applet() : GFX(0, 0)
@@ -353,10 +354,9 @@ std::string InkHUD::Applet::parseShortName(meshtastic_NodeInfoLite *node)
 // Determine if all characters of a string are printable using the current font
 bool InkHUD::Applet::isPrintable(std::string text)
 {
-    // Scan for DEL (0x7F), which is the value assigned by AppletFont::applyEncoding if a unicode character is not handled
-    // Todo: move this to from DEL to SUB, once the fonts have been changed for this
+    // Scan for SUB (0x1A), which is the value assigned by AppletFont::applyEncoding if a unicode character is not handled
     for (char &c : text) {
-        if (c == '\x7F')
+        if (c == '\x1A')
             return false;
     }
 

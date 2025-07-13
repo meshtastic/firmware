@@ -18,15 +18,21 @@
 
 // Shared NicheGraphics components
 // --------------------------------
+#include "graphics/niche/Drivers/EInk/E0213A367.h"
 #include "graphics/niche/Drivers/EInk/LCMEN2R13EFC1.h"
 #include "graphics/niche/Inputs/TwoButton.h"
 
-// Button feedback
-#include "buzz.h"
+#include "buzz.h"       // Button feedback
+#include "einkDetect.h" // Detect display model at runtime
 
 void setupNicheGraphics()
 {
     using namespace NicheGraphics;
+
+    // Detect E-Ink Model
+    // -------------------
+
+    EInkDetectionResult displayModel = detectEInk();
 
     // SPI
     // -----------------------------
@@ -38,7 +44,13 @@ void setupNicheGraphics()
     // E-Ink Driver
     // -----------------------------
 
-    Drivers::EInk *driver = new Drivers::LCMEN213EFC1;
+    Drivers::EInk *driver;
+
+    if (displayModel == EInkDetectionResult::LCMEN213EFC1) // V1 (unmarked)
+        driver = new Drivers::LCMEN213EFC1;
+    else if (displayModel == EInkDetectionResult::E0213A367) // V1.1
+        driver = new Drivers::E0213A367;
+
     driver->begin(hspi, PIN_EINK_DC, PIN_EINK_CS, PIN_EINK_BUSY, PIN_EINK_RES);
 
     // InkHUD
@@ -51,10 +63,15 @@ void setupNicheGraphics()
 
     // Set how many FAST updates per FULL update
     // Set how unhealthy additional FAST updates beyond this number are
-    inkhud->setDisplayResilience(10, 1.5);
+
+    if (displayModel == EInkDetectionResult::LCMEN213EFC1) // V1 (unmarked)
+        inkhud->setDisplayResilience(10, 1.5);
+    else if (displayModel == EInkDetectionResult::E0213A367) // V1.1
+        inkhud->setDisplayResilience(15, 3);
 
     // Select fonts
-    InkHUD::Applet::fontLarge = FREESANS_9PT_WIN1252;
+    InkHUD::Applet::fontLarge = FREESANS_12PT_WIN1252;
+    InkHUD::Applet::fontMedium = FREESANS_9PT_WIN1252;
     InkHUD::Applet::fontSmall = FREESANS_6PT_WIN1252;
 
     // Customize default settings
@@ -90,7 +107,7 @@ void setupNicheGraphics()
     buttons->setWiring(1, PIN_BUTTON2);
     buttons->setHandlerShortPress(1, [inkhud]() {
         inkhud->nextTile();
-        playBoop();
+        playChirp();
     });
 
     // Begin handling button events
