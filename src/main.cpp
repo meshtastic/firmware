@@ -286,7 +286,7 @@ void lateInitVariant() {}
  */
 void printInfo()
 {
-    LOG_INFO("S:B:%d,%s,%s", HW_VENDOR, optstr(APP_VERSION), optstr(APP_ENV));
+    LOG_INFO("S:B:%d,%s,%s,%s", HW_VENDOR, optstr(APP_VERSION), optstr(APP_ENV), optstr(APP_REPO));
 }
 #ifndef PIO_UNIT_TESTING
 void setup()
