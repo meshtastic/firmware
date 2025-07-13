@@ -1,16 +1,20 @@
 #include "configuration.h"
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER
+#include "buzz/BuzzerFeedbackThread.h"
 #include "input/ExpressLRSFiveWay.h"
 #include "input/InputBroker.h"
 #include "input/RotaryEncoderInterruptImpl1.h"
-#include "input/ScanAndSelect.h"
 #include "input/SerialKeyboardImpl.h"
 #include "input/TrackballInterruptImpl1.h"
 #include "input/UpDownInterruptImpl1.h"
+#include "modules/SystemCommandsModule.h"
 #if !MESHTASTIC_EXCLUDE_I2C
 #include "input/cardKbI2cImpl.h"
 #endif
 #include "input/kbMatrixImpl.h"
+#endif
+#if !MESHTASTIC_EXCLUDE_PKI
+#include "KeyVerificationModule.h"
 #endif
 #if !MESHTASTIC_EXCLUDE_ADMIN
 #include "modules/AdminModule.h"
@@ -49,6 +53,7 @@
 #endif
 #if ARCH_PORTDUINO
 #include "input/LinuxInputImpl.h"
+#include "input/SeesawRotary.h"
 #include "modules/Telemetry/HostMetrics.h"
 #if !MESHTASTIC_EXCLUDE_STOREFORWARD
 #include "modules/StoreForwardModule.h"
@@ -62,6 +67,7 @@
 #include "modules/Telemetry/AirQualityTelemetry.h"
 #include "modules/Telemetry/EnvironmentTelemetry.h"
 #include "modules/Telemetry/HealthTelemetry.h"
+#include "modules/Telemetry/Sensor/TelemetrySensor.h"
 #endif
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_POWER_TELEMETRY
 #include "modules/Telemetry/PowerTelemetry.h"
@@ -104,7 +110,11 @@ void setupModules()
 {
     if (config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER) {
 #if (HAS_BUTTON || ARCH_PORTDUINO) && !MESHTASTIC_EXCLUDE_INPUTBROKER
-        inputBroker = new InputBroker();
+        if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+            inputBroker = new InputBroker();
+            systemCommandsModule = new SystemCommandsModule();
+            buzzerFeedbackThread = new BuzzerFeedbackThread();
+        }
 #endif
 #if !MESHTASTIC_EXCLUDE_ADMIN
         adminModule = new AdminModule();
@@ -133,7 +143,9 @@ void setupModules()
 #if !MESHTASTIC_EXCLUDE_ATAK
         atakPluginModule = new AtakPluginModule();
 #endif
-
+#if !MESHTASTIC_EXCLUDE_PKI
+        keyVerificationModule = new KeyVerificationModule();
+#endif
 #if !MESHTASTIC_EXCLUDE_DROPZONE
         dropzoneModule = new DropzoneModule();
 #endif
@@ -152,50 +164,53 @@ void setupModules()
         // Example: Put your module here
         // new ReplyModule();
 #if (HAS_BUTTON || ARCH_PORTDUINO) && !MESHTASTIC_EXCLUDE_INPUTBROKER
-        rotaryEncoderInterruptImpl1 = new RotaryEncoderInterruptImpl1();
-        if (!rotaryEncoderInterruptImpl1->init()) {
-            delete rotaryEncoderInterruptImpl1;
-            rotaryEncoderInterruptImpl1 = nullptr;
-        }
-        upDownInterruptImpl1 = new UpDownInterruptImpl1();
-        if (!upDownInterruptImpl1->init()) {
-            delete upDownInterruptImpl1;
-            upDownInterruptImpl1 = nullptr;
-        }
-
-#if HAS_SCREEN
-        // In order to have the user button dismiss the canned message frame, this class lightly interacts with the Screen class
-        scanAndSelectInput = new ScanAndSelectInput();
-        if (!scanAndSelectInput->init()) {
-            delete scanAndSelectInput;
-            scanAndSelectInput = nullptr;
-        }
-#endif
-
-        cardKbI2cImpl = new CardKbI2cImpl();
-        cardKbI2cImpl->init();
+        if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+            rotaryEncoderInterruptImpl1 = new RotaryEncoderInterruptImpl1();
+            if (!rotaryEncoderInterruptImpl1->init()) {
+                delete rotaryEncoderInterruptImpl1;
+                rotaryEncoderInterruptImpl1 = nullptr;
+            }
+            upDownInterruptImpl1 = new UpDownInterruptImpl1();
+            if (!upDownInterruptImpl1->init()) {
+                delete upDownInterruptImpl1;
+                upDownInterruptImpl1 = nullptr;
+            }
+            cardKbI2cImpl = new CardKbI2cImpl();
+            cardKbI2cImpl->init();
 #ifdef INPUTBROKER_MATRIX_TYPE
-        kbMatrixImpl = new KbMatrixImpl();
-        kbMatrixImpl->init();
+            kbMatrixImpl = new KbMatrixImpl();
+            kbMatrixImpl->init();
 #endif // INPUTBROKER_MATRIX_TYPE
 #ifdef INPUTBROKER_SERIAL_TYPE
-        aSerialKeyboardImpl = new SerialKeyboardImpl();
-        aSerialKeyboardImpl->init();
+            aSerialKeyboardImpl = new SerialKeyboardImpl();
+            aSerialKeyboardImpl->init();
 #endif // INPUTBROKER_MATRIX_TYPE
+        }
 #endif // HAS_BUTTON
-#if ARCH_PORTDUINO && !HAS_TFT
-        aLinuxInputImpl = new LinuxInputImpl();
-        aLinuxInputImpl->init();
+#if ARCH_PORTDUINO
+        if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+            seesawRotary = new SeesawRotary("SeesawRotary");
+            if (!seesawRotary->init()) {
+                delete seesawRotary;
+                seesawRotary = nullptr;
+            }
+            aLinuxInputImpl = new LinuxInputImpl();
+            aLinuxInputImpl->init();
+        }
 #endif
-#if HAS_TRACKBALL && !MESHTASTIC_EXCLUDE_INPUTBROKER
-        trackballInterruptImpl1 = new TrackballInterruptImpl1();
-        trackballInterruptImpl1->init();
+#if !MESHTASTIC_EXCLUDE_INPUTBROKER
+        if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+            trackballInterruptImpl1 = new TrackballInterruptImpl1();
+            trackballInterruptImpl1->init(TB_DOWN, TB_UP, TB_LEFT, TB_RIGHT, TB_PRESS);
+        }
 #endif
 #ifdef INPUTBROKER_EXPRESSLRSFIVEWAY_TYPE
         expressLRSFiveWayInput = new ExpressLRSFiveWay();
 #endif
 #if HAS_SCREEN && !MESHTASTIC_EXCLUDE_CANNEDMESSAGES
-        cannedMessageModule = new CannedMessageModule();
+        if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+            cannedMessageModule = new CannedMessageModule();
+        }
 #endif
 #if ARCH_PORTDUINO
         new HostMetricsModule();
@@ -203,11 +218,14 @@ void setupModules()
 #if HAS_TELEMETRY
         new DeviceTelemetryModule();
 #endif
+// TODO: How to improve this?
 #if HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
         new EnvironmentTelemetryModule();
+#if __has_include("Adafruit_PM25AQI.h")
         if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_PMSA003I].first > 0) {
             new AirQualityTelemetryModule();
         }
+#endif
 #if !MESHTASTIC_EXCLUDE_HEALTH_TELEMETRY
         if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_MAX30102].first > 0 ||
             nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_MLX90614].first > 0) {
@@ -221,7 +239,9 @@ void setupModules()
 #if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040)) && !defined(CONFIG_IDF_TARGET_ESP32S2) &&               \
     !defined(CONFIG_IDF_TARGET_ESP32C3)
 #if !MESHTASTIC_EXCLUDE_SERIAL
-        new SerialModule();
+        if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+            new SerialModule();
+        }
 #endif
 #endif
 #ifdef ARCH_ESP32

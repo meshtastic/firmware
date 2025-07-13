@@ -35,6 +35,8 @@ char *configPath = nullptr;
 char *optionMac = nullptr;
 bool forceSimulated = false;
 
+const char *argp_program_version = optstr(APP_VERSION);
+
 // FIXME - move setBluetoothEnable into a HALPlatform class
 void setBluetoothEnable(bool enable)
 {
@@ -143,10 +145,26 @@ void portduinoSetup()
 {
     printf("Set up Meshtastic on Portduino...\n");
     int max_GPIO = 0;
-    const configNames GPIO_lines[] = {
-        cs_pin,        irq_pin,        busy_pin,  reset_pin,        sx126x_ant_sw_pin,          txen_pin,
-        rxen_pin,      displayDC,      displayCS, displayBacklight, displayBacklightPWMChannel, displayReset,
-        touchscreenCS, touchscreenIRQ, user};
+    const configNames GPIO_lines[] = {cs_pin,
+                                      irq_pin,
+                                      busy_pin,
+                                      reset_pin,
+                                      sx126x_ant_sw_pin,
+                                      txen_pin,
+                                      rxen_pin,
+                                      displayDC,
+                                      displayCS,
+                                      displayBacklight,
+                                      displayBacklightPWMChannel,
+                                      displayReset,
+                                      touchscreenCS,
+                                      touchscreenIRQ,
+                                      userButtonPin,
+                                      tbUpPin,
+                                      tbDownPin,
+                                      tbLeftPin,
+                                      tbRightPin,
+                                      tbPressPin};
 
     std::string gpioChipName = "gpiochip";
     settingsStrings[i2cdev] = "";
@@ -159,6 +177,11 @@ void portduinoSetup()
     settingsMap[ascii_logs] = !isatty(1);
     settingsMap[displayPanel] = no_screen;
     settingsMap[touchscreenModule] = no_touchscreen;
+    settingsMap[tbUpPin] = RADIOLIB_NC;
+    settingsMap[tbDownPin] = RADIOLIB_NC;
+    settingsMap[tbLeftPin] = RADIOLIB_NC;
+    settingsMap[tbRightPin] = RADIOLIB_NC;
+    settingsMap[tbPressPin] = RADIOLIB_NC;
 
     YAML::Node yamlConfig;
 
@@ -313,9 +336,34 @@ void portduinoSetup()
 
     // Need to bind all the configured GPIO pins so they're not simulated
     // TODO: If one of these fails, we should log and terminate
-    if (settingsMap.count(user) > 0 && settingsMap[user] != RADIOLIB_NC) {
-        if (initGPIOPin(settingsMap[user], defaultGpioChipName, settingsMap[user]) != ERRNO_OK) {
-            settingsMap[user] = RADIOLIB_NC;
+    if (settingsMap.count(userButtonPin) > 0 && settingsMap[userButtonPin] != RADIOLIB_NC) {
+        if (initGPIOPin(settingsMap[userButtonPin], defaultGpioChipName, settingsMap[userButtonPin]) != ERRNO_OK) {
+            settingsMap[userButtonPin] = RADIOLIB_NC;
+        }
+    }
+    if (settingsMap.count(tbUpPin) > 0 && settingsMap[tbUpPin] != RADIOLIB_NC) {
+        if (initGPIOPin(settingsMap[tbUpPin], defaultGpioChipName, settingsMap[tbUpPin]) != ERRNO_OK) {
+            settingsMap[tbUpPin] = RADIOLIB_NC;
+        }
+    }
+    if (settingsMap.count(tbDownPin) > 0 && settingsMap[tbDownPin] != RADIOLIB_NC) {
+        if (initGPIOPin(settingsMap[tbDownPin], defaultGpioChipName, settingsMap[tbDownPin]) != ERRNO_OK) {
+            settingsMap[tbDownPin] = RADIOLIB_NC;
+        }
+    }
+    if (settingsMap.count(tbLeftPin) > 0 && settingsMap[tbLeftPin] != RADIOLIB_NC) {
+        if (initGPIOPin(settingsMap[tbLeftPin], defaultGpioChipName, settingsMap[tbLeftPin]) != ERRNO_OK) {
+            settingsMap[tbLeftPin] = RADIOLIB_NC;
+        }
+    }
+    if (settingsMap.count(tbRightPin) > 0 && settingsMap[tbRightPin] != RADIOLIB_NC) {
+        if (initGPIOPin(settingsMap[tbRightPin], defaultGpioChipName, settingsMap[tbRightPin]) != ERRNO_OK) {
+            settingsMap[tbRightPin] = RADIOLIB_NC;
+        }
+    }
+    if (settingsMap.count(tbPressPin) > 0 && settingsMap[tbPressPin] != RADIOLIB_NC) {
+        if (initGPIOPin(settingsMap[tbPressPin], defaultGpioChipName, settingsMap[tbPressPin]) != ERRNO_OK) {
+            settingsMap[tbPressPin] = RADIOLIB_NC;
         }
     }
     if (settingsMap[displayPanel] != no_screen) {
@@ -377,6 +425,8 @@ int initGPIOPin(int pinNum, const std::string gpioChipName, int line)
 {
 #ifdef PORTDUINO_LINUX_HARDWARE
     std::string gpio_name = "GPIO" + std::to_string(pinNum);
+    std::cout << gpio_name;
+    printf("\n");
     try {
         GPIOPin *csPin;
         csPin = new LinuxGPIOPin(pinNum, gpioChipName.c_str(), line, gpio_name.c_str());
@@ -498,7 +548,7 @@ bool loadConfig(const char *configPath)
             }
         }
         if (yamlConfig["GPIO"]) {
-            settingsMap[user] = yamlConfig["GPIO"]["User"].as<int>(RADIOLIB_NC);
+            settingsMap[userButtonPin] = yamlConfig["GPIO"]["User"].as<int>(RADIOLIB_NC);
         }
         if (yamlConfig["GPS"]) {
             std::string serialPath = yamlConfig["GPS"]["SerialPath"].as<std::string>("");
@@ -588,6 +638,17 @@ bool loadConfig(const char *configPath)
         if (yamlConfig["Input"]) {
             settingsStrings[keyboardDevice] = (yamlConfig["Input"]["KeyboardDevice"]).as<std::string>("");
             settingsStrings[pointerDevice] = (yamlConfig["Input"]["PointerDevice"]).as<std::string>("");
+            settingsMap[userButtonPin] = yamlConfig["Input"]["User"].as<int>(RADIOLIB_NC);
+            settingsMap[tbUpPin] = yamlConfig["Input"]["TrackballUp"].as<int>(RADIOLIB_NC);
+            settingsMap[tbDownPin] = yamlConfig["Input"]["TrackballDown"].as<int>(RADIOLIB_NC);
+            settingsMap[tbLeftPin] = yamlConfig["Input"]["TrackballLeft"].as<int>(RADIOLIB_NC);
+            settingsMap[tbRightPin] = yamlConfig["Input"]["TrackballRight"].as<int>(RADIOLIB_NC);
+            settingsMap[tbPressPin] = yamlConfig["Input"]["TrackballPress"].as<int>(RADIOLIB_NC);
+            if (yamlConfig["Input"]["TrackballDirection"].as<std::string>("RISING") == "RISING") {
+                settingsMap[tbDirection] = 4;
+            } else if (yamlConfig["Input"]["TrackballDirection"].as<std::string>("RISING") == "FALLING") {
+                settingsMap[tbDirection] = 3;
+            }
         }
 
         if (yamlConfig["Webserver"]) {
@@ -604,6 +665,21 @@ bool loadConfig(const char *configPath)
             settingsMap[hostMetrics_channel] = (yamlConfig["HostMetrics"]["Channel"]).as<int>(0);
             settingsMap[hostMetrics_interval] = (yamlConfig["HostMetrics"]["ReportInterval"]).as<int>(0);
             settingsStrings[hostMetrics_user_command] = (yamlConfig["HostMetrics"]["UserStringCommand"]).as<std::string>("");
+        }
+
+        if (yamlConfig["Config"]) {
+            if (yamlConfig["Config"]["DisplayMode"]) {
+                settingsMap[has_configDisplayMode] = true;
+                if ((yamlConfig["Config"]["DisplayMode"]).as<std::string>("") == "TWOCOLOR") {
+                    settingsMap[configDisplayMode] = meshtastic_Config_DisplayConfig_DisplayMode_TWOCOLOR;
+                } else if ((yamlConfig["Config"]["DisplayMode"]).as<std::string>("") == "INVERTED") {
+                    settingsMap[configDisplayMode] = meshtastic_Config_DisplayConfig_DisplayMode_INVERTED;
+                } else if ((yamlConfig["Config"]["DisplayMode"]).as<std::string>("") == "COLOR") {
+                    settingsMap[configDisplayMode] = meshtastic_Config_DisplayConfig_DisplayMode_COLOR;
+                } else {
+                    settingsMap[configDisplayMode] = meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT;
+                }
+            }
         }
 
         if (yamlConfig["General"]) {

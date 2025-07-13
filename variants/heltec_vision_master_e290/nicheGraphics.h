@@ -34,6 +34,9 @@ Different NicheGraphics UIs and different hardware variants will each have their
 #include "graphics/niche/Drivers/EInk/DEPG0290BNS800.h"
 #include "graphics/niche/Inputs/TwoButton.h"
 
+// Button feedback
+#include "buzz.h"
+
 void setupNicheGraphics()
 {
     using namespace NicheGraphics;
@@ -64,7 +67,8 @@ void setupNicheGraphics()
     inkhud->setDisplayResilience(7, 1.5);
 
     // Select fonts
-    InkHUD::Applet::fontLarge = FREESANS_9PT_WIN1252;
+    InkHUD::Applet::fontLarge = FREESANS_12PT_WIN1252;
+    InkHUD::Applet::fontMedium = FREESANS_9PT_WIN1252;
     InkHUD::Applet::fontSmall = FREESANS_6PT_WIN1252;
 
     // Customize default settings
@@ -97,8 +101,11 @@ void setupNicheGraphics()
     buttons->setHandlerLongPress(0, [inkhud]() { inkhud->longpress(); });
 
     // #1: Aux Button
-    buttons->setWiring(1, BUTTON_PIN_SECONDARY);
-    buttons->setHandlerShortPress(1, [inkhud]() { inkhud->nextTile(); });
+    buttons->setWiring(1, PIN_BUTTON2);
+    buttons->setHandlerShortPress(1, [inkhud]() {
+        inkhud->nextTile();
+        playChirp();
+    });
 
     // Begin handling button events
     buttons->start();

@@ -87,6 +87,24 @@
   </screenshots>
 
   <releases>
+    <release version="2.7.3" date="2025-07-10">
+      <url type="details">https://github.com/meshtastic/firmware/releases?q=tag%3Av2.7.3</url>
+    </release>
+    <release version="2.7.2" date="2025-07-04">
+      <url type="details">https://github.com/meshtastic/firmware/releases?q=tag%3Av2.7.2</url>
+    </release>
+    <release version="2.7.1" date="2025-06-27">
+      <url type="details">https://github.com/meshtastic/firmware/releases?q=tag%3Av2.7.1</url>
+    </release>
+    <release version="2.7.0" date="2025-06-20">
+      <url type="details">https://github.com/meshtastic/firmware/releases?q=tag%3Av2.7.0</url>
+    </release>
+    <release version="2.6.13" date="2025-06-16">
+      <url type="details">https://github.com/meshtastic/firmware/releases?q=tag%3Av2.6.13</url>
+    </release>
+    <release version="2.6.12" date="2025-06-15">
+      <url type="details">https://github.com/meshtastic/firmware/releases?q=tag%3Av2.6.12</url>
+    </release>
     <release version="2.6.11" date="2025-06-02">
       <url type="details">https://github.com/meshtastic/firmware/releases?q=tag%3Av2.6.11</url>
     </release>
