@@ -31,17 +31,16 @@ EOF
 }
 
 # Check for --change-mode and remove it from arguments
-NEW_ARGS=""
+NEW_ARGS=()
 for arg in "$@"; do
     if [ "$arg" = "--change-mode" ]; then
         CHANGE_MODE=true
     else
-        NEW_ARGS="$NEW_ARGS \"\$arg\""
+        NEW_ARGS+=("$arg")
     fi
 done
 
-# Reset positional parameters to filtered list
-eval set -- $NEW_ARGS
+set -- "${NEW_ARGS[@]}"
 
 while getopts ":hp:P:f:" opt; do
     case "${opt}" in

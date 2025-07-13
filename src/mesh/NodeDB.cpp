@@ -344,6 +344,22 @@ NodeDB::NodeDB()
         config.device.node_info_broadcast_secs = MAX_INTERVAL;
     if (config.position.position_broadcast_secs > MAX_INTERVAL)
         config.position.position_broadcast_secs = MAX_INTERVAL;
+    if (config.position.gps_update_interval > MAX_INTERVAL)
+        config.position.gps_update_interval = MAX_INTERVAL;
+    if (config.position.gps_attempt_time > MAX_INTERVAL)
+        config.position.gps_attempt_time = MAX_INTERVAL;
+    if (config.position.position_flags > MAX_INTERVAL)
+        config.position.position_flags = MAX_INTERVAL;
+    if (config.position.rx_gpio > MAX_INTERVAL)
+        config.position.rx_gpio = MAX_INTERVAL;
+    if (config.position.tx_gpio > MAX_INTERVAL)
+        config.position.tx_gpio = MAX_INTERVAL;
+    if (config.position.broadcast_smart_minimum_distance > MAX_INTERVAL)
+        config.position.broadcast_smart_minimum_distance = MAX_INTERVAL;
+    if (config.position.broadcast_smart_minimum_interval_secs > MAX_INTERVAL)
+        config.position.broadcast_smart_minimum_interval_secs = MAX_INTERVAL;
+    if (config.position.gps_en_gpio > MAX_INTERVAL)
+        config.position.gps_en_gpio = MAX_INTERVAL;
     if (moduleConfig.neighbor_info.update_interval > MAX_INTERVAL)
         moduleConfig.neighbor_info.update_interval = MAX_INTERVAL;
     if (moduleConfig.telemetry.device_update_interval > MAX_INTERVAL)
@@ -777,7 +793,7 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.output_buzzer = PIN_BUZZER;
     moduleConfig.external_notification.use_pwm = true;
     moduleConfig.external_notification.alert_message_buzzer = true;
-    moduleConfig.external_notification.nag_timeout = 60;
+    moduleConfig.external_notification.nag_timeout = default_ringtone_nag_secs;
 #endif
 #if defined(PIN_VIBRATION)
     moduleConfig.external_notification.enabled = true;
@@ -793,7 +809,7 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.active = true;
     moduleConfig.external_notification.alert_message = true;
     moduleConfig.external_notification.output_ms = 1000;
-    moduleConfig.external_notification.nag_timeout = 60;
+    moduleConfig.external_notification.nag_timeout = default_ringtone_nag_secs;
 #endif
 
 #ifdef HAS_I2S
@@ -802,10 +818,10 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.use_i2s_as_buzzer = true;
     moduleConfig.external_notification.alert_message_buzzer = true;
 #if HAS_TFT
-    if (moduleConfig.external_notification.nag_timeout == 60)
+    if (moduleConfig.external_notification.nag_timeout == default_ringtone_nag_secs)
         moduleConfig.external_notification.nag_timeout = 0;
 #else
-    moduleConfig.external_notification.nag_timeout = 60;
+    moduleConfig.external_notification.nag_timeout = default_ringtone_nag_secs;
 #endif
 #endif
 #ifdef NANO_G2_ULTRA
@@ -1315,6 +1331,13 @@ void NodeDB::loadFromDisk()
 
         saveToDisk(SEGMENT_MODULECONFIG);
     }
+#if ARCH_PORTDUINO
+    // set any config overrides
+    if (settingsMap[has_configDisplayMode]) {
+        config.display.displaymode = (_meshtastic_Config_DisplayConfig_DisplayMode)settingsMap[configDisplayMode];
+    }
+
+#endif
 }
 
 /** Save a protobuf from a file, return true for success */
