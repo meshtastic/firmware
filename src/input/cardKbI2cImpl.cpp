@@ -9,6 +9,10 @@ CardKbI2cImpl::CardKbI2cImpl() : KbI2cBase("cardKB") {}
 
 void CardKbI2cImpl::init()
 {
+    if (kb_model == 0x12) {
+        disable();
+        return;
+    }
 #if !MESHTASTIC_EXCLUDE_I2C && !defined(ARCH_PORTDUINO) && !defined(I2C_NO_RESCAN)
     if (cardkb_found.address == 0x00) {
         LOG_DEBUG("Rescan for I2C keyboard");

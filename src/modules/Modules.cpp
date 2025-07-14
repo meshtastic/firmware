@@ -12,6 +12,7 @@
 #include "input/cardKbI2cImpl.h"
 #endif
 #include "input/kbMatrixImpl.h"
+#include "input/peMatrixImpl.h"
 #endif
 #if !MESHTASTIC_EXCLUDE_PKI
 #include "KeyVerificationModule.h"
@@ -181,6 +182,10 @@ void setupModules()
             kbMatrixImpl = new KbMatrixImpl();
             kbMatrixImpl->init();
 #endif // INPUTBROKER_MATRIX_TYPE
+
+        peMatrixImpl = new PeMatrixImpl();
+        peMatrixImpl->init();
+
 #ifdef INPUTBROKER_SERIAL_TYPE
             aSerialKeyboardImpl = new SerialKeyboardImpl();
             aSerialKeyboardImpl->init();
