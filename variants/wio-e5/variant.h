@@ -17,6 +17,8 @@ Do not expect a working Meshtastic device with this target.
 #define LED_PIN PB5
 #define LED_STATE_ON 1
 
+#define WIO_E5
+
 #if (defined(LED_BUILTIN) && LED_BUILTIN == PNUM_NOT_DEFINED)
 #undef LED_BUILTIN
 #define LED_BUILTIN (LED_PIN)
