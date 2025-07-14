@@ -1,4 +1,4 @@
-name: Build RPI2040
+name: Build RP2xx0
 
 on:
   workflow_call:
@@ -10,7 +10,7 @@ on:
 permissions: read-all
 
 jobs:
-  build-rpi2040:
+  build-rp2xx0:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -20,7 +20,7 @@ jobs:
         run: echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
         id: version
 
-      - name: Build Raspberry Pi 2040
+      - name: Build Raspberry Pi 2xx0
         id: build
         uses: meshtastic/gh-action-firmware@main
         with:
@@ -31,7 +31,7 @@ jobs:
       - name: Store binaries as an artifact
         uses: actions/upload-artifact@v4
         with:
-          name: firmware-rp2040-${{ inputs.board }}-${{ steps.version.outputs.long }}.zip
+          name: firmware-rp2xx0-${{ inputs.board }}-${{ steps.version.outputs.long }}.zip
           overwrite: true
           path: |
             release/*.uf2
