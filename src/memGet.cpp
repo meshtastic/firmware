@@ -10,6 +10,10 @@
 #include "memGet.h"
 #include "configuration.h"
 
+#ifdef ARCH_STM32WL
+#include <malloc.h>
+#endif
+
 MemGet memGet;
 
 /**
@@ -24,6 +28,9 @@ uint32_t MemGet::getFreeHeap()
     return dbgHeapFree();
 #elif defined(ARCH_RP2040)
     return rp2040.getFreeHeap();
+#elif defined(ARCH_STM32WL)
+    struct mallinfo m = mallinfo();
+    return m.fordblks; // Total free space (bytes)
 #else
     // this platform does not have heap management function implemented
     return UINT32_MAX;
@@ -42,6 +49,9 @@ uint32_t MemGet::getHeapSize()
     return dbgHeapTotal();
 #elif defined(ARCH_RP2040)
     return rp2040.getTotalHeap();
+#elif defined(ARCH_STM32WL)
+    struct mallinfo m = mallinfo();
+    return m.arena; // Non-mmapped space allocated (bytes)
 #else
     // this platform does not have heap management function implemented
     return UINT32_MAX;
