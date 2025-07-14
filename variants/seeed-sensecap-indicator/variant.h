@@ -44,13 +44,7 @@
 #define TOUCH_I2C_PORT 0
 #define TOUCH_SLAVE_ADDRESS 0x48
 
-// in future, we may want to add a buzzer and add all sensors to the indicator via a data protocol for now only GPS is supported
-// // Buzzer
-// #define PIN_BUZZER 19
-
 #define GPS_DEFAULT_NOT_PRESENT 1
-#define GPS_RX_PIN 20
-#define GPS_TX_PIN 19
 #define HAS_GPS 1
 
 #define USE_SX1262
@@ -78,3 +72,7 @@
 
 #define USE_VIRTUAL_KEYBOARD 1
 #define DISPLAY_CLOCK_FRAME 1
+
+// this powers the RP 2040 on boot.
+#define SENSOR_POWER_CTRL_EXPANDER (8 | IO_EXPANDER)
+#define SENSOR_POWER_ON_EXPANDER 1
