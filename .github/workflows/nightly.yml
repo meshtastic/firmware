@@ -8,6 +8,7 @@ permissions: read-all
 
 jobs:
   trunk_check:
+    if: github.repository == 'meshtastic/firmware'
     name: Trunk Check and Upload
     runs-on: ubuntu-24.04
 
@@ -21,6 +22,7 @@ jobs:
           trunk-token: ${{ secrets.TRUNK_TOKEN }}
 
   trunk_upgrade:
+    if: github.repository == 'meshtastic/firmware'
     # See: https://github.com/trunk-io/trunk-action/blob/v1/readme.md#automatic-upgrades
     name: Trunk Upgrade (PR)
     runs-on: ubuntu-24.04

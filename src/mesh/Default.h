@@ -26,6 +26,12 @@
 #define default_map_publish_interval_secs 60 * 60
 #define default_network_ipv6_enabled true
 
+#ifdef USERPREFS_RINGTONE_NAG_SECS
+#define default_ringtone_nag_secs USERPREFS_RINGTONE_NAG_SECS
+#else
+#define default_ringtone_nag_secs 60
+#endif
+
 #define default_mqtt_address "mqtt.meshtastic.org"
 #define default_mqtt_username "meshdev"
 #define default_mqtt_password "large4cats"

@@ -1327,12 +1327,6 @@ void AdminModule::handleSendInputEvent(const meshtastic_AdminMessage_InputEvent 
     LOG_DEBUG("Processing input event: event_code=%u, kb_char=%u, touch_x=%u, touch_y=%u", inputEvent.event_code,
               inputEvent.kb_char, inputEvent.touch_x, inputEvent.touch_y);
 
-    // Validate input parameters
-    if (inputEvent.event_code > INPUT_BROKER_ANYKEY) {
-        LOG_WARN("Invalid input event code: %u", inputEvent.event_code);
-        return;
-    }
-
     // Create InputEvent for injection
     InputEvent event = {.inputEvent = (input_broker_event)inputEvent.event_code,
                         .kbchar = (unsigned char)inputEvent.kb_char,

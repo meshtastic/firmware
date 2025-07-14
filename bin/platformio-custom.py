@@ -3,6 +3,7 @@
 # trunk-ignore-all(flake8/F821): For SConstruct imports
 import sys
 from os.path import join
+import subprocess
 import json
 import re
 
@@ -92,6 +93,17 @@ prefsLoc = projenv["PROJECT_DIR"] + "/version.properties"
 verObj = readProps(prefsLoc)
 print("Using meshtastic platformio-custom.py, firmware version " + verObj["long"] + " on " + env.get("PIOENV"))
 
+# get repository owner if git is installed
+try:
+    r_owner = (
+        subprocess.check_output(["git", "config", "--get", "remote.origin.url"])
+        .decode("utf-8")
+        .strip().split("/")
+    )
+    repo_owner = r_owner[-2] + "/" + r_owner[-1].replace(".git", "")
+except subprocess.CalledProcessError:
+    repo_owner = "unknown"
+
 jsonLoc = env["PROJECT_DIR"] + "/userPrefs.jsonc"
 with open(jsonLoc) as f:
     jsonStr = re.sub("//.*","", f.read(), flags=re.MULTILINE)
@@ -117,6 +129,7 @@ flags = [
         "-DAPP_VERSION=" + verObj["long"],
         "-DAPP_VERSION_SHORT=" + verObj["short"],
         "-DAPP_ENV=" + env.get("PIOENV"),
+        "-DAPP_REPO=" + repo_owner,
     ] + pref_flags
 
 print ("Using flags:")

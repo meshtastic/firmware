@@ -29,6 +29,7 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
     uint8_t fromRadioBytes[meshtastic_FromRadio_size] = {0};
     size_t numBytes = 0;
     bool hasChecked = false;
+    bool phoneWants = false;
 
   protected:
     virtual int32_t runOnce() override
@@ -38,10 +39,10 @@ class BluetoothPhoneAPI : public PhoneAPI, public concurrency::OSThread
             for (uint8_t i = 0; i < queue_size; i++) {
                 handleToRadio(nimble_queue.at(i).data(), nimble_queue.at(i).length());
             }
-            LOG_WARN("Queue_size %u", queue_size);
+            LOG_DEBUG("Queue_size %u", queue_size);
             queue_size = 0;
         }
-        if (hasChecked == false) {
+        if (hasChecked == false && phoneWants == true) {
             numBytes = getFromRadio(fromRadioBytes);
             hasChecked = true;
         }
@@ -98,9 +99,12 @@ class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
 {
     virtual void onRead(NimBLECharacteristic *pCharacteristic)
     {
-        while (!bluetoothPhoneAPI->hasChecked) {
+        int tries = 0;
+        bluetoothPhoneAPI->phoneWants = true;
+        while (!bluetoothPhoneAPI->hasChecked && tries < 100) {
             bluetoothPhoneAPI->setIntervalFromNow(0);
             delay(20);
+            tries++;
         }
         std::lock_guard<std::mutex> guard(bluetoothPhoneAPI->nimble_mutex);
         std::string fromRadioByteString(bluetoothPhoneAPI->fromRadioBytes,
@@ -111,6 +115,7 @@ class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
             bluetoothPhoneAPI->setIntervalFromNow(0);
         bluetoothPhoneAPI->numBytes = 0;
         bluetoothPhoneAPI->hasChecked = false;
+        bluetoothPhoneAPI->phoneWants = false;
     }
 };
 
@@ -186,7 +191,12 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
             new meshtastic::BluetoothStatus(meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED));
 
         if (bluetoothPhoneAPI) {
+            std::lock_guard<std::mutex> guard(bluetoothPhoneAPI->nimble_mutex);
             bluetoothPhoneAPI->close();
+            bluetoothPhoneAPI->hasChecked = false;
+            bluetoothPhoneAPI->phoneWants = false;
+            bluetoothPhoneAPI->numBytes = 0;
+            bluetoothPhoneAPI->queue_size = 0;
         }
     }
 };
