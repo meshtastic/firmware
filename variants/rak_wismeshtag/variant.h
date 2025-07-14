@@ -16,11 +16,10 @@
   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
-#ifndef _VARIANT_RAK2560_
-#define _VARIANT_RAK2560_
+#ifndef _VARIANT_RAK4630_
+#define _VARIANT_RAK4630_
 
 #define RAK4630
-#define RAK2560
 
 /** Master clock frequency */
 #define VARIANT_MCK (64000000ul)
@@ -101,9 +100,9 @@ static const uint8_t AREF = PIN_AREF;
 #define PIN_SERIAL1_RX (15)
 #define PIN_SERIAL1_TX (16)
 
-// Connected to Serial 2
-#define PIN_SERIAL2_RX (19)
-#define PIN_SERIAL2_TX (20)
+// Connected to Jlink CDC
+#define PIN_SERIAL2_RX (8)
+#define PIN_SERIAL2_TX (6)
 
 /*
  * SPI Interfaces
@@ -134,15 +133,14 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define PIN_EINK_SCLK (0 + 3)
 #define PIN_EINK_MOSI (0 + 30) // also called SDI
 
-// #define USE_EINK
-
 /*
  * Wire Interfaces
  */
 #define WIRE_INTERFACES_COUNT 1
 
-#define PIN_WIRE_SDA (13)
-#define PIN_WIRE_SCL (14)
+// RAK WISMESHTAG
+#define PIN_WIRE_SDA (25)
+#define PIN_WIRE_SCL (24)
 
 // QSPI Pins
 #define PIN_QSPI_SCK 3
@@ -151,6 +149,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define PIN_QSPI_IO1 29
 #define PIN_QSPI_IO2 28
 #define PIN_QSPI_IO3 2
+
 
 /* @note RAK5005-O GPIO mapping to RAK4631 GPIO ports
    RAK5005-O <->  nRF52840
@@ -212,31 +211,15 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 // Do not toggle this for GPS power savings
 #define PIN_3V3_EN (34)
 
-// RAK1910 GPS module
-// If using the wisblock GPS module and pluged into Port A on WisBlock base
-// IO1 is hooked to PPS (pin 12 on header) = gpio 17
-// IO2 is hooked to GPS RESET = gpio 34, but it can not be used to this because IO2 is ALSO used to control 3V3_S power (1 is on).
-// Therefore must be 1 to keep peripherals powered
-// Power is on the controllable 3V3_S rail
-// #define PIN_GPS_RESET (34)
-// #define PIN_GPS_EN PIN_3V3_EN
+// RAK WISMESHTAG
+#define PIN_GPS_EN PIN_3V3_EN
 #define PIN_GPS_PPS (17) // Pulse per second input from the GPS
 
-#define GPS_SERIAL_PORT Serial2
-// On RAK2560 the GPS is be on a different UART
-// #define GPS_RX_PIN PIN_SERIAL2_RX
-// #define GPS_TX_PIN PIN_SERIAL2_TX
-// #define PIN_GPS_EN PIN_3V3_EN
-// Disable GPS
-// #define MESHTASTIC_EXCLUDE_GPS 1
-// Define pin to enable GPS toggle (set GPIO to LOW) via user button triple press
+#define GPS_RX_PIN PIN_SERIAL1_RX
+#define GPS_TX_PIN PIN_SERIAL1_TX
 
-// RAK12002 RTC Module
-#define RV3028_RTC (uint8_t)0b1010010
-
-// RAK18001 Buzzer in Slot C
-// #define PIN_BUZZER 21 // IO3 is PWM2
-// NEW: set this via protobuf instead!
+// RAK WISMESHTAG
+#define PIN_BUZZER 21 
 
 // Battery
 // The battery sense is hooked to pin A0 (5)
@@ -249,22 +232,7 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
 #define ADC_MULTIPLIER 1.73
 
-#define HAS_RTC 1
-
 #define RAK_4631 1
-
-#define HALF_UART_PIN PIN_SERIAL1_RX
-
-#if defined(GPS_RX_PIN) && (GPS_RX_PIN == HALF_UART_PIN)
-#error pin 15 collision
-
-#endif
-
-#if defined(GPS_TX_PIN) && (GPS_RX_PIN == HALF_UART_PIN)
-#error pin 15 collision
-#endif
-
-#define AQ_SET_PIN 10
 
 #ifdef __cplusplus
 }

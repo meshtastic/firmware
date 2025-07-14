@@ -107,7 +107,7 @@ void setupNicheGraphics()
     buttons->setWiring(1, PIN_BUTTON2);
     buttons->setHandlerShortPress(1, [inkhud]() {
         inkhud->nextTile();
-        playBoop();
+        playChirp();
     });
 
     // Begin handling button events

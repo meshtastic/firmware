@@ -21,6 +21,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 */
 #include "Screen.h"
+#include "NodeDB.h"
 #include "PowerMon.h"
 #include "Throttle.h"
 #include "configuration.h"
@@ -44,7 +45,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 #include "FSCommon.h"
 #include "MeshService.h"
-#include "NodeDB.h"
 #include "RadioLibInterface.h"
 #include "error.h"
 #include "gps/GeoCoord.h"
@@ -82,29 +82,6 @@ extern uint16_t TFT_MESH;
 #include "modules/StoreForwardModule.h"
 #include "platform/portduino/PortduinoGlue.h"
 #endif
-
-bool shouldWakeOnReceivedMessage()
-{
-    /*
-    The goal here is to determine when we do NOT wake up the screen on message received:
-    - Any ext. notifications are turned on
-    - If role is not client / client_mute
-    - If the battery level is very low
-    */
-    if (moduleConfig.external_notification.enabled) {
-        return false;
-    }
-    if (config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT &&
-        config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE) {
-        return false;
-    }
-    if (powerStatus && powerStatus->getBatteryChargePercent() < 10) {
-        return false;
-    }
-    return true;
-}
-
-bool wake_on_received_message = shouldWakeOnReceivedMessage(); // Master Switch to enable here
 
 using namespace meshtastic; /** @todo remove */
 
@@ -409,9 +386,7 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 #ifdef T_WATCH_S3
             PMU->enablePowerOutput(XPOWERS_ALDO2);
 #endif
-#ifdef HELTEC_TRACKER_V1_X
-            uint8_t tft_vext_enabled = digitalRead(VEXT_ENABLE);
-#endif
+
 #if !ARCH_PORTDUINO
             dispdev->displayOn();
 #endif
@@ -423,10 +398,7 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 
             dispdev->displayOn();
 #ifdef HELTEC_TRACKER_V1_X
-            // If the TFT VEXT power is not enabled, initialize the UI.
-            if (!tft_vext_enabled) {
-                ui->init();
-            }
+            ui->init();
 #endif
 #ifdef USE_ST7789
             pinMode(VTFT_CTRL, OUTPUT);
@@ -663,6 +635,11 @@ void Screen::forceDisplay(bool forceUiUpdate)
 
     // Tell EInk class to update the display
     static_cast<EInkDisplay *>(dispdev)->forceDisplay();
+#else
+    // No delay between UI frame rendering
+    if (forceUiUpdate) {
+        setFastFramerate();
+    }
 #endif
 }
 
@@ -1282,8 +1259,7 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
             setFrames(FOCUS_PRESERVE);              // Refresh frame list without switching view
 
             // Only wake/force display if the configuration allows it
-            wake_on_received_message = shouldWakeOnReceivedMessage();
-            if (wake_on_received_message) {
+            if (shouldWakeOnReceivedMessage()) {
                 setOn(true);    // Wake up the screen first
                 forceDisplay(); // Forces screen redraw
 
@@ -1452,3 +1428,23 @@ bool Screen::isOverlayBannerShowing()
 #else
 graphics::Screen::Screen(ScanI2C::DeviceAddress, meshtastic_Config_DisplayConfig_OledType, OLEDDISPLAY_GEOMETRY) {}
 #endif // HAS_SCREEN
+
+bool shouldWakeOnReceivedMessage()
+{
+    /*
+    The goal here is to determine when we do NOT wake up the screen on message received:
+    - Any ext. notifications are turned on
+    - If role is not client / client_mute
+    - If the battery level is very low
+    */
+    if (moduleConfig.external_notification.enabled) {
+        return false;
+    }
+    if (!meshtastic_Config_DeviceConfig_Role_CLIENT && !meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE) {
+        return false;
+    }
+    if (powerStatus && powerStatus->getBatteryChargePercent() < 10) {
+        return false;
+    }
+    return true;
+}
