@@ -87,16 +87,18 @@ static void onNetworkConnected()
 
         // start mdns
         if (!MDNS.begin("Meshtastic")) {
-            LOG_ERROR("Error setting up MDNS responder!");
+            LOG_ERROR("Error setting up mDNS responder!");
         } else {
             LOG_INFO("mDNS Host: Meshtastic.local");
             MDNS.addService("meshtastic", "tcp", SERVER_API_DEFAULT_PORT);
+// ESPmDNS (ESP32) and SimpleMDNS (RP2040) have slightly different APIs for adding TXT records
 #ifdef ARCH_ESP32
-            MDNS.addService("http", "tcp", 80);
-            MDNS.addService("https", "tcp", 443);
+            MDNS.addServiceTxt("meshtastic", "tcp", "shortname", String(owner.short_name));
+            MDNS.addServiceTxt("meshtastic", "tcp", "id", String(owner.id));
             // ESP32 prints obtained IP address in WiFiEvent
 #elif defined(ARCH_RP2040)
-            // ARCH_RP2040 does not support HTTPS
+            MDNS.addServiceTxt("meshtastic", "shortname", owner.short_name);
+            MDNS.addServiceTxt("meshtastic", "id", owner.id);
             LOG_INFO("Obtained IP address: %s", WiFi.localIP().toString().c_str());
 #endif
         }

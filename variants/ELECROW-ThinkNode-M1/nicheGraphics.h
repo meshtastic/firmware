@@ -56,7 +56,8 @@ void setupNicheGraphics()
     inkhud->setDisplayResilience(10, 1.5);
 
     // Select fonts
-    InkHUD::Applet::fontLarge = FREESANS_9PT_WIN1252;
+    InkHUD::Applet::fontLarge = FREESANS_12PT_WIN1252;
+    InkHUD::Applet::fontMedium = FREESANS_9PT_WIN1252;
     InkHUD::Applet::fontSmall = FREESANS_6PT_WIN1252;
 
     // Customize default settings
@@ -103,11 +104,11 @@ void setupNicheGraphics()
     buttons->setHandlerDown(1, [backlight]() { backlight->peek(); });
     buttons->setHandlerLongPress(1, [backlight]() {
         backlight->latch();
-        playBeep();
+        playBoop();
     });
     buttons->setHandlerShortPress(1, [backlight]() {
         backlight->off();
-        playBoop();
+        playChirp();
     });
 
     // Begin handling button events

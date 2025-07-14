@@ -642,6 +642,11 @@ bool loadConfig(const char *configPath)
             settingsMap[tbLeftPin] = yamlConfig["Input"]["TrackballLeft"].as<int>(RADIOLIB_NC);
             settingsMap[tbRightPin] = yamlConfig["Input"]["TrackballRight"].as<int>(RADIOLIB_NC);
             settingsMap[tbPressPin] = yamlConfig["Input"]["TrackballPress"].as<int>(RADIOLIB_NC);
+            if (yamlConfig["Input"]["TrackballDirection"].as<std::string>("RISING") == "RISING") {
+                settingsMap[tbDirection] = 4;
+            } else if (yamlConfig["Input"]["TrackballDirection"].as<std::string>("RISING") == "FALLING") {
+                settingsMap[tbDirection] = 3;
+            }
         }
 
         if (yamlConfig["Webserver"]) {
@@ -658,6 +663,21 @@ bool loadConfig(const char *configPath)
             settingsMap[hostMetrics_channel] = (yamlConfig["HostMetrics"]["Channel"]).as<int>(0);
             settingsMap[hostMetrics_interval] = (yamlConfig["HostMetrics"]["ReportInterval"]).as<int>(0);
             settingsStrings[hostMetrics_user_command] = (yamlConfig["HostMetrics"]["UserStringCommand"]).as<std::string>("");
+        }
+
+        if (yamlConfig["Config"]) {
+            if (yamlConfig["Config"]["DisplayMode"]) {
+                settingsMap[has_configDisplayMode] = true;
+                if ((yamlConfig["Config"]["DisplayMode"]).as<std::string>("") == "TWOCOLOR") {
+                    settingsMap[configDisplayMode] = meshtastic_Config_DisplayConfig_DisplayMode_TWOCOLOR;
+                } else if ((yamlConfig["Config"]["DisplayMode"]).as<std::string>("") == "INVERTED") {
+                    settingsMap[configDisplayMode] = meshtastic_Config_DisplayConfig_DisplayMode_INVERTED;
+                } else if ((yamlConfig["Config"]["DisplayMode"]).as<std::string>("") == "COLOR") {
+                    settingsMap[configDisplayMode] = meshtastic_Config_DisplayConfig_DisplayMode_COLOR;
+                } else {
+                    settingsMap[configDisplayMode] = meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT;
+                }
+            }
         }
 
         if (yamlConfig["General"]) {

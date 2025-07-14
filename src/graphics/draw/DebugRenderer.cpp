@@ -501,7 +501,10 @@ void drawMemoryUsage(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     int line = 1;
     const int barHeight = 6;
     const int labelX = x;
-    const int barsOffset = (isHighResolution) ? 24 : 0;
+    int barsOffset = (isHighResolution) ? 24 : 0;
+#ifdef USE_EINK
+    barsOffset -= 12;
+#endif
     const int barX = x + 40 + barsOffset;
 
     auto drawUsageRow = [&](const char *label, uint32_t used, uint32_t total, bool isHeap = false) {

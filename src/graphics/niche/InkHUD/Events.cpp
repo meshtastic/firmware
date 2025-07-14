@@ -39,8 +39,8 @@ void InkHUD::Events::begin()
 void InkHUD::Events::onButtonShort()
 {
     // Audio feedback (via buzzer)
-    // Short low tone
-    playBoop();
+    // Short tone
+    playChirp();
     // Cancel any beeping, buzzing, blinking
     // Some button handling suppressed if we are dismissing an external notification (see below)
     bool dismissedExt = dismissExternalNotification();
@@ -64,8 +64,8 @@ void InkHUD::Events::onButtonShort()
 void InkHUD::Events::onButtonLong()
 {
     // Audio feedback (via buzzer)
-    // Low tone, longer than playBoop
-    playBeep();
+    // Slightly longer than playChirp
+    playBoop();
 
     // Check which system applet wants to handle the button press (if any)
     SystemApplet *consumer = nullptr;
