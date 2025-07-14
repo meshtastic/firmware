@@ -12,7 +12,7 @@
 
 #define USE_RF95 // RFM95/SX127x
 #define RF95_MAX_POWER 10
-#define RF95_PA_EN 1 
+#define RF95_PA_EN 1
 #define LORA_SCK PIN_SPI0_SCK
 #define LORA_MISO PIN_SPI0_MISO
 #define LORA_MOSI PIN_SPI0_MOSI
