@@ -42,6 +42,7 @@ permissions:
 
 jobs:
   docker-build:
+    name: docker-${{ inputs.distro }}
     outputs:
       digest: ${{ steps.docker_variant.outputs.digest }}
     runs-on: ${{ inputs.runs-on }}

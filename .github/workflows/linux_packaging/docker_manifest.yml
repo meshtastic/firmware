@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   docker-debian-amd64:
-    uses: ./.github/workflows/docker_build.yml
+    uses: ./.github/workflows/linux_packaging/docker_build.yml
     with:
       distro: debian
       platform: linux/amd64
@@ -26,7 +26,7 @@ jobs:
     secrets: inherit
 
   docker-debian-arm64:
-    uses: ./.github/workflows/docker_build.yml
+    uses: ./.github/workflows/linux_packaging/docker_build.yml
     with:
       distro: debian
       platform: linux/arm64
@@ -35,7 +35,7 @@ jobs:
     secrets: inherit
 
   docker-debian-armv7:
-    uses: ./.github/workflows/docker_build.yml
+    uses: ./.github/workflows/linux_packaging/docker_build.yml
     with:
       distro: debian
       platform: linux/arm/v7
@@ -44,7 +44,7 @@ jobs:
     secrets: inherit
 
   docker-alpine-amd64:
-    uses: ./.github/workflows/docker_build.yml
+    uses: ./.github/workflows/linux_packaging/docker_build.yml
     with:
       distro: alpine
       platform: linux/amd64
@@ -53,7 +53,7 @@ jobs:
     secrets: inherit
 
   docker-alpine-arm64:
-    uses: ./.github/workflows/docker_build.yml
+    uses: ./.github/workflows/linux_packaging/docker_build.yml
     with:
       distro: alpine
       platform: linux/arm64
@@ -62,7 +62,7 @@ jobs:
     secrets: inherit
 
   docker-alpine-armv7:
-    uses: ./.github/workflows/docker_build.yml
+    uses: ./.github/workflows/linux_packaging/docker_build.yml
     with:
       distro: alpine
       platform: linux/arm/v7
