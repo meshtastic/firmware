@@ -294,13 +294,13 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
     LOG_INFO("Protobuf Value uiconfig.screen_rgb_color: %d", uiconfig.screen_rgb_color);
     int32_t rawRGB = uiconfig.screen_rgb_color;
     if (rawRGB > 0 && rawRGB <= 255255255) {
-        uint8_t r = (rawRGB >> 16) & 0xFF;
-        uint8_t g = (rawRGB >> 8) & 0xFF;
-        uint8_t b = rawRGB & 0xFF;
-        LOG_INFO("Values of r,g,b: %d, %d, %d", r, g, b);
+        uint8_t TFT_MESH_r = (rawRGB >> 16) & 0xFF;
+        uint8_t TFT_MESH_g = (rawRGB >> 8) & 0xFF;
+        uint8_t TFT_MESH_b = rawRGB & 0xFF;
+        LOG_INFO("Values of r,g,b: %d, %d, %d", TFT_MESH_r, TFT_MESH_g, TFT_MESH_b);
 
-        if (r <= 255 && g <= 255 && b <= 255) {
-            TFT_MESH = COLOR565(r, g, b);
+        if (TFT_MESH_r <= 255 && TFT_MESH_g <= 255 && TFT_MESH_b <= 255) {
+            TFT_MESH = COLOR565(TFT_MESH_r, TFT_MESH_g, TFT_MESH_b);
         }
     }
 
@@ -313,6 +313,8 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
                             ST7789_MISO, ST7789_SCK);
 #else
     dispdev = new ST7789Spi(&SPI1, ST7789_RESET, ST7789_RS, ST7789_NSS, GEOMETRY_RAWMODE, TFT_WIDTH, TFT_HEIGHT);
+#endif
+#elif defined(USE_ST7789)
     static_cast<ST7789Spi *>(dispdev)->setRGB(TFT_MESH);
 #endif
 #elif defined(USE_ST7796)
@@ -322,6 +324,7 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 #else
     dispdev = new ST7796Spi(&SPI1, ST7796_RESET, ST7796_RS, ST7796_NSS, GEOMETRY_RAWMODE, TFT_WIDTH, TFT_HEIGHT);
 #endif
+
 #elif defined(USE_SSD1306)
     dispdev = new SSD1306Wire(address.address, -1, -1, geometry,
                               (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
@@ -981,22 +984,6 @@ void Screen::setFrames(FrameFocus focus)
     indicatorIcons.push_back(digital_icon_clock);
 #endif
 
-    // We don't show the node info of our node (if we have it yet - we should)
-    size_t numMeshNodes = nodeDB->getNumMeshNodes();
-    if (numMeshNodes > 0)
-        numMeshNodes--;
-
-    for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
-        const meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(i);
-        if (n && n->num != nodeDB->getNodeNum() && n->is_favorite) {
-            if (fsi.positions.firstFavorite == 255)
-                fsi.positions.firstFavorite = numframes;
-            fsi.positions.lastFavorite = numframes;
-            normalFrames[numframes++] = graphics::UIRenderer::drawNodeInfo;
-            indicatorIcons.push_back(icon_node);
-        }
-    }
-
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
     if (!dismissedFrames.wifi && isWifiAvailable()) {
         fsi.positions.wifi = numframes;
@@ -1006,7 +993,7 @@ void Screen::setFrames(FrameFocus focus)
 #endif
 
     // Beware of what changes you make in this code!
-    // We pass numfames into GetMeshModulesWithUIFrames() which is highly important!
+    // We pass numframes into GetMeshModulesWithUIFrames() which is highly important!
     // Inside of that callback, goes over to MeshModule.cpp and we run
     // modulesWithUIFrames.resize(startIndex, nullptr), to insert nullptr
     // entries until we're ready to start building the matching entries.
@@ -1035,6 +1022,34 @@ void Screen::setFrames(FrameFocus focus)
 
     LOG_DEBUG("Added modules.  numframes: %d", numframes);
 
+    // We don't show the node info of our node (if we have it yet - we should)
+    size_t numMeshNodes = nodeDB->getNumMeshNodes();
+    if (numMeshNodes > 0)
+        numMeshNodes--;
+
+    // Temporary array to hold favorite node frames
+    std::vector<FrameCallback> favoriteFrames;
+
+    for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
+        const meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(i);
+        if (n && n->num != nodeDB->getNodeNum() && n->is_favorite) {
+            favoriteFrames.push_back(graphics::UIRenderer::drawNodeInfo);
+        }
+    }
+
+    // Insert favorite frames *after* collecting them all
+    if (!favoriteFrames.empty()) {
+        fsi.positions.firstFavorite = numframes;
+        for (auto &f : favoriteFrames) {
+            normalFrames[numframes++] = f;
+            indicatorIcons.push_back(icon_node);
+        }
+        fsi.positions.lastFavorite = numframes - 1;
+    } else {
+        fsi.positions.firstFavorite = 255;
+        fsi.positions.lastFavorite = 255;
+    }
+
     fsi.frameCount = numframes;   // Total framecount is used to apply FOCUS_PRESERVE
     this->frameCount = numframes; // ✅ Save frame count for use in custom overlay
     LOG_DEBUG("Finished build frames. numframes: %d", numframes);
@@ -1046,8 +1061,7 @@ void Screen::setFrames(FrameFocus focus)
     static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
     ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
 
-    prevFrame = -1; // Force drawNodeInfo to pick a new node (because our list
-                    // just changed)
+    prevFrame = -1; // Force drawNodeInfo to pick a new node (because our list just changed)
 
     // Focus on a specific frame, in the frame set we just created
     switch (focus) {
