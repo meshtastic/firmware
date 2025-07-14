@@ -924,9 +924,7 @@ void menuHandler::screenOptionsMenu()
 {
     // Check if brightness is supported
     bool hasSupportBrightness = false;
-#if (defined(ST7789_CS) || defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) || defined(USE_SH1107) ||            \
-     HAS_TFT) &&                                                                                                                 \
-    (!defined(T_DECK))
+#if defined(ST7789_CS) || defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) || defined(USE_SH1107) || HAS_TFT
     hasSupportBrightness = true;
 #endif
 
