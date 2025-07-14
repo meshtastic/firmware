@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build-docker:
-    uses: ./.github/workflows/linux_packaging/docker_manifest.yml
+    uses: ./.github/workflows/docker_manifest.yml
     with:
       release_channel: |-
         ${{ contains(github.event.release.name, 'Beta') && 'beta' || contains(github.event.release.name, 'Alpha') && 'alpha' }}
@@ -25,7 +25,7 @@ jobs:
           - noble # 24.04
           - plucky # 25.04
           # - questing # 25.10
-    uses: ./.github/workflows/linux_packaging/ppa.yml
+    uses: ./.github/workflows/package_ppa.yml
     with:
       ppa_repo: |-
         ppa:meshtastic/${{ contains(github.event.release.name, 'Beta') && 'beta' || contains(github.event.release.name, 'Alpha') && 'alpha' }}
@@ -33,7 +33,7 @@ jobs:
     secrets: inherit
 
   package-obs:
-    uses: ./.github/workflows/linux_packaging/obs.yml
+    uses: ./.github/workflows/package_obs.yml
     with:
       obs_project: |-
         network:Meshtastic:${{ contains(github.event.release.name, 'Beta') && 'beta' || contains(github.event.release.name, 'Alpha') && 'alpha' }}
@@ -42,7 +42,7 @@ jobs:
     secrets: inherit
 
   hook-copr:
-    uses: ./.github/workflows/linux_packaging/copr.yml
+    uses: ./.github/workflows/hook_copr.yml
     with:
       copr_project: |-
         ${{ contains(github.event.release.name, 'Beta') && 'beta' || contains(github.event.release.name, 'Alpha') && 'alpha' }}

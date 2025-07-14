@@ -10,8 +10,8 @@ elif (echo $2 | grep -q "nrf52"); then
   bin/build-nrf52.sh $1
 elif (echo $2 | grep -q "stm32"); then
   bin/build-stm32.sh $1
-elif (echo $2 | grep -q "rp2xx0"); then
-  bin/build-rp2xx0.sh $1
+elif (echo $2 | grep -q "rpi2040"); then
+  bin/build-rpi2040.sh $1
 else
   echo "Unknown target $2"
   exit 1

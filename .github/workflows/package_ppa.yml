@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   build-debian-src:
-    uses: ./.github/workflows/linux_packaging/debian_src.yml
+    uses: ./.github/workflows/build_debian_src.yml
     secrets: inherit
     with:
       series: ${{ inputs.series }}
