@@ -570,7 +570,6 @@ int32_t MQTT::runOnce()
         publishQueuedMessages();
         return 200;
     }
-
 #if HAS_NETWORKING
     else if (!pubSub.loop()) {
         if (!wantConnection)
@@ -595,8 +594,10 @@ int32_t MQTT::runOnce()
         powerFSM.trigger(EVENT_CONTACT_FROM_PHONE); // Suppress entering light sleep (because that would turn off bluetooth)
         return 20;
     }
-#endif
+#else
+    // No networking available, return default interval
     return 30000;
+#endif
 }
 
 bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTClient *client)
