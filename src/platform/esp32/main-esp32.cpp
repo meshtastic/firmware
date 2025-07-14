@@ -25,6 +25,8 @@
 #include <nvs.h>
 #include <nvs_flash.h>
 
+#include "esp_idf_version.h"
+
 #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH
 void setBluetoothEnable(bool enable)
 {
@@ -169,7 +171,7 @@ void esp32Setup()
 // #define APP_WATCHDOG_SECS 45
 #define APP_WATCHDOG_SECS 90
 
-#if defined(CONFIG_IDF_TARGET_ESP32C6) || defined(SENSECAP_INDICATOR)
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
     esp_task_wdt_config_t *wdt_config = (esp_task_wdt_config_t *)malloc(sizeof(esp_task_wdt_config_t));
     wdt_config->timeout_ms = APP_WATCHDOG_SECS * 1000;
     wdt_config->idle_core_mask = 0;
