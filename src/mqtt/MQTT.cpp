@@ -559,10 +559,8 @@ void MQTT::sendSubscriptions()
 
 int32_t MQTT::runOnce()
 {
-#if HAS_NETWORKING
     if (!moduleConfig.mqtt.enabled || !(moduleConfig.mqtt.map_reporting_enabled || channels.anyMqttEnabled()))
         return disable();
-
     bool wantConnection = wantsLink();
 
     perhapsReportToMap();
@@ -573,6 +571,7 @@ int32_t MQTT::runOnce()
         return 200;
     }
 
+#if HAS_NETWORKING
     else if (!pubSub.loop()) {
         if (!wantConnection)
             return 5000; // If we don't want connection now, check again in 5 secs
