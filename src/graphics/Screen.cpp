@@ -398,7 +398,7 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 
             dispdev->displayOn();
 #ifdef HELTEC_TRACKER_V1_X
-                ui->init();
+            ui->init();
 #endif
 #ifdef USE_ST7789
             pinMode(VTFT_CTRL, OUTPUT);
