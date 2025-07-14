@@ -9,11 +9,11 @@ on:
     paths:
       - debian/**
       - "*.rpkg"
-      - .github/workflows/nightly_packaging.yml
-      - .github/workflows/build_debian_src.yml
-      - .github/workflows/package_ppa.yml
-      - .github/workflows/package_obs.yml
-      - .github/workflows/hook_copr.yml
+      - .github/workflows/daily_packaging.yml
+      - .github/workflows/linux_packaging/debian_src.yml
+      - .github/workflows/linux_packaging/ppa.yml
+      - .github/workflows/linux_packaging/obs.yml
+      - .github/workflows/linux_packaging/copr.yml
 
 permissions:
   contents: write
@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   docker-multiarch:
-    uses: ./.github/workflows/docker_manifest.yml
+    uses: ./.github/workflows/linux_packaging/docker_manifest.yml
     with:
       release_channel: daily
     secrets: inherit
@@ -35,21 +35,21 @@ jobs:
           - noble # 24.04
           - plucky # 25.04
           - questing # 25.10
-    uses: ./.github/workflows/package_ppa.yml
+    uses: ./.github/workflows/linux_packaging/ppa.yml
     with:
       ppa_repo: ppa:meshtastic/daily
       series: ${{ matrix.series }}
     secrets: inherit
 
   package-obs:
-    uses: ./.github/workflows/package_obs.yml
+    uses: ./.github/workflows/linux_packaging/obs.yml
     with:
       obs_project: network:Meshtastic:daily
       series: unstable
     secrets: inherit
 
   hook-copr:
-    uses: ./.github/workflows/hook_copr.yml
+    uses: ./.github/workflows/linux_packaging/copr.yml
     with:
       copr_project: daily
     secrets: inherit
