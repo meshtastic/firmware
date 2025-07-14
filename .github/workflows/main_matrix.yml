@@ -136,7 +136,7 @@ jobs:
 
   build-debian-src:
     if: github.repository == 'meshtastic/firmware'
-    uses: ./.github/workflows/linux_packaging/debian_src.yml
+    uses: ./.github/workflows/build_debian_src.yml
     with:
       series: UNRELEASED
       build_location: local
@@ -154,7 +154,7 @@ jobs:
     uses: ./.github/workflows/test_native.yml
 
   docker-deb-amd64:
-    uses: ./.github/workflows/linux_packaging/docker_build.yml
+    uses: ./.github/workflows/docker_build.yml
     with:
       distro: debian
       platform: linux/amd64
@@ -162,7 +162,7 @@ jobs:
       push: false
 
   docker-deb-amd64-tft:
-    uses: ./.github/workflows/linux_packaging/docker_build.yml
+    uses: ./.github/workflows/docker_build.yml
     with:
       distro: debian
       platform: linux/amd64
@@ -171,7 +171,7 @@ jobs:
       pio_env: native-tft
 
   docker-alp-amd64:
-    uses: ./.github/workflows/linux_packaging/docker_build.yml
+    uses: ./.github/workflows/docker_build.yml
     with:
       distro: alpine
       platform: linux/amd64
@@ -179,7 +179,7 @@ jobs:
       push: false
 
   docker-alp-amd64-tft:
-    uses: ./.github/workflows/linux_packaging/docker_build.yml
+    uses: ./.github/workflows/docker_build.yml
     with:
       distro: alpine
       platform: linux/amd64
@@ -188,7 +188,7 @@ jobs:
       pio_env: native-tft
 
   docker-deb-arm64:
-    uses: ./.github/workflows/linux_packaging/docker_build.yml
+    uses: ./.github/workflows/docker_build.yml
     with:
       distro: debian
       platform: linux/arm64
@@ -196,7 +196,7 @@ jobs:
       push: false
 
   docker-deb-armv7:
-    uses: ./.github/workflows/linux_packaging/docker_build.yml
+    uses: ./.github/workflows/docker_build.yml
     with:
       distro: debian
       platform: linux/arm/v7

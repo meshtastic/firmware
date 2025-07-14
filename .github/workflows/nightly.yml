@@ -1,4 +1,4 @@
-name: Trunk Nightly
+name: Nightly
 on:
   schedule:
     - cron: 0 8 * * 1-5
