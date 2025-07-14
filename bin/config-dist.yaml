@@ -199,6 +199,10 @@ HostMetrics:
 #  UserStringCommand: cat /sys/firmware/devicetree/base/serial-number # Command to execute, to send the results as the userString
 
 
+Config:
+#  DisplayMode: TWOCOLOR # uncomment to force BaseUI
+#  DisplayMode: COLOR # uncomment to force MUI
+
 General:
   MaxNodes: 200
   MaxMessageQueue: 100

@@ -109,7 +109,9 @@ enum configNames {
     mac_address,
     hostMetrics_interval,
     hostMetrics_channel,
-    hostMetrics_user_command
+    hostMetrics_user_command,
+    configDisplayMode,
+    has_configDisplayMode
 };
 enum { no_screen, x11, fb, st7789, st7735, st7735s, st7796, ili9341, ili9342, ili9486, ili9488, hx8357d };
 enum { no_touchscreen, xpt2046, stmpe610, gt911, ft5x06 };
