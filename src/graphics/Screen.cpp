@@ -21,6 +21,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 */
 #include "Screen.h"
+#include "NodeDB.h"
 #include "PowerMon.h"
 #include "Throttle.h"
 #include "configuration.h"
@@ -44,7 +45,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 #include "FSCommon.h"
 #include "MeshService.h"
-#include "NodeDB.h"
 #include "RadioLibInterface.h"
 #include "error.h"
 #include "gps/GeoCoord.h"
@@ -171,7 +171,7 @@ void Screen::showOverlayBanner(BannerOverlayOptions banner_overlay_options)
 }
 
 // Called to trigger a banner with custom message and duration
-void Screen::showNodePicker(const char *message, uint32_t durationMs, std::function<void(int)> bannerCallback)
+void Screen::showNodePicker(const char *message, uint32_t durationMs, std::function<void(uint32_t)> bannerCallback)
 {
 #ifdef USE_EINK
     EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Skip full refresh for all overlay menus
@@ -196,7 +196,6 @@ void Screen::showNodePicker(const char *message, uint32_t durationMs, std::funct
 void Screen::showNumberPicker(const char *message, uint32_t durationMs, uint8_t digits,
                               std::function<void(uint32_t)> bannerCallback)
 {
-    LOG_WARN("Show Number Picker");
 #ifdef USE_EINK
     EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Skip full refresh for all overlay menus
 #endif
@@ -398,9 +397,7 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 #ifdef T_WATCH_S3
             PMU->enablePowerOutput(XPOWERS_ALDO2);
 #endif
-#ifdef HELTEC_TRACKER_V1_X
-            uint8_t tft_vext_enabled = digitalRead(VEXT_ENABLE);
-#endif
+
 #if !ARCH_PORTDUINO
             dispdev->displayOn();
 #endif
@@ -412,10 +409,7 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 
             dispdev->displayOn();
 #ifdef HELTEC_TRACKER_V1_X
-            // If the TFT VEXT power is not enabled, initialize the UI.
-            if (!tft_vext_enabled) {
-                ui->init();
-            }
+            ui->init();
 #endif
 #ifdef USE_ST7789
             pinMode(VTFT_CTRL, OUTPUT);
@@ -682,6 +676,11 @@ void Screen::forceDisplay(bool forceUiUpdate)
 
     // Tell EInk class to update the display
     static_cast<EInkDisplay *>(dispdev)->forceDisplay();
+#else
+    // No delay between UI frame rendering
+    if (forceUiUpdate) {
+        setFastFramerate();
+    }
 #endif
 }
 
@@ -1299,40 +1298,45 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
             devicestate.has_rx_text_message = true; // Needed to include the message frame
             hasUnreadMessage = true;                // Enables mail icon in the header
             setFrames(FOCUS_PRESERVE);              // Refresh frame list without switching view
-            forceDisplay();                         // Forces screen redraw
 
-            // === Prepare banner content ===
-            const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(packet->from);
-            const char *longName = (node && node->has_user) ? node->user.long_name : nullptr;
+            // Only wake/force display if the configuration allows it
+            if (shouldWakeOnReceivedMessage()) {
+                setOn(true);    // Wake up the screen first
+                forceDisplay(); // Forces screen redraw
 
-            const char *msgRaw = reinterpret_cast<const char *>(packet->decoded.payload.bytes);
+                // === Prepare banner content ===
+                const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(packet->from);
+                const char *longName = (node && node->has_user) ? node->user.long_name : nullptr;
 
-            char banner[256];
+                const char *msgRaw = reinterpret_cast<const char *>(packet->decoded.payload.bytes);
 
-            // Check for bell character in message to determine alert type
-            bool isAlert = false;
-            for (size_t i = 0; i < packet->decoded.payload.size && i < 100; i++) {
-                if (msgRaw[i] == '\x07') {
-                    isAlert = true;
-                    break;
+                char banner[256];
+
+                // Check for bell character in message to determine alert type
+                bool isAlert = false;
+                for (size_t i = 0; i < packet->decoded.payload.size && i < 100; i++) {
+                    if (msgRaw[i] == '\x07') {
+                        isAlert = true;
+                        break;
+                    }
                 }
-            }
 
-            if (isAlert) {
-                if (longName && longName[0]) {
-                    snprintf(banner, sizeof(banner), "Alert Received from\n%s", longName);
+                if (isAlert) {
+                    if (longName && longName[0]) {
+                        snprintf(banner, sizeof(banner), "Alert Received from\n%s", longName);
+                    } else {
+                        strcpy(banner, "Alert Received");
+                    }
                 } else {
-                    strcpy(banner, "Alert Received");
+                    if (longName && longName[0]) {
+                        snprintf(banner, sizeof(banner), "New Message from\n%s", longName);
+                    } else {
+                        strcpy(banner, "New Message");
+                    }
                 }
-            } else {
-                if (longName && longName[0]) {
-                    snprintf(banner, sizeof(banner), "New Message from\n%s", longName);
-                } else {
-                    strcpy(banner, "New Message");
-                }
-            }
 
-            screen->showSimpleBanner(banner, 3000);
+                screen->showSimpleBanner(banner, 3000);
+            }
         }
     }
 
@@ -1371,7 +1375,7 @@ int Screen::handleInputEvent(const InputEvent *event)
     setFastFramerate();                       // Draw ASAP
 #endif
     if (NotificationRenderer::isOverlayBannerShowing()) {
-        NotificationRenderer::inEvent = event->inputEvent;
+        NotificationRenderer::inEvent = *event;
         static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
         ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
         setFastFramerate(); // Draw ASAP
@@ -1465,3 +1469,23 @@ bool Screen::isOverlayBannerShowing()
 #else
 graphics::Screen::Screen(ScanI2C::DeviceAddress, meshtastic_Config_DisplayConfig_OledType, OLEDDISPLAY_GEOMETRY) {}
 #endif // HAS_SCREEN
+
+bool shouldWakeOnReceivedMessage()
+{
+    /*
+    The goal here is to determine when we do NOT wake up the screen on message received:
+    - Any ext. notifications are turned on
+    - If role is not client / client_mute
+    - If the battery level is very low
+    */
+    if (moduleConfig.external_notification.enabled) {
+        return false;
+    }
+    if (!meshtastic_Config_DeviceConfig_Role_CLIENT && !meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE) {
+        return false;
+    }
+    if (powerStatus && powerStatus->getBatteryChargePercent() < 10) {
+        return false;
+    }
+    return true;
+}
