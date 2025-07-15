@@ -94,10 +94,8 @@ int32_t AirQualityTelemetryModule::runOnce()
             return pmsa003iSensor.wakeUp();
 #endif /* PMSA003I_ENABLE_PIN */
 
-#ifdef SEN5X_ENABLE_PIN
         if (sen5xSensor.hasSensor() && !sen5xSensor.isActive())
             return sen5xSensor.wakeUp();
-#endif /* SEN5X_ENABLE_PIN */
 
         if (((lastSentToMesh == 0) ||
             !Throttle::isWithinTimespanMs(lastSentToMesh, Default::getConfiguredOrDefaultMsScaled(
@@ -115,13 +113,13 @@ int32_t AirQualityTelemetryModule::runOnce()
             lastSentToPhone = millis();
         }
 
+        // TODO - When running this continuously, we are turning on and off the sensors but not sending data to mesh or phone, which turns on the device unnecessarily for a while
 #ifdef PMSA003I_ENABLE_PIN
         pmsa003iSensor.sleep();
 #endif /* PMSA003I_ENABLE_PIN */
 
-#ifdef SEN5X_ENABLE_PIN
-        sen5xSensor.sleep();
-#endif /* SEN5X_ENABLE_PIN */
+        // TODO - Add logic here to send the sensor to idle ONLY if there is enough time to wake it up before the next reading cycle
+        sen5xSensor.idle();
 
     }
     return min(sendToPhoneIntervalMs, result);
@@ -167,8 +165,7 @@ void AirQualityTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSta
     const auto &m = telemetry.variant.air_quality_metrics;
 
     // Check if any telemetry field has valid data
-    bool hasAny = m.has_pm10_standard || m.has_pm25_standard || m.has_pm100_standard  || m.has_pm10_environmental || m.has_pm25_environmental ||
-                  m.has_pm100_environmental;
+    bool hasAny = m.has_pm10_standard || m.has_pm25_standard || m.has_pm100_standard;
 
     if (!hasAny) {
         display->drawString(x, currentY, "No Telemetry");
@@ -232,9 +229,10 @@ bool AirQualityTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPack
                  t->variant.air_quality_metrics.pm10_standard, t->variant.air_quality_metrics.pm25_standard,
                  t->variant.air_quality_metrics.pm100_standard);
 
-        LOG_INFO("                  | PM1.0(Environmental)=%i, PM2.5(Environmental)=%i, PM10.0(Environmental)=%i",
-                 t->variant.air_quality_metrics.pm10_environmental, t->variant.air_quality_metrics.pm25_environmental,
-                 t->variant.air_quality_metrics.pm100_environmental);
+        // TODO - Decide what to do with these
+        // LOG_INFO("                  | PM1.0(Environmental)=%i, PM2.5(Environmental)=%i, PM10.0(Environmental)=%i",
+        //          t->variant.air_quality_metrics.pm10_environmental, t->variant.air_quality_metrics.pm25_environmental,
+        //          t->variant.air_quality_metrics.pm100_environmental);
 #endif
         // release previous packet before occupying a new spot
         if (lastMeasurementPacket != nullptr)
@@ -254,16 +252,14 @@ bool AirQualityTelemetryModule::getAirQualityTelemetry(meshtastic_Telemetry *m)
     m->which_variant = meshtastic_Telemetry_air_quality_metrics_tag;
     m->variant.air_quality_metrics = meshtastic_AirQualityMetrics_init_zero;
 
+    // TODO - This is currently problematic, as it assumes only one sensor connected
+    // We should implement some logic to avoid not getting data if one sensor disconnects
     if (pmsa003iSensor.hasSensor()) {
-        // TODO - Should we check for sensor state here?
-        // If a sensor is sleeping, we should know and check to wake it up
         valid = valid && pmsa003iSensor.getMetrics(m);
         hasSensor = true;
     }
 
     if (sen5xSensor.hasSensor()) {
-        // TODO - Should we check for sensor state here?
-        // If a sensor is sleeping, we should know and check to wake it up
         valid = valid && sen5xSensor.getMetrics(m);
         hasSensor = true;
     }
@@ -304,11 +300,12 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
     m.which_variant = meshtastic_Telemetry_air_quality_metrics_tag;
     m.time = getTime();
+    // TODO - if one sensor fails here, we will stop taking measurements from everything
+    // Can we do this in a smarter way, for instance checking the nodeTelemetrySensor map and making it dynamic?
     if (getAirQualityTelemetry(&m)) {
         LOG_INFO("Send: pm10_standard=%u, pm25_standard=%u, pm100_standard=%u, pm10_environmental=%u, pm100_environmental=%u",
                  m.variant.air_quality_metrics.pm10_standard, m.variant.air_quality_metrics.pm25_standard,
-                 m.variant.air_quality_metrics.pm100_standard, m.variant.air_quality_metrics.pm10_environmental,
-                 m.variant.air_quality_metrics.pm100_environmental);
+                 m.variant.air_quality_metrics.pm100_standard);
 
         meshtastic_MeshPacket *p = allocDataProtobuf(m);
         p->to = dest;

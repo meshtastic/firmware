@@ -58,7 +58,7 @@ int32_t PMSA003ISensor::runOnce()
 
     restoreClock(currentClock);
 
-    status = 1; 
+    status = 1;
     LOG_INFO("PMSA003I Enabled");
 
     return initI2CSensor();
@@ -136,19 +136,19 @@ bool PMSA003ISensor::getMetrics(meshtastic_Telemetry *measurement)
 
     measurement->variant.air_quality_metrics.has_particles_05um = true;
     measurement->variant.air_quality_metrics.particles_05um = read16(buffer, 18);
-  
+
     measurement->variant.air_quality_metrics.has_particles_10um = true;
     measurement->variant.air_quality_metrics.particles_10um = read16(buffer, 20);
-  
+
     measurement->variant.air_quality_metrics.has_particles_25um = true;
     measurement->variant.air_quality_metrics.particles_25um = read16(buffer, 22);
-   
+
     measurement->variant.air_quality_metrics.has_particles_50um = true;
     measurement->variant.air_quality_metrics.particles_50um = read16(buffer, 24);
-  
+
     measurement->variant.air_quality_metrics.has_particles_100um = true;
     measurement->variant.air_quality_metrics.particles_100um = read16(buffer, 26);
-  
+
     return true;
 }
 
