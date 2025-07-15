@@ -367,37 +367,10 @@ int32_t SEN5XSensor::runOnce()
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
 
-    // Check if firmware version allows The direct switch between Measurement and RHT/Gas-Only Measurement mode
-    if (!getVersion()) return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
-    if (firmwareVer < 2) {
-        LOG_ERROR("SEN5X: error firmware is too old and will not work with this implementation");
-        return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
-    }
-
     // Detection succeeded
     state = SEN5X_IDLE;
     status = 1;
     LOG_INFO("SEN5X Enabled");
-
-    // uint16_t error;
-    // char errorMessage[256];
-    // error = sen5x.deviceReset();
-    // if (error) {
-    //     LOG_INFO("Error trying to execute deviceReset(): ");
-    //     errorToString(error, errorMessage, 256);
-    //     LOG_INFO(errorMessage);
-    //     return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
-    // }
-
-    // error = sen5x.startMeasurement();
-    // if (error) {
-    //     LOG_INFO("Error trying to execute startMeasurement(): ");
-    //     errorToString(error, errorMessage, 256);
-    //     LOG_INFO(errorMessage);
-    //     return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
-    // } else {
-    //     status = 1;
-    // }
 
     // Detection succeeded
     state = SEN5X_IDLE;
@@ -468,6 +441,7 @@ bool SEN5XSensor::readValues()
 
     // TODO we should check if values are NAN before converting them
     // convert them based on Sensirion Arduino lib
+    // TODO - Change based on the type of final values
     sen5xmeasurement.pM1p0          = uint_pM1p0      / 10.0f;
     sen5xmeasurement.pM2p5          = uint_pM2p5      / 10.0f;
     sen5xmeasurement.pM4p0          = uint_pM4p0      / 10.0f;
@@ -477,8 +451,8 @@ bool SEN5XSensor::readValues()
     sen5xmeasurement.vocIndex       = int_vocIndex    / 10.0f;
     sen5xmeasurement.noxIndex       = int_noxIndex    / 10.0f;
 
-    // TODO - this is currently returning crap
-    LOG_INFO("Got: pM1p0=%.2f, pM2p5=%.2f, pM4p0=%.2f, pM10p0=%.2f",
+    // TODO - change depending on the final values
+    LOG_DEBUG("Got: pM1p0=%.2f, pM2p5=%.2f, pM4p0=%.2f, pM10p0=%.2f",
                 sen5xmeasurement.pM1p0, sen5xmeasurement.pM2p5,
                 sen5xmeasurement.pM4p0, sen5xmeasurement.pM10p0);
 
@@ -497,7 +471,7 @@ bool SEN5XSensor::readPnValues()
     uint8_t dataBuffer[30];
     size_t receivedNumber = readBuffer(&dataBuffer[0], 30);
     if (receivedNumber == 0) {
-        LOG_ERROR("SEN5X: Error getting PM values");
+        LOG_ERROR("SEN5X: Error getting PN values");
         return false;
     }
 
@@ -526,6 +500,9 @@ bool SEN5XSensor::readPnValues()
     sen5xmeasurement.tSize   = uint_tSize  / 1000.0f;
 
     // Convert PN readings from #/cm3 to #/0.1l
+    // TODO - Decide if those units are right
+    // TODO Remove accumuluative values:
+    // https://github.com/fablabbcn/smartcitizen-kit-2x/issues/85
     sen5xmeasurement.pN0p5  *= 100;
     sen5xmeasurement.pN1p0  *= 100;
     sen5xmeasurement.pN2p5  *= 100;
@@ -533,8 +510,8 @@ bool SEN5XSensor::readPnValues()
     sen5xmeasurement.pN10p0 *= 100;
     sen5xmeasurement.tSize  *= 100;
 
-    // TODO - this is currently returning crap
-    LOG_INFO("Got: pN0p5=%u, pN1p0=%u, pN2p5=%u, pN4p0=%u, pN10p0=%u, tSize=%.2f",
+    // TODO - Change depending on the final values
+    LOG_DEBUG("Got: pN0p5=%u, pN1p0=%u, pN2p5=%u, pN4p0=%u, pN10p0=%u, tSize=%.2f",
                 sen5xmeasurement.pN0p5, sen5xmeasurement.pN1p0,
                 sen5xmeasurement.pN2p5, sen5xmeasurement.pN4p0,
                 sen5xmeasurement.pN10p0, sen5xmeasurement.tSize
