@@ -344,6 +344,35 @@ void menuHandler::homeBaseMenu()
     screen->showOverlayBanner(bannerOptions);
 }
 
+void menuHandler::textMessageBaseMenu()
+{
+    enum optionsNumbers { Back, Preset, Freetext, enumEnd };
+
+    static const char *optionsArray[enumEnd] = {"Back"};
+    static int optionsEnumArray[enumEnd] = {Back};
+    int options = 1;
+    optionsArray[options] = "New Preset Msg";
+    optionsEnumArray[options++] = Preset;
+    if (kb_found) {
+        optionsArray[options] = "New Freetext Msg";
+        optionsEnumArray[options++] = Freetext;
+    }
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Message Action";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
+    bannerOptions.optionsCount = options;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Preset) {
+            cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST);
+        } else if (selected == Freetext) {
+            cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST);
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
 void menuHandler::systemBaseMenu()
 {
     // Check if brightness is supported
