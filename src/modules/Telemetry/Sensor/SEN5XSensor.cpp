@@ -362,16 +362,6 @@ int32_t SEN5XSensor::runOnce()
     }
     delay(200); // From Sensirion Arduino library
 
-    if (!findModel()) {
-        LOG_ERROR("SEN5X: error finding sensor model");
-        return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
-    }
-
-    // Detection succeeded
-    state = SEN5X_IDLE;
-    status = 1;
-    LOG_INFO("SEN5X Enabled");
-
     // Detection succeeded
     state = SEN5X_IDLE;
     status = 1;
