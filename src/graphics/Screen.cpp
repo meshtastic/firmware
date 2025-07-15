@@ -1374,9 +1374,12 @@ int Screen::handleInputEvent(const InputEvent *event)
                     menuHandler::clockMenu();
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.lora) {
                     menuHandler::LoraRegionPicker();
-                } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.textMessage &&
-                           devicestate.rx_text_message.from) {
-                    menuHandler::messageResponseMenu();
+                } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.textMessage) {
+                    if (devicestate.rx_text_message.from) {
+                        menuHandler::messageResponseMenu();
+                    } else {
+                        menuHandler::textMessageBaseMenu();
+                    }
                 } else if (framesetInfo.positions.firstFavorite != 255 &&
                            this->ui->getUiState()->currentFrame >= framesetInfo.positions.firstFavorite &&
                            this->ui->getUiState()->currentFrame <= framesetInfo.positions.lastFavorite) {
