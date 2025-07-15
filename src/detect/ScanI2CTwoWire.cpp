@@ -128,7 +128,6 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
     DeviceAddress addr(port, 0x00);
 
     uint16_t registerValue = 0x00;
-    String prod = "";
     ScanI2C::DeviceType type;
     TwoWire *i2cBus;
 #ifdef RV3028_RTC
@@ -574,12 +573,13 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 logFoundDevice("ICM20948", (uint8_t)addr.address);
                 break;
 #endif
-                prod = readSEN5xProductName(i2cBus, addr.address);
                 if (registerValue == 0xEA) {
                     type = ICM20948;
                     logFoundDevice("ICM20948", (uint8_t)addr.address);
                     break;
                 } else {
+                    String prod = "";
+                    prod = readSEN5xProductName(i2cBus, addr.address);
                     if (prod.startsWith("SEN55")) {
                         type = SEN5X;
                         logFoundDevice("Sensirion SEN55", addr.address);
