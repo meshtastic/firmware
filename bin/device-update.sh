@@ -30,6 +30,17 @@ Flash image file to device, leave existing system intact."
 EOF
 }
 
+# Check for --change-mode and remove it from arguments
+NEW_ARGS=()
+for arg in "$@"; do
+    if [ "$arg" = "--change-mode" ]; then
+        CHANGE_MODE=true
+    else
+        NEW_ARGS+=("$arg")
+    fi
+done
+
+set -- "${NEW_ARGS[@]}"
 
 while getopts ":hp:P:f:" opt; do
     case "${opt}" in
@@ -43,9 +54,6 @@ while getopts ":hp:P:f:" opt; do
             ;;
         f)  FILENAME=${OPTARG}
             ;;
-	    --change-mode)
-            CHANGE_MODE=true
-            ;;
         *)
             echo "Invalid flag."
             show_help >&2
@@ -55,7 +63,7 @@ while getopts ":hp:P:f:" opt; do
 done
 shift "$((OPTIND-1))"
 
-if [[ $CHANGE_MODE == true ]]; then
+if [ "$CHANGE_MODE" = true ]; then
 	$ESPTOOL_CMD --baud 1200 --after no_reset read_flash_status
     exit 0
 fi

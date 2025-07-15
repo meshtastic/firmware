@@ -12,9 +12,11 @@ permissions:
 
 jobs:
   native-tests:
+    if: github.repository == 'meshtastic/firmware'
     uses: ./.github/workflows/test_native.yml
 
   hardware-tests:
+    if: github.repository == 'meshtastic/firmware'
     runs-on: test-runner
     steps:
       - name: Checkout code

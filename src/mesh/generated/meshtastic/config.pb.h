@@ -102,7 +102,11 @@ typedef enum _meshtastic_Config_DeviceConfig_BuzzerMode {
     meshtastic_Config_DeviceConfig_BuzzerMode_NOTIFICATIONS_ONLY = 2,
     /* Non-notification system buzzer tones only.
  Buzzer is enabled only for non-notification tones such as button presses, startup, shutdown, but not for alerts. */
-    meshtastic_Config_DeviceConfig_BuzzerMode_SYSTEM_ONLY = 3
+    meshtastic_Config_DeviceConfig_BuzzerMode_SYSTEM_ONLY = 3,
+    /* Direct Message notifications only.
+ Buzzer is enabled only for direct messages and alerts, but not for button presses.
+ External notification config determines the specifics of the notification behavior. */
+    meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY = 4
 } meshtastic_Config_DeviceConfig_BuzzerMode;
 
 /* Bit field of boolean configuration options, indicating which optional
@@ -645,8 +649,8 @@ extern "C" {
 #define _meshtastic_Config_DeviceConfig_RebroadcastMode_ARRAYSIZE ((meshtastic_Config_DeviceConfig_RebroadcastMode)(meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY+1))
 
 #define _meshtastic_Config_DeviceConfig_BuzzerMode_MIN meshtastic_Config_DeviceConfig_BuzzerMode_ALL_ENABLED
-#define _meshtastic_Config_DeviceConfig_BuzzerMode_MAX meshtastic_Config_DeviceConfig_BuzzerMode_SYSTEM_ONLY
-#define _meshtastic_Config_DeviceConfig_BuzzerMode_ARRAYSIZE ((meshtastic_Config_DeviceConfig_BuzzerMode)(meshtastic_Config_DeviceConfig_BuzzerMode_SYSTEM_ONLY+1))
+#define _meshtastic_Config_DeviceConfig_BuzzerMode_MAX meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY
+#define _meshtastic_Config_DeviceConfig_BuzzerMode_ARRAYSIZE ((meshtastic_Config_DeviceConfig_BuzzerMode)(meshtastic_Config_DeviceConfig_BuzzerMode_DIRECT_MSG_ONLY+1))
 
 #define _meshtastic_Config_PositionConfig_PositionFlags_MIN meshtastic_Config_PositionConfig_PositionFlags_UNSET
 #define _meshtastic_Config_PositionConfig_PositionFlags_MAX meshtastic_Config_PositionConfig_PositionFlags_SPEED

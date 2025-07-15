@@ -1,3 +1,5 @@
+#pragma once
+#if HAS_SCREEN
 #include "configuration.h"
 namespace graphics
 {
@@ -13,9 +15,7 @@ class menuHandler
         clock_face_picker,
         clock_menu,
         position_base_menu,
-#if !MESHTASTIC_EXCLUDE_GPS
         gps_toggle_menu,
-#endif
         compass_point_north_menu,
         reset_node_db_menu,
         buzzermodemenupicker,
@@ -23,10 +23,20 @@ class menuHandler
         tftcolormenupicker,
         brightness_picker,
         reboot_menu,
+        shutdown_menu,
         add_favorite,
         remove_favorite,
         test_menu,
-        number_test
+        number_test,
+        wifi_toggle_menu,
+        bluetooth_toggle_menu,
+        notifications_menu,
+        screen_options_menu,
+        power_menu,
+        system_base_menu,
+        key_verification_init,
+        key_verification_final_prompt,
+        throttle_message
     };
     static screenMenus menuQueue;
 
@@ -38,6 +48,7 @@ class menuHandler
     static void ClockFacePicker();
     static void messageResponseMenu();
     static void homeBaseMenu();
+    static void textMessageBaseMenu();
     static void systemBaseMenu();
     static void favoriteBaseMenu();
     static void positionBaseMenu();
@@ -50,10 +61,23 @@ class menuHandler
     static void resetNodeDBMenu();
     static void BrightnessPickerMenu();
     static void rebootMenu();
+    static void shutdownMenu();
     static void addFavoriteMenu();
     static void removeFavoriteMenu();
     static void testMenu();
     static void numberTest();
+    static void wifiBaseMenu();
+    static void wifiToggleMenu();
+    static void notificationsMenu();
+    static void screenOptionsMenu();
+    static void powerMenu();
+
+  private:
+    static void saveUIConfig();
+    static void keyVerificationInitMenu();
+    static void keyVerificationFinalPrompt();
+    static void BluetoothToggleMenu();
 };
 
 } // namespace graphics
+#endif
