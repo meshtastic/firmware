@@ -84,12 +84,12 @@ bool PMSA003ISensor::getMetrics(meshtastic_Telemetry *measurement)
     measurement->variant.air_quality_metrics.has_pm100_standard = true;
     measurement->variant.air_quality_metrics.pm100_standard = pmsa003iData.pm100_standard;
 
-    measurement->variant.air_quality_metrics.has_pm10_environmental = true;
-    measurement->variant.air_quality_metrics.pm10_environmental = pmsa003iData.pm10_env;
-    measurement->variant.air_quality_metrics.has_pm25_environmental = true;
-    measurement->variant.air_quality_metrics.pm25_environmental = pmsa003iData.pm25_env;
-    measurement->variant.air_quality_metrics.has_pm100_environmental = true;
-    measurement->variant.air_quality_metrics.pm100_environmental = pmsa003iData.pm100_env;
+    // measurement->variant.air_quality_metrics.has_pm10_environmental = true;
+    // measurement->variant.air_quality_metrics.pm10_environmental = pmsa003iData.pm10_env;
+    // measurement->variant.air_quality_metrics.has_pm25_environmental = true;
+    // measurement->variant.air_quality_metrics.pm25_environmental = pmsa003iData.pm25_env;
+    // measurement->variant.air_quality_metrics.has_pm100_environmental = true;
+    // measurement->variant.air_quality_metrics.pm100_environmental = pmsa003iData.pm100_env;
 
     return true;
 }
