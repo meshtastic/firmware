@@ -873,12 +873,16 @@ void Power::readPowerStatus()
             LOG_DEBUG("Low voltage counter: %d/10", low_voltage_counter);
             if (low_voltage_counter > 10) {
 #ifdef ARCH_NRF52
-                // We can't trigger deep sleep on NRF52, it's freezing the board
-                LOG_DEBUG("Low voltage detected, but not trigger deep sleep");
-#else
-                LOG_INFO("Low voltage detected, trigger deep sleep");
-                powerFSM.trigger(EVENT_LOW_BATTERY);
+                // NRF52 doesn't wake from super deep sleep for some reason
+                // Only trigger it if Super Deep Sleep Seconds is UINT32_MAX
+                if (config.power.sds_secs != UINT32_MAX) {
+                    LOG_DEBUG("Low voltage detected, but not triggering deep sleep");
+                } else
 #endif
+                {
+                    LOG_INFO("Low voltage detected, trigger deep sleep");
+                    powerFSM.trigger(EVENT_LOW_BATTERY);
+                }
             }
         } else {
             low_voltage_counter = 0;
