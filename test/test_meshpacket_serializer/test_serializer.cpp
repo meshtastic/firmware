@@ -1,13 +1,19 @@
+#include "test_helpers.h"
 #include <Arduino.h>
 #include <unity.h>
 
-// Include all modular test files
-#include "ports/test_encrypted.cpp"
-#include "ports/test_nodeinfo.cpp"
-#include "ports/test_position.cpp"
-#include "ports/test_telemetry.cpp"
-#include "ports/test_text_message.cpp"
-#include "ports/test_waypoint.cpp"
+// Forward declarations for test functions
+void test_text_message_serialization();
+void test_position_serialization();
+void test_nodeinfo_serialization();
+void test_waypoint_serialization();
+void test_telemetry_device_metrics_serialization();
+void test_telemetry_environment_metrics_serialization();
+void test_telemetry_environment_metrics_comprehensive();
+void test_telemetry_environment_metrics_missing_fields();
+void test_telemetry_environment_metrics_complete_coverage();
+void test_telemetry_environment_metrics_unset_fields();
+void test_encrypted_packet_serialization();
 
 void setup()
 {

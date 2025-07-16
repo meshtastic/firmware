@@ -15,9 +15,9 @@ static meshtastic_MeshPacket create_test_packet(meshtastic_PortNum port, const u
 {
     meshtastic_MeshPacket packet = meshtastic_MeshPacket_init_zero;
 
-    packet.id = 12345;
-    packet.from = 0xAABBCCDD;
-    packet.to = 0xFFFFFFFF;
+    packet.id = 0x9999;
+    packet.from = 0x11223344;
+    packet.to = 0x55667788;
     packet.channel = 0;
     packet.hop_limit = 3;
     packet.want_ack = false;
@@ -34,8 +34,8 @@ static meshtastic_MeshPacket create_test_packet(meshtastic_PortNum port, const u
     memcpy(packet.decoded.payload.bytes, payload, payload_size);
     packet.decoded.payload.size = payload_size;
     packet.decoded.want_response = false;
-    packet.decoded.dest = 0xFFFFFFFF;
-    packet.decoded.source = 0xAABBCCDD;
+    packet.decoded.dest = 0x55667788;
+    packet.decoded.source = 0x11223344;
     packet.decoded.request_id = 0;
     packet.decoded.reply_id = 0;
     packet.decoded.emoji = 0;
