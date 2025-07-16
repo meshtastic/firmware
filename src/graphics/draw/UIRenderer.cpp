@@ -24,6 +24,23 @@ extern graphics::Screen *screen;
 namespace graphics
 {
 NodeNum UIRenderer::currentFavoriteNodeNum = 0;
+std::vector<meshtastic_NodeInfoLite *> graphics::UIRenderer::favoritedNodes;
+
+void graphics::UIRenderer::rebuildFavoritedNodes()
+{
+    favoritedNodes.clear();
+    size_t total = nodeDB->getNumMeshNodes();
+    for (size_t i = 0; i < total; i++) {
+        meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(i);
+        if (!n || n->num == nodeDB->getNodeNum())
+            continue;
+        if (n->is_favorite)
+            favoritedNodes.push_back(n);
+    }
+
+    std::sort(favoritedNodes.begin(), favoritedNodes.end(),
+              [](const meshtastic_NodeInfoLite *a, const meshtastic_NodeInfoLite *b) { return a->num < b->num; });
+}
 
 #if !MESHTASTIC_EXCLUDE_GPS
 // GeoCoord object for coordinate conversions
@@ -201,27 +218,7 @@ void UIRenderer::drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const mes
 // **********************
 void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    // --- Cache favorite nodes for the current frame only, to save computation ---
-    static std::vector<meshtastic_NodeInfoLite *> favoritedNodes;
-    static int prevFrame = -1;
 
-    // --- Only rebuild favorites list if we're on a new frame ---
-    if (state->currentFrame != prevFrame) {
-        prevFrame = state->currentFrame;
-        favoritedNodes.clear();
-        size_t total = nodeDB->getNumMeshNodes();
-        for (size_t i = 0; i < total; i++) {
-            meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(i);
-            // Skip nulls and ourself
-            if (!n || n->num == nodeDB->getNodeNum())
-                continue;
-            if (n->is_favorite)
-                favoritedNodes.push_back(n);
-        }
-        // Keep a stable, consistent display order
-        std::sort(favoritedNodes.begin(), favoritedNodes.end(),
-                  [](const meshtastic_NodeInfoLite *a, const meshtastic_NodeInfoLite *b) { return a->num < b->num; });
-    }
     if (favoritedNodes.empty())
         return;
 
