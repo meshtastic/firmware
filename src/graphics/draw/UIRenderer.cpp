@@ -657,7 +657,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
 
     char combinedName[50];
     snprintf(combinedName, sizeof(combinedName), "%s (%s)", longNameStr.empty() ? "" : longNameStr.c_str(), shortnameble);
-    if (SCREEN_WIDTH - (display->getStringWidth(longName) + display->getStringWidth(shortnameble)) > 10) {
+    if (SCREEN_WIDTH - (display->getStringWidth(combinedName)) > 10) {
         size_t len = strlen(combinedName);
         if (len >= 3 && strcmp(combinedName + len - 3, " ()") == 0) {
             combinedName[len - 3] = '\0'; // Remove the last three characters
@@ -668,7 +668,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
             nameX, ((rows == 4) ? getTextPositions(display)[line++] : getTextPositions(display)[line++]) + yOffset, combinedName);
     } else {
         // === LongName Centered ===
-        textWidth = display->getStringWidth(longName);
+        textWidth = display->getStringWidth(longNameStr.c_str());
         nameX = (SCREEN_WIDTH - textWidth) / 2;
         display->drawString(nameX, getTextPositions(display)[line++], longNameStr.c_str());
 
