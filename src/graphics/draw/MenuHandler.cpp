@@ -450,11 +450,11 @@ void menuHandler::favoriteBaseMenu()
     bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.optionsCount = options;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == 1) {
+        if (selected == Preset) {
             cannedMessageModule->LaunchWithDestination(graphics::UIRenderer::currentFavoriteNodeNum);
-        } else if (selected == 2 && kb_found) {
+        } else if (selected == Freetext) {
             cannedMessageModule->LaunchFreetextWithDestination(graphics::UIRenderer::currentFavoriteNodeNum);
-        } else if ((!kb_found && selected == 2) || (selected == 3 && kb_found)) {
+        } else if (selected == Remove) {
             menuHandler::menuQueue = menuHandler::remove_favorite;
             screen->runNow();
         }
@@ -856,8 +856,9 @@ void menuHandler::removeFavoriteMenu()
     bannerOptions.optionsCount = 2;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 1) {
+            LOG_INFO("Removing %x as favorite node", graphics::UIRenderer::currentFavoriteNodeNum);
             nodeDB->set_favorite(false, graphics::UIRenderer::currentFavoriteNodeNum);
-            screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
+            screen->setFrames(graphics::Screen::FOCUS_DEFAULT);
         }
     };
     screen->showOverlayBanner(bannerOptions);
