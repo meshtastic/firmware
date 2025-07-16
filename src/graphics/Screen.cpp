@@ -386,9 +386,7 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 #ifdef T_WATCH_S3
             PMU->enablePowerOutput(XPOWERS_ALDO2);
 #endif
-#ifdef HELTEC_TRACKER_V1_X
-            uint8_t tft_vext_enabled = digitalRead(VEXT_ENABLE);
-#endif
+
 #if !ARCH_PORTDUINO
             dispdev->displayOn();
 #endif
@@ -400,10 +398,7 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 
             dispdev->displayOn();
 #ifdef HELTEC_TRACKER_V1_X
-            // If the TFT VEXT power is not enabled, initialize the UI.
-            if (!tft_vext_enabled) {
-                ui->init();
-            }
+            ui->init();
 #endif
 #ifdef USE_ST7789
             pinMode(VTFT_CTRL, OUTPUT);
@@ -1379,9 +1374,12 @@ int Screen::handleInputEvent(const InputEvent *event)
                     menuHandler::clockMenu();
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.lora) {
                     menuHandler::LoraRegionPicker();
-                } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.textMessage &&
-                           devicestate.rx_text_message.from) {
-                    menuHandler::messageResponseMenu();
+                } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.textMessage) {
+                    if (devicestate.rx_text_message.from) {
+                        menuHandler::messageResponseMenu();
+                    } else {
+                        menuHandler::textMessageBaseMenu();
+                    }
                 } else if (framesetInfo.positions.firstFavorite != 255 &&
                            this->ui->getUiState()->currentFrame >= framesetInfo.positions.firstFavorite &&
                            this->ui->getUiState()->currentFrame <= framesetInfo.positions.lastFavorite) {

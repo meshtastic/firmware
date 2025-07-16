@@ -6,11 +6,11 @@
 #include <pb.h>
 #include "meshtastic/channel.pb.h"
 #include "meshtastic/config.pb.h"
+#include "meshtastic/device_ui.pb.h"
 #include "meshtastic/module_config.pb.h"
 #include "meshtastic/portnums.pb.h"
 #include "meshtastic/telemetry.pb.h"
 #include "meshtastic/xmodem.pb.h"
-#include "meshtastic/device_ui.pb.h"
 
 #if PB_PROTO_HEADER_VERSION != 40
 #error Regenerate this file with the current version of nanopb generator.
@@ -247,32 +247,26 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_NOMADSTAR_METEOR_PRO = 96,
     /* Elecrow CrowPanel Advance models, ESP32-S3 and TFT with SX1262 radio plugin */
     meshtastic_HardwareModel_CROWPANEL = 97,
-    /* *
- Lilygo LINK32 board with sensors */
+    /* Lilygo LINK32 board with sensors */
     meshtastic_HardwareModel_LINK_32 = 98,
-    /* *
- Seeed Tracker L1 */
+    /* Seeed Tracker L1 */
     meshtastic_HardwareModel_SEEED_WIO_TRACKER_L1 = 99,
-    /* *
- Seeed Tracker L1 EINK driver */
+    /* Seeed Tracker L1 EINK driver */
     meshtastic_HardwareModel_SEEED_WIO_TRACKER_L1_EINK = 100,
     /* Reserved ID for future and past use */
     meshtastic_HardwareModel_QWANTZ_TINY_ARMS = 101,
-    /* *
- Lilygo T-Deck Pro */
+    /* Lilygo T-Deck Pro */
     meshtastic_HardwareModel_T_DECK_PRO = 102,
-    /* *
- Lilygo TLora Pager */
+    /* Lilygo TLora Pager */
     meshtastic_HardwareModel_T_LORA_PAGER = 103,
-    /* *
- GAT562 Mesh Trial Tracker */
+    /* GAT562 Mesh Trial Tracker */
     meshtastic_HardwareModel_GAT562_MESH_TRIAL_TRACKER = 104,
-    /* *
- RAKwireless WisMesh Tag */
+    /* RAKwireless WisMesh Tag */
     meshtastic_HardwareModel_WISMESH_TAG = 105,
-    /* *
- RAKwireless WisBlock Core RAK3312 https://docs.rakwireless.com/product-categories/wisduo/rak3112-module/overview/ */
+    /* RAKwireless WisBlock Core RAK3312 https://docs.rakwireless.com/product-categories/wisduo/rak3112-module/overview/ */
     meshtastic_HardwareModel_RAK3312 = 106,
+    /* Elecrow ThinkNode M5 https://www.elecrow.com/wiki/ThinkNode_M5_Meshtastic_LoRa_Signal_Transceiver_ESP32-S3.html */
+    meshtastic_HardwareModel_THINKNODE_M5 = 107,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
