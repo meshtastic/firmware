@@ -182,7 +182,7 @@ void AirQualityTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSta
     if (m.has_pm100_standard)
         entries.push_back("PM10.0: " + String(m.pm100_standard) + "ug/m3");
     if (m.has_co2)
-        entries.push_back("CO2: " + String(m.co2, 0) + "ppm");
+        entries.push_back("CO2: " + String(m.co2) + "ppm");
 
 
     // === Show first available metric on top-right of first line ===
