@@ -94,8 +94,14 @@ int32_t AirQualityTelemetryModule::runOnce()
             return pmsa003iSensor.wakeUp();
 #endif /* PMSA003I_ENABLE_PIN */
 
-        if (sen5xSensor.hasSensor() && !sen5xSensor.isActive())
-            return sen5xSensor.wakeUp();
+        // Wake up the sensors that need it, before we need to take telemetry data
+        if ((lastSentToMesh == 0) ||
+            !Throttle::isWithinTimespanMs(lastSentToMesh - SEN5X_WARMUP_MS_1, Default::getConfiguredOrDefaultMsScaled(
+                                                            moduleConfig.telemetry.air_quality_interval,
+                                                            default_telemetry_broadcast_interval_secs, numOnlineNodes))) {
+            if (sen5xSensor.hasSensor() && !sen5xSensor.isActive())
+                return sen5xSensor.wakeUp();
+        }
 
         if (((lastSentToMesh == 0) ||
             !Throttle::isWithinTimespanMs(lastSentToMesh, Default::getConfiguredOrDefaultMsScaled(
@@ -113,14 +119,14 @@ int32_t AirQualityTelemetryModule::runOnce()
             lastSentToPhone = millis();
         }
 
-        // TODO - When running this continuously, we are turning on and off the sensors but not sending data to mesh or phone, which turns on the device unnecessarily for a while
+
+        // TODO - Add logic here to send the sensor to idle ONLY if there is enough time to wake it up before the next reading cycle
 #ifdef PMSA003I_ENABLE_PIN
         pmsa003iSensor.sleep();
 #endif /* PMSA003I_ENABLE_PIN */
 
-        // TODO - Add logic here to send the sensor to idle ONLY if there is enough time to wake it up before the next reading cycle
-        sen5xSensor.idle();
-
+            if (sen5xSensor.hasSensor() && sen5xSensor.isActive())
+                sen5xSensor.idle();
     }
     return min(sendToPhoneIntervalMs, result);
 }
