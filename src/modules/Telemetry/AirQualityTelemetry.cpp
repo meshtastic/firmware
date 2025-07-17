@@ -132,8 +132,16 @@ int32_t AirQualityTelemetryModule::runOnce()
         pmsa003iSensor.sleep();
 #endif /* PMSA003I_ENABLE_PIN */
 
-        if (sen5xSensor.hasSensor() && sen5xSensor.isActive() )
-            sen5xSensor.idle();
+        if (sen5xSensor.hasSensor() && sen5xSensor.isActive()) {
+            if (SEN5X_WARMUP_MS_2 < Default::getConfiguredOrDefaultMsScaled(
+                moduleConfig.telemetry.air_quality_interval,
+                default_telemetry_broadcast_interval_secs, numOnlineNodes)) {
+                    LOG_DEBUG("SEN5X: Disabling sensor until next period");
+                    sen5xSensor.idle();
+            } else {
+                LOG_DEBUG("SEN5X: Sensor stays enabled due to warm up period");
+            }
+        }
     }
     return min(sendToPhoneIntervalMs, result);
 }
