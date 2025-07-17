@@ -657,9 +657,11 @@ bool SEN5XSensor::getMetrics(meshtastic_Telemetry *measurement)
     } else if (response == 1) {
         // TODO return because data was not ready yet
         // Should this return false?
+        idle();
         return false;
     } else if (response == 2) {
         // Return with error for non-existing data
+        idle();
         return false;
     }
 
