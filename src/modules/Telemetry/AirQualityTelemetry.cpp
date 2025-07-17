@@ -47,6 +47,7 @@ int32_t AirQualityTelemetryModule::runOnce()
     }
 
     uint32_t result = UINT32_MAX;
+    uint32_t sen5xPendingForReady;
 
     /*
         Uncomment the preferences below if you want to use the module
@@ -102,6 +103,14 @@ int32_t AirQualityTelemetryModule::runOnce()
                 return sen5xSensor.wakeUp();
         }
 
+        // Check if sen5x is ready to return data, or if it needs more time because of the low concentration threshold
+        if (sen5xSensor.hasSensor() && sen5xSensor.isActive()) {
+            sen5xPendingForReady = sen5xSensor.pendingForReady();
+            if (sen5xPendingForReady) {
+                return sen5xPendingForReady;
+            }
+        }
+
         if (((lastSentToMesh == 0) ||
             !Throttle::isWithinTimespanMs(lastSentToMesh, Default::getConfiguredOrDefaultMsScaled(
                                                             moduleConfig.telemetry.air_quality_interval,
@@ -118,14 +127,13 @@ int32_t AirQualityTelemetryModule::runOnce()
             lastSentToPhone = millis();
         }
 
-
         // TODO - Add logic here to send the sensor to idle ONLY if there is enough time to wake it up before the next reading cycle
 #ifdef PMSA003I_ENABLE_PIN
         pmsa003iSensor.sleep();
 #endif /* PMSA003I_ENABLE_PIN */
 
-            if (sen5xSensor.hasSensor() && sen5xSensor.isActive())
-                sen5xSensor.idle();
+        if (sen5xSensor.hasSensor() && sen5xSensor.isActive() )
+            sen5xSensor.idle();
     }
     return min(sendToPhoneIntervalMs, result);
 }
