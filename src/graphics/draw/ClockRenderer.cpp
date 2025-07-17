@@ -186,7 +186,7 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
 {
     display->clear();
     display->setTextAlignment(TEXT_ALIGN_LEFT);
-    int line = 1;
+
     // === Set Title, Blank for Clock
     const char *titleStr = "";
     // === Header ===
@@ -230,6 +230,8 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
 
 #ifdef T_WATCH_S3
     float scale = 1.5;
+#elif defined(CHATTER_2)
+    float scale = 1.1;
 #else
     float scale = 0.75;
     if (isHighResolution) {
@@ -285,6 +287,9 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
     int yOffset = (isHighResolution) ? 3 : 1;
 #ifdef SENSECAP_INDICATOR
     yOffset -= 3;
+#endif
+#ifdef T_DECK
+    yOffset -= 5;
 #endif
     if (config.display.use_12h_clock) {
         display->drawString(startingHourMinuteTextX + xOffset, (display->getHeight() - hourMinuteTextY) - yOffset - 2,

@@ -39,9 +39,9 @@ template <typename T, std::size_t N> std::size_t array_count(const T (&)[N])
     return N;
 }
 
-#if defined(NRF52840_XXAA) || defined(NRF52833_XXAA) || defined(ARCH_ESP32) || defined(ARCH_PORTDUINO)
-#if defined(RAK2560)
-HardwareSerial *GPS::_serial_gps = &Serial2;
+#if defined(NRF52840_XXAA) || defined(NRF52833_XXAA) || defined(ARCH_ESP32) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32WL)
+#if defined(GPS_SERIAL_PORT)
+HardwareSerial *GPS::_serial_gps = &GPS_SERIAL_PORT;
 #else
 HardwareSerial *GPS::_serial_gps = &Serial1;
 #endif
@@ -1536,7 +1536,10 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
         if (t.tm_mon > -1) {
             LOG_DEBUG("NMEA GPS time %02d-%02d-%02d %02d:%02d:%02d age %d", d.year(), d.month(), t.tm_mday, t.tm_hour, t.tm_min,
                       t.tm_sec, ti.age());
-            perhapsSetRTC(RTCQualityGPS, t);
+            if (perhapsSetRTC(RTCQualityGPS, t) == RTCSetResultInvalidTime) {
+                // Clear the GPS buffer if we got an invalid time
+                clearBuffer();
+            }
             return true;
         } else
             return false;

@@ -11,20 +11,30 @@ permissions: read-all
 
 jobs:
   build-nrf52:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
+      - name: Get release version string
+        shell: bash
+        run: echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+        id: version
+
       - name: Build NRF52
         id: build
-        uses: ./.github/actions/build-variant
+        uses: meshtastic/gh-action-firmware@main
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          board: ${{ inputs.board }}
-          build-script-path: bin/build-nrf52.sh
-          artifact-paths: |
-            release/*.hex
+          pio_platform: nrf52
+          pio_env: ${{ inputs.board }}
+          pio_target: build
+
+      - name: Store binaries as an artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-nrf52840-${{ inputs.board }}-${{ steps.version.outputs.long }}.zip
+          overwrite: true
+          path: |
             release/*.uf2
             release/*.elf
-            release/*.zip
-          arch: nrf52840
+            release/*.hex
+            release/*-ota.zip

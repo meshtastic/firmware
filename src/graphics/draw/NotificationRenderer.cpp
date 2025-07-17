@@ -26,7 +26,7 @@ extern bool hasUnreadMessage;
 namespace graphics
 {
 
-char NotificationRenderer::inEvent = INPUT_BROKER_NONE;
+InputEvent NotificationRenderer::inEvent;
 int8_t NotificationRenderer::curSelected = 0;
 char NotificationRenderer::alertBannerMessage[256] = {0};
 uint32_t NotificationRenderer::alertBannerUntil = 0;  // 0 is a special case meaning forever
@@ -42,7 +42,7 @@ uint32_t NotificationRenderer::currentNumber = 0;
 uint32_t pow_of_10(uint32_t n)
 {
     uint32_t ret = 1;
-    for (int i = 0; i < n; i++) {
+    for (uint32_t i = 0; i < n; i++) {
         ret *= 10;
     }
     return ret;
@@ -72,14 +72,31 @@ void NotificationRenderer::resetBanner()
 {
     alertBannerMessage[0] = '\0';
     current_notification_type = notificationTypeEnum::none;
+
+    inEvent.inputEvent = INPUT_BROKER_NONE;
+    inEvent.kbchar = 0;
+    curSelected = 0;
+    alertBannerOptions = 0; // last x lines are seelctable options
+    optionsArrayPtr = nullptr;
+    optionsEnumPtr = nullptr;
+    alertBannerCallback = NULL;
+    pauseBanner = false;
+    numDigits = 0;
+    currentNumber = 0;
+
     nodeDB->pause_sort(false);
 }
 
 void NotificationRenderer::drawBannercallback(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
+    if (!isOverlayBannerShowing() && alertBannerMessage[0] != '\0')
+        resetBanner();
     if (!isOverlayBannerShowing() || pauseBanner)
         return;
     switch (current_notification_type) {
+    case notificationTypeEnum::none:
+        // Do nothing - no notification to display
+        break;
     case notificationTypeEnum::text_banner:
     case notificationTypeEnum::selection_picker:
         drawAlertBannerOverlay(display, state);
@@ -112,31 +129,40 @@ void NotificationRenderer::drawNumberPicker(OLEDDisplay *display, OLEDDisplayUiS
     // modulo to extract
     uint8_t this_digit = (currentNumber % (pow_of_10(numDigits - curSelected))) / (pow_of_10(numDigits - curSelected - 1));
     // Handle input
-    if (inEvent == INPUT_BROKER_UP || inEvent == INPUT_BROKER_ALT_PRESS) {
+    if (inEvent.inputEvent == INPUT_BROKER_UP || inEvent.inputEvent == INPUT_BROKER_ALT_PRESS) {
         if (this_digit == 9) {
             currentNumber -= 9 * (pow_of_10(numDigits - curSelected - 1));
         } else {
             currentNumber += (pow_of_10(numDigits - curSelected - 1));
         }
-    } else if (inEvent == INPUT_BROKER_DOWN || inEvent == INPUT_BROKER_USER_PRESS) {
+    } else if (inEvent.inputEvent == INPUT_BROKER_DOWN || inEvent.inputEvent == INPUT_BROKER_USER_PRESS) {
         if (this_digit == 0) {
             currentNumber += 9 * (pow_of_10(numDigits - curSelected - 1));
         } else {
             currentNumber -= (pow_of_10(numDigits - curSelected - 1));
         }
-    } else if (inEvent == INPUT_BROKER_SELECT || inEvent == INPUT_BROKER_RIGHT) {
+    } else if (inEvent.inputEvent == INPUT_BROKER_ANYKEY) {
+        if (inEvent.kbchar > 47 && inEvent.kbchar < 58) { // have a digit
+            currentNumber -= this_digit * (pow_of_10(numDigits - curSelected - 1));
+            currentNumber += (inEvent.kbchar - 48) * (pow_of_10(numDigits - curSelected - 1));
+            curSelected++;
+        }
+    } else if (inEvent.inputEvent == INPUT_BROKER_SELECT || inEvent.inputEvent == INPUT_BROKER_RIGHT) {
         curSelected++;
-    } else if (inEvent == INPUT_BROKER_LEFT) {
+    } else if (inEvent.inputEvent == INPUT_BROKER_LEFT) {
         curSelected--;
-    } else if ((inEvent == INPUT_BROKER_CANCEL || inEvent == INPUT_BROKER_ALT_LONG) && alertBannerUntil != 0) {
+    } else if ((inEvent.inputEvent == INPUT_BROKER_CANCEL || inEvent.inputEvent == INPUT_BROKER_ALT_LONG) &&
+               alertBannerUntil != 0) {
         resetBanner();
+        return;
     }
-    if (curSelected == numDigits) {
-        resetBanner();
+    if (curSelected == static_cast<int8_t>(numDigits)) {
         alertBannerCallback(currentNumber);
+        resetBanner();
+        return;
     }
 
-    inEvent = INPUT_BROKER_NONE;
+    inEvent.inputEvent = INPUT_BROKER_NONE;
     if (alertBannerMessage[0] == '\0')
         return;
 
@@ -144,12 +170,12 @@ void NotificationRenderer::drawNumberPicker(OLEDDisplay *display, OLEDDisplayUiS
     const char *linePointers[totalLines + 1] = {0}; // this is sort of a dynamic allocation
 
     // copy the linestarts to display to the linePointers holder
-    for (int i = 0; i < lineCount; i++) {
+    for (uint16_t i = 0; i < lineCount; i++) {
         linePointers[i] = lineStarts[i];
     }
     std::string digits = " ";
     std::string arrowPointer = " ";
-    for (int i = 0; i < numDigits; i++) {
+    for (uint16_t i = 0; i < numDigits; i++) {
         // Modulo minus modulo to return just the current number
         digits += std::to_string((currentNumber % (pow_of_10(numDigits - i))) / (pow_of_10(numDigits - i - 1))) + " ";
         if (curSelected == i) {
@@ -190,16 +216,18 @@ void NotificationRenderer::drawNodePicker(OLEDDisplay *display, OLEDDisplayUiSta
     }
 
     // Handle input
-    if (inEvent == INPUT_BROKER_UP || inEvent == INPUT_BROKER_ALT_PRESS) {
+    if (inEvent.inputEvent == INPUT_BROKER_UP || inEvent.inputEvent == INPUT_BROKER_ALT_PRESS) {
         curSelected--;
-    } else if (inEvent == INPUT_BROKER_DOWN || inEvent == INPUT_BROKER_USER_PRESS) {
+    } else if (inEvent.inputEvent == INPUT_BROKER_DOWN || inEvent.inputEvent == INPUT_BROKER_USER_PRESS) {
         curSelected++;
-    } else if (inEvent == INPUT_BROKER_SELECT) {
-        resetBanner();
+    } else if (inEvent.inputEvent == INPUT_BROKER_SELECT) {
         alertBannerCallback(selectedNodenum);
-
-    } else if ((inEvent == INPUT_BROKER_CANCEL || inEvent == INPUT_BROKER_ALT_LONG) && alertBannerUntil != 0) {
         resetBanner();
+        return;
+    } else if ((inEvent.inputEvent == INPUT_BROKER_CANCEL || inEvent.inputEvent == INPUT_BROKER_ALT_LONG) &&
+               alertBannerUntil != 0) {
+        resetBanner();
+        return;
     }
 
     if (curSelected == -1)
@@ -207,7 +235,7 @@ void NotificationRenderer::drawNodePicker(OLEDDisplay *display, OLEDDisplayUiSta
     if (curSelected == alertBannerOptions)
         curSelected = 0;
 
-    inEvent = INPUT_BROKER_NONE;
+    inEvent.inputEvent = INPUT_BROKER_NONE;
     if (alertBannerMessage[0] == '\0')
         return;
 
@@ -305,11 +333,11 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
 
     // Handle input
     if (alertBannerOptions > 0) {
-        if (inEvent == INPUT_BROKER_UP || inEvent == INPUT_BROKER_ALT_PRESS) {
+        if (inEvent.inputEvent == INPUT_BROKER_UP || inEvent.inputEvent == INPUT_BROKER_ALT_PRESS) {
             curSelected--;
-        } else if (inEvent == INPUT_BROKER_DOWN || inEvent == INPUT_BROKER_USER_PRESS) {
+        } else if (inEvent.inputEvent == INPUT_BROKER_DOWN || inEvent.inputEvent == INPUT_BROKER_USER_PRESS) {
             curSelected++;
-        } else if (inEvent == INPUT_BROKER_SELECT) {
+        } else if (inEvent.inputEvent == INPUT_BROKER_SELECT) {
             if (optionsEnumPtr != nullptr) {
                 alertBannerCallback(optionsEnumPtr[curSelected]);
                 optionsEnumPtr = nullptr;
@@ -317,8 +345,11 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
                 alertBannerCallback(curSelected);
             }
             resetBanner();
-        } else if ((inEvent == INPUT_BROKER_CANCEL || inEvent == INPUT_BROKER_ALT_LONG) && alertBannerUntil != 0) {
+            return;
+        } else if ((inEvent.inputEvent == INPUT_BROKER_CANCEL || inEvent.inputEvent == INPUT_BROKER_ALT_LONG) &&
+                   alertBannerUntil != 0) {
             resetBanner();
+            return;
         }
 
         if (curSelected == -1)
@@ -326,12 +357,14 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
         if (curSelected == alertBannerOptions)
             curSelected = 0;
     } else {
-        if (inEvent == INPUT_BROKER_SELECT || inEvent == INPUT_BROKER_ALT_LONG || inEvent == INPUT_BROKER_CANCEL) {
+        if (inEvent.inputEvent == INPUT_BROKER_SELECT || inEvent.inputEvent == INPUT_BROKER_ALT_LONG ||
+            inEvent.inputEvent == INPUT_BROKER_CANCEL) {
             resetBanner();
+            return;
         }
     }
 
-    inEvent = INPUT_BROKER_NONE;
+    inEvent.inputEvent = INPUT_BROKER_NONE;
     if (alertBannerMessage[0] == '\0')
         return;
 
