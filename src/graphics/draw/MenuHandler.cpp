@@ -318,10 +318,13 @@ void menuHandler::positionBaseMenu()
     static const char *optionsArray[] = {"Back", "GPS Toggle", "Compass"};
     static const char *optionsArrayCalibrate[] = {"Back", "GPS Toggle", "Compass", "Compass Calibrate"};
 
+#if !MESHTASTIC_EXCLUDE_I2C
     if (accelerometerThread) {
         optionsArrayPtr = optionsArrayCalibrate;
         options = 4;
-    } else {
+    } else
+#endif
+    {
         optionsArrayPtr = optionsArray;
         options = 3;
     }
@@ -334,8 +337,14 @@ void menuHandler::positionBaseMenu()
 #endif
         } else if (selected == 2) {
             menuQueue = compass_point_north_menu;
-        } else if (selected == 3) {
+        }
+#if !MESHTASTIC_EXCLUDE_I2C
+        else if (selected == 3) {
             accelerometerThread->calibrate(30);
+        }
+#endif
+        else {
+            menuQueue = menu_none;
         }
     });
 }
