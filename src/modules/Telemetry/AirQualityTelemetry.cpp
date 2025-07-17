@@ -101,8 +101,13 @@ int32_t AirQualityTelemetryModule::runOnce()
         // Wake up the sensors that need it
         LOG_INFO("Waking up sensors");
         for (TelemetrySensor *sensor : sensors) {
-            if (!sensor->isActive()) {
-                return sensor->wakeUp();
+            if ((lastSentToMesh == 0) ||
+                        !Throttle::isWithinTimespanMs(lastSentToMesh - sensor->warmup_time, Default::getConfiguredOrDefaultMsScaled(
+                                                                        moduleConfig.telemetry.air_quality_interval,
+                                                                        default_telemetry_broadcast_interval_secs, numOnlineNodes))) {
+                if (!sensor->isActive()) {
+                    return sensor->wakeUp();
+                }
             }
         }
 

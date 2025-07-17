@@ -122,7 +122,7 @@ bool SEN5XSensor::sendCommand(uint16_t command, uint8_t* buffer, uint8_t byteNum
 #endif
 
     // Transmit the data
-    LOG_INFO("Beginning connection to SEN5X: 0x%x", address);
+    // LOG_INFO("Beginning connection to SEN5X: 0x%x", address);
     bus->beginTransmission(address);
     size_t writtenBytes = bus->write(toSend, bufferSize);
     uint8_t i2c_error = bus->endTransmission();
@@ -276,14 +276,14 @@ bool SEN5XSensor::isActive(){
 }
 
 uint32_t SEN5XSensor::wakeUp(){
-    LOG_INFO("SEN5X: Attempting to wakeUp sensor");
+    // LOG_INFO("SEN5X: Attempting to wakeUp sensor");
     if (!sendCommand(SEN5X_START_MEASUREMENT)) {
         LOG_INFO("SEN5X: Error starting measurement");
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
     delay(50); // From Sensirion Arduino library
 
-    LOG_INFO("SEN5X: Setting measurement mode");
+    // LOG_INFO("SEN5X: Setting measurement mode");
     uint32_t now;
     now = getTime();
     measureStarted = now;
