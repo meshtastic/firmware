@@ -27,6 +27,13 @@ static const uint8_t _message_CAS_CFG_RST_FACTORY[] = {
     0x03        // Startup Mode: Factory
 };
 
+// Clear RTC data
+static const uint8_t _message_CAS_CFG_RST_RTC[] = {
+    0x00, 0x01, // NavBbrMask: Clear RTC data
+    0x01,       // Reset Mode: Controlled Software reset
+    0x00        // Reserved
+};
+
 // CFG_RATE (0x06, 0x01)
 // 1HZ update rate, this should always be the case after
 // factory reset but update it regardless

@@ -1539,6 +1539,13 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
             if (perhapsSetRTC(RTCQualityGPS, t) == RTCSetResultInvalidTime) {
                 // Clear the GPS buffer if we got an invalid time
                 clearBuffer();
+                // Clear the RTC from the L76K, L76B, and clones
+                if (IS_ONE_OF(gnssModel, GNSS_MODEL_MTK_L76B, GNSS_MODEL_MTK)) {
+                    // Clear the RTC from the L76 and MTK GPS modules
+                    LOG_DEBUG("Clearing RTC from L76K/L76B");
+                    int msglen = makeCASPacket(0x06, 0x02, sizeof(_message_CAS_CFG_RST_FACTORY), _message_CAS_CFG_RST_FACTORY);
+                    _serial_gps->write(_message_CAS_CFG_RST_FACTORY, msglen);
+                }
             }
             return true;
         } else
