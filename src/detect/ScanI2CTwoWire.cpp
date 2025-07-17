@@ -1,4 +1,6 @@
 #include "ScanI2CTwoWire.h"
+#include "configuration.h"
+#include "detect/ScanI2C.h"
 
 #if !MESHTASTIC_EXCLUDE_I2C
 
@@ -454,9 +456,17 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 }
                 break;
 
-            case LPS22HB_ADDR_ALT:
-                SCAN_SIMPLE_CASE(LPS22HB_ADDR, LPS22HB, "LPS22HB", (uint8_t)addr.address)
-                SCAN_SIMPLE_CASE(QMC6310_ADDR, QMC6310, "QMC6310", (uint8_t)addr.address)
+            case SFA30_ADDR: 
+          // also alternative for LPS22HB
+                // registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 1);
+                
+                
+            
+                // SCAN_SIMPLE_CASE(LPS22HB_ADDR, LPS22HB, "LPS22HB", (uint8_t)addr.address)
+                // SCAN_SIMPLE_CASE(QMC6310_ADDR, QMC6310, "QMC6310", (uint8_t)addr.address)
+                type = SFA30;
+                logFoundDevice("SFA30", (uint8_t)addr.address);
+                break;
 
             case QMI8658_ADDR:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0A), 1); // get ID
