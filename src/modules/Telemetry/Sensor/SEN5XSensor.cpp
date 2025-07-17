@@ -395,7 +395,6 @@ int32_t SEN5XSensor::runOnce()
         LOG_INFO("SEN5X: No valid last cleaning date found, saving it now: %u", lastCleaning);
     }
 
-    // TODO - Should wakeUp happen here?
     return initI2CSensor();
 }
 
@@ -478,10 +477,6 @@ bool SEN5XSensor::readPnValues()
     uint16_t uint_tSize   = static_cast<uint16_t>((dataBuffer[18]  << 8) | dataBuffer[19]);
 
     // Convert them based on Sensirion Arduino lib
-    // sen5xmeasurement.pM1p0   = uint_pM1p0  / 10.0f;
-    // sen5xmeasurement.pM2p5   = uint_pM2p5  / 10.0f;
-    // sen5xmeasurement.pM4p0   = uint_pM4p0  / 10.0f;
-    // sen5xmeasurement.pM10p0  = uint_pM10p0 / 10.0f;
     sen5xmeasurement.pN0p5   = uint_pN0p5  / 10;
     sen5xmeasurement.pN1p0   = uint_pN1p0  / 10;
     sen5xmeasurement.pN2p5   = uint_pN2p5  / 10;
@@ -490,7 +485,6 @@ bool SEN5XSensor::readPnValues()
     sen5xmeasurement.tSize   = uint_tSize  / 1000.0f;
 
     // Convert PN readings from #/cm3 to #/0.1l
-    // TODO - Decide if those units are right
     // TODO Remove accumuluative values:
     // https://github.com/fablabbcn/smartcitizen-kit-2x/issues/85
     sen5xmeasurement.pN0p5  *= 100;
