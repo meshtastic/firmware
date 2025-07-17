@@ -7,15 +7,12 @@
 #include "Wire.h"
 #include "RTC.h"
 
+// Warm up times for SEN5X from the datasheet
 #ifndef SEN5X_WARMUP_MS_1
-// from the SEN5X datasheet
-// #define SEN5X_WARMUP_MS_1 15000 - Change to this
-#define SEN5X_WARMUP_MS_1 30000
+#define SEN5X_WARMUP_MS_1 15000
 #endif
 
-// TODO - For now, we ignore this threshold, and we only use the MS_1 (to 30000)
 #ifndef SEN5X_WARMUP_MS_2
-// from the SEN5X datasheet
 #define SEN5X_WARMUP_MS_2 30000
 #endif
 
@@ -76,16 +73,9 @@ class SEN5XSensor : public TelemetrySensor
 
     enum SEN5XState { SEN5X_OFF, SEN5X_IDLE, SEN5X_MEASUREMENT, SEN5X_MEASUREMENT_2, SEN5X_CLEANING, SEN5X_NOT_DETECTED };
     SEN5XState state = SEN5X_OFF;
-
+    // TODO - Remove
     bool continousMode = false;
     bool forcedContinousMode = false;
-
-    // TODO
-    // Sensirion recommends taking a reading after 16 seconds, if the Perticle number reading is over 100#/cm3 the reading is OK, but if it is lower wait until 30 seconds and take it again.
-    // https://sensirion.com/resource/application_note/low_power_mode/sen5x
-    // TODO Implement logic for this concentrationThreshold
-    // This can reduce battery consumption by a lot
-    // uint16_t concentrationThreshold = 100;
 
     bool sendCommand(uint16_t wichCommand);
     bool sendCommand(uint16_t wichCommand, uint8_t* buffer, uint8_t byteNumber=0);
@@ -131,6 +121,12 @@ class SEN5XSensor : public TelemetrySensor
     bool idle();
     virtual int32_t runOnce() override;
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
+
+    // Sensirion recommends taking a reading after 15 seconds, if the Particle number reading is over 100#/cm3 the reading is OK, but if it is lower wait until 30 seconds and take it again.
+    // https://sensirion.com/resource/application_note/low_power_mode/sen5x
+    #define SEN5X_PN4P0_CONC_THD 100
+    // This value represents the time needed for pending data
+    int32_t pendingForReady();
 };
 
 

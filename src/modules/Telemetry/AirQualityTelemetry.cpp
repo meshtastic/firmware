@@ -68,6 +68,7 @@ int32_t AirQualityTelemetryModule::runOnce()
     }
 
     uint32_t result = UINT32_MAX;
+    uint32_t sen5xPendingForReady;
 
     if (!(moduleConfig.telemetry.air_quality_enabled  || moduleConfig.telemetry.air_quality_screen_enabled ||
           AIR_QUALITY_TELEMETRY_MODULE_ENABLE)) {
@@ -108,6 +109,15 @@ int32_t AirQualityTelemetryModule::runOnce()
                 if (!sensor->isActive()) {
                     return sensor->wakeUp();
                 }
+            }
+        }
+
+        // TODO - FIX
+        // Check if sen5x is ready to return data, or if it needs more time because of the low concentration threshold
+        if (sen5xSensor.hasSensor() && sen5xSensor.isActive()) {
+            sen5xPendingForReady = sen5xSensor.pendingForReady();
+            if (sen5xPendingForReady) {
+                return sen5xPendingForReady;
             }
         }
 

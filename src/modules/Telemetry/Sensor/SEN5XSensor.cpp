@@ -570,6 +570,44 @@ uint8_t SEN5XSensor::getMeasurements()
     return 0;
 }
 
+int32_t SEN5XSensor::pendingForReady(){
+    uint32_t now;
+    now = getTime();
+    uint32_t sinceMeasureStarted = (now - measureStarted)*1000;
+    LOG_INFO("Since measure started: %u", sinceMeasureStarted);
+    switch (state) {
+        case SEN5X_MEASUREMENT: {
+
+            if (sinceMeasureStarted < SEN5X_WARMUP_MS_1) {
+                LOG_INFO("SEN5X: not enough time passed since starting measurement");
+                return SEN5X_WARMUP_MS_1 - sinceMeasureStarted;
+            }
+
+            // Get PN values to check if we are above or below threshold
+            readPnValues();
+
+            // If the reading is low (the tyhreshold is in #/cm3) and second warmUp hasn't passed we return to come back later
+            if ((sen5xmeasurement.pN4p0 / 100) < SEN5X_PN4P0_CONC_THD && sinceMeasureStarted < SEN5X_WARMUP_MS_2) {
+                LOG_INFO("SEN5X: Concentration is low, we will ask again in the second warm up period");
+                state = SEN5X_MEASUREMENT_2;
+                // Report how many seconds are pending to cover the first warm up period
+                return SEN5X_WARMUP_MS_2 - sinceMeasureStarted;
+            }
+            return 0;
+        }
+        case SEN5X_MEASUREMENT_2: {
+            if (sinceMeasureStarted < SEN5X_WARMUP_MS_2) {
+                // Report how many seconds are pending to cover the first warm up period
+                return SEN5X_WARMUP_MS_2 - sinceMeasureStarted;
+            }
+            return 0;
+        }
+        default: {
+            return -1;
+        }
+    }
+}
+
 bool SEN5XSensor::getMetrics(meshtastic_Telemetry *measurement)
 {
     LOG_INFO("SEN5X: Attempting to get metrics");
