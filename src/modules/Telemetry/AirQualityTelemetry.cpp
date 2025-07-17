@@ -176,13 +176,13 @@ void AirQualityTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSta
     std::vector<String> entries;
 
     if (m.has_pm10_standard)
-        entries.push_back("PM1.0: " + String(m.pm10_standard, 0) + "ug/m3");
+        entries.push_back("PM1.0: " + String(m.pm10_standard) + "ug/m3");
     if (m.has_pm25_standard)
-        entries.push_back("PM2.5: " + String(m.pm25_standard, 0) + "ug/m3");
+        entries.push_back("PM2.5: " + String(m.pm25_standard) + "ug/m3");
     if (m.has_pm100_standard)
-        entries.push_back("PM10.0: " + String(m.pm100_standard, 0) + "ug/m3");
+        entries.push_back("PM10.0: " + String(m.pm100_standard) + "ug/m3");
     if (m.has_co2)
-        entries.push_back("CO2: " + String(m.co2, 0) + "ppm");
+        entries.push_back("CO2: " + String(m.co2) + "ppm");
 
 
     // === Show first available metric on top-right of first line ===
