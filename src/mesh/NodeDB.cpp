@@ -550,7 +550,6 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.lora.tx_enabled =
         true; // FIXME: maybe false in the future, and setting region to enable it. (unset region forces it off)
     config.lora.override_duty_cycle = false;
-    config.lora.config_ok_to_mqtt = false;
 
 #if HAS_TFT // For the devices that support MUI, default to that
     config.display.displaymode = meshtastic_Config_DisplayConfig_DisplayMode_COLOR;
@@ -585,6 +584,11 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.lora.ignore_mqtt = USERPREFS_CONFIG_LORA_IGNORE_MQTT;
 #else
     config.lora.ignore_mqtt = false;
+#endif
+#ifdef USERPREFS_CONFIG_LORA_OK_MQTT
+    config.lora.config_ok_to_mqtt = USERPREFS_CONFIG_LORA_OK_MQTT;
+#else
+    config.lora.config_ok_to_mqtt = false;
 #endif
     // Initialize admin_key_count to zero
     byte numAdminKeys = 0;

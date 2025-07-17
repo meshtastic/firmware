@@ -18,6 +18,7 @@
   // "USERPREFS_CHANNEL_2_UPLINK_ENABLED": "false",
   // "USERPREFS_CONFIG_GPS_MODE": "meshtastic_Config_PositionConfig_GpsMode_ENABLED",
   // "USERPREFS_CONFIG_LORA_IGNORE_MQTT": "true",
+  // "USERPREFS_CONFIG_LORA_OK_MQTT": "false",
   // "USERPREFS_CONFIG_LORA_REGION": "meshtastic_Config_LoRaConfig_RegionCode_US",
   // "USERPREFS_CONFIG_OWNER_LONG_NAME": "My Long Name",
   // "USERPREFS_CONFIG_OWNER_SHORT_NAME": "MLN",
