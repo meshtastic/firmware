@@ -140,8 +140,21 @@ int32_t AirQualityTelemetryModule::runOnce()
     // Send to sleep sensors that consume power
     LOG_INFO("Sending sensors to sleep");
     for (TelemetrySensor *sensor : sensors) {
-        sensor->sleep();
+        // TODO FIX
+        if (sensor->isActive()) {
+            if (sensor.warmup_time < Default::getConfiguredOrDefaultMsScaled(
+                moduleConfig.telemetry.air_quality_interval,
+                default_telemetry_broadcast_interval_secs, numOnlineNodes)) {
+                    LOG_DEBUG("SEN5X: Disabling sensor until next period");
+                    sensor->sleep();
+            } else {
+                LOG_DEBUG("SEN5X: Sensor stays enabled due to warm up period");
+            }
+        }
     }
+
+
+
 
     }
     return min(sendToPhoneIntervalMs, result);
