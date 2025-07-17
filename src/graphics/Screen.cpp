@@ -864,6 +864,8 @@ void Screen::setFrames(FrameFocus focus)
     uint8_t previousFrameCount = framesetInfo.frameCount;
     FramesetInfo fsi; // Location of specific frames, for applying focus parameter
 
+    graphics::UIRenderer::rebuildFavoritedNodes();
+
     LOG_DEBUG("Show standard frames");
     showingNormalScreen = true;
 

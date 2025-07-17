@@ -850,7 +850,13 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
     this->waitingForAck = true;
 
     // Log outgoing message
-    LOG_INFO("Send message id=%d, dest=%x, msg=%.*s", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
+    LOG_INFO("Send message id=%u, dest=%x, msg=%.*s", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
+
+    if (p->to != 0xffffffff) {
+        LOG_INFO("Proactively adding %x as favorite node", p->to);
+        nodeDB->set_favorite(true, p->to);
+        screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
+    }
 
     // Send to mesh and phone (even if no phone connected, to track ACKs)
     service->sendToMesh(p, RX_SRC_LOCAL, true);
