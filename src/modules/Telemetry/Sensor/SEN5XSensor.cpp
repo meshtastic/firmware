@@ -13,7 +13,7 @@ SEN5XSensor::SEN5XSensor() : TelemetrySensor(meshtastic_TelemetrySensorType_SEN5
 bool SEN5XSensor::restoreClock(uint32_t currentClock){
 #ifdef SEN5X_I2C_CLOCK_SPEED
     if (currentClock != SEN5X_I2C_CLOCK_SPEED){
-        LOG_DEBUG("Restoring I2C clock to %uHz", currentClock);
+        // LOG_DEBUG("Restoring I2C clock to %uHz", currentClock);
         return bus->setClock(currentClock);
     }
     return true;
@@ -116,7 +116,7 @@ bool SEN5XSensor::sendCommand(uint16_t command, uint8_t* buffer, uint8_t byteNum
     uint32_t currentClock;
     currentClock = bus->getClock();
     if (currentClock != SEN5X_I2C_CLOCK_SPEED){
-        LOG_DEBUG("Changing I2C clock to %u", SEN5X_I2C_CLOCK_SPEED);
+        // LOG_DEBUG("Changing I2C clock to %u", SEN5X_I2C_CLOCK_SPEED);
         bus->setClock(SEN5X_I2C_CLOCK_SPEED);
     }
 #endif
@@ -135,7 +135,7 @@ bool SEN5XSensor::sendCommand(uint16_t command, uint8_t* buffer, uint8_t byteNum
     }
 
     if (i2c_error != 0) {
-        LOG_ERROR("SEN5X: Error on I2c communication: %x", i2c_error);
+        LOG_ERROR("SEN5X: Error on I2C communication: %x", i2c_error);
         return false;
     }
     return true;
@@ -147,7 +147,7 @@ uint8_t SEN5XSensor::readBuffer(uint8_t* buffer, uint8_t byteNumber)
     uint32_t currentClock;
     currentClock = bus->getClock();
     if (currentClock != SEN5X_I2C_CLOCK_SPEED){
-        LOG_DEBUG("Changing I2C clock to %u", SEN5X_I2C_CLOCK_SPEED);
+        // LOG_DEBUG("Changing I2C clock to %u", SEN5X_I2C_CLOCK_SPEED);
         bus->setClock(SEN5X_I2C_CLOCK_SPEED);
     }
 #endif
@@ -219,7 +219,7 @@ bool SEN5XSensor::idle()
         LOG_ERROR("SEN5X: Error stoping measurement");
         return false;
     }
-    delay(200); // From Sensirion Arduino library
+    // delay(200); // From Sensirion Arduino library
 
     LOG_INFO("SEN5X: Stop measurement mode");
 
@@ -237,13 +237,13 @@ void SEN5XSensor::loadCleaningState()
     if (file) {
         file.read();
         file.close();
-        LOG_INFO("Cleaning state %u read for %s read from %s", lastCleaning, sensorName, sen5XCleaningFileName);
+        LOG_INFO("SEN5X: Cleaning state %u read for %s read from %s", lastCleaning, sensorName, sen5XCleaningFileName);
     } else {
-        LOG_INFO("No %s state found (File: %s)", sensorName, sen5XCleaningFileName);
+        LOG_INFO("SEN5X: No %s state found (File: %s)", sensorName, sen5XCleaningFileName);
     }
     spiLock->unlock();
 #else
-    LOG_ERROR("ERROR: Filesystem not implemented");
+    LOG_ERROR("SEN5X: ERROR - Filesystem not implemented");
 #endif
 }
 
@@ -253,21 +253,21 @@ void SEN5XSensor::updateCleaningState()
     spiLock->lock();
 
     if (FSCom.exists(sen5XCleaningFileName) && !FSCom.remove(sen5XCleaningFileName)) {
-        LOG_WARN("Can't remove old state file");
+        LOG_WARN("SEN5X: Can't remove old state file");
     }
     auto file = FSCom.open(sen5XCleaningFileName, FILE_O_WRITE);
     if (file) {
-        LOG_INFO("Save cleaning state %u for %s to %s", lastCleaning, sensorName, sen5XCleaningFileName);
+        LOG_INFO("SEN5X: Save cleaning state %u for %s to %s", lastCleaning, sensorName, sen5XCleaningFileName);
         file.write(lastCleaning);
         file.flush();
         file.close();
     } else {
-        LOG_INFO("Can't write %s state (File: %s)", sensorName, sen5XCleaningFileName);
+        LOG_INFO("SEN5X: Can't write %s state (File: %s)", sensorName, sen5XCleaningFileName);
     }
 
     spiLock->unlock();
 #else
-    LOG_ERROR("ERROR: Filesystem not implemented");
+    LOG_ERROR("SEN5X: ERROR: Filesystem not implemented");
 #endif
 }
 
@@ -281,7 +281,7 @@ uint32_t SEN5XSensor::wakeUp(){
         LOG_INFO("SEN5X: Error starting measurement");
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
-    delay(50); // From Sensirion Arduino library
+    // delay(50); // From Sensirion Arduino library
 
     // LOG_INFO("SEN5X: Setting measurement mode");
     uint32_t now;
@@ -308,7 +308,7 @@ bool SEN5XSensor::startCleaning()
         LOG_ERROR("SEN5X: Error starting fan cleaning");
         return false;
     }
-    delay(20); // From Sensirion Arduino library
+    // delay(20); // From Sensirion Arduino library
 
     // This message will be always printed so the user knows the device it's not hung
     LOG_INFO("SEN5X: Started fan cleaning it will take 10 seconds...");
@@ -318,7 +318,7 @@ bool SEN5XSensor::startCleaning()
         // Serial.print(".");
         delay(500);
     }
-    LOG_INFO(" Cleaning done!!");
+    LOG_INFO("SEN5X: Cleaning done!!");
 
     // Save timestamp in flash so we know when a week has passed
     uint32_t now;
@@ -370,24 +370,24 @@ int32_t SEN5XSensor::runOnce()
     // Check if it is time to do a cleaning
     // TODO - this is not currently working as intended - always reading 0 from the file. We should probably make a unified approach for both the cleaning and the VOCstate
     loadCleaningState();
-    LOG_INFO("Last cleaning time: %u", lastCleaning);
+    LOG_INFO("SEN5X: Last cleaning time: %u", lastCleaning);
     if (lastCleaning) {
-        LOG_INFO("Last cleaning is valid");
+        LOG_INFO("SEN5X: Last cleaning is valid");
 
         uint32_t now;
         now = getTime();
-        LOG_INFO("Current time %us", now);
+        LOG_INFO("SEN5X: Current time %us", now);
         uint32_t passed = now - lastCleaning;
-        LOG_INFO("Elapsed time since last cleaning: %us", passed);
+        LOG_INFO("SEN5X: Elapsed time since last cleaning: %us", passed);
 
         if (passed > ONE_WEEK_IN_SECONDS && (now > 1514764800)) {       // If current date greater than 01/01/2018 (validity check)
             LOG_INFO("SEN5X: More than a week since las cleaning, cleaning...");
             startCleaning();
         } else {
-            LOG_INFO("Last cleaning date (in epoch): %u", lastCleaning);
+            LOG_INFO("SEN5X: Last cleaning date (in epoch): %u", lastCleaning);
         }
     } else {
-        LOG_INFO("Last cleaning is not valid");
+        LOG_INFO("SEN5X: Last cleaning is not valid");
         // We asume the device has just been updated or it is new, so no need to trigger a cleaning.
         // Just save the timestamp to do a cleaning one week from now.
         lastCleaning = getTime();
@@ -574,7 +574,7 @@ int32_t SEN5XSensor::pendingForReady(){
     uint32_t now;
     now = getTime();
     uint32_t sinceMeasureStarted = (now - measureStarted)*1000;
-    LOG_INFO("Since measure started: %u", sinceMeasureStarted);
+    LOG_DEBUG("SEN5X: Since measure started: %ums", sinceMeasureStarted);
     switch (state) {
         case SEN5X_MEASUREMENT: {
 
