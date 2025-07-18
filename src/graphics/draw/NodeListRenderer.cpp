@@ -354,10 +354,12 @@ void drawEntryBRC(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x
     auto xText = x + ((isHighResolution) ? 6 : 3);
     display->drawString(xText, y, nodeName);
 
-    char buf[14] = "";
-    BRCAddress(node->position.latitude_i, node->position.longitude_i).compact(buf, 14);
-    auto nameWidth = display->getStringWidth("WWWW"); // Fixed width so they are aligned.
-    display->drawString(xText + nameWidth, y, buf);
+    if (nodeDB->hasValidPosition(node)) {
+        char buf[14] = "";
+        BRCAddress(node->position.latitude_i, node->position.longitude_i).compact(buf, 14);
+        auto nameWidth = display->getStringWidth("WWWW") - 2; // Fixed width so they are aligned.
+        display->drawString(xText + nameWidth, y, buf);
+    }
 
     if (node->is_favorite) {
         if (isHighResolution) {
@@ -626,11 +628,7 @@ void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, 
 
 void drawBRCList(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    auto ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
-    double lat = DegD(ourNode->position.latitude_i);
-    double lon = DegD(ourNode->position.longitude_i);
-
-    drawNodeListScreen(display, state, x, y, "BRC", drawEntryBRC, drawLastSeenExtra, 0, lat, lon, 1);
+    drawNodeListScreen(display, state, x, y, "BRC", drawEntryBRC, drawLastSeenExtra, 0, 0, 0, 1);
 }
 
 /// Draw a series of fields in a column, wrapping to multiple columns if needed
