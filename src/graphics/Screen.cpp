@@ -905,7 +905,7 @@ void Screen::setFrames(FrameFocus focus)
 
 // Show detailed node views only on E-Ink builds
 #ifdef USE_EINK
-    fsi.positions.nodelist_brc = numframes;
+    fsi.positions.nodelist_bearings = numframes;
     normalFrames[numframes++] = graphics::NodeListRenderer::drawLastHeardScreen;
     indicatorIcons.push_back(icon_nodes);
 
@@ -922,7 +922,7 @@ void Screen::setFrames(FrameFocus focus)
     indicatorIcons.push_back(icon_list);
 #endif
 #if HAS_GPS
-    fsi.positions.nodelist_bearings = numframes;
+    fsi.positions.nodelist_brc = numframes;
     normalFrames[numframes++] = graphics::NodeListRenderer::drawBRCList;
     indicatorIcons.push_back(icon_bm);
 
