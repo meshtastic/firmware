@@ -228,6 +228,13 @@ RTCSetResult perhapsSetRTC(RTCQuality q, struct tm &t)
     tv.tv_sec = res;
     tv.tv_usec = 0; // time.centisecond() * (10 / 1000);
 
+#ifdef BUILD_EPOCH
+    if (tv->tv_sec < BUILD_EPOCH) {
+        LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
+        return RTCSetResultInvalidTime;
+    }
+#endif
+
     // LOG_DEBUG("Got time from GPS month=%d, year=%d, unixtime=%ld", t.tm_mon, t.tm_year, tv.tv_sec);
     if (t.tm_year < 0 || t.tm_year >= 300) {
         // LOG_DEBUG("Ignore invalid GPS month=%d, year=%d, unixtime=%ld", t.tm_mon, t.tm_year, tv.tv_sec);
