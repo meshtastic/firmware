@@ -6,6 +6,7 @@
 #include "UIRenderer.h"
 #include "gps/GeoCoord.h"
 #include "gps/RTC.h" // for getTime() function
+#include "graphics/BRC.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/images.h"
@@ -87,6 +88,8 @@ const char *getCurrentModeTitle(int screenWidth)
 #endif
     case MODE_DISTANCE:
         return "Distance";
+    case MODE_BEARING:
+        return "Bearing";
     default:
         return "Nodes";
     }
@@ -309,6 +312,9 @@ void drawEntryDynamic(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     case MODE_DISTANCE:
         drawNodeDistance(display, node, x, y, columnWidth);
         break;
+    case MODE_BEARING:
+        drawEntryCompass(display, node, x, y, columnWidth);
+        break;
     default:
         break;
     }
@@ -326,6 +332,35 @@ void drawEntryCompass(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
     display->drawStringMaxWidth(x + ((isHighResolution) ? 6 : 3), y, nameMaxWidth, nodeName);
+    if (node->is_favorite) {
+        if (isHighResolution) {
+            drawScaledXBitmap16x16(x, y + 6, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint, display);
+        } else {
+            display->drawXbm(x, y + 5, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint);
+        }
+    }
+}
+
+void drawEntryBRC(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth)
+{
+    bool isLeftCol = (x < SCREEN_WIDTH / 2);
+
+    // Adjust max text width depending on column and screen width
+    int nameMaxWidth = columnWidth - (isHighResolution ? (isLeftCol ? 25 : 28) : (isLeftCol ? 20 : 22));
+
+    const char *nodeName = getSafeNodeName(node);
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
+    auto xText = x + ((isHighResolution) ? 6 : 3);
+    display->drawString(xText, y, nodeName);
+
+    if (nodeDB->hasValidPosition(node)) {
+        char buf[14] = "";
+        BRCAddress(node->position.latitude_i, node->position.longitude_i).compact(buf, 14);
+        auto nameWidth = display->getStringWidth("WWWW") - 2; // Fixed width so they are aligned.
+        display->drawString(xText + nameWidth, y, buf);
+    }
+
     if (node->is_favorite) {
         if (isHighResolution) {
             drawScaledXBitmap16x16(x, y + 6, smallbulletpoint_width, smallbulletpoint_height, smallbulletpoint, display);
@@ -384,17 +419,46 @@ void drawCompassArrow(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16
     */
 }
 
+void drawLastSeenExtra(OLEDDisplay *display, meshtastic_NodeInfoLite *node, int16_t x, int16_t y, int columnWidth,
+                       float /*myHeading*/, double /*userLat*/, double /*userLon*/)
+{
+    char timeStr[10];
+    uint32_t seconds = sinceLastSeen(node);
+    if (seconds == 0 || seconds == UINT32_MAX) {
+        snprintf(timeStr, sizeof(timeStr), "?");
+    } else {
+        uint32_t minutes = seconds / 60, hours = minutes / 60, days = hours / 24;
+        snprintf(timeStr, sizeof(timeStr), (days > 99 ? "?" : "%d%c"),
+                 (days    ? days
+                  : hours ? hours
+                          : minutes),
+                 (days    ? 'd'
+                  : hours ? 'h'
+                          : 'm'));
+    }
+
+    bool isLeftCol = (x < SCREEN_WIDTH / 2);
+    int timeOffset = (isHighResolution) ? (isLeftCol ? 7 : 10) : (isLeftCol ? 3 : 7);
+    int rightEdge = x + columnWidth - timeOffset;
+    if (timeStr[strlen(timeStr) - 1] == 'm') // Fix the fact that our fonts don't line up well all the time
+        rightEdge -= 1;
+    // display->setTextAlignment(TEXT_ALIGN_RIGHT);
+    int textWidth = display->getStringWidth(timeStr);
+    display->drawString(rightEdge - textWidth, y, timeStr);
+}
+
 // =============================
 // Main Screen Functions
 // =============================
 
 void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *title,
-                        EntryRenderer renderer, NodeExtrasRenderer extras, float heading, double lat, double lon)
+                        EntryRenderer renderer, NodeExtrasRenderer extras, float heading, double lat, double lon,
+                        int totalColumns)
 {
     const int COMMON_HEADER_HEIGHT = FONT_HEIGHT_SMALL - 1;
     const int rowYOffset = FONT_HEIGHT_SMALL - 3;
 
-    int columnWidth = display->getWidth() / 2;
+    int columnWidth = display->getWidth() / totalColumns;
 
     display->clear();
 
@@ -408,7 +472,6 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     int totalRowsAvailable = (display->getHeight() - y) / rowYOffset;
 
     int visibleNodeRows = totalRowsAvailable;
-    int totalColumns = 2;
 
     int startIndex = scrollIndex * visibleNodeRows * totalColumns;
     if (nodeDB->getMeshNodeByIndex(startIndex)->num == nodeDB->getNodeNum()) {
@@ -446,7 +509,7 @@ void drawNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t
     }
 
     // Draw column separator
-    if (shownCount > 0) {
+    if (shownCount > 0 && totalColumns > 1) {
         const int firstNodeY = y + 3;
         drawColumnSeparator(display, x, firstNodeY, lastNodeY);
     }
@@ -482,7 +545,31 @@ void drawDynamicNodeListScreen(OLEDDisplay *display, OLEDDisplayUiState *state, 
 
     // Render screen based on currentMode
     const char *title = getCurrentModeTitle(display->getWidth());
-    drawNodeListScreen(display, state, x, y, title, drawEntryDynamic);
+
+    if (currentMode == MODE_BEARING) {
+        float heading = 0;
+        bool validHeading = false;
+        auto ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+        double lat = DegD(ourNode->position.latitude_i);
+        double lon = DegD(ourNode->position.longitude_i);
+
+        if (uiconfig.compass_mode != meshtastic_CompassMode_FREEZE_HEADING) {
+            if (screen->hasHeading()) {
+                heading = screen->getHeading(); // degrees
+                validHeading = true;
+            } else {
+                heading = screen->estimatedHeading(lat, lon);
+                validHeading = !isnan(heading);
+            }
+            if (!validHeading) {
+                lastRenderedMode = MODE_COUNT;
+                return;
+            }
+        }
+        drawNodeListScreen(display, state, x, y, title, drawEntryCompass, drawCompassArrow, heading, lat, lon);
+    } else {
+        drawNodeListScreen(display, state, x, y, title, drawEntryDynamic);
+    }
 
     // Track the last mode to avoid reinitializing modeStartTime
     lastRenderedMode = currentMode;
@@ -537,6 +624,11 @@ void drawNodeListWithCompasses(OLEDDisplay *display, OLEDDisplayUiState *state, 
             return;
     }
     drawNodeListScreen(display, state, x, y, "Bearings", drawEntryCompass, drawCompassArrow, heading, lat, lon);
+}
+
+void drawBRCList(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    drawNodeListScreen(display, state, x, y, "BRC", drawEntryBRC, drawLastSeenExtra, 0, 0, 0, 1);
 }
 
 /// Draw a series of fields in a column, wrapping to multiple columns if needed
