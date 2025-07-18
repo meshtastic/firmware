@@ -371,9 +371,16 @@ NodeDB::NodeDB()
     if (moduleConfig.telemetry.health_update_interval > MAX_INTERVAL)
         moduleConfig.telemetry.health_update_interval = MAX_INTERVAL;
 
-    if (moduleConfig.mqtt.has_map_report_settings &&
+    if (moduleConfig.has_mqtt && moduleConfig.mqtt.has_map_report_settings &&
         moduleConfig.mqtt.map_report_settings.publish_interval_secs < default_map_publish_interval_secs) {
         moduleConfig.mqtt.map_report_settings.publish_interval_secs = default_map_publish_interval_secs;
+    }
+
+    // If we are using the default MQTT server, then we need to ensure that the root topic is set to msh/region name
+    if (moduleConfig.has_mqtt && config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET &&
+        strncmp(moduleConfig.mqtt.address, default_mqtt_address, sizeof(default_mqtt_address)) == 0 &&
+        strcmp(moduleConfig.mqtt.root, default_mqtt_root) == 0) {
+        sprintf(moduleConfig.mqtt.root, "%s/%s", default_mqtt_root, myRegion->name);
     }
 
     // Ensure that the neighbor info update interval is coerced to the minimum
@@ -436,8 +443,8 @@ NodeDB::NodeDB()
 }
 
 /**
- * Most (but not always) of the time we want to treat packets 'from' the local phone (where from == 0), as if they originated on
- * the local node. If from is zero this function returns our node number instead
+ * Most (but not always) of the time we want to treat packets 'from' the local phone (where from == 0), as if they originated
+ * on the local node. If from is zero this function returns our node number instead
  */
 NodeNum getFrom(const meshtastic_MeshPacket *p)
 {
@@ -1191,11 +1198,10 @@ void NodeDB::loadFromDisk()
                       &meshtastic_DeviceState_msg, &devicestate);
 
     // See https://github.com/meshtastic/firmware/issues/4184#issuecomment-2269390786
-    // It is very important to try and use the saved prefs even if we fail to read meshtastic_DeviceState.  Because most of our
-    // critical config may still be valid (in the other files - loaded next).
-    // Also, if we did fail on reading we probably failed on the enormous (and non critical) nodeDB.  So DO NOT install default
-    // device state.
-    // if (state != LoadFileResult::LOAD_SUCCESS) {
+    // It is very important to try and use the saved prefs even if we fail to read meshtastic_DeviceState.  Because most of
+    // our critical config may still be valid (in the other files - loaded next). Also, if we did fail on reading we probably
+    // failed on the enormous (and non critical) nodeDB.  So DO NOT install default device state. if (state !=
+    // LoadFileResult::LOAD_SUCCESS) {
     //    installDefaultDeviceState(); // Our in RAM copy might now be corrupt
     //} else {
     if ((state != LoadFileResult::LOAD_SUCCESS) || (devicestate.version < DEVICESTATE_MIN_VER)) {
