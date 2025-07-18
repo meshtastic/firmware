@@ -116,6 +116,7 @@ int32_t AirQualityTelemetryModule::runOnce()
         // Check if sen5x is ready to return data, or if it needs more time because of the low concentration threshold
         if (sen5xSensor.hasSensor() && sen5xSensor.isActive()) {
             sen5xPendingForReady = sen5xSensor.pendingForReady();
+            LOG_DEBUG("SEN5X: Pending for ready %ums", sen5xPendingForReady);
             if (sen5xPendingForReady) {
                 return sen5xPendingForReady;
             }
