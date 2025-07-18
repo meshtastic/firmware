@@ -218,7 +218,6 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
         hour %= 12;
         if (hour == 0)
             hour = 12;
-        bool isPM = hour >= 12;
         snprintf(timeString, sizeof(timeString), "%d:%02d", hour, minute);
     } else {
         snprintf(timeString, sizeof(timeString), "%02d:%02d", hour, minute);
@@ -366,9 +365,6 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
     // hour hand radius and y coordinate
     int16_t hourHandRadius = radius * 0.35;
-    if (isHighResolution) {
-        int16_t hourHandRadius = radius * 0.55;
-    }
     int16_t hourHandNoonY = centerY - hourHandRadius;
 
     display->setColor(OLEDDISPLAY_COLOR::WHITE);
@@ -386,7 +382,7 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
         bool isPM = hour >= 12;
         if (config.display.use_12h_clock) {
-            bool isPM = hour >= 12;
+            isPM = hour >= 12;
             display->setFont(FONT_SMALL);
             int yOffset = isHighResolution ? 1 : 0;
 #ifdef USE_EINK
