@@ -380,7 +380,11 @@ NodeDB::NodeDB()
     if (moduleConfig.has_mqtt && config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET &&
         strncmp(moduleConfig.mqtt.address, default_mqtt_address, sizeof(default_mqtt_address)) == 0 &&
         strcmp(moduleConfig.mqtt.root, default_mqtt_root) == 0) {
-        sprintf(moduleConfig.mqtt.root, "%s/%s", default_mqtt_root, myRegion->name);
+        if (myRegion == nullptr) {
+            logError("myRegion is null. Cannot set MQTT root topic.");
+        } else {
+            sprintf(moduleConfig.mqtt.root, "%s/%s", default_mqtt_root, myRegion->name);
+        }
     }
 
     // Ensure that the neighbor info update interval is coerced to the minimum
