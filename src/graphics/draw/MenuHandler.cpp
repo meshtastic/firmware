@@ -493,14 +493,18 @@ void menuHandler::positionBaseMenu()
 {
     enum optionsNumbers { Back, GPSToggle, CompassMenu, CompassCalibrate, DismissFrame, enumEnd };
 
-    static const char *optionsArray[enumEnd] = {"Back", "GPS Toggle", "Compass", "Hide Frame"};
-    static int optionsEnumArray[enumEnd] = {Back, GPSToggle, CompassMenu, DismissFrame};
-    int options = 4;
+    static const char *optionsArray[enumEnd] = {"Back", "GPS Toggle", "Compass"};
+    static int optionsEnumArray[enumEnd] = {Back, GPSToggle, CompassMenu};
+    int options = 3;
 
     if (accelerometerThread) {
         optionsArray[options] = "Compass Calibrate";
         optionsEnumArray[options++] = CompassCalibrate;
     }
+
+    optionsArray[options] = "Hide Frame";
+    optionsEnumArray[options++] = DismissFrame;
+
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Position Action";
     bannerOptions.optionsArrayPtr = optionsArray;
