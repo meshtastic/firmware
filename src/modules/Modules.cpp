@@ -12,6 +12,7 @@
 #include "input/cardKbI2cImpl.h"
 #endif
 #include "input/kbMatrixImpl.h"
+#include "input/kbUsbImpl.h"
 #endif
 #if !MESHTASTIC_EXCLUDE_PKI
 #include "KeyVerificationModule.h"
@@ -181,10 +182,14 @@ void setupModules()
             kbMatrixImpl = new KbMatrixImpl();
             kbMatrixImpl->init();
 #endif // INPUTBROKER_MATRIX_TYPE
+#if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32S2
+        kbUsbImpl = new KbUsbImpl();
+        kbUsbImpl->init();
+#endif
 #ifdef INPUTBROKER_SERIAL_TYPE
             aSerialKeyboardImpl = new SerialKeyboardImpl();
             aSerialKeyboardImpl->init();
-#endif // INPUTBROKER_MATRIX_TYPE
+#endif // INPUTBROKER_SERIAL_TYPE
         }
 #endif // HAS_BUTTON
 #if ARCH_PORTDUINO
