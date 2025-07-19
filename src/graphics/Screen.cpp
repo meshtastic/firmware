@@ -1107,6 +1107,10 @@ void Screen::dismissCurrentFrame()
         LOG_DEBUG("Dismiss WiFi Screen");
         dismissedFrames.wifi = true;
         dismissed = true;
+    } else if (currentFrame == framesetInfo.positions.lora) {
+        LOG_INFO("Dismiss LoRa");
+        dismissedFrames.lora = true;
+        dismissed = true;
     } else if (currentFrame == framesetInfo.positions.system) {
         LOG_INFO("Dismiss Memory");
         dismissedFrames.system = true;
@@ -1416,7 +1420,7 @@ int Screen::handleInputEvent(const InputEvent *event)
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.clock) {
                     menuHandler::clockMenu();
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.lora) {
-                    menuHandler::LoraRegionPicker();
+                    menuHandler::loraMenu();
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.textMessage) {
                     if (devicestate.rx_text_message.from) {
                         menuHandler::messageResponseMenu();

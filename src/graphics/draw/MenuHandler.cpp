@@ -23,6 +23,25 @@ menuHandler::screenMenus menuHandler::menuQueue = menu_none;
 bool test_enabled = false;
 uint8_t test_count = 0;
 
+void menuHandler::loraMenu()
+{
+    static const char *optionsArray[] = {"Back", "Region Picker", "Dismiss Frame"};
+    enum optionsNumbers { Back = 0, lora_picker = 1, DismissCurrentFrame = 2 };
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "LoRa Actions";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 3;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Back) {
+            menuHandler::menuQueue = menuHandler::clock_menu;
+            screen->runNow();
+        } else if (selected == DismissCurrentFrame) {
+            menuHandler::menuQueue = menuHandler::DismissCurrentFrame;
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
 void menuHandler::LoraRegionPicker(uint32_t duration)
 {
     static const char *optionsArray[] = {"Back",

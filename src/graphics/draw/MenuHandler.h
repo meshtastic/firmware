@@ -42,6 +42,7 @@ class menuHandler
     static screenMenus menuQueue;
 
     static void LoraRegionPicker(uint32_t duration = 30000);
+    static void loraMenu();
     static void handleMenuSwitch(OLEDDisplay *display);
     static void clockMenu();
     static void TZPicker();
