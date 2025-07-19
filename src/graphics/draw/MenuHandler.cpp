@@ -234,12 +234,12 @@ void menuHandler::TZPicker()
 
 void menuHandler::clockMenu()
 {
-    static const char *optionsArray[] = {"Back", "Clock Face", "Time Format", "Timezone"};
-    enum optionsNumbers { Back = 0, Clock = 1, Time = 2, Timezone = 3 };
+    static const char *optionsArray[] = {"Back", "Clock Face", "Time Format", "Timezone", "Dismiss Frame"};
+    enum optionsNumbers { Back = 0, Clock = 1, Time = 2, Timezone = 3, DismissCurrentFrame = 4 };
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Clock Action";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 4;
+    bannerOptions.optionsCount = 5;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == Clock) {
             menuHandler::menuQueue = menuHandler::clock_face_picker;
@@ -250,6 +250,8 @@ void menuHandler::clockMenu()
         } else if (selected == Timezone) {
             menuHandler::menuQueue = menuHandler::TZ_picker;
             screen->runNow();
+        } else if (selected == DismissCurrentFrame) {
+            menuHandler::menuQueue = menuHandler::DismissCurrentFrame;
         }
     };
     screen->showOverlayBanner(bannerOptions);

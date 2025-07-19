@@ -677,6 +677,7 @@ class Screen : public concurrency::OSThread
         bool wifi = false;
         bool system = false;
         bool home = false;
+        bool clock = false;
 #ifndef USE_EINK
         bool nodelist = false;
 #endif

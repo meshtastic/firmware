@@ -882,10 +882,12 @@ void Screen::setFrames(FrameFocus focus)
     }
 
 #if defined(DISPLAY_CLOCK_FRAME)
-    fsi.positions.clock = numframes;
-    normalFrames[numframes++] = uiconfig.is_clockface_analog ? graphics::ClockRenderer::drawAnalogClockFrame
-                                                             : graphics::ClockRenderer::drawDigitalClockFrame;
-    indicatorIcons.push_back(digital_icon_clock);
+    if (!dismissedFrames.clock) {
+        fsi.positions.clock = numframes;
+        normalFrames[numframes++] = uiconfig.is_clockface_analog ? graphics::ClockRenderer::drawAnalogClockFrame
+                                                                 : graphics::ClockRenderer::drawDigitalClockFrame;
+        indicatorIcons.push_back(digital_icon_clock);
+    }
 #endif
 
     // Declare this early so it’s available in FOCUS_PRESERVE block
@@ -950,10 +952,12 @@ void Screen::setFrames(FrameFocus focus)
         indicatorIcons.push_back(icon_system);
     }
 #if !defined(DISPLAY_CLOCK_FRAME)
-    fsi.positions.clock = numframes;
-    normalFrames[numframes++] = uiconfig.is_clockface_analog ? graphics::ClockRenderer::drawAnalogClockFrame
-                                                             : graphics::ClockRenderer::drawDigitalClockFrame;
-    indicatorIcons.push_back(digital_icon_clock);
+    if (!dismissedFrames.clock) {
+        fsi.positions.clock = numframes;
+        normalFrames[numframes++] = uiconfig.is_clockface_analog ? graphics::ClockRenderer::drawAnalogClockFrame
+                                                                 : graphics::ClockRenderer::drawDigitalClockFrame;
+        indicatorIcons.push_back(digital_icon_clock);
+    }
 #endif
 
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
@@ -1114,6 +1118,10 @@ void Screen::dismissCurrentFrame()
     } else if (currentFrame == framesetInfo.positions.system) {
         LOG_INFO("Dismiss Memory");
         dismissedFrames.system = true;
+        dismissed = true;
+    } else if (currentFrame == framesetInfo.positions.clock) {
+        LOG_INFO("Dismiss Clock");
+        dismissedFrames.clock = true;
         dismissed = true;
 #if HAS_GPS
     } else if (currentFrame == framesetInfo.positions.nodelist_bearings) {
