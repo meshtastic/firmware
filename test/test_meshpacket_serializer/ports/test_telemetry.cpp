@@ -8,11 +8,11 @@ static size_t encode_telemetry_device_metrics(uint8_t *buffer, size_t buffer_siz
     telemetry.which_variant = meshtastic_Telemetry_device_metrics_tag;
     telemetry.variant.device_metrics.battery_level = 85;
     telemetry.variant.device_metrics.has_battery_level = true;
-    telemetry.variant.device_metrics.voltage = 3.7f;
+    telemetry.variant.device_metrics.voltage = 3.72f;
     telemetry.variant.device_metrics.has_voltage = true;
-    telemetry.variant.device_metrics.channel_utilization = 15.5f;
+    telemetry.variant.device_metrics.channel_utilization = 15.56f;
     telemetry.variant.device_metrics.has_channel_utilization = true;
-    telemetry.variant.device_metrics.air_util_tx = 8.2f;
+    telemetry.variant.device_metrics.air_util_tx = 8.23f;
     telemetry.variant.device_metrics.has_air_util_tx = true;
     telemetry.variant.device_metrics.uptime_seconds = 12345;
     telemetry.variant.device_metrics.has_uptime_seconds = true;
@@ -46,67 +46,67 @@ static size_t encode_telemetry_environment_metrics_all_fields(uint8_t *buffer, s
     telemetry.which_variant = meshtastic_Telemetry_environment_metrics_tag;
 
     // Basic environment metrics
-    telemetry.variant.environment_metrics.temperature = 23.5f;
+    telemetry.variant.environment_metrics.temperature = 23.56f;
     telemetry.variant.environment_metrics.has_temperature = true;
-    telemetry.variant.environment_metrics.relative_humidity = 65.0f;
+    telemetry.variant.environment_metrics.relative_humidity = 65.43f;
     telemetry.variant.environment_metrics.has_relative_humidity = true;
-    telemetry.variant.environment_metrics.barometric_pressure = 1013.25f;
+    telemetry.variant.environment_metrics.barometric_pressure = 1013.27f;
     telemetry.variant.environment_metrics.has_barometric_pressure = true;
 
     // Gas and air quality
-    telemetry.variant.environment_metrics.gas_resistance = 50.5f;
+    telemetry.variant.environment_metrics.gas_resistance = 50.58f;
     telemetry.variant.environment_metrics.has_gas_resistance = true;
     telemetry.variant.environment_metrics.iaq = 120;
     telemetry.variant.environment_metrics.has_iaq = true;
 
     // Power measurements
-    telemetry.variant.environment_metrics.voltage = 3.3f;
+    telemetry.variant.environment_metrics.voltage = 3.34f;
     telemetry.variant.environment_metrics.has_voltage = true;
-    telemetry.variant.environment_metrics.current = 0.5f;
+    telemetry.variant.environment_metrics.current = 0.53f;
     telemetry.variant.environment_metrics.has_current = true;
 
     // Light measurements (ALL 4 types)
-    telemetry.variant.environment_metrics.lux = 450.0f;
+    telemetry.variant.environment_metrics.lux = 450.12f;
     telemetry.variant.environment_metrics.has_lux = true;
-    telemetry.variant.environment_metrics.white_lux = 380.0f;
+    telemetry.variant.environment_metrics.white_lux = 380.95f;
     telemetry.variant.environment_metrics.has_white_lux = true;
-    telemetry.variant.environment_metrics.ir_lux = 25.0f;
+    telemetry.variant.environment_metrics.ir_lux = 25.37f;
     telemetry.variant.environment_metrics.has_ir_lux = true;
-    telemetry.variant.environment_metrics.uv_lux = 15.0f;
+    telemetry.variant.environment_metrics.uv_lux = 15.68f;
     telemetry.variant.environment_metrics.has_uv_lux = true;
 
     // Distance measurement
-    telemetry.variant.environment_metrics.distance = 150.0f;
+    telemetry.variant.environment_metrics.distance = 150.29f;
     telemetry.variant.environment_metrics.has_distance = true;
 
     // Wind measurements (ALL 4 types)
     telemetry.variant.environment_metrics.wind_direction = 180;
     telemetry.variant.environment_metrics.has_wind_direction = true;
-    telemetry.variant.environment_metrics.wind_speed = 5.5f;
+    telemetry.variant.environment_metrics.wind_speed = 5.52f;
     telemetry.variant.environment_metrics.has_wind_speed = true;
-    telemetry.variant.environment_metrics.wind_gust = 8.2f;
+    telemetry.variant.environment_metrics.wind_gust = 8.24f;
     telemetry.variant.environment_metrics.has_wind_gust = true;
-    telemetry.variant.environment_metrics.wind_lull = 2.1f;
+    telemetry.variant.environment_metrics.wind_lull = 2.13f;
     telemetry.variant.environment_metrics.has_wind_lull = true;
 
     // Weight measurement
-    telemetry.variant.environment_metrics.weight = 75.5f;
+    telemetry.variant.environment_metrics.weight = 75.56f;
     telemetry.variant.environment_metrics.has_weight = true;
 
     // Radiation measurement
-    telemetry.variant.environment_metrics.radiation = 0.12f;
+    telemetry.variant.environment_metrics.radiation = 0.13f;
     telemetry.variant.environment_metrics.has_radiation = true;
 
     // Rainfall measurements (BOTH types)
-    telemetry.variant.environment_metrics.rainfall_1h = 2.5f;
+    telemetry.variant.environment_metrics.rainfall_1h = 2.57f;
     telemetry.variant.environment_metrics.has_rainfall_1h = true;
-    telemetry.variant.environment_metrics.rainfall_24h = 15.8f;
+    telemetry.variant.environment_metrics.rainfall_24h = 15.89f;
     telemetry.variant.environment_metrics.has_rainfall_24h = true;
 
     // Soil measurements (BOTH types)
     telemetry.variant.environment_metrics.soil_moisture = 85;
     telemetry.variant.environment_metrics.has_soil_moisture = true;
-    telemetry.variant.environment_metrics.soil_temperature = 18.5f;
+    telemetry.variant.environment_metrics.soil_temperature = 18.54f;
     telemetry.variant.environment_metrics.has_soil_temperature = true;
 
     // IMPORTANT: When new environment fields are added to the protobuf,
@@ -125,67 +125,67 @@ static size_t encode_telemetry_environment_metrics(uint8_t *buffer, size_t buffe
     telemetry.which_variant = meshtastic_Telemetry_environment_metrics_tag;
 
     // Basic environment metrics
-    telemetry.variant.environment_metrics.temperature = 23.5f;
+    telemetry.variant.environment_metrics.temperature = 23.56f;
     telemetry.variant.environment_metrics.has_temperature = true;
-    telemetry.variant.environment_metrics.relative_humidity = 65.0f;
+    telemetry.variant.environment_metrics.relative_humidity = 65.43f;
     telemetry.variant.environment_metrics.has_relative_humidity = true;
-    telemetry.variant.environment_metrics.barometric_pressure = 1013.25f;
+    telemetry.variant.environment_metrics.barometric_pressure = 1013.27f;
     telemetry.variant.environment_metrics.has_barometric_pressure = true;
 
     // Gas and air quality
-    telemetry.variant.environment_metrics.gas_resistance = 50.5f;
+    telemetry.variant.environment_metrics.gas_resistance = 50.58f;
     telemetry.variant.environment_metrics.has_gas_resistance = true;
     telemetry.variant.environment_metrics.iaq = 120;
     telemetry.variant.environment_metrics.has_iaq = true;
 
     // Power measurements
-    telemetry.variant.environment_metrics.voltage = 3.3f;
+    telemetry.variant.environment_metrics.voltage = 3.34f;
     telemetry.variant.environment_metrics.has_voltage = true;
-    telemetry.variant.environment_metrics.current = 0.5f;
+    telemetry.variant.environment_metrics.current = 0.53f;
     telemetry.variant.environment_metrics.has_current = true;
 
     // Light measurements
-    telemetry.variant.environment_metrics.lux = 450.0f;
+    telemetry.variant.environment_metrics.lux = 450.12f;
     telemetry.variant.environment_metrics.has_lux = true;
-    telemetry.variant.environment_metrics.white_lux = 380.0f;
+    telemetry.variant.environment_metrics.white_lux = 380.95f;
     telemetry.variant.environment_metrics.has_white_lux = true;
-    telemetry.variant.environment_metrics.ir_lux = 25.0f;
+    telemetry.variant.environment_metrics.ir_lux = 25.37f;
     telemetry.variant.environment_metrics.has_ir_lux = true;
-    telemetry.variant.environment_metrics.uv_lux = 15.0f;
+    telemetry.variant.environment_metrics.uv_lux = 15.68f;
     telemetry.variant.environment_metrics.has_uv_lux = true;
 
     // Distance measurement
-    telemetry.variant.environment_metrics.distance = 150.0f;
+    telemetry.variant.environment_metrics.distance = 150.29f;
     telemetry.variant.environment_metrics.has_distance = true;
 
     // Wind measurements
     telemetry.variant.environment_metrics.wind_direction = 180;
     telemetry.variant.environment_metrics.has_wind_direction = true;
-    telemetry.variant.environment_metrics.wind_speed = 5.5f;
+    telemetry.variant.environment_metrics.wind_speed = 5.52f;
     telemetry.variant.environment_metrics.has_wind_speed = true;
-    telemetry.variant.environment_metrics.wind_gust = 8.2f;
+    telemetry.variant.environment_metrics.wind_gust = 8.24f;
     telemetry.variant.environment_metrics.has_wind_gust = true;
-    telemetry.variant.environment_metrics.wind_lull = 2.1f;
+    telemetry.variant.environment_metrics.wind_lull = 2.13f;
     telemetry.variant.environment_metrics.has_wind_lull = true;
 
     // Weight measurement
-    telemetry.variant.environment_metrics.weight = 75.5f;
+    telemetry.variant.environment_metrics.weight = 75.56f;
     telemetry.variant.environment_metrics.has_weight = true;
 
     // Radiation measurement
-    telemetry.variant.environment_metrics.radiation = 0.12f;
+    telemetry.variant.environment_metrics.radiation = 0.13f;
     telemetry.variant.environment_metrics.has_radiation = true;
 
     // Rainfall measurements
-    telemetry.variant.environment_metrics.rainfall_1h = 2.5f;
+    telemetry.variant.environment_metrics.rainfall_1h = 2.57f;
     telemetry.variant.environment_metrics.has_rainfall_1h = true;
-    telemetry.variant.environment_metrics.rainfall_24h = 15.8f;
+    telemetry.variant.environment_metrics.rainfall_24h = 15.89f;
     telemetry.variant.environment_metrics.has_rainfall_24h = true;
 
     // Soil measurements
     telemetry.variant.environment_metrics.soil_moisture = 85;
     telemetry.variant.environment_metrics.has_soil_moisture = true;
-    telemetry.variant.environment_metrics.soil_temperature = 18.5f;
+    telemetry.variant.environment_metrics.soil_temperature = 18.54f;
     telemetry.variant.environment_metrics.has_soil_temperature = true;
 
     pb_ostream_t stream = pb_ostream_from_buffer(buffer, buffer_size);
@@ -225,13 +225,16 @@ void test_telemetry_device_metrics_serialization()
     TEST_ASSERT_EQUAL(85, (int)payload["battery_level"]->AsNumber());
 
     TEST_ASSERT_TRUE(payload.find("voltage") != payload.end());
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 3.7f, payload["voltage"]->AsNumber());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 3.72f, payload["voltage"]->AsNumber());
 
     TEST_ASSERT_TRUE(payload.find("channel_utilization") != payload.end());
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 15.5f, payload["channel_utilization"]->AsNumber());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 15.56f, payload["channel_utilization"]->AsNumber());
 
     TEST_ASSERT_TRUE(payload.find("uptime_seconds") != payload.end());
     TEST_ASSERT_EQUAL(12345, (int)payload["uptime_seconds"]->AsNumber());
+
+    // Note: JSON serialization may not preserve exact 2-decimal formatting due to float precision
+    // We verify the numeric values are correct within tolerance
 
     delete root;
 }
@@ -261,13 +264,16 @@ void test_telemetry_environment_metrics_serialization()
 
     // Test key fields that should be present in the serializer
     TEST_ASSERT_TRUE(payload.find("temperature") != payload.end());
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 23.5f, payload["temperature"]->AsNumber());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 23.56f, payload["temperature"]->AsNumber());
 
     TEST_ASSERT_TRUE(payload.find("relative_humidity") != payload.end());
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 65.0f, payload["relative_humidity"]->AsNumber());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 65.43f, payload["relative_humidity"]->AsNumber());
 
     TEST_ASSERT_TRUE(payload.find("distance") != payload.end());
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 150.0f, payload["distance"]->AsNumber());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 150.29f, payload["distance"]->AsNumber());
+
+    // Note: JSON serialization may have float precision limitations
+    // We focus on verifying numeric accuracy rather than exact string formatting
 
     delete root;
 }
@@ -340,25 +346,28 @@ void test_telemetry_environment_metrics_missing_fields()
 
     // Check the 7 fields that were previously missing
     TEST_ASSERT_TRUE(payload.find("ir_lux") != payload.end());
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 25.0f, payload["ir_lux"]->AsNumber());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 25.37f, payload["ir_lux"]->AsNumber());
 
     TEST_ASSERT_TRUE(payload.find("uv_lux") != payload.end());
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 15.0f, payload["uv_lux"]->AsNumber());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 15.68f, payload["uv_lux"]->AsNumber());
 
     TEST_ASSERT_TRUE(payload.find("weight") != payload.end());
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 75.5f, payload["weight"]->AsNumber());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 75.56f, payload["weight"]->AsNumber());
 
     TEST_ASSERT_TRUE(payload.find("rainfall_1h") != payload.end());
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 2.5f, payload["rainfall_1h"]->AsNumber());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 2.57f, payload["rainfall_1h"]->AsNumber());
 
     TEST_ASSERT_TRUE(payload.find("rainfall_24h") != payload.end());
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 15.8f, payload["rainfall_24h"]->AsNumber());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 15.89f, payload["rainfall_24h"]->AsNumber());
 
     TEST_ASSERT_TRUE(payload.find("soil_moisture") != payload.end());
     TEST_ASSERT_EQUAL(85, (int)payload["soil_moisture"]->AsNumber());
 
     TEST_ASSERT_TRUE(payload.find("soil_temperature") != payload.end());
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 18.5f, payload["soil_temperature"]->AsNumber());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 18.54f, payload["soil_temperature"]->AsNumber());
+
+    // Note: JSON float serialization may not preserve exact decimal formatting
+    // We verify the values are numerically correct within tolerance
 
     delete root;
 }
@@ -394,70 +403,73 @@ void test_telemetry_environment_metrics_complete_coverage()
 
     // Basic environment (3 fields)
     TEST_ASSERT_TRUE(payload.find("temperature") != payload.end());
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 23.5f, payload["temperature"]->AsNumber());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 23.56f, payload["temperature"]->AsNumber());
     TEST_ASSERT_TRUE(payload.find("relative_humidity") != payload.end());
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 65.0f, payload["relative_humidity"]->AsNumber());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 65.43f, payload["relative_humidity"]->AsNumber());
     TEST_ASSERT_TRUE(payload.find("barometric_pressure") != payload.end());
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 1013.25f, payload["barometric_pressure"]->AsNumber());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 1013.27f, payload["barometric_pressure"]->AsNumber());
 
     // Gas and air quality (2 fields)
     TEST_ASSERT_TRUE(payload.find("gas_resistance") != payload.end());
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 50.5f, payload["gas_resistance"]->AsNumber());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 50.58f, payload["gas_resistance"]->AsNumber());
     TEST_ASSERT_TRUE(payload.find("iaq") != payload.end());
     TEST_ASSERT_EQUAL(120, (int)payload["iaq"]->AsNumber());
 
     // Power measurements (2 fields)
     TEST_ASSERT_TRUE(payload.find("voltage") != payload.end());
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 3.3f, payload["voltage"]->AsNumber());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 3.34f, payload["voltage"]->AsNumber());
     TEST_ASSERT_TRUE(payload.find("current") != payload.end());
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.5f, payload["current"]->AsNumber());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.53f, payload["current"]->AsNumber());
 
     // Light measurements (4 fields)
     TEST_ASSERT_TRUE(payload.find("lux") != payload.end());
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 450.0f, payload["lux"]->AsNumber());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 450.12f, payload["lux"]->AsNumber());
     TEST_ASSERT_TRUE(payload.find("white_lux") != payload.end());
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 380.0f, payload["white_lux"]->AsNumber());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 380.95f, payload["white_lux"]->AsNumber());
     TEST_ASSERT_TRUE(payload.find("ir_lux") != payload.end());
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 25.0f, payload["ir_lux"]->AsNumber());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 25.37f, payload["ir_lux"]->AsNumber());
     TEST_ASSERT_TRUE(payload.find("uv_lux") != payload.end());
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 15.0f, payload["uv_lux"]->AsNumber());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 15.68f, payload["uv_lux"]->AsNumber());
 
     // Distance measurement (1 field)
     TEST_ASSERT_TRUE(payload.find("distance") != payload.end());
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 150.0f, payload["distance"]->AsNumber());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 150.29f, payload["distance"]->AsNumber());
 
     // Wind measurements (4 fields)
     TEST_ASSERT_TRUE(payload.find("wind_direction") != payload.end());
     TEST_ASSERT_EQUAL(180, (int)payload["wind_direction"]->AsNumber());
     TEST_ASSERT_TRUE(payload.find("wind_speed") != payload.end());
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 5.5f, payload["wind_speed"]->AsNumber());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 5.52f, payload["wind_speed"]->AsNumber());
     TEST_ASSERT_TRUE(payload.find("wind_gust") != payload.end());
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 8.2f, payload["wind_gust"]->AsNumber());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 8.24f, payload["wind_gust"]->AsNumber());
     TEST_ASSERT_TRUE(payload.find("wind_lull") != payload.end());
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 2.1f, payload["wind_lull"]->AsNumber());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 2.13f, payload["wind_lull"]->AsNumber());
 
     // Weight measurement (1 field)
     TEST_ASSERT_TRUE(payload.find("weight") != payload.end());
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 75.5f, payload["weight"]->AsNumber());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 75.56f, payload["weight"]->AsNumber());
 
     // Radiation measurement (1 field)
     TEST_ASSERT_TRUE(payload.find("radiation") != payload.end());
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.12f, payload["radiation"]->AsNumber());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.13f, payload["radiation"]->AsNumber());
 
     // Rainfall measurements (2 fields)
     TEST_ASSERT_TRUE(payload.find("rainfall_1h") != payload.end());
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 2.5f, payload["rainfall_1h"]->AsNumber());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 2.57f, payload["rainfall_1h"]->AsNumber());
     TEST_ASSERT_TRUE(payload.find("rainfall_24h") != payload.end());
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 15.8f, payload["rainfall_24h"]->AsNumber());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 15.89f, payload["rainfall_24h"]->AsNumber());
 
     // Soil measurements (2 fields)
     TEST_ASSERT_TRUE(payload.find("soil_moisture") != payload.end());
     TEST_ASSERT_EQUAL(85, (int)payload["soil_moisture"]->AsNumber());
     TEST_ASSERT_TRUE(payload.find("soil_temperature") != payload.end());
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 18.5f, payload["soil_temperature"]->AsNumber());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 18.54f, payload["soil_temperature"]->AsNumber());
 
     // Total: 22 environment fields
     // This test ensures 100% coverage of environment metrics
+
+    // Note: JSON float serialization precision may vary due to the underlying library
+    // The important aspect is that all values are numerically accurate within tolerance
 
     delete root;
 }

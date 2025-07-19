@@ -101,7 +101,7 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
                         msgPayload["iaq"] = new JSONValue((uint)decoded->variant.environment_metrics.iaq);
                     }
                     if (decoded->variant.environment_metrics.has_distance) {
-                        msgPayload["distance"] = new JSONValue((uint)decoded->variant.environment_metrics.distance);
+                        msgPayload["distance"] = new JSONValue(decoded->variant.environment_metrics.distance);
                     }
                     if (decoded->variant.environment_metrics.has_wind_speed) {
                         msgPayload["wind_speed"] = new JSONValue(decoded->variant.environment_metrics.wind_speed);
