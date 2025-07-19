@@ -156,7 +156,7 @@ void NotificationRenderer::drawNumberPicker(OLEDDisplay *display, OLEDDisplayUiS
         resetBanner();
         return;
     }
-    if (curSelected == numDigits) {
+    if (curSelected == static_cast<int8_t>(numDigits)) {
         alertBannerCallback(currentNumber);
         resetBanner();
         return;

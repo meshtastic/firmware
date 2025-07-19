@@ -67,4 +67,5 @@ void CardKbI2cImpl::init()
     }
 #endif
     inputBroker->registerSource(this);
+    kb_found = true;
 }

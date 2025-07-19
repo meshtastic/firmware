@@ -454,7 +454,7 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
         else if ((destIndex / columns) >= (scrollIndex + visibleRows))
             scrollIndex = (destIndex / columns) - visibleRows + 1;
 
-        screen->forceDisplay();
+        screen->forceDisplay(true);
         return 1;
     }
 
@@ -469,7 +469,7 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
         if ((destIndex / columns) >= (scrollIndex + visibleRows))
             scrollIndex = (destIndex / columns) - visibleRows + 1;
 
-        screen->forceDisplay();
+        screen->forceDisplay(true);
         return 1;
     }
 
@@ -491,7 +491,7 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
 
         runState = returnToCannedList ? CANNED_MESSAGE_RUN_STATE_ACTIVE : CANNED_MESSAGE_RUN_STATE_FREETEXT;
         returnToCannedList = false;
-        screen->forceDisplay();
+        screen->forceDisplay(true);
         return 1;
     }
 
@@ -504,7 +504,7 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
         // UIFrameEvent e;
         // e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
         // notifyObservers(&e);
-        screen->forceDisplay();
+        screen->forceDisplay(true);
         return 1;
     }
 
@@ -850,7 +850,13 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
     this->waitingForAck = true;
 
     // Log outgoing message
-    LOG_INFO("Send message id=%d, dest=%x, msg=%.*s", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
+    LOG_INFO("Send message id=%u, dest=%x, msg=%.*s", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
+
+    if (p->to != 0xffffffff) {
+        LOG_INFO("Proactively adding %x as favorite node", p->to);
+        nodeDB->set_favorite(true, p->to);
+        screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
+    }
 
     // Send to mesh and phone (even if no phone connected, to track ACKs)
     service->sendToMesh(p, RX_SRC_LOCAL, true);
