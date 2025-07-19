@@ -1129,7 +1129,7 @@ void menuHandler::RestoreAllFrames_menu()
 {
     static const char *optionsArray[] = {"Cancel", "Confirm"};
     BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "Show All Frames?";
+    bannerOptions.message = "Restore All Frames?";
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 2;
     bannerOptions.bannerCallback = [](int selected) -> void {
