@@ -68,6 +68,9 @@ static int32_t reconnectETH()
                 initApiServer();
             }
 #endif
+            if (udpHandler && config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST) {
+                udpHandler->start();
+            }
 
             ethStartupComplete = true;
         }
