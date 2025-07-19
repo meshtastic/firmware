@@ -37,7 +37,11 @@ bool AsyncUDP::writeTo(const uint8_t *data, size_t len, IPAddress ip, uint16_t p
 // AsyncUDPPacket
 AsyncUDPPacket::AsyncUDPPacket(EthernetUDP &source) : _udp(source), _remoteIP(source.remoteIP()), _remotePort(source.remotePort())
 {
-    _readLength = _udp.read(_buffer, sizeof(_buffer));
+    if (_udp.available() > 0) {
+        _readLength = _udp.read(_buffer, sizeof(_buffer));
+    } else {
+        _readLength = 0;
+    }
 }
 
 IPAddress AsyncUDPPacket::remoteIP()
