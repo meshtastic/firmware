@@ -226,7 +226,14 @@ RTCSetResult perhapsSetRTC(RTCQuality q, struct tm &t)
     time_t res = gm_mktime(&t);
     struct timeval tv;
     tv.tv_sec = res;
-    tv.tv_usec = 0; // time.centisecond() * (10 / 1000);
+    tv.tv_usec = 0;                      // time.centisecond() * (10 / 1000);
+    uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
+#ifdef BUILD_EPOCH
+    if (tv.tv_sec < BUILD_EPOCH) {
+        LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
+        return RTCSetResultInvalidTime;
+    }
+#endif
 
     // LOG_DEBUG("Got time from GPS month=%d, year=%d, unixtime=%ld", t.tm_mon, t.tm_year, tv.tv_sec);
     if (t.tm_year < 0 || t.tm_year >= 300) {
