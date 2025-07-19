@@ -67,6 +67,8 @@ uint32_t MemGet::getFreePsram()
 {
 #ifdef ARCH_ESP32
     return ESP.getFreePsram();
+#elif (defined(HAS_SDCARD) && defined(ARCH_ESP32))
+    return SD.totalBytes() - SD.usedBytes();
 #elif defined(ARCH_PORTDUINO)
     return 4194252;
 #else
@@ -83,6 +85,8 @@ uint32_t MemGet::getPsramSize()
 {
 #ifdef ARCH_ESP32
     return ESP.getPsramSize();
+#elif (defined(HAS_SDCARD) && defined(ARCH_ESP32))
+    return SD.totalBytes();
 #elif defined(ARCH_PORTDUINO)
     return 4194252;
 #else
