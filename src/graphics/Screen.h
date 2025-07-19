@@ -676,6 +676,20 @@ class Screen : public concurrency::OSThread
         bool waypoint = false;
         bool wifi = false;
         bool system = false;
+        bool home = false;
+#ifndef USE_EINK
+        bool nodelist = false;
+#endif
+#ifdef USE_EINK
+        bool nodelist_lastheard = false;
+        bool nodelist_hopsignal = false;
+        bool nodelist_distance = false;
+#endif
+#if HAS_GPS
+        bool nodelist_bearings = false;
+        bool gps = false;
+#endif
+        bool lora = false;
     } dismissedFrames;
 
     /// Try to start drawing ASAP

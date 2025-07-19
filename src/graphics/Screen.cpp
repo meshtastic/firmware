@@ -891,44 +891,55 @@ void Screen::setFrames(FrameFocus focus)
     // Declare this early so it’s available in FOCUS_PRESERVE block
     bool willInsertTextMessage = shouldDrawMessage(&devicestate.rx_text_message);
 
-    fsi.positions.home = numframes;
-    normalFrames[numframes++] = graphics::UIRenderer::drawDeviceFocused;
-    indicatorIcons.push_back(icon_home);
+    if (!dismissedFrames.home) {
+        fsi.positions.home = numframes;
+        normalFrames[numframes++] = graphics::UIRenderer::drawDeviceFocused;
+        indicatorIcons.push_back(icon_home);
+    }
 
     fsi.positions.textMessage = numframes;
     normalFrames[numframes++] = graphics::MessageRenderer::drawTextMessageFrame;
     indicatorIcons.push_back(icon_mail);
 
 #ifndef USE_EINK
-    fsi.positions.nodelist = numframes;
-    normalFrames[numframes++] = graphics::NodeListRenderer::drawDynamicNodeListScreen;
-    indicatorIcons.push_back(icon_nodes);
+    if (!dismissedFrames.nodelist) {
+        fsi.positions.nodelist = numframes;
+        normalFrames[numframes++] = graphics::NodeListRenderer::drawDynamicNodeListScreen;
+        indicatorIcons.push_back(icon_nodes);
+    }
 #endif
 
 // Show detailed node views only on E-Ink builds
 #ifdef USE_EINK
-    fsi.positions.nodelist_lastheard = numframes;
-    normalFrames[numframes++] = graphics::NodeListRenderer::drawLastHeardScreen;
-    indicatorIcons.push_back(icon_nodes);
-
-    fsi.positions.nodelist_hopsignal = numframes;
-    normalFrames[numframes++] = graphics::NodeListRenderer::drawHopSignalScreen;
-    indicatorIcons.push_back(icon_signal);
-
-    fsi.positions.nodelist_distance = numframes;
-    normalFrames[numframes++] = graphics::NodeListRenderer::drawDistanceScreen;
-    indicatorIcons.push_back(icon_distance);
+    if (!dismissedFrames.nodelist_lastheard) {
+        fsi.positions.nodelist_lastheard = numframes;
+        normalFrames[numframes++] = graphics::NodeListRenderer::drawLastHeardScreen;
+        indicatorIcons.push_back(icon_nodes);
+    }
+    if (!dismissedFrames.nodelist_hopsignal) {
+        fsi.positions.nodelist_hopsignal = numframes;
+        normalFrames[numframes++] = graphics::NodeListRenderer::drawHopSignalScreen;
+        indicatorIcons.push_back(icon_signal);
+    }
+    if (!dismissedFrames.nodelist_distance) {
+        fsi.positions.nodelist_distance = numframes;
+        normalFrames[numframes++] = graphics::NodeListRenderer::drawDistanceScreen;
+        indicatorIcons.push_back(icon_distance);
+    }
 #endif
 #if HAS_GPS
-    fsi.positions.nodelist_bearings = numframes;
-    normalFrames[numframes++] = graphics::NodeListRenderer::drawNodeListWithCompasses;
-    indicatorIcons.push_back(icon_list);
-
-    fsi.positions.gps = numframes;
-    normalFrames[numframes++] = graphics::UIRenderer::drawCompassAndLocationScreen;
-    indicatorIcons.push_back(icon_compass);
+    if (!dismissedFrames.nodelist_bearings) {
+        fsi.positions.nodelist_bearings = numframes;
+        normalFrames[numframes++] = graphics::NodeListRenderer::drawNodeListWithCompasses;
+        indicatorIcons.push_back(icon_list);
+    }
+    if (!dismissedFrames.gps) {
+        fsi.positions.gps = numframes;
+        normalFrames[numframes++] = graphics::UIRenderer::drawCompassAndLocationScreen;
+        indicatorIcons.push_back(icon_compass);
+    }
 #endif
-    if (RadioLibInterface::instance) {
+    if (RadioLibInterface::instance && !dismissedFrames.lora) {
         fsi.positions.lora = numframes;
         normalFrames[numframes++] = graphics::DebugRenderer::drawLoRaFocused;
         indicatorIcons.push_back(icon_radio);
@@ -1099,6 +1110,10 @@ void Screen::dismissCurrentFrame()
     } else if (currentFrame == framesetInfo.positions.system) {
         LOG_INFO("Dismiss Memory");
         dismissedFrames.system = true;
+        dismissed = true;
+    } else if (currentFrame == framesetInfo.positions.nodelist_bearings) {
+        LOG_INFO("Dismiss Bearings");
+        dismissedFrames.nodelist_bearings = true;
         dismissed = true;
     }
 
