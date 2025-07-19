@@ -706,13 +706,21 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             requiresReboot = false;
         }
 
-#ifdef RF95_FAN_EN
+#ifdef RADIO_FAN_EN
+#ifdef RADIO_FAN_PWM
+#if defined(ARCH_ESP32)
+        ledcWrite(1, c.payload_variant.lora.pa_fan_disabled ? 0 : (pa_fan_percentage * 2.55));
+#elif defined(ARCH_NFR52)
+        analogWrite(RADIO_FAN_EN, c.payload_variant.lora.pa_fan_disabled ? 0 : (pa_fan_percentage * 2.55));
+#endif
+#else
         // Turn PA off if disabled by config
         if (c.payload_variant.lora.pa_fan_disabled) {
-            digitalWrite(RF95_FAN_EN, LOW ^ 0);
+            digitalWrite(RADIO_FAN_EN, LOW ^ 0);
         } else {
-            digitalWrite(RF95_FAN_EN, HIGH ^ 0);
+            digitalWrite(RADIO_FAN_EN, HIGH ^ 0);
         }
+#endif
 #endif
         config.lora = c.payload_variant.lora;
         // If we're setting region for the first time, init the region

@@ -154,10 +154,7 @@ bool RF95Interface::init()
     digitalWrite(RF95_TXEN, 0);
 #endif
 
-#ifdef RF95_FAN_EN
-    pinMode(RF95_FAN_EN, OUTPUT);
-    digitalWrite(RF95_FAN_EN, 1);
-#endif
+    enableFan();
 
 #ifdef RF95_RXEN
     pinMode(RF95_RXEN, OUTPUT);
@@ -330,10 +327,7 @@ bool RF95Interface::sleep()
     // put chipset into sleep mode
     setStandby(); // First cancel any active receiving/sending
     lora->sleep();
-
-#ifdef RF95_FAN_EN
-    digitalWrite(RF95_FAN_EN, 0);
-#endif
+    disableFan();
 
     return true;
 }

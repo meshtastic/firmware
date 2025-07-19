@@ -12,7 +12,7 @@
 #define LORA_MISO 19
 #define LORA_MOSI 23
 #define LORA_CS 5
-#define RF95_FAN_EN 17
+#define RADIO_FAN_EN 17
 
 // #define LED_PIN 16 // This is a LED_WS2812 not a standard LED
 #define HAS_NEOPIXEL                         // Enable the use of neopixels

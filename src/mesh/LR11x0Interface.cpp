@@ -3,6 +3,7 @@
 #include "Throttle.h"
 #include "configuration.h"
 #include "error.h"
+#include "main.h"
 #include "mesh/NodeDB.h"
 #ifdef LR11X0_DIO_AS_RF_SWITCH
 #include "rfswitch.h"
@@ -53,6 +54,8 @@ template <typename T> bool LR11x0Interface<T>::init()
     pinMode(LR11X0_POWER_EN, OUTPUT);
     digitalWrite(LR11X0_POWER_EN, HIGH);
 #endif
+
+    enableFan();
 
 #if ARCH_PORTDUINO
     float tcxoVoltage = (float)settingsMap[dio3_tcxo_voltage] / 1000;

@@ -32,7 +32,7 @@
   This unit has a FAN built-in.
   FAN is active at 250mW on it's ExpressLRS Firmware.
 */
-#define RF95_FAN_EN 2
+#define RADIO_FAN_EN 2
 
 /*
   LED PIN setup.
