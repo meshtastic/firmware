@@ -375,7 +375,7 @@ void menuHandler::textMessageBaseMenu()
 
 void menuHandler::systemBaseMenu()
 {
-    enum optionsNumbers { Back, Notifications, ScreenOptions, PowerMenu, Test, DismissSystemFrame, enumEnd };
+    enum optionsNumbers { Back, Notifications, ScreenOptions, PowerMenu, Test, DismissFrame, enumEnd };
     static const char *optionsArray[enumEnd] = {"Back"};
     static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
@@ -396,8 +396,8 @@ void menuHandler::systemBaseMenu()
         optionsEnumArray[options++] = Test;
     }
 
-    optionsArray[options] = "Dismiss Frame";
-    optionsEnumArray[options++] = DismissSystemFrame;
+    // optionsArray[options] = "Dismiss Frame";
+    // optionsEnumArray[options++] = DismissCurrentFrame;
 
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "System Action";
@@ -417,8 +417,8 @@ void menuHandler::systemBaseMenu()
         } else if (selected == Test) {
             menuHandler::menuQueue = menuHandler::test_menu;
             screen->runNow();
-        } else if (selected == DismissSystemFrame) {
-            menuHandler::menuQueue = menuHandler::DismissSystemFrame;
+        } else if (selected == DismissFrame) {
+            menuHandler::menuQueue = menuHandler::DismissCurrentFrame;
             screen->runNow();
         } else if (selected == Back && !test_enabled) {
             test_count++;
@@ -489,7 +489,7 @@ void menuHandler::positionBaseMenu()
         } else if (selected == CompassCalibrate) {
             accelerometerThread->calibrate(30);
         } else if (selected == DismissFrame) {
-            menuQueue = DismissPositionFrame;
+            menuQueue = DismissCurrentFrame;
             screen->runNow();
         }
     };
@@ -498,7 +498,7 @@ void menuHandler::positionBaseMenu()
 
 void menuHandler::nodeListMenu()
 {
-    enum optionsNumbers { Back, Favorite, Verify, Reset, Dismissnodelist_bearings };
+    enum optionsNumbers { Back, Favorite, Verify, Reset, DismissFrame };
     static const char *optionsArray[] = {"Back", "Add Favorite", "Key Verification", "Reset NodeDB", "Dismiss Frame"};
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Node Action";
@@ -514,8 +514,8 @@ void menuHandler::nodeListMenu()
         } else if (selected == Reset) {
             menuQueue = reset_node_db_menu;
             screen->runNow();
-        } else if (selected == Dismissnodelist_bearings) {
-            menuQueue = Dismissnodelist_bearingsFrame;
+        } else if (selected == DismissFrame) {
+            menuQueue = DismissCurrentFrame;
             screen->runNow();
         }
     };
@@ -1079,73 +1079,16 @@ void menuHandler::keyVerificationFinalPrompt()
     }
 }
 
-void menuHandler::DismissSystemFrame_menu()
+void menuHandler::DismissCurrentFrame_menu()
 {
-    static const char *optionsArray[] = {"Back", "Confirm"};
+    static const char *optionsArray[] = {"Cancel", "Confirm"};
     BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "Dismiss System Frame?";
+    bannerOptions.message = "Dismiss Current Frame?";
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 2;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 1) {
             screen->dismissCurrentFrame();
-        } else {
-            menuQueue = system_base_menu;
-            screen->runNow();
-        }
-    };
-    screen->showOverlayBanner(bannerOptions);
-}
-
-void menuHandler::Dismissnodelist_bearings_menu()
-{
-    static const char *optionsArray[] = {"Back", "Confirm"};
-    BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "Dismiss Bearings Frame?";
-    bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 2;
-    bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == 1) {
-            screen->dismissCurrentFrame();
-        } else {
-            // menuQueue = system_base_menu;
-            // screen->runNow();
-        }
-    };
-    screen->showOverlayBanner(bannerOptions);
-}
-
-void menuHandler::DismissLoRaFrame_menu()
-{
-    static const char *optionsArray[] = {"Back", "Confirm"};
-    BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "Dismiss LoRa Frame?";
-    bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 2;
-    bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == 1) {
-            screen->dismissCurrentFrame();
-        } else {
-            // menuQueue = system_base_menu;
-            // screen->runNow();
-        }
-    };
-    screen->showOverlayBanner(bannerOptions);
-}
-
-void menuHandler::DismissPositionFrame_menu()
-{
-    static const char *optionsArray[] = {"Back", "Confirm"};
-    BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "Dismiss Position Frame?";
-    bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 2;
-    bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == 1) {
-            screen->dismissCurrentFrame();
-        } else {
-            menuQueue = position_base_menu;
-            screen->runNow();
         }
     };
     screen->showOverlayBanner(bannerOptions);
@@ -1241,17 +1184,8 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
     case power_menu:
         powerMenu();
         break;
-    case DismissSystemFrame:
-        DismissSystemFrame_menu();
-        break;
-    case DismissLoRaFrame:
-        DismissLoRaFrame_menu();
-        break;
-    case Dismissnodelist_bearingsFrame:
-        Dismissnodelist_bearings_menu();
-        break;
-    case DismissPositionFrame:
-        DismissPositionFrame_menu();
+    case DismissCurrentFrame:
+        DismissCurrentFrame_menu();
         break;
     case throttle_message:
         screen->showSimpleBanner("Too Many Attempts\nTry again in 60 seconds.", 5000);

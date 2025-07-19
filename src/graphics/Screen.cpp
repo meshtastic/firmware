@@ -1111,6 +1111,7 @@ void Screen::dismissCurrentFrame()
         LOG_INFO("Dismiss Memory");
         dismissedFrames.system = true;
         dismissed = true;
+#if HAS_GPS
     } else if (currentFrame == framesetInfo.positions.nodelist_bearings) {
         LOG_INFO("Dismiss Bearings");
         dismissedFrames.nodelist_bearings = true;
@@ -1119,6 +1120,27 @@ void Screen::dismissCurrentFrame()
         LOG_INFO("Dismiss Position");
         dismissedFrames.gps = true;
         dismissed = true;
+#endif
+#ifndef USE_EINK
+    } else if (currentFrame == framesetInfo.positions.nodelist) {
+        LOG_INFO("Dismiss NodeList");
+        dismissedFrames.nodelist = true;
+        dismissed = true;
+#endif
+#ifdef USE_EINK
+    } else if (currentFrame == framesetInfo.positions.nodelist_lastheard) {
+        LOG_INFO("Dismiss NodeList (Last Heard - EInk)");
+        dismissedFrames.nodelist_lastheard = true;
+        dismissed = true;
+    } else if (currentFrame == framesetInfo.positions.nodelist_hopsignal) {
+        LOG_INFO("Dismiss NodeList (Hop / Signal - EInk)");
+        dismissedFrames.nodelist_hopsignal = true;
+        dismissed = true;
+    } else if (currentFrame == framesetInfo.positions.nodelinodelist_distancest) {
+        LOG_INFO("Dismiss NodeList (Distance - EInk)");
+        dismissedFrames.nodelist_distance = true;
+        dismissed = true;
+#endif
     }
 
     if (dismissed) {
