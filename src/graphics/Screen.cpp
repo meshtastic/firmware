@@ -1136,7 +1136,7 @@ void Screen::hideCurrentFrame()
     } else if (currentFrame == framesetInfo.positions.nodelist_hopsignal) {
         LOG_INFO("Hide NodeList (Hop / Signal - EInk)");
         hiddenFrames.nodelist_hopsignal = true;
-    } else if (currentFrame == framesetInfo.positions.nodelinodelist_distancest) {
+    } else if (currentFrame == framesetInfo.positions.nodelist_distance) {
         LOG_INFO("Hide NodeList (Distance - EInk)");
         hiddenFrames.nodelist_distance = true;
 #endif
