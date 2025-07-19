@@ -1,0 +1,24 @@
+name: Check PR Labels
+
+on:
+  pull_request:
+    types: [opened, edited, labeled, unlabeled, synchronize, reopened]
+
+permissions:
+  pull-requests: read
+  contents: read
+
+jobs:
+  check-label:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check for PR labels
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const labels = context.payload.pull_request.labels.map(label => label.name);
+            const requiredLabels = ['bugfix', 'enhancement', 'hardware-support', 'dependencies', 'submodules', 'github_actions', 'trunk'];
+            const hasRequiredLabel = labels.some(label => requiredLabels.includes(label));
+            if (!hasRequiredLabel) {
+              core.setFailed(`PR must have at least one of the following labels before it can be merged: ${requiredLabels.join(', ')}.`);
+            }
