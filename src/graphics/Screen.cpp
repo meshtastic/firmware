@@ -933,10 +933,10 @@ void Screen::setFrames(FrameFocus focus)
         normalFrames[numframes++] = graphics::DebugRenderer::drawLoRaFocused;
         indicatorIcons.push_back(icon_radio);
     }
-    if (!dismissedFrames.memory) {
-        fsi.positions.memory = numframes;
-        normalFrames[numframes++] = graphics::DebugRenderer::drawMemoryUsage;
-        indicatorIcons.push_back(icon_memory);
+    if (!dismissedFrames.system) {
+        fsi.positions.system = numframes;
+        normalFrames[numframes++] = graphics::DebugRenderer::drawSystemScreen;
+        indicatorIcons.push_back(icon_system);
     }
 #if !defined(DISPLAY_CLOCK_FRAME)
     fsi.positions.clock = numframes;
@@ -1047,7 +1047,7 @@ void Screen::setFrames(FrameFocus focus)
         ui->switchToFrame(fsi.positions.clock);
         break;
     case FOCUS_SYSTEM:
-        ui->switchToFrame(fsi.positions.memory);
+        ui->switchToFrame(fsi.positions.system);
         break;
 
     case FOCUS_PRESERVE:
@@ -1096,9 +1096,9 @@ void Screen::dismissCurrentFrame()
         LOG_DEBUG("Dismiss WiFi Screen");
         dismissedFrames.wifi = true;
         dismissed = true;
-    } else if (currentFrame == framesetInfo.positions.memory) {
+    } else if (currentFrame == framesetInfo.positions.system) {
         LOG_INFO("Dismiss Memory");
-        dismissedFrames.memory = true;
+        dismissedFrames.system = true;
         dismissed = true;
     }
 
@@ -1366,7 +1366,7 @@ int Screen::handleInputEvent(const InputEvent *event)
             } else if (event->inputEvent == INPUT_BROKER_SELECT) {
                 if (this->ui->getUiState()->currentFrame == framesetInfo.positions.home) {
                     menuHandler::homeBaseMenu();
-                } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.memory) {
+                } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.system) {
                     menuHandler::systemBaseMenu();
 #if HAS_GPS
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.gps && gps) {

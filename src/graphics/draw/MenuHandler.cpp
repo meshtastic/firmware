@@ -375,7 +375,7 @@ void menuHandler::textMessageBaseMenu()
 
 void menuHandler::systemBaseMenu()
 {
-    enum optionsNumbers { Back, Notifications, ScreenOptions, PowerMenu, Test, enumEnd };
+    enum optionsNumbers { Back, Notifications, ScreenOptions, PowerMenu, Test, DismissSystemFrame, enumEnd };
     static const char *optionsArray[enumEnd] = {"Back"};
     static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
@@ -396,6 +396,9 @@ void menuHandler::systemBaseMenu()
         optionsEnumArray[options++] = Test;
     }
 
+    optionsArray[options] = "Dismiss Frame";
+    optionsEnumArray[options++] = DismissSystemFrame;
+
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "System Action";
     bannerOptions.optionsArrayPtr = optionsArray;
@@ -413,6 +416,9 @@ void menuHandler::systemBaseMenu()
             screen->runNow();
         } else if (selected == Test) {
             menuHandler::menuQueue = menuHandler::test_menu;
+            screen->runNow();
+        } else if (selected == DismissSystemFrame) {
+            menuHandler::menuQueue = menuHandler::DismissSystemFrame;
             screen->runNow();
         } else if (selected == Back && !test_enabled) {
             test_count++;
@@ -1067,6 +1073,24 @@ void menuHandler::keyVerificationFinalPrompt()
     }
 }
 
+void menuHandler::DismissSystemFrame_menu()
+{
+    static const char *optionsArray[] = {"Back", "Confirm"};
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Dismiss System Frame?";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 2;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == 1) {
+            screen->dismissCurrentFrame();
+        } else {
+            menuQueue = system_base_menu;
+            screen->runNow();
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
 void menuHandler::handleMenuSwitch(OLEDDisplay *display)
 {
     if (menuQueue != menu_none)
@@ -1156,6 +1180,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case power_menu:
         powerMenu();
+        break;
+    case DismissSystemFrame:
+        DismissSystemFrame_menu();
         break;
     case throttle_message:
         screen->showSimpleBanner("Too Many Attempts\nTry again in 60 seconds.", 5000);

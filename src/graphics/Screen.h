@@ -653,7 +653,7 @@ class Screen : public concurrency::OSThread
             uint8_t settings = 255;
             uint8_t wifi = 255;
             uint8_t deviceFocused = 255;
-            uint8_t memory = 255;
+            uint8_t system = 255;
             uint8_t gps = 255;
             uint8_t home = 255;
             uint8_t textMessage = 255;
@@ -675,7 +675,7 @@ class Screen : public concurrency::OSThread
         bool textMessage = false;
         bool waypoint = false;
         bool wifi = false;
-        bool memory = false;
+        bool system = false;
     } dismissedFrames;
 
     /// Try to start drawing ASAP

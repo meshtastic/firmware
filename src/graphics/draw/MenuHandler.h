@@ -36,7 +36,8 @@ class menuHandler
         system_base_menu,
         key_verification_init,
         key_verification_final_prompt,
-        throttle_message
+        throttle_message,
+        DismissSystemFrame
     };
     static screenMenus menuQueue;
 
@@ -71,6 +72,7 @@ class menuHandler
     static void notificationsMenu();
     static void screenOptionsMenu();
     static void powerMenu();
+    static void DismissSystemFrame_menu();
 
   private:
     static void saveUIConfig();
