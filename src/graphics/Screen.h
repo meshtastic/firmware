@@ -591,7 +591,7 @@ class Screen : public concurrency::OSThread
     void setSSLFrames();
 
     // Dismiss the currently focussed frame, if possible (e.g. text message, waypoint)
-    void dismissCurrentFrame();
+    void hideCurrentFrame();
 
     // Restore all Frames
     void restoreAllFrames();
@@ -674,7 +674,7 @@ class Screen : public concurrency::OSThread
         uint8_t frameCount = 0;
     } framesetInfo;
 
-    struct DismissedFrames {
+    struct hiddenFrames {
         bool textMessage = false;
         bool waypoint = false;
         bool wifi = false;
@@ -694,7 +694,7 @@ class Screen : public concurrency::OSThread
         bool gps = false;
 #endif
         bool lora = false;
-    } dismissedFrames;
+    } hiddenFrames;
 
     /// Try to start drawing ASAP
     void setFastFramerate();

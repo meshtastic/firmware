@@ -882,7 +882,7 @@ void Screen::setFrames(FrameFocus focus)
     }
 
 #if defined(DISPLAY_CLOCK_FRAME)
-    if (!dismissedFrames.clock) {
+    if (!hiddenFrames.clock) {
         fsi.positions.clock = numframes;
         normalFrames[numframes++] = uiconfig.is_clockface_analog ? graphics::ClockRenderer::drawAnalogClockFrame
                                                                  : graphics::ClockRenderer::drawDigitalClockFrame;
@@ -893,7 +893,7 @@ void Screen::setFrames(FrameFocus focus)
     // Declare this early so it’s available in FOCUS_PRESERVE block
     bool willInsertTextMessage = shouldDrawMessage(&devicestate.rx_text_message);
 
-    if (!dismissedFrames.home) {
+    if (!hiddenFrames.home) {
         fsi.positions.home = numframes;
         normalFrames[numframes++] = graphics::UIRenderer::drawDeviceFocused;
         indicatorIcons.push_back(icon_home);
@@ -904,7 +904,7 @@ void Screen::setFrames(FrameFocus focus)
     indicatorIcons.push_back(icon_mail);
 
 #ifndef USE_EINK
-    if (!dismissedFrames.nodelist) {
+    if (!hiddenFrames.nodelist) {
         fsi.positions.nodelist = numframes;
         normalFrames[numframes++] = graphics::NodeListRenderer::drawDynamicNodeListScreen;
         indicatorIcons.push_back(icon_nodes);
@@ -913,46 +913,46 @@ void Screen::setFrames(FrameFocus focus)
 
 // Show detailed node views only on E-Ink builds
 #ifdef USE_EINK
-    if (!dismissedFrames.nodelist_lastheard) {
+    if (!hiddenFrames.nodelist_lastheard) {
         fsi.positions.nodelist_lastheard = numframes;
         normalFrames[numframes++] = graphics::NodeListRenderer::drawLastHeardScreen;
         indicatorIcons.push_back(icon_nodes);
     }
-    if (!dismissedFrames.nodelist_hopsignal) {
+    if (!hiddenFrames.nodelist_hopsignal) {
         fsi.positions.nodelist_hopsignal = numframes;
         normalFrames[numframes++] = graphics::NodeListRenderer::drawHopSignalScreen;
         indicatorIcons.push_back(icon_signal);
     }
-    if (!dismissedFrames.nodelist_distance) {
+    if (!hiddenFrames.nodelist_distance) {
         fsi.positions.nodelist_distance = numframes;
         normalFrames[numframes++] = graphics::NodeListRenderer::drawDistanceScreen;
         indicatorIcons.push_back(icon_distance);
     }
 #endif
 #if HAS_GPS
-    if (!dismissedFrames.nodelist_bearings) {
+    if (!hiddenFrames.nodelist_bearings) {
         fsi.positions.nodelist_bearings = numframes;
         normalFrames[numframes++] = graphics::NodeListRenderer::drawNodeListWithCompasses;
         indicatorIcons.push_back(icon_list);
     }
-    if (!dismissedFrames.gps) {
+    if (!hiddenFrames.gps) {
         fsi.positions.gps = numframes;
         normalFrames[numframes++] = graphics::UIRenderer::drawCompassAndLocationScreen;
         indicatorIcons.push_back(icon_compass);
     }
 #endif
-    if (RadioLibInterface::instance && !dismissedFrames.lora) {
+    if (RadioLibInterface::instance && !hiddenFrames.lora) {
         fsi.positions.lora = numframes;
         normalFrames[numframes++] = graphics::DebugRenderer::drawLoRaFocused;
         indicatorIcons.push_back(icon_radio);
     }
-    if (!dismissedFrames.system) {
+    if (!hiddenFrames.system) {
         fsi.positions.system = numframes;
         normalFrames[numframes++] = graphics::DebugRenderer::drawSystemScreen;
         indicatorIcons.push_back(icon_system);
     }
 #if !defined(DISPLAY_CLOCK_FRAME)
-    if (!dismissedFrames.clock) {
+    if (!hiddenFrames.clock) {
         fsi.positions.clock = numframes;
         normalFrames[numframes++] = uiconfig.is_clockface_analog ? graphics::ClockRenderer::drawAnalogClockFrame
                                                                  : graphics::ClockRenderer::drawDigitalClockFrame;
@@ -961,7 +961,7 @@ void Screen::setFrames(FrameFocus focus)
 #endif
 
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
-    if (!dismissedFrames.wifi && isWifiAvailable()) {
+    if (!hiddenFrames.wifi && isWifiAvailable()) {
         fsi.positions.wifi = numframes;
         normalFrames[numframes++] = graphics::DebugRenderer::drawDebugInfoWiFiTrampoline;
         indicatorIcons.push_back(icon_wifi);
@@ -1093,94 +1093,78 @@ void Screen::setFrameImmediateDraw(FrameCallback *drawFrames)
 // Dismisses the currently displayed screen frame, if possible
 // Relevant for text message, waypoint, others in future?
 // Triggered with a CardKB keycombo
-void Screen::dismissCurrentFrame()
+void Screen::hideCurrentFrame()
 {
     uint8_t currentFrame = ui->getUiState()->currentFrame;
-    bool dismissed = false;
-
     if (currentFrame == framesetInfo.positions.textMessage && devicestate.has_rx_text_message) {
-        LOG_INFO("Dismiss Text Message");
+        LOG_INFO("Hide Text Message");
         devicestate.has_rx_text_message = false;
         memset(&devicestate.rx_text_message, 0, sizeof(devicestate.rx_text_message));
     } else if (currentFrame == framesetInfo.positions.waypoint && devicestate.has_rx_waypoint) {
-        LOG_DEBUG("Dismiss Waypoint");
+        LOG_DEBUG("Hide Waypoint");
         devicestate.has_rx_waypoint = false;
-        dismissedFrames.waypoint = true;
-        dismissed = true;
+        hiddenFrames.waypoint = true;
     } else if (currentFrame == framesetInfo.positions.wifi) {
-        LOG_DEBUG("Dismiss WiFi Screen");
-        dismissedFrames.wifi = true;
-        dismissed = true;
+        LOG_DEBUG("Hide WiFi Screen");
+        hiddenFrames.wifi = true;
     } else if (currentFrame == framesetInfo.positions.lora) {
-        LOG_INFO("Dismiss LoRa");
-        dismissedFrames.lora = true;
-        dismissed = true;
+        LOG_INFO("Hide LoRa");
+        hiddenFrames.lora = true;
     } else if (currentFrame == framesetInfo.positions.system) {
-        LOG_INFO("Dismiss Memory");
-        dismissedFrames.system = true;
-        dismissed = true;
+        LOG_INFO("Hide Memory");
+        hiddenFrames.system = true;
     } else if (currentFrame == framesetInfo.positions.clock) {
-        LOG_INFO("Dismiss Clock");
-        dismissedFrames.clock = true;
-        dismissed = true;
+        LOG_INFO("Hide Clock");
+        hiddenFrames.clock = true;
 #if HAS_GPS
     } else if (currentFrame == framesetInfo.positions.nodelist_bearings) {
-        LOG_INFO("Dismiss Bearings");
-        dismissedFrames.nodelist_bearings = true;
-        dismissed = true;
+        LOG_INFO("Hide Bearings");
+        hiddenFrames.nodelist_bearings = true;
     } else if (currentFrame == framesetInfo.positions.gps) {
-        LOG_INFO("Dismiss Position");
-        dismissedFrames.gps = true;
-        dismissed = true;
+        LOG_INFO("Hide Position");
+        hiddenFrames.gps = true;
 #endif
 #ifndef USE_EINK
     } else if (currentFrame == framesetInfo.positions.nodelist) {
-        LOG_INFO("Dismiss NodeList");
-        dismissedFrames.nodelist = true;
-        dismissed = true;
+        LOG_INFO("Hide NodeList");
+        hiddenFrames.nodelist = true;
 #endif
 #ifdef USE_EINK
     } else if (currentFrame == framesetInfo.positions.nodelist_lastheard) {
-        LOG_INFO("Dismiss NodeList (Last Heard - EInk)");
-        dismissedFrames.nodelist_lastheard = true;
-        dismissed = true;
+        LOG_INFO("Hide NodeList (Last Heard - EInk)");
+        hiddenFrames.nodelist_lastheard = true;
     } else if (currentFrame == framesetInfo.positions.nodelist_hopsignal) {
-        LOG_INFO("Dismiss NodeList (Hop / Signal - EInk)");
-        dismissedFrames.nodelist_hopsignal = true;
-        dismissed = true;
+        LOG_INFO("Hide NodeList (Hop / Signal - EInk)");
+        hiddenFrames.nodelist_hopsignal = true;
     } else if (currentFrame == framesetInfo.positions.nodelinodelist_distancest) {
-        LOG_INFO("Dismiss NodeList (Distance - EInk)");
-        dismissedFrames.nodelist_distance = true;
-        dismissed = true;
+        LOG_INFO("Hide NodeList (Distance - EInk)");
+        hiddenFrames.nodelist_distance = true;
 #endif
     }
-
-    if (dismissed) {
-        setFrames(FOCUS_DEFAULT); // You could also use FOCUS_PRESERVE
-    }
+    setFrames(FOCUS_DEFAULT); // You could also use FOCUS_PRESERVE
 }
 
 void Screen::restoreAllFrames()
 {
-    dismissedFrames.textMessage = false;
-    dismissedFrames.waypoint = false;
-    dismissedFrames.wifi = false;
-    dismissedFrames.system = false;
-    dismissedFrames.home = false;
-    dismissedFrames.clock = false;
+    hiddenFrames.textMessage = false;
+    hiddenFrames.waypoint = false;
+    hiddenFrames.wifi = false;
+    hiddenFrames.system = false;
+    hiddenFrames.home = false;
+    hiddenFrames.clock = false;
 #ifndef USE_EINK
-    dismissedFrames.nodelist = false;
+    hiddenFrames.nodelist = false;
 #endif
 #ifdef USE_EINK
-    dismissedFrames.nodelist_lastheard = false;
-    dismissedFrames.nodelist_hopsignal = false;
-    dismissedFrames.nodelist_distance = false;
+    hiddenFrames.nodelist_lastheard = false;
+    hiddenFrames.nodelist_hopsignal = false;
+    hiddenFrames.nodelist_distance = false;
 #endif
 #if HAS_GPS
-    dismissedFrames.nodelist_bearings = false;
-    dismissedFrames.gps = false;
+    hiddenFrames.nodelist_bearings = false;
+    hiddenFrames.gps = false;
 #endif
-    dismissedFrames.lora = false;
+    hiddenFrames.lora = false;
     setFrames(FOCUS_DEFAULT);
 }
 
@@ -1327,7 +1311,7 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
             // Outgoing message (likely sent from phone)
             devicestate.has_rx_text_message = false;
             memset(&devicestate.rx_text_message, 0, sizeof(devicestate.rx_text_message));
-            dismissedFrames.textMessage = true;
+            hiddenFrames.textMessage = true;
             hasUnreadMessage = false; // Clear unread state when user replies
 
             setFrames(FOCUS_PRESERVE); // Stay on same frame, silently update frame list
