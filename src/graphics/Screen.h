@@ -593,6 +593,9 @@ class Screen : public concurrency::OSThread
     // Dismiss the currently focussed frame, if possible (e.g. text message, waypoint)
     void dismissCurrentFrame();
 
+    // Restore all Frames
+    void restoreAllFrames();
+
 #ifdef USE_EINK
     /// Draw an image to remain on E-Ink display after screen off
     void setScreensaverFrames(FrameCallback einkScreensaver = NULL);

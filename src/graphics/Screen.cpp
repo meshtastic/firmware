@@ -1160,6 +1160,30 @@ void Screen::dismissCurrentFrame()
     }
 }
 
+void Screen::restoreAllFrames()
+{
+    dismissedFrames.textMessage = false;
+    dismissedFrames.waypoint = false;
+    dismissedFrames.wifi = false;
+    dismissedFrames.system = false;
+    dismissedFrames.home = false;
+    dismissedFrames.clock = false;
+#ifndef USE_EINK
+    dismissedFrames.nodelist = false;
+#endif
+#ifdef USE_EINK
+    dismissedFrames.nodelist_lastheard = false;
+    dismissedFrames.nodelist_hopsignal = false;
+    dismissedFrames.nodelist_distance = false;
+#endif
+#if HAS_GPS
+    dismissedFrames.nodelist_bearings = false;
+    dismissedFrames.gps = false;
+#endif
+    dismissedFrames.lora = false;
+    setFrames(FOCUS_DEFAULT);
+}
+
 void Screen::handleStartFirmwareUpdateScreen()
 {
     LOG_DEBUG("Show firmware screen");

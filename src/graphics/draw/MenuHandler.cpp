@@ -396,7 +396,7 @@ void menuHandler::textMessageBaseMenu()
 
 void menuHandler::systemBaseMenu()
 {
-    enum optionsNumbers { Back, Notifications, ScreenOptions, PowerMenu, Test, DismissFrame, enumEnd };
+    enum optionsNumbers { Back, Notifications, ScreenOptions, PowerMenu, RestoreAllFrames, Test, DismissFrame, enumEnd };
     static const char *optionsArray[enumEnd] = {"Back"};
     static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
@@ -408,6 +408,9 @@ void menuHandler::systemBaseMenu()
     optionsArray[options] = "Screen Options";
     optionsEnumArray[options++] = ScreenOptions;
 #endif
+
+    optionsArray[options] = "Restore All Frames";
+    optionsEnumArray[options++] = RestoreAllFrames;
 
     optionsArray[options] = "Reboot/Shutdown";
     optionsEnumArray[options++] = PowerMenu;
@@ -434,6 +437,9 @@ void menuHandler::systemBaseMenu()
             screen->runNow();
         } else if (selected == PowerMenu) {
             menuHandler::menuQueue = menuHandler::power_menu;
+            screen->runNow();
+        } else if (selected == RestoreAllFrames) {
+            menuHandler::menuQueue = menuHandler::RestoreAllFrames;
             screen->runNow();
         } else if (selected == Test) {
             menuHandler::menuQueue = menuHandler::test_menu;
@@ -1115,6 +1121,21 @@ void menuHandler::DismissCurrentFrame_menu()
     screen->showOverlayBanner(bannerOptions);
 }
 
+void menuHandler::RestoreAllFrames_menu()
+{
+    static const char *optionsArray[] = {"Cancel", "Confirm"};
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Restore All Frames?";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 2;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == 1) {
+            screen->restoreAllFrames();
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
 void menuHandler::handleMenuSwitch(OLEDDisplay *display)
 {
     if (menuQueue != menu_none)
@@ -1207,6 +1228,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case DismissCurrentFrame:
         DismissCurrentFrame_menu();
+        break;
+    case RestoreAllFrames:
+        RestoreAllFrames_menu();
         break;
     case throttle_message:
         screen->showSimpleBanner("Too Many Attempts\nTry again in 60 seconds.", 5000);
