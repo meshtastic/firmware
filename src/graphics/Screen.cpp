@@ -1115,6 +1115,10 @@ void Screen::dismissCurrentFrame()
         LOG_INFO("Dismiss Bearings");
         dismissedFrames.nodelist_bearings = true;
         dismissed = true;
+    } else if (currentFrame == framesetInfo.positions.gps) {
+        LOG_INFO("Dismiss Position");
+        dismissedFrames.gps = true;
+        dismissed = true;
     }
 
     if (dismissed) {
