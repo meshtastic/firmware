@@ -42,10 +42,10 @@ class UdpMulticastHandler final
     void onReceive(AsyncUDPPacket packet)
     {
         size_t packetLength = packet.length();
-#if defined(ARCH_NRF52) || defined(ARCH_PORTDUINO)
+#if defined(ARCH_NRF52)
         IPAddress ip = packet.remoteIP();
         LOG_DEBUG("UDP broadcast from: %u.%u.%u.%u, len=%u", ip[0], ip[1], ip[2], ip[3], packetLength);
-#else
+#elif !defined(ARCH_PORTDUINO)
         // FIXME(PORTDUINO): arduino lacks IPAddress::toString()
         LOG_DEBUG("UDP broadcast from: %s, len=%u", packet.remoteIP().toString().c_str(), packetLength);
 #endif
