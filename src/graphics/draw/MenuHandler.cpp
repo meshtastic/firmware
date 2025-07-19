@@ -23,6 +23,25 @@ menuHandler::screenMenus menuHandler::menuQueue = menu_none;
 bool test_enabled = false;
 uint8_t test_count = 0;
 
+void menuHandler::loraMenu()
+{
+    static const char *optionsArray[] = {"Back", "Region Picker", "Hide Frame"};
+    enum optionsNumbers { Back = 0, lora_picker = 1, hideCurrentFrame = 2 };
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "LoRa Actions";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 3;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Back) {
+            menuHandler::menuQueue = menuHandler::clock_menu;
+            screen->runNow();
+        } else if (selected == hideCurrentFrame) {
+            menuHandler::menuQueue = menuHandler::hideCurrentFrame;
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
 void menuHandler::LoraRegionPicker(uint32_t duration)
 {
     static const char *optionsArray[] = {"Back",
@@ -215,12 +234,12 @@ void menuHandler::TZPicker()
 
 void menuHandler::clockMenu()
 {
-    static const char *optionsArray[] = {"Back", "Clock Face", "Time Format", "Timezone"};
-    enum optionsNumbers { Back = 0, Clock = 1, Time = 2, Timezone = 3 };
+    static const char *optionsArray[] = {"Back", "Clock Face", "Time Format", "Timezone", "Hide Frame"};
+    enum optionsNumbers { Back = 0, Clock = 1, Time = 2, Timezone = 3, hideCurrentFrame = 4 };
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Clock Action";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 4;
+    bannerOptions.optionsCount = 5;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == Clock) {
             menuHandler::menuQueue = menuHandler::clock_face_picker;
@@ -231,6 +250,8 @@ void menuHandler::clockMenu()
         } else if (selected == Timezone) {
             menuHandler::menuQueue = menuHandler::TZ_picker;
             screen->runNow();
+        } else if (selected == hideCurrentFrame) {
+            menuHandler::menuQueue = menuHandler::hideCurrentFrame;
         }
     };
     screen->showOverlayBanner(bannerOptions);
@@ -260,7 +281,7 @@ void menuHandler::messageResponseMenu()
     bannerOptions.optionsCount = options;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == Dismiss) {
-            screen->dismissCurrentFrame();
+            screen->hideCurrentFrame();
         } else if (selected == Preset) {
             if (devicestate.rx_text_message.to == NODENUM_BROADCAST) {
                 cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST, devicestate.rx_text_message.channel);
@@ -375,7 +396,7 @@ void menuHandler::textMessageBaseMenu()
 
 void menuHandler::systemBaseMenu()
 {
-    enum optionsNumbers { Back, Notifications, ScreenOptions, PowerMenu, Test, enumEnd };
+    enum optionsNumbers { Back, Notifications, ScreenOptions, PowerMenu, RestoreAllFrames, Test, DismissFrame, enumEnd };
     static const char *optionsArray[enumEnd] = {"Back"};
     static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
@@ -388,6 +409,9 @@ void menuHandler::systemBaseMenu()
     optionsEnumArray[options++] = ScreenOptions;
 #endif
 
+    optionsArray[options] = "Restore All Frames";
+    optionsEnumArray[options++] = RestoreAllFrames;
+
     optionsArray[options] = "Reboot/Shutdown";
     optionsEnumArray[options++] = PowerMenu;
 
@@ -395,6 +419,9 @@ void menuHandler::systemBaseMenu()
         optionsArray[options] = "Test Menu";
         optionsEnumArray[options++] = Test;
     }
+
+    // optionsArray[options] = "Hide Frame";
+    // optionsEnumArray[options++] = hideCurrentFrame;
 
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "System Action";
@@ -411,8 +438,14 @@ void menuHandler::systemBaseMenu()
         } else if (selected == PowerMenu) {
             menuHandler::menuQueue = menuHandler::power_menu;
             screen->runNow();
+        } else if (selected == RestoreAllFrames) {
+            menuHandler::menuQueue = menuHandler::RestoreAllFrames;
+            screen->runNow();
         } else if (selected == Test) {
             menuHandler::menuQueue = menuHandler::test_menu;
+            screen->runNow();
+        } else if (selected == DismissFrame) {
+            menuHandler::menuQueue = menuHandler::hideCurrentFrame;
             screen->runNow();
         } else if (selected == Back && !test_enabled) {
             test_count++;
@@ -458,7 +491,7 @@ void menuHandler::favoriteBaseMenu()
 
 void menuHandler::positionBaseMenu()
 {
-    enum optionsNumbers { Back, GPSToggle, CompassMenu, CompassCalibrate, enumEnd };
+    enum optionsNumbers { Back, GPSToggle, CompassMenu, CompassCalibrate, DismissFrame, enumEnd };
 
     static const char *optionsArray[enumEnd] = {"Back", "GPS Toggle", "Compass"};
     static int optionsEnumArray[enumEnd] = {Back, GPSToggle, CompassMenu};
@@ -468,6 +501,10 @@ void menuHandler::positionBaseMenu()
         optionsArray[options] = "Compass Calibrate";
         optionsEnumArray[options++] = CompassCalibrate;
     }
+
+    optionsArray[options] = "Hide Frame";
+    optionsEnumArray[options++] = DismissFrame;
+
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Position Action";
     bannerOptions.optionsArrayPtr = optionsArray;
@@ -482,6 +519,9 @@ void menuHandler::positionBaseMenu()
             screen->runNow();
         } else if (selected == CompassCalibrate) {
             accelerometerThread->calibrate(30);
+        } else if (selected == DismissFrame) {
+            menuQueue = hideCurrentFrame;
+            screen->runNow();
         }
     };
     screen->showOverlayBanner(bannerOptions);
@@ -489,12 +529,12 @@ void menuHandler::positionBaseMenu()
 
 void menuHandler::nodeListMenu()
 {
-    enum optionsNumbers { Back, Favorite, Verify, Reset };
-    static const char *optionsArray[] = {"Back", "Add Favorite", "Key Verification", "Reset NodeDB"};
+    enum optionsNumbers { Back, Favorite, Verify, Reset, DismissFrame };
+    static const char *optionsArray[] = {"Back", "Add Favorite", "Key Verification", "Reset NodeDB", "Hide Frame"};
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Node Action";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 4;
+    bannerOptions.optionsCount = 5;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == Favorite) {
             menuQueue = add_favorite;
@@ -504,6 +544,9 @@ void menuHandler::nodeListMenu()
             screen->runNow();
         } else if (selected == Reset) {
             menuQueue = reset_node_db_menu;
+            screen->runNow();
+        } else if (selected == DismissFrame) {
+            menuQueue = hideCurrentFrame;
             screen->runNow();
         }
     };
@@ -1067,6 +1110,36 @@ void menuHandler::keyVerificationFinalPrompt()
     }
 }
 
+void menuHandler::hideCurrentFrame_menu()
+{
+    static const char *optionsArray[] = {"Cancel", "Confirm"};
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Hide Current Frame?";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 2;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == 1) {
+            screen->hideCurrentFrame();
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::RestoreAllFrames_menu()
+{
+    static const char *optionsArray[] = {"Cancel", "Confirm"};
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Restore All Frames?";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 2;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == 1) {
+            screen->restoreAllFrames();
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
 void menuHandler::handleMenuSwitch(OLEDDisplay *display)
 {
     if (menuQueue != menu_none)
@@ -1156,6 +1229,12 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case power_menu:
         powerMenu();
+        break;
+    case hideCurrentFrame:
+        hideCurrentFrame_menu();
+        break;
+    case RestoreAllFrames:
+        RestoreAllFrames_menu();
         break;
     case throttle_message:
         screen->showSimpleBanner("Too Many Attempts\nTry again in 60 seconds.", 5000);

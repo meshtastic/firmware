@@ -36,11 +36,14 @@ class menuHandler
         system_base_menu,
         key_verification_init,
         key_verification_final_prompt,
-        throttle_message
+        throttle_message,
+        hideCurrentFrame,
+        RestoreAllFrames
     };
     static screenMenus menuQueue;
 
     static void LoraRegionPicker(uint32_t duration = 30000);
+    static void loraMenu();
     static void handleMenuSwitch(OLEDDisplay *display);
     static void clockMenu();
     static void TZPicker();
@@ -71,6 +74,8 @@ class menuHandler
     static void notificationsMenu();
     static void screenOptionsMenu();
     static void powerMenu();
+    static void hideCurrentFrame_menu();
+    static void RestoreAllFrames_menu();
 
   private:
     static void saveUIConfig();
