@@ -30,11 +30,10 @@ void menuHandler::loraMenu()
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "LoRa Actions";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 3;
+    bannerOptions.optionsCount = 2;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == Back) {
-            menuHandler::menuQueue = menuHandler::clock_menu;
-            screen->runNow();
+            // No action
         } else if (selected == lora_picker) {
             menuHandler::menuQueue = menuHandler::lora_picker;
         }
@@ -239,7 +238,7 @@ void menuHandler::clockMenu()
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Clock Action";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 5;
+    bannerOptions.optionsCount = 4;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == Clock) {
             menuHandler::menuQueue = menuHandler::clock_face_picker;
@@ -518,7 +517,7 @@ void menuHandler::nodeListMenu()
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Node Action";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 5;
+    bannerOptions.optionsCount = 4;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == Favorite) {
             menuQueue = add_favorite;
