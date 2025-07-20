@@ -687,8 +687,8 @@ void Power::shutdown()
         screen->showSimpleBanner("Shutting Down...", 0); // stays on screen
     }
 #endif
-    nodeDB->saveToDisk();
     playShutdownMelody();
+    nodeDB->saveToDisk();
 
 #if defined(ARCH_NRF52) || defined(ARCH_ESP32) || defined(ARCH_RP2040)
 #ifdef PIN_LED1
