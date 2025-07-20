@@ -70,4 +70,4 @@ int32_t AsyncUDP::runOnce()
     return 5; // check every 5ms
 }
 
-#endif
+#endif // HAS_ETHERNET

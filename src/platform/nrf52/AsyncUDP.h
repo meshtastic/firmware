@@ -58,6 +58,6 @@ inline bool isMulticast(const IPAddress &ip)
     return (ip[0] & 0xF0) == 0xE0;
 }
 
-#endif
+#endif // HAS_ETHERNET
 
 #endif // ASYNC_UDP_H
