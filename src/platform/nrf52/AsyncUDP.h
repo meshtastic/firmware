@@ -1,6 +1,10 @@
 #ifndef ASYNC_UDP_H
 #define ASYNC_UDP_H
 
+#include "configuration.h"
+
+#if HAS_ETHERNET
+
 #include "concurrency/OSThread.h"
 #include <IPAddress.h>
 #include <Print.h>
@@ -53,5 +57,7 @@ inline bool isMulticast(const IPAddress &ip)
 {
     return (ip[0] & 0xF0) == 0xE0;
 }
+
+#endif
 
 #endif // ASYNC_UDP_H
