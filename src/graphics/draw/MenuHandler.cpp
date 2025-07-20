@@ -25,8 +25,8 @@ uint8_t test_count = 0;
 
 void menuHandler::loraMenu()
 {
-    static const char *optionsArray[] = {"Back", "Region Picker", "Hide Frame"};
-    enum optionsNumbers { Back = 0, lora_picker = 1, hideCurrentFrame = 2 };
+    static const char *optionsArray[] = {"Back", "Region Picker"};
+    enum optionsNumbers { Back = 0, lora_picker = 1 };
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "LoRa Actions";
     bannerOptions.optionsArrayPtr = optionsArray;
@@ -35,8 +35,8 @@ void menuHandler::loraMenu()
         if (selected == Back) {
             menuHandler::menuQueue = menuHandler::clock_menu;
             screen->runNow();
-        } else if (selected == hideCurrentFrame) {
-            menuHandler::menuQueue = menuHandler::hideCurrentFrame;
+        } else if (selected == lora_picker) {
+            menuHandler::menuQueue = menuHandler::lora_picker;
         }
     };
     screen->showOverlayBanner(bannerOptions);
@@ -234,8 +234,8 @@ void menuHandler::TZPicker()
 
 void menuHandler::clockMenu()
 {
-    static const char *optionsArray[] = {"Back", "Clock Face", "Time Format", "Timezone", "Hide Frame"};
-    enum optionsNumbers { Back = 0, Clock = 1, Time = 2, Timezone = 3, hideCurrentFrame = 4 };
+    static const char *optionsArray[] = {"Back", "Clock Face", "Time Format", "Timezone"};
+    enum optionsNumbers { Back = 0, Clock = 1, Time = 2, Timezone = 3 };
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Clock Action";
     bannerOptions.optionsArrayPtr = optionsArray;
@@ -250,8 +250,6 @@ void menuHandler::clockMenu()
         } else if (selected == Timezone) {
             menuHandler::menuQueue = menuHandler::TZ_picker;
             screen->runNow();
-        } else if (selected == hideCurrentFrame) {
-            menuHandler::menuQueue = menuHandler::hideCurrentFrame;
         }
     };
     screen->showOverlayBanner(bannerOptions);
@@ -280,9 +278,7 @@ void menuHandler::messageResponseMenu()
     bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.optionsCount = options;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == Dismiss) {
-            screen->hideCurrentFrame();
-        } else if (selected == Preset) {
+        if (selected == Preset) {
             if (devicestate.rx_text_message.to == NODENUM_BROADCAST) {
                 cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST, devicestate.rx_text_message.channel);
             } else {
@@ -396,7 +392,7 @@ void menuHandler::textMessageBaseMenu()
 
 void menuHandler::systemBaseMenu()
 {
-    enum optionsNumbers { Back, Notifications, ScreenOptions, PowerMenu, RestoreAllFrames, Test, DismissFrame, enumEnd };
+    enum optionsNumbers { Back, Notifications, ScreenOptions, PowerMenu, FrameToggles, Test, enumEnd };
     static const char *optionsArray[enumEnd] = {"Back"};
     static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
@@ -409,8 +405,8 @@ void menuHandler::systemBaseMenu()
     optionsEnumArray[options++] = ScreenOptions;
 #endif
 
-    optionsArray[options] = "Restore All Frames";
-    optionsEnumArray[options++] = RestoreAllFrames;
+    optionsArray[options] = "Frame Visiblity Toggle";
+    optionsEnumArray[options++] = FrameToggles;
 
     optionsArray[options] = "Reboot/Shutdown";
     optionsEnumArray[options++] = PowerMenu;
@@ -419,9 +415,6 @@ void menuHandler::systemBaseMenu()
         optionsArray[options] = "Test Menu";
         optionsEnumArray[options++] = Test;
     }
-
-    // optionsArray[options] = "Hide Frame";
-    // optionsEnumArray[options++] = hideCurrentFrame;
 
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "System Action";
@@ -438,14 +431,11 @@ void menuHandler::systemBaseMenu()
         } else if (selected == PowerMenu) {
             menuHandler::menuQueue = menuHandler::power_menu;
             screen->runNow();
-        } else if (selected == RestoreAllFrames) {
-            menuHandler::menuQueue = menuHandler::RestoreAllFrames;
+        } else if (selected == FrameToggles) {
+            menuHandler::menuQueue = menuHandler::FrameToggles;
             screen->runNow();
         } else if (selected == Test) {
             menuHandler::menuQueue = menuHandler::test_menu;
-            screen->runNow();
-        } else if (selected == DismissFrame) {
-            menuHandler::menuQueue = menuHandler::hideCurrentFrame;
             screen->runNow();
         } else if (selected == Back && !test_enabled) {
             test_count++;
@@ -491,7 +481,7 @@ void menuHandler::favoriteBaseMenu()
 
 void menuHandler::positionBaseMenu()
 {
-    enum optionsNumbers { Back, GPSToggle, CompassMenu, CompassCalibrate, DismissFrame, enumEnd };
+    enum optionsNumbers { Back, GPSToggle, CompassMenu, CompassCalibrate, enumEnd };
 
     static const char *optionsArray[enumEnd] = {"Back", "GPS Toggle", "Compass"};
     static int optionsEnumArray[enumEnd] = {Back, GPSToggle, CompassMenu};
@@ -501,9 +491,6 @@ void menuHandler::positionBaseMenu()
         optionsArray[options] = "Compass Calibrate";
         optionsEnumArray[options++] = CompassCalibrate;
     }
-
-    optionsArray[options] = "Hide Frame";
-    optionsEnumArray[options++] = DismissFrame;
 
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Position Action";
@@ -519,9 +506,6 @@ void menuHandler::positionBaseMenu()
             screen->runNow();
         } else if (selected == CompassCalibrate) {
             accelerometerThread->calibrate(30);
-        } else if (selected == DismissFrame) {
-            menuQueue = hideCurrentFrame;
-            screen->runNow();
         }
     };
     screen->showOverlayBanner(bannerOptions);
@@ -529,8 +513,8 @@ void menuHandler::positionBaseMenu()
 
 void menuHandler::nodeListMenu()
 {
-    enum optionsNumbers { Back, Favorite, Verify, Reset, DismissFrame };
-    static const char *optionsArray[] = {"Back", "Add Favorite", "Key Verification", "Reset NodeDB", "Hide Frame"};
+    enum optionsNumbers { Back, Favorite, Verify, Reset };
+    static const char *optionsArray[] = {"Back", "Add Favorite", "Key Verification", "Reset NodeDB"};
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Node Action";
     bannerOptions.optionsArrayPtr = optionsArray;
@@ -544,9 +528,6 @@ void menuHandler::nodeListMenu()
             screen->runNow();
         } else if (selected == Reset) {
             menuQueue = reset_node_db_menu;
-            screen->runNow();
-        } else if (selected == DismissFrame) {
-            menuQueue = hideCurrentFrame;
             screen->runNow();
         }
     };
@@ -1110,31 +1091,90 @@ void menuHandler::keyVerificationFinalPrompt()
     }
 }
 
-void menuHandler::hideCurrentFrame_menu()
+void menuHandler::FrameToggles_menu()
 {
-    static const char *optionsArray[] = {"Cancel", "Confirm"};
-    BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "Hide Current Frame?";
-    bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 2;
-    bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == 1) {
-            screen->hideCurrentFrame();
-        }
+    enum optionsNumbers {
+        Finish,
+        nodelist,
+        nodelist_lastheard,
+        nodelist_hopsignal,
+        nodelist_distance,
+        nodelist_bearings,
+        gps,
+        lora,
+        clock,
+        enumEnd
     };
-    screen->showOverlayBanner(bannerOptions);
-}
+    static const char *optionsArray[enumEnd] = {"Finish"};
+    static int optionsEnumArray[enumEnd] = {Finish};
+    int options = 1;
 
-void menuHandler::RestoreAllFrames_menu()
-{
-    static const char *optionsArray[] = {"Cancel", "Confirm"};
+#ifndef USE_EINK
+    optionsArray[options] = screen->isFrameHidden("nodelist") ? "Show Node List" : "Hide Node List";
+    optionsEnumArray[options++] = nodelist;
+#endif
+#ifdef USE_EINK
+    optionsArray[options] = screen->isFrameHidden("nodelist_lastheard") ? "Show NL - Last Heard" : "Hide NL - Last Heard";
+    optionsEnumArray[options++] = nodelist_lastheard;
+    optionsArray[options] = screen->isFrameHidden("nodelist_hopsignal") ? "Show NL - Hops/Signal" : "Hide NL - Hops/Signal";
+    optionsEnumArray[options++] = nodelist_hopsignal;
+    optionsArray[options] = screen->isFrameHidden("nodelist_distance") ? "Show NL - Distance" : "Hide NL - Distance";
+    optionsEnumArray[options++] = nodelist_distance;
+#endif
+#if HAS_GPS
+    optionsArray[options] = screen->isFrameHidden("nodelist_bearings") ? "Show Bearings" : "Hide Bearings";
+    optionsEnumArray[options++] = nodelist_bearings;
+
+    optionsArray[options] = screen->isFrameHidden("gps") ? "Show Position" : "Hide Position";
+    optionsEnumArray[options++] = gps;
+
+    optionsArray[options] = screen->isFrameHidden("lora") ? "Show LoRa" : "Hide LoRa";
+    optionsEnumArray[options++] = lora;
+
+    optionsArray[options] = screen->isFrameHidden("clock") ? "Show Clock" : "Hide Clock";
+    optionsEnumArray[options++] = clock;
+#endif
+
     BannerOverlayOptions bannerOptions;
-    bannerOptions.message = "Restore All Frames?";
+    bannerOptions.message = "Show/Hide Frames";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 2;
+    bannerOptions.optionsCount = options;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == 1) {
-            screen->restoreAllFrames();
+        if (selected == Finish) {
+            screen->setFrames(Screen::FOCUS_DEFAULT);
+        } else if (selected == nodelist) {
+            screen->toggleFrameVisibility("nodelist");
+            menuHandler::menuQueue = menuHandler::FrameToggles;
+            screen->runNow();
+        } else if (selected == nodelist_lastheard) {
+            screen->toggleFrameVisibility("nodelist_lastheard");
+            menuHandler::menuQueue = menuHandler::FrameToggles;
+            screen->runNow();
+        } else if (selected == nodelist_hopsignal) {
+            screen->toggleFrameVisibility("nodelist_hopsignal");
+            menuHandler::menuQueue = menuHandler::FrameToggles;
+            screen->runNow();
+        } else if (selected == nodelist_distance) {
+            screen->toggleFrameVisibility("nodelist_distance");
+            menuHandler::menuQueue = menuHandler::FrameToggles;
+            screen->runNow();
+        } else if (selected == nodelist_bearings) {
+            screen->toggleFrameVisibility("nodelist_bearings");
+            menuHandler::menuQueue = menuHandler::FrameToggles;
+            screen->runNow();
+        } else if (selected == gps) {
+            screen->toggleFrameVisibility("gps");
+            menuHandler::menuQueue = menuHandler::FrameToggles;
+            screen->runNow();
+        } else if (selected == lora) {
+            screen->toggleFrameVisibility("lora");
+            menuHandler::menuQueue = menuHandler::FrameToggles;
+            screen->runNow();
+        } else if (selected == clock) {
+            screen->toggleFrameVisibility("clock");
+            menuHandler::menuQueue = menuHandler::FrameToggles;
+            screen->runNow();
         }
     };
     screen->showOverlayBanner(bannerOptions);
@@ -1230,11 +1270,8 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
     case power_menu:
         powerMenu();
         break;
-    case hideCurrentFrame:
-        hideCurrentFrame_menu();
-        break;
-    case RestoreAllFrames:
-        RestoreAllFrames_menu();
+    case FrameToggles:
+        FrameToggles_menu();
         break;
     case throttle_message:
         screen->showSimpleBanner("Too Many Attempts\nTry again in 60 seconds.", 5000);

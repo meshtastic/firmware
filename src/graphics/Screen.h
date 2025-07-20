@@ -590,11 +590,9 @@ class Screen : public concurrency::OSThread
     /// Draws our SSL cert screen during boot (called from WebServer)
     void setSSLFrames();
 
-    // Dismiss the currently focussed frame, if possible (e.g. text message, waypoint)
-    void hideCurrentFrame();
-
-    // Restore all Frames
-    void restoreAllFrames();
+    // Menu-driven Show / Hide Toggle
+    void toggleFrameVisibility(const std::string &frameName);
+    bool isFrameHidden(const std::string &frameName) const;
 
 #ifdef USE_EINK
     /// Draw an image to remain on E-Ink display after screen off

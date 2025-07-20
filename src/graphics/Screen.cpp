@@ -1090,82 +1090,66 @@ void Screen::setFrameImmediateDraw(FrameCallback *drawFrames)
     setFastFramerate();
 }
 
-// Dismisses the currently displayed screen frame, if possible
-// Relevant for text message, waypoint, others in future?
-// Triggered with a CardKB keycombo
-void Screen::hideCurrentFrame()
+void Screen::toggleFrameVisibility(const std::string &frameName)
 {
-    uint8_t currentFrame = ui->getUiState()->currentFrame;
-    if (currentFrame == framesetInfo.positions.textMessage && devicestate.has_rx_text_message) {
-        LOG_INFO("Hide Text Message");
-        devicestate.has_rx_text_message = false;
-        memset(&devicestate.rx_text_message, 0, sizeof(devicestate.rx_text_message));
-    } else if (currentFrame == framesetInfo.positions.waypoint && devicestate.has_rx_waypoint) {
-        LOG_DEBUG("Hide Waypoint");
-        devicestate.has_rx_waypoint = false;
-        hiddenFrames.waypoint = true;
-    } else if (currentFrame == framesetInfo.positions.wifi) {
-        LOG_DEBUG("Hide WiFi Screen");
-        hiddenFrames.wifi = true;
-    } else if (currentFrame == framesetInfo.positions.lora) {
-        LOG_INFO("Hide LoRa");
-        hiddenFrames.lora = true;
-    } else if (currentFrame == framesetInfo.positions.system) {
-        LOG_INFO("Hide Memory");
-        hiddenFrames.system = true;
-    } else if (currentFrame == framesetInfo.positions.clock) {
-        LOG_INFO("Hide Clock");
-        hiddenFrames.clock = true;
-#if HAS_GPS
-    } else if (currentFrame == framesetInfo.positions.nodelist_bearings) {
-        LOG_INFO("Hide Bearings");
-        hiddenFrames.nodelist_bearings = true;
-    } else if (currentFrame == framesetInfo.positions.gps) {
-        LOG_INFO("Hide Position");
-        hiddenFrames.gps = true;
-#endif
 #ifndef USE_EINK
-    } else if (currentFrame == framesetInfo.positions.nodelist) {
-        LOG_INFO("Hide NodeList");
-        hiddenFrames.nodelist = true;
+    if (frameName == "nodelist") {
+        hiddenFrames.nodelist = !hiddenFrames.nodelist;
+    }
 #endif
 #ifdef USE_EINK
-    } else if (currentFrame == framesetInfo.positions.nodelist_lastheard) {
-        LOG_INFO("Hide NodeList (Last Heard - EInk)");
-        hiddenFrames.nodelist_lastheard = true;
-    } else if (currentFrame == framesetInfo.positions.nodelist_hopsignal) {
-        LOG_INFO("Hide NodeList (Hop / Signal - EInk)");
-        hiddenFrames.nodelist_hopsignal = true;
-    } else if (currentFrame == framesetInfo.positions.nodelist_distance) {
-        LOG_INFO("Hide NodeList (Distance - EInk)");
-        hiddenFrames.nodelist_distance = true;
-#endif
+    if (frameName == "nodelist_lastheard") {
+        hiddenFrames.nodelist_lastheard = !hiddenFrames.nodelist_lastheard;
     }
-    setFrames(FOCUS_DEFAULT); // You could also use FOCUS_PRESERVE
+    if (frameName == "nodelist_hopsignal") {
+        hiddenFrames.nodelist_hopsignal = !hiddenFrames.nodelist_hopsignal;
+    }
+    if (frameName == "nodelist_distance") {
+        hiddenFrames.nodelist_distance = !hiddenFrames.nodelist_distance;
+    }
+#endif
+#if HAS_GPS
+    if (frameName == "nodelist_bearings") {
+        hiddenFrames.nodelist_bearings = !hiddenFrames.nodelist_bearings;
+    }
+    if (frameName == "gps") {
+        hiddenFrames.gps = !hiddenFrames.gps;
+    }
+#endif
+    if (frameName == "lora") {
+        hiddenFrames.lora = !hiddenFrames.lora;
+    }
+    if (frameName == "clock") {
+        hiddenFrames.clock = !hiddenFrames.clock;
+    }
 }
 
-void Screen::restoreAllFrames()
+bool Screen::isFrameHidden(const std::string &frameName) const
 {
-    hiddenFrames.textMessage = false;
-    hiddenFrames.waypoint = false;
-    hiddenFrames.wifi = false;
-    hiddenFrames.system = false;
-    hiddenFrames.home = false;
-    hiddenFrames.clock = false;
 #ifndef USE_EINK
-    hiddenFrames.nodelist = false;
+    if (frameName == "nodelist")
+        return hiddenFrames.nodelist;
 #endif
 #ifdef USE_EINK
-    hiddenFrames.nodelist_lastheard = false;
-    hiddenFrames.nodelist_hopsignal = false;
-    hiddenFrames.nodelist_distance = false;
+    if (frameName == "nodelist_lastheard")
+        return hiddenFrames.nodelist_lastheard;
+    if (frameName == "nodelist_hopsignal")
+        return hiddenFrames.nodelist_hopsignal;
+    if (frameName == "nodelist_distance")
+        return hiddenFrames.nodelist_distance;
 #endif
 #if HAS_GPS
-    hiddenFrames.nodelist_bearings = false;
-    hiddenFrames.gps = false;
+    if (frameName == "nodelist_bearings")
+        return hiddenFrames.nodelist_bearings;
+    if (frameName == "gps")
+        return hiddenFrames.gps;
 #endif
-    hiddenFrames.lora = false;
-    setFrames(FOCUS_DEFAULT);
+    if (frameName == "lora")
+        return hiddenFrames.lora;
+    if (frameName == "clock")
+        return hiddenFrames.clock;
+
+    return false;
 }
 
 void Screen::handleStartFirmwareUpdateScreen()
