@@ -344,14 +344,37 @@ void menuHandler::homeBaseMenu()
     screen->showOverlayBanner(bannerOptions);
 }
 
+void menuHandler::textMessageBaseMenu()
+{
+    enum optionsNumbers { Back, Preset, Freetext, enumEnd };
+
+    static const char *optionsArray[enumEnd] = {"Back"};
+    static int optionsEnumArray[enumEnd] = {Back};
+    int options = 1;
+    optionsArray[options] = "New Preset Msg";
+    optionsEnumArray[options++] = Preset;
+    if (kb_found) {
+        optionsArray[options] = "New Freetext Msg";
+        optionsEnumArray[options++] = Freetext;
+    }
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Message Action";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
+    bannerOptions.optionsCount = options;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Preset) {
+            cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST);
+        } else if (selected == Freetext) {
+            cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST);
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
 void menuHandler::systemBaseMenu()
 {
-    // Check if brightness is supported
-    bool hasSupportBrightness = false;
-#if defined(ST7789_CS) || defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) || defined(USE_SH1107) || HAS_TFT
-    hasSupportBrightness = true;
-#endif
-
     enum optionsNumbers { Back, Notifications, ScreenOptions, PowerMenu, Test, enumEnd };
     static const char *optionsArray[enumEnd] = {"Back"};
     static int optionsEnumArray[enumEnd] = {Back};
@@ -421,11 +444,11 @@ void menuHandler::favoriteBaseMenu()
     bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.optionsCount = options;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == 1) {
+        if (selected == Preset) {
             cannedMessageModule->LaunchWithDestination(graphics::UIRenderer::currentFavoriteNodeNum);
-        } else if (selected == 2 && kb_found) {
+        } else if (selected == Freetext) {
             cannedMessageModule->LaunchFreetextWithDestination(graphics::UIRenderer::currentFavoriteNodeNum);
-        } else if ((!kb_found && selected == 2) || (selected == 3 && kb_found)) {
+        } else if (selected == Remove) {
             menuHandler::menuQueue = menuHandler::remove_favorite;
             screen->runNow();
         }
@@ -678,6 +701,7 @@ void menuHandler::TFTColorPickerMenu(OLEDDisplay *display)
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 10;
     bannerOptions.bannerCallback = [display](int selected) -> void {
+#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || defined(T_DECK) || HAS_TFT
         uint8_t TFT_MESH_r = 0;
         uint8_t TFT_MESH_g = 0;
         uint8_t TFT_MESH_b = 0;
@@ -729,7 +753,6 @@ void menuHandler::TFTColorPickerMenu(OLEDDisplay *display)
             screen->runNow();
         }
 
-#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || HAS_TFT
         if (selected != 0) {
             display->setColor(BLACK);
             display->fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
@@ -827,8 +850,9 @@ void menuHandler::removeFavoriteMenu()
     bannerOptions.optionsCount = 2;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 1) {
+            LOG_INFO("Removing %x as favorite node", graphics::UIRenderer::currentFavoriteNodeNum);
             nodeDB->set_favorite(false, graphics::UIRenderer::currentFavoriteNodeNum);
-            screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
+            screen->setFrames(graphics::Screen::FOCUS_DEFAULT);
         }
     };
     screen->showOverlayBanner(bannerOptions);
@@ -924,8 +948,13 @@ void menuHandler::screenOptionsMenu()
 {
     // Check if brightness is supported
     bool hasSupportBrightness = false;
-#if defined(ST7789_CS) || defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) || defined(USE_SH1107) || HAS_TFT
+#if defined(ST7789_CS) || defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) || defined(USE_SH1107)
     hasSupportBrightness = true;
+#endif
+
+#if defined(T_DECK)
+    // TDeck Doesn't seem to support brightness at all, at least not reliably
+    hasSupportBrightness = false;
 #endif
 
     enum optionsNumbers { Back, Brightness, ScreenColor };
@@ -934,13 +963,13 @@ void menuHandler::screenOptionsMenu()
     int options = 1;
 
     // Only show brightness for B&W displays
-    if (hasSupportBrightness && !HAS_TFT) {
+    if (hasSupportBrightness) {
         optionsArray[options] = "Brightness";
         optionsEnumArray[options++] = Brightness;
     }
 
     // Only show screen color for TFT displays
-#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || HAS_TFT
+#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || defined(T_DECK) || HAS_TFT
     optionsArray[options] = "Screen Color";
     optionsEnumArray[options++] = ScreenColor;
 #endif
