@@ -1,23 +1,20 @@
 #pragma once
 #include "ProtobufModule.h"
-#include "input/InputBroker.h"
+#include "concurrency/OSThread.h"
 #include "graphics/Screen.h"
 #include "graphics/SharedUIDisplay.h"
-#include "concurrency/OSThread.h"
+#include "input/InputBroker.h"
 
 #define ROUTE_SIZE sizeof(((meshtastic_RouteDiscovery *)0)->route) / sizeof(((meshtastic_RouteDiscovery *)0)->route[0])
 
 /**
  * A module that traces the route to a certain destination node
  */
-enum TraceRouteRunState {
-    TRACEROUTE_STATE_IDLE,
-    TRACEROUTE_STATE_TRACKING,
-    TRACEROUTE_STATE_RESULT,
-    TRACEROUTE_STATE_COOLDOWN
-};
+enum TraceRouteRunState { TRACEROUTE_STATE_IDLE, TRACEROUTE_STATE_TRACKING, TRACEROUTE_STATE_RESULT, TRACEROUTE_STATE_COOLDOWN };
 
-class TraceRouteModule : public ProtobufModule<meshtastic_RouteDiscovery>, public Observable<const UIFrameEvent *>, private concurrency::OSThread
+class TraceRouteModule : public ProtobufModule<meshtastic_RouteDiscovery>,
+                         public Observable<const UIFrameEvent *>,
+                         private concurrency::OSThread
 {
   public:
     TraceRouteModule();

@@ -457,7 +457,7 @@ void menuHandler::favoriteBaseMenu()
         } else if (selected == TraceRoute) {
             if (traceRouteModule) {
                 traceRouteModule->launch(graphics::UIRenderer::currentFavoriteNodeNum);
-            } 
+            }
         }
     };
     screen->showOverlayBanner(bannerOptions);
@@ -497,7 +497,7 @@ void menuHandler::positionBaseMenu()
 void menuHandler::nodeListMenu()
 {
     enum optionsNumbers { Back, Favorite, TraceRoute, Verify, Reset, enumEnd };
-    static const char *optionsArray[] = {"Back", "Add Favorite",  "Trace Route", "Key Verification","Reset NodeDB"};
+    static const char *optionsArray[] = {"Back", "Add Favorite", "Trace Route", "Key Verification", "Reset NodeDB"};
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Node Action";
     bannerOptions.optionsArrayPtr = optionsArray;
@@ -874,7 +874,7 @@ void menuHandler::traceRouteMenu()
         LOG_INFO("Menu: Node picker selected node 0x%08x, traceRouteModule=%p", nodenum, traceRouteModule);
         if (traceRouteModule) {
             traceRouteModule->startTraceRoute(nodenum);
-        } 
+        }
     });
 }
 
