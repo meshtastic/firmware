@@ -24,7 +24,7 @@ struct ButtonConfig {
     bool touchQuirk = false;
 
     // Constructor to set required parameter
-    ButtonConfig(uint8_t pin = 0) : pinNumber(pin) {}
+    explicit ButtonConfig(uint8_t pin = 0) : pinNumber(pin) {}
 };
 
 #ifndef BUTTON_CLICK_MS
@@ -62,7 +62,7 @@ class ButtonThread : public Observable<const InputEvent *>, public concurrency::
         BUTTON_EVENT_COMBO_SHORT_LONG,
     };
 
-    ButtonThread(const char *name);
+    explicit ButtonThread(const char *name);
     int32_t runOnce() override;
     OneButton userButton;
     void attachButtonInterrupts();
