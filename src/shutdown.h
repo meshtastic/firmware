@@ -41,6 +41,7 @@ void powerCommandsCheck()
     }
 
     if (shutdownAtMsec && millis() > shutdownAtMsec) {
+        shutdownAtMsec = 0;
         power->shutdown();
     }
 }
