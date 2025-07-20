@@ -864,6 +864,8 @@ void Screen::setFrames(FrameFocus focus)
     uint8_t previousFrameCount = framesetInfo.frameCount;
     FramesetInfo fsi; // Location of specific frames, for applying focus parameter
 
+    graphics::UIRenderer::rebuildFavoritedNodes();
+
     LOG_DEBUG("Show standard frames");
     showingNormalScreen = true;
 
@@ -999,7 +1001,7 @@ void Screen::setFrames(FrameFocus focus)
     // Insert favorite frames *after* collecting them all
     if (!favoriteFrames.empty()) {
         fsi.positions.firstFavorite = numframes;
-        for (auto &f : favoriteFrames) {
+        for (const auto &f : favoriteFrames) {
             normalFrames[numframes++] = f;
             indicatorIcons.push_back(icon_node);
         }
