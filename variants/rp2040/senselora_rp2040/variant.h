@@ -6,6 +6,7 @@
 #define BUTTON_NEED_PULLUP
 
 #define LED_PIN PIN_LED
+#define ledOff(pin) pinMode(pin, INPUT)
 
 #undef BATTERY_PIN
 #define BATTERY_SENSE_RESOLUTION_BITS ADC_RESOLUTION

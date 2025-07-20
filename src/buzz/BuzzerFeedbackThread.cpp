@@ -69,10 +69,7 @@ int32_t BuzzerFeedbackThread::runOnce()
     // This thread is primarily event-driven, but we can use runOnce
     // for any periodic tasks if needed in the future
 
-    if (needsUpdate) {
-        needsUpdate = false;
-        // Could add any periodic processing here
-    }
+    needsUpdate = false;
 
     // Run every 100ms when active, less frequently when idle
     return needsUpdate ? 100 : 1000;

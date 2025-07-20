@@ -1016,7 +1016,7 @@ void Screen::setFrames(FrameFocus focus)
     // Insert favorite frames *after* collecting them all
     if (!favoriteFrames.empty()) {
         fsi.positions.firstFavorite = numframes;
-        for (auto &f : favoriteFrames) {
+        for (const auto &f : favoriteFrames) {
             normalFrames[numframes++] = f;
             indicatorIcons.push_back(icon_node);
         }
