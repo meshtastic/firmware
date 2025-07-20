@@ -1,5 +1,7 @@
 #include "AsyncUDP.h"
 
+#if HAS_ETHERNET
+
 AsyncUDP::AsyncUDP() : OSThread("AsyncUDP"), localPort(0) {}
 
 bool AsyncUDP::listenMulticast(IPAddress multicastIP, uint16_t port, uint8_t ttl)
@@ -67,3 +69,5 @@ int32_t AsyncUDP::runOnce()
     }
     return 5; // check every 5ms
 }
+
+#endif // HAS_ETHERNET
