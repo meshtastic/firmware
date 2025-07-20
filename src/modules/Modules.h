@@ -5,9 +5,5 @@
  * 
  * 
  */
-// src/modules/Modules.h
-#ifdef USE_WS5500
-#include "EthernetModule/EthernetModule.h"
-extern EthernetModule ethernetModule; // Non-pointer
-#endif
+
 void setupModules();

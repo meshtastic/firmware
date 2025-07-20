@@ -65,6 +65,7 @@ NRF52Bluetooth *nrf52Bluetooth = nullptr;
 #include "mesh/eth/ethClient.h"
 #endif
 
+
 #if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
 #endif

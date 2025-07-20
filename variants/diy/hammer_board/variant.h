@@ -38,15 +38,15 @@
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 #define TCXO_OPTIONAL
 #define SX126X_MAX_POWER 22
-// Ethernet (HSPI)
-#define ETH_CS_PIN 16
-#define ETH_SCLK_PIN 35
-#define ETH_MISO_PIN 34
-#define ETH_MOSI_PIN 25
+// Ethernet (VSPI)
+#define ETH_CS_PIN 15
+#define ETH_SCLK_PIN 5
+#define ETH_MISO_PIN 19
+#define ETH_MOSI_PIN 27
 #define ETH_RST_PIN 17
 #define ETH_INT_PIN -1
 #define ETH_ADDR 0
-#define SPI3_HOST HSPI_HOST
+#define SPI3_HOST VSPI_HOST
 // LoRa Modules
 #define USE_SX1262
 #define USE_SX1268
