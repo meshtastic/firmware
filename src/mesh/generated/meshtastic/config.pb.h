@@ -480,7 +480,8 @@ typedef struct _meshtastic_Config_DisplayConfig {
     /* Number of seconds the screen stays on after pressing the user button or receiving a message
  0 for default of one minute MAXUINT for always on */
     uint32_t screen_on_secs;
-    /* How the GPS coordinates are formatted on the OLED screen. */
+    /* Deprecated in 2.7.4: Unused
+ How the GPS coordinates are formatted on the OLED screen. */
     meshtastic_Config_DisplayConfig_GpsCoordinateFormat gps_format;
     /* Automatically toggles to the next page on the screen like a carousel, based the specified interval in seconds.
  Potentially useful for devices without user buttons. */
