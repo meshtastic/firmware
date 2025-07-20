@@ -192,16 +192,17 @@ int32_t ButtonThread::runOnce()
                         screen->forceDisplay(true); // Force a new UI frame, then force an EInk update
                 }
                 break;
-                
+#endif
+#if !defined(USE_EINK)                
             // 4 clicks: toggle Lost and found
-                case 4:
+            case 4:
                 if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT) {
                     LOG_WARN("Changing mode to LOST_AND_FOUND");
                     config.device.role = meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND;
                     if (screen)
                         screen->startAlert("Switching to LOST!");
                     nodeDB->saveToDisk(SEGMENT_CONFIG);
-                }else{
+                } else {
                     LOG_WARN("Changing mode to Client");
                     config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
                     if (screen)
