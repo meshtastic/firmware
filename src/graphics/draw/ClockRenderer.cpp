@@ -366,7 +366,7 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     // hour hand radius and y coordinate
     int16_t hourHandRadius = radius * 0.35;
     if (isHighResolution) {
-        int16_t hourHandRadius = radius * 0.55;
+        hourHandRadius = radius * 0.55;
     }
     int16_t hourHandNoonY = centerY - hourHandRadius;
 
