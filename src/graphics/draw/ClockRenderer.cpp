@@ -365,6 +365,9 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
     // hour hand radius and y coordinate
     int16_t hourHandRadius = radius * 0.35;
+    if (isHighResolution) {
+        hourHandRadius = radius * 0.55;
+    }
     int16_t hourHandNoonY = centerY - hourHandRadius;
 
     display->setColor(OLEDDISPLAY_COLOR::WHITE);
