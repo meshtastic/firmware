@@ -40,21 +40,7 @@ void powerCommandsCheck()
 #endif
     }
 
-#if defined(ARCH_ESP32) || defined(ARCH_NRF52)
-    if (shutdownAtMsec && screen) {
-        screen->showSimpleBanner("Shutting Down...", 0); // stays on screen
-    }
-#endif
-
     if (shutdownAtMsec && millis() > shutdownAtMsec) {
-        LOG_INFO("Shut down from admin command");
-#if defined(ARCH_NRF52) || defined(ARCH_ESP32) || defined(ARCH_RP2040)
-        playShutdownMelody();
         power->shutdown();
-#elif defined(ARCH_PORTDUINO)
-        exit(EXIT_SUCCESS);
-#else
-        LOG_WARN("FIXME implement shutdown for this platform");
-#endif
     }
 }

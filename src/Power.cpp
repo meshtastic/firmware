@@ -681,7 +681,14 @@ bool Power::setup()
 
 void Power::shutdown()
 {
-    LOG_INFO("Shutting Down");
+
+#if HAS_SCREEN
+    if (screen) {
+        screen->showSimpleBanner("Shutting Down...", 0); // stays on screen
+    }
+#endif
+    nodeDB->saveToDisk();
+    playShutdownMelody();
 
 #if defined(ARCH_NRF52) || defined(ARCH_ESP32) || defined(ARCH_RP2040)
 #ifdef PIN_LED1
@@ -694,6 +701,10 @@ void Power::shutdown()
     ledOff(PIN_LED3);
 #endif
     doDeepSleep(DELAY_FOREVER, false, false);
+#elif defined(ARCH_PORTDUINO)
+    exit(EXIT_SUCCESS);
+#else
+    LOG_WARN("FIXME implement shutdown for this platform");
 #endif
 }
 
