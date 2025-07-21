@@ -687,7 +687,7 @@ void Power::shutdown()
         screen->showSimpleBanner("Shutting Down...", 0); // stays on screen
     }
 #endif
-#ifndef ARCH_STM32
+#if !defined(ARCH_STM32WL)
     playShutdownMelody();
 #endif
     nodeDB->saveToDisk();
