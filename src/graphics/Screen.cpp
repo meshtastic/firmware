@@ -1152,6 +1152,37 @@ bool Screen::isFrameHidden(const std::string &frameName) const
     return false;
 }
 
+// Dismisses the currently displayed screen frame, if possible
+// Relevant for text message, waypoint, others in future?
+// Triggered with a CardKB keycombo
+void Screen::hideCurrentFrame()
+{
+    uint8_t currentFrame = ui->getUiState()->currentFrame;
+    bool dismissed = false;
+    if (currentFrame == framesetInfo.positions.textMessage && devicestate.has_rx_text_message) {
+        LOG_INFO("Hide Text Message");
+        devicestate.has_rx_text_message = false;
+        memset(&devicestate.rx_text_message, 0, sizeof(devicestate.rx_text_message));
+    } else if (currentFrame == framesetInfo.positions.waypoint && devicestate.has_rx_waypoint) {
+        LOG_DEBUG("Hide Waypoint");
+        devicestate.has_rx_waypoint = false;
+        hiddenFrames.waypoint = true;
+        dismissed = true;
+    } else if (currentFrame == framesetInfo.positions.wifi) {
+        LOG_DEBUG("Hide WiFi Screen");
+        hiddenFrames.wifi = true;
+        dismissed = true;
+    } else if (currentFrame == framesetInfo.positions.lora) {
+        LOG_INFO("Hide LoRa");
+        hiddenFrames.lora = true;
+        dismissed = true;
+    }
+
+    if (dismissed) {
+        setFrames(FOCUS_DEFAULT); // You could also use FOCUS_PRESERVE
+    }
+}
+
 void Screen::handleStartFirmwareUpdateScreen()
 {
     LOG_DEBUG("Show firmware screen");

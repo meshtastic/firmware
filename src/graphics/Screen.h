@@ -590,6 +590,9 @@ class Screen : public concurrency::OSThread
     /// Draws our SSL cert screen during boot (called from WebServer)
     void setSSLFrames();
 
+    // Dismiss the currently focussed frame, if possible (e.g. text message, waypoint)
+    void hideCurrentFrame();
+
     // Menu-driven Show / Hide Toggle
     void toggleFrameVisibility(const std::string &frameName);
     bool isFrameHidden(const std::string &frameName) const;
