@@ -695,6 +695,7 @@ class Screen : public concurrency::OSThread
         bool gps = false;
 #endif
         bool lora = false;
+        bool show_favorites = false;
     } hiddenFrames;
 
     /// Try to start drawing ASAP

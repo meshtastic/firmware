@@ -1103,6 +1103,7 @@ void menuHandler::FrameToggles_menu()
         gps,
         lora,
         clock,
+        show_favorites,
         enumEnd
     };
     static const char *optionsArray[enumEnd] = {"Finish"};
@@ -1133,6 +1134,9 @@ void menuHandler::FrameToggles_menu()
 
     optionsArray[options] = screen->isFrameHidden("clock") ? "Show Clock" : "Hide Clock";
     optionsEnumArray[options++] = clock;
+
+    optionsArray[options] = screen->isFrameHidden("show_favorites") ? "Show Favorites" : "Hide Favorites";
+    optionsEnumArray[options++] = show_favorites;
 #endif
 
     BannerOverlayOptions bannerOptions;
@@ -1173,6 +1177,10 @@ void menuHandler::FrameToggles_menu()
             screen->runNow();
         } else if (selected == clock) {
             screen->toggleFrameVisibility("clock");
+            menuHandler::menuQueue = menuHandler::FrameToggles;
+            screen->runNow();
+        } else if (selected == show_favorites) {
+            screen->toggleFrameVisibility("show_favorites");
             menuHandler::menuQueue = menuHandler::FrameToggles;
             screen->runNow();
         }

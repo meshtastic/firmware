@@ -1003,27 +1003,29 @@ void Screen::setFrames(FrameFocus focus)
     if (numMeshNodes > 0)
         numMeshNodes--;
 
-    // Temporary array to hold favorite node frames
-    std::vector<FrameCallback> favoriteFrames;
+    if (!hiddenFrames.show_favorites) {
+        // Temporary array to hold favorite node frames
+        std::vector<FrameCallback> favoriteFrames;
 
-    for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
-        const meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(i);
-        if (n && n->num != nodeDB->getNodeNum() && n->is_favorite) {
-            favoriteFrames.push_back(graphics::UIRenderer::drawNodeInfo);
+        for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
+            const meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(i);
+            if (n && n->num != nodeDB->getNodeNum() && n->is_favorite) {
+                favoriteFrames.push_back(graphics::UIRenderer::drawNodeInfo);
+            }
         }
-    }
 
-    // Insert favorite frames *after* collecting them all
-    if (!favoriteFrames.empty()) {
-        fsi.positions.firstFavorite = numframes;
-        for (const auto &f : favoriteFrames) {
-            normalFrames[numframes++] = f;
-            indicatorIcons.push_back(icon_node);
+        // Insert favorite frames *after* collecting them all
+        if (!favoriteFrames.empty()) {
+            fsi.positions.firstFavorite = numframes;
+            for (const auto &f : favoriteFrames) {
+                normalFrames[numframes++] = f;
+                indicatorIcons.push_back(icon_node);
+            }
+            fsi.positions.lastFavorite = numframes - 1;
+        } else {
+            fsi.positions.firstFavorite = 255;
+            fsi.positions.lastFavorite = 255;
         }
-        fsi.positions.lastFavorite = numframes - 1;
-    } else {
-        fsi.positions.firstFavorite = 255;
-        fsi.positions.lastFavorite = 255;
     }
 
     fsi.frameCount = numframes;   // Total framecount is used to apply FOCUS_PRESERVE
@@ -1122,6 +1124,9 @@ void Screen::toggleFrameVisibility(const std::string &frameName)
     if (frameName == "clock") {
         hiddenFrames.clock = !hiddenFrames.clock;
     }
+    if (frameName == "show_favorites") {
+        hiddenFrames.show_favorites = !hiddenFrames.show_favorites;
+    }
 }
 
 bool Screen::isFrameHidden(const std::string &frameName) const
@@ -1148,6 +1153,8 @@ bool Screen::isFrameHidden(const std::string &frameName) const
         return hiddenFrames.lora;
     if (frameName == "clock")
         return hiddenFrames.clock;
+    if (frameName == "show_favorites")
+        return hiddenFrames.show_favorites;
 
     return false;
 }
