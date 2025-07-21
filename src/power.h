@@ -126,6 +126,8 @@ class Power : private concurrency::OSThread
     bool analogInit();
     /// Setup a Lipo battery level sensor
     bool lipoInit();
+    /// Setup a Lipo charger
+    bool lipoChargerInit();
 
   private:
     // open circuit voltage lookup table
