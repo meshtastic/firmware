@@ -600,7 +600,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x01), 2);
                 if (registerValue == 0x8583) {
                     type = ADS1X15_ALT;
-                    logFoundDevice("ADS1X15", (uint8_t)addr.address);
+                    logFoundDevice("ADS1X15_ALT", (uint8_t)addr.address);
                     break;
                 }
 
