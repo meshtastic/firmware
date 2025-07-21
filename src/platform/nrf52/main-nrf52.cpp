@@ -284,8 +284,12 @@ void cpuDeepSleep(uint32_t msecToWake)
 #endif
     // This may cause crashes as debug messages continue to flow.
     Serial.end();
+
+    // This causes troubles with waking up on nrf52 (on pro-micro in particular):
+    // we have no Serial1 in use on nrf52, check Serial and GPS modules.
 #ifdef PIN_SERIAL1_RX
-    Serial1.end();
+    if (Serial1)        // A straightforward solution to the wake from deepsleep problem
+        Serial1.end();
 #endif
     setBluetoothEnable(false);
 
