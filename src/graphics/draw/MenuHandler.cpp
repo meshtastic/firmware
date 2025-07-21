@@ -840,9 +840,8 @@ void menuHandler::shutdownMenu()
     bannerOptions.optionsCount = 2;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 1) {
-            IF_SCREEN(screen->showSimpleBanner("Shutting Down...", 0));
-            nodeDB->saveToDisk();
-            power->shutdown();
+            InputEvent event = {.inputEvent = (input_broker_event)INPUT_BROKER_SHUTDOWN, .kbchar = 0, .touchX = 0, .touchY = 0};
+            inputBroker->injectInputEvent(&event);
         } else {
             menuQueue = power_menu;
             screen->runNow();
