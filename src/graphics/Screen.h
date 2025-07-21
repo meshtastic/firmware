@@ -662,6 +662,7 @@ class Screen : public concurrency::OSThread
             uint8_t nodelist_hopsignal = 255;
             uint8_t nodelist_distance = 255;
             uint8_t nodelist_bearings = 255;
+            uint8_t nodelist_brc = 255;
             uint8_t clock = 255;
             uint8_t firstFavorite = 255;
             uint8_t lastFavorite = 255;

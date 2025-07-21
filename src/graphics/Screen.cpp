@@ -907,7 +907,7 @@ void Screen::setFrames(FrameFocus focus)
 
 // Show detailed node views only on E-Ink builds
 #ifdef USE_EINK
-    fsi.positions.nodelist_lastheard = numframes;
+    fsi.positions.nodelist_bearings = numframes;
     normalFrames[numframes++] = graphics::NodeListRenderer::drawLastHeardScreen;
     indicatorIcons.push_back(icon_nodes);
 
@@ -918,11 +918,15 @@ void Screen::setFrames(FrameFocus focus)
     fsi.positions.nodelist_distance = numframes;
     normalFrames[numframes++] = graphics::NodeListRenderer::drawDistanceScreen;
     indicatorIcons.push_back(icon_distance);
-#endif
-#if HAS_GPS
+
     fsi.positions.nodelist_bearings = numframes;
     normalFrames[numframes++] = graphics::NodeListRenderer::drawNodeListWithCompasses;
     indicatorIcons.push_back(icon_list);
+#endif
+#if HAS_GPS
+    fsi.positions.nodelist_brc = numframes;
+    normalFrames[numframes++] = graphics::NodeListRenderer::drawBRCList;
+    indicatorIcons.push_back(icon_bm);
 
     fsi.positions.gps = numframes;
     normalFrames[numframes++] = graphics::UIRenderer::drawCompassAndLocationScreen;
@@ -1391,7 +1395,8 @@ int Screen::handleInputEvent(const InputEvent *event)
                            this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_hopsignal ||
                            this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_distance ||
                            this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_hopsignal ||
-                           this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_bearings) {
+                           this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_bearings ||
+                           this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_brc) {
                     menuHandler::nodeListMenu();
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.wifi) {
                     menuHandler::wifiBaseMenu();
