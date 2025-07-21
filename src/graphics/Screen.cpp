@@ -386,9 +386,7 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 #ifdef T_WATCH_S3
             PMU->enablePowerOutput(XPOWERS_ALDO2);
 #endif
-#ifdef HELTEC_TRACKER_V1_X
-            uint8_t tft_vext_enabled = digitalRead(VEXT_ENABLE);
-#endif
+
 #if !ARCH_PORTDUINO
             dispdev->displayOn();
 #endif
@@ -400,10 +398,7 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 
             dispdev->displayOn();
 #ifdef HELTEC_TRACKER_V1_X
-            // If the TFT VEXT power is not enabled, initialize the UI.
-            if (!tft_vext_enabled) {
-                ui->init();
-            }
+            ui->init();
 #endif
 #ifdef USE_ST7789
             pinMode(VTFT_CTRL, OUTPUT);
@@ -584,7 +579,7 @@ void Screen::setup()
             touchScreenImpl1->init();
         }
     }
-#elif HAS_TOUCHSCREEN
+#elif HAS_TOUCHSCREEN && !defined(USE_EINK)
     touchScreenImpl1 =
         new TouchScreenImpl1(dispdev->getWidth(), dispdev->getHeight(), static_cast<TFTDisplay *>(dispdev)->getTouch);
     touchScreenImpl1->init();
@@ -869,6 +864,8 @@ void Screen::setFrames(FrameFocus focus)
     uint8_t previousFrameCount = framesetInfo.frameCount;
     FramesetInfo fsi; // Location of specific frames, for applying focus parameter
 
+    graphics::UIRenderer::rebuildFavoritedNodes();
+
     LOG_DEBUG("Show standard frames");
     showingNormalScreen = true;
 
@@ -1004,7 +1001,7 @@ void Screen::setFrames(FrameFocus focus)
     // Insert favorite frames *after* collecting them all
     if (!favoriteFrames.empty()) {
         fsi.positions.firstFavorite = numframes;
-        for (auto &f : favoriteFrames) {
+        for (const auto &f : favoriteFrames) {
             normalFrames[numframes++] = f;
             indicatorIcons.push_back(icon_node);
         }
@@ -1379,9 +1376,12 @@ int Screen::handleInputEvent(const InputEvent *event)
                     menuHandler::clockMenu();
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.lora) {
                     menuHandler::LoraRegionPicker();
-                } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.textMessage &&
-                           devicestate.rx_text_message.from) {
-                    menuHandler::messageResponseMenu();
+                } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.textMessage) {
+                    if (devicestate.rx_text_message.from) {
+                        menuHandler::messageResponseMenu();
+                    } else {
+                        menuHandler::textMessageBaseMenu();
+                    }
                 } else if (framesetInfo.positions.firstFavorite != 255 &&
                            this->ui->getUiState()->currentFrame >= framesetInfo.positions.firstFavorite &&
                            this->ui->getUiState()->currentFrame <= framesetInfo.positions.lastFavorite) {

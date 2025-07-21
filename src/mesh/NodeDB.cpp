@@ -735,7 +735,6 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.display.screen_on_secs = 30;
     config.display.wake_on_tap_or_motion = true;
 #endif
-
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WIFI
     if (WiFiOTA::isUpdated()) {
         WiFiOTA::recoverConfig(&config.network);
@@ -795,6 +794,13 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.use_pwm = true;
     moduleConfig.external_notification.alert_message_buzzer = true;
     moduleConfig.external_notification.nag_timeout = default_ringtone_nag_secs;
+#endif
+#if defined(PIN_VIBRATION)
+    moduleConfig.external_notification.enabled = true;
+    moduleConfig.external_notification.output_vibra = PIN_VIBRATION;
+    moduleConfig.external_notification.alert_message_vibra = true;
+    moduleConfig.external_notification.output_ms = 500;
+    moduleConfig.external_notification.nag_timeout = 2;
 #endif
 #if defined(RAK4630) || defined(RAK11310) || defined(RAK3312)
     // Default to RAK led pin 2 (blue)
@@ -1868,7 +1874,7 @@ UserLicenseStatus NodeDB::getLicenseStatus(uint32_t nodeNum)
     return info->user.is_licensed ? UserLicenseStatus::Licensed : UserLicenseStatus::NotLicensed;
 }
 
-bool NodeDB::checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_public_key_t keyToTest)
+bool NodeDB::checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_public_key_t &keyToTest)
 {
     if (keyToTest.size == 32) {
         uint8_t keyHash[32] = {0};
