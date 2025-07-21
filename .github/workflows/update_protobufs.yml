@@ -34,7 +34,9 @@ jobs:
         uses: peter-evans/create-pull-request@v7
         with:
           branch: create-pull-request/update-protobufs
+          labels: submodules
           title: Update protobufs and classes
+          commit-message: Update protobufs
           add-paths: |
             protobufs
             src/mesh
