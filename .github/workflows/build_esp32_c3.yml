@@ -3,6 +3,9 @@ name: Build ESP32-C3
 on:
   workflow_call:
     inputs:
+      version:
+        required: true
+        type: string
       board:
         required: true
         type: string
@@ -14,11 +17,10 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-
-      - name: Get release version string
-        shell: bash
-        run: echo "long=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
-        id: version
+        with:
+          submodules: recursive
+          ref: ${{github.event.pull_request.head.ref}}
+          repository: ${{github.event.pull_request.head.repo.full_name}}
 
       - name: Build ESP32-C3
         id: build
@@ -33,7 +35,7 @@ jobs:
       - name: Store binaries as an artifact
         uses: actions/upload-artifact@v4
         with:
-          name: firmware-esp32c3-${{ inputs.board }}-${{ steps.version.outputs.long }}.zip
+          name: firmware-esp32c3-${{ inputs.board }}-${{ inputs.version }}.zip
           overwrite: true
           path: |
             release/*.bin
