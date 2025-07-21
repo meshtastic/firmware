@@ -47,10 +47,6 @@ int BuzzerFeedbackThread::handleInputEvent(const InputEvent *event)
         playComboTune(); // Ping sent feedback
         break;
 
-    case INPUT_BROKER_SHUTDOWN:
-        playShutdownMelody(); // Shutdown feedback
-        break;
-
     default:
         // For other events, check if it's a printable character
         if (event->kbchar >= 32 && event->kbchar <= 126) {

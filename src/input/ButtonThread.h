@@ -18,7 +18,7 @@ struct ButtonConfig {
     uint16_t longPressTime = 500;
     input_broker_event doublePress = INPUT_BROKER_NONE;
     input_broker_event longLongPress = INPUT_BROKER_NONE;
-    uint16_t longLongPressTime = 5000;
+    uint16_t longLongPressTime = 3900;
     input_broker_event triplePress = INPUT_BROKER_NONE;
     input_broker_event shortLong = INPUT_BROKER_NONE;
     bool touchQuirk = false;
