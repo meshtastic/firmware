@@ -187,7 +187,6 @@ const RegionInfo regions[] = {
     */
     RDEF(UNSET, 902.0f, 928.0f, 100, 0, 30, true, false, false)
 
-
 };
 
 const RegionInfo *myRegion;
