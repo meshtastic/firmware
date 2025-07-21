@@ -288,7 +288,7 @@ void menuHandler::messageResponseMenu()
 
 void menuHandler::homeBaseMenu()
 {
-    enum optionsNumbers { Back, Backlight, Position, Preset, Freetext, Bluetooth, Sleep, enumEnd };
+    enum optionsNumbers { Back, Backlight, Position, Preset, Freetext, Lost, Bluetooth, Sleep, enumEnd };
 
     static const char *optionsArray[enumEnd] = {"Back"};
     static int optionsEnumArray[enumEnd] = {Back};
@@ -310,6 +310,8 @@ void menuHandler::homeBaseMenu()
         optionsArray[options] = "New Freetext Msg";
         optionsEnumArray[options++] = Freetext;
     }
+    optionsArray[options] = "LostAndFound";
+    optionsEnumArray[options++] = Lost;
     optionsArray[options] = "Bluetooth Toggle";
     optionsEnumArray[options++] = Bluetooth;
 
@@ -339,6 +341,9 @@ void menuHandler::homeBaseMenu()
         } else if (selected == Bluetooth) {
             menuQueue = bluetooth_toggle_menu;
             screen->runNow();
+        } else if (selected == Lost) {
+            InputEvent event = {.inputEvent = (input_broker_event)INPUT_BROKER_LOST_TOGGLE, .kbchar = INPUT_BROKER_LOST_TOGGLE, .touchX = 0, .touchY = 0};
+            inputBroker->injectInputEvent(&event);
         }
     };
     screen->showOverlayBanner(bannerOptions);
