@@ -276,6 +276,11 @@ bool PowerTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
                  m.variant.power_metrics.ch1_voltage, m.variant.power_metrics.ch1_current, m.variant.power_metrics.ch2_voltage,
                  m.variant.power_metrics.ch2_current, m.variant.power_metrics.ch3_voltage, m.variant.power_metrics.ch3_current,
                  m.variant.power_metrics.ch4_voltage);
+        LOG_INFO("Send: ch5_voltage=%f, ch5_current=%f, ch6_voltage=%f, ch6_current=%f, "
+                 "ch7_voltage=%f, ch7_current=%f, ch8_voltage=%f",
+                 m.variant.power_metrics.ch5_voltage, m.variant.power_metrics.ch5_current, m.variant.power_metrics.ch6_voltage,
+                 m.variant.power_metrics.ch6_current, m.variant.power_metrics.ch7_voltage, m.variant.power_metrics.ch7_current,
+                 m.variant.power_metrics.ch8_voltage, m.variant.power_metrics.ch8_current);
 
         sensor_read_error_count = 0;
 

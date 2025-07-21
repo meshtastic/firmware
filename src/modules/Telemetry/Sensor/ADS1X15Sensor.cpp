@@ -16,7 +16,26 @@ int32_t ADS1X15Sensor::runOnce()
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
 
-    status = ads1x15.begin(nodeTelemetrySensorsMap[sensorType].first);
+    bus = nodeTelemetrySensorsMap[sensorType].second;
+    address = (uint8_t)nodeTelemetrySensorsMap[sensorType].first;
+
+#ifdef ADS1X15_I2C_CLOCK_SPEED
+    uint32_t currentClock;
+    currentClock = bus->getClock();
+    if (currentClock != ADS1X15_I2C_CLOCK_SPEED){
+        // LOG_DEBUG("Changing I2C clock to %u", ADS1X15_I2C_CLOCK_SPEED);
+        bus->setClock(ADS1X15_I2C_CLOCK_SPEED);
+    }
+#endif
+
+    status = ads1x15.begin(address);
+
+#ifdef ADS1X15_I2C_CLOCK_SPEED
+    if (currentClock != ADS1X15_I2C_CLOCK_SPEED){
+        // LOG_DEBUG("Restoring I2C clock to %uHz", currentClock);
+        bus->setClock(currentClock);
+    }
+#endif
 
     return initI2CSensor();
 }
@@ -26,6 +45,15 @@ void ADS1X15Sensor::setup() {}
 struct _ADS1X15Measurement ADS1X15Sensor::getMeasurement(uint8_t ch)
 {
     struct _ADS1X15Measurement measurement;
+
+#ifdef ADS1X15_I2C_CLOCK_SPEED
+    uint32_t currentClock;
+    currentClock = bus->getClock();
+    if (currentClock != ADS1X15_I2C_CLOCK_SPEED){
+        // LOG_DEBUG("Changing I2C clock to %u", ADS1X15_I2C_CLOCK_SPEED);
+        bus->setClock(ADS1X15_I2C_CLOCK_SPEED);
+    }
+#endif
 
     // Reset gain
     ads1x15.setGain(GAIN_TWOTHIRDS);
@@ -71,6 +99,13 @@ struct _ADS1X15Measurement ADS1X15Sensor::getMeasurement(uint8_t ch)
         // Get the value again
         value = ads1x15.readADC_SingleEnded(ch);
     }
+
+#ifdef ADS1X15_I2C_CLOCK_SPEED
+    if (currentClock != ADS1X15_I2C_CLOCK_SPEED){
+        // LOG_DEBUG("Restoring I2C clock to %uHz", currentClock);
+        bus->setClock(currentClock);
+    }
+#endif
 
     measurement.voltage = (float)value / 32768 * voltage_range;
 
