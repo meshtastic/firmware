@@ -3,6 +3,8 @@
 #include "gps/GeoCoord.h"
 #include "graphics/Screen.h"
 
+#if HAS_SCREEN
+
 using namespace meshtastic;
 
 const int32_t BRC_LATI = (40.786958 * 1e7);
@@ -150,3 +152,5 @@ int BRCAddress::compact(char *buf, size_t len)
     buf[l] = 0; // always null terminated
     return l;
 };
+
+#endif
