@@ -173,7 +173,7 @@ const RegionInfo regions[] = {
       /*
         Nepal
         865 MHz to 868 MHz frequency band for IoT (Internet of Things), M2M (Machine-to-Machine), and smart metering use, specifically in non-cellular mode.
-        https://www.nta.gov.np/uploads/contents/Radio-Frequency-Policy-2080-English.pdf?utm_source=chatgpt.com        
+        https://www.nta.gov.np/uploads/contents/Radio-Frequency-Policy-2080-English.pdf
     */
     RDEF(NP_865, 865.0f, 868.0f, 100, 0, 30, true, false, false)
 
