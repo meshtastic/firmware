@@ -26,7 +26,7 @@
 
 /*
 Board Information: https://www.seeedstudio.com/XIAO-ESP32S3-Sense-p-5639.html
-Expansion Board Infomation : https://www.seeedstudio.com/Seeeduino-XIAO-Expansion-board-p-4746.html
+Expansion Board Information : https://www.seeedstudio.com/Seeeduino-XIAO-Expansion-board-p-4746.html
 L76K GPS Module Information : https://www.seeedstudio.com/L76K-GNSS-Module-for-Seeed-Studio-XIAO-p-5864.html
 */
 
