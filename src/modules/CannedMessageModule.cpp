@@ -1985,6 +1985,10 @@ void CannedMessageModule::loadProtoForModule()
                           sizeof(meshtastic_CannedMessageModuleConfig), &meshtastic_CannedMessageModuleConfig_msg,
                           &cannedMessageModuleConfig) != LoadFileResult::LOAD_SUCCESS) {
         installDefaultCannedMessageModuleConfig();
+    } else {
+        if (cannedMessageModuleConfig.messages[0] != '\0') {
+            moduleConfig.canned_message.enabled = true;
+        }
     }
 }
 /**
@@ -2015,6 +2019,7 @@ bool CannedMessageModule::saveProtoForModule()
 void CannedMessageModule::installDefaultCannedMessageModuleConfig()
 {
     strncpy(cannedMessageModuleConfig.messages, "Hi|Bye|Yes|No|Ok", sizeof(cannedMessageModuleConfig.messages));
+    moduleConfig.canned_message.enabled = true;
 }
 
 /**
