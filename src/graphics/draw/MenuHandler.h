@@ -48,6 +48,7 @@ class menuHandler
     static void ClockFacePicker();
     static void messageResponseMenu();
     static void homeBaseMenu();
+    static void textMessageBaseMenu();
     static void systemBaseMenu();
     static void favoriteBaseMenu();
     static void positionBaseMenu();
