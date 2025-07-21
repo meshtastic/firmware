@@ -1110,6 +1110,9 @@ void menuHandler::FrameToggles_menu()
     static int optionsEnumArray[enumEnd] = {Finish};
     int options = 1;
 
+    // Track last selected index (not enum value!)
+    static int lastSelectedIndex = 0;
+
 #ifndef USE_EINK
     optionsArray[options] = screen->isFrameHidden("nodelist") ? "Show Node List" : "Hide Node List";
     optionsEnumArray[options++] = nodelist;
@@ -1144,7 +1147,17 @@ void menuHandler::FrameToggles_menu()
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = options;
     bannerOptions.optionsEnumPtr = optionsEnumArray;
-    bannerOptions.bannerCallback = [](int selected) -> void {
+    bannerOptions.InitialSelected = lastSelectedIndex; // Use index, not enum value
+
+    bannerOptions.bannerCallback = [optionsEnumArray, options](int selected) mutable -> void {
+        // Find the index of selected in optionsEnumArray
+        int idx = 0;
+        for (; idx < options; ++idx) {
+            if (optionsEnumArray[idx] == selected)
+                break;
+        }
+        lastSelectedIndex = idx;
+
         if (selected == Finish) {
             screen->setFrames(Screen::FOCUS_DEFAULT);
         } else if (selected == nodelist) {
