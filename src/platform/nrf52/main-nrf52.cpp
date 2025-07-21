@@ -363,6 +363,7 @@ void cpuDeepSleep(uint32_t msecToWake)
         // Resume on user button press
         // https://github.com/lyusupov/SoftRF/blob/81c519ca75693b696752235d559e881f2e0511ee/software/firmware/source/SoftRF/src/platform/nRF52.cpp#L1738
         constexpr uint32_t DFU_MAGIC_SKIP = 0x6d;
+        sd_power_gpregret_clr(0, 0xFF); // Clear the register before setting a new values in it for stability reasons
         sd_power_gpregret_set(0, DFU_MAGIC_SKIP); // Equivalent NRF_POWER->GPREGRET = DFU_MAGIC_SKIP
 
         // FIXME, use system off mode with ram retention for key state?
