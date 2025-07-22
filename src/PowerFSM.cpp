@@ -72,7 +72,7 @@ extern Power *power;
 static void shutdownEnter()
 {
     LOG_DEBUG("State: SHUTDOWN");
-    power->shutdown();
+    shutdownAtMsec = millis();
 }
 
 #include "error.h"

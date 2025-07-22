@@ -33,7 +33,6 @@
 #include "mesh/generated/meshtastic/config.pb.h"
 #include "meshUtils.h"
 #include "modules/Modules.h"
-#include "shutdown.h"
 #include "sleep.h"
 #include "target_specific.h"
 #include <memory>
@@ -1530,7 +1529,7 @@ void loop()
 #ifdef ARCH_NRF52
     nrf52Loop();
 #endif
-    powerCommandsCheck();
+    power->powerCommandsCheck();
 
 #ifdef DEBUG_STACK
     static uint32_t lastPrint = 0;
