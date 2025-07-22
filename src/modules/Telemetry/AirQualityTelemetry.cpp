@@ -25,7 +25,7 @@ NullSensor pmsa003iSensor;
 #endif
 #include "graphics/ScreenFonts.h"
 
-// Small hack
+// TODO - Small hack to review
 #ifndef INCLUDE_SEN5X
 #define INCLUDE_SEN5X 1
 #endif
