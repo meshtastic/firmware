@@ -483,7 +483,7 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
 }
 
 // ****************************
-// *      Memory Screen       *
+// *      System Screen       *
 // ****************************
 void drawMemoryUsage(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
@@ -593,7 +593,19 @@ void drawMemoryUsage(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     }
     line += 1;
     char appversionstr[35];
-    snprintf(appversionstr, sizeof(appversionstr), "Ver.: %s", optstr(APP_VERSION));
+    snprintf(appversionstr, sizeof(appversionstr), "Ver: %s", optstr(APP_VERSION));
+    char appversionstr_formatted[40];
+    char *lastDot = strrchr(appversionstr, '.');
+    if (lastDot) {
+        size_t prefixLen = lastDot - appversionstr;
+        strncpy(appversionstr_formatted, appversionstr, prefixLen);
+        appversionstr_formatted[prefixLen] = '\0';
+        strncat(appversionstr_formatted, " (", sizeof(appversionstr_formatted) - strlen(appversionstr_formatted) - 1);
+        strncat(appversionstr_formatted, lastDot + 1, sizeof(appversionstr_formatted) - strlen(appversionstr_formatted) - 1);
+        strncat(appversionstr_formatted, ")", sizeof(appversionstr_formatted) - strlen(appversionstr_formatted) - 1);
+        strncpy(appversionstr, appversionstr_formatted, sizeof(appversionstr) - 1);
+        appversionstr[sizeof(appversionstr) - 1] = '\0';
+    }
     int textWidth = display->getStringWidth(appversionstr);
     int nameX = (SCREEN_WIDTH - textWidth) / 2;
     display->drawString(nameX, getTextPositions(display)[line], appversionstr);

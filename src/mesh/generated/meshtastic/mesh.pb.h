@@ -426,7 +426,10 @@ typedef enum _meshtastic_Routing_Error {
     /* Admin packet otherwise checks out, but uses a bogus or expired session key */
     meshtastic_Routing_Error_ADMIN_BAD_SESSION_KEY = 36,
     /* Admin packet sent using PKC, but not from a public key on the admin key list */
-    meshtastic_Routing_Error_ADMIN_PUBLIC_KEY_UNAUTHORIZED = 37
+    meshtastic_Routing_Error_ADMIN_PUBLIC_KEY_UNAUTHORIZED = 37,
+    /* Airtime fairness rate limit exceeded for a packet
+ This typically enforced per portnum and is used to prevent a single node from monopolizing airtime */
+    meshtastic_Routing_Error_RATE_LIMIT_EXCEEDED = 38
 } meshtastic_Routing_Error;
 
 /* The priority of this message for sending.
@@ -1222,8 +1225,8 @@ extern "C" {
 #define _meshtastic_Position_AltSource_ARRAYSIZE ((meshtastic_Position_AltSource)(meshtastic_Position_AltSource_ALT_BAROMETRIC+1))
 
 #define _meshtastic_Routing_Error_MIN meshtastic_Routing_Error_NONE
-#define _meshtastic_Routing_Error_MAX meshtastic_Routing_Error_ADMIN_PUBLIC_KEY_UNAUTHORIZED
-#define _meshtastic_Routing_Error_ARRAYSIZE ((meshtastic_Routing_Error)(meshtastic_Routing_Error_ADMIN_PUBLIC_KEY_UNAUTHORIZED+1))
+#define _meshtastic_Routing_Error_MAX meshtastic_Routing_Error_RATE_LIMIT_EXCEEDED
+#define _meshtastic_Routing_Error_ARRAYSIZE ((meshtastic_Routing_Error)(meshtastic_Routing_Error_RATE_LIMIT_EXCEEDED+1))
 
 #define _meshtastic_MeshPacket_Priority_MIN meshtastic_MeshPacket_Priority_UNSET
 #define _meshtastic_MeshPacket_Priority_MAX meshtastic_MeshPacket_Priority_MAX

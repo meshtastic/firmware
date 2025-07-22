@@ -14,6 +14,11 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
 {
     auto p = *pptr;
 
+    if (p.is_licensed != owner.is_licensed) {
+        LOG_WARN("Invalid nodeInfo detected, is_licensed mismatch!");
+        return true;
+    }
+
     // Coerce user.id to be derived from the node number
     snprintf(p.id, sizeof(p.id), "!%08x", getFrom(&mp));
 
