@@ -344,8 +344,6 @@ NodeDB::NodeDB()
         config.device.node_info_broadcast_secs = MAX_INTERVAL;
     if (config.position.position_broadcast_secs > MAX_INTERVAL)
         config.position.position_broadcast_secs = MAX_INTERVAL;
-    if (config.position.gps_update_interval > MAX_INTERVAL)
-        config.position.gps_update_interval = MAX_INTERVAL;
     if (config.position.gps_attempt_time > MAX_INTERVAL)
         config.position.gps_attempt_time = MAX_INTERVAL;
     if (config.position.position_flags > MAX_INTERVAL)
@@ -741,11 +739,6 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 
 void NodeDB::initConfigIntervals()
 {
-#ifdef USERPREFS_CONFIG_GPS_UPDATE_INTERVAL
-    config.position.gps_update_interval = USERPREFS_CONFIG_GPS_UPDATE_INTERVAL;
-#else
-    config.position.gps_update_interval = default_gps_update_interval;
-#endif
 #ifdef USERPREFS_CONFIG_POSITION_BROADCAST_INTERVAL
     config.position.position_broadcast_secs = USERPREFS_CONFIG_POSITION_BROADCAST_INTERVAL;
 #else

@@ -855,7 +855,7 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
         writePinStandby(true);                                      // Standby (pin): asleep (not awake)
         setPowerUBLOX(false, sleepTime);                            // Standby (UBLOX): asleep, timed
 #ifdef GNSS_AIROHA
-        if (config.position.gps_update_interval * 1000 >= GPS_FIX_HOLD_TIME * 2) {
+        if (config.position.broadcast_smart_minimum_interval_secs * 1000 >= GPS_FIX_HOLD_TIME * 2) {
             digitalWrite(PIN_GPS_EN, LOW);
         }
 #endif
@@ -869,7 +869,7 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
         writePinStandby(true);                                      // Standby (pin): asleep
         setPowerUBLOX(false, 0);                                    // Standby (UBLOX): asleep, indefinitely
 #ifdef GNSS_AIROHA
-        if (config.position.gps_update_interval * 1000 >= GPS_FIX_HOLD_TIME * 2) {
+        if (config.position.broadcast_smart_minimum_interval_secs * 1000 >= GPS_FIX_HOLD_TIME * 2) {
             digitalWrite(PIN_GPS_EN, LOW);
         }
 #endif
@@ -1018,7 +1018,7 @@ void GPS::down()
     scheduling.informGotLock();
     uint32_t predictedSearchDuration = scheduling.predictedSearchDurationMs();
     uint32_t sleepTime = scheduling.msUntilNextSearch();
-    uint32_t updateInterval = Default::getConfiguredOrDefaultMs(config.position.gps_update_interval);
+    uint32_t updateInterval = Default::getConfiguredOrDefaultMs(config.position.broadcast_smart_minimum_interval_secs);
 
     LOG_DEBUG("%us until next search", sleepTime / 1000);
 
@@ -1039,12 +1039,12 @@ void GPS::down()
             softsleepSupported = true;
 
         if (softsleepSupported) {
-            // How long does gps_update_interval need to be, for GPS_HARDSLEEP to become more efficient than
+            // How long does broadcast_smart_minimum_interval_secs need to be, for GPS_HARDSLEEP to become more efficient than
             // GPS_SOFTSLEEP? Heuristic equation. A compromise manually fitted to power observations from U-blox NEO-6M
             // and M10050 https://www.desmos.com/calculator/6gvjghoumr This is not particularly accurate, but probably an
             // improvement over a single, fixed threshold
             uint32_t hardsleepThreshold = (2750 * pow(predictedSearchDuration / 1000, 1.22));
-            LOG_DEBUG("gps_update_interval >= %us needed to justify hardsleep", hardsleepThreshold / 1000);
+            LOG_DEBUG("broadcast_smart_minimum_interval_secs >= %us needed to justify hardsleep", hardsleepThreshold / 1000);
 
             // If update interval too short: softsleep (if supported by hardware)
             if (updateInterval < hardsleepThreshold) {
@@ -1556,7 +1556,7 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
 bool GPS::lookForLocation()
 {
 #ifdef GNSS_AIROHA
-    if ((config.position.gps_update_interval * 1000) >= (GPS_FIX_HOLD_TIME * 2)) {
+    if ((config.position.broadcast_smart_minimum_interval_secs * 1000) >= (GPS_FIX_HOLD_TIME * 2)) {
         uint8_t fix = reader.fixQuality();
         if (fix > 0) {
             if (lastFixStartMsec > 0) {
