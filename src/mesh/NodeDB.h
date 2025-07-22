@@ -336,13 +336,10 @@ extern NodeDB *nodeDB;
 
         # FIXME - after tuning, move these params into the on-device defaults based on is_router and is_power_saving
 
-        # prefs.position_broadcast_secs = FIXME possibly broadcast only once an hr
         prefs.wait_bluetooth_secs = 1  # Don't stay in bluetooth mode
         # try to stay in light sleep one full day, then briefly wake and sleep again
 
         prefs.ls_secs = oneday
-
-        prefs.position_broadcast_secs = 12 hours # send either position or owner every 12hrs
 
         # get a new GPS position once per day
         prefs.gps_update_interval = oneday

@@ -34,7 +34,8 @@ uint32_t GPSUpdateScheduling::msUntilNextSearch()
     uint32_t now = millis();
 
     // Target interval (seconds), between GPS updates
-    uint32_t updateInterval = Default::getConfiguredOrDefaultMs(config.position.gps_update_interval, default_gps_update_interval);
+    uint32_t updateInterval =
+        Default::getConfiguredOrDefaultMs(config.position.broadcast_smart_minimum_interval_secs, default_gps_update_interval);
 
     // Check how long until we should start searching, to hopefully hit our target interval
     uint32_t dueAtMs = searchEndedMs + updateInterval;
@@ -71,7 +72,7 @@ bool GPSUpdateScheduling::isUpdateDue()
 bool GPSUpdateScheduling::searchedTooLong()
 {
     uint32_t minimumOrConfiguredSecs =
-        Default::getConfiguredOrMinimumValue(config.position.position_broadcast_secs, default_broadcast_interval_secs);
+        Default::getConfiguredOrMinimumValue(position_broadcast_secs, default_broadcast_interval_secs);
     uint32_t maxSearchMs = Default::getConfiguredOrDefaultMs(minimumOrConfiguredSecs, default_broadcast_interval_secs);
     // If broadcast interval set to max, no such thing as "too long"
     if (maxSearchMs == UINT32_MAX)

@@ -342,8 +342,6 @@ NodeDB::NodeDB()
     // FIXME: UINT32_MAX intervals overflows Apple clients until they are fully patched
     if (config.device.node_info_broadcast_secs > MAX_INTERVAL)
         config.device.node_info_broadcast_secs = MAX_INTERVAL;
-    if (config.position.position_broadcast_secs > MAX_INTERVAL)
-        config.position.position_broadcast_secs = MAX_INTERVAL;
     if (config.position.gps_attempt_time > MAX_INTERVAL)
         config.position.gps_attempt_time = MAX_INTERVAL;
     if (config.position.position_flags > MAX_INTERVAL)
@@ -739,11 +737,6 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 
 void NodeDB::initConfigIntervals()
 {
-#ifdef USERPREFS_CONFIG_POSITION_BROADCAST_INTERVAL
-    config.position.position_broadcast_secs = USERPREFS_CONFIG_POSITION_BROADCAST_INTERVAL;
-#else
-    config.position.position_broadcast_secs = default_broadcast_interval_secs;
-#endif
 
     config.power.ls_secs = default_ls_secs;
     config.power.min_wake_secs = default_min_wake_secs;
@@ -899,11 +892,8 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
         moduleConfig.telemetry.device_update_interval = default_telemetry_broadcast_interval_secs;
         moduleConfig.telemetry.environment_measurement_enabled = true;
         moduleConfig.telemetry.environment_update_interval = 300;
-    } else if (role == meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND) {
-        config.position.position_broadcast_secs = 300; // Every 5 minutes
     } else if (role == meshtastic_Config_DeviceConfig_Role_TAK) {
         config.device.node_info_broadcast_secs = ONE_DAY;
-        config.position.position_broadcast_secs = ONE_DAY;
         // Remove Altitude MSL from flags since CoTs use HAE (height above ellipsoid)
         config.position.position_flags =
             (meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE | meshtastic_Config_PositionConfig_PositionFlags_SPEED |
@@ -917,7 +907,6 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
         owner.has_is_unmessagable = true;
         owner.is_unmessagable = true;
         config.device.node_info_broadcast_secs = ONE_DAY;
-        config.position.position_broadcast_secs = 3 * 60; // Every 3 minutes
         config.position.broadcast_smart_minimum_distance = 20;
         config.position.broadcast_smart_minimum_interval_secs = 15;
         // Remove Altitude MSL from flags since CoTs use HAE (height above ellipsoid)
@@ -928,7 +917,6 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
     } else if (role == meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN) {
         config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY;
         config.device.node_info_broadcast_secs = MAX_INTERVAL;
-        config.position.position_broadcast_secs = MAX_INTERVAL;
         moduleConfig.neighbor_info.update_interval = MAX_INTERVAL;
         moduleConfig.telemetry.device_update_interval = MAX_INTERVAL;
         moduleConfig.telemetry.environment_update_interval = MAX_INTERVAL;
