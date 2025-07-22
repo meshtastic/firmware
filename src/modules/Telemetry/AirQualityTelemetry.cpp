@@ -45,7 +45,7 @@ void AirQualityTelemetryModule::i2cScanFinished(ScanI2C *i2cScanner)
     addSensor<PMSA003ISensor>(i2cScanner, ScanI2C::DeviceType::PMSA003I);
 }
 
-// Small hack
+// TODO - Small hack to review
 #ifndef INCLUDE_SEN5X
 #define INCLUDE_SEN5X 1
 #endif
