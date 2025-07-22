@@ -166,11 +166,11 @@ void AirQualityTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSta
     std::vector<String> entries;
 
     if (m.has_pm10_standard)
-        entries.push_back("PM1.0: " + String(m.pm10_standard, 0) + "ug/m3");
+        entries.push_back("PM1.0: " + String(m.pm10_standard) + "ug/m3");
     if (m.has_pm25_standard)
-        entries.push_back("PM2.5: " + String(m.pm25_standard, 0) + "ug/m3");
+        entries.push_back("PM2.5: " + String(m.pm25_standard) + "ug/m3");
     if (m.has_pm100_standard)
-        entries.push_back("PM10.0: " + String(m.pm100_standard, 0) + "ug/m3");
+        entries.push_back("PM10.0: " + String(m.pm100_standard) + "ug/m3");
 
     // === Show first available metric on top-right of first line ===
     if (!entries.empty()) {
@@ -274,7 +274,7 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     m.which_variant = meshtastic_Telemetry_air_quality_metrics_tag;
     m.time = getTime();
     if (getAirQualityTelemetry(&m)) {
-        LOG_INFO("Send: pm10_standard=%f, pm25_standard=%f, pm100_standard=%f, pm10_environmental=%f, pm100_environmental=%f",
+        LOG_INFO("Send: pm10_standard=%u, pm25_standard=%u, pm100_standard=%u, pm10_environmental=%u, pm100_environmental=%u",
                  m.variant.air_quality_metrics.pm10_standard, m.variant.air_quality_metrics.pm25_standard,
                  m.variant.air_quality_metrics.pm100_standard, m.variant.air_quality_metrics.pm10_environmental,
                  m.variant.air_quality_metrics.pm100_environmental);

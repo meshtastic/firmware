@@ -1,49 +1,38 @@
-#include "configuration.h"
+#pragma once
 
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && __has_include(<Adafruit_PM25AQI.h>)
-
-#include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "TelemetrySensor.h"
-#include "detect/ScanI2CTwoWire.h"
-#include <Adafruit_PM25AQI.h>
 
-#ifndef PMSA003I_WARMUP_MS
-// from the PMSA003I datasheet:
-// "Stable data should be got at least 30 seconds after the sensor wakeup
-// from the sleep mode because of the fan’s performance."
-#define PMSA003I_WARMUP_MS 30000
+#ifndef PMSA003I_I2C_CLOCK_SPEED
+#define PMSA003I_I2C_CLOCK_SPEED 100000
+#endif
+
+#ifndef PMSA003I_ENABLE_PIN
+#define PMSA003I_FRAME_LENGTH  32
 #endif
 
 class PMSA003ISensor : public TelemetrySensor
 {
-  private:
-    Adafruit_PM25AQI pmsa003i = Adafruit_PM25AQI();
-    PM25_AQI_Data pmsa003iData = {0};
-
-  protected:
+public:
+    PMSA003ISensor();
     virtual void setup() override;
-
-  public:
-    enum State {
-        IDLE = 0,
-        ACTIVE = 1,
-    };
+    virtual int32_t runOnce() override;
+    virtual bool restoreClock(uint32_t currentClock);
+    virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
+    virtual bool isActive();
 
 #ifdef PMSA003I_ENABLE_PIN
     void sleep();
     uint32_t wakeUp();
-    // the PMSA003I sensor uses about 300mW on its own; support powering it off when it's not actively taking
-    // a reading
-    // put the sensor to sleep on startup
-    State state = State::IDLE;
-#else
+#endif
+
+private:
+    enum class State { IDLE, ACTIVE };
     State state = State::ACTIVE;
-#endif
+    TwoWire * bus;
+    uint8_t address;
 
-    PMSA003ISensor();
-    bool isActive();
-    virtual int32_t runOnce() override;
-    virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
+    uint16_t computedChecksum = 0;
+    uint16_t receivedChecksum = 0;
+
+    uint8_t buffer[PMSA003I_FRAME_LENGTH];
 };
-
-#endif
