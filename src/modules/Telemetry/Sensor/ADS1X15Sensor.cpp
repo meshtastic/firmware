@@ -46,15 +46,6 @@ struct _ADS1X15Measurement ADS1X15Sensor::getMeasurement(uint8_t ch)
 {
     struct _ADS1X15Measurement measurement;
 
-#ifdef ADS1X15_I2C_CLOCK_SPEED
-    uint32_t currentClock;
-    currentClock = bus->getClock();
-    if (currentClock != ADS1X15_I2C_CLOCK_SPEED){
-        // LOG_DEBUG("Changing I2C clock to %u", ADS1X15_I2C_CLOCK_SPEED);
-        bus->setClock(ADS1X15_I2C_CLOCK_SPEED);
-    }
-#endif
-
     // Reset gain
     ads1x15.setGain(GAIN_TWOTHIRDS);
     double voltage_range = 6.144;
@@ -100,12 +91,7 @@ struct _ADS1X15Measurement ADS1X15Sensor::getMeasurement(uint8_t ch)
         value = ads1x15.readADC_SingleEnded(ch);
     }
 
-#ifdef ADS1X15_I2C_CLOCK_SPEED
-    if (currentClock != ADS1X15_I2C_CLOCK_SPEED){
-        // LOG_DEBUG("Restoring I2C clock to %uHz", currentClock);
-        bus->setClock(currentClock);
-    }
-#endif
+
 
     measurement.voltage = (float)value / 32768 * voltage_range;
 
@@ -126,8 +112,24 @@ struct _ADS1X15Measurements ADS1X15Sensor::getMeasurements()
 
 bool ADS1X15Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
+    // Done here and not in getMeasurements to avoid the back-and-forth 4-8 times one after the other
+#ifdef ADS1X15_I2C_CLOCK_SPEED
+    uint32_t currentClock;
+    currentClock = bus->getClock();
+    if (currentClock != ADS1X15_I2C_CLOCK_SPEED){
+        // LOG_DEBUG("Changing I2C clock to %u", ADS1X15_I2C_CLOCK_SPEED);
+        bus->setClock(ADS1X15_I2C_CLOCK_SPEED);
+    }
+#endif
 
     struct _ADS1X15Measurements m = getMeasurements();
+
+#ifdef ADS1X15_I2C_CLOCK_SPEED
+    if (currentClock != ADS1X15_I2C_CLOCK_SPEED){
+        // LOG_DEBUG("Restoring I2C clock to %uHz", currentClock);
+        bus->setClock(currentClock);
+    }
+#endif
 
     switch (sensorType)
     {
