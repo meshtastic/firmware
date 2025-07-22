@@ -428,7 +428,7 @@ int32_t PositionModule::runOnce()
                 sendLostAndFoundText();
             }
         }
-    } else if (config.position.position_broadcast_smart_enabled) {
+    } else {
         const meshtastic_NodeInfoLite *node2 = service->refreshLocalMeshNode(); // should guarantee there is now a position
 
         if (nodeDB->hasValidPosition(node2)) {
