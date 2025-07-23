@@ -342,10 +342,6 @@ NodeDB::NodeDB()
     // FIXME: UINT32_MAX intervals overflows Apple clients until they are fully patched
     if (config.device.node_info_broadcast_secs > MAX_INTERVAL)
         config.device.node_info_broadcast_secs = MAX_INTERVAL;
-    if (config.position.position_broadcast_secs > MAX_INTERVAL)
-        config.position.position_broadcast_secs = MAX_INTERVAL;
-    if (config.position.gps_update_interval > MAX_INTERVAL)
-        config.position.gps_update_interval = MAX_INTERVAL;
     if (config.position.gps_attempt_time > MAX_INTERVAL)
         config.position.gps_attempt_time = MAX_INTERVAL;
     if (config.position.position_flags > MAX_INTERVAL)
@@ -628,11 +624,6 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #ifdef PIN_GPS_EN
     config.position.gps_en_gpio = PIN_GPS_EN;
 #endif
-#ifdef GPS_POWER_TOGGLE
-    config.device.disable_triple_click = false;
-#else
-    config.device.disable_triple_click = true;
-#endif
 #if defined(USERPREFS_CONFIG_GPS_MODE)
     config.position.gps_mode = USERPREFS_CONFIG_GPS_MODE;
 #elif !HAS_GPS || GPS_DEFAULT_NOT_PRESENT
@@ -644,11 +635,6 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
         config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_DISABLED;
 #else
     config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
-#endif
-#ifdef USERPREFS_CONFIG_SMART_POSITION_ENABLED
-    config.position.position_broadcast_smart_enabled = USERPREFS_CONFIG_SMART_POSITION_ENABLED;
-#else
-    config.position.position_broadcast_smart_enabled = true;
 #endif
     config.position.broadcast_smart_minimum_distance = 100;
     config.position.broadcast_smart_minimum_interval_secs = 30;
@@ -751,16 +737,6 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 
 void NodeDB::initConfigIntervals()
 {
-#ifdef USERPREFS_CONFIG_GPS_UPDATE_INTERVAL
-    config.position.gps_update_interval = USERPREFS_CONFIG_GPS_UPDATE_INTERVAL;
-#else
-    config.position.gps_update_interval = default_gps_update_interval;
-#endif
-#ifdef USERPREFS_CONFIG_POSITION_BROADCAST_INTERVAL
-    config.position.position_broadcast_secs = USERPREFS_CONFIG_POSITION_BROADCAST_INTERVAL;
-#else
-    config.position.position_broadcast_secs = default_broadcast_interval_secs;
-#endif
 
     config.power.ls_secs = default_ls_secs;
     config.power.min_wake_secs = default_min_wake_secs;
@@ -916,13 +892,8 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
         moduleConfig.telemetry.device_update_interval = default_telemetry_broadcast_interval_secs;
         moduleConfig.telemetry.environment_measurement_enabled = true;
         moduleConfig.telemetry.environment_update_interval = 300;
-    } else if (role == meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND) {
-        config.position.position_broadcast_smart_enabled = false;
-        config.position.position_broadcast_secs = 300; // Every 5 minutes
     } else if (role == meshtastic_Config_DeviceConfig_Role_TAK) {
         config.device.node_info_broadcast_secs = ONE_DAY;
-        config.position.position_broadcast_smart_enabled = false;
-        config.position.position_broadcast_secs = ONE_DAY;
         // Remove Altitude MSL from flags since CoTs use HAE (height above ellipsoid)
         config.position.position_flags =
             (meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE | meshtastic_Config_PositionConfig_PositionFlags_SPEED |
@@ -936,8 +907,6 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
         owner.has_is_unmessagable = true;
         owner.is_unmessagable = true;
         config.device.node_info_broadcast_secs = ONE_DAY;
-        config.position.position_broadcast_smart_enabled = true;
-        config.position.position_broadcast_secs = 3 * 60; // Every 3 minutes
         config.position.broadcast_smart_minimum_distance = 20;
         config.position.broadcast_smart_minimum_interval_secs = 15;
         // Remove Altitude MSL from flags since CoTs use HAE (height above ellipsoid)
@@ -948,8 +917,6 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
     } else if (role == meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN) {
         config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY;
         config.device.node_info_broadcast_secs = MAX_INTERVAL;
-        config.position.position_broadcast_smart_enabled = false;
-        config.position.position_broadcast_secs = MAX_INTERVAL;
         moduleConfig.neighbor_info.update_interval = MAX_INTERVAL;
         moduleConfig.telemetry.device_update_interval = MAX_INTERVAL;
         moduleConfig.telemetry.environment_update_interval = MAX_INTERVAL;
