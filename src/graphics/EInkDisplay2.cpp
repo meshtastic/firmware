@@ -6,6 +6,10 @@
 #include "main.h"
 #include <SPI.h>
 
+#ifdef GXEPD2_DRIVER_0
+#include "einkDetect.h"
+#endif
+
 /*
     The macros EINK_DISPLAY_MODEL, EINK_WIDTH, and EINK_HEIGHT are defined as build_flags in a variant's platformio.ini
     Previously, these macros were defined at the top of this file.
@@ -174,9 +178,8 @@ bool EInkDisplay::connect()
         }
     }
 
-#elif defined(HELTEC_WIRELESS_PAPER_V1_0) || defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_VISION_MASTER_E213) ||             \
-    defined(HELTEC_VISION_MASTER_E290) || defined(TLORA_T3S3_EPAPER) || defined(CROWPANEL_ESP32S3_5_EPAPER) ||                   \
-    defined(CROWPANEL_ESP32S3_4_EPAPER) || defined(CROWPANEL_ESP32S3_2_EPAPER)
+#elif defined(HELTEC_WIRELESS_PAPER_V1_0) || defined(HELTEC_VISION_MASTER_E290) || defined(TLORA_T3S3_EPAPER) ||                 \
+    defined(CROWPANEL_ESP32S3_5_EPAPER) || defined(CROWPANEL_ESP32S3_4_EPAPER) || defined(CROWPANEL_ESP32S3_2_EPAPER)
     {
         // Start HSPI
         hspi = new SPIClass(HSPI);
@@ -203,7 +206,7 @@ bool EInkDisplay::connect()
         adafruitDisplay->setRotation(0);
         adafruitDisplay->setPartialWindow(0, 0, EINK_WIDTH, EINK_HEIGHT);
     }
-#elif defined(M5_COREINK)
+#elif defined(M5_COREINK) || defined(T_DECK_PRO)
     auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY);
     adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(*lowLevel);
     adafruitDisplay->init(115200, true, 40, false, SPI, SPISettings(4000000, MSBFIRST, SPI_MODE0));
@@ -232,6 +235,23 @@ bool EInkDisplay::connect()
         adafruitDisplay->init();
         adafruitDisplay->setRotation(3);
     }
+#elif defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_VISION_MASTER_E213)
+
+    // Detect display model, before starting SPI
+    EInkDetectionResult displayModel = detectEInk();
+
+    // Start HSPI
+    hspi = new SPIClass(HSPI);
+    hspi->begin(PIN_EINK_SCLK, -1, PIN_EINK_MOSI, PIN_EINK_CS); // SCLK, MISO, MOSI, SS
+
+    // Create GxEPD2 object
+    adafruitDisplay = new GxEPD2_Multi<GXEPD2_DRIVER_0, GXEPD2_DRIVER_1>((uint8_t)displayModel, PIN_EINK_CS, PIN_EINK_DC,
+                                                                         PIN_EINK_RES, PIN_EINK_BUSY, *hspi);
+
+    // Init GxEPD2
+    adafruitDisplay->init();
+    adafruitDisplay->setRotation(3);
+
 #endif
 
     return true;

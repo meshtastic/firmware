@@ -3,6 +3,9 @@ name: Build STM32
 on:
   workflow_call:
     inputs:
+      version:
+        required: true
+        type: string
       board:
         required: true
         type: string
@@ -11,19 +14,28 @@ permissions: read-all
 
 jobs:
   build-stm32:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ref: ${{github.event.pull_request.head.ref}}
+          repository: ${{github.event.pull_request.head.repo.full_name}}
 
       - name: Build STM32WL
         id: build
-        uses: ./.github/actions/build-variant
+        uses: meshtastic/gh-action-firmware@main
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          board: ${{ inputs.board }}
-          build-script-path: bin/build-stm32.sh
-          artifact-paths: |
+          pio_platform: stm32wl
+          pio_env: ${{ inputs.board }}
+          pio_target: build
+
+      - name: Store binaries as an artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-stm32-${{ inputs.board }}-${{ inputs.version }}.zip
+          overwrite: true
+          path: |
             release/*.hex
             release/*.bin
             release/*.elf
-          arch: stm32

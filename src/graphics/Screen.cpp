@@ -21,6 +21,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 */
 #include "Screen.h"
+#include "NodeDB.h"
 #include "PowerMon.h"
 #include "Throttle.h"
 #include "configuration.h"
@@ -44,7 +45,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 #include "FSCommon.h"
 #include "MeshService.h"
-#include "NodeDB.h"
 #include "RadioLibInterface.h"
 #include "error.h"
 #include "gps/GeoCoord.h"
@@ -171,7 +171,7 @@ void Screen::showOverlayBanner(BannerOverlayOptions banner_overlay_options)
 }
 
 // Called to trigger a banner with custom message and duration
-void Screen::showNodePicker(const char *message, uint32_t durationMs, std::function<void(int)> bannerCallback)
+void Screen::showNodePicker(const char *message, uint32_t durationMs, std::function<void(uint32_t)> bannerCallback)
 {
 #ifdef USE_EINK
     EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Skip full refresh for all overlay menus
@@ -196,7 +196,6 @@ void Screen::showNodePicker(const char *message, uint32_t durationMs, std::funct
 void Screen::showNumberPicker(const char *message, uint32_t durationMs, uint8_t digits,
                               std::function<void(uint32_t)> bannerCallback)
 {
-    LOG_WARN("Show Number Picker");
 #ifdef USE_EINK
     EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Skip full refresh for all overlay menus
 #endif
@@ -294,13 +293,13 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
     LOG_INFO("Protobuf Value uiconfig.screen_rgb_color: %d", uiconfig.screen_rgb_color);
     int32_t rawRGB = uiconfig.screen_rgb_color;
     if (rawRGB > 0 && rawRGB <= 255255255) {
-        uint8_t r = (rawRGB >> 16) & 0xFF;
-        uint8_t g = (rawRGB >> 8) & 0xFF;
-        uint8_t b = rawRGB & 0xFF;
-        LOG_INFO("Values of r,g,b: %d, %d, %d", r, g, b);
+        uint8_t TFT_MESH_r = (rawRGB >> 16) & 0xFF;
+        uint8_t TFT_MESH_g = (rawRGB >> 8) & 0xFF;
+        uint8_t TFT_MESH_b = rawRGB & 0xFF;
+        LOG_INFO("Values of r,g,b: %d, %d, %d", TFT_MESH_r, TFT_MESH_g, TFT_MESH_b);
 
-        if (r <= 255 && g <= 255 && b <= 255) {
-            TFT_MESH = COLOR565(r, g, b);
+        if (TFT_MESH_r <= 255 && TFT_MESH_g <= 255 && TFT_MESH_b <= 255) {
+            TFT_MESH = COLOR565(TFT_MESH_r, TFT_MESH_g, TFT_MESH_b);
         }
     }
 
@@ -313,8 +312,8 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
                             ST7789_MISO, ST7789_SCK);
 #else
     dispdev = new ST7789Spi(&SPI1, ST7789_RESET, ST7789_RS, ST7789_NSS, GEOMETRY_RAWMODE, TFT_WIDTH, TFT_HEIGHT);
-    static_cast<ST7789Spi *>(dispdev)->setRGB(TFT_MESH);
 #endif
+    static_cast<ST7789Spi *>(dispdev)->setRGB(TFT_MESH);
 #elif defined(USE_SSD1306)
     dispdev = new SSD1306Wire(address.address, -1, -1, geometry,
                               (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
@@ -387,9 +386,7 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 #ifdef T_WATCH_S3
             PMU->enablePowerOutput(XPOWERS_ALDO2);
 #endif
-#ifdef HELTEC_TRACKER_V1_X
-            uint8_t tft_vext_enabled = digitalRead(VEXT_ENABLE);
-#endif
+
 #if !ARCH_PORTDUINO
             dispdev->displayOn();
 #endif
@@ -401,10 +398,7 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 
             dispdev->displayOn();
 #ifdef HELTEC_TRACKER_V1_X
-            // If the TFT VEXT power is not enabled, initialize the UI.
-            if (!tft_vext_enabled) {
-                ui->init();
-            }
+            ui->init();
 #endif
 #ifdef USE_ST7789
             pinMode(VTFT_CTRL, OUTPUT);
@@ -585,7 +579,7 @@ void Screen::setup()
             touchScreenImpl1->init();
         }
     }
-#elif HAS_TOUCHSCREEN
+#elif HAS_TOUCHSCREEN && !defined(USE_EINK)
     touchScreenImpl1 =
         new TouchScreenImpl1(dispdev->getWidth(), dispdev->getHeight(), static_cast<TFTDisplay *>(dispdev)->getTouch);
     touchScreenImpl1->init();
@@ -641,6 +635,11 @@ void Screen::forceDisplay(bool forceUiUpdate)
 
     // Tell EInk class to update the display
     static_cast<EInkDisplay *>(dispdev)->forceDisplay();
+#else
+    // No delay between UI frame rendering
+    if (forceUiUpdate) {
+        setFastFramerate();
+    }
 #endif
 }
 
@@ -865,6 +864,8 @@ void Screen::setFrames(FrameFocus focus)
     uint8_t previousFrameCount = framesetInfo.frameCount;
     FramesetInfo fsi; // Location of specific frames, for applying focus parameter
 
+    graphics::UIRenderer::rebuildFavoritedNodes();
+
     LOG_DEBUG("Show standard frames");
     showingNormalScreen = true;
 
@@ -944,22 +945,6 @@ void Screen::setFrames(FrameFocus focus)
     indicatorIcons.push_back(digital_icon_clock);
 #endif
 
-    // We don't show the node info of our node (if we have it yet - we should)
-    size_t numMeshNodes = nodeDB->getNumMeshNodes();
-    if (numMeshNodes > 0)
-        numMeshNodes--;
-
-    for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
-        const meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(i);
-        if (n && n->num != nodeDB->getNodeNum() && n->is_favorite) {
-            if (fsi.positions.firstFavorite == 255)
-                fsi.positions.firstFavorite = numframes;
-            fsi.positions.lastFavorite = numframes;
-            normalFrames[numframes++] = graphics::UIRenderer::drawNodeInfo;
-            indicatorIcons.push_back(icon_node);
-        }
-    }
-
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
     if (!dismissedFrames.wifi && isWifiAvailable()) {
         fsi.positions.wifi = numframes;
@@ -969,7 +954,7 @@ void Screen::setFrames(FrameFocus focus)
 #endif
 
     // Beware of what changes you make in this code!
-    // We pass numfames into GetMeshModulesWithUIFrames() which is highly important!
+    // We pass numframes into GetMeshModulesWithUIFrames() which is highly important!
     // Inside of that callback, goes over to MeshModule.cpp and we run
     // modulesWithUIFrames.resize(startIndex, nullptr), to insert nullptr
     // entries until we're ready to start building the matching entries.
@@ -998,6 +983,34 @@ void Screen::setFrames(FrameFocus focus)
 
     LOG_DEBUG("Added modules.  numframes: %d", numframes);
 
+    // We don't show the node info of our node (if we have it yet - we should)
+    size_t numMeshNodes = nodeDB->getNumMeshNodes();
+    if (numMeshNodes > 0)
+        numMeshNodes--;
+
+    // Temporary array to hold favorite node frames
+    std::vector<FrameCallback> favoriteFrames;
+
+    for (size_t i = 0; i < nodeDB->getNumMeshNodes(); i++) {
+        const meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(i);
+        if (n && n->num != nodeDB->getNodeNum() && n->is_favorite) {
+            favoriteFrames.push_back(graphics::UIRenderer::drawNodeInfo);
+        }
+    }
+
+    // Insert favorite frames *after* collecting them all
+    if (!favoriteFrames.empty()) {
+        fsi.positions.firstFavorite = numframes;
+        for (const auto &f : favoriteFrames) {
+            normalFrames[numframes++] = f;
+            indicatorIcons.push_back(icon_node);
+        }
+        fsi.positions.lastFavorite = numframes - 1;
+    } else {
+        fsi.positions.firstFavorite = 255;
+        fsi.positions.lastFavorite = 255;
+    }
+
     fsi.frameCount = numframes;   // Total framecount is used to apply FOCUS_PRESERVE
     this->frameCount = numframes; // ✅ Save frame count for use in custom overlay
     LOG_DEBUG("Finished build frames. numframes: %d", numframes);
@@ -1009,8 +1022,7 @@ void Screen::setFrames(FrameFocus focus)
     static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
     ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
 
-    prevFrame = -1; // Force drawNodeInfo to pick a new node (because our list
-                    // just changed)
+    prevFrame = -1; // Force drawNodeInfo to pick a new node (because our list just changed)
 
     // Focus on a specific frame, in the frame set we just created
     switch (focus) {
@@ -1247,40 +1259,45 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
             devicestate.has_rx_text_message = true; // Needed to include the message frame
             hasUnreadMessage = true;                // Enables mail icon in the header
             setFrames(FOCUS_PRESERVE);              // Refresh frame list without switching view
-            forceDisplay();                         // Forces screen redraw
 
-            // === Prepare banner content ===
-            const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(packet->from);
-            const char *longName = (node && node->has_user) ? node->user.long_name : nullptr;
+            // Only wake/force display if the configuration allows it
+            if (shouldWakeOnReceivedMessage()) {
+                setOn(true);    // Wake up the screen first
+                forceDisplay(); // Forces screen redraw
 
-            const char *msgRaw = reinterpret_cast<const char *>(packet->decoded.payload.bytes);
+                // === Prepare banner content ===
+                const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(packet->from);
+                const char *longName = (node && node->has_user) ? node->user.long_name : nullptr;
 
-            char banner[256];
+                const char *msgRaw = reinterpret_cast<const char *>(packet->decoded.payload.bytes);
 
-            // Check for bell character in message to determine alert type
-            bool isAlert = false;
-            for (size_t i = 0; i < packet->decoded.payload.size && i < 100; i++) {
-                if (msgRaw[i] == '\x07') {
-                    isAlert = true;
-                    break;
+                char banner[256];
+
+                // Check for bell character in message to determine alert type
+                bool isAlert = false;
+                for (size_t i = 0; i < packet->decoded.payload.size && i < 100; i++) {
+                    if (msgRaw[i] == '\x07') {
+                        isAlert = true;
+                        break;
+                    }
                 }
-            }
 
-            if (isAlert) {
-                if (longName && longName[0]) {
-                    snprintf(banner, sizeof(banner), "Alert Received from\n%s", longName);
+                if (isAlert) {
+                    if (longName && longName[0]) {
+                        snprintf(banner, sizeof(banner), "Alert Received from\n%s", longName);
+                    } else {
+                        strcpy(banner, "Alert Received");
+                    }
                 } else {
-                    strcpy(banner, "Alert Received");
+                    if (longName && longName[0]) {
+                        snprintf(banner, sizeof(banner), "New Message from\n%s", longName);
+                    } else {
+                        strcpy(banner, "New Message");
+                    }
                 }
-            } else {
-                if (longName && longName[0]) {
-                    snprintf(banner, sizeof(banner), "New Message from\n%s", longName);
-                } else {
-                    strcpy(banner, "New Message");
-                }
-            }
 
-            screen->showSimpleBanner(banner, 3000);
+                screen->showSimpleBanner(banner, 3000);
+            }
         }
     }
 
@@ -1319,7 +1336,7 @@ int Screen::handleInputEvent(const InputEvent *event)
     setFastFramerate();                       // Draw ASAP
 #endif
     if (NotificationRenderer::isOverlayBannerShowing()) {
-        NotificationRenderer::inEvent = event->inputEvent;
+        NotificationRenderer::inEvent = *event;
         static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
         ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
         setFastFramerate(); // Draw ASAP
@@ -1359,9 +1376,12 @@ int Screen::handleInputEvent(const InputEvent *event)
                     menuHandler::clockMenu();
                 } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.lora) {
                     menuHandler::LoraRegionPicker();
-                } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.textMessage &&
-                           devicestate.rx_text_message.from) {
-                    menuHandler::messageResponseMenu();
+                } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.textMessage) {
+                    if (devicestate.rx_text_message.from) {
+                        menuHandler::messageResponseMenu();
+                    } else {
+                        menuHandler::textMessageBaseMenu();
+                    }
                 } else if (framesetInfo.positions.firstFavorite != 255 &&
                            this->ui->getUiState()->currentFrame >= framesetInfo.positions.firstFavorite &&
                            this->ui->getUiState()->currentFrame <= framesetInfo.positions.lastFavorite) {
@@ -1413,3 +1433,23 @@ bool Screen::isOverlayBannerShowing()
 #else
 graphics::Screen::Screen(ScanI2C::DeviceAddress, meshtastic_Config_DisplayConfig_OledType, OLEDDISPLAY_GEOMETRY) {}
 #endif // HAS_SCREEN
+
+bool shouldWakeOnReceivedMessage()
+{
+    /*
+    The goal here is to determine when we do NOT wake up the screen on message received:
+    - Any ext. notifications are turned on
+    - If role is not client / client_mute
+    - If the battery level is very low
+    */
+    if (moduleConfig.external_notification.enabled) {
+        return false;
+    }
+    if (!meshtastic_Config_DeviceConfig_Role_CLIENT && !meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE) {
+        return false;
+    }
+    if (powerStatus && powerStatus->getBatteryChargePercent() < 10) {
+        return false;
+    }
+    return true;
+}
