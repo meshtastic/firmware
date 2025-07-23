@@ -590,7 +590,7 @@ void TraceRouteModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state
 
         display->drawString(x, y, "Route Result");
 
-        int contentStartY = y + FONT_HEIGHT_MEDIUM - 4;
+        int contentStartY = y + FONT_HEIGHT_MEDIUM + 2; // Add more spacing after title
         display->setTextAlignment(TEXT_ALIGN_LEFT);
         display->setFont(FONT_SMALL);
 
@@ -616,31 +616,61 @@ void TraceRouteModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state
                 if (display->getStringWidth(segment) <= maxWidth) {
                     lines.push_back(segment);
                 } else {
-                    String tempLine = "";
-                    for (int i = 0; i < segment.length(); i++) {
-                        String testLine = tempLine + segment.charAt(i);
-                        if (display->getStringWidth(testLine) > maxWidth) {
+                    // Try to break at better positions (space, >, <, -)
+                    String remaining = segment;
+
+                    while (remaining.length() > 0) {
+                        String tempLine = "";
+                        int lastGoodBreak = -1;
+                        bool lineComplete = false;
+
+                        for (int i = 0; i < remaining.length(); i++) {
+                            char ch = remaining.charAt(i);
+                            String testLine = tempLine + ch;
+
+                            if (display->getStringWidth(testLine) > maxWidth) {
+                                if (lastGoodBreak >= 0) {
+                                    // Break at the last good position
+                                    lines.push_back(remaining.substring(0, lastGoodBreak + 1));
+                                    remaining = remaining.substring(lastGoodBreak + 1);
+                                    lineComplete = true;
+                                    break;
+                                } else if (tempLine.length() > 0) {
+                                    lines.push_back(tempLine);
+                                    remaining = remaining.substring(i);
+                                    lineComplete = true;
+                                    break;
+                                } else {
+                                    // Single character exceeds width
+                                    lines.push_back(String(ch));
+                                    remaining = remaining.substring(i + 1);
+                                    lineComplete = true;
+                                    break;
+                                }
+                            } else {
+                                tempLine = testLine;
+                                // Mark good break positions
+                                if (ch == ' ' || ch == '>' || ch == '<' || ch == '-' || ch == '(' || ch == ')') {
+                                    lastGoodBreak = i;
+                                }
+                            }
+                        }
+
+                        if (!lineComplete) {
+                            // Reached end of remaining text
                             if (tempLine.length() > 0) {
                                 lines.push_back(tempLine);
-                                tempLine = String(segment.charAt(i));
-                            } else {
-                                lines.push_back(testLine);
-                                tempLine = "";
                             }
-                        } else {
-                            tempLine = testLine;
+                            break;
                         }
-                    }
-                    if (tempLine.length() > 0) {
-                        lines.push_back(tempLine);
                     }
                 }
             }
 
-            int lineHeight = 9;
+            int lineHeight = FONT_HEIGHT_SMALL + 1; // Use proper font height with 1px spacing
             for (size_t i = 0; i < lines.size(); i++) {
                 int lineY = contentStartY + (i * lineHeight);
-                if (lineY + 9 <= display->getHeight()) {
+                if (lineY + FONT_HEIGHT_SMALL <= display->getHeight()) {
                     display->drawString(x + 2, lineY, lines[i]);
                 }
             }
