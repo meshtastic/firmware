@@ -88,19 +88,22 @@ int32_t AirQualityTelemetryModule::runOnce()
             return disable();
         }
 
-        // Wake up the sensors that need it
-#ifdef PMSA003I_ENABLE_PIN
-        if (pmsa003iSensor.hasSensor() && !pmsa003iSensor.isActive())
-            return pmsa003iSensor.wakeUp();
-#endif /* PMSA003I_ENABLE_PIN */
-
         // Wake up the sensors that need it, before we need to take telemetry data
         if ((lastSentToMesh == 0) ||
-            !Throttle::isWithinTimespanMs(lastSentToMesh - SEN5X_WARMUP_MS_1, Default::getConfiguredOrDefaultMsScaled(
+            (sen5xSensor.hasSensor() && !Throttle::isWithinTimespanMs(lastSentToMesh - SEN5X_WARMUP_MS_1, Default::getConfiguredOrDefaultMsScaled(
                                                             moduleConfig.telemetry.air_quality_interval,
-                                                            default_telemetry_broadcast_interval_secs, numOnlineNodes))) {
+                                                            default_telemetry_broadcast_interval_secs, numOnlineNodes))) ||
+            (pmsa003iSensor.hasSensor() && !Throttle::isWithinTimespanMs(lastSentToMesh - PMSA003I_WARMUP_MS, Default::getConfiguredOrDefaultMsScaled(
+                                                            moduleConfig.telemetry.air_quality_interval,
+                                                            default_telemetry_broadcast_interval_secs, numOnlineNodes)))) {
+
             if (sen5xSensor.hasSensor() && !sen5xSensor.isActive())
                 return sen5xSensor.wakeUp();
+
+#ifdef PMSA003I_ENABLE_PIN
+            if (pmsa003iSensor.hasSensor() && !pmsa003iSensor.isActive())
+                return pmsa003iSensor.wakeUp();
+#endif /* PMSA003I_ENABLE_PIN */
         }
 
         // Check if sen5x is ready to return data, or if it needs more time because of the low concentration threshold
@@ -128,9 +131,18 @@ int32_t AirQualityTelemetryModule::runOnce()
             lastSentToPhone = millis();
         }
 
-        // TODO - Add logic here to send the sensor to idle ONLY if there is enough time to wake it up before the next reading cycle
+        // Send the sensor to idle ONLY if there is enough time to wake it up before the next reading cycle
 #ifdef PMSA003I_ENABLE_PIN
-        pmsa003iSensor.sleep();
+        if (pmsa003iSensor.hasSensor() && pmsa003iSensor.isActive()) {
+            if (PMSA003I_WARMUP_MS < Default::getConfiguredOrDefaultMsScaled(
+                moduleConfig.telemetry.air_quality_interval,
+                default_telemetry_broadcast_interval_secs, numOnlineNodes)) {
+                    LOG_DEBUG("PMSA003I: Disabling sensor until next period");
+                    pmsa003iSensor.sleep();
+            } else {
+                LOG_DEBUG("PMSA003I: Sensor stays enabled due to warm up period");
+            }
+        }
 #endif /* PMSA003I_ENABLE_PIN */
 
         if (sen5xSensor.hasSensor() && sen5xSensor.isActive()) {
