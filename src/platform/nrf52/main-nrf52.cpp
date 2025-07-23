@@ -282,13 +282,13 @@ void cpuDeepSleep(uint32_t msecToWake)
 #if SPI_INTERFACES_COUNT > 1
     SPI1.end();
 #endif
-    // This may cause crashes as debug messages continue to flow.
-    Serial.end();
+    if (Serial)       // Another check in case of disabled default serial, does nothing bad
+        Serial.end(); // This may cause crashes as debug messages continue to flow.
 
-    // This causes troubles with waking up on nrf52 (on pro-micro in particular):
-    // we have no Serial1 in use on nrf52, check Serial and GPS modules.
+        // This causes troubles with waking up on nrf52 (on pro-micro in particular):
+        // we have no Serial1 in use on nrf52, check Serial and GPS modules.
 #ifdef PIN_SERIAL1_RX
-    if (Serial1)        // A straightforward solution to the wake from deepsleep problem
+    if (Serial1) // A straightforward solution to the wake from deepsleep problem
         Serial1.end();
 #endif
     setBluetoothEnable(false);
@@ -363,7 +363,7 @@ void cpuDeepSleep(uint32_t msecToWake)
         // Resume on user button press
         // https://github.com/lyusupov/SoftRF/blob/81c519ca75693b696752235d559e881f2e0511ee/software/firmware/source/SoftRF/src/platform/nRF52.cpp#L1738
         constexpr uint32_t DFU_MAGIC_SKIP = 0x6d;
-        sd_power_gpregret_clr(0, 0xFF); // Clear the register before setting a new values in it for stability reasons
+        sd_power_gpregret_clr(0, 0xFF);           // Clear the register before setting a new values in it for stability reasons
         sd_power_gpregret_set(0, DFU_MAGIC_SKIP); // Equivalent NRF_POWER->GPREGRET = DFU_MAGIC_SKIP
 
         // FIXME, use system off mode with ram retention for key state?
