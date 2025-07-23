@@ -153,6 +153,7 @@ void menuHandler::TZPicker()
                                          "US/Mountain",
                                          "US/Central",
                                          "US/Eastern",
+                                         "BR/Brasilia",
                                          "UTC",
                                          "EU/Western",
                                          "EU/"
@@ -167,7 +168,7 @@ void menuHandler::TZPicker()
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Pick Timezone";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 17;
+    bannerOptions.optionsCount = 19;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 0) {
             menuHandler::menuQueue = menuHandler::clock_menu;
@@ -186,25 +187,27 @@ void menuHandler::TZPicker()
             strncpy(config.device.tzdef, "CST6CDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
         } else if (selected == 7) { // Eastern
             strncpy(config.device.tzdef, "EST5EDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
-        } else if (selected == 8) { // UTC
+        } else if (selected == 8) { // Brazil
+            strncpy(config.device.tzdef, "BRT3", sizeof(config.device.tzdef));
+        } else if (selected == 9) { // UTC
             strncpy(config.device.tzdef, "UTC", sizeof(config.device.tzdef));
-        } else if (selected == 9) { // EU/Western
+        } else if (selected == 10) { // EU/Western
             strncpy(config.device.tzdef, "GMT0BST,M3.5.0/1,M10.5.0", sizeof(config.device.tzdef));
-        } else if (selected == 10) { // EU/Central
+        } else if (selected == 11) { // EU/Central
             strncpy(config.device.tzdef, "CET-1CEST,M3.5.0,M10.5.0/3", sizeof(config.device.tzdef));
-        } else if (selected == 11) { // EU/Eastern
+        } else if (selected == 12) { // EU/Eastern
             strncpy(config.device.tzdef, "EET-2EEST,M3.5.0/3,M10.5.0/4", sizeof(config.device.tzdef));
-        } else if (selected == 12) { // Asia/Kolkata
+        } else if (selected == 13) { // Asia/Kolkata
             strncpy(config.device.tzdef, "IST-5:30", sizeof(config.device.tzdef));
-        } else if (selected == 13) { // China
+        } else if (selected == 14) { // China
             strncpy(config.device.tzdef, "HKT-8", sizeof(config.device.tzdef));
-        } else if (selected == 14) { // AU/AWST
+        } else if (selected == 15) { // AU/AWST
             strncpy(config.device.tzdef, "AWST-8", sizeof(config.device.tzdef));
-        } else if (selected == 15) { // AU/ACST
+        } else if (selected == 16) { // AU/ACST
             strncpy(config.device.tzdef, "ACST-9:30ACDT,M10.1.0,M4.1.0/3", sizeof(config.device.tzdef));
-        } else if (selected == 16) { // AU/AEST
+        } else if (selected == 17) { // AU/AEST
             strncpy(config.device.tzdef, "AEST-10AEDT,M10.1.0,M4.1.0/3", sizeof(config.device.tzdef));
-        } else if (selected == 17) { // NZ
+        } else if (selected == 18) { // NZ
             strncpy(config.device.tzdef, "NZST-12NZDT,M9.5.0,M4.1.0/3", sizeof(config.device.tzdef));
         }
         if (selected != 0) {
