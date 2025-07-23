@@ -54,12 +54,10 @@ HardwareSerial *GPS::_serial_gps = nullptr;
 GPS *gps = nullptr;
 
 static GPSUpdateScheduling scheduling;
-#ifdef GPS_SLEEP_DELAY_TIME
 static uint32_t gps_start_time=0;
 static bool gps_first_lock=false;
 static uint32_t gps_first_lock_time=0;
 static bool gps_need_sleep_delay=false;
-#endif
 
 /// Multiple GPS instances might use the same serial port (in sequence), but we can
 /// only init that port once.
@@ -73,6 +71,8 @@ static struct uBloxGnssModelInfo {
     uint8_t protocol_version;
 } ublox_info;
 
+#define GPS_ENABLE_SLEEP_DELAY_FIX_TIME 20  //time in seconds enable gps delay sleep. If gps lock time greater than GPS_ENABLE_SLEEP_DELAY_FIX_TIME, delay GPS_SLEEP_DELAY_TIME before gps sleep
+#define GPS_SLEEP_DELAY_TIME 20             //time in seconds wait for gps module backup info after locked before sleep
 #define GPS_SOL_EXPIRY_MS 5000 // in millis. give 1 second time to combine different sentences. NMEA Frequency isn't higher anyway
 #define NMEA_MSG_GXGSA "GNGSA" // GSA message (GPGSA, GNGSA etc)
 
@@ -852,11 +852,9 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
 #ifdef GNSS_AIROHA
         lastFixStartMsec = 0;
 #endif
-#ifdef GPS_SLEEP_DELAY_TIME
         gps_need_sleep_delay=false;
         gps_first_lock=false;
         gps_start_time=millis();
-#endif
         break;
 
     case GPS_SOFTSLEEP:
@@ -1724,7 +1722,6 @@ bool GPS::hasLock()
 {
     // Using GPGGA fix quality indicator
     if (fixQual >= 1 && fixQual <= 5) {
-#ifdef GPS_SLEEP_DELAY_TIME
         if(gps_first_lock==false)
         {
             gps_first_lock=true;
@@ -1739,7 +1736,6 @@ bool GPS::hasLock()
         {
             return false;
         }
-#endif
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
         // Use GPGSA fix type 2D/3D (better) if available
         if (fixType == 3 || fixType == 0) // zero means "no data received"
