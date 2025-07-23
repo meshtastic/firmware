@@ -31,10 +31,16 @@ jobs:
       fail-fast: false
       matrix:
         arch: [esp32, esp32s3, esp32c3, esp32c6, nrf52840, rp2040, stm32, check]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - id: jsonStep
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.x
+          cache: pip
+      - run: pip install -U platformio
+      - name: Generate matrix
+        id: jsonStep
         run: |
           if [[ "$GITHUB_HEAD_REF" == "" ]]; then
             TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}})
