@@ -23,17 +23,20 @@ int32_t ADS1X15Sensor::runOnce()
     uint32_t currentClock;
     currentClock = bus->getClock();
     if (currentClock != ADS1X15_I2C_CLOCK_SPEED){
-        // LOG_DEBUG("Changing I2C clock to %u", ADS1X15_I2C_CLOCK_SPEED);
-        bus->setClock(ADS1X15_I2C_CLOCK_SPEED);
+        LOG_DEBUG("Changing I2C clock to %uHz", ADS1X15_I2C_CLOCK_SPEED);
+        if (!bus->setClock(ADS1X15_I2C_CLOCK_SPEED))
+            LOG_ERROR("Error setting the I2C clock speed");
     }
 #endif
 
     status = ads1x15.begin(address);
 
+
 #ifdef ADS1X15_I2C_CLOCK_SPEED
     if (currentClock != ADS1X15_I2C_CLOCK_SPEED){
-        // LOG_DEBUG("Restoring I2C clock to %uHz", currentClock);
-        bus->setClock(currentClock);
+        LOG_DEBUG("Restoring I2C clock to %uHz", currentClock);
+        if (!bus->setClock(currentClock))
+            LOG_ERROR("Error resetting the I2C clock speed");
     }
 #endif
 
@@ -117,8 +120,9 @@ bool ADS1X15Sensor::getMetrics(meshtastic_Telemetry *measurement)
     uint32_t currentClock;
     currentClock = bus->getClock();
     if (currentClock != ADS1X15_I2C_CLOCK_SPEED){
-        // LOG_DEBUG("Changing I2C clock to %u", ADS1X15_I2C_CLOCK_SPEED);
-        bus->setClock(ADS1X15_I2C_CLOCK_SPEED);
+        LOG_DEBUG("Changing I2C clock to %uHz", ADS1X15_I2C_CLOCK_SPEED);
+        if (!bus->setClock(ADS1X15_I2C_CLOCK_SPEED))
+            LOG_ERROR("Error setting the I2C clock speed");
     }
 #endif
 
@@ -126,8 +130,9 @@ bool ADS1X15Sensor::getMetrics(meshtastic_Telemetry *measurement)
 
 #ifdef ADS1X15_I2C_CLOCK_SPEED
     if (currentClock != ADS1X15_I2C_CLOCK_SPEED){
-        // LOG_DEBUG("Restoring I2C clock to %uHz", currentClock);
-        bus->setClock(currentClock);
+        LOG_DEBUG("Restoring I2C clock to %uHz", currentClock);
+        if (!bus->setClock(currentClock))
+            LOG_ERROR("Error resetting the I2C clock speed");
     }
 #endif
 

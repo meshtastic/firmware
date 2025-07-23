@@ -184,6 +184,7 @@ void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *s
     if (m.has_ch3_voltage || m.has_ch3_current) {
         drawLine("Ch3", m.ch3_voltage, m.ch3_current);
     }
+    // TODO - Add rest in here?
 }
 
 bool PowerTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *t)
