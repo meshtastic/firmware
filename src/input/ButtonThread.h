@@ -18,13 +18,13 @@ struct ButtonConfig {
     uint16_t longPressTime = 500;
     input_broker_event doublePress = INPUT_BROKER_NONE;
     input_broker_event longLongPress = INPUT_BROKER_NONE;
-    uint16_t longLongPressTime = 5000;
+    uint16_t longLongPressTime = 3900;
     input_broker_event triplePress = INPUT_BROKER_NONE;
     input_broker_event shortLong = INPUT_BROKER_NONE;
     bool touchQuirk = false;
 
     // Constructor to set required parameter
-    ButtonConfig(uint8_t pin = 0) : pinNumber(pin) {}
+    explicit ButtonConfig(uint8_t pin = 0) : pinNumber(pin) {}
 };
 
 #ifndef BUTTON_CLICK_MS
@@ -62,7 +62,7 @@ class ButtonThread : public Observable<const InputEvent *>, public concurrency::
         BUTTON_EVENT_COMBO_SHORT_LONG,
     };
 
-    ButtonThread(const char *name);
+    explicit ButtonThread(const char *name);
     int32_t runOnce() override;
     OneButton userButton;
     void attachButtonInterrupts();

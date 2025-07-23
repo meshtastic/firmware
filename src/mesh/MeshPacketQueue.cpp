@@ -121,7 +121,7 @@ meshtastic_MeshPacket *MeshPacketQueue::remove(NodeNum from, PacketId id, bool t
 bool MeshPacketQueue::find(const NodeNum from, const PacketId id)
 {
     for (auto it = queue.begin(); it != queue.end(); it++) {
-        const auto p = (*it);
+        const auto *p = *it;
         if (getFrom(p) == from && p->id == id) {
             return true;
         }

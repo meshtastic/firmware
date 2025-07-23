@@ -103,8 +103,9 @@ jobs:
         with:
           base: ${{ github.event.repository.default_branch }}
           branch: create-pull-request/bump-version
+          labels: github_actions
           title: Bump release version
-          commit-message: automated bumps
+          commit-message: Automated version bumps
           add-paths: |
             version.properties
             debian/changelog

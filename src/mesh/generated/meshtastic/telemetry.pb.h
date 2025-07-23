@@ -93,7 +93,11 @@ typedef enum _meshtastic_TelemetrySensorType {
     /* PCT2075 Temperature Sensor */
     meshtastic_TelemetrySensorType_PCT2075 = 39,
     /* ADS1X15 ADC */
-    meshtastic_TelemetrySensorType_ADS1X15 = 40
+    meshtastic_TelemetrySensorType_ADS1X15 = 40,
+    /* ADS1X15 ADC_ALT */
+    meshtastic_TelemetrySensorType_ADS1X15_ALT = 41,
+    /* Sensirion SFA30 Formaldehyde sensor */
+    meshtastic_TelemetrySensorType_SFA30 = 42
 } meshtastic_TelemetrySensorType;
 
 /* Struct definitions */
@@ -287,6 +291,15 @@ typedef struct _meshtastic_AirQualityMetrics {
     /* CO2 sensor relative humidity in % */
     bool has_co2_humidity;
     float co2_humidity;
+    /* Formaldehyde sensor formaldehyde concentration in ppb */
+    bool has_form_formaldehyde;
+    float form_formaldehyde;
+    /* Formaldehyde sensor relative humidity in %RH */
+    bool has_form_humidity;
+    float form_humidity;
+    /* Formaldehyde sensor temperature in degrees Celsius */
+    bool has_form_temperature;
+    float form_temperature;
 } meshtastic_AirQualityMetrics;
 
 /* Local device mesh statistics */
@@ -398,8 +411,8 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _meshtastic_TelemetrySensorType_MIN meshtastic_TelemetrySensorType_SENSOR_UNSET
-#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_ADS1X15
-#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_ADS1X15+1))
+#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_SFA30
+#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_SFA30+1))
 
 
 
@@ -415,7 +428,7 @@ extern "C" {
 #define meshtastic_DeviceMetrics_init_default    {false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_EnvironmentMetrics_init_default {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_PowerMetrics_init_default     {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
-#define meshtastic_AirQualityMetrics_init_default {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
+#define meshtastic_AirQualityMetrics_init_default {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_LocalStats_init_default       {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_HealthMetrics_init_default    {false, 0, false, 0, false, 0}
 #define meshtastic_HostMetrics_init_default      {0, 0, 0, false, 0, false, 0, 0, 0, 0, false, ""}
@@ -424,7 +437,7 @@ extern "C" {
 #define meshtastic_DeviceMetrics_init_zero       {false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_EnvironmentMetrics_init_zero  {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_PowerMetrics_init_zero        {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
-#define meshtastic_AirQualityMetrics_init_zero   {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
+#define meshtastic_AirQualityMetrics_init_zero   {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_LocalStats_init_zero          {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_HealthMetrics_init_zero       {false, 0, false, 0, false, 0}
 #define meshtastic_HostMetrics_init_zero         {0, 0, 0, false, 0, false, 0, 0, 0, 0, false, ""}
@@ -490,6 +503,9 @@ extern "C" {
 #define meshtastic_AirQualityMetrics_co2_tag     13
 #define meshtastic_AirQualityMetrics_co2_temperature_tag 14
 #define meshtastic_AirQualityMetrics_co2_humidity_tag 15
+#define meshtastic_AirQualityMetrics_form_formaldehyde_tag 16
+#define meshtastic_AirQualityMetrics_form_humidity_tag 17
+#define meshtastic_AirQualityMetrics_form_temperature_tag 18
 #define meshtastic_LocalStats_uptime_seconds_tag 1
 #define meshtastic_LocalStats_channel_utilization_tag 2
 #define meshtastic_LocalStats_air_util_tx_tag    3
@@ -597,7 +613,10 @@ X(a, STATIC,   OPTIONAL, UINT32,   particles_50um,   11) \
 X(a, STATIC,   OPTIONAL, UINT32,   particles_100um,  12) \
 X(a, STATIC,   OPTIONAL, UINT32,   co2,              13) \
 X(a, STATIC,   OPTIONAL, FLOAT,    co2_temperature,  14) \
-X(a, STATIC,   OPTIONAL, FLOAT,    co2_humidity,     15)
+X(a, STATIC,   OPTIONAL, FLOAT,    co2_humidity,     15) \
+X(a, STATIC,   OPTIONAL, FLOAT,    form_formaldehyde,  16) \
+X(a, STATIC,   OPTIONAL, FLOAT,    form_humidity,    17) \
+X(a, STATIC,   OPTIONAL, FLOAT,    form_temperature,  18)
 #define meshtastic_AirQualityMetrics_CALLBACK NULL
 #define meshtastic_AirQualityMetrics_DEFAULT NULL
 
@@ -686,7 +705,7 @@ extern const pb_msgdesc_t meshtastic_Nau7802Config_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_TELEMETRY_PB_H_MAX_SIZE meshtastic_Telemetry_size
-#define meshtastic_AirQualityMetrics_size        88
+#define meshtastic_AirQualityMetrics_size        106
 #define meshtastic_DeviceMetrics_size            27
 #define meshtastic_EnvironmentMetrics_size       113
 #define meshtastic_HealthMetrics_size            11
