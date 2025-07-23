@@ -22,13 +22,11 @@
 
 #define ONE_WEEK_IN_SECONDS 604800
 
-// TODO - These are currently ints in the protobuf
-// Decide on final type for this values and change accordingly
 struct _SEN5XMeasurements {
-    float pM1p0;
-    float pM2p5;
-    float pM4p0;
-    float pM10p0;
+    uint16_t pM1p0;
+    uint16_t pM2p5;
+    uint16_t pM4p0;
+    uint16_t pM10p0;
     uint32_t pN0p5;
     uint32_t pN1p0;
     uint32_t pN2p5;
