@@ -628,11 +628,6 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #ifdef PIN_GPS_EN
     config.position.gps_en_gpio = PIN_GPS_EN;
 #endif
-#ifdef GPS_POWER_TOGGLE
-    config.device.disable_triple_click = false;
-#else
-    config.device.disable_triple_click = true;
-#endif
 #if defined(USERPREFS_CONFIG_GPS_MODE)
     config.position.gps_mode = USERPREFS_CONFIG_GPS_MODE;
 #elif !HAS_GPS || GPS_DEFAULT_NOT_PRESENT
