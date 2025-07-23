@@ -280,7 +280,7 @@ bool AirQualityTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPack
 
 bool AirQualityTelemetryModule::getAirQualityTelemetry(meshtastic_Telemetry *m)
 {
-    bool valid = true;
+    bool valid = false;
     bool hasSensor = false;
     m->time = getTime();
     m->which_variant = meshtastic_Telemetry_air_quality_metrics_tag;
@@ -289,12 +289,12 @@ bool AirQualityTelemetryModule::getAirQualityTelemetry(meshtastic_Telemetry *m)
     // TODO - This is currently problematic, as it assumes only one sensor connected
     // We should implement some logic to avoid not getting data if one sensor disconnects
     if (pmsa003iSensor.hasSensor()) {
-        valid = valid && pmsa003iSensor.getMetrics(m);
+        valid = valid || pmsa003iSensor.getMetrics(m);
         hasSensor = true;
     }
 
     if (sen5xSensor.hasSensor()) {
-        valid = valid && sen5xSensor.getMetrics(m);
+        valid = valid || sen5xSensor.getMetrics(m);
         hasSensor = true;
     }
 
