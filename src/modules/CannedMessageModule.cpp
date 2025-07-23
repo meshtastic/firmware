@@ -40,6 +40,9 @@ extern ScanI2C::DeviceAddress cardkb_found;
 extern bool graphics::isMuted;
 
 static const char *cannedMessagesConfigFile = "/prefs/cannedConf.proto";
+static NodeNum lastDest = NODENUM_BROADCAST;
+static uint8_t lastChannel = 0;
+static bool lastDestSet = false;
 
 meshtastic_CannedMessageModuleConfig cannedMessageModuleConfig;
 
@@ -63,8 +66,16 @@ CannedMessageModule::CannedMessageModule()
 
 void CannedMessageModule::LaunchWithDestination(NodeNum newDest, uint8_t newChannel)
 {
-    dest = newDest;
-    channel = newChannel;
+    if (!lastDestSet) {
+        dest = NODENUM_BROADCAST;
+        channel = 0;
+        lastDest = dest;
+        lastChannel = channel;
+        lastDestSet = true;
+    } else {
+        dest = lastDest;
+        channel = lastChannel;
+    }
     // Always select the first real canned message on activation
     int firstRealMsgIdx = 0;
     for (int i = 0; i < messagesCount; ++i) {
@@ -479,6 +490,9 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
         if (destIndex < static_cast<int>(activeChannelIndices.size())) {
             dest = NODENUM_BROADCAST;
             channel = activeChannelIndices[destIndex];
+            lastDest = dest;
+            lastChannel = channel;
+            lastDestSet = true;
         } else {
             int nodeIndex = destIndex - static_cast<int>(activeChannelIndices.size());
             if (nodeIndex >= 0 && nodeIndex < static_cast<int>(filteredNodes.size())) {
@@ -486,6 +500,10 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
                 if (selectedNode) {
                     dest = selectedNode->num;
                     channel = selectedNode->channel;
+                    // Already saves here, but for clarity, also:
+                    lastDest = dest;
+                    lastChannel = channel;
+                    lastDestSet = true;
                 }
             }
         }
@@ -827,6 +845,9 @@ int CannedMessageModule::handleEmotePickerInput(const InputEvent *event)
 
 void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const char *message, bool wantReplies)
 {
+    lastDest = dest;
+    lastChannel = channel;
+    lastDestSet = true;
     // === Prepare packet ===
     meshtastic_MeshPacket *p = allocDataPacket();
     p->to = dest;
