@@ -430,18 +430,16 @@ bool SEN5XSensor::readValues()
 
     // TODO we should check if values are NAN before converting them
     // convert them based on Sensirion Arduino lib
-    // TODO - Change based on the type of final values
-    sen5xmeasurement.pM1p0          = uint_pM1p0      / 10.0f;
-    sen5xmeasurement.pM2p5          = uint_pM2p5      / 10.0f;
-    sen5xmeasurement.pM4p0          = uint_pM4p0      / 10.0f;
-    sen5xmeasurement.pM10p0         = uint_pM10p0     / 10.0f;
+    sen5xmeasurement.pM1p0          = uint_pM1p0      / 10;
+    sen5xmeasurement.pM2p5          = uint_pM2p5      / 10;
+    sen5xmeasurement.pM4p0          = uint_pM4p0      / 10;
+    sen5xmeasurement.pM10p0         = uint_pM10p0     / 10;
     sen5xmeasurement.humidity       = int_humidity    / 100.0f;
     sen5xmeasurement.temperature    = int_temperature / 200.0f;
     sen5xmeasurement.vocIndex       = int_vocIndex    / 10.0f;
     sen5xmeasurement.noxIndex       = int_noxIndex    / 10.0f;
 
-    // TODO - change depending on the final values
-    LOG_DEBUG("Got: pM1p0=%.2f, pM2p5=%.2f, pM4p0=%.2f, pM10p0=%.2f",
+    LOG_DEBUG("Got: pM1p0=%u, pM2p5=%u, pM4p0=%u, pM10p0=%u",
                 sen5xmeasurement.pM1p0, sen5xmeasurement.pM2p5,
                 sen5xmeasurement.pM4p0, sen5xmeasurement.pM10p0);
 
@@ -454,6 +452,7 @@ bool SEN5XSensor::readPnValues()
         LOG_ERROR("SEN5X: Error sending read command");
         return false;
     }
+
     LOG_DEBUG("SEN5X: Reading PN Values");
     delay(20); // From Sensirion Arduino library
 
