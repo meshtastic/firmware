@@ -274,10 +274,11 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     m.which_variant = meshtastic_Telemetry_air_quality_metrics_tag;
     m.time = getTime();
     if (getAirQualityTelemetry(&m)) {
-        LOG_INFO("Send: pm10_standard=%u, pm25_standard=%u, pm100_standard=%u, pm10_environmental=%u, pm100_environmental=%u",
-                 m.variant.air_quality_metrics.pm10_standard, m.variant.air_quality_metrics.pm25_standard,
-                 m.variant.air_quality_metrics.pm100_standard, m.variant.air_quality_metrics.pm10_environmental,
-                 m.variant.air_quality_metrics.pm100_environmental);
+        LOG_INFO("Send: pm10_standard=%u, pm25_standard=%u, pm100_standard=%u, \
+                    pm10_environmental=%u, pm25_environmental=%u, pm100_environmental=%u", \
+                    m.variant.air_quality_metrics.pm10_standard, m.variant.air_quality_metrics.pm25_standard, \
+                    m.variant.air_quality_metrics.pm100_standard, m.variant.air_quality_metrics.pm10_environmental, \
+                    m.variant.air_quality_metrics.pm25_environmental, m.variant.air_quality_metrics.pm100_environmental);
 
         meshtastic_MeshPacket *p = allocDataProtobuf(m);
         p->to = dest;
