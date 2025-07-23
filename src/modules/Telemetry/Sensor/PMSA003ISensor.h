@@ -2,13 +2,10 @@
 
 #include "TelemetrySensor.h"
 
-#ifndef PMSA003I_I2C_CLOCK_SPEED
 #define PMSA003I_I2C_CLOCK_SPEED 100000
-#endif
-
-#ifndef PMSA003I_ENABLE_PIN
 #define PMSA003I_FRAME_LENGTH  32
-#endif
+#define PMSA003I_WARMUP_MS 30000
+
 
 class PMSA003ISensor : public TelemetrySensor
 {
