@@ -167,7 +167,7 @@ void menuHandler::TZPicker()
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Pick Timezone";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 17;
+    bannerOptions.optionsCount = 18;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 0) {
             menuHandler::menuQueue = menuHandler::clock_menu;
