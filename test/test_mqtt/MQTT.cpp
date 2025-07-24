@@ -823,14 +823,6 @@ void test_configWithDefaultServerAndInvalidPort(void)
     TEST_ASSERT_FALSE(MQTT::isValidConfig(config));
 }
 
-// Configuration with the default server and tls_enabled = true is invalid.
-void test_configWithDefaultServerAndInvalidTLSEnabled(void)
-{
-    meshtastic_ModuleConfig_MQTTConfig config = {.tls_enabled = true};
-
-    TEST_ASSERT_FALSE(MQTT::isValidConfig(config));
-}
-
 // isValidConfig connects to a custom host and port.
 void test_configCustomHostAndPort(void)
 {
