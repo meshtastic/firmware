@@ -76,23 +76,18 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
         return 0;
     case INPUT_BROKER_LOST_TOGGLE:
         LOG_WARN("Lost Toggle");
-#if !MESHTASTIC_EXCLUDE_GPS
-        if (gps) {
-            LOG_WARN("GPS present");
-            if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT) {
-                LOG_WARN("Changing mode to LOST_AND_FOUND");
-                config.device.role = meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND;
-                IF_SCREEN(screen->forceDisplay(); screen->showSimpleBanner("Switching to LOST!", 3000);)
-                nodeDB->saveToDisk(SEGMENT_CONFIG);
-            } else {
-                LOG_WARN("Changing mode to Client");
-                config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
-                IF_SCREEN(screen->forceDisplay(); screen->showSimpleBanner("Switching to Client!", 3000);)
-                nodeDB->saveToDisk(SEGMENT_CONFIG);
-                }
-            rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
-        }
-#endif
+        if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT) {
+            LOG_WARN("Changing mode to LOST_AND_FOUND");
+            config.device.role = meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND;
+            IF_SCREEN(screen->forceDisplay(); screen->showSimpleBanner("Switching to LOST!", 3000);)
+            nodeDB->saveToDisk(SEGMENT_CONFIG);
+        } else {
+            LOG_WARN("Changing mode to Client");
+            config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+            IF_SCREEN(screen->forceDisplay(); screen->showSimpleBanner("Switching to Client!", 3000);)
+            nodeDB->saveToDisk(SEGMENT_CONFIG);
+            }
+        rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
         return true;
     case INPUT_BROKER_MSG_REBOOT:
         IF_SCREEN(screen->showSimpleBanner("Rebooting...", 0));
