@@ -630,7 +630,8 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
         cn->level = meshtastic_LogRecord_Level_ERROR;
         cn->time = getValidTime(RTCQualityFromNet);
-        strcpy(cn->message, warning);
+        strncpy(cn->message, warning, sizeof(cn->message) - 1);
+        cn->message[sizeof(cn->message) - 1] = '\0'; // Ensure null termination
         service->sendClientNotification(cn);
         return false;
 #endif
