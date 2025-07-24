@@ -45,24 +45,28 @@ for pio_env in pio_envs:
   all_envs.append(env)
 
 # Filter outputs based on options
-# Check is currently mutually exclusive with other options
+# Check is mutually exclusive with other options (except 'pr')
 if "check" in options:
   for env in all_envs:
     if env['board_check']:
-      outlist.append(env['name'])
+      if "pr" in options:
+        if env['board_level'] == 'pr':
+          outlist.append(env['name'])
+      else:
+        outlist.append(env['name'])
 # Filter (non-check) builds by platform
 else:
   for env in all_envs:
     if options[0] == env['platform']:
-      # If no board level is specified, always include it
-      if not env['board_level']:
+      # Always include board_level = 'pr'
+      if env['board_level'] == 'pr':
         outlist.append(env['name'])
-      # Include `extra` boards when requested
+      # Include board_level = 'extra' when requested
       elif "extra" in options and env['board_level'] == "extra":
+        outlist.append(env['name'])
+      # If no board level is specified, include in release builds (not PR)
+      elif "pr" not in options and not env['board_level']:
         outlist.append(env['name'])
 
 # Return as a JSON list
-if ("quick" in options) and (len(outlist) > 3):
-    print(json.dumps(random.sample(outlist, 3)))
-else:
-    print(json.dumps(outlist))
+print(json.dumps(outlist))
