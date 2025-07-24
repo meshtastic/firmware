@@ -630,10 +630,6 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
     }
 
     const bool defaultServer = isDefaultServer(parsed.serverAddr);
-    if (defaultServer && config.tls_enabled) {
-        LOG_ERROR("Invalid MQTT config: TLS was enabled, but the default server does not support TLS");
-        return false;
-    }
     if (defaultServer && parsed.serverPort != PubSubConfig::defaultPort) {
         LOG_ERROR("Invalid MQTT config: Unsupported port '%d' for the default MQTT server", parsed.serverPort);
         return false;
