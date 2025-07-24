@@ -572,7 +572,7 @@ bool TraceRouteModule::shouldDraw()
     }
     return draw;
 }
-
+#if HAS_SCREEN
 void TraceRouteModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     LOG_DEBUG("TraceRoute drawFrame called: runState=%d", runState);
@@ -682,7 +682,7 @@ void TraceRouteModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state
         display->drawString(display->getWidth() / 2 + x, centerY, bannerText);
     }
 }
-
+#endif // HAS_SCREEN
 int32_t TraceRouteModule::runOnce()
 {
     unsigned long now = millis();
