@@ -45,7 +45,7 @@ jobs:
           if [[ "$GITHUB_HEAD_REF" == "" ]]; then
             TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}})
           else  
-            TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}} quick)
+            TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}} pr)
           fi
           echo "Name: $GITHUB_REF_NAME Base: $GITHUB_BASE_REF Ref: $GITHUB_REF Targets: $TARGETS"
           echo "${{matrix.arch}}=$(jq -cn --argjson environments "$TARGETS" '{board: $environments}')" >> $GITHUB_OUTPUT
