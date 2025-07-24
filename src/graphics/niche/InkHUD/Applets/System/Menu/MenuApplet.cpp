@@ -223,7 +223,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
 
     case SHUTDOWN:
         LOG_INFO("Shutting down from menu");
-        power->shutdown();
+        shutdownAtMsec = millis();
         // Menu is then sent to background via onShutdown
         break;
 
