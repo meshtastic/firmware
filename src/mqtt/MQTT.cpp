@@ -39,6 +39,7 @@
 #include <machine/endian.h>
 #define ntohl __ntohl
 #endif
+#include <RTC.h>
 
 MQTT *mqtt;
 
@@ -624,14 +625,26 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
             return connectPubSub(parsed, *pubSub, (client != nullptr) ? *client : *clientConnection);
         }
 #else
-        LOG_ERROR("Invalid MQTT config: proxy_to_client_enabled must be enabled on nodes that do not have a network");
+        const char *warning = "Invalid MQTT config: proxy_to_client_enabled must be enabled on nodes that do not have a network";
+        LOG_ERROR(warning);
+        meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+        cn->level = meshtastic_LogRecord_Level_WARNING;
+        cn->time = getValidTime(RTCQualityFromNet);
+        strcpy(cn->message, warning);
+        service->sendClientNotification(cn);
         return false;
 #endif
     }
 
     const bool defaultServer = isDefaultServer(parsed.serverAddr);
     if (defaultServer && parsed.serverPort != PubSubConfig::defaultPort) {
-        LOG_ERROR("Invalid MQTT config: Unsupported port '%d' for the default MQTT server", parsed.serverPort);
+        const char *warning = "Invalid MQTT config: default server address must not have a port specified";
+        LOG_ERROR(warning);
+        meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+        cn->level = meshtastic_LogRecord_Level_WARNING;
+        cn->time = getValidTime(RTCQualityFromNet);
+        strcpy(cn->message, warning);
+        service->sendClientNotification(cn);
         return false;
     }
     return true;
