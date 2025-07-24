@@ -798,8 +798,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
 
 bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
 {
-    // If we are in an open transaction or configuring MQTT, defer Disable Bluetooth
-    // Otherwise, disable Bluetooth to prevent any other module from sending data
+    // If we are in an open transaction or configuring MQTT, defer disabling Bluetooth
+    // Otherwise, disable Bluetooth to prevent the phone from interfering with the config
     if (!hasOpenEditTransaction && c.which_payload_variant != meshtastic_ModuleConfig_mqtt_tag)
         disableBluetooth();
 
