@@ -813,7 +813,7 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         if (!MQTT::isValidConfig(c.payload_variant.mqtt)) {
             return false;
         }
-        // Resume disabled bluetooth
+        // Disable Bluetooth to prevent interference during MQTT configuration
         disableBluetooth();
         moduleConfig.has_mqtt = true;
         moduleConfig.mqtt = c.payload_variant.mqtt;
