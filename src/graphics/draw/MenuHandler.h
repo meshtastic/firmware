@@ -36,6 +36,7 @@ class menuHandler
         system_base_menu,
         key_verification_init,
         key_verification_final_prompt,
+        trace_route_menu,
         throttle_message,
         FrameToggles
     };
@@ -66,6 +67,7 @@ class menuHandler
     static void shutdownMenu();
     static void addFavoriteMenu();
     static void removeFavoriteMenu();
+    static void traceRouteMenu();
     static void testMenu();
     static void numberTest();
     static void wifiBaseMenu();
