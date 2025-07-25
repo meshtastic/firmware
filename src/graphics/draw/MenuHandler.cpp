@@ -14,6 +14,7 @@
 #include "modules/AdminModule.h"
 #include "modules/CannedMessageModule.h"
 #include "modules/KeyVerificationModule.h"
+#include "modules/TraceRouteModule.h"
 
 extern uint16_t TFT_MESH;
 
@@ -190,7 +191,7 @@ void menuHandler::TZPicker()
         } else if (selected == 8) { // Brazil
             strncpy(config.device.tzdef, "BRT3", sizeof(config.device.tzdef));
         } else if (selected == 9) { // UTC
-            strncpy(config.device.tzdef, "UTC", sizeof(config.device.tzdef));
+            strncpy(config.device.tzdef, "UTC0", sizeof(config.device.tzdef));
         } else if (selected == 10) { // EU/Western
             strncpy(config.device.tzdef, "GMT0BST,M3.5.0/1,M10.5.0", sizeof(config.device.tzdef));
         } else if (selected == 11) { // EU/Central
@@ -431,7 +432,7 @@ void menuHandler::systemBaseMenu()
 
 void menuHandler::favoriteBaseMenu()
 {
-    enum optionsNumbers { Back, Preset, Freetext, Remove, enumEnd };
+    enum optionsNumbers { Back, Preset, Freetext, Remove, TraceRoute, enumEnd };
     static const char *optionsArray[enumEnd] = {"Back", "New Preset Msg"};
     static int optionsEnumArray[enumEnd] = {Back, Preset};
     int options = 2;
@@ -440,6 +441,8 @@ void menuHandler::favoriteBaseMenu()
         optionsArray[options] = "New Freetext Msg";
         optionsEnumArray[options++] = Freetext;
     }
+    optionsArray[options] = "Trace Route";
+    optionsEnumArray[options++] = TraceRoute;
     optionsArray[options] = "Remove Favorite";
     optionsEnumArray[options++] = Remove;
 
@@ -456,6 +459,10 @@ void menuHandler::favoriteBaseMenu()
         } else if (selected == Remove) {
             menuHandler::menuQueue = menuHandler::remove_favorite;
             screen->runNow();
+        } else if (selected == TraceRoute) {
+            if (traceRouteModule) {
+                traceRouteModule->launch(graphics::UIRenderer::currentFavoriteNodeNum);
+            }
         }
     };
     screen->showOverlayBanner(bannerOptions);
@@ -494,12 +501,12 @@ void menuHandler::positionBaseMenu()
 
 void menuHandler::nodeListMenu()
 {
-    enum optionsNumbers { Back, Favorite, Verify, Reset };
-    static const char *optionsArray[] = {"Back", "Add Favorite", "Key Verification", "Reset NodeDB"};
+    enum optionsNumbers { Back, Favorite, TraceRoute, Verify, Reset, enumEnd };
+    static const char *optionsArray[] = {"Back", "Add Favorite", "Trace Route", "Key Verification", "Reset NodeDB"};
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Node Action";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 4;
+    bannerOptions.optionsCount = 5;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == Favorite) {
             menuQueue = add_favorite;
@@ -509,6 +516,9 @@ void menuHandler::nodeListMenu()
             screen->runNow();
         } else if (selected == Reset) {
             menuQueue = reset_node_db_menu;
+            screen->runNow();
+        } else if (selected == TraceRoute) {
+            menuQueue = trace_route_menu;
             screen->runNow();
         }
     };
@@ -862,6 +872,16 @@ void menuHandler::removeFavoriteMenu()
     screen->showOverlayBanner(bannerOptions);
 }
 
+void menuHandler::traceRouteMenu()
+{
+    screen->showNodePicker("Node to Trace", 30000, [](uint32_t nodenum) -> void {
+        LOG_INFO("Menu: Node picker selected node 0x%08x, traceRouteModule=%p", nodenum, traceRouteModule);
+        if (traceRouteModule) {
+            traceRouteModule->startTraceRoute(nodenum);
+        }
+    });
+}
+
 void menuHandler::testMenu()
 {
 
@@ -1133,6 +1153,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case remove_favorite:
         removeFavoriteMenu();
+        break;
+    case trace_route_menu:
+        traceRouteMenu();
         break;
     case test_menu:
         testMenu();
