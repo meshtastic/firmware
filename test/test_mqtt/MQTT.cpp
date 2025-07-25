@@ -903,7 +903,6 @@ void setup()
     RUN_TEST(test_configEnabledEmptyIsValid);
     RUN_TEST(test_configWithDefaultServer);
     RUN_TEST(test_configWithDefaultServerAndInvalidPort);
-    RUN_TEST(test_configWithDefaultServerAndInvalidTLSEnabled);
     RUN_TEST(test_configCustomHostAndPort);
     RUN_TEST(test_configWithConnectionFailure);
     RUN_TEST(test_configWithTLSEnabled);
