@@ -20,6 +20,11 @@
 #include "meshUtils.h"
 #include "sleep.h"
 
+#if defined(ARCH_PORTDUINO)
+#include "api/WiFiServerAPI.h"
+#include "input/LinuxInputImpl.h"
+#endif
+
 // Working USB detection for powered/charging states on the RAK platform
 #ifdef NRF_APM
 #include "nrfx_power.h"
@@ -118,6 +123,15 @@ NullSensor max17048Sensor;
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && HAS_RAKPROT
 RAK9154Sensor rak9154Sensor;
+#endif
+
+#ifdef HAS_PPM
+// note: XPOWERS_CHIP_XXX must be defined in variant.h
+#include <XPowersLib.h>
+#endif
+
+#ifdef HAS_BQ27220
+#include "bq27220.h"
 #endif
 
 #ifdef HAS_PMU
@@ -665,6 +679,8 @@ bool Power::setup()
         found = true;
     } else if (lipoInit()) {
         found = true;
+    } else if (lipoChargerInit()) {
+        found = true;
     } else if (analogInit()) {
         found = true;
     }
@@ -679,9 +695,59 @@ bool Power::setup()
     return found;
 }
 
+void Power::powerCommandsCheck()
+{
+    if (rebootAtMsec && millis() > rebootAtMsec) {
+        LOG_INFO("Rebooting");
+        reboot();
+    }
+
+    if (shutdownAtMsec && millis() > shutdownAtMsec) {
+        shutdownAtMsec = 0;
+        shutdown();
+    }
+}
+
+void Power::reboot()
+{
+    notifyReboot.notifyObservers(NULL);
+#if defined(ARCH_ESP32)
+    ESP.restart();
+#elif defined(ARCH_NRF52)
+    NVIC_SystemReset();
+#elif defined(ARCH_RP2040)
+    rp2040.reboot();
+#elif defined(ARCH_PORTDUINO)
+    deInitApiServer();
+    if (aLinuxInputImpl)
+        aLinuxInputImpl->deInit();
+    SPI.end();
+    Wire.end();
+    Serial1.end();
+    if (screen)
+        delete screen;
+    LOG_DEBUG("final reboot!");
+    reboot();
+#elif defined(ARCH_STM32WL)
+    HAL_NVIC_SystemReset();
+#else
+    rebootAtMsec = -1;
+    LOG_WARN("FIXME implement reboot for this platform. Note that some settings require a restart to be applied");
+#endif
+}
+
 void Power::shutdown()
 {
-    LOG_INFO("Shutting Down");
+
+#if HAS_SCREEN
+    if (screen) {
+        screen->showSimpleBanner("Shutting Down...", 0); // stays on screen
+    }
+#endif
+#if !defined(ARCH_STM32WL)
+    playShutdownMelody();
+#endif
+    nodeDB->saveToDisk();
 
 #if defined(ARCH_NRF52) || defined(ARCH_ESP32) || defined(ARCH_RP2040)
 #ifdef PIN_LED1
@@ -693,7 +759,11 @@ void Power::shutdown()
 #ifdef PIN_LED3
     ledOff(PIN_LED3);
 #endif
-    doDeepSleep(DELAY_FOREVER, false, false);
+    doDeepSleep(DELAY_FOREVER, false, true);
+#elif defined(ARCH_PORTDUINO)
+    exit(EXIT_SUCCESS);
+#else
+    LOG_WARN("FIXME implement shutdown for this platform");
 #endif
 }
 
@@ -1233,6 +1303,147 @@ bool Power::lipoInit()
  * The Lipo battery level sensor is unavailable - default to AnalogBatteryLevel
  */
 bool Power::lipoInit()
+{
+    return false;
+}
+#endif
+
+#if defined(HAS_PPM) && HAS_PPM
+
+/**
+ * Adapter class for BQ25896/BQ27220 Lipo battery charger.
+ */
+class LipoCharger : public HasBatteryLevel
+{
+  private:
+    XPowersPPM *ppm = nullptr;
+    BQ27220 *bq = nullptr;
+
+  public:
+    /**
+     * Init the I2C BQ25896 Lipo battery charger
+     */
+    bool runOnce()
+    {
+        if (ppm == nullptr) {
+            ppm = new XPowersPPM;
+            bool result = ppm->init(Wire, I2C_SDA, I2C_SCL, BQ25896_ADDR);
+            if (result) {
+                LOG_INFO("PPM BQ25896 init succeeded");
+                // Set the minimum operating voltage. Below this voltage, the PPM will protect
+                // ppm->setSysPowerDownVoltage(3100);
+
+                // Set input current limit, default is 500mA
+                // ppm->setInputCurrentLimit(800);
+
+                // Disable current limit pin
+                // ppm->disableCurrentLimitPin();
+
+                // Set the charging target voltage, Range:3840 ~ 4608mV ,step:16 mV
+                ppm->setChargeTargetVoltage(4288);
+
+                // Set the precharge current , Range: 64mA ~ 1024mA ,step:64mA
+                // ppm->setPrechargeCurr(64);
+
+                // The premise is that limit pin is disabled, or it will
+                // only follow the maximum charging current set by limit pin.
+                // Set the charging current , Range:0~5056mA ,step:64mA
+                ppm->setChargerConstantCurr(1024);
+
+                // To obtain voltage data, the ADC must be enabled first
+                ppm->enableMeasure();
+
+                // Turn on charging function
+                // If there is no battery connected, do not turn on the charging function
+                ppm->enableCharge();
+            } else {
+                LOG_WARN("PPM BQ25896 init failed");
+                delete ppm;
+                ppm = nullptr;
+                return false;
+            }
+        }
+        if (bq == nullptr) {
+            bq = new BQ27220;
+            bq->setDefaultCapacity(BQ27220_DESIGN_CAPACITY);
+
+            bool result = bq->init();
+            if (result) {
+                LOG_DEBUG("BQ27220 design capacity: %d", bq->getDesignCapacity());
+                LOG_DEBUG("BQ27220 fullCharge capacity: %d", bq->getFullChargeCapacity());
+                LOG_DEBUG("BQ27220 remaining capacity: %d", bq->getRemainingCapacity());
+                return true;
+            } else {
+                LOG_WARN("BQ27220 init failed");
+                delete bq;
+                bq = nullptr;
+                return false;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Battery state of charge, from 0 to 100 or -1 for unknown
+     */
+    virtual int getBatteryPercent() override
+    {
+        return -1;
+        // return bq->getChargePercent(); // don't use BQ27220 for battery percent, it is not calibrated
+    }
+
+    /**
+     * The raw voltage of the battery in millivolts, or NAN if unknown
+     */
+    virtual uint16_t getBattVoltage() override { return bq->getVoltage(); }
+
+    /**
+     * return true if there is a battery installed in this unit
+     */
+    virtual bool isBatteryConnect() override { return ppm->getBattVoltage() > 0; }
+
+    /**
+     * return true if there is an external power source detected
+     */
+    virtual bool isVbusIn() override { return ppm->getVbusVoltage() > 0; }
+
+    /**
+     * return true if the battery is currently charging
+     */
+    virtual bool isCharging() override
+    {
+        bool isCharging = ppm->isCharging();
+        if (isCharging) {
+            LOG_DEBUG("BQ27220 time to full charge: %d min", bq->getTimeToFull());
+        } else {
+            if (!ppm->isVbusIn()) {
+                LOG_DEBUG("BQ27220 time to empty: %d min (%d mAh)", bq->getTimeToEmpty(), bq->getRemainingCapacity());
+            }
+        }
+        return isCharging;
+    }
+};
+
+LipoCharger lipoCharger;
+
+/**
+ * Init the Lipo battery charger
+ */
+bool Power::lipoChargerInit()
+{
+    bool result = lipoCharger.runOnce();
+    LOG_DEBUG("Power::lipoChargerInit lipo sensor is %s", result ? "ready" : "not ready yet");
+    if (!result)
+        return false;
+    batteryLevel = &lipoCharger;
+    return true;
+}
+
+#else
+/**
+ * The Lipo battery level sensor is unavailable - default to AnalogBatteryLevel
+ */
+bool Power::lipoChargerInit()
 {
     return false;
 }

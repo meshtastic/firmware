@@ -33,7 +33,6 @@
 #include "mesh/generated/meshtastic/config.pb.h"
 #include "meshUtils.h"
 #include "modules/Modules.h"
-#include "shutdown.h"
 #include "sleep.h"
 #include "target_specific.h"
 #include <memory>
@@ -335,6 +334,15 @@ void setup()
     pinMode(TFT_CS, OUTPUT);
     digitalWrite(TFT_CS, HIGH);
     delay(100);
+#elif defined(T_DECK_PRO)
+    pinMode(LORA_EN, OUTPUT);
+    digitalWrite(LORA_EN, HIGH);
+    pinMode(LORA_CS, OUTPUT);
+    digitalWrite(LORA_CS, HIGH);
+    pinMode(SDCARD_CS, OUTPUT);
+    digitalWrite(SDCARD_CS, HIGH);
+    pinMode(PIN_EINK_CS, OUTPUT);
+    digitalWrite(PIN_EINK_CS, HIGH);
 #endif
 
     concurrency::hasBeenSetup = true;
@@ -1042,8 +1050,9 @@ void setup()
             mainDelay.interruptFromISR(&higherWake);
         };
         userConfigNoScreen.singlePress = INPUT_BROKER_USER_PRESS;
-        userConfigNoScreen.longPress = INPUT_BROKER_SHUTDOWN;
-        userConfigNoScreen.longPressTime = 5000;
+        userConfigNoScreen.longPress = INPUT_BROKER_NONE;
+        userConfigNoScreen.longPressTime = 500;
+        userConfigNoScreen.longLongPress = INPUT_BROKER_SHUTDOWN;
         userConfigNoScreen.doublePress = INPUT_BROKER_SEND_PING;
         userConfigNoScreen.triplePress = INPUT_BROKER_GPS_TOGGLE;
         UserButtonThread->initButton(userConfigNoScreen);
@@ -1520,7 +1529,7 @@ void loop()
 #ifdef ARCH_NRF52
     nrf52Loop();
 #endif
-    powerCommandsCheck();
+    power->powerCommandsCheck();
 
 #ifdef DEBUG_STACK
     static uint32_t lastPrint = 0;

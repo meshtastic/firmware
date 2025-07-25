@@ -148,6 +148,9 @@ class MeshService
     /// Send a ClientNotification to the phone
     void sendClientNotification(meshtastic_ClientNotification *cn);
 
+    /// Send an error response to the phone
+    void sendRoutingErrorResponse(meshtastic_Routing_Error error, const meshtastic_MeshPacket *mp);
+
     bool isToPhoneQueueEmpty();
 
     ErrorCode sendQueueStatusToPhone(const meshtastic_QueueStatus &qs, ErrorCode res, uint32_t mesh_packet_id);
