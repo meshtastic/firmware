@@ -56,7 +56,13 @@ class MockMeshService : public MeshService
         messages_.emplace_back(*m);
         releaseMqttClientProxyMessageToPool(m);
     }
-    std::list<meshtastic_MqttClientProxyMessage> messages_; // Messages received from the MeshService.
+    void sendClientNotification(meshtastic_ClientNotification *n) override
+    {
+        notifications_.emplace_back(*n);
+        releaseClientNotificationToPool(n);
+    }
+    std::list<meshtastic_MqttClientProxyMessage> messages_;  // Messages received from the MeshService.
+    std::list<meshtastic_ClientNotification> notifications_; // Notifications received from the MeshService.
 };
 
 // Minimal NodeDB needed to return values from getMeshNode.
