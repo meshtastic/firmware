@@ -16,13 +16,12 @@
 #include "main.h"
 #include "sleep.h"
 #include <Throttle.h>
-
-#if __has_include(<Adafruit_PM25AQI.h>)
+// Sensor includes
 #include "Sensor/PMSA003ISensor.h"
+
+// Sensors
 PMSA003ISensor pmsa003iSensor;
-#else
-NullSensor pmsa003iSensor;
-#endif
+
 #include "graphics/ScreenFonts.h"
 
 int32_t AirQualityTelemetryModule::runOnce()
@@ -326,6 +325,9 @@ AdminMessageHandleResult AirQualityTelemetryModule::handleAdminMessageForModule(
     AdminMessageHandleResult result = AdminMessageHandleResult::NOT_HANDLED;
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR_EXTERNAL
     if (pmsa003iSensor.hasSensor()) {
+        // TODO - Potentially implement an admin message to choose between pm_standard
+        // and pm_environmental. This could be configurable as it doesn't make sense so
+        // have both
         result = pmsa003iSensor.handleAdminMessage(mp, request, response);
         if (result != AdminMessageHandleResult::NOT_HANDLED)
             return result;
