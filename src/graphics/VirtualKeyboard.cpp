@@ -163,7 +163,7 @@ void VirtualKeyboard::drawInputArea(OLEDDisplay *display, int16_t offsetX, int16
 
     // Draw text inside the box - properly centered vertically in the input box
     int textX = offsetX + 4;
-    int textY = boxY - 1; // Moved down by 1 pixel
+    int textY = boxY; // Moved down by 1 pixel
 
     if (!scrolledText.empty()) {
         display->drawString(textX, textY, scrolledText.c_str());
@@ -175,7 +175,7 @@ void VirtualKeyboard::drawInputArea(OLEDDisplay *display, int16_t offsetX, int16
         // Ensure cursor stays within box bounds
         if (cursorX < offsetX + boxWidth - 2) {
             // Align cursor properly with the text baseline and height - moved down by 2 pixels
-            display->drawVerticalLine(cursorX, textY + 3, 10);
+            display->drawVerticalLine(cursorX, textY + 2, 10);
         }
     }
 }
