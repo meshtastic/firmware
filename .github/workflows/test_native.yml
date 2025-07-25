@@ -90,6 +90,8 @@ jobs:
         run: sed -i 's/-DBUILD_EPOCH=$UNIX_TIME/#-DBUILD_EPOCH=$UNIX_TIME/' platformio.ini
 
       - name: PlatformIO Tests
+        env:
+          ASAN_OPTIONS: suppressions=asan_suppressions.txt:halt_on_error=1:abort_on_error=1
         run: platformio test -e coverage -v --junit-output-path testreport.xml
 
       - name: Save test results
