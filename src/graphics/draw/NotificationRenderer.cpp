@@ -7,10 +7,15 @@
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/images.h"
+#include "input/RotaryEncoderInterruptImpl1.h"
+#include "input/UpDownInterruptImpl1.h"
 #include "main.h"
 #include <algorithm>
 #include <string>
 #include <vector>
+#if HAS_TRACKBALL
+#include "input/TrackballInterruptImpl1.h"
+#endif
 
 #ifdef ARCH_ESP32
 #include "esp_task_wdt.h"
@@ -124,6 +129,9 @@ void NotificationRenderer::drawBannercallback(OLEDDisplay *display, OLEDDisplayU
         break;
     case notificationTypeEnum::number_picker:
         drawNumberPicker(display, state);
+        break;
+    case notificationTypeEnum::text_input:
+        // text_input is handled at the top of the function
         break;
     }
 }
@@ -615,59 +623,64 @@ void NotificationRenderer::drawTextInput(OLEDDisplay *display, OLEDDisplayUiStat
             return;
         }
 
-        // Handle input events for virtual keyboard navigation
         if (inEvent.inputEvent != INPUT_BROKER_NONE) {
             if (inEvent.inputEvent == INPUT_BROKER_UP) {
-                virtualKeyboard->moveCursorUp();
+                // high frequency for move cursor left/right than up/down with encoders
+                extern ::RotaryEncoderInterruptImpl1 *rotaryEncoderInterruptImpl1;
+                extern ::UpDownInterruptImpl1 *upDownInterruptImpl1;
+                if (::rotaryEncoderInterruptImpl1 || ::upDownInterruptImpl1) {
+                    virtualKeyboard->moveCursorLeft();
+                } else {
+                    virtualKeyboard->moveCursorUp();
+                }
             } else if (inEvent.inputEvent == INPUT_BROKER_DOWN) {
-                virtualKeyboard->moveCursorDown();
+                extern ::RotaryEncoderInterruptImpl1 *rotaryEncoderInterruptImpl1;
+                extern ::UpDownInterruptImpl1 *upDownInterruptImpl1;
+                if (::rotaryEncoderInterruptImpl1 || ::upDownInterruptImpl1) {
+                    virtualKeyboard->moveCursorRight();
+                } else {
+                    virtualKeyboard->moveCursorDown();
+                }
             } else if (inEvent.inputEvent == INPUT_BROKER_LEFT) {
                 virtualKeyboard->moveCursorLeft();
             } else if (inEvent.inputEvent == INPUT_BROKER_RIGHT) {
                 virtualKeyboard->moveCursorRight();
+            } else if (inEvent.inputEvent == INPUT_BROKER_UP_LONG) {
+                virtualKeyboard->moveCursorUp();
+            } else if (inEvent.inputEvent == INPUT_BROKER_DOWN_LONG) {
+                virtualKeyboard->moveCursorDown();
             } else if (inEvent.inputEvent == INPUT_BROKER_ALT_PRESS) {
-                // Long press UP = move left
                 virtualKeyboard->moveCursorLeft();
             } else if (inEvent.inputEvent == INPUT_BROKER_USER_PRESS) {
-                // Long press DOWN = move right
                 virtualKeyboard->moveCursorRight();
             } else if (inEvent.inputEvent == INPUT_BROKER_SELECT) {
                 virtualKeyboard->handlePress();
             } else if (inEvent.inputEvent == INPUT_BROKER_SELECT_LONG) {
                 virtualKeyboard->handleLongPress();
             } else if (inEvent.inputEvent == INPUT_BROKER_CANCEL) {
-                // Cancel virtual keyboard - call callback with empty string
-                auto callback = textInputCallback; // Store callback before clearing
-
-                // Clean up first to prevent re-entry
+                auto callback = textInputCallback;
                 delete virtualKeyboard;
                 virtualKeyboard = nullptr;
                 textInputCallback = nullptr;
                 resetBanner();
-
-                // Call callback after cleanup
                 if (callback) {
                     callback("");
                 }
-
-                // Restore normal overlays
                 if (screen) {
                     screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
                 }
                 return;
             }
 
-            // Reset input event after processing
+            // Consume the event after processing for virtual keyboard
             inEvent.inputEvent = INPUT_BROKER_NONE;
         }
 
-        // Clear the display and draw virtual keyboard
-        display->setColor(BLACK);
-        display->fillRect(0, 0, display->getWidth(), display->getHeight());
-        display->setColor(WHITE);
+        // Draw the virtual keyboard - clear only when needed
         virtualKeyboard->draw(display, 0, 0);
     } else {
         // If virtualKeyboard is null, reset the banner to avoid getting stuck
+        LOG_INFO("Virtual keyboard is null - resetting banner");
         resetBanner();
     }
 }

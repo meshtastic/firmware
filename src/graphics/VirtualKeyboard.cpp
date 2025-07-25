@@ -64,6 +64,9 @@ void VirtualKeyboard::initializeKeyboard()
 
 void VirtualKeyboard::draw(OLEDDisplay *display, int16_t offsetX, int16_t offsetY)
 {
+    // Clear the display to avoid overlapping with other UI elements
+    display->clear();
+
     // Set initial color and font
     display->setColor(WHITE);
     display->setFont(FONT_SMALL);
@@ -145,7 +148,7 @@ void VirtualKeyboard::drawInputArea(OLEDDisplay *display, int16_t offsetX, int16
     }
 
     // Handle text overflow with scrolling
-    int textPadding = 4;
+    int textPadding = 6; // 2px left padding + 4px right padding for cursor space
     int maxWidth = boxWidth - textPadding;
     int textWidth = display->getStringWidth(displayText.c_str());
 
@@ -158,6 +161,13 @@ void VirtualKeyboard::drawInputArea(OLEDDisplay *display, int16_t offsetX, int16
         }
         if (scrolledText != displayText) {
             scrolledText = "..." + scrolledText;
+            // Recalculate width with ellipsis and ensure it still fits
+            textWidth = display->getStringWidth(scrolledText.c_str());
+            while (textWidth > maxWidth && scrolledText.length() > 3) {
+                // Remove one character after "..." and recalculate
+                scrolledText = "..." + scrolledText.substr(4);
+                textWidth = display->getStringWidth(scrolledText.c_str());
+            }
         }
     }
 
@@ -172,8 +182,9 @@ void VirtualKeyboard::drawInputArea(OLEDDisplay *display, int16_t offsetX, int16
     // Draw cursor at the end of visible text - aligned with text baseline
     if (!inputText.empty() || true) { // Always show cursor for visibility
         int cursorX = textX + display->getStringWidth(scrolledText.c_str());
-        // Ensure cursor stays within box bounds
-        if (cursorX < offsetX + boxWidth - 2) {
+        // Ensure cursor stays within box bounds with proper margin from right edge
+        int rightBoundary = offsetX + 2 + boxWidth - 3; // 3px margin from right border
+        if (cursorX < rightBoundary) {
             // Align cursor properly with the text baseline and height - moved down by 2 pixels
             display->drawVerticalLine(cursorX, textY + 2, 10);
         }
@@ -277,7 +288,7 @@ char VirtualKeyboard::getCharForKey(const VirtualKey &key, bool isLongPress)
 
 void VirtualKeyboard::moveCursorUp()
 {
-    resetTimeout(); // Reset timeout on any input activity
+    resetTimeout();
 
     // If we're on the close button, move to keyboard
     if (cursorOnCloseButton) {
@@ -322,7 +333,7 @@ void VirtualKeyboard::moveCursorUp()
 
 void VirtualKeyboard::moveCursorDown()
 {
-    resetTimeout(); // Reset timeout on any input activity
+    resetTimeout();
 
     uint8_t originalRow = cursorRow;
     if (cursorRow < KEYBOARD_ROWS - 1) {
@@ -354,7 +365,7 @@ void VirtualKeyboard::moveCursorDown()
 
 void VirtualKeyboard::moveCursorLeft()
 {
-    resetTimeout(); // Reset timeout on any input activity
+    resetTimeout();
 
     // Find the previous valid key position
     do {
@@ -375,7 +386,7 @@ void VirtualKeyboard::moveCursorLeft()
 
 void VirtualKeyboard::moveCursorRight()
 {
-    resetTimeout(); // Reset timeout on any input activity
+    resetTimeout();
 
     // If we're on the close button, go back to keyboard
     if (cursorOnCloseButton) {

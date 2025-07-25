@@ -42,8 +42,8 @@ void TrackballInterruptBase::init(uint8_t pinDown, uint8_t pinUp, uint8_t pinLef
         attachInterrupt(this->_pinRight, onIntRight, TB_DIRECTION);
     }
 
-    LOG_DEBUG("Trackball GPIO initialized (%d, %d, %d, %d, %d)", this->_pinUp, this->_pinDown, this->_pinLeft, this->_pinRight,
-              pinPress);
+    LOG_DEBUG("Trackball GPIO initialized - UP:%d DOWN:%d LEFT:%d RIGHT:%d PRESS:%d", this->_pinUp, this->_pinDown,
+              this->_pinLeft, this->_pinRight, pinPress);
 
     this->setInterval(100);
 }
@@ -65,9 +65,8 @@ int32_t TrackballInterruptBase::runOnce()
 #endif
 
         if (!buttonStillPressed) {
-            // Button released
+            // Button released - check if it was a short press
             if (pressDuration < LONG_PRESS_DURATION) {
-                // Short press
                 e.inputEvent = this->_eventPressed;
             }
             // Reset state
@@ -75,15 +74,10 @@ int32_t TrackballInterruptBase::runOnce()
             pressStartTime = 0;
             lastLongPressEventTime = 0;
             this->action = TB_ACTION_NONE;
-        } else if (pressDuration >= LONG_PRESS_DURATION) {
-            // Long press detected
-            uint32_t currentTime = millis();
-            // Only trigger long press event if enough time has passed since the last one
-            if (lastLongPressEventTime == 0 || (currentTime - lastLongPressEventTime) >= LONG_PRESS_REPEAT_INTERVAL) {
-                e.inputEvent = this->_eventPressedLong;
-                lastLongPressEventTime = currentTime;
-            }
-            this->action = TB_ACTION_PRESSED_LONG;
+        } else if (pressDuration >= LONG_PRESS_DURATION && lastLongPressEventTime == 0) {
+            // First long press event only - avoid repeated events that cause lag
+            e.inputEvent = this->_eventPressedLong;
+            lastLongPressEventTime = millis();
         }
     }
 
@@ -113,16 +107,12 @@ int32_t TrackballInterruptBase::runOnce()
         pressStartTime = millis();
         // Don't send event yet, wait to see if it's a long press
     } else if (this->action == TB_ACTION_UP && !digitalRead(_pinUp)) {
-        // LOG_DEBUG("Trackball event UP");
         e.inputEvent = this->_eventUp;
     } else if (this->action == TB_ACTION_DOWN && !digitalRead(_pinDown)) {
-        // LOG_DEBUG("Trackball event DOWN");
         e.inputEvent = this->_eventDown;
     } else if (this->action == TB_ACTION_LEFT && !digitalRead(_pinLeft)) {
-        // LOG_DEBUG("Trackball event LEFT");
         e.inputEvent = this->_eventLeft;
     } else if (this->action == TB_ACTION_RIGHT && !digitalRead(_pinRight)) {
-        // LOG_DEBUG("Trackball event RIGHT");
         e.inputEvent = this->_eventRight;
     }
 #endif
