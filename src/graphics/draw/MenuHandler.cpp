@@ -188,7 +188,7 @@ void menuHandler::TZPicker()
         } else if (selected == 7) { // Eastern
             strncpy(config.device.tzdef, "EST5EDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
         } else if (selected == 8) { // UTC
-            strncpy(config.device.tzdef, "UTC", sizeof(config.device.tzdef));
+            strncpy(config.device.tzdef, "UTC0", sizeof(config.device.tzdef));
         } else if (selected == 9) { // EU/Western
             strncpy(config.device.tzdef, "GMT0BST,M3.5.0/1,M10.5.0", sizeof(config.device.tzdef));
         } else if (selected == 10) { // EU/Central
