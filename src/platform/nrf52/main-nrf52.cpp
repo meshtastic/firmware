@@ -378,6 +378,14 @@ void cpuDeepSleep(uint32_t msecToWake)
         nrf_gpio_cfg_sense_set(PIN_BUTTON2, sense1);
 #endif
 
+#ifdef TRACKER_T1000_E
+        // Configure button wake-up for T-1000-E
+        // T-1000-E: BUTTON_ACTIVE_LOW=false (active high), BUTTON_ACTIVE_PULLUP=false (uses pulldown)
+        nrf_gpio_cfg_input(BUTTON_PIN, NRF_GPIO_PIN_PULLDOWN);
+        nrf_gpio_pin_sense_t sense_t1000e = NRF_GPIO_PIN_SENSE_HIGH;
+        nrf_gpio_cfg_sense_set(BUTTON_PIN, sense_t1000e);
+#endif
+
         auto ok = sd_power_system_off();
         if (ok != NRF_SUCCESS) {
             LOG_ERROR("FIXME: Ignoring soft device (EasyDMA pending?) and forcing system-off!");
