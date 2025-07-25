@@ -627,12 +627,14 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
 #else
         const char *warning = "Invalid MQTT config: proxy_to_client_enabled must be enabled on nodes that do not have a network";
         LOG_ERROR(warning);
+#if !IS_RUNNING_TESTS
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
         cn->level = meshtastic_LogRecord_Level_ERROR;
         cn->time = getValidTime(RTCQualityFromNet);
         strncpy(cn->message, warning, sizeof(cn->message) - 1);
         cn->message[sizeof(cn->message) - 1] = '\0'; // Ensure null termination
         service->sendClientNotification(cn);
+#endif
         return false;
 #endif
     }
@@ -641,12 +643,14 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
     if (defaultServer && parsed.serverPort != PubSubConfig::defaultPort) {
         const char *warning = "Invalid MQTT config: default server address must not have a port specified";
         LOG_ERROR(warning);
+#if !IS_RUNNING_TESTS
         meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
         cn->level = meshtastic_LogRecord_Level_ERROR;
         cn->time = getValidTime(RTCQualityFromNet);
         strncpy(cn->message, warning, sizeof(cn->message) - 1);
         cn->message[sizeof(cn->message) - 1] = '\0'; // Ensure null termination
         service->sendClientNotification(cn);
+#endif
         return false;
     }
     return true;

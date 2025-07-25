@@ -27,6 +27,11 @@
 #include <utility>
 #include <variant>
 
+#define IS_RUNNING_TESTS 1
+#else
+#define IS_RUNNING_TESTS 0
+#endif
+
 namespace
 {
 // Minimal router needed to receive messages from MQTT.
