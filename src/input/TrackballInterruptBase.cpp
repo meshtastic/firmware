@@ -73,12 +73,17 @@ int32_t TrackballInterruptBase::runOnce()
             // Reset state
             pressDetected = false;
             pressStartTime = 0;
+            lastLongPressEventTime = 0;
             this->action = TB_ACTION_NONE;
         } else if (pressDuration >= LONG_PRESS_DURATION) {
             // Long press detected
-            e.inputEvent = this->_eventPressedLong;
+            uint32_t currentTime = millis();
+            // Only trigger long press event if enough time has passed since the last one
+            if (lastLongPressEventTime == 0 || (currentTime - lastLongPressEventTime) >= LONG_PRESS_REPEAT_INTERVAL) {
+                e.inputEvent = this->_eventPressedLong;
+                lastLongPressEventTime = currentTime;
+            }
             this->action = TB_ACTION_PRESSED_LONG;
-            // Keep pressDetected true to avoid repeated long press events
         }
     }
 
