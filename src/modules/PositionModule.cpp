@@ -41,6 +41,30 @@ PositionModule::PositionModule()
     }
 }
 
+bool PositionModule::shouldUpdatePosition(const meshtastic_PositionLite &existingPos, const meshtastic_Position &incomingPos)
+{
+    // Assume precision is 32 if not set (older firmware compatibility)
+    uint32_t existingPrecision = existingPos.precision_bits ? existingPos.precision_bits : 32;
+    uint32_t incomingPrecision = incomingPos.precision_bits ? incomingPos.precision_bits : 32;
+    
+    // Use the lower precision for position comparison
+    uint32_t minPrecision = (incomingPrecision < existingPrecision) ? incomingPrecision : existingPrecision;
+    
+    int32_t degradedExistingLat = existingPos.latitude_i & (0xFFFFFFFF << (32 - minPrecision));
+    int32_t degradedExistingLon = existingPos.longitude_i & (0xFFFFFFFF << (32 - minPrecision));
+    
+    int32_t degradedIncomingLat = incomingPos.latitude_i & (0xFFFFFFFF << (32 - minPrecision));
+    int32_t degradedIncomingLon = incomingPos.longitude_i & (0xFFFFFFFF << (32 - minPrecision));
+    
+    if (degradedExistingLat != degradedIncomingLat || degradedExistingLon != degradedIncomingLon) {
+        // Position changed - always update regardless of precision
+        return true;
+    } else {
+        // Same position - only update if precision is equal or higher
+        return incomingPrecision >= existingPrecision;
+    }
+}
+
 bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Position *pptr)
 {
     auto p = *pptr;
@@ -92,7 +116,27 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
         trySetRtc(p, isLocal, force);
     }
 
-    nodeDB->updatePosition(getFrom(&mp), p);
+    // Smart position update logic with precision awareness:
+    // Only update if position has actually changed to avoid unnecessary mesh traffic
+    bool shouldUpdate = true;
+    
+    meshtastic_NodeInfoLite *existingNode = nodeDB->getMeshNode(getFrom(&mp));
+    if (existingNode && existingNode->has_position) {
+        // Use precision-aware position comparison directly with PositionLite
+        shouldUpdate = shouldUpdatePosition(existingNode->position, p);
+        
+        if (shouldUpdate) {
+            LOG_DEBUG("Accept position update: precision-aware logic approved (existing precision: %d, incoming: %d)", 
+                     existingNode->position.precision_bits, p.precision_bits);
+        } else {
+            LOG_DEBUG("Reject position update: precision-aware logic rejected (preserving higher precision data)");
+        }
+    }
+    
+    if (shouldUpdate) {
+        nodeDB->updatePosition(getFrom(&mp), p);
+    }
+    
     if (channels.getByIndex(mp.channel).settings.has_module_settings) {
         precision = channels.getByIndex(mp.channel).settings.module_settings.position_precision;
     } else if (channels.getByIndex(mp.channel).role == meshtastic_Channel_Role_PRIMARY) {
@@ -338,7 +382,7 @@ void PositionModule::sendOurPosition()
         if (channels.getByIndex(channelNum).settings.has_module_settings &&
             channels.getByIndex(channelNum).settings.module_settings.position_precision != 0) {
             sendOurPosition(NODENUM_BROADCAST, requestReplies, channelNum);
-            return;
+            // Continue to next channel instead of returning
         }
     }
 }
