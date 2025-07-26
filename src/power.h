@@ -110,7 +110,7 @@ class Power : private concurrency::OSThread
 
     Power();
 
-    void shutdown();
+    void powerCommandsCheck();
     void readPowerStatus();
     virtual bool setup();
     virtual int32_t runOnce() override;
@@ -126,8 +126,12 @@ class Power : private concurrency::OSThread
     bool analogInit();
     /// Setup a Lipo battery level sensor
     bool lipoInit();
+    /// Setup a Lipo charger
+    bool lipoChargerInit();
 
   private:
+    void shutdown();
+    void reboot();
     // open circuit voltage lookup table
     uint8_t low_voltage_counter;
 #ifdef DEBUG_HEAP

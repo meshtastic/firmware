@@ -17,6 +17,7 @@
 #include "modules/AdminModule.h"
 #include "modules/CannedMessageModule.h"
 #include "modules/KeyVerificationModule.h"
+#include "modules/TraceRouteModule.h"
 
 extern uint16_t TFT_MESH;
 
@@ -54,12 +55,14 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
                                          "PH_915",
                                          "ANZ_433",
                                          "KZ_433",
-                                         "KZ_863"};
+                                         "KZ_863",
+                                         "NP_865",
+                                         "BR_902"};
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Set the LoRa region";
     bannerOptions.durationMs = duration;
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 25;
+    bannerOptions.optionsCount = 27;
     bannerOptions.InitialSelected = 0;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected != 0 && config.lora.region != _meshtastic_Config_LoRaConfig_RegionCode(selected)) {
@@ -154,6 +157,7 @@ void menuHandler::TZPicker()
                                          "US/Mountain",
                                          "US/Central",
                                          "US/Eastern",
+                                         "BR/Brasilia",
                                          "UTC",
                                          "EU/Western",
                                          "EU/"
@@ -168,7 +172,7 @@ void menuHandler::TZPicker()
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Pick Timezone";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 17;
+    bannerOptions.optionsCount = 19;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 0) {
             menuHandler::menuQueue = menuHandler::clock_menu;
@@ -187,25 +191,27 @@ void menuHandler::TZPicker()
             strncpy(config.device.tzdef, "CST6CDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
         } else if (selected == 7) { // Eastern
             strncpy(config.device.tzdef, "EST5EDT,M3.2.0,M11.1.0", sizeof(config.device.tzdef));
-        } else if (selected == 8) { // UTC
-            strncpy(config.device.tzdef, "UTC", sizeof(config.device.tzdef));
-        } else if (selected == 9) { // EU/Western
+        } else if (selected == 8) { // Brazil
+            strncpy(config.device.tzdef, "BRT3", sizeof(config.device.tzdef));
+        } else if (selected == 9) { // UTC
+            strncpy(config.device.tzdef, "UTC0", sizeof(config.device.tzdef));
+        } else if (selected == 10) { // EU/Western
             strncpy(config.device.tzdef, "GMT0BST,M3.5.0/1,M10.5.0", sizeof(config.device.tzdef));
-        } else if (selected == 10) { // EU/Central
+        } else if (selected == 11) { // EU/Central
             strncpy(config.device.tzdef, "CET-1CEST,M3.5.0,M10.5.0/3", sizeof(config.device.tzdef));
-        } else if (selected == 11) { // EU/Eastern
+        } else if (selected == 12) { // EU/Eastern
             strncpy(config.device.tzdef, "EET-2EEST,M3.5.0/3,M10.5.0/4", sizeof(config.device.tzdef));
-        } else if (selected == 12) { // Asia/Kolkata
+        } else if (selected == 13) { // Asia/Kolkata
             strncpy(config.device.tzdef, "IST-5:30", sizeof(config.device.tzdef));
-        } else if (selected == 13) { // China
+        } else if (selected == 14) { // China
             strncpy(config.device.tzdef, "HKT-8", sizeof(config.device.tzdef));
-        } else if (selected == 14) { // AU/AWST
+        } else if (selected == 15) { // AU/AWST
             strncpy(config.device.tzdef, "AWST-8", sizeof(config.device.tzdef));
-        } else if (selected == 15) { // AU/ACST
+        } else if (selected == 16) { // AU/ACST
             strncpy(config.device.tzdef, "ACST-9:30ACDT,M10.1.0,M4.1.0/3", sizeof(config.device.tzdef));
-        } else if (selected == 16) { // AU/AEST
+        } else if (selected == 17) { // AU/AEST
             strncpy(config.device.tzdef, "AEST-10AEDT,M10.1.0,M4.1.0/3", sizeof(config.device.tzdef));
-        } else if (selected == 17) { // NZ
+        } else if (selected == 18) { // NZ
             strncpy(config.device.tzdef, "NZST-12NZDT,M9.5.0,M4.1.0/3", sizeof(config.device.tzdef));
         }
         if (selected != 0) {
@@ -429,7 +435,7 @@ void menuHandler::systemBaseMenu()
 
 void menuHandler::favoriteBaseMenu()
 {
-    enum optionsNumbers { Back, Preset, Freetext, Remove, enumEnd };
+    enum optionsNumbers { Back, Preset, Freetext, Remove, TraceRoute, enumEnd };
     static const char *optionsArray[enumEnd] = {"Back", "New Preset Msg"};
     static int optionsEnumArray[enumEnd] = {Back, Preset};
     int options = 2;
@@ -438,6 +444,8 @@ void menuHandler::favoriteBaseMenu()
         optionsArray[options] = "New Freetext Msg";
         optionsEnumArray[options++] = Freetext;
     }
+    optionsArray[options] = "Trace Route";
+    optionsEnumArray[options++] = TraceRoute;
     optionsArray[options] = "Remove Favorite";
     optionsEnumArray[options++] = Remove;
 
@@ -454,6 +462,10 @@ void menuHandler::favoriteBaseMenu()
         } else if (selected == Remove) {
             menuHandler::menuQueue = menuHandler::remove_favorite;
             screen->runNow();
+        } else if (selected == TraceRoute) {
+            if (traceRouteModule) {
+                traceRouteModule->launch(graphics::UIRenderer::currentFavoriteNodeNum);
+            }
         }
     };
     screen->showOverlayBanner(bannerOptions);
@@ -492,12 +504,12 @@ void menuHandler::positionBaseMenu()
 
 void menuHandler::nodeListMenu()
 {
-    enum optionsNumbers { Back, Favorite, Verify, Reset };
-    static const char *optionsArray[] = {"Back", "Add Favorite", "Key Verification", "Reset NodeDB"};
+    enum optionsNumbers { Back, Favorite, TraceRoute, Verify, Reset, enumEnd };
+    static const char *optionsArray[] = {"Back", "Add Favorite", "Trace Route", "Key Verification", "Reset NodeDB"};
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Node Action";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 4;
+    bannerOptions.optionsCount = 5;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == Favorite) {
             menuQueue = add_favorite;
@@ -507,6 +519,9 @@ void menuHandler::nodeListMenu()
             screen->runNow();
         } else if (selected == Reset) {
             menuQueue = reset_node_db_menu;
+            screen->runNow();
+        } else if (selected == TraceRoute) {
+            menuQueue = trace_route_menu;
             screen->runNow();
         }
     };
@@ -860,6 +875,16 @@ void menuHandler::removeFavoriteMenu()
     screen->showOverlayBanner(bannerOptions);
 }
 
+void menuHandler::traceRouteMenu()
+{
+    screen->showNodePicker("Node to Trace", 30000, [](uint32_t nodenum) -> void {
+        LOG_INFO("Menu: Node picker selected node 0x%08x, traceRouteModule=%p", nodenum, traceRouteModule);
+        if (traceRouteModule) {
+            traceRouteModule->startTraceRoute(nodenum);
+        }
+    });
+}
+
 void menuHandler::testMenu()
 {
 
@@ -1131,6 +1156,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case remove_favorite:
         removeFavoriteMenu();
+        break;
+    case trace_route_menu:
+        traceRouteMenu();
         break;
     case test_menu:
         testMenu();

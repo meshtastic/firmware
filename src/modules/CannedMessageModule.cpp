@@ -60,6 +60,7 @@ CannedMessageModule::CannedMessageModule()
         disable();
     } else {
         LOG_INFO("CannedMessageModule is enabled");
+        moduleConfig.canned_message.enabled = true;
         this->inputObserver.observe(inputBroker);
     }
 }
@@ -2215,6 +2216,9 @@ void CannedMessageModule::handleSetCannedMessageModuleMessages(const char *from_
 
     if (changed) {
         this->saveProtoForModule();
+        if (splitConfiguredMessages()) {
+            moduleConfig.canned_message.enabled = true;
+        }
     }
 }
 
