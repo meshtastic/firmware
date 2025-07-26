@@ -4,13 +4,20 @@
 
 #ifdef ARCH_PORTDUINO
 #include "configuration.h"
-#include "modules/SerialModule.h"
 
 #if defined(UNIT_TEST)
 #define IS_RUNNING_TESTS 1
 #else
 #define IS_RUNNING_TESTS 0
 #endif
+
+#if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040)) && !defined(CONFIG_IDF_TARGET_ESP32S2) &&               \
+    !defined(CONFIG_IDF_TARGET_ESP32C3)
+#include "modules/SerialModule.h"
+#endif
+
+#if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040)) && !defined(CONFIG_IDF_TARGET_ESP32S2) &&               \
+    !defined(CONFIG_IDF_TARGET_ESP32C3)
 
 // Test that empty configuration is valid.
 void test_serialConfigEmptyIsValid(void)
@@ -112,10 +119,14 @@ void test_serialConfigVariousModesWithoutOverrideAreValid(void)
     TEST_ASSERT_TRUE(SerialModule::isValidConfig(config));
 }
 
+#endif // Architecture check
+
 void setup()
 {
     initializeTestEnvironment();
 
+#if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040)) && !defined(CONFIG_IDF_TARGET_ESP32S2) &&               \
+    !defined(CONFIG_IDF_TARGET_ESP32C3)
     UNITY_BEGIN();
     RUN_TEST(test_serialConfigEmptyIsValid);
     RUN_TEST(test_serialConfigEnabledIsValid);
@@ -127,6 +138,11 @@ void setup()
     RUN_TEST(test_serialConfigWithOverrideConsoleProtoModeIsInvalid);
     RUN_TEST(test_serialConfigVariousModesWithoutOverrideAreValid);
     exit(UNITY_END());
+#else
+    LOG_WARN("This test requires ESP32, NRF52, or RP2040 architecture");
+    UNITY_BEGIN();
+    UNITY_END();
+#endif
 }
 #else
 void setup()
