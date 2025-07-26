@@ -150,10 +150,10 @@ static const uint8_t SCK = PIN_SPI_SCK;
 
 // QSPI Pins
 #define PIN_QSPI_SCK 3
-#define PIN_QSPI_CS 22      // Changed from 26 to avoid conflict with encoder
-#define PIN_QSPI_IO0 27     // Changed from 30 to avoid conflict with buzzer
+#define PIN_QSPI_CS 22  // Changed from 26 to avoid conflict with encoder
+#define PIN_QSPI_IO0 27 // Changed from 30 to avoid conflict with buzzer
 #define PIN_QSPI_IO1 29
-#define PIN_QSPI_IO2 21     // Changed from 28 to avoid conflict with encoder button
+#define PIN_QSPI_IO2 21 // Changed from 28 to avoid conflict with encoder button
 #define PIN_QSPI_IO3 2
 
 // On-board QSPI Flash
