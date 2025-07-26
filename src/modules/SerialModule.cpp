@@ -74,6 +74,27 @@ static Print *serialPrint = &Serial2;
 char serialBytes[512];
 size_t serialPayloadSize;
 
+bool SerialModule::isValidConfig(const meshtastic_ModuleConfig_SerialConfig &config)
+{
+    if (config.override_console_serial_port && !IS_ONE_OF(config.mode, meshtastic_ModuleConfig_SerialConfig_Serial_Mode_NMEA,
+                                                          meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO)) {
+        const char *warning =
+            "Invalid Serial config: override console serial port is only supported in NMEA and CalTopo output-only modes.";
+        LOG_ERROR(warning);
+#if !IS_RUNNING_TESTS
+        meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+        cn->level = meshtastic_LogRecord_Level_ERROR;
+        cn->time = getValidTime(RTCQualityFromNet);
+        strncpy(cn->message, warning, sizeof(cn->message) - 1);
+        cn->message[sizeof(cn->message) - 1] = '\0'; // Ensure null termination
+        service->sendClientNotification(cn);
+#endif
+        return false;
+    }
+
+    return true;
+}
+
 SerialModuleRadio::SerialModuleRadio() : MeshModule("SerialModuleRadio")
 {
     switch (moduleConfig.serial.mode) {
