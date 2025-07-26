@@ -89,6 +89,11 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
 #if !MESHTASTIC_EXCLUDE_GPS
         if (gps) {
             LOG_WARN("GPS Toggle2");
+            if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED &&
+                config.position.fixed_position == false) {
+                nodeDB->clearLocalPosition();
+                nodeDB->saveToDisk();
+            }
             gps->toggleGpsMode();
             const char *msg =
                 (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) ? "GPS Enabled" : "GPS Disabled";
