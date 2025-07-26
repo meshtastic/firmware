@@ -1,6 +1,7 @@
 #include "VirtualKeyboard.h"
 #include "configuration.h"
 #include "graphics/Screen.h"
+#include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
 #include "main.h"
 #include <Arduino.h>
