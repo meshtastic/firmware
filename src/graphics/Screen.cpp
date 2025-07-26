@@ -579,7 +579,7 @@ void Screen::setup()
             touchScreenImpl1->init();
         }
     }
-#elif HAS_TOUCHSCREEN
+#elif HAS_TOUCHSCREEN && !defined(USE_EINK)
     touchScreenImpl1 =
         new TouchScreenImpl1(dispdev->getWidth(), dispdev->getHeight(), static_cast<TFTDisplay *>(dispdev)->getTouch);
     touchScreenImpl1->init();
@@ -1001,7 +1001,7 @@ void Screen::setFrames(FrameFocus focus)
     // Insert favorite frames *after* collecting them all
     if (!favoriteFrames.empty()) {
         fsi.positions.firstFavorite = numframes;
-        for (auto &f : favoriteFrames) {
+        for (const auto &f : favoriteFrames) {
             normalFrames[numframes++] = f;
             indicatorIcons.push_back(icon_node);
         }

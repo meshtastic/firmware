@@ -325,6 +325,25 @@ typedef enum _meshtastic_CriticalErrorCode {
     meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE = 13
 } meshtastic_CriticalErrorCode;
 
+/* Enum to indicate to clients whether this firmware is a special firmware build, like an event.
+ The first 16 values are reserved for non-event special firmwares, like the Smart Citizen use case. */
+typedef enum _meshtastic_FirmwareEdition {
+    /* Vanilla firmware */
+    meshtastic_FirmwareEdition_VANILLA = 0,
+    /* Firmware for use in the Smart Citizen environmental monitoring network */
+    meshtastic_FirmwareEdition_SMART_CITIZEN = 1,
+    /* Open Sauce, the maker conference held yearly in CA */
+    meshtastic_FirmwareEdition_OPEN_SAUCE = 16,
+    /* DEFCON, the yearly hacker conference */
+    meshtastic_FirmwareEdition_DEFCON = 17,
+    /* Burning Man, the yearly hippie gathering in the desert */
+    meshtastic_FirmwareEdition_BURNING_MAN = 18,
+    /* Hamvention, the Dayton amateur radio convention */
+    meshtastic_FirmwareEdition_HAMVENTION = 19,
+    /* Placeholder for DIY and unofficial events */
+    meshtastic_FirmwareEdition_DIY_EDITION = 127
+} meshtastic_FirmwareEdition;
+
 /* Enum for modules excluded from a device's configuration.
  Each value represents a ModuleConfigType that can be toggled as excluded
  by setting its corresponding bit in the `excluded_modules` bitmask field. */
@@ -426,7 +445,10 @@ typedef enum _meshtastic_Routing_Error {
     /* Admin packet otherwise checks out, but uses a bogus or expired session key */
     meshtastic_Routing_Error_ADMIN_BAD_SESSION_KEY = 36,
     /* Admin packet sent using PKC, but not from a public key on the admin key list */
-    meshtastic_Routing_Error_ADMIN_PUBLIC_KEY_UNAUTHORIZED = 37
+    meshtastic_Routing_Error_ADMIN_PUBLIC_KEY_UNAUTHORIZED = 37,
+    /* Airtime fairness rate limit exceeded for a packet
+ This typically enforced per portnum and is used to prevent a single node from monopolizing airtime */
+    meshtastic_Routing_Error_RATE_LIMIT_EXCEEDED = 38
 } meshtastic_Routing_Error;
 
 /* The priority of this message for sending.
@@ -911,6 +933,8 @@ typedef struct _meshtastic_MyNodeInfo {
     meshtastic_MyNodeInfo_device_id_t device_id;
     /* The PlatformIO environment used to build this firmware */
     char pio_env[40];
+    /* The indicator for whether this device is running event firmware and which */
+    meshtastic_FirmwareEdition firmware_edition;
 } meshtastic_MyNodeInfo;
 
 /* Debug output from the device.
@@ -1209,6 +1233,10 @@ extern "C" {
 #define _meshtastic_CriticalErrorCode_MAX meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE
 #define _meshtastic_CriticalErrorCode_ARRAYSIZE ((meshtastic_CriticalErrorCode)(meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE+1))
 
+#define _meshtastic_FirmwareEdition_MIN meshtastic_FirmwareEdition_VANILLA
+#define _meshtastic_FirmwareEdition_MAX meshtastic_FirmwareEdition_DIY_EDITION
+#define _meshtastic_FirmwareEdition_ARRAYSIZE ((meshtastic_FirmwareEdition)(meshtastic_FirmwareEdition_DIY_EDITION+1))
+
 #define _meshtastic_ExcludedModules_MIN meshtastic_ExcludedModules_EXCLUDED_NONE
 #define _meshtastic_ExcludedModules_MAX meshtastic_ExcludedModules_NETWORK_CONFIG
 #define _meshtastic_ExcludedModules_ARRAYSIZE ((meshtastic_ExcludedModules)(meshtastic_ExcludedModules_NETWORK_CONFIG+1))
@@ -1222,8 +1250,8 @@ extern "C" {
 #define _meshtastic_Position_AltSource_ARRAYSIZE ((meshtastic_Position_AltSource)(meshtastic_Position_AltSource_ALT_BAROMETRIC+1))
 
 #define _meshtastic_Routing_Error_MIN meshtastic_Routing_Error_NONE
-#define _meshtastic_Routing_Error_MAX meshtastic_Routing_Error_ADMIN_PUBLIC_KEY_UNAUTHORIZED
-#define _meshtastic_Routing_Error_ARRAYSIZE ((meshtastic_Routing_Error)(meshtastic_Routing_Error_ADMIN_PUBLIC_KEY_UNAUTHORIZED+1))
+#define _meshtastic_Routing_Error_MAX meshtastic_Routing_Error_RATE_LIMIT_EXCEEDED
+#define _meshtastic_Routing_Error_ARRAYSIZE ((meshtastic_Routing_Error)(meshtastic_Routing_Error_RATE_LIMIT_EXCEEDED+1))
 
 #define _meshtastic_MeshPacket_Priority_MIN meshtastic_MeshPacket_Priority_UNSET
 #define _meshtastic_MeshPacket_Priority_MAX meshtastic_MeshPacket_Priority_MAX
@@ -1255,6 +1283,7 @@ extern "C" {
 #define meshtastic_MeshPacket_delayed_ENUMTYPE meshtastic_MeshPacket_Delayed
 
 
+#define meshtastic_MyNodeInfo_firmware_edition_ENUMTYPE meshtastic_FirmwareEdition
 
 #define meshtastic_LogRecord_level_ENUMTYPE meshtastic_LogRecord_Level
 
@@ -1293,7 +1322,7 @@ extern "C" {
 #define meshtastic_MqttClientProxyMessage_init_default {"", 0, {{0, {0}}}, 0}
 #define meshtastic_MeshPacket_init_default       {0, 0, 0, 0, {meshtastic_Data_init_default}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0}
 #define meshtastic_NodeInfo_init_default         {0, false, meshtastic_User_init_default, false, meshtastic_Position_init_default, 0, 0, false, meshtastic_DeviceMetrics_init_default, 0, 0, false, 0, 0, 0, 0}
-#define meshtastic_MyNodeInfo_init_default       {0, 0, 0, {0, {0}}, ""}
+#define meshtastic_MyNodeInfo_init_default       {0, 0, 0, {0, {0}}, "", _meshtastic_FirmwareEdition_MIN}
 #define meshtastic_LogRecord_init_default        {"", 0, "", _meshtastic_LogRecord_Level_MIN}
 #define meshtastic_QueueStatus_init_default      {0, 0, 0, 0}
 #define meshtastic_FromRadio_init_default        {0, 0, {meshtastic_MeshPacket_init_default}}
@@ -1324,7 +1353,7 @@ extern "C" {
 #define meshtastic_MqttClientProxyMessage_init_zero {"", 0, {{0, {0}}}, 0}
 #define meshtastic_MeshPacket_init_zero          {0, 0, 0, 0, {meshtastic_Data_init_zero}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0}
 #define meshtastic_NodeInfo_init_zero            {0, false, meshtastic_User_init_zero, false, meshtastic_Position_init_zero, 0, 0, false, meshtastic_DeviceMetrics_init_zero, 0, 0, false, 0, 0, 0, 0}
-#define meshtastic_MyNodeInfo_init_zero          {0, 0, 0, {0, {0}}, ""}
+#define meshtastic_MyNodeInfo_init_zero          {0, 0, 0, {0, {0}}, "", _meshtastic_FirmwareEdition_MIN}
 #define meshtastic_LogRecord_init_zero           {"", 0, "", _meshtastic_LogRecord_Level_MIN}
 #define meshtastic_QueueStatus_init_zero         {0, 0, 0, 0}
 #define meshtastic_FromRadio_init_zero           {0, 0, {meshtastic_MeshPacket_init_zero}}
@@ -1447,6 +1476,7 @@ extern "C" {
 #define meshtastic_MyNodeInfo_min_app_version_tag 11
 #define meshtastic_MyNodeInfo_device_id_tag      12
 #define meshtastic_MyNodeInfo_pio_env_tag        13
+#define meshtastic_MyNodeInfo_firmware_edition_tag 14
 #define meshtastic_LogRecord_message_tag         1
 #define meshtastic_LogRecord_time_tag            2
 #define meshtastic_LogRecord_source_tag          3
@@ -1679,7 +1709,8 @@ X(a, STATIC,   SINGULAR, UINT32,   my_node_num,       1) \
 X(a, STATIC,   SINGULAR, UINT32,   reboot_count,      8) \
 X(a, STATIC,   SINGULAR, UINT32,   min_app_version,  11) \
 X(a, STATIC,   SINGULAR, BYTES,    device_id,        12) \
-X(a, STATIC,   SINGULAR, STRING,   pio_env,          13)
+X(a, STATIC,   SINGULAR, STRING,   pio_env,          13) \
+X(a, STATIC,   SINGULAR, UENUM,    firmware_edition,  14)
 #define meshtastic_MyNodeInfo_CALLBACK NULL
 #define meshtastic_MyNodeInfo_DEFAULT NULL
 
@@ -1962,7 +1993,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_LowEntropyKey_size            0
 #define meshtastic_MeshPacket_size               378
 #define meshtastic_MqttClientProxyMessage_size   501
-#define meshtastic_MyNodeInfo_size               77
+#define meshtastic_MyNodeInfo_size               79
 #define meshtastic_NeighborInfo_size             258
 #define meshtastic_Neighbor_size                 22
 #define meshtastic_NodeInfo_size                 323
