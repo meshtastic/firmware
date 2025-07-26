@@ -1,36 +1,10 @@
 /*
- ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄
-▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌▐░░░░░░░░░░▌
-▐░█▀▀▀▀▀▀▀▀▀ ▐░█▀▀▀▀▀▀▀▀▀ ▐░█▀▀▀▀▀▀▀▀▀ ▐░█▀▀▀▀▀▀▀▀▀ ▐░█▀▀▀▀▀▀▀█░▌
-▐░▌          ▐░▌          ▐░▌          ▐░▌          ▐░▌       ▐░▌
-▐░█▄▄▄▄▄▄▄▄▄ ▐░█▄▄▄▄▄▄▄▄▄ ▐░█▄▄▄▄▄▄▄▄▄ ▐░█▄▄▄▄▄▄▄▄▄ ▐░▌       ▐░▌
-▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌▐░▌       ▐░▌
- ▀▀▀▀▀▀▀▀▀█░▌▐░█▀▀▀▀▀▀▀▀▀ ▐░█▀▀▀▀▀▀▀▀▀ ▐░█▀▀▀▀▀▀▀▀▀ ▐░▌       ▐░▌
-          ▐░▌▐░▌          ▐░▌          ▐░▌          ▐░▌       ▐░▌
- ▄▄▄▄▄▄▄▄▄█░▌▐░█▄▄▄▄▄▄▄▄▄ ▐░█▄▄▄▄▄▄▄▄▄ ▐░█▄▄▄▄▄▄▄▄▄ ▐░█▄▄▄▄▄▄▄█░▌
-▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌▐░░░░░░░░░░▌
- ▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀
-
-  ▄       ▄  ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄▄       ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄▄
- ▐░▌     ▐░▌▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌     ▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌
-  ▐░▌   ▐░▌  ▀▀▀▀█░█▀▀▀▀ ▐░█▀▀▀▀▀▀▀█░▌▐░█▀▀▀▀▀▀▀█░▌     ▐░█▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀█░▌
-   ▐░▌ ▐░▌       ▐░▌     ▐░▌       ▐░▌▐░▌       ▐░▌     ▐░▌                    ▐░▌
-    ▐░▐░▌        ▐░▌     ▐░█▄▄▄▄▄▄▄█░▌▐░▌       ▐░▌     ▐░█▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄█░▌
-     ▐░▌         ▐░▌     ▐░░░░░░░░░░░▌▐░▌       ▐░▌     ▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌
-    ▐░▌░▌        ▐░▌     ▐░█▀▀▀▀▀▀▀█░▌▐░▌       ▐░▌      ▀▀▀▀▀▀▀▀▀█░▌ ▀▀▀▀▀▀▀▀▀█░▌
-   ▐░▌ ▐░▌       ▐░▌     ▐░▌       ▐░▌▐░▌       ▐░▌               ▐░▌          ▐░▌
-  ▐░▌   ▐░▌  ▄▄▄▄█░█▄▄▄▄ ▐░▌       ▐░▌▐░█▄▄▄▄▄▄▄█░▌      ▄▄▄▄▄▄▄▄▄█░▌ ▄▄▄▄▄▄▄▄▄█░▌
- ▐░▌     ▐░▌▐░░░░░░░░░░░▌▐░▌       ▐░▌▐░░░░░░░░░░░▌     ▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌
-  ▀       ▀  ▀▀▀▀▀▀▀▀▀▀▀  ▀         ▀  ▀▀▀▀▀▀▀▀▀▀▀       ▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀
-*/
-
-/*
 Board Information: https://www.seeedstudio.com/XIAO-ESP32S3-Sense-p-5639.html
 Expansion Board Information : https://www.seeedstudio.com/Seeeduino-XIAO-Expansion-board-p-4746.html
 L76K GPS Module Information : https://www.seeedstudio.com/L76K-GNSS-Module-for-Seeed-Studio-XIAO-p-5864.html
 */
 
-#define LED_PIN 48
+#define LED_PIN 44
 #define LED_STATE_ON 1 // State when LED is lit
 
 #define BUTTON_PIN 21 // This is the Program Button
@@ -47,8 +21,8 @@ L76K GPS Module Information : https://www.seeedstudio.com/L76K-GNSS-Module-for-S
 */
 #define GPS_L76K
 #ifdef GPS_L76K
-#define GPS_RX_PIN 44
-#define GPS_TX_PIN 43
+#define GPS_RX_PIN 39
+#define GPS_TX_PIN 40
 #define HAS_GPS 0
 #define GPS_BAUDRATE 9600
 #define GPS_THREAD_INTERVAL 50
@@ -69,22 +43,22 @@ L76K GPS Module Information : https://www.seeedstudio.com/L76K-GNSS-Module-for-S
 #define LORA_MISO 8
 #define LORA_SCK 7
 #define LORA_MOSI 9
-#define LORA_CS 5
+#define LORA_CS 4
 
-#define LORA_RESET 3
+#define LORA_RESET 43
 #define LORA_DIO1 2
 
-#define LORA_DIO2 5
+#define LORA_DIO2 1
 
 #ifdef USE_SX1262
 #define SX126X_CS LORA_CS
 #define SX126X_DIO1 LORA_DIO1
-#define SX126X_BUSY 4
+#define SX126X_BUSY 3
 #define SX126X_RESET LORA_RESET
 
 //  DIO2 controlls an antenna switch and the TCXO voltage is controlled by DIO3
 #define SX126X_DIO2_AS_RF_SWITCH
-#define SX126X_RXEN 6
+#define SX126X_RXEN 1
 #define SX126X_TXEN RADIOLIB_NC
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 #endif
