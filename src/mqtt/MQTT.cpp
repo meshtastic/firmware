@@ -39,6 +39,7 @@
 #include <machine/endian.h>
 #define ntohl __ntohl
 #endif
+#include <RTC.h>
 
 MQTT *mqtt;
 
@@ -624,18 +625,32 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
             return connectPubSub(parsed, *pubSub, (client != nullptr) ? *client : *clientConnection);
         }
 #else
-        LOG_ERROR("Invalid MQTT config: proxy_to_client_enabled must be enabled on nodes that do not have a network");
+        const char *warning = "Invalid MQTT config: proxy_to_client_enabled must be enabled on nodes that do not have a network";
+        LOG_ERROR(warning);
+#if !IS_RUNNING_TESTS
+        meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+        cn->level = meshtastic_LogRecord_Level_ERROR;
+        cn->time = getValidTime(RTCQualityFromNet);
+        strncpy(cn->message, warning, sizeof(cn->message) - 1);
+        cn->message[sizeof(cn->message) - 1] = '\0'; // Ensure null termination
+        service->sendClientNotification(cn);
+#endif
         return false;
 #endif
     }
 
     const bool defaultServer = isDefaultServer(parsed.serverAddr);
-    if (defaultServer && config.tls_enabled) {
-        LOG_ERROR("Invalid MQTT config: TLS was enabled, but the default server does not support TLS");
-        return false;
-    }
     if (defaultServer && parsed.serverPort != PubSubConfig::defaultPort) {
-        LOG_ERROR("Invalid MQTT config: Unsupported port '%d' for the default MQTT server", parsed.serverPort);
+        const char *warning = "Invalid MQTT config: default server address must not have a port specified";
+        LOG_ERROR(warning);
+#if !IS_RUNNING_TESTS
+        meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+        cn->level = meshtastic_LogRecord_Level_ERROR;
+        cn->time = getValidTime(RTCQualityFromNet);
+        strncpy(cn->message, warning, sizeof(cn->message) - 1);
+        cn->message[sizeof(cn->message) - 1] = '\0'; // Ensure null termination
+        service->sendClientNotification(cn);
+#endif
         return false;
     }
     return true;
