@@ -27,6 +27,7 @@
 #include <utility>
 #include <variant>
 
+#if defined(UNIT_TEST)
 #define IS_RUNNING_TESTS 1
 #else
 #define IS_RUNNING_TESTS 0
