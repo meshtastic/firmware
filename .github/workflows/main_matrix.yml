@@ -30,7 +30,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [esp32, esp32s3, esp32c3, esp32c6, nrf52840, rp2040, stm32, check]
+        arch:
+          - esp32
+          - esp32s3
+          - esp32c3
+          - esp32c6
+          - nrf52840
+          - rp2040
+          - rp2350
+          - stm32
+          - check
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -45,7 +54,7 @@ jobs:
           if [[ "$GITHUB_HEAD_REF" == "" ]]; then
             TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}})
           else  
-            TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}} quick)
+            TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}} pr)
           fi
           echo "Name: $GITHUB_REF_NAME Base: $GITHUB_BASE_REF Ref: $GITHUB_REF Targets: $TARGETS"
           echo "${{matrix.arch}}=$(jq -cn --argjson environments "$TARGETS" '{board: $environments}')" >> $GITHUB_OUTPUT
@@ -56,6 +65,7 @@ jobs:
       esp32c6: ${{ steps.jsonStep.outputs.esp32c6 }}
       nrf52840: ${{ steps.jsonStep.outputs.nrf52840 }}
       rp2040: ${{ steps.jsonStep.outputs.rp2040 }}
+      rp2350: ${{ steps.jsonStep.outputs.rp2350 }}
       stm32: ${{ steps.jsonStep.outputs.stm32 }}
       check: ${{ steps.jsonStep.outputs.check }}
 
@@ -145,7 +155,7 @@ jobs:
       pio_env: ${{ matrix.board }}
       platform: nrf52840
 
-  build-rpi2040:
+  build-rp2040:
     needs: [setup, version]
     strategy:
       fail-fast: false
@@ -155,6 +165,17 @@ jobs:
       version: ${{ needs.version.outputs.long }}
       pio_env: ${{ matrix.board }}
       platform: rp2040
+
+  build-rp2350:
+    needs: [setup, version]
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.setup.outputs.rp2350) }}
+    uses: ./.github/workflows/build_firmware.yml
+    with:
+      version: ${{ needs.version.outputs.long }}
+      pio_env: ${{ matrix.board }}
+      platform: rp2350
 
   build-stm32:
     needs: [setup, version]
@@ -243,7 +264,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [esp32, esp32s3, esp32c3, esp32c6, nrf52840, rp2040, stm32]
+        arch:
+          - esp32
+          - esp32s3
+          - esp32c3
+          - esp32c6
+          - nrf52840
+          - rp2040
+          - rp2350
+          - stm32
     runs-on: ubuntu-latest
     needs:
       [
@@ -253,7 +282,8 @@ jobs:
         build-esp32c3,
         build-esp32c6,
         build-nrf52840,
-        build-rpi2040,
+        build-rp2040,
+        build-rp2350,
         build-stm32,
       ]
     steps:
@@ -392,7 +422,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [esp32, esp32s3, esp32c3, esp32c6, nrf52840, rp2040, stm32]
+        arch:
+          - esp32
+          - esp32s3
+          - esp32c3
+          - esp32c6
+          - nrf52840
+          - rp2040
+          - rp2350
+          - stm32
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'workflow_dispatch' }}
     needs: [release-artifacts, version]
@@ -449,7 +487,8 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' }}
     needs: [release-firmware, version]
     env:
-      targets: esp32,esp32s3,esp32c3,esp32c6,nrf52840,rp2040,stm32
+      targets: |-
+        esp32,esp32s3,esp32c3,esp32c6,nrf52840,rp2040,rp2350,stm32
     steps:
       - name: Checkout
         uses: actions/checkout@v4
