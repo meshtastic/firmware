@@ -43,6 +43,10 @@
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
 #include "motion/AccelerometerThread.h"
 #endif
+#if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040)) && !defined(CONFIG_IDF_TARGET_ESP32S2) &&               \
+    !defined(CONFIG_IDF_TARGET_ESP32C3)
+#include "SerialModule.h"
+#endif
 
 AdminModule *adminModule;
 bool hasOpenEditTransaction;
@@ -807,10 +811,12 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
 
 bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
 {
-    // If we are in an open transaction or configuring MQTT, defer disabling Bluetooth
+    // If we are in an open transaction or configuring MQTT or Serial (which have validation), defer disabling Bluetooth
     // Otherwise, disable Bluetooth to prevent the phone from interfering with the config
-    if (!hasOpenEditTransaction && c.which_payload_variant != meshtastic_ModuleConfig_mqtt_tag)
+    if (!hasOpenEditTransaction &&
+        !IS_ONE_OF(c.which_payload_variant, meshtastic_ModuleConfig_mqtt_tag, meshtastic_ModuleConfig_serial_tag)) {
         disableBluetooth();
+    }
 
     switch (c.which_payload_variant) {
     case meshtastic_ModuleConfig_mqtt_tag:
@@ -830,6 +836,14 @@ bool AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         break;
     case meshtastic_ModuleConfig_serial_tag:
         LOG_INFO("Set module config: Serial");
+#if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040)) && !defined(CONFIG_IDF_TARGET_ESP32S2) &&               \
+    !defined(CONFIG_IDF_TARGET_ESP32C3)
+        if (!SerialModule::isValidConfig(c.payload_variant.serial)) {
+            LOG_ERROR("Invalid serial config");
+            return false;
+        }
+        disableBluetooth(); // Disable Bluetooth to prevent interference during Serial configuration
+#endif
         moduleConfig.has_serial = true;
         moduleConfig.serial = c.payload_variant.serial;
         break;
@@ -985,9 +999,10 @@ void AdminModule::handleGetConfig(const meshtastic_MeshPacket &req, const uint32
         // So even if we internally use 0 to represent 'use default' we still need to send the value we are
         // using to the app (so that even old phone apps work with new device loads).
         // r.get_radio_response.preferences.ls_secs = getPref_ls_secs();
-        // hideSecret(r.get_radio_response.preferences.wifi_ssid); // hmm - leave public for now, because only minimally private
-        // and useful for users to know current provisioning) hideSecret(r.get_radio_response.preferences.wifi_password);
-        // r.get_config_response.which_payloadVariant = Config_ModuleConfig_telemetry_tag;
+        // hideSecret(r.get_radio_response.preferences.wifi_ssid); // hmm - leave public for now, because only minimally
+        // private and useful for users to know current provisioning)
+        // hideSecret(r.get_radio_response.preferences.wifi_password); r.get_config_response.which_payloadVariant =
+        // Config_ModuleConfig_telemetry_tag;
         res.which_payload_variant = meshtastic_AdminMessage_get_config_response_tag;
         setPassKey(&res);
         myReply = allocDataProtobuf(res);
@@ -1071,9 +1086,10 @@ void AdminModule::handleGetModuleConfig(const meshtastic_MeshPacket &req, const 
         // So even if we internally use 0 to represent 'use default' we still need to send the value we are
         // using to the app (so that even old phone apps work with new device loads).
         // r.get_radio_response.preferences.ls_secs = getPref_ls_secs();
-        // hideSecret(r.get_radio_response.preferences.wifi_ssid); // hmm - leave public for now, because only minimally private
-        // and useful for users to know current provisioning) hideSecret(r.get_radio_response.preferences.wifi_password);
-        // r.get_config_response.which_payloadVariant = Config_ModuleConfig_telemetry_tag;
+        // hideSecret(r.get_radio_response.preferences.wifi_ssid); // hmm - leave public for now, because only minimally
+        // private and useful for users to know current provisioning)
+        // hideSecret(r.get_radio_response.preferences.wifi_password); r.get_config_response.which_payloadVariant =
+        // Config_ModuleConfig_telemetry_tag;
         res.which_payload_variant = meshtastic_AdminMessage_get_module_config_response_tag;
         setPassKey(&res);
         myReply = allocDataProtobuf(res);
