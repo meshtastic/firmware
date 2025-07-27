@@ -66,16 +66,18 @@ CannedMessageModule::CannedMessageModule()
 
 void CannedMessageModule::LaunchWithDestination(NodeNum newDest, uint8_t newChannel)
 {
-    if (!lastDestSet) {
-        dest = NODENUM_BROADCAST;
-        channel = 0;
-        lastDest = dest;
-        lastChannel = channel;
-        lastDestSet = true;
-    } else {
-        dest = lastDest;
-        channel = lastChannel;
+    // Use the requested destination, unless it's "broadcast" and we have a previous node/channel
+    if (newDest == NODENUM_BROADCAST && lastDestSet) {
+        newDest = lastDest;
+        newChannel = lastChannel;
     }
+    dest = newDest;
+    channel = newChannel;
+    lastDest = dest;
+    lastChannel = channel;
+    lastDestSet = true;
+
+    // Rest of function unchanged...
     // Always select the first real canned message on activation
     int firstRealMsgIdx = 0;
     for (int i = 0; i < messagesCount; ++i) {
@@ -95,10 +97,28 @@ void CannedMessageModule::LaunchWithDestination(NodeNum newDest, uint8_t newChan
     notifyObservers(&e);
 }
 
+void CannedMessageModule::LaunchRepeatDestination()
+{
+    if (!lastDestSet) {
+        LaunchWithDestination(NODENUM_BROADCAST, 0);
+    } else {
+        LaunchWithDestination(lastDest, lastChannel);
+    }
+}
+
 void CannedMessageModule::LaunchFreetextWithDestination(NodeNum newDest, uint8_t newChannel)
 {
+    // Use the requested destination, unless it's "broadcast" and we have a previous node/channel
+    if (newDest == NODENUM_BROADCAST && lastDestSet) {
+        newDest = lastDest;
+        newChannel = lastChannel;
+    }
     dest = newDest;
     channel = newChannel;
+    lastDest = dest;
+    lastChannel = channel;
+    lastDestSet = true;
+
     runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
     requestFocus();
     UIFrameEvent e;
