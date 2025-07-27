@@ -20,9 +20,13 @@ bool UpDownInterruptImpl1::init()
     input_broker_event eventDown = INPUT_BROKER_DOWN;
     input_broker_event eventUp = INPUT_BROKER_UP;
     input_broker_event eventPressed = INPUT_BROKER_SELECT;
+    input_broker_event eventPressedLong = INPUT_BROKER_SELECT_LONG;
+    input_broker_event eventUpLong = INPUT_BROKER_UP_LONG;
+    input_broker_event eventDownLong = INPUT_BROKER_DOWN_LONG;
 
-    UpDownInterruptBase::init(pinDown, pinUp, pinPress, eventDown, eventUp, eventPressed, UpDownInterruptImpl1::handleIntDown,
-                              UpDownInterruptImpl1::handleIntUp, UpDownInterruptImpl1::handleIntPressed);
+    UpDownInterruptBase::init(pinDown, pinUp, pinPress, eventDown, eventUp, eventPressed, eventPressedLong, eventUpLong,
+                              eventDownLong, UpDownInterruptImpl1::handleIntDown, UpDownInterruptImpl1::handleIntUp,
+                              UpDownInterruptImpl1::handleIntPressed);
     inputBroker->registerSource(this);
     return true;
 }
