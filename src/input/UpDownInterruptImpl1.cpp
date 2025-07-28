@@ -1,5 +1,6 @@
 #include "UpDownInterruptImpl1.h"
 #include "InputBroker.h"
+extern bool osk_found;
 
 UpDownInterruptImpl1 *upDownInterruptImpl1;
 
@@ -28,6 +29,7 @@ bool UpDownInterruptImpl1::init()
                               eventDownLong, UpDownInterruptImpl1::handleIntDown, UpDownInterruptImpl1::handleIntUp,
                               UpDownInterruptImpl1::handleIntPressed);
     inputBroker->registerSource(this);
+    osk_found = true;
     return true;
 }
 

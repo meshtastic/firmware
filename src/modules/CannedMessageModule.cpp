@@ -42,6 +42,7 @@
 
 extern ScanI2C::DeviceAddress cardkb_found;
 extern bool graphics::isMuted;
+extern bool osk_found;
 
 static const char *cannedMessagesConfigFile = "/prefs/cannedConf.proto";
 
@@ -125,20 +126,11 @@ int CannedMessageModule::splitConfiguredMessages()
     int tempCount = 0;
     // Insert at position 0 (top)
     tempMessages[tempCount++] = "[Select Destination]";
-
 #if defined(USE_VIRTUAL_KEYBOARD)
     // Add a "Free Text" entry at the top if using a touch screen virtual keyboard
     tempMessages[tempCount++] = "[-- Free Text --]";
 #else
-    // For devices with encoder input or trackball, also add Free Text option
-#if HAS_TRACKBALL
-    extern TrackballInterruptImpl1 *trackballInterruptImpl1;
-    if (trackballInterruptImpl1) {
-#else
-    extern RotaryEncoderInterruptImpl1 *rotaryEncoderInterruptImpl1;
-    extern UpDownInterruptImpl1 *upDownInterruptImpl1;
-    if (rotaryEncoderInterruptImpl1 || upDownInterruptImpl1) {
-#endif
+    if (osk_found && screen) {
         tempMessages[tempCount++] = "[-- Free Text --]";
     }
 #endif
@@ -610,18 +602,9 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
         }
 #else
         if (strcmp(current, "[-- Free Text --]") == 0) {
-#if HAS_TRACKBALL
-            extern TrackballInterruptImpl1 *trackballInterruptImpl1;
-            if (trackballInterruptImpl1 && screen) {
-#else
-            extern RotaryEncoderInterruptImpl1 *rotaryEncoderInterruptImpl1;
-            extern UpDownInterruptImpl1 *upDownInterruptImpl1;
-            if ((rotaryEncoderInterruptImpl1 || upDownInterruptImpl1) && screen) {
-#endif
+            if (osk_found && screen) {
                 screen->showTextInput("Free Text", "", 300000, [this](const std::string &text) {
-                    LOG_INFO("Free text submitted: '%s'", text.c_str());
                     if (!text.empty()) {
-                        LOG_INFO("Storing message for delayed sending: '%s'", text.c_str());
                         this->freetext = text.c_str();
                         this->payload = CANNED_MESSAGE_RUN_STATE_FREETEXT;
                         runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
@@ -633,7 +616,6 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
                         screen->forceDisplay();
 
                         setIntervalFromNow(500);
-                        LOG_INFO("Free text callback completed safely");
                         return;
                     } else {
                         // Don't delete virtual keyboard immediately - it might still be executing
