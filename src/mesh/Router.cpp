@@ -224,9 +224,10 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     if (!config.lora.override_duty_cycle && myRegion->dutyCycle < 100) {
         float hourlyTxPercent = airTime->utilizationTXPercent();
         if (hourlyTxPercent > myRegion->dutyCycle) {
-#ifdef DEBUG_PORT
             uint8_t silentMinutes = airTime->getSilentMinutes(hourlyTxPercent, myRegion->dutyCycle);
+
             LOG_WARN("Duty cycle limit exceeded. Aborting send for now, you can send again in %d mins", silentMinutes);
+
             meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
             cn->has_reply_id = true;
             cn->reply_id = p->id;
@@ -234,7 +235,7 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
             cn->time = getValidTime(RTCQualityFromNet);
             sprintf(cn->message, "Duty cycle limit exceeded. You can send again in %d mins", silentMinutes);
             service->sendClientNotification(cn);
-#endif
+
             meshtastic_Routing_Error err = meshtastic_Routing_Error_DUTY_CYCLE_LIMIT;
             if (isFromUs(p)) { // only send NAK to API, not to the mesh
                 abortSendAndNak(err, p);
