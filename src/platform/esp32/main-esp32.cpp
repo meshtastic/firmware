@@ -180,10 +180,10 @@ void esp32Setup()
     assert(res == ESP_OK);
 #else
     res = esp_task_wdt_init(APP_WATCHDOG_SECS, true);
-    assert(res == ESP_OK);
+    // assert(res == ESP_OK);
 #endif
     res = esp_task_wdt_add(NULL);
-    assert(res == ESP_OK);
+    // assert(res == ESP_OK);
 
 #ifdef HAS_32768HZ
     enableSlowCLK();
@@ -193,7 +193,11 @@ void esp32Setup()
 /// loop code specific to ESP32 targets
 void esp32Loop()
 {
-    esp_task_wdt_reset(); // service our app level watchdog
+    +if (esp_task_wdt_reset() != ESP_OK)
+    {
+        +LOG_ERROR("Failed to reset task watchdog");
+        +
+    }
 
     // for debug printing
     // radio.radioIf.canSleep();
