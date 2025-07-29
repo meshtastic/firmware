@@ -47,7 +47,7 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
             bool isMuted = externalNotificationModule->getMute();
             externalNotificationModule->setMute(!isMuted);
             IF_SCREEN(graphics::isMuted = !isMuted; if (!isMuted) externalNotificationModule->stopNow();
-                      screen->showOverlayBanner(isMuted ? "Notifications\nEnabled" : "Notifications\nDisabled", 3000);)
+                      screen->showSimpleBanner(isMuted ? "Notifications\nEnabled" : "Notifications\nDisabled", 3000);)
         }
         return 0;
     // Bluetooth
@@ -58,24 +58,24 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
 #if defined(ARDUINO_ARCH_NRF52)
         if (!config.bluetooth.enabled) {
             disableBluetooth();
-            IF_SCREEN(screen->showOverlayBanner("Bluetooth OFF\nRebooting", 3000));
+            IF_SCREEN(screen->showSimpleBanner("Bluetooth OFF\nRebooting", 3000));
             rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 2000;
         } else {
-            IF_SCREEN(screen->showOverlayBanner("Bluetooth ON\nRebooting", 3000));
+            IF_SCREEN(screen->showSimpleBanner("Bluetooth ON\nRebooting", 3000));
             rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
         }
 #else
         if (!config.bluetooth.enabled) {
             disableBluetooth();
-            IF_SCREEN(screen->showOverlayBanner("Bluetooth OFF", 3000));
+            IF_SCREEN(screen->showSimpleBanner("Bluetooth OFF", 3000));
         } else {
-            IF_SCREEN(screen->showOverlayBanner("Bluetooth ON\nRebooting", 3000));
+            IF_SCREEN(screen->showSimpleBanner("Bluetooth ON\nRebooting", 3000));
             rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
         }
 #endif
         return 0;
     case INPUT_BROKER_MSG_REBOOT:
-        IF_SCREEN(screen->showOverlayBanner("Rebooting...", 0));
+        IF_SCREEN(screen->showSimpleBanner("Rebooting...", 0));
         nodeDB->saveToDisk();
         rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
         // runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
@@ -89,10 +89,15 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
 #if !MESHTASTIC_EXCLUDE_GPS
         if (gps) {
             LOG_WARN("GPS Toggle2");
+            if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED &&
+                config.position.fixed_position == false) {
+                nodeDB->clearLocalPosition();
+                nodeDB->saveToDisk();
+            }
             gps->toggleGpsMode();
             const char *msg =
                 (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) ? "GPS Enabled" : "GPS Disabled";
-            IF_SCREEN(screen->forceDisplay(); screen->showOverlayBanner(msg, 3000);)
+            IF_SCREEN(screen->forceDisplay(); screen->showSimpleBanner(msg, 3000);)
         }
 #endif
         return true;
@@ -100,18 +105,14 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
     case INPUT_BROKER_SEND_PING:
         service->refreshLocalMeshNode();
         if (service->trySendPosition(NODENUM_BROADCAST, true)) {
-            IF_SCREEN(screen->showOverlayBanner("Position\nSent", 3000));
+            IF_SCREEN(screen->showSimpleBanner("Position\nSent", 3000));
         } else {
-            IF_SCREEN(screen->showOverlayBanner("Node Info\nSent", 3000));
+            IF_SCREEN(screen->showSimpleBanner("Node Info\nSent", 3000));
         }
         return true;
     // Power control
     case INPUT_BROKER_SHUTDOWN:
-        LOG_ERROR("Shutting Down");
-        IF_SCREEN(screen->showOverlayBanner("Shutting Down..."));
-        nodeDB->saveToDisk();
-        shutdownAtMsec = millis() + DEFAULT_SHUTDOWN_SECONDS * 1000;
-        // runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+        shutdownAtMsec = millis();
         return true;
 
     default:

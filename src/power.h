@@ -81,7 +81,7 @@ extern NullSensor ina3221Sensor;
 
 #endif
 
-#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(ARCH_STM32WL)
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 #if __has_include(<Adafruit_MAX1704X.h>)
 #include "modules/Telemetry/Sensor/MAX17048Sensor.h"
 extern MAX17048Sensor max17048Sensor;
@@ -110,7 +110,7 @@ class Power : private concurrency::OSThread
 
     Power();
 
-    void shutdown();
+    void powerCommandsCheck();
     void readPowerStatus();
     virtual bool setup();
     virtual int32_t runOnce() override;
@@ -126,8 +126,12 @@ class Power : private concurrency::OSThread
     bool analogInit();
     /// Setup a Lipo battery level sensor
     bool lipoInit();
+    /// Setup a Lipo charger
+    bool lipoChargerInit();
 
   private:
+    void shutdown();
+    void reboot();
     // open circuit voltage lookup table
     uint8_t low_voltage_counter;
 #ifdef DEBUG_HEAP

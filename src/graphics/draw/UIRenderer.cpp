@@ -18,38 +18,29 @@
 #include <RTC.h>
 #include <cstring>
 
-bool isAllowedPunctuation(char c)
-{
-    const std::string allowed = ".,!?;:-_()[]{}'\"@#$/\\&+=%~^ ";
-    return allowed.find(c) != std::string::npos;
-}
-
-std::string sanitizeString(const std::string &input)
-{
-    std::string output;
-    bool inReplacement = false;
-
-    for (char c : input) {
-        if (std::isalnum(static_cast<unsigned char>(c)) || isAllowedPunctuation(c)) {
-            output += c;
-            inReplacement = false;
-        } else {
-            if (!inReplacement) {
-                output += 0xbf; // ISO-8859-1 for inverted question mark
-                inReplacement = true;
-            }
-        }
-    }
-
-    return output;
-}
-
 // External variables
 extern graphics::Screen *screen;
 
 namespace graphics
 {
 NodeNum UIRenderer::currentFavoriteNodeNum = 0;
+std::vector<meshtastic_NodeInfoLite *> graphics::UIRenderer::favoritedNodes;
+
+void graphics::UIRenderer::rebuildFavoritedNodes()
+{
+    favoritedNodes.clear();
+    size_t total = nodeDB->getNumMeshNodes();
+    for (size_t i = 0; i < total; i++) {
+        meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(i);
+        if (!n || n->num == nodeDB->getNodeNum())
+            continue;
+        if (n->is_favorite)
+            favoritedNodes.push_back(n);
+    }
+
+    std::sort(favoritedNodes.begin(), favoritedNodes.end(),
+              [](const meshtastic_NodeInfoLite *a, const meshtastic_NodeInfoLite *b) { return a->num < b->num; });
+}
 
 #if !MESHTASTIC_EXCLUDE_GPS
 // GeoCoord object for coordinate conversions
@@ -227,27 +218,7 @@ void UIRenderer::drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const mes
 // **********************
 void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    // --- Cache favorite nodes for the current frame only, to save computation ---
-    static std::vector<meshtastic_NodeInfoLite *> favoritedNodes;
-    static int prevFrame = -1;
 
-    // --- Only rebuild favorites list if we're on a new frame ---
-    if (state->currentFrame != prevFrame) {
-        prevFrame = state->currentFrame;
-        favoritedNodes.clear();
-        size_t total = nodeDB->getNumMeshNodes();
-        for (size_t i = 0; i < total; i++) {
-            meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(i);
-            // Skip nulls and ourself
-            if (!n || n->num == nodeDB->getNodeNum())
-                continue;
-            if (n->is_favorite)
-                favoritedNodes.push_back(n);
-        }
-        // Keep a stable, consistent display order
-        std::sort(favoritedNodes.begin(), favoritedNodes.end(),
-                  [](const meshtastic_NodeInfoLite *a, const meshtastic_NodeInfoLite *b) { return a->num < b->num; });
-    }
     if (favoritedNodes.empty())
         return;
 
@@ -443,7 +414,7 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
                 GeoCoord::latLongToMeter(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
             */
             float bearing = GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(p.latitude_i), DegD(p.longitude_i));
-            if (screen->ignoreCompass) {
+            if (uiconfig.compass_mode == meshtastic_CompassMode_FREEZE_HEADING) {
                 myHeading = 0;
             } else {
                 bearing -= myHeading;
@@ -488,7 +459,7 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
 
             const auto &op = ourNode->position;
             float myHeading = 0;
-            if (!screen->ignoreCompass) {
+            if (uiconfig.compass_mode != meshtastic_CompassMode_FREEZE_HEADING) {
                 myHeading = screen->hasHeading() ? screen->getHeading() * PI / 180
                                                  : screen->estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
             }
@@ -500,7 +471,7 @@ void UIRenderer::drawNodeInfo(OLEDDisplay *display, const OLEDDisplayUiState *st
                 GeoCoord::latLongToMeter(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
             */
             float bearing = GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(p.latitude_i), DegD(p.longitude_i));
-            if (!screen->ignoreCompass)
+            if (uiconfig.compass_mode != meshtastic_CompassMode_FREEZE_HEADING)
                 bearing -= myHeading;
             graphics::CompassRenderer::drawNodeHeading(display, compassX, compassY, compassRadius * 2, bearing);
 
@@ -600,7 +571,11 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
 
     int chutil_bar_width = (isHighResolution) ? 100 : 50;
     if (!config.bluetooth.enabled) {
+#if defined(USE_EINK)
+        chutil_bar_width = (isHighResolution) ? 50 : 30;
+#else
         chutil_bar_width = (isHighResolution) ? 80 : 40;
+#endif
     }
     int chutil_bar_height = (isHighResolution) ? 12 : 7;
     int extraoffset = (isHighResolution) ? 6 : 3;
@@ -679,7 +654,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
 
     char combinedName[50];
     snprintf(combinedName, sizeof(combinedName), "%s (%s)", longNameStr.empty() ? "" : longNameStr.c_str(), shortnameble);
-    if (SCREEN_WIDTH - (display->getStringWidth(longName) + display->getStringWidth(shortnameble)) > 10) {
+    if (SCREEN_WIDTH - (display->getStringWidth(combinedName)) > 10) {
         size_t len = strlen(combinedName);
         if (len >= 3 && strcmp(combinedName + len - 3, " ()") == 0) {
             combinedName[len - 3] = '\0'; // Remove the last three characters
@@ -690,7 +665,7 @@ void UIRenderer::drawDeviceFocused(OLEDDisplay *display, OLEDDisplayUiState *sta
             nameX, ((rows == 4) ? getTextPositions(display)[line++] : getTextPositions(display)[line++]) + yOffset, combinedName);
     } else {
         // === LongName Centered ===
-        textWidth = display->getStringWidth(longName);
+        textWidth = display->getStringWidth(longNameStr.c_str());
         nameX = (SCREEN_WIDTH - textWidth) / 2;
         display->drawString(nameX, getTextPositions(display)[line++], longNameStr.c_str());
 
@@ -933,7 +908,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
     // === Determine Compass Heading ===
     float heading = 0;
     bool validHeading = false;
-    if (screen->ignoreCompass) {
+    if (uiconfig.compass_mode == meshtastic_CompassMode_FREEZE_HEADING) {
         validHeading = true;
     } else {
         if (screen->hasHeading()) {
@@ -999,7 +974,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
 
             // "N" label
             float northAngle = 0;
-            if (!config.display.compass_north_top)
+            if (uiconfig.compass_mode != meshtastic_CompassMode_FIXED_RING)
                 northAngle = -heading;
             float radius = compassRadius;
             int16_t nX = compassX + (radius - 1) * sin(northAngle);
@@ -1042,7 +1017,7 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
 
             // "N" label
             float northAngle = 0;
-            if (!config.display.compass_north_top)
+            if (uiconfig.compass_mode != meshtastic_CompassMode_FIXED_RING)
                 northAngle = -heading;
             float radius = compassRadius;
             int16_t nX = compassX + (radius - 1) * sin(northAngle);
@@ -1066,9 +1041,16 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
 void UIRenderer::drawOEMIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     static const uint8_t xbm[] = USERPREFS_OEM_IMAGE_DATA;
-    display->drawXbm(x + (SCREEN_WIDTH - USERPREFS_OEM_IMAGE_WIDTH) / 2,
-                     y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - USERPREFS_OEM_IMAGE_HEIGHT) / 2 + 2, USERPREFS_OEM_IMAGE_WIDTH,
-                     USERPREFS_OEM_IMAGE_HEIGHT, xbm);
+    if (isHighResolution) {
+        display->drawXbm(x + (SCREEN_WIDTH - USERPREFS_OEM_IMAGE_WIDTH) / 2,
+                         y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - USERPREFS_OEM_IMAGE_HEIGHT) / 2 + 2, USERPREFS_OEM_IMAGE_WIDTH,
+                         USERPREFS_OEM_IMAGE_HEIGHT, xbm);
+    } else {
+
+        display->drawXbm(x + (SCREEN_WIDTH - USERPREFS_OEM_IMAGE_WIDTH) / 2,
+                         y + (SCREEN_HEIGHT - USERPREFS_OEM_IMAGE_HEIGHT) / 2 + 2, USERPREFS_OEM_IMAGE_WIDTH,
+                         USERPREFS_OEM_IMAGE_HEIGHT, xbm);
+    }
 
     switch (USERPREFS_OEM_FONT_SIZE) {
     case 0:
@@ -1084,7 +1066,9 @@ void UIRenderer::drawOEMIconScreen(const char *upperMsg, OLEDDisplay *display, O
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     const char *title = USERPREFS_OEM_TEXT;
-    display->drawString(x + getStringCenteredX(title), y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM, title);
+    if (isHighResolution) {
+        display->drawString(x + getStringCenteredX(title), y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM, title);
+    }
     display->setFont(FONT_SMALL);
 
     // Draw region in upper left

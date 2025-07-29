@@ -205,6 +205,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         // app not to send locations on our behalf.
         fromRadioScratch.which_payload_variant = meshtastic_FromRadio_my_info_tag;
         strncpy(myNodeInfo.pio_env, optstr(APP_ENV), sizeof(myNodeInfo.pio_env));
+        myNodeInfo.nodedb_count = static_cast<uint16_t>(nodeDB->getNumMeshNodes());
         fromRadioScratch.my_info = myNodeInfo;
         state = STATE_SEND_UIDATA;
 
@@ -686,7 +687,8 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
         LOG_WARN("Rate limit portnum %d", p.decoded.portnum);
         meshtastic_QueueStatus qs = router->getQueueStatus();
         service->sendQueueStatusToPhone(qs, 0, p.id);
-        sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "Text messages can only be sent once every 2 seconds");
+        service->sendRoutingErrorResponse(meshtastic_Routing_Error_RATE_LIMIT_EXCEEDED, &p);
+        // sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "Text messages can only be sent once every 2 seconds");
         return false;
     }
     lastPortNumToRadio[p.decoded.portnum] = millis();

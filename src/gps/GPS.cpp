@@ -39,9 +39,9 @@ template <typename T, std::size_t N> std::size_t array_count(const T (&)[N])
     return N;
 }
 
-#if defined(NRF52840_XXAA) || defined(NRF52833_XXAA) || defined(ARCH_ESP32) || defined(ARCH_PORTDUINO)
-#if defined(RAK2560)
-HardwareSerial *GPS::_serial_gps = &Serial2;
+#if defined(NRF52840_XXAA) || defined(NRF52833_XXAA) || defined(ARCH_ESP32) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32WL)
+#if defined(GPS_SERIAL_PORT)
+HardwareSerial *GPS::_serial_gps = &GPS_SERIAL_PORT;
 #else
 HardwareSerial *GPS::_serial_gps = &Serial1;
 #endif
@@ -643,8 +643,16 @@ bool GPS::setup()
             delay(250);
         } else if (IS_ONE_OF(gnssModel, GNSS_MODEL_AG3335, GNSS_MODEL_AG3352)) {
 
-            _serial_gps->write("$PAIR066,1,0,1,0,0,1*3B\r\n"); // Enable GPS+GALILEO+NAVIC
-
+            if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_IN ||
+                config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_NP_865) {
+                _serial_gps->write("$PAIR066,1,0,1,0,0,1*3B\r\n"); // Enable GPS+GALILEO+NAVIC
+                // GPS GLONASS GALILEO BDS QZSS NAVIC
+                //  1    0       1      0   0    1
+            } else {
+                _serial_gps->write("$PAIR066,1,1,1,1,0,0*3A\r\n"); // Enable GPS+GLONASS+GALILEO+BDS
+                // GPS GLONASS GALILEO BDS QZSS NAVIC
+                //  1    1       1      1   0    0
+            }
             // Configure NMEA (sentences will output once per fix)
             _serial_gps->write("$PAIR062,0,1*3F\r\n"); // GGA ON
             _serial_gps->write("$PAIR062,1,0*3F\r\n"); // GLL OFF
@@ -1536,7 +1544,10 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
         if (t.tm_mon > -1) {
             LOG_DEBUG("NMEA GPS time %02d-%02d-%02d %02d:%02d:%02d age %d", d.year(), d.month(), t.tm_mday, t.tm_hour, t.tm_min,
                       t.tm_sec, ti.age());
-            perhapsSetRTC(RTCQualityGPS, t);
+            if (perhapsSetRTC(RTCQualityGPS, t) == RTCSetResultInvalidTime) {
+                // Clear the GPS buffer if we got an invalid time
+                clearBuffer();
+            }
             return true;
         } else
             return false;

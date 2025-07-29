@@ -205,6 +205,15 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         settings->optionalFeatures.notifications = !settings->optionalFeatures.notifications;
         break;
 
+    case TOGGLE_INVERT_COLOR:
+        if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED)
+            config.display.displaymode = meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT;
+        else
+            config.display.displaymode = meshtastic_Config_DisplayConfig_DisplayMode_INVERTED;
+
+        nodeDB->saveToDisk(SEGMENT_CONFIG);
+        break;
+
     case SET_RECENTS:
         // Set value of settings.recentlyActiveSeconds
         // Uses menu cursor to read RECENTS_OPTIONS_MINUTES array (defined at top of this file)
@@ -214,7 +223,7 @@ void InkHUD::MenuApplet::execute(MenuItem item)
 
     case SHUTDOWN:
         LOG_INFO("Shutting down from menu");
-        power->shutdown();
+        shutdownAtMsec = millis();
         // Menu is then sent to background via onShutdown
         break;
 
@@ -316,6 +325,10 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
                                  &settings->optionalFeatures.notifications));
         items.push_back(MenuItem("Battery Icon", MenuAction::TOGGLE_BATTERY_ICON, MenuPage::OPTIONS,
                                  &settings->optionalFeatures.batteryIcon));
+
+        invertedColors = (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED);
+        items.push_back(MenuItem("Invert Color", MenuAction::TOGGLE_INVERT_COLOR, MenuPage::OPTIONS, &invertedColors));
+
         items.push_back(
             MenuItem("12-Hour Clock", MenuAction::TOGGLE_12H_CLOCK, MenuPage::OPTIONS, &config.display.use_12h_clock));
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
@@ -654,11 +667,11 @@ void InkHUD::MenuApplet::drawSystemInfoPanel(int16_t left, int16_t top, uint16_t
     // ====================
     std::string clockString = getTimeString();
     if (clockString.length() > 0) {
-        setFont(fontLarge);
+        setFont(fontMedium);
         printAt(width / 2, top, clockString, CENTER, TOP);
 
-        height += fontLarge.lineHeight();
-        height += fontLarge.lineHeight() * 0.1; // Padding below clock
+        height += fontMedium.lineHeight();
+        height += fontMedium.lineHeight() * 0.1; // Padding below clock
     }
 
     // Stats

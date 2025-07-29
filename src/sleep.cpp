@@ -131,7 +131,7 @@ void initDeepSleep()
       support busted boards, assume button one was pressed wakeButtons = ((uint64_t)1) << buttons.gpios[0];
       */
 
-#ifdef DEBUG_PORT
+#if defined(DEBUG_PORT) && !defined(DEBUG_MUTE)
     // If we booted because our timer ran out or the user pressed reset, send those as fake events
     RESET_REASON hwReason = rtc_get_reset_reason(0);
 

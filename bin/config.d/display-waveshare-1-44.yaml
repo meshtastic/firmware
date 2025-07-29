@@ -22,5 +22,5 @@ Input:
   TrackballLeft: 5
   TrackballRight: 26
   TrackballPress: 13
-
+  TrackballDirection: FALLING
 #  User: 21

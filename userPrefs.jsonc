@@ -23,6 +23,7 @@
   // "USERPREFS_CONFIG_OWNER_SHORT_NAME": "MLN",
   // "USERPREFS_CONFIG_DEVICE_ROLE": "meshtastic_Config_DeviceConfig_Role_CLIENT", // Defaults to CLIENT. ROUTER*, LOST AND FOUND, and REPEATER roles are restricted.
   // "USERPREFS_EVENT_MODE": "1",
+  // "USERPREFS_FIRMWARE_EDITION": "meshtastic_FirmwareEdition_BURNING_MAN",
   // "USERPREFS_FIXED_BLUETOOTH": "121212",
   // "USERPREFS_FIXED_GPS": "",
   // "USERPREFS_FIXED_GPS_ALT": "0",
@@ -53,5 +54,7 @@
   // "USERPREFS_MQTT_ENCRYPTION_ENABLED": "true",
   // "USERPREFS_MQTT_TLS_ENABLED": "false",
   // "USERPREFS_MQTT_ROOT_TOPIC": "event/REPLACEME",
+  // "USERPREFS_RINGTONE_NAG_SECS": "60",
+  "USERPREFS_RINGTONE_RTTTL": "24:d=32,o=5,b=565:f6,p,f6,4p,p,f6,p,f6,2p,p,b6,p,b6,p,b6,p,b6,p,b,p,b,p,b,p,b,p,b,p,b,p,b,p,b,1p.,2p.,p",
   "USERPREFS_TZ_STRING": "tzplaceholder                                         "
 }

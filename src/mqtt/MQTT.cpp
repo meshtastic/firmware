@@ -39,6 +39,7 @@
 #include <machine/endian.h>
 #define ntohl __ntohl
 #endif
+#include <RTC.h>
 
 MQTT *mqtt;
 
@@ -559,10 +560,8 @@ void MQTT::sendSubscriptions()
 
 int32_t MQTT::runOnce()
 {
-#if HAS_NETWORKING
     if (!moduleConfig.mqtt.enabled || !(moduleConfig.mqtt.map_reporting_enabled || channels.anyMqttEnabled()))
         return disable();
-
     bool wantConnection = wantsLink();
 
     perhapsReportToMap();
@@ -572,7 +571,7 @@ int32_t MQTT::runOnce()
         publishQueuedMessages();
         return 200;
     }
-
+#if HAS_NETWORKING
     else if (!pubSub.loop()) {
         if (!wantConnection)
             return 5000; // If we don't want connection now, check again in 5 secs
@@ -596,8 +595,10 @@ int32_t MQTT::runOnce()
         powerFSM.trigger(EVENT_CONTACT_FROM_PHONE); // Suppress entering light sleep (because that would turn off bluetooth)
         return 20;
     }
-#endif
+#else
+    // No networking available, return default interval
     return 30000;
+#endif
 }
 
 bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTClient *client)
@@ -624,18 +625,32 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
             return connectPubSub(parsed, *pubSub, (client != nullptr) ? *client : *clientConnection);
         }
 #else
-        LOG_ERROR("Invalid MQTT config: proxy_to_client_enabled must be enabled on nodes that do not have a network");
+        const char *warning = "Invalid MQTT config: proxy_to_client_enabled must be enabled on nodes that do not have a network";
+        LOG_ERROR(warning);
+#if !IS_RUNNING_TESTS
+        meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+        cn->level = meshtastic_LogRecord_Level_ERROR;
+        cn->time = getValidTime(RTCQualityFromNet);
+        strncpy(cn->message, warning, sizeof(cn->message) - 1);
+        cn->message[sizeof(cn->message) - 1] = '\0'; // Ensure null termination
+        service->sendClientNotification(cn);
+#endif
         return false;
 #endif
     }
 
     const bool defaultServer = isDefaultServer(parsed.serverAddr);
-    if (defaultServer && config.tls_enabled) {
-        LOG_ERROR("Invalid MQTT config: TLS was enabled, but the default server does not support TLS");
-        return false;
-    }
     if (defaultServer && parsed.serverPort != PubSubConfig::defaultPort) {
-        LOG_ERROR("Invalid MQTT config: Unsupported port '%d' for the default MQTT server", parsed.serverPort);
+        const char *warning = "Invalid MQTT config: default server address must not have a port specified";
+        LOG_ERROR(warning);
+#if !IS_RUNNING_TESTS
+        meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+        cn->level = meshtastic_LogRecord_Level_ERROR;
+        cn->time = getValidTime(RTCQualityFromNet);
+        strncpy(cn->message, warning, sizeof(cn->message) - 1);
+        cn->message[sizeof(cn->message) - 1] = '\0'; // Ensure null termination
+        service->sendClientNotification(cn);
+#endif
         return false;
     }
     return true;

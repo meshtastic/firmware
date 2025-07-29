@@ -191,6 +191,16 @@ class NodeDB
      */
     bool updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelIndex = 0);
 
+    /*
+     * Sets a node either favorite or unfavorite
+     */
+    void set_favorite(bool is_favorite, uint32_t nodeId);
+
+    /**
+     * Other functions like the node picker can request a pause in the node sorting
+     */
+    void pause_sort(bool paused);
+
     /// @return our node number
     NodeNum getNodeNum() { return myNodeInfo.my_node_num; }
 
@@ -207,9 +217,6 @@ class NodeDB
     level mesh sw does if it does conflict?  would it be better for people who are replying with denynode num to just broadcast
     their denial?)
     */
-
-    /// pick a provisional nodenum we hope no one is using
-    void pickNewNodeNum();
 
     // get channel channel index we heard a nodeNum on, defaults to 0 if not found
     uint8_t getMeshNodeChannel(NodeNum n);
@@ -272,11 +279,19 @@ class NodeDB
 
     bool hasValidPosition(const meshtastic_NodeInfoLite *n);
 
-    bool checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_public_key_t keyToTest);
+    bool checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_public_key_t &keyToTest);
 
     bool backupPreferences(meshtastic_AdminMessage_BackupLocation location);
     bool restorePreferences(meshtastic_AdminMessage_BackupLocation location,
                             int restoreWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
+
+    /// Notify observers of changes to the DB
+    void notifyObservers(bool forceUpdate = false)
+    {
+        // Notify observers of the current node state
+        const meshtastic::NodeStatus status = meshtastic::NodeStatus(getNumOnlineMeshNodes(), getNumMeshNodes(), forceUpdate);
+        newStatus.notifyObservers(&status);
+    }
 
   private:
     bool duplicateWarned = false;
@@ -286,13 +301,13 @@ class NodeDB
     /// Find a node in our DB, create an empty NodeInfoLite if missing
     meshtastic_NodeInfoLite *getOrCreateMeshNode(NodeNum n);
 
-    /// Notify observers of changes to the DB
-    void notifyObservers(bool forceUpdate = false)
-    {
-        // Notify observers of the current node state
-        const meshtastic::NodeStatus status = meshtastic::NodeStatus(getNumOnlineMeshNodes(), getNumMeshNodes(), forceUpdate);
-        newStatus.notifyObservers(&status);
-    }
+    /*
+     * Internal boolean to track sorting paused
+     */
+    bool sortingIsPaused = false;
+
+    /// pick a provisional nodenum we hope no one is using
+    void pickNewNodeNum();
 
     /// read our db from flash
     void loadFromDisk();

@@ -53,6 +53,7 @@
 #endif
 #if ARCH_PORTDUINO
 #include "input/LinuxInputImpl.h"
+#include "input/SeesawRotary.h"
 #include "modules/Telemetry/HostMetrics.h"
 #if !MESHTASTIC_EXCLUDE_STOREFORWARD
 #include "modules/StoreForwardModule.h"
@@ -163,7 +164,6 @@ void setupModules()
         // Example: Put your module here
         // new ReplyModule();
 #if (HAS_BUTTON || ARCH_PORTDUINO) && !MESHTASTIC_EXCLUDE_INPUTBROKER && !MESHTASTIC_EXCLUDE_I2C
-
         if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
             rotaryEncoderInterruptImpl1 = new RotaryEncoderInterruptImpl1();
             if (!rotaryEncoderInterruptImpl1->init()) {
@@ -189,6 +189,11 @@ void setupModules()
 #endif // HAS_BUTTON
 #if ARCH_PORTDUINO
         if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+            seesawRotary = new SeesawRotary("SeesawRotary");
+            if (!seesawRotary->init()) {
+                delete seesawRotary;
+                seesawRotary = nullptr;
+            }
             aLinuxInputImpl = new LinuxInputImpl();
             aLinuxInputImpl->init();
         }
@@ -213,11 +218,14 @@ void setupModules()
 #if HAS_TELEMETRY
         new DeviceTelemetryModule();
 #endif
+// TODO: How to improve this?
 #if HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
         new EnvironmentTelemetryModule();
+#if __has_include("Adafruit_PM25AQI.h")
         if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_PMSA003I].first > 0) {
             new AirQualityTelemetryModule();
         }
+#endif
 #if !MESHTASTIC_EXCLUDE_HEALTH_TELEMETRY
         if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_MAX30102].first > 0 ||
             nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_MLX90614].first > 0) {
