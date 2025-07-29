@@ -112,8 +112,8 @@ void NeighborInfoModule::sendNeighborInfo(NodeNum dest, bool wantReplies)
     // only send neighbours if we have some to send
     if (neighborInfo.neighbors_count > 0) {
         printNeighborInfo("SENDING", &neighborInfo);
+        service->sendToMesh(p, RX_SRC_LOCAL, true);
     }
-    service->sendToMesh(p, RX_SRC_LOCAL, true);
 }
 
 /*
