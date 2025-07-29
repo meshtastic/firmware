@@ -193,10 +193,8 @@ void esp32Setup()
 /// loop code specific to ESP32 targets
 void esp32Loop()
 {
-    +if (esp_task_wdt_reset() != ESP_OK)
-    {
-        +LOG_ERROR("Failed to reset task watchdog");
-        +
+    if (esp_task_wdt_reset() != ESP_OK) {
+        LOG_ERROR("Failed to reset task watchdog");
     }
 
     // for debug printing
