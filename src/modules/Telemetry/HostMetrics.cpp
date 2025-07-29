@@ -27,7 +27,7 @@ bool HostMetricsModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, 
         return false;
 
     if (t->which_variant == meshtastic_Telemetry_host_metrics_tag) {
-#ifdef DEBUG_PORT
+#if defined(DEBUG_PORT) && !defined(DEBUG_MUTE)
         const char *sender = getSenderShortName(mp);
         if (t->variant.host_metrics.has_user_string)
             t->variant.host_metrics.user_string[sizeof(t->variant.host_metrics.user_string) - 1] = '\0';
