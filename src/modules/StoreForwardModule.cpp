@@ -339,7 +339,7 @@ void StoreForwardModule::sendErrorTextMessage(NodeNum dest, bool want_response)
     if (this->busy) {
         str = "S&F - Busy. Try again shortly.";
     } else {
-        str = "S&F not permitted on the public channel.";
+        str = "Something went wrong with S&F on this custom firmware.";
     }
     LOG_WARN("%s", str);
     memcpy(pr->decoded.payload.bytes, str, strlen(str));
@@ -392,7 +392,8 @@ ProcessMessage StoreForwardModule::handleReceived(const meshtastic_MeshPacket &m
                 LOG_DEBUG("Legacy Request to send");
 
                 // Send the last 60 minutes of messages.
-                if (this->busy || channels.isDefaultChannel(mp.channel)) {
+                // if (this->busy || channels.isDefaultChannel(mp.channel)) {
+                if (this->busy) {
                     sendErrorTextMessage(getFrom(&mp), mp.decoded.want_response);
                 } else {
                     storeForwardModule->historySend(historyReturnWindow * 60, getFrom(&mp));
@@ -457,7 +458,8 @@ bool StoreForwardModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
             requests_history++;
             LOG_INFO("Client Request to send HISTORY");
             // Send the last 60 minutes of messages.
-            if (this->busy || channels.isDefaultChannel(mp.channel)) {
+            // if (this->busy || channels.isDefaultChannel(mp.channel)) {
+            if (this->busy) {
                 sendErrorTextMessage(getFrom(&mp), mp.decoded.want_response);
             } else {
                 if ((p->which_variant == meshtastic_StoreAndForward_history_tag) && (p->variant.history.window > 0)) {
