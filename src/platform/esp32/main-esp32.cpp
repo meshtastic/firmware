@@ -177,10 +177,10 @@ void esp32Setup()
     wdt_config->idle_core_mask = 0;
     wdt_config->trigger_panic = true;
     res = esp_task_wdt_init(wdt_config);
-    assert(res == ESP_OK);
+    // assert(res == ESP_OK);
 #else
     res = esp_task_wdt_init(APP_WATCHDOG_SECS, true);
-    // assert(res == ESP_OK);
+    assert(res == ESP_OK);
 #endif
     res = esp_task_wdt_add(NULL);
     // assert(res == ESP_OK);
