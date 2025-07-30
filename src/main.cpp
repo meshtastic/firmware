@@ -768,7 +768,7 @@ void setup()
     if (screen_model == meshtastic_Config_DisplayConfig_OledType_OLED_SH1107) {
         screen_geometry = GEOMETRY_128_128;
     } else if (screen_model == meshtastic_Config_DisplayConfig_OledType_OLED_SH1107_128_64) {
-        screen_model == meshtastic_Config_DisplayConfig_OledType_OLED_SH1107;
+        screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107;
         screen_geometry = GEOMETRY_128_64;
     }
 
