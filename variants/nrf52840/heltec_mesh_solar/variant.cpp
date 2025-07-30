@@ -32,6 +32,5 @@ const uint32_t g_ADigitalPinMap[] = {
 
 void initVariant()
 {
-  pinMode(BQ4050_EMERGENCY_SHUTDOWN_PIN, OUTPUT);
-  digitalWrite(BQ4050_EMERGENCY_SHUTDOWN_PIN, HIGH);
+  pinMode(BQ4050_EMERGENCY_SHUTDOWN_PIN, INPUT);
 }
