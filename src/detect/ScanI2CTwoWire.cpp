@@ -184,8 +184,13 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 type = RTC_RV3028;
                 logFoundDevice("RV3028", (uint8_t)addr.address);
                 rtc.initI2C(*i2cBus);
-                rtc.writeToRegister(0x35, 0x07); // no Clkout
-                rtc.writeToRegister(0x37, 0xB4);
+                // Update RTC EEPROM settings, if necessary
+                if (rtc.readEEPROMRegister(0x35) != 0x07) {
+                    rtc.writeEEPROMRegister(0x35, 0x07); // no Clkout
+                }
+                if (rtc.readEEPROMRegister(0x37) != 0xB4) {
+                    rtc.writeEEPROMRegister(0x37, 0xB4);
+                }
                 break;
 #endif
 
