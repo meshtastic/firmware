@@ -1511,7 +1511,7 @@ bool GPS::lookForTime()
 
 #ifdef GNSS_AIROHA
     uint8_t fix = reader.fixQuality();
-    if (fix > 0) {
+    if (fix >= 1 && fix <= 5) {
         if (lastFixStartMsec > 0) {
             if (Throttle::isWithinTimespanMs(lastFixStartMsec, GPS_FIX_HOLD_TIME)) {
                 return false;
@@ -1566,7 +1566,7 @@ bool GPS::lookForLocation()
 #ifdef GNSS_AIROHA
     if ((config.position.gps_update_interval * 1000) >= (GPS_FIX_HOLD_TIME * 2)) {
         uint8_t fix = reader.fixQuality();
-        if (fix > 0) {
+        if (fix >= 1 && fix <= 5) {
             if (lastFixStartMsec > 0) {
                 if (Throttle::isWithinTimespanMs(lastFixStartMsec, GPS_FIX_HOLD_TIME)) {
                     return false;
