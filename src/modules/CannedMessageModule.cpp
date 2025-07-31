@@ -601,6 +601,8 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
 #if CANNED_MESSAGE_ADD_CONFIRMATION
             graphics::menuHandler::showConfirmationBanner(
                 "Send message?", [this, destNode, chan, current]() { this->sendText(destNode, chan, current, false); });
+#else
+            this->sendText(destNode, chan, current, false);
 #endif
             // Do not immediately set runState; wait for confirmation
             handled = true;
