@@ -600,9 +600,16 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
             ChannelIndex chan = channel;
 #if CANNED_MESSAGE_ADD_CONFIRMATION
             graphics::menuHandler::showConfirmationBanner("Send message?", [this, destNode, chan, current]() {
-                // this->sendText(destNode, chan, current, false);
+                this->sendText(destNode, chan, current, false);
                 payload = runState;
-                runState = CANNED_MESSAGE_RUN_STATE_ACTION_SELECT;
+                runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+                currentMessageIndex = -1;
+
+                // Notify UI to regenerate frame set and redraw
+                UIFrameEvent e;
+                e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+                notifyObservers(&e);
+                screen->forceDisplay();
             });
 #else
             payload = runState;
