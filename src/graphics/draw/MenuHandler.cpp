@@ -27,7 +27,6 @@ bool test_enabled = false;
 uint8_t test_count = 0;
 
 void menuHandler::LoraRegionPicker(uint32_t duration)
-// ...existing code...
 {
     static const char *optionsArray[] = {"Back",
                                          "US",
@@ -356,11 +355,7 @@ void menuHandler::homeBaseMenu()
             InputEvent event = {.inputEvent = (input_broker_event)INPUT_BROKER_SEND_PING, .kbchar = 0, .touchX = 0, .touchY = 0};
             inputBroker->injectInputEvent(&event);
         } else if (selected == Preset) {
-#if CANNED_MESSAGE_ADD_CONFIRMATION
-            showConfirmationBanner("Send message?", [] { cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST); });
-#else
             cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST);
-#endif
         } else if (selected == Freetext) {
             cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST);
         }
@@ -389,11 +384,7 @@ void menuHandler::textMessageBaseMenu()
     bannerOptions.optionsCount = options;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == Preset) {
-#if CANNED_MESSAGE_ADD_CONFIRMATION
-            showConfirmationBanner("Send message?", [] { cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST); });
-#else
             cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST);
-#endif
         } else if (selected == Freetext) {
             cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST);
         }

@@ -598,8 +598,10 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
             // Show confirmation dialog before sending canned message
             NodeNum destNode = dest;
             ChannelIndex chan = channel;
+#if CANNED_MESSAGE_ADD_CONFIRMATION
             graphics::menuHandler::showConfirmationBanner(
-                "Send preset message?", [this, destNode, chan, current]() { this->sendText(destNode, chan, current, false); });
+                "Send message?", [this, destNode, chan, current]() { this->sendText(destNode, chan, current, false); });
+#endif
             // Do not immediately set runState; wait for confirmation
             handled = true;
         }
