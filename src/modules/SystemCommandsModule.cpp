@@ -76,15 +76,15 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
         return 0;
     case INPUT_BROKER_LOST_TOGGLE:
         LOG_WARN("Lost Toggle");
-        if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT) {
-            LOG_WARN("Changing mode to LOST_AND_FOUND");
-            config.device.role = meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND;
-            IF_SCREEN(screen->forceDisplay(); screen->showSimpleBanner("Switching to LOST!", 3000);)
-            nodeDB->saveToDisk(SEGMENT_CONFIG);
-        } else {
+        if (config.device.role == meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND) {
             LOG_WARN("Changing mode to Client");
             config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
-            IF_SCREEN(screen->forceDisplay(); screen->showSimpleBanner("Switching to Client!", 3000);)
+            IF_SCREEN(screen->forceDisplay(); screen->showSimpleBanner("Switching to Client!", 1000);)
+            nodeDB->saveToDisk(SEGMENT_CONFIG);
+        } else {
+            LOG_WARN("Changing mode to LOST_AND_FOUND");
+            config.device.role = meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND;
+            IF_SCREEN(screen->forceDisplay(); screen->showSimpleBanner("Switching to LOST!", 1000);)
             nodeDB->saveToDisk(SEGMENT_CONFIG);
             }
         rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
