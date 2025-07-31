@@ -595,8 +595,12 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
         // Normal canned message selection
         if (runState == CANNED_MESSAGE_RUN_STATE_INACTIVE || runState == CANNED_MESSAGE_RUN_STATE_DISABLED) {
         } else {
-            payload = runState;
-            runState = CANNED_MESSAGE_RUN_STATE_ACTION_SELECT;
+            // Show confirmation dialog before sending canned message
+            NodeNum destNode = dest;
+            ChannelIndex chan = channel;
+            graphics::menuHandler::showConfirmationBanner(
+                "Send preset message?", [this, destNode, chan, current]() { this->sendText(destNode, chan, current, false); });
+            // Do not immediately set runState; wait for confirmation
             handled = true;
         }
     }
