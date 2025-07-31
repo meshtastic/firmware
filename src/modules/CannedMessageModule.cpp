@@ -595,8 +595,27 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
         // Normal canned message selection
         if (runState == CANNED_MESSAGE_RUN_STATE_INACTIVE || runState == CANNED_MESSAGE_RUN_STATE_DISABLED) {
         } else {
+            // Show confirmation dialog before sending canned message
+            NodeNum destNode = dest;
+            ChannelIndex chan = channel;
+#if CANNED_MESSAGE_ADD_CONFIRMATION
+            graphics::menuHandler::showConfirmationBanner("Send message?", [this, destNode, chan, current]() {
+                this->sendText(destNode, chan, current, false);
+                payload = runState;
+                runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+                currentMessageIndex = -1;
+
+                // Notify UI to regenerate frame set and redraw
+                UIFrameEvent e;
+                e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+                notifyObservers(&e);
+                screen->forceDisplay();
+            });
+#else
             payload = runState;
             runState = CANNED_MESSAGE_RUN_STATE_ACTION_SELECT;
+#endif
+            // Do not immediately set runState; wait for confirmation
             handled = true;
         }
     }
@@ -1711,7 +1730,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
                     // Text: split by words and wrap inside word if needed
                     String text = token.second;
                     pos = 0;
-                    while (pos < text.length()) {
+                    while (pos < static_cast<int>(text.length())) {
                         // Find next space (or end)
                         int spacePos = text.indexOf(' ', pos);
                         int endPos = (spacePos == -1) ? text.length() : spacePos + 1; // Include space

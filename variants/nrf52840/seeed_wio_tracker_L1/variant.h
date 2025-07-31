@@ -162,6 +162,8 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 
 #define CANNED_MESSAGE_MODULE_ENABLE 1
 
+#define CANNED_MESSAGE_ADD_CONFIRMATION 1
+
 // trackball
 #define HAS_TRACKBALL 1
 #define TB_UP 25
