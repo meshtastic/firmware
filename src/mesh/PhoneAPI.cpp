@@ -31,6 +31,9 @@
 #include "Throttle.h"
 #include <RTC.h>
 
+// Flag to indicate a heartbeat was received and we should send queue status
+bool heartbeatReceived = false;
+
 PhoneAPI::PhoneAPI()
 {
     lastContactMsec = millis();
@@ -155,6 +158,7 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
 #endif
         case meshtastic_ToRadio_heartbeat_tag:
             LOG_DEBUG("Got client heartbeat");
+            heartbeatReceived = true;
             break;
         default:
             // Ignore nop messages
@@ -193,6 +197,17 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
     }
     // In case we send a FromRadio packet
     memset(&fromRadioScratch, 0, sizeof(fromRadioScratch));
+
+    // Respond to heartbeat by sending queue status
+    if (heartbeatReceived) {
+        memset(&fromRadioScratch, 0, sizeof(fromRadioScratch));
+        fromRadioScratch.which_payload_variant = meshtastic_FromRadio_queueStatus_tag;
+        fromRadioScratch.queueStatus = router->getQueueStatus();
+        heartbeatReceived = false;
+        size_t numbytes = pb_encode_to_bytes(buf, meshtastic_FromRadio_size, &meshtastic_FromRadio_msg, &fromRadioScratch);
+        LOG_DEBUG("FromRadio=STATE_SEND_QUEUE_STATUS, numbytes=%u", numbytes);
+        return numbytes;
+    }
 
     // Advance states as needed
     switch (state) {
