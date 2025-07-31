@@ -45,6 +45,7 @@ class menuHandler
     static void LoraRegionPicker(uint32_t duration = 30000);
     static void loraMenu();
     static void handleMenuSwitch(OLEDDisplay *display);
+    static void showConfirmationBanner(const char *message, std::function<void()> onConfirm);
     static void clockMenu();
     static void TZPicker();
     static void TwelveHourPicker();

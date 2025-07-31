@@ -14,7 +14,9 @@
 #include "modules/AdminModule.h"
 #include "modules/CannedMessageModule.h"
 #include "modules/KeyVerificationModule.h"
+
 #include "modules/TraceRouteModule.h"
+#include <functional>
 
 extern uint16_t TFT_MESH;
 
@@ -134,6 +136,22 @@ void menuHandler::TwelveHourPicker()
         service->reloadConfig(SEGMENT_CONFIG);
     };
     screen->showOverlayBanner(bannerOptions);
+}
+
+// Reusable confirmation prompt function
+void menuHandler::showConfirmationBanner(const char *message, std::function<void()> onConfirm)
+{
+    static const char *confirmOptions[] = {"No", "Yes"};
+    BannerOverlayOptions confirmBanner;
+    confirmBanner.message = message;
+    confirmBanner.optionsArrayPtr = confirmOptions;
+    confirmBanner.optionsCount = 2;
+    confirmBanner.bannerCallback = [onConfirm](int confirmSelected) -> void {
+        if (confirmSelected == 1) {
+            onConfirm();
+        }
+    };
+    screen->showOverlayBanner(confirmBanner);
 }
 
 void menuHandler::ClockFacePicker()
@@ -312,7 +330,7 @@ void menuHandler::messageResponseMenu()
 
 void menuHandler::homeBaseMenu()
 {
-    enum optionsNumbers { Back, Backlight, Position, Preset, Freetext, Bluetooth, Sleep, enumEnd };
+    enum optionsNumbers { Back, Backlight, Position, Preset, Freetext, Sleep, enumEnd };
 
     static const char *optionsArray[enumEnd] = {"Back"};
     static int optionsEnumArray[enumEnd] = {Back};
@@ -334,8 +352,6 @@ void menuHandler::homeBaseMenu()
         optionsArray[options] = "New Freetext Msg";
         optionsEnumArray[options++] = Freetext;
     }
-    optionsArray[options] = "Bluetooth Toggle";
-    optionsEnumArray[options++] = Bluetooth;
 
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Home Action";
@@ -360,9 +376,6 @@ void menuHandler::homeBaseMenu()
             cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST);
         } else if (selected == Freetext) {
             cannedMessageModule->LaunchFreetextWithDestination(NODENUM_BROADCAST);
-        } else if (selected == Bluetooth) {
-            menuQueue = bluetooth_toggle_menu;
-            screen->runNow();
         }
     };
     screen->showOverlayBanner(bannerOptions);
@@ -399,7 +412,7 @@ void menuHandler::textMessageBaseMenu()
 
 void menuHandler::systemBaseMenu()
 {
-    enum optionsNumbers { Back, Notifications, ScreenOptions, PowerMenu, FrameToggles, Test, enumEnd };
+    enum optionsNumbers { Back, Notifications, ScreenOptions, Bluetooth, PowerMenu, FrameToggles, Test, enumEnd };
     static const char *optionsArray[enumEnd] = {"Back"};
     static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
@@ -414,6 +427,9 @@ void menuHandler::systemBaseMenu()
 
     optionsArray[options] = "Frame Visiblity Toggle";
     optionsEnumArray[options++] = FrameToggles;
+
+    optionsArray[options] = "Bluetooth Toggle";
+    optionsEnumArray[options++] = Bluetooth;
 
     optionsArray[options] = "Reboot/Shutdown";
     optionsEnumArray[options++] = PowerMenu;
@@ -443,6 +459,9 @@ void menuHandler::systemBaseMenu()
             screen->runNow();
         } else if (selected == Test) {
             menuHandler::menuQueue = menuHandler::test_menu;
+            screen->runNow();
+        } else if (selected == Bluetooth) {
+            menuQueue = bluetooth_toggle_menu;
             screen->runNow();
         } else if (selected == Back && !test_enabled) {
             test_count++;
