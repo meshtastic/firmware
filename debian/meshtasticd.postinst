@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # postinst script for meshtasticd
 #
 # see: dh_installdeb(1)

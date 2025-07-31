@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 PYTHON=${PYTHON:-$(which python3 python|head -n 1)}
 CHANGE_MODE=false
