@@ -100,6 +100,9 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
                     if (decoded->variant.environment_metrics.has_iaq) {
                         msgPayload["iaq"] = new JSONValue((uint)decoded->variant.environment_metrics.iaq);
                     }
+                    if (decoded->variant.environment_metrics.has_distance) {
+                        msgPayload["distance"] = new JSONValue(decoded->variant.environment_metrics.distance);
+                    }
                     if (decoded->variant.environment_metrics.has_wind_speed) {
                         msgPayload["wind_speed"] = new JSONValue(decoded->variant.environment_metrics.wind_speed);
                     }
@@ -114,6 +117,27 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
                     }
                     if (decoded->variant.environment_metrics.has_radiation) {
                         msgPayload["radiation"] = new JSONValue(decoded->variant.environment_metrics.radiation);
+                    }
+                    if (decoded->variant.environment_metrics.has_ir_lux) {
+                        msgPayload["ir_lux"] = new JSONValue(decoded->variant.environment_metrics.ir_lux);
+                    }
+                    if (decoded->variant.environment_metrics.has_uv_lux) {
+                        msgPayload["uv_lux"] = new JSONValue(decoded->variant.environment_metrics.uv_lux);
+                    }
+                    if (decoded->variant.environment_metrics.has_weight) {
+                        msgPayload["weight"] = new JSONValue(decoded->variant.environment_metrics.weight);
+                    }
+                    if (decoded->variant.environment_metrics.has_rainfall_1h) {
+                        msgPayload["rainfall_1h"] = new JSONValue(decoded->variant.environment_metrics.rainfall_1h);
+                    }
+                    if (decoded->variant.environment_metrics.has_rainfall_24h) {
+                        msgPayload["rainfall_24h"] = new JSONValue(decoded->variant.environment_metrics.rainfall_24h);
+                    }
+                    if (decoded->variant.environment_metrics.has_soil_moisture) {
+                        msgPayload["soil_moisture"] = new JSONValue((uint)decoded->variant.environment_metrics.soil_moisture);
+                    }
+                    if (decoded->variant.environment_metrics.has_soil_temperature) {
+                        msgPayload["soil_temperature"] = new JSONValue(decoded->variant.environment_metrics.soil_temperature);
                     }
                 } else if (decoded->which_variant == meshtastic_Telemetry_air_quality_metrics_tag) {
                     if (decoded->variant.air_quality_metrics.has_pm10_standard) {

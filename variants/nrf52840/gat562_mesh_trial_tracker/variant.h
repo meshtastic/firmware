@@ -19,8 +19,6 @@
 #ifndef _VARIANT_GAT562_MESH_TRIAL_TRACKER_
 #define _VARIANT_GAT562_MESH_TRIAL_TRACKER_
 
-#define GAT562_MESH_TRIAL_TRACKER
-
 // led pin 2 (blue), see https://github.com/meshtastic/firmware/blob/master/src/mesh/NodeDB.cpp#L723
 #define RAK4630
 
