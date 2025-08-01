@@ -3,7 +3,7 @@ concurrency:
   group: ci-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 on:
-  # # Triggers the workflow on push but only for the master branch
+  # # Triggers the workflow on push but only for the main branches
   push:
     branches:
       - master
