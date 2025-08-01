@@ -167,7 +167,7 @@ jobs:
   build-stm32:
     needs: [setup, version]
     strategy:
-        fail-fast: ${{ vars.FAIL_FAST_PER_ARCH }}
+      fail-fast: ${{ vars.FAIL_FAST_PER_ARCH }}
       matrix: ${{ fromJson(needs.setup.outputs.stm32) }}
     uses: ./.github/workflows/build_firmware.yml
     with:
