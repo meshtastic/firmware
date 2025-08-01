@@ -174,16 +174,16 @@ void esp32Setup()
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
     esp_task_wdt_config_t *wdt_config = (esp_task_wdt_config_t *)malloc(sizeof(esp_task_wdt_config_t));
     wdt_config->timeout_ms = APP_WATCHDOG_SECS * 1000;
-    wdt_config->idle_core_mask = 0;
+    wdt_config->idle_core_mask = 1 << 1;
     wdt_config->trigger_panic = true;
     res = esp_task_wdt_init(wdt_config);
-    // assert(res == ESP_OK);
+    assert(res == ESP_OK);
 #else
     res = esp_task_wdt_init(APP_WATCHDOG_SECS, true);
     assert(res == ESP_OK);
 #endif
     res = esp_task_wdt_add(NULL);
-    // assert(res == ESP_OK);
+    assert(res == ESP_OK);
 
 #ifdef HAS_32768HZ
     enableSlowCLK();
