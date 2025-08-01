@@ -9,6 +9,7 @@ plugins:
       uri: https://github.com/trunk-io/plugins
 lint:
   enabled:
+    - pre-commit-hooks@5.0.0
     - checkov@3.2.451
     - renovate@41.40.0
     - prettier@3.6.2
