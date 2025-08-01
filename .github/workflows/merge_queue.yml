@@ -243,6 +243,7 @@ jobs:
       push: false
 
   gather-artifacts:
+    # trunk-ignore(checkov/CKV2_GHA_1)
     permissions:
       contents: write
       pull-requests: write
