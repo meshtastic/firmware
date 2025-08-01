@@ -1,9 +1,3 @@
-### Many device configs have been moved to /etc/meshtasticd/available.d
-### To activate, simply copy or link the appropriate file into /etc/meshtasticd/config.d
-
-### Define your devices here using Broadcom pin numbering
-### Uncomment the block that corresponds to your hardware
-### Including the "Module:" line!
 ---
 Lora:
   # Default to auto-detecting the module type

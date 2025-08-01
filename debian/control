@@ -35,5 +35,5 @@ Depends: adduser,
          ${misc:Depends},
          ${shlibs:Depends}
 Description: Meshtastic daemon for communicating with Meshtastic devices
- Meshtastic is an off-grid text communication platform that uses inexpensive 
+ Meshtastic is an off-grid text communication platform that uses inexpensive
  LoRa radios.

@@ -7,6 +7,3 @@
 #endif
 
 PB_BIND(meshtastic_RTTTLConfig, meshtastic_RTTTLConfig, AUTO)
-
-
-

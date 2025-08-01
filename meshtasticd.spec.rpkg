@@ -10,7 +10,7 @@
 # - https://docs.pagure.org/rpkg-util/v3/index.html
 # - https://docs.fedoraproject.org/en-US/packaging-guidelines/Versioning/
 
-%global  meshtasticd_user          meshtasticd   
+%global  meshtasticd_user          meshtasticd
 
 Name:           meshtasticd
 # Version Ex:   2.5.19

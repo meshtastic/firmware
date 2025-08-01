@@ -2,8 +2,8 @@
 
 set -e
 
-VERSION=`bin/buildinfo.py long`
-SHORT_VERSION=`bin/buildinfo.py short`
+VERSION=$(bin/buildinfo.py long)
+SHORT_VERSION=$(bin/buildinfo.py short)
 
 OUTDIR=release/
 

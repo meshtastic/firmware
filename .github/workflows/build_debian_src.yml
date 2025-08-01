@@ -1,3 +1,4 @@
+---
 name: Build Debian Source Package
 
 on:

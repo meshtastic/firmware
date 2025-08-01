@@ -13,8 +13,3 @@ PB_BIND(meshtastic_ModuleSettings, meshtastic_ModuleSettings, AUTO)
 
 
 PB_BIND(meshtastic_Channel, meshtastic_Channel, AUTO)
-
-
-
-
-

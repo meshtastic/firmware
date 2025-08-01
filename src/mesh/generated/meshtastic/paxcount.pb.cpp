@@ -7,6 +7,3 @@
 #endif
 
 PB_BIND(meshtastic_Paxcount, meshtastic_Paxcount, AUTO)
-
-
-

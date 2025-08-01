@@ -22,6 +22,3 @@ PB_BIND(meshtastic_BluetoothConnectionStatus, meshtastic_BluetoothConnectionStat
 
 
 PB_BIND(meshtastic_SerialConnectionStatus, meshtastic_SerialConnectionStatus, AUTO)
-
-
-

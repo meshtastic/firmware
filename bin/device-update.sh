@@ -1,6 +1,6 @@
 #!/bin/bash
 
-PYTHON=${PYTHON:-$(which python3 python|head -n 1)}
+PYTHON=${PYTHON:-$(which python3 python | head -n 1)}
 CHANGE_MODE=false
 
 # Determine the correct esptool command to use
@@ -17,7 +17,7 @@ fi
 
 # Usage info
 show_help() {
-cat << EOF
+    cat <<EOF
 Usage: $(basename "$0") [-h] [-p ESPTOOL_PORT] [-P PYTHON] [-f FILENAME|FILENAME] [--change-mode]
 Flash image file to device, leave existing system intact."
 
@@ -44,31 +44,34 @@ set -- "${NEW_ARGS[@]}"
 
 while getopts ":hp:P:f:" opt; do
     case "${opt}" in
-        h)
-            show_help
-            exit 0
-            ;;
-        p)  ESPTOOL_CMD="$ESPTOOL_CMD --port ${OPTARG}"
-            ;;
-        P)  PYTHON=${OPTARG}
-            ;;
-        f)  FILENAME=${OPTARG}
-            ;;
-        *)
-            echo "Invalid flag."
-            show_help >&2
-            exit 1
-            ;;
+    h)
+        show_help
+        exit 0
+        ;;
+    p)
+        ESPTOOL_CMD="$ESPTOOL_CMD --port ${OPTARG}"
+        ;;
+    P)
+        PYTHON=${OPTARG}
+        ;;
+    f)
+        FILENAME=${OPTARG}
+        ;;
+    *)
+        echo "Invalid flag."
+        show_help >&2
+        exit 1
+        ;;
     esac
 done
-shift "$((OPTIND-1))"
+shift "$((OPTIND - 1))"
 
 if [ "$CHANGE_MODE" = true ]; then
-	$ESPTOOL_CMD --baud 1200 --after no_reset read_flash_status
+    $ESPTOOL_CMD --baud 1200 --after no_reset read_flash_status
     exit 0
 fi
 
-[ -z "$FILENAME" ]  && [ -n "$1" ] && {
+[ -z "$FILENAME" ] && [ -n "$1" ] && {
     FILENAME="$1"
     shift
 }

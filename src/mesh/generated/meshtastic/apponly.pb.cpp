@@ -7,6 +7,3 @@
 #endif
 
 PB_BIND(meshtastic_ChannelSet, meshtastic_ChannelSet, 2)
-
-
-

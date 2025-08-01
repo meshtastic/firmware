@@ -1,3 +1,4 @@
+---
 name: Update protobufs and regenerate classes
 on: workflow_dispatch
 

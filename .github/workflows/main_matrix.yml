@@ -1,3 +1,4 @@
+---
 name: CI
 concurrency:
   group: ci-${{ github.head_ref || github.run_id }}
@@ -53,7 +54,7 @@ jobs:
         run: |
           if [[ "$GITHUB_HEAD_REF" == "" ]]; then
             TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}})
-          else  
+          else
             TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}} pr)
           fi
           echo "Name: $GITHUB_REF_NAME Base: $GITHUB_BASE_REF Ref: $GITHUB_REF Targets: $TARGETS"

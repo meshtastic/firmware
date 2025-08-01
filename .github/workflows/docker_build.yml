@@ -1,3 +1,4 @@
+---
 name: Build Docker
 
 # Build Docker image, push untagged (digest-only)

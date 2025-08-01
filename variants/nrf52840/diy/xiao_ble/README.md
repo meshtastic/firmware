@@ -102,7 +102,7 @@ _(none)_
 2. For **Build** → **Step 3**, select `xiao_ble` as your target
 3. Adjust source code if you:
    - Wired your board for Manual Tx/Rx Switching Mode: see [Wire the Board](#1-wire-the-board)
-   - Used an E22-900M33S module  
+   - Used an E22-900M33S module
      (this step is important to avoid **damaging the power amplifier** in the M33S module and **transmitting power above legal limits**!):
      1. Open `variants/diy/platformio.ini`
      2. Search for `[env:xiao_ble]`

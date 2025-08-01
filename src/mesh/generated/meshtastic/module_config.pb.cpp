@@ -52,18 +52,3 @@ PB_BIND(meshtastic_ModuleConfig_AmbientLightingConfig, meshtastic_ModuleConfig_A
 
 
 PB_BIND(meshtastic_RemoteHardwarePin, meshtastic_RemoteHardwarePin, AUTO)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -22,10 +22,3 @@ PB_BIND(meshtastic_Contact, meshtastic_Contact, AUTO)
 
 
 PB_BIND(meshtastic_PLI, meshtastic_PLI, AUTO)
-
-
-
-
-
-
-

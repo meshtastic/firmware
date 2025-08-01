@@ -1,3 +1,4 @@
+---
 name: Trigger release workflows upon Publish
 
 on:

@@ -7,8 +7,3 @@
 #endif
 
 PB_BIND(meshtastic_XModem, meshtastic_XModem, AUTO)
-
-
-
-
-

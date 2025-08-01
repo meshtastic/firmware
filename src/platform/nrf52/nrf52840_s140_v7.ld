@@ -13,7 +13,7 @@ MEMORY
    * - Max ATT MTU
    * - Concurrent connection peripheral + central + secure links
    * - Event Len, HVN queue, Write CMD queue
-   */ 
+   */
   RAM (rwx) :  ORIGIN = 0x20006000, LENGTH = 0x20040000 - 0x20006000
 }
 
@@ -26,7 +26,7 @@ SECTIONS
     KEEP(*(.svc_data))
     PROVIDE(__stop_svc_data = .);
   } > RAM
-  
+
   .fs_data :
   {
     PROVIDE(__start_fs_data = .);

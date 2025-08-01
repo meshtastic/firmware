@@ -7,6 +7,3 @@
 #endif
 
 PB_BIND(meshtastic_DeviceProfile, meshtastic_DeviceProfile, 2)
-
-
-

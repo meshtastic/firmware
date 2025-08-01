@@ -1,3 +1,4 @@
+---
 name: Run Tests on Native platform
 
 on:
@@ -7,7 +8,9 @@ on:
 permissions: {}
 
 env:
-  LCOV_CAPTURE_FLAGS: --quiet --capture --include "${PWD}/src/*" --exclude '*/src/mesh/generated/*' --directory .pio/build/coverage/src --base-directory "${PWD}"
+  LCOV_CAPTURE_FLAGS:
+    --quiet --capture --include "${PWD}/src/*" --exclude '*/src/mesh/generated/*' --directory .pio/build/coverage/src --base-directory
+    "${PWD}"
 
 jobs:
   simulator-tests:

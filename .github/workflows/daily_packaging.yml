@@ -1,3 +1,4 @@
+---
 name: Daily Packaging
 on:
   schedule:

@@ -1,8 +1,10 @@
 import configparser
 import subprocess
 import os
-run_number = os.getenv('GITHUB_RUN_NUMBER', '0')
-build_location = os.getenv('BUILD_LOCATION', 'local')
+
+run_number = os.getenv("GITHUB_RUN_NUMBER", "0")
+build_location = os.getenv("BUILD_LOCATION", "local")
+
 
 def readProps(prefsLoc):
     """Read the version of our project as a string"""
@@ -31,7 +33,9 @@ def readProps(prefsLoc):
         #     # short for 'dirty', we want to keep our verstrings source for protobuf reasons
         #     suffix = sha + "-d"
         verObj["long"] = "{}.{}".format(verObj["short"], suffix)
-        verObj["deb"] = "{}.{}~{}{}".format(verObj["short"], run_number, build_location, sha)
+        verObj["deb"] = "{}.{}~{}{}".format(
+            verObj["short"], run_number, build_location, sha
+        )
     except:
         # print("Unexpected error:", sys.exc_info()[0])
         # traceback.print_exc()

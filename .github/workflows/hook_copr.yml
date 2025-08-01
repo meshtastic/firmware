@@ -1,3 +1,4 @@
+---
 name: Trigger COPR build
 
 on:

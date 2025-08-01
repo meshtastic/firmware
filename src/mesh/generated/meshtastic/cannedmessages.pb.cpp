@@ -7,6 +7,3 @@
 #endif
 
 PB_BIND(meshtastic_CannedMessageModuleConfig, meshtastic_CannedMessageModuleConfig, AUTO)
-
-
-

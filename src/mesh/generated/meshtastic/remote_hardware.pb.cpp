@@ -7,8 +7,3 @@
 #endif
 
 PB_BIND(meshtastic_HardwareMessage, meshtastic_HardwareMessage, AUTO)
-
-
-
-
-

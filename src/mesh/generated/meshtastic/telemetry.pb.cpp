@@ -31,8 +31,3 @@ PB_BIND(meshtastic_Telemetry, meshtastic_Telemetry, 2)
 
 
 PB_BIND(meshtastic_Nau7802Config, meshtastic_Nau7802Config, AUTO)
-
-
-
-
-

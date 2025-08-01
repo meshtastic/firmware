@@ -1,3 +1,4 @@
+---
 Lora:
   Module: RF95  # Adafruit RFM9x
   Reset: 25

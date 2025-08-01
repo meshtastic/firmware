@@ -37,36 +37,3 @@ PB_BIND(meshtastic_Config_SecurityConfig, meshtastic_Config_SecurityConfig, AUTO
 
 
 PB_BIND(meshtastic_Config_SessionkeyConfig, meshtastic_Config_SessionkeyConfig, AUTO)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

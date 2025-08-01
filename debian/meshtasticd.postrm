@@ -18,18 +18,17 @@ set -e
 # for details, see http://www.debian.org/doc/debian-policy/ or
 # the debian-policy package
 
-
 case "$1" in
-    purge|remove|upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
-      # Only remove /var/lib/meshtasticd on purge
-      if [ "${1}" = "purge" ] ; then
-          rm -rf /var/lib/meshtasticd
-      fi
+purge | remove | upgrade | failed-upgrade | abort-install | abort-upgrade | disappear)
+    # Only remove /var/lib/meshtasticd on purge
+    if [ "${1}" = "purge" ]; then
+        rm -rf /var/lib/meshtasticd
+    fi
     ;;
 
-    *)
-        echo "postrm called with unknown argument \`$1'" >&2
-        exit 1
+*)
+    echo "postrm called with unknown argument \`$1'" >&2
+    exit 1
     ;;
 esac
 

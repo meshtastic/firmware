@@ -2,7 +2,7 @@
 Lora:
 ## Ebyte E80-900M22S
 ## This is a bit experimental
-## 
+##
 ##
   Module: lr1121
   gpiochip: 1 # subtract 32 from the gpio numbers
@@ -15,6 +15,6 @@ Lora:
 
   spidev: spidev0.0 #pins are (CS=16, CLK=17, MOSI=18, MISO=19)
   spiSpeed: 2000000
-  
+
 General:
   MACAddressSource: eth0

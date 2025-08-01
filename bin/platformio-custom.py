@@ -83,22 +83,32 @@ if platform.name == "espressif32":
         env.Append(LINKFLAGS=["--specs=nano.specs", "-u", "_printf_float"])
 
 if platform.name == "nordicnrf52":
-    env.AddPostAction("$BUILD_DIR/${PROGNAME}.hex",
-                      env.VerboseAction(f"\"{sys.executable}\" ./bin/uf2conv.py $BUILD_DIR/firmware.hex -c -f 0xADA52840 -o $BUILD_DIR/firmware.uf2",
-                                        "Generating UF2 file"))
+    env.AddPostAction(
+        "$BUILD_DIR/${PROGNAME}.hex",
+        env.VerboseAction(
+            f'"{sys.executable}" ./bin/uf2conv.py $BUILD_DIR/firmware.hex -c -f 0xADA52840 -o $BUILD_DIR/firmware.uf2',
+            "Generating UF2 file",
+        ),
+    )
 
 Import("projenv")
 
 prefsLoc = projenv["PROJECT_DIR"] + "/version.properties"
 verObj = readProps(prefsLoc)
-print("Using meshtastic platformio-custom.py, firmware version " + verObj["long"] + " on " + env.get("PIOENV"))
+print(
+    "Using meshtastic platformio-custom.py, firmware version "
+    + verObj["long"]
+    + " on "
+    + env.get("PIOENV")
+)
 
 # get repository owner if git is installed
 try:
     r_owner = (
         subprocess.check_output(["git", "config", "--get", "remote.origin.url"])
         .decode("utf-8")
-        .strip().split("/")
+        .strip()
+        .split("/")
     )
     repo_owner = r_owner[-2] + "/" + r_owner[-1].replace(".git", "")
 except subprocess.CalledProcessError:
@@ -106,7 +116,7 @@ except subprocess.CalledProcessError:
 
 jsonLoc = env["PROJECT_DIR"] + "/userPrefs.jsonc"
 with open(jsonLoc) as f:
-    jsonStr = re.sub("//.*","", f.read(), flags=re.MULTILINE)
+    jsonStr = re.sub("//.*", "", f.read(), flags=re.MULTILINE)
     userPrefs = json.loads(jsonStr)
 
 pref_flags = []
@@ -126,16 +136,16 @@ for pref in userPrefs:
 
 # General options that are passed to the C and C++ compilers
 flags = [
-        "-DAPP_VERSION=" + verObj["long"],
-        "-DAPP_VERSION_SHORT=" + verObj["short"],
-        "-DAPP_ENV=" + env.get("PIOENV"),
-        "-DAPP_REPO=" + repo_owner,
-    ] + pref_flags
+    "-DAPP_VERSION=" + verObj["long"],
+    "-DAPP_VERSION_SHORT=" + verObj["short"],
+    "-DAPP_ENV=" + env.get("PIOENV"),
+    "-DAPP_REPO=" + repo_owner,
+] + pref_flags
 
-print ("Using flags:")
+print("Using flags:")
 for flag in flags:
     print(flag)
-    
+
 projenv.Append(
     CCFLAGS=flags,
 )
@@ -144,6 +154,7 @@ for lb in env.GetLibBuilders():
     if lb.name == "meshtastic-device-ui":
         lb.env.Append(CPPDEFINES=[("APP_VERSION", verObj["long"])])
         break
+
 
 # Get the display resolution from macros
 def get_display_resolution(build_flags):
@@ -154,6 +165,7 @@ def get_display_resolution(build_flags):
             return screen_width, screen_height
     print("No screen resolution defined in build_flags. Please define DISPLAY_SIZE.")
     exit(1)
+
 
 def load_boot_logo(source, target, env):
     build_flags = env.get("CPPDEFINES", [])
@@ -171,6 +183,7 @@ def load_boot_logo(source, target, env):
         # Copy the logo to the `data/boot` directory
         env.Execute(f"cp {source_path} {dest_path}")
 
+
 # Load the boot logo on TFT builds
 if ("HAS_TFT", 1) in env.get("CPPDEFINES", []):
-    env.AddPreAction('$BUILD_DIR/littlefs.bin', load_boot_logo)
+    env.AddPreAction("$BUILD_DIR/littlefs.bin", load_boot_logo)

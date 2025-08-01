@@ -1,3 +1,4 @@
+---
 name: Build Docker Multi-Arch Manifest
 
 on:

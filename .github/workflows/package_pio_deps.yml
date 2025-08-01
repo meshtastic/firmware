@@ -1,3 +1,4 @@
+---
 name: Package PlatformIO Library Dependencies
 # trunk-ignore-all(checkov/CKV_GHA_7): Allow workflow_dispatch inputs for testing
 

@@ -1,3 +1,4 @@
+---
 name: process stale Issues and PR's
 on:
   schedule:

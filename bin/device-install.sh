@@ -7,31 +7,31 @@ MCU=""
 
 # Variant groups
 BIGDB_8MB=(
-	"picomputer-s3"
-	"unphone"
-	"seeed-sensecap-indicator"
-	"crowpanel-esp32s3"
-	"heltec_capsule_sensor_v3"
-	"heltec-v3"
-	"heltec-vision-master-e213"
-	"heltec-vision-master-e290"
-	"heltec-vision-master-t190"
-	"heltec-wireless-paper"
-	"heltec-wireless-tracker"
-	"heltec-wsl-v3"
-	"icarus"
-	"seeed-xiao-s3"
-	"tbeam-s3-core"
-	"tracksenger"
+    "picomputer-s3"
+    "unphone"
+    "seeed-sensecap-indicator"
+    "crowpanel-esp32s3"
+    "heltec_capsule_sensor_v3"
+    "heltec-v3"
+    "heltec-vision-master-e213"
+    "heltec-vision-master-e290"
+    "heltec-vision-master-t190"
+    "heltec-wireless-paper"
+    "heltec-wireless-tracker"
+    "heltec-wsl-v3"
+    "icarus"
+    "seeed-xiao-s3"
+    "tbeam-s3-core"
+    "tracksenger"
 )
 BIGDB_16MB=(
-	"t-deck"
-	"mesh-tab"
-	"t-energy-s3"
-	"dreamcatcher"
-	"ESP32-S3-Pico"
-	"m5stack-cores3"
-	"station-g2"
+    "t-deck"
+    "mesh-tab"
+    "t-energy-s3"
+    "dreamcatcher"
+    "ESP32-S3-Pico"
+    "m5stack-cores3"
+    "station-g2"
     "t-eth-elite"
     "t-watch-s3"
     "elecrow-adv-35-tft"
@@ -106,8 +106,8 @@ while [ $# -gt 0 ]; do
         shift
         ;;
     --1200bps-reset)
-		    BPS_RESET=true
-		    ;;
+        BPS_RESET=true
+        ;;
     --) # Stop parsing options
         shift
         break
@@ -121,8 +121,8 @@ while [ $# -gt 0 ]; do
 done
 
 if [[ $BPS_RESET == true ]]; then
-	$ESPTOOL_CMD --baud 1200 --after no_reset read_flash_status
-	exit 0
+    $ESPTOOL_CMD --baud 1200 --after no_reset read_flash_status
+    exit 0
 fi
 
 [ -z "$FILENAME" ] && [ -n "$1" ] && {
@@ -130,13 +130,13 @@ fi
     shift
 }
 
-if [[ "$FILENAME" != firmware-* ]]; then
-  echo "Filename must be a firmware-* file."
-  exit 1
+if [[ $FILENAME != firmware-* ]]; then
+    echo "Filename must be a firmware-* file."
+    exit 1
 fi
 
 # Check if FILENAME contains "-tft-" and set target partitionScheme accordingly.
-if [[ "${FILENAME//-tft-/}" != "$FILENAME" ]]; then
+if [[ ${FILENAME//-tft-/} != "$FILENAME" ]]; then
     TFT_BUILD=true
 fi
 
@@ -187,15 +187,15 @@ if [ -f "${FILENAME}" ] && [ -n "${FILENAME##*"update"*}" ]; then
     # Set SPIFFS filename with "littlefs-" prefix.
     SPIFFSFILE=littlefs-${BASENAME}
 
-    if [[ ! -f "$FILENAME" ]]; then
+    if [[ ! -f $FILENAME ]]; then
         echo "Error: file ${FILENAME} wasn't found. Terminating."
         exit 1
     fi
-    if [[ ! -f "$OTAFILE" ]]; then
+    if [[ ! -f $OTAFILE ]]; then
         echo "Error: file ${OTAFILE} wasn't found. Terminating."
         exit 1
     fi
-    if [[ ! -f "$SPIFFSFILE" ]]; then
+    if [[ ! -f $SPIFFSFILE ]]; then
         echo "Error: file ${SPIFFSFILE} wasn't found. Terminating."
         exit 1
     fi

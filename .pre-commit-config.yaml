@@ -1,0 +1,99 @@
+---
+fail_fast: false
+repos:
+  - hooks:
+      - id: commitizen
+        stages:
+          - commit-msg
+    repo: https://github.com/commitizen-tools/commitizen
+    rev: v4.8.3
+  - hooks:
+      - id: check-useless-excludes
+    repo: meta
+  - hooks:
+      - files: \.(css|js|md|markdown|json)
+        id: prettier
+    repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v4.0.0-alpha.8
+  - hooks:
+      - id: black
+    repo: https://github.com/python/black
+    rev: 25.1.0
+  - hooks:
+      - id: check-added-large-files
+        args: [--maxkb=10000]
+      - id: check-ast
+      - id: check-case-conflict
+      - id: check-executables-have-shebangs
+      # - id: check-json
+      - id: check-merge-conflict
+      - id: check-symlinks
+      # - id: check-vcs-permalinks
+      - id: debug-statements
+      - id: check-xml
+      - args:
+          - --unsafe
+        id: check-yaml
+      - id: end-of-file-fixer
+      - id: forbid-new-submodules
+      - args:
+          - --branch
+          - gh-pages
+        id: no-commit-to-branch
+      - id: requirements-txt-fixer
+      - id: sort-simple-yaml
+      - id: trailing-whitespace
+      - id: mixed-line-ending
+      - id: detect-private-key
+      - id: check-byte-order-marker
+      - id: check-docstring-first
+    repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    # Ruff version.
+    rev: v0.12.7
+    hooks:
+      # Run the linter.
+      - id: ruff
+        args:
+          - --fix
+      # Run the formatter.
+      - id: ruff-format
+
+  - repo: https://github.com/scop/pre-commit-shfmt
+    rev: v3.12.0-2
+    hooks:
+      # Choose one of:
+      - id: shfmt # native (requires/installs Go to build)
+        args:
+          - -w
+          - -i
+          - "4"
+          - -s
+        types:
+          - shell
+
+  - hooks:
+      - id: blacken-docs
+    repo: https://github.com/asottile/blacken-docs
+    rev: 1.19.1
+
+  # - repo: https://github.com/asottile/pyupgrade
+  #   rev: v2.38.0
+  #   hooks:
+  #     - id: pyupgrade
+  #       args: [--py39-plus]
+
+  - repo: https://github.com/jumanjihouse/pre-commit-hook-yamlfmt
+    rev: 0.2.3 # or other specific tag
+    hooks:
+      - id: yamlfmt
+        args:
+          [--mapping, "2", --sequence, "4", --offset, "2", "--preserve-quotes"]
+
+  # - repo: https://github.com/hcodes/yaspeller.git
+  #   rev: v10.0.1
+  #   hooks:
+  #     - id: yaspeller
+  #       types:
+  #         - markdown

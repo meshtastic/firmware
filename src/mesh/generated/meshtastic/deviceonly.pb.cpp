@@ -25,6 +25,3 @@ PB_BIND(meshtastic_ChannelFile, meshtastic_ChannelFile, 2)
 
 
 PB_BIND(meshtastic_BackupPreferences, meshtastic_BackupPreferences, 2)
-
-
-

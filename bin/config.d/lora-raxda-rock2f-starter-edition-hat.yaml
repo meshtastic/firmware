@@ -1,10 +1,11 @@
+---
 Lora:
 
 ### Raxda Rock 2F running Armbian Linux 6.1.99-vendor-rk35xx
 ### https://github.com/markbirss/rock-2f
 ### https://github.com/markbirss/lora-starter-edition-sx1262-i2c
 ### https://github.com/radxa-pkg/radxa-overlays/blob/main/arch/arm64/boot/dts/rockchip/overlays/rk3528-spi0-cs1-spidev.dts
-### Require install of https://github.com/radxa-pkg/radxa-overlays and rk3528-spi0-cs1-spidev.dtbo copied to /boot/dtb/rockchip/overlay and enabled 
+### Require install of https://github.com/radxa-pkg/radxa-overlays and rk3528-spi0-cs1-spidev.dtbo copied to /boot/dtb/rockchip/overlay and enabled
 ### in  /boot/armbianEnv.txt - overlays=rk3528-spi0-cs1-spidev
 ### The Radxa Rock 2F employs multiple gpio chips.
 ### Each gpio pin must be unique, but can be assigned to a specific gpio chip and line.
