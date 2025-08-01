@@ -1,6 +1,6 @@
 
 name: Merge Queue
-# Not sure how concu
+# Not sure how concurrency works in merge_queue, removing for now.
 # concurrency:
 #   group: merge-queue-${{ github.head_ref || github.run_id }}
 #   cancel-in-progress: true
