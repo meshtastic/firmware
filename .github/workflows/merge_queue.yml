@@ -1,8 +1,9 @@
 
 name: Merge Queue
-concurrency:
-  group: merge-queue-${{ github.head_ref || github.run_id }}
-  cancel-in-progress: true
+# Not sure how concu
+# concurrency:
+#   group: merge-queue-${{ github.head_ref || github.run_id }}
+#   cancel-in-progress: true
 on:
   # Merge group is a special trigger that is used to trigger the workflow when a merge group is created.
   merge_group:
@@ -89,7 +90,7 @@ jobs:
   build-esp32:
     needs: [setup, version]
     strategy:
-      fail-fast: ${{ env.FAIL_FAST_PER_ARCH }}
+      fail-fast: ${{ vars.FAIL_FAST_PER_ARCH }}
       matrix: ${{ fromJson(needs.setup.outputs.esp32) }}
     uses: ./.github/workflows/build_firmware.yml
     with:
@@ -100,7 +101,7 @@ jobs:
   build-esp32s3:
     needs: [setup, version]
     strategy:
-      fail-fast: ${{ env.FAIL_FAST_PER_ARCH }}
+      fail-fast: ${{ vars.FAIL_FAST_PER_ARCH }}
       matrix: ${{ fromJson(needs.setup.outputs.esp32s3) }}
     uses: ./.github/workflows/build_firmware.yml
     with:
@@ -111,7 +112,7 @@ jobs:
   build-esp32c3:
     needs: [setup, version]
     strategy:
-      fail-fast: ${{ env.FAIL_FAST_PER_ARCH }}
+      fail-fast: ${{ vars.FAIL_FAST_PER_ARCH }}
       matrix: ${{ fromJson(needs.setup.outputs.esp32c3) }}
     uses: ./.github/workflows/build_firmware.yml
     with:
@@ -122,7 +123,7 @@ jobs:
   build-esp32c6:
     needs: [setup, version]
     strategy:
-      fail-fast: ${{ env.FAIL_FAST_PER_ARCH }}
+      fail-fast: ${{ vars.FAIL_FAST_PER_ARCH }}
       matrix: ${{ fromJson(needs.setup.outputs.esp32c6) }}
     uses: ./.github/workflows/build_firmware.yml
     with:
@@ -133,7 +134,7 @@ jobs:
   build-nrf52840:
     needs: [setup, version]
     strategy:
-      fail-fast: ${{ env.FAIL_FAST_PER_ARCH }}
+      fail-fast: ${{ vars.FAIL_FAST_PER_ARCH }}
       matrix: ${{ fromJson(needs.setup.outputs.nrf52840) }}
     uses: ./.github/workflows/build_firmware.yml
     with:
@@ -144,7 +145,7 @@ jobs:
   build-rp2040:
     needs: [setup, version]
     strategy:
-      fail-fast: ${{ env.FAIL_FAST_PER_ARCH }}
+      fail-fast: ${{ vars.FAIL_FAST_PER_ARCH }}
       matrix: ${{ fromJson(needs.setup.outputs.rp2040) }}
     uses: ./.github/workflows/build_firmware.yml
     with:
@@ -155,7 +156,7 @@ jobs:
   build-rp2350:
     needs: [setup, version]
     strategy:
-      fail-fast: ${{ env.FAIL_FAST_PER_ARCH }}
+      fail-fast: ${{ vars.FAIL_FAST_PER_ARCH }}
       matrix: ${{ fromJson(needs.setup.outputs.rp2350) }}
     uses: ./.github/workflows/build_firmware.yml
     with:
@@ -166,7 +167,7 @@ jobs:
   build-stm32:
     needs: [setup, version]
     strategy:
-      fail-fast: ${{ env.FAIL_FAST_PER_ARCH }}
+        fail-fast: ${{ vars.FAIL_FAST_PER_ARCH }}
       matrix: ${{ fromJson(needs.setup.outputs.stm32) }}
     uses: ./.github/workflows/build_firmware.yml
     with:
