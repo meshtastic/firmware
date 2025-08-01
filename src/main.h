@@ -5,7 +5,11 @@
 #include "NodeStatus.h"
 #include "PowerStatus.h"
 #include "detect/ScanI2C.h"
+#if !MESHTASTIC_EXCLUDE_SCREEN
 #include "graphics/Screen.h"
+#else
+#include "FakeScreen.h"
+#endif
 #include "memGet.h"
 #include "mesh/generated/meshtastic/config.pb.h"
 #include "mesh/generated/meshtastic/telemetry.pb.h"
