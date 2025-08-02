@@ -39,6 +39,8 @@ L76K GPS module information: https://www.seeedstudio.com/L76K-GNSS-Module-for-Se
 #endif
 
 
+#define USE_SX1262
+
 #define SX126X_CS 41
 #define LORA_SCK 7
 #define LORA_MOSI 9
@@ -49,11 +51,11 @@ L76K GPS module information: https://www.seeedstudio.com/L76K-GNSS-Module-for-Se
 
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_TXEN RADIOLIB_NC
-#define SX126X_RXEN 38
-
-#define USE_SX1262
+#define SX126X_RXEN 38 // LORA_RF_SW1 on the schematic
 
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
+
+#define SX126X_MAX_POWER 22 // No requirement to reduce output power
 
 #define LORA_CS SX126X_CS
 #define LORA_RESET SX126X_RESET
