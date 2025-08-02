@@ -1,5 +1,6 @@
 #include "RotaryEncoderInterruptImpl1.h"
 #include "InputBroker.h"
+extern bool osk_found;
 
 RotaryEncoderInterruptImpl1 *rotaryEncoderInterruptImpl1;
 
@@ -25,6 +26,7 @@ bool RotaryEncoderInterruptImpl1::init()
                                      RotaryEncoderInterruptImpl1::handleIntA, RotaryEncoderInterruptImpl1::handleIntB,
                                      RotaryEncoderInterruptImpl1::handleIntPressed);
     inputBroker->registerSource(this);
+    osk_found = true;
     return true;
 }
 
