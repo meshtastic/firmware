@@ -641,7 +641,13 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
 #else
         if (strcmp(current, "[-- Free Text --]") == 0) {
             if (osk_found && screen) {
-                screen->showTextInput("Free Text", "", 300000, [this](const std::string &text) {
+                char headerBuffer[64];
+                if (this->dest == NODENUM_BROADCAST) {
+                    snprintf(headerBuffer, sizeof(headerBuffer), "To: Broadcast@%s", channels.getName(this->channel));
+                } else {
+                    snprintf(headerBuffer, sizeof(headerBuffer), "To: %s", getNodeName(this->dest));
+                }
+                screen->showTextInput(headerBuffer, "", 300000, [this](const std::string &text) {
                     if (!text.empty()) {
                         this->freetext = text.c_str();
                         this->payload = CANNED_MESSAGE_RUN_STATE_FREETEXT;

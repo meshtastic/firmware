@@ -1,5 +1,6 @@
 #include "TrackballInterruptBase.h"
 #include "configuration.h"
+extern bool osk_found;
 
 TrackballInterruptBase::TrackballInterruptBase(const char *name) : concurrency::OSThread(name), _originName(name) {}
 
@@ -44,7 +45,7 @@ void TrackballInterruptBase::init(uint8_t pinDown, uint8_t pinUp, uint8_t pinLef
 
     LOG_DEBUG("Trackball GPIO initialized - UP:%d DOWN:%d LEFT:%d RIGHT:%d PRESS:%d", this->_pinUp, this->_pinDown,
               this->_pinLeft, this->_pinRight, pinPress);
-
+    osk_found = true;
     this->setInterval(100);
 }
 
