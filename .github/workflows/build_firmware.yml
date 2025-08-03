@@ -1,0 +1,66 @@
+name: Build
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+      platform:
+        required: true
+        type: string
+      pio_env:
+        required: true
+        type: string
+
+permissions: read-all
+
+jobs:
+  pio-build:
+    name: build-${{ inputs.platform }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ref: ${{github.event.pull_request.head.ref}}
+          repository: ${{github.event.pull_request.head.repo.full_name}}
+
+      - name: Set OTA firmware source and target
+        if: startsWith(inputs.platform, 'esp32')
+        id: ota_dir
+        env:
+          PIO_PLATFORM: ${{ inputs.platform }}
+        run: |
+          if [ "$PIO_PLATFORM" = "esp32s3" ]; then
+            echo "src=firmware-s3.bin" >> $GITHUB_OUTPUT
+            echo "tgt=release/bleota-s3.bin" >> $GITHUB_OUTPUT
+          elif [ "$PIO_PLATFORM" = "esp32c3" ] || [ "$PIO_PLATFORM" = "esp32c6" ]; then
+            echo "src=firmware-c3.bin" >> $GITHUB_OUTPUT
+            echo "tgt=release/bleota-c3.bin" >> $GITHUB_OUTPUT
+          elif [ "$PIO_PLATFORM" = "esp32" ]; then
+            echo "src=firmware.bin" >> $GITHUB_OUTPUT
+            echo "tgt=release/bleota.bin" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build ${{ inputs.platform }}
+        id: build
+        uses: meshtastic/gh-action-firmware@main
+        with:
+          pio_platform: ${{ inputs.platform }}
+          pio_env: ${{ inputs.pio_env }}
+          pio_target: build
+          ota_firmware_source: ${{ steps.ota_dir.outputs.src || '' }}
+          ota_firmware_target: ${{ steps.ota_dir.outputs.tgt || '' }}
+
+      - name: Store binaries as an artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ inputs.platform }}-${{ inputs.pio_env }}-${{ inputs.version }}.zip
+          overwrite: true
+          path: |
+            release/*.bin
+            release/*.elf
+            release/*.uf2
+            release/*.hex
+            release/*-ota.zip

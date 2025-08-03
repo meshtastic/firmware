@@ -620,7 +620,7 @@ void Screen::setup()
             touchScreenImpl1->init();
         }
     }
-#elif HAS_TOUCHSCREEN && !HAS_CST226SE
+#elif HAS_TOUCHSCREEN && !defined(USE_EINK) && !HAS_CST226SE
     touchScreenImpl1 =
         new TouchScreenImpl1(dispdev->getWidth(), dispdev->getHeight(), static_cast<TFTDisplay *>(dispdev)->getTouch);
     touchScreenImpl1->init();

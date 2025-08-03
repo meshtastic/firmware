@@ -414,9 +414,9 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     float freq = RadioLibInterface::instance->getFreq();
     snprintf(freqStr, sizeof(freqStr), "%.3f", freq);
     if (config.lora.channel_num == 0) {
-        snprintf(frequencyslot, sizeof(frequencyslot), "Freq: %smhz", freqStr);
+        snprintf(frequencyslot, sizeof(frequencyslot), "Freq: %sMHz", freqStr);
     } else {
-        snprintf(frequencyslot, sizeof(frequencyslot), "Freq/Ch: %smhz (%d)", freqStr, config.lora.channel_num);
+        snprintf(frequencyslot, sizeof(frequencyslot), "Freq/Ch: %sMHz (%d)", freqStr, config.lora.channel_num);
     }
     size_t len = strlen(frequencyslot);
     if (len >= 4 && strcmp(frequencyslot + len - 4, " (0)") == 0) {

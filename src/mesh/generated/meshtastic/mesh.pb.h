@@ -267,6 +267,9 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_RAK3312 = 106,
     /* Elecrow ThinkNode M5 https://www.elecrow.com/wiki/ThinkNode_M5_Meshtastic_LoRa_Signal_Transceiver_ESP32-S3.html */
     meshtastic_HardwareModel_THINKNODE_M5 = 107,
+    /* MeshSolar is an integrated power management and communication solution designed for outdoor low-power devices.
+ https://heltec.org/project/meshsolar/ */
+    meshtastic_HardwareModel_HELTEC_MESH_SOLAR = 108,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
@@ -324,6 +327,25 @@ typedef enum _meshtastic_CriticalErrorCode {
  If you see this failure in the field please post in the forum because we are interested in seeing if this is occurring in the field. */
     meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE = 13
 } meshtastic_CriticalErrorCode;
+
+/* Enum to indicate to clients whether this firmware is a special firmware build, like an event.
+ The first 16 values are reserved for non-event special firmwares, like the Smart Citizen use case. */
+typedef enum _meshtastic_FirmwareEdition {
+    /* Vanilla firmware */
+    meshtastic_FirmwareEdition_VANILLA = 0,
+    /* Firmware for use in the Smart Citizen environmental monitoring network */
+    meshtastic_FirmwareEdition_SMART_CITIZEN = 1,
+    /* Open Sauce, the maker conference held yearly in CA */
+    meshtastic_FirmwareEdition_OPEN_SAUCE = 16,
+    /* DEFCON, the yearly hacker conference */
+    meshtastic_FirmwareEdition_DEFCON = 17,
+    /* Burning Man, the yearly hippie gathering in the desert */
+    meshtastic_FirmwareEdition_BURNING_MAN = 18,
+    /* Hamvention, the Dayton amateur radio convention */
+    meshtastic_FirmwareEdition_HAMVENTION = 19,
+    /* Placeholder for DIY and unofficial events */
+    meshtastic_FirmwareEdition_DIY_EDITION = 127
+} meshtastic_FirmwareEdition;
 
 /* Enum for modules excluded from a device's configuration.
  Each value represents a ModuleConfigType that can be toggled as excluded
@@ -914,6 +936,11 @@ typedef struct _meshtastic_MyNodeInfo {
     meshtastic_MyNodeInfo_device_id_t device_id;
     /* The PlatformIO environment used to build this firmware */
     char pio_env[40];
+    /* The indicator for whether this device is running event firmware and which */
+    meshtastic_FirmwareEdition firmware_edition;
+    /* The number of nodes in the nodedb.
+ This is used by the phone to know how many NodeInfo packets to expect on want_config */
+    uint16_t nodedb_count;
 } meshtastic_MyNodeInfo;
 
 /* Debug output from the device.
@@ -1212,6 +1239,10 @@ extern "C" {
 #define _meshtastic_CriticalErrorCode_MAX meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE
 #define _meshtastic_CriticalErrorCode_ARRAYSIZE ((meshtastic_CriticalErrorCode)(meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE+1))
 
+#define _meshtastic_FirmwareEdition_MIN meshtastic_FirmwareEdition_VANILLA
+#define _meshtastic_FirmwareEdition_MAX meshtastic_FirmwareEdition_DIY_EDITION
+#define _meshtastic_FirmwareEdition_ARRAYSIZE ((meshtastic_FirmwareEdition)(meshtastic_FirmwareEdition_DIY_EDITION+1))
+
 #define _meshtastic_ExcludedModules_MIN meshtastic_ExcludedModules_EXCLUDED_NONE
 #define _meshtastic_ExcludedModules_MAX meshtastic_ExcludedModules_NETWORK_CONFIG
 #define _meshtastic_ExcludedModules_ARRAYSIZE ((meshtastic_ExcludedModules)(meshtastic_ExcludedModules_NETWORK_CONFIG+1))
@@ -1258,6 +1289,7 @@ extern "C" {
 #define meshtastic_MeshPacket_delayed_ENUMTYPE meshtastic_MeshPacket_Delayed
 
 
+#define meshtastic_MyNodeInfo_firmware_edition_ENUMTYPE meshtastic_FirmwareEdition
 
 #define meshtastic_LogRecord_level_ENUMTYPE meshtastic_LogRecord_Level
 
@@ -1296,7 +1328,7 @@ extern "C" {
 #define meshtastic_MqttClientProxyMessage_init_default {"", 0, {{0, {0}}}, 0}
 #define meshtastic_MeshPacket_init_default       {0, 0, 0, 0, {meshtastic_Data_init_default}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0}
 #define meshtastic_NodeInfo_init_default         {0, false, meshtastic_User_init_default, false, meshtastic_Position_init_default, 0, 0, false, meshtastic_DeviceMetrics_init_default, 0, 0, false, 0, 0, 0, 0}
-#define meshtastic_MyNodeInfo_init_default       {0, 0, 0, {0, {0}}, ""}
+#define meshtastic_MyNodeInfo_init_default       {0, 0, 0, {0, {0}}, "", _meshtastic_FirmwareEdition_MIN, 0}
 #define meshtastic_LogRecord_init_default        {"", 0, "", _meshtastic_LogRecord_Level_MIN}
 #define meshtastic_QueueStatus_init_default      {0, 0, 0, 0}
 #define meshtastic_FromRadio_init_default        {0, 0, {meshtastic_MeshPacket_init_default}}
@@ -1327,7 +1359,7 @@ extern "C" {
 #define meshtastic_MqttClientProxyMessage_init_zero {"", 0, {{0, {0}}}, 0}
 #define meshtastic_MeshPacket_init_zero          {0, 0, 0, 0, {meshtastic_Data_init_zero}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0}
 #define meshtastic_NodeInfo_init_zero            {0, false, meshtastic_User_init_zero, false, meshtastic_Position_init_zero, 0, 0, false, meshtastic_DeviceMetrics_init_zero, 0, 0, false, 0, 0, 0, 0}
-#define meshtastic_MyNodeInfo_init_zero          {0, 0, 0, {0, {0}}, ""}
+#define meshtastic_MyNodeInfo_init_zero          {0, 0, 0, {0, {0}}, "", _meshtastic_FirmwareEdition_MIN, 0}
 #define meshtastic_LogRecord_init_zero           {"", 0, "", _meshtastic_LogRecord_Level_MIN}
 #define meshtastic_QueueStatus_init_zero         {0, 0, 0, 0}
 #define meshtastic_FromRadio_init_zero           {0, 0, {meshtastic_MeshPacket_init_zero}}
@@ -1450,6 +1482,8 @@ extern "C" {
 #define meshtastic_MyNodeInfo_min_app_version_tag 11
 #define meshtastic_MyNodeInfo_device_id_tag      12
 #define meshtastic_MyNodeInfo_pio_env_tag        13
+#define meshtastic_MyNodeInfo_firmware_edition_tag 14
+#define meshtastic_MyNodeInfo_nodedb_count_tag   15
 #define meshtastic_LogRecord_message_tag         1
 #define meshtastic_LogRecord_time_tag            2
 #define meshtastic_LogRecord_source_tag          3
@@ -1682,7 +1716,9 @@ X(a, STATIC,   SINGULAR, UINT32,   my_node_num,       1) \
 X(a, STATIC,   SINGULAR, UINT32,   reboot_count,      8) \
 X(a, STATIC,   SINGULAR, UINT32,   min_app_version,  11) \
 X(a, STATIC,   SINGULAR, BYTES,    device_id,        12) \
-X(a, STATIC,   SINGULAR, STRING,   pio_env,          13)
+X(a, STATIC,   SINGULAR, STRING,   pio_env,          13) \
+X(a, STATIC,   SINGULAR, UENUM,    firmware_edition,  14) \
+X(a, STATIC,   SINGULAR, UINT32,   nodedb_count,     15)
 #define meshtastic_MyNodeInfo_CALLBACK NULL
 #define meshtastic_MyNodeInfo_DEFAULT NULL
 
@@ -1965,7 +2001,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_LowEntropyKey_size            0
 #define meshtastic_MeshPacket_size               378
 #define meshtastic_MqttClientProxyMessage_size   501
-#define meshtastic_MyNodeInfo_size               77
+#define meshtastic_MyNodeInfo_size               83
 #define meshtastic_NeighborInfo_size             258
 #define meshtastic_Neighbor_size                 22
 #define meshtastic_NodeInfo_size                 323
