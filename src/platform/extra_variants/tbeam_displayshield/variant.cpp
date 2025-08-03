@@ -7,7 +7,7 @@
 #include <Wire.h>
 
 TouchDrvCSTXXX tsPanel;
-static constexpr uint8_t PossibleAddresses[2] = {CST226SE_ADDR, CST226SE_ADDR_ALT};
+static constexpr uint8_t PossibleAddresses[2] = {CST328_ADDR, CST226SE_ADDR_ALT};
 uint8_t i2cAddress = 0;
 
 bool readTouch(int16_t *x, int16_t *y)
