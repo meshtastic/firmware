@@ -39,8 +39,6 @@
 #include <utility>
 
 #ifdef ELECROW_ThinkNode_M5
-#include <PCA9557.h>
-#include <Wire.h>
 PCA9557 io(0x18, &Wire);
 #endif
 
