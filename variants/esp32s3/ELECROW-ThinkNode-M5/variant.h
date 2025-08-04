@@ -1,46 +1,38 @@
-// Status
-// #define LED_PIN_POWER 1
-// #define BIAS_T_ENABLE LED_PIN_POWER
-// #define BIAS_T_VALUE HIGH
-
-#define ELECROW_ThinkNode_M5
-
-#define M5_buzzer 5
+#ifndef ELECROW_ThinkNode_M5_VAR
+#define ELECROW_ThinkNode_M5_VAR
 
 #define UART_TX 43
 #define UART_RX 44
+
 // LED
-#define POWER_LED 3 // red
-#define LED_POWER 2
-// #define USER_LED 1  //green
+// Both of these are on the GPIO expander
+#define PCA_LED_USER 1  // the Blue LED
+#define PCA_LED_POWER 3 // the Red LED? Seems to have hardware logic to blink when USB is plugged in.
 
 // USB_CHECK
-#define USB_CHECK 12
-#define ADC_V 4
+#define EXT_PWR_DETECT 12
+#define ADC_V 8
 
-/*
- * Buttons
- */
+#define PIN_BUZZER 9
+
+// Buttons
+
 #define PIN_BUTTON2 14
 #define PIN_BUTTON1 21
 
-/*Wire Interfaces*/
+// Wire Interfaces
 
 #define I2C_SCL 1
 #define I2C_SDA 2
-// #define I2C_SCL 47
-// #define I2C_SDA 48
-/*
- * GPS pins
- */
+
+// GPS pins
 #define GPS_SWITH 10
-// #define HAS_GPS 1
+#define HAS_GPS 1
 #define GPS_L76K
 #define PIN_GPS_REINIT 13 // An output to reset L76K GPS. As per datasheet, low for > 100ms will reset the L76K
 
 #define PIN_GPS_STANDBY 11 // An output to wake GPS, low means allow sleep, high means force wake
-// Seems to be missing on this new board
-// #define PIN_GPS_PPS (32 + 4)  // Pulse per second input from the GPS
+
 #define GPS_TX_PIN 20 // This is for bits going TOWARDS the CPU
 #define GPS_RX_PIN 19 // This is for bits going TOWARDS the GPS
 
@@ -60,7 +52,6 @@
 #define SX126X_BUSY 5
 #define SX126X_DIO1 4
 #define SX126X_DIO2_AS_RF_SWITCH
-// #define SX126X_DIO3 9
 #define SX126X_DIO3_TCXO_VOLTAGE 3.3
 #define SX126X_POWER_EN 46
 #define SX126X_MAX_POWER 22 // SX126xInterface.cpp defaults to 22 if not defined, but here we define it for good practice
@@ -69,8 +60,8 @@
 #define LORA_DIO1 SX126X_DIO1
 
 #define USE_EINK
-#define PIN_EINK_EN -1 // Note: this is really just backlight power
-#define PCA_PIN_EINK_EN 5
+#define PIN_EINK_EN -1    // Note: this is really just backlight power
+#define PCA_PIN_EINK_EN 5 // This is the pin number on the GPIO expander
 #define PIN_EINK_CS 39
 #define PIN_EINK_BUSY 42
 #define PIN_EINK_DC 40
@@ -80,20 +71,12 @@
 
 // Controls power for all peripherals (eink + GPS + LoRa + Sensor)
 #define PIN_POWER_EN -1
-#define PCA_PIN_POWER_EN 4
+#define PCA_PIN_POWER_EN 4 // This is the pin number on the GPIO expander
 
-// #define PIN_SPI1_MISO  -1
-// #define PIN_SPI1_MOSI PIN_EINK_MOSI
-// #define PIN_SPI1_SCK PIN_EINK_SCLK
-/*
- * SPI Interfaces
- */
-// #define SPI_INTERFACES_COUNT 1s
-
-// For LORA, spi 2
 #define PIN_SPI_MISO 7
 #define PIN_SPI_MOSI 15
 #define PIN_SPI_SCK 16
 
 #define BUTTON_PIN PIN_BUTTON1
 #define BUTTON_PIN_ALT PIN_BUTTON2
+#endif
