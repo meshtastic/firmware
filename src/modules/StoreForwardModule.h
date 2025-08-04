@@ -19,6 +19,8 @@ struct PacketHistoryStruct {
     bool emoji;
     uint8_t payload[meshtastic_Constants_DATA_PAYLOAD_LEN];
     pb_size_t payload_size;
+    int32_t rx_rssi;
+    float rx_snr;
 };
 
 class StoreForwardModule : private concurrency::OSThread, public ProtobufModule<meshtastic_StoreAndForward>
