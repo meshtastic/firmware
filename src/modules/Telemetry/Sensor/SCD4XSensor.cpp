@@ -11,15 +11,19 @@
 
 SCD4XSensor::SCD4XSensor() : TelemetrySensor(meshtastic_TelemetrySensorType_SCD4X, "SCD4X") {}
 
-bool SCD4XSensor::restoreClock(uint32_t currentClock){
 #ifdef SCD4X_I2C_CLOCK_SPEED
-    if (currentClock != SCD4X_I2C_CLOCK_SPEED){
-        // LOG_DEBUG("Restoring I2C clock to %uHz", currentClock);
-        return bus->setClock(currentClock);
+uint32_t SCD4XSensor::setI2CClock(uint32_t desiredClock){
+    uint32_t currentClock;
+    currentClock = bus->getClock();
+    LOG_DEBUG("Current I2C clock: %uHz", currentClock);
+    if (currentClock != desiredClock){
+        LOG_DEBUG("Setting I2C clock to: %uHz", desiredClock);
+        bus->setClock(desiredClock);
+        return currentClock;
     }
-    return true;
-#endif
+    return 0;
 }
+#endif
 
 int32_t SCD4XSensor::runOnce()
 {
@@ -28,57 +32,59 @@ int32_t SCD4XSensor::runOnce()
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
 
-    uint16_t error;
-
     bus = nodeTelemetrySensorsMap[sensorType].second;
     address = (uint8_t)nodeTelemetrySensorsMap[sensorType].first;
 
 #ifdef SCD4X_I2C_CLOCK_SPEED
     uint32_t currentClock;
-    currentClock = bus->getClock();
-    if (currentClock != SCD4X_I2C_CLOCK_SPEED){
-        // LOG_DEBUG("Changing I2C clock to %u", SCD4X_I2C_CLOCK_SPEED);
-        bus->setClock(SCD4X_I2C_CLOCK_SPEED);
-    }
+    currentClock = setI2CClock(SCD4X_I2C_CLOCK_SPEED);
 #endif
 
     // FIXME - This should be based on bus and address from above
     scd4x.begin(*nodeTelemetrySensorsMap[sensorType].second,
-        (uint8_t)nodeTelemetrySensorsMap[sensorType].first);
+        address);
 
+    // SCD4X library
     delay(30);
 
-    // Ensure sensor is in clean state
-    error = scd4x.wakeUp();
-    if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("SCD4X: Error trying to execute wakeUp()");
+    // Stop periodic measurement
+    if (!stopMeasurement()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
 
-    // Stop periodic measurement
-    error = scd4x.stopPeriodicMeasurement();
-    if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("SCD4X: Error trying to stopPeriodicMeasurement()");
-        return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
+    // Get sensor variant
+    scd4x.getSensorVariant(sensorVariant);
+
+    if (sensorVariant == SCD4X_SENSOR_VARIANT_SCD41){
+        LOG_INFO("SCD4X: Found SCD41");
+        if (!wakeUp()) {
+            LOG_ERROR("SCD4X: Error trying to execute wakeUp()");
+            return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
+        }
     }
+
     if (!getASC(ascActive)){
         LOG_ERROR("SCD4X: Unable to check if ASC is enabled");
-        return false;
+        return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
 
-    if (!ascActive){
-        LOG_INFO("SCD4X: ASC is not active");
-    } else {
-        LOG_INFO("SCD4X: ASC is active");
+    // Start measurement in selected power mode (low power by default)
+    if (!startMeasurement()){
+        LOG_ERROR("SCD4X: Couldn't start measurement");
+        return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
 
-    if (!scd4x.startLowPowerPeriodicMeasurement()) {
+#ifdef SCD4X_I2C_CLOCK_SPEED
+    if (currentClock){
+        setI2CClock(currentClock);
+    }
+#endif
+
+    if (state == SCD4X_MEASUREMENT){
         status = 1;
     } else {
         status = 0;
     }
-
-    restoreClock(currentClock);
 
     return initI2CSensor();
 }
@@ -87,26 +93,41 @@ void SCD4XSensor::setup() {}
 
 bool SCD4XSensor::getMetrics(meshtastic_Telemetry *measurement)
 {
+
+    if (state != SCD4X_MEASUREMENT) {
+        LOG_ERROR("SCD4X: Not in measurement mode");
+        return false;
+    }
+
     uint16_t co2, error;
-    float temperature;
-    float humidity;
+    float temperature, humidity;
 
 #ifdef SCD4X_I2C_CLOCK_SPEED
     uint32_t currentClock;
-    currentClock = bus->getClock();
-    if (currentClock != SCD4X_I2C_CLOCK_SPEED){
-        // LOG_DEBUG("Changing I2C clock to %u", SCD4X_I2C_CLOCK_SPEED);
-        bus->setClock(SCD4X_I2C_CLOCK_SPEED);
-    }
+    currentClock = setI2CClock(SCD4X_I2C_CLOCK_SPEED);
 #endif
+
+    bool dataReady;
+    error = scd4x.getDataReadyStatus(dataReady);
+    if (!dataReady) {
+        LOG_ERROR("SCD4X: Data is not ready");
+        return false;
+    }
 
     error = scd4x.readMeasurement(co2, temperature, humidity);
 
-    restoreClock(currentClock);
-    LOG_DEBUG("SCD4X: Error while getting measurements: %u", error);
-    LOG_DEBUG("SCD4X readings: %u, %.2f, %.2f", co2, temperature, humidity);
-    if (error != SCD4X_NO_ERROR || co2 == 0) {
-        LOG_ERROR("SCD4X: Skipping invalid measurement.");
+#ifdef SCD4X_I2C_CLOCK_SPEED
+    if (currentClock){
+        setI2CClock(currentClock);
+    }
+#endif
+
+    LOG_DEBUG("SCD4X readings: %u ppm, %.2f degC, %.2f %rh", co2, temperature, humidity);
+    if (error != SCD4X_NO_ERROR) {
+        LOG_DEBUG("SCD4X: Error while getting measurements: %u", error);
+        if (co2 == 0) {
+            LOG_ERROR("SCD4X: Skipping invalid measurement.");
+        }
         return false;
     } else {
         measurement->variant.air_quality_metrics.has_co2_temperature = true;
@@ -132,18 +153,19 @@ bool SCD4XSensor::getMetrics(meshtastic_Telemetry *measurement)
 * command. 3. Issue the perform_forced_recalibration command.
 */
 bool SCD4XSensor::performFRC(uint32_t targetCO2) {
-    uint16_t error;
-    uint16_t frcCorr;
+    uint16_t error, frcCorr;
 
     LOG_INFO("SCD4X: Issuing FRC. Ensure device has been working at least 3 minutes in stable target environment");
 
-    error = scd4x.stopPeriodicMeasurement();
-    if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("SCD4X: Unable to set idle mode on SCD4X.");
+    if (!stopMeasurement()) {
         return false;
     }
 
+    LOG_INFO("SCD4X: Target CO2: %u ppm", targetCO2);
     error = scd4x.performForcedRecalibration((uint16_t)targetCO2, frcCorr);
+
+    // SCD4X Sensirion datasheet
+    delay(400);
 
     if (error != SCD4X_NO_ERROR){
         LOG_ERROR("SCD4X: Unable to perform forced recalibration.");
@@ -155,6 +177,67 @@ bool SCD4XSensor::performFRC(uint32_t targetCO2) {
         return false;
     }
 
+    LOG_INFO("SCD4X: FRC Correction successful. Correction output: %u", (uint16_t)(frcCorr-0x8000));
+
+    return true;
+}
+
+bool SCD4XSensor::startMeasurement() {
+    uint16_t error;
+
+    if (state == SCD4X_MEASUREMENT){
+        LOG_DEBUG("SCD4X: Already in measurement mode");
+        return true;
+    }
+
+    if (lowPower) {
+        error = scd4x.startLowPowerPeriodicMeasurement();
+    } else {
+        error = scd4x.startPeriodicMeasurement();
+    }
+
+    if (error == SCD4X_NO_ERROR) {
+        LOG_INFO("SCD4X: Started measurement mode");
+        if (lowPower) {
+            LOG_INFO("SCD4X: Low power mode");
+        } else {
+            LOG_INFO("SCD4X: Normal power mode");
+        }
+
+        state = SCD4X_MEASUREMENT;
+        return true;
+    } else {
+        LOG_ERROR("SCD4X: Couldn't start measurement mode");
+        return false;
+    }
+}
+
+bool SCD4XSensor::stopMeasurement(){
+    uint16_t error;
+
+    error = scd4x.stopPeriodicMeasurement();
+    if (error != SCD4X_NO_ERROR) {
+        LOG_ERROR("SCD4X: Unable to set idle mode on SCD4X.");
+        return false;
+    }
+
+    state = SCD4X_IDLE;
+    return true;
+}
+
+bool SCD4XSensor::setPowerMode(bool _lowPower) {
+    lowPower = _lowPower;
+
+    if (!stopMeasurement()) {
+        return false;
+    }
+
+    if (lowPower) {
+        LOG_DEBUG("SCD4X: Set low power mode");
+    } else {
+        LOG_DEBUG("SCD4X: Set normal power mode");
+    }
+
     return true;
 }
 
@@ -163,22 +246,26 @@ bool SCD4XSensor::performFRC(uint32_t targetCO2) {
 
 * From Sensirion SCD4X I2C Library
 */
-bool SCD4XSensor::getASC(uint16_t &ascEnabled) {
+bool SCD4XSensor::getASC(uint16_t &_ascActive) {
     uint16_t error;
     LOG_INFO("SCD4X: Getting ASC");
 
-    error = scd4x.stopPeriodicMeasurement();
-    if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("SCD4X: Unable to set idle mode on SCD4X.");
+    if (!stopMeasurement()) {
         return false;
     }
-
-    error = scd4x.getAutomaticSelfCalibrationEnabled(ascEnabled);
+    error = scd4x.getAutomaticSelfCalibrationEnabled(_ascActive);
 
     if (error != SCD4X_NO_ERROR){
         LOG_ERROR("SCD4X: Unable to send command.");
         return false;
     }
+
+    if (_ascActive){
+        LOG_INFO("SCD4X: ASC is enabled");
+    } else {
+        LOG_INFO("SCD4X: FRC is enabled");
+    }
+
     return true;
 }
 
@@ -199,9 +286,7 @@ bool SCD4XSensor::setASC(bool ascEnabled){
         LOG_INFO("SCD4X: Disabling ASC");
     }
 
-    error = scd4x.stopPeriodicMeasurement();
-    if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("SCD4X: Unable to set idle mode on SCD4X.");
+    if (!stopMeasurement()) {
         return false;
     }
 
@@ -245,18 +330,18 @@ bool SCD4XSensor::setASC(bool ascEnabled){
 * ppm.
 */
 bool SCD4XSensor::setASCBaseline(uint32_t targetCO2){
+    // TODO - Remove?
+    //  Available in library, but not described in datasheet.
     uint16_t error;
-    LOG_INFO("SCD4X: Setting ASC baseline");
+    LOG_INFO("SCD4X: Setting ASC baseline to: %u", targetCO2);
 
     getASC(ascActive);
     if (!ascActive){
-        LOG_ERROR("SCD4X: ASC is not active");
+        LOG_ERROR("SCD4X: Can't set ASC baseline. ASC is not active");
         return false;
     }
 
-    error = scd4x.stopPeriodicMeasurement();
-    if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("SCD4X: Unable to set idle mode on SCD4X.");
+    if (!stopMeasurement()) {
         return false;
     }
 
@@ -273,6 +358,8 @@ bool SCD4XSensor::setASCBaseline(uint32_t targetCO2){
         return false;
     }
 
+    LOG_INFO("SCD4X: Setting ASC baseline successful");
+
     return true;
 }
 
@@ -283,7 +370,8 @@ bool SCD4XSensor::setASCBaseline(uint32_t targetCO2){
 * From Sensirion SCD4X I2C Library.
 *
 * Setting the temperature offset of the SCD4x inside the customer device
-* allows the user to optimize the RH and T output signal. By default, the temperature offset is set to 4 °C. To save
+* allows the user to optimize the RH and T output signal.
+* By default, the temperature offset is set to 4 °C. To save
 * the setting to the EEPROM, the persist_settings command may be issued.
 * Equation (1) details how the characteristic temperature offset can be
 * calculated using the current temperature output of the sensor (TSCD4x), a
@@ -299,49 +387,58 @@ bool SCD4XSensor::setASCBaseline(uint32_t targetCO2){
 bool SCD4XSensor::setTemperature(float tempReference){
     uint16_t error;
     float prevTempOffset;
+    float updatedTempOffset;
     float tempOffset;
-
+    bool dataReady;
     uint16_t co2;
     float temperature;
     float humidity;
-    LOG_INFO("SCD4X: Setting reference temperature at: %.2f". temperature);
+
+    LOG_INFO("SCD4X: Setting reference temperature at: %.2f", tempReference);
+
+    error = scd4x.getDataReadyStatus(dataReady);
+    if (!dataReady) {
+        LOG_ERROR("SCD4X: Data is not ready");
+        return false;
+    }
 
     error = scd4x.readMeasurement(co2, temperature, humidity);
     if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("SCD4X: Unable read current temperature.");
+        LOG_ERROR("SCD4X: Unable to read current temperature. Error code: %u", error);
         return false;
     }
 
     LOG_INFO("SCD4X: Current sensor temperature: %.2f", temperature);
 
-    error = scd4x.stopPeriodicMeasurement();
-    if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("SCD4X: Unable to set idle mode on SCD4X.");
+    if (!stopMeasurement()) {
         return false;
     }
 
     error = scd4x.getTemperatureOffset(prevTempOffset);
 
     if (error != SCD4X_NO_ERROR){
-        LOG_ERROR("SCD4X: Unable to get temperature offset.");
+        LOG_ERROR("SCD4X: Unable to get temperature offset. Error code: %u", error);
         return false;
     }
-    LOG_INFO("SCD4X: Sensor temperature offset: %.2f", prevTempOffset);
+    LOG_INFO("SCD4X: Current sensor temperature offset: %.2f", prevTempOffset);
 
     tempOffset = temperature - tempReference + prevTempOffset;
 
     LOG_INFO("SCD4X: Setting temperature offset: %.2f", tempOffset);
     error = scd4x.setTemperatureOffset(tempOffset);
     if (error != SCD4X_NO_ERROR){
-        LOG_ERROR("SCD4X: Unable to set temperature offset.");
+        LOG_ERROR("SCD4X: Unable to set temperature offset. Error code: %u", error);
         return false;
     }
 
     error = scd4x.persistSettings();
     if (error != SCD4X_NO_ERROR){
-        LOG_ERROR("SCD4X: Unable to make settings persistent.");
+        LOG_ERROR("SCD4X: Unable to make settings persistent. Error code: %u", error);
         return false;
     }
+
+    scd4x.getTemperatureOffset(updatedTempOffset);
+    LOG_INFO("SCD4X: Updated sensor temperature offset: %.2f", updatedTempOffset);
 
     return true;
 }
@@ -358,19 +455,39 @@ bool SCD4XSensor::getAltitude(uint16_t &altitude){
     uint16_t error;
     LOG_INFO("SCD4X: Requesting sensor altitude");
 
-    error = scd4x.stopPeriodicMeasurement();
-    if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("SCD4X: Unable to set idle mode on SCD4X.");
+    if (!stopMeasurement()) {
         return false;
     }
 
     error = scd4x.getSensorAltitude(altitude);
 
     if (error != SCD4X_NO_ERROR){
-        LOG_ERROR("SCD4X: Unable to get altitude.");
+        LOG_ERROR("SCD4X: Unable to get altitude. Error code: %u", error);
         return false;
     }
     LOG_INFO("SCD4X: Sensor altitude: %u", altitude);
+
+    return true;
+}
+
+/**
+* @brief Get the ambient pressure around the sensor.
+*
+* From Sensirion SCD4X I2C Library.
+*
+* Gets the ambient pressure in Pa.
+*/
+bool SCD4XSensor::getAmbientPressure(uint32_t &ambientPressure){
+    uint16_t error;
+    LOG_INFO("SCD4X: Requesting sensor ambient pressure");
+
+    error = scd4x.getAmbientPressure(ambientPressure);
+
+    if (error != SCD4X_NO_ERROR){
+        LOG_ERROR("SCD4X: Unable to get altitude. Error code: %u", error);
+        return false;
+    }
+    LOG_INFO("SCD4X: Sensor ambient pressure: %u", ambientPressure);
 
     return true;
 }
@@ -386,22 +503,20 @@ bool SCD4XSensor::getAltitude(uint16_t &altitude){
 bool SCD4XSensor::setAltitude(uint32_t altitude){
     uint16_t error;
 
-    error = scd4x.stopPeriodicMeasurement();
-    if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("SCD4X: Unable to set idle mode on SCD4X.");
+    if (!stopMeasurement()) {
         return false;
     }
 
     error = scd4x.setSensorAltitude(altitude);
 
     if (error != SCD4X_NO_ERROR){
-        LOG_ERROR("SCD4X: Unable to set altitude.");
+        LOG_ERROR("SCD4X: Unable to set altitude. Error code: %u", error);
         return false;
     }
 
     error = scd4x.persistSettings();
     if (error != SCD4X_NO_ERROR){
-        LOG_ERROR("SCD4X: Unable to make settings persistent.");
+        LOG_ERROR("SCD4X: Unable to make settings persistent. Error code: %u", error);
         return false;
     }
 
@@ -427,14 +542,14 @@ bool SCD4XSensor::setAmbientPressure(uint32_t ambientPressure) {
     error = scd4x.setAmbientPressure(ambientPressure);
 
     if (error != SCD4X_NO_ERROR){
-        LOG_ERROR("SCD4X: Unable to set altitude.");
+        LOG_ERROR("SCD4X: Unable to set altitude. Error code: %u", error);
         return false;
     }
 
     // Sensirion doesn't indicate if this is necessary. We send it anyway
     error = scd4x.persistSettings();
     if (error != SCD4X_NO_ERROR){
-        LOG_ERROR("SCD4X: Unable to make settings persistent.");
+        LOG_ERROR("SCD4X: Unable to make settings persistent. Error code: %u", error);
         return false;
     }
 
@@ -449,52 +564,106 @@ bool SCD4XSensor::setAmbientPressure(uint32_t ambientPressure) {
 * The perform_factory_reset command resets all configuration settings
 * stored in the EEPROM and erases the FRC and ASC algorithm history.
 */
-
 bool SCD4XSensor::factoryReset() {
     uint16_t error;
 
-    error = scd4x.stopPeriodicMeasurement();
-    if (error != SCD4X_NO_ERROR) {
-        LOG_ERROR("SCD4X: Unable to set idle mode on SCD4X.");
+    LOG_INFO("SCD4X: Requesting factory reset");
+
+    if (!stopMeasurement()) {
         return false;
     }
 
     error = scd4x.performFactoryReset();
 
     if (error != SCD4X_NO_ERROR){
-        LOG_ERROR("SCD4X: Unable to do factory reset.");
+        LOG_ERROR("SCD4X: Unable to do factory reset. Error code: %u", error);
         return false;
     }
+
+    LOG_INFO("SCD4X: Factory reset successful");
 
     return true;
 }
 
+/**
+* @brief Put the sensor into sleep mode from idle mode.
+*
+* From Sensirion SCD4X I2C Library.
+*
+* Put the sensor from idle to sleep to reduce power consumption. Can be
+* used to power down when operating the sensor in power-cycled single shot
+* mode.
+*
+* @note This command is only available in idle mode. Only for SCD41.
+*/
+bool SCD4XSensor::sleep() {
+    LOG_INFO("SCD4X: Powering down");
 
+    if (sensorVariant != SCD4X_SENSOR_VARIANT_SCD41) {
+        LOG_WARN("SCD4X: Can't send sensor to sleep. Incorrect variant. Ignoring");
+        return true;
+    }
+
+    if (!stopMeasurement()) {
+        return false;
+    }
+
+    if (scd4x.powerDown() != SCD4X_NO_ERROR) {
+        LOG_ERROR("SCD4X: Error trying to execute wakeUp()");
+        return false;
+    }
+    state = SCD4X_OFF;
+    return true;
+}
+
+/**
+* @brief Wake up sensor from sleep mode to idle mode.
+*
+* From Sensirion SCD4X I2C Library.
+*
+* Wake up the sensor from sleep mode into idle mode. Note that the SCD4x
+* does not acknowledge the wake_up command. The sensor's idle state after
+* wake up can be verified by reading out the serial number.
+*
+* @note This command is only available for SCD41.
+*/
+bool SCD4XSensor::wakeUp(){
+    LOG_INFO("SCD4X: Waking up");
+
+    if (scd4x.wakeUp() != SCD4X_NO_ERROR) {
+        LOG_ERROR("SCD4X: Error trying to execute wakeUp()");
+        return false;
+    }
+    state = SCD4X_IDLE;
+    return true;
+}
 
 AdminMessageHandleResult SCD4XSensor::handleAdminMessage(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,
                                                            meshtastic_AdminMessage *response)
 {
     AdminMessageHandleResult result;
 
+    // TODO: potentially add selftest command?
+
     switch (request->which_payload_variant) {
         case meshtastic_AdminMessage_sensor_config_tag:
             // Check for ASC-FRC request first
-            if (!request->sensor_config.has_scdxx_config) {
+            if (!request->sensor_config.has_scd4x_config) {
                 result = AdminMessageHandleResult::NOT_HANDLED;
                 break;
             }
 
-            if (request->sensor_config.scdxx_config.has_factory_reset) {
+            if (request->sensor_config.scd4x_config.has_factory_reset) {
                 LOG_DEBUG("SCD4X: Requested factory reset");
                 this->factoryReset();
             } else {
 
-                if (request->sensor_config.scdxx_config.has_set_asc) {
-                    this->setASC(request->sensor_config.scdxx_config.set_asc);
-                    if (request->sensor_config.scdxx_config.set_asc == false) {
+                if (request->sensor_config.scd4x_config.has_set_asc) {
+                    this->setASC(request->sensor_config.scd4x_config.set_asc);
+                    if (request->sensor_config.scd4x_config.set_asc == false) {
                         LOG_DEBUG("SCD4X: Request for FRC");
-                        if (request->sensor_config.scdxx_config.has_target_co2_conc) {
-                            this->performFRC(request->sensor_config.scdxx_config.target_co2_conc);
+                        if (request->sensor_config.scd4x_config.has_set_target_co2_conc) {
+                            this->performFRC(request->sensor_config.scd4x_config.set_target_co2_conc);
                         } else {
                             // FRC requested but no target CO2 provided
                             LOG_ERROR("SCD4X: target CO2 not provided");
@@ -503,9 +672,10 @@ AdminMessageHandleResult SCD4XSensor::handleAdminMessage(const meshtastic_MeshPa
                         }
                     } else {
                         LOG_DEBUG("SCD4X: Request for ASC");
-                        if (request->sensor_config.scdxx_config.has_target_co2_conc) {
+                        if (request->sensor_config.scd4x_config.has_set_target_co2_conc) {
                             LOG_DEBUG("SCD4X: Request has target CO2");
-                            this->setASCBaseline(request->sensor_config.scdxx_config.target_co2_conc);
+                            // TODO - Remove? see setASCBaseline function
+                            this->setASCBaseline(request->sensor_config.scd4x_config.set_target_co2_conc);
                         } else {
                             LOG_DEBUG("SCD4X: Request doesn't have target CO2");
                         }
@@ -513,18 +683,30 @@ AdminMessageHandleResult SCD4XSensor::handleAdminMessage(const meshtastic_MeshPa
                 }
 
                 // Check for temperature offset
-                if (request->sensor_config.scdxx_config.has_temperature) {
-                    this->setTemperature(request->sensor_config.scdxx_config.temperature);
+                // NOTE: this requires to have a sensor working on stable environment
+                // And to make it between readings
+                if (request->sensor_config.scd4x_config.has_set_temperature) {
+                    this->setTemperature(request->sensor_config.scd4x_config.set_temperature);
                 }
 
                 // Check for altitude or pressure offset
-                if (request->sensor_config.scdxx_config.has_altitude) {
-                    this->setAltitude(request->sensor_config.scdxx_config.altitude);
-                } else if (request->sensor_config.scdxx_config.has_ambient_pressure){
-                    this->setAmbientPressure(request->sensor_config.scdxx_config.ambient_pressure);
+                if (request->sensor_config.scd4x_config.has_set_altitude) {
+                    this->setAltitude(request->sensor_config.scd4x_config.set_altitude);
+                } else if (request->sensor_config.scd4x_config.has_set_ambient_pressure){
+                    this->setAmbientPressure(request->sensor_config.scd4x_config.set_ambient_pressure);
+                }
+
+                // Check for low power mode
+                // NOTE: to switch from one mode to another do:
+                // setPowerMode -> startMeasurement
+                if (request->sensor_config.scd4x_config.has_set_power_mode) {
+                    this->setPowerMode(request->sensor_config.scd4x_config.set_power_mode);
                 }
 
             }
+
+            // Start measurement mode
+            this->startMeasurement();
 
             result = AdminMessageHandleResult::HANDLED;
             break;
