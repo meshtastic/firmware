@@ -11,7 +11,8 @@
 
 // USB_CHECK
 #define EXT_PWR_DETECT 12
-#define ADC_V 8
+#define BATTERY_PIN 8
+#define ADC_CHANNEL ADC1_GPIO8_CHANNEL
 
 #define PIN_BUZZER 9
 
