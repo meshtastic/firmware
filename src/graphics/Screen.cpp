@@ -1265,7 +1265,6 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
                 setOn(true);    // Wake up the screen first
                 forceDisplay(); // Forces screen redraw
             }
-
             // === Prepare banner content ===
             const meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(packet->from);
             const char *longName = (node && node->has_user) ? node->user.long_name : nullptr;
@@ -1299,134 +1298,134 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
 
             screen->showSimpleBanner(banner, 3000);
         }
-
-        return 0;
     }
 
-    // Triggered by MeshModules
-    int Screen::handleUIFrameEvent(const UIFrameEvent *event)
-    {
-        if (showingNormalScreen) {
-            // Regenerate the frameset, potentially honoring a module's internal requestFocus() call
-            if (event->action == UIFrameEvent::Action::REGENERATE_FRAMESET)
-                setFrames(FOCUS_MODULE);
+    return 0;
+}
 
-            // Regenerate the frameset, while Attempt to maintain focus on the current frame
-            else if (event->action == UIFrameEvent::Action::REGENERATE_FRAMESET_BACKGROUND)
-                setFrames(FOCUS_PRESERVE);
+// Triggered by MeshModules
+int Screen::handleUIFrameEvent(const UIFrameEvent *event)
+{
+    if (showingNormalScreen) {
+        // Regenerate the frameset, potentially honoring a module's internal requestFocus() call
+        if (event->action == UIFrameEvent::Action::REGENERATE_FRAMESET)
+            setFrames(FOCUS_MODULE);
 
-            // Don't regenerate the frameset, just re-draw whatever is on screen ASAP
-            else if (event->action == UIFrameEvent::Action::REDRAW_ONLY)
-                setFastFramerate();
-        }
+        // Regenerate the frameset, while Attempt to maintain focus on the current frame
+        else if (event->action == UIFrameEvent::Action::REGENERATE_FRAMESET_BACKGROUND)
+            setFrames(FOCUS_PRESERVE);
 
-        return 0;
+        // Don't regenerate the frameset, just re-draw whatever is on screen ASAP
+        else if (event->action == UIFrameEvent::Action::REDRAW_ONLY)
+            setFastFramerate();
     }
 
-    int Screen::handleInputEvent(const InputEvent *event)
-    {
-        if (!screenOn)
-            return 0;
+    return 0;
+}
+
+int Screen::handleInputEvent(const InputEvent *event)
+{
+    if (!screenOn)
+        return 0;
 
 #ifdef USE_EINK // the screen is the last input handler, so if an event makes it here, we can assume it will prompt a screen draw.
-        EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Use fast-refresh for next frame, no skip please
-        EINK_ADD_FRAMEFLAG(dispdev, BLOCKING);    // Edge case: if this frame is promoted to COSMETIC, wait for update
-        handleSetOn(true);                        // Ensure power-on to receive deep-sleep screensaver (PowerFSM should handle?)
-        setFastFramerate();                       // Draw ASAP
+    EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Use fast-refresh for next frame, no skip please
+    EINK_ADD_FRAMEFLAG(dispdev, BLOCKING);    // Edge case: if this frame is promoted to COSMETIC, wait for update
+    handleSetOn(true);                        // Ensure power-on to receive deep-sleep screensaver (PowerFSM should handle?)
+    setFastFramerate();                       // Draw ASAP
 #endif
-        if (NotificationRenderer::isOverlayBannerShowing()) {
-            NotificationRenderer::inEvent = *event;
-            static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar,
-                                                 NotificationRenderer::drawBannercallback};
-            ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
-            setFastFramerate(); // Draw ASAP
-            ui->update();
+    if (NotificationRenderer::isOverlayBannerShowing()) {
+        NotificationRenderer::inEvent = *event;
+        static OverlayCallback overlays[] = {graphics::UIRenderer::drawNavigationBar, NotificationRenderer::drawBannercallback};
+        ui->setOverlays(overlays, sizeof(overlays) / sizeof(overlays[0]));
+        setFastFramerate(); // Draw ASAP
+        ui->update();
 
-            menuHandler::handleMenuSwitch(dispdev);
-            return 0;
+        menuHandler::handleMenuSwitch(dispdev);
+        return 0;
+    }
+
+    // Use left or right input from a keyboard to move between frames,
+    // so long as a mesh module isn't using these events for some other purpose
+    if (showingNormalScreen) {
+
+        // Ask any MeshModules if they're handling keyboard input right now
+        bool inputIntercepted = false;
+        for (MeshModule *module : moduleFrames) {
+            if (module && module->interceptingKeyboardInput())
+                inputIntercepted = true;
         }
 
-        // Use left or right input from a keyboard to move between frames,
-        // so long as a mesh module isn't using these events for some other purpose
-        if (showingNormalScreen) {
-
-            // Ask any MeshModules if they're handling keyboard input right now
-            bool inputIntercepted = false;
-            for (MeshModule *module : moduleFrames) {
-                if (module && module->interceptingKeyboardInput())
-                    inputIntercepted = true;
-            }
-
-            // If no modules are using the input, move between frames
-            if (!inputIntercepted) {
-                if (event->inputEvent == INPUT_BROKER_LEFT || event->inputEvent == INPUT_BROKER_ALT_PRESS) {
-                    showPrevFrame();
-                } else if (event->inputEvent == INPUT_BROKER_RIGHT || event->inputEvent == INPUT_BROKER_USER_PRESS) {
-                    showNextFrame();
-                } else if (event->inputEvent == INPUT_BROKER_SELECT) {
-                    if (this->ui->getUiState()->currentFrame == framesetInfo.positions.home) {
-                        menuHandler::homeBaseMenu();
-                    } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.memory) {
-                        menuHandler::systemBaseMenu();
+        // If no modules are using the input, move between frames
+        if (!inputIntercepted) {
+            if (event->inputEvent == INPUT_BROKER_LEFT || event->inputEvent == INPUT_BROKER_ALT_PRESS) {
+                showPrevFrame();
+            } else if (event->inputEvent == INPUT_BROKER_RIGHT || event->inputEvent == INPUT_BROKER_USER_PRESS) {
+                showNextFrame();
+            } else if (event->inputEvent == INPUT_BROKER_SELECT) {
+                if (this->ui->getUiState()->currentFrame == framesetInfo.positions.home) {
+                    menuHandler::homeBaseMenu();
+                } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.memory) {
+                    menuHandler::systemBaseMenu();
 #if HAS_GPS
-                    } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.gps && gps) {
-                        menuHandler::positionBaseMenu();
+                } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.gps && gps) {
+                    menuHandler::positionBaseMenu();
 #endif
-                    } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.clock) {
-                        menuHandler::clockMenu();
-                    } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.lora) {
-                        menuHandler::LoraRegionPicker();
-                    } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.textMessage) {
-                        if (devicestate.rx_text_message.from) {
-                            menuHandler::messageResponseMenu();
-                        } else {
-                            menuHandler::textMessageBaseMenu();
-                        }
-                    } else if (framesetInfo.positions.firstFavorite != 255 &&
-                               this->ui->getUiState()->currentFrame >= framesetInfo.positions.firstFavorite &&
-                               this->ui->getUiState()->currentFrame <= framesetInfo.positions.lastFavorite) {
-                        menuHandler::favoriteBaseMenu();
-                    } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist ||
-                               this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_lastheard ||
-                               this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_hopsignal ||
-                               this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_distance ||
-                               this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_hopsignal ||
-                               this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_bearings) {
-                        menuHandler::nodeListMenu();
-                    } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.wifi) {
-                        menuHandler::wifiBaseMenu();
+                } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.clock) {
+                    menuHandler::clockMenu();
+                } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.lora) {
+                    menuHandler::LoraRegionPicker();
+                } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.textMessage) {
+                    if (devicestate.rx_text_message.from) {
+                        menuHandler::messageResponseMenu();
+                    } else {
+                        menuHandler::textMessageBaseMenu();
                     }
-                } else if (event->inputEvent == INPUT_BROKER_BACK) {
-                    showPrevFrame();
-                } else if (event->inputEvent == INPUT_BROKER_CANCEL) {
-                    setOn(false);
+                } else if (framesetInfo.positions.firstFavorite != 255 &&
+                           this->ui->getUiState()->currentFrame >= framesetInfo.positions.firstFavorite &&
+                           this->ui->getUiState()->currentFrame <= framesetInfo.positions.lastFavorite) {
+                    menuHandler::favoriteBaseMenu();
+                } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist ||
+                           this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_lastheard ||
+                           this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_hopsignal ||
+                           this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_distance ||
+                           this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_hopsignal ||
+                           this->ui->getUiState()->currentFrame == framesetInfo.positions.nodelist_bearings) {
+                    menuHandler::nodeListMenu();
+                } else if (this->ui->getUiState()->currentFrame == framesetInfo.positions.wifi) {
+                    menuHandler::wifiBaseMenu();
                 }
+            } else if (event->inputEvent == INPUT_BROKER_BACK) {
+                showPrevFrame();
+            } else if (event->inputEvent == INPUT_BROKER_CANCEL) {
+                setOn(false);
             }
         }
-
-        return 0;
     }
 
-    int Screen::handleAdminMessage(AdminModule_ObserverData * arg)
-    {
-        switch (arg->request->which_payload_variant) {
-        // Node removed manually (i.e. via app)
-        case meshtastic_AdminMessage_remove_by_nodenum_tag:
-            setFrames(FOCUS_PRESERVE);
-            *arg->result = AdminMessageHandleResult::HANDLED;
-            break;
+    return 0;
+}
 
-        // Default no-op, in case the admin message observable gets used by other classes in future
-        default:
-            break;
-        }
-        return 0;
-    }
+int Screen::handleAdminMessage(AdminModule_ObserverData *arg)
+{
+    switch (arg->request->which_payload_variant) {
+    // Node removed manually (i.e. via app)
+    case meshtastic_AdminMessage_remove_by_nodenum_tag:
+        setFrames(FOCUS_PRESERVE);
+        *arg->result = AdminMessageHandleResult::HANDLED;
+        break;
 
-    bool Screen::isOverlayBannerShowing()
-    {
-        return NotificationRenderer::isOverlayBannerShowing();
+    // Default no-op, in case the admin message observable gets used by other classes in future
+    default:
+        break;
     }
+    return 0;
+}
+
+bool Screen::isOverlayBannerShowing()
+{
+    return NotificationRenderer::isOverlayBannerShowing();
+}
 
 } // namespace graphics
 
