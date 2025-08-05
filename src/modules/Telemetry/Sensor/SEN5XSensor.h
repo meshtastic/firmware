@@ -84,7 +84,7 @@ class SEN5XSensor : public TelemetrySensor
     bool startCleaning();
     uint8_t getMeasurements();
     bool readRawValues();
-    bool readPnValues();
+    bool readPnValues(bool cumulative);
     bool readValues();
 
     uint32_t measureStarted = 0;
@@ -92,15 +92,14 @@ class SEN5XSensor : public TelemetrySensor
 
   protected:
     // Store status of the sensor in this file
-    const char *sen5XCleaningFileName = "/prefs/sen5XCleaning.dat";
-    const char *sen5XVOCFileName = "/prefs/sen5XVOC.dat";
+    const char *sen5XStateFileName = "/prefs/sen5X.dat";
+    bool loadState();
+    bool saveState();
 
     // Cleaning State
-    #define SEN5X_MAX_CLEANING_SIZE 32
-    // Last cleaning status - if > 0 - valid, otherwise 0
+    // Last cleaning status
     uint32_t lastCleaning = 0;
-    void loadCleaningState();
-    void updateCleaningState();
+    bool lastCleaningValid = false;
 
     // TODO - VOC State
     // # define SEN5X_VOC_STATE_BUFFER_SIZE 12
