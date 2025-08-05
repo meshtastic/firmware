@@ -39,6 +39,7 @@
 #include <machine/endian.h>
 #define ntohl __ntohl
 #endif
+#include <RTC.h>
 
 MQTT *mqtt;
 
@@ -256,6 +257,11 @@ bool isDefaultServer(const String &host)
     return host.length() == 0 || host == default_mqtt_address;
 }
 
+bool isDefaultRootTopic(const String &root)
+{
+    return root.length() == 0 || root == default_mqtt_root;
+}
+
 struct PubSubConfig {
     explicit PubSubConfig(const meshtastic_ModuleConfig_MQTTConfig &config)
     {
@@ -350,7 +356,7 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
         // if another "/" was added, parse string up to that character
         channelName = strtok(channelName, "/") ? strtok(channelName, "/") : channelName;
         // We allow downlink JSON packets only on a channel named "mqtt"
-        meshtastic_Channel &sendChannel = channels.getByName(channelName);
+        const meshtastic_Channel &sendChannel = channels.getByName(channelName);
         if (!(strncasecmp(channels.getGlobalId(sendChannel.index), Channels::mqttChannel, strlen(Channels::mqttChannel)) == 0 &&
               sendChannel.settings.downlink_enabled)) {
             LOG_WARN("JSON downlink received on channel not called 'mqtt' or without downlink enabled");
@@ -387,10 +393,12 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
             cryptTopic = moduleConfig.mqtt.root + cryptTopic;
             jsonTopic = moduleConfig.mqtt.root + jsonTopic;
             mapTopic = moduleConfig.mqtt.root + mapTopic;
+            isConfiguredForDefaultRootTopic = isDefaultRootTopic(moduleConfig.mqtt.root);
         } else {
             cryptTopic = "msh" + cryptTopic;
             jsonTopic = "msh" + jsonTopic;
             mapTopic = "msh" + mapTopic;
+            isConfiguredForDefaultRootTopic = true;
         }
 
         if (moduleConfig.mqtt.map_reporting_enabled && moduleConfig.mqtt.has_map_report_settings) {
@@ -484,7 +492,7 @@ void MQTT::reconnect()
             return; // Don't try to connect directly to the server
         }
 #if HAS_NETWORKING
-        const PubSubConfig config(moduleConfig.mqtt);
+        const PubSubConfig ps_config(moduleConfig.mqtt);
         MQTTClient *clientConnection = mqttClient.get();
 #if MQTT_SUPPORTS_TLS
         if (moduleConfig.mqtt.tls_enabled) {
@@ -495,7 +503,7 @@ void MQTT::reconnect()
             LOG_INFO("Use non-TLS-encrypted session");
         }
 #endif
-        if (connectPubSub(config, pubSub, *clientConnection)) {
+        if (connectPubSub(ps_config, pubSub, *clientConnection)) {
             enabled = true; // Start running background process again
             runASAP = true;
             reconnectCount = 0;
@@ -552,10 +560,8 @@ void MQTT::sendSubscriptions()
 
 int32_t MQTT::runOnce()
 {
-#if HAS_NETWORKING
     if (!moduleConfig.mqtt.enabled || !(moduleConfig.mqtt.map_reporting_enabled || channels.anyMqttEnabled()))
         return disable();
-
     bool wantConnection = wantsLink();
 
     perhapsReportToMap();
@@ -565,7 +571,7 @@ int32_t MQTT::runOnce()
         publishQueuedMessages();
         return 200;
     }
-
+#if HAS_NETWORKING
     else if (!pubSub.loop()) {
         if (!wantConnection)
             return 5000; // If we don't want connection now, check again in 5 secs
@@ -589,8 +595,10 @@ int32_t MQTT::runOnce()
         powerFSM.trigger(EVENT_CONTACT_FROM_PHONE); // Suppress entering light sleep (because that would turn off bluetooth)
         return 20;
     }
-#endif
+#else
+    // No networking available, return default interval
     return 30000;
+#endif
 }
 
 bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTClient *client)
@@ -617,18 +625,32 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
             return connectPubSub(parsed, *pubSub, (client != nullptr) ? *client : *clientConnection);
         }
 #else
-        LOG_ERROR("Invalid MQTT config: proxy_to_client_enabled must be enabled on nodes that do not have a network");
+        const char *warning = "Invalid MQTT config: proxy_to_client_enabled must be enabled on nodes that do not have a network";
+        LOG_ERROR(warning);
+#if !IS_RUNNING_TESTS
+        meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+        cn->level = meshtastic_LogRecord_Level_ERROR;
+        cn->time = getValidTime(RTCQualityFromNet);
+        strncpy(cn->message, warning, sizeof(cn->message) - 1);
+        cn->message[sizeof(cn->message) - 1] = '\0'; // Ensure null termination
+        service->sendClientNotification(cn);
+#endif
         return false;
 #endif
     }
 
     const bool defaultServer = isDefaultServer(parsed.serverAddr);
-    if (defaultServer && config.tls_enabled) {
-        LOG_ERROR("Invalid MQTT config: TLS was enabled, but the default server does not support TLS");
-        return false;
-    }
     if (defaultServer && parsed.serverPort != PubSubConfig::defaultPort) {
-        LOG_ERROR("Invalid MQTT config: Unsupported port '%d' for the default MQTT server", parsed.serverPort);
+        const char *warning = "Invalid MQTT config: default server address must not have a port specified";
+        LOG_ERROR(warning);
+#if !IS_RUNNING_TESTS
+        meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+        cn->level = meshtastic_LogRecord_Level_ERROR;
+        cn->time = getValidTime(RTCQualityFromNet);
+        strncpy(cn->message, warning, sizeof(cn->message) - 1);
+        cn->message[sizeof(cn->message) - 1] = '\0'; // Ensure null termination
+        service->sendClientNotification(cn);
+#endif
         return false;
     }
     return true;
@@ -756,24 +778,33 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
         }
         entry->topic = std::move(topic);
         entry->envBytes.assign(bytes, numBytes);
-        assert(mqttQueue.enqueue(entry, 0));
+        if (mqttQueue.enqueue(entry, 0) == false) {
+            LOG_CRIT("Failed to add a message to mqttQueue!");
+            abort();
+        }
     }
 }
 
 void MQTT::perhapsReportToMap()
 {
-    if (!moduleConfig.mqtt.map_reporting_enabled || !(moduleConfig.mqtt.proxy_to_client_enabled || isConnectedDirectly()))
+    if (!moduleConfig.mqtt.map_reporting_enabled || !moduleConfig.mqtt.map_report_settings.should_report_location ||
+        !(moduleConfig.mqtt.proxy_to_client_enabled || isConnectedDirectly()))
         return;
+
+    // Coerce the map position precision to be within the valid range
+    // This removes obtusely large radius and privacy problematic ones from the map
+    if (map_position_precision < 12 || map_position_precision > 15) {
+        LOG_WARN("MQTT Map report position precision %u is out of range, using default %u", map_position_precision,
+                 default_map_position_precision);
+        map_position_precision = default_map_position_precision;
+    }
 
     if (Throttle::isWithinTimespanMs(last_report_to_map, map_publish_interval_msecs))
         return;
 
-    if (map_position_precision == 0 || (localPosition.latitude_i == 0 && localPosition.longitude_i == 0)) {
+    if (localPosition.latitude_i == 0 && localPosition.longitude_i == 0) {
         last_report_to_map = millis();
-        if (map_position_precision == 0)
-            LOG_WARN("MQTT Map report enabled, but precision is 0");
-        if (localPosition.latitude_i == 0 && localPosition.longitude_i == 0)
-            LOG_WARN("MQTT Map report enabled, but no position available");
+        LOG_WARN("MQTT Map report enabled, but no position available");
         return;
     }
 
@@ -794,17 +825,14 @@ void MQTT::perhapsReportToMap()
     mapReport.region = config.lora.region;
     mapReport.modem_preset = config.lora.modem_preset;
     mapReport.has_default_channel = channels.hasDefaultChannel();
+    mapReport.has_opted_report_location = true;
 
     // Set position with precision (same as in PositionModule)
-    if (map_position_precision < 32 && map_position_precision > 0) {
-        mapReport.latitude_i = localPosition.latitude_i & (UINT32_MAX << (32 - map_position_precision));
-        mapReport.longitude_i = localPosition.longitude_i & (UINT32_MAX << (32 - map_position_precision));
-        mapReport.latitude_i += (1 << (31 - map_position_precision));
-        mapReport.longitude_i += (1 << (31 - map_position_precision));
-    } else {
-        mapReport.latitude_i = localPosition.latitude_i;
-        mapReport.longitude_i = localPosition.longitude_i;
-    }
+    mapReport.latitude_i = localPosition.latitude_i & (UINT32_MAX << (32 - map_position_precision));
+    mapReport.longitude_i = localPosition.longitude_i & (UINT32_MAX << (32 - map_position_precision));
+    mapReport.latitude_i += (1 << (31 - map_position_precision));
+    mapReport.longitude_i += (1 << (31 - map_position_precision));
+
     mapReport.altitude = localPosition.altitude;
     mapReport.position_precision = map_position_precision;
 

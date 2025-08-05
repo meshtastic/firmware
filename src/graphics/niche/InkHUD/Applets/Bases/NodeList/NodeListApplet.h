@@ -65,8 +65,8 @@ class NodeListApplet : public Applet, public MeshModule
 
     // Card Dimensions
     // - for rendering and for maxCards calc
-    const uint8_t cardMarginH = fontSmall.lineHeight() / 2;                               // Gap between cards
-    const uint16_t cardH = fontLarge.lineHeight() + fontSmall.lineHeight() + cardMarginH; // Height of card
+    uint8_t cardMarginH = fontSmall.lineHeight() / 2;                                // Gap between cards
+    uint16_t cardH = fontMedium.lineHeight() + fontSmall.lineHeight() + cardMarginH; // Height of card
 };
 
 } // namespace NicheGraphics::InkHUD

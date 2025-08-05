@@ -347,7 +347,7 @@ bool Channels::anyMqttEnabled()
 {
 #if USERPREFS_EVENT_MODE && !MESHTASTIC_EXCLUDE_MQTT
     // Don't publish messages on the public MQTT broker if we are in event mode
-    if (mqtt && mqtt->isUsingDefaultServer()) {
+    if (mqtt && mqtt->isUsingDefaultServer() && mqtt->isUsingDefaultRootTopic()) {
         return false;
     }
 #endif

@@ -23,11 +23,6 @@ int InkHUD::DMApplet::onReceiveTextMessage(const meshtastic_MeshPacket *p)
     if (!isActive())
         return 0;
 
-    // Abort if only an "emoji reactions"
-    // Possibly some implemetation of this in future?
-    if (p->decoded.emoji)
-        return 0;
-
     // If DM (not broadcast)
     if (!isBroadcast(p->to)) {
         // Want to update display, if applet is foreground
@@ -68,13 +63,13 @@ void InkHUD::DMApplet::onRender()
     }
 
     // Sender's id
-    // - shortname, if available, or
+    // - shortname and long name, if available, or
     // - node id
     meshtastic_NodeInfoLite *sender = nodeDB->getMeshNode(latestMessage->dm.sender);
     if (sender && sender->has_user) {
-        header += sender->user.short_name;
+        header += parseShortName(sender); // May be last-four of node if unprintable (emoji, etc)
         header += " (";
-        header += sender->user.long_name;
+        header += parse(sender->user.long_name);
         header += ")";
     } else
         header += hexifyNodeNum(latestMessage->dm.sender);
@@ -96,19 +91,32 @@ void InkHUD::DMApplet::onRender()
     // Print message text
     // ===================
 
+    // Parse any non-ascii chars in the message
+    std::string text = parse(latestMessage->dm.text);
+
     // Extra gap below the header
     int16_t textTop = headerDivY + padDivH;
 
-    // Determine size if printed large
+    // Attempt to print with fontLarge
+    uint32_t textHeight;
     setFont(fontLarge);
-    uint32_t textHeight = getWrappedTextHeight(0, width(), latestMessage->dm.text);
+    textHeight = getWrappedTextHeight(0, width(), text);
+    if (textHeight <= (uint32_t)height()) {
+        printWrapped(0, textTop, width(), text);
+        return;
+    }
 
-    // If too large, swap to small font
-    if (textHeight + textTop > (uint32_t)height()) // (compare signed and unsigned)
-        setFont(fontSmall);
+    // Fallback (too large): attempt to print with fontMedium
+    setFont(fontMedium);
+    textHeight = getWrappedTextHeight(0, width(), text);
+    if (textHeight <= (uint32_t)height()) {
+        printWrapped(0, textTop, width(), text);
+        return;
+    }
 
-    // Print text
-    printWrapped(0, textTop, width(), latestMessage->dm.text);
+    // Fallback (too large): print with fontSmall
+    setFont(fontSmall);
+    printWrapped(0, textTop, width(), text);
 }
 
 // Don't show notifications for direct messages when our applet is displayed

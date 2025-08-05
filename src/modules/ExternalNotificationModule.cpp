@@ -126,9 +126,11 @@ int32_t ExternalNotificationModule::runOnce()
                 millis()) {
                 setExternalState(1, !getExternal(1));
             }
-            if (externalTurnedOn[2] + (moduleConfig.external_notification.output_ms ? moduleConfig.external_notification.output_ms
+            // Only toggle buzzer output if not using PWM mode (to avoid conflict with RTTTL)
+            if (!moduleConfig.external_notification.use_pwm &&
+                externalTurnedOn[2] + (moduleConfig.external_notification.output_ms ? moduleConfig.external_notification.output_ms
                                                                                     : EXT_NOTIFICATION_MODULE_OUTPUT_MS) <
-                millis()) {
+                    millis()) {
                 LOG_DEBUG("EXTERNAL 2 %d compared to %d", externalTurnedOn[2] + moduleConfig.external_notification.output_ms,
                           millis());
                 setExternalState(2, !getExternal(2));
@@ -188,7 +190,7 @@ int32_t ExternalNotificationModule::runOnce()
 
         // Play RTTTL over i2s audio interface if enabled as buzzer
 #ifdef HAS_I2S
-        if (moduleConfig.external_notification.use_i2s_as_buzzer) {
+        if (moduleConfig.external_notification.use_i2s_as_buzzer && canBuzz()) {
             if (audioThread->isPlaying()) {
                 // Continue playing
             } else if (isNagging && (nagCycleCutoff >= millis())) {
@@ -197,7 +199,7 @@ int32_t ExternalNotificationModule::runOnce()
         }
 #endif
         // now let the PWM buzzer play
-        if (moduleConfig.external_notification.use_pwm && config.device.buzzer_gpio) {
+        if (moduleConfig.external_notification.use_pwm && config.device.buzzer_gpio && canBuzz()) {
             if (rtttl::isPlaying()) {
                 rtttl::play();
             } else if (isNagging && (nagCycleCutoff >= millis())) {
@@ -208,6 +210,18 @@ int32_t ExternalNotificationModule::runOnce()
 
         return EXT_NOTIFICATION_DEFAULT_THREAD_MS;
     }
+}
+
+/**
+ * Based on buzzer mode, return true if we can buzz.
+ */
+bool ExternalNotificationModule::canBuzz()
+{
+    if (config.device.buzzer_mode != meshtastic_Config_DeviceConfig_BuzzerMode_DISABLED &&
+        config.device.buzzer_mode != meshtastic_Config_DeviceConfig_BuzzerMode_SYSTEM_ONLY) {
+        return true;
+    }
+    return false;
 }
 
 bool ExternalNotificationModule::wantPacket(const meshtastic_MeshPacket *p)
@@ -235,7 +249,8 @@ void ExternalNotificationModule::setExternalState(uint8_t index, bool on)
             digitalWrite(moduleConfig.external_notification.output_vibra, on);
         break;
     case 2:
-        if (moduleConfig.external_notification.output_buzzer)
+        // Only control buzzer pin digitally if not using PWM mode
+        if (moduleConfig.external_notification.output_buzzer && !moduleConfig.external_notification.use_pwm)
             digitalWrite(moduleConfig.external_notification.output_buzzer, on);
         break;
     default:
@@ -293,6 +308,12 @@ bool ExternalNotificationModule::getExternal(uint8_t index)
     return externalCurrentState[index];
 }
 
+// Allow other firmware components to determine whether a notification is ongoing
+bool ExternalNotificationModule::nagging()
+{
+    return isNagging;
+}
+
 void ExternalNotificationModule::stopNow()
 {
     rtttl::stop();
@@ -302,6 +323,11 @@ void ExternalNotificationModule::stopNow()
 #endif
     nagCycleCutoff = 1; // small value
     isNagging = false;
+    // Turn off all outputs
+    for (int i = 0; i < 3; i++) {
+        setExternalState(i, false);
+        externalTurnedOn[i] = 0;
+    }
     setIntervalFromNow(0);
 #ifdef T_WATCH_S3
     drv.stop();
@@ -338,12 +364,14 @@ ExternalNotificationModule::ExternalNotificationModule()
     // moduleConfig.external_notification.alert_message_buzzer = true;
 
     if (moduleConfig.external_notification.enabled) {
+        if (inputBroker) // put our callback in the inputObserver list
+            inputObserver.observe(inputBroker);
+
         if (nodeDB->loadProto(rtttlConfigFile, meshtastic_RTTTLConfig_size, sizeof(meshtastic_RTTTLConfig),
                               &meshtastic_RTTTLConfig_msg, &rtttlConfig) != LoadFileResult::LOAD_SUCCESS) {
             memset(rtttlConfig.ringtone, 0, sizeof(rtttlConfig.ringtone));
-            strncpy(rtttlConfig.ringtone,
-                    "24:d=32,o=5,b=565:f6,p,f6,4p,p,f6,p,f6,2p,p,b6,p,b6,p,b6,p,b6,p,b,p,b,p,b,p,b,p,b,p,b,p,b,p,b,1p.,2p.,p",
-                    sizeof(rtttlConfig.ringtone));
+            // The default ringtone is always loaded from userPrefs.jsonc
+            strncpy(rtttlConfig.ringtone, USERPREFS_RINGTONE_RTTTL, sizeof(rtttlConfig.ringtone));
         }
 
         LOG_INFO("Init External Notification Module");
@@ -364,7 +392,7 @@ ExternalNotificationModule::ExternalNotificationModule()
             setExternalState(1, false);
             externalTurnedOn[1] = 0;
         }
-        if (moduleConfig.external_notification.output_buzzer) {
+        if (moduleConfig.external_notification.output_buzzer && canBuzz()) {
             if (!moduleConfig.external_notification.use_pwm) {
                 LOG_INFO("Use Pin %i for buzzer", moduleConfig.external_notification.output_buzzer);
                 pinMode(moduleConfig.external_notification.output_buzzer, OUTPUT);
@@ -454,18 +482,21 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 }
             }
 
-            if (moduleConfig.external_notification.alert_bell_buzzer) {
+            if (moduleConfig.external_notification.alert_bell_buzzer && canBuzz()) {
                 if (containsBell) {
                     LOG_INFO("externalNotificationModule - Notification Bell (Buzzer)");
                     isNagging = true;
-                    if (!moduleConfig.external_notification.use_pwm) {
+                    if (!moduleConfig.external_notification.use_pwm && !moduleConfig.external_notification.use_i2s_as_buzzer) {
                         setExternalState(2, true);
                     } else {
 #ifdef HAS_I2S
-                        audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));
-#else
-                        rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
+                        if (moduleConfig.external_notification.use_i2s_as_buzzer) {
+                            audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));
+                        } else
 #endif
+                            if (moduleConfig.external_notification.use_pwm) {
+                            rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
+                        }
                     }
                     if (moduleConfig.external_notification.nag_timeout) {
                         nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
@@ -506,10 +537,11 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
 #ifdef HAS_I2S
                     if (moduleConfig.external_notification.use_i2s_as_buzzer) {
                         audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));
-                    }
-#else
-                    rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
+                    } else
 #endif
+                        if (moduleConfig.external_notification.use_pwm) {
+                        rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
+                    }
                 }
                 if (moduleConfig.external_notification.nag_timeout) {
                     nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
@@ -583,4 +615,13 @@ void ExternalNotificationModule::handleSetRingtone(const char *from_msg)
     if (changed) {
         nodeDB->saveProto(rtttlConfigFile, meshtastic_RTTTLConfig_size, &meshtastic_RTTTLConfig_msg, &rtttlConfig);
     }
+}
+
+int ExternalNotificationModule::handleInputEvent(const InputEvent *event)
+{
+    if (nagCycleCutoff != UINT32_MAX) {
+        stopNow();
+        return 1;
+    }
+    return 0;
 }

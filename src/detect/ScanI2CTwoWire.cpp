@@ -184,8 +184,13 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 type = RTC_RV3028;
                 logFoundDevice("RV3028", (uint8_t)addr.address);
                 rtc.initI2C(*i2cBus);
-                rtc.writeToRegister(0x35, 0x07); // no Clkout
-                rtc.writeToRegister(0x37, 0xB4);
+                // Update RTC EEPROM settings, if necessary
+                if (rtc.readEEPROMRegister(0x35) != 0x07) {
+                    rtc.writeEEPROMRegister(0x35, 0x07); // no Clkout
+                }
+                if (rtc.readEEPROMRegister(0x37) != 0xB4) {
+                    rtc.writeEEPROMRegister(0x37, 0xB4);
+                }
                 break;
 #endif
 
@@ -206,7 +211,17 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 }
                 break;
 
-                SCAN_SIMPLE_CASE(TDECK_KB_ADDR, TDECKKB, "T-Deck keyboard", (uint8_t)addr.address);
+            case TDECK_KB_ADDR:
+                // Do we have the T-Deck keyboard or the T-Deck Pro battery sensor?
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x04), 1);
+                if (registerValue != 0) {
+                    logFoundDevice("BQ27220", (uint8_t)addr.address);
+                    type = BQ27220;
+                } else {
+                    logFoundDevice("TDECKKB", (uint8_t)addr.address);
+                    type = TDECKKB;
+                }
+                break;
                 SCAN_SIMPLE_CASE(BBQ10_KB_ADDR, BBQ10KB, "BB Q10", (uint8_t)addr.address);
 
                 SCAN_SIMPLE_CASE(ST7567_ADDRESS, SCREEN_ST7567, "ST7567", (uint8_t)addr.address);
@@ -358,7 +373,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
             case SHT31_4x_ADDR:     // same as OPT3001_ADDR_ALT
             case SHT31_4x_ADDR_ALT: // same as OPT3001_ADDR
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x89), 2);
-                if (registerValue == 0x11a2 || registerValue == 0x11da || registerValue == 0xe9c) {
+                if (registerValue == 0x11a2 || registerValue == 0x11da || registerValue == 0xe9c || registerValue == 0xc8d) {
                     type = SHT4X;
                     logFoundDevice("SHT4X", (uint8_t)addr.address);
                 } else if (getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x7E), 2) == 0x5449) {
@@ -394,6 +409,12 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 if (registerValue == 0xC0) {
                     type = BQ24295;
                     logFoundDevice("BQ24295", (uint8_t)addr.address);
+                    break;
+                }
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x14), 1); // get ID
+                if ((registerValue & 0b00000011) == 0b00000010) {
+                    type = BQ25896;
+                    logFoundDevice("BQ25896", (uint8_t)addr.address);
                     break;
                 }
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0F), 1); // get ID
@@ -436,9 +457,21 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     logFoundDevice("BMA423", (uint8_t)addr.address);
                 }
                 break;
+            case TCA9535_ADDR:
+            case RAK120352_ADDR:
+            case RAK120353_ADDR:
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x02), 1);
+                if (registerValue == addr.address) { // RAK12035 returns its I2C address at 0x02 (eg 0x20)
+                    type = RAK12035;
+                    logFoundDevice("RAK12035", (uint8_t)addr.address);
+                } else {
+                    type = TCA9535;
+                    logFoundDevice("TCA9535", (uint8_t)addr.address);
+                }
+
+                break;
 
                 SCAN_SIMPLE_CASE(LSM6DS3_ADDR, LSM6DS3, "LSM6DS3", (uint8_t)addr.address);
-                SCAN_SIMPLE_CASE(TCA9535_ADDR, TCA9535, "TCA9535", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(TCA9555_ADDR, TCA9555, "TCA9555", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(VEML7700_ADDR, VEML7700, "VEML7700", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(TSL25911_ADDR, TSL2591, "TSL2591", (uint8_t)addr.address);
@@ -446,6 +479,12 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 SCAN_SIMPLE_CASE(NAU7802_ADDR, NAU7802, "NAU7802", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(DFROBOT_RAIN_ADDR, DFROBOT_RAIN, "DFRobot Rain Gauge", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(LTR390UV_ADDR, LTR390UV, "LTR390UV", (uint8_t)addr.address);
+                SCAN_SIMPLE_CASE(PCT2075_ADDR, PCT2075, "PCT2075", (uint8_t)addr.address);
+                SCAN_SIMPLE_CASE(CST328_ADDR, CST328, "CST328", (uint8_t)addr.address);
+                SCAN_SIMPLE_CASE(LTR553ALS_ADDR, LTR553ALS, "LTR553ALS", (uint8_t)addr.address);
+                SCAN_SIMPLE_CASE(BHI260AP_ADDR, BHI260AP, "BHI260AP", (uint8_t)addr.address);
+                SCAN_SIMPLE_CASE(SCD4X_ADDR, SCD4X, "SCD4X", (uint8_t)addr.address);
+                SCAN_SIMPLE_CASE(BMM150_ADDR, BMM150, "BMM150", (uint8_t)addr.address);
 #ifdef HAS_TPS65233
                 SCAN_SIMPLE_CASE(TPS65233_ADDR, TPS65233, "TPS65233", (uint8_t)addr.address);
 #endif

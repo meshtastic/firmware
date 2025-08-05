@@ -105,7 +105,7 @@ void readFromRTC()
  *
  * If we haven't yet set our RTC this boot, set it from a GPS derived time
  */
-bool perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpdate)
+RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpdate)
 {
     static uint32_t lastSetMsec = 0;
     uint32_t now = millis();
@@ -113,7 +113,7 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpdate)
 #ifdef BUILD_EPOCH
     if (tv->tv_sec < BUILD_EPOCH) {
         LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
-        return false;
+        return RTCSetResultInvalidTime;
     }
 #endif
 
@@ -184,9 +184,9 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpdate)
         readFromRTC();
 #endif
 
-        return true;
+        return RTCSetResultSuccess;
     } else {
-        return false;
+        return RTCSetResultNotSet; // RTC was already set with a higher quality time
     }
 }
 
@@ -215,7 +215,7 @@ const char *RtcName(RTCQuality quality)
  * @param t The time to potentially set the RTC to.
  * @return True if the RTC was set to the provided time, false otherwise.
  */
-bool perhapsSetRTC(RTCQuality q, struct tm &t)
+RTCSetResult perhapsSetRTC(RTCQuality q, struct tm &t)
 {
     /* Convert to unix time
     The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of seconds that have elapsed since January 1, 1970
@@ -226,12 +226,19 @@ bool perhapsSetRTC(RTCQuality q, struct tm &t)
     time_t res = gm_mktime(&t);
     struct timeval tv;
     tv.tv_sec = res;
-    tv.tv_usec = 0; // time.centisecond() * (10 / 1000);
+    tv.tv_usec = 0;                      // time.centisecond() * (10 / 1000);
+    uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
+#ifdef BUILD_EPOCH
+    if (tv.tv_sec < BUILD_EPOCH) {
+        LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
+        return RTCSetResultInvalidTime;
+    }
+#endif
 
     // LOG_DEBUG("Got time from GPS month=%d, year=%d, unixtime=%ld", t.tm_mon, t.tm_year, tv.tv_sec);
     if (t.tm_year < 0 || t.tm_year >= 300) {
         // LOG_DEBUG("Ignore invalid GPS month=%d, year=%d, unixtime=%ld", t.tm_mon, t.tm_year, tv.tv_sec);
-        return false;
+        return RTCSetResultInvalidTime;
     } else {
         return perhapsSetRTC(q, &tv);
     }
@@ -244,11 +251,15 @@ bool perhapsSetRTC(RTCQuality q, struct tm &t)
  */
 int32_t getTZOffset()
 {
+#if MESHTASTIC_EXCLUDE_TZ
+    return 0;
+#else
     time_t now = getTime(false);
     struct tm *gmt;
     gmt = gmtime(&now);
     gmt->tm_isdst = -1;
     return (int32_t)difftime(now, mktime(gmt));
+#endif
 }
 
 /**

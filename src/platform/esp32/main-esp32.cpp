@@ -56,9 +56,11 @@ void updateBatteryLevel(uint8_t level) {}
 void getMacAddr(uint8_t *dmac)
 {
 #if defined(CONFIG_IDF_TARGET_ESP32C6) && defined(CONFIG_SOC_IEEE802154_SUPPORTED)
-    assert(esp_base_mac_addr_get(dmac) == ESP_OK);
+    auto res = esp_base_mac_addr_get(dmac);
+    assert(res == ESP_OK);
 #else
-    assert(esp_efuse_mac_get_default(dmac) == ESP_OK);
+    auto res = esp_efuse_mac_get_default(dmac);
+    assert(res == ESP_OK);
 #endif
 }
 

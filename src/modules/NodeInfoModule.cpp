@@ -14,16 +14,17 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
 {
     auto p = *pptr;
 
+    if (p.is_licensed != owner.is_licensed) {
+        LOG_WARN("Invalid nodeInfo detected, is_licensed mismatch!");
+        return true;
+    }
+
+    // Coerce user.id to be derived from the node number
+    snprintf(p.id, sizeof(p.id), "!%08x", getFrom(&mp));
+
     bool hasChanged = nodeDB->updateUser(getFrom(&mp), p, mp.channel);
 
     bool wasBroadcast = isBroadcast(mp.to);
-
-    // Show new nodes on LCD screen
-    if (wasBroadcast) {
-        String lcd = String("Joined: ") + p.long_name + "\n";
-        if (screen)
-            screen->print(lcd.c_str());
-    }
 
     // if user has changed while packet was not for us, inform phone
     if (hasChanged && !wasBroadcast && !isToUs(&mp))
@@ -85,6 +86,11 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
         if (u.is_licensed && u.public_key.size > 0) {
             u.public_key.bytes[0] = 0;
             u.public_key.size = 0;
+        }
+        // Coerce unmessagable for Repeater role
+        if (u.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
+            u.has_is_unmessagable = true;
+            u.is_unmessagable = true;
         }
 
         LOG_INFO("Send owner %s/%s/%s", u.id, u.long_name, u.short_name);

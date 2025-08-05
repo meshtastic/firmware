@@ -71,16 +71,13 @@ template <typename T> bool LR11x0Interface<T>::init()
 
     RadioLibInterface::init();
 
-    if (power > LR1110_MAX_POWER) // Clamp power to maximum defined level
-        power = LR1110_MAX_POWER;
+    limitPower(LR1110_MAX_POWER);
 
     if ((power > LR1120_MAX_POWER) &&
         (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) { // clamp again if wide freq range
         power = LR1120_MAX_POWER;
         preambleLength = 12; // 12 is the default for operation above 2GHz
     }
-
-    limitPower();
 
 #ifdef LR11X0_RF_SWITCH_SUBGHZ
     pinMode(LR11X0_RF_SWITCH_SUBGHZ, OUTPUT);

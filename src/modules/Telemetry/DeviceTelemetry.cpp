@@ -9,6 +9,7 @@
 #include "configuration.h"
 #include "gps/RTC.h"
 #include "main.h"
+#include "memGet.h"
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 #include <meshUtils.h>
@@ -48,7 +49,7 @@ bool DeviceTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
         return false;
 
     if (t->which_variant == meshtastic_Telemetry_device_metrics_tag) {
-#ifdef DEBUG_PORT
+#if defined(DEBUG_PORT) && !defined(DEBUG_MUTE)
         const char *sender = getSenderShortName(mp);
 
         LOG_INFO("(Received from %s): air_util_tx=%f, channel_utilization=%f, battery_level=%i, voltage=%f", sender,
@@ -133,6 +134,9 @@ meshtastic_Telemetry DeviceTelemetryModule::getLocalStatsTelemetry()
         telemetry.variant.local_stats.num_packets_rx_bad = SimRadio::instance->rxBad;
         telemetry.variant.local_stats.num_tx_relay = SimRadio::instance->txRelay;
     }
+#else
+    telemetry.variant.local_stats.heap_total_bytes = memGet.getHeapSize();
+    telemetry.variant.local_stats.heap_free_bytes = memGet.getFreeHeap();
 #endif
     if (router) {
         telemetry.variant.local_stats.num_rx_dupe = router->rxDupe;
