@@ -65,6 +65,8 @@ extern "C" {
 #define INPUTDRIVER_ENCODER_DOWN 4
 #define INPUTDRIVER_ENCODER_BTN 28
 
+#define CANNED_MESSAGE_MODULE_ENABLE 1
+
 /*
  * Buzzer - PWM
  */
