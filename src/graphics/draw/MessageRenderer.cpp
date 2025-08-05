@@ -273,7 +273,7 @@ void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     currentKey ^= ((size_t)mp.id << 24);
 
     if (cachedKey != currentKey) {
-        LOG_INFO("Message cache key is misssed cachedKey=0x%0x, currentKey=0x%x", cachedKey, currentKey);
+        LOG_INFO("Onscreen message scroll cache key needs updating: cachedKey=0x%0x, currentKey=0x%x", cachedKey, currentKey);
 
         // Cache miss - regenerate lines and heights
         cachedLines = generateLines(display, headerStr, messageBuf, textWidth);
