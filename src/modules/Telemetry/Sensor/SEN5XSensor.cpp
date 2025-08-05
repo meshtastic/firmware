@@ -7,6 +7,11 @@
 #include "TelemetrySensor.h"
 #include "FSCommon.h"
 #include "SPILock.h"
+#include "SafeFile.h"
+#include <pb_decode.h>
+#include <pb_encode.h>
+
+meshtastic_SEN5XState sen5xstate = meshtastic_SEN5XState_init_zero;
 
 SEN5XSensor::SEN5XSensor() : TelemetrySensor(meshtastic_TelemetrySensorType_SEN5X, "SEN5X") {}
 
@@ -229,45 +234,59 @@ bool SEN5XSensor::idle()
     return true;
 }
 
-void SEN5XSensor::loadCleaningState()
+bool SEN5XSensor::loadState()
 {
 #ifdef FSCom
     spiLock->lock();
-    auto file = FSCom.open(sen5XCleaningFileName, FILE_O_READ);
+    auto file = FSCom.open(sen5XStateFileName, FILE_O_READ);
+    bool okay = false;
     if (file) {
-        file.read();
+        LOG_INFO("%s state read from %s", sensorName, sen5XStateFileName);
+        pb_istream_t stream = {&readcb, &file, meshtastic_SEN5XState_size};
+        if (!pb_decode(&stream, &meshtastic_SEN5XState_msg, &sen5xstate)) {
+            LOG_ERROR("Error: can't decode protobuf %s", PB_GET_ERROR(&stream));
+        } else {
+            lastCleaning = sen5xstate.last_cleaning_time;
+            lastCleaningValid = sen5xstate.last_cleaning_valid;
+            okay = true;
+        }
         file.close();
-        LOG_INFO("SEN5X: Cleaning state %u read for %s read from %s", lastCleaning, sensorName, sen5XCleaningFileName);
     } else {
-        LOG_INFO("SEN5X: No %s state found (File: %s)", sensorName, sen5XCleaningFileName);
+        LOG_INFO("No %s state found (File: %s)", sensorName, sen5XStateFileName);
     }
     spiLock->unlock();
+    return okay;
 #else
     LOG_ERROR("SEN5X: ERROR - Filesystem not implemented");
 #endif
 }
 
-void SEN5XSensor::updateCleaningState()
+bool SEN5XSensor::saveState()
 {
 #ifdef FSCom
-    spiLock->lock();
+    auto file = SafeFile(sen5XStateFileName);
 
-    if (FSCom.exists(sen5XCleaningFileName) && !FSCom.remove(sen5XCleaningFileName)) {
-        LOG_WARN("SEN5X: Can't remove old state file");
-    }
-    auto file = FSCom.open(sen5XCleaningFileName, FILE_O_WRITE);
-    if (file) {
-        LOG_INFO("SEN5X: Save cleaning state %u for %s to %s", lastCleaning, sensorName, sen5XCleaningFileName);
-        file.write(lastCleaning);
-        file.flush();
-        file.close();
+    sen5xstate.last_cleaning_time = lastCleaning;
+    sen5xstate.last_cleaning_valid = lastCleaningValid;
+    bool okay = false;
+
+    LOG_INFO("%s: state write to %s", sensorName, sen5XStateFileName);
+    pb_ostream_t stream = {&writecb, static_cast<Print *>(&file), meshtastic_SEN5XState_size};
+
+    if (!pb_encode(&stream, &meshtastic_SEN5XState_msg, &sen5xstate)) {
+        LOG_ERROR("Error: can't encode protobuf %s", PB_GET_ERROR(&stream));
     } else {
-        LOG_INFO("SEN5X: Can't write %s state (File: %s)", sensorName, sen5XCleaningFileName);
+        okay = true;
     }
 
-    spiLock->unlock();
+    okay &= file.close();
+
+    if (okay)
+        LOG_INFO("%s: state write to %s successful", sensorName, sen5XStateFileName);
+
+    return okay;
 #else
-    LOG_ERROR("SEN5X: ERROR: Filesystem not implemented");
+    LOG_ERROR("%s: ERROR - Filesystem not implemented", sensorName);
 #endif
 }
 
@@ -281,6 +300,7 @@ uint32_t SEN5XSensor::wakeUp(){
         LOG_INFO("SEN5X: Error starting measurement");
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
+    // Not needed
     // delay(50); // From Sensirion Arduino library
 
     // LOG_INFO("SEN5X: Setting measurement mode");
@@ -295,6 +315,8 @@ uint32_t SEN5XSensor::wakeUp(){
 
 bool SEN5XSensor::startCleaning()
 {
+    // Note: we only should enter here if we have a valid RTC with at least
+    // RTCQuality::RTCQualityDevice
     state = SEN5X_CLEANING;
 
     // Note that this command can only be run when the sensor is in measurement mode
@@ -322,9 +344,11 @@ bool SEN5XSensor::startCleaning()
 
     // Save timestamp in flash so we know when a week has passed
     uint32_t now;
-    now = getTime();
+    now = getValidTime(RTCQuality::RTCQualityDevice);
+    // If time is not RTCQualityNone, it will return non-zero
     lastCleaning = now;
-    updateCleaningState();
+    lastCleaningValid = true;
+    saveState();
 
     idle();
     return true;
@@ -365,34 +389,43 @@ int32_t SEN5XSensor::runOnce()
     // Detection succeeded
     state = SEN5X_IDLE;
     status = 1;
-    LOG_INFO("SEN5X Enabled");
+
+    // Load state
+    loadState();
 
     // Check if it is time to do a cleaning
-    // TODO - this is not currently working as intended - always reading 0 from the file. We should probably make a unified approach for both the cleaning and the VOCstate
-    loadCleaningState();
-    LOG_INFO("SEN5X: Last cleaning time: %u", lastCleaning);
-    if (lastCleaning) {
-        LOG_INFO("SEN5X: Last cleaning is valid");
+    uint32_t now;
+    now = getValidTime(RTCQuality::RTCQualityDevice);
+    // If time is not RTCQualityNone, it will return non-zero
 
-        uint32_t now;
-        now = getTime();
-        LOG_INFO("SEN5X: Current time %us", now);
-        uint32_t passed = now - lastCleaning;
-        LOG_INFO("SEN5X: Elapsed time since last cleaning: %us", passed);
+    if (now) {
+        if (lastCleaningValid) {
+            // LOG_INFO("SEN5X: Last cleaning is valid");
+            // LOG_INFO("SEN5X: Current time %us", now);
 
-        if (passed > ONE_WEEK_IN_SECONDS && (now > 1514764800)) {       // If current date greater than 01/01/2018 (validity check)
-            LOG_INFO("SEN5X: More than a week since las cleaning, cleaning...");
-            startCleaning();
+            int32_t passed = now - lastCleaning; // in seconds
+            // LOG_INFO("SEN5X: Elapsed time since last cleaning: %us", passed);
+
+            if (passed > ONE_WEEK_IN_SECONDS && (now > 1514764800)) {       // If current date greater than 01/01/2018 (validity check)
+                LOG_INFO("SEN5X: More than a week (%us) since last cleaning in epoch (%us). Trigger, cleaning...", passed, lastCleaning);
+                startCleaning();
+            } else {
+                LOG_INFO("SEN5X: Cleaning not needed (%ds passed). Last cleaning date (in epoch): %us", passed, lastCleaning);
+            }
         } else {
-            LOG_INFO("SEN5X: Last cleaning date (in epoch): %u", lastCleaning);
-        }
+            // LOG_INFO("SEN5X: Last cleaning time is not valid");
+            // We assume the device has just been updated or it is new, so no need to trigger a cleaning.
+            // Just save the timestamp to do a cleaning one week from now.
+            // TODO - could we trigger this after getting time?
+            // Otherwise, we will never trigger cleaning in some cases
+            lastCleaning = now;
+            lastCleaningValid = true;
+            LOG_INFO("SEN5X: No valid last cleaning date found, saving it now: %us", lastCleaning);
+            saveState();
+            }
     } else {
-        LOG_INFO("SEN5X: Last cleaning is not valid");
-        // We asume the device has just been updated or it is new, so no need to trigger a cleaning.
-        // Just save the timestamp to do a cleaning one week from now.
-        lastCleaning = getTime();
-        updateCleaningState();
-        LOG_INFO("SEN5X: No valid last cleaning date found, saving it now: %u", lastCleaning);
+        // TODO - Should this actually ignore? We could end up never cleaning...
+        LOG_INFO("SEN5X: Not enough RTCQuality, ignoring cleaning");
     }
 
     return initI2CSensor();
@@ -429,7 +462,8 @@ bool SEN5XSensor::readValues()
     int16_t  int_noxIndex      = static_cast<int16_t>((dataBuffer[14]  << 8) | dataBuffer[15]);
 
     // TODO we should check if values are NAN before converting them
-    // convert them based on Sensirion Arduino lib
+
+    // Convert values based on Sensirion Arduino lib
     sen5xmeasurement.pM1p0          = uint_pM1p0      / 10;
     sen5xmeasurement.pM2p5          = uint_pM2p5      / 10;
     sen5xmeasurement.pM4p0          = uint_pM4p0      / 10;
@@ -446,7 +480,7 @@ bool SEN5XSensor::readValues()
     return true;
 }
 
-bool SEN5XSensor::readPnValues()
+bool SEN5XSensor::readPnValues(bool cumulative)
 {
     if (!sendCommand(SEN5X_READ_PM_VALUES)){
         LOG_ERROR("SEN5X: Error sending read command");
@@ -475,7 +509,7 @@ bool SEN5XSensor::readPnValues()
     uint16_t uint_pN10p0  = static_cast<uint16_t>((dataBuffer[16]  << 8) | dataBuffer[17]);
     uint16_t uint_tSize   = static_cast<uint16_t>((dataBuffer[18]  << 8) | dataBuffer[19]);
 
-    // Convert them based on Sensirion Arduino lib
+    // Convert values based on Sensirion Arduino lib
     sen5xmeasurement.pN0p5   = uint_pN0p5  / 10;
     sen5xmeasurement.pN1p0   = uint_pN1p0  / 10;
     sen5xmeasurement.pN2p5   = uint_pN2p5  / 10;
@@ -484,8 +518,6 @@ bool SEN5XSensor::readPnValues()
     sen5xmeasurement.tSize   = uint_tSize  / 1000.0f;
 
     // Convert PN readings from #/cm3 to #/0.1l
-    // TODO Remove accumuluative values:
-    // https://github.com/fablabbcn/smartcitizen-kit-2x/issues/85
     sen5xmeasurement.pN0p5  *= 100;
     sen5xmeasurement.pN1p0  *= 100;
     sen5xmeasurement.pN2p5  *= 100;
@@ -493,7 +525,15 @@ bool SEN5XSensor::readPnValues()
     sen5xmeasurement.pN10p0 *= 100;
     sen5xmeasurement.tSize  *= 100;
 
-    // TODO - Change depending on the final values
+    // Remove accumuluative values:
+    // https://github.com/fablabbcn/smartcitizen-kit-2x/issues/85
+    if (!cumulative) {
+        sen5xmeasurement.pN10p0 -= sen5xmeasurement.pN4p0;
+        sen5xmeasurement.pN4p0 -= sen5xmeasurement.pN2p5;
+        sen5xmeasurement.pN2p5 -= sen5xmeasurement.pN1p0;
+        sen5xmeasurement.pN1p0 -= sen5xmeasurement.pN0p5;
+    }
+
     LOG_DEBUG("Got: pN0p5=%u, pN1p0=%u, pN2p5=%u, pN4p0=%u, pN10p0=%u, tSize=%.2f",
                 sen5xmeasurement.pN0p5, sen5xmeasurement.pN1p0,
                 sen5xmeasurement.pN2p5, sen5xmeasurement.pN4p0,
@@ -556,7 +596,7 @@ uint8_t SEN5XSensor::getMeasurements()
         return 2;
     }
 
-    if(!readPnValues()) {
+    if(!readPnValues(false)) {
         LOG_ERROR("SEN5X: Error getting PM readings");
         return 2;
     }
@@ -583,7 +623,7 @@ int32_t SEN5XSensor::pendingForReady(){
             }
 
             // Get PN values to check if we are above or below threshold
-            readPnValues();
+            readPnValues(true);
 
             // If the reading is low (the tyhreshold is in #/cm3) and second warmUp hasn't passed we return to come back later
             if ((sen5xmeasurement.pN4p0 / 100) < SEN5X_PN4P0_CONC_THD && sinceMeasureStarted < SEN5X_WARMUP_MS_2) {
