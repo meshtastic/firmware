@@ -6,7 +6,6 @@
 #define PMSA003I_FRAME_LENGTH  32
 #define PMSA003I_WARMUP_MS 30000
 
-
 class PMSA003ISensor : public TelemetrySensor
 {
 public:

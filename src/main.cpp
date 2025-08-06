@@ -524,39 +524,6 @@ void setup()
     LOG_INFO("Scan for i2c devices");
 #endif
 
-// Scan I2C port at desired speed
-#ifdef SCAN_I2C_CLOCK_SPEED
-    uint32_t currentClock;
-    currentClock = i2cScanner->getClockSpeed(ScanI2C::I2CPort::WIRE);
-    LOG_INFO("Clock speed: %uHz on WIRE", currentClock);
-    LOG_DEBUG("Setting Wire with defined clock speed, %uHz...", SCAN_I2C_CLOCK_SPEED);
-
-    if(!i2cScanner->setClockSpeed(ScanI2C::I2CPort::WIRE, SCAN_I2C_CLOCK_SPEED)) {
-        LOG_ERROR("Unable to set clock speed on WIRE");
-    } else {
-        currentClock = i2cScanner->getClockSpeed(ScanI2C::I2CPort::WIRE);
-        LOG_INFO("Set clock speed: %uHz on WIRE", currentClock);
-    }
-
-    // TODO Check if necessary
-    // LOG_DEBUG("Starting Wire with defined clock speed, %d...", SCAN_I2C_CLOCK_SPEED);
-    // if(!i2cScanner->setClockSpeed(ScanI2C::I2CPort::WIRE1, SCAN_I2C_CLOCK_SPEED)) {
-    //     LOG_ERROR("Unable to set clock speed on WIRE1");
-    // } else {
-    //     LOG_INFO("Set clock speed: %d on WIRE1", SCAN_I2C_CLOCK_SPEED);
-    // }
-
-    // Restore clock speed
-    if (currentClock != SCAN_I2C_CLOCK_SPEED) {
-        if(!i2cScanner->setClockSpeed(ScanI2C::I2CPort::WIRE, currentClock)) {
-            LOG_ERROR("Unable to restore clock speed on WIRE");
-        } else {
-            currentClock = i2cScanner->getClockSpeed(ScanI2C::I2CPort::WIRE);
-            LOG_INFO("Set clock speed restored to: %uHz on WIRE", currentClock);
-        }
-    }
-#endif
-
 #if defined(I2C_SDA1) || (defined(NRF52840_XXAA) && (WIRE_INTERFACES_COUNT == 2))
     i2cScanner->scanPort(ScanI2C::I2CPort::WIRE1);
 #endif

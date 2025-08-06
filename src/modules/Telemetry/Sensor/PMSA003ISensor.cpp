@@ -56,9 +56,11 @@ int32_t PMSA003ISensor::runOnce()
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
 
+#ifdef PMSA003I_I2C_CLOCK_SPEED
     restoreClock(currentClock);
+#endif
 
-    status = 1; 
+    status = 1;
     LOG_INFO("PMSA003I Enabled");
 
     return initI2CSensor();
@@ -86,7 +88,9 @@ bool PMSA003ISensor::getMetrics(meshtastic_Telemetry *measurement)
         return false;
     }
 
+#ifdef PMSA003I_I2C_CLOCK_SPEED
     restoreClock(currentClock);
+#endif
 
     for (uint8_t i = 0; i < PMSA003I_FRAME_LENGTH; i++) {
         buffer[i] = bus->read();
@@ -136,19 +140,19 @@ bool PMSA003ISensor::getMetrics(meshtastic_Telemetry *measurement)
 
     measurement->variant.air_quality_metrics.has_particles_05um = true;
     measurement->variant.air_quality_metrics.particles_05um = read16(buffer, 18);
-  
+
     measurement->variant.air_quality_metrics.has_particles_10um = true;
     measurement->variant.air_quality_metrics.particles_10um = read16(buffer, 20);
-  
+
     measurement->variant.air_quality_metrics.has_particles_25um = true;
     measurement->variant.air_quality_metrics.particles_25um = read16(buffer, 22);
-   
+
     measurement->variant.air_quality_metrics.has_particles_50um = true;
     measurement->variant.air_quality_metrics.particles_50um = read16(buffer, 24);
-  
+
     measurement->variant.air_quality_metrics.has_particles_100um = true;
     measurement->variant.air_quality_metrics.particles_100um = read16(buffer, 26);
-  
+
     return true;
 }
 
