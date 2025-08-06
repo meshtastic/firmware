@@ -25,8 +25,6 @@
 #include <nvs.h>
 #include <nvs_flash.h>
 
-#include "esp_idf_version.h"
-
 #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH
 void setBluetoothEnable(bool enable)
 {
@@ -193,9 +191,7 @@ void esp32Setup()
 /// loop code specific to ESP32 targets
 void esp32Loop()
 {
-    if (esp_task_wdt_reset() != ESP_OK) {
-        LOG_ERROR("Failed to reset task watchdog");
-    }
+    esp_task_wdt_reset(); // service our app level watchdog
 
     // for debug printing
     // radio.radioIf.canSleep();
