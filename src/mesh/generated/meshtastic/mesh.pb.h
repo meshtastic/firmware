@@ -267,6 +267,9 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_RAK3312 = 106,
     /* Elecrow ThinkNode M5 https://www.elecrow.com/wiki/ThinkNode_M5_Meshtastic_LoRa_Signal_Transceiver_ESP32-S3.html */
     meshtastic_HardwareModel_THINKNODE_M5 = 107,
+    /* MeshSolar is an integrated power management and communication solution designed for outdoor low-power devices.
+ https://heltec.org/project/meshsolar/ */
+    meshtastic_HardwareModel_HELTEC_MESH_SOLAR = 108,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
@@ -935,6 +938,9 @@ typedef struct _meshtastic_MyNodeInfo {
     char pio_env[40];
     /* The indicator for whether this device is running event firmware and which */
     meshtastic_FirmwareEdition firmware_edition;
+    /* The number of nodes in the nodedb.
+ This is used by the phone to know how many NodeInfo packets to expect on want_config */
+    uint16_t nodedb_count;
 } meshtastic_MyNodeInfo;
 
 /* Debug output from the device.
@@ -1322,7 +1328,7 @@ extern "C" {
 #define meshtastic_MqttClientProxyMessage_init_default {"", 0, {{0, {0}}}, 0}
 #define meshtastic_MeshPacket_init_default       {0, 0, 0, 0, {meshtastic_Data_init_default}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0}
 #define meshtastic_NodeInfo_init_default         {0, false, meshtastic_User_init_default, false, meshtastic_Position_init_default, 0, 0, false, meshtastic_DeviceMetrics_init_default, 0, 0, false, 0, 0, 0, 0}
-#define meshtastic_MyNodeInfo_init_default       {0, 0, 0, {0, {0}}, "", _meshtastic_FirmwareEdition_MIN}
+#define meshtastic_MyNodeInfo_init_default       {0, 0, 0, {0, {0}}, "", _meshtastic_FirmwareEdition_MIN, 0}
 #define meshtastic_LogRecord_init_default        {"", 0, "", _meshtastic_LogRecord_Level_MIN}
 #define meshtastic_QueueStatus_init_default      {0, 0, 0, 0}
 #define meshtastic_FromRadio_init_default        {0, 0, {meshtastic_MeshPacket_init_default}}
@@ -1353,7 +1359,7 @@ extern "C" {
 #define meshtastic_MqttClientProxyMessage_init_zero {"", 0, {{0, {0}}}, 0}
 #define meshtastic_MeshPacket_init_zero          {0, 0, 0, 0, {meshtastic_Data_init_zero}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0}
 #define meshtastic_NodeInfo_init_zero            {0, false, meshtastic_User_init_zero, false, meshtastic_Position_init_zero, 0, 0, false, meshtastic_DeviceMetrics_init_zero, 0, 0, false, 0, 0, 0, 0}
-#define meshtastic_MyNodeInfo_init_zero          {0, 0, 0, {0, {0}}, "", _meshtastic_FirmwareEdition_MIN}
+#define meshtastic_MyNodeInfo_init_zero          {0, 0, 0, {0, {0}}, "", _meshtastic_FirmwareEdition_MIN, 0}
 #define meshtastic_LogRecord_init_zero           {"", 0, "", _meshtastic_LogRecord_Level_MIN}
 #define meshtastic_QueueStatus_init_zero         {0, 0, 0, 0}
 #define meshtastic_FromRadio_init_zero           {0, 0, {meshtastic_MeshPacket_init_zero}}
@@ -1477,6 +1483,7 @@ extern "C" {
 #define meshtastic_MyNodeInfo_device_id_tag      12
 #define meshtastic_MyNodeInfo_pio_env_tag        13
 #define meshtastic_MyNodeInfo_firmware_edition_tag 14
+#define meshtastic_MyNodeInfo_nodedb_count_tag   15
 #define meshtastic_LogRecord_message_tag         1
 #define meshtastic_LogRecord_time_tag            2
 #define meshtastic_LogRecord_source_tag          3
@@ -1710,7 +1717,8 @@ X(a, STATIC,   SINGULAR, UINT32,   reboot_count,      8) \
 X(a, STATIC,   SINGULAR, UINT32,   min_app_version,  11) \
 X(a, STATIC,   SINGULAR, BYTES,    device_id,        12) \
 X(a, STATIC,   SINGULAR, STRING,   pio_env,          13) \
-X(a, STATIC,   SINGULAR, UENUM,    firmware_edition,  14)
+X(a, STATIC,   SINGULAR, UENUM,    firmware_edition,  14) \
+X(a, STATIC,   SINGULAR, UINT32,   nodedb_count,     15)
 #define meshtastic_MyNodeInfo_CALLBACK NULL
 #define meshtastic_MyNodeInfo_DEFAULT NULL
 
@@ -1993,7 +2001,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_LowEntropyKey_size            0
 #define meshtastic_MeshPacket_size               378
 #define meshtastic_MqttClientProxyMessage_size   501
-#define meshtastic_MyNodeInfo_size               79
+#define meshtastic_MyNodeInfo_size               83
 #define meshtastic_NeighborInfo_size             258
 #define meshtastic_Neighbor_size                 22
 #define meshtastic_NodeInfo_size                 323
