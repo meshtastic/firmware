@@ -761,7 +761,16 @@ void setup()
 
 #if defined(USE_SH1107_128_64)
     screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // keep dimension of 128x64
+    screen_geometry = GEOMETRY_128_64;
 #endif
+
+    // if we have one of the fixed overrides in the settings, adjust display type accordingly.
+    if (screen_model == meshtastic_Config_DisplayConfig_OledType_OLED_SH1107) {
+        screen_geometry = GEOMETRY_128_128;
+    } else if (screen_model == meshtastic_Config_DisplayConfig_OledType_OLED_SH1107_128_64) {
+        screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107;
+        screen_geometry = GEOMETRY_128_64;
+    }
 
 #if !MESHTASTIC_EXCLUDE_I2C
 #if !defined(ARCH_STM32WL)
@@ -808,7 +817,7 @@ void setup()
 #elif !defined(ARCH_ESP32) // ARCH_RP2040
     SPI.begin();
 #else
-        // ESP32
+    // ESP32
 #if defined(HW_SPI1_DEVICE)
     SPI1.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
     LOG_DEBUG("SPI1.begin(SCK=%d, MISO=%d, MOSI=%d, NSS=%d)", LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
@@ -902,13 +911,19 @@ void setup()
     service = new MeshService();
     service->init();
 
-    if (nodeDB->keyIsLowEntropy) {
-        service->reloadConfig(SEGMENT_CONFIG);
-        rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
-    }
-
     // Now that the mesh service is created, create any modules
     setupModules();
+
+    // warn the user about a low entropy key
+    if (nodeDB->keyIsLowEntropy && !nodeDB->hasWarned) {
+        LOG_WARN(LOW_ENTROPY_WARNING);
+        meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+        cn->level = meshtastic_LogRecord_Level_WARNING;
+        cn->time = getValidTime(RTCQualityFromNet);
+        sprintf(cn->message, LOW_ENTROPY_WARNING);
+        service->sendClientNotification(cn);
+        nodeDB->hasWarned = true;
+    }
 
 // buttons are now inputBroker, so have to come after setupModules
 #if HAS_BUTTON

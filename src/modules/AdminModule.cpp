@@ -727,7 +727,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         }
 #endif
         config.lora = c.payload_variant.lora;
-        // If we're setting region for the first time, init the region
+        // If we're setting region for the first time, init the region and regenerate the keys
         if (isRegionUnset && config.lora.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
             if (!owner.is_licensed) {
                 bool keygenSuccess = false;
@@ -772,8 +772,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             if (config.security.private_key.size != 32) {
                 crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
 
-            } else if (config.security.public_key.size != 32) {
-                // We check for a potentially valid private key, and a blank public key, and regen the public key if needed.
+            } else {
                 if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
                     config.security.public_key.size = 32;
                 }
