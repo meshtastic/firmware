@@ -45,6 +45,9 @@
 
 
 */
+#ifdef HELTEC_MESH_SOLAR 
+#include "meshSolarApp.h"
+#endif
 
 #if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040)) && !defined(CONFIG_IDF_TARGET_ESP32S2) &&               \
     !defined(CONFIG_IDF_TARGET_ESP32C3)
@@ -60,7 +63,7 @@
 SerialModule *serialModule;
 SerialModuleRadio *serialModuleRadio;
 
-#if defined(TTGO_T_ECHO) || defined(CANARYONE) || defined(MESHLINK) || defined(ELECROW_ThinkNode_M1)
+#if defined(TTGO_T_ECHO) || defined(CANARYONE) || defined(MESHLINK) || defined(ELECROW_ThinkNode_M1) || defined(HELTEC_MESH_SOLAR)
 SerialModule::SerialModule() : StreamAPI(&Serial), concurrency::OSThread("Serial") {}
 static Print *serialPrint = &Serial;
 #elif defined(CONFIG_IDF_TARGET_ESP32C6)
@@ -77,7 +80,8 @@ size_t serialPayloadSize;
 bool SerialModule::isValidConfig(const meshtastic_ModuleConfig_SerialConfig &config)
 {
     if (config.override_console_serial_port && !IS_ONE_OF(config.mode, meshtastic_ModuleConfig_SerialConfig_Serial_Mode_NMEA,
-                                                          meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO)) {
+                                                          meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO,
+                                                        meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MS_CONFIG)) {
         const char *warning =
             "Invalid Serial config: override console serial port is only supported in NMEA and CalTopo output-only modes.";
         LOG_ERROR(warning);
@@ -238,7 +242,17 @@ int32_t SerialModule::runOnce()
             else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_WS85)) {
                 processWXSerial();
 
-            } else {
+            }
+#if defined(HELTEC_MESH_SOLAR)
+            else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MS_CONFIG)) {
+                    serialPayloadSize = Serial.readBytes(serialBytes, sizeof(serialBytes)-1);
+                    //If the parsing fails, the following parsing will be performed.
+                    if((serialPayloadSize > 0) && (meshSolarCmdHandle(serialBytes)!=0)) {
+                        return runOncePart(serialBytes,serialPayloadSize);
+                    }
+            }
+#endif
+            else {
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
                 while (Serial1.available()) {
                     serialPayloadSize = Serial1.readBytes(serialBytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
