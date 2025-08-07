@@ -11,8 +11,6 @@
 #include <pb_decode.h>
 #include <pb_encode.h>
 
-meshtastic_SEN5XState sen5xstate = meshtastic_SEN5XState_init_zero;
-
 SEN5XSensor::SEN5XSensor() : TelemetrySensor(meshtastic_TelemetrySensorType_SEN5X, "SEN5X") {}
 
 bool SEN5XSensor::restoreClock(uint32_t currentClock){
@@ -31,7 +29,7 @@ bool SEN5XSensor::getVersion()
         LOG_ERROR("SEN5X: Error sending version command");
         return false;
     }
-    delay(20); // From Sensirion Arduino library
+    delay(20); // From Sensirion Datasheet
 
     uint8_t versionBuffer[12];
     size_t charNumber = readBuffer(&versionBuffer[0], 3);
@@ -57,7 +55,7 @@ bool SEN5XSensor::findModel()
         LOG_ERROR("SEN5X: Error asking for product name");
         return false;
     }
-    delay(50); // From Sensirion Arduino library
+    delay(50); // From Sensirion Datasheet
 
     const uint8_t nameSize = 48;
     uint8_t name[nameSize];
@@ -127,12 +125,16 @@ bool SEN5XSensor::sendCommand(uint16_t command, uint8_t* buffer, uint8_t byteNum
 #endif
 
     // Transmit the data
-    // LOG_INFO("Beginning connection to SEN5X: 0x%x", address);
+    // LOG_DEBUG("Beginning connection to SEN5X: 0x%x. Size: %u", address, bufferSize);
+    // Note: this is necessary to allow for long-buffers
+    delay(20);
     bus->beginTransmission(address);
     size_t writtenBytes = bus->write(toSend, bufferSize);
     uint8_t i2c_error = bus->endTransmission();
 
+#ifdef SEN5X_I2C_CLOCK_SPEED
     restoreClock(currentClock);
+#endif
 
     if (writtenBytes != bufferSize) {
         LOG_ERROR("SEN5X: Error writting on I2C bus");
@@ -177,7 +179,10 @@ uint8_t SEN5XSensor::readBuffer(uint8_t* buffer, uint8_t byteNumber)
         readBytes -=3;
         receivedBytes += 2;
     }
+#ifdef SEN5X_I2C_CLOCK_SPEED
     restoreClock(currentClock);
+#endif
+
     return receivedBytes;
 }
 
@@ -212,24 +217,107 @@ bool SEN5XSensor::I2Cdetect(TwoWire *_Wire, uint8_t address)
 
 bool SEN5XSensor::idle()
 {
-    // In continous mode we don't sleep
-    if (continousMode || forcedContinousMode) {
-        LOG_ERROR("SEN5X: Not going to idle mode, we are in continous mode!!");
-        return false;
+
+
+    // Get VOC state before going to idle mode
+    if (vocStateFromSensor()) {
+        // TODO Should this be saved with saveState()?
+        // It so, we can consider not saving it when rebooting as
+        // we would have likely saved it recently
+
+        // Check if we have time, and store it
+        uint32_t now;  // If time is RTCQualityNone, it will return zero
+        now = getValidTime(RTCQuality::RTCQualityDevice);
+
+        if (now) {
+            vocTime = now;
+            vocValid = true;
+            // saveState();
+        }
+    } else {
+        vocValid = false;
     }
-    // TODO - Get VOC state before going to idle mode
-    // vocStateFromSensor();
 
     if (!sendCommand(SEN5X_STOP_MEASUREMENT)) {
         LOG_ERROR("SEN5X: Error stoping measurement");
         return false;
     }
-    // delay(200); // From Sensirion Arduino library
+    delay(200); // From Sensirion Datasheet
 
     LOG_INFO("SEN5X: Stop measurement mode");
 
     state = SEN5X_IDLE;
     measureStarted = 0;
+    return true;
+}
+
+bool SEN5XSensor::vocStateToSensor()
+{
+    if (model != SEN55){
+        return true;
+    }
+
+    if (!sendCommand(SEN5X_STOP_MEASUREMENT)) {
+        LOG_ERROR("SEN5X: Error stoping measurement");
+        return false;
+    }
+    delay(200); // From Sensirion Datasheet
+
+    LOG_DEBUG("SEN5X: Sending VOC state to sensor");
+    LOG_DEBUG("[%u, %u, %u, %u, %u, %u, %u, %u]",
+        vocState[0],vocState[1], vocState[2], vocState[3],
+        vocState[4],vocState[5], vocState[6], vocState[7]);
+
+    // Note: send command already takes into account the CRC
+    // buffer size increment needed
+    if (!sendCommand(SEN5X_RW_VOCS_STATE, vocState, SEN5X_VOC_STATE_BUFFER_SIZE)){
+        LOG_ERROR("SEN5X: Error sending VOC's state command'");
+        return false;
+    }
+
+    return true;
+}
+
+bool SEN5XSensor::vocStateFromSensor()
+{
+    if (model != SEN55){
+        return true;
+    }
+
+    LOG_INFO("SEN5X: Getting VOC state from sensor");
+    //  Ask VOCs state from the sensor
+    if (!sendCommand(SEN5X_RW_VOCS_STATE)){
+        LOG_ERROR("SEN5X: Error sending VOC's state command'");
+        return false;
+    }
+
+    delay(20); // From Sensirion Datasheet
+
+    // Retrieve the data
+    // Allocate buffer to account for CRC
+    uint8_t vocBuffer[SEN5X_VOC_STATE_BUFFER_SIZE + (SEN5X_VOC_STATE_BUFFER_SIZE / 2)];
+    size_t receivedNumber = readBuffer(&vocBuffer[0], SEN5X_VOC_STATE_BUFFER_SIZE + (SEN5X_VOC_STATE_BUFFER_SIZE / 2));
+    delay(20); // From Sensirion Datasheet
+
+    if (receivedNumber == 0) {
+        LOG_DEBUG("SEN5X: Error getting VOC's state");
+        return false;
+    }
+
+    vocState[0] = vocBuffer[0];
+    vocState[1] = vocBuffer[1];
+    vocState[2] = vocBuffer[3];
+    vocState[3] = vocBuffer[4];
+    vocState[4] = vocBuffer[6];
+    vocState[5] = vocBuffer[7];
+    vocState[6] = vocBuffer[9];
+    vocState[7] = vocBuffer[10];
+
+    // Print the state (if debug is on)
+    LOG_DEBUG("SEN5X: VOC state retrieved from sensor");
+    LOG_DEBUG("[%u, %u, %u, %u, %u, %u, %u, %u]",
+        vocState[0],vocState[1], vocState[2], vocState[3],
+        vocState[4],vocState[5], vocState[6], vocState[7]);
 
     return true;
 }
@@ -248,6 +336,18 @@ bool SEN5XSensor::loadState()
         } else {
             lastCleaning = sen5xstate.last_cleaning_time;
             lastCleaningValid = sen5xstate.last_cleaning_valid;
+            // Unpack state
+            vocState[7] = (uint8_t)(sen5xstate.voc_state >> 56);
+            vocState[6] = (uint8_t)(sen5xstate.voc_state >> 48);
+            vocState[5] = (uint8_t)(sen5xstate.voc_state >> 40);
+            vocState[4] = (uint8_t)(sen5xstate.voc_state >> 32);
+            vocState[3] = (uint8_t)(sen5xstate.voc_state >> 24);
+            vocState[2] = (uint8_t)(sen5xstate.voc_state >> 16);
+            vocState[1] = (uint8_t)(sen5xstate.voc_state >> 8);
+            vocState[0] = (uint8_t)sen5xstate.voc_state;
+
+            vocTime = sen5xstate.voc_time;
+            vocValid = sen5xstate.voc_valid;
             okay = true;
         }
         file.close();
@@ -263,11 +363,29 @@ bool SEN5XSensor::loadState()
 
 bool SEN5XSensor::saveState()
 {
+    // TODO - This should be called before a reboot
+    // is there a way to get notified?
 #ifdef FSCom
     auto file = SafeFile(sen5XStateFileName);
 
     sen5xstate.last_cleaning_time = lastCleaning;
     sen5xstate.last_cleaning_valid = lastCleaningValid;
+
+    // Unpack state (12 bytes in two parts)
+    sen5xstate.voc_state = ((uint64_t) vocState[7] << 56) |
+        ((uint64_t) vocState[6] << 48) |
+        ((uint64_t) vocState[5] << 40) |
+        ((uint64_t) vocState[4] << 32) |
+        ((uint32_t) vocState[3] << 24) |
+        ((uint32_t) vocState[2] << 16) |
+        ((uint32_t) vocState[1] << 8) |
+        vocState[0];
+
+    LOG_INFO("sen5xstate.voc_state %i", sen5xstate.voc_state);
+
+    sen5xstate.voc_time = vocTime;
+    sen5xstate.voc_valid = vocValid;
+
     bool okay = false;
 
     LOG_INFO("%s: state write to %s", sensorName, sen5XStateFileName);
@@ -296,17 +414,45 @@ bool SEN5XSensor::isActive(){
 
 uint32_t SEN5XSensor::wakeUp(){
     // LOG_INFO("SEN5X: Attempting to wakeUp sensor");
+
+    // From the datasheet
+    // By default, the VOC algorithm resets its state to initial
+    // values each time a measurement is started,
+    // even if the measurement was stopped only for a short
+    // time. So, the VOC index output value needs a long time
+    // until it is stable again. This can be avoided by
+    // restoring the previously memorized algorithm state before
+    // starting the measure mode
+
+    // TODO - This needs to be tested
+    // In SC, the sensor is operated in contionuous mode if
+    // VOCs are present, increasing battery consumption
+    // A different approach should be possible as stated on the
+    // datasheet (see above)
+    // uint32_t now, passed;
+    // now = getValidTime(RTCQuality::RTCQualityDevice);
+    // passed = now - vocTime; //in seconds
+    // // Check if state is recent, less than 10 minutes (600 seconds)
+    // if ((passed < SEN5X_VOC_VALID_TIME) && (now > SEN5X_VOC_VALID_DATE) && vocValid) {
+    //     if (!vocStateToSensor()){
+    //         LOG_ERROR("SEN5X: Sending VOC state to sensor failed");
+    //     }
+    // } else {
+    //     LOG_DEBUG("SEN5X: No valid VOC state found. Ignoring");
+    // }
+
     if (!sendCommand(SEN5X_START_MEASUREMENT)) {
-        LOG_INFO("SEN5X: Error starting measurement");
+        LOG_ERROR("SEN5X: Error starting measurement");
+        // TODO - what should this return??
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
-    // Not needed
-    // delay(50); // From Sensirion Arduino library
+    delay(50); // From Sensirion Datasheet
 
     // LOG_INFO("SEN5X: Setting measurement mode");
-    uint32_t now;
-    now = getTime();
-    measureStarted = now;
+    // TODO - This is currently "problematic"
+    // If time is updated in between reads, there is no way to
+    // keep track of how long it has passed
+    measureStarted = getTime();
     state = SEN5X_MEASUREMENT;
     if (state == SEN5X_MEASUREMENT)
         LOG_INFO("SEN5X: Started measurement mode");
@@ -319,18 +465,18 @@ bool SEN5XSensor::startCleaning()
     // RTCQuality::RTCQualityDevice
     state = SEN5X_CLEANING;
 
-    // Note that this command can only be run when the sensor is in measurement mode
+    // Note that cleaning command can only be run when the sensor is in measurement mode
     if (!sendCommand(SEN5X_START_MEASUREMENT)) {
         LOG_ERROR("SEN5X: Error starting measurment mode");
         return false;
     }
-    delay(50); // From Sensirion Arduino library
+    delay(50); // From Sensirion Datasheet
 
     if (!sendCommand(SEN5X_START_FAN_CLEANING)) {
         LOG_ERROR("SEN5X: Error starting fan cleaning");
         return false;
     }
-    // delay(20); // From Sensirion Arduino library
+    delay(20); // From Sensirion Datasheet
 
     // This message will be always printed so the user knows the device it's not hung
     LOG_INFO("SEN5X: Started fan cleaning it will take 10 seconds...");
@@ -371,7 +517,7 @@ int32_t SEN5XSensor::runOnce()
         LOG_ERROR("SEN5X: Error reseting device");
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
-    delay(200); // From Sensirion Arduino library
+    delay(200); // From Sensirion Datasheet
 
     if (!findModel()) {
         LOG_ERROR("SEN5X: error finding sensor model");
@@ -384,7 +530,7 @@ int32_t SEN5XSensor::runOnce()
         LOG_ERROR("SEN5X: error firmware is too old and will not work with this implementation");
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
-    delay(200); // From Sensirion Arduino library
+    delay(200); // From Sensirion Datasheet
 
     // Detection succeeded
     state = SEN5X_IDLE;
@@ -395,25 +541,23 @@ int32_t SEN5XSensor::runOnce()
 
     // Check if it is time to do a cleaning
     uint32_t now;
+    int32_t passed;
     now = getValidTime(RTCQuality::RTCQualityDevice);
     // If time is not RTCQualityNone, it will return non-zero
 
     if (now) {
         if (lastCleaningValid) {
-            // LOG_INFO("SEN5X: Last cleaning is valid");
-            // LOG_INFO("SEN5X: Current time %us", now);
 
-            int32_t passed = now - lastCleaning; // in seconds
-            // LOG_INFO("SEN5X: Elapsed time since last cleaning: %us", passed);
+            passed = now - lastCleaning; // in seconds
 
-            if (passed > ONE_WEEK_IN_SECONDS && (now > 1514764800)) {       // If current date greater than 01/01/2018 (validity check)
+            if (passed > ONE_WEEK_IN_SECONDS && (now > SEN5X_VOC_VALID_DATE)) {
+                // If current date greater than 01/01/2018 (validity check)
                 LOG_INFO("SEN5X: More than a week (%us) since last cleaning in epoch (%us). Trigger, cleaning...", passed, lastCleaning);
                 startCleaning();
             } else {
                 LOG_INFO("SEN5X: Cleaning not needed (%ds passed). Last cleaning date (in epoch): %us", passed, lastCleaning);
             }
         } else {
-            // LOG_INFO("SEN5X: Last cleaning time is not valid");
             // We assume the device has just been updated or it is new, so no need to trigger a cleaning.
             // Just save the timestamp to do a cleaning one week from now.
             // TODO - could we trigger this after getting time?
@@ -422,10 +566,28 @@ int32_t SEN5XSensor::runOnce()
             lastCleaningValid = true;
             LOG_INFO("SEN5X: No valid last cleaning date found, saving it now: %us", lastCleaning);
             saveState();
+        }
+        if (model == SEN55) {
+            if (!vocValid) {
+                LOG_INFO("SEN5X: No valid VOC's state found");
+            } else {
+                passed = now - vocTime; //in seconds
+
+                // Check if state is recent, less than 10 minutes (600 seconds)
+                if (passed < SEN5X_VOC_VALID_TIME && (now > SEN5X_VOC_VALID_DATE)) {
+                    // If current date greater than 01/01/2018 (validity check)
+                    // Send it to the sensor
+                    LOG_INFO("SEN5X: VOC state is valid and recent");
+                    vocStateToSensor();
+                } else {
+                    LOG_INFO("SEN5X VOC state is to old or date is invalid");
+                }
             }
+        }
+
     } else {
         // TODO - Should this actually ignore? We could end up never cleaning...
-        LOG_INFO("SEN5X: Not enough RTCQuality, ignoring cleaning");
+        LOG_INFO("SEN5X: Not enough RTCQuality, ignoring saved state");
     }
 
     return initI2CSensor();
@@ -442,7 +604,7 @@ bool SEN5XSensor::readValues()
         return false;
     }
     LOG_DEBUG("SEN5X: Reading PM Values");
-    delay(20); // From Sensirion Arduino library
+    delay(20); // From Sensirion Datasheet
 
     uint8_t dataBuffer[24];
     size_t receivedNumber = readBuffer(&dataBuffer[0], 24);
@@ -488,7 +650,7 @@ bool SEN5XSensor::readPnValues(bool cumulative)
     }
 
     LOG_DEBUG("SEN5X: Reading PN Values");
-    delay(20); // From Sensirion Arduino library
+    delay(20); // From Sensirion Datasheet
 
     uint8_t dataBuffer[30];
     size_t receivedNumber = readBuffer(&dataBuffer[0], 30);
@@ -550,7 +712,7 @@ bool SEN5XSensor::readPnValues(bool cumulative)
 //         LOG_ERROR("SEN5X: Error sending read command");
 //         return false;
 //     }
-//     delay(20); // From Sensirion Arduino library
+//     delay(20); // From Sensirion Datasheet
 
 //     uint8_t dataBuffer[12];
 //     size_t receivedNumber = readBuffer(&dataBuffer[0], 12);
@@ -575,7 +737,7 @@ uint8_t SEN5XSensor::getMeasurements()
         LOG_ERROR("SEN5X: Error sending command data ready flag");
         return 2;
     }
-    delay(20); // From Sensirion Arduino library
+    delay(20); // From Sensirion Datasheet
 
     uint8_t dataReadyBuffer[3];
     size_t charNumber = readBuffer(&dataReadyBuffer[0], 3);
