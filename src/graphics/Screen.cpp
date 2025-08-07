@@ -391,6 +391,10 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             dispdev->displayOn();
 #endif
 
+#ifdef ELECROW_ThinkNode_M5
+            io.digitalWrite(PCA_PIN_EINK_EN, HIGH);
+#endif
+
 #if defined(ST7789_CS) &&                                                                                                        \
     !defined(M5STACK) // set display brightness when turning on screens. Just moved function from TFTDisplay to here.
             static_cast<TFTDisplay *>(dispdev)->setDisplayBrightness(brightness);
@@ -425,6 +429,11 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
                 digitalWrite(PIN_EINK_EN, LOW);
             }
 #endif
+
+#ifdef ELECROW_ThinkNode_M5
+            io.digitalWrite(PCA_PIN_EINK_EN, LOW);
+#endif
+
             dispdev->displayOff();
 #ifdef USE_ST7789
             SPI1.end();
