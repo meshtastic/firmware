@@ -724,10 +724,12 @@ void Power::reboot()
     SPI.end();
     Wire.end();
     Serial1.end();
-    if (screen)
+    if (screen) {
         delete screen;
+        screen = nullptr;
+    }
     LOG_DEBUG("final reboot!");
-    reboot();
+    ::reboot();
 #elif defined(ARCH_STM32WL)
     HAL_NVIC_SystemReset();
 #else
