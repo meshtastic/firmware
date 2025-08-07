@@ -31,18 +31,11 @@ Different NicheGraphics UIs and different hardware variants will each have their
 #include "graphics/niche/InkHUD/Applets/User/RecentsList/RecentsListApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/ThreadedMessage/ThreadedMessageApplet.h"
 
-// #include "graphics/niche/InkHUD/Applets/Examples/BasicExample/BasicExampleApplet.h"
-// #include "graphics/niche/InkHUD/Applets/Examples/NewMsgExample/NewMsgExampleApplet.h"
-
 // Shared NicheGraphics components
 // --------------------------------
 #include "graphics/niche/Drivers/Backlight/LatchingBacklight.h"
 #include "graphics/niche/Drivers/EInk/DEPG0290BNS800.h"
 #include "graphics/niche/Inputs/TwoButton.h"
-
-#include "graphics/niche/Fonts/FreeSans6pt7b.h"
-#include "graphics/niche/Fonts/FreeSans6pt8bCyrillic.h"
-#include <Fonts/FreeSans9pt7b.h>
 
 void setupNicheGraphics()
 {
@@ -75,13 +68,8 @@ void setupNicheGraphics()
     inkhud->setDisplayResilience(7, 1.5);
 
     // Prepare fonts
-    InkHUD::Applet::fontLarge = InkHUD::AppletFont(FreeSans9pt7b);
-    InkHUD::Applet::fontSmall = InkHUD::AppletFont(FreeSans6pt7b);
-    /*
-    // Font localization demo: Cyrillic
-    InkHUD::Applet::fontSmall = InkHUD::AppletFont(FreeSans6pt8bCyrillic);
-    InkHUD::Applet::fontSmall.addSubstitutionsWin1251();
-    */
+    InkHUD::Applet::fontLarge = FREESANS_9PT_WIN1252;
+    InkHUD::Applet::fontSmall = FREESANS_6PT_WIN1252;
 
     // Init settings, and customize defaults
     inkhud->persistence->settings.userTiles.maxCount = 2; // How many tiles can the display handle?
