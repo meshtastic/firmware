@@ -924,13 +924,19 @@ void setup()
     service = new MeshService();
     service->init();
 
-    if (nodeDB->keyIsLowEntropy) {
-        service->reloadConfig(SEGMENT_CONFIG);
-        rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
-    }
-
     // Now that the mesh service is created, create any modules
     setupModules();
+
+    // warn the user about a low entropy key
+    if (nodeDB->keyIsLowEntropy && !nodeDB->hasWarned) {
+        LOG_WARN(LOW_ENTROPY_WARNING);
+        meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+        cn->level = meshtastic_LogRecord_Level_WARNING;
+        cn->time = getValidTime(RTCQualityFromNet);
+        sprintf(cn->message, LOW_ENTROPY_WARNING);
+        service->sendClientNotification(cn);
+        nodeDB->hasWarned = true;
+    }
 
 // buttons are now inputBroker, so have to come after setupModules
 #if HAS_BUTTON
