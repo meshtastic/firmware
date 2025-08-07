@@ -66,6 +66,9 @@ class SEN5XSensor : public TelemetrySensor
     #define SEN5X_READ_RAW_VALUES              0x03D2
     #define SEN5X_READ_PM_VALUES               0x0413
 
+    #define SEN5X_VOC_VALID_TIME               600
+    #define SEN5X_VOC_VALID_DATE               1514764800
+
     enum SEN5Xmodel { SEN5X_UNKNOWN = 0, SEN50 = 0b001, SEN54 = 0b010, SEN55 = 0b100 };
     SEN5Xmodel model = SEN5X_UNKNOWN;
 
@@ -93,20 +96,22 @@ class SEN5XSensor : public TelemetrySensor
   protected:
     // Store status of the sensor in this file
     const char *sen5XStateFileName = "/prefs/sen5X.dat";
+    meshtastic_SEN5XState sen5xstate = meshtastic_SEN5XState_init_zero;
+
     bool loadState();
     bool saveState();
 
     // Cleaning State
-    // Last cleaning status
     uint32_t lastCleaning = 0;
     bool lastCleaningValid = false;
 
-    // TODO - VOC State
-    // # define SEN5X_VOC_STATE_BUFFER_SIZE 12
-    // uint8_t VOCstate[SEN5X_VOC_STATE_BUFFER_SIZE];
-    // struct VOCstateStruct { uint8_t state[SEN5X_VOC_STATE_BUFFER_SIZE]; uint32_t time; bool valid=true; };
-    // void loadVOCState();
-    // void updateVOCState();
+    // VOC State
+    #define SEN5X_VOC_STATE_BUFFER_SIZE 8
+    uint8_t vocState[SEN5X_VOC_STATE_BUFFER_SIZE];
+    uint32_t vocTime;
+    bool vocValid = true;
+    bool vocStateFromSensor();
+    bool vocStateToSensor();
 
     virtual void setup() override;
 
