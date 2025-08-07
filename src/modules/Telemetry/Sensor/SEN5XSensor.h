@@ -124,6 +124,7 @@ class SEN5XSensor : public TelemetrySensor
     #define SEN5X_PN4P0_CONC_THD 100
     // This value represents the time needed for pending data
     int32_t pendingForReady();
+    AdminMessageHandleResult handleAdminMessage(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request, meshtastic_AdminMessage *response) override;
 };
 
 
