@@ -17,7 +17,10 @@ void initApiServer(int port)
 }
 void deInitApiServer()
 {
-    delete apiPort;
+    if (apiPort) {
+        delete apiPort;
+        apiPort = nullptr;
+    }
 }
 
 WiFiServerAPI::WiFiServerAPI(WiFiClient &_client) : ServerAPI(_client)
