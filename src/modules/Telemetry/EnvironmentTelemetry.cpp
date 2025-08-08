@@ -198,6 +198,11 @@ T1000xSensor t1000xSensor;
 IndicatorSensor indicatorSensor;
 #endif
 
+#ifdef ARCH_NRF52
+#include "Sensor/NRFTempSensor.h"
+NRFTempSensor nrfTempSensor;
+#endif
+
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
 
@@ -242,6 +247,9 @@ int32_t EnvironmentTelemetryModule::runOnce()
 #ifdef T1000X_SENSOR_EN
             result = t1000xSensor.runOnce();
 #elif !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR_EXTERNAL
+#ifdef ARCH_NRF52
+            result = nrfTempSensor.runOnce();
+#endif
             if (dfRobotLarkSensor.hasSensor())
                 result = dfRobotLarkSensor.runOnce();
             if (dfRobotGravitySensor.hasSensor())
@@ -548,6 +556,11 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
     valid = valid && t1000xSensor.getMetrics(m);
     hasSensor = true;
 #else
+#ifdef ARCH_NRF52
+    valid = valid && nrfTempSensor.getMetrics(m);
+    hasSensor = true;
+#endif
+
     if (dfRobotLarkSensor.hasSensor()) {
         valid = valid && dfRobotLarkSensor.getMetrics(m);
         hasSensor = true;
@@ -670,6 +683,7 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
         valid = valid && cgRadSens.getMetrics(m);
         hasSensor = true;
     }
+
     if (pct2075Sensor.hasSensor()) {
         valid = valid && pct2075Sensor.getMetrics(m);
         hasSensor = true;
