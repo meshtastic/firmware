@@ -7,10 +7,15 @@
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/images.h"
+#include "input/RotaryEncoderInterruptImpl1.h"
+#include "input/UpDownInterruptImpl1.h"
 #include "main.h"
 #include <algorithm>
 #include <string>
 #include <vector>
+#if HAS_TRACKBALL
+#include "input/TrackballInterruptImpl1.h"
+#endif
 
 #ifdef ARCH_ESP32
 #include "esp_task_wdt.h"
@@ -38,6 +43,8 @@ bool NotificationRenderer::pauseBanner = false;
 notificationTypeEnum NotificationRenderer::current_notification_type = notificationTypeEnum::none;
 uint32_t NotificationRenderer::numDigits = 0;
 uint32_t NotificationRenderer::currentNumber = 0;
+VirtualKeyboard *NotificationRenderer::virtualKeyboard = nullptr;
+std::function<void(const std::string &)> NotificationRenderer::textInputCallback = nullptr;
 
 uint32_t pow_of_10(uint32_t n)
 {
@@ -89,10 +96,26 @@ void NotificationRenderer::resetBanner()
 
 void NotificationRenderer::drawBannercallback(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
-    if (!isOverlayBannerShowing() && alertBannerMessage[0] != '\0')
-        resetBanner();
-    if (!isOverlayBannerShowing() || pauseBanner)
+    // Handle text_input notifications first - they have their own timeout/banner logic
+    if (current_notification_type == notificationTypeEnum::text_input) {
+        // Check for timeout and reset if needed for text input
+        if (millis() > alertBannerUntil && alertBannerUntil > 0) {
+            resetBanner();
+            return;
+        }
+        drawTextInput(display, state);
         return;
+    }
+
+    if (millis() > alertBannerUntil && alertBannerUntil > 0) {
+        resetBanner();
+    }
+
+    // Exit if no banner is showing or banner is paused
+    if (!isOverlayBannerShowing() || pauseBanner) {
+        return;
+    }
+
     switch (current_notification_type) {
     case notificationTypeEnum::none:
         // Do nothing - no notification to display
@@ -106,6 +129,9 @@ void NotificationRenderer::drawBannercallback(OLEDDisplay *display, OLEDDisplayU
         break;
     case notificationTypeEnum::number_picker:
         drawNumberPicker(display, state);
+        break;
+    case notificationTypeEnum::text_input:
+        // text_input is handled at the top of the function
         break;
     }
 }
@@ -568,6 +594,95 @@ void NotificationRenderer::drawFrameFirmware(OLEDDisplay *display, OLEDDisplayUi
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->drawStringMaxWidth(0 + x, 2 + y + FONT_HEIGHT_SMALL * 2, x + display->getWidth(),
                                 "Please be patient and do not power off.");
+}
+
+void NotificationRenderer::drawTextInput(OLEDDisplay *display, OLEDDisplayUiState *state)
+{
+    if (virtualKeyboard) {
+        // Check for timeout and auto-exit if needed
+        if (virtualKeyboard->isTimedOut()) {
+            LOG_INFO("Virtual keyboard timeout - auto-exiting");
+            // Cancel virtual keyboard - call callback with empty string to indicate timeout
+            auto callback = textInputCallback; // Store callback before clearing
+
+            // Clean up first to prevent re-entry
+            delete virtualKeyboard;
+            virtualKeyboard = nullptr;
+            textInputCallback = nullptr;
+            resetBanner();
+
+            // Call callback after cleanup
+            if (callback) {
+                callback("");
+            }
+
+            // Restore normal overlays
+            if (screen) {
+                screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
+            }
+            return;
+        }
+
+        if (inEvent.inputEvent != INPUT_BROKER_NONE) {
+            if (inEvent.inputEvent == INPUT_BROKER_UP) {
+                // high frequency for move cursor left/right than up/down with encoders
+                extern ::RotaryEncoderInterruptImpl1 *rotaryEncoderInterruptImpl1;
+                extern ::UpDownInterruptImpl1 *upDownInterruptImpl1;
+                if (::rotaryEncoderInterruptImpl1 || ::upDownInterruptImpl1) {
+                    virtualKeyboard->moveCursorLeft();
+                } else {
+                    virtualKeyboard->moveCursorUp();
+                }
+            } else if (inEvent.inputEvent == INPUT_BROKER_DOWN) {
+                extern ::RotaryEncoderInterruptImpl1 *rotaryEncoderInterruptImpl1;
+                extern ::UpDownInterruptImpl1 *upDownInterruptImpl1;
+                if (::rotaryEncoderInterruptImpl1 || ::upDownInterruptImpl1) {
+                    virtualKeyboard->moveCursorRight();
+                } else {
+                    virtualKeyboard->moveCursorDown();
+                }
+            } else if (inEvent.inputEvent == INPUT_BROKER_LEFT) {
+                virtualKeyboard->moveCursorLeft();
+            } else if (inEvent.inputEvent == INPUT_BROKER_RIGHT) {
+                virtualKeyboard->moveCursorRight();
+            } else if (inEvent.inputEvent == INPUT_BROKER_UP_LONG) {
+                virtualKeyboard->moveCursorUp();
+            } else if (inEvent.inputEvent == INPUT_BROKER_DOWN_LONG) {
+                virtualKeyboard->moveCursorDown();
+            } else if (inEvent.inputEvent == INPUT_BROKER_ALT_PRESS) {
+                virtualKeyboard->moveCursorLeft();
+            } else if (inEvent.inputEvent == INPUT_BROKER_USER_PRESS) {
+                virtualKeyboard->moveCursorRight();
+            } else if (inEvent.inputEvent == INPUT_BROKER_SELECT) {
+                virtualKeyboard->handlePress();
+            } else if (inEvent.inputEvent == INPUT_BROKER_SELECT_LONG) {
+                virtualKeyboard->handleLongPress();
+            } else if (inEvent.inputEvent == INPUT_BROKER_CANCEL) {
+                auto callback = textInputCallback;
+                delete virtualKeyboard;
+                virtualKeyboard = nullptr;
+                textInputCallback = nullptr;
+                resetBanner();
+                if (callback) {
+                    callback("");
+                }
+                if (screen) {
+                    screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
+                }
+                return;
+            }
+
+            // Consume the event after processing for virtual keyboard
+            inEvent.inputEvent = INPUT_BROKER_NONE;
+        }
+
+        // Draw the virtual keyboard - clear only when needed
+        virtualKeyboard->draw(display, 0, 0);
+    } else {
+        // If virtualKeyboard is null, reset the banner to avoid getting stuck
+        LOG_INFO("Virtual keyboard is null - resetting banner");
+        resetBanner();
+    }
 }
 
 bool NotificationRenderer::isOverlayBannerShowing()
