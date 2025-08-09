@@ -137,7 +137,11 @@ void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string 
                 display->drawString(cursorX + 1, fontY, textChunk.c_str());
             }
             display->drawString(cursorX, fontY, textChunk.c_str());
+#if defined(OLED_UA) || defined(OLED_RU)
+            cursorX += display->getStringWidth(textChunk.c_str(), textChunk.length(), true);
+#else
             cursorX += display->getStringWidth(textChunk.c_str());
+#endif
             i = nextControl;
             continue;
         }
@@ -155,7 +159,12 @@ void drawStringWithEmotes(OLEDDisplay *display, int x, int y, const std::string 
                 display->drawString(cursorX + 1, fontY, remaining.c_str());
             }
             display->drawString(cursorX, fontY, remaining.c_str());
+#if defined(OLED_UA) || defined(OLED_RU)
+            cursorX += display->getStringWidth(remaining.c_str(), remaining.length(), true);
+#else
             cursorX += display->getStringWidth(remaining.c_str());
+#endif
+
             break;
         }
     }
@@ -374,10 +383,16 @@ std::vector<std::string> generateLines(OLEDDisplay *display, const char *headerS
         } else {
             word += ch;
             std::string test = line + word;
-            // Keep these lines for diagnostics
-            // LOG_INFO("Char: '%c' (0x%02X)", ch, (unsigned char)ch);
-            // LOG_INFO("Current String: %s", test.c_str());
-            if (display->getStringWidth(test.c_str()) > textWidth) {
+// Keep these lines for diagnostics
+// LOG_INFO("Char: '%c' (0x%02X)", ch, (unsigned char)ch);
+// LOG_INFO("Current String: %s", test.c_str());
+// Note: there are boolean comparition uint16 (getStringWidth) with int (textWidth), hope textWidth is always positive :)
+#if defined(OLED_UA) || defined(OLED_RU)
+            uint16_t strWidth = display->getStringWidth(test.c_str(), test.length(), true);
+#else
+            uint16_t strWidth = display->getStringWidth(test.c_str());
+#endif
+            if (strWidth > textWidth) {
                 if (!line.empty())
                     lines.push_back(line);
                 line = word;
