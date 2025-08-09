@@ -38,6 +38,14 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
 
     void handleNewPosition();
 
+    /**
+     * Precision-aware position update logic for smart filtering
+     * @param existingPos Existing position with latitude, longitude, and precision
+     * @param incomingPos Incoming position with latitude, longitude, and precision
+     * @return true if position should be updated, false otherwise
+     */
+    static bool shouldUpdatePosition(const meshtastic_PositionLite &existingPos, const meshtastic_Position &incomingPos);
+
   protected:
     /** Called to handle a particular incoming message
 
