@@ -186,6 +186,15 @@ const RegionInfo regions[] = {
     RDEF(BR_902, 902.0f, 907.5f, 100, 0, 30, true, false, false),
 
     /*
+        Vietnam
+        Main document: https://vanban.chinhphu.vn/default.aspx?pageid=27160&docid=204286
+        Page 16: https://datafiles.chinhphu.vn/cpp/files/vbpq/2021/10/08-btttt.signed.pdf
+        Item 39: 433.05 - 434.79 MHz <=25 mW ERP
+        Item 45: 920 - 923 MHz <=25 mW ERP
+    */
+    RDEF(VN_433, 433.05f, 434.79f, 100, 0, 14, true, false, false), RDEF(VN_923, 920.0f, 923.0f, 100, 0, 14, true, false, false),
+
+    /*
        2.4 GHZ WLAN Band equivalent. Only for SX128x chips.
     */
     RDEF(LORA_24, 2400.0f, 2483.5f, 100, 0, 10, true, false, true),
