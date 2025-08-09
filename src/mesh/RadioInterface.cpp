@@ -170,7 +170,6 @@ const RegionInfo regions[] = {
     */
     RDEF(KZ_433, 433.075f, 434.775f, 100, 0, 10, true, false, false), RDEF(KZ_863, 863.0f, 868.0f, 100, 0, 30, true, false, true),
 
-
     /*
         Nepal
         865 MHz to 868 MHz frequency band for IoT (Internet of Things), M2M (Machine-to-Machine), and smart metering use, specifically in non-cellular mode.
@@ -184,6 +183,14 @@ const RegionInfo regions[] = {
         https://github.com/meshtastic/firmware/issues/3741
     */
     RDEF(BR_902, 902.0f, 907.5f, 100, 0, 30, true, false, false),
+
+    /*
+        Israel
+        917.3 - 919.9 MHz, <25 mW erp, 1% duty cycle, 200 kHz spacing, 125 kHz bandwidth
+        https://free-justice.openapi.gov.il/free/moj/portal/rest/searchpredefinedapi/v1/SearchPredefinedApi/Documents/IdngyMn~ojdQSrkxuAqfZqiM8c1foi3TSZQhp7OMszo=
+        https://olaw.org.il/takanot/takanot-9301.pdf
+    */
+    RDEF(IL_917, 917.3f, 919.9f, 1, 200, 14, true, false, false),
 
     /*
        2.4 GHZ WLAN Band equivalent. Only for SX128x chips.
