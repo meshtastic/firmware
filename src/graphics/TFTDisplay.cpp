@@ -667,7 +667,9 @@ static LGFX *tft = nullptr;
 static TFT_eSPI *tft = nullptr; // Invoke library, pins defined in User_Setup.h
 #elif ARCH_PORTDUINO
 #include <LovyanGFX.hpp> // Graphics and font library for ST7735 driver chip
+#if defined(LGFX_SDL)
 #include <lgfx/v1/platforms/sdl/Panel_sdl.hpp>
+#endif
 
 class LGFX : public lgfx::LGFX_Device
 {
