@@ -30,6 +30,12 @@ class Router : protected concurrency::OSThread, protected PacketHistory
     Router();
 
     /**
+     * Destructor
+     *
+     */
+    ~Router();
+
+    /**
      * Currently we only allow one interface, that may change in the future
      */
     void addInterface(RadioInterface *_iface) { iface = _iface; }
@@ -138,6 +144,10 @@ class Router : protected concurrency::OSThread, protected PacketHistory
 
     /** Frees the provided packet, and generates a NAK indicating the specifed error while sending */
     void abortSendAndNak(meshtastic_Routing_Error err, meshtastic_MeshPacket *p);
+
+    int preflightSleepCb(void *unused = NULL) { return !fromRadioQueue.isEmpty(); }
+
+    CallbackObserver<Router, void *> preflightSleepObserver = CallbackObserver<Router, void *>(this, &Router::preflightSleepCb);
 };
 
 enum DecodeState { DECODE_SUCCESS, DECODE_FAILURE, DECODE_FATAL };
