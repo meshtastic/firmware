@@ -1149,7 +1149,8 @@ typedef struct _meshtastic_FromRadio {
 /* A heartbeat message is sent to the node from the client to keep the connection alive.
  This is currently only needed to keep serial connections alive, but can be used by any PhoneAPI. */
 typedef struct _meshtastic_Heartbeat {
-    char dummy_field;
+    /* The nonce of the heartbeat message */
+    uint32_t nonce;
 } meshtastic_Heartbeat;
 
 /* Packets/commands to the radio will be written (reliably) to the toRadio characteristic.
@@ -1551,6 +1552,7 @@ extern "C" {
 #define meshtastic_FromRadio_fileInfo_tag        15
 #define meshtastic_FromRadio_clientNotification_tag 16
 #define meshtastic_FromRadio_deviceuiConfig_tag  17
+#define meshtastic_Heartbeat_nonce_tag           1
 #define meshtastic_ToRadio_packet_tag            1
 #define meshtastic_ToRadio_want_config_id_tag    3
 #define meshtastic_ToRadio_disconnect_tag        4
@@ -1882,7 +1884,7 @@ X(a, STATIC,   SINGULAR, UINT32,   excluded_modules,  12)
 #define meshtastic_DeviceMetadata_DEFAULT NULL
 
 #define meshtastic_Heartbeat_FIELDLIST(X, a) \
-
+X(a, STATIC,   SINGULAR, UINT32,   nonce,             1)
 #define meshtastic_Heartbeat_CALLBACK NULL
 #define meshtastic_Heartbeat_DEFAULT NULL
 
@@ -1992,7 +1994,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_DuplicatedPublicKey_size      0
 #define meshtastic_FileInfo_size                 236
 #define meshtastic_FromRadio_size                510
-#define meshtastic_Heartbeat_size                0
+#define meshtastic_Heartbeat_size                6
 #define meshtastic_KeyVerificationFinal_size     65
 #define meshtastic_KeyVerificationNumberInform_size 58
 #define meshtastic_KeyVerificationNumberRequest_size 52
