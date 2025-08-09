@@ -60,7 +60,7 @@ jobs:
         id: version
 
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: firmware-debian-${{ steps.version.outputs.deb }}~${{ inputs.series }}-src
           merge-multiple: true
