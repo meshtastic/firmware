@@ -70,7 +70,7 @@ bool PacketAPI::receivePacket(void)
             break;
         }
         case meshtastic_ToRadio_heartbeat_tag:
-            if (mr->heartbeat.dummy_field == 1) {
+            if (mr->heartbeat.nonce == 1) {
                 if (nodeInfoModule) {
                     LOG_INFO("Broadcasting nodeinfo ping");
                     nodeInfoModule->sendOurNodeInfo(NODENUM_BROADCAST, true, 0, true);

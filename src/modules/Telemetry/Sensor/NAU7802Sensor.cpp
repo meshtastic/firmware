@@ -112,9 +112,8 @@ bool NAU7802Sensor::saveCalibrationData()
     } else {
         okay = true;
     }
-    spiLock->lock();
+    // Note: SafeFile::close() already acquires the lock and releases it internally
     okay &= file.close();
-    spiLock->unlock();
 
     return okay;
 }
