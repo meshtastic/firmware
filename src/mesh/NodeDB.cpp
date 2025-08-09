@@ -985,8 +985,9 @@ void NodeDB::resetNodes()
 
 void NodeDB::removeNodeByNum(NodeNum nodeNum)
 {
-    int newPos = 0, removed = 0;
-    for (int i = 0; i < numMeshNodes; i++) {
+    // Don't remove the own node at position 0
+    int newPos = 1, removed = 0;
+    for (int i = 1; i < numMeshNodes; i++) {
         if (meshNodes->at(i).num != nodeNum)
             meshNodes->at(newPos++) = meshNodes->at(i);
         else
@@ -1082,18 +1083,16 @@ void NodeDB::pickNewNodeNum()
     }
 
     meshtastic_NodeInfoLite *found;
-    while (((found = getMeshNode(nodeNum)) && memcmp(found->user.macaddr, ourMacAddr, sizeof(ourMacAddr)) != 0) ||
-           (nodeNum == NODENUM_BROADCAST || nodeNum < NUM_RESERVED)) {
-        NodeNum candidate = random(NUM_RESERVED, LONG_MAX); // try a new random choice
-        if (found)
-            LOG_WARN("NOTE! Our desired nodenum 0x%x is invalid or in use, by MAC ending in 0x%02x%02x vs our 0x%02x%02x, so "
-                     "trying for 0x%x",
-                     nodeNum, found->user.macaddr[4], found->user.macaddr[5], ourMacAddr[4], ourMacAddr[5], candidate);
-        nodeNum = candidate;
+    if (((found = getMeshNode(nodeNum)) && memcmp(found->user.macaddr, ourMacAddr, sizeof(ourMacAddr)) != 0) ||
+        (nodeNum == NODENUM_BROADCAST || nodeNum < NUM_RESERVED)) {
+        NodeNum newNodeNum = (ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5];
+        LOG_WARN("NOTE! Our saved nodenum 0x%x is invalid or in use. Using 0x%x", nodeNum, newNodeNum);
+        nodeNum = newNodeNum;
     }
     LOG_DEBUG("Use nodenum 0x%x ", nodeNum);
 
     myNodeInfo.my_node_num = nodeNum;
+    removeNodeByNum(nodeNum); // Since we skip 0, this should only ever remove outside matches.
 }
 
 /** Load a protobuf from a file, return LoadFileResult */
@@ -1689,10 +1688,10 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
 /// we updateGUI and updateGUIforNode if we think our this change is big enough for a redraw
 void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
 {
-    // if (mp.from == getNodeNum()) {
-    //     LOG_DEBUG("Ignore update from self");
-    //     return;
-    // }
+    if (mp.transport_mechanism != meshtastic_MeshPacket_TransportMechanism_TRANSPORT_API && mp.from == getNodeNum()) {
+        LOG_DEBUG("Ignore update from self");
+        return;
+    }
     if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag && mp.from) {
         LOG_DEBUG("Update DB node 0x%x, rx_time=%u", mp.from, mp.rx_time);
 
