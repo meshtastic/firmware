@@ -1,0 +1,40 @@
+# Dockerfile for building Meshtastic ESP32 firmware
+FROM python:3.11-slim
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    build-essential \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install PlatformIO
+RUN pip install platformio
+
+# Set working directory
+WORKDIR /firmware
+
+# Copy the firmware source code
+COPY . /firmware/
+
+# Initialize git submodules if they exist
+RUN git submodule update --init --recursive || true
+
+# Make the build script executable
+RUN chmod +x bin/build-esp32.sh
+
+# Build the firmware for elecrow-crt01262m
+RUN ./bin/build-esp32.sh elecrow-crt01262m
+
+# Create output directory and copy all build artifacts
+RUN mkdir -p /output && \
+    cp release/* /output/ 2>/dev/null || \
+    echo "Copying release files..." && \
+    ls -la release/ && \
+    cp release/* /output/
+
+# List what we've got
+RUN echo "=== Build Output ===" && ls -la /output/
+
+# Set the output directory as volume
+VOLUME ["/output"]
