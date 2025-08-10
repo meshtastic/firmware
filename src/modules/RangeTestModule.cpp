@@ -303,17 +303,24 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
 bool RangeTestModuleRadio::removeFile()
 {
 #ifdef ARCH_ESP32
-    if(FSCom.exists("/static/rangetest.csv"))
-    {
-        LOG_INFO("Deleting previous range test.");
-        bool result = FSCom.remove("/static/rangetest.csv");
-        if(!result)
-        {
-            LOG_ERROR("Failed to delete rangeTest.csv");
-            return 0;
-        }
-        LOG_INFO("Range test removed.");
+    if (!FSBegin()) {
+        LOG_DEBUG("An Error has occurred while mounting the filesystem");
+        return 0;
     }
+
+    if(!FSCom.exists("/static/rangetest.csv")) {
+        LOG_DEBUG("No range tests found.");
+        return 0;
+    }
+
+    LOG_INFO("Deleting previous range test.");
+    bool result = FSCom.remove("/static/rangetest.csv");
+
+    if(!result) {
+        LOG_ERROR("Failed to delete range test.");
+        return 0;
+    }
+    LOG_INFO("Range test removed.");
 #endif
 
     return 1;
