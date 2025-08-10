@@ -300,18 +300,17 @@ void RF95Interface::startReceive()
         LOG_ERROR("RF95 startReceive %s%d", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
 
-    isReceiving = true;
+    // Update common receive state and schedule polling if enabled
+    RadioLibInterface::startReceive();
 
-    // Must be done AFTER, starting receive, because startReceive clears (possibly stale) interrupt pending register bits
-#ifdef RF95_USE_POLLING
-    if (usePolling) {
-        LOG_DEBUG("RF95Interface: startReceive using polling mode.\n");
-        schedulePoll();
-    } else
-#endif
-    {
+    // Must be done AFTER starting receive, because startReceive clears (possibly stale) interrupt pending register bits
+#ifndef RF95_USE_POLLING
+    enableInterrupt(isrRxLevel0);
+#else
+    if (!usePolling) {
         enableInterrupt(isrRxLevel0);
     }
+#endif
 }
 
 bool RF95Interface::isChannelActive()

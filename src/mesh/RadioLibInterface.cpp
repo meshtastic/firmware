@@ -260,12 +260,12 @@ void RadioLibInterface::onNotify(uint32_t notification)
                 LOG_DEBUG("RadioLibInterface: POLL detected TX_DONE.\n");
                 handleTransmitInterrupt();
                 startReceive();
-                startTransmitTimer();
+                setTransmitDelay();
             } else if (cause == ISR_RX) {
                 LOG_DEBUG("RadioLibInterface: POLL detected RX_DONE.\n");
                 handleReceiveInterrupt();
                 startReceive();
-                startTransmitTimer();
+                setTransmitDelay();
             }
             if (isReceiving || sendingPacket != NULL) {
                 schedulePoll();
@@ -552,20 +552,17 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
             powerMon->clearState(meshtastic_PowerMon_State_Lora_TXOn); // Transmitter off now
             startReceive(); // Restart receive mode (because startTransmit failed to put us in xmit mode)
         } else {
-            // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register
-            // bits
-            enableInterrupt(isrTxLevel0);
+            // Must be done AFTER starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
+            if (usePolling) {
+                LOG_DEBUG("RadioLibInterface: startSend using polling mode.\n");
+                schedulePoll();
+            } else {
+                enableInterrupt(isrTxLevel0);
+            }
             lastTxStart = millis();
             printPacket("Started Tx", txp);
         }
 
-        // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
-        if (usePolling) {
-            LOG_DEBUG("RadioLibInterface: startSend using polling mode.\n");
-            schedulePoll();
-        } else {
-            enableInterrupt(isrTxLevel0);
-        }
         return res == RADIOLIB_ERR_NONE;
     }
 }

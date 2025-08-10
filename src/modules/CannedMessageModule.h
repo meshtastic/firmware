@@ -187,7 +187,7 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     std::vector<uint8_t> activeChannelIndices;
     std::vector<NodeEntry> filteredNodes;
 
-#if defined(USE_VIRTUAL_KEYBOARD)
+#if defined(USE_VIRTUAL_KEYBOARD) || defined(T_WATCH_S3) || defined(RAK14014) || defined(PRIVATE_HW)
     bool shift = false;
     int charSet = 0; // 0=ABC, 1=123
 #endif

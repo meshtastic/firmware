@@ -453,65 +453,6 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
             runOnce(); // update filter immediately
             lastFilterUpdate = millis();
         }
-#if defined(T_WATCH_S3) || defined(RAK14014) || defined(PRIVATE_HW)
-    if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
-        String keyTapped = keyForCoordinates(event->touchX, event->touchY);
-
-        if (keyTapped == "⇧") {
-            this->highlight = -1;
-
-            this->payload = 0x00;
-
-            validEvent = true;
-
-            this->shift = !this->shift;
-        } else if (keyTapped == "⌫") {
-            this->highlight = keyTapped[0];
-
-            this->payload = 0x08;
-
-            validEvent = true;
-
-            this->shift = false;
-        } else if (keyTapped == "123" || keyTapped == "ABC") {
-            this->highlight = -1;
-
-            this->payload = 0x00;
-
-            this->charSet = this->charSet == 0 ? 1 : 0;
-
-            validEvent = true;
-        } else if (keyTapped == " ") {
-            this->highlight = keyTapped[0];
-
-            this->payload = keyTapped[0];
-
-            validEvent = true;
-
-            this->shift = false;
-        } else if (keyTapped == "↵") {
-            this->highlight = 0x00;
-
-            this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_SELECT;
-
-            this->payload = CANNED_MESSAGE_RUN_STATE_FREETEXT;
-
-            this->currentMessageIndex = event->kbchar - 1;
-
-            validEvent = true;
-
-            this->shift = false;
-        } else if (keyTapped != "") {
-            this->highlight = keyTapped[0];
-
-            this->payload = this->shift ? keyTapped[0] : std::tolower(keyTapped[0]);
-
-            validEvent = true;
-
-            this->shift = false;
-            
-        }
-        return 1;
     }
 
     size_t numMeshNodes = filteredNodes.size();
@@ -1046,15 +987,7 @@ int32_t CannedMessageModule::runOnce()
                 if (strcmp(this->messages[this->currentMessageIndex], "~") == 0) {
                     return INT32_MAX;
                 } else {
-<<<<<<< HEAD
                     sendText(this->dest, this->channel, this->messages[this->currentMessageIndex], true);
-=======
-#if defined(T_WATCH_S3) || defined(RAK14014) || defined(PRIVATE_HW) // Elecrow-CRT01262M
-                    sendText(this->dest, indexChannels[this->channel], this->messages[this->currentMessageIndex], true);
-#else
-                    sendText(NODENUM_BROADCAST, channels.getPrimaryIndex(), this->messages[this->currentMessageIndex], true);
-#endif
->>>>>>> 4d3edf320 (Enable free-text via canned messages)
                 }
                 this->runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
             } else {
@@ -1771,7 +1704,6 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         display->setTextAlignment(TEXT_ALIGN_LEFT);
         display->setFont(FONT_SMALL);
         display->drawString(10 + x, 0 + y + FONT_HEIGHT_SMALL, "Canned Message\nModule disabled.");
-<<<<<<< HEAD
         return;
     }
 
@@ -1782,12 +1714,9 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         EInkDynamicDisplay *einkDisplay = static_cast<EInkDynamicDisplay *>(display);
         einkDisplay->enableUnlimitedFastMode();
 #endif
-#if defined(USE_VIRTUAL_KEYBOARD)
-=======
-    } else if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
-        requestFocus(); // Tell Screen::setFrames to move to our module's frame
 #if defined(T_WATCH_S3) || defined(RAK14014) || defined(PRIVATE_HW) // Elecrow-CRT01262M
->>>>>>> 4d3edf320 (Enable free-text via canned messages)
+        drawKeyboard(display, state, 0, 0);
+#elif defined(USE_VIRTUAL_KEYBOARD)
         drawKeyboard(display, state, 0, 0);
 #else
         display->setTextAlignment(TEXT_ALIGN_LEFT);
