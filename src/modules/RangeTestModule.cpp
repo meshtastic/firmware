@@ -308,7 +308,7 @@ bool RangeTestModuleRadio::removeFile()
         return 0;
     }
 
-    if(!FSCom.exists("/static/rangetest.csv")) {
+    if (!FSCom.exists("/static/rangetest.csv")) {
         LOG_DEBUG("No range tests found.");
         return 0;
     }
@@ -316,7 +316,7 @@ bool RangeTestModuleRadio::removeFile()
     LOG_INFO("Deleting previous range test.");
     bool result = FSCom.remove("/static/rangetest.csv");
 
-    if(!result) {
+    if (!result) {
         LOG_ERROR("Failed to delete range test.");
         return 0;
     }
@@ -324,5 +324,4 @@ bool RangeTestModuleRadio::removeFile()
 #endif
 
     return 1;
-
 }
