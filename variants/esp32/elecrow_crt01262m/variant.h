@@ -16,9 +16,9 @@
 #define LORA_DIO2 RADIOLIB_NC
 
 // RAM tuning for this low-RAM board
-//#ifndef MAX_TX_QUEUE
-//#define MAX_TX_QUEUE 8
-//#endif
+#ifndef MAX_TX_QUEUE
+#define MAX_TX_QUEUE 16 // 16 (default), lower and it started dropping packets.
+#endif
 #ifndef MAX_RX_TOPHONE
 #define MAX_RX_TOPHONE 16
 #endif
@@ -70,5 +70,3 @@
 //#define TOUCH_MISO LORA_MISO
 //#define TOUCH_THRESHOLD_X 35
 //#define TOUCH_THRESHOLD_Y 35
-
-

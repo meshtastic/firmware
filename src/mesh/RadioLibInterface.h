@@ -229,6 +229,5 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     virtual PendingISR checkPendingInterrupt() { return ISR_NONE; }
 
     /** Schedule the next poll tick if polling is enabled */
-    void schedulePoll(uint32_t delayMsec = 2);
-    
+    void schedulePoll(uint32_t delayMsec = 1);
 };
