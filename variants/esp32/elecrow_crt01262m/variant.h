@@ -16,9 +16,9 @@
 #define LORA_DIO2 RADIOLIB_NC
 
 // RAM tuning for this low-RAM board
-#ifndef MAX_TX_QUEUE
-#define MAX_TX_QUEUE 8
-#endif
+//#ifndef MAX_TX_QUEUE
+//#define MAX_TX_QUEUE 8
+//#endif
 #ifndef MAX_RX_TOPHONE
 #define MAX_RX_TOPHONE 16
 #endif
@@ -58,16 +58,17 @@
 #define SCREEN_TRANSITION_FRAMERATE 5 // fps
 #define DISPLAY_FORCE_SMALL_FONTS
 
-// Touch
-#define HAS_TOUCHSCREEN 1
-#define USE_XPT2046 1
-#define TOUCH_SPIHOST VSPI_HOST
-#define TOUCH_CS 15
-#define TOUCH_IRQ 39
-#define TOUCH_SCK LORA_SCK
-#define TOUCH_MOSI LORA_MOSI
-#define TOUCH_MISO LORA_MISO
-#define TOUCH_THRESHOLD_X 35
-#define TOUCH_THRESHOLD_Y 35
+// Touch (disabled to save RAM)
+#undef HAS_TOUCHSCREEN
+#define HAS_TOUCHSCREEN 0
+#undef USE_XPT2046
+//#define TOUCH_SPIHOST VSPI_HOST
+//#define TOUCH_CS 15
+//#define TOUCH_IRQ 39
+//#define TOUCH_SCK LORA_SCK
+//#define TOUCH_MOSI LORA_MOSI
+//#define TOUCH_MISO LORA_MISO
+//#define TOUCH_THRESHOLD_X 35
+//#define TOUCH_THRESHOLD_Y 35
 
 
