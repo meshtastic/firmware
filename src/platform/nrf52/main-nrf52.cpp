@@ -278,6 +278,9 @@ void cpuDeepSleep(uint32_t msecToWake)
 #if HAS_WIRE
     Wire.end();
 #endif
+#if WIRE_INTERFACES_COUNT > 1
+    Wire1.end();
+#endif
     SPI.end();
 #if SPI_INTERFACES_COUNT > 1
     SPI1.end();
@@ -323,6 +326,16 @@ void cpuDeepSleep(uint32_t msecToWake)
     nrf_gpio_cfg_default(PIN_GPS_PPS);
     detachInterrupt(PIN_GPS_PPS);
     detachInterrupt(PIN_BUTTON1);
+#endif
+
+#ifdef FOBE_IDEA_MESH_TRACKER_C1
+    for (int pin = 0; pin < 48; pin++) {
+        if (pin == SX126X_CS || pin == SX126X_DIO1 || pin == SX126X_BUSY || pin == SX126X_RESET || pin == SX126X_RXEN ||
+            pin == PIN_SPI_MISO || pin == PIN_SPI_MOSI || pin == PIN_SPI_SCK || pin == BATTERY_PIN || pin == PIN_BUTTON1) {
+            continue;
+        }
+        nrf_gpio_cfg_default(pin);
+    }
 #endif
 
 #ifdef ELECROW_ThinkNode_M1
