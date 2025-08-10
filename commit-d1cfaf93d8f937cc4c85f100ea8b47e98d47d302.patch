@@ -1,0 +1,243 @@
+From d1cfaf93d8f937cc4c85f100ea8b47e98d47d302 Mon Sep 17 00:00:00 2001
+From: Michael Overhorst <michael.overhorst@pitcrew.nl>
+Date: Sun, 10 Aug 2025 15:17:19 +0200
+Subject: [PATCH] Add polling support in RadioLibInterface for improved
+ interrupt handling
+
+- Introduced a polling mechanism in RadioLibInterface to handle radio events when the IRQ pin is not configured.
+- Updated the PendingISR enum to include POLL_EVENT for managing polling notifications.
+- Enhanced startReceive and startSend methods to utilize polling mode when enabled.
+- Implemented schedulePoll method to manage polling intervals.
+- Updated RF95Interface to check IRQ flags when polling is active.
+
+diff --git a/src/mesh/RF95Interface.cpp b/src/mesh/RF95Interface.cpp
+index 3cb6bfdda..4845efbe5 100644
+--- a/src/mesh/RF95Interface.cpp
++++ b/src/mesh/RF95Interface.cpp
+@@ -5,6 +5,13 @@
+ #include "configuration.h"
+ #include "error.h"
+ 
++#ifndef RADIOLIB_SX127X_MASK_IRQ_FLAG_RX_DONE
++#define RADIOLIB_SX127X_MASK_IRQ_FLAG_RX_DONE 0x40
++#endif
++#ifndef RADIOLIB_SX127X_MASK_IRQ_FLAG_TX_DONE
++#define RADIOLIB_SX127X_MASK_IRQ_FLAG_TX_DONE 0x08
++#endif
++
+ #if ARCH_PORTDUINO
+ #include "PortduinoGlue.h"
+ #endif
+@@ -296,7 +303,15 @@ void RF95Interface::startReceive()
+     isReceiving = true;
+ 
+     // Must be done AFTER, starting receive, because startReceive clears (possibly stale) interrupt pending register bits
+-    enableInterrupt(isrRxLevel0);
++#ifdef RF95_USE_POLLING
++    if (usePolling) {
++        LOG_DEBUG("RF95Interface: startReceive using polling mode.\n");
++        schedulePoll();
++    } else
++#endif
++    {
++        enableInterrupt(isrRxLevel0);
++    }
+ }
+ 
+ bool RF95Interface::isChannelActive()
+@@ -337,4 +352,34 @@ bool RF95Interface::sleep()
+ 
+     return true;
+ }
++
++RadioLibInterface::PendingISR RF95Interface::checkPendingInterrupt()
++{
++#ifdef RF95_USE_POLLING
++    if (usePolling) {
++        uint16_t irq = lora->getIRQFlags();
++        if (irq == 0) {
++            return ISR_NONE;
++        }
++        // RX done
++        if (irq & RADIOLIB_SX127X_MASK_IRQ_FLAG_RX_DONE) {
++            // Clear handled flags
++            lora->clearIrqFlags(RADIOLIB_SX127X_MASK_IRQ_FLAG_RX_DONE);
++            LOG_DEBUG("RF95Interface: POLL RX_DONE irq=0x%04x\n", irq);
++            return ISR_RX;
++        }
++        // TX done
++        if (irq & RADIOLIB_SX127X_MASK_IRQ_FLAG_TX_DONE) {
++            lora->clearIrqFlags(RADIOLIB_SX127X_MASK_IRQ_FLAG_TX_DONE);
++            LOG_DEBUG("RF95Interface: POLL TX_DONE irq=0x%04x\n", irq);
++            return ISR_TX;
++        }
++        // Header valid indicates active reception; no action yet
++        if (irq & RADIOLIB_SX127X_MASK_IRQ_FLAG_VALID_HEADER) {
++            return ISR_NONE;
++        }
++    }
++#endif
++    return ISR_NONE;
++}
+ #endif
+\ No newline at end of file
+diff --git a/src/mesh/RF95Interface.h b/src/mesh/RF95Interface.h
+index 327e57900..b4c0524b5 100644
+--- a/src/mesh/RF95Interface.h
++++ b/src/mesh/RF95Interface.h
+@@ -42,6 +42,9 @@ class RF95Interface : public RadioLibInterface
+      */
+     virtual void enableInterrupt(void (*callback)()) { lora->setDio0Action(callback, RISING); }
+ 
++    /** When polling is enabled, check IRQ flags */
++    virtual PendingISR checkPendingInterrupt() override;
++
+     /** can we detect a LoRa preamble on the current channel? */
+     virtual bool isChannelActive() override;
+ 
+diff --git a/src/mesh/RadioLibInterface.cpp b/src/mesh/RadioLibInterface.cpp
+index 664709ed1..5b2ed1b92 100644
+--- a/src/mesh/RadioLibInterface.cpp
++++ b/src/mesh/RadioLibInterface.cpp
+@@ -60,6 +60,13 @@ RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE c
+     : NotifiedWorkerThread("RadioIf"), module(hal, cs, irq, rst, busy), iface(_iface)
+ {
+     instance = this;
++#ifdef RF95_USE_POLLING
++    configuredIrqPin = irq;
++    if (configuredIrqPin == RADIOLIB_NC) {
++        usePolling = true;
++        LOG_INFO("RadioLibInterface: IRQ pin NC, enabling polling mode.\n");
++    }
++#endif
+ #if defined(ARCH_STM32WL) && defined(USE_SX1262)
+     module.setCb_digitalWrite(stm32wl_emulate_digitalWrite);
+     module.setCb_digitalRead(stm32wl_emulate_digitalRead);
+@@ -248,6 +255,25 @@ currently active.
+ void RadioLibInterface::onNotify(uint32_t notification)
+ {
+     switch (notification) {
++    case POLL_EVENT:
++        if (usePolling) {
++            PendingISR cause = checkPendingInterrupt();
++            if (cause == ISR_TX) {
++                LOG_DEBUG("RadioLibInterface: POLL detected TX_DONE.\n");
++                handleTransmitInterrupt();
++                startReceive();
++                startTransmitTimer();
++            } else if (cause == ISR_RX) {
++                LOG_DEBUG("RadioLibInterface: POLL detected RX_DONE.\n");
++                handleReceiveInterrupt();
++                startReceive();
++                startTransmitTimer();
++            }
++            if (isReceiving || sendingPacket != NULL) {
++                schedulePoll();
++            }
++        }
++        break;
+     case ISR_TX:
+         handleTransmitInterrupt();
+         startReceive();
+@@ -447,6 +473,10 @@ void RadioLibInterface::startReceive()
+ {
+     isReceiving = true;
+     powerMon->setState(meshtastic_PowerMon_State_Lora_RXOn);
++    if (usePolling) {
++        LOG_DEBUG("RadioLibInterface: startReceive using polling mode.\n");
++        schedulePoll();
++    }
+ }
+ 
+ void RadioLibInterface::configHardwareForSend()
+@@ -484,8 +514,19 @@ void RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
+             startReceive(); // Restart receive mode (because startTransmit failed to put us in xmit mode)
+         }
+ 
+-        // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register
+-        // bits
+-        enableInterrupt(isrTxLevel0);
++        // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
++        if (usePolling) {
++            LOG_DEBUG("RadioLibInterface: startSend using polling mode.\n");
++            schedulePoll();
++        } else {
++            enableInterrupt(isrTxLevel0);
++        }
++    }
++}
++
++void RadioLibInterface::schedulePoll(uint32_t delayMsec)
++{
++    if (usePolling) {
++        notifyLater(delayMsec, POLL_EVENT, false);
+     }
+ }
+\ No newline at end of file
+diff --git a/src/mesh/RadioLibInterface.h b/src/mesh/RadioLibInterface.h
+index 13bef851a..51f4211e2 100644
+--- a/src/mesh/RadioLibInterface.h
++++ b/src/mesh/RadioLibInterface.h
+@@ -53,8 +53,9 @@ class STM32WLx_ModuleWrapper : public STM32WLx_Module
+ 
+ class RadioLibInterface : public RadioInterface, protected concurrency::NotifiedWorkerThread
+ {
++  protected:
+     /// Used as our notification from the ISR
+-    enum PendingISR { ISR_NONE = 0, ISR_RX, ISR_TX, TRANSMIT_DELAY_COMPLETED };
++    enum PendingISR { ISR_NONE = 0, ISR_RX, ISR_TX, TRANSMIT_DELAY_COMPLETED, POLL_EVENT };
+ 
+     /**
+      * Raw ISR handler that just calls our polymorphic method
+@@ -89,6 +90,12 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
+     /// are _trying_ to receive a packet currently (note - we might just be waiting for one)
+     bool isReceiving = false;
+ 
++    /// If true, use timer-based polling in place of GPIO IRQs
++    bool usePolling = false;
++
++    /// Remember the configured IRQ pin for diagnostics
++    RADIOLIB_PIN_TYPE configuredIrqPin = RADIOLIB_NC;
++
+   public:
+     /** Our ISR code currently needs this to find our active instance
+      */
+@@ -196,4 +203,13 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
+      * Subclasses must override, implement and then call into this base class implementation
+      */
+     virtual void setStandby();
++
++    /**
++     * When polling is enabled, subclasses can check radio IRQ flags and
++     * return what event (if any) occurred. Default: none.
++     */
++    virtual PendingISR checkPendingInterrupt() { return ISR_NONE; }
++
++    /** Schedule the next poll tick if polling is enabled */
++    void schedulePoll(uint32_t delayMsec = 2);
+ };
+\ No newline at end of file
+diff --git a/variants/elecrow_crt01262m/variant.h b/variants/elecrow_crt01262m/variant.h
+index fb056a4ce..cdabe5436 100644
+--- a/variants/elecrow_crt01262m/variant.h
++++ b/variants/elecrow_crt01262m/variant.h
+@@ -3,14 +3,16 @@
+ #define BUTTON_PIN 0
+ 
+ // LoRa
+-#define USE_RF95 // Ra-01H - SX1276
++#define USE_RF95
++#define RF95_USE_POLLING 1
++
+ #define LORA_SCK 33
+ #define LORA_MISO 35
+ #define LORA_MOSI 32
+ #define LORA_CS 14
+ #define LORA_RESET 12
+-#define LORA_DIO0 36 // IRQ - connected manually
+-#define LORA_DIO1 34 // BUSY
++#define LORA_DIO0 RADIOLIB_NC
++#define LORA_DIO1 34
+ #define LORA_DIO2 RADIOLIB_NC
+ 
+ // Display

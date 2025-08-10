@@ -12,7 +12,6 @@ echo Building Docker image...
 docker build -f Dockerfile.esp32 -t meshtastic-esp32-builder .
 if %ERRORLEVEL% neq 0 (
     echo Failed to build Docker image!
-    pause
     exit /b 1
 )
 
@@ -24,7 +23,6 @@ docker run --rm -v "%cd%\firmware-output:/host-output" meshtastic-esp32-builder 
 
 if %ERRORLEVEL% neq 0 (
     echo Build failed!
-    pause
     exit /b 1
 )
 
