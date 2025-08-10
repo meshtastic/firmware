@@ -285,8 +285,14 @@ static int8_t prevFrame = -1;
 SPIClass SPI1(HSPI);
 #endif
 
+// Allow boards to override the command queue depth to reduce RAM usage
+#ifndef SCREEN_CMD_QUEUE_SIZE
+#define SCREEN_CMD_QUEUE_SIZE 32
+#endif
+
 Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_OledType screenType, OLEDDISPLAY_GEOMETRY geometry)
-    : concurrency::OSThread("Screen"), address_found(address), model(screenType), geometry(geometry), cmdQueue(32)
+    : concurrency::OSThread("Screen"), address_found(address), model(screenType), geometry(geometry),
+      cmdQueue(SCREEN_CMD_QUEUE_SIZE)
 {
     graphics::normalFrames = new FrameCallback[MAX_NUM_NODES + NUM_EXTRA_FRAMES];
 

@@ -15,6 +15,25 @@
 #define LORA_DIO1 34
 #define LORA_DIO2 RADIOLIB_NC
 
+// RAM tuning for this low-RAM board
+#ifndef MAX_TX_QUEUE
+#define MAX_TX_QUEUE 8
+#endif
+#ifndef MAX_RX_TOPHONE
+#define MAX_RX_TOPHONE 16
+#endif
+#ifndef MAX_MQTT_QUEUE
+#define MAX_MQTT_QUEUE 8
+#endif
+#ifndef MAX_NUM_NODES
+#define MAX_NUM_NODES 50
+#endif
+
+// Lower display command queue to save RAM on this board
+#ifndef SCREEN_CMD_QUEUE_SIZE
+#define SCREEN_CMD_QUEUE_SIZE 32
+#endif
+
 // Display
 #define HAS_SCREEN 1
 #define ST7735S 1
