@@ -58,6 +58,7 @@ void test_nodeinfo_spoofing_vulnerability()
 
     // Create a spoofed packet claiming to be from our own node
     meshtastic_MeshPacket spoofedPacket = meshtastic_MeshPacket_init_default;
+    spoofedPacket.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
     spoofedPacket.from = 0x12345678; // VULNERABILITY: Same as our node number
     spoofedPacket.to = NODENUM_BROADCAST;
     spoofedPacket.channel = 0;
@@ -107,6 +108,7 @@ void test_legitimate_packet_processing()
 
     // Create a legitimate packet from a DIFFERENT node
     meshtastic_MeshPacket legitimatePacket = meshtastic_MeshPacket_init_default;
+    legitimatePacket.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
     legitimatePacket.from = 0x87654321; // Different node number - this is legitimate
     legitimatePacket.to = NODENUM_BROADCAST;
     legitimatePacket.channel = 0;
