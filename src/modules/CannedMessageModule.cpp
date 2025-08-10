@@ -452,6 +452,7 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
         if ((millis() - lastFilterUpdate) > filterDebounceMs) {
             runOnce(); // update filter immediately
             lastFilterUpdate = millis();
+        }
 #if defined(T_WATCH_S3) || defined(RAK14014) || defined(PRIVATE_HW)
     if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
         String keyTapped = keyForCoordinates(event->touchX, event->touchY);
