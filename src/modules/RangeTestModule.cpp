@@ -299,3 +299,22 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
 
     return 1;
 }
+
+bool RangeTestModuleRadio::removeFile()
+{
+    #ifdef ARCH_ESP32
+        char *fp = "/static/rangetest.csv";
+        if(FSCom.exists(fp))
+        {
+            LOG_INFO("Deleting previous range test.")
+            bool result = FSCom.remove(fp);
+            if(!result)
+            {
+                LOG_ERROR("Failed to delete rangeTest.csv");
+                return 0;
+            }
+        }
+    #endif
+
+    return 1;
+};
