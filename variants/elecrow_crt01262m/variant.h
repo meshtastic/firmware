@@ -3,14 +3,16 @@
 #define BUTTON_PIN 0
 
 // LoRa
-#define USE_RF95 // Ra-01H - SX1276
+#define USE_RF95
+#define RF95_USE_POLLING 1
+
 #define LORA_SCK 33
 #define LORA_MISO 35
 #define LORA_MOSI 32
 #define LORA_CS 14
 #define LORA_RESET 12
-#define LORA_DIO0 36 // IRQ - connected manually
-#define LORA_DIO1 34 // BUSY
+#define LORA_DIO0 RADIOLIB_NC
+#define LORA_DIO1 34
 #define LORA_DIO2 RADIOLIB_NC
 
 // Display

@@ -5,6 +5,13 @@
 #include "configuration.h"
 #include "error.h"
 
+#ifndef RADIOLIB_SX127X_MASK_IRQ_FLAG_RX_DONE
+#define RADIOLIB_SX127X_MASK_IRQ_FLAG_RX_DONE 0x40
+#endif
+#ifndef RADIOLIB_SX127X_MASK_IRQ_FLAG_TX_DONE
+#define RADIOLIB_SX127X_MASK_IRQ_FLAG_TX_DONE 0x08
+#endif
+
 #if ARCH_PORTDUINO
 #include "PortduinoGlue.h"
 #endif
@@ -296,7 +303,15 @@ void RF95Interface::startReceive()
     isReceiving = true;
 
     // Must be done AFTER, starting receive, because startReceive clears (possibly stale) interrupt pending register bits
-    enableInterrupt(isrRxLevel0);
+#ifdef RF95_USE_POLLING
+    if (usePolling) {
+        LOG_DEBUG("RF95Interface: startReceive using polling mode.\n");
+        schedulePoll();
+    } else
+#endif
+    {
+        enableInterrupt(isrRxLevel0);
+    }
 }
 
 bool RF95Interface::isChannelActive()
@@ -336,5 +351,35 @@ bool RF95Interface::sleep()
 #endif
 
     return true;
+}
+
+RadioLibInterface::PendingISR RF95Interface::checkPendingInterrupt()
+{
+#ifdef RF95_USE_POLLING
+    if (usePolling) {
+        uint16_t irq = lora->getIRQFlags();
+        if (irq == 0) {
+            return ISR_NONE;
+        }
+        // RX done
+        if (irq & RADIOLIB_SX127X_MASK_IRQ_FLAG_RX_DONE) {
+            // Clear handled flags
+            lora->clearIrqFlags(RADIOLIB_SX127X_MASK_IRQ_FLAG_RX_DONE);
+            LOG_DEBUG("RF95Interface: POLL RX_DONE irq=0x%04x\n", irq);
+            return ISR_RX;
+        }
+        // TX done
+        if (irq & RADIOLIB_SX127X_MASK_IRQ_FLAG_TX_DONE) {
+            lora->clearIrqFlags(RADIOLIB_SX127X_MASK_IRQ_FLAG_TX_DONE);
+            LOG_DEBUG("RF95Interface: POLL TX_DONE irq=0x%04x\n", irq);
+            return ISR_TX;
+        }
+        // Header valid indicates active reception; no action yet
+        if (irq & RADIOLIB_SX127X_MASK_IRQ_FLAG_VALID_HEADER) {
+            return ISR_NONE;
+        }
+    }
+#endif
+    return ISR_NONE;
 }
 #endif

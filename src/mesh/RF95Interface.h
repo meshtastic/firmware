@@ -42,6 +42,9 @@ class RF95Interface : public RadioLibInterface
      */
     virtual void enableInterrupt(void (*callback)()) { lora->setDio0Action(callback, RISING); }
 
+    /** When polling is enabled, check IRQ flags */
+    virtual PendingISR checkPendingInterrupt() override;
+
     /** can we detect a LoRa preamble on the current channel? */
     virtual bool isChannelActive() override;
 
