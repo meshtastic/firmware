@@ -1,14 +1,7 @@
 From d1cfaf93d8f937cc4c85f100ea8b47e98d47d302 Mon Sep 17 00:00:00 2001
 From: Michael Overhorst <michael.overhorst@pitcrew.nl>
 Date: Sun, 10 Aug 2025 15:17:19 +0200
-Subject: [PATCH] Add polling support in RadioLibInterface for improved
- interrupt handling
-
-- Introduced a polling mechanism in RadioLibInterface to handle radio events when the IRQ pin is not configured.
-- Updated the PendingISR enum to include POLL_EVENT for managing polling notifications.
-- Enhanced startReceive and startSend methods to utilize polling mode when enabled.
-- Implemented schedulePoll method to manage polling intervals.
-- Updated RF95Interface to check IRQ flags when polling is active.
+Subject: [PATCH] Add polling support in RadioLibInterface
 
 diff --git a/src/mesh/RF95Interface.cpp b/src/mesh/RF95Interface.cpp
 index 3cb6bfdda..4845efbe5 100644

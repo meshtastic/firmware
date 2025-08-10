@@ -60,9 +60,6 @@ CannedMessageModule::CannedMessageModule()
             disable();
         } else {
             LOG_INFO("CannedMessageModule is enabled");
-#if defined(T_WATCH_S3) || defined(RAK14014) || defined(PRIVATE_HW)
-            this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
-#endif
             this->inputObserver.observe(inputBroker);
         }
     } else {
@@ -448,7 +445,6 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
         }
     }
 
-<<<<<<< HEAD
     if (event->kbchar >= 32 && event->kbchar <= 126 && !isUp && !isDown && event->inputEvent != INPUT_BROKER_LEFT &&
         event->inputEvent != INPUT_BROKER_RIGHT && event->inputEvent != INPUT_BROKER_SELECT) {
         this->searchQuery += (char)event->kbchar;
@@ -456,8 +452,7 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
         if ((millis() - lastFilterUpdate) > filterDebounceMs) {
             runOnce(); // update filter immediately
             lastFilterUpdate = millis();
-=======
-#if defined(T_WATCH_S3) || defined(RAK14014) || defined(PRIVATE_HW) // Elecrow-CRT01262M
+#if defined(T_WATCH_S3) || defined(RAK14014) || defined(PRIVATE_HW)
     if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
         String keyTapped = keyForCoordinates(event->touchX, event->touchY);
 
@@ -1242,11 +1237,7 @@ void CannedMessageModule::showTemporaryMessage(const String &message)
     setIntervalFromNow(2000);
 }
 
-<<<<<<< HEAD
-#if defined(USE_VIRTUAL_KEYBOARD)
-=======
-#if defined(T_WATCH_S3) || defined(RAK14014) || defined(PRIVATE_HW) // Elecrow-CRT01262M
->>>>>>> 4d3edf320 (Enable free-text via canned messages)
+#if defined(USE_VIRTUAL_KEYBOARD) || defined(T_WATCH_S3) || defined(RAK14014) || defined(PRIVATE_HW)
 
 String CannedMessageModule::keyForCoordinates(uint x, uint y)
 {
