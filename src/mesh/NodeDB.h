@@ -353,6 +353,9 @@ extern uint32_t error_address;
 #define NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_SHIFT 0
 #define NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK (1 << NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_SHIFT)
 
+#define NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_SHIFT 1
+#define NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK (1 << NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_SHIFT)
+
 #define Module_Config_size                                                                                                       \
     (ModuleConfig_CannedMessageConfig_size + ModuleConfig_ExternalNotificationConfig_size + ModuleConfig_MQTTConfig_size +       \
      ModuleConfig_RangeTestConfig_size + ModuleConfig_SerialConfig_size + ModuleConfig_StoreForwardConfig_size +                 \

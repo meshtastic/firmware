@@ -152,6 +152,31 @@ void test_PKC(void)
     TEST_ASSERT_EQUAL_MEMORY(expected_decrypted, decrypted, 10);
 }
 
+void test_XEdDSA(void)
+{
+    uint8_t private_key[32];
+    uint8_t x_public_key[32];
+    uint8_t ed_private_key[32];
+    uint8_t ed_public_key[32];
+    uint8_t ed_public_key2[32];
+    meshtastic_UserLite_public_key_t public_key;
+    uint8_t message[] = "This is a test!";
+    uint8_t message2[] = "This is a test.";
+    uint8_t signature[64];
+    for (int times = 0; times < 10; times++) {
+        printf("Start of time %u\n", times);
+        crypto->generateKeyPair(x_public_key, private_key);
+        // crypto->setDHPrivateKey(private_key);
+        crypto->priv_curve_to_ed_keys(private_key, ed_private_key, ed_public_key);
+        crypto->curve_to_ed_pub(x_public_key, ed_public_key2);
+        TEST_ASSERT_EQUAL_MEMORY(ed_public_key, ed_public_key2, 32);
+
+        crypto->xeddsa_sign(private_key, message, sizeof(message), signature);
+        TEST_ASSERT(crypto->xeddsa_verify(x_public_key, message, sizeof(message), signature));
+        TEST_ASSERT_FALSE(crypto->xeddsa_verify(x_public_key, message2, sizeof(message), signature));
+    }
+}
+
 void test_AES_CTR(void)
 {
     uint8_t expected[32];
@@ -192,6 +217,7 @@ void setup()
     RUN_TEST(test_DH25519);
     RUN_TEST(test_AES_CTR);
     RUN_TEST(test_PKC);
+    RUN_TEST(test_XEdDSA);
     exit(UNITY_END()); // stop unit testing
 }
 

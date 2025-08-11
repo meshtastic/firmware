@@ -35,6 +35,8 @@ class CryptoEngine
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN)
     virtual void generateKeyPair(uint8_t *pubKey, uint8_t *privKey);
     virtual bool regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey);
+    bool xeddsa_sign(uint8_t *message, size_t len, uint8_t *signature);
+    bool xeddsa_verify(uint8_t *pubKey, uint8_t *message, size_t len, uint8_t *signature);
 
 #endif
     void clearKeys();
@@ -82,6 +84,10 @@ class CryptoEngine
 #if !(MESHTASTIC_EXCLUDE_PKI)
     uint8_t shared_key[32] = {0};
     uint8_t private_key[32] = {0};
+    uint8_t xeddsa_public_key[32] = {0};
+    uint8_t xeddsa_private_key[32] = {0};
+    void curve_to_ed_pub(uint8_t *curve_pubkey, uint8_t *ed_pubkey);
+    void priv_curve_to_ed_keys(uint8_t *curve_privkey, uint8_t *ed_privkey, uint8_t *ed_pubkey);
 #endif
     /**
      * Init our 128 bit nonce for a new packet

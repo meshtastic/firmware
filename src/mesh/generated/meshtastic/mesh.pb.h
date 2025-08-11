@@ -710,6 +710,7 @@ typedef struct _meshtastic_Routing {
 } meshtastic_Routing;
 
 typedef PB_BYTES_ARRAY_T(233) meshtastic_Data_payload_t;
+typedef PB_BYTES_ARRAY_T(64) meshtastic_Data_xeddsa_signature_t;
 /* (Formerly called SubPacket)
  The payload portion fo a packet, this is the actual bytes that are sent
  inside a radio packet (because from/to are broken out by the comms library) */
@@ -743,6 +744,9 @@ typedef struct _meshtastic_Data {
     /* Bitfield for extra flags. First use is to indicate that user approves the packet being uploaded to MQTT. */
     bool has_bitfield;
     uint8_t bitfield;
+    /* XEdDSA signature for the payload */
+    bool has_xeddsa_signature;
+    meshtastic_Data_xeddsa_signature_t xeddsa_signature;
 } meshtastic_Data;
 
 typedef PB_BYTES_ARRAY_T(32) meshtastic_KeyVerification_hash1_t;
@@ -885,6 +889,8 @@ typedef struct _meshtastic_MeshPacket {
     uint32_t tx_after;
     /* Indicates which transport mechanism this packet arrived over */
     meshtastic_MeshPacket_TransportMechanism transport_mechanism;
+    /* Indicates whether the packet has a valid signature */
+    bool xeddsa_signed;
 } meshtastic_MeshPacket;
 
 /* The bluetooth to device link:
@@ -938,6 +944,10 @@ typedef struct _meshtastic_NodeInfo {
  Persists between NodeDB internal clean ups
  LSB 0 of the bitfield */
     bool is_key_manually_verified;
+    /* True if node is signing its packets via XEdDSA
+ Persists between NodeDB internal clean ups
+ LSB 1 of the bitfield */
+    bool has_xeddsa_signed;
 } meshtastic_NodeInfo;
 
 typedef PB_BYTES_ARRAY_T(16) meshtastic_MyNodeInfo_device_id_t;
@@ -1350,12 +1360,12 @@ extern "C" {
 #define meshtastic_User_init_default             {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}, false, 0}
 #define meshtastic_RouteDiscovery_init_default   {0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define meshtastic_Routing_init_default          {0, {meshtastic_RouteDiscovery_init_default}}
-#define meshtastic_Data_init_default             {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0, false, 0}
+#define meshtastic_Data_init_default             {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0, false, 0, false, {0, {0}}}
 #define meshtastic_KeyVerification_init_default  {0, {0, {0}}, {0, {0}}}
 #define meshtastic_Waypoint_init_default         {0, false, 0, false, 0, 0, 0, "", "", 0}
 #define meshtastic_MqttClientProxyMessage_init_default {"", 0, {{0, {0}}}, 0}
-#define meshtastic_MeshPacket_init_default       {0, 0, 0, 0, {meshtastic_Data_init_default}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN}
-#define meshtastic_NodeInfo_init_default         {0, false, meshtastic_User_init_default, false, meshtastic_Position_init_default, 0, 0, false, meshtastic_DeviceMetrics_init_default, 0, 0, false, 0, 0, 0, 0}
+#define meshtastic_MeshPacket_init_default       {0, 0, 0, 0, {meshtastic_Data_init_default}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN, 0}
+#define meshtastic_NodeInfo_init_default         {0, false, meshtastic_User_init_default, false, meshtastic_Position_init_default, 0, 0, false, meshtastic_DeviceMetrics_init_default, 0, 0, false, 0, 0, 0, 0, 0}
 #define meshtastic_MyNodeInfo_init_default       {0, 0, 0, {0, {0}}, "", _meshtastic_FirmwareEdition_MIN, 0}
 #define meshtastic_LogRecord_init_default        {"", 0, "", _meshtastic_LogRecord_Level_MIN}
 #define meshtastic_QueueStatus_init_default      {0, 0, 0, 0}
@@ -1381,12 +1391,12 @@ extern "C" {
 #define meshtastic_User_init_zero                {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}, false, 0}
 #define meshtastic_RouteDiscovery_init_zero      {0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define meshtastic_Routing_init_zero             {0, {meshtastic_RouteDiscovery_init_zero}}
-#define meshtastic_Data_init_zero                {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0, false, 0}
+#define meshtastic_Data_init_zero                {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0, false, 0, false, {0, {0}}}
 #define meshtastic_KeyVerification_init_zero     {0, {0, {0}}, {0, {0}}}
 #define meshtastic_Waypoint_init_zero            {0, false, 0, false, 0, 0, 0, "", "", 0}
 #define meshtastic_MqttClientProxyMessage_init_zero {"", 0, {{0, {0}}}, 0}
-#define meshtastic_MeshPacket_init_zero          {0, 0, 0, 0, {meshtastic_Data_init_zero}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN}
-#define meshtastic_NodeInfo_init_zero            {0, false, meshtastic_User_init_zero, false, meshtastic_Position_init_zero, 0, 0, false, meshtastic_DeviceMetrics_init_zero, 0, 0, false, 0, 0, 0, 0}
+#define meshtastic_MeshPacket_init_zero          {0, 0, 0, 0, {meshtastic_Data_init_zero}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN, 0}
+#define meshtastic_NodeInfo_init_zero            {0, false, meshtastic_User_init_zero, false, meshtastic_Position_init_zero, 0, 0, false, meshtastic_DeviceMetrics_init_zero, 0, 0, false, 0, 0, 0, 0, 0}
 #define meshtastic_MyNodeInfo_init_zero          {0, 0, 0, {0, {0}}, "", _meshtastic_FirmwareEdition_MIN, 0}
 #define meshtastic_LogRecord_init_zero           {"", 0, "", _meshtastic_LogRecord_Level_MIN}
 #define meshtastic_QueueStatus_init_zero         {0, 0, 0, 0}
@@ -1458,6 +1468,7 @@ extern "C" {
 #define meshtastic_Data_reply_id_tag             7
 #define meshtastic_Data_emoji_tag                8
 #define meshtastic_Data_bitfield_tag             9
+#define meshtastic_Data_xeddsa_signature_tag     10
 #define meshtastic_KeyVerification_nonce_tag     1
 #define meshtastic_KeyVerification_hash1_tag     2
 #define meshtastic_KeyVerification_hash2_tag     3
@@ -1494,6 +1505,7 @@ extern "C" {
 #define meshtastic_MeshPacket_relay_node_tag     19
 #define meshtastic_MeshPacket_tx_after_tag       20
 #define meshtastic_MeshPacket_transport_mechanism_tag 21
+#define meshtastic_MeshPacket_xeddsa_signed_tag  22
 #define meshtastic_NodeInfo_num_tag              1
 #define meshtastic_NodeInfo_user_tag             2
 #define meshtastic_NodeInfo_position_tag         3
@@ -1506,6 +1518,7 @@ extern "C" {
 #define meshtastic_NodeInfo_is_favorite_tag      10
 #define meshtastic_NodeInfo_is_ignored_tag       11
 #define meshtastic_NodeInfo_is_key_manually_verified_tag 12
+#define meshtastic_NodeInfo_has_xeddsa_signed_tag 13
 #define meshtastic_MyNodeInfo_my_node_num_tag    1
 #define meshtastic_MyNodeInfo_reboot_count_tag   8
 #define meshtastic_MyNodeInfo_min_app_version_tag 11
@@ -1666,7 +1679,8 @@ X(a, STATIC,   SINGULAR, FIXED32,  source,            5) \
 X(a, STATIC,   SINGULAR, FIXED32,  request_id,        6) \
 X(a, STATIC,   SINGULAR, FIXED32,  reply_id,          7) \
 X(a, STATIC,   SINGULAR, FIXED32,  emoji,             8) \
-X(a, STATIC,   OPTIONAL, UINT32,   bitfield,          9)
+X(a, STATIC,   OPTIONAL, UINT32,   bitfield,          9) \
+X(a, STATIC,   OPTIONAL, BYTES,    xeddsa_signature,  10)
 #define meshtastic_Data_CALLBACK NULL
 #define meshtastic_Data_DEFAULT NULL
 
@@ -1718,7 +1732,8 @@ X(a, STATIC,   SINGULAR, BOOL,     pki_encrypted,    17) \
 X(a, STATIC,   SINGULAR, UINT32,   next_hop,         18) \
 X(a, STATIC,   SINGULAR, UINT32,   relay_node,       19) \
 X(a, STATIC,   SINGULAR, UINT32,   tx_after,         20) \
-X(a, STATIC,   SINGULAR, UENUM,    transport_mechanism,  21)
+X(a, STATIC,   SINGULAR, UENUM,    transport_mechanism,  21) \
+X(a, STATIC,   SINGULAR, BOOL,     xeddsa_signed,    22)
 #define meshtastic_MeshPacket_CALLBACK NULL
 #define meshtastic_MeshPacket_DEFAULT NULL
 #define meshtastic_MeshPacket_payload_variant_decoded_MSGTYPE meshtastic_Data
@@ -1735,7 +1750,8 @@ X(a, STATIC,   SINGULAR, BOOL,     via_mqtt,          8) \
 X(a, STATIC,   OPTIONAL, UINT32,   hops_away,         9) \
 X(a, STATIC,   SINGULAR, BOOL,     is_favorite,      10) \
 X(a, STATIC,   SINGULAR, BOOL,     is_ignored,       11) \
-X(a, STATIC,   SINGULAR, BOOL,     is_key_manually_verified,  12)
+X(a, STATIC,   SINGULAR, BOOL,     is_key_manually_verified,  12) \
+X(a, STATIC,   SINGULAR, BOOL,     has_xeddsa_signed,  13)
 #define meshtastic_NodeInfo_CALLBACK NULL
 #define meshtastic_NodeInfo_DEFAULT NULL
 #define meshtastic_NodeInfo_user_MSGTYPE meshtastic_User
@@ -2018,7 +2034,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_ChunkedPayload_size           245
 #define meshtastic_ClientNotification_size       482
 #define meshtastic_Compressed_size               239
-#define meshtastic_Data_size                     269
+#define meshtastic_Data_size                     335
 #define meshtastic_DeviceMetadata_size           54
 #define meshtastic_DuplicatedPublicKey_size      0
 #define meshtastic_FileInfo_size                 236
@@ -2030,12 +2046,12 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_KeyVerification_size          79
 #define meshtastic_LogRecord_size                426
 #define meshtastic_LowEntropyKey_size            0
-#define meshtastic_MeshPacket_size               381
+#define meshtastic_MeshPacket_size               450
 #define meshtastic_MqttClientProxyMessage_size   501
 #define meshtastic_MyNodeInfo_size               83
 #define meshtastic_NeighborInfo_size             258
 #define meshtastic_Neighbor_size                 22
-#define meshtastic_NodeInfo_size                 323
+#define meshtastic_NodeInfo_size                 325
 #define meshtastic_NodeRemoteHardwarePin_size    29
 #define meshtastic_Position_size                 144
 #define meshtastic_QueueStatus_size              23

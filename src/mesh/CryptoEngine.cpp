@@ -6,10 +6,18 @@
 #include "NodeDB.h"
 #include "aes-ccm.h"
 #include "meshUtils.h"
+#include "xeddsa.h"
 #include <Crypto.h>
 #include <Curve25519.h>
+#include <Ed25519.h>
 #include <RNG.h>
 #include <SHA256.h>
+
+#ifndef NUM_LIMBS_256BIT
+#define NUM_LIMBS_BITS(n) (((n) + sizeof(limb_t) * 8 - 1) / (8 * sizeof(limb_t)))
+#define NUM_LIMBS_256BIT NUM_LIMBS_BITS(256)
+#endif
+
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN)
 #if !defined(ARCH_STM32WL)
 #define CryptRNG RNG
@@ -35,6 +43,7 @@ void CryptoEngine::generateKeyPair(uint8_t *pubKey, uint8_t *privKey)
     Curve25519::dh1(public_key, private_key);
     memcpy(pubKey, public_key, sizeof(public_key));
     memcpy(privKey, private_key, sizeof(private_key));
+    priv_curve_to_ed_keys(private_key, xeddsa_private_key, xeddsa_public_key);
 }
 
 /**
@@ -54,12 +63,109 @@ bool CryptoEngine::regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey)
         }
         memcpy(private_key, privKey, sizeof(private_key));
         memcpy(public_key, pubKey, sizeof(public_key));
+        priv_curve_to_ed_keys(private_key, xeddsa_private_key, xeddsa_public_key);
     } else {
         LOG_WARN("X25519 key generation failed due to blank private key");
         return false;
     }
     return true;
 }
+
+bool CryptoEngine::xeddsa_sign(uint8_t *message, size_t len, uint8_t *signature)
+{
+    Ed25519::sign(signature, xeddsa_private_key, xeddsa_public_key, message,
+                  len); // sign will need modified to use the raw secret scalar, and not hash it first.
+    return true;
+}
+bool CryptoEngine::xeddsa_verify(uint8_t *pubKey, uint8_t *message, size_t len, uint8_t *signature)
+{
+    uint8_t publicKey[32] = {0};
+    curve_to_ed_pub(pubKey, publicKey);
+
+    return Ed25519::verify(signature, publicKey, message, len);
+}
+
+void CryptoEngine::curve_to_ed_pub(uint8_t *curve_pubkey, uint8_t *ed_pubkey)
+{
+
+    // Apply the birational map defined in RFC 7748, section 4.1 "Curve25519" to calculate an Ed25519 public
+    // key from a Curve25519 public key. Because the serialization format of Curve25519 public keys only
+    // contains the u coordinate, the x coordinate of the corresponding Ed25519 public key can't be uniquely
+    // calculated as defined by the birational map. The x coordinate is represented in the serialization
+    // format of Ed25519 public keys only in a single sign bit. This function assumes that the sign bit is
+    // known to the user and is passed accordingly.
+    fe u, y;
+    fe one;
+    fe u_minus_one, u_plus_one, u_plus_one_inv;
+
+    // Parse the Curve25519 public key input as a field element containing the u coordinate. RFC 7748,
+    // section 5 "The X25519 and X448 Functions", mandates that the most significant bit of the Curve25519
+    // public key has to be zeroized. This is handled by fe_frombytes internally.
+    fe_frombytes(u, curve_pubkey);
+
+    // Calculate the parameters (u - 1) and (u + 1)
+    fe_1(one);
+    fe_sub(u_minus_one, u, one);
+    fe_add(u_plus_one, u, one);
+
+    // Invert u + 1
+    fe_invert(u_plus_one_inv, u_plus_one);
+
+    // Calculate y = (u - 1) * inv(u + 1) (mod p)
+    fe_mul(y, u_minus_one, u_plus_one_inv);
+
+    // Serialize the field element containing the y coordinate to the Ed25519 public key output
+    fe_tobytes(ed_pubkey, y);
+
+    // Set the sign bit to zero
+    ed_pubkey[31] &= 0x7f;
+
+    // need to convert the pubkey y = ( u - 1) * inv( u + 1) (mod p).
+}
+void CryptoEngine::priv_curve_to_ed_keys(uint8_t *curve_privkey, uint8_t *ed_privkey, uint8_t *ed_pubkey)
+{
+    limb_t a[NUM_LIMBS_256BIT];
+    limb_t a2[NUM_LIMBS_256BIT];
+    uint8_t negKey[32] = {0};
+    Ed25519::Point ptA;
+    Ed25519::Point ptA2;
+
+    for (uint8_t i = 0; i < 32; i++) {
+        ed_privkey[i] = curve_privkey[i];
+    }
+
+    ed_privkey[0] &= 0xF8;
+    ed_privkey[31] &= 0x7F;
+    ed_privkey[31] |= 0x40;
+
+    Ed25519::deriveKeys(nullptr, a, ed_privkey);
+    Ed25519::mul(ptA, a);
+    Ed25519::encodePoint(ed_pubkey, ptA);
+
+    clean(a);
+    clean(ptA);
+
+    // check sign
+    if ((ed_pubkey[31] & 0x80) >> 7 == 0) {
+        return;
+    }
+    sc_muladd(negKey, MINUS_ONE, ed_privkey, ZERO);
+
+    for (uint8_t i = 0; i < 32; i++) {
+        ed_privkey[i] = negKey[i];
+    }
+
+    BigNumberUtil::unpackLE(a2, NUM_LIMBS_256BIT, negKey, 32);
+    Ed25519::mul(ptA2, a2);
+    Ed25519::encodePoint(ed_pubkey, ptA2);
+    if ((ed_pubkey[31] & 0x80) >> 7 == 0) {
+    }
+
+    // Clean up and exit.
+    clean(a);
+    clean(ptA);
+}
+
 #endif
 void CryptoEngine::clearKeys()
 {

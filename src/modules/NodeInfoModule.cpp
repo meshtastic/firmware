@@ -18,6 +18,10 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
         LOG_WARN("Invalid nodeInfo detected, is_licensed mismatch!");
         return true;
     }
+    NodeNum sourceNum = getFrom(&mp);
+    auto node = nodeDB->getMeshNode(sourceNum);
+    if ((node->bitfield & NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK) && !mp.xeddsa_signed)
+        return true;
 
     // Coerce user.id to be derived from the node number
     snprintf(p.id, sizeof(p.id), "!%08x", getFrom(&mp));
