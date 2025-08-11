@@ -118,7 +118,7 @@ E22/NRF52 PRO MICRO PIN ASSIGNMENT
 #define LED_STATE_ON 1 // State when LED is lit
 
 // Button
-//#define BUTTON_PIN // no button
+// #define BUTTON_PIN // no button
 
 // GPS
 #define PIN_GPS_TX (32 + 1) // P1.01
@@ -139,8 +139,8 @@ E22/NRF52 PRO MICRO PIN ASSIGNMENT
 // Serial interfaces
 #define SPI_INTERFACES_COUNT 1
 
-#define PIN_SPI_MISO (32 + 13)  // P1.13
-#define PIN_SPI_MOSI (32 + 11)  // P1.11
+#define PIN_SPI_MISO (32 + 13) // P1.13
+#define PIN_SPI_MOSI (32 + 11) // P1.11
 #define PIN_SPI_SCK (0 + 10)   // P0.10
 
 #define LORA_MISO PIN_SPI_MISO
@@ -151,21 +151,21 @@ E22/NRF52 PRO MICRO PIN ASSIGNMENT
 // LORA MODULE
 #define USE_SX1262
 
-#define LORA_DIO0 (0 + 2)     // P0.02 BUSY
-#define LORA_DIO1 (0 + 29)    // P0.29 IRQ
-#define LORA_RESET (32 + 15)  // P1.15 NRST
+#define LORA_DIO0 (0 + 2)    // P0.02 BUSY
+#define LORA_DIO1 (0 + 29)   // P0.29 IRQ
+#define LORA_RESET (32 + 15) // P1.15 NRST
 
 // SX126X CONFIG
 #undef TX_GAIN_LORA
-#define TX_GAIN_LORA 22 // 8 for E22 900M30S, 25 for 900M33S, 22 for 3.7V battery powered 900M33S,  0 for 900M22S
+#define TX_GAIN_LORA 22    // 8 for E22 900M30S, 25 for 900M33S, 22 for 3.7V battery powered 900M33S,  0 for 900M22S
 #define SX126X_MAX_POWER 8 // 8 for 900M33S, 22 for 900M30S and 900M22S; defaults to 22 if not defined
 
 #define SX126X_CS LORA_CS
 #define SX126X_DIO1 LORA_DIO1
 #define SX126X_BUSY LORA_DIO0
 #define SX126X_RESET LORA_RESET
-#define SX126X_RXEN  (0 + 11)    // P0.11
-#define SX126X_TXEN  (32 + 0)    // P1.00
+#define SX126X_RXEN (0 + 11) // P0.11
+#define SX126X_TXEN (32 + 0) // P1.00
 
 /*
 | Mfr          | Module           | TCXO | RF Switch | Notes                                 |
