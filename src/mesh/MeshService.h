@@ -146,7 +146,10 @@ class MeshService
     virtual void sendMqttMessageToClientProxy(meshtastic_MqttClientProxyMessage *m);
 
     /// Send a ClientNotification to the phone
-    void sendClientNotification(meshtastic_ClientNotification *cn);
+    virtual void sendClientNotification(meshtastic_ClientNotification *cn);
+
+    /// Send an error response to the phone
+    void sendRoutingErrorResponse(meshtastic_Routing_Error error, const meshtastic_MeshPacket *mp);
 
     bool isToPhoneQueueEmpty();
 

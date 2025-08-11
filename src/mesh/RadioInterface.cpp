@@ -67,6 +67,7 @@ const RegionInfo regions[] = {
     /*
         https://www.iot.org.au/wp/wp-content/uploads/2016/12/IoTSpectrumFactSheet.pdf
         https://iotalliance.org.nz/wp-content/uploads/sites/4/2019/05/IoT-Spectrum-in-NZ-Briefing-Paper.pdf
+        Also used in Brazil.
      */
     RDEF(ANZ, 915.0f, 928.0f, 100, 0, 30, true, false, false),
 
@@ -168,6 +169,21 @@ const RegionInfo regions[] = {
                                 https://github.com/meshtastic/firmware/issues/7204
     */
     RDEF(KZ_433, 433.075f, 434.775f, 100, 0, 10, true, false, false), RDEF(KZ_863, 863.0f, 868.0f, 100, 0, 30, true, false, true),
+
+
+    /*
+        Nepal
+        865 MHz to 868 MHz frequency band for IoT (Internet of Things), M2M (Machine-to-Machine), and smart metering use, specifically in non-cellular mode.
+        https://www.nta.gov.np/uploads/contents/Radio-Frequency-Policy-2080-English.pdf
+    */
+    RDEF(NP_865, 865.0f, 868.0f, 100, 0, 30, true, false, false),
+
+    /*
+        Brazil
+        902 - 907.5 MHz , 1W power limit, no duty cycle restrictions
+        https://github.com/meshtastic/firmware/issues/3741
+    */
+    RDEF(BR_902, 902.0f, 907.5f, 100, 0, 30, true, false, false),
 
     /*
        2.4 GHZ WLAN Band equivalent. Only for SX128x chips.
