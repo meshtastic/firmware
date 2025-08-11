@@ -255,16 +255,28 @@ void RadioLibInterface::onNotify(uint32_t notification)
     switch (notification) {
     case POLL_EVENT:
         if (usePolling) {
-            PendingISR cause = checkPendingInterrupt();
-            if (cause == ISR_TX) {
-                LOG_DEBUG("RadioLibInterface: POLL detected TX_DONE.\n");
-                handleTransmitInterrupt();
-                startReceive();
-                setTransmitDelay();
-            } else if (cause == ISR_RX) {
-                LOG_DEBUG("RadioLibInterface: POLL detected RX_DONE.\n");
-                handleReceiveInterrupt();
-                startReceive();
+            // Process up to two events per poll (e.g., TX_DONE followed by RX_DONE)
+            // to avoid an extra poll tick in the rare case both flags are set.
+            bool handledAny = false;
+            for (int attempt = 0; attempt < 2; ++attempt) {
+                PendingISR cause = checkPendingInterrupt();
+                if (cause == ISR_TX) {
+                    LOG_DEBUG("RadioLibInterface: POLL detected TX_DONE.\n");
+                    handleTransmitInterrupt();
+                    startReceive();
+                    handledAny = true;
+                    continue; // check again for a possible RX_DONE
+                }
+                if (cause == ISR_RX) {
+                    LOG_DEBUG("RadioLibInterface: POLL detected RX_DONE.\n");
+                    handleReceiveInterrupt();
+                    startReceive();
+                    handledAny = true;
+                    continue; // check again for a possible second event
+                }
+                break; // no more pending events
+            }
+            if (handledAny) {
                 setTransmitDelay();
             }
             if (isReceiving || sendingPacket != NULL) {

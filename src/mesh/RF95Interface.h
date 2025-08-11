@@ -15,8 +15,8 @@ class RF95Interface : public RadioLibInterface
     RF95Interface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                   RADIOLIB_PIN_TYPE busy);
 
-    // TODO: Verify that this irq flag works with RFM95 / SX1276 radios the way it used to
-    bool isIRQPending() override { return lora->getIRQFlags() & RADIOLIB_SX127X_MASK_IRQ_FLAG_VALID_HEADER; }
+    // Check for active header detection to signal pending RX in polling mode
+    bool isIRQPending() override { return (lora->getIRQFlags() & 0x10) != 0; }
 
     /// Initialise the Driver transport hardware and software.
     /// Make sure the Driver is properly configured before calling init().

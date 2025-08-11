@@ -145,7 +145,16 @@ void Router::sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFro
 void Router::abortSendAndNak(meshtastic_Routing_Error err, meshtastic_MeshPacket *p)
 {
     LOG_ERROR("Error=%d, return NAK and drop packet", err);
-    sendAckNak(err, getFrom(p), p->id, p->channel);
+    // When encryption fails or packets are malformed, p->channel may still be a hash (0..255)
+    // or an invalid index. For error responses, prefer a safe channel index.
+    ChannelIndex safeChIndex = channels.getPrimaryIndex();
+    if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
+        // Only trust channel as an index if it is in range
+        if (p->channel < channels.getNumChannels()) {
+            safeChIndex = p->channel;
+        }
+    }
+    sendAckNak(err, getFrom(p), p->id, safeChIndex);
     packetPool.release(p);
 }
 
