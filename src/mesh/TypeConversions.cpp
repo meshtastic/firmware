@@ -18,6 +18,7 @@ meshtastic_NodeInfo TypeConversions::ConvertToNodeInfo(const meshtastic_NodeInfo
     info.is_ignored = nodeInfoLiteIsIgnored(lite);
     info.is_key_manually_verified = nodeInfoLiteIsKeyManuallyVerified(lite);
     info.is_muted = nodeInfoLiteIsMuted(lite);
+    info.has_xeddsa_signed = lite->bitfield & NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK;
 
     if (lite->has_hops_away) {
         info.has_hops_away = true;

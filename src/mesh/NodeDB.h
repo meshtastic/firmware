@@ -537,6 +537,9 @@ inline void nodeInfoLiteSetBit(meshtastic_NodeInfoLite *n, uint32_t mask, bool v
         n->bitfield &= ~mask;
 }
 
+#define NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_SHIFT 1
+#define NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_MASK (1 << NODEINFO_BITFIELD_HAS_XEDDSA_SIGNED_SHIFT)
+
 #define Module_Config_size                                                                                                       \
     (ModuleConfig_CannedMessageConfig_size + ModuleConfig_ExternalNotificationConfig_size + ModuleConfig_MQTTConfig_size +       \
      ModuleConfig_RangeTestConfig_size + ModuleConfig_SerialConfig_size + ModuleConfig_StoreForwardConfig_size +                 \
