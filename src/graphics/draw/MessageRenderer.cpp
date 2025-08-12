@@ -386,7 +386,7 @@ std::vector<std::string> generateLines(OLEDDisplay *display, const char *headerS
 // Keep these lines for diagnostics
 // LOG_INFO("Char: '%c' (0x%02X)", ch, (unsigned char)ch);
 // LOG_INFO("Current String: %s", test.c_str());
-// Note: there are boolean comparition uint16 (getStringWidth) with int (textWidth), hope textWidth is always positive :)
+// Note: there are boolean comparison uint16 (getStringWidth) with int (textWidth), hope textWidth is always positive :)
 #if defined(OLED_UA) || defined(OLED_RU)
             uint16_t strWidth = display->getStringWidth(test.c_str(), test.length(), true);
 #else
