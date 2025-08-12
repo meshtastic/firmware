@@ -21,13 +21,18 @@ void UpDownInterruptBase::init(uint8_t pinDown, uint8_t pinUp, uint8_t pinPress,
     this->_eventUpLong = eventUpLong;
     this->_eventDownLong = eventDownLong;
 
+    // Store debounce configuration passed by caller
+    this->updownDebounceMs = updownDebounceMs;
+
     pinMode(pinPress, INPUT_PULLUP);
     pinMode(this->_pinDown, INPUT_PULLUP);
     pinMode(this->_pinUp, INPUT_PULLUP);
 
-    attachInterrupt(pinPress, onIntPress, RISING);
-    attachInterrupt(this->_pinDown, onIntDown, RISING);
-    attachInterrupt(this->_pinUp, onIntUp, RISING);
+    // Use FALLING edge for active-low buttons so we detect press at the moment of pressing
+    // This enables long-press timing to start immediately instead of waiting for release.
+    attachInterrupt(pinPress, onIntPress, FALLING);
+    attachInterrupt(this->_pinDown, onIntDown, FALLING);
+    attachInterrupt(this->_pinUp, onIntUp, FALLING);
 
     LOG_DEBUG("Up/down/press GPIO initialized (%d, %d, %d)", this->_pinUp, this->_pinDown, pinPress);
 
@@ -92,10 +97,12 @@ int32_t UpDownInterruptBase::runOnce()
             upDetected = false;
             upStartTime = 0;
             lastUpLongEventTime = 0;
-        } else if (upDuration >= LONG_PRESS_DURATION && lastUpLongEventTime == 0) {
-            // First long press event only - avoid repeated events causing lag
-            e.inputEvent = this->_eventUpLong;
-            lastUpLongEventTime = now;
+        } else if (upDuration >= LONG_PRESS_DURATION) {
+            // Auto-repeat long press events
+            if (lastUpLongEventTime == 0 || (now - lastUpLongEventTime) >= LONG_PRESS_REPEAT_INTERVAL) {
+                e.inputEvent = this->_eventUpLong;
+                lastUpLongEventTime = now;
+            }
         }
     }
 
@@ -113,9 +120,12 @@ int32_t UpDownInterruptBase::runOnce()
             downDetected = false;
             downStartTime = 0;
             lastDownLongEventTime = 0;
-        } else if (downDuration >= LONG_PRESS_DURATION && lastDownLongEventTime == 0) {
-            e.inputEvent = this->_eventDownLong;
-            lastDownLongEventTime = now;
+        } else if (downDuration >= LONG_PRESS_DURATION) {
+            // Auto-repeat long press events
+            if (lastDownLongEventTime == 0 || (now - lastDownLongEventTime) >= LONG_PRESS_REPEAT_INTERVAL) {
+                e.inputEvent = this->_eventDownLong;
+                lastDownLongEventTime = now;
+            }
         }
     }
 
