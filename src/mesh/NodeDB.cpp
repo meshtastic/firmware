@@ -1535,9 +1535,19 @@ void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSou
         // Local packet, fully authoritative
         LOG_INFO("updatePosition LOCAL pos@%x time=%u lat=%d lon=%d alt=%d", p.timestamp, p.time, p.latitude_i, p.longitude_i,
                  p.altitude);
-
-        setLocalPosition(p);
-        info->position = TypeConversions::ConvertToPositionLite(p);
+        // If a fixed position is configured, do not overwrite our stored coordinates with dynamic values.
+        // Only allow time-only updates when lat/lon are zero and location_source is unset (handled below),
+        // or when we are explicitly converting from our saved fixed position elsewhere.
+        if (config.position.fixed_position) {
+            // Preserve existing coordinates; update only time fields when provided
+            const uint32_t resolvedTime = p.time ? p.time : info->position.time;
+            info->position.time = resolvedTime;
+            // Update localPosition time/timestamp only
+            setLocalPosition(p, true);
+        } else {
+            setLocalPosition(p);
+            info->position = TypeConversions::ConvertToPositionLite(p);
+        }
     } else if ((p.time > 0) && !p.latitude_i && !p.longitude_i && !p.timestamp && !p.location_source) {
         // FIXME SPECIAL TIME SETTING PACKET FROM EUD TO RADIO
         // (stop-gap fix for issue #900)

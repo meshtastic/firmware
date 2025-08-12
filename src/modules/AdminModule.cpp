@@ -650,7 +650,14 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             nodeDB->clearLocalPosition();
             saveChanges(SEGMENT_NODEDATABASE | SEGMENT_CONFIG, false);
         }
-        config.position = c.payload_variant.position;
+        // Preserve sticky fixed_position flag if it was already set true and incoming config doesn't explicitly unset it.
+        {
+            bool wasFixed = config.position.fixed_position;
+            config.position = c.payload_variant.position;
+            if (wasFixed && !c.payload_variant.position.fixed_position) {
+                config.position.fixed_position = true;
+            }
+        }
 
         // Save nodedb as well in case we got a fixed position packet
         break;
