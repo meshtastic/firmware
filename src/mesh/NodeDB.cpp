@@ -264,12 +264,12 @@ NodeDB::NodeDB()
 
     if (!owner.is_licensed && config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
         bool keygenSuccess = false;
-        if (config.security.private_key.size == 32) {
+        keyIsLowEntropy = checkLowEntropyPublicKey(config.security.public_key);
+        if (config.security.private_key.size == 32 && !keyIsLowEntropy) {
             if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
                 keygenSuccess = true;
             }
         } else {
-            LOG_INFO("Generate new PKI keys");
             crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
             keygenSuccess = true;
         }
@@ -288,16 +288,6 @@ NodeDB::NodeDB()
         crypto->setDHPrivateKey(config.security.private_key.bytes);
     }
 #endif
-    keyIsLowEntropy = checkLowEntropyPublicKey(config.security.public_key);
-    if (keyIsLowEntropy) {
-        LOG_WARN("Erasing low entropy keys");
-        config.security.private_key.size = 0;
-        memfll(config.security.private_key.bytes, '\0', sizeof(config.security.private_key.bytes));
-        config.security.public_key.size = 0;
-        memfll(config.security.public_key.bytes, '\0', sizeof(config.security.public_key.bytes));
-        owner.public_key.size = 0;
-        memfll(owner.public_key.bytes, '\0', sizeof(owner.public_key.bytes));
-    }
     // Include our owner in the node db under our nodenum
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
     info->user = TypeConversions::ConvertToUserLite(owner);
@@ -344,6 +334,22 @@ NodeDB::NodeDB()
         config.device.node_info_broadcast_secs = MAX_INTERVAL;
     if (config.position.position_broadcast_secs > MAX_INTERVAL)
         config.position.position_broadcast_secs = MAX_INTERVAL;
+    if (config.position.gps_update_interval > MAX_INTERVAL)
+        config.position.gps_update_interval = MAX_INTERVAL;
+    if (config.position.gps_attempt_time > MAX_INTERVAL)
+        config.position.gps_attempt_time = MAX_INTERVAL;
+    if (config.position.position_flags > MAX_INTERVAL)
+        config.position.position_flags = MAX_INTERVAL;
+    if (config.position.rx_gpio > MAX_INTERVAL)
+        config.position.rx_gpio = MAX_INTERVAL;
+    if (config.position.tx_gpio > MAX_INTERVAL)
+        config.position.tx_gpio = MAX_INTERVAL;
+    if (config.position.broadcast_smart_minimum_distance > MAX_INTERVAL)
+        config.position.broadcast_smart_minimum_distance = MAX_INTERVAL;
+    if (config.position.broadcast_smart_minimum_interval_secs > MAX_INTERVAL)
+        config.position.broadcast_smart_minimum_interval_secs = MAX_INTERVAL;
+    if (config.position.gps_en_gpio > MAX_INTERVAL)
+        config.position.gps_en_gpio = MAX_INTERVAL;
     if (moduleConfig.neighbor_info.update_interval > MAX_INTERVAL)
         moduleConfig.neighbor_info.update_interval = MAX_INTERVAL;
     if (moduleConfig.telemetry.device_update_interval > MAX_INTERVAL)
@@ -369,6 +375,14 @@ NodeDB::NodeDB()
         config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY;
     }
 
+#if !HAS_TFT
+    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
+        // On a device without MUI, this display mode makes no sense, and will break logic.
+        config.display.displaymode = meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT;
+        config.bluetooth.enabled = true;
+    }
+#endif
+
     if (devicestateCRC != crc32Buffer(&devicestate, sizeof(devicestate)))
         saveWhat |= SEGMENT_DEVICESTATE;
     if (nodeDatabaseCRC != crc32Buffer(&nodeDatabase, sizeof(nodeDatabase)))
@@ -382,6 +396,9 @@ NodeDB::NodeDB()
         config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
         config.position.gps_enabled = 0;
     }
+#ifdef USERPREFS_FIRMWARE_EDITION
+    myNodeInfo.firmware_edition = USERPREFS_FIRMWARE_EDITION;
+#endif
 #ifdef USERPREFS_FIXED_GPS
     if (myNodeInfo.reboot_count == 1) { // Check if First boot ever or after Factory Reset.
         meshtastic_Position fixedGPS = meshtastic_Position_init_default;
@@ -407,6 +424,7 @@ NodeDB::NodeDB()
 #endif
     }
 #endif
+    sortMeshDB();
     saveToDisk(saveWhat);
 }
 
@@ -603,11 +621,6 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #ifdef PIN_GPS_EN
     config.position.gps_en_gpio = PIN_GPS_EN;
 #endif
-#ifdef GPS_POWER_TOGGLE
-    config.device.disable_triple_click = false;
-#else
-    config.device.disable_triple_click = true;
-#endif
 #if defined(USERPREFS_CONFIG_GPS_MODE)
     config.position.gps_mode = USERPREFS_CONFIG_GPS_MODE;
 #elif !HAS_GPS || GPS_DEFAULT_NOT_PRESENT
@@ -710,7 +723,6 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.display.screen_on_secs = 30;
     config.display.wake_on_tap_or_motion = true;
 #endif
-
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WIFI
     if (WiFiOTA::isUpdated()) {
         WiFiOTA::recoverConfig(&config.network);
@@ -769,16 +781,23 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.output_buzzer = PIN_BUZZER;
     moduleConfig.external_notification.use_pwm = true;
     moduleConfig.external_notification.alert_message_buzzer = true;
-    moduleConfig.external_notification.nag_timeout = 60;
+    moduleConfig.external_notification.nag_timeout = default_ringtone_nag_secs;
 #endif
-#if defined(RAK4630) || defined(RAK11310)
+#if defined(PIN_VIBRATION)
+    moduleConfig.external_notification.enabled = true;
+    moduleConfig.external_notification.output_vibra = PIN_VIBRATION;
+    moduleConfig.external_notification.alert_message_vibra = true;
+    moduleConfig.external_notification.output_ms = 500;
+    moduleConfig.external_notification.nag_timeout = 2;
+#endif
+#if defined(RAK4630) || defined(RAK11310) || defined(RAK3312)
     // Default to RAK led pin 2 (blue)
     moduleConfig.external_notification.enabled = true;
     moduleConfig.external_notification.output = PIN_LED2;
     moduleConfig.external_notification.active = true;
     moduleConfig.external_notification.alert_message = true;
     moduleConfig.external_notification.output_ms = 1000;
-    moduleConfig.external_notification.nag_timeout = 60;
+    moduleConfig.external_notification.nag_timeout = default_ringtone_nag_secs;
 #endif
 
 #ifdef HAS_I2S
@@ -787,10 +806,10 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.use_i2s_as_buzzer = true;
     moduleConfig.external_notification.alert_message_buzzer = true;
 #if HAS_TFT
-    if (moduleConfig.external_notification.nag_timeout == 60)
+    if (moduleConfig.external_notification.nag_timeout == default_ringtone_nag_secs)
         moduleConfig.external_notification.nag_timeout = 0;
 #else
-    moduleConfig.external_notification.nag_timeout = 60;
+    moduleConfig.external_notification.nag_timeout = default_ringtone_nag_secs;
 #endif
 #endif
 #ifdef NANO_G2_ULTRA
@@ -1000,7 +1019,10 @@ void NodeDB::cleanupMeshDB()
                     meshNodes->at(i).user.public_key.size = 0;
                 }
             }
-            meshNodes->at(newPos++) = meshNodes->at(i);
+            if (newPos != i)
+                meshNodes->at(newPos++) = meshNodes->at(i);
+            else
+                newPos++;
         } else {
             removed++;
         }
@@ -1087,8 +1109,8 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
     if (f) {
         LOG_INFO("Load %s", filename);
         pb_istream_t stream = {&readcb, &f, protoSize};
-
-        memset(dest_struct, 0, objSize);
+        if (fields != &meshtastic_NodeDatabase_msg) // contains a vector object
+            memset(dest_struct, 0, objSize);
         if (!pb_decode(&stream, fields, dest_struct)) {
             LOG_ERROR("Error: can't decode protobuf %s", PB_GET_ERROR(&stream));
             state = LoadFileResult::DECODE_FAILED;
@@ -1156,7 +1178,7 @@ void NodeDB::loadFromDisk()
         LOG_WARN("Node count %d exceeds MAX_NUM_NODES %d, truncating", numMeshNodes, MAX_NUM_NODES);
         numMeshNodes = MAX_NUM_NODES;
     }
-    meshNodes->resize(MAX_NUM_NODES + 1); // The rp2040, rp2035, and maybe other targets, have a problem doing a sort() when full
+    meshNodes->resize(MAX_NUM_NODES);
 
     // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
     state = loadProto(deviceStateFileName, meshtastic_DeviceState_size, sizeof(meshtastic_DeviceState),
@@ -1297,6 +1319,13 @@ void NodeDB::loadFromDisk()
 
         saveToDisk(SEGMENT_MODULECONFIG);
     }
+#if ARCH_PORTDUINO
+    // set any config overrides
+    if (settingsMap[has_configDisplayMode]) {
+        config.display.displaymode = (_meshtastic_Config_DisplayConfig_DisplayMode)settingsMap[configDisplayMode];
+    }
+
+#endif
 }
 
 /** Save a protobuf from a file, return true for success */
@@ -1608,7 +1637,6 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
                              "to regenerate your public keys.";
             LOG_WARN(warning, p.long_name);
             meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
-            cn->which_payload_variant = meshtastic_ClientNotification_duplicated_public_key_tag;
             cn->level = meshtastic_LogRecord_Level_WARNING;
             cn->time = getValidTime(RTCQualityFromNet);
             sprintf(cn->message, warning, p.long_name);
@@ -1690,26 +1718,48 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
     }
 }
 
+void NodeDB::set_favorite(bool is_favorite, uint32_t nodeId)
+{
+    meshtastic_NodeInfoLite *lite = getMeshNode(nodeId);
+    if (lite && lite->is_favorite != is_favorite) {
+        lite->is_favorite = is_favorite;
+        sortMeshDB();
+        saveNodeDatabaseToDisk();
+    }
+}
+
+void NodeDB::pause_sort(bool paused)
+{
+    sortingIsPaused = paused;
+}
+
 void NodeDB::sortMeshDB()
 {
-    if (!Throttle::isWithinTimespanMs(lastSort, 1000 * 5)) {
+    if (!sortingIsPaused && (lastSort == 0 || !Throttle::isWithinTimespanMs(lastSort, 1000 * 5))) {
         lastSort = millis();
-        std::sort(meshNodes->begin(), meshNodes->begin() + numMeshNodes,
-                  [](const meshtastic_NodeInfoLite &a, const meshtastic_NodeInfoLite &b) {
-                      if (a.num == myNodeInfo.my_node_num && b.num == myNodeInfo.my_node_num) // in theory impossible
-                          return false;
-                      if (a.num == myNodeInfo.my_node_num) {
-                          return true;
-                      }
-                      if (b.num == myNodeInfo.my_node_num) {
-                          return false;
-                      }
-                      bool aFav = a.is_favorite;
-                      bool bFav = b.is_favorite;
-                      if (aFav != bFav)
-                          return aFav;
-                      return a.last_heard > b.last_heard;
-                  });
+        bool changed = true;
+        while (changed) { // dumb reverse bubble sort, but probably not bad for what we're doing
+            changed = false;
+            for (int i = numMeshNodes - 1; i > 0; i--) { // lowest case this should examine is i == 1
+                if (meshNodes->at(i - 1).num == getNodeNum()) {
+                    // noop
+                } else if (meshNodes->at(i).num ==
+                           getNodeNum()) { // in the oddball case our own node num is not at location 0, put it there
+                    // TODO: Look for at(i-1) also matching own node num, and throw the DB in the trash
+                    std::swap(meshNodes->at(i), meshNodes->at(i - 1));
+                    changed = true;
+                } else if (meshNodes->at(i).is_favorite && !meshNodes->at(i - 1).is_favorite) {
+                    std::swap(meshNodes->at(i), meshNodes->at(i - 1));
+                    changed = true;
+                } else if (!meshNodes->at(i).is_favorite && meshNodes->at(i - 1).is_favorite) {
+                    // noop
+                } else if (meshNodes->at(i).last_heard > meshNodes->at(i - 1).last_heard) {
+                    std::swap(meshNodes->at(i), meshNodes->at(i - 1));
+                    changed = true;
+                }
+            }
+        }
+        LOG_INFO("Sort took %u milliseconds", millis() - lastSort);
     }
 }
 
@@ -1811,34 +1861,16 @@ UserLicenseStatus NodeDB::getLicenseStatus(uint32_t nodeNum)
     return info->user.is_licensed ? UserLicenseStatus::Licensed : UserLicenseStatus::NotLicensed;
 }
 
-bool NodeDB::checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_public_key_t keyToTest)
+bool NodeDB::checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_public_key_t &keyToTest)
 {
     if (keyToTest.size == 32) {
         uint8_t keyHash[32] = {0};
         memcpy(keyHash, keyToTest.bytes, keyToTest.size);
         crypto->hash(keyHash, 32);
-        if (memcmp(keyHash, LOW_ENTROPY_HASH1, sizeof(LOW_ENTROPY_HASH1)) ==
-                0 || // should become an array that gets looped through rather than this abomination
-            memcmp(keyHash, LOW_ENTROPY_HASH2, sizeof(LOW_ENTROPY_HASH2)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH3, sizeof(LOW_ENTROPY_HASH3)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH4, sizeof(LOW_ENTROPY_HASH4)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH5, sizeof(LOW_ENTROPY_HASH5)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH6, sizeof(LOW_ENTROPY_HASH6)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH7, sizeof(LOW_ENTROPY_HASH7)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH8, sizeof(LOW_ENTROPY_HASH8)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH9, sizeof(LOW_ENTROPY_HASH9)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH10, sizeof(LOW_ENTROPY_HASH10)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH11, sizeof(LOW_ENTROPY_HASH11)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH12, sizeof(LOW_ENTROPY_HASH12)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH13, sizeof(LOW_ENTROPY_HASH13)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH14, sizeof(LOW_ENTROPY_HASH14)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH15, sizeof(LOW_ENTROPY_HASH15)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH16, sizeof(LOW_ENTROPY_HASH16)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH17, sizeof(LOW_ENTROPY_HASH17)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH18, sizeof(LOW_ENTROPY_HASH18)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH19, sizeof(LOW_ENTROPY_HASH19)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH20, sizeof(LOW_ENTROPY_HASH20)) == 0) {
-            return true;
+        for (int i = 0; i < sizeof(LOW_ENTROPY_HASHES) / sizeof(LOW_ENTROPY_HASHES[0]); i++) {
+            if (memcmp(keyHash, LOW_ENTROPY_HASHES[i], sizeof(LOW_ENTROPY_HASHES[0])) == 0) {
+                return true;
+            }
         }
     }
     return false;

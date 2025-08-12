@@ -31,6 +31,9 @@
 #include "Throttle.h"
 #include <RTC.h>
 
+// Flag to indicate a heartbeat was received and we should send queue status
+bool heartbeatReceived = false;
+
 PhoneAPI::PhoneAPI()
 {
     lastContactMsec = millis();
@@ -155,6 +158,7 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
 #endif
         case meshtastic_ToRadio_heartbeat_tag:
             LOG_DEBUG("Got client heartbeat");
+            heartbeatReceived = true;
             break;
         default:
             // Ignore nop messages
@@ -194,6 +198,17 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
     // In case we send a FromRadio packet
     memset(&fromRadioScratch, 0, sizeof(fromRadioScratch));
 
+    // Respond to heartbeat by sending queue status
+    if (heartbeatReceived) {
+        memset(&fromRadioScratch, 0, sizeof(fromRadioScratch));
+        fromRadioScratch.which_payload_variant = meshtastic_FromRadio_queueStatus_tag;
+        fromRadioScratch.queueStatus = router->getQueueStatus();
+        heartbeatReceived = false;
+        size_t numbytes = pb_encode_to_bytes(buf, meshtastic_FromRadio_size, &meshtastic_FromRadio_msg, &fromRadioScratch);
+        LOG_DEBUG("FromRadio=STATE_SEND_QUEUE_STATUS, numbytes=%u", numbytes);
+        return numbytes;
+    }
+
     // Advance states as needed
     switch (state) {
     case STATE_SEND_NOTHING:
@@ -205,6 +220,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         // app not to send locations on our behalf.
         fromRadioScratch.which_payload_variant = meshtastic_FromRadio_my_info_tag;
         strncpy(myNodeInfo.pio_env, optstr(APP_ENV), sizeof(myNodeInfo.pio_env));
+        myNodeInfo.nodedb_count = static_cast<uint16_t>(nodeDB->getNumMeshNodes());
         fromRadioScratch.my_info = myNodeInfo;
         state = STATE_SEND_UIDATA;
 
@@ -686,7 +702,8 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
         LOG_WARN("Rate limit portnum %d", p.decoded.portnum);
         meshtastic_QueueStatus qs = router->getQueueStatus();
         service->sendQueueStatusToPhone(qs, 0, p.id);
-        sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "Text messages can only be sent once every 2 seconds");
+        service->sendRoutingErrorResponse(meshtastic_Routing_Error_RATE_LIMIT_EXCEEDED, &p);
+        // sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "Text messages can only be sent once every 2 seconds");
         return false;
     }
     lastPortNumToRadio[p.decoded.portnum] = millis();

@@ -49,8 +49,13 @@
 #define HW_VENDOR meshtastic_HardwareModel_RAK2560
 #elif defined(WISMESH_TAP)
 #define HW_VENDOR meshtastic_HardwareModel_WISMESH_TAP
+#elif defined(WISMESH_TAG)
+#define HW_VENDOR meshtastic_HardwareModel_WISMESH_TAG
 #elif defined(GAT562_MESH_TRIAL_TRACKER)
 #define HW_VENDOR meshtastic_HardwareModel_GAT562_MESH_TRIAL_TRACKER
+#elif defined(NOMADSTAR_METEOR_PRO)
+#define HW_VENDOR meshtastic_HardwareModel_NOMADSTAR_METEOR_PRO
+// MAke sure all custom RAK4630 boards are defined before the generic RAK4630
 #elif defined(RAK4630)
 #define HW_VENDOR meshtastic_HardwareModel_RAK4631
 #elif defined(TTGO_T_ECHO)
@@ -87,8 +92,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_SEEED_SOLAR_NODE
 #elif defined(HELTEC_MESH_POCKET)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_POCKET
-#elif defined(NOMADSTAR_METEOR_PRO)
-#define HW_VENDOR meshtastic_HardwareModel_NOMADSTAR_METEOR_PRO
+#elif defined(SEEED_WIO_TRACKER_L1_EINK)
+#define HW_VENDOR meshtastic_HardwareModel_SEEED_WIO_TRACKER_L1_EINK
 #elif defined(SEEED_WIO_TRACKER_L1)
 #define HW_VENDOR meshtastic_HardwareModel_SEEED_WIO_TRACKER_L1
 #else

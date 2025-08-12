@@ -21,7 +21,6 @@ namespace graphics
 
 namespace ClockRenderer
 {
-bool digitalWatchFace = true;
 
 void drawSegmentedDisplayColon(OLEDDisplay *display, int x, int y, float scale)
 {
@@ -187,7 +186,7 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
 {
     display->clear();
     display->setTextAlignment(TEXT_ALIGN_LEFT);
-    int line = 1;
+
     // === Set Title, Blank for Clock
     const char *titleStr = "";
     // === Header ===
@@ -219,7 +218,6 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
         hour %= 12;
         if (hour == 0)
             hour = 12;
-        bool isPM = hour >= 12;
         snprintf(timeString, sizeof(timeString), "%d:%02d", hour, minute);
     } else {
         snprintf(timeString, sizeof(timeString), "%02d:%02d", hour, minute);
@@ -231,6 +229,8 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
 
 #ifdef T_WATCH_S3
     float scale = 1.5;
+#elif defined(CHATTER_2)
+    float scale = 1.1;
 #else
     float scale = 0.75;
     if (isHighResolution) {
@@ -284,6 +284,12 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
         xOffset += (isHighResolution) ? 32 : 18;
     }
     int yOffset = (isHighResolution) ? 3 : 1;
+#ifdef SENSECAP_INDICATOR
+    yOffset -= 3;
+#endif
+#ifdef T_DECK
+    yOffset -= 5;
+#endif
     if (config.display.use_12h_clock) {
         display->drawString(startingHourMinuteTextX + xOffset, (display->getHeight() - hourMinuteTextY) - yOffset - 2,
                             isPM ? "pm" : "am");
@@ -360,7 +366,7 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     // hour hand radius and y coordinate
     int16_t hourHandRadius = radius * 0.35;
     if (isHighResolution) {
-        int16_t hourHandRadius = radius * 0.55;
+        hourHandRadius = radius * 0.55;
     }
     int16_t hourHandNoonY = centerY - hourHandRadius;
 
@@ -379,7 +385,7 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
         bool isPM = hour >= 12;
         if (config.display.use_12h_clock) {
-            bool isPM = hour >= 12;
+            isPM = hour >= 12;
             display->setFont(FONT_SMALL);
             int yOffset = isHighResolution ? 1 : 0;
 #ifdef USE_EINK

@@ -5,7 +5,7 @@ runs:
   using: composite
   steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         submodules: recursive
         ref: ${{github.event.pull_request.head.ref}}
