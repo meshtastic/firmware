@@ -32,6 +32,7 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
         LOG_DEBUG("Skip poisoning NodeInfo, not a direct neighbor (hops: %d)", hops_away);
         return false;
     }
+    delay(1500);
 
     LOG_INFO("Excellent SNR (%.2f) and direct neighbor detected, sending poisoned NodeInfo", mp.rx_snr);
 
