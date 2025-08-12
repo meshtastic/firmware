@@ -669,7 +669,7 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
             mqtt->onSend(*p_encrypted, *p, p->channel);
 #endif
     } else if (p->from == nodeDB->getNodeNum() && !skipHandle) {
-        MeshModule::callModules(*p, src, "routing");
+        MeshModule::callModules(*p, src, ROUTING_MODULE);
     }
 
     packetPool.release(p_encrypted); // Release the encrypted packet
