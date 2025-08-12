@@ -40,6 +40,9 @@ extern ScanI2C::DeviceAddress cardkb_found;
 extern bool graphics::isMuted;
 
 static const char *cannedMessagesConfigFile = "/prefs/cannedConf.proto";
+static NodeNum lastDest = NODENUM_BROADCAST;
+static uint8_t lastChannel = 0;
+static bool lastDestSet = false;
 
 meshtastic_CannedMessageModuleConfig cannedMessageModuleConfig;
 
@@ -56,14 +59,25 @@ CannedMessageModule::CannedMessageModule()
         disable();
     } else {
         LOG_INFO("CannedMessageModule is enabled");
+        moduleConfig.canned_message.enabled = true;
         this->inputObserver.observe(inputBroker);
     }
 }
 
 void CannedMessageModule::LaunchWithDestination(NodeNum newDest, uint8_t newChannel)
 {
+    // Use the requested destination, unless it's "broadcast" and we have a previous node/channel
+    if (newDest == NODENUM_BROADCAST && lastDestSet) {
+        newDest = lastDest;
+        newChannel = lastChannel;
+    }
     dest = newDest;
     channel = newChannel;
+    lastDest = dest;
+    lastChannel = channel;
+    lastDestSet = true;
+
+    // Rest of function unchanged...
     // Always select the first real canned message on activation
     int firstRealMsgIdx = 0;
     for (int i = 0; i < messagesCount; ++i) {
@@ -83,10 +97,28 @@ void CannedMessageModule::LaunchWithDestination(NodeNum newDest, uint8_t newChan
     notifyObservers(&e);
 }
 
+void CannedMessageModule::LaunchRepeatDestination()
+{
+    if (!lastDestSet) {
+        LaunchWithDestination(NODENUM_BROADCAST, 0);
+    } else {
+        LaunchWithDestination(lastDest, lastChannel);
+    }
+}
+
 void CannedMessageModule::LaunchFreetextWithDestination(NodeNum newDest, uint8_t newChannel)
 {
+    // Use the requested destination, unless it's "broadcast" and we have a previous node/channel
+    if (newDest == NODENUM_BROADCAST && lastDestSet) {
+        newDest = lastDest;
+        newChannel = lastChannel;
+    }
     dest = newDest;
     channel = newChannel;
+    lastDest = dest;
+    lastChannel = channel;
+    lastDestSet = true;
+
     runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
     requestFocus();
     UIFrameEvent e;
@@ -478,6 +510,9 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
         if (destIndex < static_cast<int>(activeChannelIndices.size())) {
             dest = NODENUM_BROADCAST;
             channel = activeChannelIndices[destIndex];
+            lastDest = dest;
+            lastChannel = channel;
+            lastDestSet = true;
         } else {
             int nodeIndex = destIndex - static_cast<int>(activeChannelIndices.size());
             if (nodeIndex >= 0 && nodeIndex < static_cast<int>(filteredNodes.size())) {
@@ -485,6 +520,10 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
                 if (selectedNode) {
                     dest = selectedNode->num;
                     channel = selectedNode->channel;
+                    // Already saves here, but for clarity, also:
+                    lastDest = dest;
+                    lastChannel = channel;
+                    lastDestSet = true;
                 }
             }
         }
@@ -594,8 +633,27 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
         // Normal canned message selection
         if (runState == CANNED_MESSAGE_RUN_STATE_INACTIVE || runState == CANNED_MESSAGE_RUN_STATE_DISABLED) {
         } else {
+            // Show confirmation dialog before sending canned message
+            NodeNum destNode = dest;
+            ChannelIndex chan = channel;
+#if CANNED_MESSAGE_ADD_CONFIRMATION
+            graphics::menuHandler::showConfirmationBanner("Send message?", [this, destNode, chan, current]() {
+                this->sendText(destNode, chan, current, false);
+                payload = runState;
+                runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+                currentMessageIndex = -1;
+
+                // Notify UI to regenerate frame set and redraw
+                UIFrameEvent e;
+                e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+                notifyObservers(&e);
+                screen->forceDisplay();
+            });
+#else
             payload = runState;
             runState = CANNED_MESSAGE_RUN_STATE_ACTION_SELECT;
+#endif
+            // Do not immediately set runState; wait for confirmation
             handled = true;
         }
     }
@@ -826,6 +884,9 @@ int CannedMessageModule::handleEmotePickerInput(const InputEvent *event)
 
 void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const char *message, bool wantReplies)
 {
+    lastDest = dest;
+    lastChannel = channel;
+    lastDestSet = true;
     // === Prepare packet ===
     meshtastic_MeshPacket *p = allocDataPacket();
     p->to = dest;
@@ -850,7 +911,13 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
     this->waitingForAck = true;
 
     // Log outgoing message
-    LOG_INFO("Send message id=%d, dest=%x, msg=%.*s", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
+    LOG_INFO("Send message id=%u, dest=%x, msg=%.*s", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
+
+    if (p->to != 0xffffffff) {
+        LOG_INFO("Proactively adding %x as favorite node", p->to);
+        nodeDB->set_favorite(true, p->to);
+        screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
+    }
 
     // Send to mesh and phone (even if no phone connected, to track ACKs)
     service->sendToMesh(p, RX_SRC_LOCAL, true);
@@ -1441,7 +1508,7 @@ void CannedMessageModule::drawEmotePickerScreen(OLEDDisplay *display, OLEDDispla
     int headerY = y;
     int listTop = headerY + headerFontHeight + headerMargin;
 
-    int visibleRows = (display->getHeight() - listTop - 2) / rowHeight;
+    int _visibleRows = (display->getHeight() - listTop - 2) / rowHeight;
     int numEmotes = graphics::numEmotes;
 
     // Clamp highlight index
@@ -1451,11 +1518,11 @@ void CannedMessageModule::drawEmotePickerScreen(OLEDDisplay *display, OLEDDispla
         emotePickerIndex = numEmotes - 1;
 
     // Determine which emote is at the top
-    int topIndex = emotePickerIndex - visibleRows / 2;
+    int topIndex = emotePickerIndex - _visibleRows / 2;
     if (topIndex < 0)
         topIndex = 0;
-    if (topIndex > numEmotes - visibleRows)
-        topIndex = std::max(0, numEmotes - visibleRows);
+    if (topIndex > numEmotes - _visibleRows)
+        topIndex = std::max(0, numEmotes - _visibleRows);
 
     // Draw header/title
     display->setFont(FONT_SMALL);
@@ -1703,8 +1770,8 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
                 } else {
                     // Text: split by words and wrap inside word if needed
                     String text = token.second;
-                    uint16_t pos = 0;
-                    while (pos < text.length()) {
+                    pos = 0;
+                    while (pos < static_cast<int>(text.length())) {
                         // Find next space (or end)
                         int spacePos = text.indexOf(' ', pos);
                         int endPos = (spacePos == -1) ? text.length() : spacePos + 1; // Include space
@@ -1747,7 +1814,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
             int yLine = inputY;
             for (auto &line : lines) {
                 int nextX = x;
-                for (auto &token : line) {
+                for (const auto &token : line) {
                     if (token.first) {
                         const graphics::Emote *emote = nullptr;
                         for (int j = 0; j < graphics::numEmotes; j++) {
@@ -1783,19 +1850,20 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
 
         int topMsg;
         std::vector<int> rowHeights;
-        int visibleRows;
+        int _visibleRows;
 
         // Draw header (To: ...)
         drawHeader(display, x, y, buffer);
 
         // Shift message list upward by 3 pixels to reduce spacing between header and first message
         const int listYOffset = y + FONT_HEIGHT_SMALL - 3;
-        visibleRows = (display->getHeight() - listYOffset) / baseRowSpacing;
+        _visibleRows = (display->getHeight() - listYOffset) / baseRowSpacing;
 
         // Figure out which messages are visible and their needed heights
-        topMsg =
-            (messagesCount > visibleRows && currentMessageIndex >= visibleRows - 1) ? currentMessageIndex - visibleRows + 2 : 0;
-        int countRows = std::min(messagesCount, visibleRows);
+        topMsg = (messagesCount > _visibleRows && currentMessageIndex >= _visibleRows - 1)
+                     ? currentMessageIndex - _visibleRows + 2
+                     : 0;
+        int countRows = std::min(messagesCount, _visibleRows);
 
         // --- Build per-row max height based on all emotes in line ---
         for (int i = 0; i < countRows; i++) {
@@ -1822,7 +1890,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
             int lineY = yCursor;
             const char *msg = getMessageByIndex(msgIdx);
             int rowHeight = rowHeights[vis];
-            bool highlight = (msgIdx == currentMessageIndex);
+            bool _highlight = (msgIdx == currentMessageIndex);
 
             // --- Multi-emote tokenization ---
             std::vector<std::pair<bool, String>> tokens; // (isEmote, token)
@@ -1875,20 +1943,20 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
             int textYOffset = (rowHeight - FONT_HEIGHT_SMALL) / 2;
 
 #ifdef USE_EINK
-            int nextX = x + (highlight ? 12 : 0);
-            if (highlight)
+            int nextX = x + (_highlight ? 12 : 0);
+            if (_highlight)
                 display->drawString(x + 0, lineY + textYOffset, ">");
 #else
             int scrollPadding = 8;
-            if (highlight) {
+            if (_highlight) {
                 display->fillRect(x + 0, lineY, display->getWidth() - scrollPadding, rowHeight);
                 display->setColor(BLACK);
             }
-            int nextX = x + (highlight ? 2 : 0);
+            int nextX = x + (_highlight ? 2 : 0);
 #endif
 
             // Draw all tokens left to right
-            for (auto &token : tokens) {
+            for (const auto &token : tokens) {
                 if (token.first) {
                     // Emote
                     const graphics::Emote *emote = nullptr;
@@ -1910,7 +1978,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
                 }
             }
 #ifndef USE_EINK
-            if (highlight)
+            if (_highlight)
                 display->setColor(WHITE);
 #endif
 
@@ -1918,11 +1986,11 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         }
 
         // Scrollbar
-        if (messagesCount > visibleRows) {
+        if (messagesCount > _visibleRows) {
             int scrollHeight = display->getHeight() - listYOffset;
             int scrollTrackX = display->getWidth() - 6;
             display->drawRect(scrollTrackX, listYOffset, 4, scrollHeight);
-            int barHeight = (scrollHeight * visibleRows) / messagesCount;
+            int barHeight = (scrollHeight * _visibleRows) / messagesCount;
             int scrollPos = listYOffset + (scrollHeight * topMsg) / messagesCount;
             display->fillRect(scrollTrackX, scrollPos, 4, barHeight);
         }
@@ -2068,6 +2136,9 @@ void CannedMessageModule::handleSetCannedMessageModuleMessages(const char *from_
 
     if (changed) {
         this->saveProtoForModule();
+        if (splitConfiguredMessages()) {
+            moduleConfig.canned_message.enabled = true;
+        }
     }
 }
 

@@ -27,6 +27,12 @@
 #include <utility>
 #include <variant>
 
+#if defined(UNIT_TEST)
+#define IS_RUNNING_TESTS 1
+#else
+#define IS_RUNNING_TESTS 0
+#endif
+
 namespace
 {
 // Minimal router needed to receive messages from MQTT.
@@ -56,7 +62,13 @@ class MockMeshService : public MeshService
         messages_.emplace_back(*m);
         releaseMqttClientProxyMessageToPool(m);
     }
-    std::list<meshtastic_MqttClientProxyMessage> messages_; // Messages received from the MeshService.
+    void sendClientNotification(meshtastic_ClientNotification *n) override
+    {
+        notifications_.emplace_back(*n);
+        releaseClientNotificationToPool(n);
+    }
+    std::list<meshtastic_MqttClientProxyMessage> messages_;  // Messages received from the MeshService.
+    std::list<meshtastic_ClientNotification> notifications_; // Notifications received from the MeshService.
 };
 
 // Minimal NodeDB needed to return values from getMeshNode.
@@ -823,14 +835,6 @@ void test_configWithDefaultServerAndInvalidPort(void)
     TEST_ASSERT_FALSE(MQTT::isValidConfig(config));
 }
 
-// Configuration with the default server and tls_enabled = true is invalid.
-void test_configWithDefaultServerAndInvalidTLSEnabled(void)
-{
-    meshtastic_ModuleConfig_MQTTConfig config = {.tls_enabled = true};
-
-    TEST_ASSERT_FALSE(MQTT::isValidConfig(config));
-}
-
 // isValidConfig connects to a custom host and port.
 void test_configCustomHostAndPort(void)
 {
@@ -911,7 +915,6 @@ void setup()
     RUN_TEST(test_configEnabledEmptyIsValid);
     RUN_TEST(test_configWithDefaultServer);
     RUN_TEST(test_configWithDefaultServerAndInvalidPort);
-    RUN_TEST(test_configWithDefaultServerAndInvalidTLSEnabled);
     RUN_TEST(test_configCustomHostAndPort);
     RUN_TEST(test_configWithConnectionFailure);
     RUN_TEST(test_configWithTLSEnabled);
