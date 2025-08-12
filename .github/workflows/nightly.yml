@@ -14,7 +14,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Trunk Check
         uses: trunk-io/trunk-action@v1
@@ -31,7 +31,7 @@ jobs:
       pull-requests: write # For trunk to create PRs
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Trunk Upgrade
         uses: trunk-io/trunk-action/upgrade@v1
