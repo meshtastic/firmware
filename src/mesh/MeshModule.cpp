@@ -108,7 +108,7 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src, const char
         auto &pi = **i;
 
         // If specificModule is provided, only call that specific module
-        if (specificModule && strcmp(pi.name, specificModule) != 0) {
+        if (specificModule && (!pi.name || strcmp(pi.name, specificModule) != 0)) {
             continue;
         }
 
