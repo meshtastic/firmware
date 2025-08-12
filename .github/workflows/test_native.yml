@@ -137,7 +137,7 @@ jobs:
         id: version
 
       - name: Download test artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: platformio-test-report-${{ steps.version.outputs.long }}.zip
           merge-multiple: true
@@ -150,7 +150,7 @@ jobs:
           reporter: java-junit
 
       - name: Download coverage artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           pattern: lcov-coverage-info-native-*-${{ steps.version.outputs.long }}.zip
           path: code-coverage-report
