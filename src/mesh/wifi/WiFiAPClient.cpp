@@ -236,6 +236,11 @@ bool isWifiAvailable()
     } else if (config.network.eth_enabled) {
         return true;
 #endif
+#ifndef ARCH_PORTDUINO
+    } else if (WiFi.status() == WL_CONNECTED) {
+        // it's likely we have wifi now, but user intends to turn it off in config!
+        return true;
+#endif
     } else {
         return false;
     }

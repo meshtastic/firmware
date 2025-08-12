@@ -59,6 +59,7 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     CannedMessageModule();
 
     void LaunchWithDestination(NodeNum, uint8_t newChannel = 0);
+    void LaunchRepeatDestination();
     void LaunchFreetextWithDestination(NodeNum, uint8_t newChannel = 0);
 
     // === Emote Picker navigation ===

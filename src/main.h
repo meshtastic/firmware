@@ -51,6 +51,11 @@ extern Adafruit_DRV2605 drv;
 extern AudioThread *audioThread;
 #endif
 
+#ifdef ELECROW_ThinkNode_M5
+#include <PCA9557.h>
+extern PCA9557 io;
+#endif
+
 #ifdef HAS_UDP_MULTICAST
 #include "mesh/udp/UdpMulticastHandler.h"
 extern UdpMulticastHandler *udpHandler;

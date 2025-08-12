@@ -34,6 +34,7 @@ Ch341Hal *ch341Hal = nullptr;
 char *configPath = nullptr;
 char *optionMac = nullptr;
 bool forceSimulated = false;
+bool verboseEnabled = false;
 
 const char *argp_program_version = optstr(APP_VERSION);
 
@@ -70,7 +71,9 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
     case 'h':
         optionMac = arg;
         break;
-
+    case 'v':
+        verboseEnabled = true;
+        break;
     case ARGP_KEY_ARG:
         return 0;
     default:
@@ -85,6 +88,7 @@ void portduinoCustomInit()
                                            {"config", 'c', "CONFIG_PATH", 0, "Full path of the .yaml config file to use."},
                                            {"hwid", 'h', "HWID", 0, "The mac address to assign to this virtual machine"},
                                            {"sim", 's', 0, 0, "Run in Simulated radio mode"},
+                                           {"verbose", 'v', 0, 0, "Set log level to full debug"},
                                            {0}};
     static void *childArguments;
     static char doc[] = "Meshtastic native build.";
@@ -416,6 +420,9 @@ void portduinoSetup()
             std::cout << "*** traceFile Exception " << e.what() << std::endl;
             exit(EXIT_FAILURE);
         }
+    }
+    if (verboseEnabled && settingsMap[logoutputlevel] != level_trace) {
+        settingsMap[logoutputlevel] = level_debug;
     }
 
     return;

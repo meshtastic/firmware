@@ -9,7 +9,7 @@ TextMessageModule *textMessageModule;
 
 ProcessMessage TextMessageModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
-#ifdef DEBUG_PORT
+#if defined(DEBUG_PORT) && !defined(DEBUG_MUTE)
     auto &p = mp.decoded;
     LOG_INFO("Received text msg from=0x%0x, id=0x%x, msg=%.*s", mp.from, mp.id, p.payload.size, p.payload.bytes);
 #endif

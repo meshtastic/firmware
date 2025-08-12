@@ -153,6 +153,21 @@ bool EInkDisplay::connect()
 #endif
         adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
     }
+#elif defined(ELECROW_ThinkNode_M5)
+    {
+        // Start HSPI
+        hspi = new SPIClass(HSPI);
+        hspi->begin(PIN_EINK_SCLK, -1, PIN_EINK_MOSI, PIN_EINK_CS); // SCLK, MISO, MOSI, SS
+
+        auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY, *hspi);
+
+        adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(*lowLevel);
+        adafruitDisplay->init();
+
+        adafruitDisplay->setRotation(4);
+
+        adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
+    }
 #elif defined(MESHLINK)
     {
         auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY, SPI1);

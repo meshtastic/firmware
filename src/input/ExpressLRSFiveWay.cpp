@@ -199,7 +199,7 @@ void ExpressLRSFiveWay::sendKey(input_broker_event key)
 void ExpressLRSFiveWay::toggleGPS()
 {
 #if HAS_GPS && !MESHTASTIC_EXCLUDE_GPS
-    if (!config.device.disable_triple_click && (gps != nullptr)) {
+    if (gps != nullptr) {
         gps->toggleGpsMode();
         screen->startAlert("GPS Toggled");
         alerting = true;

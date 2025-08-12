@@ -121,7 +121,7 @@ int32_t AirQualityTelemetryModule::runOnce()
 bool AirQualityTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *t)
 {
     if (t->which_variant == meshtastic_Telemetry_air_quality_metrics_tag) {
-#ifdef DEBUG_PORT
+#if defined(DEBUG_PORT) && !defined(DEBUG_MUTE)
         const char *sender = getSenderShortName(mp);
 
         LOG_INFO("(Received from %s): pm10_standard=%i, pm25_standard=%i, pm100_standard=%i", sender,
