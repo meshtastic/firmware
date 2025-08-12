@@ -264,12 +264,12 @@ NodeDB::NodeDB()
 
     if (!owner.is_licensed && config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
         bool keygenSuccess = false;
-        if (config.security.private_key.size == 32) {
+        keyIsLowEntropy = checkLowEntropyPublicKey(config.security.public_key);
+        if (config.security.private_key.size == 32 && !keyIsLowEntropy) {
             if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
                 keygenSuccess = true;
             }
         } else {
-            LOG_INFO("Generate new PKI keys");
             crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
             keygenSuccess = true;
         }
@@ -288,16 +288,6 @@ NodeDB::NodeDB()
         crypto->setDHPrivateKey(config.security.private_key.bytes);
     }
 #endif
-    keyIsLowEntropy = checkLowEntropyPublicKey(config.security.public_key);
-    if (keyIsLowEntropy) {
-        LOG_WARN("Erasing low entropy keys");
-        config.security.private_key.size = 0;
-        memfll(config.security.private_key.bytes, '\0', sizeof(config.security.private_key.bytes));
-        config.security.public_key.size = 0;
-        memfll(config.security.public_key.bytes, '\0', sizeof(config.security.public_key.bytes));
-        owner.public_key.size = 0;
-        memfll(owner.public_key.bytes, '\0', sizeof(owner.public_key.bytes));
-    }
     // Include our owner in the node db under our nodenum
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
     info->user = TypeConversions::ConvertToUserLite(owner);
@@ -406,6 +396,9 @@ NodeDB::NodeDB()
         config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
         config.position.gps_enabled = 0;
     }
+#ifdef USERPREFS_FIRMWARE_EDITION
+    myNodeInfo.firmware_edition = USERPREFS_FIRMWARE_EDITION;
+#endif
 #ifdef USERPREFS_FIXED_GPS
     if (myNodeInfo.reboot_count == 1) { // Check if First boot ever or after Factory Reset.
         meshtastic_Position fixedGPS = meshtastic_Position_init_default;
@@ -1644,7 +1637,6 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
                              "to regenerate your public keys.";
             LOG_WARN(warning, p.long_name);
             meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
-            cn->which_payload_variant = meshtastic_ClientNotification_duplicated_public_key_tag;
             cn->level = meshtastic_LogRecord_Level_WARNING;
             cn->time = getValidTime(RTCQualityFromNet);
             sprintf(cn->message, warning, p.long_name);
@@ -1875,28 +1867,10 @@ bool NodeDB::checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_pub
         uint8_t keyHash[32] = {0};
         memcpy(keyHash, keyToTest.bytes, keyToTest.size);
         crypto->hash(keyHash, 32);
-        if (memcmp(keyHash, LOW_ENTROPY_HASH1, sizeof(LOW_ENTROPY_HASH1)) ==
-                0 || // should become an array that gets looped through rather than this abomination
-            memcmp(keyHash, LOW_ENTROPY_HASH2, sizeof(LOW_ENTROPY_HASH2)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH3, sizeof(LOW_ENTROPY_HASH3)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH4, sizeof(LOW_ENTROPY_HASH4)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH5, sizeof(LOW_ENTROPY_HASH5)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH6, sizeof(LOW_ENTROPY_HASH6)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH7, sizeof(LOW_ENTROPY_HASH7)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH8, sizeof(LOW_ENTROPY_HASH8)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH9, sizeof(LOW_ENTROPY_HASH9)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH10, sizeof(LOW_ENTROPY_HASH10)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH11, sizeof(LOW_ENTROPY_HASH11)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH12, sizeof(LOW_ENTROPY_HASH12)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH13, sizeof(LOW_ENTROPY_HASH13)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH14, sizeof(LOW_ENTROPY_HASH14)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH15, sizeof(LOW_ENTROPY_HASH15)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH16, sizeof(LOW_ENTROPY_HASH16)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH17, sizeof(LOW_ENTROPY_HASH17)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH18, sizeof(LOW_ENTROPY_HASH18)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH19, sizeof(LOW_ENTROPY_HASH19)) == 0 ||
-            memcmp(keyHash, LOW_ENTROPY_HASH20, sizeof(LOW_ENTROPY_HASH20)) == 0) {
-            return true;
+        for (int i = 0; i < sizeof(LOW_ENTROPY_HASHES) / sizeof(LOW_ENTROPY_HASHES[0]); i++) {
+            if (memcmp(keyHash, LOW_ENTROPY_HASHES[i], sizeof(LOW_ENTROPY_HASHES[0])) == 0) {
+                return true;
+            }
         }
     }
     return false;

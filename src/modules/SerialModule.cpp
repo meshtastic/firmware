@@ -60,7 +60,8 @@
 SerialModule *serialModule;
 SerialModuleRadio *serialModuleRadio;
 
-#if defined(TTGO_T_ECHO) || defined(CANARYONE) || defined(MESHLINK) || defined(ELECROW_ThinkNode_M1)
+#if defined(TTGO_T_ECHO) || defined(CANARYONE) || defined(MESHLINK) || defined(ELECROW_ThinkNode_M1) ||                          \
+    defined(ELECROW_ThinkNode_M5)
 SerialModule::SerialModule() : StreamAPI(&Serial), concurrency::OSThread("Serial") {}
 static Print *serialPrint = &Serial;
 #elif defined(CONFIG_IDF_TARGET_ESP32C6)
@@ -73,6 +74,26 @@ static Print *serialPrint = &Serial2;
 
 char serialBytes[512];
 size_t serialPayloadSize;
+
+bool SerialModule::isValidConfig(const meshtastic_ModuleConfig_SerialConfig &config)
+{
+    if (config.override_console_serial_port && !IS_ONE_OF(config.mode, meshtastic_ModuleConfig_SerialConfig_Serial_Mode_NMEA,
+                                                          meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO)) {
+        const char *warning =
+            "Invalid Serial config: override console serial port is only supported in NMEA and CalTopo output-only modes.";
+        LOG_ERROR(warning);
+#if !IS_RUNNING_TESTS
+        meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+        cn->level = meshtastic_LogRecord_Level_ERROR;
+        cn->time = getValidTime(RTCQualityFromNet);
+        snprintf(cn->message, sizeof(cn->message), "%s", warning);
+        service->sendClientNotification(cn);
+#endif
+        return false;
+    }
+
+    return true;
+}
 
 SerialModuleRadio::SerialModuleRadio() : MeshModule("SerialModuleRadio")
 {
@@ -158,7 +179,8 @@ int32_t SerialModule::runOnce()
                 Serial.begin(baud);
                 Serial.setTimeout(moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT);
             }
-#elif !defined(TTGO_T_ECHO) && !defined(CANARYONE) && !defined(MESHLINK) && !defined(ELECROW_ThinkNode_M1)
+#elif !defined(TTGO_T_ECHO) && !defined(CANARYONE) && !defined(MESHLINK) && !defined(ELECROW_ThinkNode_M1) &&                    \
+    !defined(ELECROW_ThinkNode_M5)
             if (moduleConfig.serial.rxd && moduleConfig.serial.txd) {
 #ifdef ARCH_RP2040
                 Serial2.setFIFOSize(RX_BUFFER);
@@ -214,7 +236,8 @@ int32_t SerialModule::runOnce()
                 }
             }
 
-#if !defined(TTGO_T_ECHO) && !defined(CANARYONE) && !defined(MESHLINK) && !defined(ELECROW_ThinkNode_M1)
+#if !defined(TTGO_T_ECHO) && !defined(CANARYONE) && !defined(MESHLINK) && !defined(ELECROW_ThinkNode_M1) &&                      \
+    !defined(ELECROW_ThinkNode_M5)
             else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_WS85)) {
                 processWXSerial();
 
@@ -474,7 +497,7 @@ ParsedLine parseLine(const char *line)
 void SerialModule::processWXSerial()
 {
 #if !defined(TTGO_T_ECHO) && !defined(CANARYONE) && !defined(CONFIG_IDF_TARGET_ESP32C6) && !defined(MESHLINK) &&                 \
-    !defined(ELECROW_ThinkNode_M1)
+    !defined(ELECROW_ThinkNode_M1) && !defined(ELECROW_ThinkNode_M5)
     static unsigned int lastAveraged = 0;
     static unsigned int averageIntervalMillis = 300000; // 5 minutes hard coded.
     static double dir_sum_sin = 0;
