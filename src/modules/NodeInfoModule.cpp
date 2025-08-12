@@ -15,6 +15,7 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     auto p = *pptr;
 
     if (mp.from == nodeDB->getNodeNum()) {
+        LOG_WARN("Ignoring packet supposed to be from our own node: %08x", mp.from);
         return false;
     }
     if (p.is_licensed != owner.is_licensed) {
