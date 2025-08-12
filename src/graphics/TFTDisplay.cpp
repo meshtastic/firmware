@@ -562,6 +562,91 @@ class LGFX : public lgfx::LGFX_Device
 
 static LGFX *tft = nullptr;
 
+#elif defined(ST7796_CS)
+#include <LovyanGFX.hpp> // Graphics and font library for ST7796 driver chip
+
+class LGFX : public lgfx::LGFX_Device
+{
+    lgfx::Panel_ST7796 _panel_instance;
+    lgfx::Bus_SPI _bus_instance;
+    lgfx::Light_PWM _light_instance;
+
+  public:
+    LGFX(void)
+    {
+        {
+            auto cfg = _bus_instance.config();
+
+            // SPI
+            cfg.spi_host = ST7796_SPI_HOST;
+            cfg.spi_mode = 0;
+            cfg.freq_write = SPI_FREQUENCY; // SPI clock for transmission (up to 80MHz, rounded to the value obtained by dividing
+                                            // 80MHz by an integer)
+            cfg.freq_read = SPI_READ_FREQUENCY; // SPI clock when receiving
+            cfg.spi_3wire = false;
+            cfg.use_lock = true;               // Set to true to use transaction locking
+            cfg.dma_channel = SPI_DMA_CH_AUTO; // SPI_DMA_CH_AUTO; // Set DMA channel to use (0=not use DMA / 1=1ch / 2=ch /
+                                               // SPI_DMA_CH_AUTO=auto setting)
+            cfg.pin_sclk = ST7796_SCK;         // Set SPI SCLK pin number
+            cfg.pin_mosi = ST7796_SDA;         // Set SPI MOSI pin number
+            cfg.pin_miso = ST7796_MISO;        // Set SPI MISO pin number (-1 = disable)
+            cfg.pin_dc = ST7796_RS;            // Set SPI DC pin number (-1 = disable)
+
+            _bus_instance.config(cfg);              // applies the set value to the bus.
+            _panel_instance.setBus(&_bus_instance); // set the bus on the panel.
+        }
+
+        {                                        // Set the display panel control.
+            auto cfg = _panel_instance.config(); // Gets a structure for display panel settings.
+
+            cfg.pin_cs = ST7796_CS;     // Pin number where CS is connected (-1 = disable)
+            cfg.pin_rst = ST7796_RESET; // Pin number where RST is connected  (-1 = disable)
+            cfg.pin_busy = ST7796_BUSY; // Pin number where BUSY is connected (-1 = disable)
+
+            // cfg.memory_width = TFT_WIDTH;              // Maximum width supported by the driver IC
+            // cfg.memory_height = TFT_HEIGHT;            // Maximum height supported by the driver IC
+            cfg.panel_width = TFT_WIDTH;                  // actual displayable width
+            cfg.panel_height = TFT_HEIGHT;                // actual displayable height
+            cfg.offset_x = TFT_OFFSET_X;                  // Panel offset amount in X direction
+            cfg.offset_y = TFT_OFFSET_Y;                  // Panel offset amount in Y direction
+            cfg.offset_rotation = TFT_OFFSET_ROTATION;    // Rotation direction value offset 0~7 (4~7 is mirrored)
+#ifdef TFT_DUMMY_READ_PIXELS
+            cfg.dummy_read_pixel = TFT_DUMMY_READ_PIXELS; // Number of bits for dummy read before pixel readout
+#else
+            cfg.dummy_read_pixel = 9; // Number of bits for dummy read before pixel readout
+#endif
+            cfg.dummy_read_bits = 1;                      // Number of bits for dummy read before non-pixel data read
+            cfg.readable = true;                          // Set to true if data can be read
+            cfg.invert = true;                            // Set to true if the light/darkness of the panel is reversed
+            cfg.rgb_order = false;                        // Set to true if the panel's red and blue are swapped
+            cfg.dlen_16bit =
+                false;             // Set to true for panels that transmit data length in 16-bit units with 16-bit parallel or SPI
+            cfg.bus_shared = true; // If the bus is shared with the SD card, set to true (bus control with drawJpgFile etc.)
+
+            _panel_instance.config(cfg);
+        }
+
+#ifdef ST7796_BL
+        // Set the backlight control. (delete if not necessary)
+        {
+            auto cfg = _light_instance.config(); // Gets a structure for backlight settings.
+
+            cfg.pin_bl = ST7796_BL; // Pin number to which the backlight is connected
+            cfg.invert = false;     // true to invert the brightness of the backlight
+            cfg.freq = 44100;
+            cfg.pwm_channel = 7;
+
+            _light_instance.config(cfg);
+            _panel_instance.setLight(&_light_instance); // Set the backlight on the panel.
+        }
+#endif
+
+        setPanel(&_panel_instance); // Sets the panel to use.
+    }
+};
+
+static LGFX *tft = nullptr;
+
 #elif defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER)
 
 #include <LovyanGFX.hpp> // Graphics and font library for ILI9341/ILI9342 driver chip
@@ -982,8 +1067,9 @@ static LGFX *tft = nullptr;
 
 #endif
 
-#if defined(ST7701_CS) || defined(ST7735_CS) || defined(ST7789_CS) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) ||      \
-    defined(RAK14014) || defined(HX8357_CS) || defined(ILI9488_CS) || defined(ST72xx_DE) || (ARCH_PORTDUINO && HAS_SCREEN != 0)
+#if defined(ST7701_CS) || defined(ST7735_CS) || defined(ST7789_CS) || defined(ST7796_CS) || defined(ILI9341_DRIVER) ||           \
+    defined(ILI9342_DRIVER) || defined(RAK14014) || defined(HX8357_CS) || defined(ILI9488_CS) || defined(ST72xx_DE) ||           \
+    (ARCH_PORTDUINO && HAS_SCREEN != 0)
 #include "SPILock.h"
 #include "TFTDisplay.h"
 #include <SPI.h>
