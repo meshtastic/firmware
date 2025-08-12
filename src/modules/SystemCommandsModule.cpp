@@ -89,6 +89,11 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
 #if !MESHTASTIC_EXCLUDE_GPS
         if (gps) {
             LOG_WARN("GPS Toggle2");
+            if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED &&
+                config.position.fixed_position == false) {
+                nodeDB->clearLocalPosition();
+                nodeDB->saveToDisk();
+            }
             gps->toggleGpsMode();
             const char *msg =
                 (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) ? "GPS Enabled" : "GPS Disabled";
@@ -107,11 +112,7 @@ int SystemCommandsModule::handleInputEvent(const InputEvent *event)
         return true;
     // Power control
     case INPUT_BROKER_SHUTDOWN:
-        LOG_ERROR("Shutting Down");
-        IF_SCREEN(screen->showSimpleBanner("Shutting Down..."));
-        nodeDB->saveToDisk();
-        shutdownAtMsec = millis() + DEFAULT_SHUTDOWN_SECONDS * 1000;
-        // runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+        shutdownAtMsec = millis();
         return true;
 
     default:

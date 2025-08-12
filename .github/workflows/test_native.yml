@@ -14,7 +14,7 @@ jobs:
     name: Native Simulator Tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{github.event.pull_request.head.ref}}
           repository: ${{github.event.pull_request.head.repo.full_name}}
@@ -70,7 +70,7 @@ jobs:
     name: Native PlatformIO Tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{github.event.pull_request.head.ref}}
           repository: ${{github.event.pull_request.head.repo.full_name}}
@@ -127,7 +127,7 @@ jobs:
       - platformio-tests
     if: always()
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{github.event.pull_request.head.ref}}
           repository: ${{github.event.pull_request.head.repo.full_name}}
@@ -137,7 +137,7 @@ jobs:
         id: version
 
       - name: Download test artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: platformio-test-report-${{ steps.version.outputs.long }}.zip
           merge-multiple: true
@@ -150,7 +150,7 @@ jobs:
           reporter: java-junit
 
       - name: Download coverage artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           pattern: lcov-coverage-info-native-*-${{ steps.version.outputs.long }}.zip
           path: code-coverage-report

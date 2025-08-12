@@ -181,7 +181,7 @@ PacketHistory::PacketRecord *PacketHistory::find(NodeNum sender, PacketId id)
 }
 
 /** Insert/Replace oldest PacketRecord in recentPackets. */
-void PacketHistory::insert(PacketRecord &r)
+void PacketHistory::insert(const PacketRecord &r)
 {
     uint32_t now_millis = millis(); // Should not jump with time changes
     uint32_t OldtrxTimeMsec = 0;
@@ -308,7 +308,7 @@ bool PacketHistory::wasRelayer(const uint8_t relayer, const uint32_t id, const N
         return false;
     }
 
-    PacketRecord *found = find(sender, id);
+    const PacketRecord *found = find(sender, id);
 
     if (found == NULL) {
 #if VERBOSE_PACKET_HISTORY
@@ -327,7 +327,7 @@ bool PacketHistory::wasRelayer(const uint8_t relayer, const uint32_t id, const N
 
 /* Check if a certain node was a relayer of a packet in the history given iterator
  * @return true if node was indeed a relayer, false if not */
-bool PacketHistory::wasRelayer(const uint8_t relayer, PacketRecord &r)
+bool PacketHistory::wasRelayer(const uint8_t relayer, const PacketRecord &r)
 {
     for (uint8_t i = 0; i < NUM_RELAYERS; i++) {
         if (r.relayed_by[i] == relayer) {
