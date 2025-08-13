@@ -9,8 +9,8 @@
 // GPS
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
-#define GPS_RX_PIN 12
-#define GPS_TX_PIN 13
+#define GPS_RX_PIN 15
+#define GPS_TX_PIN 12
 #define GPS_UBLOX
 // Power and Button
 #define EXT_PWR_DETECT 4
