@@ -66,6 +66,7 @@ int32_t Router::runOnce()
 {
     meshtastic_MeshPacket *mp;
     while ((mp = fromRadioQueue.dequeuePtr(0)) != NULL) {
+        mp->transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
         // printPacket("handle fromRadioQ", mp);
         perhapsHandleReceived(mp);
     }
@@ -677,10 +678,9 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
     }
 
     // call modules here
-    if (!skipHandle) {
-        if (p->from != nodeDB->getNodeNum()) {
-            MeshModule::callModules(*p, src);
-        }
+    // If this could be a spoofed packet, don't let the modules see it.
+    if (!skipHandle && p->from != nodeDB->getNodeNum()) {
+        MeshModule::callModules(*p, src);
 
 #if !MESHTASTIC_EXCLUDE_MQTT
         // Mark as pki_encrypted if it is not yet decoded and MQTT encryption is also enabled, hash matches and it's a DM not to
@@ -693,6 +693,8 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
             !isFromUs(p) && mqtt)
             mqtt->onSend(*p_encrypted, *p, p->channel);
 #endif
+    } else if (p->from == nodeDB->getNodeNum() && !skipHandle) {
+        MeshModule::callModules(*p, src, ROUTING_MODULE);
     }
 
     packetPool.release(p_encrypted); // Release the encrypted packet
