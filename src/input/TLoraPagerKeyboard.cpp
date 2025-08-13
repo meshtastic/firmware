@@ -1,6 +1,7 @@
 #if defined(T_LORA_PAGER)
 
 #include "TLoraPagerKeyboard.h"
+#include "main.h"
 
 #define _TCA8418_COLS 10
 #define _TCA8418_ROWS 4
@@ -64,6 +65,8 @@ void TLoraPagerKeyboard::pressed(uint8_t key)
     if (state == Init || state == Busy) {
         return;
     }
+    hapticFeedback();
+
     if (modifierFlag && (millis() - last_modifier_time > _TCA8418_MULTI_TAP_THRESHOLD)) {
         modifierFlag = 0;
     }
@@ -126,6 +129,13 @@ void TLoraPagerKeyboard::released()
     queueEvent(TLoraPagerTapMap[last_key][modifierFlag % TLoraPagerTapMod[last_key]]);
     if (isModifierKey(last_key) == false)
         modifierFlag = 0;
+}
+
+void TLoraPagerKeyboard::hapticFeedback()
+{
+    drv.setWaveform(0, 14); // strong buzz 100%
+    drv.setWaveform(1, 0);  // end waveform
+    drv.go();
 }
 
 void TLoraPagerKeyboard::toggleBacklight(void)

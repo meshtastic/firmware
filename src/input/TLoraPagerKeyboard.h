@@ -12,6 +12,7 @@ class TLoraPagerKeyboard : public TCA8418KeyboardBase
   protected:
     void pressed(uint8_t key) override;
     void released(void) override;
+    void hapticFeedback(void);
 
     void updateModifierFlag(uint8_t key);
     bool isModifierKey(uint8_t key);
