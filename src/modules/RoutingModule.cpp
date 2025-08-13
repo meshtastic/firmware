@@ -73,7 +73,7 @@ uint8_t RoutingModule::getHopLimitForResponse(uint8_t hopStart, uint8_t hopLimit
     return Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit); // Use the default hop limit
 }
 
-RoutingModule::RoutingModule() : ProtobufModule("routing", meshtastic_PortNum_ROUTING_APP, &meshtastic_Routing_msg)
+RoutingModule::RoutingModule() : ProtobufModule(ROUTING_MODULE, meshtastic_PortNum_ROUTING_APP, &meshtastic_Routing_msg)
 {
     isPromiscuous = true;
 

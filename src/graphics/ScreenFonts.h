@@ -40,6 +40,9 @@
 #ifdef OLED_PL
 #define FONT_MEDIUM_LOCAL ArialMT_Plain_16_PL // Height: 19
 #else
+#ifdef OLED_RU
+#define FONT_MEDIUM_LOCAL ArialMT_Plain_16_RU // Height: 19
+#else
 #ifdef OLED_UA
 #define FONT_MEDIUM_LOCAL ArialMT_Plain_16_UA // Height: 19
 #else
@@ -50,8 +53,12 @@
 #endif
 #endif
 #endif
+#endif
 #ifdef OLED_PL
 #define FONT_LARGE_LOCAL ArialMT_Plain_24_PL // Height: 28
+#else
+#ifdef OLED_RU
+#define FONT_LARGE_LOCAL ArialMT_Plain_24_RU // Height: 28
 #else
 #ifdef OLED_UA
 #define FONT_LARGE_LOCAL ArialMT_Plain_24_UA // Height: 28
@@ -60,6 +67,7 @@
 #define FONT_LARGE_LOCAL ArialMT_Plain_24_CS // Height: 28
 #else
 #define FONT_LARGE_LOCAL ArialMT_Plain_24 // Height: 28
+#endif
 #endif
 #endif
 #endif

@@ -1867,7 +1867,7 @@ bool NodeDB::checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_pub
         uint8_t keyHash[32] = {0};
         memcpy(keyHash, keyToTest.bytes, keyToTest.size);
         crypto->hash(keyHash, 32);
-        for (int i = 0; i < sizeof(LOW_ENTROPY_HASHES) / sizeof(LOW_ENTROPY_HASHES[0]); i++) {
+        for (uint16_t i = 0; i < sizeof(LOW_ENTROPY_HASHES) / sizeof(LOW_ENTROPY_HASHES[0]); i++) {
             if (memcmp(keyHash, LOW_ENTROPY_HASHES[i], sizeof(LOW_ENTROPY_HASHES[0])) == 0) {
                 return true;
             }

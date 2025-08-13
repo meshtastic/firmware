@@ -73,7 +73,7 @@ class MeshModule
 
     /** For use only by MeshService
      */
-    static void callModules(meshtastic_MeshPacket &mp, RxSource src = RX_SRC_RADIO);
+    static void callModules(meshtastic_MeshPacket &mp, RxSource src = RX_SRC_RADIO, const char *specificModule = nullptr);
 
     static std::vector<MeshModule *> GetMeshModulesWithUIFrames(int startIndex);
     static void observeUIEvents(Observer<const UIFrameEvent *> *observer);

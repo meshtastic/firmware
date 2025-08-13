@@ -21,7 +21,7 @@ jobs:
     steps:
       # step 1
       - name: clone application source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # step 2
       - name: full scan

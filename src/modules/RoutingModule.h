@@ -2,6 +2,8 @@
 #include "Channels.h"
 #include "ProtobufModule.h"
 
+static const char *ROUTING_MODULE = "routing";
+
 /**
  * Routing module for router control messages
  */
