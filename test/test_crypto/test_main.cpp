@@ -2,6 +2,7 @@
 #include "CryptoEngine.h"
 
 #include "TestUtil.h"
+#include <XEdDSA.h>
 #include <unity.h>
 
 void HexToBytes(uint8_t *result, const std::string hex, size_t len = 0)
@@ -167,11 +168,11 @@ void test_XEdDSA(void)
         printf("Start of time %u\n", times);
         crypto->generateKeyPair(x_public_key, private_key);
         // crypto->setDHPrivateKey(private_key);
-        crypto->priv_curve_to_ed_keys(private_key, ed_private_key, ed_public_key);
+        XEdDSA::priv_curve_to_ed_keys(private_key, ed_private_key, ed_public_key);
         crypto->curve_to_ed_pub(x_public_key, ed_public_key2);
         TEST_ASSERT_EQUAL_MEMORY(ed_public_key, ed_public_key2, 32);
 
-        crypto->xeddsa_sign(private_key, message, sizeof(message), signature);
+        crypto->xeddsa_sign(message, sizeof(message), signature);
         TEST_ASSERT(crypto->xeddsa_verify(x_public_key, message, sizeof(message), signature));
         TEST_ASSERT_FALSE(crypto->xeddsa_verify(x_public_key, message2, sizeof(message), signature));
     }
