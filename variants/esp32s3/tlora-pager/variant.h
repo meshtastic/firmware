@@ -44,7 +44,7 @@
 #define ROTARY_B (41)
 #define ROTARY_PRESS (7)
 
-#define BUTTON_PIN 7
+#define BUTTON_PIN 0
 
 // SPI interface SD card slot
 #define HAS_SDCARD
