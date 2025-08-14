@@ -729,24 +729,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         config.lora = c.payload_variant.lora;
         // If we're setting region for the first time, init the region and regenerate the keys
         if (isRegionUnset && config.lora.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
-            if (!owner.is_licensed) {
-                bool keygenSuccess = false;
-                if (config.security.private_key.size == 32) {
-                    if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
-                        keygenSuccess = true;
-                    }
-                } else {
-                    LOG_INFO("Generate new PKI keys");
-                    crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
-                    keygenSuccess = true;
-                }
-                if (keygenSuccess) {
-                    config.security.public_key.size = 32;
-                    config.security.private_key.size = 32;
-                    owner.public_key.size = 32;
-                    memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
-                }
-            }
+            // Use consolidated key generation function
+            nodeDB->generateCryptoKeyPair();
             config.lora.tx_enabled = true;
             initRegion();
             if (myRegion->dutyCycle < 100) {
@@ -754,7 +738,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             }
             if (strcmp(moduleConfig.mqtt.root, default_mqtt_root) == 0) {
                 sprintf(moduleConfig.mqtt.root, "%s/%s", default_mqtt_root, myRegion->name);
-                changes = SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
+                changes = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE;
             }
         }
         break;
@@ -767,22 +751,14 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         LOG_INFO("Set config: Security");
         config.security = c.payload_variant.security;
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN) && !(MESHTASTIC_EXCLUDE_PKI)
-        // If the client set the key to blank, go ahead and regenerate so long as we're not in ham mode
-        if (!owner.is_licensed && config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
-            if (config.security.private_key.size != 32) {
-                crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
-
-            } else {
-                if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
-                    config.security.public_key.size = 32;
-                }
-            }
-        }
+        // If the client set the key to blank, regenerate using consolidated function
+        nodeDB->generateCryptoKeyPair();
 #endif
         owner.public_key.size = config.security.public_key.size;
         memcpy(owner.public_key.bytes, config.security.public_key.bytes, config.security.public_key.size);
 #if !MESHTASTIC_EXCLUDE_PKI
         crypto->setDHPrivateKey(config.security.private_key.bytes);
+        nodeDB->createNewIdentity();
 #endif
         if (config.security.is_managed && !(config.security.admin_key[0].size == 32 || config.security.admin_key[1].size == 32 ||
                                             config.security.admin_key[2].size == 32)) {
@@ -792,9 +768,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             sendWarning(warning);
         }
 
-        if (config.security.debug_log_api_enabled == c.payload_variant.security.debug_log_api_enabled &&
-            config.security.serial_enabled == c.payload_variant.security.serial_enabled)
-            requiresReboot = false;
+        requiresReboot = true;
 
         break;
     case meshtastic_Config_device_ui_tag:

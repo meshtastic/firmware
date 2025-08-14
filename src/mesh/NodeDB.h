@@ -270,6 +270,11 @@ class NodeDB
 
     bool checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_public_key_t &keyToTest);
 
+    /// Consolidate crypto key generation logic used across multiple modules
+    bool generateCryptoKeyPair();
+
+    bool createNewIdentity();
+
     bool backupPreferences(meshtastic_AdminMessage_BackupLocation location);
     bool restorePreferences(meshtastic_AdminMessage_BackupLocation location,
                             int restoreWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
