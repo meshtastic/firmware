@@ -95,6 +95,7 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
     p->hop_start = e.packet->hop_start;
     p->want_ack = e.packet->want_ack;
     p->via_mqtt = true; // Mark that the packet was received via MQTT
+    p->transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT;
     p->which_payload_variant = e.packet->which_payload_variant;
     memcpy(&p->decoded, &e.packet->decoded, std::max(sizeof(p->decoded), sizeof(p->encrypted)));
 
