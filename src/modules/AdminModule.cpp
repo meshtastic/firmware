@@ -753,7 +753,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN) && !(MESHTASTIC_EXCLUDE_PKI)
         // Only regenerate keys if both public and private keys are blank/empty
         if (config.security.public_key.size == 0 && config.security.private_key.size == 0) {
-
+            nodeDB->generateCryptoKeyPair();
         }
         // If user provided a private key but no public key, generate the public key from private key
         else if (config.security.private_key.size == 32 && config.security.public_key.size == 0) {
