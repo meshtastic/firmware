@@ -1911,7 +1911,6 @@ bool NodeDB::generateCryptoKeyPair(const uint8_t *privateKey)
 
         // Set the DH private key for crypto operations
         crypto->setDHPrivateKey(config.security.private_key.bytes);
-
         createNewIdentity();
     }
 
