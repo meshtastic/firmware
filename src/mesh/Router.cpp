@@ -66,6 +66,7 @@ int32_t Router::runOnce()
 {
     meshtastic_MeshPacket *mp;
     while ((mp = fromRadioQueue.dequeuePtr(0)) != NULL) {
+        mp->transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
         // printPacket("handle fromRadioQ", mp);
         perhapsHandleReceived(mp);
     }
@@ -549,20 +550,6 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             numbytes += MESHTASTIC_PKC_OVERHEAD;
             p->channel = 0;
             p->pki_encrypted = true;
-
-            // warn the user about a low entropy key
-            if (nodeDB->keyIsLowEntropy) {
-                LOG_WARN(LOW_ENTROPY_WARNING);
-                if (!nodeDB->hasWarned) {
-                    meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
-                    cn->which_payload_variant = meshtastic_ClientNotification_low_entropy_key_tag;
-                    cn->level = meshtastic_LogRecord_Level_WARNING;
-                    cn->time = getValidTime(RTCQualityFromNet);
-                    sprintf(cn->message, LOW_ENTROPY_WARNING);
-                    service->sendClientNotification(cn);
-                    nodeDB->hasWarned = true;
-                }
-            }
         } else {
             if (p->pki_encrypted == true) {
                 // Client specifically requested PKI encryption
@@ -666,7 +653,8 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
     }
 
     // call modules here
-    if (!skipHandle) {
+    // If this could be a spoofed packet, don't let the modules see it.
+    if (!skipHandle && p->from != nodeDB->getNodeNum()) {
         MeshModule::callModules(*p, src);
 
 #if !MESHTASTIC_EXCLUDE_MQTT
@@ -680,6 +668,8 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
             !isFromUs(p) && mqtt)
             mqtt->onSend(*p_encrypted, *p, p->channel);
 #endif
+    } else if (p->from == nodeDB->getNodeNum() && !skipHandle) {
+        MeshModule::callModules(*p, src, ROUTING_MODULE);
     }
 
     packetPool.release(p_encrypted); // Release the encrypted packet

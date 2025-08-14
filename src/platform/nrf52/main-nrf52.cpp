@@ -282,10 +282,14 @@ void cpuDeepSleep(uint32_t msecToWake)
 #if SPI_INTERFACES_COUNT > 1
     SPI1.end();
 #endif
-    // This may cause crashes as debug messages continue to flow.
-    Serial.end();
+    if (Serial)       // Another check in case of disabled default serial, does nothing bad
+        Serial.end(); // This may cause crashes as debug messages continue to flow.
+
+        // This causes troubles with waking up on nrf52 (on pro-micro in particular):
+        // we have no Serial1 in use on nrf52, check Serial and GPS modules.
 #ifdef PIN_SERIAL1_RX
-    Serial1.end();
+    if (Serial1) // A straightforward solution to the wake from deepsleep problem
+        Serial1.end();
 #endif
     setBluetoothEnable(false);
 
@@ -362,6 +366,7 @@ void cpuDeepSleep(uint32_t msecToWake)
         // Resume on user button press
         // https://github.com/lyusupov/SoftRF/blob/81c519ca75693b696752235d559e881f2e0511ee/software/firmware/source/SoftRF/src/platform/nRF52.cpp#L1738
         constexpr uint32_t DFU_MAGIC_SKIP = 0x6d;
+        sd_power_gpregret_clr(0, 0xFF);           // Clear the register before setting a new values in it for stability reasons
         sd_power_gpregret_set(0, DFU_MAGIC_SKIP); // Equivalent NRF_POWER->GPREGRET = DFU_MAGIC_SKIP
 
         // FIXME, use system off mode with ram retention for key state?
@@ -376,6 +381,12 @@ void cpuDeepSleep(uint32_t msecToWake)
         nrf_gpio_cfg_input(PIN_BUTTON2, NRF_GPIO_PIN_PULLUP);
         nrf_gpio_pin_sense_t sense1 = NRF_GPIO_PIN_SENSE_LOW;
         nrf_gpio_cfg_sense_set(PIN_BUTTON2, sense1);
+#endif
+
+#ifdef PROMICRO_DIY_TCXO
+        nrf_gpio_cfg_input(BUTTON_PIN, NRF_GPIO_PIN_PULLUP); // Enable internal pull-up on the button pin
+        nrf_gpio_pin_sense_t sense = NRF_GPIO_PIN_SENSE_LOW; // Configure SENSE signal on low edge
+        nrf_gpio_cfg_sense_set(BUTTON_PIN, sense);           // Apply SENSE to wake up the device from the deep sleep
 #endif
 
         auto ok = sd_power_system_off();
