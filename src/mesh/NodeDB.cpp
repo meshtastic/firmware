@@ -1926,16 +1926,17 @@ bool NodeDB::createNewIdentity()
     // Remove the old node from the NodeDB
     uint32_t oldNodeNum = getNodeNum();
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(oldNodeNum);
-    if (node != NULL) {
+
+    // Set my node num uint32 value to bytes from the new public key
+    myNodeInfo.my_node_num = crc32Buffer(config.security.public_key.bytes, config.security.public_key.size);
+
+    if (node != NULL && myNodeInfo.my_node_num != oldNodeNum) {
         node->is_ignored = true;
         node->has_device_metrics = false;
         node->has_position = false;
         node->user.public_key.size = 0;
         node->user.public_key.bytes[0] = 0;
     }
-
-    // Set my node num uint32 value to bytes from the new public key
-    myNodeInfo.my_node_num = crc32Buffer(config.security.public_key.bytes, config.security.public_key.size);
 
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
     info->user = TypeConversions::ConvertToUserLite(owner);

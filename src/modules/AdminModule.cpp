@@ -739,7 +739,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             }
             if (strcmp(moduleConfig.mqtt.root, default_mqtt_root) == 0) {
                 sprintf(moduleConfig.mqtt.root, "%s/%s", default_mqtt_root, myRegion->name);
-                changes = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE;
+                changes = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_NODEDATABASE | SEGMENT_DEVICESTATE;
             }
         }
         break;
@@ -772,6 +772,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             LOG_WARN(warning);
             sendWarning(warning);
         }
+
+        changes = SEGMENT_CONFIG | SEGMENT_DEVICESTATE | SEGMENT_NODEDATABASE;
 
         requiresReboot = true;
 
