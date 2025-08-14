@@ -1,0 +1,451 @@
+// ELRS Target Selection - automatically defined by PlatformIO environment
+// #define ELRS_ANYLEAF_DUAL_RADIO_2400
+// #define ELRS_BAYCKRC_DUAL_CORE_2400
+// #define ELRS_BETAFPV_SUPERD_2400
+// #define ELRS_GENERIC_TRUE_DIVERSITY_2400
+// #define ELRS_GENERIC_DIVERSITY_PA_VTX_2400
+// #define ELRS_GENERIC_DIVERSITY_VTX_2400
+// #define ELRS_GEPRC_GEPRC_DUAL_2400
+// #define ELRS_HAPPYMODEL_EP_DUAL_2400
+// #define ELRS_HGLRC_DUAL_2400
+// #define ELRS_IFLIGHT_DUAL250_2400
+// #define ELRS_RADIOMASTER_RP4_2400
+// #define ELRS_RADIOMASTER_RP4M_2400
+// #define ELRS_RADIOMASTER_NEXUS_XR_2400
+// #define ELRS_SEQURE_DUAL_2400
+// #define ELRS_BAYCKRC_DUAL_CORE_900
+// #define ELRS_BETAFPV_SUPERD_900
+// #define ELRS_FOXEER_TD_900
+// #define ELRS_GENERIC_TRUE_DIVERSITY_900
+// #define ELRS_GENERIC_TRUE_DIVERSITY_PA_900
+// #define ELRS_GEPRC_DUAL_900
+// #define ELRS_GEPRC_DUAL500_900
+// #define ELRS_HAPPYMODEL_ES900_DUAL_900
+// #define ELRS_HGLRC_DUAL_900
+// #define ELRS_IFLIGHT_DUAL500_900
+// #define ELRS_SEQURE_DUAL_900
+// #define ELRS_BAYCKRC_DUAL_DUAL
+// #define ELRS_GENERIC_TRUE_DIVERSITY_DUAL
+// #define ELRS_GEPRC_DUAL_DUAL
+// #define ELRS_RADIOMASTER_DBR4_DUAL
+// #define ELRS_RADIOMASTER_XR4_DUAL
+// #define ELRS_BETAFPV_SUPERP_900
+// #define ELRS_GENERIC_TRUE_DIVERSITY_PWM16_900
+// #define ELRS_BETAFPV_SUPERP_2400
+// #define ELRS_GENERIC_TRUE_DIVERSITY_PWM16_2400
+// #define ELRS_GENERIC_TRUE_DIVERSITY_PWM14_2400
+// #define ELRS_DIY_TTGOV1_900
+// #define ELRS_DIY_TTGOV2_900
+// #define ELRS_GENERIC_PWM_VARIO_2400
+// #define ELRS_RADIOMASTER_ER6G_2400
+// #define ELRS_RADIOMASTER_ER6GV_2400
+// #define ELRS_GENERIC_FRANK_2400
+// #define ELRS_GENERIC_RX_VTX_2400
+// #define ELRS_HAPPYMODEL_AIO_2400
+// #define ELRS_HELLORADIO_HR8E_2400
+// #define ELRS_HELLORADIO_HR7E_2400
+// #define ELRS_RADIOMASTER_BANDIT_NANO_RX_900
+// #define ELRS_RADIOMASTER_ER6_2400
+// #define ELRS_RADIOMASTER_ER8_2400
+// #define ELRS_RADIOMASTER_ER8G_2400
+// #define ELRS_RADIOMASTER_ER8GV_2400
+// #define ELRS_SPRACING_RXN1_2400
+
+// Common settings
+#undef HAS_GPS
+#undef GPS_RX_PIN
+#undef GPS_TX_PIN
+#undef EXT_NOTIFY_OUT
+
+// Global chip-specific pin mappings
+// SX128X mappings (2.4GHz)
+#define SX128X_CS LORA_CS
+#define SX128X_DIO1 LORA_DIO1
+#define SX128X_BUSY LORA_BUSY
+#define SX128X_RESET LORA_RESET
+
+// LR1121 mappings (dual-band)
+#define LR1121_SPI_NSS_PIN LORA_CS
+#define LR1121_SPI_SCK_PIN LORA_SCK
+#define LR1121_SPI_MOSI_PIN LORA_MOSI
+#define LR1121_SPI_MISO_PIN LORA_MISO
+#define LR1121_NRESET_PIN LORA_RESET
+#define LR1121_BUSY_PIN LORA_BUSY
+#define LR1121_IRQ_PIN LORA_DIO1
+#define LR11X0_DIO_AS_RF_SWITCH
+
+// Second radio mappings for true diversity
+#define SX128X_CS_2 LORA_CS_2
+#define SX128X_DIO0_2 LORA_DIO0_2
+#define SX128X_DIO1_2 LORA_DIO1_2
+#define SX128X_BUSY_2 LORA_BUSY_2
+#define SX128X_RESET_2 LORA_RESET_2
+#define LR1121_SPI_NSS_2_PIN LORA_CS_2
+#define LR1121_NRESET_2_PIN LORA_RESET_2
+#define LR1121_BUSY_2_PIN LORA_BUSY_2
+#define LR1121_IRQ_2_PIN LORA_DIO1_2
+
+// Pin Configuration 1 - Shared by multiple targets
+#if defined(ELRS_ANYLEAF_DUAL_RADIO_2400) || defined(ELRS_BAYCKRC_DUAL_CORE_2400) || defined(ELRS_BETAFPV_SUPERD_2400) || defined(ELRS_GENERIC_TRUE_DIVERSITY_2400) || defined(ELRS_GENERIC_DIVERSITY_PA_VTX_2400) || defined(ELRS_GENERIC_DIVERSITY_VTX_2400) || defined(ELRS_GEPRC_GEPRC_DUAL_2400) || defined(ELRS_HAPPYMODEL_EP_DUAL_2400) || defined(ELRS_HGLRC_DUAL_2400) || defined(ELRS_IFLIGHT_DUAL250_2400) || defined(ELRS_RADIOMASTER_RP4_2400) || defined(ELRS_RADIOMASTER_RP4M_2400) || defined(ELRS_RADIOMASTER_NEXUS_XR_2400) || defined(ELRS_SEQURE_DUAL_2400)
+#define USE_SX1280
+#define TWO_RADIOS
+
+// Radio pins
+#define LORA_BUSY 36
+#define LORA_CS 27
+#define LORA_DIO1 37
+#define LORA_MISO 33
+#define LORA_MOSI 32
+#define LORA_RESET 26
+#define LORA_SCK 25
+
+// Second radio pins (true diversity)
+#define LORA_BUSY_2 39
+#define LORA_CS_2 13
+#define LORA_DIO1_2 34
+#define LORA_RESET_2 21
+
+// Other pins
+#define NEOPIXEL_DATA 22
+#define SERIAL_RX_PIN 3
+#define SERIAL_TX_PIN 1
+
+
+// RGB LED
+#define HAS_NEOPIXEL
+#define NEOPIXEL_COUNT 1
+#define NEOPIXEL_TYPE (NEO_GRB + NEO_KHZ800)
+#endif // defined(ELRS_ANYLEAF_DUAL_RADIO_2400) || defined(ELRS_BAYCKRC_DUAL_CORE_2400) || defined(ELRS_BETAFPV_SUPERD_2400) || defined(ELRS_GENERIC_TRUE_DIVERSITY_2400) || defined(ELRS_GENERIC_DIVERSITY_PA_VTX_2400) || defined(ELRS_GENERIC_DIVERSITY_VTX_2400) || defined(ELRS_GEPRC_GEPRC_DUAL_2400) || defined(ELRS_HAPPYMODEL_EP_DUAL_2400) || defined(ELRS_HGLRC_DUAL_2400) || defined(ELRS_IFLIGHT_DUAL250_2400) || defined(ELRS_RADIOMASTER_RP4_2400) || defined(ELRS_RADIOMASTER_RP4M_2400) || defined(ELRS_RADIOMASTER_NEXUS_XR_2400) || defined(ELRS_SEQURE_DUAL_2400)
+
+// Pin Configuration 2 - Shared by multiple targets
+#if defined(ELRS_BAYCKRC_DUAL_CORE_900) || defined(ELRS_BETAFPV_SUPERD_900) || defined(ELRS_FOXEER_TD_900) || defined(ELRS_GENERIC_TRUE_DIVERSITY_900) || defined(ELRS_GENERIC_TRUE_DIVERSITY_PA_900) || defined(ELRS_GEPRC_DUAL_900) || defined(ELRS_GEPRC_DUAL500_900) || defined(ELRS_HAPPYMODEL_ES900_DUAL_900) || defined(ELRS_HGLRC_DUAL_900) || defined(ELRS_IFLIGHT_DUAL500_900) || defined(ELRS_SEQURE_DUAL_900)
+#define USE_RF95
+#define TWO_RADIOS
+
+// Radio pins
+#define LORA_CS 27
+#define LORA_DIO0 36
+#define LORA_DIO1 37
+#define LORA_MISO 33
+#define LORA_MOSI 32
+#define LORA_RESET 26
+#define LORA_SCK 25
+
+// Second radio pins (true diversity)
+#define LORA_CS_2 13
+#define LORA_DIO0_2 39
+#define LORA_DIO1_2 34
+#define LORA_RESET_2 21
+
+// Other pins
+#define NEOPIXEL_DATA 22
+#define SERIAL_RX_PIN 3
+#define SERIAL_TX_PIN 1
+
+
+// RGB LED
+#define HAS_NEOPIXEL
+#define NEOPIXEL_COUNT 1
+#define NEOPIXEL_TYPE (NEO_GRB + NEO_KHZ800)
+#endif // defined(ELRS_BAYCKRC_DUAL_CORE_900) || defined(ELRS_BETAFPV_SUPERD_900) || defined(ELRS_FOXEER_TD_900) || defined(ELRS_GENERIC_TRUE_DIVERSITY_900) || defined(ELRS_GENERIC_TRUE_DIVERSITY_PA_900) || defined(ELRS_GEPRC_DUAL_900) || defined(ELRS_GEPRC_DUAL500_900) || defined(ELRS_HAPPYMODEL_ES900_DUAL_900) || defined(ELRS_HGLRC_DUAL_900) || defined(ELRS_IFLIGHT_DUAL500_900) || defined(ELRS_SEQURE_DUAL_900)
+
+// Pin Configuration 3 - Shared by multiple targets
+#if defined(ELRS_BAYCKRC_DUAL_DUAL) || defined(ELRS_GENERIC_TRUE_DIVERSITY_DUAL) || defined(ELRS_GEPRC_DUAL_DUAL) || defined(ELRS_RADIOMASTER_DBR4_DUAL) || defined(ELRS_RADIOMASTER_XR4_DUAL)
+#define USE_LR1121
+#define TWO_RADIOS
+
+// Radio pins
+#define LORA_BUSY 36
+#define LORA_CS 27
+#define LORA_DIO1 37
+#define LORA_MISO 33
+#define LORA_MOSI 32
+#define LORA_RESET 26
+#define LORA_SCK 25
+
+// Second radio pins (true diversity)
+#define LORA_BUSY_2 39
+#define LORA_CS_2 13
+#define LORA_DIO1_2 34
+#define LORA_RESET_2 21
+
+// Other pins
+#define NEOPIXEL_DATA 22
+#define SERIAL_RX_PIN 3
+#define SERIAL_TX_PIN 1
+
+
+// RGB LED
+#define HAS_NEOPIXEL
+#define NEOPIXEL_COUNT 1
+#define NEOPIXEL_TYPE (NEO_GRB + NEO_KHZ800)
+#endif // defined(ELRS_BAYCKRC_DUAL_DUAL) || defined(ELRS_GENERIC_TRUE_DIVERSITY_DUAL) || defined(ELRS_GEPRC_DUAL_DUAL) || defined(ELRS_RADIOMASTER_DBR4_DUAL) || defined(ELRS_RADIOMASTER_XR4_DUAL)
+
+// Pin Configuration 4 - Shared by multiple targets
+#if defined(ELRS_BETAFPV_SUPERP_900) || defined(ELRS_GENERIC_TRUE_DIVERSITY_PWM16_900)
+#define USE_RF95
+#define TWO_RADIOS
+
+// Radio pins
+#define LORA_CS 26
+#define LORA_DIO0 37
+#define LORA_DIO1 38
+#define LORA_MISO 35
+#define LORA_MOSI 32
+#define LORA_RESET 25
+#define LORA_SCK 33
+
+// Second radio pins (true diversity)
+#define LORA_CS_2 27
+#define LORA_DIO0_2 39
+#define LORA_DIO1_2 34
+
+// Other pins
+#define NEOPIXEL_DATA 21
+
+
+// RGB LED
+#define HAS_NEOPIXEL
+#define NEOPIXEL_COUNT 1
+#define NEOPIXEL_TYPE (NEO_GRB + NEO_KHZ800)
+#endif // defined(ELRS_BETAFPV_SUPERP_900) || defined(ELRS_GENERIC_TRUE_DIVERSITY_PWM16_900)
+
+// Pin Configuration 5 - Shared by multiple targets
+#if defined(ELRS_BETAFPV_SUPERP_2400) || defined(ELRS_GENERIC_TRUE_DIVERSITY_PWM16_2400) || defined(ELRS_GENERIC_TRUE_DIVERSITY_PWM14_2400)
+#define USE_SX1280
+#define TWO_RADIOS
+
+// Radio pins
+#define LORA_BUSY 37
+#define LORA_CS 26
+#define LORA_DIO1 38
+#define LORA_MISO 35
+#define LORA_MOSI 32
+#define LORA_RESET 25
+#define LORA_SCK 33
+
+// Second radio pins (true diversity)
+#define LORA_BUSY_2 39
+#define LORA_CS_2 27
+#define LORA_DIO1_2 34
+
+// Other pins
+#define NEOPIXEL_DATA 21
+
+
+// RGB LED
+#define HAS_NEOPIXEL
+#define NEOPIXEL_COUNT 1
+#define NEOPIXEL_TYPE (NEO_GRB + NEO_KHZ800)
+#endif // defined(ELRS_BETAFPV_SUPERP_2400) || defined(ELRS_GENERIC_TRUE_DIVERSITY_PWM16_2400) || defined(ELRS_GENERIC_TRUE_DIVERSITY_PWM14_2400)
+
+// diy ttgov1
+#ifdef ELRS_DIY_TTGOV1_900
+#define USE_RF95
+
+// Radio pins
+#define LORA_CS 18
+#define LORA_DIO0 26
+#define LORA_MISO 19
+#define LORA_MOSI 27
+#define LORA_RESET 14
+#define LORA_SCK 5
+
+// Other pins
+#define LED_PIN 2
+#define SERIAL_RX_PIN 3
+#define SERIAL_TX_PIN 1
+
+#endif // ELRS_DIY_TTGOV1_900
+
+// diy ttgov2
+#ifdef ELRS_DIY_TTGOV2_900
+#define USE_RF95
+
+// Radio pins
+#define LORA_CS 18
+#define LORA_DIO0 26
+#define LORA_MISO 19
+#define LORA_MOSI 27
+#define LORA_RESET 23
+#define LORA_SCK 5
+
+// Other pins
+#define LED_PIN 25
+#define SERIAL_RX_PIN 3
+#define SERIAL_TX_PIN 1
+
+#endif // ELRS_DIY_TTGOV2_900
+
+// Pin Configuration 8 - Shared by multiple targets
+#if defined(ELRS_GENERIC_PWM_VARIO_2400) || defined(ELRS_RADIOMASTER_ER6G_2400) || defined(ELRS_RADIOMASTER_ER6GV_2400)
+#define USE_SX1280
+
+// Radio pins
+#define LORA_BUSY 36
+#define LORA_CS 27
+#define LORA_DIO1 37
+#define LORA_MISO 33
+#define LORA_MOSI 32
+#define LORA_RESET 13
+#define LORA_SCK 25
+
+// Other pins
+#define LED_PIN 21
+
+#endif // defined(ELRS_GENERIC_PWM_VARIO_2400) || defined(ELRS_RADIOMASTER_ER6G_2400) || defined(ELRS_RADIOMASTER_ER6GV_2400)
+
+// generic frank
+#ifdef ELRS_GENERIC_FRANK_2400
+#define USE_SX1280
+
+// Radio pins
+#define LORA_BUSY 36
+#define LORA_CS 10
+#define LORA_DIO1 39
+#define LORA_MISO 38
+#define LORA_MOSI 23
+#define LORA_RESET 9
+#define LORA_SCK 18
+
+// Other pins
+#define NEOPIXEL_DATA 2
+#define SERIAL_RX_PIN 3
+#define SERIAL_TX_PIN 1
+
+
+// RGB LED
+#define HAS_NEOPIXEL
+#define NEOPIXEL_COUNT 1
+#define NEOPIXEL_TYPE (NEO_GRB + NEO_KHZ800)
+#endif // ELRS_GENERIC_FRANK_2400
+
+// Pin Configuration 10 - Shared by multiple targets
+#if defined(ELRS_GENERIC_RX_VTX_2400) || defined(ELRS_HAPPYMODEL_AIO_2400)
+#define USE_SX1280
+
+// Radio pins
+#define LORA_BUSY 36
+#define LORA_CS 27
+#define LORA_DIO1 37
+#define LORA_MISO 33
+#define LORA_MOSI 32
+#define LORA_RESET 26
+#define LORA_SCK 25
+
+// Other pins
+#define NEOPIXEL_DATA 22
+#define SERIAL_RX_PIN 3
+#define SERIAL_TX_PIN 1
+
+
+// RGB LED
+#define HAS_NEOPIXEL
+#define NEOPIXEL_COUNT 1
+#define NEOPIXEL_TYPE (NEO_GRB + NEO_KHZ800)
+#endif // defined(ELRS_GENERIC_RX_VTX_2400) || defined(ELRS_HAPPYMODEL_AIO_2400)
+
+// Pin Configuration 11 - Shared by multiple targets
+#if defined(ELRS_HELLORADIO_HR8E_2400) || defined(ELRS_HELLORADIO_HR7E_2400)
+#define USE_SX1280
+
+// Radio pins
+#define LORA_BUSY 37
+#define LORA_CS 26
+#define LORA_DIO1 38
+#define LORA_MISO 35
+#define LORA_MOSI 32
+#define LORA_RESET 25
+#define LORA_SCK 33
+
+// Other pins
+#define NEOPIXEL_DATA 21
+#define SERIAL_RX_PIN 3
+#define SERIAL_TX_PIN 1
+
+
+// RGB LED
+#define HAS_NEOPIXEL
+#define NEOPIXEL_COUNT 1
+#define NEOPIXEL_TYPE (NEO_GRB + NEO_KHZ800)
+#endif // defined(ELRS_HELLORADIO_HR8E_2400) || defined(ELRS_HELLORADIO_HR7E_2400)
+
+// radiomaster bandit-nano-rx
+#ifdef ELRS_RADIOMASTER_BANDIT_NANO_RX_900
+#define USE_RF95
+
+// Radio pins
+#define LORA_CS 4
+#define LORA_DIO0 22
+#define LORA_DIO1 21
+#define LORA_MISO 19
+#define LORA_MOSI 23
+#define LORA_RESET 5
+#define LORA_SCK 18
+
+// Other pins
+#define LED_PIN 15
+#define SERIAL_RX_PIN 3
+#define SERIAL_TX_PIN 1
+
+#endif // ELRS_RADIOMASTER_BANDIT_NANO_RX_900
+
+// Pin Configuration 13 - Shared by multiple targets
+#if defined(ELRS_RADIOMASTER_ER6_2400) || defined(ELRS_RADIOMASTER_ER8_2400) || defined(ELRS_RADIOMASTER_ER8G_2400) || defined(ELRS_RADIOMASTER_ER8GV_2400)
+#define USE_SX1280
+
+// Radio pins
+#define LORA_BUSY 36
+#define LORA_CS 27
+#define LORA_DIO1 37
+#define LORA_MISO 33
+#define LORA_MOSI 32
+#define LORA_RESET 13
+#define LORA_SCK 25
+
+// Other pins
+#define NEOPIXEL_DATA 21
+#define SERIAL_RX_PIN 3
+#define SERIAL_TX_PIN 1
+
+
+// RGB LED
+#define HAS_NEOPIXEL
+#define NEOPIXEL_COUNT 1
+#define NEOPIXEL_TYPE (NEO_GRB + NEO_KHZ800)
+#endif // defined(ELRS_RADIOMASTER_ER6_2400) || defined(ELRS_RADIOMASTER_ER8_2400) || defined(ELRS_RADIOMASTER_ER8G_2400) || defined(ELRS_RADIOMASTER_ER8GV_2400)
+
+// spracing rxn1
+#ifdef ELRS_SPRACING_RXN1_2400
+#define USE_SX1280
+
+// Radio pins
+#define LORA_BUSY 36
+#define LORA_CS 27
+#define LORA_DIO1 37
+#define LORA_MISO 4
+#define LORA_MOSI 32
+#define LORA_RESET 22
+#define LORA_SCK 33
+
+// Other pins
+#define NEOPIXEL_DATA 2
+#define SERIAL_RX_PIN 3
+#define SERIAL_TX_PIN 1
+
+
+// RGB LED
+#define HAS_NEOPIXEL
+#define NEOPIXEL_COUNT 1
+#define NEOPIXEL_TYPE (NEO_GRB + NEO_KHZ800)
+#endif // ELRS_SPRACING_RXN1_2400
+
+// Set second radio CS pin high at startup to disable it
+#if defined(TWO_RADIOS)
+#define PIN_ENABLE_HIGH LORA_CS_2
+#endif // TWO_RADIOS
+
+// Ensure only one target is selected
+#if defined(ELRS_ANYLEAF_DUAL_RADIO_2400) + defined(ELRS_BAYCKRC_DUAL_CORE_2400) + defined(ELRS_BETAFPV_SUPERD_2400) + defined(ELRS_GENERIC_TRUE_DIVERSITY_2400) + defined(ELRS_GENERIC_DIVERSITY_PA_VTX_2400) + defined(ELRS_GENERIC_DIVERSITY_VTX_2400) + defined(ELRS_GEPRC_GEPRC_DUAL_2400) + defined(ELRS_HAPPYMODEL_EP_DUAL_2400) + defined(ELRS_HGLRC_DUAL_2400) + defined(ELRS_IFLIGHT_DUAL250_2400) + defined(ELRS_RADIOMASTER_RP4_2400) + defined(ELRS_RADIOMASTER_RP4M_2400) + defined(ELRS_RADIOMASTER_NEXUS_XR_2400) + defined(ELRS_SEQURE_DUAL_2400) + defined(ELRS_BAYCKRC_DUAL_CORE_900) + defined(ELRS_BETAFPV_SUPERD_900) + defined(ELRS_FOXEER_TD_900) + defined(ELRS_GENERIC_TRUE_DIVERSITY_900) + defined(ELRS_GENERIC_TRUE_DIVERSITY_PA_900) + defined(ELRS_GEPRC_DUAL_900) + defined(ELRS_GEPRC_DUAL500_900) + defined(ELRS_HAPPYMODEL_ES900_DUAL_900) + defined(ELRS_HGLRC_DUAL_900) + defined(ELRS_IFLIGHT_DUAL500_900) + defined(ELRS_SEQURE_DUAL_900) + defined(ELRS_BAYCKRC_DUAL_DUAL) + defined(ELRS_GENERIC_TRUE_DIVERSITY_DUAL) + defined(ELRS_GEPRC_DUAL_DUAL) + defined(ELRS_RADIOMASTER_DBR4_DUAL) + defined(ELRS_RADIOMASTER_XR4_DUAL) + defined(ELRS_BETAFPV_SUPERP_900) + defined(ELRS_GENERIC_TRUE_DIVERSITY_PWM16_900) + defined(ELRS_BETAFPV_SUPERP_2400) + defined(ELRS_GENERIC_TRUE_DIVERSITY_PWM16_2400) + defined(ELRS_GENERIC_TRUE_DIVERSITY_PWM14_2400) + defined(ELRS_DIY_TTGOV1_900) + defined(ELRS_DIY_TTGOV2_900) + defined(ELRS_GENERIC_PWM_VARIO_2400) + defined(ELRS_RADIOMASTER_ER6G_2400) + defined(ELRS_RADIOMASTER_ER6GV_2400) + defined(ELRS_GENERIC_FRANK_2400) + defined(ELRS_GENERIC_RX_VTX_2400) + defined(ELRS_HAPPYMODEL_AIO_2400) + defined(ELRS_HELLORADIO_HR8E_2400) + defined(ELRS_HELLORADIO_HR7E_2400) + defined(ELRS_RADIOMASTER_BANDIT_NANO_RX_900) + defined(ELRS_RADIOMASTER_ER6_2400) + defined(ELRS_RADIOMASTER_ER8_2400) + defined(ELRS_RADIOMASTER_ER8G_2400) + defined(ELRS_RADIOMASTER_ER8GV_2400) + defined(ELRS_SPRACING_RXN1_2400) != 1
+#error "Exactly one ELRS target must be defined"
+#endif

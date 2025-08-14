@@ -300,6 +300,11 @@ void setup()
     digitalWrite(PIN_POWER_EN, HIGH);
 #endif
 
+#ifdef PIN_ENABLE_HIGH // This pin can be selected by each target to set high, incase a radio pin needs to be pulled high or something. Currently used only in ELRS.
+    pinMode(PIN_ENABLE_HIGH, OUTPUT);
+    digitalWrite(PIN_ENABLE_HIGH, HIGH);
+#endif
+
 #if defined(ELECROW_ThinkNode_M5)
     Wire.begin(48, 47);
     io.pinMode(PCA_PIN_EINK_EN, OUTPUT);
