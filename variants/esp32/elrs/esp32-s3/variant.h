@@ -25,7 +25,6 @@
 #define LR1121_NRESET_PIN LORA_RESET
 #define LR1121_BUSY_PIN LORA_BUSY
 #define LR1121_IRQ_PIN LORA_DIO1
-#define LR11X0_DIO_AS_RF_SWITCH
 
 // Second radio mappings for true diversity
 #define SX128X_CS_2 LORA_CS_2
@@ -138,6 +137,11 @@
 #if defined(TWO_RADIOS)
 #define PIN_ENABLE_HIGH LORA_CS_2
 #endif // TWO_RADIOS
+
+// LR1121 RF switch control
+#if defined(USE_LR1121)
+#define LR11X0_DIO_AS_RF_SWITCH
+#endif // USE_LR1121
 
 // Ensure only one target is selected
 #if defined(ELRS_BSIP_SUPERX_MONO_DUAL) + defined(ELRS_DIY_TRUE_DIVERSITY_PWM16_S3_2400) + defined(ELRS_DIY_TRUE_DIVERSITY_VTX_PWM11_S3_2400) + defined(ELRS_SPRACING_RXG1_2400) != 1

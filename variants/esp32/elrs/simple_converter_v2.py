@@ -402,6 +402,10 @@ class SimpleELRSConverter:
             if target['is_diversity']:
                 content.append("#define TWO_RADIOS")
             
+            # Add LR11X0_DIO_AS_RF_SWITCH if using LR1121
+            if target['radio_chip'] == 'lr1121':
+                content.append("#define LR11X0_DIO_AS_RF_SWITCH")
+            
             content.append("")
             
             # Separate pins into categories
@@ -467,17 +471,6 @@ class SimpleELRSConverter:
                 else:
                     continue
                 break
-        
-        # Set LR11X0_DIO_AS_RF_SWITCH only if USE_LR1121 is defined
-        has_lr1121 = any(target['radio_chip'] == 'lr1121' for targets_list in pin_groups.values() for target in targets_list)
-        if has_lr1121:
-            content.extend([
-                "// LR1121 RF switch control",
-                "#if defined(USE_LR1121)",
-                "#define LR11X0_DIO_AS_RF_SWITCH",
-                "#endif // USE_LR1121",
-                ""
-            ])
         
         # Footer - ensure only one target is selected
         all_defines = [t['define_name'] for targets_list in pin_groups.values() for t in targets_list]
