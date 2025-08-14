@@ -271,7 +271,8 @@ class NodeDB
     bool checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_public_key_t &keyToTest);
 
     /// Consolidate crypto key generation logic used across multiple modules
-    bool generateCryptoKeyPair();
+    /// @param privateKey Optional 32-byte private key to use. If nullptr, generates new random keys.
+    bool generateCryptoKeyPair(const uint8_t *privateKey = nullptr);
 
     bool createNewIdentity();
 

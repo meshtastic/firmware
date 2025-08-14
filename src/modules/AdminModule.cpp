@@ -731,6 +731,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         if (isRegionUnset && config.lora.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
             // Use consolidated key generation function
             nodeDB->generateCryptoKeyPair();
+            nodeDB->createNewIdentity();
             config.lora.tx_enabled = true;
             initRegion();
             if (myRegion->dutyCycle < 100) {
@@ -751,14 +752,18 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         LOG_INFO("Set config: Security");
         config.security = c.payload_variant.security;
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN) && !(MESHTASTIC_EXCLUDE_PKI)
-        // If the client set the key to blank, regenerate using consolidated function
-        nodeDB->generateCryptoKeyPair();
-#endif
-        owner.public_key.size = config.security.public_key.size;
-        memcpy(owner.public_key.bytes, config.security.public_key.bytes, config.security.public_key.size);
-#if !MESHTASTIC_EXCLUDE_PKI
-        crypto->setDHPrivateKey(config.security.private_key.bytes);
-        nodeDB->createNewIdentity();
+        // Only regenerate keys if both public and private keys are blank/empty
+        if (config.security.public_key.size == 0 && config.security.private_key.size == 0) {
+            if (nodeDB->generateCryptoKeyPair()) {
+                nodeDB->createNewIdentity();
+            }
+        }
+        // If user provided a private key but no public key, generate the public key from private key
+        else if (config.security.private_key.size == 32 && config.security.public_key.size == 0) {
+            if (nodeDB->generateCryptoKeyPair(config.security.private_key.bytes)) {
+                nodeDB->createNewIdentity();
+            }
+        }
 #endif
         if (config.security.is_managed && !(config.security.admin_key[0].size == 32 || config.security.admin_key[1].size == 32 ||
                                             config.security.admin_key[2].size == 32)) {

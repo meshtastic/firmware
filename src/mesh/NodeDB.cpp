@@ -260,7 +260,10 @@ NodeDB::NodeDB()
 
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
     // Generate crypto keys if needed using consolidated function
-    generateCryptoKeyPair();
+    // Set my node num uint32 value to bytes from the public key (if we have one)
+    if (config.security.public_key.size == 32) {
+        myNodeInfo.my_node_num = crc32Buffer(config.security.public_key.bytes, config.security.public_key.size);
+    }
 #elif !(MESHTASTIC_EXCLUDE_PKI)
     // Calculate Curve25519 public and private keys
     if (config.security.private_key.size == 32 && config.security.public_key.size == 32) {
@@ -1859,7 +1862,7 @@ bool NodeDB::checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_pub
     return false;
 }
 
-bool NodeDB::generateCryptoKeyPair()
+bool NodeDB::generateCryptoKeyPair(const uint8_t *privateKey)
 {
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
     // Only generate keys for non-licensed users and if LoRa region is set
@@ -1870,8 +1873,22 @@ bool NodeDB::generateCryptoKeyPair()
     bool keygenSuccess = false;
     bool lowEntropy = checkLowEntropyPublicKey(config.security.public_key);
 
+    // If a specific private key was provided, use it
+    if (privateKey != nullptr) {
+        LOG_INFO("Using provided private key for PKI");
+        memcpy(config.security.private_key.bytes, privateKey, 32);
+        config.security.private_key.size = 32;
+
+        // Generate public key from the provided private key
+        if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
+            keygenSuccess = true;
+        } else {
+            LOG_ERROR("Failed to generate public key from provided private key");
+            return false;
+        }
+    }
     // Try to regenerate public key from existing private key if it's valid and not low entropy
-    if (config.security.private_key.size == 32 && !lowEntropy) {
+    else if (config.security.private_key.size == 32 && !lowEntropy) {
         if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
             keygenSuccess = true;
         }
@@ -1908,7 +1925,14 @@ bool NodeDB::createNewIdentity()
 {
     // Remove the old node from the NodeDB
     uint32_t oldNodeNum = getNodeNum();
-    removeNodeByNum(oldNodeNum);
+    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(oldNodeNum);
+    if (node != NULL) {
+        node->is_ignored = true;
+        node->has_device_metrics = false;
+        node->has_position = false;
+        node->user.public_key.size = 0;
+        node->user.public_key.bytes[0] = 0;
+    }
 
     // Set my node num uint32 value to bytes from the new public key
     myNodeInfo.my_node_num = crc32Buffer(config.security.public_key.bytes, config.security.public_key.size);
