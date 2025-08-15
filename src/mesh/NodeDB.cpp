@@ -1931,7 +1931,7 @@ bool NodeDB::createNewIdentity()
 {
     // Remove the old node from the NodeDB
     uint32_t oldNodeNum = getNodeNum();
-    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(oldNodeNum);
+    meshtastic_NodeInfoLite *node = getMeshNode(oldNodeNum);
 
     // Set my node num uint32 value to bytes from the new public key
     myNodeInfo.my_node_num = crc32Buffer(config.security.public_key.bytes, config.security.public_key.size);
