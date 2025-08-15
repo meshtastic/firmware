@@ -163,7 +163,7 @@ static const uint8_t A0 = PIN_A0;
 
 // Battery
 // The battery sense is hooked to pin A0 (2)
-// it is defined in the anlaolgue pin section of this file
+// it is defined in the analogue pin section of this file
 // and has 12 bit resolution
 #define BATTERY_SENSE_RESOLUTION_BITS 12
 #define BATTERY_SENSE_RESOLUTION 4096.0
