@@ -53,23 +53,21 @@ bool ButtonThread::initButton(const ButtonConfig &config)
         },
         this);
 
-    if (config.longPress != INPUT_BROKER_NONE) {
-        _longPress = config.longPress;
-        userButton.attachLongPressStart(
-            [](void *callerThread) -> void {
-                ButtonThread *thread = (ButtonThread *)callerThread;
-                // if (millis() > 30000) // hold off 30s after boot
-                thread->btnEvent = BUTTON_EVENT_LONG_PRESSED;
-            },
-            this);
-        userButton.attachLongPressStop(
-            [](void *callerThread) -> void {
-                ButtonThread *thread = (ButtonThread *)callerThread;
-                // if (millis() > 30000) // hold off 30s after boot
-                thread->btnEvent = BUTTON_EVENT_LONG_RELEASED;
-            },
-            this);
-    }
+    _longPress = config.longPress;
+    userButton.attachLongPressStart(
+        [](void *callerThread) -> void {
+            ButtonThread *thread = (ButtonThread *)callerThread;
+            // if (millis() > 30000) // hold off 30s after boot
+            thread->btnEvent = BUTTON_EVENT_LONG_PRESSED;
+        },
+        this);
+    userButton.attachLongPressStop(
+        [](void *callerThread) -> void {
+            ButtonThread *thread = (ButtonThread *)callerThread;
+            // if (millis() > 30000) // hold off 30s after boot
+            thread->btnEvent = BUTTON_EVENT_LONG_RELEASED;
+        },
+        this);
 
     if (config.doublePress != INPUT_BROKER_NONE) {
         _doublePress = config.doublePress;
@@ -94,8 +92,11 @@ bool ButtonThread::initButton(const ButtonConfig &config)
     if (config.shortLong != INPUT_BROKER_NONE) {
         _shortLong = config.shortLong;
     }
-
+#ifdef USE_EINK
+    userButton.setDebounceMs(0);
+#else
     userButton.setDebounceMs(1);
+#endif
     userButton.setPressMs(_longPressTime);
 
     if (screen) {
@@ -202,11 +203,11 @@ int32_t ButtonThread::runOnce()
 
                 break;
             }
-
-            // Forward long press to InputBroker (but NOT as DOWN/SELECT, just forward a "button long press" event)
-            evt.inputEvent = _longPress;
-            this->notifyObservers(&evt);
-
+            if (_longPress != INPUT_BROKER_NONE) {
+                // Forward long press to InputBroker (but NOT as DOWN/SELECT, just forward a "button long press" event)
+                evt.inputEvent = _longPress;
+                this->notifyObservers(&evt);
+            }
             // Reset combination tracking
             waitingForLongPress = false;
 
@@ -253,7 +254,7 @@ int32_t ButtonThread::runOnce()
         // may wake the board immediatedly.
         case BUTTON_EVENT_LONG_RELEASED: {
 
-            LOG_INFO("LONG PRESS RELEASE");
+            LOG_INFO("LONG PRESS RELEASE AFTER %u MILLIS", millis() - buttonPressStartTime);
             if (millis() > 30000 && _longLongPress != INPUT_BROKER_NONE &&
                 (millis() - buttonPressStartTime) >= _longLongPressTime) {
                 evt.inputEvent = _longLongPress;

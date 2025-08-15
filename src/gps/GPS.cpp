@@ -643,8 +643,16 @@ bool GPS::setup()
             delay(250);
         } else if (IS_ONE_OF(gnssModel, GNSS_MODEL_AG3335, GNSS_MODEL_AG3352)) {
 
-            _serial_gps->write("$PAIR066,1,0,1,0,0,1*3B\r\n"); // Enable GPS+GALILEO+NAVIC
-
+            if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_IN ||
+                config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_NP_865) {
+                _serial_gps->write("$PAIR066,1,0,1,0,0,1*3B\r\n"); // Enable GPS+GALILEO+NAVIC
+                // GPS GLONASS GALILEO BDS QZSS NAVIC
+                //  1    0       1      0   0    1
+            } else {
+                _serial_gps->write("$PAIR066,1,1,1,1,0,0*3A\r\n"); // Enable GPS+GLONASS+GALILEO+BDS
+                // GPS GLONASS GALILEO BDS QZSS NAVIC
+                //  1    1       1      1   0    0
+            }
             // Configure NMEA (sentences will output once per fix)
             _serial_gps->write("$PAIR062,0,1*3F\r\n"); // GGA ON
             _serial_gps->write("$PAIR062,1,0*3F\r\n"); // GLL OFF
@@ -1503,7 +1511,7 @@ bool GPS::lookForTime()
 
 #ifdef GNSS_AIROHA
     uint8_t fix = reader.fixQuality();
-    if (fix > 0) {
+    if (fix >= 1 && fix <= 5) {
         if (lastFixStartMsec > 0) {
             if (Throttle::isWithinTimespanMs(lastFixStartMsec, GPS_FIX_HOLD_TIME)) {
                 return false;
@@ -1558,7 +1566,7 @@ bool GPS::lookForLocation()
 #ifdef GNSS_AIROHA
     if ((config.position.gps_update_interval * 1000) >= (GPS_FIX_HOLD_TIME * 2)) {
         uint8_t fix = reader.fixQuality();
-        if (fix > 0) {
+        if (fix >= 1 && fix <= 5) {
             if (lastFixStartMsec > 0) {
                 if (Throttle::isWithinTimespanMs(lastFixStartMsec, GPS_FIX_HOLD_TIME)) {
                     return false;

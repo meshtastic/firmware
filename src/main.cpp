@@ -33,11 +33,14 @@
 #include "mesh/generated/meshtastic/config.pb.h"
 #include "meshUtils.h"
 #include "modules/Modules.h"
-#include "shutdown.h"
 #include "sleep.h"
 #include "target_specific.h"
 #include <memory>
 #include <utility>
+
+#ifdef ELECROW_ThinkNode_M5
+PCA9557 io(0x18, &Wire);
+#endif
 
 #ifdef ARCH_ESP32
 #include "freertosinc.h"
@@ -303,6 +306,14 @@ void setup()
     digitalWrite(PIN_POWER_EN, HIGH);
 #endif
 
+#if defined(ELECROW_ThinkNode_M5)
+    Wire.begin(48, 47);
+    io.pinMode(PCA_PIN_EINK_EN, OUTPUT);
+    io.pinMode(PCA_PIN_POWER_EN, OUTPUT);
+    io.digitalWrite(PCA_PIN_POWER_EN, HIGH);
+    // io.pinMode(C2_PIN, OUTPUT);
+#endif
+
 #ifdef LED_POWER
     pinMode(LED_POWER, OUTPUT);
     digitalWrite(LED_POWER, LED_STATE_ON);
@@ -341,6 +352,15 @@ void setup()
     pinMode(TFT_CS, OUTPUT);
     digitalWrite(TFT_CS, HIGH);
     delay(100);
+#elif defined(T_DECK_PRO)
+    pinMode(LORA_EN, OUTPUT);
+    digitalWrite(LORA_EN, HIGH);
+    pinMode(LORA_CS, OUTPUT);
+    digitalWrite(LORA_CS, HIGH);
+    pinMode(SDCARD_CS, OUTPUT);
+    digitalWrite(SDCARD_CS, HIGH);
+    pinMode(PIN_EINK_CS, OUTPUT);
+    digitalWrite(PIN_EINK_CS, HIGH);
 #endif
 
     concurrency::hasBeenSetup = true;
@@ -906,13 +926,19 @@ void setup()
     service = new MeshService();
     service->init();
 
-    if (nodeDB->keyIsLowEntropy) {
-        service->reloadConfig(SEGMENT_CONFIG);
-        rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
-    }
-
     // Now that the mesh service is created, create any modules
     setupModules();
+
+    // warn the user about a low entropy key
+    if (nodeDB->keyIsLowEntropy && !nodeDB->hasWarned) {
+        LOG_WARN(LOW_ENTROPY_WARNING);
+        meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+        cn->level = meshtastic_LogRecord_Level_WARNING;
+        cn->time = getValidTime(RTCQualityFromNet);
+        sprintf(cn->message, LOW_ENTROPY_WARNING);
+        service->sendClientNotification(cn);
+        nodeDB->hasWarned = true;
+    }
 
 // buttons are now inputBroker, so have to come after setupModules
 #if HAS_BUTTON
@@ -1054,8 +1080,9 @@ void setup()
             mainDelay.interruptFromISR(&higherWake);
         };
         userConfigNoScreen.singlePress = INPUT_BROKER_USER_PRESS;
-        userConfigNoScreen.longPress = INPUT_BROKER_SHUTDOWN;
-        userConfigNoScreen.longPressTime = 5000;
+        userConfigNoScreen.longPress = INPUT_BROKER_NONE;
+        userConfigNoScreen.longPressTime = 500;
+        userConfigNoScreen.longLongPress = INPUT_BROKER_SHUTDOWN;
         userConfigNoScreen.doublePress = INPUT_BROKER_SEND_PING;
         userConfigNoScreen.triplePress = INPUT_BROKER_GPS_TOGGLE;
         UserButtonThread->initButton(userConfigNoScreen);
@@ -1532,7 +1559,7 @@ void loop()
 #ifdef ARCH_NRF52
     nrf52Loop();
 #endif
-    powerCommandsCheck();
+    power->powerCommandsCheck();
 
 #ifdef DEBUG_STACK
     static uint32_t lastPrint = 0;
