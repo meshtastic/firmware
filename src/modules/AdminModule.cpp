@@ -751,12 +751,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         LOG_INFO("Set config: Security");
         config.security = c.payload_variant.security;
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN) && !(MESHTASTIC_EXCLUDE_PKI)
-        // Only regenerate keys if both public and private keys are blank/empty
-        if (config.security.public_key.size == 0 && config.security.private_key.size == 0) {
-            nodeDB->generateCryptoKeyPair();
-        }
-        // Regenerate keys if either key is missing or invalid (not 32 bytes)
-        if (config.security.public_key.size != 32 || config.security.private_key.size != 32) {
+        // Only regenerate keys the private key are not 32
+        if (config.security.private_key.size != 32) {
             nodeDB->generateCryptoKeyPair();
         }
         // If user provided a private key of correct size but no public key, generate the public key from private key
