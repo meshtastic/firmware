@@ -3,19 +3,17 @@
 
 #include <stdint.h>
 
-#define USB_VID 0x2886
+#define USB_VID 0x2886 // Seeed Technology Co., Ltd
 #define USB_PID 0x0059
 
-// GPIO48 Reference: https://github.com/espressif/arduino-esp32/pull/8600
+// map SPI
+static const uint8_t SS = LORA_CS;
+static const uint8_t SCK = LORA_SCK;
+static const uint8_t MOSI = LORA_MOSI;
+static const uint8_t MISO = LORA_MISO;
 
-// The default Wire will be mapped to Screen and Sensors
-static const uint8_t SDA = 47;
+// map I2C
 static const uint8_t SCL = 48;
-
-// Default SPI will be mapped to Radio
-static const uint8_t MISO = 8;
-static const uint8_t SCK = 7;
-static const uint8_t MOSI = 9;
-static const uint8_t SS = 41;
+static const uint8_t SDA = 47;
 
 #endif /* Pins_Arduino_h */
