@@ -65,7 +65,10 @@ void TLoraPagerKeyboard::pressed(uint8_t key)
     if (state == Init || state == Busy) {
         return;
     }
-    hapticFeedback();
+    if (config.device.buzzer_mode == meshtastic_Config_DeviceConfig_BuzzerMode_ALL_ENABLED ||
+        config.device.buzzer_mode == meshtastic_Config_DeviceConfig_BuzzerMode_SYSTEM_ONLY) {
+        hapticFeedback();
+    }
 
     if (modifierFlag && (millis() - last_modifier_time > _TCA8418_MULTI_TAP_THRESHOLD)) {
         modifierFlag = 0;
