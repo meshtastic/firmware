@@ -1,0 +1,18 @@
+{
+  "name": "HAMMER_5500E",
+  "version": "1.0.0",
+  "description": "Custom Ethernet library for W5500/W5100S on HSPI for Hammer board",
+  "keywords": "ethernet, w5500, w5100s, hspi",
+  "authors": [
+    {
+      "name": "BrokenCircuitRanch",
+      "url": "https://github.com/BrokenCircuitRanch"
+    }
+  ],
+  "frameworks": "arduino",
+  "platforms": "espressif32",
+  "dependencies": {
+    "name": "Ethernet",
+    "version": "https://github.com/arduino-libraries/Ethernet.git#2.0.0"
+  }
+}
