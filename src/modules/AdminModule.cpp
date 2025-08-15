@@ -751,7 +751,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         LOG_INFO("Set config: Security");
         config.security = c.payload_variant.security;
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN) && !(MESHTASTIC_EXCLUDE_PKI)
-        // Only regenerate keys the private key are not 32
+        // Only regenerate keys if the private key is not 32 bytes
         if (config.security.private_key.size != 32) {
             nodeDB->generateCryptoKeyPair();
         }
