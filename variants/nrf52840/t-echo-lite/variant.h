@@ -34,8 +34,6 @@
 extern "C" {
 #endif // __cplusplus
 
-#define T_ECHO_LITE
-
 // Number of pins defined in PinDescription array
 #define PINS_COUNT (48)
 #define NUM_DIGITAL_PINS (48)
