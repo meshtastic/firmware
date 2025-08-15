@@ -57,4 +57,6 @@ class TFTDisplay : public OLEDDisplay
 
     // Connect to the display
     virtual bool connect() override;
+
+    uint16_t *linePixelBuffer = nullptr;
 };

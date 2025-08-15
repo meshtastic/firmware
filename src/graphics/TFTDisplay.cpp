@@ -1118,32 +1118,95 @@ void TFTDisplay::display(bool fromBlank)
 {
     if (fromBlank)
         tft->fillScreen(TFT_BLACK);
-    // tft->clear();
+
     concurrency::LockGuard g(spiLock);
 
-    uint16_t x, y;
+    uint32_t x, y;
+    uint32_t y_byteIndex;
+    uint8_t y_byteMask;
+    uint32_t x_FirstPixelUpdate;
+    uint32_t x_LastPixelUpdate;
+    bool isset, dblbuf_isset;
+    uint16_t colorTftMesh, colorTftBlack;
+    bool somethingChanged = false;
+
+    // Store colors byte-reversed so that TFT_eSPI doesn't have to swap bytes in a separate step
+    colorTftMesh = (TFT_MESH >> 8) | ((TFT_MESH & 0xFF) << 8);
+    colorTftBlack = (TFT_BLACK >> 8) | ((TFT_BLACK & 0xFF) << 8);
 
     for (y = 0; y < displayHeight; y++) {
-        for (x = 0; x < displayWidth; x++) {
-            auto isset = buffer[x + (y / 8) * displayWidth] & (1 << (y & 7));
+        y_byteIndex = (y / 8) * displayWidth;
+        y_byteMask = (1 << (y & 7));
+
+        // Step 1: Do a quick scan of 8 rows together. This allows fast-forwarding over unchanged screen areas.
+        if (y_byteMask == 1) {
             if (!fromBlank) {
-                // get src pixel in the page based ordering the OLED lib uses FIXME, super inefficent
-                auto dblbuf_isset = buffer_back[x + (y / 8) * displayWidth] & (1 << (y & 7));
+                for (x = 0; x < displayWidth; x++) {
+                    if (buffer[x + y_byteIndex] != buffer_back[x + y_byteIndex])
+                        break;
+                }
+            } else {
+                for (x = 0; x < displayWidth; x++) {
+                    if (buffer[x + y_byteIndex] != 0)
+                        break;
+                }
+            }
+            if (x >= displayWidth) {
+                // No changed pixels found in these 8 rows, fast-forward to the next 8
+                y = y + 7;
+                continue;
+            }
+        }
+
+        // Step 2: Scan each of the 8 rows individually. Find the first pixel in each row that needs updating
+        for (x_FirstPixelUpdate = 0; x_FirstPixelUpdate < displayWidth; x_FirstPixelUpdate++) {
+            isset = buffer[x_FirstPixelUpdate + y_byteIndex] & y_byteMask;
+
+            if (!fromBlank) {
+                // get src pixel in the page based ordering the OLED lib uses
+                dblbuf_isset = buffer_back[x_FirstPixelUpdate + y_byteIndex] & y_byteMask;
                 if (isset != dblbuf_isset) {
-                    tft->drawPixel(x, y, isset ? TFT_MESH : TFT_BLACK);
+                    break;
                 }
             } else if (isset) {
-                tft->drawPixel(x, y, TFT_MESH);
+                break;
             }
+        }
+
+        // Did we find a pixel that needs updating on this row?
+        if (x_FirstPixelUpdate < displayWidth) {
+
+            // Quickly write out the first changed pixel (saves another array lookup)
+            linePixelBuffer[x_FirstPixelUpdate] = isset ? colorTftMesh : colorTftBlack;
+            x_LastPixelUpdate = x_FirstPixelUpdate;
+
+            // Step 3: copy all remaining pixels in this row into the pixel line buffer,
+            // while also recording the last pixel in the row that needs updating
+            for (x = x_FirstPixelUpdate + 1; x < displayWidth; x++) {
+                isset = buffer[x + y_byteIndex] & y_byteMask;
+                linePixelBuffer[x] = isset ? colorTftMesh : colorTftBlack;
+
+                if (!fromBlank) {
+                    dblbuf_isset = buffer_back[x + y_byteIndex] & y_byteMask;
+                    if (isset != dblbuf_isset) {
+                        x_LastPixelUpdate = x;
+                    }
+                } else if (isset) {
+                    x_LastPixelUpdate = x;
+                }
+            }
+
+            // Step 4: Send the changed pixels on this line to the screen as a single block transfer.
+            // This function accepts pixel data MSB first so it can dump the memory straight out the SPI port.
+            tft->pushRect(x_FirstPixelUpdate, y, (x_LastPixelUpdate - x_FirstPixelUpdate + 1), 1,
+                          &linePixelBuffer[x_FirstPixelUpdate]);
+
+            somethingChanged = true;
         }
     }
     // Copy the Buffer to the Back Buffer
-    for (y = 0; y < (displayHeight / 8); y++) {
-        for (x = 0; x < displayWidth; x++) {
-            uint16_t pos = x + y * displayWidth;
-            buffer_back[pos] = buffer[pos];
-        }
-    }
+    if (somethingChanged)
+        memcpy(buffer_back, buffer, displayBufferSize);
 }
 
 // Send a command to the display (low level function)
@@ -1299,6 +1362,14 @@ bool TFTDisplay::connect()
 #endif
     tft->fillScreen(TFT_BLACK);
 
+    if (this->linePixelBuffer == NULL) {
+        this->linePixelBuffer = (uint16_t *)malloc(sizeof(uint16_t) * displayWidth);
+
+        if (!this->linePixelBuffer) {
+            LOG_ERROR("Not enough memory to create TFT line buffer\n");
+            return false;
+        }
+    }
     return true;
 }
 
