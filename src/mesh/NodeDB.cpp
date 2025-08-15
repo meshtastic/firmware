@@ -262,8 +262,7 @@ NodeDB::NodeDB()
     // Generate crypto keys if needed using consolidated function
     // Set my node num uint32 value to bytes from the public key (if we have one)
     // Skip identity creation since the constructor handles complete identity setup
-    generateCryptoKeyPair(nullptr, true);
-    myNodeInfo.my_node_num = crc32Buffer(config.security.public_key.bytes, config.security.public_key.size);
+    generateCryptoKeyPair(nullptr);
 #elif !(MESHTASTIC_EXCLUDE_PKI)
     // Calculate Curve25519 public and private keys
     if (config.security.private_key.size == 32 && config.security.public_key.size == 32) {
@@ -1862,7 +1861,7 @@ bool NodeDB::checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_pub
     return false;
 }
 
-bool NodeDB::generateCryptoKeyPair(const uint8_t *privateKey, bool skipIdentityCreation)
+bool NodeDB::generateCryptoKeyPair(const uint8_t *privateKey)
 {
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
     // Only generate keys for non-licensed users and if LoRa region is set
@@ -1917,9 +1916,7 @@ bool NodeDB::generateCryptoKeyPair(const uint8_t *privateKey, bool skipIdentityC
         crypto->setDHPrivateKey(config.security.private_key.bytes);
 
         // Conditionally create new identity based on parameter
-        if (!skipIdentityCreation) {
-            createNewIdentity();
-        }
+        createNewIdentity();
     }
     return keygenSuccess;
 #else

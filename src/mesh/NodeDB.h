@@ -273,7 +273,7 @@ class NodeDB
     /// Consolidate crypto key generation logic used across multiple modules
     /// @param privateKey Optional 32-byte private key to use. If nullptr, generates new random keys.
     /// @param skipIdentityCreation If true, skips calling createNewIdentity() after key generation
-    bool generateCryptoKeyPair(const uint8_t *privateKey = nullptr, bool skipIdentityCreation = false);
+    bool generateCryptoKeyPair(const uint8_t *privateKey = nullptr);
 
     bool createNewIdentity();
 
