@@ -81,8 +81,6 @@ bool initEthernet()
         }
 #endif
 #if defined(USE_ESP32_RMIIPHY)
-        ETH.begin(ESP32_RMIIPHY_ADDR, ESP32_RMIIPHY_PWR,
-                  ESP32_RMIIPHY_MDC,  ESP32_RMIIPHY_MDIO,
         if (!ETH.begin(ESP32_RMIIPHY_ADDR, ESP32_RMIIPHY_PWR,
                        ESP32_RMIIPHY_MDC,  ESP32_RMIIPHY_MDIO,
                        ESP32_RMIIPHY_TYPE, ESP32_RMIIPHY_CLKTYPE)) {
@@ -90,7 +88,7 @@ bool initEthernet()
             return false;
         }
 #endif
-       
+
 #if !MESHTASTIC_EXCLUDE_WEBSERVER
         createSSLCert(); // For WebServer
 #endif
