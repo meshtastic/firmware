@@ -365,9 +365,6 @@ void Screen::doDeepSleep()
 {
 #ifdef USE_EINK
     setOn(false, graphics::UIRenderer::drawDeepSleepFrame);
-#ifdef PIN_EINK_EN
-    digitalWrite(PIN_EINK_EN, LOW); // power off backlight
-#endif
 #else
     // Without E-Ink display:
     setOn(false);
@@ -391,8 +388,12 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             dispdev->displayOn();
 #endif
 
-#ifdef ELECROW_ThinkNode_M5
-            io.digitalWrite(PCA_PIN_EINK_EN, HIGH);
+#ifdef PIN_EINK_EN
+            if (uiconfig.screen_brightness == 1)
+                digitalWrite(PIN_EINK_EN, HIGH);
+#elif defined(PCA_PIN_EINK_EN)
+            if (uiconfig.screen_brightness == 1)
+                io.digitalWrite(PCA_PIN_EINK_EN, HIGH);
 #endif
 
 #if defined(ST7789_CS) &&                                                                                                        \
@@ -424,13 +425,10 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             // eInkScreensaver parameter is usually NULL (default argument), default frame used instead
             setScreensaverFrames(einkScreensaver);
 #endif
-#ifdef ELECROW_ThinkNode_M1
-            if (digitalRead(PIN_EINK_EN) == HIGH) {
-                digitalWrite(PIN_EINK_EN, LOW);
-            }
-#endif
 
-#ifdef ELECROW_ThinkNode_M5
+#ifdef PIN_EINK_EN
+            digitalWrite(PIN_EINK_EN, LOW);
+#elif defined(PCA_PIN_EINK_EN)
             io.digitalWrite(PCA_PIN_EINK_EN, LOW);
 #endif
 
