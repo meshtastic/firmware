@@ -92,8 +92,11 @@ bool ButtonThread::initButton(const ButtonConfig &config)
     if (config.shortLong != INPUT_BROKER_NONE) {
         _shortLong = config.shortLong;
     }
-
+#ifdef USE_EINK
+    userButton.setDebounceMs(0);
+#else
     userButton.setDebounceMs(1);
+#endif
     userButton.setPressMs(_longPressTime);
 
     if (screen) {

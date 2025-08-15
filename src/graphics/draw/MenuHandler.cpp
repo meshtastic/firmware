@@ -318,7 +318,7 @@ void menuHandler::homeBaseMenu()
     static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
 
-#ifdef PIN_EINK_EN
+#if defined(PIN_EINK_EN) || defined(PCA_PIN_EINK_EN)
     optionsArray[options] = "Toggle Backlight";
     optionsEnumArray[options++] = Backlight;
 #else
@@ -342,11 +342,21 @@ void menuHandler::homeBaseMenu()
     bannerOptions.optionsCount = options;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == Backlight) {
-#ifdef PIN_EINK_EN
-            if (digitalRead(PIN_EINK_EN) == HIGH) {
+#if defined(PIN_EINK_EN)
+            if (screen->backlight_enabled) {
+                screen->backlight_enabled = false;
                 digitalWrite(PIN_EINK_EN, LOW);
             } else {
+                screen->backlight_enabled = true;
                 digitalWrite(PIN_EINK_EN, HIGH);
+            }
+#elif defined(PCA_PIN_EINK_EN)
+            if (screen->backlight_enabled) {
+                screen->backlight_enabled = false;
+                io.digitalWrite(PCA_PIN_EINK_EN, LOW);
+            } else {
+                screen->backlight_enabled = true;
+                io.digitalWrite(PCA_PIN_EINK_EN, HIGH);
             }
 #endif
         } else if (selected == Sleep) {
