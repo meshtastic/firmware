@@ -343,21 +343,23 @@ void menuHandler::homeBaseMenu()
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == Backlight) {
 #if defined(PIN_EINK_EN)
-            if (screen->backlight_enabled) {
-                screen->backlight_enabled = false;
+            if (uiconfig.screen_brightness == 1) {
+                uiconfig.screen_brightness = 0;
                 digitalWrite(PIN_EINK_EN, LOW);
             } else {
-                screen->backlight_enabled = true;
+                uiconfig.screen_brightness = 1;
                 digitalWrite(PIN_EINK_EN, HIGH);
             }
+            saveUIConfig();
 #elif defined(PCA_PIN_EINK_EN)
-            if (screen->backlight_enabled) {
-                screen->backlight_enabled = false;
+            if (uiconfig.screen_brightness == 1) {
+                uiconfig.screen_brightness = 0;
                 io.digitalWrite(PCA_PIN_EINK_EN, LOW);
             } else {
-                screen->backlight_enabled = true;
+                uiconfig.screen_brightness = 1;
                 io.digitalWrite(PCA_PIN_EINK_EN, HIGH);
             }
+            saveUIConfig();
 #endif
         } else if (selected == Sleep) {
             screen->setOn(false);

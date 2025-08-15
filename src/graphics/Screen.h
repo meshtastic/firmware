@@ -245,10 +245,6 @@ class Screen : public concurrency::OSThread
     meshtastic_Config_DisplayConfig_OledType model;
     OLEDDISPLAY_GEOMETRY geometry;
 
-#if defined(PIN_EINK_EN) || defined(PCA_PIN_EINK_EN)
-    bool backlight_enabled = true;
-#endif
-
     bool isOverlayBannerShowing();
 
     // Stores the last 4 of our hardware ID, to make finding the device for pairing easier

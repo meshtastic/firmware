@@ -389,10 +389,10 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 #endif
 
 #ifdef PIN_EINK_EN
-            if (backlight_enabled)
+            if (uiconfig.screen_brightness == 1)
                 digitalWrite(PIN_EINK_EN, HIGH);
 #elif defined(PCA_PIN_EINK_EN)
-            if (backlight_enabled)
+            if (uiconfig.screen_brightness == 1)
                 io.digitalWrite(PCA_PIN_EINK_EN, HIGH);
 #endif
 
