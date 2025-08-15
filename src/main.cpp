@@ -371,6 +371,8 @@ void setup()
     io.begin(Wire, XL9555_SLAVE_ADDRESS0, SDA, SCL);
     io.pinMode(EXPANDS_DRV_EN, OUTPUT);
     io.digitalWrite(EXPANDS_DRV_EN, HIGH);
+    io.pinMode(EXPANDS_AMP_EN, OUTPUT);
+    io.digitalWrite(EXPANDS_AMP_EN, HIGH);
     io.pinMode(EXPANDS_LORA_EN, OUTPUT);
     io.digitalWrite(EXPANDS_LORA_EN, HIGH);
     io.pinMode(EXPANDS_GPS_EN, OUTPUT);
@@ -381,6 +383,7 @@ void setup()
     io.digitalWrite(EXPANDS_SD_EN, HIGH);
     io.pinMode(EXPANDS_GPIO_EN, OUTPUT);
     io.digitalWrite(EXPANDS_GPIO_EN, HIGH);
+    io.pinMode(EXPANDS_SD_PULLEN, INPUT);
 #endif
 
     concurrency::hasBeenSetup = true;
