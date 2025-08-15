@@ -261,9 +261,9 @@ NodeDB::NodeDB()
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
     // Generate crypto keys if needed using consolidated function
     // Set my node num uint32 value to bytes from the public key (if we have one)
-    if (config.security.public_key.size == 32) {
-        myNodeInfo.my_node_num = crc32Buffer(config.security.public_key.bytes, config.security.public_key.size);
-    }
+    // Skip identity creation since the constructor handles complete identity setup
+    generateCryptoKeyPair(nullptr, true);
+    myNodeInfo.my_node_num = crc32Buffer(config.security.public_key.bytes, config.security.public_key.size);
 #elif !(MESHTASTIC_EXCLUDE_PKI)
     // Calculate Curve25519 public and private keys
     if (config.security.private_key.size == 32 && config.security.public_key.size == 32) {
@@ -1862,7 +1862,7 @@ bool NodeDB::checkLowEntropyPublicKey(const meshtastic_Config_SecurityConfig_pub
     return false;
 }
 
-bool NodeDB::generateCryptoKeyPair(const uint8_t *privateKey)
+bool NodeDB::generateCryptoKeyPair(const uint8_t *privateKey, bool skipIdentityCreation)
 {
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
     // Only generate keys for non-licensed users and if LoRa region is set
@@ -1878,6 +1878,7 @@ bool NodeDB::generateCryptoKeyPair(const uint8_t *privateKey)
         LOG_INFO("Using provided private key for PKI");
         memcpy(config.security.private_key.bytes, privateKey, 32);
         config.security.private_key.size = 32;
+        config.security.public_key.size = 32;
 
         // Generate public key from the provided private key
         if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
@@ -1889,20 +1890,22 @@ bool NodeDB::generateCryptoKeyPair(const uint8_t *privateKey)
     }
     // Try to regenerate public key from existing private key if it's valid and not low entropy
     else if (config.security.private_key.size == 32 && !lowEntropy) {
+        config.security.public_key.size = 32;
+        LOG_DEBUG("Regenerate PKI public key from existing private key");
         if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
             keygenSuccess = true;
         }
     } else {
         // Generate a new key pair
         LOG_INFO("Generate new PKI keys");
+        config.security.public_key.size = 32;
+        config.security.private_key.size = 32;
         crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
         keygenSuccess = true;
     }
 
     // Update sizes and copy to owner if successful
     if (keygenSuccess) {
-        config.security.public_key.size = 32;
-        config.security.private_key.size = 32;
         owner.public_key.size = 32;
         memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
 
@@ -1910,10 +1913,14 @@ bool NodeDB::generateCryptoKeyPair(const uint8_t *privateKey)
         keyIsLowEntropy = false;
 
         // Set the DH private key for crypto operations
+        LOG_DEBUG("Set DH private key for crypto operations");
         crypto->setDHPrivateKey(config.security.private_key.bytes);
-        createNewIdentity();
-    }
 
+        // Conditionally create new identity based on parameter
+        if (!skipIdentityCreation) {
+            createNewIdentity();
+        }
+    }
     return keygenSuccess;
 #else
     return false;
@@ -1930,6 +1937,7 @@ bool NodeDB::createNewIdentity()
     myNodeInfo.my_node_num = crc32Buffer(config.security.public_key.bytes, config.security.public_key.size);
 
     if (node != NULL && myNodeInfo.my_node_num != oldNodeNum) {
+        LOG_DEBUG("Old node num %u is now %u", oldNodeNum, myNodeInfo.my_node_num);
         node->is_ignored = true;
         node->has_device_metrics = false;
         node->has_position = false;
