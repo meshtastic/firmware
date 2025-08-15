@@ -66,7 +66,6 @@ int32_t Router::runOnce()
 {
     meshtastic_MeshPacket *mp;
     while ((mp = fromRadioQueue.dequeuePtr(0)) != NULL) {
-        mp->transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
         // printPacket("handle fromRadioQ", mp);
         perhapsHandleReceived(mp);
     }

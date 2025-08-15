@@ -78,16 +78,15 @@ void CannedMessageModule::LaunchWithDestination(NodeNum newDest, uint8_t newChan
     lastDestSet = true;
 
     // Rest of function unchanged...
-    // Always select the first real canned message on activation
-    int firstRealMsgIdx = 0;
+    // Upon activation, highlight "[Select Destination]"
+    int selectDestination = 0;
     for (int i = 0; i < messagesCount; ++i) {
-        if (strcmp(messages[i], "[Select Destination]") != 0 && strcmp(messages[i], "[Exit]") != 0 &&
-            strcmp(messages[i], "[---- Free Text ----]") != 0) {
-            firstRealMsgIdx = i;
+        if (strcmp(messages[i], "[Select Destination]") == 0) {
+            selectDestination = i;
             break;
         }
     }
-    currentMessageIndex = firstRealMsgIdx;
+    currentMessageIndex = selectDestination;
 
     // This triggers the canned message list
     runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
@@ -999,17 +998,16 @@ int32_t CannedMessageModule::runOnce()
         this->notifyObservers(&e);
         return 2000;
     }
-    // Always highlight the first real canned message when entering the message list
+    // Highlight [Select Destination] initially when entering the message list
     else if ((this->runState != CANNED_MESSAGE_RUN_STATE_FREETEXT) && (this->currentMessageIndex == -1)) {
-        int firstRealMsgIdx = 0;
+        int selectDestination = 0;
         for (int i = 0; i < this->messagesCount; ++i) {
-            if (strcmp(this->messages[i], "[Select Destination]") != 0 && strcmp(this->messages[i], "[Exit]") != 0 &&
-                strcmp(this->messages[i], "[---- Free Text ----]") != 0) {
-                firstRealMsgIdx = i;
+            if (strcmp(this->messages[i], "[Select Destination]") == 0) {
+                selectDestination = i;
                 break;
             }
         }
-        this->currentMessageIndex = firstRealMsgIdx;
+        this->currentMessageIndex = selectDestination;
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
         this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_UP) {
