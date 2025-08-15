@@ -755,7 +755,11 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         if (config.security.public_key.size == 0 && config.security.private_key.size == 0) {
             nodeDB->generateCryptoKeyPair();
         }
-        // If user provided a private key but no public key, generate the public key from private key
+        // Regenerate keys if either key is missing or invalid (not 32 bytes)
+        if (config.security.public_key.size != 32 || config.security.private_key.size != 32) {
+            nodeDB->generateCryptoKeyPair();
+        }
+        // If user provided a private key of correct size but no public key, generate the public key from private key
         else if (config.security.private_key.size == 32 && config.security.public_key.size == 0) {
             nodeDB->generateCryptoKeyPair(config.security.private_key.bytes);
         }
