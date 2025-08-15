@@ -147,13 +147,18 @@ extern "C" void logLegacy(const char *level, const char *fmt, ...);
 // Default Bluetooth PIN
 #define defaultBLEPin 123456
 
-#if HAS_ETHERNET && !defined(USE_WS5500)
+#if HAS_ETHERNET && !(defined(USE_WS5500) || defined(USE_ESP32_RMIIPHY))
 #include <RAK13800_W5100S.h>
 #endif // HAS_ETHERNET
 
-#if HAS_ETHERNET && defined(USE_WS5500)
-#include <ETHClass2.h>
-#define ETH ETH2
+#if HAS_ETHERNET
+# if defined(USE_WS5500)
+# include <ETHClass2.h>
+# define ETH ETH2
+# endif
+# if defined(USE_ESP32_RMIIPHY)
+# include <ETH.h>
+# endif
 #endif // HAS_ETHERNET
 
 #if HAS_WIFI

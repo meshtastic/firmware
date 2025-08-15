@@ -10,9 +10,14 @@
 #include "target_specific.h"
 #include <WiFi.h>
 
-#if HAS_ETHERNET && defined(USE_WS5500)
-#include <ETHClass2.h>
-#define ETH ETH2
+#if HAS_ETHERNET
+# if defined(USE_WS5500)
+# include <ETHClass2.h>
+# define ETH ETH2
+# endif
+# if defined(USE_ESP32_RMIIPHY)
+# include <ETH.h>
+# endif
 #endif // HAS_ETHERNET
 
 #include <WiFiUdp.h>
@@ -62,13 +67,22 @@ Syslog syslog(syslogClient);
 
 Periodic *wifiReconnect;
 
-#ifdef USE_WS5500
+#if defined(USE_WS5500) || defined(USE_ESP32_RMIIPHY)
 // Startup Ethernet
 bool initEthernet()
 {
-    if ((config.network.eth_enabled) && (ETH.begin(ETH_PHY_W5500, 1, ETH_CS_PIN, ETH_INT_PIN, ETH_RST_PIN, SPI3_HOST,
-                                                   ETH_SCLK_PIN, ETH_MISO_PIN, ETH_MOSI_PIN))) {
+    if (config.network.eth_enabled) {
         WiFi.onEvent(WiFiEvent);
+#if defined(USE_WS5500)
+        ETH.begin(ETH_PHY_W5500, 1, ETH_CS_PIN, ETH_INT_PIN, ETH_RST_PIN, SPI3_HOST,
+                  ETH_SCLK_PIN, ETH_MISO_PIN, ETH_MOSI_PIN);
+#endif
+#if defined(USE_ESP32_RMIIPHY)
+        ETH.begin(ESP32_RMIIPHY_ADDR, ESP32_RMIIPHY_PWR,
+                  ESP32_RMIIPHY_MDC,  ESP32_RMIIPHY_MDIO,
+                  ESP32_RMIIPHY_TYPE, ESP32_RMIIPHY_CLKTYPE);
+#endif
+       
 #if !MESHTASTIC_EXCLUDE_WEBSERVER
         createSSLCert(); // For WebServer
 #endif
@@ -234,7 +248,7 @@ bool isWifiAvailable()
 
     if (config.network.wifi_enabled && (config.network.wifi_ssid[0])) {
         return true;
-#ifdef USE_WS5500
+#if defined(USE_WS5500) || defined(USE_ESP32_RMIIPHY)
     } else if (config.network.eth_enabled) {
         return true;
 #endif
@@ -455,14 +469,14 @@ static void WiFiEvent(WiFiEvent_t event)
         LOG_INFO("Ethernet disconnected");
         break;
     case ARDUINO_EVENT_ETH_GOT_IP:
-#ifdef USE_WS5500
+#if defined(USE_WS5500) || defined(USE_ESP32_RMIIPHY)
         LOG_INFO("Obtained IP address: %s, %u Mbps, %s", ETH.localIP().toString().c_str(), ETH.linkSpeed(),
                  ETH.fullDuplex() ? "FULL_DUPLEX" : "HALF_DUPLEX");
         onNetworkConnected();
 #endif
         break;
     case ARDUINO_EVENT_ETH_GOT_IP6:
-#ifdef USE_WS5500
+#if defined(USE_WS5500) || defined(USE_ESP32_RMIIPHY)
 #if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
         LOG_INFO("Obtained Local IP6 address: %s", ETH.linkLocalIPv6().toString().c_str());
         LOG_INFO("Obtained GlobalIP6 address: %s", ETH.globalIPv6().toString().c_str());
