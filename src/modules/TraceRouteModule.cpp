@@ -602,7 +602,7 @@ void TraceRouteModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state
             int start = 0;
             int newlinePos = resultText.indexOf('\n', start);
 
-            while (newlinePos != -1 || start < resultText.length()) {
+            while (newlinePos != -1 || start < static_cast<int>(resultText.length())) {
                 String segment;
                 if (newlinePos != -1) {
                     segment = resultText.substring(start, newlinePos);
