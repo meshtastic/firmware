@@ -4,6 +4,7 @@
 enum input_broker_event {
     INPUT_BROKER_NONE = 0,
     INPUT_BROKER_SELECT = 10,
+    INPUT_BROKER_SELECT_LONG,
     INPUT_BROKER_UP = 17,
     INPUT_BROKER_DOWN = 18,
     INPUT_BROKER_LEFT = 19,
