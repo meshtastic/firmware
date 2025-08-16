@@ -35,7 +35,9 @@
 #define PIN_GPS_PPS 13
 
 // PCF8563 RTC Module
+#if __has_include("pcf8563.h")
 #include "pcf8563.h"
+#endif
 #define PCF8563_RTC 0x51
 #define HAS_RTC 1
 
@@ -47,8 +49,6 @@
 #define BUTTON_PIN 0
 
 // SPI interface SD card slot
-#define HAS_SDCARD
-#define SDCARD_USE_SPI1
 #define SPI_MOSI MOSI
 #define SPI_SCK SCK
 #define SPI_MISO MISO
