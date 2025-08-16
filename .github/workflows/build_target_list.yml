@@ -1,0 +1,69 @@
+name: Build Target List
+
+on:
+  # # Triggers the workflow on push but only for the master branch
+  # push:
+  #   branches:
+  #     - master
+  #     - develop
+  #     - event/*
+  #   paths-ignore:
+  #     - "**.md"
+  #     - version.properties
+
+  # Note: This is different from "pull_request". Need to specify ref when doing checkouts.
+  # pull_request_target:
+  #   branches:
+  #     - master
+  #     - develop
+  #     - event/*
+  #   paths-ignore:
+  #     - "**.md"
+      #- "**.yml"
+
+  workflow_dispatch:
+
+
+jobs:
+  setup:
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - esp32
+          - esp32s3
+          - esp32c3
+          - esp32c6
+          - nrf52840
+          - rp2040
+          - rp2350
+          - stm32
+
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.x
+          cache: pip
+      - run: pip install -U platformio
+      - name: Generate matrix
+        id: jsonStep
+        run: |
+          TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}} extra)
+          echo "Name: $GITHUB_REF_NAME" >> $GITHUB_STEP_SUMMARY
+          echo "Base: $GITHUB_BASE_REF" >> $GITHUB_STEP_SUMMARY
+          echo "Arch: ${{matrix.arch}}" >> $GITHUB_STEP_SUMMARY
+          echo "Ref: $GITHUB_REF" >> $GITHUB_STEP_SUMMARY
+          echo "Targets:" >> $GITHUB_STEP_SUMMARY
+          echo $TARGETS | sed 's/[][]//g; s/", "/\n- /g; s/"//g; s/^/- /' >> $GITHUB_STEP_SUMMARY
+          echo "${{matrix.arch}}=$(jq -cn --argjson environments "$TARGETS" '{$environments}')" >> $GITHUB_OUTPUT
+    outputs:
+      esp32: ${{ steps.jsonStep.outputs.esp32 }}
+      esp32s3: ${{ steps.jsonStep.outputs.esp32s3 }}
+      esp32c3: ${{ steps.jsonStep.outputs.esp32c3 }}
+      esp32c6: ${{ steps.jsonStep.outputs.esp32c6 }}
+      nrf52840: ${{ steps.jsonStep.outputs.nrf52840 }}
+      rp2040: ${{ steps.jsonStep.outputs.rp2040 }}
+      rp2350: ${{ steps.jsonStep.outputs.rp2350 }}
+      stm32: ${{ steps.jsonStep.outputs.stm32 }}
