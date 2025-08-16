@@ -692,7 +692,7 @@ int32_t Screen::runOnce()
 
 #ifndef DISABLE_WELCOME_UNSET
     if (!NotificationRenderer::isOverlayBannerShowing() && config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
-        menuHandler::LoraRegionPicker(0);
+        menuHandler::OnboardMessage();
     }
 #endif
     if (!NotificationRenderer::isOverlayBannerShowing() && rebootAtMsec != 0) {
