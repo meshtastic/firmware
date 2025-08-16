@@ -1631,24 +1631,33 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
         printBytes("Incoming Pubkey: ", p.public_key.bytes, 32);
 
         // Alert the user if a remote node is advertising public key that matches our own
-        if (owner.public_key.size == 32 && memcmp(p.public_key.bytes, owner.public_key.bytes, 32) == 0 && !duplicateWarned) {
-            duplicateWarned = true;
-            char warning[] = "Remote device %s has advertised your public key. This may indicate a compromised key. You may need "
-                             "to regenerate your public keys.";
-            LOG_WARN(warning, p.long_name);
-            meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
-            cn->level = meshtastic_LogRecord_Level_WARNING;
-            cn->time = getValidTime(RTCQualityFromNet);
-            sprintf(cn->message, warning, p.long_name);
-            service->sendClientNotification(cn);
+        if (owner.public_key.size == 32 && memcmp(p.public_key.bytes, owner.public_key.bytes, 32) == 0) {
+            if (!duplicateWarned) {
+                duplicateWarned = true;
+                char warning[] =
+                    "Remote device %s has advertised your public key. This may indicate a compromised key. You may need "
+                    "to regenerate your public keys.";
+                LOG_WARN(warning, p.long_name);
+                meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+                cn->level = meshtastic_LogRecord_Level_WARNING;
+                cn->time = getValidTime(RTCQualityFromNet);
+                sprintf(cn->message, warning, p.long_name);
+                service->sendClientNotification(cn);
+            }
+            return false;
         }
     }
-    if (info->user.public_key.size > 0) { // if we have a key for this user already, don't overwrite with a new one
+    if (info->user.public_key.size == 32) { // if we have a key for this user already, don't overwrite with a new one
+        // if the key doesn't match, don't update nodeDB at all.
+        if (p.public_key.size != 32 || (memcmp(p.public_key.bytes, info->user.public_key.bytes, 32) != 0)) {
+            LOG_WARN("Public Key mismatch, dropping NodeInfo");
+            return false;
+        }
         LOG_INFO("Public Key set for node, not updating!");
         // we copy the key into the incoming packet, to prevent overwrite
         p.public_key.size = 32;
         memcpy(p.public_key.bytes, info->user.public_key.bytes, 32);
-    } else if (p.public_key.size > 0) {
+    } else if (p.public_key.size == 32) {
         LOG_INFO("Update Node Pubkey!");
     }
 #endif
