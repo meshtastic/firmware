@@ -140,13 +140,13 @@ bool EInkDisplay::connect()
 #endif
 #endif
 
-#if defined(TTGO_T_ECHO) || defined(ELECROW_ThinkNode_M1)
+#if defined(TTGO_T_ECHO) || defined(ELECROW_ThinkNode_M1) || defined(T_ECHO_LITE)
     {
         auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY, SPI1);
 
         adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(*lowLevel);
         adafruitDisplay->init();
-#ifdef ELECROW_ThinkNode_M1
+#if defined(ELECROW_ThinkNode_M1) || defined(T_ECHO_LITE)
         adafruitDisplay->setRotation(4);
 #else
         adafruitDisplay->setRotation(3);
