@@ -11,13 +11,13 @@
 #include <WiFi.h>
 
 #if HAS_ETHERNET
-# if defined(USE_WS5500)
-# include <ETHClass2.h>
-# define ETH ETH2
-# endif
-# if defined(USE_ESP32_RMIIPHY)
-# include <ETH.h>
-# endif
+#if defined(USE_WS5500)
+#include <ETHClass2.h>
+#define ETH ETH2
+#endif
+#if defined(USE_ESP32_RMIIPHY)
+#include <ETH.h>
+#endif
 #endif // HAS_ETHERNET
 
 #include <WiFiUdp.h>
@@ -74,16 +74,15 @@ bool initEthernet()
     if (config.network.eth_enabled) {
         WiFi.onEvent(WiFiEvent);
 #if defined(USE_WS5500)
-        if (!ETH.begin(ETH_PHY_W5500, 1, ETH_CS_PIN, ETH_INT_PIN, ETH_RST_PIN, SPI3_HOST,
-                       ETH_SCLK_PIN, ETH_MISO_PIN, ETH_MOSI_PIN)) {
+        if (!ETH.begin(ETH_PHY_W5500, 1, ETH_CS_PIN, ETH_INT_PIN, ETH_RST_PIN, SPI3_HOST, ETH_SCLK_PIN, ETH_MISO_PIN,
+                       ETH_MOSI_PIN)) {
             LOG_ERROR("ETH.begin() failed for WS5500");
             return false;
         }
 #endif
 #if defined(USE_ESP32_RMIIPHY)
-        if (!ETH.begin(ESP32_RMIIPHY_ADDR, ESP32_RMIIPHY_PWR,
-                       ESP32_RMIIPHY_MDC,  ESP32_RMIIPHY_MDIO,
-                       ESP32_RMIIPHY_TYPE, ESP32_RMIIPHY_CLKTYPE)) {
+        if (!ETH.begin(ESP32_RMIIPHY_ADDR, ESP32_RMIIPHY_PWR, ESP32_RMIIPHY_MDC, ESP32_RMIIPHY_MDIO, ESP32_RMIIPHY_TYPE,
+                       ESP32_RMIIPHY_CLKTYPE)) {
             LOG_ERROR("ETH.begin() failed for ESP32 RMII PHY");
             return false;
         }
