@@ -31,7 +31,9 @@ void menuHandler::OnboardMessage()
     static const char *optionsArray[] = {"OK", "Got it!"};
     enum optionsNumbers { OK, got };
     BannerOverlayOptions bannerOptions;
-#if defined(BUTTON_PIN)
+#if HAS_TFT
+    bannerOptions.message = "Welcome to Meshtastic!\nSwipe to navigate and\nlong press to select\nor open a menu.";
+#elif defined(BUTTON_PIN)
     bannerOptions.message = "Welcome to Meshtastic!\nClick to navigate and\nlong press to select\nor open a menu.";
 #else
     bannerOptions.message = "Welcome to Meshtastic!\nUse the Select button\nto open menus\nand make selections.";
