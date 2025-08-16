@@ -29,7 +29,7 @@
 #include "mqtt/MQTT.h"
 #endif
 #include "Throttle.h"
-#include <RTC.h>
+#include "gps/RTC.h"
 
 // Flag to indicate a heartbeat was received and we should send queue status
 bool heartbeatReceived = false;
