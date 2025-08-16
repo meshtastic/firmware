@@ -140,6 +140,10 @@ bool playNextLeadUpNote()
     playTones(&note, 1); // Play single note using existing playTones function
 
     leadUpNoteIndex++;
+
+    if (leadUpNoteIndex >= leadUpNotesCount) {
+        return false; // this was the final note
+    }
     return true; // Note was played (playTones handles buzzer availability internally)
 }
 
