@@ -100,7 +100,6 @@ IF NOT "!FILENAME:update=!"=="!FILENAME!" (
 )
 
 :skip-filename
-SET "ESPTOOL_BAUD=1200"
 
 CALL :LOG_MESSAGE DEBUG "Determine the correct esptool command to use..."
 IF NOT "__%PYTHON%__"=="____" (
@@ -142,7 +141,7 @@ CALL :LOG_MESSAGE INFO "Using esptool baud: !ESPTOOL_BAUD!."
 
 IF %BPS_RESET% EQU 1 (
     @REM Attempt to change mode via 1200bps Reset.
-    CALL :RUN_ESPTOOL !ESPTOOL_BAUD! --after no_reset read_flash_status
+    CALL :RUN_ESPTOOL 1200 --after no_reset read_flash_status
     GOTO eof
 )
 
