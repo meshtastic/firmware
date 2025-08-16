@@ -23,6 +23,7 @@ class TFTDisplay : public OLEDDisplay
     // Write the buffer to the display memory
     virtual void display() override { display(false); };
     virtual void display(bool fromBlank);
+    void sdlLoop();
 
     // Turn the display upside down
     virtual void flipScreenVertically();
