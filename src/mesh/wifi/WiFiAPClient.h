@@ -10,13 +10,13 @@
 #endif
 
 #if HAS_ETHERNET
-# if defined(USE_WS5500)
-# include <ETHClass2.h>
-# define ETH ETH2
-# endif
-# if defined(USE_ESP32_RMIIPHY)
-# include <ETH.h>
-# endif
+#if defined(USE_WS5500)
+#include <ETHClass2.h>
+#define ETH ETH2
+#endif
+#if defined(USE_ESP32_RMIIPHY)
+#include <ETH.h>
+#endif
 #endif // HAS_ETHERNET
 
 extern bool needReconnect;
