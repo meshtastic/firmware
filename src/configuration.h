@@ -138,6 +138,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #if defined(SEEED_WIO_TRACKER_L1)
 #define SSD1306_ADDRESS 0x3D
 #define USE_SH1106
+#elif defined(FOBE_IDEA_MESH_TRACKER_C1)
+#define SSD1306_ADDRESS 0x3D
 #else
 #define SSD1306_ADDRESS 0x3C
 #endif
