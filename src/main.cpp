@@ -325,7 +325,11 @@ void setup()
 
 #ifdef BLE_LED
     pinMode(BLE_LED, OUTPUT);
+#ifdef BLE_LED_INVERTED
+    digitalWrite(BLE_LED, HIGH);
+#else
     digitalWrite(BLE_LED, LOW);
+#endif
 #endif
 
 #if defined(T_DECK)
