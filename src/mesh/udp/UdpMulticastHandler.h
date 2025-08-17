@@ -10,6 +10,10 @@
 #include <WiFi.h>
 #endif
 
+#if ARCH_PORTDUINO
+#include <ErriezCRC32.h>
+#endif
+
 #include <AsyncUDP.h>
 
 #if HAS_ETHERNET && defined(USE_WS5500)
@@ -45,8 +49,11 @@ class UdpMulticastHandler final
 #if defined(ARCH_NRF52)
         IPAddress ip = packet.remoteIP();
         LOG_DEBUG("UDP broadcast from: %u.%u.%u.%u, len=%u", ip[0], ip[1], ip[2], ip[3], packetLength);
-#elif !defined(ARCH_PORTDUINO)
-        // FIXME(PORTDUINO): arduino lacks IPAddress::toString()
+#elif defined(ARCH_PORTDUINO)
+if (packetLength == 0 || crc32Buffer(packet.data(), packetLength) == last_crc) {
+    return;
+}
+#else        // FIXME(PORTDUINO): arduino lacks IPAddress::toString()
         LOG_DEBUG("UDP broadcast from: %s, len=%u", packet.remoteIP().toString().c_str(), packetLength);
 #endif
         meshtastic_MeshPacket mp;
@@ -85,6 +92,9 @@ class UdpMulticastHandler final
         LOG_DEBUG("Broadcasting packet over UDP (id=%u)", mp->id);
         uint8_t buffer[meshtastic_MeshPacket_size];
         size_t encodedLength = pb_encode_to_bytes(buffer, sizeof(buffer), &meshtastic_MeshPacket_msg, mp);
+#if ARCH_PORTDUINO
+last_crc = crc32Buffer(buffer, encodedLength);
+#endif
         udp.writeTo(buffer, encodedLength, udpIpAddress, UDP_MULTICAST_DEFAUL_PORT);
         return true;
     }
@@ -92,5 +102,9 @@ class UdpMulticastHandler final
   private:
     IPAddress udpIpAddress;
     AsyncUDP udp;
+#if ARCH_PORTDUINO
+    uint32_t last_crc;
+#endif
+
 };
 #endif // HAS_UDP_MULTICAST
