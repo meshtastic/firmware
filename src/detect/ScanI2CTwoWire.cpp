@@ -470,8 +470,8 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 SCAN_SIMPLE_CASE(PCT2075_ADDR, PCT2075, "PCT2075", (uint8_t)addr.address);
             case CST328_ADDR:
                 // Do we have the CST328 or the CST226SE
-                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xAB), 8);
-                if (registerValue == 0x3232365345) {
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xAB), 1);
+                if (registerValue == 0xA9) {
                     type = CST226SE;
                     logFoundDevice("CST226SE", (uint8_t)addr.address);
                 } else {
