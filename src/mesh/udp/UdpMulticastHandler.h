@@ -50,10 +50,10 @@ class UdpMulticastHandler final
         IPAddress ip = packet.remoteIP();
         LOG_DEBUG("UDP broadcast from: %u.%u.%u.%u, len=%u", ip[0], ip[1], ip[2], ip[3], packetLength);
 #elif defined(ARCH_PORTDUINO)
-if (packetLength == 0 || crc32Buffer(packet.data(), packetLength) == last_crc) {
-    return;
-}
-#else        // FIXME(PORTDUINO): arduino lacks IPAddress::toString()
+        if (packetLength == 0 || crc32Buffer(packet.data(), packetLength) == last_crc) {
+            return;
+        }
+#else // FIXME(PORTDUINO): arduino lacks IPAddress::toString()
         LOG_DEBUG("UDP broadcast from: %s, len=%u", packet.remoteIP().toString().c_str(), packetLength);
 #endif
         meshtastic_MeshPacket mp;
@@ -93,7 +93,7 @@ if (packetLength == 0 || crc32Buffer(packet.data(), packetLength) == last_crc) {
         uint8_t buffer[meshtastic_MeshPacket_size];
         size_t encodedLength = pb_encode_to_bytes(buffer, sizeof(buffer), &meshtastic_MeshPacket_msg, mp);
 #if ARCH_PORTDUINO
-last_crc = crc32Buffer(buffer, encodedLength);
+        last_crc = crc32Buffer(buffer, encodedLength);
 #endif
         udp.writeTo(buffer, encodedLength, udpIpAddress, UDP_MULTICAST_DEFAUL_PORT);
         return true;
@@ -105,6 +105,5 @@ last_crc = crc32Buffer(buffer, encodedLength);
 #if ARCH_PORTDUINO
     uint32_t last_crc;
 #endif
-
 };
 #endif // HAS_UDP_MULTICAST
