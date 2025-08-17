@@ -492,6 +492,10 @@ static const int rareSerialSpeeds[3] = {4800, 57600, GPS_BAUDRATE};
  */
 bool GPS::setup()
 {
+    // skip baud rate probing if disabled
+    if (isDisabled())
+        return true;
+
     if (!didSerialInit) {
         int msglen = 0;
         if (tx_gpio && gnssModel == GNSS_MODEL_UNKNOWN) {
@@ -1726,6 +1730,15 @@ bool GPS::hasLock()
 bool GPS::hasFlow()
 {
     return reader.passedChecksum() > 0;
+}
+
+bool GPS::isDisabled() const
+{
+    if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_DISABLED ||
+        config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT)
+        return true;
+
+    return powerState == GPS_OFF;
 }
 
 bool GPS::whileActive()
