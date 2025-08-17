@@ -3,7 +3,7 @@
 # trunk-ignore-all(hadolint/DL3008): Do not pin apt package versions
 # trunk-ignore-all(hadolint/DL3013): Do not pin pip package versions
 
-FROM python:3.13-bookworm AS builder
+FROM python:3.13-slim-trixie AS builder
 ARG PIO_ENV=native
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Etc/UTC
@@ -36,7 +36,7 @@ RUN curl -L "https://github.com/meshtastic/web/releases/download/v$(cat /tmp/fir
 
 ##### PRODUCTION BUILD #############
 
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 LABEL org.opencontainers.image.title="Meshtastic" \
       org.opencontainers.image.description="Debian Meshtastic daemon and web interface" \
       org.opencontainers.image.url="https://meshtastic.org" \
@@ -51,8 +51,8 @@ ENV TZ=Etc/UTC
 USER root
 
 RUN apt-get update && apt-get --no-install-recommends -y install \
-        libc-bin libc6 libgpiod2 libyaml-cpp0.7 libi2c0 libuv1 libusb-1.0-0-dev \
-        liborcania2.3 libulfius2.7 libssl3 \
+        libc-bin libc6 libgpiod3 libyaml-cpp0.8 libi2c0 libuv1t64 libusb-1.0-0-dev \
+        liborcania2.3 libulfius2.7t64 libssl3t64 \
         libx11-6 libinput10 libxkbcommon-x11-0 \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /var/lib/meshtasticd \

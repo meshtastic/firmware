@@ -304,7 +304,6 @@ void setup()
     Wire.begin(48, 47);
     io.pinMode(PCA_PIN_EINK_EN, OUTPUT);
     io.pinMode(PCA_PIN_POWER_EN, OUTPUT);
-    io.digitalWrite(PCA_PIN_EINK_EN, HIGH);
     io.digitalWrite(PCA_PIN_POWER_EN, HIGH);
     // io.pinMode(C2_PIN, OUTPUT);
 #endif
