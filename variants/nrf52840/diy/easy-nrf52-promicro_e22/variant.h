@@ -118,7 +118,7 @@ E22/NRF52 PRO MICRO PIN ASSIGNMENT
 #define LED_STATE_ON 1 // State when LED is lit
 
 // Button
-// #define BUTTON_PIN // no button
+#define BUTTON_PIN (-1) // no button
 
 // GPS
 #define PIN_GPS_TX (32 + 1) // P1.01
