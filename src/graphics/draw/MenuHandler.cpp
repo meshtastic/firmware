@@ -26,7 +26,6 @@ menuHandler::screenMenus menuHandler::menuQueue = menu_none;
 bool test_enabled = false;
 uint8_t test_count = 0;
 
-
 void menuHandler::loraMenu()
 {
     static const char *optionsArray[] = {"Back", "Region Picker"};
@@ -41,6 +40,9 @@ void menuHandler::loraMenu()
         } else if (selected == lora_picker) {
             menuHandler::menuQueue = menuHandler::lora_picker;
         }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
 
 void menuHandler::OnboardMessage()
 {
@@ -59,7 +61,6 @@ void menuHandler::OnboardMessage()
     bannerOptions.bannerCallback = [](int selected) -> void {
         menuHandler::menuQueue = menuHandler::no_timeout_lora_picker;
         screen->runNow();
-
     };
     screen->showOverlayBanner(bannerOptions);
 }
