@@ -613,7 +613,7 @@ class LGFX : public lgfx::LGFX_Device
 #ifdef TFT_DUMMY_READ_PIXELS
             cfg.dummy_read_pixel = TFT_DUMMY_READ_PIXELS; // Number of bits for dummy read before pixel readout
 #else
-            cfg.dummy_read_pixel = 9; // Number of bits for dummy read before pixel readout
+            cfg.dummy_read_pixel = 8; // Number of bits for dummy read before pixel readout
 #endif
             cfg.dummy_read_bits = 1;                      // Number of bits for dummy read before non-pixel data read
             cfg.readable = true;                          // Set to true if data can be read
@@ -1134,7 +1134,8 @@ void TFTDisplay::display(bool fromBlank)
     colorTftMesh = (TFT_MESH >> 8) | ((TFT_MESH & 0xFF) << 8);
     colorTftBlack = (TFT_BLACK >> 8) | ((TFT_BLACK & 0xFF) << 8);
 
-    for (y = 0; y < displayHeight; y++) {
+    y = 0;
+    while (y < displayHeight) {
         y_byteIndex = (y / 8) * displayWidth;
         y_byteMask = (1 << (y & 7));
 
@@ -1153,7 +1154,7 @@ void TFTDisplay::display(bool fromBlank)
             }
             if (x >= displayWidth) {
                 // No changed pixels found in these 8 rows, fast-forward to the next 8
-                y = y + 7;
+                y = y + 8;
                 continue;
             }
         }
@@ -1203,6 +1204,7 @@ void TFTDisplay::display(bool fromBlank)
 
             somethingChanged = true;
         }
+        y++;
     }
     // Copy the Buffer to the Back Buffer
     if (somethingChanged)
@@ -1355,7 +1357,7 @@ bool TFTDisplay::connect()
     tft->setRotation(1); // T-Deck has the TFT in landscape
 #elif defined(T_WATCH_S3)
     tft->setRotation(2); // T-Watch S3 left-handed orientation
-#elif ARCH_PORTDUINO || defined(SENSECAP_INDICATOR)
+#elif ARCH_PORTDUINO || defined(SENSECAP_INDICATOR) || defined(T_LORA_PAGER)
     tft->setRotation(0); // use config.yaml to set rotation
 #else
     tft->setRotation(3); // Orient horizontal and wide underneath the silkscreen name label
