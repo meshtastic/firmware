@@ -130,7 +130,7 @@ void getMacAddr(uint8_t *dmac);
 bool MAC_from_string(std::string mac_str, uint8_t *dmac);
 std::string exec(const char *cmd);
 
-struct {
+extern struct portduino_config_struct {
     bool has_rfswitch_table = false;
     uint32_t rfswitch_dio_pins[5] = {RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC};
     Module::RfSwitchMode_t rfswitch_table[8];

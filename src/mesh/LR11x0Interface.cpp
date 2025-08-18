@@ -124,7 +124,7 @@ template <typename T> bool LR11x0Interface<T>::init()
 
     if (dioAsRfSwitch) {
         lora.setRfSwitchTable(rfswitch_dio_pins, rfswitch_table);
-        LOG_DEBUG("Set DIO RF switch", res);
+        LOG_DEBUG("Set DIO RF switch");
     }
 
     if (res == RADIOLIB_ERR_NONE) {

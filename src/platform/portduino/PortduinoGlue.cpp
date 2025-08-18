@@ -29,6 +29,7 @@
 
 std::map<configNames, int> settingsMap;
 std::map<configNames, std::string> settingsStrings;
+portduino_config_struct portduino_config;
 std::ofstream traceFile;
 Ch341Hal *ch341Hal = nullptr;
 char *configPath = nullptr;
