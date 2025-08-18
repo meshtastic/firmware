@@ -29,6 +29,7 @@
 
 std::map<configNames, int> settingsMap;
 std::map<configNames, std::string> settingsStrings;
+portduino_config_struct portduino_config;
 std::ofstream traceFile;
 Ch341Hal *ch341Hal = nullptr;
 char *configPath = nullptr;
@@ -551,6 +552,48 @@ bool loadConfig(const char *configPath)
                         settingsMap[displayspidev] = settingsMap[spidev];
                         settingsMap[touchscreenspidev] = settingsMap[spidev];
                     }
+                }
+            }
+            if (yamlConfig["Lora"]["rfswitch_table"]) {
+                portduino_config.has_rfswitch_table = true;
+                portduino_config.rfswitch_table[0].mode = LR11x0::MODE_STBY;
+                portduino_config.rfswitch_table[1].mode = LR11x0::MODE_RX;
+                portduino_config.rfswitch_table[2].mode = LR11x0::MODE_TX;
+                portduino_config.rfswitch_table[3].mode = LR11x0::MODE_TX_HP;
+                portduino_config.rfswitch_table[4].mode = LR11x0::MODE_TX_HF;
+                portduino_config.rfswitch_table[5].mode = LR11x0::MODE_GNSS;
+                portduino_config.rfswitch_table[6].mode = LR11x0::MODE_WIFI;
+                portduino_config.rfswitch_table[7] = END_OF_MODE_TABLE;
+
+                for (int i = 0; i < 5; i++) {
+
+                    // set up the pin array first
+                    if (yamlConfig["Lora"]["rfswitch_table"]["pins"][i].as<std::string>("") == "DIO5")
+                        portduino_config.rfswitch_dio_pins[i] = RADIOLIB_LR11X0_DIO5;
+                    if (yamlConfig["Lora"]["rfswitch_table"]["pins"][i].as<std::string>("") == "DIO6")
+                        portduino_config.rfswitch_dio_pins[i] = RADIOLIB_LR11X0_DIO6;
+                    if (yamlConfig["Lora"]["rfswitch_table"]["pins"][i].as<std::string>("") == "DIO7")
+                        portduino_config.rfswitch_dio_pins[i] = RADIOLIB_LR11X0_DIO7;
+                    if (yamlConfig["Lora"]["rfswitch_table"]["pins"][i].as<std::string>("") == "DIO8")
+                        portduino_config.rfswitch_dio_pins[i] = RADIOLIB_LR11X0_DIO8;
+                    if (yamlConfig["Lora"]["rfswitch_table"]["pins"][i].as<std::string>("") == "DIO10")
+                        portduino_config.rfswitch_dio_pins[i] = RADIOLIB_LR11X0_DIO10;
+
+                    // now fill in the table
+                    if (yamlConfig["Lora"]["rfswitch_table"]["MODE_STBY"][i].as<std::string>("") == "HIGH")
+                        portduino_config.rfswitch_table[0].values[i] = HIGH;
+                    if (yamlConfig["Lora"]["rfswitch_table"]["MODE_RX"][i].as<std::string>("") == "HIGH")
+                        portduino_config.rfswitch_table[1].values[i] = HIGH;
+                    if (yamlConfig["Lora"]["rfswitch_table"]["MODE_TX"][i].as<std::string>("") == "HIGH")
+                        portduino_config.rfswitch_table[2].values[i] = HIGH;
+                    if (yamlConfig["Lora"]["rfswitch_table"]["MODE_TX_HP"][i].as<std::string>("") == "HIGH")
+                        portduino_config.rfswitch_table[3].values[i] = HIGH;
+                    if (yamlConfig["Lora"]["rfswitch_table"]["MODE_TX_HF"][i].as<std::string>("") == "HIGH")
+                        portduino_config.rfswitch_table[4].values[i] = HIGH;
+                    if (yamlConfig["Lora"]["rfswitch_table"]["MODE_GNSS"][i].as<std::string>("") == "HIGH")
+                        portduino_config.rfswitch_table[5].values[i] = HIGH;
+                    if (yamlConfig["Lora"]["rfswitch_table"]["MODE_WIFI"][i].as<std::string>("") == "HIGH")
+                        portduino_config.rfswitch_table[6].values[i] = HIGH;
                 }
             }
         }

@@ -3,6 +3,8 @@
 #include <map>
 #include <unordered_map>
 
+#include "LR11x0Interface.h"
+#include "Module.h"
 #include "platform/portduino/USBHal.h"
 
 // Product strings for auto-configuration
@@ -127,3 +129,9 @@ static bool ends_with(std::string_view str, std::string_view suffix);
 void getMacAddr(uint8_t *dmac);
 bool MAC_from_string(std::string mac_str, uint8_t *dmac);
 std::string exec(const char *cmd);
+
+extern struct portduino_config_struct {
+    bool has_rfswitch_table = false;
+    uint32_t rfswitch_dio_pins[5] = {RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC};
+    Module::RfSwitchMode_t rfswitch_table[8];
+} portduino_config;
