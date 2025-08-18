@@ -57,6 +57,7 @@
 #define SD_SPI_FREQUENCY 75000000U
 
 // TCA8418 keyboard
+#define I2C_NO_RESCAN
 #define KB_BL_PIN 46
 #define KB_INT 6
 #define CANNED_MESSAGE_MODULE_ENABLE 1
