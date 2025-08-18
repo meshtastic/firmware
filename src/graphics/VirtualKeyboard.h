@@ -8,7 +8,7 @@
 namespace graphics
 {
 
-enum VirtualKeyType { VK_CHAR, VK_BACKSPACE, VK_ENTER, VK_SHIFT };
+enum VirtualKeyType { VK_CHAR, VK_BACKSPACE, VK_ENTER, VK_SHIFT, VK_ESC, VK_SPACE };
 
 struct VirtualKey {
     char character;
@@ -43,15 +43,12 @@ class VirtualKeyboard
     void resetTimeout();
     bool isTimedOut() const;
 
-    // Check cursor position for input handling
-    bool isCursorOnCloseButton() const;
-
   private:
-    static const uint8_t KEYBOARD_ROWS = 3;
-    static const uint8_t KEYBOARD_COLS = 14;
+    static const uint8_t KEYBOARD_ROWS = 4;
+    static const uint8_t KEYBOARD_COLS = 11;
     static const uint8_t KEY_WIDTH = 9;
-    static const uint8_t KEY_HEIGHT = 12; // Optimized for FONT_SMALL text with minimal padding
-    static const uint8_t KEYBOARD_START_Y = 25;
+    static const uint8_t KEY_HEIGHT = 9;        // Compressed to fit 4 rows on 64px displays
+    static const uint8_t KEYBOARD_START_Y = 26; // Start just below input box bottom
 
     VirtualKey keyboard[KEYBOARD_ROWS][KEYBOARD_COLS];
 
@@ -62,10 +59,6 @@ class VirtualKeyboard
     uint8_t cursorRow;
     uint8_t cursorCol;
 
-    // Close button position for cursor navigation
-    int closeButtonX, closeButtonY, closeButtonWidth, closeButtonHeight;
-    bool cursorOnCloseButton;
-
     // Timeout management for auto-exit
     uint32_t lastActivityTime;
     static const uint32_t TIMEOUT_MS = 60000; // 1 minute timeout
@@ -73,8 +66,9 @@ class VirtualKeyboard
     void initializeKeyboard();
     void drawKey(OLEDDisplay *display, const VirtualKey &key, bool selected, int16_t offsetX, int16_t offsetY);
     void drawInputArea(OLEDDisplay *display, int16_t offsetX, int16_t offsetY);
-    void drawCloseButton(OLEDDisplay *display, int16_t offsetX, int16_t offsetY, bool selected);
-    void drawCursor(OLEDDisplay *display, int16_t offsetX, int16_t offsetY);
+
+    // Unified cursor movement helper
+    void moveCursorDelta(int dRow, int dCol);
 
     char getCharForKey(const VirtualKey &key, bool isLongPress = false);
     void insertCharacter(char c);

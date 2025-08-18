@@ -9,9 +9,7 @@
 namespace graphics
 {
 
-VirtualKeyboard::VirtualKeyboard()
-    : cursorRow(0), cursorCol(0), closeButtonX(0), closeButtonY(0), closeButtonWidth(0), closeButtonHeight(0),
-      cursorOnCloseButton(false), lastActivityTime(millis())
+VirtualKeyboard::VirtualKeyboard() : cursorRow(0), cursorCol(0), lastActivityTime(millis())
 {
     initializeKeyboard();
     // Set cursor to Q(0, 0)
@@ -23,43 +21,50 @@ VirtualKeyboard::~VirtualKeyboard() {}
 
 void VirtualKeyboard::initializeKeyboard()
 {
+    // New 4-row layout with 10 characters + 1 action key per row (11 columns):
+    // 1) 1 2 3 4 5 6 7 8 9 0 BACK
+    // 2) q w e r t y u i o p ENTER
+    // 3) a s d f g h j k l ; SPACE
+    // 4) z x c v b n m . , ? ESC
+    static const char LAYOUT[KEYBOARD_ROWS][KEYBOARD_COLS] = {{'1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '\b'},
+                                                              {'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '\n'},
+                                                              {'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', ' '},
+                                                              {'z', 'x', 'c', 'v', 'b', 'n', 'm', '.', ',', '?', '\x1b'}};
+
+    // Derive layout dimensions and assert they match the configured keyboard grid
+    constexpr int LAYOUT_ROWS = (int)(sizeof(LAYOUT) / sizeof(LAYOUT[0]));
+    constexpr int LAYOUT_COLS = (int)(sizeof(LAYOUT[0]) / sizeof(LAYOUT[0][0]));
+    static_assert(LAYOUT_ROWS == KEYBOARD_ROWS, "LAYOUT rows must equal KEYBOARD_ROWS");
+    static_assert(LAYOUT_COLS == KEYBOARD_COLS, "LAYOUT cols must equal KEYBOARD_COLS");
+
     // Initialize all keys to empty first
-    for (int row = 0; row < KEYBOARD_ROWS; row++) {
-        for (int col = 0; col < KEYBOARD_COLS; col++) {
+    for (int row = 0; row < LAYOUT_ROWS; row++) {
+        for (int col = 0; col < LAYOUT_COLS; col++) {
             keyboard[row][col] = {0, VK_CHAR, 0, 0, 0, 0};
         }
     }
 
-    // Row 0: q w e r t y u i o p 0 1 2 3
-    const char *row0 = "qwertyuiop0123";
-    for (int i = 0; i < 14; i++) {
-        keyboard[0][i] = {row0[i], VK_CHAR, (uint8_t)(i * KEY_WIDTH), 0, KEY_WIDTH, KEY_HEIGHT};
-    }
+    // Fill keyboard from the 2D layout
+    for (int row = 0; row < LAYOUT_ROWS; row++) {
+        for (int col = 0; col < LAYOUT_COLS; col++) {
+            char ch = LAYOUT[row][col];
+            // No empty slots in the simplified layout
 
-    // Row 1: a s d f g h j k l ← 4 5 6
-    const char *row1 = "asdfghjkl";
-    for (int i = 0; i < 9; i++) {
-        keyboard[1][i] = {row1[i], VK_CHAR, (uint8_t)(i * KEY_WIDTH), KEY_HEIGHT, KEY_WIDTH, KEY_HEIGHT};
-    }
-    // Backspace key (2 chars wide)
-    keyboard[1][9] = {'\b', VK_BACKSPACE, 9 * KEY_WIDTH, KEY_HEIGHT, KEY_WIDTH * 2, KEY_HEIGHT};
-    // Numbers 4, 5, 6
-    const char *numbers456 = "456";
-    for (int i = 0; i < 3; i++) {
-        keyboard[1][11 + i] = {numbers456[i], VK_CHAR, (uint8_t)((11 + i) * KEY_WIDTH), KEY_HEIGHT, KEY_WIDTH, KEY_HEIGHT};
-    }
+            VirtualKeyType type = VK_CHAR;
+            if (ch == '\b') {
+                type = VK_BACKSPACE;
+            } else if (ch == '\n') {
+                type = VK_ENTER;
+            } else if (ch == '\x1b') { // ESC
+                type = VK_ESC;
+            } else if (ch == ' ') {
+                type = VK_SPACE;
+            }
 
-    // Row 2: z x c v b n m _ . OK 7 8 9
-    const char *row2 = "zxcvbnm_.";
-    for (int i = 0; i < 9; i++) {
-        keyboard[2][i] = {row2[i], VK_CHAR, (uint8_t)(i * KEY_WIDTH), 2 * KEY_HEIGHT, KEY_WIDTH, KEY_HEIGHT};
-    }
-    // OK key (Enter) - 2 chars wide
-    keyboard[2][9] = {'\n', VK_ENTER, 9 * KEY_WIDTH, 2 * KEY_HEIGHT, KEY_WIDTH * 2, KEY_HEIGHT};
-    // Numbers 7, 8, 9
-    const char *numbers789 = "789";
-    for (int i = 0; i < 3; i++) {
-        keyboard[2][11 + i] = {numbers789[i], VK_CHAR, (uint8_t)((11 + i) * KEY_WIDTH), 2 * KEY_HEIGHT, KEY_WIDTH, KEY_HEIGHT};
+            // Make action keys wider to fit text while keeping the last column aligned
+            uint8_t width = (type == VK_BACKSPACE || type == VK_ENTER || type == VK_SPACE) ? (KEY_WIDTH * 3) : KEY_WIDTH;
+            keyboard[row][col] = {ch, type, (uint8_t)(col * KEY_WIDTH), (uint8_t)(row * KEY_HEIGHT), width, KEY_HEIGHT};
+        }
     }
 }
 
@@ -72,41 +77,17 @@ void VirtualKeyboard::draw(OLEDDisplay *display, int16_t offsetX, int16_t offset
     // Draw input area (header + input box)
     drawInputArea(display, offsetX, offsetY);
 
-    // Draw keyboard with proper QWERTY layout
+    // Draw keyboard with proper layout
     for (int row = 0; row < KEYBOARD_ROWS; row++) {
         for (int col = 0; col < KEYBOARD_COLS; col++) {
             if (keyboard[row][col].character != 0 || keyboard[row][col].type != VK_CHAR) { // Include special keys
-                bool selected = (row == cursorRow && col == cursorCol && !cursorOnCloseButton);
+                bool selected = (row == cursorRow && col == cursorCol);
                 drawKey(display, keyboard[row][col], selected, offsetX, offsetY + KEYBOARD_START_Y);
             }
         }
     }
 
-    drawCloseButton(display, offsetX, offsetY, cursorOnCloseButton);
-}
-
-void VirtualKeyboard::drawCloseButton(OLEDDisplay *display, int16_t offsetX, int16_t offsetY, bool selected)
-{
-    if (closeButtonX == 0 && closeButtonY == 0) {
-        // Close button position not set yet
-        return;
-    }
-
-    display->setColor(WHITE);
-
-    if (selected) {
-        // Draw highlighted close button background
-        display->drawRect(closeButtonX - 1, closeButtonY - 1, closeButtonWidth + 2, closeButtonHeight + 2);
-        display->fillRect(closeButtonX, closeButtonY, closeButtonWidth, closeButtonHeight);
-        display->setColor(BLACK);
-    }
-
-    // Draw the X symbol
-    display->drawLine(closeButtonX, closeButtonY, closeButtonX + closeButtonWidth, closeButtonY + closeButtonHeight);
-    display->drawLine(closeButtonX + closeButtonWidth, closeButtonY, closeButtonX, closeButtonY + closeButtonHeight);
-
-    // Reset color
-    display->setColor(WHITE);
+    // No close button any more
 }
 
 void VirtualKeyboard::drawInputArea(OLEDDisplay *display, int16_t offsetX, int16_t offsetY)
@@ -119,15 +100,6 @@ void VirtualKeyboard::drawInputArea(OLEDDisplay *display, int16_t offsetX, int16
     int headerHeight = 0;
     if (!headerText.empty()) {
         display->drawString(offsetX + 2, offsetY, headerText.c_str());
-
-        // Set close button position
-        closeButtonX = screenWidth - 12;
-        closeButtonY = offsetY;
-        closeButtonWidth = 8;
-        closeButtonHeight = 8;
-
-        drawCloseButton(display, offsetX, offsetY, false);
-
         headerHeight = 10;
     }
 
@@ -186,73 +158,74 @@ void VirtualKeyboard::drawKey(OLEDDisplay *display, const VirtualKey &key, bool 
     int x = offsetX + key.x;
     int y = offsetY + key.y;
 
-    // Draw border for OK key or selected keys (NOT for backspace key)
-    bool drawBorder = selected || (key.type == VK_ENTER);
-
-    if (drawBorder) {
-        if (selected) {
-            if (key.type == VK_BACKSPACE) {
-                display->fillRect(x, y + 3, key.width, 10);
-            } else if (key.type == VK_ENTER) {
-                display->fillRect(x, y + 3, key.width, 10);
-            } else {
-                display->fillRect(x, y + 3, key.width, key.height);
-            }
-            display->setColor(BLACK);
-        } else {
-            display->setColor(WHITE);
-        }
-    } else {
-        display->setColor(WHITE);
-    }
-
     // Draw key content
     display->setFont(FONT_SMALL);
-
-    if (key.type == VK_BACKSPACE) {
-        int centerX = x + key.width / 2;
-        int centerY = y + key.height / 2;
-
-        display->drawLine(centerX - 3, centerY + 1, centerX + 2, centerY + 1); // horizontal line
-        display->drawLine(centerX - 3, centerY + 1, centerX - 1, centerY - 1); // upper diagonal
-        display->drawLine(centerX - 3, centerY + 1, centerX - 1, centerY + 3); // lower diagonal
-    } else if (key.type == VK_ENTER) {
-        std::string keyText = "OK";
-        int textWidth = display->getStringWidth(keyText.c_str());
-        int textX = x + (key.width - textWidth) / 2;
-        int textY = y + 2;
-        display->drawString(textX, textY - 1, keyText.c_str());
-        display->drawRect(textX - 1, textY, textWidth + 3, 11);
+    const int fontH = FONT_HEIGHT_SMALL; // actual pixel height of current font
+    // Build label and metrics first
+    std::string keyText;
+    if (key.type == VK_BACKSPACE || key.type == VK_ENTER || key.type == VK_SPACE || key.type == VK_ESC) {
+        // Keep literal text labels for the action keys on the rightmost column
+        keyText = (key.type == VK_BACKSPACE) ? "BACK"
+                  : (key.type == VK_ENTER)   ? "ENTER"
+                  : (key.type == VK_SPACE)   ? "SPACE"
+                  : (key.type == VK_ESC)     ? "ESC"
+                                             : "SHIFT";
     } else {
-        std::string keyText;
-        char c = getCharForKey(key, false); // Pass false for display purposes
-
-        if (key.character == ' ') {
-            keyText = "_"; // Show underscore for space
-        } else if (key.character == '_') {
-            keyText = "_"; // Show underscore for underscore character
-        } else {
-            keyText = c;
-        }
-
-        // Center text in key with perfect horizontal and vertical alignment
-        int textWidth = display->getStringWidth(keyText.c_str());
-        int textX = x + (key.width - textWidth) / 2;
-        int textY = y; // Fixed position for optimal centering in 12px height
-
-        // If the character is a digit, adjust X position by +1
-        if (key.character >= '0' && key.character <= '9') {
-            textX += 1;
-            textY += 1;
-        }
-
-        display->drawString(textX, textY + 1, keyText.c_str());
+        char c = getCharForKey(key, false);
+        keyText = (key.character == ' ' || key.character == '_') ? "_" : std::string(1, c);
     }
 
-    // Reset color after drawing
+    int textWidth = display->getStringWidth(keyText.c_str());
+    // Right-align text for the last column keys to screen edge (~2px margin), otherwise center
+    int colIndex = key.x / KEY_WIDTH;
+    bool isLastCol = (colIndex == (KEYBOARD_COLS - 1));
+    const int screenRight = display->getWidth() - 2; // keep ~2px margin from the right screen edge
+    int textX = isLastCol ? (screenRight - textWidth) : (x + (key.width - textWidth) / 2);
+    int textY = y + (key.height - fontH) / 2; // baseline for text
+    // Per-character vertical nudge for better visual centering (only for single-character keys)
+    if (key.type == VK_CHAR) {
+        int nudge = 0;
+        if (keyText == "j") {
+            nudge = 1; // j up 1px
+        } else if (keyText.find_first_of("gpqy") != std::string::npos) {
+            nudge = 2; // g/p/q/y up 2px
+        }
+        if (nudge) {
+            textY -= nudge;
+            if (textY < 0)
+                textY = 0;
+        }
+    }
+
+    // Selected: for action text buttons, highlight fits text width; for char keys, fill entire key
     if (selected) {
         display->setColor(WHITE);
+        bool isAction = (key.type == VK_BACKSPACE || key.type == VK_ENTER || key.type == VK_SPACE || key.type == VK_ESC);
+        if (isAction) {
+            const int padX = 2; // small horizontal padding around text
+            int hlX = textX - padX;
+            int hlW = textWidth + padX * 2;
+            // Constrain highlight within the key's horizontal span
+            int keyRight = isLastCol ? screenRight : (x + key.width);
+            if (hlX < x) {
+                hlW -= (x - hlX);
+                hlX = x;
+            }
+            int maxW = keyRight - hlX;
+            if (hlW > maxW)
+                hlW = maxW;
+            if (hlW < 1)
+                hlW = 1;
+            display->fillRect(hlX, y, hlW, key.height);
+        } else {
+            display->fillRect(x, y, key.width, key.height);
+        }
+        display->setColor(BLACK);
+    } else {
+        display->setColor(WHITE);
     }
+
+    display->drawString(textX, textY, keyText.c_str());
 }
 
 char VirtualKeyboard::getCharForKey(const VirtualKey &key, bool isLongPress)
@@ -264,9 +237,7 @@ char VirtualKeyboard::getCharForKey(const VirtualKey &key, bool isLongPress)
     char c = key.character;
 
     if (isLongPress) {
-        if (c == '_') {
-            return ' ';
-        } else if (c == '.') {
+        if (c == '.') {
             return ',';
         } else if (c >= 'a' && c <= 'z') {
             c = c - 'a' + 'A';
@@ -276,157 +247,44 @@ char VirtualKeyboard::getCharForKey(const VirtualKey &key, bool isLongPress)
     return c;
 }
 
+void VirtualKeyboard::moveCursorDelta(int dRow, int dCol)
+{
+    resetTimeout();
+    // wrap around rows and cols in the 4x11 grid
+    int r = (int)cursorRow + dRow;
+    int c = (int)cursorCol + dCol;
+    if (r < 0)
+        r = KEYBOARD_ROWS - 1;
+    else if (r >= KEYBOARD_ROWS)
+        r = 0;
+    if (c < 0)
+        c = KEYBOARD_COLS - 1;
+    else if (c >= KEYBOARD_COLS)
+        c = 0;
+    cursorRow = (uint8_t)r;
+    cursorCol = (uint8_t)c;
+}
+
 void VirtualKeyboard::moveCursorUp()
 {
-    resetTimeout(); // Reset timeout on any input activity
-
-    // If we're on the close button, move to keyboard
-    if (cursorOnCloseButton) {
-        cursorOnCloseButton = false;
-        cursorRow = 0;
-        cursorCol = KEYBOARD_COLS - 1; // Move to rightmost key in top row
-        return;
-    }
-
-    uint8_t originalRow = cursorRow;
-    if (cursorRow > 0) {
-        cursorRow--;
-    } else {
-        // From top row, move to close button if on rightmost position
-        if (cursorCol >= KEYBOARD_COLS - 3) { // Close to right edge
-            cursorOnCloseButton = true;
-            return;
-        }
-        cursorRow = KEYBOARD_ROWS - 1;
-    }
-
-    // If the new position is empty, find the nearest valid key in this row
-    if (keyboard[cursorRow][cursorCol].character == 0) {
-        // First try to move left to find a valid key
-        uint8_t originalCol = cursorCol;
-        while (cursorCol > 0 && keyboard[cursorRow][cursorCol].character == 0) {
-            cursorCol--;
-        }
-        // If we still don't have a valid key, try moving right from original position
-        if (keyboard[cursorRow][cursorCol].character == 0) {
-            cursorCol = originalCol;
-            while (cursorCol < KEYBOARD_COLS - 1 && keyboard[cursorRow][cursorCol].character == 0) {
-                cursorCol++;
-            }
-        }
-        // If still no valid key, go back to original row
-        if (keyboard[cursorRow][cursorCol].character == 0) {
-            cursorRow = originalRow;
-        }
-    }
+    moveCursorDelta(-1, 0);
 }
-
 void VirtualKeyboard::moveCursorDown()
 {
-    resetTimeout(); // Reset timeout on any input activity
-
-    uint8_t originalRow = cursorRow;
-    if (cursorRow < KEYBOARD_ROWS - 1) {
-        cursorRow++;
-    } else {
-        cursorRow = 0;
-    }
-
-    // If the new position is empty, find the nearest valid key in this row
-    if (keyboard[cursorRow][cursorCol].character == 0) {
-        // First try to move left to find a valid key
-        uint8_t originalCol = cursorCol;
-        while (cursorCol > 0 && keyboard[cursorRow][cursorCol].character == 0) {
-            cursorCol--;
-        }
-        // If we still don't have a valid key, try moving right from original position
-        if (keyboard[cursorRow][cursorCol].character == 0) {
-            cursorCol = originalCol;
-            while (cursorCol < KEYBOARD_COLS - 1 && keyboard[cursorRow][cursorCol].character == 0) {
-                cursorCol++;
-            }
-        }
-        // If still no valid key, go back to original row
-        if (keyboard[cursorRow][cursorCol].character == 0) {
-            cursorRow = originalRow;
-        }
-    }
+    moveCursorDelta(1, 0);
 }
-
 void VirtualKeyboard::moveCursorLeft()
 {
-    resetTimeout(); // Reset timeout on any input activity
-
-    // Find the previous valid key position
-    do {
-        if (cursorCol > 0) {
-            cursorCol--;
-        } else {
-            if (cursorRow > 0) {
-                cursorRow--;
-                cursorCol = KEYBOARD_COLS - 1;
-            } else {
-                cursorRow = KEYBOARD_ROWS - 1;
-                cursorCol = KEYBOARD_COLS - 1;
-            }
-        }
-    } while ((keyboard[cursorRow][cursorCol].character == 0 && keyboard[cursorRow][cursorCol].type == VK_CHAR) &&
-             !(cursorRow == 0 && cursorCol == 0)); // Prevent infinite loop
+    moveCursorDelta(0, -1);
 }
-
 void VirtualKeyboard::moveCursorRight()
 {
-    resetTimeout(); // Reset timeout on any input activity
-
-    // If we're on the close button, go back to keyboard
-    if (cursorOnCloseButton) {
-        cursorOnCloseButton = false;
-        cursorRow = 0;
-        cursorCol = 0;
-        return;
-    }
-
-    // Find the next valid key position
-    do {
-        if (cursorCol < KEYBOARD_COLS - 1) {
-            cursorCol++;
-        } else {
-            // From top row's rightmost position, check if we should go to close button
-            if (cursorRow == 0) {
-                cursorOnCloseButton = true;
-                return;
-            }
-
-            if (cursorRow < KEYBOARD_ROWS - 1) {
-                cursorRow++;
-                cursorCol = 0;
-            } else {
-                cursorRow = 0;
-                cursorCol = 0;
-            }
-        }
-    } while ((keyboard[cursorRow][cursorCol].character == 0 && keyboard[cursorRow][cursorCol].type == VK_CHAR) &&
-             !(cursorRow == 0 && cursorCol == 0)); // Prevent infinite loop
+    moveCursorDelta(0, 1);
 }
 
 void VirtualKeyboard::handlePress()
 {
     resetTimeout(); // Reset timeout on any input activity
-
-    // Handle close button press
-    if (cursorOnCloseButton) {
-        LOG_INFO("Virtual keyboard: close button pressed, cancelling");
-        if (onTextEntered) {
-            // Store callback before clearing to prevent use-after-free
-            std::function<void(const std::string &)> callback = onTextEntered;
-            onTextEntered = nullptr; // Clear immediately to prevent re-entry
-            inputText = "";          // Clear input
-
-            // Call callback with empty string to signal cancellation
-            callback("");
-        }
-        return;
-    }
 
     const VirtualKey &key = keyboard[cursorRow][cursorCol];
 
@@ -449,6 +307,17 @@ void VirtualKeyboard::handlePress()
     case VK_ENTER:
         submitText();
         break;
+    case VK_SPACE:
+        insertCharacter(' ');
+        break;
+    case VK_ESC:
+        if (onTextEntered) {
+            std::function<void(const std::string &)> callback = onTextEntered;
+            onTextEntered = nullptr;
+            inputText = "";
+            callback("");
+        }
+        return;
     default:
         break;
     }
@@ -457,15 +326,6 @@ void VirtualKeyboard::handlePress()
 void VirtualKeyboard::handleLongPress()
 {
     resetTimeout(); // Reset timeout on any input activity
-
-    // Handle close button long press (same as regular press for now)
-    if (cursorOnCloseButton) {
-        // Call callback with empty string to indicate cancel/close
-        if (onTextEntered) {
-            onTextEntered("");
-        }
-        return;
-    }
 
     const VirtualKey &key = keyboard[cursorRow][cursorCol];
 
@@ -487,6 +347,14 @@ void VirtualKeyboard::handleLongPress()
         break;
     case VK_ENTER:
         submitText();
+        break;
+    case VK_SPACE:
+        insertCharacter(' ');
+        break;
+    case VK_ESC:
+        if (onTextEntered) {
+            onTextEntered("");
+        }
         break;
     default:
         break;
@@ -560,11 +428,6 @@ void VirtualKeyboard::resetTimeout()
 bool VirtualKeyboard::isTimedOut() const
 {
     return (millis() - lastActivityTime) > TIMEOUT_MS;
-}
-
-bool VirtualKeyboard::isCursorOnCloseButton() const
-{
-    return cursorOnCloseButton;
 }
 
 } // namespace graphics
