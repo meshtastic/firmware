@@ -115,6 +115,9 @@ void NotificationRenderer::drawBannercallback(OLEDDisplay *display, OLEDDisplayU
     case notificationTypeEnum::none:
         // Do nothing - no notification to display
         break;
+    case notificationTypeEnum::text_input:
+        // Already handled above with dedicated logic (early return). Keep a case here to satisfy -Wswitch.
+        break;
     case notificationTypeEnum::text_banner:
     case notificationTypeEnum::selection_picker:
         drawAlertBannerOverlay(display, state);

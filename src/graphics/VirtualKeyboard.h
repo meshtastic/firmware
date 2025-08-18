@@ -64,8 +64,9 @@ class VirtualKeyboard
     static const uint32_t TIMEOUT_MS = 60000; // 1 minute timeout
 
     void initializeKeyboard();
-    void drawKey(OLEDDisplay *display, const VirtualKey &key, bool selected, int16_t offsetX, int16_t offsetY);
-    void drawInputArea(OLEDDisplay *display, int16_t offsetX, int16_t offsetY);
+    void drawKey(OLEDDisplay *display, const VirtualKey &key, bool selected, int16_t x, int16_t y, uint8_t w, uint8_t h,
+                 bool isLastCol);
+    void drawInputArea(OLEDDisplay *display, int16_t offsetX, int16_t offsetY, int16_t keyboardStartY);
 
     // Unified cursor movement helper
     void moveCursorDelta(int dRow, int dCol);
