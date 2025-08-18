@@ -1477,6 +1477,7 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
     deviceMetadata.hw_model = HW_VENDOR;
     deviceMetadata.hasRemoteHardware = moduleConfig.remote_hardware.enabled;
     deviceMetadata.excluded_modules = meshtastic_ExcludedModules_EXCLUDED_NONE;
+    deviceMetadata.remaining_battery = powerStatus->getBatteryChargePercent();
 #if MESHTASTIC_EXCLUDE_REMOTEHARDWARE
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_REMOTEHARDWARE_CONFIG;
 #endif

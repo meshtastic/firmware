@@ -1110,6 +1110,8 @@ typedef struct _meshtastic_DeviceMetadata {
     bool hasRemoteHardware;
     /* Has PKC capabilities */
     bool hasPKC;
+    /* How much battery the device has left */
+    uint8_t remaining_battery;
     /* Bit field of boolean for excluded modules
  (bitwise OR of ExcludedModules) */
     uint32_t excluded_modules;
