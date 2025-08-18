@@ -26,6 +26,27 @@ menuHandler::screenMenus menuHandler::menuQueue = menu_none;
 bool test_enabled = false;
 uint8_t test_count = 0;
 
+void menuHandler::OnboardMessage()
+{
+    static const char *optionsArray[] = {"OK", "Got it!"};
+    enum optionsNumbers { OK, got };
+    BannerOverlayOptions bannerOptions;
+#if HAS_TFT
+    bannerOptions.message = "Welcome to Meshtastic!\nSwipe to navigate and\nlong press to select\nor open a menu.";
+#elif defined(BUTTON_PIN)
+    bannerOptions.message = "Welcome to Meshtastic!\nClick to navigate and\nlong press to select\nor open a menu.";
+#else
+    bannerOptions.message = "Welcome to Meshtastic!\nUse the Select button\nto open menus\nand make selections.";
+#endif
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 2;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        menuHandler::menuQueue = menuHandler::no_timeout_lora_picker;
+        screen->runNow();
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
 void menuHandler::LoraRegionPicker(uint32_t duration)
 {
     static const char *optionsArray[] = {"Back",
@@ -1131,6 +1152,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case lora_picker:
         LoraRegionPicker();
+        break;
+    case no_timeout_lora_picker:
+        LoraRegionPicker(0);
         break;
     case TZ_picker:
         TZPicker();
