@@ -5,6 +5,7 @@
 #include "graphics/SharedUIDisplay.h"
 #include "main.h"
 #include <Arduino.h>
+#include <vector>
 
 namespace graphics
 {
@@ -70,6 +71,7 @@ void VirtualKeyboard::initializeKeyboard()
 
 void VirtualKeyboard::draw(OLEDDisplay *display, int16_t offsetX, int16_t offsetY)
 {
+    // Repeat ticking is driven by NotificationRenderer once per frame
     // Base styles
     display->setColor(WHITE);
     display->setFont(FONT_SMALL);
@@ -90,12 +92,6 @@ void VirtualKeyboard::draw(OLEDDisplay *display, int16_t offsetX, int16_t offset
     const int lastColPad = (screenW <= 128 ? 2 : 6);
     const int reservedLastColW = lastColLabelW + lastColPad; // reserved width for last column keys
 
-    // Dynamic key geometry
-    int cellH = KEY_HEIGHT;
-    if (isWide) {
-        cellH = KEY_HEIGHT + 3; // slightly taller on wide screens
-    }
-
     // Always reserve width for the rightmost text column to avoid overlap on small screens
     int cellW = 0;
     int leftoverW = 0;
@@ -108,6 +104,28 @@ void VirtualKeyboard::draw(OLEDDisplay *display, int16_t offsetX, int16_t offset
         }
         cellW = usableW / leftCols;
         leftoverW = usableW - cellW * leftCols; // distribute extra pixels over left columns (left to right)
+    }
+
+    // Dynamic key geometry
+    int cellH = KEY_HEIGHT;
+    if (isWide) {
+        // For wide screens (e.g., T114 240x135), prefer square keys: height equals left-column key width.
+        cellH = std::max((int)KEY_HEIGHT, cellW);
+
+        // Guarantee at least 2 lines of input are visible by reducing cell height minimally if needed.
+        // Replicate the spacing used in drawInputArea(): headerGap=1, box-to-header gap=1, gap above keyboard=1
+        display->setFont(FONT_SMALL);
+        const int headerHeight = headerText.empty() ? 0 : (FONT_HEIGHT_SMALL + 1);
+        const int headerToBoxGap = 1;
+        const int gapAboveKb = 1;
+        const int minBoxHeightForTwoLines = 2 * FONT_HEIGHT_SMALL + 2; // inner 1px top/bottom
+        int maxKeyboardHeight = screenH - (offsetY + headerHeight + headerToBoxGap + minBoxHeightForTwoLines + gapAboveKb);
+        int maxCellHAllowed = maxKeyboardHeight / KEYBOARD_ROWS;
+        if (maxCellHAllowed < (int)KEY_HEIGHT)
+            maxCellHAllowed = KEY_HEIGHT;
+        if (maxCellHAllowed > 0 && cellH > maxCellHAllowed) {
+            cellH = maxCellHAllowed;
+        }
     }
 
     // Keyboard placement from bottom
@@ -153,53 +171,151 @@ void VirtualKeyboard::draw(OLEDDisplay *display, int16_t offsetX, int16_t offset
 void VirtualKeyboard::drawInputArea(OLEDDisplay *display, int16_t offsetX, int16_t offsetY, int16_t keyboardStartY)
 {
     display->setColor(WHITE);
-    display->setFont(FONT_SMALL);
 
     const int screenWidth = display->getWidth();
-    const int lineH = FONT_HEIGHT_SMALL;
+    const int screenHeight = display->getHeight();
+    // Use the standard small font metrics for input box sizing (restore original size)
+    const int inputLineH = FONT_HEIGHT_SMALL;
 
+    // Header uses the standard small (which may be larger on big screens)
+    display->setFont(FONT_SMALL);
     int headerHeight = 0;
     if (!headerText.empty()) {
+        // Draw header and reserve exact font height (plus a tighter gap) to maximize input area
         display->drawString(offsetX + 2, offsetY, headerText.c_str());
-        headerHeight = 10;
+        // On very small screens (e.g., 128x64), push the input box as close as possible to the header
+        headerHeight = FONT_HEIGHT_SMALL; // no extra padding baked in
     }
 
     // Input box - from below header down to just above the keyboard
     const int boxX = offsetX + 2;
-    const int boxY = offsetY + headerHeight + 2;
+    // Smaller gap below header on tiny screens, slightly larger otherwise
+    const int gapBelowHeader = (screenHeight <= 64 ? 0 : 1);
+    const int boxY = offsetY + headerHeight + gapBelowHeader;
     const int boxWidth = screenWidth - 4;
-    int availableH = keyboardStartY - boxY - 2; // small gap above keyboard
-    if (availableH < lineH + 2)
-        availableH = lineH + 2; // ensure minimum
-    const int boxHeight = availableH;
+    // Ensure the box doesn't touch the keyboard: prefer a bigger guard gap on 64px screens
+    int gapAboveKeyboard = (screenHeight <= 64 ? 3 : 1);
+    // Minimum box height to fully contain one text line with 1px padding on top and bottom
+    const int minBoxHeight = inputLineH + 2;
+    int availableH = keyboardStartY - boxY - gapAboveKeyboard; // initial available height
+    if (screenHeight <= 64 && availableH < minBoxHeight) {
+        // Try to grow the box by reducing the gap above keyboard, but keep at least 1px separation
+        int need = minBoxHeight - availableH;
+        int canReduce = gapAboveKeyboard - 1;
+        int reduce = std::min(need, canReduce);
+        if (reduce > 0) {
+            gapAboveKeyboard -= reduce;
+            availableH = keyboardStartY - boxY - gapAboveKeyboard;
+        }
+    }
+    int boxHeight;
+    if (screenHeight <= 64) {
+        // On tiny screens, enforce at least one text line + 2px padding when possible
+        if (availableH >= minBoxHeight) {
+            boxHeight = availableH; // maximize
+        } else {
+            // If still not enough space, use whatever is available but keep >=1px
+            boxHeight = std::max(1, availableH);
+        }
+    } else {
+        if (availableH < inputLineH + 2)
+            availableH = inputLineH + 2; // ensure minimum readability on larger screens
+        boxHeight = availableH;
+    }
 
     // Draw box border
     display->drawRect(boxX, boxY, boxWidth, boxHeight);
 
+    display->setFont(FONT_SMALL);
+
     // Text rendering: multi-line if space allows (>= 2 lines), else single-line with leading ellipsis
     const int textX = boxX + 2;
     const int maxTextWidth = boxWidth - 4;
-    const int maxLines = (boxHeight - 2) / lineH;
+    const int maxLines = (boxHeight - 2) / inputLineH;
     if (maxLines >= 2) {
-        std::string remaining = inputText;
-        int lineY = boxY + 1;
-        for (int line = 0; line < maxLines && !remaining.empty(); ++line) {
-            int bestLen = 0;
-            for (int len = 1; len <= (int)remaining.size(); ++len) {
-                int w = display->getStringWidth(remaining.substr(0, len).c_str());
-                if (w <= maxTextWidth)
-                    bestLen = len;
-                else
-                    break;
+        // Inner bounds for caret clamping
+        const int innerLeft = boxX + 1;
+        const int innerRight = boxX + boxWidth - 2;
+        const int innerTop = boxY + 1;
+        const int innerBottom = boxY + boxHeight - 2;
+
+        // Wrap text greedily into lines that fit maxTextWidth
+        std::vector<std::string> lines;
+        {
+            std::string remaining = inputText;
+            while (!remaining.empty()) {
+                int bestLen = 0;
+                for (int len = 1; len <= (int)remaining.size(); ++len) {
+                    int w = display->getStringWidth(remaining.substr(0, len).c_str());
+                    if (w <= maxTextWidth)
+                        bestLen = len;
+                    else
+                        break;
+                }
+                if (bestLen == 0) {
+                    // At least show one character to make progress
+                    bestLen = 1;
+                }
+                lines.emplace_back(remaining.substr(0, bestLen));
+                remaining.erase(0, bestLen);
             }
-            if (bestLen == 0)
-                break;
-            std::string chunk = remaining.substr(0, bestLen);
-            display->drawString(textX, lineY, chunk.c_str());
-            remaining.erase(0, bestLen);
-            lineY += lineH;
         }
-        // Optional: draw cursor at end of last line could be added if needed
+
+        const bool scrolledUp = ((int)lines.size() > maxLines);
+        int caretX = textX;
+        int caretY = innerTop;
+
+        // Leave a small top gap to render '...' without replacing the first line
+        const int topInset = 2;
+        const int lineStep = std::max(1, inputLineH - 1); // slightly tighter than font height
+        int lineY = innerTop + topInset;
+
+        if (scrolledUp) {
+            // Draw three small dots centered horizontally, vertically at the midpoint of the gap
+            // between the inner top and the first line's top baseline. This avoids using a tall glyph.
+            const int firstLineTop = lineY;                                   // baseline top for the first visible line
+            const int gapMidY = innerTop + (firstLineTop - innerTop) / 2 + 1; // shift down 1px as requested
+            const int centerX = boxX + boxWidth / 2;
+            const int dotSpacing = 3; // px between dots
+            const int dotSize = 1;    // small square dot
+            display->fillRect(centerX - dotSpacing, gapMidY, dotSize, dotSize);
+            display->fillRect(centerX, gapMidY, dotSize, dotSize);
+            display->fillRect(centerX + dotSpacing, gapMidY, dotSize, dotSize);
+        }
+
+        // How many lines fit with our top inset and tighter step
+        const int linesCapacity = std::max(1, (innerBottom - lineY + 1) / lineStep);
+        const int linesToShow = std::min((int)lines.size(), linesCapacity);
+        const int startIndex = scrolledUp ? ((int)lines.size() - linesToShow) : 0;
+
+        for (int i = 0; i < linesToShow; ++i) {
+            const std::string &chunk = lines[startIndex + i];
+            display->drawString(textX, lineY, chunk.c_str());
+            caretX = textX + display->getStringWidth(chunk.c_str());
+            caretY = lineY;
+            lineY += lineStep;
+        }
+
+        // Draw caret at end of the last visible line
+        int caretPadY = 2;
+        if (boxHeight >= inputLineH + 4)
+            caretPadY = 3;
+        int cursorTop = caretY + caretPadY;
+        // Use lineStep so caret height matches the row spacing
+        int cursorH = lineStep - caretPadY * 2;
+        if (cursorH < 1)
+            cursorH = 1;
+        // Clamp vertical bounds to stay inside the inner rect
+        if (cursorTop < innerTop)
+            cursorTop = innerTop;
+        if (cursorTop + cursorH - 1 > innerBottom)
+            cursorH = innerBottom - cursorTop + 1;
+        if (cursorH < 1)
+            cursorH = 1;
+        // Only draw if cursor is inside inner bounds
+        if (caretX >= innerLeft && caretX <= innerRight) {
+            display->drawVerticalLine(caretX, cursorTop, cursorH);
+        }
     } else {
         std::string displayText = inputText;
         int textW = display->getStringWidth(displayText.c_str());
@@ -230,7 +346,12 @@ void VirtualKeyboard::drawInputArea(OLEDDisplay *display, int16_t offsetX, int16
         const int innerTop = boxY + 1;
         const int innerBottom = boxY + boxHeight - 2;
 
-        const int textY = boxY + 1;
+        // Position text above vertical center; total up-shift by 4px for single-line
+        int innerH = innerBottom - innerTop + 1;
+        int textY = innerTop + std::max(0, (innerH - inputLineH) / 2) - 5; // was -4, now -5
+        // Allow clamping to the outer border so upward shift remains visible on very small boxes
+        if (textY < boxY)
+            textY = boxY;
         if (!scrolled.empty()) {
             display->drawString(textX, textY, scrolled.c_str());
         }
@@ -240,12 +361,9 @@ void VirtualKeyboard::drawInputArea(OLEDDisplay *display, int16_t offsetX, int16
         if (cursorX > innerRight)
             cursorX = innerRight;
 
-        // Apply vertical padding so caret doesn't touch top/bottom
-        int caretPadY = 2;
-        if (boxHeight >= lineH + 4)
-            caretPadY = 3; // if box is taller than minimal, allow larger gap
-        int cursorTop = textY + caretPadY;
-        int cursorH = lineH - caretPadY * 2;
+        // Caret: height = outer box height - 4, with a 2px margin from top/bottom
+        int cursorTop = boxY + 2;
+        int cursorH = boxHeight - 4;
         if (cursorH < 1)
             cursorH = 1;
         // Clamp vertical bounds to stay inside the inner rect
@@ -268,7 +386,7 @@ void VirtualKeyboard::drawKey(OLEDDisplay *display, const VirtualKey &key, bool 
 {
     // Draw key content
     display->setFont(FONT_SMALL);
-    const int fontH = FONT_HEIGHT_SMALL; // actual pixel height of current font
+    const int fontH = FONT_HEIGHT_SMALL;
     // Build label and metrics first
     std::string keyText;
     if (key.type == VK_BACKSPACE || key.type == VK_ENTER || key.type == VK_SPACE || key.type == VK_ESC) {
@@ -294,32 +412,16 @@ void VirtualKeyboard::drawKey(OLEDDisplay *display, const VirtualKey &key, bool 
         if (textX < x)
             textX = x; // guard
     } else {
-        textX = x + ((width - textWidth) + 1) / 2; // ceil((w - tw)/2)
+        textX = x + (width - textWidth) / 2;
     }
-    int textY = y + (height - fontH) / 2; // baseline for text
-    // Per-character vertical nudge for better visual centering (only for single-character keys)
-    if (key.type == VK_CHAR) {
-        int nudge = 0;
-        if (keyText == "j") {
-            nudge = 1; // j up 1px
-        } else if (keyText.find_first_of("gpqy") != std::string::npos) {
-            nudge = 2; // g/p/q/y up 2px
-        } else if (keyText == ";" || keyText == "." || keyText == ",") {
-            nudge = 1; // ; . , up 1px to appear vertically centered
-        }
-        if (nudge) {
-            textY -= nudge;
-            if (textY < 0)
-                textY = 0;
-        }
-    }
-
-    // Selected: for action text buttons, highlight fits text width; for char keys, fill entire key
+    int contentTop = y;
+    int contentH = height;
     if (selected) {
         display->setColor(WHITE);
         bool isAction = (key.type == VK_BACKSPACE || key.type == VK_ENTER || key.type == VK_SPACE || key.type == VK_ESC);
         if (isAction) {
             const int padX = 2; // small horizontal padding around text
+            const int padY = 1; // vertical padding so highlight doesn't touch edges
             int hlX = textX - padX;
             int hlW = textWidth + padX * 2;
             // Constrain highlight within the key's horizontal span
@@ -333,16 +435,45 @@ void VirtualKeyboard::drawKey(OLEDDisplay *display, const VirtualKey &key, bool 
                 hlW = maxW;
             if (hlW < 1)
                 hlW = 1;
-            display->fillRect(hlX, y, hlW, height);
+            // Vertical: keep a small gap from top/bottom to avoid overlap with neighboring rows
+            int hlY = y + padY;
+            int hlH = height - padY * 2 + 2; // extend downward by 1px
+            if (hlH < 1)
+                hlH = 1;
+            display->fillRect(hlX, hlY, hlW, hlH);
+            // Content area (for centering text) matches highlight
+            contentTop = hlY;
+            contentH = hlH;
         } else {
-            display->fillRect(x, y, width, height);
+            int hlY = y + 1;
+            int hlH = height + 1;
+            if (hlH < 1)
+                hlH = 1;
+            display->fillRect(x, hlY, width, hlH);
+            contentTop = hlY;
+            contentH = hlH;
         }
         display->setColor(BLACK);
     } else {
         display->setColor(WHITE);
     }
 
-    display->drawString(textX, textY, keyText.c_str());
+    int centeredTextY = contentTop + (contentH - fontH) / 2;
+    if (key.type == VK_CHAR) {
+        if (keyText.size() == 1) {
+            char ch = keyText[0];
+            bool tinyScreen = (display->getHeight() <= 64);
+            if (tinyScreen) {
+                if (ch == 'g' || ch == 'j' || ch == 'q' || ch == 'y' || ch == 'p' || ch == 'v' || ch == '.' || ch == ',' ||
+                    ch == ';') {
+                    centeredTextY -= 1;
+                    if (centeredTextY < 0)
+                        centeredTextY = 0;
+                }
+            }
+        }
+    }
+    display->drawString(textX, centeredTextY, keyText.c_str());
 }
 
 char VirtualKeyboard::getCharForKey(const VirtualKey &key, bool isLongPress)
@@ -454,10 +585,14 @@ void VirtualKeyboard::handleLongPress()
         return;
     }
 
-    // For non-character keys, long press behaves the same as regular press
     switch (key.type) {
     case VK_BACKSPACE:
-        deleteCharacter();
+        // One-shot: delete up to 5 characters on long press
+        for (int i = 0; i < 5; ++i) {
+            if (inputText.empty())
+                break;
+            deleteCharacter();
+        }
         break;
     case VK_ENTER:
         submitText();
