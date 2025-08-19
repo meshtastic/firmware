@@ -28,11 +28,11 @@ RUN bash ./bin/build-native.sh "$PIO_ENV" && \
     cp "/tmp/firmware/release/meshtasticd_linux_$(uname -m)" "/tmp/firmware/release/meshtasticd"
 
 # Fetch web assets
-RUN curl -L "https://github.com/meshtastic/web/releases/download/v$(cat /tmp/firmware/bin/web.version)/build.tar" -o /tmp/web.tar \
+RUN bash -c 'curl -L "https://github.com/meshtastic/web/releases/download/v$(cat /tmp/firmware/bin/web.version)/build.tar" -o /tmp/web.tar \
     && mkdir -p /tmp/web \
     && tar -xf /tmp/web.tar -C /tmp/web/ \
     && gzip -dr /tmp/web \
-    && rm /tmp/web.tar
+    && rm /tmp/web.tar'
 
 ##### PRODUCTION BUILD #############
 
