@@ -292,10 +292,10 @@ static int ble_gap_event(struct ble_gap_event *event, void *arg)
     // Adverts matching certain patterns are useless for positioning purposes
     //  (ephemeral MAC etc), so try excluding them if possible
     //
-    // TODO: Expand the list of reject patterns for BLE adverts.  
-    //   There are likely more than 10 patterns to test and reject, including most Apple devices and others.  
-    //  
-    // TODO: Implement full packet search for reject patterns (use memmem() or similar),  
+    // TODO: Expand the list of reject patterns for BLE adverts.
+    //   There are likely more than 10 patterns to test and reject, including most Apple devices and others.
+    //
+    // TODO: Implement full packet search for reject patterns (use memmem() or similar),
     //   not just at the beginning (currently uses memcmp()).
 
     const uint8_t rejPat[] = {0x1e, 0xff, 0x06, 0x00, 0x01}; // one of many

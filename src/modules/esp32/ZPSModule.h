@@ -71,7 +71,7 @@ class ZPSModule : public SinglePortModule, private concurrency::OSThread
 
     inline void outBufAdd(uint64_t netBytes)
     {
-        // If this is the first record, initialize the header with the current time and reset the record count.  
+        // If this is the first record, initialize the header with the current time and reset the record count.
         if (!netRecs) {
             netData[0] = getTime();
             netData[1] = 0;
