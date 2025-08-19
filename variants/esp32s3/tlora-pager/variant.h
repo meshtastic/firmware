@@ -13,7 +13,7 @@
 #define SPI_FREQUENCY 75000000
 #define SPI_READ_FREQUENCY 16000000
 #define TFT_HEIGHT 480
-#define TFT_WIDTH 224 // pretend we have two more lines so it's dividable by 8
+#define TFT_WIDTH 222
 #define TFT_OFFSET_X 49
 #define TFT_OFFSET_Y 0
 #define TFT_OFFSET_ROTATION 3
