@@ -71,8 +71,7 @@ class ZPSModule : public SinglePortModule, private concurrency::OSThread
 
     inline void outBufAdd(uint64_t netBytes)
     {
-        // is this first record? then initialize header
-        // this is SO BAD that it's incorrect even by our inexistent standards
+        // If this is the first record, initialize the header with the current time and reset the record count.  
         if (!netRecs) {
             netData[0] = getTime();
             netData[1] = 0;

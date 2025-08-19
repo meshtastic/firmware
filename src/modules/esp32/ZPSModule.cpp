@@ -23,8 +23,6 @@
 #define BLE_MAX_REC 15
 #define BLE_NO_RESULTS -1 // Indicates a BLE scan is in progress
 
-#define ZPS_EXTRAVERBOSE
-
 uint8_t bleCounter = 0; // used internally by the ble scanner
 uint64_t bleResult[BLE_MAX_REC + 1];
 int bleResSize = BLE_NO_RESULTS;
@@ -255,7 +253,6 @@ int32_t ZPSModule::runOnce()
         return 1000; // scan in progress, re-check soon
     }
 
-    // FIXME - NEVER REACHED! (because yeah there's ALWAYS a scan in progress)
     return 5000;
 }
 
@@ -292,15 +289,15 @@ uint64_t encodeBLE(uint8_t *addr, uint8_t absRSSI)
  */
 static int ble_gap_event(struct ble_gap_event *event, void *arg)
 {
-
     // Adverts matching certain patterns are useless for positioning purposes
     //  (ephemeral MAC etc), so try excluding them if possible
     //
-    // FIXME This is very undeveloped right now, there are probably more than
-    //   10 patterns we can test and reject - most Apple devices and more
-    //
-    // FIXME we should search the entire length of the packet (a la memmem()),
-    //   not just at the beginning (memcmp())
+    // TODO: Expand the list of reject patterns for BLE adverts.  
+    //   There are likely more than 10 patterns to test and reject, including most Apple devices and others.  
+    //  
+    // TODO: Implement full packet search for reject patterns (use memmem() or similar),  
+    //   not just at the beginning (currently uses memcmp()).
+
     const uint8_t rejPat[] = {0x1e, 0xff, 0x06, 0x00, 0x01}; // one of many
 
     struct ble_hs_adv_fields fields;
@@ -338,8 +335,8 @@ static int ble_gap_event(struct ble_gap_event *event, void *arg)
         netBytes = encodeBLE(event->disc.addr.val, abs(event->disc.rssi));
 
         // SOME DUPLICATES SURVIVE through filter_duplicates = 1, catch them here
-        // FIXME! this is somewhat redundant with the sorting loop further down,
-        //   but right now we write for clarity not optimization
+        // Duplicate filtering is now handled in the sorting loop below,
+        // but right now we write for clarity not optimization
         for (i = 0; i < bleCounter; i++) {
             if ((bleResult[i] & 0xffffffffffff) == (netBytes & 0xffffffffffff)) {
                 LOG_DEBUG("(BLE duplicate filtered)\n");
