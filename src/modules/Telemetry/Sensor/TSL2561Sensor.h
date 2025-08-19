@@ -9,6 +9,7 @@
 class TSL2561Sensor : public TelemetrySensor
 {
   private:
+    // The magic number is a sensor id, the actual value doesn't matter
     Adafruit_TSL2561_Unified tsl = Adafruit_TSL2561_Unified(TSL2561_ADDR_LOW, 12345);
 
   protected:
