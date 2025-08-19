@@ -6,7 +6,6 @@
 #include "TSL2561Sensor.h"
 #include "TelemetrySensor.h"
 #include <Adafruit_TSL2561_U.h>
-#include <typeinfo>
 
 TSL2561Sensor::TSL2561Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_TSL2561, "TSL2561") {}
 
