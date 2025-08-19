@@ -698,7 +698,7 @@ class LGFX : public lgfx::LGFX_Device
             _panel_instance = new lgfx::Panel_ILI9488;
         else if (settingsMap[displayPanel] == hx8357d)
             _panel_instance = new lgfx::Panel_HX8357D;
-#if defined(SDL_h_)
+#if defined(LGFX_SDL)
         else if (settingsMap[displayPanel] == x11) {
             _panel_instance = new lgfx::Panel_sdl;
         }
@@ -763,7 +763,7 @@ class LGFX : public lgfx::LGFX_Device
             _touch_instance->config(touch_cfg);
             _panel_instance->setTouch(_touch_instance);
         }
-#if defined(SDL_h_)
+#if defined(LGFX_SDL)
         if (settingsMap[displayPanel] == x11) {
             lgfx::Panel_sdl *sdl_panel_ = (lgfx::Panel_sdl *)_panel_instance;
             sdl_panel_->setup();
@@ -1077,7 +1077,7 @@ void TFTDisplay::display(bool fromBlank)
 
 void TFTDisplay::sdlLoop()
 {
-#if defined(SDL_h_)
+#if defined(LGFX_SDL)
     static int lastPressed = 0;
     static int shuttingDown = false;
     if (settingsMap[displayPanel] == x11) {

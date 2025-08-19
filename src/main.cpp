@@ -1562,7 +1562,7 @@ void loop()
 #endif
 
     service->loop();
-#if defined(ARCH_PORTDUINO)
+#if defined(LGFX_SDL)
     if (screen) {
         auto dispdev = screen->getDisplayDevice();
         if (dispdev)
