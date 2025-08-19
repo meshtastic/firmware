@@ -523,8 +523,8 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
         // is not in the local nodedb
         // First, only PKC encrypt packets we are originating
         if (isFromUs(p) &&
-            // Don't use PKC with simulator
-            radioType != SIM_RADIO &&
+            // Sim radio via the cli flag skips PKC
+            !portduino_config.force_simradio &&
             // Don't use PKC with Ham mode
             !owner.is_licensed &&
             // Don't use PKC if it's not explicitly requested and a non-primary channel is requested
