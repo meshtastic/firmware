@@ -16,6 +16,8 @@
 #include "gps/RTC.h"
 #include <WiFi.h>
 
+#if !defined(MESHTASTIC_EXCLUDE_BLUETOOTH)
+
 #include "NimBLEDevice.h"
 
 #define BLE_MAX_REC 15
@@ -416,3 +418,5 @@ static int ble_scan(uint32_t duration, bool passive, bool dedup)
 
     return rc;
 }
+
+#endif // MESHTASTIC_EXCLUDE_BLUETOOTH

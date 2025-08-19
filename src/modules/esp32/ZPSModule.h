@@ -63,7 +63,7 @@ class ZPSModule : public SinglePortModule, private concurrency::OSThread
 
   private:
     // outbound data packet staging buffer and record counter
-    uint64_t netData[ZPS_DATAPKT_MAXITEMS + 2];
+    uint64_t netData[ZPS_DATAPKT_MAXITEMS + 2] = {0};
     uint8_t netRecs = 0;
 
     // mini state machine to alternate between BSS(Wifi) and BLE scanning
