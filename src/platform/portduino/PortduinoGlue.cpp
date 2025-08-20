@@ -290,7 +290,6 @@ void portduinoSetup()
                     } else if (devID_start == nullptr) {
                         devID_start = autoconf_product + i + 1;
                     }
-
                 }
                 i++;
             }
@@ -305,7 +304,7 @@ void portduinoSetup()
                 if (strlen(devID_start) == 32) {
                     std::string devID_str(devID_start);
                     for (int j = 0; j < 16; j++) {
-                        portduino_config.device_id[j] = std::stoi(devID_str.substr(j*2, 2), nullptr, 16);
+                        portduino_config.device_id[j] = std::stoi(devID_str.substr(j * 2, 2), nullptr, 16);
                     }
                     portduino_config.has_device_id = true;
                 }

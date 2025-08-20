@@ -11,9 +11,12 @@
 // {"PRODUCT_STRING", "CONFIG.YAML"}
 // YAML paths are relative to `meshtastic/available.d`
 inline const std::unordered_map<std::string, std::string> configProducts = {
-    {"MESHTOAD", "lora-usb-meshtoad-e22.yaml"},  {"MESHSTICK", "lora-meshstick-1262.yaml"},
-    {"MESHADV-PI", "lora-MeshAdv-900M30S.yaml"}, {"MeshAdv Mini", "lora-MeshAdv-Mini-900M22S.yaml"},
-    {"POWERPI", "lora-MeshAdv-900M30S.yaml"},    {"RAK6421-13300-S1", "lora-RAK6421-13300-slot1.yaml"},
+    {"MESHTOAD", "lora-usb-meshtoad-e22.yaml"},
+    {"MESHSTICK", "lora-meshstick-1262.yaml"},
+    {"MESHADV-PI", "lora-MeshAdv-900M30S.yaml"},
+    {"MeshAdv Mini", "lora-MeshAdv-Mini-900M22S.yaml"},
+    {"POWERPI", "lora-MeshAdv-900M30S.yaml"},
+    {"RAK6421-13300-S1", "lora-RAK6421-13300-slot1.yaml"},
     {"RAK6421-13300-S2", "lora-RAK6421-13300-slot2.yaml"}};
 
 enum configNames {
