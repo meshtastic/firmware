@@ -849,9 +849,29 @@ static LGFX *tft = nullptr;
 #include <lgfx/v1/platforms/esp32s3/Bus_RGB.hpp>
 #include <lgfx/v1/platforms/esp32s3/Panel_RGB.hpp>
 
+class PanelInit_ST7701 : public lgfx::Panel_ST7701
+{
+  public:
+    const uint8_t *getInitCommands(uint8_t listno) const override
+    {
+        // 180 degree hw rotation: vertical flip, horizontal flip
+        static constexpr const uint8_t list1[] = {0x36, 1,   0x10,                         // MADCTL for vertical flip
+                                                  0xFF, 5,   0x77, 0x01, 0x00, 0x00, 0x10, // Command2 BK0 SEL
+                                                  0xC7, 1,   0x04, // SDIR: X-direction Control (Horizontal Flip)
+                                                  0xFF, 5,   0x77, 0x01, 0x00, 0x00, 0x00, // Command2 BK0 DIS
+                                                  0xFF, 0xFF};
+        switch (listno) {
+        case 1:
+            return list1;
+        default:
+            return lgfx::Panel_ST7701::getInitCommands(listno);
+        }
+    }
+};
+
 class LGFX : public lgfx::LGFX_Device
 {
-    lgfx::Panel_ST7701 _panel_instance;
+    PanelInit_ST7701 _panel_instance;
     lgfx::Bus_RGB _bus_instance;
     lgfx::Light_PWM _light_instance;
     lgfx::Touch_FT5x06 _touch_instance;
@@ -1184,9 +1204,9 @@ bool TFTDisplay::connect()
     attachInterrupt(digitalPinToInterrupt(SCREEN_TOUCH_INT), rak14014_tpIntHandle, FALLING);
 #elif defined(T_DECK) || defined(PICOMPUTER_S3) || defined(CHATTER_2)
     tft->setRotation(1); // T-Deck has the TFT in landscape
-#elif defined(T_WATCH_S3) || defined(SENSECAP_INDICATOR)
+#elif defined(T_WATCH_S3)
     tft->setRotation(2); // T-Watch S3 left-handed orientation
-#elif ARCH_PORTDUINO
+#elif ARCH_PORTDUINO || defined(SENSECAP_INDICATOR)
     tft->setRotation(0); // use config.yaml to set rotation
 #else
     tft->setRotation(3); // Orient horizontal and wide underneath the silkscreen name label

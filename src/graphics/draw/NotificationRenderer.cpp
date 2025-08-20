@@ -383,7 +383,9 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
 
     uint8_t firstOptionToShow = 0;
     if (alertBannerOptions > 0) {
-        if (curSelected > 1 && alertBannerOptions > visibleTotalLines - lineCount) {
+        if (visibleTotalLines - lineCount == 1) {
+            firstOptionToShow = curSelected;
+        } else if (curSelected > 1 && alertBannerOptions > visibleTotalLines - lineCount) {
             if (curSelected > alertBannerOptions - visibleTotalLines + lineCount)
                 firstOptionToShow = alertBannerOptions - visibleTotalLines + lineCount;
             else
@@ -392,6 +394,9 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
             firstOptionToShow = 0;
         }
     }
+    // Useful log line for troubleshooting:
+    /* LOG_WARN("alertBannerOptions: %u, curSelected: %u, visibleTotalLines: %u, lineCount: %u, firstOptionToShow: %u",
+             alertBannerOptions, curSelected, visibleTotalLines, lineCount, firstOptionToShow); */
 
     for (int i = firstOptionToShow; i < alertBannerOptions && linesShown < visibleTotalLines; i++, linesShown++) {
         if (i == curSelected) {

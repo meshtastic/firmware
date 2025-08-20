@@ -666,8 +666,10 @@ void RadioInterface::limitPower(int8_t loraMaxPower)
 
 void RadioInterface::deliverToReceiver(meshtastic_MeshPacket *p)
 {
-    if (router)
+    if (router) {
+        p->transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
         router->enqueueReceivedMessage(p);
+    }
 }
 
 /***
