@@ -778,7 +778,6 @@ void setup()
     // if we have one of the fixed overrides in the settings, adjust display type accordingly.
     if (screen_model == meshtastic_Config_DisplayConfig_OledType_OLED_SH1107) {
         screen_geometry = GEOMETRY_128_64;
-
     } else if (screen_model == meshtastic_Config_DisplayConfig_OledType_OLED_SH1107_128_128) {
         screen_geometry = GEOMETRY_128_128;
     }
