@@ -22,6 +22,7 @@
 #include "nrf.h"
 #include "wiring_constants.h"
 #include "wiring_digital.h"
+#include "TEchoBacklight.h"
 
 const uint32_t g_ADigitalPinMap[] = {
     // P0 - pins 0 and 1 are hardwired for xtal and should never be enabled

@@ -108,6 +108,10 @@ NRF52Bluetooth *nrf52Bluetooth = nullptr;
 ButtonThread *TouchButtonThread = nullptr;
 #endif
 
+#if defined(TTGO_T_ECHO) && !defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
+#include "../variants/nrf52840/t-echo/TEchoBacklight.h"
+#endif
+
 #if defined(BUTTON_PIN) || defined(ARCH_PORTDUINO)
 ButtonThread *UserButtonThread = nullptr;
 #endif
@@ -981,8 +985,13 @@ void setup()
         BaseType_t higherWake = 0;
         mainDelay.interruptFromISR(&higherWake);
     };
+#if defined(TTGO_T_ECHO) && !defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
+    touchConfig.singlePress = INPUT_BROKER_NONE;
+    touchConfig.longPress = INPUT_BROKER_NONE;
+#else
     touchConfig.singlePress = INPUT_BROKER_NONE;
     touchConfig.longPress = INPUT_BROKER_BACK;
+#endif
     TouchButtonThread->initButton(touchConfig);
 #endif
 
@@ -1456,6 +1465,14 @@ void setup()
 
     // We manually run this to update the NodeStatus
     nodeDB->notifyObservers(true);
+
+#if defined(TTGO_T_ECHO) && !defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
+    if (!tEchoBacklight) {
+        tEchoBacklight = new TEchoBacklight();
+        tEchoBacklight->setPin(PIN_EINK_EN);
+        tEchoBacklight->start();
+    }
+#endif
 }
 
 #endif
