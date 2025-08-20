@@ -10,6 +10,12 @@ Import("env")
 platform = env.PioPlatform()
 
 sys.path.append(join(platform.get_package_dir("tool-esptoolpy")))
+# IntelHex workaround, remove after fixed upstream
+# https://github.com/platformio/platform-espressif32/issues/1632
+try:
+    import intelhex
+except ImportError:
+    env.Execute("$PYTHONEXE -m pip install intelhex")
 import esptool
 
 
