@@ -264,6 +264,55 @@ void portduinoSetup()
         } else {
             std::cout << "autoconf: Could not locate Pi HAT+ at /proc/device-tree/hat/product" << std::endl;
         }
+        // attempt to load autoconf data from an EEPROM on 0x50
+        //      RAK6421-13300-S1:aabbcc123456:5ba85807d92138b7519cfb60460573af
+        // <model string>:mac address :<16 random unique bytes in hexidecimal>
+        try {
+            char *mac_start = nullptr;
+            char *devID_start = nullptr;
+            Wire.begin();
+            Wire.beginTransmission(0x50);
+            Wire.write(0x0);
+            Wire.write(0x0);
+            Wire.endTransmission();
+            Wire.requestFrom((uint8_t)0x50, (uint8_t)75);
+            uint8_t i = 0;
+            delay(100);
+            while (Wire.available() && i < sizeof(autoconf_product)) {
+                autoconf_product[i] = Wire.read();
+                if (autoconf_product[i] == 0xff) {
+                    autoconf_product[i] = 0x0;
+                    break;
+                } else if (autoconf_product[i] == ':') {
+                    autoconf_product[i] = 0x0;
+                    if (mac_start == nullptr) {
+                        mac_start = autoconf_product + i + 1;
+                    } else if (devID_start == nullptr) {
+                        devID_start = autoconf_product + i + 1;
+                    }
+
+                }
+                i++;
+            }
+            std::cout << "autoconf: Found eeprom data " << autoconf_product << std::endl;
+            if (mac_start != nullptr) {
+                std::cout << "autoconf: Found mac data " << mac_start << std::endl;
+                if (strlen(mac_start) == 12)
+                    settingsStrings[mac_address] = std::string(mac_start);
+            }
+            if (devID_start != nullptr) {
+                std::cout << "autoconf: Found deviceid data " << devID_start << std::endl;
+                if (strlen(devID_start) == 32) {
+                    std::string devID_str(devID_start);
+                    for (int j = 0; j < 16; j++) {
+                        portduino_config.device_id[j] = std::stoi(devID_str.substr(j*2, 2), nullptr, 16);
+                    }
+                    portduino_config.has_device_id = true;
+                }
+            }
+        } catch (...) {
+            std::cout << "autoconf: Could not locate EEPROM" << std::endl;
+        }
         // Load the config file based on the product string
         if (strlen(autoconf_product) > 0) {
             // From configProducts map in PortduinoGlue.h
