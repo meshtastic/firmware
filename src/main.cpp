@@ -1562,7 +1562,13 @@ void loop()
 #endif
 
     service->loop();
-
+#if defined(LGFX_SDL)
+    if (screen) {
+        auto dispdev = screen->getDisplayDevice();
+        if (dispdev)
+            static_cast<TFTDisplay *>(dispdev)->sdlLoop();
+    }
+#endif
     long delayMsec = mainController.runOrDelay();
 
     // We want to sleep as long as possible here - because it saves power
