@@ -443,7 +443,7 @@ void VirtualKeyboard::drawKey(OLEDDisplay *display, const VirtualKey &key, bool 
         if (textX < x)
             textX = x; // guard
     } else {
-        if (display->getHeight() <= 64) {
+        if (display->getHeight() <= 64 && (key.character >= '0' && key.character <= '9')) {
             textX = x + (width - textWidth + 1) / 2;
         } else {
             textX = x + (width - textWidth) / 2;
