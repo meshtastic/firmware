@@ -144,7 +144,9 @@ ProcessMessage RangeTestModuleRadio::handleReceived(const meshtastic_MeshPacket 
 
             if (moduleConfig.range_test.save) {
                 appendFile(mp);
-            }
+            } else if (moduleConfig.range_test.clear) {
+                removeFile();
+            };
 
             /*
             NodeInfoLite *n = nodeDB->getMeshNode(getFrom(&mp));
