@@ -15,7 +15,7 @@ int32_t TSL2561Sensor::runOnce()
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
-    
+
     status = tsl.begin(nodeTelemetrySensorsMap[sensorType].second);
 
     return initI2CSensor();
