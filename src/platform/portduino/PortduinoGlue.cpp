@@ -10,6 +10,7 @@
 #include "linux/gpio/LinuxGPIOPin.h"
 #include "meshUtils.h"
 #include "yaml-cpp/yaml.h"
+#include <ErriezCRC32.h>
 #include <Utility.h>
 #include <assert.h>
 #include <bluetooth/bluetooth.h>
@@ -20,8 +21,6 @@
 #include <map>
 #include <sys/ioctl.h>
 #include <unistd.h>
-#include <ErriezCRC32.h>
-
 
 #ifdef PORTDUINO_LINUX_HARDWARE
 #include <cxxabi.h>
@@ -270,7 +269,7 @@ void portduinoSetup()
         }
         // attempt to load autoconf data from an EEPROM on 0x50
         //      RAK6421-13300-S1:aabbcc123456:5ba85807d92138b7519cfb60460573af:3061e8d8
-        // <model string>:mac address :<16 random unique bytes in hexidecimal> : crc32 
+        // <model string>:mac address :<16 random unique bytes in hexidecimal> : crc32
         // crc32 is calculated on the eeprom string up to but not including the final colon
         if (strlen(autoconf_product) < 6) {
             try {
@@ -311,7 +310,7 @@ void portduinoSetup()
 
                     // convert crc32 ascii to raw uint32
                     for (int j = 0; j < 4; j++) {
-                        crc32_value += std::stoi(crc32_str.substr(j*2, 2), nullptr, 16) << (3 - j)*8;
+                        crc32_value += std::stoi(crc32_str.substr(j * 2, 2), nullptr, 16) << (3 - j) * 8;
                     }
                     std::cout << "autoconf: Found eeprom crc " << crc32_start << std::endl;
 
@@ -331,7 +330,7 @@ void portduinoSetup()
                             if (strlen(devID_start) == 32) {
                                 std::string devID_str(devID_start);
                                 for (int j = 0; j < 16; j++) {
-                                    portduino_config.device_id[j] = std::stoi(devID_str.substr(j*2, 2), nullptr, 16);
+                                    portduino_config.device_id[j] = std::stoi(devID_str.substr(j * 2, 2), nullptr, 16);
                                 }
                                 portduino_config.has_device_id = true;
                             }
