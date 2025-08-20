@@ -134,4 +134,5 @@ extern struct portduino_config_struct {
     bool has_rfswitch_table = false;
     uint32_t rfswitch_dio_pins[5] = {RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC};
     Module::RfSwitchMode_t rfswitch_table[8];
+    bool force_simradio = false;
 } portduino_config;

@@ -34,7 +34,6 @@ std::ofstream traceFile;
 Ch341Hal *ch341Hal = nullptr;
 char *configPath = nullptr;
 char *optionMac = nullptr;
-bool forceSimulated = false;
 bool verboseEnabled = false;
 
 const char *argp_program_version = optstr(APP_VERSION);
@@ -67,7 +66,7 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
         configPath = arg;
         break;
     case 's':
-        forceSimulated = true;
+        portduino_config.force_simradio = true;
         break;
     case 'h':
         optionMac = arg;
@@ -190,7 +189,7 @@ void portduinoSetup()
 
     YAML::Node yamlConfig;
 
-    if (forceSimulated == true) {
+    if (portduino_config.force_simradio == true) {
         settingsMap[use_simradio] = true;
     } else if (configPath != nullptr) {
         if (loadConfig(configPath)) {
