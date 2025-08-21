@@ -41,12 +41,12 @@ int32_t RangeTestModule::runOnce()
     // moduleConfig.range_test.enabled = 1;
     // moduleConfig.range_test.sender = 30;
     // moduleConfig.range_test.save = 1;
+    // moduleConfig.range_test.clear = 1;
 
     // Fixed position is useful when testing indoors.
     // config.position.fixed_position = 1;
 
     uint32_t senderHeartbeat = moduleConfig.range_test.sender * 1000;
-
     if (moduleConfig.range_test.enabled) {
 
         if (firstTime) {
@@ -54,6 +54,11 @@ int32_t RangeTestModule::runOnce()
 
             firstTime = 0;
 
+            if (moduleConfig.range_test.clear) {
+                // User wants to delete previous range test(s)
+                LOG_INFO("Range Test Module - Clearing out previous test file");
+                rangeTestModuleRadio->removeFile();
+            }
             if (moduleConfig.range_test.sender) {
                 LOG_INFO("Init Range Test Module -- Sender");
                 started = millis(); // make a note of when we started
@@ -141,12 +146,9 @@ ProcessMessage RangeTestModuleRadio::handleReceived(const meshtastic_MeshPacket 
         */
 
         if (!isFromUs(&mp)) {
-
             if (moduleConfig.range_test.save) {
                 appendFile(mp);
-            } else if (moduleConfig.range_test.clear) {
-                removeFile();
-            };
+            }
 
             /*
             NodeInfoLite *n = nodeDB->getMeshNode(getFrom(&mp));
