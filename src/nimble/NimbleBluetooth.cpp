@@ -223,9 +223,12 @@ void NimbleBluetooth::deinit()
     LOG_INFO("Disable bluetooth until reboot");
 
 #ifdef BLE_LED
+#ifdef BLE_LED_INVERTED
+    digitalWrite(BLE_LED, HIGH);
+#else
     digitalWrite(BLE_LED, LOW);
 #endif
-
+#endif
     NimBLEDevice::deinit();
 #endif
 }
