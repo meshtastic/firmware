@@ -12,7 +12,7 @@
 #define getStringCenteredX(s) ((SCREEN_WIDTH - display->getStringWidth(s)) / 2)
 namespace graphics
 {
-enum notificationTypeEnum { none, text_banner, selection_picker, node_picker, number_picker, text_input };
+enum notificationTypeEnum { none, text_banner, selection_picker, node_picker, number_picker };
 
 struct BannerOverlayOptions {
     const char *message;
@@ -313,8 +313,6 @@ class Screen : public concurrency::OSThread
 
     void showNodePicker(const char *message, uint32_t durationMs, std::function<void(uint32_t)> bannerCallback);
     void showNumberPicker(const char *message, uint32_t durationMs, uint8_t digits, std::function<void(uint32_t)> bannerCallback);
-    void showTextInput(const char *header, const char *initialText, uint32_t durationMs,
-                       std::function<void(const std::string &)> textCallback);
 
     void requestMenu(graphics::menuHandler::screenMenus menuToShow)
     {
