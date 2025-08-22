@@ -640,7 +640,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #ifdef USERPREFS_CONFIG_SMART_POSITION_ENABLED
     config.position.position_broadcast_smart_enabled = USERPREFS_CONFIG_SMART_POSITION_ENABLED;
 #else
-    config.position.position_broadcast_smart_enabled = true;
+    config.position.position_broadcast_smart_enabled = false; // Position broadcasting is opt-in
 #endif
     config.position.broadcast_smart_minimum_distance = 100;
     config.position.broadcast_smart_minimum_interval_secs = 30;
