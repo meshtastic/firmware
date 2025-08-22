@@ -928,8 +928,8 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
         owner.has_is_unmessagable = true;
         owner.is_unmessagable = true;
         config.device.node_info_broadcast_secs = ONE_DAY;
-        config.position.position_broadcast_smart_enabled = true;
-        config.position.position_broadcast_secs = 3 * 60; // Every 3 minutes
+        config.position.position_broadcast_smart_enabled = true; // Broadcast is implicit in the selection of this role
+        config.position.position_broadcast_secs = 3 * 60;        // Every 3 minutes
         config.position.broadcast_smart_minimum_distance = 20;
         config.position.broadcast_smart_minimum_interval_secs = 15;
         // Remove Altitude MSL from flags since CoTs use HAE (height above ellipsoid)
