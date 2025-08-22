@@ -61,7 +61,7 @@ RUN apt-get update && apt-get --no-install-recommends -y install \
 
 # Fetch compiled binary from the builder
 COPY --from=builder /tmp/firmware/release/meshtasticd /usr/bin/
-COPY --from=builder /tmp/web /usr/share/meshtasticd/
+COPY --from=builder /tmp/web /usr/share/meshtasticd/web/
 # Copy config templates
 COPY ./bin/config.d /etc/meshtasticd/available.d
 
