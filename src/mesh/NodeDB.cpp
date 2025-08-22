@@ -751,7 +751,7 @@ void NodeDB::initConfigIntervals()
 #ifdef USERPREFS_CONFIG_POSITION_BROADCAST_INTERVAL
     config.position.position_broadcast_secs = USERPREFS_CONFIG_POSITION_BROADCAST_INTERVAL;
 #else
-    config.position.position_broadcast_secs = default_broadcast_interval_secs;
+    config.position.position_broadcast_secs = MAX_INTERVAL;
 #endif
 
     config.power.ls_secs = default_ls_secs;
