@@ -93,21 +93,10 @@ RTC_DATA_ATTR int bootCount = 0;
  */
 void setCPUFast(bool on)
 {
-#if defined(ARCH_ESP32) && !HAS_TFT
-#ifdef HAS_WIFI
-    if (isWifiAvailable()) {
-#if !defined(CONFIG_IDF_TARGET_ESP32C3) && !defined(WIFI_MAX_PERFORMANCE)
-        LOG_DEBUG("Set CPU to 240MHz because WiFi is in use");
-        setCpuFrequencyMhz(240);
-        return;
-#endif
-    }
-#endif
-
-// The Heltec LORA32 V1 runs at 26 MHz base frequency and doesn't react well to switching to 80 MHz...
-#if !defined(ARDUINO_HELTEC_WIFI_LORA_32) && !defined(CONFIG_IDF_TARGET_ESP32C3)
-    setCpuFrequencyMhz(on ? 240 : 80);
-#endif
+#ifdef ARCH_ESP32
+    uint8_t targetFrequency = on ? 240 : 80;
+    setCpuFrequencyMhz(targetFrequency);
+    LOG_INFO("CPU frequency set to %u MHz", targetFrequency);
 #endif
 }
 
