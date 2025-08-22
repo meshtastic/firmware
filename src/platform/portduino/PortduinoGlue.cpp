@@ -10,6 +10,7 @@
 #include "linux/gpio/LinuxGPIOPin.h"
 #include "meshUtils.h"
 #include "yaml-cpp/yaml.h"
+#include <ErriezCRC32.h>
 #include <Utility.h>
 #include <assert.h>
 #include <bluetooth/bluetooth.h>
@@ -34,7 +35,6 @@ std::ofstream traceFile;
 Ch341Hal *ch341Hal = nullptr;
 char *configPath = nullptr;
 char *optionMac = nullptr;
-bool forceSimulated = false;
 bool verboseEnabled = false;
 
 const char *argp_program_version = optstr(APP_VERSION);
@@ -67,7 +67,7 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
         configPath = arg;
         break;
     case 's':
-        forceSimulated = true;
+        portduino_config.force_simradio = true;
         break;
     case 'h':
         optionMac = arg;
@@ -190,7 +190,7 @@ void portduinoSetup()
 
     YAML::Node yamlConfig;
 
-    if (forceSimulated == true) {
+    if (portduino_config.force_simradio == true) {
         settingsMap[use_simradio] = true;
     } else if (configPath != nullptr) {
         if (loadConfig(configPath)) {
@@ -254,16 +254,95 @@ void portduinoSetup()
             std::cout << "autoconf: Could not locate CH341 device" << std::endl;
         }
         // Try Pi HAT+
-        std::cout << "autoconf: Looking for Pi HAT+..." << std::endl;
-        if (access("/proc/device-tree/hat/product", R_OK) == 0) {
-            std::ifstream hatProductFile("/proc/device-tree/hat/product");
-            if (hatProductFile.is_open()) {
-                hatProductFile.read(autoconf_product, 95);
-                hatProductFile.close();
+        if (strlen(autoconf_product) < 6) {
+            std::cout << "autoconf: Looking for Pi HAT+..." << std::endl;
+            if (access("/proc/device-tree/hat/product", R_OK) == 0) {
+                std::ifstream hatProductFile("/proc/device-tree/hat/product");
+                if (hatProductFile.is_open()) {
+                    hatProductFile.read(autoconf_product, 95);
+                    hatProductFile.close();
+                }
+                std::cout << "autoconf: Found Pi HAT+ " << autoconf_product << " at /proc/device-tree/hat/product" << std::endl;
+            } else {
+                std::cout << "autoconf: Could not locate Pi HAT+ at /proc/device-tree/hat/product" << std::endl;
             }
-            std::cout << "autoconf: Found Pi HAT+ " << autoconf_product << " at /proc/device-tree/hat/product" << std::endl;
-        } else {
-            std::cout << "autoconf: Could not locate Pi HAT+ at /proc/device-tree/hat/product" << std::endl;
+        }
+        // attempt to load autoconf data from an EEPROM on 0x50
+        //      RAK6421-13300-S1:aabbcc123456:5ba85807d92138b7519cfb60460573af:3061e8d8
+        // <model string>:mac address :<16 random unique bytes in hexidecimal> : crc32
+        // crc32 is calculated on the eeprom string up to but not including the final colon
+        if (strlen(autoconf_product) < 6) {
+            try {
+                char *mac_start = nullptr;
+                char *devID_start = nullptr;
+                char *crc32_start = nullptr;
+                Wire.begin();
+                Wire.beginTransmission(0x50);
+                Wire.write(0x0);
+                Wire.write(0x0);
+                Wire.endTransmission();
+                Wire.requestFrom((uint8_t)0x50, (uint8_t)75);
+                uint8_t i = 0;
+                delay(100);
+                std::string autoconf_raw;
+                while (Wire.available() && i < sizeof(autoconf_product)) {
+                    autoconf_product[i] = Wire.read();
+                    if (autoconf_product[i] == 0xff) {
+                        autoconf_product[i] = 0x0;
+                        break;
+                    }
+                    autoconf_raw += autoconf_product[i];
+                    if (autoconf_product[i] == ':') {
+                        autoconf_product[i] = 0x0;
+                        if (mac_start == nullptr) {
+                            mac_start = autoconf_product + i + 1;
+                        } else if (devID_start == nullptr) {
+                            devID_start = autoconf_product + i + 1;
+                        } else if (crc32_start == nullptr) {
+                            crc32_start = autoconf_product + i + 1;
+                        }
+                    }
+                    i++;
+                }
+                if (crc32_start != nullptr && strlen(crc32_start) == 8) {
+                    std::string crc32_str(crc32_start);
+                    uint32_t crc32_value = 0;
+
+                    // convert crc32 ascii to raw uint32
+                    for (int j = 0; j < 4; j++) {
+                        crc32_value += std::stoi(crc32_str.substr(j * 2, 2), nullptr, 16) << (3 - j) * 8;
+                    }
+                    std::cout << "autoconf: Found eeprom crc " << crc32_start << std::endl;
+
+                    // set the autoconf string to blank and short circuit
+                    if (crc32_value != crc32Buffer(autoconf_raw.c_str(), i - 9)) {
+                        std::cout << "autoconf: crc32 mismatch, dropping " << std::endl;
+                        autoconf_product[0] = 0x0;
+                    } else {
+                        std::cout << "autoconf: Found eeprom data " << autoconf_raw << std::endl;
+                        if (mac_start != nullptr) {
+                            std::cout << "autoconf: Found mac data " << mac_start << std::endl;
+                            if (strlen(mac_start) == 12)
+                                settingsStrings[mac_address] = std::string(mac_start);
+                        }
+                        if (devID_start != nullptr) {
+                            std::cout << "autoconf: Found deviceid data " << devID_start << std::endl;
+                            if (strlen(devID_start) == 32) {
+                                std::string devID_str(devID_start);
+                                for (int j = 0; j < 16; j++) {
+                                    portduino_config.device_id[j] = std::stoi(devID_str.substr(j * 2, 2), nullptr, 16);
+                                }
+                                portduino_config.has_device_id = true;
+                            }
+                        }
+                    }
+                } else {
+                    std::cout << "autoconf: crc32 missing " << std::endl;
+                    autoconf_product[0] = 0x0;
+                }
+            } catch (...) {
+                std::cout << "autoconf: Could not locate EEPROM" << std::endl;
+            }
         }
         // Load the config file based on the product string
         if (strlen(autoconf_product) > 0) {
