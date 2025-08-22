@@ -6,7 +6,7 @@ class TLoraPagerKeyboard : public TCA8418KeyboardBase
     TLoraPagerKeyboard();
     void reset(void);
     void trigger(void) override;
-    void setBacklight(bool on) override{};
+    void setBacklight(bool on) override;
     virtual ~TLoraPagerKeyboard() {}
 
   protected:
@@ -16,7 +16,7 @@ class TLoraPagerKeyboard : public TCA8418KeyboardBase
 
     void updateModifierFlag(uint8_t key);
     bool isModifierKey(uint8_t key);
-    void toggleBacklight(void);
+    void toggleBacklight(bool off = false);
 
   private:
     uint8_t modifierFlag;        // Flag to indicate if a modifier key is pressed
