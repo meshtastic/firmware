@@ -367,8 +367,11 @@ void menuHandler::homeBaseMenu()
     optionsArray[options] = "Sleep Screen";
     optionsEnumArray[options++] = Sleep;
 #endif
-
-    optionsArray[options] = "Send Position";
+    if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
+        optionsArray[options] = "Send Position";
+    } else {
+        optionsArray[options] = "Send Node Info";
+    }
     optionsEnumArray[options++] = Position;
     optionsArray[options] = "New Preset Msg";
     optionsEnumArray[options++] = Preset;
