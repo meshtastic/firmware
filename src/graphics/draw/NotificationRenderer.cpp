@@ -687,8 +687,6 @@ void NotificationRenderer::drawTextInput(OLEDDisplay *display, OLEDDisplayUiStat
             inEvent.inputEvent = INPUT_BROKER_NONE;
         }
 
-        // Continuous long-press repeat removed: no per-frame ticking needed
-
         // Clear the screen to avoid overlapping with underlying frames or overlays
         display->setColor(BLACK);
         display->fillRect(0, 0, display->getWidth(), display->getHeight());
