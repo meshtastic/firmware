@@ -661,8 +661,10 @@ void NotificationRenderer::drawTextInput(OLEDDisplay *display, OLEDDisplayUiStat
             } else if (inEvent.inputEvent == INPUT_BROKER_DOWN_LONG) {
                 virtualKeyboard->moveCursorDown();
             } else if (inEvent.inputEvent == INPUT_BROKER_ALT_PRESS) {
+                // Long press UP = move left
                 virtualKeyboard->moveCursorLeft();
             } else if (inEvent.inputEvent == INPUT_BROKER_USER_PRESS) {
+                // Long press DOWN = move right
                 virtualKeyboard->moveCursorRight();
             } else if (inEvent.inputEvent == INPUT_BROKER_SELECT) {
                 virtualKeyboard->handlePress();
@@ -686,14 +688,11 @@ void NotificationRenderer::drawTextInput(OLEDDisplay *display, OLEDDisplayUiStat
             // Consume the event after processing for virtual keyboard
             inEvent.inputEvent = INPUT_BROKER_NONE;
         }
-
-        // Continuous long-press repeat removed: no per-frame ticking needed
-
+        
         // Clear the screen to avoid overlapping with underlying frames or overlays
         display->setColor(BLACK);
         display->fillRect(0, 0, display->getWidth(), display->getHeight());
         display->setColor(WHITE);
-        // Draw the virtual keyboard
         virtualKeyboard->draw(display, 0, 0);
     } else {
         // If virtualKeyboard is null, reset the banner to avoid getting stuck
