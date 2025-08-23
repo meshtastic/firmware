@@ -6,9 +6,44 @@
 #include "Router.h"
 #include "configuration.h"
 #include "main.h"
+#include "mesh/mesh-pb-constants.h"
 #include <Throttle.h>
 
 NodeInfoModule *nodeInfoModule;
+
+ProcessMessage NodeInfoModule::handleReceived(const meshtastic_MeshPacket &mp)
+{
+    if (mp.which_payload_variant != meshtastic_MeshPacket_decoded_tag || mp.decoded.portnum != ourPortNum) {
+        // Not for us, or not decoded, so skip
+        return ProcessMessage::CONTINUE;
+    }
+    // Decode the protobuf payload into a meshtastic_User
+    meshtastic_User p = meshtastic_User_init_default;
+    if (!pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_User_msg, &p)) {
+        LOG_ERROR("Failed to decode NodeInfo protobuf. Ignoring packet.");
+        return ProcessMessage::STOP;
+    }
+    // Validate that the nodenum matches the user's macaddr
+    NodeNum senderNodeNum = getFrom(&mp);
+
+    if (senderNodeNum != nodeDB->getNodeNum()) {
+        // Calculate expected nodenum from macaddr (same logic as pickNewNodeNum)
+        NodeNum expectedNodeNum = (p.macaddr[2] << 24) | (p.macaddr[3] << 16) | (p.macaddr[4] << 8) | p.macaddr[5];
+
+        if (senderNodeNum != expectedNodeNum) {
+            LOG_WARN(
+                "Dropping NodeInfo packet: nodenum 0x%08x doesn't match expected 0x%08x from MAC %02x:%02x:%02x:%02x:%02x:%02x",
+                senderNodeNum, expectedNodeNum, p.macaddr[0], p.macaddr[1], p.macaddr[2], p.macaddr[3], p.macaddr[4],
+                p.macaddr[5]);
+            // Cancel the sending of this packet and stop processing it
+            if (router)
+                router->cancelSending(mp.from, mp.id);
+            return ProcessMessage::STOP;
+        }
+    }
+
+    return ProcessMessage::CONTINUE;
+}
 
 bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_User *pptr)
 {
