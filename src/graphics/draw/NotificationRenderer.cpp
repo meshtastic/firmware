@@ -688,7 +688,7 @@ void NotificationRenderer::drawTextInput(OLEDDisplay *display, OLEDDisplayUiStat
             // Consume the event after processing for virtual keyboard
             inEvent.inputEvent = INPUT_BROKER_NONE;
         }
-        
+
         // Clear the screen to avoid overlapping with underlying frames or overlays
         display->setColor(BLACK);
         display->fillRect(0, 0, display->getWidth(), display->getHeight());
