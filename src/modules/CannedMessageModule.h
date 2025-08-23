@@ -115,7 +115,7 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     int getNextIndex();
     int getPrevIndex();
 
-#if defined(USE_VIRTUAL_KEYBOARD)
+#if defined(USE_VIRTUAL_KEYBOARD) || defined(T_WATCH_S3) || defined(RAK14014) || defined(PRIVATE_HW)
     void drawKeyboard(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
     String keyForCoordinates(uint x, uint y);
     void drawShiftIcon(OLEDDisplay *display, int x, int y, float scale = 1);
@@ -187,7 +187,7 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     std::vector<uint8_t> activeChannelIndices;
     std::vector<NodeEntry> filteredNodes;
 
-#if defined(USE_VIRTUAL_KEYBOARD)
+#if defined(USE_VIRTUAL_KEYBOARD) || defined(T_WATCH_S3) || defined(RAK14014) || defined(PRIVATE_HW)
     bool shift = false;
     int charSet = 0; // 0=ABC, 1=123
 #endif
@@ -200,7 +200,7 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     bool handleMessageSelectorInput(const InputEvent *event, bool isUp, bool isDown, bool isSelect);
     bool handleFreeTextInput(const InputEvent *event);
 
-#if defined(USE_VIRTUAL_KEYBOARD)
+#if defined(USE_VIRTUAL_KEYBOARD) || defined(T_WATCH_S3) || defined(RAK14014) || defined(PRIVATE_HW)
     Letter keyboard[2][4][10] = {{{{"Q", 20, 0, 0, 0, 0},
                                    {"W", 22, 0, 0, 0, 0},
                                    {"E", 17, 0, 0, 0, 0},

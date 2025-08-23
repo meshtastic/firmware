@@ -75,9 +75,14 @@ meshtastic_MeshPacket *MeshModule::allocAckNak(meshtastic_Routing_Error err, Nod
 
 meshtastic_MeshPacket *MeshModule::allocErrorResponse(meshtastic_Routing_Error err, const meshtastic_MeshPacket *p)
 {
-    // If the original packet couldn't be decoded, use the primary channel
-    uint8_t channelIndex =
-        p->which_payload_variant == meshtastic_MeshPacket_decoded_tag ? p->channel : channels.getPrimaryIndex();
+    // If the original packet couldn't be decoded, use the primary channel.
+    // If decoded, ensure the channel index is valid (packets may still carry a hash in corner cases).
+    uint8_t channelIndex;
+    if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag && p->channel < channels.getNumChannels()) {
+        channelIndex = p->channel;
+    } else {
+        channelIndex = channels.getPrimaryIndex();
+    }
     auto r = allocAckNak(err, getFrom(p), p->id, channelIndex);
 
     setReplyTo(r, *p);
@@ -129,8 +134,11 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src, const char
 
             moduleFound = true;
 
-            /// received channel (or NULL if not decoded)
-            meshtastic_Channel *ch = isDecoded ? &channels.getByIndex(mp.channel) : NULL;
+            /// received channel (or NULL if not decoded or invalid)
+            meshtastic_Channel *ch = NULL;
+            if (isDecoded && mp.channel < channels.getNumChannels()) {
+                ch = &channels.getByIndex(mp.channel);
+            }
 
             /// Is the channel this packet arrived on acceptable? (security check)
             /// Note: we can't know channel names for encrypted packets, so those are NEVER sent to boundChannel modules
@@ -202,7 +210,9 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src, const char
             // SECURITY NOTE! I considered sending back a different error code if we didn't find the psk (i.e. !isDecoded)
             // but opted NOT TO.  Because it is not a good idea to let remote nodes 'probe' to find out which PSKs were "good" vs
             // bad.
-            routingModule->sendAckNak(meshtastic_Routing_Error_NO_RESPONSE, getFrom(&mp), mp.id, mp.channel,
+            // Ensure channel index is valid when replying
+            routingModule->sendAckNak(meshtastic_Routing_Error_NO_RESPONSE, getFrom(&mp), mp.id,
+                                      (mp.channel < channels.getNumChannels()) ? mp.channel : channels.getPrimaryIndex(),
                                       routingModule->getHopLimitForResponse(mp.hop_start, mp.hop_limit));
         }
     }

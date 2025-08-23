@@ -51,16 +51,20 @@ CannedMessageModule *cannedMessageModule;
 CannedMessageModule::CannedMessageModule()
     : SinglePortModule("canned", meshtastic_PortNum_TEXT_MESSAGE_APP), concurrency::OSThread("CannedMessage")
 {
-    this->loadProtoForModule();
-    if ((this->splitConfiguredMessages() <= 0) && (cardkb_found.address == 0x00) && !INPUTBROKER_MATRIX_TYPE &&
-        !CANNED_MESSAGE_MODULE_ENABLE) {
-        LOG_INFO("CannedMessageModule: No messages are configured. Module is disabled");
+    if (moduleConfig.canned_message.enabled || CANNED_MESSAGE_MODULE_ENABLE) {
+        this->loadProtoForModule();
+        if ((this->splitConfiguredMessages() <= 0) && (cardkb_found.address == 0x00) && !INPUTBROKER_MATRIX_TYPE &&
+            !CANNED_MESSAGE_MODULE_ENABLE) {
+            LOG_INFO("CannedMessageModule: No messages are configured. Module is disabled");
+            this->runState = CANNED_MESSAGE_RUN_STATE_DISABLED;
+            disable();
+        } else {
+            LOG_INFO("CannedMessageModule is enabled");
+            this->inputObserver.observe(inputBroker);
+        }
+    } else {
         this->runState = CANNED_MESSAGE_RUN_STATE_DISABLED;
         disable();
-    } else {
-        LOG_INFO("CannedMessageModule is enabled");
-        moduleConfig.canned_message.enabled = true;
-        this->inputObserver.observe(inputBroker);
     }
 }
 
@@ -449,7 +453,6 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
             runOnce(); // update filter immediately
             lastFilterUpdate = millis();
         }
-        return 1;
     }
 
     size_t numMeshNodes = filteredNodes.size();
@@ -1168,7 +1171,7 @@ void CannedMessageModule::showTemporaryMessage(const String &message)
     setIntervalFromNow(2000);
 }
 
-#if defined(USE_VIRTUAL_KEYBOARD)
+#if defined(USE_VIRTUAL_KEYBOARD) || defined(T_WATCH_S3) || defined(RAK14014) || defined(PRIVATE_HW)
 
 String CannedMessageModule::keyForCoordinates(uint x, uint y)
 {
@@ -1194,9 +1197,24 @@ void CannedMessageModule::drawKeyboard(OLEDDisplay *display, OLEDDisplayUiState 
 {
     int outerSize = *(&this->keyboard[this->charSet] + 1) - this->keyboard[this->charSet];
 
+// Elecrow-CRT01262M
+// Special keys like shift, backspace, enter are already scaled manually
+// We want to use a smaller scale factor, to match our FONT_SMALL
+#ifdef PRIVATE_HW
+    constexpr float specialKeyScale = 0.5;
+#else
+    constexpr float specialKeyScale = 1.2;
+#endif
+
     int xOffset = 0;
 
+// Elecrow-CRT01262M
+// Screen too small, start drawing the keyboard hard up against screen left
+#ifdef PRIVATE_HW
+    int yOffset = 36;
+#else
     int yOffset = 56;
+#endif
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
@@ -1206,8 +1224,9 @@ void CannedMessageModule::drawKeyboard(OLEDDisplay *display, OLEDDisplayUiState 
 
     display->drawStringMaxWidth(0, 0, display->getWidth(),
                                 cannedMessageModule->drawWithCursor(cannedMessageModule->freetext, cannedMessageModule->cursor));
-
-    display->setFont(FONT_MEDIUM);
+    // Elecrow-CRT01262M
+    // Small font for tiny lil' screen
+    display->setFont(FONT_SMALL);
 
     int cellHeight = round((display->height() - 64) / outerSize);
 
@@ -1242,21 +1261,27 @@ void CannedMessageModule::drawKeyboard(OLEDDisplay *display, OLEDDisplayUiState 
 #endif
             this->keyboard[this->charSet][outerIndex][innerIndex] = updatedLetter;
 
+            // Elecrow-CRT01262M
+            // Offset all the letters in the keyboard
+            // Better centering in the key boxes, because the whole graphic is squish on the tiny display
+#ifdef PRIVATE_HW
+            float characterOffset = ((cellWidth / 2) - (letter.width / 2)) + 4;
+#else
             float characterOffset = ((cellWidth / 2) - (letter.width / 2));
-
+#endif
             if (letter.character == "⇧") {
                 if (this->shift) {
                     display->fillRect(xOffset, yOffset, cellWidth, cellHeight);
 
                     display->setColor(OLEDDISPLAY_COLOR::BLACK);
 
-                    drawShiftIcon(display, xOffset + characterOffset, yOffset + yCorrection + 5, 1.2);
+                    drawShiftIcon(display, xOffset + characterOffset, yOffset + yCorrection + 5, specialKeyScale);
 
                     display->setColor(OLEDDISPLAY_COLOR::WHITE);
                 } else {
                     display->drawRect(xOffset, yOffset, cellWidth, cellHeight);
 
-                    drawShiftIcon(display, xOffset + characterOffset, yOffset + yCorrection + 5, 1.2);
+                    drawShiftIcon(display, xOffset + characterOffset, yOffset + yCorrection + 5, specialKeyScale);
                 }
             } else if (letter.character == "⌫") {
                 if (this->highlight == letter.character[0]) {
@@ -1264,7 +1289,7 @@ void CannedMessageModule::drawKeyboard(OLEDDisplay *display, OLEDDisplayUiState 
 
                     display->setColor(OLEDDISPLAY_COLOR::BLACK);
 
-                    drawBackspaceIcon(display, xOffset + characterOffset, yOffset + yCorrection + 5, 1.2);
+                    drawBackspaceIcon(display, xOffset + characterOffset, yOffset + yCorrection + 5, specialKeyScale);
 
                     display->setColor(OLEDDISPLAY_COLOR::WHITE);
 
@@ -1272,29 +1297,43 @@ void CannedMessageModule::drawKeyboard(OLEDDisplay *display, OLEDDisplayUiState 
                 } else {
                     display->drawRect(xOffset, yOffset, cellWidth, cellHeight);
 
-                    drawBackspaceIcon(display, xOffset + characterOffset, yOffset + yCorrection + 5, 1.2);
+                    drawBackspaceIcon(display, xOffset + characterOffset, yOffset + yCorrection + 5, specialKeyScale);
                 }
             } else if (letter.character == "↵") {
                 display->drawRect(xOffset, yOffset, cellWidth, cellHeight);
 
-                drawEnterIcon(display, xOffset + characterOffset, yOffset + yCorrection + 5, 1.7);
+                drawEnterIcon(display, xOffset + characterOffset, yOffset + yCorrection + 5, specialKeyScale);
             } else {
                 if (this->highlight == letter.character[0]) {
                     display->fillRect(xOffset, yOffset, cellWidth, cellHeight);
 
                     display->setColor(OLEDDISPLAY_COLOR::BLACK);
 
+// Elecrow-CRT01262M
+// Kludge: move the spacebar text over, to fit in the box
+#ifdef PRIVATE_HW
+                    display->drawString(xOffset + characterOffset + (letter.character == " " ? 10 : 0), yOffset + yCorrection,
+                                        letter.character == " " ? "space" : letter.character);
+#else
                     display->drawString(xOffset + characterOffset, yOffset + yCorrection,
                                         letter.character == " " ? "space" : letter.character);
-
+#endif
                     display->setColor(OLEDDISPLAY_COLOR::WHITE);
 
                     setIntervalFromNow(0);
                 } else {
                     display->drawRect(xOffset, yOffset, cellWidth, cellHeight);
 
+// Elecrow-CRT01262M
+// Kludge: move the spacebar text over, to fit in the box
+#ifdef PRIVATE_HW
+                    display->drawString(xOffset + characterOffset + (letter.character == " " ? 10 : 0), yOffset + yCorrection,
+                                        letter.character == " " ? "space" : letter.character);
+#else
                     display->drawString(xOffset + characterOffset, yOffset + yCorrection,
                                         letter.character == " " ? "space" : letter.character);
+
+#endif
                 }
             }
         }
@@ -1675,7 +1714,9 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         EInkDynamicDisplay *einkDisplay = static_cast<EInkDynamicDisplay *>(display);
         einkDisplay->enableUnlimitedFastMode();
 #endif
-#if defined(USE_VIRTUAL_KEYBOARD)
+#if defined(T_WATCH_S3) || defined(RAK14014) || defined(PRIVATE_HW) // Elecrow-CRT01262M
+        drawKeyboard(display, state, 0, 0);
+#elif defined(USE_VIRTUAL_KEYBOARD)
         drawKeyboard(display, state, 0, 0);
 #else
         display->setTextAlignment(TEXT_ALIGN_LEFT);

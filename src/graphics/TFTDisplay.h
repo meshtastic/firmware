@@ -3,6 +3,10 @@
 #include <GpioLogic.h>
 #include <OLEDDisplay.h>
 
+#ifndef TFT_BACKLIGHT_ON
+#define TFT_BACKLIGHT_ON HIGH
+#endif
+
 /**
  * An adapter class that allows using the LovyanGFX library as if it was an OLEDDisplay implementation.
  *

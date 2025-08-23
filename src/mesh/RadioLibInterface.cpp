@@ -40,6 +40,13 @@ RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE c
     : NotifiedWorkerThread("RadioIf"), module(hal, cs, irq, rst, busy), iface(_iface)
 {
     instance = this;
+#ifdef RF95_USE_POLLING
+    configuredIrqPin = irq;
+    if (configuredIrqPin == RADIOLIB_NC) {
+        usePolling = true;
+        LOG_INFO("RadioLibInterface: IRQ pin NC, enabling polling mode.\n");
+    }
+#endif
 #if defined(ARCH_STM32WL) && defined(USE_SX1262)
     module.setCb_digitalWrite(stm32wl_emulate_digitalWrite);
     module.setCb_digitalRead(stm32wl_emulate_digitalRead);
@@ -246,6 +253,37 @@ currently active.
 void RadioLibInterface::onNotify(uint32_t notification)
 {
     switch (notification) {
+    case POLL_EVENT:
+        if (usePolling) {
+            // Process up to two events per poll (e.g., TX_DONE followed by RX_DONE)
+            // to avoid an extra poll tick in the rare case both flags are set.
+            bool handledAny = false;
+            for (int attempt = 0; attempt < 2; ++attempt) {
+                PendingISR cause = checkPendingInterrupt();
+                if (cause == ISR_TX) {
+                    LOG_DEBUG("RadioLibInterface: POLL detected TX_DONE.\n");
+                    handleTransmitInterrupt();
+                    startReceive();
+                    handledAny = true;
+                    continue; // check again for a possible RX_DONE
+                }
+                if (cause == ISR_RX) {
+                    LOG_DEBUG("RadioLibInterface: POLL detected RX_DONE.\n");
+                    handleReceiveInterrupt();
+                    startReceive();
+                    handledAny = true;
+                    continue; // check again for a possible second event
+                }
+                break; // no more pending events
+            }
+            if (handledAny) {
+                setTransmitDelay();
+            }
+            if (isReceiving || sendingPacket != NULL) {
+                schedulePoll();
+            }
+        }
+        break;
     case ISR_TX:
         handleTransmitInterrupt();
         startReceive();
@@ -484,6 +522,10 @@ void RadioLibInterface::startReceive()
 {
     isReceiving = true;
     powerMon->setState(meshtastic_PowerMon_State_Lora_RXOn);
+    if (usePolling) {
+        LOG_DEBUG("RadioLibInterface: startReceive using polling mode.\n");
+        schedulePoll();
+    }
 }
 
 void RadioLibInterface::configHardwareForSend()
@@ -522,13 +564,24 @@ bool RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
             powerMon->clearState(meshtastic_PowerMon_State_Lora_TXOn); // Transmitter off now
             startReceive(); // Restart receive mode (because startTransmit failed to put us in xmit mode)
         } else {
-            // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register
-            // bits
-            enableInterrupt(isrTxLevel0);
+            // Must be done AFTER starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
+            if (usePolling) {
+                LOG_DEBUG("RadioLibInterface: startSend using polling mode.\n");
+                schedulePoll();
+            } else {
+                enableInterrupt(isrTxLevel0);
+            }
             lastTxStart = millis();
             printPacket("Started Tx", txp);
         }
 
         return res == RADIOLIB_ERR_NONE;
+    }
+}
+
+void RadioLibInterface::schedulePoll(uint32_t delayMsec)
+{
+    if (usePolling) {
+        notifyLater(delayMsec, POLL_EVENT, false);
     }
 }

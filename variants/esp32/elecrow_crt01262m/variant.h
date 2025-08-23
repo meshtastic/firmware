@@ -1,0 +1,72 @@
+#define LED_PIN 5
+#define LED_INVERTED true
+#define BUTTON_PIN 0
+
+// LoRa
+#define USE_RF95
+#define RF95_USE_POLLING 1
+
+#define LORA_SCK 33
+#define LORA_MISO 35
+#define LORA_MOSI 32
+#define LORA_CS 14
+#define LORA_RESET 12
+#define LORA_DIO0 RADIOLIB_NC
+#define LORA_DIO1 34
+#define LORA_DIO2 RADIOLIB_NC
+
+// RAM tuning for this low-RAM board
+#ifndef MAX_TX_QUEUE
+#define MAX_TX_QUEUE 16 // 16 (default), lower and it started dropping packets.
+#endif
+#ifndef MAX_RX_TOPHONE
+#define MAX_RX_TOPHONE 16
+#endif
+#ifndef MAX_MQTT_QUEUE
+#define MAX_MQTT_QUEUE 8
+#endif
+#ifndef MAX_NUM_NODES
+#define MAX_NUM_NODES 50
+#endif
+
+// Lower display command queue to save RAM on this board
+#ifndef SCREEN_CMD_QUEUE_SIZE
+#define SCREEN_CMD_QUEUE_SIZE 32
+#endif
+
+// Display
+#define HAS_SCREEN 1
+#define ST7735S 1
+#define ST7735_CS 2
+#define ST7735_RS 4   // DC
+#define ST7735_SDA 32 // MOSI
+#define ST7735_SCK 33
+#define ST7735_RESET -1
+#define ST7735_MISO 35
+#define ST7735_BUSY -1
+#define ST7735_SPI_HOST VSPI_HOST
+#define SPI_FREQUENCY 40000000
+#define SPI_READ_FREQUENCY 16000000
+#define TFT_MESH_OVERRIDE COLOR565(0xFF, 0xFF, 0xFF)
+#define TFT_HEIGHT 160
+#define TFT_WIDTH 128
+#define TFT_OFFSET_X -2
+#define TFT_OFFSET_Y -1
+#define TFT_INVERT false
+#define TFT_BL 16
+#define ST7735_BL -1
+#define SCREEN_TRANSITION_FRAMERATE 5 // fps
+#define DISPLAY_FORCE_SMALL_FONTS
+
+// Touch (disabled to save RAM)
+#undef HAS_TOUCHSCREEN
+#define HAS_TOUCHSCREEN 0
+#undef USE_XPT2046
+//#define TOUCH_SPIHOST VSPI_HOST
+//#define TOUCH_CS 15
+//#define TOUCH_IRQ 39
+//#define TOUCH_SCK LORA_SCK
+//#define TOUCH_MOSI LORA_MOSI
+//#define TOUCH_MISO LORA_MISO
+//#define TOUCH_THRESHOLD_X 35
+//#define TOUCH_THRESHOLD_Y 35
