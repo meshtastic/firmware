@@ -720,6 +720,13 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             requiresReboot = false;
         }
 
+#if defined(ARCH_PORTDUINO)
+        // If running on portduino and using SimRadio, do not require reboot
+        if (SimRadio::instance) {
+            requiresReboot = false;
+        }
+#endif
+
 #ifdef RF95_FAN_EN
         // Turn PA off if disabled by config
         if (c.payload_variant.lora.pa_fan_disabled) {
