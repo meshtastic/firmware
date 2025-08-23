@@ -104,7 +104,7 @@ class LGFX : public lgfx::LGFX_Device
             touch_cfg.bus_shared = true;
 
 // Elecrow-CRT01262M
-#elif defined(PRIVATE_HW)
+#elif defined(ELECROW_CRT01262M)
             // Uses defaults from lgfx::v1:Touch_XPT2046 constructor
             // touch_cfg.x_min = 300;
             // touch_cfg.x_max = 3900;
@@ -1317,8 +1317,8 @@ bool TFTDisplay::connect()
     tft->setRotation(2); // T-Watch S3 left-handed orientation
 #elif ARCH_PORTDUINO || defined(SENSECAP_INDICATOR)
     tft->setRotation(0); // use config.yaml to set rotation
-#elif defined(PRIVATE_HW)
-    tft->setRotation(2); // Elecrow CRT01262M - testing
+#elif defined(ELECROW_CRT01262M)
+    tft->setRotation(2); // Elecrow CRT01262M
 #else
     tft->setRotation(3); // Orient horizontal and wide underneath the silkscreen name label
 #endif

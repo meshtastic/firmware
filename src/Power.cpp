@@ -762,8 +762,8 @@ void Power::shutdown()
     ledOff(PIN_LED3);
 #endif
     // On explicit shutdown, skip preflight waits so we don't hang on queued TX.
-    // It is acceptable to drop any pending transmissions when powering off.
-    doDeepSleep(DELAY_FOREVER, true, true);
+    // Save NodeDB to avoid data loss during power-off.
+    doDeepSleep(DELAY_FOREVER, true, false);
 #elif defined(ARCH_PORTDUINO)
     exit(EXIT_SUCCESS);
 #else

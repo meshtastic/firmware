@@ -1,4 +1,5 @@
 #define LED_PIN 5
+#define ELECROW_CRT01262M 1
 #define LED_INVERTED true
 #define BUTTON_PIN 0
 
@@ -20,7 +21,7 @@
 #define MAX_TX_QUEUE 16 // 16 (default), lower and it started dropping packets.
 #endif
 #ifndef MAX_RX_TOPHONE
-#define MAX_RX_TOPHONE 16
+#define MAX_RX_TOPHONE 32
 #endif
 #ifndef MAX_MQTT_QUEUE
 #define MAX_MQTT_QUEUE 8
@@ -58,15 +59,14 @@
 #define SCREEN_TRANSITION_FRAMERATE 5 // fps
 #define DISPLAY_FORCE_SMALL_FONTS
 
-// Touch (disabled to save RAM)
-#undef HAS_TOUCHSCREEN
-#define HAS_TOUCHSCREEN 0
-#undef USE_XPT2046
-//#define TOUCH_SPIHOST VSPI_HOST
-//#define TOUCH_CS 15
-//#define TOUCH_IRQ 39
-//#define TOUCH_SCK LORA_SCK
-//#define TOUCH_MOSI LORA_MOSI
-//#define TOUCH_MISO LORA_MISO
-//#define TOUCH_THRESHOLD_X 35
-//#define TOUCH_THRESHOLD_Y 35
+// Touch (enabled)
+#define HAS_TOUCHSCREEN 1
+#define USE_XPT2046 1
+#define TOUCH_SPIHOST VSPI_HOST
+#define TOUCH_CS 15
+#define TOUCH_IRQ 39
+#define TOUCH_SCK LORA_SCK
+#define TOUCH_MOSI LORA_MOSI
+#define TOUCH_MISO LORA_MISO
+#define TOUCH_THRESHOLD_X 35
+#define TOUCH_THRESHOLD_Y 35

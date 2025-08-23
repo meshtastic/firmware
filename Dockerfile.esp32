@@ -29,9 +29,7 @@ RUN ./bin/build-esp32.sh elecrow-crt01262m
 # Create output directory and copy all build artifacts
 RUN mkdir -p /output && \
     cp release/* /output/ 2>/dev/null || \
-    echo "Copying release files..." && \
-    ls -la release/ && \
-    cp release/* /output/
+    (echo "Copying release files..." && ls -la release/ && cp release/* /output/ || true)
 
 # List what we've got
 RUN echo "=== Build Output ===" && ls -la /output/
