@@ -1,3 +1,5 @@
+#define HAS_32768HZ
+
 #define I2C_SCL SCL
 #define I2C_SDA SDA
 
