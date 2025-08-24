@@ -1214,6 +1214,7 @@ void menuHandler::FrameToggles_menu()
 
     optionsArray[options] = screen->isFrameHidden("gps") ? "Show Position" : "Hide Position";
     optionsEnumArray[options++] = gps;
+#endif
 
     optionsArray[options] = screen->isFrameHidden("lora") ? "Show LoRa" : "Hide LoRa";
     optionsEnumArray[options++] = lora;
@@ -1223,7 +1224,6 @@ void menuHandler::FrameToggles_menu()
 
     optionsArray[options] = screen->isFrameHidden("show_favorites") ? "Show Favorites" : "Hide Favorites";
     optionsEnumArray[options++] = show_favorites;
-#endif
 
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Show/Hide Frames";
