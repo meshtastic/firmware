@@ -4,6 +4,10 @@
 
 // Forward declarations for test functions
 void test_text_message_serialization();
+void test_text_message_serialization_null();
+void test_text_message_serialization_long_text();
+void test_text_message_serialization_oversized();
+void test_text_message_serialization_invalid_utf8();
 void test_position_serialization();
 void test_nodeinfo_serialization();
 void test_waypoint_serialization();
@@ -21,6 +25,10 @@ void setup()
 
     // Text message tests
     RUN_TEST(test_text_message_serialization);
+    RUN_TEST(test_text_message_serialization_null);
+    RUN_TEST(test_text_message_serialization_long_text);
+    RUN_TEST(test_text_message_serialization_oversized);
+    RUN_TEST(test_text_message_serialization_invalid_utf8);
 
     // Position tests
     RUN_TEST(test_position_serialization);
