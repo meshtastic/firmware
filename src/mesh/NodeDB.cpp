@@ -832,7 +832,7 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.nag_timeout = 60;
 #endif
 #ifdef T_LORA_PAGER
-    moduleConfig.canned_message.rotary1_enabled = true;
+    moduleConfig.canned_message.updown1_enabled = true;
     moduleConfig.canned_message.inputbroker_pin_a = ROTARY_A;
     moduleConfig.canned_message.inputbroker_pin_b = ROTARY_B;
     moduleConfig.canned_message.inputbroker_pin_press = ROTARY_PRESS;
