@@ -21,6 +21,7 @@
 #include "target_specific.h"
 #include <Preferences.h>
 #include <driver/rtc_io.h>
+#include <driver/uart.h>
 #include <nvs.h>
 #include <nvs_flash.h>
 
@@ -259,4 +260,52 @@ void cpuDeepSleep(uint32_t msecToWake)
 
     esp_sleep_enable_timer_wakeup(msecToWake * 1000ULL); // call expects usecs
     esp_deep_sleep_start();                              // TBD mA sleep current (battery)
+}
+
+bool setSerialClockToRefTick(int uart_num)
+{
+#if !SOC_UART_SUPPORT_REF_TICK
+    return false;
+#else
+    uart_config_t uart_config;
+    uint32_t baudrate;
+
+    if (uart_get_baudrate(uart_num, &baudrate) != ESP_OK) {
+        LOG_ERROR("Unable to get UART baudrate");
+        return false;
+    }
+
+    uart_config.baud_rate = (int)baudrate;
+
+    if (uart_get_word_length(uart_num, &uart_config.data_bits) != ESP_OK) {
+        LOG_ERROR("Unable to get UART baudrate");
+        return false;
+    }
+    if (uart_get_parity(uart_num, &uart_config.parity) != ESP_OK) {
+        LOG_ERROR("Unable to get UART baudrate");
+        return false;
+    }
+    if (uart_get_stop_bits(uart_num, &uart_config.stop_bits) != ESP_OK) {
+        LOG_ERROR("Unable to get UART baudrate");
+        return false;
+    }
+    if (uart_get_hw_flow_ctrl(uart_num, &uart_config.flow_ctrl) != ESP_OK) {
+        LOG_ERROR("Unable to get UART baudrate");
+        return false;
+    }
+
+    if (uart_config.flow_ctrl != UART_HW_FLOWCTRL_DISABLE) {
+        uart_config.rx_flow_ctrl_thresh = 122;
+    }
+
+    uart_config.source_clk = UART_SCLK_REF_TICK;
+
+    // Configure UART parameters
+    if (uart_param_config(uart_num, &uart_config) != ESP_OK) {
+        LOG_ERROR("Unable to get UART baudrate");
+        return false;
+    }
+
+    return true;
+#endif
 }

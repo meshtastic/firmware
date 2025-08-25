@@ -68,6 +68,9 @@ Observable<esp_sleep_wakeup_cause_t> notifyLightSleepEnd;
 esp_pm_lock_handle_t pmLightSleepLock;
 #endif
 
+// this are imported symbol with target-specific implementation
+bool setSerialClockToRefTick(int uart_num);
+
 // restores GPIO function after sleep
 void gpioReset(void);
 // enables button wake-up interrupt
@@ -77,6 +80,9 @@ void enableLoraInterrupt(void);
 
 bool shouldLoraWake(uint32_t msecToWake);
 #endif
+
+// this are imported symbol with target-specific implementation
+void cpuDeepSleep(uint32_t msecToWake);
 
 // deep sleep support
 RTC_DATA_ATTR int bootCount = 0;
@@ -455,6 +461,13 @@ void doLightSleep(uint32_t sleepMsec)
 void initLightSleep()
 {
     esp_err_t res;
+    bool dfsSupported = true;
+
+#if defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2)
+    if (dfsSupported) {
+        dfsSupported &= setSerialClockToRefTick(UART_NUM_0);
+    }
+#endif
 
 #ifdef HAS_ESP32_PM_SUPPORT
     res = esp_pm_lock_create(ESP_PM_NO_LIGHT_SLEEP, 0, "meshtastic", &pmLightSleepLock);
@@ -465,7 +478,7 @@ void initLightSleep()
 
     esp_pm_config_esp32_t pm_config;
     pm_config.max_freq_mhz = 80;
-    pm_config.min_freq_mhz = 20;
+    pm_config.min_freq_mhz = dfsSupported ? 20 : pm_config.max_freq_mhz;
 #ifdef HAS_ESP32_DYNAMIC_LIGHT_SLEEP
     pm_config.light_sleep_enable = true;
 #else
