@@ -483,8 +483,14 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     type = MLX90614;
                     logFoundDevice("MLX90614", (uint8_t)addr.address);
                 } else {
-                    type = MPR121KB;
-                    logFoundDevice("MPR121KB", (uint8_t)addr.address);
+                    registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 1); // DRV2605_REG_STATUS
+                    if (registerValue == 0xe0) {
+                        type = DRV2605;
+                        logFoundDevice("DRV2605", (uint8_t)addr.address);
+                    } else {
+                        type = MPR121KB;
+                        logFoundDevice("MPR121KB", (uint8_t)addr.address);
+                    }
                 }
                 break;
 
