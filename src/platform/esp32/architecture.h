@@ -215,3 +215,13 @@
 #endif
 
 #define SERIAL0_RX_GPIO 3 // Always GPIO3 on ESP32 // FIXME: may be different on ESP32-S3, etc.
+
+// Setup flag, which indicates if our device supports power management
+#ifdef CONFIG_PM_ENABLE
+#define HAS_ESP32_PM_SUPPORT 1
+#endif
+
+// Setup flag, which indicates if our device supports dynamic light sleep
+#if defined(HAS_ESP32_PM_SUPPORT) && defined(CONFIG_FREERTOS_USE_TICKLESS_IDLE)
+#define HAS_ESP32_DYNAMIC_LIGHT_SLEEP 1
+#endif
