@@ -1,3 +1,5 @@
+#ifdef T_LORA_PAGER
+
 #include "RotaryEncoderImpl.h"
 #include "InputBroker.h"
 #include "RotaryEncoder.h"
@@ -66,3 +68,5 @@ int32_t RotaryEncoderImpl::runOnce()
 
     return 20;
 }
+
+#endif
