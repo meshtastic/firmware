@@ -21,7 +21,7 @@ void doLightSleep(uint32_t msecToWake);
 
 // perform power on init that we do on each wake from deep sleep
 void initDeepSleep();
-void doDeepSleep(uint32_t msecToWake, bool skipPreflight, bool skipSaveNodeDb), cpuDeepSleep(uint32_t msecToWake);
+void doDeepSleep(uint32_t msecToWake, bool skipPreflight, bool skipSaveNodeDb);
 
 void setCPUFast(bool on);
 
