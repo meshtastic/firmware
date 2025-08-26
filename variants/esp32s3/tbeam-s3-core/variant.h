@@ -62,6 +62,6 @@
 // #define PCF8563_RTC 0x51         //Putting definitions in variant. h does not compile correctly
 
 // has 32768 Hz crystal
-#define HAS_32768HZ
+#define HAS_32768HZ 1
 
 #define USE_SH1106
