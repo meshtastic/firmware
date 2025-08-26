@@ -85,7 +85,7 @@ static void lsEnter()
     sleepStart = -1;
     sleepTime = 0;
 
-#ifdef HAS_ESP32_DYNAMIC_LIGHT_SLEEP
+#if HAS_ESP32_DYNAMIC_LIGHT_SLEEP
     if (!doPreflightSleep()) {
         LOG_DEBUG("Transition to LS state aborted because of tasks pending");
         powerFSM.trigger(EVENT_WAKE_TIMER);
@@ -102,7 +102,7 @@ static void lsEnter()
 static void lsIdle()
 {
     if (!doPreflightSleep()) {
-#ifdef HAS_ESP32_DYNAMIC_LIGHT_SLEEP
+#if HAS_ESP32_DYNAMIC_LIGHT_SLEEP
         powerFSM.trigger(EVENT_WAKE_TIMER);
 #endif
         return;
@@ -119,7 +119,7 @@ static void lsIdle()
     }
 
 #ifdef ARCH_ESP32
-#ifndef HAS_ESP32_DYNAMIC_LIGHT_SLEEP
+#if !HAS_ESP32_DYNAMIC_LIGHT_SLEEP
     doLightSleep(sleepLeft);
 #endif
 
@@ -158,7 +158,7 @@ static void lsIdle()
 
 static void lsExit()
 {
-#ifdef HAS_ESP32_DYNAMIC_LIGHT_SLEEP
+#if HAS_ESP32_DYNAMIC_LIGHT_SLEEP
     doLightSleep(LIGHT_SLEEP_ABORT);
 #endif
 
@@ -336,7 +336,7 @@ void PowerFSM_setup()
     powerFSM.add_transition(&stateLS, &stateDARK, EVENT_WEB_REQUEST, NULL, "Web request");
     powerFSM.add_transition(&stateDARK, &stateDARK, EVENT_WEB_REQUEST, NULL, "Web request");
 
-#ifdef HAS_ESP32_DYNAMIC_LIGHT_SLEEP
+#if HAS_ESP32_DYNAMIC_LIGHT_SLEEP
     // it's better to exit dynamic light sleep when packet is received to ensure routing is properly handled
     powerFSM.add_transition(&stateLS, &stateDARK, EVENT_RADIO_INTERRUPT, NULL, "Radio interrupt");
     powerFSM.add_transition(&stateDARK, &stateDARK, EVENT_RADIO_INTERRUPT, NULL, "Radio interrupt");
