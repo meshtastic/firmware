@@ -20,15 +20,15 @@ void UpDownInterruptBase::init(uint8_t pinDown, uint8_t pinUp, uint8_t pinPress,
     isRAK = true;
 #endif
 
-    if (!RAK_4631 || pinPress != 0) {
+    if (!isRAK || pinPress != 0) {
         pinMode(pinPress, INPUT_PULLUP);
         attachInterrupt(pinPress, onIntPress, RISING);
     }
-    if (!RAK_4631 || this->_pinDown != 0) {
+    if (!isRAK || this->_pinDown != 0) {
         pinMode(this->_pinDown, INPUT_PULLUP);
         attachInterrupt(this->_pinDown, onIntDown, RISING);
     }
-    if (!RAK_4631 || this->_pinUp != 0) {
+    if (!isRAK || this->_pinUp != 0) {
         pinMode(this->_pinUp, INPUT_PULLUP);
         attachInterrupt(this->_pinUp, onIntUp, RISING);
     }

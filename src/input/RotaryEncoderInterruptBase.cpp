@@ -23,15 +23,15 @@ void RotaryEncoderInterruptBase::init(
     isRAK = true;
 #endif
 
-    if (!RAK_4631 || pinPress != 0) {
+    if (!isRAK || pinPress != 0) {
         pinMode(pinPress, INPUT_PULLUP);
         attachInterrupt(pinPress, onIntPress, RISING);
     }
-    if (!RAK_4631 || this->_pinA != 0) {
+    if (!isRAK || this->_pinA != 0) {
         pinMode(this->_pinA, INPUT_PULLUP);
         attachInterrupt(this->_pinA, onIntA, CHANGE);
     }
-    if (!RAK_4631 || this->_pinA != 0) {
+    if (!isRAK || this->_pinA != 0) {
         pinMode(this->_pinB, INPUT_PULLUP);
         attachInterrupt(this->_pinB, onIntB, CHANGE);
     }
