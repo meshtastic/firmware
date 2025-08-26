@@ -74,9 +74,9 @@ class SEN5XSensor : public TelemetrySensor
 
     enum SEN5XState { SEN5X_OFF, SEN5X_IDLE, SEN5X_MEASUREMENT, SEN5X_MEASUREMENT_2, SEN5X_CLEANING, SEN5X_NOT_DETECTED };
     SEN5XState state = SEN5X_OFF;
-    // TODO - Remove
-    bool continousMode = false;
-    bool forcedContinousMode = false;
+    // Flag to work on one-shot (read and sleep), or continuous mode
+    bool oneShotMode = true;
+    void setMode(bool setOneShot);
 
     bool sendCommand(uint16_t wichCommand);
     bool sendCommand(uint16_t wichCommand, uint8_t* buffer, uint8_t byteNumber=0);

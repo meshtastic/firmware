@@ -238,6 +238,11 @@ bool SEN5XSensor::idle()
         vocValid = false;
     }
 
+    if (!oneShotMode) {
+        LOG_INFO("SEN5X: Not stopping measurement, continuous mode!");
+        return true;
+    }
+
     if (!sendCommand(SEN5X_STOP_MEASUREMENT)) {
         LOG_ERROR("SEN5X: Error stoping measurement");
         return false;
@@ -336,6 +341,7 @@ bool SEN5XSensor::loadState()
         } else {
             lastCleaning = sen5xstate.last_cleaning_time;
             lastCleaningValid = sen5xstate.last_cleaning_valid;
+            oneShotMode = sen5xstate.one_shot_mode;
             // Unpack state
             vocState[7] = (uint8_t)(sen5xstate.voc_state >> 56);
             vocState[6] = (uint8_t)(sen5xstate.voc_state >> 48);
@@ -370,6 +376,7 @@ bool SEN5XSensor::saveState()
 
     sen5xstate.last_cleaning_time = lastCleaning;
     sen5xstate.last_cleaning_valid = lastCleaningValid;
+    sen5xstate.one_shot_mode = oneShotMode;
 
     // Unpack state (12 bytes in two parts)
     sen5xstate.voc_state = ((uint64_t) vocState[7] << 56) |
@@ -869,32 +876,41 @@ bool SEN5XSensor::getMetrics(meshtastic_Telemetry *measurement)
     return true;
 }
 
+void SEN5XSensor::setMode(bool setOneShot) {
+    oneShotMode = setOneShot;
+}
+
 AdminMessageHandleResult SEN5XSensor::handleAdminMessage(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,
                                                            meshtastic_AdminMessage *response)
 {
     AdminMessageHandleResult result;
     result = AdminMessageHandleResult::NOT_HANDLED;
 
-    // TODO - Add admin command to set temperature offset
-    // switch (request->which_payload_variant) {
-    //     case meshtastic_AdminMessage_sensor_config_tag:
-    //         if (!request->sensor_config.has_sen5x_config) {
-    //             result = AdminMessageHandleResult::NOT_HANDLED;
-    //             break;
-    //         }
 
-    //         // Check for temperature offset
-    //         // if (request->sensor_config.sen5x_config.has_set_temperature) {
-    //         //     this->setTemperature(request->sensor_config.sen5x_config.set_temperature);
-    //         // }
+    switch (request->which_payload_variant) {
+        case meshtastic_AdminMessage_sensor_config_tag:
+            if (!request->sensor_config.has_sen5x_config) {
+                result = AdminMessageHandleResult::NOT_HANDLED;
+                break;
+            }
 
-    //         // result = AdminMessageHandleResult::HANDLED;
-    //         result = AdminMessageHandleResult::NOT_HANDLED;
-    //         break;
+            // TODO - Add admin command to set temperature offset
+            // Check for temperature offset
+            // if (request->sensor_config.sen5x_config.has_set_temperature) {
+            //     this->setTemperature(request->sensor_config.sen5x_config.set_temperature);
+            // }
 
-    //     default:
-    //         result = AdminMessageHandleResult::NOT_HANDLED;
-    // }
+            // Check for one-shot/continuous mode request
+            if (request->sensor_config.sen5x_config.has_set_one_shot_mode) {
+                this->setMode(request->sensor_config.sen5x_config.set_one_shot_mode);
+            }
+
+            result = AdminMessageHandleResult::HANDLED;
+            break;
+
+        default:
+            result = AdminMessageHandleResult::NOT_HANDLED;
+    }
 
     return result;
 }
