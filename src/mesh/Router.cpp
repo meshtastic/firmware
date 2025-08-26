@@ -416,6 +416,27 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
             }
         }
     }
+
+    // Fallback: for UDP multicast, try default preset names with default PSK if normal channel match failed
+    if (!decrypted && p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MULTICAST_UDP) {
+        if (channels.setDefaultPresetCryptoForHash(p->channel)) {
+            memcpy(bytes, p->encrypted.bytes, rawSize);
+            crypto->decrypt(p->from, p->id, rawSize, bytes);
+
+            meshtastic_Data decodedtmp;
+            memset(&decodedtmp, 0, sizeof(decodedtmp));
+            if (pb_decode_from_bytes(bytes, rawSize, &meshtastic_Data_msg, &decodedtmp) &&
+                decodedtmp.portnum != meshtastic_PortNum_UNKNOWN_APP) {
+                p->decoded = decodedtmp;
+                p->which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+                // Map to our primary channel index so subsequent processing and re-encoding use local preset
+                chIndex = channels.getPrimaryIndex();
+                decrypted = true;
+            } else {
+                LOG_WARN("UDP fallback decode attempted but failed for hash 0x%x", p->channel);
+            }
+        }
+    }
     if (decrypted) {
         // parsing was successful
         p->channel = chIndex; // change to store the index instead of the hash

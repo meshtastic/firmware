@@ -68,6 +68,13 @@ bool FloodingRouter::isRebroadcaster()
 void FloodingRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
 {
     if (!isToUs(p) && (p->hop_limit > 0) && !isFromUs(p)) {
+        // If this packet arrived via UDP and is still encrypted, skip rebroadcast.
+        // We expect the router to decode and then re-encode to our local preset before sending.
+        if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MULTICAST_UDP &&
+            p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag) {
+            LOG_DEBUG("Skip rebroadcast of UDP-encrypted packet; awaiting local decode/re-encode");
+            return;
+        }
         if (p->id != 0) {
             if (isRebroadcaster()) {
                 meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
