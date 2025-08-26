@@ -29,8 +29,9 @@ bool RotaryEncoderImpl::init()
 
     inputBroker->registerSource(this);
 
-    LOG_INFO("RotaryEncoder initialized (%d, %d, %d)", moduleConfig.canned_message.inputbroker_pin_a,
-             moduleConfig.canned_message.inputbroker_pin_b, moduleConfig.canned_message.inputbroker_pin_press);
+    LOG_INFO("RotaryEncoder initialized pins(%d, %d, %d), events(%d, %d, %d)", moduleConfig.canned_message.inputbroker_pin_a,
+             moduleConfig.canned_message.inputbroker_pin_b, moduleConfig.canned_message.inputbroker_pin_press, eventCw, eventCcw,
+             eventPressed);
     return true;
 }
 

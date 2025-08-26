@@ -836,8 +836,8 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.canned_message.inputbroker_pin_a = ROTARY_A;
     moduleConfig.canned_message.inputbroker_pin_b = ROTARY_B;
     moduleConfig.canned_message.inputbroker_pin_press = ROTARY_PRESS;
-    moduleConfig.canned_message.inputbroker_event_ccw = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP;
-    moduleConfig.canned_message.inputbroker_event_cw = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN;
+    moduleConfig.canned_message.inputbroker_event_cw = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar(28);
+    moduleConfig.canned_message.inputbroker_event_ccw = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar(29);
     moduleConfig.canned_message.inputbroker_event_press = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT;
 #endif
     moduleConfig.has_canned_message = true;
