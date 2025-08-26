@@ -2,6 +2,7 @@
 #ifndef VARIANT_H
 #define VARIANT_H
 
+
 #ifdef DIY_V1
 // OLED
 #define I2C_SDA 21
