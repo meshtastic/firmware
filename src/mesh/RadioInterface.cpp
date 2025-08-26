@@ -185,6 +185,14 @@ const RegionInfo regions[] = {
     RDEF(BR_902, 902.0f, 907.5f, 100, 0, 30, true, false, false),
 
     /*
+        Israel
+        917.3 - 919.9 MHz, <25 mW erp, 1% duty cycle, 200 kHz spacing, 125 kHz bandwidth
+        https://free-justice.openapi.gov.il/free/moj/portal/rest/searchpredefinedapi/v1/SearchPredefinedApi/Documents/IdngyMn~ojdQSrkxuAqfZqiM8c1foi3TSZQhp7OMszo=
+        https://olaw.org.il/takanot/takanot-9301.pdf
+    */
+    RDEF(IL_917, 917.3f, 919.9f, 1, 200, 14, true, false, false),
+
+    /*
        2.4 GHZ WLAN Band equivalent. Only for SX128x chips.
     */
     RDEF(LORA_24, 2400.0f, 2483.5f, 100, 0, 10, true, false, true),
