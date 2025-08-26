@@ -1,7 +1,5 @@
 #define LED_POWER LED
 
-#define HAS_32768HZ
-
 #define USE_SSD1306 // Heltec_v3 has a SSD1306 display
 
 #define RESET_OLED RST_OLED

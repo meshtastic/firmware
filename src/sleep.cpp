@@ -18,7 +18,7 @@
 #include "target_specific.h"
 
 #ifdef ARCH_ESP32
-#ifdef HAS_ESP32_PM_SUPPORT
+#if HAS_ESP32_PM_SUPPORT
 #include "esp32/pm.h"
 #include "esp_pm.h"
 #endif
@@ -64,7 +64,7 @@ Observable<void *> notifyLightSleep;
 /// Called to tell observers that light sleep has just ended, and why it ended
 Observable<esp_sleep_wakeup_cause_t> notifyLightSleepEnd;
 
-#ifdef HAS_ESP32_PM_SUPPORT
+#if HAS_ESP32_PM_SUPPORT
 esp_pm_lock_handle_t pmLightSleepLock;
 #endif
 
@@ -338,7 +338,7 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
 }
 
 #ifdef ARCH_ESP32
-#ifdef HAS_ESP32_DYNAMIC_LIGHT_SLEEP
+#if HAS_ESP32_DYNAMIC_LIGHT_SLEEP
 static bool pmLightSleepLockAcquired;
 #endif
 static concurrency::Lock *lightSleepConcurrencyLock;
@@ -355,7 +355,7 @@ void doLightSleep(uint32_t sleepMsec)
     assert(lightSleepConcurrencyLock);
     lightSleepConcurrencyLock->lock();
 
-#ifndef HAS_ESP32_DYNAMIC_LIGHT_SLEEP
+#if !HAS_ESP32_DYNAMIC_LIGHT_SLEEP
     assert(sleepMsec != LIGHT_SLEEP_ABORT);
     assert(sleepMsec != LIGHT_SLEEP_DYNAMIC);
 #else
@@ -447,7 +447,7 @@ void doLightSleep(uint32_t sleepMsec)
         notifyLightSleepEnd.notifyObservers(wakeCause);
 
     } else {
-#ifdef HAS_ESP32_DYNAMIC_LIGHT_SLEEP
+#if HAS_ESP32_DYNAMIC_LIGHT_SLEEP
         res = esp_pm_lock_release(pmLightSleepLock);
         assert(res == ESP_OK);
         pmLightSleepLockAcquired = false;
@@ -469,7 +469,7 @@ void initLightSleep()
     }
 #endif
 
-#ifdef HAS_ESP32_PM_SUPPORT
+#if HAS_ESP32_PM_SUPPORT
     res = esp_pm_lock_create(ESP_PM_NO_LIGHT_SLEEP, 0, "meshtastic", &pmLightSleepLock);
     assert(res == ESP_OK);
 
@@ -479,7 +479,7 @@ void initLightSleep()
     esp_pm_config_esp32_t pm_config;
     pm_config.max_freq_mhz = 80;
     pm_config.min_freq_mhz = dfsSupported ? 20 : pm_config.max_freq_mhz;
-#ifdef HAS_ESP32_DYNAMIC_LIGHT_SLEEP
+#if HAS_ESP32_DYNAMIC_LIGHT_SLEEP
     pm_config.light_sleep_enable = true;
 #else
     pm_config.light_sleep_enable = false;
@@ -494,7 +494,7 @@ void initLightSleep()
 
     lightSleepConcurrencyLock = new concurrency::Lock();
 
-#ifdef HAS_ESP32_DYNAMIC_LIGHT_SLEEP
+#if HAS_ESP32_DYNAMIC_LIGHT_SLEEP
     pmLightSleepLockAcquired = true;
 #endif
 }
