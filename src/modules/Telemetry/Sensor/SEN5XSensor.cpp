@@ -10,6 +10,7 @@
 #include "SafeFile.h"
 #include <pb_decode.h>
 #include <pb_encode.h>
+#include <float.h> // FLT_MAX
 
 SEN5XSensor::SEN5XSensor() : TelemetrySensor(meshtastic_TelemetrySensorType_SEN5X, "SEN5X") {}
 
@@ -620,7 +621,7 @@ bool SEN5XSensor::readValues()
         return false;
     }
 
-    // First get the integers
+    // Get the integers
     uint16_t uint_pM1p0        = static_cast<uint16_t>((dataBuffer[0]  << 8) | dataBuffer[1]);
     uint16_t uint_pM2p5        = static_cast<uint16_t>((dataBuffer[2]  << 8) | dataBuffer[3]);
     uint16_t uint_pM4p0        = static_cast<uint16_t>((dataBuffer[4]  << 8) | dataBuffer[5]);
@@ -630,17 +631,15 @@ bool SEN5XSensor::readValues()
     int16_t  int_vocIndex      = static_cast<int16_t>((dataBuffer[12]  << 8) | dataBuffer[13]);
     int16_t  int_noxIndex      = static_cast<int16_t>((dataBuffer[14]  << 8) | dataBuffer[15]);
 
-    // TODO we should check if values are NAN before converting them
-
     // Convert values based on Sensirion Arduino lib
-    sen5xmeasurement.pM1p0          = uint_pM1p0      / 10;
-    sen5xmeasurement.pM2p5          = uint_pM2p5      / 10;
-    sen5xmeasurement.pM4p0          = uint_pM4p0      / 10;
-    sen5xmeasurement.pM10p0         = uint_pM10p0     / 10;
-    sen5xmeasurement.humidity       = int_humidity    / 100.0f;
-    sen5xmeasurement.temperature    = int_temperature / 200.0f;
-    sen5xmeasurement.vocIndex       = int_vocIndex    / 10.0f;
-    sen5xmeasurement.noxIndex       = int_noxIndex    / 10.0f;
+    sen5xmeasurement.pM1p0          = !isnan(uint_pM1p0) ? uint_pM1p0 / 10 : UINT16_MAX;
+    sen5xmeasurement.pM2p5          = !isnan(uint_pM2p5) ? uint_pM2p5 / 10 : UINT16_MAX;
+    sen5xmeasurement.pM4p0          = !isnan(uint_pM4p0) ? uint_pM4p0 / 10 : UINT16_MAX;
+    sen5xmeasurement.pM10p0         = !isnan(uint_pM10p0) ? uint_pM10p0 / 10 : UINT16_MAX;
+    sen5xmeasurement.humidity       = !isnan(int_humidity) ? int_humidity / 100.0f : FLT_MAX;
+    sen5xmeasurement.temperature    = !isnan(int_temperature) ? int_temperature / 200.0f : FLT_MAX;
+    sen5xmeasurement.vocIndex       = !isnan(int_vocIndex) ? int_vocIndex / 10.0f : FLT_MAX;
+    sen5xmeasurement.noxIndex       = !isnan(int_noxIndex) ? int_noxIndex / 10.0f : FLT_MAX;
 
     LOG_DEBUG("Got: pM1p0=%u, pM2p5=%u, pM4p0=%u, pM10p0=%u",
                 sen5xmeasurement.pM1p0, sen5xmeasurement.pM2p5,
@@ -666,7 +665,7 @@ bool SEN5XSensor::readPnValues(bool cumulative)
         return false;
     }
 
-    // First get the integers
+    // Get the integers
     // uint16_t uint_pM1p0   = static_cast<uint16_t>((dataBuffer[0]   << 8) | dataBuffer[1]);
     // uint16_t uint_pM2p5   = static_cast<uint16_t>((dataBuffer[2]   << 8) | dataBuffer[3]);
     // uint16_t uint_pM4p0   = static_cast<uint16_t>((dataBuffer[4]   << 8) | dataBuffer[5]);
@@ -679,20 +678,13 @@ bool SEN5XSensor::readPnValues(bool cumulative)
     uint16_t uint_tSize   = static_cast<uint16_t>((dataBuffer[18]  << 8) | dataBuffer[19]);
 
     // Convert values based on Sensirion Arduino lib
-    sen5xmeasurement.pN0p5   = uint_pN0p5  / 10;
-    sen5xmeasurement.pN1p0   = uint_pN1p0  / 10;
-    sen5xmeasurement.pN2p5   = uint_pN2p5  / 10;
-    sen5xmeasurement.pN4p0   = uint_pN4p0  / 10;
-    sen5xmeasurement.pN10p0  = uint_pN10p0 / 10;
-    sen5xmeasurement.tSize   = uint_tSize  / 1000.0f;
-
-    // Convert PN readings from #/cm3 to #/0.1l
-    sen5xmeasurement.pN0p5  *= 100;
-    sen5xmeasurement.pN1p0  *= 100;
-    sen5xmeasurement.pN2p5  *= 100;
-    sen5xmeasurement.pN4p0  *= 100;
-    sen5xmeasurement.pN10p0 *= 100;
-    sen5xmeasurement.tSize  *= 100;
+    // Multiply by 100 for converting from #/cm3 to #/0.1l for PN values
+    sen5xmeasurement.pN0p5   = !isnan(uint_pN0p5) ? uint_pN0p5  / 10 * 100: UINT32_MAX;
+    sen5xmeasurement.pN1p0   = !isnan(uint_pN1p0) ? uint_pN1p0  / 10 * 100: UINT32_MAX;
+    sen5xmeasurement.pN2p5   = !isnan(uint_pN2p5) ? uint_pN2p5  / 10 * 100: UINT32_MAX;
+    sen5xmeasurement.pN4p0   = !isnan(uint_pN4p0) ? uint_pN4p0  / 10 * 100: UINT32_MAX;
+    sen5xmeasurement.pN10p0  = !isnan(uint_pN10p0) ? uint_pN10p0 / 10 * 100: UINT32_MAX;
+    sen5xmeasurement.tSize   = !isnan(uint_tSize) ? uint_tSize  / 1000.0f : FLT_MAX;
 
     // Remove accumuluative values:
     // https://github.com/fablabbcn/smartcitizen-kit-2x/issues/85
@@ -766,7 +758,7 @@ uint8_t SEN5XSensor::getMeasurements()
     }
 
     if(!readPnValues(false)) {
-        LOG_ERROR("SEN5X: Error getting PM readings");
+        LOG_ERROR("SEN5X: Error getting PN readings");
         return 2;
     }
 
@@ -828,39 +820,69 @@ bool SEN5XSensor::getMetrics(meshtastic_Telemetry *measurement)
     response = getMeasurements();
 
     if (response == 0) {
-        measurement->variant.air_quality_metrics.has_pm10_standard = true;
-        measurement->variant.air_quality_metrics.pm10_standard = sen5xmeasurement.pM1p0;
-        measurement->variant.air_quality_metrics.has_pm25_standard = true;
-        measurement->variant.air_quality_metrics.pm25_standard = sen5xmeasurement.pM2p5;
-        measurement->variant.air_quality_metrics.has_pm40_standard = true;
-        measurement->variant.air_quality_metrics.pm40_standard = sen5xmeasurement.pM4p0;
-        measurement->variant.air_quality_metrics.has_pm100_standard = true;
-        measurement->variant.air_quality_metrics.pm100_standard = sen5xmeasurement.pM10p0;
-
-        measurement->variant.air_quality_metrics.has_particles_05um = true;
-        measurement->variant.air_quality_metrics.particles_05um = sen5xmeasurement.pN0p5;
-        measurement->variant.air_quality_metrics.has_particles_10um = true;
-        measurement->variant.air_quality_metrics.particles_10um = sen5xmeasurement.pN1p0;
-        measurement->variant.air_quality_metrics.has_particles_25um = true;
-        measurement->variant.air_quality_metrics.particles_25um = sen5xmeasurement.pN2p5;
-        measurement->variant.air_quality_metrics.has_particles_40um = true;
-        measurement->variant.air_quality_metrics.particles_40um = sen5xmeasurement.pN4p0;
-        measurement->variant.air_quality_metrics.has_particles_100um = true;
-        measurement->variant.air_quality_metrics.particles_100um = sen5xmeasurement.pN10p0;
+        if (sen5xmeasurement.pM1p0 != UINT16_MAX) {
+            measurement->variant.air_quality_metrics.has_pm10_standard = true;
+            measurement->variant.air_quality_metrics.pm10_standard = sen5xmeasurement.pM1p0;
+        }
+        if (sen5xmeasurement.pM2p5 != UINT16_MAX) {
+            measurement->variant.air_quality_metrics.has_pm25_standard = true;
+            measurement->variant.air_quality_metrics.pm25_standard = sen5xmeasurement.pM2p5;
+        }
+        if (sen5xmeasurement.pM4p0 != UINT16_MAX) {
+            measurement->variant.air_quality_metrics.has_pm40_standard = true;
+            measurement->variant.air_quality_metrics.pm40_standard = sen5xmeasurement.pM4p0;
+        }
+        if (sen5xmeasurement.pM10p0 != UINT16_MAX) {
+            measurement->variant.air_quality_metrics.has_pm100_standard = true;
+            measurement->variant.air_quality_metrics.pm100_standard = sen5xmeasurement.pM10p0;
+        }
+        if (sen5xmeasurement.pN0p5 != UINT32_MAX) {
+            measurement->variant.air_quality_metrics.has_particles_05um = true;
+            measurement->variant.air_quality_metrics.particles_05um = sen5xmeasurement.pN0p5;
+        }
+        if (sen5xmeasurement.pN1p0 != UINT32_MAX) {
+            measurement->variant.air_quality_metrics.has_particles_10um = true;
+            measurement->variant.air_quality_metrics.particles_10um = sen5xmeasurement.pN1p0;
+        }
+        if (sen5xmeasurement.pN2p5 != UINT32_MAX) {
+            measurement->variant.air_quality_metrics.has_particles_25um = true;
+            measurement->variant.air_quality_metrics.particles_25um = sen5xmeasurement.pN2p5;
+        }
+        if (sen5xmeasurement.pN4p0 != UINT32_MAX) {
+            measurement->variant.air_quality_metrics.has_particles_40um = true;
+            measurement->variant.air_quality_metrics.particles_40um = sen5xmeasurement.pN4p0;
+        }
+        if (sen5xmeasurement.pN10p0 != UINT32_MAX) {
+            measurement->variant.air_quality_metrics.has_particles_100um = true;
+            measurement->variant.air_quality_metrics.particles_100um = sen5xmeasurement.pN10p0;
+        }
+        if (sen5xmeasurement.tSize != FLT_MAX) {
+            measurement->variant.air_quality_metrics.has_particles_tps = true;
+            measurement->variant.air_quality_metrics.particles_tps = sen5xmeasurement.tSize;
+        }
 
         if (model == SEN54 || model == SEN55) {
-            measurement->variant.air_quality_metrics.has_pm_humidity = true;
-            measurement->variant.air_quality_metrics.pm_humidity = sen5xmeasurement.humidity;
-            measurement->variant.air_quality_metrics.has_pm_temperature = true;
-            measurement->variant.air_quality_metrics.pm_temperature = sen5xmeasurement.temperature;
-            measurement->variant.air_quality_metrics.has_pm_nox_idx = true;
-            measurement->variant.air_quality_metrics.pm_nox_idx = sen5xmeasurement.noxIndex;
+            if (sen5xmeasurement.humidity!= FLT_MAX) {
+                measurement->variant.air_quality_metrics.has_pm_humidity = true;
+                measurement->variant.air_quality_metrics.pm_humidity = sen5xmeasurement.humidity;
+            }
+            if (sen5xmeasurement.temperature!= FLT_MAX) {
+                measurement->variant.air_quality_metrics.has_pm_temperature = true;
+                measurement->variant.air_quality_metrics.pm_temperature = sen5xmeasurement.temperature;
+            }
+            if (sen5xmeasurement.noxIndex!= FLT_MAX) {
+                measurement->variant.air_quality_metrics.has_pm_nox_idx = true;
+                measurement->variant.air_quality_metrics.pm_nox_idx = sen5xmeasurement.noxIndex;
+            }
         }
 
         if (model == SEN55) {
-            measurement->variant.air_quality_metrics.has_pm_voc_idx = true;
-            measurement->variant.air_quality_metrics.pm_voc_idx = sen5xmeasurement.vocIndex;
+            if (sen5xmeasurement.noxIndex!= FLT_MAX) {
+                measurement->variant.air_quality_metrics.has_pm_voc_idx = true;
+                measurement->variant.air_quality_metrics.pm_voc_idx = sen5xmeasurement.vocIndex;
+            }
         }
+
         return true;
     } else if (response == 1) {
         // TODO return because data was not ready yet

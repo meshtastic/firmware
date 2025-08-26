@@ -78,15 +78,15 @@ class SEN5XSensor : public TelemetrySensor
     bool oneShotMode = true;
     void setMode(bool setOneShot);
 
-    bool sendCommand(uint16_t wichCommand);
-    bool sendCommand(uint16_t wichCommand, uint8_t* buffer, uint8_t byteNumber=0);
+    bool sendCommand(uint16_t command);
+    bool sendCommand(uint16_t command, uint8_t* buffer, uint8_t byteNumber=0);
     uint8_t readBuffer(uint8_t* buffer, uint8_t byteNumber); // Return number of bytes received
     uint8_t sen5xCRC(uint8_t* buffer);
     bool I2Cdetect(TwoWire *_Wire, uint8_t address);
     bool restoreClock(uint32_t);
     bool startCleaning();
     uint8_t getMeasurements();
-    bool readRawValues();
+    // bool readRawValues();
     bool readPnValues(bool cumulative);
     bool readValues();
 
