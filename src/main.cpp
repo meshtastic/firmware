@@ -406,6 +406,16 @@ void setup()
 
     initDeepSleep();
 
+#if defined(MODEM_POWER_EN)
+    pinMode(MODEM_POWER_EN, OUTPUT);
+    digitalWrite(MODEM_POWER_EN, LOW);
+#endif
+
+#if defined(MODEM_PWRKEY)
+    pinMode(MODEM_PWRKEY, OUTPUT);
+    digitalWrite(MODEM_PWRKEY, LOW);
+#endif
+
 #if defined(LORA_TCXO_GPIO)
     pinMode(LORA_TCXO_GPIO, OUTPUT);
     digitalWrite(LORA_TCXO_GPIO, HIGH);
