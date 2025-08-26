@@ -425,10 +425,13 @@ bool Channels::decryptForHash(ChannelIndex chIndex, ChannelHash channelHash)
 bool Channels::setDefaultPresetCryptoForHash(ChannelHash channelHash)
 {
     // Iterate all known presets
-    for (int preset = _meshtastic_Config_LoRaConfig_ModemPreset_MIN; preset <= _meshtastic_Config_LoRaConfig_ModemPreset_MAX; ++preset) {
+    for (int preset = _meshtastic_Config_LoRaConfig_ModemPreset_MIN; preset <= _meshtastic_Config_LoRaConfig_ModemPreset_MAX;
+         ++preset) {
         const char *name = DisplayFormatters::getModemPresetDisplayName((meshtastic_Config_LoRaConfig_ModemPreset)preset, false);
-        if (!name) continue;
-        if (strcmp(name, "Invalid") == 0) continue; // skip invalid placeholder
+        if (!name)
+            continue;
+        if (strcmp(name, "Invalid") == 0)
+            continue; // skip invalid placeholder
         uint8_t h = xorHash((const uint8_t *)name, strlen(name));
         // Expand default PSK alias 1 to actual bytes and xor into hash
         uint8_t tmp = h ^ xorHash(defaultpsk, sizeof(defaultpsk));
