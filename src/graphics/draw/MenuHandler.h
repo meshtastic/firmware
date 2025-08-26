@@ -10,6 +10,7 @@ class menuHandler
     enum screenMenus {
         menu_none,
         lora_picker,
+        no_timeout_lora_picker,
         TZ_picker,
         twelve_hour_picker,
         clock_face_picker,
@@ -41,6 +42,7 @@ class menuHandler
     };
     static screenMenus menuQueue;
 
+    static void OnboardMessage();
     static void LoraRegionPicker(uint32_t duration = 30000);
     static void handleMenuSwitch(OLEDDisplay *display);
     static void showConfirmationBanner(const char *message, std::function<void()> onConfirm);
