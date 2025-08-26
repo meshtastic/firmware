@@ -18,6 +18,7 @@ void test_telemetry_environment_metrics_missing_fields();
 void test_telemetry_environment_metrics_complete_coverage();
 void test_telemetry_environment_metrics_unset_fields();
 void test_encrypted_packet_serialization();
+void test_empty_encrypted_packet();
 
 void setup()
 {
@@ -49,6 +50,7 @@ void setup()
 
     // Encrypted packet test
     RUN_TEST(test_encrypted_packet_serialization);
+    RUN_TEST(test_empty_encrypted_packet);
 
     UNITY_END();
 }
