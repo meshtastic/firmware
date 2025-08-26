@@ -116,7 +116,7 @@ static const uint8_t SCL = PIN_WIRE_SCL;
 #define PIN_EINK_SCLK 31
 #define PIN_EINK_MOSI 33
 #define PIN_EINK_EN 14   // unused
-#define PIN_SPI1_MISO 15 // unused
+#define PIN_SPI1_MISO -1 // 15 unused
 #define PIN_SPI1_MOSI PIN_EINK_MOSI
 #define PIN_SPI1_SCK PIN_EINK_SCLK
 

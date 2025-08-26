@@ -235,7 +235,7 @@ bool EInkDisplay::connect()
         adafruitDisplay->setRotation(1);
         adafruitDisplay->setPartialWindow(0, 0, EINK_WIDTH, EINK_HEIGHT);
     }
-#elif defined(HELTEC_MESH_POCKET)
+#elif defined(HELTEC_MESH_POCKET) || defined(SEEED_WIO_TRACKER_L1_EINK)
     {
         spi1 = &SPI1;
         spi1->begin();
@@ -248,7 +248,11 @@ bool EInkDisplay::connect()
 
         // Init GxEPD2
         adafruitDisplay->init();
+#if defined(HELTEC_MESH_POCKET)
         adafruitDisplay->setRotation(3);
+#elif defined(SEEED_WIO_TRACKER_L1_EINK)
+        adafruitDisplay->setRotation(1);
+#endif
     }
 #elif defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_VISION_MASTER_E213)
 
