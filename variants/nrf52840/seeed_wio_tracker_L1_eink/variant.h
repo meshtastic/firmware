@@ -33,17 +33,10 @@
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  Button Configuration
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-#ifdef BUTTON_PIN
-#undef BUTTON_PIN
-#endif
-
-#define BUTTON_PIN D13 // This is the Program Button
+#define CANCEL_BUTTON_PIN D13 // This is the Program Button
 // #define BUTTON_NEED_PULLUP   1
-#define BUTTON_ACTIVE_LOW true
-#define BUTTON_ACTIVE_PULLUP false
-
-#define BUTTON_PIN_TOUCH 13 // Touch button
+#define CANCEL_BUTTON_ACTIVE_LOW true
+#define CANCEL_BUTTON_ACTIVE_PULLUP false
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  Digital Pin Mapping (D0-D10)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
