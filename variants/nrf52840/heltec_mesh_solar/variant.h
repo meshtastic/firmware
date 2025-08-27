@@ -75,7 +75,7 @@ No longer populated on PCB
 // Routed to footprint for PCF8563TS RTC
 // Not populated on T114 V1, maybe in future?
 #define PIN_WIRE_SDA (0 + 6) // P0.26
-#define PIN_WIRE_SCL (0 + 26) // P0.27
+#define PIN_WIRE_SCL (0 + 26) // P0.26
 
 // I2C bus 1
 // Available on header pins, for general use
