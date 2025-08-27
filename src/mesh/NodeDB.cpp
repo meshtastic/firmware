@@ -225,7 +225,11 @@ NodeDB::NodeDB()
     memcpy(myNodeInfo.device_id.bytes + sizeof(device_id_start), &device_id_end, sizeof(device_id_end));
     myNodeInfo.device_id.size = 16;
     // Uncomment below to print the device id
-
+#elif ARCH_PORTDUINO
+    if (portduino_config.has_device_id) {
+        memcpy(myNodeInfo.device_id.bytes, portduino_config.device_id, 16);
+        myNodeInfo.device_id.size = 16;
+    }
 #else
     // FIXME - implement for other platforms
 #endif
