@@ -140,8 +140,7 @@ int32_t ButtonThread::runOnce()
     }
 
     // Progressive lead-up sound system
-    if (buttonCurrentlyPressed && (millis() - buttonPressStartTime) >= BUTTON_LEADUP_MS &&
-        (millis() - buttonPressStartTime) < _longLongPressTime) {
+    if (buttonCurrentlyPressed && (millis() - buttonPressStartTime) >= BUTTON_LEADUP_MS) {
 
         // Start the progressive sequence if not already active
         if (!leadUpSequenceActive) {
@@ -153,13 +152,14 @@ int32_t ButtonThread::runOnce()
         else if ((millis() - lastLeadUpNoteTime) >= 400) { // 400ms interval between notes
             if (playNextLeadUpNote()) {
                 lastLeadUpNoteTime = millis();
+            } else {
+                leadUpPlayed = true;
             }
         }
     }
 
     // Reset when button is released
     if (!buttonCurrentlyPressed && buttonWasPressed) {
-        leadUpPlayed = false;
         leadUpSequenceActive = false;
         resetLeadUpSequence();
     }
@@ -256,12 +256,13 @@ int32_t ButtonThread::runOnce()
 
             LOG_INFO("LONG PRESS RELEASE AFTER %u MILLIS", millis() - buttonPressStartTime);
             if (millis() > 30000 && _longLongPress != INPUT_BROKER_NONE &&
-                (millis() - buttonPressStartTime) >= _longLongPressTime) {
+                (millis() - buttonPressStartTime) >= _longLongPressTime && leadUpPlayed) {
                 evt.inputEvent = _longLongPress;
                 this->notifyObservers(&evt);
             }
             // Reset combination tracking
             waitingForLongPress = false;
+            leadUpPlayed = false;
 
             break;
         }

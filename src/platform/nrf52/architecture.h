@@ -60,6 +60,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_RAK4631
 #elif defined(TTGO_T_ECHO)
 #define HW_VENDOR meshtastic_HardwareModel_T_ECHO
+#elif defined(T_ECHO_LITE)
+#define HW_VENDOR meshtastic_HardwareModel_T_ECHO_LITE
 #elif defined(ELECROW_ThinkNode_M1)
 #define HW_VENDOR meshtastic_HardwareModel_THINKNODE_M1
 #elif defined(NANO_G2_ULTRA)
@@ -96,6 +98,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_SEEED_WIO_TRACKER_L1_EINK
 #elif defined(SEEED_WIO_TRACKER_L1)
 #define HW_VENDOR meshtastic_HardwareModel_SEEED_WIO_TRACKER_L1
+#elif defined(HELTEC_MESH_SOLAR)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_SOLAR
 #else
 #define HW_VENDOR meshtastic_HardwareModel_NRF52_UNKNOWN
 #endif

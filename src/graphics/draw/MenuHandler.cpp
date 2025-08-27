@@ -26,6 +26,27 @@ menuHandler::screenMenus menuHandler::menuQueue = menu_none;
 bool test_enabled = false;
 uint8_t test_count = 0;
 
+void menuHandler::OnboardMessage()
+{
+    static const char *optionsArray[] = {"OK", "Got it!"};
+    enum optionsNumbers { OK, got };
+    BannerOverlayOptions bannerOptions;
+#if HAS_TFT
+    bannerOptions.message = "Welcome to Meshtastic!\nSwipe to navigate and\nlong press to select\nor open a menu.";
+#elif defined(BUTTON_PIN)
+    bannerOptions.message = "Welcome to Meshtastic!\nClick to navigate and\nlong press to select\nor open a menu.";
+#else
+    bannerOptions.message = "Welcome to Meshtastic!\nUse the Select button\nto open menus\nand make selections.";
+#endif
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 2;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        menuHandler::menuQueue = menuHandler::no_timeout_lora_picker;
+        screen->runNow();
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
 void menuHandler::LoraRegionPicker(uint32_t duration)
 {
     static const char *optionsArray[] = {"Back",
@@ -413,8 +434,8 @@ void menuHandler::systemBaseMenu()
 
     optionsArray[options] = "Notifications";
     optionsEnumArray[options++] = Notifications;
-#if defined(ST7789_CS) || defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) || defined(USE_SH1107) ||             \
-    defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || HAS_TFT
+#if defined(ST7789_CS) || defined(ST7796_CS) || defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) ||              \
+    defined(USE_SH1107) || defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || HAS_TFT
     optionsArray[options] = "Screen Options";
     optionsEnumArray[options++] = ScreenOptions;
 #endif
@@ -704,7 +725,7 @@ void menuHandler::BrightnessPickerMenu()
 #if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
             // For HELTEC devices, use analogWrite to control backlight
             analogWrite(VTFT_LEDA, uiconfig.screen_brightness);
-#elif defined(ST7789_CS)
+#elif defined(ST7789_CS) || defined(ST7796_CS)
             static_cast<TFTDisplay *>(screen->getDisplayDevice())->setDisplayBrightness(uiconfig.screen_brightness);
 #elif defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) || defined(USE_SH1107)
             screen->getDisplayDevice()->setBrightness(uiconfig.screen_brightness);
@@ -747,7 +768,7 @@ void menuHandler::TFTColorPickerMenu(OLEDDisplay *display)
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 10;
     bannerOptions.bannerCallback = [display](int selected) -> void {
-#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || defined(T_DECK) || HAS_TFT
+#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || defined(T_DECK) || defined(T_LORA_PAGER) || HAS_TFT
         uint8_t TFT_MESH_r = 0;
         uint8_t TFT_MESH_g = 0;
         uint8_t TFT_MESH_b = 0;
@@ -1024,7 +1045,7 @@ void menuHandler::screenOptionsMenu()
     }
 
     // Only show screen color for TFT displays
-#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || defined(T_DECK) || HAS_TFT
+#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || defined(T_DECK) || defined(T_LORA_PAGER) || HAS_TFT
     optionsArray[options] = "Screen Color";
     optionsEnumArray[options++] = ScreenColor;
 #endif
@@ -1131,6 +1152,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case lora_picker:
         LoraRegionPicker();
+        break;
+    case no_timeout_lora_picker:
+        LoraRegionPicker(0);
         break;
     case TZ_picker:
         TZPicker();

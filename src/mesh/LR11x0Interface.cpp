@@ -6,16 +6,16 @@
 #include "mesh/NodeDB.h"
 #ifdef LR11X0_DIO_AS_RF_SWITCH
 #include "rfswitch.h"
+#elif ARCH_PORTDUINO
+#include "PortduinoGlue.h"
+#define rfswitch_dio_pins portduino_config.rfswitch_dio_pins
+#define rfswitch_table portduino_config.rfswitch_table
 #else
 static const uint32_t rfswitch_dio_pins[] = {RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC};
 static const Module::RfSwitchMode_t rfswitch_table[] = {
     {LR11x0::MODE_STBY, {}},  {LR11x0::MODE_RX, {}},   {LR11x0::MODE_TX, {}},   {LR11x0::MODE_TX_HP, {}},
     {LR11x0::MODE_TX_HF, {}}, {LR11x0::MODE_GNSS, {}}, {LR11x0::MODE_WIFI, {}}, END_OF_MODE_TABLE,
 };
-#endif
-
-#ifdef ARCH_PORTDUINO
-#include "PortduinoGlue.h"
 #endif
 
 // Particular boards might define a different max power based on what their hardware can do, default to max power output if not
@@ -117,17 +117,14 @@ template <typename T> bool LR11x0Interface<T>::init()
 #ifdef LR11X0_DIO_AS_RF_SWITCH
     bool dioAsRfSwitch = true;
 #elif defined(ARCH_PORTDUINO)
-    bool dioAsRfSwitch = false;
-    if (settingsMap[dio2_as_rf_switch]) {
-        dioAsRfSwitch = true;
-    }
+    bool dioAsRfSwitch = portduino_config.has_rfswitch_table;
 #else
     bool dioAsRfSwitch = false;
 #endif
 
     if (dioAsRfSwitch) {
         lora.setRfSwitchTable(rfswitch_dio_pins, rfswitch_table);
-        LOG_DEBUG("Set DIO RF switch", res);
+        LOG_DEBUG("Set DIO RF switch");
     }
 
     if (res == RADIOLIB_ERR_NONE) {
