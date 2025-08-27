@@ -8,7 +8,10 @@
 
 RotaryEncoderImpl *rotaryEncoderImpl;
 
-RotaryEncoderImpl::RotaryEncoderImpl() : concurrency::OSThread(ORIGIN_NAME), originName(ORIGIN_NAME) {}
+RotaryEncoderImpl::RotaryEncoderImpl() : concurrency::OSThread(ORIGIN_NAME), originName(ORIGIN_NAME)
+{
+    rotary = nullptr;
+}
 
 bool RotaryEncoderImpl::init()
 {
