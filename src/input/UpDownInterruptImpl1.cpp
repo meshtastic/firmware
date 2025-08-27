@@ -18,8 +18,8 @@ bool UpDownInterruptImpl1::init()
     uint8_t pinDown = moduleConfig.canned_message.inputbroker_pin_b;
     uint8_t pinPress = moduleConfig.canned_message.inputbroker_pin_press;
 
-    input_broker_event eventDown = INPUT_BROKER_DOWN;
-    input_broker_event eventUp = INPUT_BROKER_UP;
+    input_broker_event eventDown = INPUT_BROKER_USER_PRESS; // acts like RIGHT/DOWN
+    input_broker_event eventUp = INPUT_BROKER_ALT_PRESS;    // acts like LEFT/UP
     input_broker_event eventPressed = INPUT_BROKER_SELECT;
     input_broker_event eventPressedLong = INPUT_BROKER_SELECT_LONG;
     input_broker_event eventUpLong = INPUT_BROKER_UP_LONG;
