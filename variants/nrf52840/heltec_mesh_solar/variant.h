@@ -79,7 +79,7 @@ No longer populated on PCB
 
 // I2C bus 1
 // Available on header pins, for general use
-#define PIN_WIRE1_SDA (0 + 30) // P0.16
+#define PIN_WIRE1_SDA (0 + 30) // P0.30
 #define PIN_WIRE1_SCL (0 + 5) // P0.13
 
 /*
