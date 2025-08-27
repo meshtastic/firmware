@@ -15,22 +15,22 @@ int32_t StreamAPI::runOncePart()
     checkConnectionTimeout();
     return result;
 }
-int32_t StreamAPI::runOncePart(char *buf,uint16_t bufLen)
+int32_t StreamAPI::runOncePart(char *buf, uint16_t bufLen)
 {
-    auto result = readStream(buf,bufLen);
+    auto result = readStream(buf, bufLen);
     writeStream();
     checkConnectionTimeout();
     return result;
 }
 
-int32_t StreamAPI::handleRecStream(char *buf,uint16_t bufLen)
+int32_t StreamAPI::handleRecStream(char *buf, uint16_t bufLen)
 {
     uint16_t index = 0;
     while (bufLen > index) { // Currently we never want to block
         int cInt = buf[index++];
         if (cInt < 0)
             break; // We ran out of characters (even though available said otherwise) - this can happen on rf52 adafruit
-                    // arduino
+                   // arduino
 
         uint8_t c = (uint8_t)cInt;
 
@@ -85,7 +85,7 @@ int32_t StreamAPI::readStream()
         char buf[1];
         while (stream->available()) { // Currently we never want to block
             buf[0] = stream->read();
-            handleRecStream(buf,1);
+            handleRecStream(buf, 1);
         }
         // we had bytes available this time, so assume we might have them next time also
         lastRxMsec = millis();
@@ -93,19 +93,18 @@ int32_t StreamAPI::readStream()
     }
 }
 
-
 /**
  * Read any rx chars from the link and call handleRecStream
  */
-int32_t StreamAPI::readStream(char *buf,uint16_t bufLen)
+int32_t StreamAPI::readStream(char *buf, uint16_t bufLen)
 {
     uint16_t index = 0;
-    if (bufLen<1) {
+    if (bufLen < 1) {
         // Nothing available this time, if the computer has talked to us recently, poll often, otherwise let CPU sleep a long time
         bool recentRx = Throttle::isWithinTimespanMs(lastRxMsec, 2000);
         return recentRx ? 5 : 250;
     } else {
-        handleRecStream(buf,bufLen);
+        handleRecStream(buf, bufLen);
         // we had bytes available this time, so assume we might have them next time also
         lastRxMsec = millis();
         return 0;
