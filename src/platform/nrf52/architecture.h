@@ -60,6 +60,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_RAK4631
 #elif defined(TTGO_T_ECHO)
 #define HW_VENDOR meshtastic_HardwareModel_T_ECHO
+#elif defined(T_ECHO_LITE)
+#define HW_VENDOR meshtastic_HardwareModel_T_ECHO_LITE
 #elif defined(ELECROW_ThinkNode_M1)
 #define HW_VENDOR meshtastic_HardwareModel_THINKNODE_M1
 #elif defined(NANO_G2_ULTRA)
