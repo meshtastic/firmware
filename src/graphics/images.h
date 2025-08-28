@@ -117,8 +117,8 @@ const uint8_t icon_radio[] PROGMEM = {
     0xA9  // Row 7: #..#.#.#
 };
 
-// 🪙 Memory Icon
-const uint8_t icon_memory[] PROGMEM = {
+// 🪙 System Icon
+const uint8_t icon_system[] PROGMEM = {
     0x24, // Row 0: ..#..#..
     0x3C, // Row 1: ..####..
     0xC3, // Row 2: ##....##
