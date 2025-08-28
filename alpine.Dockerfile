@@ -42,21 +42,26 @@ USER root
 RUN apk --no-cache add \
         shadow libstdc++ libgpiod yaml-cpp libusb i2c-tools libuv \
         libx11 libinput libxkbcommon \
-    && rm -rf /var/cache/apk/* \
     && mkdir -p /var/lib/meshtasticd \
     && mkdir -p /etc/meshtasticd/config.d \
     && mkdir -p /etc/meshtasticd/ssl
 
-# Fetch compiled binary from the builder
-COPY --from=builder /tmp/firmware/release/meshtasticd /usr/bin/
-# Copy config templates
-COPY ./bin/config.d /etc/meshtasticd/available.d
+# Fetch compiled binary from the builder (ensure root owns it)
+# We also changed/ tightend  permissions right after copying to limit the blast a little. 
+COPY --from=builder --chown=root:root /tmp/firmware/release/meshtasticd /usr/bin/meshtasticd
+RUN chmod 0755 /usr/bin/meshtasticd  # executable by all, not writable by group/others
+
+# Copy config templates with correct ownership, then shut down dirs
+COPY --chown=root:root ./bin/config.d /etc/meshtasticd/available.d
+RUN chmod 0750 /etc/meshtasticd /etc/meshtasticd/config.d /etc/meshtasticd/available.d \
+ && chmod 0700 /etc/meshtasticd/ssl  # SSL/key material should be private
 
 WORKDIR /var/lib/meshtasticd
 VOLUME /var/lib/meshtasticd
 
 EXPOSE 4403
 
-CMD [ "sh",  "-cx", "meshtasticd --fsdir=/var/lib/meshtasticd" ]
-
+# Run daemon directly- no shell. Safer and better sig handling for PID 1.
+CMD ["/usr/bin/meshtasticd", "--fsdir=/var/lib/meshtasticd"]
+### i feel we should imp a health check at some point. 
 HEALTHCHECK NONE
