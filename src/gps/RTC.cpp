@@ -23,7 +23,7 @@ static uint64_t zeroOffsetSecs; // GPS based time in secs since 1970 - only upda
  * Reads the current date and time from the RTC module and updates the system time.
  * @return True if the RTC was successfully read and the system time was updated, false otherwise.
  */
-void readFromRTC()
+RTCSetResult readFromRTC()
 {
     struct timeval tv; /* btw settimeofday() is helpful here too*/
 #ifdef RV3028_RTC
@@ -44,8 +44,15 @@ void readFromRTC()
         t.tm_sec = rtc.getSecond();
         tv.tv_sec = gm_mktime(&t);
         tv.tv_usec = 0;
-
         uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
+
+#ifdef BUILD_EPOCH
+        if (tv.tv_sec < BUILD_EPOCH) {
+            LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
+            return RTCSetResultInvalidTime;
+        }
+#endif
+
         LOG_DEBUG("Read RTC time from RV3028 getTime as %02d-%02d-%02d %02d:%02d:%02d (%ld)", t.tm_year + 1900, t.tm_mon + 1,
                   t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
         timeStartMsec = now;
@@ -53,6 +60,7 @@ void readFromRTC()
         if (currentQuality == RTCQualityNone) {
             currentQuality = RTCQualityDevice;
         }
+        return RTCSetResultSuccess;
     }
 #elif defined(PCF8563_RTC)
     if (rtc_found.address == PCF8563_RTC) {
@@ -75,8 +83,15 @@ void readFromRTC()
         t.tm_sec = tc.second;
         tv.tv_sec = gm_mktime(&t);
         tv.tv_usec = 0;
-
         uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
+
+#ifdef BUILD_EPOCH
+        if (tv.tv_sec < BUILD_EPOCH) {
+            LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
+            return RTCSetResultInvalidTime;
+        }
+#endif
+
         LOG_DEBUG("Read RTC time from PCF8563 getDateTime as %02d-%02d-%02d %02d:%02d:%02d (%ld)", t.tm_year + 1900, t.tm_mon + 1,
                   t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
         timeStartMsec = now;
@@ -84,6 +99,7 @@ void readFromRTC()
         if (currentQuality == RTCQualityNone) {
             currentQuality = RTCQualityDevice;
         }
+        return RTCSetResultSuccess;
     }
 #else
     if (!gettimeofday(&tv, NULL)) {
@@ -92,8 +108,10 @@ void readFromRTC()
         LOG_DEBUG("Read RTC time as %ld", printableEpoch);
         timeStartMsec = now;
         zeroOffsetSecs = tv.tv_sec;
+        return RTCSetResultSuccess;
     }
 #endif
+    return RTCSetResultNotSet;
 }
 
 /**
@@ -101,7 +119,7 @@ void readFromRTC()
  *
  * @param q The quality of the provided time.
  * @param tv A pointer to a timeval struct containing the time to potentially set the RTC to.
- * @return True if the RTC was set, false otherwise.
+ * @return RTCSetResult
  *
  * If we haven't yet set our RTC this boot, set it from a GPS derived time
  */
