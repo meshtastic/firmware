@@ -505,7 +505,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     if (mp.decoded.want_response && !myReply) {
         myReply = allocErrorResponse(meshtastic_Routing_Error_NONE, &mp);
     }
-    if (mp.pki_encrypted) {
+    if (mp.pki_encrypted && myReply) {
         myReply->pki_encrypted = true;
     }
     return handled;
