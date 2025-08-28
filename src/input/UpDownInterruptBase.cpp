@@ -23,16 +23,23 @@ void UpDownInterruptBase::init(uint8_t pinDown, uint8_t pinUp, uint8_t pinPress,
 
     // Store debounce configuration passed by caller
     this->updownDebounceMs = updownDebounceMs;
+    bool isRAK = false;
+#ifdef RAK_4631
+    isRAK = true;
+#endif
 
-    pinMode(pinPress, INPUT_PULLUP);
-    pinMode(this->_pinDown, INPUT_PULLUP);
-    pinMode(this->_pinUp, INPUT_PULLUP);
-
-    // Use FALLING edge for active-low buttons so we detect press at the moment of pressing
-    // This enables long-press timing to start immediately instead of waiting for release.
-    attachInterrupt(pinPress, onIntPress, FALLING);
-    attachInterrupt(this->_pinDown, onIntDown, FALLING);
-    attachInterrupt(this->_pinUp, onIntUp, FALLING);
+    if (!isRAK || pinPress != 0) {
+        pinMode(pinPress, INPUT_PULLUP);
+        attachInterrupt(pinPress, onIntPress, RISING);
+    }
+    if (!isRAK || this->_pinDown != 0) {
+        pinMode(this->_pinDown, INPUT_PULLUP);
+        attachInterrupt(this->_pinDown, onIntDown, RISING);
+    }
+    if (!isRAK || this->_pinUp != 0) {
+        pinMode(this->_pinUp, INPUT_PULLUP);
+        attachInterrupt(this->_pinUp, onIntUp, RISING);
+    }
 
     LOG_DEBUG("Up/down/press GPIO initialized (%d, %d, %d)", this->_pinUp, this->_pinDown, pinPress);
 

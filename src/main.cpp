@@ -135,8 +135,9 @@ AccelerometerThread *accelerometerThread = nullptr;
 AudioThread *audioThread = nullptr;
 #endif
 
-#ifdef USE_PCA9557
-PCA9557 IOEXP;
+#ifdef USE_XL9555
+#include "ExtensionIOXL9555.hpp"
+ExtensionIOXL9555 io;
 #endif
 
 #if HAS_TFT
@@ -203,7 +204,7 @@ ScanI2C::FoundDevice rgb_found = ScanI2C::FoundDevice(ScanI2C::DeviceType::NONE,
 /// The I2C address of our Air Quality Indicator (if found)
 ScanI2C::DeviceAddress aqi_found = ScanI2C::ADDRESS_NONE;
 
-#ifdef T_WATCH_S3
+#if defined(T_WATCH_S3) || defined(T_LORA_PAGER)
 Adafruit_DRV2605 drv;
 #endif
 
@@ -361,6 +362,30 @@ void setup()
     digitalWrite(SDCARD_CS, HIGH);
     pinMode(PIN_EINK_CS, OUTPUT);
     digitalWrite(PIN_EINK_CS, HIGH);
+#elif defined(T_LORA_PAGER)
+    pinMode(LORA_CS, OUTPUT);
+    digitalWrite(LORA_CS, HIGH);
+    pinMode(SDCARD_CS, OUTPUT);
+    digitalWrite(SDCARD_CS, HIGH);
+    pinMode(TFT_CS, OUTPUT);
+    digitalWrite(TFT_CS, HIGH);
+    // io expander
+    io.begin(Wire, XL9555_SLAVE_ADDRESS0, SDA, SCL);
+    io.pinMode(EXPANDS_DRV_EN, OUTPUT);
+    io.digitalWrite(EXPANDS_DRV_EN, HIGH);
+    io.pinMode(EXPANDS_AMP_EN, OUTPUT);
+    io.digitalWrite(EXPANDS_AMP_EN, HIGH);
+    io.pinMode(EXPANDS_LORA_EN, OUTPUT);
+    io.digitalWrite(EXPANDS_LORA_EN, HIGH);
+    io.pinMode(EXPANDS_GPS_EN, OUTPUT);
+    io.digitalWrite(EXPANDS_GPS_EN, HIGH);
+    io.pinMode(EXPANDS_KB_EN, OUTPUT);
+    io.digitalWrite(EXPANDS_KB_EN, HIGH);
+    io.pinMode(EXPANDS_SD_EN, OUTPUT);
+    io.digitalWrite(EXPANDS_SD_EN, HIGH);
+    io.pinMode(EXPANDS_GPIO_EN, OUTPUT);
+    io.digitalWrite(EXPANDS_GPIO_EN, HIGH);
+    io.pinMode(EXPANDS_SD_PULLEN, INPUT);
 #endif
 
     concurrency::hasBeenSetup = true;
@@ -807,7 +832,7 @@ void setup()
 #endif
 #endif
 
-#ifdef T_WATCH_S3
+#if defined(T_WATCH_S3) || defined(T_LORA_PAGER)
     drv.begin();
     drv.selectLibrary(1);
     // I2C trigger by sending 'go' command
@@ -853,7 +878,7 @@ void setup()
     if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
 
 #if defined(ST7701_CS) || defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) ||       \
-    defined(ST7789_CS) || defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS)
+    defined(ST7789_CS) || defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(ST7796_CS)
         screen = new graphics::Screen(screen_found, screen_model, screen_geometry);
 #elif defined(ARCH_PORTDUINO)
         if ((screen_found.port != ScanI2C::I2CPort::NO_I2C || settingsMap[displayPanel]) &&
@@ -1116,7 +1141,7 @@ void setup()
 // Don't call screen setup until after nodedb is setup (because we need
 // the current region name)
 #if defined(ST7701_CS) || defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) ||       \
-    defined(ST7789_CS) || defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS)
+    defined(ST7789_CS) || defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(ST7796_CS)
     if (screen)
         screen->setup();
 #elif defined(ARCH_PORTDUINO)
