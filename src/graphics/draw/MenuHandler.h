@@ -39,11 +39,13 @@ class menuHandler
         key_verification_final_prompt,
         trace_route_menu,
         throttle_message,
+        FrameToggles
     };
     static screenMenus menuQueue;
 
     static void OnboardMessage();
     static void LoraRegionPicker(uint32_t duration = 30000);
+    static void loraMenu();
     static void handleMenuSwitch(OLEDDisplay *display);
     static void showConfirmationBanner(const char *message, std::function<void()> onConfirm);
     static void clockMenu();
@@ -77,6 +79,7 @@ class menuHandler
     static void screenOptionsMenu();
     static void powerMenu();
     static void textMessageMenu();
+    static void FrameToggles_menu();
 
   private:
     static void saveUIConfig();

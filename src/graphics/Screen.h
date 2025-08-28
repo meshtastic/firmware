@@ -593,7 +593,11 @@ class Screen : public concurrency::OSThread
     void setSSLFrames();
 
     // Dismiss the currently focussed frame, if possible (e.g. text message, waypoint)
-    void dismissCurrentFrame();
+    void hideCurrentFrame();
+
+    // Menu-driven Show / Hide Toggle
+    void toggleFrameVisibility(const std::string &frameName);
+    bool isFrameHidden(const std::string &frameName) const;
 
 #ifdef USE_EINK
     /// Draw an image to remain on E-Ink display after screen off
@@ -655,7 +659,7 @@ class Screen : public concurrency::OSThread
             uint8_t settings = 255;
             uint8_t wifi = 255;
             uint8_t deviceFocused = 255;
-            uint8_t memory = 255;
+            uint8_t system = 255;
             uint8_t gps = 255;
             uint8_t home = 255;
             uint8_t textMessage = 255;
@@ -673,12 +677,28 @@ class Screen : public concurrency::OSThread
         uint8_t frameCount = 0;
     } framesetInfo;
 
-    struct DismissedFrames {
+    struct hiddenFrames {
         bool textMessage = false;
         bool waypoint = false;
         bool wifi = false;
-        bool memory = false;
-    } dismissedFrames;
+        bool system = false;
+        bool home = false;
+        bool clock = false;
+#ifndef USE_EINK
+        bool nodelist = false;
+#endif
+#ifdef USE_EINK
+        bool nodelist_lastheard = false;
+        bool nodelist_hopsignal = false;
+        bool nodelist_distance = false;
+#endif
+#if HAS_GPS
+        bool nodelist_bearings = false;
+        bool gps = false;
+#endif
+        bool lora = false;
+        bool show_favorites = false;
+    } hiddenFrames;
 
     /// Try to start drawing ASAP
     void setFastFramerate();
