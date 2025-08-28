@@ -30,15 +30,15 @@ void UpDownInterruptBase::init(uint8_t pinDown, uint8_t pinUp, uint8_t pinPress,
 
     if (!isRAK || pinPress != 0) {
         pinMode(pinPress, INPUT_PULLUP);
-        attachInterrupt(pinPress, onIntPress, RISING);
+        attachInterrupt(pinPress, onIntPress, FALLING);
     }
     if (!isRAK || this->_pinDown != 0) {
         pinMode(this->_pinDown, INPUT_PULLUP);
-        attachInterrupt(this->_pinDown, onIntDown, RISING);
+        attachInterrupt(this->_pinDown, onIntDown, FALLING);
     }
     if (!isRAK || this->_pinUp != 0) {
         pinMode(this->_pinUp, INPUT_PULLUP);
-        attachInterrupt(this->_pinUp, onIntUp, RISING);
+        attachInterrupt(this->_pinUp, onIntUp, FALLING);
     }
 
     LOG_DEBUG("Up/down/press GPIO initialized (%d, %d, %d)", this->_pinUp, this->_pinDown, pinPress);
