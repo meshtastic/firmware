@@ -3,9 +3,9 @@
 #include "MeshService.h"
 #include "NMEAWPL.h"
 #include "NodeDB.h"
-#include "RTC.h"
 #include "Router.h"
 #include "configuration.h"
+#include "gps/RTC.h"
 #include <Arduino.h>
 #include <Throttle.h>
 
