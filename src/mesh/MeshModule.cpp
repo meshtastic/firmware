@@ -105,11 +105,6 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
     for (auto i = modules->begin(); i != modules->end(); ++i) {
         auto &pi = **i;
 
-        // If the message is from us, only call the routing and canned modules
-        if (fromUs && (!pi.name || (strcmp(pi.name, "routing") != 0 && strcmp(pi.name, "canned") != 0))) {
-            continue;
-        }
-
         pi.currentRequest = &mp;
 
         /// We only call modules that are interested in the packet (and the message is destined to us or we are promiscious)
