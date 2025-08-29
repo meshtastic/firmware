@@ -562,7 +562,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             // Now that we are encrypting the packet channel should be the hash (no longer the index)
             p->channel = hash;
             if (hash < 0) {
-                // No suitable channel could be found for sending
+                // No suitable channel could be found for
                 return meshtastic_Routing_Error_NO_CHANNEL;
             }
             crypto->encryptPacket(getFrom(p), p->id, numbytes, bytes);
@@ -578,7 +578,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
         // Now that we are encrypting the packet channel should be the hash (no longer the index)
         p->channel = hash;
         if (hash < 0) {
-            // No suitable channel could be found for sending
+            // No suitable channel could be found for
             return meshtastic_Routing_Error_NO_CHANNEL;
         }
         crypto->encryptPacket(getFrom(p), p->id, numbytes, bytes);
@@ -671,7 +671,7 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
             mqtt->onSend(*p_encrypted, *p, p->channel);
 #endif
     } else if (p->from == nodeDB->getNodeNum() && !skipHandle) {
-        MeshModule::callModules(*p, src, ROUTING_MODULE);
+        MeshModule::callModules(*p, src);
     }
 
     packetPool.release(p_encrypted); // Release the encrypted packet
