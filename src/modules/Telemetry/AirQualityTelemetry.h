@@ -4,9 +4,10 @@
 
 #pragma once
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
-#include "Adafruit_PM25AQI.h"
 #include "NodeDB.h"
 #include "ProtobufModule.h"
+#include <OLEDDisplay.h>
+#include <OLEDDisplayUi.h>
 
 class AirQualityTelemetryModule : private concurrency::OSThread, public ProtobufModule<meshtastic_Telemetry>
 {
@@ -20,9 +21,8 @@ class AirQualityTelemetryModule : private concurrency::OSThread, public Protobuf
           ProtobufModule("AirQualityTelemetry", meshtastic_PortNum_TELEMETRY_APP, &meshtastic_Telemetry_msg)
     {
         lastMeasurementPacket = nullptr;
-        setIntervalFromNow(10 * 1000);
-        aqi = Adafruit_PM25AQI();
         nodeStatusObserver.observe(&nodeStatus->onNewStatus);
+        setIntervalFromNow(10 * 1000);
 
 #ifdef PMSA003I_ENABLE_PIN
         // the PMSA003I sensor uses about 300mW on its own; support powering it off when it's not actively taking
@@ -32,6 +32,12 @@ class AirQualityTelemetryModule : private concurrency::OSThread, public Protobuf
         state = State::ACTIVE;
 #endif
     }
+    virtual bool wantUIFrame() override;
+#if !HAS_SCREEN
+    void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+#else
+    virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) override;
+#endif
 
   protected:
     /** Called to handle a particular incoming message
@@ -62,6 +68,8 @@ class AirQualityTelemetryModule : private concurrency::OSThread, public Protobuf
     meshtastic_MeshPacket *lastMeasurementPacket;
     uint32_t sendToPhoneIntervalMs = SECONDS_IN_MINUTE * 1000; // Send to phone every minute
     uint32_t lastSentToMesh = 0;
+    uint32_t lastSentToPhone = 0;
+    uint32_t sensor_read_error_count = 0;
 };
 
 #endif
