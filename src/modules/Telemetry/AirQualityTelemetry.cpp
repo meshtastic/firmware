@@ -86,7 +86,6 @@ int32_t AirQualityTelemetryModule::runOnce()
             if (!sensors.empty()) {
                 result = DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
             }
-
         }
 
         // it's possible to have this module enabled, only for displaying values on the screen.
@@ -101,25 +100,28 @@ int32_t AirQualityTelemetryModule::runOnce()
         // Wake up the sensors that need it
         LOG_INFO("Waking up sensors");
         for (TelemetrySensor *sensor : sensors) {
-            if ((lastSentToMesh == 0) ||
-                        !Throttle::isWithinTimespanMs(lastSentToMesh - sensor->warmup_time, Default::getConfiguredOrDefaultMsScaled(
+            if (((lastSentToMesh == 0) ||
+                    !Throttle::isWithinTimespanMs(lastSentToMesh - sensor->warmup_time, Default::getConfiguredOrDefaultMsScaled(
                                                                         moduleConfig.telemetry.air_quality_interval,
-                                                                        default_telemetry_broadcast_interval_secs, numOnlineNodes))) {
+                                                                        default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
+            airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
+            airTime->isTxAllowedAirUtil()) {
                 if (!sensor->isActive()) {
                     return sensor->wakeUp();
                 }
             }
         }
 
-        // TODO - FIX
+
         // Check if sen5x is ready to return data, or if it needs more time because of the low concentration threshold
         if (sen5xSensor.hasSensor() && sen5xSensor.isActive()) {
             sen5xPendingForReady = sen5xSensor.pendingForReady();
             LOG_DEBUG("SEN5X: Pending for ready %ums", sen5xPendingForReady);
-            if (sen5xPendingForReady) {
+            if (sen5xPendingForReady > 0) {
                 return sen5xPendingForReady;
             }
         }
+        LOG_DEBUG("Checking if sending telemetry");
 
         if (((lastSentToMesh == 0) ||
             !Throttle::isWithinTimespanMs(lastSentToMesh, Default::getConfiguredOrDefaultMsScaled(
@@ -137,25 +139,21 @@ int32_t AirQualityTelemetryModule::runOnce()
             lastSentToPhone = millis();
         }
 
-    // Send to sleep sensors that consume power
-    LOG_INFO("Sending sensors to sleep");
-    for (TelemetrySensor *sensor : sensors) {
-        // TODO FIX
-        if (sensor->isActive()) {
-            if (sensor.warmup_time < Default::getConfiguredOrDefaultMsScaled(
-                moduleConfig.telemetry.air_quality_interval,
-                default_telemetry_broadcast_interval_secs, numOnlineNodes)) {
-                    LOG_DEBUG("SEN5X: Disabling sensor until next period");
-                    sensor->sleep();
-            } else {
-                LOG_DEBUG("SEN5X: Sensor stays enabled due to warm up period");
+        // Send to sleep sensors that consume power
+        LOG_INFO("Sending sensors to sleep");
+        for (TelemetrySensor *sensor : sensors) {
+            // TODO FIX
+            if (sensor->isActive()) {
+                if (sensor.warmup_time < Default::getConfiguredOrDefaultMsScaled(
+                    moduleConfig.telemetry.air_quality_interval,
+                    default_telemetry_broadcast_interval_secs, numOnlineNodes)) {
+                        LOG_DEBUG("SEN5X: Disabling sensor until next period");
+                        sensor->sleep();
+                } else {
+                    LOG_DEBUG("SEN5X: Sensor stays enabled due to warm up period");
+                }
             }
         }
-    }
-
-
-
-
     }
     return min(sendToPhoneIntervalMs, result);
 }
@@ -334,8 +332,10 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
     m.which_variant = meshtastic_Telemetry_air_quality_metrics_tag;
     m.time = getTime();
+
     // TODO - if one sensor fails here, we will stop taking measurements from everything
     // Can we do this in a smarter way, for instance checking the nodeTelemetrySensor map and making it dynamic?
+
     if (getAirQualityTelemetry(&m)) {
         LOG_INFO("Send: pm10_standard=%u, pm25_standard=%u, pm100_standard=%u",
             m.variant.air_quality_metrics.pm10_standard, m.variant.air_quality_metrics.pm25_standard,
