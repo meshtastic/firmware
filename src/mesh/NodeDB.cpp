@@ -640,7 +640,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #ifdef USERPREFS_CONFIG_SMART_POSITION_ENABLED
     config.position.position_broadcast_smart_enabled = USERPREFS_CONFIG_SMART_POSITION_ENABLED;
 #else
-    config.position.position_broadcast_smart_enabled = true;
+    config.position.position_broadcast_smart_enabled = false; // Position broadcasting is opt-in
 #endif
     config.position.broadcast_smart_minimum_distance = 100;
     config.position.broadcast_smart_minimum_interval_secs = 30;
@@ -751,7 +751,7 @@ void NodeDB::initConfigIntervals()
 #ifdef USERPREFS_CONFIG_POSITION_BROADCAST_INTERVAL
     config.position.position_broadcast_secs = USERPREFS_CONFIG_POSITION_BROADCAST_INTERVAL;
 #else
-    config.position.position_broadcast_secs = default_broadcast_interval_secs;
+    config.position.position_broadcast_secs = MAX_INTERVAL;
 #endif
 
     config.power.ls_secs = default_ls_secs;
@@ -937,8 +937,8 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
         owner.has_is_unmessagable = true;
         owner.is_unmessagable = true;
         config.device.node_info_broadcast_secs = ONE_DAY;
-        config.position.position_broadcast_smart_enabled = true;
-        config.position.position_broadcast_secs = 3 * 60; // Every 3 minutes
+        config.position.position_broadcast_smart_enabled = true; // Broadcast is implicit in the selection of this role
+        config.position.position_broadcast_secs = 3 * 60;        // Every 3 minutes
         config.position.broadcast_smart_minimum_distance = 20;
         config.position.broadcast_smart_minimum_interval_secs = 15;
         // Remove Altitude MSL from flags since CoTs use HAE (height above ellipsoid)
