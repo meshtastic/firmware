@@ -323,8 +323,14 @@ static int8_t prevFrame = -1;
 SPIClass SPI1(HSPI);
 #endif
 
+// Allow boards to override the command queue depth to reduce RAM usage
+#ifndef SCREEN_CMD_QUEUE_SIZE
+#define SCREEN_CMD_QUEUE_SIZE 32
+#endif
+
 Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_OledType screenType, OLEDDISPLAY_GEOMETRY geometry)
-    : concurrency::OSThread("Screen"), address_found(address), model(screenType), geometry(geometry), cmdQueue(32)
+    : concurrency::OSThread("Screen"), address_found(address), model(screenType), geometry(geometry),
+      cmdQueue(SCREEN_CMD_QUEUE_SIZE)
 {
     graphics::normalFrames = new FrameCallback[MAX_NUM_NODES + NUM_EXTRA_FRAMES];
 
@@ -438,6 +444,9 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
     !defined(M5STACK) // set display brightness when turning on screens. Just moved function from TFTDisplay to here.
             static_cast<TFTDisplay *>(dispdev)->setDisplayBrightness(brightness);
 #endif
+#if defined(ELECROW_CRT01262M) && defined(TFT_BL)
+            digitalWrite(TFT_BL, TFT_BACKLIGHT_ON);
+#endif
 
             dispdev->displayOn();
 #ifdef HELTEC_TRACKER_V1_X
@@ -490,6 +499,9 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 
 #ifdef T_WATCH_S3
             PMU->disablePowerOutput(XPOWERS_ALDO2);
+#endif
+#if defined(ELECROW_CRT01262M) && defined(TFT_BL)
+            digitalWrite(TFT_BL, !TFT_BACKLIGHT_ON);
 #endif
             enabled = false;
         }

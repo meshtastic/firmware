@@ -763,7 +763,9 @@ void Power::shutdown()
 #ifdef PIN_LED3
     ledOff(PIN_LED3);
 #endif
-    doDeepSleep(DELAY_FOREVER, false, true);
+    // On explicit shutdown, skip preflight waits so we don't hang on queued TX.
+    // Save NodeDB to avoid data loss during power-off.
+    doDeepSleep(DELAY_FOREVER, true, false);
 #elif defined(ARCH_PORTDUINO)
     exit(EXIT_SUCCESS);
 #else

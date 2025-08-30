@@ -34,6 +34,7 @@ __pycache__
 
 venv/
 release/
+firmware-builds/
 .vscode/extensions.json
 /compile_commands.json
 src/mesh/raspihttp/certificate.pem

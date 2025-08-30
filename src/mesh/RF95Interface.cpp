@@ -5,6 +5,18 @@
 #include "configuration.h"
 #include "error.h"
 
+// Use explicit SX127x LoRa IRQ masks per Semtech datasheet to avoid any macro conflicts
+namespace {
+constexpr uint8_t SX127X_IRQ_RX_DONE = 0x40;
+constexpr uint8_t SX127X_IRQ_TX_DONE = 0x08;
+constexpr uint8_t SX127X_IRQ_PAYLOAD_CRC_ERROR = 0x20;
+constexpr uint8_t SX127X_IRQ_VALID_HEADER = 0x10;
+constexpr uint8_t SX127X_IRQ_CAD_DONE = 0x04;
+constexpr uint8_t SX127X_IRQ_FHSS_CHANGE_CHANNEL = 0x02;
+constexpr uint8_t SX127X_IRQ_CAD_DETECTED = 0x01;
+constexpr uint8_t SX127X_IRQ_RX_TIMEOUT = 0x80;
+}
+
 #if ARCH_PORTDUINO
 #include "PortduinoGlue.h"
 #endif
@@ -293,10 +305,17 @@ void RF95Interface::startReceive()
         LOG_ERROR("RF95 startReceive %s%d", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
 
-    isReceiving = true;
+    // Update common receive state and schedule polling if enabled
+    RadioLibInterface::startReceive();
 
-    // Must be done AFTER, starting receive, because startReceive clears (possibly stale) interrupt pending register bits
+    // Must be done AFTER starting receive, because startReceive clears (possibly stale) interrupt pending register bits
+#ifndef RF95_USE_POLLING
     enableInterrupt(isrRxLevel0);
+#else
+    if (!usePolling) {
+        enableInterrupt(isrRxLevel0);
+    }
+#endif
 }
 
 bool RF95Interface::isChannelActive()
@@ -336,5 +355,68 @@ bool RF95Interface::sleep()
 #endif
 
     return true;
+}
+
+RadioLibInterface::PendingISR RF95Interface::checkPendingInterrupt()
+{
+#ifdef RF95_USE_POLLING
+    if (usePolling) {
+        uint16_t irq = lora->getIRQFlags();
+        if (irq == 0) {
+            return ISR_NONE;
+        }
+        // Always log the raw IRQ mask when non-zero to aid in field debugging
+        LOG_DEBUG("RF95Interface: POLL IRQ flags=0x%04x\n", irq);
+        // Log bit evaluations to aid debugging in the field
+        bool txDoneBit = (irq & SX127X_IRQ_TX_DONE) != 0;
+        bool rxDoneBit = (irq & SX127X_IRQ_RX_DONE) != 0;
+        bool validHeaderBit = (irq & SX127X_IRQ_VALID_HEADER) != 0;
+        LOG_DEBUG("RF95Interface: POLL bits tx=%d rx=%d vh=%d\n", txDoneBit, rxDoneBit, validHeaderBit);
+
+        // Prioritize TX_DONE to avoid an extra poll when both TX and RX are pending,
+        // but only if we are actually transmitting. This avoids misclassifying
+        // VALID_HEADER as TX_DONE on platforms with differing mask layouts.
+        if (txDoneBit && isSending()) {
+            lora->clearIrqFlags(SX127X_IRQ_TX_DONE);
+            LOG_DEBUG("RF95Interface: POLL TX_DONE irq=0x%04x\n", irq);
+            return ISR_TX;
+        }
+        // RX done
+        if (rxDoneBit) {
+            // Do not clear RX_DONE here. Let the subsequent readData() call clear IRQs
+            // to avoid racing with RadioLib's internal expectations, which can lead
+            // to spurious read errors on valid packets when polling.
+            LOG_DEBUG("RF95Interface: POLL RX_DONE irq=0x%04x\n", irq);
+            return ISR_RX;
+        }
+        // Clean up other non-terminal flags to prevent stale bits from masking future events
+        uint8_t cleanupMask = 0x00;
+        if (irq & SX127X_IRQ_PAYLOAD_CRC_ERROR) {
+            cleanupMask |= SX127X_IRQ_PAYLOAD_CRC_ERROR;
+            LOG_DEBUG("RF95Interface: POLL CRC_ERROR irq=0x%04x\n", irq);
+        }
+        if (irq & SX127X_IRQ_RX_TIMEOUT) {
+            cleanupMask |= SX127X_IRQ_RX_TIMEOUT;
+            LOG_DEBUG("RF95Interface: POLL RX_TIMEOUT irq=0x%04x\n", irq);
+        }
+        if (irq & SX127X_IRQ_CAD_DONE) {
+            cleanupMask |= SX127X_IRQ_CAD_DONE;
+            LOG_DEBUG("RF95Interface: POLL CAD_DONE irq=0x%04x\n", irq);
+        }
+        if (irq & SX127X_IRQ_CAD_DETECTED) {
+            cleanupMask |= SX127X_IRQ_CAD_DETECTED;
+            LOG_DEBUG("RF95Interface: POLL CAD_DETECTED irq=0x%04x\n", irq);
+        }
+        if (irq & SX127X_IRQ_FHSS_CHANGE_CHANNEL) {
+            cleanupMask |= SX127X_IRQ_FHSS_CHANGE_CHANNEL;
+            LOG_DEBUG("RF95Interface: POLL FHSS_CHANGE_CHANNEL irq=0x%04x\n", irq);
+        }
+        // Header valid indicates active reception; do not clear it here.
+        if (cleanupMask) {
+            lora->clearIrqFlags(cleanupMask);
+        }
+    }
+#endif
+    return ISR_NONE;
 }
 #endif

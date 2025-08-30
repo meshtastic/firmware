@@ -36,8 +36,11 @@ PositionModule::PositionModule()
     if ((config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER ||
          config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER) &&
         config.power.is_power_saving) {
-        LOG_DEBUG("Clear position on startup for sleepy tracker (ー。ー) zzz");
-        nodeDB->clearLocalPosition();
+        // Do not clear if a fixed position is configured
+        if (!config.position.fixed_position) {
+            LOG_DEBUG("Clear position on startup for sleepy tracker (ー。ー) zzz");
+            nodeDB->clearLocalPosition();
+        }
     }
 }
 
