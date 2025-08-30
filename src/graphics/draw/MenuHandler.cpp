@@ -160,6 +160,7 @@ void menuHandler::DeviceRolePicker()
         if (selected == Back) {
             menuHandler::menuQueue = menuHandler::lora_Menu;
             screen->runNow();
+            return;
         } else if (selected == devicerole_client) {
             config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
         } else if (selected == devicerole_clientmute) {
