@@ -80,6 +80,7 @@ class ScanI2C
         LTR553ALS,
         BHI260AP,
         BMM150,
+        SEN5X,
         DRV2605
     } DeviceType;
 
