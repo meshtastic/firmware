@@ -746,7 +746,11 @@ void Power::shutdown()
 
 #if HAS_SCREEN
     if (screen) {
+#ifdef T_DECK_PRO
+        screen->showSimpleBanner("Device is turned off.\nConnect USB to start!", 0); // T-Deck Pro has no power button
+#else
         screen->showSimpleBanner("Shutting Down...", 0); // stays on screen
+#endif
     }
 #endif
 #if !defined(ARCH_STM32WL)
@@ -764,7 +768,7 @@ void Power::shutdown()
 #ifdef PIN_LED3
     ledOff(PIN_LED3);
 #endif
-    doDeepSleep(DELAY_FOREVER, false, true);
+    doDeepSleep(DELAY_FOREVER, true, true);
 #elif defined(ARCH_PORTDUINO)
     exit(EXIT_SUCCESS);
 #else
