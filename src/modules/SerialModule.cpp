@@ -49,8 +49,8 @@
 #include "meshSolarApp.h"
 #endif
 
-#if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040)) && !defined(CONFIG_IDF_TARGET_ESP32S2) &&               \
-    !defined(CONFIG_IDF_TARGET_ESP32C3)
+#if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040) || defined(ARCH_STM32WL)) &&                             \
+    !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3)
 
 #define RX_BUFFER 256
 #define TIMEOUT 250
@@ -173,7 +173,15 @@ int32_t SerialModule::runOnce()
                 Serial.begin(baud);
                 Serial.setTimeout(moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT);
             }
-
+#elif defined(ARCH_STM32WL)
+            if (moduleConfig.serial.rxd && moduleConfig.serial.txd) {
+                Serial2.begin(baud);
+                Serial2.setTx(moduleConfig.serial.txd);
+                Serial2.setRx(moduleConfig.serial.rxd);
+            } else {
+                Serial2.begin(baud);
+                Serial2.setTimeout(moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT);
+            }
 #elif defined(ARCH_ESP32)
 
             if (moduleConfig.serial.rxd && moduleConfig.serial.txd) {
