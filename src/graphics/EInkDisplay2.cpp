@@ -67,20 +67,28 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
 
     // FIXME - only draw bits have changed (use backbuf similar to the other displays)
     const bool flipped = config.display.flip_screen;
+    // HACK for L1 EInk
+#if defined(SEEED_WIO_TRACKER_L1_EINK)
+    // For SEEED_WIO_TRACKER_L1_EINK, setRotation(3) is correct but mirrored; flip both axes
     for (uint32_t y = 0; y < displayHeight; y++) {
         for (uint32_t x = 0; x < displayWidth; x++) {
-            // get src pixel in the page based ordering the OLED lib uses FIXME, super inefficient
             auto b = buffer[x + (y / 8) * displayWidth];
             auto isset = b & (1 << (y & 7));
-
-            // Handle flip here, rather than with setRotation(),
-            // Avoids issues when display width is not a multiple of 8
+            adafruitDisplay->drawPixel((displayWidth - 1) - x, (displayHeight - 1) - y, isset ? GxEPD_BLACK : GxEPD_WHITE);
+        }
+    }
+#else
+    for (uint32_t y = 0; y < displayHeight; y++) {
+        for (uint32_t x = 0; x < displayWidth; x++) {
+            auto b = buffer[x + (y / 8) * displayWidth];
+            auto isset = b & (1 << (y & 7));
             if (flipped)
                 adafruitDisplay->drawPixel((displayWidth - 1) - x, (displayHeight - 1) - y, isset ? GxEPD_BLACK : GxEPD_WHITE);
             else
                 adafruitDisplay->drawPixel(x, y, isset ? GxEPD_BLACK : GxEPD_WHITE);
         }
     }
+#endif
 
     // Trigger the refresh in GxEPD2
     LOG_DEBUG("Update E-Paper");
@@ -140,17 +148,32 @@ bool EInkDisplay::connect()
 #endif
 #endif
 
-#if defined(TTGO_T_ECHO) || defined(ELECROW_ThinkNode_M1)
+#if defined(TTGO_T_ECHO) || defined(ELECROW_ThinkNode_M1) || defined(T_ECHO_LITE)
     {
         auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY, SPI1);
 
         adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(*lowLevel);
         adafruitDisplay->init();
-#ifdef ELECROW_ThinkNode_M1
+#if defined(ELECROW_ThinkNode_M1) || defined(T_ECHO_LITE)
         adafruitDisplay->setRotation(4);
 #else
         adafruitDisplay->setRotation(3);
 #endif
+        adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
+    }
+#elif defined(ELECROW_ThinkNode_M5)
+    {
+        // Start HSPI
+        hspi = new SPIClass(HSPI);
+        hspi->begin(PIN_EINK_SCLK, -1, PIN_EINK_MOSI, PIN_EINK_CS); // SCLK, MISO, MOSI, SS
+
+        auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY, *hspi);
+
+        adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(*lowLevel);
+        adafruitDisplay->init();
+
+        adafruitDisplay->setRotation(4);
+
         adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
     }
 #elif defined(MESHLINK)
@@ -220,7 +243,7 @@ bool EInkDisplay::connect()
         adafruitDisplay->setRotation(1);
         adafruitDisplay->setPartialWindow(0, 0, EINK_WIDTH, EINK_HEIGHT);
     }
-#elif defined(HELTEC_MESH_POCKET)
+#elif defined(HELTEC_MESH_POCKET) || defined(SEEED_WIO_TRACKER_L1_EINK)
     {
         spi1 = &SPI1;
         spi1->begin();
@@ -234,6 +257,7 @@ bool EInkDisplay::connect()
         // Init GxEPD2
         adafruitDisplay->init();
         adafruitDisplay->setRotation(3);
+        adafruitDisplay->setPartialWindow(0, 0, EINK_WIDTH, EINK_HEIGHT);
     }
 #elif defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_VISION_MASTER_E213)
 

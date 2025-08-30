@@ -18,15 +18,8 @@
 
 // Shared NicheGraphics components
 // --------------------------------
-#include "graphics/niche/Drivers/Backlight/LatchingBacklight.h"
-#include "graphics/niche/Drivers/EInk/GDEY0213B74.h"
+#include "graphics/niche/Drivers/EInk/ZJY122250_0213BAAMFGN.h"
 #include "graphics/niche/Inputs/TwoButton.h"
-
-// Special case - fix T-Echo's touch button
-// ----------------------------------------
-// On a handful of T-Echos, LoRa TX triggers the capacitive touch
-// To avoid this, we lockout the button during TX
-#include "mesh/RadioLibInterface.h"
 
 void setupNicheGraphics()
 {
@@ -41,7 +34,7 @@ void setupNicheGraphics()
     // E-Ink Driver
     // -----------------------------
 
-    Drivers::EInk *driver = new Drivers::GDEY0213B74;
+    Drivers::EInk *driver = new Drivers::ZJY122250_0213BAAMFGN;
     driver->begin(&SPI1, PIN_EINK_DC, PIN_EINK_CS, PIN_EINK_BUSY, PIN_EINK_RES);
 
     // InkHUD
@@ -53,8 +46,7 @@ void setupNicheGraphics()
     inkhud->setDriver(driver);
 
     // Set how many FAST updates per FULL update
-    // Set how unhealthy additional FAST updates beyond this number are
-    inkhud->setDisplayResilience(7, 1.5);
+    inkhud->setDisplayResilience(15);
 
     // Select fonts
     InkHUD::Applet::fontLarge = FREESANS_12PT_WIN1252;
@@ -62,16 +54,10 @@ void setupNicheGraphics()
     InkHUD::Applet::fontSmall = FREESANS_6PT_WIN1252;
 
     // Customize default settings
-    inkhud->persistence->settings.userTiles.maxCount = 2;              // Two applets side-by-side
-                                                                       // 270 degrees clockwise
+    inkhud->persistence->settings.rotation = 1;                        // 90 degrees clockwise
     inkhud->persistence->settings.optionalFeatures.batteryIcon = true; // Device definitely has a battery
-    inkhud->persistence->settings.optionalMenuItems.backlight = true;  // Until proves capacitive button works by touching it
-    inkhud->persistence->settings.userTiles.count = 1; // One tile only by default, keep things simple for new users
-
-    // Setup backlight controller
-    // Note: AUX button attached further down
-    Drivers::LatchingBacklight *backlight = Drivers::LatchingBacklight::getInstance();
-    backlight->setPin(PIN_EINK_EN);
+    inkhud->persistence->settings.userTiles.count = 1;    // One tile only by default, keep things simple for new users
+    inkhud->persistence->settings.userTiles.maxCount = 2; // Two applets side-by-side
 
     // Pick applets
     // Note: order of applets determines priority of "auto-show" feature
@@ -83,11 +69,9 @@ void setupNicheGraphics()
     inkhud->addApplet("Recents List", new InkHUD::RecentsListApplet);            // -
     inkhud->addApplet("Heard", new InkHUD::HeardApplet, true, false, 0);         // Activated, no autoshow, default on tile 0
 
-    inkhud->persistence->settings.rotation = 1;
-    // inkhud->persistence->printSettings(&inkhud->persistence->settings);
     //  Start running InkHUD
     inkhud->begin();
-    // inkhud->persistence->printSettings(&inkhud->persistence->settings);
+
     //  Buttons
     //  --------------------------
 

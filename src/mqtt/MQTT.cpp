@@ -95,6 +95,7 @@ inline void onReceiveProto(char *topic, byte *payload, size_t length)
     p->hop_start = e.packet->hop_start;
     p->want_ack = e.packet->want_ack;
     p->via_mqtt = true; // Mark that the packet was received via MQTT
+    p->transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_MQTT;
     p->which_payload_variant = e.packet->which_payload_variant;
     memcpy(&p->decoded, &e.packet->decoded, std::max(sizeof(p->decoded), sizeof(p->encrypted)));
 
@@ -278,6 +279,8 @@ struct PubSubConfig {
 
     // Defaults
     static constexpr uint16_t defaultPort = 1883;
+    static constexpr uint16_t defaultPortTls = 8883;
+
     uint16_t serverPort = defaultPort;
     String serverAddr = default_mqtt_address;
     const char *mqttUsername = default_mqtt_username;
@@ -640,7 +643,7 @@ bool MQTT::isValidConfig(const meshtastic_ModuleConfig_MQTTConfig &config, MQTTC
     }
 
     const bool defaultServer = isDefaultServer(parsed.serverAddr);
-    if (defaultServer && parsed.serverPort != PubSubConfig::defaultPort) {
+    if (defaultServer && !IS_ONE_OF(parsed.serverPort, PubSubConfig::defaultPort, PubSubConfig::defaultPortTls)) {
         const char *warning = "Invalid MQTT config: default server address must not have a port specified";
         LOG_ERROR(warning);
 #if !IS_RUNNING_TESTS
