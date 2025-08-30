@@ -20,6 +20,16 @@
 #define SEN5X_I2C_CLOCK_SPEED 100000
 #endif
 
+/*
+Time after which the sensor can go to sleep, as the warmup period has passed
+and the VOCs sensor will is allowed to stop (although needs to recover the state
+each time)
+*/
+#ifndef SEN55_VOC_STATE_WARMUP_S
+// TODO for Testing 5' - Sensirion recommends 1h. We can try to test a smaller value
+#define SEN55_VOC_STATE_WARMUP_S 3600
+#endif
+
 #define ONE_WEEK_IN_SECONDS 604800
 
 struct _SEN5XMeasurements {
@@ -77,6 +87,7 @@ class SEN5XSensor : public TelemetrySensor
     // Flag to work on one-shot (read and sleep), or continuous mode
     bool oneShotMode = true;
     void setMode(bool setOneShot);
+    bool vocStateValid();
 
     bool sendCommand(uint16_t command);
     bool sendCommand(uint16_t command, uint8_t* buffer, uint8_t byteNumber=0);
@@ -91,6 +102,7 @@ class SEN5XSensor : public TelemetrySensor
     bool readValues();
 
     uint32_t measureStarted = 0;
+    uint32_t firstMeasureStarted = 0;
     _SEN5XMeasurements sen5xmeasurement;
 
   protected:
@@ -108,10 +120,13 @@ class SEN5XSensor : public TelemetrySensor
     // VOC State
     #define SEN5X_VOC_STATE_BUFFER_SIZE 8
     uint8_t vocState[SEN5X_VOC_STATE_BUFFER_SIZE];
-    uint32_t vocTime;
-    bool vocValid = true;
+    uint32_t vocTime = 0;
+    bool vocValid = false;
+
     bool vocStateFromSensor();
     bool vocStateToSensor();
+    bool vocStateStable();
+    bool vocStateRecent(uint32_t now);
 
     virtual void setup() override;
 

@@ -79,13 +79,16 @@ int32_t AirQualityTelemetryModule::runOnce()
         }
 
         // Wake up the sensors that need it, before we need to take telemetry data
-        if ((lastSentToMesh == 0) ||
+        // TODO - Do it for SENSOR ROLE too?
+        if (((lastSentToMesh == 0) ||
             (sen5xSensor.hasSensor() && !Throttle::isWithinTimespanMs(lastSentToMesh - SEN5X_WARMUP_MS_1, Default::getConfiguredOrDefaultMsScaled(
                                                             moduleConfig.telemetry.air_quality_interval,
                                                             default_telemetry_broadcast_interval_secs, numOnlineNodes))) ||
             (pmsa003iSensor.hasSensor() && !Throttle::isWithinTimespanMs(lastSentToMesh - PMSA003I_WARMUP_MS, Default::getConfiguredOrDefaultMsScaled(
                                                             moduleConfig.telemetry.air_quality_interval,
-                                                            default_telemetry_broadcast_interval_secs, numOnlineNodes)))) {
+                                                            default_telemetry_broadcast_interval_secs, numOnlineNodes)))) &&
+            airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
+            airTime->isTxAllowedAirUtil()) {
 
             if (sen5xSensor.hasSensor() && !sen5xSensor.isActive())
                 return sen5xSensor.wakeUp();
@@ -100,10 +103,11 @@ int32_t AirQualityTelemetryModule::runOnce()
         if (sen5xSensor.hasSensor() && sen5xSensor.isActive()) {
             sen5xPendingForReady = sen5xSensor.pendingForReady();
             LOG_DEBUG("SEN5X: Pending for ready %ums", sen5xPendingForReady);
-            if (sen5xPendingForReady) {
+            if (sen5xPendingForReady > 0) {
                 return sen5xPendingForReady;
             }
         }
+        LOG_DEBUG("Checking if sending telemetry");
 
         if (((lastSentToMesh == 0) ||
             !Throttle::isWithinTimespanMs(lastSentToMesh, Default::getConfiguredOrDefaultMsScaled(
@@ -122,6 +126,7 @@ int32_t AirQualityTelemetryModule::runOnce()
         }
 
         // Send the sensor to idle ONLY if there is enough time to wake it up before the next reading cycle
+        // TODO - include conditions here for module timing
 #ifdef PMSA003I_ENABLE_PIN
         if (pmsa003iSensor.hasSensor() && pmsa003iSensor.isActive()) {
             if (PMSA003I_WARMUP_MS < Default::getConfiguredOrDefaultMsScaled(
@@ -322,8 +327,10 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
     m.which_variant = meshtastic_Telemetry_air_quality_metrics_tag;
     m.time = getTime();
+
     // TODO - if one sensor fails here, we will stop taking measurements from everything
     // Can we do this in a smarter way, for instance checking the nodeTelemetrySensor map and making it dynamic?
+
     if (getAirQualityTelemetry(&m)) {
         LOG_INFO("Send: pm10_standard=%u, pm25_standard=%u, pm100_standard=%u",
             m.variant.air_quality_metrics.pm10_standard, m.variant.air_quality_metrics.pm25_standard,

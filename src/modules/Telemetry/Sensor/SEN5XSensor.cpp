@@ -218,25 +218,36 @@ bool SEN5XSensor::I2Cdetect(TwoWire *_Wire, uint8_t address)
 
 bool SEN5XSensor::idle()
 {
+    // From the datasheet:
+    // By default, the VOC algorithm resets its state to initial
+    // values each time a measurement is started,
+    // even if the measurement was stopped only for a short
+    // time. So, the VOC index output value needs a long time
+    // until it is stable again. This can be avoided by
+    // restoring the previously memorized algorithm state before
+    // starting the measure mode
 
-
-    // Get VOC state before going to idle mode
-    if (vocStateFromSensor()) {
-        // TODO Should this be saved with saveState()?
-        // It so, we can consider not saving it when rebooting as
-        // we would have likely saved it recently
-
-        // Check if we have time, and store it
-        uint32_t now;  // If time is RTCQualityNone, it will return zero
-        now = getValidTime(RTCQuality::RTCQualityDevice);
-
-        if (now) {
-            vocTime = now;
-            vocValid = true;
-            // saveState();
-        }
-    } else {
+    // If the stabilisation period is not passed for SEN55, don't go to idle
+    if (model == SEN55) {
+        // Get VOC state before going to idle mode
         vocValid = false;
+        if (vocStateFromSensor()) {
+            vocValid = vocStateValid();
+            // Check if we have time, and store it
+            uint32_t now;  // If time is RTCQualityNone, it will return zero
+            now = getValidTime(RTCQuality::RTCQualityDevice);
+            if (now) {
+                // Check if state is valid (non-zero)
+                vocTime = now;
+            }
+        }
+
+        if (vocStateStable() && vocValid) {
+            saveState();
+        } else {
+            LOG_INFO("SEN5X: Not stopping measurement, vocState is not stable yet!");
+            return true;
+        }
     }
 
     if (!oneShotMode) {
@@ -248,8 +259,8 @@ bool SEN5XSensor::idle()
         LOG_ERROR("SEN5X: Error stoping measurement");
         return false;
     }
-    delay(200); // From Sensirion Datasheet
 
+    delay(200); // From Sensirion Datasheet
     LOG_INFO("SEN5X: Stop measurement mode");
 
     state = SEN5X_IDLE;
@@ -257,9 +268,37 @@ bool SEN5XSensor::idle()
     return true;
 }
 
+bool SEN5XSensor::vocStateRecent(uint32_t now){
+    if (now) {
+        uint32_t passed = now - vocTime; //in seconds
+
+        // Check if state is recent, less than 10 minutes (600 seconds)
+        if (passed < SEN5X_VOC_VALID_TIME && (now > SEN5X_VOC_VALID_DATE)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool SEN5XSensor::vocStateValid() {
+    if (!vocState[0] && !vocState[1] && !vocState[2] && !vocState[3] &&
+    !vocState[4] && !vocState[5] && !vocState[6] && !vocState[7]) {
+        LOG_DEBUG("SEN5X: VOC state is all 0, invalid");
+        return false;
+    } else {
+        LOG_DEBUG("SEN5X: VOC state is valid");
+        return true;
+    }
+}
+
 bool SEN5XSensor::vocStateToSensor()
 {
     if (model != SEN55){
+        return true;
+    }
+
+    if (!vocStateValid()) {
+        LOG_INFO("SEN5X: VOC state is invalid, not sending");
         return true;
     }
 
@@ -320,8 +359,7 @@ bool SEN5XSensor::vocStateFromSensor()
     vocState[7] = vocBuffer[10];
 
     // Print the state (if debug is on)
-    LOG_DEBUG("SEN5X: VOC state retrieved from sensor");
-    LOG_DEBUG("[%u, %u, %u, %u, %u, %u, %u, %u]",
+    LOG_DEBUG("SEN5X: VOC state retrieved from sensor: [%u, %u, %u, %u, %u, %u, %u, %u]",
         vocState[0],vocState[1], vocState[2], vocState[3],
         vocState[4],vocState[5], vocState[6], vocState[7]);
 
@@ -337,24 +375,36 @@ bool SEN5XSensor::loadState()
     if (file) {
         LOG_INFO("%s state read from %s", sensorName, sen5XStateFileName);
         pb_istream_t stream = {&readcb, &file, meshtastic_SEN5XState_size};
+
         if (!pb_decode(&stream, &meshtastic_SEN5XState_msg, &sen5xstate)) {
             LOG_ERROR("Error: can't decode protobuf %s", PB_GET_ERROR(&stream));
         } else {
             lastCleaning = sen5xstate.last_cleaning_time;
             lastCleaningValid = sen5xstate.last_cleaning_valid;
             oneShotMode = sen5xstate.one_shot_mode;
-            // Unpack state
-            vocState[7] = (uint8_t)(sen5xstate.voc_state >> 56);
-            vocState[6] = (uint8_t)(sen5xstate.voc_state >> 48);
-            vocState[5] = (uint8_t)(sen5xstate.voc_state >> 40);
-            vocState[4] = (uint8_t)(sen5xstate.voc_state >> 32);
-            vocState[3] = (uint8_t)(sen5xstate.voc_state >> 24);
-            vocState[2] = (uint8_t)(sen5xstate.voc_state >> 16);
-            vocState[1] = (uint8_t)(sen5xstate.voc_state >> 8);
-            vocState[0] = (uint8_t)sen5xstate.voc_state;
 
-            vocTime = sen5xstate.voc_time;
-            vocValid = sen5xstate.voc_valid;
+            if (model == SEN55) {
+                vocTime = sen5xstate.voc_state_time;
+                vocValid = sen5xstate.voc_state_valid;
+                // Unpack state
+                vocState[7] = (uint8_t)(sen5xstate.voc_state_array >> 56);
+                vocState[6] = (uint8_t)(sen5xstate.voc_state_array >> 48);
+                vocState[5] = (uint8_t)(sen5xstate.voc_state_array >> 40);
+                vocState[4] = (uint8_t)(sen5xstate.voc_state_array >> 32);
+                vocState[3] = (uint8_t)(sen5xstate.voc_state_array >> 24);
+                vocState[2] = (uint8_t)(sen5xstate.voc_state_array >> 16);
+                vocState[1] = (uint8_t)(sen5xstate.voc_state_array >> 8);
+                vocState[0] = (uint8_t) sen5xstate.voc_state_array;
+            }
+
+            // LOG_DEBUG("Loaded lastCleaning %u", lastCleaning);
+            // LOG_DEBUG("Loaded lastCleaningValid %u", lastCleaningValid);
+            // LOG_DEBUG("Loaded oneShotMode %s", oneShotMode ? "true" : "false");
+            // LOG_DEBUG("Loaded vocTime %u", vocTime);
+            // LOG_DEBUG("Loaded [%u, %u, %u, %u, %u, %u, %u, %u]",
+            // vocState[7], vocState[6], vocState[5], vocState[4], vocState[3], vocState[2], vocState[1], vocState[0]);
+            // LOG_DEBUG("Loaded %svalid VOC state", vocValid ? "" : "in");
+
             okay = true;
         }
         file.close();
@@ -370,7 +420,7 @@ bool SEN5XSensor::loadState()
 
 bool SEN5XSensor::saveState()
 {
-    // TODO - This should be called before a reboot
+    // TODO - This should be called before a reboot for VOC index storage
     // is there a way to get notified?
 #ifdef FSCom
     auto file = SafeFile(sen5XStateFileName);
@@ -379,20 +429,23 @@ bool SEN5XSensor::saveState()
     sen5xstate.last_cleaning_valid = lastCleaningValid;
     sen5xstate.one_shot_mode = oneShotMode;
 
-    // Unpack state (12 bytes in two parts)
-    sen5xstate.voc_state = ((uint64_t) vocState[7] << 56) |
-        ((uint64_t) vocState[6] << 48) |
-        ((uint64_t) vocState[5] << 40) |
-        ((uint64_t) vocState[4] << 32) |
-        ((uint32_t) vocState[3] << 24) |
-        ((uint32_t) vocState[2] << 16) |
-        ((uint32_t) vocState[1] << 8) |
-        vocState[0];
+    if (model == SEN55) {
+        sen5xstate.has_voc_state_time = true;
+        sen5xstate.has_voc_state_valid = true;
+        sen5xstate.has_voc_state_array = true;
 
-    LOG_INFO("sen5xstate.voc_state %i", sen5xstate.voc_state);
-
-    sen5xstate.voc_time = vocTime;
-    sen5xstate.voc_valid = vocValid;
+        sen5xstate.voc_state_time = vocTime;
+        sen5xstate.voc_state_valid = vocValid;
+        // Unpack state (8 bytes)
+        sen5xstate.voc_state_array = (((uint64_t) vocState[7]) << 56) |
+            ((uint64_t) vocState[6] << 48) |
+            ((uint64_t) vocState[5] << 40) |
+            ((uint64_t) vocState[4] << 32) |
+            ((uint64_t) vocState[3] << 24) |
+            ((uint64_t) vocState[2] << 16) |
+            ((uint64_t) vocState[1] << 8) |
+            ((uint64_t) vocState[0]);
+    }
 
     bool okay = false;
 
@@ -421,42 +474,26 @@ bool SEN5XSensor::isActive(){
 }
 
 uint32_t SEN5XSensor::wakeUp(){
-    // LOG_INFO("SEN5X: Attempting to wakeUp sensor");
+    uint32_t now;
+    now = getValidTime(RTCQuality::RTCQualityDevice);
+    LOG_DEBUG("SEN5X: Waking up sensor");
 
-    // From the datasheet
-    // By default, the VOC algorithm resets its state to initial
-    // values each time a measurement is started,
-    // even if the measurement was stopped only for a short
-    // time. So, the VOC index output value needs a long time
-    // until it is stable again. This can be avoided by
-    // restoring the previously memorized algorithm state before
-    // starting the measure mode
-
-    // TODO - This needs to be tested
-    // In SC, the sensor is operated in contionuous mode if
-    // VOCs are present, increasing battery consumption
-    // A different approach should be possible as stated on the
-    // datasheet (see above)
-    // uint32_t now, passed;
-    // now = getValidTime(RTCQuality::RTCQualityDevice);
-    // passed = now - vocTime; //in seconds
-    // // Check if state is recent, less than 10 minutes (600 seconds)
-    // if ((passed < SEN5X_VOC_VALID_TIME) && (now > SEN5X_VOC_VALID_DATE) && vocValid) {
-    //     if (!vocStateToSensor()){
-    //         LOG_ERROR("SEN5X: Sending VOC state to sensor failed");
-    //     }
-    // } else {
-    //     LOG_DEBUG("SEN5X: No valid VOC state found. Ignoring");
-    // }
+    // Check if state is recent, less than 10 minutes (600 seconds)
+    if (vocStateRecent(now) && vocStateValid()) {
+        if (!vocStateToSensor()){
+            LOG_ERROR("SEN5X: Sending VOC state to sensor failed");
+        }
+    } else {
+        LOG_DEBUG("SEN5X: No valid VOC state found. Ignoring");
+    }
 
     if (!sendCommand(SEN5X_START_MEASUREMENT)) {
         LOG_ERROR("SEN5X: Error starting measurement");
-        // TODO - what should this return??
+        // TODO - what should this return?? Something actually on the default interval
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
     delay(50); // From Sensirion Datasheet
 
-    // LOG_INFO("SEN5X: Setting measurement mode");
     // TODO - This is currently "problematic"
     // If time is updated in between reads, there is no way to
     // keep track of how long it has passed
@@ -465,6 +502,15 @@ uint32_t SEN5XSensor::wakeUp(){
     if (state == SEN5X_MEASUREMENT)
         LOG_INFO("SEN5X: Started measurement mode");
     return SEN5X_WARMUP_MS_1;
+}
+
+bool SEN5XSensor::vocStateStable()
+{
+    uint32_t now;
+    now = getTime();
+    uint32_t sinceFirstMeasureStarted = (now - firstMeasureStarted);
+    LOG_DEBUG("sinceFirstMeasureStarted: %us", sinceFirstMeasureStarted);
+    return sinceFirstMeasureStarted > SEN55_VOC_STATE_WARMUP_S;
 }
 
 bool SEN5XSensor::startCleaning()
@@ -532,7 +578,7 @@ int32_t SEN5XSensor::runOnce()
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
 
-    // Check if firmware version allows The direct switch between Measurement and RHT/Gas-Only Measurement mode
+    // Check the firmware version
     if (!getVersion()) return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     if (firmwareVer < 2) {
         LOG_ERROR("SEN5X: error firmware is too old and will not work with this implementation");
@@ -551,8 +597,8 @@ int32_t SEN5XSensor::runOnce()
     uint32_t now;
     int32_t passed;
     now = getValidTime(RTCQuality::RTCQualityDevice);
-    // If time is not RTCQualityNone, it will return non-zero
 
+    // If time is not RTCQualityNone, it will return non-zero
     if (now) {
         if (lastCleaningValid) {
 
@@ -566,36 +612,35 @@ int32_t SEN5XSensor::runOnce()
                 LOG_INFO("SEN5X: Cleaning not needed (%ds passed). Last cleaning date (in epoch): %us", passed, lastCleaning);
             }
         } else {
-            // We assume the device has just been updated or it is new, so no need to trigger a cleaning.
+            // We assume the device has just been updated or it is new,
+            // so no need to trigger a cleaning.
             // Just save the timestamp to do a cleaning one week from now.
-            // TODO - could we trigger this after getting time?
             // Otherwise, we will never trigger cleaning in some cases
             lastCleaning = now;
             lastCleaningValid = true;
             LOG_INFO("SEN5X: No valid last cleaning date found, saving it now: %us", lastCleaning);
             saveState();
         }
+
         if (model == SEN55) {
             if (!vocValid) {
                 LOG_INFO("SEN5X: No valid VOC's state found");
             } else {
-                passed = now - vocTime; //in seconds
-
-                // Check if state is recent, less than 10 minutes (600 seconds)
-                if (passed < SEN5X_VOC_VALID_TIME && (now > SEN5X_VOC_VALID_DATE)) {
+                // Check if state is recent
+                if (vocStateRecent(now)) {
                     // If current date greater than 01/01/2018 (validity check)
                     // Send it to the sensor
                     LOG_INFO("SEN5X: VOC state is valid and recent");
                     vocStateToSensor();
                 } else {
-                    LOG_INFO("SEN5X VOC state is to old or date is invalid");
+                    LOG_INFO("SEN5X: VOC state is too old or date is invalid");
+                    LOG_DEBUG("SEN5X: vocTime %u, Passed %u, and now %u", vocTime, passed, now);
                 }
             }
         }
-
     } else {
         // TODO - Should this actually ignore? We could end up never cleaning...
-        LOG_INFO("SEN5X: Not enough RTCQuality, ignoring saved state");
+        LOG_INFO("SEN5X: Not enough RTCQuality, ignoring saved state. Trying again later");
     }
 
     return initI2CSensor();
@@ -644,6 +689,17 @@ bool SEN5XSensor::readValues()
     LOG_DEBUG("Got: pM1p0=%u, pM2p5=%u, pM4p0=%u, pM10p0=%u",
                 sen5xmeasurement.pM1p0, sen5xmeasurement.pM2p5,
                 sen5xmeasurement.pM4p0, sen5xmeasurement.pM10p0);
+
+    if (model == SEN54 || model == SEN55) {
+        LOG_DEBUG("Got: humidity=%.2f, temperature=%.2f, noxIndex=%.2f",
+                    sen5xmeasurement.humidity, sen5xmeasurement.temperature,
+                    sen5xmeasurement.noxIndex);
+    }
+
+    if (model == SEN55) {
+        LOG_DEBUG("Got: vocIndex=%.2f",
+            sen5xmeasurement.vocIndex);
+    }
 
     return true;
 }
@@ -783,6 +839,10 @@ int32_t SEN5XSensor::pendingForReady(){
                 return SEN5X_WARMUP_MS_1 - sinceMeasureStarted;
             }
 
+            if (!firstMeasureStarted) {
+                firstMeasureStarted = now;
+            }
+
             // Get PN values to check if we are above or below threshold
             readPnValues(true);
 
@@ -882,6 +942,7 @@ bool SEN5XSensor::getMetrics(meshtastic_Telemetry *measurement)
                 measurement->variant.air_quality_metrics.pm_voc_idx = sen5xmeasurement.vocIndex;
             }
         }
+
 
         return true;
     } else if (response == 1) {
