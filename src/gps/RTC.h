@@ -48,7 +48,7 @@ uint32_t getTime(bool local = false);
 /// Return time since 1970 in secs.  If quality is RTCQualityNone return zero
 uint32_t getValidTime(RTCQuality minQuality, bool local = false);
 
-void readFromRTC();
+RTCSetResult readFromRTC();
 
 time_t gm_mktime(struct tm *tm);
 
