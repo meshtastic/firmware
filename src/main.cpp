@@ -1531,7 +1531,7 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 #if ((!HAS_SCREEN || NO_EXT_GPIO) || MESHTASTIC_EXCLUDE_CANNEDMESSAGES) && !defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_CANNEDMSG_CONFIG;
 #endif
-#if NO_EXT_GPIO
+#if NO_EXT_GPIO || MESHTASTIC_EXCLUDE_EXTERNALNOTIFICATION
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_EXTNOTIF_CONFIG;
 #endif
 // Only edge case here is if we apply this a device with built in Accelerometer and want to detect interrupts
