@@ -31,17 +31,19 @@ uint8_t test_count = 0;
 
 void menuHandler::loraMenu()
 {
-    static const char *optionsArray[] = {"Back", "Region Picker"};
-    enum optionsNumbers { Back = 0, lora_picker = 1 };
+    static const char *optionsArray[] = {"Back", "Region Picker", "Device Role"};
+    enum optionsNumbers { Back = 0, lora_picker = 1, device_role_picker = 2 };
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "LoRa Actions";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 2;
+    bannerOptions.optionsCount = 3;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == Back) {
             // No action
         } else if (selected == lora_picker) {
             menuHandler::menuQueue = menuHandler::lora_picker;
+        } else if (selected == device_role_picker) {
+            menuHandler::menuQueue = menuHandler::device_role_picker;
         }
     };
     screen->showOverlayBanner(bannerOptions);
@@ -136,6 +138,39 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
             service->reloadConfig(SEGMENT_CONFIG);
             rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
         }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::DeviceRolePicker()
+{
+    static const char *optionsArray[] = {"Back", "Client", "Client Mute", "Lost and Found", "Tracker"};
+    enum optionsNumbers {
+        Back = 0,
+        devicerole_client = 1,
+        devicerole_clientmute = 2,
+        devicerole_lostandfound = 3,
+        devicerole_tracker = 4
+    };
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Device Role";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 5;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Back) {
+            menuHandler::menuQueue = menuHandler::lora_Menu;
+            screen->runNow();
+        } else if (selected == devicerole_client) {
+            config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+        } else if (selected == devicerole_clientmute) {
+            config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE;
+        } else if (selected == devicerole_lostandfound) {
+            config.device.role = meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND;
+        } else if (selected == devicerole_tracker) {
+            config.device.role = meshtastic_Config_DeviceConfig_Role_TRACKER;
+        }
+        service->reloadConfig(SEGMENT_CONFIG);
+        rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
     };
     screen->showOverlayBanner(bannerOptions);
 }
@@ -1291,8 +1326,14 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
     switch (menuQueue) {
     case menu_none:
         break;
+    case lora_Menu:
+        loraMenu();
+        break;
     case lora_picker:
         LoraRegionPicker();
+        break;
+    case device_role_picker:
+        DeviceRolePicker();
         break;
     case no_timeout_lora_picker:
         LoraRegionPicker(0);

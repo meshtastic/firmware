@@ -32,3 +32,24 @@ const char *DisplayFormatters::getModemPresetDisplayName(meshtastic_Config_LoRaC
         break;
     }
 }
+
+const char *DisplayFormatters::getDeviceRole(meshtastic_Config_DeviceConfig_Role role)
+{
+    switch (role) {
+    case meshtastic_Config_DeviceConfig_Role_CLIENT:
+        return "Client";
+        break;
+    case meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE:
+        return "Client Mute";
+        break;
+    case meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND:
+        return "Lost and Found";
+        break;
+    case meshtastic_Config_DeviceConfig_Role_TRACKER:
+        return "Tracker";
+        break;
+    default:
+        return "Unknown";
+        break;
+    }
+}
