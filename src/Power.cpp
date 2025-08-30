@@ -128,6 +128,7 @@ RAK9154Sensor rak9154Sensor;
 #ifdef HAS_PPM
 // note: XPOWERS_CHIP_XXX must be defined in variant.h
 #include <XPowersLib.h>
+XPowersPPM *PPM = NULL;
 #endif
 
 #ifdef HAS_BQ27220
@@ -681,7 +682,7 @@ bool Power::setup()
         found = true;
     } else if (lipoChargerInit()) {
         found = true;
-    }  else if (meshSolarInit()) {
+    } else if (meshSolarInit()) {
         found = true;
     } else if (analogInit()) {
         found = true;
@@ -1320,7 +1321,6 @@ bool Power::lipoInit()
 class LipoCharger : public HasBatteryLevel
 {
   private:
-    XPowersPPM *ppm = nullptr;
     BQ27220 *bq = nullptr;
 
   public:
@@ -1329,41 +1329,41 @@ class LipoCharger : public HasBatteryLevel
      */
     bool runOnce()
     {
-        if (ppm == nullptr) {
-            ppm = new XPowersPPM;
-            bool result = ppm->init(Wire, I2C_SDA, I2C_SCL, BQ25896_ADDR);
+        if (PPM == nullptr) {
+            PPM = new XPowersPPM;
+            bool result = PPM->init(Wire, I2C_SDA, I2C_SCL, BQ25896_ADDR);
             if (result) {
                 LOG_INFO("PPM BQ25896 init succeeded");
                 // Set the minimum operating voltage. Below this voltage, the PPM will protect
-                // ppm->setSysPowerDownVoltage(3100);
+                // PPM->setSysPowerDownVoltage(3100);
 
                 // Set input current limit, default is 500mA
-                // ppm->setInputCurrentLimit(800);
+                // PPM->setInputCurrentLimit(800);
 
                 // Disable current limit pin
-                // ppm->disableCurrentLimitPin();
+                // PPM->disableCurrentLimitPin();
 
                 // Set the charging target voltage, Range:3840 ~ 4608mV ,step:16 mV
-                ppm->setChargeTargetVoltage(4288);
+                PPM->setChargeTargetVoltage(4288);
 
                 // Set the precharge current , Range: 64mA ~ 1024mA ,step:64mA
-                // ppm->setPrechargeCurr(64);
+                // PPM->setPrechargeCurr(64);
 
                 // The premise is that limit pin is disabled, or it will
                 // only follow the maximum charging current set by limit pin.
                 // Set the charging current , Range:0~5056mA ,step:64mA
-                ppm->setChargerConstantCurr(1024);
+                PPM->setChargerConstantCurr(1024);
 
                 // To obtain voltage data, the ADC must be enabled first
-                ppm->enableMeasure();
+                PPM->enableMeasure();
 
                 // Turn on charging function
                 // If there is no battery connected, do not turn on the charging function
-                ppm->enableCharge();
+                PPM->enableCharge();
             } else {
                 LOG_WARN("PPM BQ25896 init failed");
-                delete ppm;
-                ppm = nullptr;
+                delete PPM;
+                PPM = nullptr;
                 return false;
             }
         }
@@ -1404,23 +1404,23 @@ class LipoCharger : public HasBatteryLevel
     /**
      * return true if there is a battery installed in this unit
      */
-    virtual bool isBatteryConnect() override { return ppm->getBattVoltage() > 0; }
+    virtual bool isBatteryConnect() override { return PPM->getBattVoltage() > 0; }
 
     /**
      * return true if there is an external power source detected
      */
-    virtual bool isVbusIn() override { return ppm->getVbusVoltage() > 0; }
+    virtual bool isVbusIn() override { return PPM->getVbusVoltage() > 0; }
 
     /**
      * return true if the battery is currently charging
      */
     virtual bool isCharging() override
     {
-        bool isCharging = ppm->isCharging();
+        bool isCharging = PPM->isCharging();
         if (isCharging) {
             LOG_DEBUG("BQ27220 time to full charge: %d min", bq->getTimeToFull());
         } else {
-            if (!ppm->isVbusIn()) {
+            if (!PPM->isVbusIn()) {
                 LOG_DEBUG("BQ27220 time to empty: %d min (%d mAh)", bq->getTimeToEmpty(), bq->getRemainingCapacity());
             }
         }
@@ -1452,8 +1452,6 @@ bool Power::lipoChargerInit()
     return false;
 }
 #endif
-
-
 
 #ifdef HELTEC_MESH_SOLAR
 #include "meshSolarApp.h"
@@ -1492,7 +1490,7 @@ class meshSolarBatteryLevel : public HasBatteryLevel
     /**
      * return true if there is an external power source detected
      */
-    virtual bool isVbusIn() override { return meshSolarIsVbusIn();}
+    virtual bool isVbusIn() override { return meshSolarIsVbusIn(); }
 
     /**
      * return true if the battery is currently charging
