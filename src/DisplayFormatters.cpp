@@ -42,11 +42,32 @@ const char *DisplayFormatters::getDeviceRole(meshtastic_Config_DeviceConfig_Role
     case meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE:
         return "Client Mute";
         break;
+    case meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN:
+        return "Client Hidden";
+        break;
     case meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND:
         return "Lost and Found";
         break;
     case meshtastic_Config_DeviceConfig_Role_TRACKER:
         return "Tracker";
+        break;
+    case meshtastic_Config_DeviceConfig_Role_SENSOR:
+        return "Sensor";
+        break;
+    case meshtastic_Config_DeviceConfig_Role_TAK:
+        return "TAK";
+        break;
+    case meshtastic_Config_DeviceConfig_Role_TAK_TRACKER:
+        return "TAK Tracker";
+        break;
+    case meshtastic_Config_DeviceConfig_Role_ROUTER:
+        return "Router";
+        break;
+    case meshtastic_Config_DeviceConfig_Role_ROUTER_LATE:
+        return "Router Late";
+        break;
+    case meshtastic_Config_DeviceConfig_Role_REPEATER:
+        return "Repeater";
         break;
     default:
         return "Unknown";
