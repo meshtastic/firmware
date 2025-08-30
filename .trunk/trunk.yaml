@@ -8,8 +8,8 @@ plugins:
       uri: https://github.com/trunk-io/plugins
 lint:
   enabled:
-    - checkov@3.2.465
-    - renovate@41.82.10
+    - checkov@3.2.467
+    - renovate@41.88.0
     - prettier@3.6.2
     - trufflehog@3.90.5
     - yamllint@1.37.1
