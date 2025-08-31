@@ -1126,6 +1126,10 @@ int32_t GPS::runOnce()
         LOG_DEBUG("hasValidLocation RISING EDGE");
         hasValidLocation = true;
         shouldPublish = true;
+        lastFixStartMsec = millis();
+        // Calculate hold duration: 10% of search time or 20s, whichever is smaller
+        uint32_t tenPercent = scheduling.elapsedSearchMs() / 10;
+        fixHoldEnds = lastFixStartMsec + ((tenPercent < 20000) ? tenPercent : 20000);
     }
 
     bool tooLong = scheduling.searchedTooLong();
@@ -1135,7 +1139,7 @@ int32_t GPS::runOnce()
     // Once we get a location we no longer desperately want an update
     if ((gotLoc && gotTime) || tooLong) {
 
-        if (tooLong) {
+        if (tooLong && !gotLoc) {
             // we didn't get a location during this ack window, therefore declare loss of lock
             if (hasValidLocation) {
                 LOG_DEBUG("hasValidLocation FALLING EDGE");
@@ -1143,8 +1147,11 @@ int32_t GPS::runOnce()
             p = meshtastic_Position_init_default;
             hasValidLocation = false;
         }
-
-        down();
+        if (millis() > fixHoldEnds) {
+            down();
+        } else {
+            LOG_DEBUG("Holding for GPS data download: %d ms", fixHoldEnds - millis());
+        }
         shouldPublish = true; // publish our update for this just finished acquisition window
     }
 
