@@ -175,9 +175,9 @@ int32_t SerialModule::runOnce()
             }
 #elif defined(ARCH_STM32WL)
             if (moduleConfig.serial.rxd && moduleConfig.serial.txd) {
-                Serial2.begin(baud);
                 Serial2.setTx(moduleConfig.serial.txd);
                 Serial2.setRx(moduleConfig.serial.rxd);
+                Serial2.begin(baud);
             } else {
                 Serial2.begin(baud);
                 Serial2.setTimeout(moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT);
@@ -519,7 +519,7 @@ ParsedLine parseLine(const char *line)
 void SerialModule::processWXSerial()
 {
 #if !defined(TTGO_T_ECHO) && !defined(T_ECHO_LITE) && !defined(CANARYONE) && !defined(CONFIG_IDF_TARGET_ESP32C6) &&              \
-    !defined(MESHLINK) && !defined(ELECROW_ThinkNode_M1) && !defined(ELECROW_ThinkNode_M5)
+    !defined(MESHLINK) && !defined(ELECROW_ThinkNode_M1) && !defined(ELECROW_ThinkNode_M5) && !defined(ARCH_STM32WL)
     static unsigned int lastAveraged = 0;
     static unsigned int averageIntervalMillis = 300000; // 5 minutes hard coded.
     static double dir_sum_sin = 0;
