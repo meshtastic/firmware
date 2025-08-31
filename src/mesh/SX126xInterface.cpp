@@ -12,7 +12,7 @@
 // Particular boards might define a different max power based on what their hardware can do, default to max power output if not
 // specified (may be dangerous if using external PA and SX126x power config forgotten)
 #if ARCH_PORTDUINO
-#define SX126X_MAX_POWER settingsMap[sx126x_max_power]
+#define SX126X_MAX_POWER portduino_config.sx126x_max_power
 #endif
 #ifndef SX126X_MAX_POWER
 #define SX126X_MAX_POWER 22
@@ -53,7 +53,7 @@ template <typename T> bool SX126xInterface<T>::init()
 #endif
 
 #if ARCH_PORTDUINO
-    tcxoVoltage = (float)settingsMap[dio3_tcxo_voltage] / 1000;
+    tcxoVoltage = (float)portduino_config.dio3_tcxo_voltage / 1000;
     if (portduino_config.pinMappings[sx126x_ant_sw_pin].pin != RADIOLIB_NC) {
         digitalWrite(portduino_config.pinMappings[sx126x_ant_sw_pin].pin, HIGH);
         pinMode(portduino_config.pinMappings[sx126x_ant_sw_pin].pin, OUTPUT);
@@ -98,7 +98,7 @@ template <typename T> bool SX126xInterface<T>::init()
         bool dio2AsRfSwitch = true;
 #elif defined(ARCH_PORTDUINO)
         bool dio2AsRfSwitch = false;
-        if (settingsMap[dio2_as_rf_switch]) {
+        if (portduino_config.dio2_as_rf_switch) {
             dio2AsRfSwitch = true;
         }
 #else

@@ -153,9 +153,7 @@ void portduinoSetup()
 {
     int max_GPIO = 0;
     std::string gpioChipName = "gpiochip";
-    settingsMap[spiSpeed] = 2000000;
     settingsMap[displayPanel] = no_screen;
-    settingsMap[touchscreenModule] = no_touchscreen;
 
     if (portduino_config.force_simradio == true) {
         portduino_config.lora_module = use_simradio;
@@ -223,7 +221,7 @@ void portduinoSetup()
         try {
             std::cout << "autoconf: Looking for CH341 device..." << std::endl;
             ch341Hal =
-                new Ch341Hal(0, portduino_config.lora_usb_serial_num, settingsMap[lora_usb_vid], settingsMap[lora_usb_pid]);
+                new Ch341Hal(0, portduino_config.lora_usb_serial_num, portduino_config.lora_usb_vid, portduino_config.lora_usb_pid);
             ch341Hal->getProductString(autoconf_product, 95);
             delete ch341Hal;
             std::cout << "autoconf: Found CH341 device " << autoconf_product << std::endl;
@@ -349,7 +347,7 @@ void portduinoSetup()
     if (portduino_config.lora_spi_dev == "ch341") {
         try {
             ch341Hal =
-                new Ch341Hal(0, portduino_config.lora_usb_serial_num, settingsMap[lora_usb_vid], settingsMap[lora_usb_pid]);
+                new Ch341Hal(0, portduino_config.lora_usb_serial_num, portduino_config.lora_usb_vid, portduino_config.lora_usb_pid);
         } catch (std::exception &e) {
             std::cerr << e.what() << std::endl;
             std::cerr << "Could not initialize CH341 device!" << std::endl;
@@ -481,18 +479,18 @@ bool loadConfig(const char *configPath)
                     }
                 }
             }
-            settingsMap[sx126x_max_power] = yamlConfig["Lora"]["SX126X_MAX_POWER"].as<int>(22);
-            settingsMap[sx128x_max_power] = yamlConfig["Lora"]["SX128X_MAX_POWER"].as<int>(13);
-            settingsMap[lr1110_max_power] = yamlConfig["Lora"]["LR1110_MAX_POWER"].as<int>(22);
-            settingsMap[lr1120_max_power] = yamlConfig["Lora"]["LR1120_MAX_POWER"].as<int>(13);
-            settingsMap[rf95_max_power] = yamlConfig["Lora"]["RF95_MAX_POWER"].as<int>(20);
+            portduino_config.sx126x_max_power = yamlConfig["Lora"]["SX126X_MAX_POWER"].as<int>(22);
+            portduino_config.sx128x_max_power = yamlConfig["Lora"]["SX128X_MAX_POWER"].as<int>(13);
+            portduino_config.lr1110_max_power = yamlConfig["Lora"]["LR1110_MAX_POWER"].as<int>(22);
+            portduino_config.lr1120_max_power = yamlConfig["Lora"]["LR1120_MAX_POWER"].as<int>(13);
+            portduino_config.rf95_max_power = yamlConfig["Lora"]["RF95_MAX_POWER"].as<int>(20);
 
             if (portduino_config.lora_module != use_autoconf && portduino_config.lora_module != use_simradio &&
                 !portduino_config.force_simradio) {
-                settingsMap[dio2_as_rf_switch] = yamlConfig["Lora"]["DIO2_AS_RF_SWITCH"].as<bool>(false);
-                settingsMap[dio3_tcxo_voltage] = yamlConfig["Lora"]["DIO3_TCXO_VOLTAGE"].as<float>(0) * 1000;
-                if (settingsMap[dio3_tcxo_voltage] == 0 && yamlConfig["Lora"]["DIO3_TCXO_VOLTAGE"].as<bool>(false)) {
-                    settingsMap[dio3_tcxo_voltage] = 1800; // default millivolts for "true"
+                portduino_config.dio2_as_rf_switch = yamlConfig["Lora"]["DIO2_AS_RF_SWITCH"].as<bool>(false);
+                portduino_config.dio3_tcxo_voltage = yamlConfig["Lora"]["DIO3_TCXO_VOLTAGE"].as<float>(0) * 1000;
+                if (portduino_config.dio3_tcxo_voltage == 0 && yamlConfig["Lora"]["DIO3_TCXO_VOLTAGE"].as<bool>(false)) {
+                    portduino_config.dio3_tcxo_voltage = 1800; // default millivolts for "true"
                 }
 
                 // backwards API compatibility and to globally set gpiochip once
@@ -502,10 +500,10 @@ bool loadConfig(const char *configPath)
                 }
             }
 
-            settingsMap[spiSpeed] = yamlConfig["Lora"]["spiSpeed"].as<int>(2000000);
+            portduino_config.spiSpeed = yamlConfig["Lora"]["spiSpeed"].as<int>(2000000);
             portduino_config.lora_usb_serial_num = yamlConfig["Lora"]["USB_Serialnum"].as<std::string>("");
-            settingsMap[lora_usb_pid] = yamlConfig["Lora"]["USB_PID"].as<int>(0x5512);
-            settingsMap[lora_usb_vid] = yamlConfig["Lora"]["USB_VID"].as<int>(0x1A86);
+            portduino_config.lora_usb_pid = yamlConfig["Lora"]["USB_PID"].as<int>(0x5512);
+            portduino_config.lora_usb_vid = yamlConfig["Lora"]["USB_VID"].as<int>(0x1A86);
 
             portduino_config.lora_spi_dev = yamlConfig["Lora"]["spidev"].as<std::string>("spidev0.0");
             if (portduino_config.lora_spi_dev != "ch341") {
@@ -570,7 +568,7 @@ bool loadConfig(const char *configPath)
             std::string serialPath = yamlConfig["GPS"]["SerialPath"].as<std::string>("");
             if (serialPath != "") {
                 Serial1.setPath(serialPath);
-                settingsMap[has_gps] = 1;
+                portduino_config.has_gps = 1;
             }
         }
         if (yamlConfig["I2C"]) {
@@ -631,20 +629,20 @@ bool loadConfig(const char *configPath)
         }
         if (yamlConfig["Touchscreen"]) {
             if (yamlConfig["Touchscreen"]["Module"].as<std::string>("") == "XPT2046")
-                settingsMap[touchscreenModule] = xpt2046;
+                portduino_config.touchscreenModule = xpt2046;
             else if (yamlConfig["Touchscreen"]["Module"].as<std::string>("") == "STMPE610")
-                settingsMap[touchscreenModule] = stmpe610;
+                portduino_config.touchscreenModule = stmpe610;
             else if (yamlConfig["Touchscreen"]["Module"].as<std::string>("") == "GT911")
-                settingsMap[touchscreenModule] = gt911;
+                portduino_config.touchscreenModule = gt911;
             else if (yamlConfig["Touchscreen"]["Module"].as<std::string>("") == "FT5x06")
-                settingsMap[touchscreenModule] = ft5x06;
+                portduino_config.touchscreenModule = ft5x06;
 
             readGPIOFromYaml(yamlConfig["Touchscreen"]["CS"], portduino_config.pinMappings[touchscreenCS], -1);
             readGPIOFromYaml(yamlConfig["Touchscreen"]["IRQ"], portduino_config.pinMappings[touchscreenIRQ], -1);
 
             settingsMap[touchscreenBusFrequency] = yamlConfig["Touchscreen"]["BusFrequency"].as<int>(1000000);
             settingsMap[touchscreenRotate] = yamlConfig["Touchscreen"]["Rotate"].as<int>(-1);
-            settingsMap[touchscreenI2CAddr] = yamlConfig["Touchscreen"]["I2CAddr"].as<int>(-1);
+            portduino_config.touchscreenI2CAddr = yamlConfig["Touchscreen"]["I2CAddr"].as<int>(-1);
             if (yamlConfig["Touchscreen"]["spidev"]) {
                 portduino_config.touchscreen_spi_dev = "/dev/" + yamlConfig["Touchscreen"]["spidev"].as<std::string>("");
                 if (portduino_config.touchscreen_spi_dev.length() == 14) {
@@ -668,9 +666,9 @@ bool loadConfig(const char *configPath)
             readGPIOFromYaml(yamlConfig["Input"]["TrackballPress"], portduino_config.pinMappings[tbPressPin]);
 
             if (yamlConfig["Input"]["TrackballDirection"].as<std::string>("RISING") == "RISING") {
-                settingsMap[tbDirection] = 4;
+                portduino_config.tbDirection = 4;
             } else if (yamlConfig["Input"]["TrackballDirection"].as<std::string>("RISING") == "FALLING") {
-                settingsMap[tbDirection] = 3;
+                portduino_config.tbDirection = 3;
             }
         }
 

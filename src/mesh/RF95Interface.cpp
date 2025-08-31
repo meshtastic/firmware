@@ -10,7 +10,7 @@
 #endif
 
 #if ARCH_PORTDUINO
-#define RF95_MAX_POWER settingsMap[rf95_max_power]
+#define RF95_MAX_POWER portduino_config.rf95_max_power
 #endif
 #ifndef RF95_MAX_POWER
 #define RF95_MAX_POWER 20

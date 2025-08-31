@@ -89,9 +89,9 @@ void tftSetup(void)
                     .pin_bl = (int16_t)portduino_config.pinMappings[displayBacklight].pin,
                     .pwm_channel = (int8_t)portduino_config.pinMappings[displayBacklightPWMChannel].pin,
                     .invert = (bool)settingsMap[displayBacklightInvert]});
-            if (settingsMap[touchscreenI2CAddr] == -1) {
+            if (portduino_config.touchscreenI2CAddr == -1) {
                 displayConfig.touch(
-                    DisplayDriverConfig::touch_config_t{.type = touch[settingsMap[touchscreenModule]],
+                    DisplayDriverConfig::touch_config_t{.type = touch[portduino_config.touchscreenModule],
                                                         .freq = (uint32_t)settingsMap[touchscreenBusFrequency],
                                                         .pin_int = (int16_t)portduino_config.pinMappings[touchscreenIRQ].pin,
                                                         .offset_rotation = (uint8_t)settingsMap[touchscreenRotate],
@@ -101,7 +101,7 @@ void tftSetup(void)
                                                         .pin_cs = (int16_t)portduino_config.pinMappings[touchscreenCS].pin});
             } else {
                 displayConfig.touch(DisplayDriverConfig::touch_config_t{
-                    .type = touch[settingsMap[touchscreenModule]],
+                    .type = touch[portduino_config.touchscreenModule],
                     .freq = (uint32_t)settingsMap[touchscreenBusFrequency],
                     .x_min = 0,
                     .x_max =
@@ -113,7 +113,7 @@ void tftSetup(void)
                                   1),
                     .pin_int = (int16_t)portduino_config.pinMappings[touchscreenIRQ].pin,
                     .offset_rotation = (uint8_t)settingsMap[touchscreenRotate],
-                    .i2c{.i2c_addr = (uint8_t)settingsMap[touchscreenI2CAddr]}});
+                    .i2c{.i2c_addr = (uint8_t)portduino_config.touchscreenI2CAddr}});
             }
         }
         deviceScreen = &DeviceScreen::create(&displayConfig);

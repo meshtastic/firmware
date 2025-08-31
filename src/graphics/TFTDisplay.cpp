@@ -821,12 +821,12 @@ class LGFX : public lgfx::LGFX_Device
         _panel_instance->config(cfg);
 
         // Configure settings for touch  control.
-        if (settingsMap[touchscreenModule]) {
-            if (settingsMap[touchscreenModule] == xpt2046) {
+        if (portduino_config.touchscreenModule) {
+            if (portduino_config.touchscreenModule == xpt2046) {
                 _touch_instance = new lgfx::Touch_XPT2046;
-            } else if (settingsMap[touchscreenModule] == stmpe610) {
+            } else if (portduino_config.touchscreenModule == stmpe610) {
                 _touch_instance = new lgfx::Touch_STMPE610;
-            } else if (settingsMap[touchscreenModule] == ft5x06) {
+            } else if (portduino_config.touchscreenModule == ft5x06) {
                 _touch_instance = new lgfx::Touch_FT5x06;
             }
             auto touch_cfg = _touch_instance->config();
@@ -839,8 +839,8 @@ class LGFX : public lgfx::LGFX_Device
             touch_cfg.pin_int = portduino_config.pinMappings[touchscreenIRQ].pin;
             touch_cfg.bus_shared = true;
             touch_cfg.offset_rotation = settingsMap[touchscreenRotate];
-            if (settingsMap[touchscreenI2CAddr] != -1) {
-                touch_cfg.i2c_addr = settingsMap[touchscreenI2CAddr];
+            if (portduino_config.touchscreenI2CAddr != -1) {
+                touch_cfg.i2c_addr = portduino_config.touchscreenI2CAddr;
             } else {
                 touch_cfg.spi_host = portduino_config.touchscreen_spi_dev_int;
             }

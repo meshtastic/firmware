@@ -21,20 +21,6 @@ inline const std::unordered_map<std::string, std::string> configProducts = {
     {"RAK6421-13300-S2", "lora-RAK6421-13300-slot2.yaml"}};
 
 enum configNames {
-    sx126x_max_power,
-    sx128x_max_power,
-    lr1110_max_power,
-    lr1120_max_power,
-    rf95_max_power,
-    dio2_as_rf_switch,
-    dio3_tcxo_voltage,
-    lora_usb_pid,
-    lora_usb_vid,
-    tbDirection,
-    spiSpeed,
-    has_gps,
-    touchscreenModule,
-    touchscreenI2CAddr,
     touchscreenBusFrequency,
     touchscreenRotate,
     displayBusFrequency,
@@ -56,8 +42,8 @@ enum configNames {
     configDisplayMode,
     has_configDisplayMode
 };
-enum { no_screen, x11, fb, st7789, st7735, st7735s, st7796, ili9341, ili9342, ili9486, ili9488, hx8357d };
-enum { no_touchscreen, xpt2046, stmpe610, gt911, ft5x06 };
+enum screen_modules { no_screen, x11, fb, st7789, st7735, st7735s, st7796, ili9341, ili9342, ili9486, ili9488, hx8357d };
+enum touchscreen_modules { no_touchscreen, xpt2046, stmpe610, gt911, ft5x06 };
 enum portduino_log_level { level_error, level_warn, level_info, level_debug, level_trace };
 enum lora_module_enum {
     use_simradio,
@@ -141,6 +127,20 @@ extern struct portduino_config_struct {
     std::string lora_usb_serial_num = "";
     int lora_spi_dev_int = 0;
     int lora_default_gpiochip = 0;
+    int sx126x_max_power = 0;
+    int sx128x_max_power = 0;
+    int lr1110_max_power = 0;
+    int lr1120_max_power = 0;
+    int rf95_max_power = 0;
+    bool dio2_as_rf_switch = false;
+    int dio3_tcxo_voltage = 0;
+    int lora_usb_pid = 0;
+    int lora_usb_vid = 0;
+    int spiSpeed = 2000000;
+
+    // GPS
+    bool has_gps = false;
+
 
     // I2C
     std::string i2cdev = "";
@@ -152,10 +152,13 @@ extern struct portduino_config_struct {
     // Touchscreen
     std::string touchscreen_spi_dev = "";
     int touchscreen_spi_dev_int = 0;
+    touchscreen_modules touchscreenModule = no_touchscreen;
+    int touchscreenI2CAddr = -1;
 
     // Input
     std::string keyboardDevice = "";
     std::string pointerDevice = "";
+    int tbDirection;
 
     // Logging
     portduino_log_level logoutputlevel = level_debug;
@@ -195,6 +198,30 @@ extern struct portduino_config_struct {
                 out << YAML::EndMap; // User
             }
         }
+
+        if (sx126x_max_power != 0)
+            out << YAML::Key << "SX126X_MAX_POWER" << YAML::Value << sx126x_max_power;
+        if (sx128x_max_power != 0)
+            out << YAML::Key << "SX128X_MAX_POWER" << YAML::Value << sx128x_max_power;
+        if (lr1110_max_power != 0)
+            out << YAML::Key << "LR1110_MAX_POWER" << YAML::Value << lr1110_max_power;
+        if (lr1120_max_power != 0)
+            out << YAML::Key << "LR1120_MAX_POWER" << YAML::Value << lr1120_max_power;
+        if (rf95_max_power != 0)
+            out << YAML::Key << "RF95_MAX_POWER" << YAML::Value << rf95_max_power;
+        out << YAML::Key << "DIO2_AS_RF_SWITCH" << YAML::Value << dio2_as_rf_switch;
+        if (dio3_tcxo_voltage != 0)
+            out << YAML::Key << "DIO3_TCXO_VOLTAGE" << YAML::Value << dio3_tcxo_voltage;
+        if (lora_usb_pid)
+            out << YAML::Key << "USB_PID" << YAML::Value << lora_usb_pid;
+        if (lora_usb_vid)
+            out << YAML::Key << "USB_VID" << YAML::Value << lora_usb_vid;
+        if (lora_spi_dev != "")
+            out << YAML::Key << "spidev" << YAML::Value << lora_spi_dev;
+        if (lora_usb_serial_num != "")
+            out << YAML::Key << "USB_Serialnum" << YAML::Value << lora_usb_serial_num;
+        out << YAML::Key << "spiSpeed" << YAML::Value << spiSpeed;
+
 
         out << YAML::Key << "rfswitch_table" << YAML::Value << YAML::BeginMap;
 
@@ -253,10 +280,6 @@ extern struct portduino_config_struct {
         }
 
         out << YAML::EndMap; // rfswitch_table
-        if (lora_spi_dev != "")
-            out << YAML::Key << "spidev" << YAML::Value << lora_spi_dev;
-        if (lora_usb_serial_num != "")
-            out << YAML::Key << "USB_Serialnum" << YAML::Value << lora_usb_serial_num;
         out << YAML::EndMap; // Lora
 
         if (i2cdev != "") {
@@ -276,6 +299,18 @@ extern struct portduino_config_struct {
         if (touchscreen_spi_dev != "") {
             out << YAML::Key << "Touchscreen" << YAML::Value << YAML::BeginMap;
             out << YAML::Key << "spidev" << YAML::Value << touchscreen_spi_dev;
+            switch (touchscreenModule) {
+                case xpt2046:
+                    out << YAML::Key << "Module" << YAML::Value << "XPT2046";
+                case stmpe610:
+                    out << YAML::Key << "Module" << YAML::Value << "STMPE610";
+                case gt911:
+                    out << YAML::Key << "Module" << YAML::Value << "GT911";
+                case ft5x06:
+                    out << YAML::Key << "Module" << YAML::Value << "FT5x06";
+            }
+            if (touchscreenI2CAddr != -1)
+                out << YAML::Key << "I2CAddr" << YAML::Value << touchscreenI2CAddr;
             out << YAML::EndMap; // Touchscreen
         }
 
@@ -328,6 +363,11 @@ extern struct portduino_config_struct {
             out << YAML::Key << "gpiochip" << YAML::Value << pinMappings[tbPressPin].gpiochip;
             out << YAML::EndMap; // TrackballPress
         }
+        if (tbDirection == 3)
+            out << YAML::Key << "TrackballDirection" << YAML::Value << "RISING";
+        else if (tbDirection == 4)
+            out << YAML::Key << "TrackballDirection" << YAML::Value << "FALLING";
+
         out << YAML::EndMap; // Input
 
         out << YAML::Key << "Logging" << YAML::Value << YAML::BeginMap;

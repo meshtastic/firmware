@@ -390,7 +390,7 @@ void setup()
 
     concurrency::hasBeenSetup = true;
 #if ARCH_PORTDUINO
-    SPISettings spiSettings(settingsMap[spiSpeed], MSBFIRST, SPI_MODE0);
+    SPISettings spiSettings(portduino_config.spiSpeed, MSBFIRST, SPI_MODE0);
 #else
     SPISettings spiSettings(4000000, MSBFIRST, SPI_MODE0);
 #endif

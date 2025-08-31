@@ -618,7 +618,7 @@ void Screen::setup()
 
 #if ARCH_PORTDUINO
     if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
-        if (settingsMap[touchscreenModule]) {
+        if (portduino_config.touchscreenModule) {
             touchScreenImpl1 =
                 new TouchScreenImpl1(dispdev->getWidth(), dispdev->getHeight(), static_cast<TFTDisplay *>(dispdev)->getTouch);
             touchScreenImpl1->init();
