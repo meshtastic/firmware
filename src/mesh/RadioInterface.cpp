@@ -32,9 +32,12 @@ const RegionInfo regions[] = {
     RDEF(US, 902.0f, 928.0f, 100, 0, 30, true, false, false),
 
     /*
-        https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
+        EN300220 ETSI V3.2.1 [Table B.1, Item H, p. 21]
+
+        https://www.etsi.org/deliver/etsi_en/300200_300299/30022002/03.02.01_60/en_30022002v030201p.pdf
+        FIXME: https://github.com/meshtastic/firmware/issues/3371
      */
-    RDEF(EU_433, 433.0f, 434.0f, 10, 0, 12, true, false, false),
+    RDEF(EU_433, 433.0f, 434.0f, 10, 0, 10, true, false, false),
 
     /*
        https://www.thethingsnetwork.org/docs/lorawan/duty-cycle/
@@ -170,11 +173,10 @@ const RegionInfo regions[] = {
     */
     RDEF(KZ_433, 433.075f, 434.775f, 100, 0, 10, true, false, false), RDEF(KZ_863, 863.0f, 868.0f, 100, 0, 30, true, false, true),
 
-
     /*
         Nepal
-        865 MHz to 868 MHz frequency band for IoT (Internet of Things), M2M (Machine-to-Machine), and smart metering use, specifically in non-cellular mode.
-        https://www.nta.gov.np/uploads/contents/Radio-Frequency-Policy-2080-English.pdf
+        865 MHz to 868 MHz frequency band for IoT (Internet of Things), M2M (Machine-to-Machine), and smart metering use,
+       specifically in non-cellular mode. https://www.nta.gov.np/uploads/contents/Radio-Frequency-Policy-2080-English.pdf
     */
     RDEF(NP_865, 865.0f, 868.0f, 100, 0, 30, true, false, false),
 
@@ -336,8 +338,9 @@ uint32_t RadioInterface::getTxDelayMsecWeighted(float snr)
 void printPacket(const char *prefix, const meshtastic_MeshPacket *p)
 {
 #if defined(DEBUG_PORT) && !defined(DEBUG_MUTE)
-    std::string out = DEBUG_PORT.mt_sprintf("%s (id=0x%08x fr=0x%08x to=0x%08x, WantAck=%d, HopLim=%d Ch=0x%x", prefix, p->id,
-                                            p->from, p->to, p->want_ack, p->hop_limit, p->channel);
+    std::string out =
+        DEBUG_PORT.mt_sprintf("%s (id=0x%08x fr=0x%08x to=0x%08x, transport = %u, WantAck=%d, HopLim=%d Ch=0x%x", prefix, p->id,
+                              p->from, p->to, p->transport_mechanism, p->want_ack, p->hop_limit, p->channel);
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         auto &s = p->decoded;
 
@@ -666,8 +669,10 @@ void RadioInterface::limitPower(int8_t loraMaxPower)
 
 void RadioInterface::deliverToReceiver(meshtastic_MeshPacket *p)
 {
-    if (router)
+    if (router) {
+        p->transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
         router->enqueueReceivedMessage(p);
+    }
 }
 
 /***

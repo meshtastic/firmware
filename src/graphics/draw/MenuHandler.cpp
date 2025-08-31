@@ -10,7 +10,10 @@
 #include "graphics/Screen.h"
 #include "graphics/SharedUIDisplay.h"
 #include "graphics/draw/UIRenderer.h"
+#include "input/RotaryEncoderInterruptImpl1.h"
+#include "input/UpDownInterruptImpl1.h"
 #include "main.h"
+#include "mesh/MeshTypes.h"
 #include "modules/AdminModule.h"
 #include "modules/CannedMessageModule.h"
 #include "modules/KeyVerificationModule.h"
@@ -25,6 +28,45 @@ namespace graphics
 menuHandler::screenMenus menuHandler::menuQueue = menu_none;
 bool test_enabled = false;
 uint8_t test_count = 0;
+
+void menuHandler::loraMenu()
+{
+    static const char *optionsArray[] = {"Back", "Region Picker"};
+    enum optionsNumbers { Back = 0, lora_picker = 1 };
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "LoRa Actions";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 2;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Back) {
+            // No action
+        } else if (selected == lora_picker) {
+            menuHandler::menuQueue = menuHandler::lora_picker;
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::OnboardMessage()
+{
+    static const char *optionsArray[] = {"OK", "Got it!"};
+    enum optionsNumbers { OK, got };
+    BannerOverlayOptions bannerOptions;
+#if HAS_TFT
+    bannerOptions.message = "Welcome to Meshtastic!\nSwipe to navigate and\nlong press to select\nor open a menu.";
+#elif defined(BUTTON_PIN)
+    bannerOptions.message = "Welcome to Meshtastic!\nClick to navigate and\nlong press to select\nor open a menu.";
+#else
+    bannerOptions.message = "Welcome to Meshtastic!\nUse the Select button\nto open menus\nand make selections.";
+#endif
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 2;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        menuHandler::menuQueue = menuHandler::no_timeout_lora_picker;
+        screen->runNow();
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
 
 void menuHandler::LoraRegionPicker(uint32_t duration)
 {
@@ -284,7 +326,7 @@ void menuHandler::messageResponseMenu()
     bannerOptions.optionsCount = options;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == Dismiss) {
-            screen->dismissCurrentFrame();
+            screen->hideCurrentFrame();
         } else if (selected == Preset) {
             if (devicestate.rx_text_message.to == NODENUM_BROADCAST) {
                 cannedMessageModule->LaunchWithDestination(NODENUM_BROADCAST, devicestate.rx_text_message.channel);
@@ -318,15 +360,18 @@ void menuHandler::homeBaseMenu()
     static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
 
-#ifdef PIN_EINK_EN
+#if defined(PIN_EINK_EN) || defined(PCA_PIN_EINK_EN)
     optionsArray[options] = "Toggle Backlight";
     optionsEnumArray[options++] = Backlight;
 #else
     optionsArray[options] = "Sleep Screen";
     optionsEnumArray[options++] = Sleep;
 #endif
-
-    optionsArray[options] = "Send Position";
+    if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
+        optionsArray[options] = "Send Position";
+    } else {
+        optionsArray[options] = "Send Node Info";
+    }
     optionsEnumArray[options++] = Position;
     optionsArray[options] = "New Preset Msg";
     optionsEnumArray[options++] = Preset;
@@ -342,12 +387,24 @@ void menuHandler::homeBaseMenu()
     bannerOptions.optionsCount = options;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == Backlight) {
-#ifdef PIN_EINK_EN
-            if (digitalRead(PIN_EINK_EN) == HIGH) {
+#if defined(PIN_EINK_EN)
+            if (uiconfig.screen_brightness == 1) {
+                uiconfig.screen_brightness = 0;
                 digitalWrite(PIN_EINK_EN, LOW);
             } else {
+                uiconfig.screen_brightness = 1;
                 digitalWrite(PIN_EINK_EN, HIGH);
             }
+            saveUIConfig();
+#elif defined(PCA_PIN_EINK_EN)
+            if (uiconfig.screen_brightness == 1) {
+                uiconfig.screen_brightness = 0;
+                io.digitalWrite(PCA_PIN_EINK_EN, LOW);
+            } else {
+                uiconfig.screen_brightness = 1;
+                io.digitalWrite(PCA_PIN_EINK_EN, HIGH);
+            }
+            saveUIConfig();
 #endif
         } else if (selected == Sleep) {
             screen->setOn(false);
@@ -394,18 +451,21 @@ void menuHandler::textMessageBaseMenu()
 
 void menuHandler::systemBaseMenu()
 {
-    enum optionsNumbers { Back, Notifications, ScreenOptions, Bluetooth, PowerMenu, Test, enumEnd };
+    enum optionsNumbers { Back, Notifications, ScreenOptions, Bluetooth, PowerMenu, FrameToggles, Test, enumEnd };
     static const char *optionsArray[enumEnd] = {"Back"};
     static int optionsEnumArray[enumEnd] = {Back};
     int options = 1;
 
     optionsArray[options] = "Notifications";
     optionsEnumArray[options++] = Notifications;
-#if defined(ST7789_CS) || defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) || defined(USE_SH1107) ||             \
-    defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || HAS_TFT
+#if defined(ST7789_CS) || defined(ST7796_CS) || defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) ||              \
+    defined(USE_SH1107) || defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || HAS_TFT
     optionsArray[options] = "Screen Options";
     optionsEnumArray[options++] = ScreenOptions;
 #endif
+
+    optionsArray[options] = "Frame Visiblity Toggle";
+    optionsEnumArray[options++] = FrameToggles;
 
     optionsArray[options] = "Bluetooth Toggle";
     optionsEnumArray[options++] = Bluetooth;
@@ -432,6 +492,9 @@ void menuHandler::systemBaseMenu()
             screen->runNow();
         } else if (selected == PowerMenu) {
             menuHandler::menuQueue = menuHandler::power_menu;
+            screen->runNow();
+        } else if (selected == FrameToggles) {
+            menuHandler::menuQueue = menuHandler::FrameToggles;
             screen->runNow();
         } else if (selected == Test) {
             menuHandler::menuQueue = menuHandler::test_menu;
@@ -499,6 +562,7 @@ void menuHandler::positionBaseMenu()
         optionsArray[options] = "Compass Calibrate";
         optionsEnumArray[options++] = CompassCalibrate;
     }
+
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "Position Action";
     bannerOptions.optionsArrayPtr = optionsArray;
@@ -692,7 +756,7 @@ void menuHandler::BrightnessPickerMenu()
 #if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190)
             // For HELTEC devices, use analogWrite to control backlight
             analogWrite(VTFT_LEDA, uiconfig.screen_brightness);
-#elif defined(ST7789_CS)
+#elif defined(ST7789_CS) || defined(ST7796_CS)
             static_cast<TFTDisplay *>(screen->getDisplayDevice())->setDisplayBrightness(uiconfig.screen_brightness);
 #elif defined(USE_OLED) || defined(USE_SSD1306) || defined(USE_SH1106) || defined(USE_SH1107)
             screen->getDisplayDevice()->setBrightness(uiconfig.screen_brightness);
@@ -735,7 +799,7 @@ void menuHandler::TFTColorPickerMenu(OLEDDisplay *display)
     bannerOptions.optionsArrayPtr = optionsArray;
     bannerOptions.optionsCount = 10;
     bannerOptions.bannerCallback = [display](int selected) -> void {
-#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || defined(T_DECK) || HAS_TFT
+#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || defined(T_DECK) || defined(T_LORA_PAGER) || HAS_TFT
         uint8_t TFT_MESH_r = 0;
         uint8_t TFT_MESH_g = 0;
         uint8_t TFT_MESH_b = 0;
@@ -1012,7 +1076,7 @@ void menuHandler::screenOptionsMenu()
     }
 
     // Only show screen color for TFT displays
-#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || defined(T_DECK) || HAS_TFT
+#if defined(HELTEC_MESH_NODE_T114) || defined(HELTEC_VISION_MASTER_T190) || defined(T_DECK) || defined(T_LORA_PAGER) || HAS_TFT
     optionsArray[options] = "Screen Color";
     optionsEnumArray[options++] = ScreenColor;
 #endif
@@ -1110,6 +1174,116 @@ void menuHandler::keyVerificationFinalPrompt()
     }
 }
 
+void menuHandler::FrameToggles_menu()
+{
+    enum optionsNumbers {
+        Finish,
+        nodelist,
+        nodelist_lastheard,
+        nodelist_hopsignal,
+        nodelist_distance,
+        nodelist_bearings,
+        gps,
+        lora,
+        clock,
+        show_favorites,
+        enumEnd
+    };
+    static const char *optionsArray[enumEnd] = {"Finish"};
+    static int optionsEnumArray[enumEnd] = {Finish};
+    int options = 1;
+
+    // Track last selected index (not enum value!)
+    static int lastSelectedIndex = 0;
+
+#ifndef USE_EINK
+    optionsArray[options] = screen->isFrameHidden("nodelist") ? "Show Node List" : "Hide Node List";
+    optionsEnumArray[options++] = nodelist;
+#endif
+#ifdef USE_EINK
+    optionsArray[options] = screen->isFrameHidden("nodelist_lastheard") ? "Show NL - Last Heard" : "Hide NL - Last Heard";
+    optionsEnumArray[options++] = nodelist_lastheard;
+    optionsArray[options] = screen->isFrameHidden("nodelist_hopsignal") ? "Show NL - Hops/Signal" : "Hide NL - Hops/Signal";
+    optionsEnumArray[options++] = nodelist_hopsignal;
+    optionsArray[options] = screen->isFrameHidden("nodelist_distance") ? "Show NL - Distance" : "Hide NL - Distance";
+    optionsEnumArray[options++] = nodelist_distance;
+#endif
+#if HAS_GPS
+    optionsArray[options] = screen->isFrameHidden("nodelist_bearings") ? "Show Bearings" : "Hide Bearings";
+    optionsEnumArray[options++] = nodelist_bearings;
+
+    optionsArray[options] = screen->isFrameHidden("gps") ? "Show Position" : "Hide Position";
+    optionsEnumArray[options++] = gps;
+#endif
+
+    optionsArray[options] = screen->isFrameHidden("lora") ? "Show LoRa" : "Hide LoRa";
+    optionsEnumArray[options++] = lora;
+
+    optionsArray[options] = screen->isFrameHidden("clock") ? "Show Clock" : "Hide Clock";
+    optionsEnumArray[options++] = clock;
+
+    optionsArray[options] = screen->isFrameHidden("show_favorites") ? "Show Favorites" : "Hide Favorites";
+    optionsEnumArray[options++] = show_favorites;
+
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Show/Hide Frames";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = options;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
+    bannerOptions.InitialSelected = lastSelectedIndex; // Use index, not enum value
+
+    bannerOptions.bannerCallback = [optionsEnumArray, options](int selected) mutable -> void {
+        // Find the index of selected in optionsEnumArray
+        int idx = 0;
+        for (; idx < options; ++idx) {
+            if (optionsEnumArray[idx] == selected)
+                break;
+        }
+        lastSelectedIndex = idx;
+
+        if (selected == Finish) {
+            screen->setFrames(Screen::FOCUS_DEFAULT);
+        } else if (selected == nodelist) {
+            screen->toggleFrameVisibility("nodelist");
+            menuHandler::menuQueue = menuHandler::FrameToggles;
+            screen->runNow();
+        } else if (selected == nodelist_lastheard) {
+            screen->toggleFrameVisibility("nodelist_lastheard");
+            menuHandler::menuQueue = menuHandler::FrameToggles;
+            screen->runNow();
+        } else if (selected == nodelist_hopsignal) {
+            screen->toggleFrameVisibility("nodelist_hopsignal");
+            menuHandler::menuQueue = menuHandler::FrameToggles;
+            screen->runNow();
+        } else if (selected == nodelist_distance) {
+            screen->toggleFrameVisibility("nodelist_distance");
+            menuHandler::menuQueue = menuHandler::FrameToggles;
+            screen->runNow();
+        } else if (selected == nodelist_bearings) {
+            screen->toggleFrameVisibility("nodelist_bearings");
+            menuHandler::menuQueue = menuHandler::FrameToggles;
+            screen->runNow();
+        } else if (selected == gps) {
+            screen->toggleFrameVisibility("gps");
+            menuHandler::menuQueue = menuHandler::FrameToggles;
+            screen->runNow();
+        } else if (selected == lora) {
+            screen->toggleFrameVisibility("lora");
+            menuHandler::menuQueue = menuHandler::FrameToggles;
+            screen->runNow();
+        } else if (selected == clock) {
+            screen->toggleFrameVisibility("clock");
+            menuHandler::menuQueue = menuHandler::FrameToggles;
+            screen->runNow();
+        } else if (selected == show_favorites) {
+            screen->toggleFrameVisibility("show_favorites");
+            menuHandler::menuQueue = menuHandler::FrameToggles;
+            screen->runNow();
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
 void menuHandler::handleMenuSwitch(OLEDDisplay *display)
 {
     if (menuQueue != menu_none)
@@ -1119,6 +1293,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case lora_picker:
         LoraRegionPicker();
+        break;
+    case no_timeout_lora_picker:
+        LoraRegionPicker(0);
         break;
     case TZ_picker:
         TZPicker();
@@ -1202,6 +1379,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case power_menu:
         powerMenu();
+        break;
+    case FrameToggles:
+        FrameToggles_menu();
         break;
     case throttle_message:
         screen->showSimpleBanner("Too Many Attempts\nTry again in 60 seconds.", 5000);
