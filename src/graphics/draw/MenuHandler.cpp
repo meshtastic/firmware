@@ -1004,20 +1004,33 @@ void menuHandler::traceRouteMenu()
 void menuHandler::testMenu()
 {
 
-    static const char *optionsArray[] = {"Back", "Number Picker", "Show Chirpy"};
+    enum optionsNumbers { Back, NumberPicker, ShowChirpy };
+    static const char *optionsArray[4] = {"Back"};
+    static int optionsEnumArray[4] = {Back};
+    int options = 1;
+
+    optionsArray[options] = "Number Picker";
+    optionsEnumArray[options++] = NumberPicker;
+
+    optionsArray[options] = screen->isFrameHidden("chirpy") ? "Show Chirpy" : "Hide Chirpy";
+    optionsEnumArray[options++] = ShowChirpy;
+
     BannerOverlayOptions bannerOptions;
-    std::string message = "Test to Run?\n";
-    bannerOptions.message = message.c_str();
+    bannerOptions.message = "Hidden Test Menu";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 3;
+    bannerOptions.optionsCount = options;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == 1) {
+        if (selected == NumberPicker) {
             menuQueue = number_test;
             screen->runNow();
-        } else if (selected == 2) {
-            // Show Chirpy
+        } else if (selected == ShowChirpy) {
             screen->toggleFrameVisibility("chirpy");
             screen->setFrames(Screen::FOCUS_SYSTEM);
+
+        } else {
+            menuQueue = system_base_menu;
+            screen->runNow();
         }
     };
     screen->showOverlayBanner(bannerOptions);
