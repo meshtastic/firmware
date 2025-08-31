@@ -186,7 +186,6 @@ void portduinoSetup()
         portduino_config.lora_module = use_simradio;
     }
 
-
     if (portduino_config.config_directory != "") {
         std::string filetype = ".yaml";
         for (const std::filesystem::directory_entry &entry :
@@ -211,7 +210,6 @@ void portduinoSetup()
         return;
     }
 
-
     // If LoRa `Module: auto` (default in config.yaml),
     // attempt to auto config based on Product Strings
     if (portduino_config.lora_module == use_autoconf) {
@@ -219,8 +217,8 @@ void portduinoSetup()
         // Try CH341
         try {
             std::cout << "autoconf: Looking for CH341 device..." << std::endl;
-            ch341Hal =
-                new Ch341Hal(0, portduino_config.lora_usb_serial_num, portduino_config.lora_usb_vid, portduino_config.lora_usb_pid);
+            ch341Hal = new Ch341Hal(0, portduino_config.lora_usb_serial_num, portduino_config.lora_usb_vid,
+                                    portduino_config.lora_usb_pid);
             ch341Hal->getProductString(autoconf_product, 95);
             delete ch341Hal;
             std::cout << "autoconf: Found CH341 device " << autoconf_product << std::endl;
@@ -345,8 +343,8 @@ void portduinoSetup()
     uint8_t dmac[6] = {0};
     if (portduino_config.lora_spi_dev == "ch341") {
         try {
-            ch341Hal =
-                new Ch341Hal(0, portduino_config.lora_usb_serial_num, portduino_config.lora_usb_vid, portduino_config.lora_usb_pid);
+            ch341Hal = new Ch341Hal(0, portduino_config.lora_usb_serial_num, portduino_config.lora_usb_vid,
+                                    portduino_config.lora_usb_pid);
         } catch (std::exception &e) {
             std::cerr << e.what() << std::endl;
             std::cerr << "Could not initialize CH341 device!" << std::endl;
@@ -582,7 +580,7 @@ bool loadConfig(const char *configPath)
 
             for (auto &screen_name : portduino_config.screen_names) {
                 if (yamlConfig["Display"]["Panel"].as<std::string>("") == screen_name.second)
-                portduino_config.displayPanel = screen_name.first;
+                    portduino_config.displayPanel = screen_name.first;
             }
             portduino_config.displayHeight = yamlConfig["Display"]["Height"].as<int>(0);
             portduino_config.displayWidth = yamlConfig["Display"]["Width"].as<int>(0);

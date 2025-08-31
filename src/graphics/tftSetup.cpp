@@ -104,13 +104,13 @@ void tftSetup(void)
                     .type = touch[portduino_config.touchscreenModule],
                     .freq = (uint32_t)portduino_config.touchscreenBusFrequency,
                     .x_min = 0,
-                    .x_max =
-                        (int16_t)((portduino_config.touchscreenRotate & 1 ? portduino_config.displayWidth : portduino_config.displayHeight) -
-                                  1),
+                    .x_max = (int16_t)((portduino_config.touchscreenRotate & 1 ? portduino_config.displayWidth
+                                                                               : portduino_config.displayHeight) -
+                                       1),
                     .y_min = 0,
-                    .y_max =
-                        (int16_t)((portduino_config.touchscreenRotate & 1 ? portduino_config.displayHeight : portduino_config.displayWidth) -
-                                  1),
+                    .y_max = (int16_t)((portduino_config.touchscreenRotate & 1 ? portduino_config.displayHeight
+                                                                               : portduino_config.displayWidth) -
+                                       1),
                     .pin_int = (int16_t)portduino_config.pinMappings[touchscreenIRQ].pin,
                     .offset_rotation = (uint8_t)portduino_config.touchscreenRotate,
                     .i2c{.i2c_addr = (uint8_t)portduino_config.touchscreenI2CAddr}});

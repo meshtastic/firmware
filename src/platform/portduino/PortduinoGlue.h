@@ -92,19 +92,10 @@ extern struct portduino_config_struct {
         {sx126x_ant_sw_pin, "SX126X_ANT_SW"},
     };
 
-    std::map<screen_modules, std::string> screen_names = {
-        {x11, "X11"},
-        {fb, "FB"},
-        {st7789, "ST7789"},
-        {st7735, "ST7735"},
-        {st7735s, "ST7735S"},
-        {st7796, "ST7796"},
-        {ili9341, "ILI9341"},
-        {ili9342, "ILI9342"},
-        {ili9486, "ILI9486"},
-        {ili9488, "ILI9488"},
-        {hx8357d, "HX8357D"}
-    };
+    std::map<screen_modules, std::string> screen_names = {{x11, "X11"},         {fb, "FB"},           {st7789, "ST7789"},
+                                                          {st7735, "ST7735"},   {st7735s, "ST7735S"}, {st7796, "ST7796"},
+                                                          {ili9341, "ILI9341"}, {ili9342, "ILI9342"}, {ili9486, "ILI9486"},
+                                                          {ili9488, "ILI9488"}, {hx8357d, "HX8357D"}};
 
     std::map<gpio_pins, pinMapping> pinMappings;
     lora_module_enum lora_module;
@@ -131,7 +122,6 @@ extern struct portduino_config_struct {
 
     // GPS
     bool has_gps = false;
-
 
     // I2C
     std::string i2cdev = "";
@@ -236,7 +226,6 @@ extern struct portduino_config_struct {
             out << YAML::Key << "USB_Serialnum" << YAML::Value << lora_usb_serial_num;
         out << YAML::Key << "spiSpeed" << YAML::Value << spiSpeed;
 
-
         out << YAML::Key << "rfswitch_table" << YAML::Value << YAML::BeginMap;
 
         out << YAML::Key << "pins";
@@ -307,7 +296,7 @@ extern struct portduino_config_struct {
             out << YAML::Key << "Display" << YAML::Value << YAML::BeginMap;
             for (auto &screen_name : screen_names) {
                 if (displayPanel == screen_name.first)
-                out << YAML::Key << "Module" << YAML::Value << screen_name.second;
+                    out << YAML::Key << "Module" << YAML::Value << screen_name.second;
             }
             out << YAML::Key << "spidev" << YAML::Value << display_spi_dev;
             out << YAML::Key << "BusFrequency" << YAML::Value << displayBusFrequency;
@@ -327,8 +316,7 @@ extern struct portduino_config_struct {
                 out << YAML::Key << "OffsetX" << YAML::Value << displayOffsetX;
             if (displayOffsetY)
                 out << YAML::Key << "OffsetY" << YAML::Value << displayOffsetY;
-                
-                
+
             out << YAML::Key << "OffsetRotate" << YAML::Value << displayOffsetRotate;
 
             out << YAML::EndMap; // Display
@@ -340,14 +328,14 @@ extern struct portduino_config_struct {
             out << YAML::Key << "spidev" << YAML::Value << touchscreen_spi_dev;
             out << YAML::Key << "BusFrequency" << YAML::Value << touchscreenBusFrequency;
             switch (touchscreenModule) {
-                case xpt2046:
-                    out << YAML::Key << "Module" << YAML::Value << "XPT2046";
-                case stmpe610:
-                    out << YAML::Key << "Module" << YAML::Value << "STMPE610";
-                case gt911:
-                    out << YAML::Key << "Module" << YAML::Value << "GT911";
-                case ft5x06:
-                    out << YAML::Key << "Module" << YAML::Value << "FT5x06";
+            case xpt2046:
+                out << YAML::Key << "Module" << YAML::Value << "XPT2046";
+            case stmpe610:
+                out << YAML::Key << "Module" << YAML::Value << "STMPE610";
+            case gt911:
+                out << YAML::Key << "Module" << YAML::Value << "GT911";
+            case ft5x06:
+                out << YAML::Key << "Module" << YAML::Value << "FT5x06";
             }
             if (touchscreenRotate != -1)
                 out << YAML::Key << "Rotate" << YAML::Value << touchscreenRotate;
@@ -460,17 +448,15 @@ extern struct portduino_config_struct {
         if (has_configDisplayMode) {
             out << YAML::Key << "Config" << YAML::Value << YAML::BeginMap;
             switch (configDisplayMode) {
-                case meshtastic_Config_DisplayConfig_DisplayMode_TWOCOLOR:
-                    out << YAML::Key << "DisplayMode" << YAML::Value << "TWOCOLOR";
-                case meshtastic_Config_DisplayConfig_DisplayMode_INVERTED:
-                    out << YAML::Key << "DisplayMode" << YAML::Value << "INVERTED";
-                case meshtastic_Config_DisplayConfig_DisplayMode_COLOR:
-                    out << YAML::Key << "DisplayMode" << YAML::Value << "COLOR";
-                case meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT:
-                    out << YAML::Key << "DisplayMode" << YAML::Value << "DEFAULT";
+            case meshtastic_Config_DisplayConfig_DisplayMode_TWOCOLOR:
+                out << YAML::Key << "DisplayMode" << YAML::Value << "TWOCOLOR";
+            case meshtastic_Config_DisplayConfig_DisplayMode_INVERTED:
+                out << YAML::Key << "DisplayMode" << YAML::Value << "INVERTED";
+            case meshtastic_Config_DisplayConfig_DisplayMode_COLOR:
+                out << YAML::Key << "DisplayMode" << YAML::Value << "COLOR";
+            case meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT:
+                out << YAML::Key << "DisplayMode" << YAML::Value << "DEFAULT";
             }
-            
-
 
             out << YAML::EndMap; // Config
         }
