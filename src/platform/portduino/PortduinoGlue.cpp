@@ -9,7 +9,6 @@
 #include "api/ServerAPI.h"
 #include "linux/gpio/LinuxGPIOPin.h"
 #include "meshUtils.h"
-#include "yaml-cpp/yaml.h"
 #include <ErriezCRC32.h>
 #include <Utility.h>
 #include <assert.h>
@@ -29,13 +28,13 @@
 #include "platform/portduino/USBHal.h"
 
 std::map<configNames, int> settingsMap;
-std::map<configNames, std::string> settingsStrings;
 portduino_config_struct portduino_config;
 std::ofstream traceFile;
 Ch341Hal *ch341Hal = nullptr;
 char *configPath = nullptr;
 char *optionMac = nullptr;
 bool verboseEnabled = false;
+bool yamlOnly = false;
 
 const char *argp_program_version = optstr(APP_VERSION);
 
@@ -75,6 +74,9 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
     case 'v':
         verboseEnabled = true;
         break;
+    case 'y':
+        yamlOnly = true;
+        break;
     case ARGP_KEY_ARG:
         return 0;
     default:
@@ -90,6 +92,7 @@ void portduinoCustomInit()
                                            {"hwid", 'h', "HWID", 0, "The mac address to assign to this virtual machine"},
                                            {"sim", 's', 0, 0, "Run in Simulated radio mode"},
                                            {"verbose", 'v', 0, 0, "Set log level to full debug"},
+                                           {"output-yaml", 'y', 0, 0, "Output config yaml and exit"},
                                            {0}};
     static void *childArguments;
     static char doc[] = "Meshtastic native build.";
@@ -115,8 +118,8 @@ void getMacAddr(uint8_t *dmac)
             dmac[4] = hwId >> 8;
             dmac[5] = hwId & 0xff;
         }
-    } else if (settingsStrings[mac_address].length() > 11) {
-        MAC_from_string(settingsStrings[mac_address], dmac);
+    } else if (portduino_config.mac_address.length() > 11) {
+        MAC_from_string(portduino_config.mac_address, dmac);
         exit;
     } else {
 
@@ -148,7 +151,6 @@ void getMacAddr(uint8_t *dmac)
  */
 void portduinoSetup()
 {
-    printf("Set up Meshtastic on Portduino...\n");
     int max_GPIO = 0;
     const configNames GPIO_lines[] = {cs_pin,
                                       irq_pin,
@@ -172,14 +174,7 @@ void portduinoSetup()
                                       tbPressPin};
 
     std::string gpioChipName = "gpiochip";
-    settingsStrings[i2cdev] = "";
-    settingsStrings[keyboardDevice] = "";
-    settingsStrings[pointerDevice] = "";
-    settingsStrings[webserverrootpath] = "";
-    settingsStrings[spidev] = "";
-    settingsStrings[displayspidev] = "";
     settingsMap[spiSpeed] = 2000000;
-    settingsMap[ascii_logs] = !isatty(1);
     settingsMap[displayPanel] = no_screen;
     settingsMap[touchscreenModule] = no_touchscreen;
     settingsMap[tbUpPin] = RADIOLIB_NC;
@@ -188,49 +183,54 @@ void portduinoSetup()
     settingsMap[tbRightPin] = RADIOLIB_NC;
     settingsMap[tbPressPin] = RADIOLIB_NC;
 
-    YAML::Node yamlConfig;
-
     if (portduino_config.force_simradio == true) {
-        settingsMap[use_simradio] = true;
+        portduino_config.lora_module = use_simradio;
     } else if (configPath != nullptr) {
         if (loadConfig(configPath)) {
-            std::cout << "Using " << configPath << " as config file" << std::endl;
+            if (!yamlOnly)
+                std::cout << "Using " << configPath << " as config file" << std::endl;
         } else {
             std::cout << "Unable to use " << configPath << " as config file" << std::endl;
             exit(EXIT_FAILURE);
         }
     } else if (access("config.yaml", R_OK) == 0) {
         if (loadConfig("config.yaml")) {
-            std::cout << "Using local config.yaml as config file" << std::endl;
+            if (!yamlOnly)
+                std::cout << "Using local config.yaml as config file" << std::endl;
         } else {
             std::cout << "Unable to use local config.yaml as config file" << std::endl;
             exit(EXIT_FAILURE);
         }
     } else if (access("/etc/meshtasticd/config.yaml", R_OK) == 0) {
         if (loadConfig("/etc/meshtasticd/config.yaml")) {
-            std::cout << "Using /etc/meshtasticd/config.yaml as config file" << std::endl;
+            if (!yamlOnly)
+                std::cout << "Using /etc/meshtasticd/config.yaml as config file" << std::endl;
         } else {
             std::cout << "Unable to use /etc/meshtasticd/config.yaml as config file" << std::endl;
             exit(EXIT_FAILURE);
         }
     } else {
-        std::cout << "No 'config.yaml' found..." << std::endl;
-        settingsMap[use_simradio] = true;
+        if (!yamlOnly)
+            std::cout << "No 'config.yaml' found..." << std::endl;
+        portduino_config.lora_module = use_simradio;
+    }
+    if (yamlOnly) {
+        std::cout << portduino_config.emit_yaml() << std::endl;
+        exit(EXIT_SUCCESS);
     }
 
-    if (settingsMap[use_simradio] == true) {
+    if (portduino_config.lora_module == use_simradio) {
         std::cout << "Running in simulated mode." << std::endl;
-        settingsMap[maxnodes] = 200;               // Default to 200 nodes
-        settingsMap[logoutputlevel] = level_debug; // Default to debug
+        settingsMap[maxnodes] = 200; // Default to 200 nodes
         // Set the random seed equal to TCPPort to have a different seed per instance
         randomSeed(TCPPort);
         return;
     }
 
-    if (settingsStrings[config_directory] != "") {
+    if (portduino_config.config_directory != "") {
         std::string filetype = ".yaml";
         for (const std::filesystem::directory_entry &entry :
-             std::filesystem::directory_iterator{settingsStrings[config_directory]}) {
+             std::filesystem::directory_iterator{portduino_config.config_directory}) {
             if (ends_with(entry.path().string(), ".yaml")) {
                 std::cout << "Also using " << entry << " as additional config file" << std::endl;
                 loadConfig(entry.path().c_str());
@@ -240,13 +240,13 @@ void portduinoSetup()
 
     // If LoRa `Module: auto` (default in config.yaml),
     // attempt to auto config based on Product Strings
-    if (settingsMap[use_autoconf] == true) {
+    if (portduino_config.lora_module == use_autoconf) {
         char autoconf_product[96] = {0};
         // Try CH341
         try {
             std::cout << "autoconf: Looking for CH341 device..." << std::endl;
             ch341Hal =
-                new Ch341Hal(0, settingsStrings[lora_usb_serial_num], settingsMap[lora_usb_vid], settingsMap[lora_usb_pid]);
+                new Ch341Hal(0, portduino_config.lora_usb_serial_num, settingsMap[lora_usb_vid], settingsMap[lora_usb_pid]);
             ch341Hal->getProductString(autoconf_product, 95);
             delete ch341Hal;
             std::cout << "autoconf: Found CH341 device " << autoconf_product << std::endl;
@@ -323,7 +323,7 @@ void portduinoSetup()
                         if (mac_start != nullptr) {
                             std::cout << "autoconf: Found mac data " << mac_start << std::endl;
                             if (strlen(mac_start) == 12)
-                                settingsStrings[mac_address] = std::string(mac_start);
+                                portduino_config.mac_address = std::string(mac_start);
                         }
                         if (devID_start != nullptr) {
                             std::cout << "autoconf: Found deviceid data " << devID_start << std::endl;
@@ -354,7 +354,7 @@ void portduinoSetup()
                 std::cerr << "autoconf: Unable to find config for " << autoconf_product << std::endl;
                 exit(EXIT_FAILURE);
             }
-            if (loadConfig((settingsStrings[available_directory] + product_config).c_str())) {
+            if (loadConfig((portduino_config.available_directory + product_config).c_str())) {
                 std::cout << "autoconf: Using " << product_config << " as config file for " << autoconf_product << std::endl;
             } else {
                 std::cerr << "autoconf: Unable to use " << product_config << " as config file for " << autoconf_product
@@ -363,15 +363,16 @@ void portduinoSetup()
             }
         } else {
             std::cerr << "autoconf: Could not locate any devices" << std::endl;
+            exit(EXIT_FAILURE);
         }
     }
 
     // if we're using a usermode driver, we need to initialize it here, to get a serial number back for mac address
     uint8_t dmac[6] = {0};
-    if (settingsStrings[spidev] == "ch341") {
+    if (portduino_config.lora_spi_dev == "ch341") {
         try {
             ch341Hal =
-                new Ch341Hal(0, settingsStrings[lora_usb_serial_num], settingsMap[lora_usb_vid], settingsMap[lora_usb_pid]);
+                new Ch341Hal(0, portduino_config.lora_usb_serial_num, settingsMap[lora_usb_vid], settingsMap[lora_usb_pid]);
         } catch (std::exception &e) {
             std::cerr << e.what() << std::endl;
             std::cerr << "Could not initialize CH341 device!" << std::endl;
@@ -383,7 +384,7 @@ void portduinoSetup()
         char product_string[96] = {0};
         ch341Hal->getProductString(product_string, 95);
         std::cout << "CH341 Product " << product_string << std::endl;
-        if (strlen(serial) == 8 && settingsStrings[mac_address].length() < 12) {
+        if (strlen(serial) == 8 && portduino_config.mac_address.length() < 12) {
             uint8_t hash[32] = {0};
             memcpy(hash, serial, 8);
             crypto->hash(hash, 8);
@@ -395,7 +396,7 @@ void portduinoSetup()
             dmac[5] = hash[5];
             char macBuf[13] = {0};
             sprintf(macBuf, "%02X%02X%02X%02X%02X%02X", dmac[0], dmac[1], dmac[2], dmac[3], dmac[4], dmac[5]);
-            settingsStrings[mac_address] = macBuf;
+            portduino_config.mac_address = macBuf;
         }
     }
 
@@ -409,7 +410,7 @@ void portduinoSetup()
     // Rather important to set this, if not running simulated.
     randomSeed(time(NULL));
 
-    std::string defaultGpioChipName = gpioChipName + std::to_string(settingsMap[default_gpiochip]);
+    std::string defaultGpioChipName = gpioChipName + std::to_string(portduino_config.lora_default_gpiochip);
 
     for (configNames i : GPIO_lines) {
         if (settingsMap.count(i) && settingsMap[i] > max_GPIO)
@@ -468,7 +469,7 @@ void portduinoSetup()
     }
 
     // Only initialize the radio pins when dealing with real, kernel controlled SPI hardware
-    if (settingsStrings[spidev] != "" && settingsStrings[spidev] != "ch341") {
+    if (portduino_config.lora_spi_dev != "" && portduino_config.lora_spi_dev != "ch341") {
         const struct {
             configNames pin;
             configNames gpiochip;
@@ -491,18 +492,18 @@ void portduinoSetup()
                 }
             }
         }
-        SPI.begin(settingsStrings[spidev].c_str());
+        SPI.begin(portduino_config.lora_spi_dev.c_str());
     }
-    if (settingsStrings[traceFilename] != "") {
+    if (portduino_config.traceFilename != "") {
         try {
-            traceFile.open(settingsStrings[traceFilename], std::ios::out | std::ios::app);
+            traceFile.open(portduino_config.traceFilename, std::ios::out | std::ios::app);
         } catch (std::ofstream::failure &e) {
             std::cout << "*** traceFile Exception " << e.what() << std::endl;
             exit(EXIT_FAILURE);
         }
     }
-    if (verboseEnabled && settingsMap[logoutputlevel] != level_trace) {
-        settingsMap[logoutputlevel] = level_debug;
+    if (verboseEnabled && portduino_config.logoutputlevel != level_trace) {
+        portduino_config.logoutputlevel = level_debug;
     }
 
     return;
@@ -537,36 +538,29 @@ bool loadConfig(const char *configPath)
         yamlConfig = YAML::LoadFile(configPath);
         if (yamlConfig["Logging"]) {
             if (yamlConfig["Logging"]["LogLevel"].as<std::string>("info") == "trace") {
-                settingsMap[logoutputlevel] = level_trace;
+                portduino_config.logoutputlevel = level_trace;
             } else if (yamlConfig["Logging"]["LogLevel"].as<std::string>("info") == "debug") {
-                settingsMap[logoutputlevel] = level_debug;
+                portduino_config.logoutputlevel = level_debug;
             } else if (yamlConfig["Logging"]["LogLevel"].as<std::string>("info") == "info") {
-                settingsMap[logoutputlevel] = level_info;
+                portduino_config.logoutputlevel = level_info;
             } else if (yamlConfig["Logging"]["LogLevel"].as<std::string>("info") == "warn") {
-                settingsMap[logoutputlevel] = level_warn;
+                portduino_config.logoutputlevel = level_warn;
             } else if (yamlConfig["Logging"]["LogLevel"].as<std::string>("info") == "error") {
-                settingsMap[logoutputlevel] = level_error;
+                portduino_config.logoutputlevel = level_error;
             }
-            settingsStrings[traceFilename] = yamlConfig["Logging"]["TraceFile"].as<std::string>("");
+            portduino_config.traceFilename = yamlConfig["Logging"]["TraceFile"].as<std::string>("");
             if (yamlConfig["Logging"]["AsciiLogs"]) {
                 // Default is !isatty(1) but can be set explicitly in config.yaml
-                settingsMap[ascii_logs] = yamlConfig["Logging"]["AsciiLogs"].as<bool>();
+                portduino_config.ascii_logs = yamlConfig["Logging"]["AsciiLogs"].as<bool>();
+                portduino_config.ascii_logs_explicit = true;
             }
         }
         if (yamlConfig["Lora"]) {
-            const struct {
-                configNames cfgName;
-                std::string strName;
-            } loraModules[] = {{use_simradio, "sim"},  {use_autoconf, "auto"}, {use_rf95, "RF95"},     {use_sx1262, "sx1262"},
-                               {use_sx1268, "sx1268"}, {use_sx1280, "sx1280"}, {use_lr1110, "lr1110"}, {use_lr1120, "lr1120"},
-                               {use_lr1121, "lr1121"}, {use_llcc68, "LLCC68"}};
-            for (auto &loraModule : loraModules) {
-                settingsMap[loraModule.cfgName] = false;
-            }
+
             if (yamlConfig["Lora"]["Module"]) {
-                for (auto &loraModule : loraModules) {
-                    if (yamlConfig["Lora"]["Module"].as<std::string>("") == loraModule.strName) {
-                        settingsMap[loraModule.cfgName] = true;
+                for (auto &loraModule : portduino_config.loraModules) {
+                    if (yamlConfig["Lora"]["Module"].as<std::string>("") == loraModule.second) {
+                        portduino_config.lora_module = loraModule.first;
                         break;
                     }
                 }
@@ -585,7 +579,7 @@ bool loadConfig(const char *configPath)
             }
 
             // backwards API compatibility and to globally set gpiochip once
-            int defaultGpioChip = settingsMap[default_gpiochip] = yamlConfig["Lora"]["gpiochip"].as<int>(0);
+            int defaultGpioChip = portduino_config.lora_default_gpiochip = yamlConfig["Lora"]["gpiochip"].as<int>(0);
 
             const struct {
                 configNames pin;
@@ -614,22 +608,22 @@ bool loadConfig(const char *configPath)
             }
 
             settingsMap[spiSpeed] = yamlConfig["Lora"]["spiSpeed"].as<int>(2000000);
-            settingsStrings[lora_usb_serial_num] = yamlConfig["Lora"]["USB_Serialnum"].as<std::string>("");
+            portduino_config.lora_usb_serial_num = yamlConfig["Lora"]["USB_Serialnum"].as<std::string>("");
             settingsMap[lora_usb_pid] = yamlConfig["Lora"]["USB_PID"].as<int>(0x5512);
             settingsMap[lora_usb_vid] = yamlConfig["Lora"]["USB_VID"].as<int>(0x1A86);
 
-            settingsStrings[spidev] = yamlConfig["Lora"]["spidev"].as<std::string>("spidev0.0");
-            if (settingsStrings[spidev] != "ch341") {
-                settingsStrings[spidev] = "/dev/" + settingsStrings[spidev];
-                if (settingsStrings[spidev].length() == 14) {
-                    int x = settingsStrings[spidev].at(11) - '0';
-                    int y = settingsStrings[spidev].at(13) - '0';
+            portduino_config.lora_spi_dev = yamlConfig["Lora"]["spidev"].as<std::string>("spidev0.0");
+            if (portduino_config.lora_spi_dev != "ch341") {
+                portduino_config.lora_spi_dev = "/dev/" + portduino_config.lora_spi_dev;
+                if (portduino_config.lora_spi_dev.length() == 14) {
+                    int x = portduino_config.lora_spi_dev.at(11) - '0';
+                    int y = portduino_config.lora_spi_dev.at(13) - '0';
                     // Pretty sure this is always true
                     if (x >= 0 && x < 10 && y >= 0 && y < 10) {
                         // I believe this bit of weirdness is specifically for the new GUI
-                        settingsMap[spidev] = x + y << 4;
-                        settingsMap[displayspidev] = settingsMap[spidev];
-                        settingsMap[touchscreenspidev] = settingsMap[spidev];
+                        portduino_config.lora_spi_dev_int = x + y << 4;
+                        portduino_config.display_spi_dev_int = portduino_config.lora_spi_dev_int;
+                        portduino_config.touchscreen_spi_dev_int = portduino_config.lora_spi_dev_int;
                     }
                 }
             }
@@ -687,7 +681,7 @@ bool loadConfig(const char *configPath)
             }
         }
         if (yamlConfig["I2C"]) {
-            settingsStrings[i2cdev] = yamlConfig["I2C"]["I2CDevice"].as<std::string>("");
+            portduino_config.i2cdev = yamlConfig["I2C"]["I2CDevice"].as<std::string>("");
         }
         if (yamlConfig["Display"]) {
             if (yamlConfig["Display"]["Panel"].as<std::string>("") == "ST7789")
@@ -728,13 +722,13 @@ bool loadConfig(const char *configPath)
             settingsMap[displayInvert] = yamlConfig["Display"]["Invert"].as<bool>(false);
             settingsMap[displayBusFrequency] = yamlConfig["Display"]["BusFrequency"].as<int>(40000000);
             if (yamlConfig["Display"]["spidev"]) {
-                settingsStrings[displayspidev] = "/dev/" + yamlConfig["Display"]["spidev"].as<std::string>("spidev0.1");
-                if (settingsStrings[displayspidev].length() == 14) {
-                    int x = settingsStrings[displayspidev].at(11) - '0';
-                    int y = settingsStrings[displayspidev].at(13) - '0';
+                portduino_config.display_spi_dev = "/dev/" + yamlConfig["Display"]["spidev"].as<std::string>("spidev0.1");
+                if (portduino_config.display_spi_dev.length() == 14) {
+                    int x = portduino_config.display_spi_dev.at(11) - '0';
+                    int y = portduino_config.display_spi_dev.at(13) - '0';
                     if (x >= 0 && x < 10 && y >= 0 && y < 10) {
-                        settingsMap[displayspidev] = x + y << 4;
-                        settingsMap[touchscreenspidev] = settingsMap[displayspidev];
+                        portduino_config.display_spi_dev_int = x + y << 4;
+                        portduino_config.touchscreen_spi_dev_int = portduino_config.display_spi_dev_int;
                     }
                 }
             }
@@ -754,19 +748,19 @@ bool loadConfig(const char *configPath)
             settingsMap[touchscreenRotate] = yamlConfig["Touchscreen"]["Rotate"].as<int>(-1);
             settingsMap[touchscreenI2CAddr] = yamlConfig["Touchscreen"]["I2CAddr"].as<int>(-1);
             if (yamlConfig["Touchscreen"]["spidev"]) {
-                settingsStrings[touchscreenspidev] = "/dev/" + yamlConfig["Touchscreen"]["spidev"].as<std::string>("");
-                if (settingsStrings[touchscreenspidev].length() == 14) {
-                    int x = settingsStrings[touchscreenspidev].at(11) - '0';
-                    int y = settingsStrings[touchscreenspidev].at(13) - '0';
+                portduino_config.touchscreen_spi_dev = "/dev/" + yamlConfig["Touchscreen"]["spidev"].as<std::string>("");
+                if (portduino_config.touchscreen_spi_dev.length() == 14) {
+                    int x = portduino_config.touchscreen_spi_dev.at(11) - '0';
+                    int y = portduino_config.touchscreen_spi_dev.at(13) - '0';
                     if (x >= 0 && x < 10 && y >= 0 && y < 10) {
-                        settingsMap[touchscreenspidev] = x + y << 4;
+                        portduino_config.touchscreen_spi_dev_int = x + y << 4;
                     }
                 }
             }
         }
         if (yamlConfig["Input"]) {
-            settingsStrings[keyboardDevice] = (yamlConfig["Input"]["KeyboardDevice"]).as<std::string>("");
-            settingsStrings[pointerDevice] = (yamlConfig["Input"]["PointerDevice"]).as<std::string>("");
+            portduino_config.keyboardDevice = (yamlConfig["Input"]["KeyboardDevice"]).as<std::string>("");
+            portduino_config.pointerDevice = (yamlConfig["Input"]["PointerDevice"]).as<std::string>("");
             settingsMap[userButtonPin] = yamlConfig["Input"]["User"].as<int>(RADIOLIB_NC);
             settingsMap[tbUpPin] = yamlConfig["Input"]["TrackballUp"].as<int>(RADIOLIB_NC);
             settingsMap[tbDownPin] = yamlConfig["Input"]["TrackballDown"].as<int>(RADIOLIB_NC);
@@ -782,18 +776,18 @@ bool loadConfig(const char *configPath)
 
         if (yamlConfig["Webserver"]) {
             settingsMap[webserverport] = (yamlConfig["Webserver"]["Port"]).as<int>(-1);
-            settingsStrings[webserverrootpath] =
+            portduino_config.webserver_root_path =
                 (yamlConfig["Webserver"]["RootPath"]).as<std::string>("/usr/share/meshtasticd/web");
-            settingsStrings[websslkeypath] =
+            portduino_config.webserver_ssl_key_path =
                 (yamlConfig["Webserver"]["SSLKey"]).as<std::string>("/etc/meshtasticd/ssl/private_key.pem");
-            settingsStrings[websslcertpath] =
+            portduino_config.webserver_ssl_cert_path =
                 (yamlConfig["Webserver"]["SSLCert"]).as<std::string>("/etc/meshtasticd/ssl/certificate.pem");
         }
 
         if (yamlConfig["HostMetrics"]) {
             settingsMap[hostMetrics_channel] = (yamlConfig["HostMetrics"]["Channel"]).as<int>(0);
             settingsMap[hostMetrics_interval] = (yamlConfig["HostMetrics"]["ReportInterval"]).as<int>(0);
-            settingsStrings[hostMetrics_user_command] = (yamlConfig["HostMetrics"]["UserStringCommand"]).as<std::string>("");
+            portduino_config.hostMetrics_user_command = (yamlConfig["HostMetrics"]["UserStringCommand"]).as<std::string>("");
         }
 
         if (yamlConfig["Config"]) {
@@ -814,25 +808,27 @@ bool loadConfig(const char *configPath)
         if (yamlConfig["General"]) {
             settingsMap[maxnodes] = (yamlConfig["General"]["MaxNodes"]).as<int>(200);
             settingsMap[maxtophone] = (yamlConfig["General"]["MaxMessageQueue"]).as<int>(100);
-            settingsStrings[config_directory] = (yamlConfig["General"]["ConfigDirectory"]).as<std::string>("");
-            settingsStrings[available_directory] =
+            portduino_config.config_directory = (yamlConfig["General"]["ConfigDirectory"]).as<std::string>("");
+            portduino_config.available_directory =
                 (yamlConfig["General"]["AvailableDirectory"]).as<std::string>("/etc/meshtasticd/available.d/");
             if ((yamlConfig["General"]["MACAddress"]).as<std::string>("") != "" &&
                 (yamlConfig["General"]["MACAddressSource"]).as<std::string>("") != "") {
                 std::cout << "Cannot set both MACAddress and MACAddressSource!" << std::endl;
                 exit(EXIT_FAILURE);
             }
-            settingsStrings[mac_address] = (yamlConfig["General"]["MACAddress"]).as<std::string>("");
-            if ((yamlConfig["General"]["MACAddressSource"]).as<std::string>("") != "") {
-                std::ifstream infile("/sys/class/net/" + (yamlConfig["General"]["MACAddressSource"]).as<std::string>("") +
-                                     "/address");
-                std::getline(infile, settingsStrings[mac_address]);
+            portduino_config.mac_address = (yamlConfig["General"]["MACAddress"]).as<std::string>("");
+            if (portduino_config.mac_address != "") {
+                portduino_config.mac_address_explicit = true;
+            } else if ((yamlConfig["General"]["MACAddressSource"]).as<std::string>("") != "") {
+                portduino_config.mac_address_source = (yamlConfig["General"]["MACAddressSource"]).as<std::string>("");
+                std::ifstream infile("/sys/class/net/" + portduino_config.mac_address_source + "/address");
+                std::getline(infile, portduino_config.mac_address);
             }
 
             // https://stackoverflow.com/a/20326454
-            settingsStrings[mac_address].erase(
-                std::remove(settingsStrings[mac_address].begin(), settingsStrings[mac_address].end(), ':'),
-                settingsStrings[mac_address].end());
+            portduino_config.mac_address.erase(
+                std::remove(portduino_config.mac_address.begin(), portduino_config.mac_address.end(), ':'),
+                portduino_config.mac_address.end());
         }
     } catch (YAML::Exception &e) {
         std::cout << "*** Exception " << e.what() << std::endl;
@@ -851,12 +847,12 @@ bool MAC_from_string(std::string mac_str, uint8_t *dmac)
 {
     mac_str.erase(std::remove(mac_str.begin(), mac_str.end(), ':'), mac_str.end());
     if (mac_str.length() == 12) {
-        dmac[0] = std::stoi(settingsStrings[mac_address].substr(0, 2), nullptr, 16);
-        dmac[1] = std::stoi(settingsStrings[mac_address].substr(2, 2), nullptr, 16);
-        dmac[2] = std::stoi(settingsStrings[mac_address].substr(4, 2), nullptr, 16);
-        dmac[3] = std::stoi(settingsStrings[mac_address].substr(6, 2), nullptr, 16);
-        dmac[4] = std::stoi(settingsStrings[mac_address].substr(8, 2), nullptr, 16);
-        dmac[5] = std::stoi(settingsStrings[mac_address].substr(10, 2), nullptr, 16);
+        dmac[0] = std::stoi(portduino_config.mac_address.substr(0, 2), nullptr, 16);
+        dmac[1] = std::stoi(portduino_config.mac_address.substr(2, 2), nullptr, 16);
+        dmac[2] = std::stoi(portduino_config.mac_address.substr(4, 2), nullptr, 16);
+        dmac[3] = std::stoi(portduino_config.mac_address.substr(6, 2), nullptr, 16);
+        dmac[4] = std::stoi(portduino_config.mac_address.substr(8, 2), nullptr, 16);
+        dmac[5] = std::stoi(portduino_config.mac_address.substr(10, 2), nullptr, 16);
         return true;
     } else {
         return false;

@@ -65,8 +65,8 @@ mail:   marchammermann@googlemail.com
 #define DEFAULT_REALM "default_realm"
 #define PREFIX ""
 
-#define KEY_PATH settingsStrings[websslkeypath].c_str()
-#define CERT_PATH settingsStrings[websslcertpath].c_str()
+#define KEY_PATH portduino_config.webserver_ssl_key_path.c_str()
+#define CERT_PATH portduino_config.webserver_ssl_cert_path.c_str()
 
 struct _file_config configWeb;
 
@@ -490,7 +490,7 @@ PiWebServerThread::PiWebServerThread()
         u_map_put(&configWeb.mime_types, ".ico", "image/x-icon");
         u_map_put(&configWeb.mime_types, ".svg", "image/svg+xml");
 
-        webrootpath = settingsStrings[webserverrootpath];
+        webrootpath = portduino_config.webserver_root_path;
 
         configWeb.files_path = (char *)webrootpath.c_str();
         configWeb.url_prefix = "";

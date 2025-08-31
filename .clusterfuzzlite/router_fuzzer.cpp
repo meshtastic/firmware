@@ -76,7 +76,7 @@ bool loopCanSleep()
 // Called just prior to starting Meshtastic. Allows for setting config values before startup.
 void lateInitVariant()
 {
-    settingsMap[logoutputlevel] = level_error;
+    portduino_config.logoutputlevel = level_error;
     channelFile.channels[0] = meshtastic_Channel{
         .has_settings = true,
         .settings =

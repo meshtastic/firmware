@@ -110,8 +110,8 @@ meshtastic_Telemetry HostMetricsModule::getHostMetrics()
             proc_loadavg.close();
         }
     }
-    if (settingsStrings[hostMetrics_user_command] != "") {
-        std::string userCommandResult = exec(settingsStrings[hostMetrics_user_command].c_str());
+    if (portduino_config.hostMetrics_user_command != "") {
+        std::string userCommandResult = exec(portduino_config.hostMetrics_user_command.c_str());
         if (userCommandResult.length() > 1) {
             strncpy(t.variant.host_metrics.user_string, userCommandResult.c_str(), sizeof(t.variant.host_metrics.user_string));
             t.variant.host_metrics.user_string[sizeof(t.variant.host_metrics.user_string) - 1] = '\0';

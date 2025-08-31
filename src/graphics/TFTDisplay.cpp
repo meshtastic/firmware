@@ -795,7 +795,7 @@ class LGFX : public lgfx::LGFX_Device
 
         auto buscfg = _bus_instance.config();
         buscfg.spi_mode = 0;
-        buscfg.spi_host = settingsMap[displayspidev];
+        buscfg.spi_host = portduino_config.display_spi_dev_int;
 
         buscfg.pin_dc = settingsMap[displayDC]; // Set SPI DC pin number (-1 = disable)
 
@@ -842,7 +842,7 @@ class LGFX : public lgfx::LGFX_Device
             if (settingsMap[touchscreenI2CAddr] != -1) {
                 touch_cfg.i2c_addr = settingsMap[touchscreenI2CAddr];
             } else {
-                touch_cfg.spi_host = settingsMap[touchscreenspidev];
+                touch_cfg.spi_host = portduino_config.touchscreen_spi_dev_int;
             }
 
             _touch_instance->config(touch_cfg);

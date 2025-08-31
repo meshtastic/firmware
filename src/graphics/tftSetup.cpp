@@ -82,9 +82,9 @@ void tftSetup(void)
                                                        .freq_read = 16000000,
                                                        .spi{.pin_dc = (int8_t)settingsMap[displayDC],
                                                             .use_lock = true,
-                                                            .spi_host = (uint16_t)settingsMap[displayspidev]}})
-                .input(DisplayDriverConfig::input_config_t{.keyboardDevice = settingsStrings[keyboardDevice],
-                                                           .pointerDevice = settingsStrings[pointerDevice]})
+                                                            .spi_host = (uint16_t)portduino_config.display_spi_dev_int}})
+                .input(DisplayDriverConfig::input_config_t{.keyboardDevice = portduino_config.keyboardDevice,
+                                                           .pointerDevice = portduino_config.pointerDevice})
                 .light(DisplayDriverConfig::light_config_t{.pin_bl = (int16_t)settingsMap[displayBacklight],
                                                            .pwm_channel = (int8_t)settingsMap[displayBacklightPWMChannel],
                                                            .invert = (bool)settingsMap[displayBacklightInvert]});
@@ -95,7 +95,7 @@ void tftSetup(void)
                                                         .pin_int = (int16_t)settingsMap[touchscreenIRQ],
                                                         .offset_rotation = (uint8_t)settingsMap[touchscreenRotate],
                                                         .spi{
-                                                            .spi_host = (int8_t)settingsMap[touchscreenspidev],
+                                                            .spi_host = (int8_t)portduino_config.touchscreen_spi_dev_int,
                                                         },
                                                         .pin_cs = (int16_t)settingsMap[touchscreenCS]});
             } else {
