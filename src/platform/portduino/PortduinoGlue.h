@@ -96,7 +96,7 @@ enum gpio_pins {
 };
 
 struct pinMapping {
-    int pin;
+    int pin = RADIOLIB_NC;
     int gpiochip;
     int line;
     bool enabled = false;
@@ -118,6 +118,16 @@ extern struct portduino_config_struct {
     std::map<lora_module_enum, std::string> loraModules = {
         {use_simradio, "sim"},  {use_autoconf, "auto"}, {use_rf95, "RF95"},     {use_sx1262, "sx1262"}, {use_sx1268, "sx1268"},
         {use_sx1280, "sx1280"}, {use_lr1110, "lr1110"}, {use_lr1120, "lr1120"}, {use_lr1121, "lr1121"}, {use_llcc68, "LLCC68"}};
+
+    std::map<gpio_pins, std::string> lora_pins = {
+        {cs_pin, "CS"},
+        {irq_pin, "IRQ"},
+        {busy_pin, "Busy"},
+        {reset_pin, "Reset"},
+        {txen_pin, "TXen"},
+        {rxen_pin, "RXen"},
+        {sx126x_ant_sw_pin, "SX126X_ANT_SW"},
+    };
 
     std::map<gpio_pins, pinMapping> pinMappings;
     lora_module_enum lora_module;
@@ -175,6 +185,16 @@ extern struct portduino_config_struct {
         out << YAML::Key << "Lora" << YAML::Value << YAML::BeginMap;
 
         out << YAML::Key << "Module" << YAML::Value << loraModules[lora_module];
+
+        for (auto &lora_pin : lora_pins) {
+            if (pinMappings[lora_pin.first].enabled) {
+                out << YAML::Key << lora_pin.second << YAML::Value << YAML::BeginMap;
+                out << YAML::Key << "pin" << YAML::Value << pinMappings[lora_pin.first].pin;
+                out << YAML::Key << "line" << YAML::Value << pinMappings[lora_pin.first].line;
+                out << YAML::Key << "gpiochip" << YAML::Value << pinMappings[lora_pin.first].gpiochip;
+                out << YAML::EndMap; // User
+            }
+        }
 
         out << YAML::Key << "rfswitch_table" << YAML::Value << YAML::BeginMap;
 
