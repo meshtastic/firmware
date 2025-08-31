@@ -109,15 +109,15 @@ extern struct portduino_config_struct {
     std::string lora_usb_serial_num = "";
     int lora_spi_dev_int = 0;
     int lora_default_gpiochip = 0;
-    int sx126x_max_power = 0;
-    int sx128x_max_power = 0;
-    int lr1110_max_power = 0;
-    int lr1120_max_power = 0;
-    int rf95_max_power = 0;
+    int sx126x_max_power = 22;
+    int sx128x_max_power = 13;
+    int lr1110_max_power = 22;
+    int lr1120_max_power = 13;
+    int rf95_max_power = 20;
     bool dio2_as_rf_switch = false;
     int dio3_tcxo_voltage = 0;
-    int lora_usb_pid = 0;
-    int lora_usb_vid = 0;
+    int lora_usb_pid = 0x5512;
+    int lora_usb_vid = 0x1A86;
     int spiSpeed = 2000000;
 
     // GPS
@@ -202,87 +202,86 @@ extern struct portduino_config_struct {
             }
         }
 
-        // TODO: don't output these when default
-        if (sx126x_max_power != 0)
+        if (sx126x_max_power != 22)
             out << YAML::Key << "SX126X_MAX_POWER" << YAML::Value << sx126x_max_power;
-        if (sx128x_max_power != 0)
+        if (sx128x_max_power != 13)
             out << YAML::Key << "SX128X_MAX_POWER" << YAML::Value << sx128x_max_power;
-        if (lr1110_max_power != 0)
+        if (lr1110_max_power != 22)
             out << YAML::Key << "LR1110_MAX_POWER" << YAML::Value << lr1110_max_power;
-        if (lr1120_max_power != 0)
+        if (lr1120_max_power != 13)
             out << YAML::Key << "LR1120_MAX_POWER" << YAML::Value << lr1120_max_power;
-        if (rf95_max_power != 0)
+        if (rf95_max_power != 20)
             out << YAML::Key << "RF95_MAX_POWER" << YAML::Value << rf95_max_power;
         out << YAML::Key << "DIO2_AS_RF_SWITCH" << YAML::Value << dio2_as_rf_switch;
         if (dio3_tcxo_voltage != 0)
             out << YAML::Key << "DIO3_TCXO_VOLTAGE" << YAML::Value << dio3_tcxo_voltage;
-        if (lora_usb_pid)
-            out << YAML::Key << "USB_PID" << YAML::Value << lora_usb_pid;
-        if (lora_usb_vid)
-            out << YAML::Key << "USB_VID" << YAML::Value << lora_usb_vid;
+        if (lora_usb_pid != 0x5512)
+            out << YAML::Key << "USB_PID" << YAML::Value << YAML::Hex << lora_usb_pid;
+        if (lora_usb_vid != 0x1A86)
+            out << YAML::Key << "USB_VID" << YAML::Value << YAML::Hex << lora_usb_vid;
         if (lora_spi_dev != "")
             out << YAML::Key << "spidev" << YAML::Value << lora_spi_dev;
         if (lora_usb_serial_num != "")
             out << YAML::Key << "USB_Serialnum" << YAML::Value << lora_usb_serial_num;
         out << YAML::Key << "spiSpeed" << YAML::Value << spiSpeed;
+        if (rfswitch_dio_pins[0] != RADIOLIB_NC) {
+            out << YAML::Key << "rfswitch_table" << YAML::Value << YAML::BeginMap;
 
-        out << YAML::Key << "rfswitch_table" << YAML::Value << YAML::BeginMap;
-
-        out << YAML::Key << "pins";
-        out << YAML::Value << YAML::Flow << YAML::BeginSeq;
-
-        for (int i = 0; i < 5; i++) {
-            // set up the pin array first
-            if (rfswitch_dio_pins[i] == RADIOLIB_LR11X0_DIO5)
-                out << "DIO5";
-            if (rfswitch_dio_pins[i] == RADIOLIB_LR11X0_DIO6)
-                out << "DIO6";
-            if (rfswitch_dio_pins[i] == RADIOLIB_LR11X0_DIO7)
-                out << "DIO7";
-            if (rfswitch_dio_pins[i] == RADIOLIB_LR11X0_DIO8)
-                out << "DIO8";
-            if (rfswitch_dio_pins[i] == RADIOLIB_LR11X0_DIO10)
-                out << "DIO10";
-        }
-        out << YAML::EndSeq;
-
-        for (int i = 0; i < 7; i++) {
-            switch (i) {
-            case 0:
-                out << YAML::Key << "MODE_STBY";
-                break;
-            case 1:
-                out << YAML::Key << "MODE_RX";
-                break;
-            case 2:
-                out << YAML::Key << "MODE_TX";
-                break;
-            case 3:
-                out << YAML::Key << "MODE_TX_HP";
-                break;
-            case 4:
-                out << YAML::Key << "MODE_TX_HF";
-                break;
-            case 5:
-                out << YAML::Key << "MODE_GNSS";
-                break;
-            case 6:
-                out << YAML::Key << "MODE_WIFI";
-                break;
-            }
-
+            out << YAML::Key << "pins";
             out << YAML::Value << YAML::Flow << YAML::BeginSeq;
-            for (int j = 0; j < 5; j++) {
-                if (rfswitch_table[i].values[j] == HIGH) {
-                    out << "HIGH";
-                } else {
-                    out << "LOW";
-                }
+
+            for (int i = 0; i < 5; i++) {
+                // set up the pin array first
+                if (rfswitch_dio_pins[i] == RADIOLIB_LR11X0_DIO5)
+                    out << "DIO5";
+                if (rfswitch_dio_pins[i] == RADIOLIB_LR11X0_DIO6)
+                    out << "DIO6";
+                if (rfswitch_dio_pins[i] == RADIOLIB_LR11X0_DIO7)
+                    out << "DIO7";
+                if (rfswitch_dio_pins[i] == RADIOLIB_LR11X0_DIO8)
+                    out << "DIO8";
+                if (rfswitch_dio_pins[i] == RADIOLIB_LR11X0_DIO10)
+                    out << "DIO10";
             }
             out << YAML::EndSeq;
-        }
 
-        out << YAML::EndMap; // rfswitch_table
+            for (int i = 0; i < 7; i++) {
+                switch (i) {
+                case 0:
+                    out << YAML::Key << "MODE_STBY";
+                    break;
+                case 1:
+                    out << YAML::Key << "MODE_RX";
+                    break;
+                case 2:
+                    out << YAML::Key << "MODE_TX";
+                    break;
+                case 3:
+                    out << YAML::Key << "MODE_TX_HP";
+                    break;
+                case 4:
+                    out << YAML::Key << "MODE_TX_HF";
+                    break;
+                case 5:
+                    out << YAML::Key << "MODE_GNSS";
+                    break;
+                case 6:
+                    out << YAML::Key << "MODE_WIFI";
+                    break;
+                }
+
+                out << YAML::Value << YAML::Flow << YAML::BeginSeq;
+                for (int j = 0; j < 5; j++) {
+                    if (rfswitch_table[i].values[j] == HIGH) {
+                        out << "HIGH";
+                    } else {
+                        out << "LOW";
+                    }
+                }
+                out << YAML::EndSeq;
+            }
+            out << YAML::EndMap; // rfswitch_table
+        }
         out << YAML::EndMap; // Lora
 
         if (i2cdev != "") {
