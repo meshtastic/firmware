@@ -431,7 +431,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
         gpio_wakeup_enable((gpio_num_t)PMU_IRQ, GPIO_INTR_LOW_LEVEL); // pmu irq
 #endif
 
-#ifdef USE_XL9555
+#ifdef T_LORA_PAGER
     LOG_DEBUG("power down XL9555 io");
     io.digitalWrite(EXPANDS_DRV_EN, LOW);
     io.digitalWrite(EXPANDS_AMP_EN, LOW);
@@ -480,7 +480,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
         gpio_wakeup_disable((gpio_num_t)RF95_IRQ);
     }
 #endif
-#ifdef USE_XL9555
+#ifdef T_LORA_PAGER
     LOG_DEBUG("power up XL9555 io");
     io.digitalWrite(EXPANDS_DRV_EN, HIGH);
     io.digitalWrite(EXPANDS_AMP_EN, HIGH);
