@@ -1272,7 +1272,7 @@ void menuHandler::FrameToggles_menu()
     bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.InitialSelected = lastSelectedIndex; // Use index, not enum value
 
-    bannerOptions.bannerCallback = [optionsEnumArray, options](int selected) mutable -> void {
+    bannerOptions.bannerCallback = [options](int selected) mutable -> void {
         // Find the index of selected in optionsEnumArray
         int idx = 0;
         for (; idx < options; ++idx) {
