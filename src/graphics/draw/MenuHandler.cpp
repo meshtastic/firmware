@@ -1004,16 +1004,20 @@ void menuHandler::traceRouteMenu()
 void menuHandler::testMenu()
 {
 
-    static const char *optionsArray[] = {"Back", "Number Picker"};
+    static const char *optionsArray[] = {"Back", "Number Picker", "Show Chirpy"};
     BannerOverlayOptions bannerOptions;
     std::string message = "Test to Run?\n";
     bannerOptions.message = message.c_str();
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 2;
+    bannerOptions.optionsCount = 3;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == 1) {
             menuQueue = number_test;
             screen->runNow();
+        } else if (selected == 2) {
+            // Show Chirpy
+            screen->toggleFrameVisibility("chirpy");
+            screen->setFrames(Screen::FOCUS_SYSTEM);
         }
     };
     screen->showOverlayBanner(bannerOptions);

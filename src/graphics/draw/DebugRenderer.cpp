@@ -639,6 +639,23 @@ void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x
         display->drawString(nameX, getTextPositions(display)[line], uptimeStr);
     }
 }
+
+// ****************************
+// * Chirpy Screen      *
+// ****************************
+void drawChirpy(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    display->clear();
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
+    int line = 1;
+    int iconX = (SCREEN_WIDTH - (chirpy_width + comment_ballon_width)) / 2;
+    int iconY = (SCREEN_HEIGHT - chirpy_height) / 2;
+    display->drawXbm(iconX, iconY, comment_ballon_width, comment_ballon_height, comment_balloon);
+    display->drawXbm(iconX + comment_ballon_width + 3, iconY, chirpy_width, chirpy_height, chirpy);
+    display->drawString(iconX + 4, iconY, "Hello");
+    display->drawString(iconX + 4, iconY + 10, "World");
+}
 } // namespace DebugRenderer
 } // namespace graphics
 #endif
