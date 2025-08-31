@@ -370,7 +370,7 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
 #elif ARCH_PORTDUINO
     if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
-        if (settingsMap[displayPanel] != no_screen) {
+        if (portduino_config.displayPanel != no_screen) {
             LOG_DEBUG("Make TFTDisplay!");
             dispdev = new TFTDisplay(address.address, -1, -1, geometry,
                                      (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);

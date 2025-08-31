@@ -41,44 +41,44 @@ void tftSetup(void)
     PacketAPI::create(PacketServer::init());
     deviceScreen->init(new PacketClient);
 #else
-    if (settingsMap[displayPanel] != no_screen) {
+    if (portduino_config.displayPanel != no_screen) {
         DisplayDriverConfig displayConfig;
         static char *panels[] = {"NOSCREEN", "X11",     "FB",      "ST7789",  "ST7735",  "ST7735S",
                                  "ST7796",   "ILI9341", "ILI9342", "ILI9486", "ILI9488", "HX8357D"};
         static char *touch[] = {"NOTOUCH", "XPT2046", "STMPE610", "GT911", "FT5x06"};
 #if defined(USE_X11)
-        if (settingsMap[displayPanel] == x11) {
-            if (settingsMap[displayWidth] && settingsMap[displayHeight])
-                displayConfig = DisplayDriverConfig(DisplayDriverConfig::device_t::X11, (uint16_t)settingsMap[displayWidth],
-                                                    (uint16_t)settingsMap[displayHeight]);
+        if (portduino_config.displayPanel == x11) {
+            if (portduino_config.displayWidth && portduino_config.displayHeight)
+                displayConfig = DisplayDriverConfig(DisplayDriverConfig::device_t::X11, (uint16_t)portduino_config.displayWidth,
+                                                    (uint16_t)portduino_config.displayHeight);
             else
                 displayConfig.device(DisplayDriverConfig::device_t::X11);
         } else
 #elif defined(USE_FRAMEBUFFER)
-        if (settingsMap[displayPanel] == fb) {
-            if (settingsMap[displayWidth] && settingsMap[displayHeight])
-                displayConfig = DisplayDriverConfig(DisplayDriverConfig::device_t::FB, (uint16_t)settingsMap[displayWidth],
-                                                    (uint16_t)settingsMap[displayHeight]);
+        if (portduino_config.displayPanel == fb) {
+            if (portduino_config.displayWidth && portduino_config.displayHeight)
+                displayConfig = DisplayDriverConfig(DisplayDriverConfig::device_t::FB, (uint16_t)portduino_config.displayWidth,
+                                                    (uint16_t)portduino_config.displayHeight);
             else
                 displayConfig.device(DisplayDriverConfig::device_t::FB);
         } else
 #endif
         {
             displayConfig.device(DisplayDriverConfig::device_t::CUSTOM_TFT)
-                .panel(DisplayDriverConfig::panel_config_t{.type = panels[settingsMap[displayPanel]],
-                                                           .panel_width = (uint16_t)settingsMap[displayWidth],
-                                                           .panel_height = (uint16_t)settingsMap[displayHeight],
-                                                           .rotation = (bool)settingsMap[displayRotate],
+                .panel(DisplayDriverConfig::panel_config_t{.type = panels[portduino_config.displayPanel],
+                                                           .panel_width = (uint16_t)portduino_config.displayWidth,
+                                                           .panel_height = (uint16_t)portduino_config.displayHeight,
+                                                           .rotation = (bool)portduino_config.displayRotate,
                                                            .pin_cs = (int16_t)portduino_config.pinMappings[displayCS].pin,
                                                            .pin_rst = (int16_t)portduino_config.pinMappings[displayReset].pin,
-                                                           .offset_x = (uint16_t)settingsMap[displayOffsetX],
-                                                           .offset_y = (uint16_t)settingsMap[displayOffsetY],
-                                                           .offset_rotation = (uint8_t)settingsMap[displayOffsetRotate],
-                                                           .invert = settingsMap[displayInvert] ? true : false,
-                                                           .rgb_order = (bool)settingsMap[displayRGBOrder],
-                                                           .dlen_16bit = settingsMap[displayPanel] == ili9486 ||
-                                                                         settingsMap[displayPanel] == ili9488})
-                .bus(DisplayDriverConfig::bus_config_t{.freq_write = (uint32_t)settingsMap[displayBusFrequency],
+                                                           .offset_x = (uint16_t)portduino_config.displayOffsetX,
+                                                           .offset_y = (uint16_t)portduino_config.displayOffsetY,
+                                                           .offset_rotation = (uint8_t)portduino_config.displayOffsetRotate,
+                                                           .invert = portduino_config.displayInvert ? true : false,
+                                                           .rgb_order = (bool)portduino_config.displayRGBOrder,
+                                                           .dlen_16bit = portduino_config.displayPanel == ili9486 ||
+                                                                         portduino_config.displayPanel == ili9488})
+                .bus(DisplayDriverConfig::bus_config_t{.freq_write = (uint32_t)portduino_config.displayBusFrequency,
                                                        .freq_read = 16000000,
                                                        .spi{.pin_dc = (int8_t)portduino_config.pinMappings[displayDC].pin,
                                                             .use_lock = true,
@@ -88,13 +88,13 @@ void tftSetup(void)
                 .light(DisplayDriverConfig::light_config_t{
                     .pin_bl = (int16_t)portduino_config.pinMappings[displayBacklight].pin,
                     .pwm_channel = (int8_t)portduino_config.pinMappings[displayBacklightPWMChannel].pin,
-                    .invert = (bool)settingsMap[displayBacklightInvert]});
+                    .invert = (bool)portduino_config.displayBacklightInvert});
             if (portduino_config.touchscreenI2CAddr == -1) {
                 displayConfig.touch(
                     DisplayDriverConfig::touch_config_t{.type = touch[portduino_config.touchscreenModule],
-                                                        .freq = (uint32_t)settingsMap[touchscreenBusFrequency],
+                                                        .freq = (uint32_t)portduino_config.touchscreenBusFrequency,
                                                         .pin_int = (int16_t)portduino_config.pinMappings[touchscreenIRQ].pin,
-                                                        .offset_rotation = (uint8_t)settingsMap[touchscreenRotate],
+                                                        .offset_rotation = (uint8_t)portduino_config.touchscreenRotate,
                                                         .spi{
                                                             .spi_host = (int8_t)portduino_config.touchscreen_spi_dev_int,
                                                         },
@@ -102,17 +102,17 @@ void tftSetup(void)
             } else {
                 displayConfig.touch(DisplayDriverConfig::touch_config_t{
                     .type = touch[portduino_config.touchscreenModule],
-                    .freq = (uint32_t)settingsMap[touchscreenBusFrequency],
+                    .freq = (uint32_t)portduino_config.touchscreenBusFrequency,
                     .x_min = 0,
                     .x_max =
-                        (int16_t)((settingsMap[touchscreenRotate] & 1 ? settingsMap[displayWidth] : settingsMap[displayHeight]) -
+                        (int16_t)((portduino_config.touchscreenRotate & 1 ? portduino_config.displayWidth : portduino_config.displayHeight) -
                                   1),
                     .y_min = 0,
                     .y_max =
-                        (int16_t)((settingsMap[touchscreenRotate] & 1 ? settingsMap[displayHeight] : settingsMap[displayWidth]) -
+                        (int16_t)((portduino_config.touchscreenRotate & 1 ? portduino_config.displayHeight : portduino_config.displayWidth) -
                                   1),
                     .pin_int = (int16_t)portduino_config.pinMappings[touchscreenIRQ].pin,
-                    .offset_rotation = (uint8_t)settingsMap[touchscreenRotate],
+                    .offset_rotation = (uint8_t)portduino_config.touchscreenRotate,
                     .i2c{.i2c_addr = (uint8_t)portduino_config.touchscreenI2CAddr}});
             }
         }

@@ -9,11 +9,11 @@
 int32_t HostMetricsModule::runOnce()
 {
 #if ARCH_PORTDUINO
-    if (settingsMap[hostMetrics_interval] == 0) {
+    if (portduino_config.hostMetrics_interval == 0) {
         return disable();
     } else {
         sendMetrics();
-        return 60 * 1000 * settingsMap[hostMetrics_interval];
+        return 60 * 1000 * portduino_config.hostMetrics_interval;
     }
 #else
     return disable();
@@ -135,7 +135,7 @@ bool HostMetricsModule::sendMetrics()
     p->to = NODENUM_BROADCAST;
     p->decoded.want_response = false;
     p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
-    p->channel = settingsMap[hostMetrics_channel];
+    p->channel = portduino_config.hostMetrics_channel;
     LOG_INFO("Send packet to mesh");
     service->sendToMesh(p, RX_SRC_LOCAL, true);
     return true;

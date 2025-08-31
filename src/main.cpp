@@ -881,7 +881,7 @@ void setup()
     defined(ST7789_CS) || defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(ST7796_CS)
         screen = new graphics::Screen(screen_found, screen_model, screen_geometry);
 #elif defined(ARCH_PORTDUINO)
-        if ((screen_found.port != ScanI2C::I2CPort::NO_I2C || settingsMap[displayPanel]) &&
+        if ((screen_found.port != ScanI2C::I2CPort::NO_I2C || portduino_config.displayPanel) &&
             config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
             screen = new graphics::Screen(screen_found, screen_model, screen_geometry);
         }
@@ -1145,7 +1145,7 @@ void setup()
     if (screen)
         screen->setup();
 #elif defined(ARCH_PORTDUINO)
-    if ((screen_found.port != ScanI2C::I2CPort::NO_I2C || settingsMap[displayPanel]) &&
+    if ((screen_found.port != ScanI2C::I2CPort::NO_I2C || portduino_config.displayPanel) &&
         config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
         screen->setup();
     }
@@ -1444,7 +1444,7 @@ void setup()
 
 #ifdef ARCH_PORTDUINO
 #if __has_include(<ulfius.h>)
-    if (settingsMap[webserverport] != -1) {
+    if (portduino_config.webserverport != -1) {
         piwebServerThread = new PiWebServerThread();
         std::atexit([] { delete piwebServerThread; });
     }

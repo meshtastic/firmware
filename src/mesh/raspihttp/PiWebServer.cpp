@@ -458,8 +458,8 @@ PiWebServerThread::PiWebServerThread()
         }
     }
 
-    if (settingsMap[webserverport] != 0) {
-        webservport = settingsMap[webserverport];
+    if (portduino_config.webserverport != 0) {
+        webservport = portduino_config.webserverport;
         LOG_INFO("Use webserver port from yaml config %i ", webservport);
     } else {
         LOG_INFO("Webserver port in yaml config set to 0, defaulting to port 9443");

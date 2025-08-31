@@ -20,28 +20,6 @@ inline const std::unordered_map<std::string, std::string> configProducts = {
     {"RAK6421-13300-S1", "lora-RAK6421-13300-slot1.yaml"},
     {"RAK6421-13300-S2", "lora-RAK6421-13300-slot2.yaml"}};
 
-enum configNames {
-    touchscreenBusFrequency,
-    touchscreenRotate,
-    displayBusFrequency,
-    displayPanel,
-    displayWidth,
-    displayHeight,
-    displayRGBOrder,
-    displayBacklightInvert,
-    displayRotate,
-    displayOffsetRotate,
-    displayOffsetX,
-    displayOffsetY,
-    displayInvert,
-    webserverport,
-    maxtophone,
-    maxnodes,
-    hostMetrics_interval,
-    hostMetrics_channel,
-    configDisplayMode,
-    has_configDisplayMode
-};
 enum screen_modules { no_screen, x11, fb, st7789, st7735, st7735s, st7796, ili9341, ili9342, ili9486, ili9488, hx8357d };
 enum touchscreen_modules { no_touchscreen, xpt2046, stmpe610, gt911, ft5x06 };
 enum portduino_log_level { level_error, level_warn, level_info, level_debug, level_trace };
@@ -88,7 +66,6 @@ struct pinMapping {
     bool enabled = false;
 };
 
-extern std::map<configNames, int> settingsMap;
 extern std::ofstream traceFile;
 extern Ch341Hal *ch341Hal;
 int initGPIOPin(int pinNum, std::string gpioChipname, int line);
@@ -113,6 +90,20 @@ extern struct portduino_config_struct {
         {txen_pin, "TXen"},
         {rxen_pin, "RXen"},
         {sx126x_ant_sw_pin, "SX126X_ANT_SW"},
+    };
+
+    std::map<screen_modules, std::string> screen_names = {
+        {x11, "X11"},
+        {fb, "FB"},
+        {st7789, "ST7789"},
+        {st7735, "ST7735"},
+        {st7735s, "ST7735S"},
+        {st7796, "ST7796"},
+        {ili9341, "ILI9341"},
+        {ili9342, "ILI9342"},
+        {ili9486, "ILI9486"},
+        {ili9488, "ILI9488"},
+        {hx8357d, "HX8357D"}
     };
 
     std::map<gpio_pins, pinMapping> pinMappings;
@@ -148,12 +139,25 @@ extern struct portduino_config_struct {
     // Display
     std::string display_spi_dev = "";
     int display_spi_dev_int = 0;
+    int displayBusFrequency = 40000000;
+    screen_modules displayPanel = no_screen;
+    int displayWidth = 0;
+    int displayHeight = 0;
+    bool displayRGBOrder = false;
+    bool displayBacklightInvert = false;
+    bool displayRotate = false;
+    int displayOffsetRotate = 1;
+    bool displayInvert = false;
+    int displayOffsetX = 0;
+    int displayOffsetY = 0;
 
     // Touchscreen
     std::string touchscreen_spi_dev = "";
     int touchscreen_spi_dev_int = 0;
     touchscreen_modules touchscreenModule = no_touchscreen;
     int touchscreenI2CAddr = -1;
+    int touchscreenBusFrequency = 1000000;
+    int touchscreenRotate = -1;
 
     // Input
     std::string keyboardDevice = "";
@@ -170,9 +174,16 @@ extern struct portduino_config_struct {
     std::string webserver_root_path = "";
     std::string webserver_ssl_key_path = "/etc/meshtasticd/ssl/private_key.pem";
     std::string webserver_ssl_cert_path = "/etc/meshtasticd/ssl/certificate.pem";
+    int webserverport = -1;
 
     // HostMetrics
     std::string hostMetrics_user_command = "";
+    int hostMetrics_interval = 0;
+    int hostMetrics_channel = 0;
+
+    // config
+    int configDisplayMode = 0;
+    bool has_configDisplayMode = false;
 
     // General
     std::string mac_address = "";
@@ -180,6 +191,8 @@ extern struct portduino_config_struct {
     std::string mac_address_source = "";
     std::string config_directory = "";
     std::string available_directory = "/etc/meshtasticd/available.d/";
+    int maxtophone = 100;
+    int MaxNodes = 200;
 
     std::string emit_yaml()
     {
@@ -199,6 +212,7 @@ extern struct portduino_config_struct {
             }
         }
 
+        // TODO: don't output these when default
         if (sx126x_max_power != 0)
             out << YAML::Key << "SX126X_MAX_POWER" << YAML::Value << sx126x_max_power;
         if (sx128x_max_power != 0)
@@ -289,9 +303,34 @@ extern struct portduino_config_struct {
         }
 
         // Display
-        if (display_spi_dev != "") {
+        if (displayPanel != no_screen) {
             out << YAML::Key << "Display" << YAML::Value << YAML::BeginMap;
+            for (auto &screen_name : screen_names) {
+                if (displayPanel == screen_name.first)
+                out << YAML::Key << "Module" << YAML::Value << screen_name.second;
+            }
             out << YAML::Key << "spidev" << YAML::Value << display_spi_dev;
+            out << YAML::Key << "BusFrequency" << YAML::Value << displayBusFrequency;
+            if (displayWidth)
+                out << YAML::Key << "Width" << YAML::Value << displayWidth;
+            if (displayHeight)
+                out << YAML::Key << "Height" << YAML::Value << displayHeight;
+            if (displayRGBOrder)
+                out << YAML::Key << "RGBOrder" << YAML::Value << true;
+            if (displayBacklightInvert)
+                out << YAML::Key << "BacklightInvert" << YAML::Value << true;
+            if (displayRotate)
+                out << YAML::Key << "Rotate" << YAML::Value << true;
+            if (displayInvert)
+                out << YAML::Key << "Invert" << YAML::Value << true;
+            if (displayOffsetX)
+                out << YAML::Key << "OffsetX" << YAML::Value << displayOffsetX;
+            if (displayOffsetY)
+                out << YAML::Key << "OffsetY" << YAML::Value << displayOffsetY;
+                
+                
+            out << YAML::Key << "OffsetRotate" << YAML::Value << displayOffsetRotate;
+
             out << YAML::EndMap; // Display
         }
 
@@ -299,6 +338,7 @@ extern struct portduino_config_struct {
         if (touchscreen_spi_dev != "") {
             out << YAML::Key << "Touchscreen" << YAML::Value << YAML::BeginMap;
             out << YAML::Key << "spidev" << YAML::Value << touchscreen_spi_dev;
+            out << YAML::Key << "BusFrequency" << YAML::Value << touchscreenBusFrequency;
             switch (touchscreenModule) {
                 case xpt2046:
                     out << YAML::Key << "Module" << YAML::Value << "XPT2046";
@@ -309,6 +349,8 @@ extern struct portduino_config_struct {
                 case ft5x06:
                     out << YAML::Key << "Module" << YAML::Value << "FT5x06";
             }
+            if (touchscreenRotate != -1)
+                out << YAML::Key << "Rotate" << YAML::Value << touchscreenRotate;
             if (touchscreenI2CAddr != -1)
                 out << YAML::Key << "I2CAddr" << YAML::Value << touchscreenI2CAddr;
             out << YAML::EndMap; // Touchscreen
@@ -364,8 +406,6 @@ extern struct portduino_config_struct {
             out << YAML::EndMap; // TrackballPress
         }
         if (tbDirection == 3)
-            out << YAML::Key << "TrackballDirection" << YAML::Value << "RISING";
-        else if (tbDirection == 4)
             out << YAML::Key << "TrackballDirection" << YAML::Value << "FALLING";
 
         out << YAML::EndMap; // Input
@@ -402,6 +442,7 @@ extern struct portduino_config_struct {
             out << YAML::Key << "RootPath" << YAML::Value << webserver_root_path;
             out << YAML::Key << "SSLKey" << YAML::Value << webserver_ssl_key_path;
             out << YAML::Key << "SSLCert" << YAML::Value << webserver_ssl_cert_path;
+            out << YAML::Key << "Port" << YAML::Value << webserverport;
             out << YAML::EndMap; // Webserver
         }
 
@@ -409,10 +450,32 @@ extern struct portduino_config_struct {
         if (hostMetrics_user_command != "") {
             out << YAML::Key << "HostMetrics" << YAML::Value << YAML::BeginMap;
             out << YAML::Key << "UserStringCommand" << YAML::Value << hostMetrics_user_command;
+            out << YAML::Key << "ReportInterval" << YAML::Value << hostMetrics_interval;
+            out << YAML::Key << "Channel" << YAML::Value << hostMetrics_channel;
 
             out << YAML::EndMap; // HostMetrics
         }
 
+        // config
+        if (has_configDisplayMode) {
+            out << YAML::Key << "Config" << YAML::Value << YAML::BeginMap;
+            switch (configDisplayMode) {
+                case meshtastic_Config_DisplayConfig_DisplayMode_TWOCOLOR:
+                    out << YAML::Key << "DisplayMode" << YAML::Value << "TWOCOLOR";
+                case meshtastic_Config_DisplayConfig_DisplayMode_INVERTED:
+                    out << YAML::Key << "DisplayMode" << YAML::Value << "INVERTED";
+                case meshtastic_Config_DisplayConfig_DisplayMode_COLOR:
+                    out << YAML::Key << "DisplayMode" << YAML::Value << "COLOR";
+                case meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT:
+                    out << YAML::Key << "DisplayMode" << YAML::Value << "DEFAULT";
+            }
+            
+
+
+            out << YAML::EndMap; // Config
+        }
+
+        // General
         out << YAML::Key << "General" << YAML::Value << YAML::BeginMap;
         if (config_directory != "")
             out << YAML::Key << "ConfigDirectory" << YAML::Value << config_directory;
@@ -422,6 +485,8 @@ extern struct portduino_config_struct {
             out << YAML::Key << "MACAddressSource" << YAML::Value << mac_address_source;
         if (available_directory != "")
             out << YAML::Key << "AvailableDirectory" << YAML::Value << available_directory;
+        out << YAML::Key << "MaxMessageQueue" << YAML::Value << maxtophone;
+        out << YAML::Key << "MaxNodes" << YAML::Value << MaxNodes;
         out << YAML::EndMap; // General
         return out.c_str();
     }

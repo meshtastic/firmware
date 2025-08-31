@@ -27,7 +27,6 @@
 
 #include "platform/portduino/USBHal.h"
 
-std::map<configNames, int> settingsMap;
 portduino_config_struct portduino_config;
 std::ofstream traceFile;
 Ch341Hal *ch341Hal = nullptr;
@@ -153,7 +152,7 @@ void portduinoSetup()
 {
     int max_GPIO = 0;
     std::string gpioChipName = "gpiochip";
-    settingsMap[displayPanel] = no_screen;
+    portduino_config.displayPanel = no_screen;
 
     if (portduino_config.force_simradio == true) {
         portduino_config.lora_module = use_simradio;
@@ -206,7 +205,7 @@ void portduinoSetup()
 
     if (portduino_config.lora_module == use_simradio) {
         std::cout << "Running in simulated mode." << std::endl;
-        settingsMap[maxnodes] = 200; // Default to 200 nodes
+        portduino_config.MaxNodes = 200; // Default to 200 nodes
         // Set the random seed equal to TCPPort to have a different seed per instance
         randomSeed(TCPPort);
         return;
@@ -479,11 +478,16 @@ bool loadConfig(const char *configPath)
                     }
                 }
             }
-            portduino_config.sx126x_max_power = yamlConfig["Lora"]["SX126X_MAX_POWER"].as<int>(22);
-            portduino_config.sx128x_max_power = yamlConfig["Lora"]["SX128X_MAX_POWER"].as<int>(13);
-            portduino_config.lr1110_max_power = yamlConfig["Lora"]["LR1110_MAX_POWER"].as<int>(22);
-            portduino_config.lr1120_max_power = yamlConfig["Lora"]["LR1120_MAX_POWER"].as<int>(13);
-            portduino_config.rf95_max_power = yamlConfig["Lora"]["RF95_MAX_POWER"].as<int>(20);
+            if (yamlConfig["Lora"]["SX126X_MAX_POWER"])
+                portduino_config.sx126x_max_power = yamlConfig["Lora"]["SX126X_MAX_POWER"].as<int>(22);
+            if (yamlConfig["Lora"]["SX128X_MAX_POWER"])
+                portduino_config.sx128x_max_power = yamlConfig["Lora"]["SX128X_MAX_POWER"].as<int>(13);
+            if (yamlConfig["Lora"]["LR1110_MAX_POWER"])
+                portduino_config.lr1110_max_power = yamlConfig["Lora"]["LR1110_MAX_POWER"].as<int>(22);
+            if (yamlConfig["Lora"]["LR1120_MAX_POWER"])
+                portduino_config.lr1120_max_power = yamlConfig["Lora"]["LR1120_MAX_POWER"].as<int>(13);
+            if (yamlConfig["Lora"]["RF95_MAX_POWER"])
+                portduino_config.rf95_max_power = yamlConfig["Lora"]["RF95_MAX_POWER"].as<int>(20);
 
             if (portduino_config.lora_module != use_autoconf && portduino_config.lora_module != use_simradio &&
                 !portduino_config.force_simradio) {
@@ -575,30 +579,13 @@ bool loadConfig(const char *configPath)
             portduino_config.i2cdev = yamlConfig["I2C"]["I2CDevice"].as<std::string>("");
         }
         if (yamlConfig["Display"]) {
-            if (yamlConfig["Display"]["Panel"].as<std::string>("") == "ST7789")
-                settingsMap[displayPanel] = st7789;
-            else if (yamlConfig["Display"]["Panel"].as<std::string>("") == "ST7735")
-                settingsMap[displayPanel] = st7735;
-            else if (yamlConfig["Display"]["Panel"].as<std::string>("") == "ST7735S")
-                settingsMap[displayPanel] = st7735s;
-            else if (yamlConfig["Display"]["Panel"].as<std::string>("") == "ST7796")
-                settingsMap[displayPanel] = st7796;
-            else if (yamlConfig["Display"]["Panel"].as<std::string>("") == "ILI9341")
-                settingsMap[displayPanel] = ili9341;
-            else if (yamlConfig["Display"]["Panel"].as<std::string>("") == "ILI9342")
-                settingsMap[displayPanel] = ili9342;
-            else if (yamlConfig["Display"]["Panel"].as<std::string>("") == "ILI9486")
-                settingsMap[displayPanel] = ili9486;
-            else if (yamlConfig["Display"]["Panel"].as<std::string>("") == "ILI9488")
-                settingsMap[displayPanel] = ili9488;
-            else if (yamlConfig["Display"]["Panel"].as<std::string>("") == "HX8357D")
-                settingsMap[displayPanel] = hx8357d;
-            else if (yamlConfig["Display"]["Panel"].as<std::string>("") == "X11")
-                settingsMap[displayPanel] = x11;
-            else if (yamlConfig["Display"]["Panel"].as<std::string>("") == "FB")
-                settingsMap[displayPanel] = fb;
-            settingsMap[displayHeight] = yamlConfig["Display"]["Height"].as<int>(0);
-            settingsMap[displayWidth] = yamlConfig["Display"]["Width"].as<int>(0);
+
+            for (auto &screen_name : portduino_config.screen_names) {
+                if (yamlConfig["Display"]["Panel"].as<std::string>("") == screen_name.second)
+                portduino_config.displayPanel = screen_name.first;
+            }
+            portduino_config.displayHeight = yamlConfig["Display"]["Height"].as<int>(0);
+            portduino_config.displayWidth = yamlConfig["Display"]["Width"].as<int>(0);
 
             readGPIOFromYaml(yamlConfig["Display"]["DC"], portduino_config.pinMappings[displayDC], -1);
             readGPIOFromYaml(yamlConfig["Display"]["CS"], portduino_config.pinMappings[displayCS], -1);
@@ -607,14 +594,14 @@ bool loadConfig(const char *configPath)
                              portduino_config.pinMappings[displayBacklightPWMChannel], -1);
             readGPIOFromYaml(yamlConfig["Display"]["Reset"], portduino_config.pinMappings[displayReset], -1);
 
-            settingsMap[displayBacklightInvert] = yamlConfig["Display"]["BacklightInvert"].as<bool>(false);
-            settingsMap[displayRGBOrder] = yamlConfig["Display"]["RGBOrder"].as<bool>(false);
-            settingsMap[displayOffsetX] = yamlConfig["Display"]["OffsetX"].as<int>(0);
-            settingsMap[displayOffsetY] = yamlConfig["Display"]["OffsetY"].as<int>(0);
-            settingsMap[displayRotate] = yamlConfig["Display"]["Rotate"].as<bool>(false);
-            settingsMap[displayOffsetRotate] = yamlConfig["Display"]["OffsetRotate"].as<int>(1);
-            settingsMap[displayInvert] = yamlConfig["Display"]["Invert"].as<bool>(false);
-            settingsMap[displayBusFrequency] = yamlConfig["Display"]["BusFrequency"].as<int>(40000000);
+            portduino_config.displayBacklightInvert = yamlConfig["Display"]["BacklightInvert"].as<bool>(false);
+            portduino_config.displayRGBOrder = yamlConfig["Display"]["RGBOrder"].as<bool>(false);
+            portduino_config.displayOffsetX = yamlConfig["Display"]["OffsetX"].as<int>(0);
+            portduino_config.displayOffsetY = yamlConfig["Display"]["OffsetY"].as<int>(0);
+            portduino_config.displayRotate = yamlConfig["Display"]["Rotate"].as<bool>(false);
+            portduino_config.displayOffsetRotate = yamlConfig["Display"]["OffsetRotate"].as<int>(1);
+            portduino_config.displayInvert = yamlConfig["Display"]["Invert"].as<bool>(false);
+            portduino_config.displayBusFrequency = yamlConfig["Display"]["BusFrequency"].as<int>(40000000);
             if (yamlConfig["Display"]["spidev"]) {
                 portduino_config.display_spi_dev = "/dev/" + yamlConfig["Display"]["spidev"].as<std::string>("spidev0.1");
                 if (portduino_config.display_spi_dev.length() == 14) {
@@ -640,8 +627,8 @@ bool loadConfig(const char *configPath)
             readGPIOFromYaml(yamlConfig["Touchscreen"]["CS"], portduino_config.pinMappings[touchscreenCS], -1);
             readGPIOFromYaml(yamlConfig["Touchscreen"]["IRQ"], portduino_config.pinMappings[touchscreenIRQ], -1);
 
-            settingsMap[touchscreenBusFrequency] = yamlConfig["Touchscreen"]["BusFrequency"].as<int>(1000000);
-            settingsMap[touchscreenRotate] = yamlConfig["Touchscreen"]["Rotate"].as<int>(-1);
+            portduino_config.touchscreenBusFrequency = yamlConfig["Touchscreen"]["BusFrequency"].as<int>(1000000);
+            portduino_config.touchscreenRotate = yamlConfig["Touchscreen"]["Rotate"].as<int>(-1);
             portduino_config.touchscreenI2CAddr = yamlConfig["Touchscreen"]["I2CAddr"].as<int>(-1);
             if (yamlConfig["Touchscreen"]["spidev"]) {
                 portduino_config.touchscreen_spi_dev = "/dev/" + yamlConfig["Touchscreen"]["spidev"].as<std::string>("");
@@ -673,7 +660,7 @@ bool loadConfig(const char *configPath)
         }
 
         if (yamlConfig["Webserver"]) {
-            settingsMap[webserverport] = (yamlConfig["Webserver"]["Port"]).as<int>(-1);
+            portduino_config.webserverport = (yamlConfig["Webserver"]["Port"]).as<int>(-1);
             portduino_config.webserver_root_path =
                 (yamlConfig["Webserver"]["RootPath"]).as<std::string>("/usr/share/meshtasticd/web");
             portduino_config.webserver_ssl_key_path =
@@ -683,29 +670,29 @@ bool loadConfig(const char *configPath)
         }
 
         if (yamlConfig["HostMetrics"]) {
-            settingsMap[hostMetrics_channel] = (yamlConfig["HostMetrics"]["Channel"]).as<int>(0);
-            settingsMap[hostMetrics_interval] = (yamlConfig["HostMetrics"]["ReportInterval"]).as<int>(0);
+            portduino_config.hostMetrics_channel = (yamlConfig["HostMetrics"]["Channel"]).as<int>(0);
+            portduino_config.hostMetrics_interval = (yamlConfig["HostMetrics"]["ReportInterval"]).as<int>(0);
             portduino_config.hostMetrics_user_command = (yamlConfig["HostMetrics"]["UserStringCommand"]).as<std::string>("");
         }
 
         if (yamlConfig["Config"]) {
             if (yamlConfig["Config"]["DisplayMode"]) {
-                settingsMap[has_configDisplayMode] = true;
+                portduino_config.has_configDisplayMode = true;
                 if ((yamlConfig["Config"]["DisplayMode"]).as<std::string>("") == "TWOCOLOR") {
-                    settingsMap[configDisplayMode] = meshtastic_Config_DisplayConfig_DisplayMode_TWOCOLOR;
+                    portduino_config.configDisplayMode = meshtastic_Config_DisplayConfig_DisplayMode_TWOCOLOR;
                 } else if ((yamlConfig["Config"]["DisplayMode"]).as<std::string>("") == "INVERTED") {
-                    settingsMap[configDisplayMode] = meshtastic_Config_DisplayConfig_DisplayMode_INVERTED;
+                    portduino_config.configDisplayMode = meshtastic_Config_DisplayConfig_DisplayMode_INVERTED;
                 } else if ((yamlConfig["Config"]["DisplayMode"]).as<std::string>("") == "COLOR") {
-                    settingsMap[configDisplayMode] = meshtastic_Config_DisplayConfig_DisplayMode_COLOR;
+                    portduino_config.configDisplayMode = meshtastic_Config_DisplayConfig_DisplayMode_COLOR;
                 } else {
-                    settingsMap[configDisplayMode] = meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT;
+                    portduino_config.configDisplayMode = meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT;
                 }
             }
         }
 
         if (yamlConfig["General"]) {
-            settingsMap[maxnodes] = (yamlConfig["General"]["MaxNodes"]).as<int>(200);
-            settingsMap[maxtophone] = (yamlConfig["General"]["MaxMessageQueue"]).as<int>(100);
+            portduino_config.MaxNodes = (yamlConfig["General"]["MaxNodes"]).as<int>(200);
+            portduino_config.maxtophone = (yamlConfig["General"]["MaxMessageQueue"]).as<int>(100);
             portduino_config.config_directory = (yamlConfig["General"]["ConfigDirectory"]).as<std::string>("");
             portduino_config.available_directory =
                 (yamlConfig["General"]["AvailableDirectory"]).as<std::string>("/etc/meshtasticd/available.d/");
