@@ -21,27 +21,6 @@ inline const std::unordered_map<std::string, std::string> configProducts = {
     {"RAK6421-13300-S2", "lora-RAK6421-13300-slot2.yaml"}};
 
 enum configNames {
-    cs_pin,
-    cs_line,
-    cs_gpiochip,
-    irq_pin,
-    irq_line,
-    irq_gpiochip,
-    busy_pin,
-    busy_line,
-    busy_gpiochip,
-    reset_pin,
-    reset_line,
-    reset_gpiochip,
-    txen_pin,
-    txen_line,
-    txen_gpiochip,
-    rxen_pin,
-    rxen_line,
-    rxen_gpiochip,
-    sx126x_ant_sw_pin,
-    sx126x_ant_sw_line,
-    sx126x_ant_sw_gpiochip,
     sx126x_max_power,
     sx128x_max_power,
     lr1110_max_power,
@@ -51,18 +30,10 @@ enum configNames {
     dio3_tcxo_voltage,
     lora_usb_pid,
     lora_usb_vid,
-    userButtonPin,
-    tbUpPin,
-    tbDownPin,
-    tbLeftPin,
-    tbRightPin,
-    tbPressPin,
     tbDirection,
     spiSpeed,
     has_gps,
     touchscreenModule,
-    touchscreenCS,
-    touchscreenIRQ,
     touchscreenI2CAddr,
     touchscreenBusFrequency,
     touchscreenRotate,
@@ -70,13 +41,8 @@ enum configNames {
     displayPanel,
     displayWidth,
     displayHeight,
-    displayCS,
-    displayDC,
     displayRGBOrder,
-    displayBacklight,
-    displayBacklightPWMChannel,
     displayBacklightInvert,
-    displayReset,
     displayRotate,
     displayOffsetRotate,
     displayOffsetX,
@@ -105,7 +71,7 @@ enum lora_module_enum {
     use_lr1121,
     use_llcc68
 };
-/*
+
 enum gpio_pins {
     cs_pin,
     irq_pin,
@@ -128,7 +94,13 @@ enum gpio_pins {
     tbRightPin,
     tbPressPin
 };
-*/
+
+struct pinMapping {
+    int pin;
+    int gpiochip;
+    int line;
+    bool enabled = false;
+};
 
 extern std::map<configNames, int> settingsMap;
 extern std::ofstream traceFile;
@@ -138,14 +110,8 @@ bool loadConfig(const char *configPath);
 static bool ends_with(std::string_view str, std::string_view suffix);
 void getMacAddr(uint8_t *dmac);
 bool MAC_from_string(std::string mac_str, uint8_t *dmac);
+void readGPIOFromYaml(YAML::Node sourceNode, pinMapping &destPin, int pinDefault = RADIOLIB_NC);
 std::string exec(const char *cmd);
-
-struct pinMapping {
-    int pin;
-    int gpiochip;
-    int line;
-    bool enabled = false;
-};
 
 extern struct portduino_config_struct {
     // Lora
@@ -153,6 +119,7 @@ extern struct portduino_config_struct {
         {use_simradio, "sim"},  {use_autoconf, "auto"}, {use_rf95, "RF95"},     {use_sx1262, "sx1262"}, {use_sx1268, "sx1268"},
         {use_sx1280, "sx1280"}, {use_lr1110, "lr1110"}, {use_lr1120, "lr1120"}, {use_lr1121, "lr1121"}, {use_llcc68, "LLCC68"}};
 
+    std::map<gpio_pins, pinMapping> pinMappings;
     lora_module_enum lora_module;
     bool has_rfswitch_table = false;
     uint32_t rfswitch_dio_pins[5] = {RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC};
@@ -293,14 +260,55 @@ extern struct portduino_config_struct {
         }
 
         // Input
-        if (keyboardDevice != "" || pointerDevice != "") {
-            out << YAML::Key << "Input" << YAML::Value << YAML::BeginMap;
-            if (keyboardDevice != "")
-                out << YAML::Key << "KeyboardDevice" << YAML::Value << keyboardDevice;
-            if (pointerDevice != "")
-                out << YAML::Key << "PointerDevice" << YAML::Value << pointerDevice;
-            out << YAML::EndMap; // Input
+        out << YAML::Key << "Input" << YAML::Value << YAML::BeginMap;
+        if (keyboardDevice != "")
+            out << YAML::Key << "KeyboardDevice" << YAML::Value << keyboardDevice;
+        if (pointerDevice != "")
+            out << YAML::Key << "PointerDevice" << YAML::Value << pointerDevice;
+
+        if (pinMappings[userButtonPin].enabled) {
+            out << YAML::Key << "User" << YAML::Value << YAML::BeginMap;
+            out << YAML::Key << "pin" << YAML::Value << pinMappings[userButtonPin].pin;
+            out << YAML::Key << "line" << YAML::Value << pinMappings[userButtonPin].line;
+            out << YAML::Key << "gpiochip" << YAML::Value << pinMappings[userButtonPin].gpiochip;
+            out << YAML::EndMap; // User
         }
+        if (pinMappings[tbUpPin].enabled) {
+            out << YAML::Key << "TrackballUp" << YAML::Value << YAML::BeginMap;
+            out << YAML::Key << "pin" << YAML::Value << pinMappings[tbUpPin].pin;
+            out << YAML::Key << "line" << YAML::Value << pinMappings[tbUpPin].line;
+            out << YAML::Key << "gpiochip" << YAML::Value << pinMappings[tbUpPin].gpiochip;
+            out << YAML::EndMap; // TrackballUp
+        }
+        if (pinMappings[tbDownPin].enabled) {
+            out << YAML::Key << "TrackballDown" << YAML::Value << YAML::BeginMap;
+            out << YAML::Key << "pin" << YAML::Value << pinMappings[tbDownPin].pin;
+            out << YAML::Key << "line" << YAML::Value << pinMappings[tbDownPin].line;
+            out << YAML::Key << "gpiochip" << YAML::Value << pinMappings[tbDownPin].gpiochip;
+            out << YAML::EndMap; // TrackballDown
+        }
+        if (pinMappings[tbLeftPin].enabled) {
+            out << YAML::Key << "TrackballLeft" << YAML::Value << YAML::BeginMap;
+            out << YAML::Key << "pin" << YAML::Value << pinMappings[tbLeftPin].pin;
+            out << YAML::Key << "line" << YAML::Value << pinMappings[tbLeftPin].line;
+            out << YAML::Key << "gpiochip" << YAML::Value << pinMappings[tbLeftPin].gpiochip;
+            out << YAML::EndMap; // TrackballLeft
+        }
+        if (pinMappings[tbRightPin].enabled) {
+            out << YAML::Key << "TrackballRight" << YAML::Value << YAML::BeginMap;
+            out << YAML::Key << "pin" << YAML::Value << pinMappings[tbRightPin].pin;
+            out << YAML::Key << "line" << YAML::Value << pinMappings[tbRightPin].line;
+            out << YAML::Key << "gpiochip" << YAML::Value << pinMappings[tbRightPin].gpiochip;
+            out << YAML::EndMap; // TrackballRight
+        }
+        if (pinMappings[tbPressPin].enabled) {
+            out << YAML::Key << "TrackballPress" << YAML::Value << YAML::BeginMap;
+            out << YAML::Key << "pin" << YAML::Value << pinMappings[tbPressPin].pin;
+            out << YAML::Key << "line" << YAML::Value << pinMappings[tbPressPin].line;
+            out << YAML::Key << "gpiochip" << YAML::Value << pinMappings[tbPressPin].gpiochip;
+            out << YAML::EndMap; // TrackballPress
+        }
+        out << YAML::EndMap; // Input
 
         out << YAML::Key << "Logging" << YAML::Value << YAML::BeginMap;
         out << YAML::Key << "LogLevel" << YAML::Value;

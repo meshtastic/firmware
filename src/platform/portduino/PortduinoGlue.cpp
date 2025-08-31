@@ -152,36 +152,10 @@ void getMacAddr(uint8_t *dmac)
 void portduinoSetup()
 {
     int max_GPIO = 0;
-    const configNames GPIO_lines[] = {cs_pin,
-                                      irq_pin,
-                                      busy_pin,
-                                      reset_pin,
-                                      sx126x_ant_sw_pin,
-                                      txen_pin,
-                                      rxen_pin,
-                                      displayDC,
-                                      displayCS,
-                                      displayBacklight,
-                                      displayBacklightPWMChannel,
-                                      displayReset,
-                                      touchscreenCS,
-                                      touchscreenIRQ,
-                                      userButtonPin,
-                                      tbUpPin,
-                                      tbDownPin,
-                                      tbLeftPin,
-                                      tbRightPin,
-                                      tbPressPin};
-
     std::string gpioChipName = "gpiochip";
     settingsMap[spiSpeed] = 2000000;
     settingsMap[displayPanel] = no_screen;
     settingsMap[touchscreenModule] = no_touchscreen;
-    settingsMap[tbUpPin] = RADIOLIB_NC;
-    settingsMap[tbDownPin] = RADIOLIB_NC;
-    settingsMap[tbLeftPin] = RADIOLIB_NC;
-    settingsMap[tbRightPin] = RADIOLIB_NC;
-    settingsMap[tbPressPin] = RADIOLIB_NC;
 
     if (portduino_config.force_simradio == true) {
         portduino_config.lora_module = use_simradio;
@@ -412,86 +386,25 @@ void portduinoSetup()
 
     std::string defaultGpioChipName = gpioChipName + std::to_string(portduino_config.lora_default_gpiochip);
 
-    for (configNames i : GPIO_lines) {
-        if (settingsMap.count(i) && settingsMap[i] > max_GPIO)
-            max_GPIO = settingsMap[i];
+    for (auto i : portduino_config.pinMappings) {
+        if (i.second.enabled && i.second.pin > max_GPIO)
+            max_GPIO = i.second.pin;
     }
 
     gpioInit(max_GPIO + 1); // Done here so we can inform Portduino how many GPIOs we need.
 
     // Need to bind all the configured GPIO pins so they're not simulated
     // TODO: If one of these fails, we should log and terminate
-    if (settingsMap.count(userButtonPin) > 0 && settingsMap[userButtonPin] != RADIOLIB_NC) {
-        if (initGPIOPin(settingsMap[userButtonPin], defaultGpioChipName, settingsMap[userButtonPin]) != ERRNO_OK) {
-            settingsMap[userButtonPin] = RADIOLIB_NC;
-        }
-    }
-    if (settingsMap.count(tbUpPin) > 0 && settingsMap[tbUpPin] != RADIOLIB_NC) {
-        if (initGPIOPin(settingsMap[tbUpPin], defaultGpioChipName, settingsMap[tbUpPin]) != ERRNO_OK) {
-            settingsMap[tbUpPin] = RADIOLIB_NC;
-        }
-    }
-    if (settingsMap.count(tbDownPin) > 0 && settingsMap[tbDownPin] != RADIOLIB_NC) {
-        if (initGPIOPin(settingsMap[tbDownPin], defaultGpioChipName, settingsMap[tbDownPin]) != ERRNO_OK) {
-            settingsMap[tbDownPin] = RADIOLIB_NC;
-        }
-    }
-    if (settingsMap.count(tbLeftPin) > 0 && settingsMap[tbLeftPin] != RADIOLIB_NC) {
-        if (initGPIOPin(settingsMap[tbLeftPin], defaultGpioChipName, settingsMap[tbLeftPin]) != ERRNO_OK) {
-            settingsMap[tbLeftPin] = RADIOLIB_NC;
-        }
-    }
-    if (settingsMap.count(tbRightPin) > 0 && settingsMap[tbRightPin] != RADIOLIB_NC) {
-        if (initGPIOPin(settingsMap[tbRightPin], defaultGpioChipName, settingsMap[tbRightPin]) != ERRNO_OK) {
-            settingsMap[tbRightPin] = RADIOLIB_NC;
-        }
-    }
-    if (settingsMap.count(tbPressPin) > 0 && settingsMap[tbPressPin] != RADIOLIB_NC) {
-        if (initGPIOPin(settingsMap[tbPressPin], defaultGpioChipName, settingsMap[tbPressPin]) != ERRNO_OK) {
-            settingsMap[tbPressPin] = RADIOLIB_NC;
-        }
-    }
-    if (settingsMap[displayPanel] != no_screen) {
-        if (settingsMap[displayCS] > 0)
-            initGPIOPin(settingsMap[displayCS], defaultGpioChipName, settingsMap[displayCS]);
-        if (settingsMap[displayDC] > 0)
-            initGPIOPin(settingsMap[displayDC], defaultGpioChipName, settingsMap[displayDC]);
-        if (settingsMap[displayBacklight] > 0)
-            initGPIOPin(settingsMap[displayBacklight], defaultGpioChipName, settingsMap[displayBacklight]);
-        if (settingsMap[displayReset] > 0)
-            initGPIOPin(settingsMap[displayReset], defaultGpioChipName, settingsMap[displayReset]);
-    }
-    if (settingsMap[touchscreenModule] != no_touchscreen) {
-        if (settingsMap[touchscreenCS] > 0)
-            initGPIOPin(settingsMap[touchscreenCS], defaultGpioChipName, settingsMap[touchscreenCS]);
-        if (settingsMap[touchscreenIRQ] > 0)
-            initGPIOPin(settingsMap[touchscreenIRQ], defaultGpioChipName, settingsMap[touchscreenIRQ]);
+    for (auto i : portduino_config.pinMappings) {
+        if (i.second.enabled)
+            if (initGPIOPin(i.second.pin, gpioChipName + std::to_string(i.second.gpiochip), i.second.line) != ERRNO_OK) {
+                printf("Error setting pin number %d. It may not exist, or may already be in use.\n", i.second.line);
+                exit(EXIT_FAILURE);
+            }
     }
 
     // Only initialize the radio pins when dealing with real, kernel controlled SPI hardware
     if (portduino_config.lora_spi_dev != "" && portduino_config.lora_spi_dev != "ch341") {
-        const struct {
-            configNames pin;
-            configNames gpiochip;
-            configNames line;
-        } pinMappings[] = {{cs_pin, cs_gpiochip, cs_line},
-                           {irq_pin, irq_gpiochip, irq_line},
-                           {busy_pin, busy_gpiochip, busy_line},
-                           {reset_pin, reset_gpiochip, reset_line},
-                           {rxen_pin, rxen_gpiochip, rxen_line},
-                           {txen_pin, txen_gpiochip, txen_line},
-                           {sx126x_ant_sw_pin, sx126x_ant_sw_gpiochip, sx126x_ant_sw_line}};
-        for (auto &pinMap : pinMappings) {
-            auto setMapIter = settingsMap.find(pinMap.pin);
-            if (setMapIter != settingsMap.end() && setMapIter->second != RADIOLIB_NC) {
-                if (initGPIOPin(setMapIter->second, gpioChipName + std::to_string(settingsMap[pinMap.gpiochip]),
-                                settingsMap[pinMap.line]) != ERRNO_OK) {
-                    printf("Error setting pin number %d. It may not exist, or may already be in use.\n",
-                           settingsMap[pinMap.line]);
-                    exit(EXIT_FAILURE);
-                }
-            }
-        }
         SPI.begin(portduino_config.lora_spi_dev.c_str());
     }
     if (portduino_config.traceFilename != "") {
@@ -566,44 +479,35 @@ bool loadConfig(const char *configPath)
                 }
             }
 
-            settingsMap[sx126x_max_power] = yamlConfig["Lora"]["SX126X_MAX_POWER"].as<int>(22);
-            settingsMap[sx128x_max_power] = yamlConfig["Lora"]["SX128X_MAX_POWER"].as<int>(13);
-            settingsMap[lr1110_max_power] = yamlConfig["Lora"]["LR1110_MAX_POWER"].as<int>(22);
-            settingsMap[lr1120_max_power] = yamlConfig["Lora"]["LR1120_MAX_POWER"].as<int>(13);
-            settingsMap[rf95_max_power] = yamlConfig["Lora"]["RF95_MAX_POWER"].as<int>(20);
+            if (portduino_config.lora_module != use_autoconf && portduino_config.lora_module != use_simradio &&
+                !portduino_config.force_simradio) {
 
-            settingsMap[dio2_as_rf_switch] = yamlConfig["Lora"]["DIO2_AS_RF_SWITCH"].as<bool>(false);
-            settingsMap[dio3_tcxo_voltage] = yamlConfig["Lora"]["DIO3_TCXO_VOLTAGE"].as<float>(0) * 1000;
-            if (settingsMap[dio3_tcxo_voltage] == 0 && yamlConfig["Lora"]["DIO3_TCXO_VOLTAGE"].as<bool>(false)) {
-                settingsMap[dio3_tcxo_voltage] = 1800; // default millivolts for "true"
-            }
+                settingsMap[sx126x_max_power] = yamlConfig["Lora"]["SX126X_MAX_POWER"].as<int>(22);
+                settingsMap[sx128x_max_power] = yamlConfig["Lora"]["SX128X_MAX_POWER"].as<int>(13);
+                settingsMap[lr1110_max_power] = yamlConfig["Lora"]["LR1110_MAX_POWER"].as<int>(22);
+                settingsMap[lr1120_max_power] = yamlConfig["Lora"]["LR1120_MAX_POWER"].as<int>(13);
+                settingsMap[rf95_max_power] = yamlConfig["Lora"]["RF95_MAX_POWER"].as<int>(20);
 
-            // backwards API compatibility and to globally set gpiochip once
-            int defaultGpioChip = portduino_config.lora_default_gpiochip = yamlConfig["Lora"]["gpiochip"].as<int>(0);
+                settingsMap[dio2_as_rf_switch] = yamlConfig["Lora"]["DIO2_AS_RF_SWITCH"].as<bool>(false);
+                settingsMap[dio3_tcxo_voltage] = yamlConfig["Lora"]["DIO3_TCXO_VOLTAGE"].as<float>(0) * 1000;
+                if (settingsMap[dio3_tcxo_voltage] == 0 && yamlConfig["Lora"]["DIO3_TCXO_VOLTAGE"].as<bool>(false)) {
+                    settingsMap[dio3_tcxo_voltage] = 1800; // default millivolts for "true"
+                }
 
-            const struct {
-                configNames pin;
-                configNames gpiochip;
-                configNames line;
-                std::string strName;
-            } pinMappings[] = {
-                {cs_pin, cs_gpiochip, cs_line, "CS"},
-                {irq_pin, irq_gpiochip, irq_line, "IRQ"},
-                {busy_pin, busy_gpiochip, busy_line, "Busy"},
-                {reset_pin, reset_gpiochip, reset_line, "Reset"},
-                {txen_pin, txen_gpiochip, txen_line, "TXen"},
-                {rxen_pin, rxen_gpiochip, rxen_line, "RXen"},
-                {sx126x_ant_sw_pin, sx126x_ant_sw_gpiochip, sx126x_ant_sw_line, "SX126X_ANT_SW"},
-            };
-            for (auto &pinMap : pinMappings) {
-                if (yamlConfig["Lora"][pinMap.strName].IsMap()) {
-                    settingsMap[pinMap.pin] = yamlConfig["Lora"][pinMap.strName]["pin"].as<int>(RADIOLIB_NC);
-                    settingsMap[pinMap.line] = yamlConfig["Lora"][pinMap.strName]["line"].as<int>(settingsMap[pinMap.pin]);
-                    settingsMap[pinMap.gpiochip] = yamlConfig["Lora"][pinMap.strName]["gpiochip"].as<int>(defaultGpioChip);
-                } else { // backwards API compatibility
-                    settingsMap[pinMap.pin] = yamlConfig["Lora"][pinMap.strName].as<int>(RADIOLIB_NC);
-                    settingsMap[pinMap.line] = settingsMap[pinMap.pin];
-                    settingsMap[pinMap.gpiochip] = defaultGpioChip;
+                // backwards API compatibility and to globally set gpiochip once
+                portduino_config.lora_default_gpiochip = yamlConfig["Lora"]["gpiochip"].as<int>(0);
+
+                std::map<gpio_pins, std::string> lora_pins = {
+                    {cs_pin, "CS"},
+                    {irq_pin, "IRQ"},
+                    {busy_pin, "Busy"},
+                    {reset_pin, "Reset"},
+                    {txen_pin, "TXen"},
+                    {rxen_pin, "RXen"},
+                    {sx126x_ant_sw_pin, "SX126X_ANT_SW"},
+                };
+                for (auto &lora_pin : lora_pins) {
+                    readGPIOFromYaml(yamlConfig["Lora"][lora_pin.second], portduino_config.pinMappings[lora_pin.first]);
                 }
             }
 
@@ -670,9 +574,7 @@ bool loadConfig(const char *configPath)
                 }
             }
         }
-        if (yamlConfig["GPIO"]) {
-            settingsMap[userButtonPin] = yamlConfig["GPIO"]["User"].as<int>(RADIOLIB_NC);
-        }
+        readGPIOFromYaml(yamlConfig["GPIO"]["User"], portduino_config.pinMappings[userButtonPin]);
         if (yamlConfig["GPS"]) {
             std::string serialPath = yamlConfig["GPS"]["SerialPath"].as<std::string>("");
             if (serialPath != "") {
@@ -708,13 +610,16 @@ bool loadConfig(const char *configPath)
                 settingsMap[displayPanel] = fb;
             settingsMap[displayHeight] = yamlConfig["Display"]["Height"].as<int>(0);
             settingsMap[displayWidth] = yamlConfig["Display"]["Width"].as<int>(0);
-            settingsMap[displayDC] = yamlConfig["Display"]["DC"].as<int>(-1);
-            settingsMap[displayCS] = yamlConfig["Display"]["CS"].as<int>(-1);
-            settingsMap[displayRGBOrder] = yamlConfig["Display"]["RGBOrder"].as<bool>(false);
-            settingsMap[displayBacklight] = yamlConfig["Display"]["Backlight"].as<int>(-1);
+
+            readGPIOFromYaml(yamlConfig["Display"]["DC"], portduino_config.pinMappings[displayDC], -1);
+            readGPIOFromYaml(yamlConfig["Display"]["CS"], portduino_config.pinMappings[displayCS], -1);
+            readGPIOFromYaml(yamlConfig["Display"]["Backlight"], portduino_config.pinMappings[displayBacklight], -1);
+            readGPIOFromYaml(yamlConfig["Display"]["BacklightPWMChannel"],
+                             portduino_config.pinMappings[displayBacklightPWMChannel], -1);
+            readGPIOFromYaml(yamlConfig["Display"]["Reset"], portduino_config.pinMappings[displayReset], -1);
+
             settingsMap[displayBacklightInvert] = yamlConfig["Display"]["BacklightInvert"].as<bool>(false);
-            settingsMap[displayBacklightPWMChannel] = yamlConfig["Display"]["BacklightPWMChannel"].as<int>(-1);
-            settingsMap[displayReset] = yamlConfig["Display"]["Reset"].as<int>(-1);
+            settingsMap[displayRGBOrder] = yamlConfig["Display"]["RGBOrder"].as<bool>(false);
             settingsMap[displayOffsetX] = yamlConfig["Display"]["OffsetX"].as<int>(0);
             settingsMap[displayOffsetY] = yamlConfig["Display"]["OffsetY"].as<int>(0);
             settingsMap[displayRotate] = yamlConfig["Display"]["Rotate"].as<bool>(false);
@@ -742,8 +647,10 @@ bool loadConfig(const char *configPath)
                 settingsMap[touchscreenModule] = gt911;
             else if (yamlConfig["Touchscreen"]["Module"].as<std::string>("") == "FT5x06")
                 settingsMap[touchscreenModule] = ft5x06;
-            settingsMap[touchscreenCS] = yamlConfig["Touchscreen"]["CS"].as<int>(-1);
-            settingsMap[touchscreenIRQ] = yamlConfig["Touchscreen"]["IRQ"].as<int>(-1);
+
+            readGPIOFromYaml(yamlConfig["Touchscreen"]["CS"], portduino_config.pinMappings[touchscreenCS], -1);
+            readGPIOFromYaml(yamlConfig["Touchscreen"]["IRQ"], portduino_config.pinMappings[touchscreenIRQ], -1);
+
             settingsMap[touchscreenBusFrequency] = yamlConfig["Touchscreen"]["BusFrequency"].as<int>(1000000);
             settingsMap[touchscreenRotate] = yamlConfig["Touchscreen"]["Rotate"].as<int>(-1);
             settingsMap[touchscreenI2CAddr] = yamlConfig["Touchscreen"]["I2CAddr"].as<int>(-1);
@@ -761,12 +668,14 @@ bool loadConfig(const char *configPath)
         if (yamlConfig["Input"]) {
             portduino_config.keyboardDevice = (yamlConfig["Input"]["KeyboardDevice"]).as<std::string>("");
             portduino_config.pointerDevice = (yamlConfig["Input"]["PointerDevice"]).as<std::string>("");
-            settingsMap[userButtonPin] = yamlConfig["Input"]["User"].as<int>(RADIOLIB_NC);
-            settingsMap[tbUpPin] = yamlConfig["Input"]["TrackballUp"].as<int>(RADIOLIB_NC);
-            settingsMap[tbDownPin] = yamlConfig["Input"]["TrackballDown"].as<int>(RADIOLIB_NC);
-            settingsMap[tbLeftPin] = yamlConfig["Input"]["TrackballLeft"].as<int>(RADIOLIB_NC);
-            settingsMap[tbRightPin] = yamlConfig["Input"]["TrackballRight"].as<int>(RADIOLIB_NC);
-            settingsMap[tbPressPin] = yamlConfig["Input"]["TrackballPress"].as<int>(RADIOLIB_NC);
+
+            readGPIOFromYaml(yamlConfig["Input"]["User"], portduino_config.pinMappings[userButtonPin]);
+            readGPIOFromYaml(yamlConfig["Input"]["TrackballUp"], portduino_config.pinMappings[tbUpPin]);
+            readGPIOFromYaml(yamlConfig["Input"]["TrackballDown"], portduino_config.pinMappings[tbDownPin]);
+            readGPIOFromYaml(yamlConfig["Input"]["TrackballLeft"], portduino_config.pinMappings[tbLeftPin]);
+            readGPIOFromYaml(yamlConfig["Input"]["TrackballRight"], portduino_config.pinMappings[tbRightPin]);
+            readGPIOFromYaml(yamlConfig["Input"]["TrackballPress"], portduino_config.pinMappings[tbPressPin]);
+
             if (yamlConfig["Input"]["TrackballDirection"].as<std::string>("RISING") == "RISING") {
                 settingsMap[tbDirection] = 4;
             } else if (yamlConfig["Input"]["TrackballDirection"].as<std::string>("RISING") == "FALLING") {
@@ -871,4 +780,19 @@ std::string exec(const char *cmd)
         result += buffer.data();
     }
     return result;
+}
+
+void readGPIOFromYaml(YAML::Node sourceNode, pinMapping &destPin, int pinDefault)
+{
+    if (sourceNode.IsMap()) {
+        destPin.enabled = true;
+        destPin.pin = sourceNode["pin"].as<int>(pinDefault);
+        destPin.line = sourceNode["line"].as<int>(destPin.pin);
+        destPin.gpiochip = sourceNode["gpiochip"].as<int>(portduino_config.lora_default_gpiochip);
+    } else if (sourceNode) { // backwards API compatibility
+        destPin.enabled = true;
+        destPin.pin = sourceNode.as<int>(pinDefault);
+        destPin.line = destPin.pin;
+        destPin.gpiochip = portduino_config.lora_default_gpiochip;
+    }
 }

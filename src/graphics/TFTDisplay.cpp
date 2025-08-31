@@ -797,15 +797,15 @@ class LGFX : public lgfx::LGFX_Device
         buscfg.spi_mode = 0;
         buscfg.spi_host = portduino_config.display_spi_dev_int;
 
-        buscfg.pin_dc = settingsMap[displayDC]; // Set SPI DC pin number (-1 = disable)
+        buscfg.pin_dc = portduino_config.pinMappings[displayDC].pin; // Set SPI DC pin number (-1 = disable)
 
         _bus_instance.config(buscfg);            // applies the set value to the bus.
         _panel_instance->setBus(&_bus_instance); // set the bus on the panel.
 
         auto cfg = _panel_instance->config(); // Gets a structure for display panel settings.
         LOG_DEBUG("Width: %d, Height: %d", settingsMap[displayWidth], settingsMap[displayHeight]);
-        cfg.pin_cs = settingsMap[displayCS]; // Pin number where CS is connected (-1 = disable)
-        cfg.pin_rst = settingsMap[displayReset];
+        cfg.pin_cs = portduino_config.pinMappings[displayCS].pin; // Pin number where CS is connected (-1 = disable)
+        cfg.pin_rst = portduino_config.pinMappings[displayReset].pin;
         if (settingsMap[displayRotate]) {
             cfg.panel_width = settingsMap[displayHeight]; // actual displayable width
             cfg.panel_height = settingsMap[displayWidth]; // actual displayable height
@@ -831,12 +831,12 @@ class LGFX : public lgfx::LGFX_Device
             }
             auto touch_cfg = _touch_instance->config();
 
-            touch_cfg.pin_cs = settingsMap[touchscreenCS];
+            touch_cfg.pin_cs = portduino_config.pinMappings[touchscreenCS].pin;
             touch_cfg.x_min = 0;
             touch_cfg.x_max = settingsMap[displayHeight] - 1;
             touch_cfg.y_min = 0;
             touch_cfg.y_max = settingsMap[displayWidth] - 1;
-            touch_cfg.pin_int = settingsMap[touchscreenIRQ];
+            touch_cfg.pin_int = portduino_config.pinMappings[touchscreenIRQ].pin;
             touch_cfg.bus_shared = true;
             touch_cfg.offset_rotation = settingsMap[touchscreenRotate];
             if (settingsMap[touchscreenI2CAddr] != -1) {
@@ -1279,8 +1279,8 @@ void TFTDisplay::sendCommand(uint8_t com)
         backlightEnable->set(true);
 #if ARCH_PORTDUINO
         display(true);
-        if (settingsMap[displayBacklight] > 0)
-            digitalWrite(settingsMap[displayBacklight], TFT_BACKLIGHT_ON);
+        if (portduino_config.pinMappings[displayBacklight].pin > 0)
+            digitalWrite(portduino_config.pinMappings[displayBacklight].pin, TFT_BACKLIGHT_ON);
 #elif !defined(RAK14014) && !defined(M5STACK) && !defined(UNPHONE)
         tft->wakeup();
         tft->powerSaveOff();
@@ -1303,8 +1303,8 @@ void TFTDisplay::sendCommand(uint8_t com)
         backlightEnable->set(false);
 #if ARCH_PORTDUINO
         tft->clear();
-        if (settingsMap[displayBacklight] > 0)
-            digitalWrite(settingsMap[displayBacklight], !TFT_BACKLIGHT_ON);
+        if (portduino_config.pinMappings[displayBacklight].pin > 0)
+            digitalWrite(portduino_config.pinMappings[displayBacklight].pin, !TFT_BACKLIGHT_ON);
 #elif !defined(RAK14014) && !defined(M5STACK) && !defined(UNPHONE)
         tft->sleep();
         tft->powerSaveOn();

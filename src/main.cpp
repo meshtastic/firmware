@@ -982,13 +982,13 @@ void setup()
 #endif
 #if defined(ARCH_PORTDUINO)
 
-    if (settingsMap.count(userButtonPin) != 0 && settingsMap[userButtonPin] != RADIOLIB_NC) {
+    if (portduino_config.pinMappings[userButtonPin].enabled) {
 
-        LOG_DEBUG("Use GPIO%02d for button", settingsMap[userButtonPin]);
+        LOG_DEBUG("Use GPIO%02d for button", portduino_config.pinMappings[userButtonPin].pin);
         UserButtonThread = new ButtonThread("UserButton");
         if (screen) {
             ButtonConfig config;
-            config.pinNumber = (uint8_t)settingsMap[userButtonPin];
+            config.pinNumber = (uint8_t)portduino_config.pinMappings[userButtonPin].pin;
             config.activeLow = true;
             config.activePullup = true;
             config.pullupSense = INPUT_PULLUP;
@@ -1196,8 +1196,9 @@ void setup()
     } else {
         RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
     }
-    rIf = loraModuleInterface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs_pin], settingsMap[irq_pin], settingsMap[reset_pin],
-                              settingsMap[busy_pin]);
+    rIf = loraModuleInterface((LockingArduinoHal *)RadioLibHAL, portduino_config.pinMappings[cs_pin].pin,
+                              portduino_config.pinMappings[irq_pin].pin, portduino_config.pinMappings[reset_pin].pin,
+                              portduino_config.pinMappings[busy_pin].pin);
 
     if (!rIf->init()) {
         LOG_WARN("No %s radio", portduino_config.loraModules[portduino_config.lora_module].c_str());

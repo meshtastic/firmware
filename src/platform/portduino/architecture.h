@@ -28,9 +28,9 @@
 #endif
 #ifndef HAS_TRACKBALL
 #define HAS_TRACKBALL 1
-#define TB_DOWN (uint8_t) settingsMap[tbDownPin]
-#define TB_UP (uint8_t) settingsMap[tbUpPin]
-#define TB_LEFT (uint8_t) settingsMap[tbLeftPin]
-#define TB_RIGHT (uint8_t) settingsMap[tbRightPin]
-#define TB_PRESS (uint8_t) settingsMap[tbPressPin]
+#define TB_DOWN (uint8_t) portduino_config.pinMappings[tbDownPin].pin
+#define TB_UP (uint8_t) portduino_config.pinMappings[tbUpPin].pin
+#define TB_LEFT (uint8_t) portduino_config.pinMappings[tbLeftPin].pin
+#define TB_RIGHT (uint8_t) portduino_config.pinMappings[tbRightPin].pin
+#define TB_PRESS (uint8_t) portduino_config.pinMappings[tbPressPin].pin
 #endif
