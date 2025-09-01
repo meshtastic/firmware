@@ -1504,7 +1504,7 @@ static int32_t toDegInt(RawDegrees d)
  * Perform any processing that should be done only while the GPS is awake and looking for a fix.
  * Override this method to check for new locations
  *
- * @return true if we've acquired a new location
+ * @return true if we've set a new time
  */
 bool GPS::lookForTime()
 {
@@ -1544,11 +1544,12 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
         if (t.tm_mon > -1) {
             LOG_DEBUG("NMEA GPS time %02d-%02d-%02d %02d:%02d:%02d age %d", d.year(), d.month(), t.tm_mday, t.tm_hour, t.tm_min,
                       t.tm_sec, ti.age());
-            if (perhapsSetRTC(RTCQualityGPS, t) == RTCSetResultInvalidTime) {
-                // Clear the GPS buffer if we got an invalid time
-                clearBuffer();
+            if (perhapsSetRTC(RTCQualityGPS, t) == RTCSetResultSuccess) {
+                LOG_DEBUG("Time set.");
+                return true;
+            } else {
+                return false;
             }
-            return true;
         } else
             return false;
     } else
