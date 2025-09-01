@@ -43,7 +43,6 @@ struct pinMapping {
     int gpiochip;
     int line;
     bool enabled = false;
-
 };
 
 extern std::ofstream traceFile;
@@ -116,11 +115,11 @@ extern struct portduino_config_struct {
     bool displayInvert = false;
     int displayOffsetX = 0;
     int displayOffsetY = 0;
-    pinMapping displayDC = {"Display","DC"};
-    pinMapping displayCS = {"Display","CS"};
-    pinMapping displayBacklight = {"Display","Backlight"};
-    pinMapping displayBacklightPWMChannel = {"Display","BacklightPWMChannel"};
-    pinMapping displayReset = {"Display","Reset"};
+    pinMapping displayDC = {"Display", "DC"};
+    pinMapping displayCS = {"Display", "CS"};
+    pinMapping displayBacklight = {"Display", "Backlight"};
+    pinMapping displayBacklightPWMChannel = {"Display", "BacklightPWMChannel"};
+    pinMapping displayReset = {"Display", "Reset"};
 
     // Touchscreen
     std::string touchscreen_spi_dev = "";
@@ -129,19 +128,19 @@ extern struct portduino_config_struct {
     int touchscreenI2CAddr = -1;
     int touchscreenBusFrequency = 1000000;
     int touchscreenRotate = -1;
-    pinMapping touchscreenCS = {"Touchscreen","CS"};
-    pinMapping touchscreenIRQ = {"Touchscreen","IRQ"};
+    pinMapping touchscreenCS = {"Touchscreen", "CS"};
+    pinMapping touchscreenIRQ = {"Touchscreen", "IRQ"};
 
     // Input
     std::string keyboardDevice = "";
     std::string pointerDevice = "";
     int tbDirection;
-    pinMapping userButtonPin = {"Input","User"};
-    pinMapping tbUpPin = {"Input","TrackballUp"};
-    pinMapping tbDownPin = {"Input","TrackballDown"};
-    pinMapping tbLeftPin = {"Input","TrackballLwft"};
-    pinMapping tbRightPin = {"Input","TrackballRight"};
-    pinMapping tbPressPin = {"Input","TrackballPress"};
+    pinMapping userButtonPin = {"Input", "User"};
+    pinMapping tbUpPin = {"Input", "TrackballUp"};
+    pinMapping tbDownPin = {"Input", "TrackballDown"};
+    pinMapping tbLeftPin = {"Input", "TrackballLwft"};
+    pinMapping tbRightPin = {"Input", "TrackballRight"};
+    pinMapping tbPressPin = {"Input", "TrackballPress"};
 
     // Logging
     portduino_log_level logoutputlevel = level_debug;
@@ -173,10 +172,26 @@ extern struct portduino_config_struct {
     int maxtophone = 100;
     int MaxNodes = 200;
 
-    pinMapping *all_pins[20] = {&lora_cs_pin, &lora_irq_pin, &lora_busy_pin, &lora_reset_pin, &lora_txen_pin, &lora_rxen_pin, &lora_sx126x_ant_sw_pin,
-                              &displayDC, &displayCS, &displayBacklight, &displayBacklightPWMChannel, &displayReset,
-                              &touchscreenCS, &touchscreenIRQ,
-                              &userButtonPin, &tbUpPin, &tbDownPin, &tbLeftPin, &tbRightPin, &tbPressPin};
+    pinMapping *all_pins[20] = {&lora_cs_pin,
+                                &lora_irq_pin,
+                                &lora_busy_pin,
+                                &lora_reset_pin,
+                                &lora_txen_pin,
+                                &lora_rxen_pin,
+                                &lora_sx126x_ant_sw_pin,
+                                &displayDC,
+                                &displayCS,
+                                &displayBacklight,
+                                &displayBacklightPWMChannel,
+                                &displayReset,
+                                &touchscreenCS,
+                                &touchscreenIRQ,
+                                &userButtonPin,
+                                &tbUpPin,
+                                &tbDownPin,
+                                &tbLeftPin,
+                                &tbRightPin,
+                                &tbPressPin};
 
     std::string emit_yaml()
     {

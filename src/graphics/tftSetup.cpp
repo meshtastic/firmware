@@ -85,10 +85,9 @@ void tftSetup(void)
                                                             .spi_host = (uint16_t)portduino_config.display_spi_dev_int}})
                 .input(DisplayDriverConfig::input_config_t{.keyboardDevice = portduino_config.keyboardDevice,
                                                            .pointerDevice = portduino_config.pointerDevice})
-                .light(DisplayDriverConfig::light_config_t{
-                    .pin_bl = (int16_t)portduino_config.displayBacklight.pin,
-                    .pwm_channel = (int8_t)portduino_config.displayBacklightPWMChannel.pin,
-                    .invert = (bool)portduino_config.displayBacklightInvert});
+                .light(DisplayDriverConfig::light_config_t{.pin_bl = (int16_t)portduino_config.displayBacklight.pin,
+                                                           .pwm_channel = (int8_t)portduino_config.displayBacklightPWMChannel.pin,
+                                                           .invert = (bool)portduino_config.displayBacklightInvert});
             if (portduino_config.touchscreenI2CAddr == -1) {
                 displayConfig.touch(
                     DisplayDriverConfig::touch_config_t{.type = touch[portduino_config.touchscreenModule],

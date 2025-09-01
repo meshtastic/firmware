@@ -499,7 +499,6 @@ bool loadConfig(const char *configPath)
                 for (auto this_pin : portduino_config.all_pins) {
                     if (this_pin->config_section == "Lora") {
                         readGPIOFromYaml(yamlConfig["Lora"][this_pin->config_name], *this_pin);
-      
                     }
                 }
             }
@@ -590,8 +589,7 @@ bool loadConfig(const char *configPath)
             readGPIOFromYaml(yamlConfig["Display"]["DC"], portduino_config.displayDC, -1);
             readGPIOFromYaml(yamlConfig["Display"]["CS"], portduino_config.displayCS, -1);
             readGPIOFromYaml(yamlConfig["Display"]["Backlight"], portduino_config.displayBacklight, -1);
-            readGPIOFromYaml(yamlConfig["Display"]["BacklightPWMChannel"],
-                             portduino_config.displayBacklightPWMChannel, -1);
+            readGPIOFromYaml(yamlConfig["Display"]["BacklightPWMChannel"], portduino_config.displayBacklightPWMChannel, -1);
             readGPIOFromYaml(yamlConfig["Display"]["Reset"], portduino_config.displayReset, -1);
 
             portduino_config.displayBacklightInvert = yamlConfig["Display"]["BacklightInvert"].as<bool>(false);

@@ -1196,9 +1196,9 @@ void setup()
     } else {
         RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
     }
-    rIf = loraModuleInterface((LockingArduinoHal *)RadioLibHAL, portduino_config.lora_cs_pin.pin,
-                              portduino_config.lora_irq_pin.pin, portduino_config.lora_reset_pin.pin,
-                              portduino_config.lora_busy_pin.pin);
+    rIf =
+        loraModuleInterface((LockingArduinoHal *)RadioLibHAL, portduino_config.lora_cs_pin.pin, portduino_config.lora_irq_pin.pin,
+                            portduino_config.lora_reset_pin.pin, portduino_config.lora_busy_pin.pin);
 
     if (!rIf->init()) {
         LOG_WARN("No %s radio", portduino_config.loraModules[portduino_config.lora_module].c_str());
