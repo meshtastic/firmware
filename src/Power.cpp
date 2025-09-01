@@ -747,7 +747,7 @@ void Power::shutdown()
 #if HAS_SCREEN
     if (screen) {
 #ifdef T_DECK_PRO
-        screen->showSimpleBanner("Device is turned off.\nConnect USB to start!", 0); // T-Deck Pro has no power button
+        screen->showSimpleBanner("Device is powered off.\nConnect USB to start!", 0); // T-Deck Pro has no power button
 #else
         screen->showSimpleBanner("Shutting Down...", 0); // stays on screen
 #endif
