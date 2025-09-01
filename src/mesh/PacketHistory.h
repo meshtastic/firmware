@@ -31,11 +31,11 @@ class PacketHistory
 
     /** Insert/Replace oldest PacketRecord in mx_recentPackets.
      * @param r PacketRecord to insert or replace */
-    void insert(PacketRecord &r); // Insert or replace a packet record in the history
+    void insert(const PacketRecord &r); // Insert or replace a packet record in the history
 
     /* Check if a certain node was a relayer of a packet in the history given iterator
      * @return true if node was indeed a relayer, false if not */
-    bool wasRelayer(const uint8_t relayer, PacketRecord &r);
+    bool wasRelayer(const uint8_t relayer, const PacketRecord &r);
 
     PacketHistory(const PacketHistory &);            // non construction-copyable
     PacketHistory &operator=(const PacketHistory &); // non copyable

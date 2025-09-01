@@ -20,7 +20,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        series: [plucky, noble, jammy]
+        series:
+          - jammy # 22.04
+          - noble # 24.04
+          - plucky # 25.04
+          # - questing # 25.10
     uses: ./.github/workflows/package_ppa.yml
     with:
       ppa_repo: |-
@@ -56,7 +60,7 @@ jobs:
         shell: bash
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -99,8 +103,9 @@ jobs:
         with:
           base: ${{ github.event.repository.default_branch }}
           branch: create-pull-request/bump-version
+          labels: github_actions
           title: Bump release version
-          commit-message: automated bumps
+          commit-message: Automated version bumps
           add-paths: |
             version.properties
             debian/changelog

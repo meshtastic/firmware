@@ -105,14 +105,15 @@ void NeighborInfoModule::sendNeighborInfo(NodeNum dest, bool wantReplies)
 {
     meshtastic_NeighborInfo neighborInfo = meshtastic_NeighborInfo_init_zero;
     collectNeighborInfo(&neighborInfo);
-    meshtastic_MeshPacket *p = allocDataProtobuf(neighborInfo);
-    // send regardless of whether or not we have neighbors in our DB,
-    // because we want to get neighbors for the next cycle
-    p->to = dest;
-    p->decoded.want_response = wantReplies;
-    p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
-    printNeighborInfo("SENDING", &neighborInfo);
-    service->sendToMesh(p, RX_SRC_LOCAL, true);
+    // only send neighbours if we have some to send
+    if (neighborInfo.neighbors_count > 0) {
+        meshtastic_MeshPacket *p = allocDataProtobuf(neighborInfo);
+        p->to = dest;
+        p->decoded.want_response = wantReplies;
+        p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
+        printNeighborInfo("SENDING", &neighborInfo);
+        service->sendToMesh(p, RX_SRC_LOCAL, true);
+    }
 }
 
 /*
