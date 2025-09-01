@@ -36,34 +36,14 @@ enum lora_module_enum {
     use_llcc68
 };
 
-enum gpio_pins {
-    cs_pin,
-    irq_pin,
-    busy_pin,
-    reset_pin,
-    sx126x_ant_sw_pin,
-    txen_pin,
-    rxen_pin,
-    displayDC,
-    displayCS,
-    displayBacklight,
-    displayBacklightPWMChannel,
-    displayReset,
-    touchscreenCS,
-    touchscreenIRQ,
-    userButtonPin,
-    tbUpPin,
-    tbDownPin,
-    tbLeftPin,
-    tbRightPin,
-    tbPressPin
-};
-
 struct pinMapping {
+    std::string config_section;
+    std::string config_name;
     int pin = RADIOLIB_NC;
     int gpiochip;
     int line;
     bool enabled = false;
+
 };
 
 extern std::ofstream traceFile;
@@ -82,22 +62,11 @@ extern struct portduino_config_struct {
         {use_simradio, "sim"},  {use_autoconf, "auto"}, {use_rf95, "RF95"},     {use_sx1262, "sx1262"}, {use_sx1268, "sx1268"},
         {use_sx1280, "sx1280"}, {use_lr1110, "lr1110"}, {use_lr1120, "lr1120"}, {use_lr1121, "lr1121"}, {use_llcc68, "LLCC68"}};
 
-    std::map<gpio_pins, std::string> lora_pins = {
-        {cs_pin, "CS"},
-        {irq_pin, "IRQ"},
-        {busy_pin, "Busy"},
-        {reset_pin, "Reset"},
-        {txen_pin, "TXen"},
-        {rxen_pin, "RXen"},
-        {sx126x_ant_sw_pin, "SX126X_ANT_SW"},
-    };
-
     std::map<screen_modules, std::string> screen_names = {{x11, "X11"},         {fb, "FB"},           {st7789, "ST7789"},
                                                           {st7735, "ST7735"},   {st7735s, "ST7735S"}, {st7796, "ST7796"},
                                                           {ili9341, "ILI9341"}, {ili9342, "ILI9342"}, {ili9486, "ILI9486"},
                                                           {ili9488, "ILI9488"}, {hx8357d, "HX8357D"}};
 
-    std::map<gpio_pins, pinMapping> pinMappings;
     lora_module_enum lora_module;
     bool has_rfswitch_table = false;
     uint32_t rfswitch_dio_pins[5] = {RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC, RADIOLIB_NC};
@@ -119,6 +88,13 @@ extern struct portduino_config_struct {
     int lora_usb_pid = 0x5512;
     int lora_usb_vid = 0x1A86;
     int spiSpeed = 2000000;
+    pinMapping lora_cs_pin = {"Lora", "CS"};
+    pinMapping lora_irq_pin = {"Lora", "IRQ"};
+    pinMapping lora_busy_pin = {"Lora", "Busy"};
+    pinMapping lora_reset_pin = {"Lora", "Reset"};
+    pinMapping lora_txen_pin = {"Lora", "TXen"};
+    pinMapping lora_rxen_pin = {"Lora", "RXen"};
+    pinMapping lora_sx126x_ant_sw_pin = {"Lora", "SX126X_ANT_SW"};
 
     // GPS
     bool has_gps = false;
@@ -140,6 +116,11 @@ extern struct portduino_config_struct {
     bool displayInvert = false;
     int displayOffsetX = 0;
     int displayOffsetY = 0;
+    pinMapping displayDC = {"Display","DC"};
+    pinMapping displayCS = {"Display","CS"};
+    pinMapping displayBacklight = {"Display","Backlight"};
+    pinMapping displayBacklightPWMChannel = {"Display","BacklightPWMChannel"};
+    pinMapping displayReset = {"Display","Reset"};
 
     // Touchscreen
     std::string touchscreen_spi_dev = "";
@@ -148,11 +129,19 @@ extern struct portduino_config_struct {
     int touchscreenI2CAddr = -1;
     int touchscreenBusFrequency = 1000000;
     int touchscreenRotate = -1;
+    pinMapping touchscreenCS = {"Touchscreen","CS"};
+    pinMapping touchscreenIRQ = {"Touchscreen","IRQ"};
 
     // Input
     std::string keyboardDevice = "";
     std::string pointerDevice = "";
     int tbDirection;
+    pinMapping userButtonPin = {"Input","User"};
+    pinMapping tbUpPin = {"Input","TrackballUp"};
+    pinMapping tbDownPin = {"Input","TrackballDown"};
+    pinMapping tbLeftPin = {"Input","TrackballLwft"};
+    pinMapping tbRightPin = {"Input","TrackballRight"};
+    pinMapping tbPressPin = {"Input","TrackballPress"};
 
     // Logging
     portduino_log_level logoutputlevel = level_debug;
@@ -184,20 +173,26 @@ extern struct portduino_config_struct {
     int maxtophone = 100;
     int MaxNodes = 200;
 
+    pinMapping *all_pins[20] = {&lora_cs_pin, &lora_irq_pin, &lora_busy_pin, &lora_reset_pin, &lora_txen_pin, &lora_rxen_pin, &lora_sx126x_ant_sw_pin,
+                              &displayDC, &displayCS, &displayBacklight, &displayBacklightPWMChannel, &displayReset,
+                              &touchscreenCS, &touchscreenIRQ,
+                              &userButtonPin, &tbUpPin, &tbDownPin, &tbLeftPin, &tbRightPin, &tbPressPin};
+
     std::string emit_yaml()
     {
         YAML::Emitter out;
         out << YAML::BeginMap;
-        out << YAML::Key << "Lora" << YAML::Value << YAML::BeginMap;
 
+        // Lora
+        out << YAML::Key << "Lora" << YAML::Value << YAML::BeginMap;
         out << YAML::Key << "Module" << YAML::Value << loraModules[lora_module];
 
-        for (auto &lora_pin : lora_pins) {
-            if (pinMappings[lora_pin.first].enabled) {
-                out << YAML::Key << lora_pin.second << YAML::Value << YAML::BeginMap;
-                out << YAML::Key << "pin" << YAML::Value << pinMappings[lora_pin.first].pin;
-                out << YAML::Key << "line" << YAML::Value << pinMappings[lora_pin.first].line;
-                out << YAML::Key << "gpiochip" << YAML::Value << pinMappings[lora_pin.first].gpiochip;
+        for (auto lora_pin : all_pins) {
+            if (lora_pin->config_section == "Lora" && lora_pin->enabled) {
+                out << YAML::Key << lora_pin->config_name << YAML::Value << YAML::BeginMap;
+                out << YAML::Key << "pin" << YAML::Value << lora_pin->pin;
+                out << YAML::Key << "line" << YAML::Value << lora_pin->line;
+                out << YAML::Key << "gpiochip" << YAML::Value << lora_pin->gpiochip;
                 out << YAML::EndMap; // User
             }
         }
@@ -297,6 +292,15 @@ extern struct portduino_config_struct {
                 if (displayPanel == screen_name.first)
                     out << YAML::Key << "Module" << YAML::Value << screen_name.second;
             }
+            for (auto display_pin : all_pins) {
+                if (display_pin->config_section == "Display" && display_pin->enabled) {
+                    out << YAML::Key << display_pin->config_name << YAML::Value << YAML::BeginMap;
+                    out << YAML::Key << "pin" << YAML::Value << display_pin->pin;
+                    out << YAML::Key << "line" << YAML::Value << display_pin->line;
+                    out << YAML::Key << "gpiochip" << YAML::Value << display_pin->gpiochip;
+                    out << YAML::EndMap;
+                }
+            }
             out << YAML::Key << "spidev" << YAML::Value << display_spi_dev;
             out << YAML::Key << "BusFrequency" << YAML::Value << displayBusFrequency;
             if (displayWidth)
@@ -336,6 +340,15 @@ extern struct portduino_config_struct {
             case ft5x06:
                 out << YAML::Key << "Module" << YAML::Value << "FT5x06";
             }
+            for (auto touchscreen_pin : all_pins) {
+                if (touchscreen_pin->config_section == "Touchscreen" && touchscreen_pin->enabled) {
+                    out << YAML::Key << touchscreen_pin->config_name << YAML::Value << YAML::BeginMap;
+                    out << YAML::Key << "pin" << YAML::Value << touchscreen_pin->pin;
+                    out << YAML::Key << "line" << YAML::Value << touchscreen_pin->line;
+                    out << YAML::Key << "gpiochip" << YAML::Value << touchscreen_pin->gpiochip;
+                    out << YAML::EndMap;
+                }
+            }
             if (touchscreenRotate != -1)
                 out << YAML::Key << "Rotate" << YAML::Value << touchscreenRotate;
             if (touchscreenI2CAddr != -1)
@@ -350,47 +363,14 @@ extern struct portduino_config_struct {
         if (pointerDevice != "")
             out << YAML::Key << "PointerDevice" << YAML::Value << pointerDevice;
 
-        if (pinMappings[userButtonPin].enabled) {
-            out << YAML::Key << "User" << YAML::Value << YAML::BeginMap;
-            out << YAML::Key << "pin" << YAML::Value << pinMappings[userButtonPin].pin;
-            out << YAML::Key << "line" << YAML::Value << pinMappings[userButtonPin].line;
-            out << YAML::Key << "gpiochip" << YAML::Value << pinMappings[userButtonPin].gpiochip;
-            out << YAML::EndMap; // User
-        }
-        if (pinMappings[tbUpPin].enabled) {
-            out << YAML::Key << "TrackballUp" << YAML::Value << YAML::BeginMap;
-            out << YAML::Key << "pin" << YAML::Value << pinMappings[tbUpPin].pin;
-            out << YAML::Key << "line" << YAML::Value << pinMappings[tbUpPin].line;
-            out << YAML::Key << "gpiochip" << YAML::Value << pinMappings[tbUpPin].gpiochip;
-            out << YAML::EndMap; // TrackballUp
-        }
-        if (pinMappings[tbDownPin].enabled) {
-            out << YAML::Key << "TrackballDown" << YAML::Value << YAML::BeginMap;
-            out << YAML::Key << "pin" << YAML::Value << pinMappings[tbDownPin].pin;
-            out << YAML::Key << "line" << YAML::Value << pinMappings[tbDownPin].line;
-            out << YAML::Key << "gpiochip" << YAML::Value << pinMappings[tbDownPin].gpiochip;
-            out << YAML::EndMap; // TrackballDown
-        }
-        if (pinMappings[tbLeftPin].enabled) {
-            out << YAML::Key << "TrackballLeft" << YAML::Value << YAML::BeginMap;
-            out << YAML::Key << "pin" << YAML::Value << pinMappings[tbLeftPin].pin;
-            out << YAML::Key << "line" << YAML::Value << pinMappings[tbLeftPin].line;
-            out << YAML::Key << "gpiochip" << YAML::Value << pinMappings[tbLeftPin].gpiochip;
-            out << YAML::EndMap; // TrackballLeft
-        }
-        if (pinMappings[tbRightPin].enabled) {
-            out << YAML::Key << "TrackballRight" << YAML::Value << YAML::BeginMap;
-            out << YAML::Key << "pin" << YAML::Value << pinMappings[tbRightPin].pin;
-            out << YAML::Key << "line" << YAML::Value << pinMappings[tbRightPin].line;
-            out << YAML::Key << "gpiochip" << YAML::Value << pinMappings[tbRightPin].gpiochip;
-            out << YAML::EndMap; // TrackballRight
-        }
-        if (pinMappings[tbPressPin].enabled) {
-            out << YAML::Key << "TrackballPress" << YAML::Value << YAML::BeginMap;
-            out << YAML::Key << "pin" << YAML::Value << pinMappings[tbPressPin].pin;
-            out << YAML::Key << "line" << YAML::Value << pinMappings[tbPressPin].line;
-            out << YAML::Key << "gpiochip" << YAML::Value << pinMappings[tbPressPin].gpiochip;
-            out << YAML::EndMap; // TrackballPress
+        for (auto input_pin : all_pins) {
+            if (input_pin->config_section == "Input" && input_pin->enabled) {
+                out << YAML::Key << input_pin->config_name << YAML::Value << YAML::BeginMap;
+                out << YAML::Key << "pin" << YAML::Value << input_pin->pin;
+                out << YAML::Key << "line" << YAML::Value << input_pin->line;
+                out << YAML::Key << "gpiochip" << YAML::Value << input_pin->gpiochip;
+                out << YAML::EndMap;
+            }
         }
         if (tbDirection == 3)
             out << YAML::Key << "TrackballDirection" << YAML::Value << "FALLING";

@@ -41,13 +41,13 @@ template <typename T> bool SX128xInterface<T>::init()
 #endif
 
 #if ARCH_PORTDUINO
-    if (portduino_config.pinMappings[rxen_pin].pin != RADIOLIB_NC) {
-        pinMode(portduino_config.pinMappings[rxen_pin].pin, OUTPUT);
-        digitalWrite(portduino_config.pinMappings[rxen_pin].pin, LOW); // Set low before becoming an output
+    if (portduino_config.lora_rxen_pin.pin != RADIOLIB_NC) {
+        pinMode(portduino_config.lora_rxen_pin.pin, OUTPUT);
+        digitalWrite(portduino_config.lora_rxen_pin.pin, LOW); // Set low before becoming an output
     }
-    if (portduino_config.pinMappings[txen_pin].pin != RADIOLIB_NC) {
-        pinMode(portduino_config.pinMappings[txen_pin].pin, OUTPUT);
-        digitalWrite(portduino_config.pinMappings[txen_pin].pin, LOW); // Set low before becoming an output
+    if (portduino_config.lora_txen_pin.pin != RADIOLIB_NC) {
+        pinMode(portduino_config.lora_txen_pin.pin, OUTPUT);
+        digitalWrite(portduino_config.lora_txen_pin.pin, LOW); // Set low before becoming an output
     }
 #else
 #if defined(SX128X_RXEN) && (SX128X_RXEN != RADIOLIB_NC) // set not rx or tx mode
@@ -93,9 +93,9 @@ template <typename T> bool SX128xInterface<T>::init()
         lora.setRfSwitchPins(SX128X_RXEN, SX128X_TXEN);
     }
 #elif ARCH_PORTDUINO
-    if (res == RADIOLIB_ERR_NONE && portduino_config.pinMappings[rxen_pin].pin != RADIOLIB_NC &&
-        portduino_config.pinMappings[txen_pin].pin != RADIOLIB_NC) {
-        lora.setRfSwitchPins(portduino_config.pinMappings[rxen_pin].pin, portduino_config.pinMappings[txen_pin].pin);
+    if (res == RADIOLIB_ERR_NONE && portduino_config.lora_rxen_pin.pin != RADIOLIB_NC &&
+        portduino_config.lora_txen_pin.pin != RADIOLIB_NC) {
+        lora.setRfSwitchPins(portduino_config.lora_rxen_pin.pin, portduino_config.lora_txen_pin.pin);
     }
 #endif
 
@@ -175,11 +175,11 @@ template <typename T> void SX128xInterface<T>::setStandby()
         LOG_ERROR("SX128x standby %s%d", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
 #if ARCH_PORTDUINO
-    if (portduino_config.pinMappings[rxen_pin].pin != RADIOLIB_NC) {
-        digitalWrite(portduino_config.pinMappings[rxen_pin].pin, LOW);
+    if (portduino_config.lora_rxen_pin.pin != RADIOLIB_NC) {
+        digitalWrite(portduino_config.lora_rxen_pin.pin, LOW);
     }
-    if (portduino_config.pinMappings[txen_pin].pin != RADIOLIB_NC) {
-        digitalWrite(portduino_config.pinMappings[txen_pin].pin, LOW);
+    if (portduino_config.lora_txen_pin.pin != RADIOLIB_NC) {
+        digitalWrite(portduino_config.lora_txen_pin.pin, LOW);
     }
 #else
 #if defined(SX128X_RXEN) && (SX128X_RXEN != RADIOLIB_NC) // we have RXEN/TXEN control - turn off RX and TX power
@@ -211,11 +211,11 @@ template <typename T> void SX128xInterface<T>::addReceiveMetadata(meshtastic_Mes
 template <typename T> void SX128xInterface<T>::configHardwareForSend()
 {
 #if ARCH_PORTDUINO
-    if (portduino_config.pinMappings[txen_pin].pin != RADIOLIB_NC) {
-        digitalWrite(portduino_config.pinMappings[txen_pin].pin, HIGH);
+    if (portduino_config.lora_txen_pin.pin != RADIOLIB_NC) {
+        digitalWrite(portduino_config.lora_txen_pin.pin, HIGH);
     }
-    if (portduino_config.pinMappings[rxen_pin].pin != RADIOLIB_NC) {
-        digitalWrite(portduino_config.pinMappings[rxen_pin].pin, LOW);
+    if (portduino_config.lora_rxen_pin.pin != RADIOLIB_NC) {
+        digitalWrite(portduino_config.lora_rxen_pin.pin, LOW);
     }
 
 #else
@@ -242,11 +242,11 @@ template <typename T> void SX128xInterface<T>::startReceive()
     setStandby();
 
 #if ARCH_PORTDUINO
-    if (portduino_config.pinMappings[rxen_pin].pin != RADIOLIB_NC) {
-        digitalWrite(portduino_config.pinMappings[rxen_pin].pin, HIGH);
+    if (portduino_config.lora_rxen_pin.pin != RADIOLIB_NC) {
+        digitalWrite(portduino_config.lora_rxen_pin.pin, HIGH);
     }
-    if (portduino_config.pinMappings[txen_pin].pin != RADIOLIB_NC) {
-        digitalWrite(portduino_config.pinMappings[txen_pin].pin, LOW);
+    if (portduino_config.lora_txen_pin.pin != RADIOLIB_NC) {
+        digitalWrite(portduino_config.lora_txen_pin.pin, LOW);
     }
 
 #else

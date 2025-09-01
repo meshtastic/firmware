@@ -383,20 +383,19 @@ void portduinoSetup()
     randomSeed(time(NULL));
 
     std::string defaultGpioChipName = gpioChipName + std::to_string(portduino_config.lora_default_gpiochip);
-
-    for (auto i : portduino_config.pinMappings) {
-        if (i.second.enabled && i.second.pin > max_GPIO)
-            max_GPIO = i.second.pin;
+    for (auto i : portduino_config.all_pins) {
+        if (i->enabled && i->pin > max_GPIO)
+            max_GPIO = i->pin;
     }
 
     gpioInit(max_GPIO + 1); // Done here so we can inform Portduino how many GPIOs we need.
 
     // Need to bind all the configured GPIO pins so they're not simulated
     // TODO: If one of these fails, we should log and terminate
-    for (auto i : portduino_config.pinMappings) {
-        if (i.second.enabled)
-            if (initGPIOPin(i.second.pin, gpioChipName + std::to_string(i.second.gpiochip), i.second.line) != ERRNO_OK) {
-                printf("Error setting pin number %d. It may not exist, or may already be in use.\n", i.second.line);
+    for (auto i : portduino_config.all_pins) {
+        if (i->enabled)
+            if (initGPIOPin(i->pin, gpioChipName + std::to_string(i->gpiochip), i->line) != ERRNO_OK) {
+                printf("Error setting pin number %d. It may not exist, or may already be in use.\n", i->line);
                 exit(EXIT_FAILURE);
             }
     }
@@ -497,8 +496,11 @@ bool loadConfig(const char *configPath)
 
                 // backwards API compatibility and to globally set gpiochip once
                 portduino_config.lora_default_gpiochip = yamlConfig["Lora"]["gpiochip"].as<int>(0);
-                for (auto &lora_pin : portduino_config.lora_pins) {
-                    readGPIOFromYaml(yamlConfig["Lora"][lora_pin.second], portduino_config.pinMappings[lora_pin.first]);
+                for (auto this_pin : portduino_config.all_pins) {
+                    if (this_pin->config_section == "Lora") {
+                        readGPIOFromYaml(yamlConfig["Lora"][this_pin->config_name], *this_pin);
+      
+                    }
                 }
             }
 
@@ -565,7 +567,7 @@ bool loadConfig(const char *configPath)
                 }
             }
         }
-        readGPIOFromYaml(yamlConfig["GPIO"]["User"], portduino_config.pinMappings[userButtonPin]);
+        readGPIOFromYaml(yamlConfig["GPIO"]["User"], portduino_config.userButtonPin);
         if (yamlConfig["GPS"]) {
             std::string serialPath = yamlConfig["GPS"]["SerialPath"].as<std::string>("");
             if (serialPath != "") {
@@ -585,12 +587,12 @@ bool loadConfig(const char *configPath)
             portduino_config.displayHeight = yamlConfig["Display"]["Height"].as<int>(0);
             portduino_config.displayWidth = yamlConfig["Display"]["Width"].as<int>(0);
 
-            readGPIOFromYaml(yamlConfig["Display"]["DC"], portduino_config.pinMappings[displayDC], -1);
-            readGPIOFromYaml(yamlConfig["Display"]["CS"], portduino_config.pinMappings[displayCS], -1);
-            readGPIOFromYaml(yamlConfig["Display"]["Backlight"], portduino_config.pinMappings[displayBacklight], -1);
+            readGPIOFromYaml(yamlConfig["Display"]["DC"], portduino_config.displayDC, -1);
+            readGPIOFromYaml(yamlConfig["Display"]["CS"], portduino_config.displayCS, -1);
+            readGPIOFromYaml(yamlConfig["Display"]["Backlight"], portduino_config.displayBacklight, -1);
             readGPIOFromYaml(yamlConfig["Display"]["BacklightPWMChannel"],
-                             portduino_config.pinMappings[displayBacklightPWMChannel], -1);
-            readGPIOFromYaml(yamlConfig["Display"]["Reset"], portduino_config.pinMappings[displayReset], -1);
+                             portduino_config.displayBacklightPWMChannel, -1);
+            readGPIOFromYaml(yamlConfig["Display"]["Reset"], portduino_config.displayReset, -1);
 
             portduino_config.displayBacklightInvert = yamlConfig["Display"]["BacklightInvert"].as<bool>(false);
             portduino_config.displayRGBOrder = yamlConfig["Display"]["RGBOrder"].as<bool>(false);
@@ -622,8 +624,8 @@ bool loadConfig(const char *configPath)
             else if (yamlConfig["Touchscreen"]["Module"].as<std::string>("") == "FT5x06")
                 portduino_config.touchscreenModule = ft5x06;
 
-            readGPIOFromYaml(yamlConfig["Touchscreen"]["CS"], portduino_config.pinMappings[touchscreenCS], -1);
-            readGPIOFromYaml(yamlConfig["Touchscreen"]["IRQ"], portduino_config.pinMappings[touchscreenIRQ], -1);
+            readGPIOFromYaml(yamlConfig["Touchscreen"]["CS"], portduino_config.touchscreenCS, -1);
+            readGPIOFromYaml(yamlConfig["Touchscreen"]["IRQ"], portduino_config.touchscreenIRQ, -1);
 
             portduino_config.touchscreenBusFrequency = yamlConfig["Touchscreen"]["BusFrequency"].as<int>(1000000);
             portduino_config.touchscreenRotate = yamlConfig["Touchscreen"]["Rotate"].as<int>(-1);
@@ -643,12 +645,12 @@ bool loadConfig(const char *configPath)
             portduino_config.keyboardDevice = (yamlConfig["Input"]["KeyboardDevice"]).as<std::string>("");
             portduino_config.pointerDevice = (yamlConfig["Input"]["PointerDevice"]).as<std::string>("");
 
-            readGPIOFromYaml(yamlConfig["Input"]["User"], portduino_config.pinMappings[userButtonPin]);
-            readGPIOFromYaml(yamlConfig["Input"]["TrackballUp"], portduino_config.pinMappings[tbUpPin]);
-            readGPIOFromYaml(yamlConfig["Input"]["TrackballDown"], portduino_config.pinMappings[tbDownPin]);
-            readGPIOFromYaml(yamlConfig["Input"]["TrackballLeft"], portduino_config.pinMappings[tbLeftPin]);
-            readGPIOFromYaml(yamlConfig["Input"]["TrackballRight"], portduino_config.pinMappings[tbRightPin]);
-            readGPIOFromYaml(yamlConfig["Input"]["TrackballPress"], portduino_config.pinMappings[tbPressPin]);
+            readGPIOFromYaml(yamlConfig["Input"]["User"], portduino_config.userButtonPin);
+            readGPIOFromYaml(yamlConfig["Input"]["TrackballUp"], portduino_config.tbUpPin);
+            readGPIOFromYaml(yamlConfig["Input"]["TrackballDown"], portduino_config.tbDownPin);
+            readGPIOFromYaml(yamlConfig["Input"]["TrackballLeft"], portduino_config.tbLeftPin);
+            readGPIOFromYaml(yamlConfig["Input"]["TrackballRight"], portduino_config.tbRightPin);
+            readGPIOFromYaml(yamlConfig["Input"]["TrackballPress"], portduino_config.tbPressPin);
 
             if (yamlConfig["Input"]["TrackballDirection"].as<std::string>("RISING") == "RISING") {
                 portduino_config.tbDirection = 4;
