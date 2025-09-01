@@ -1055,6 +1055,8 @@ void GPS::down()
         }
         // If update interval long enough (or softsleep unsupported): hardsleep instead
         setPowerState(GPS_HARDSLEEP, sleepTime);
+        // Reset the fix quality to 0, since we're off.
+        fixQual = 0;
     }
 }
 
@@ -1114,6 +1116,7 @@ int32_t GPS::runOnce()
         shouldPublish = true;
     }
 
+    bool prev_fixQual = fixQual;
     bool gotLoc = lookForLocation();
     if (gotLoc && !hasValidLocation) { // declare that we have location ASAP
         LOG_DEBUG("hasValidLocation RISING EDGE");
@@ -1122,6 +1125,14 @@ int32_t GPS::runOnce()
         // Hold for 20secs after getting a lock to download ephemeris etc
         lastFixStartMsec = millis();
         fixHoldEnds = lastFixStartMsec + 20000;
+    }
+
+    if (gotLoc && prev_fixQual == 0) { // we've moved from no lock to lock
+        LOG_DEBUG("Probably just got a lock after turning back on.");
+        // Hold for 20secs after getting a lock to download ephemeris etc
+        lastFixStartMsec = millis();
+        fixHoldEnds = lastFixStartMsec + 20000;
+        shouldPublish = true; // Publish immediately, since next publish is at end of hold
     }
 
     bool tooLong = scheduling.searchedTooLong();
@@ -1140,11 +1151,12 @@ int32_t GPS::runOnce()
             hasValidLocation = false;
         }
         if (millis() > fixHoldEnds) {
+            shouldPublish = true; // publish our update at the end of the lock hold
+            publishUpdate();
             down();
         } else {
-            LOG_DEBUG("Holding for GPS data download: %d ms", fixHoldEnds - millis());
+            LOG_DEBUG("Holding for GPS data download: %d ms (numSats=%d)", fixHoldEnds - millis(), p.sats_in_view);
         }
-        shouldPublish = true; // publish our update for this just finished acquisition window
     }
 
     // If state has changed do a publish
