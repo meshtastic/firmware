@@ -1123,15 +1123,11 @@ int32_t GPS::runOnce()
         hasValidLocation = true;
         shouldPublish = true;
         // Hold for 20secs after getting a lock to download ephemeris etc
-        lastFixStartMsec = millis();
-        fixHoldEnds = lastFixStartMsec + 20000;
+        fixHoldEnds = millis() + 20000;
     }
 
-    if (gotLoc && prev_fixQual == 0) { // we've moved from no lock to lock
-        LOG_DEBUG("Probably just got a lock after turning back on.");
-        // Hold for 20secs after getting a lock to download ephemeris etc
-        lastFixStartMsec = millis();
-        fixHoldEnds = lastFixStartMsec + 20000;
+    if (gotLoc && prev_fixQual == 0) { // just got a lock after turning back on.
+        fixHoldEnds = millis() + 20000;
         shouldPublish = true; // Publish immediately, since next publish is at end of hold
     }
 

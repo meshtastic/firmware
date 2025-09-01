@@ -159,7 +159,7 @@ class GPS : private concurrency::OSThread
     uint8_t fixType = 0;      // fix type from GPGSA
 #endif
 
-    uint32_t lastFixStartMsec = 0, fixHoldEnds = 0;
+    uint32_t fixHoldEnds = 0;
     uint32_t rx_gpio = 0;
     uint32_t tx_gpio = 0;
 
