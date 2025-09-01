@@ -230,8 +230,11 @@ RTCSetResult perhapsSetRTC(RTCQuality q, struct tm &t)
     uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
 #ifdef BUILD_EPOCH
     const uint32_t FORTY_YEARS = 40UL * 365 * 24 * 60 * 60; // probably time to update your firmware
-    if (tv.tv_sec < BUILD_EPOCH || tv.tv_sec > (BUILD_EPOCH + FORTY_YEARS)) {
+    if (tv.tv_sec < BUILD_EPOCH) {
         LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
+        return RTCSetResultInvalidTime;
+    } else if (tv.tv_sec > (BUILD_EPOCH + FORTY_YEARS)) {
+        LOG_WARN("Ignore time (%ld) too far in the future (build epoch: %ld, max allowed: %ld)!", printableEpoch, BUILD_EPOCH, BUILD_EPOCH + FORTY_YEARS);
         return RTCSetResultInvalidTime;
     }
 #endif
