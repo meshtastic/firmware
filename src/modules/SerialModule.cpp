@@ -64,7 +64,7 @@ SerialModule *serialModule;
 SerialModuleRadio *serialModuleRadio;
 
 #if defined(TTGO_T_ECHO) || defined(CANARYONE) || defined(MESHLINK) || defined(ELECROW_ThinkNode_M1) ||                          \
-    defined(ELECROW_ThinkNode_M5) || defined(HELTEC_MESH_SOLAR) || defined(T_ECHO_LITE)
+    defined(ELECROW_ThinkNode_M5) || defined(HELTEC_MESH_SOLAR) || defined(T_ECHO_LITE) || defined(RAK3172)
 SerialModule::SerialModule() : StreamAPI(&Serial), concurrency::OSThread("Serial") {}
 static Print *serialPrint = &Serial;
 #elif defined(CONFIG_IDF_TARGET_ESP32C6)
@@ -174,14 +174,17 @@ int32_t SerialModule::runOnce()
                 Serial.setTimeout(moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT);
             }
 #elif defined(ARCH_STM32WL)
+#ifndef RAK3172
+    HardwareSerial *serialInstance = &Serial2;
+#else
+    HardwareSerial *serialInstance = &Serial1;
+#endif
             if (moduleConfig.serial.rxd && moduleConfig.serial.txd) {
-                Serial2.setTx(moduleConfig.serial.txd);
-                Serial2.setRx(moduleConfig.serial.rxd);
-                Serial2.begin(baud);
-            } else {
-                Serial2.begin(baud);
-                Serial2.setTimeout(moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT);
+                serialInstance->setTx(moduleConfig.serial.txd);
+                serialInstance->setRx(moduleConfig.serial.rxd);
             }
+            serialInstance->begin(baud);
+            serialInstance->setTimeout(moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT);
 #elif defined(ARCH_ESP32)
 
             if (moduleConfig.serial.rxd && moduleConfig.serial.txd) {
