@@ -419,7 +419,7 @@ void setup()
     struct timeval tv;
     tv.tv_sec = time(NULL);
     tv.tv_usec = 0;
-    perhapsSetRTC(RTCQualityNTP, &tv);
+    perhapsSetRTC(RTCQualityDevice, &tv);
 #endif
 
     powerMonInit();
