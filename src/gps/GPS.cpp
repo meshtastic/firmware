@@ -1137,7 +1137,6 @@ int32_t GPS::runOnce()
 
     // Once we get a location we no longer desperately want an update
     if ((gotLoc && gotTime) || tooLong) {
-
         if (tooLong && !gotLoc) {
             // we didn't get a location during this ack window, therefore declare loss of lock
             if (hasValidLocation) {
@@ -1150,8 +1149,10 @@ int32_t GPS::runOnce()
             shouldPublish = true; // publish our update at the end of the lock hold
             publishUpdate();
             down();
+#ifdef GPS_DEBUG
         } else {
             LOG_DEBUG("Holding for GPS data download: %d ms (numSats=%d)", fixHoldEnds - millis(), p.sats_in_view);
+#endif
         }
     }
 
