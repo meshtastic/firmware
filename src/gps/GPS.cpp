@@ -843,9 +843,6 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
         setPowerPMU(true);                                        // Power (PMU): on
         writePinStandby(false);                                   // Standby (pin): awake (not standby)
         setPowerUBLOX(true);                                      // Standby (UBLOX): awake
-#ifdef GNSS_AIROHA
-        lastFixStartMsec = 0;
-#endif
         break;
 
     case GPS_SOFTSLEEP:
@@ -863,9 +860,7 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
         writePinStandby(true);                                      // Standby (pin): asleep (not awake)
         setPowerUBLOX(false, sleepTime);                            // Standby (UBLOX): asleep, timed
 #ifdef GNSS_AIROHA
-        if (config.position.gps_update_interval * 1000 >= GPS_FIX_HOLD_TIME * 2) {
-            digitalWrite(PIN_GPS_EN, LOW);
-        }
+        digitalWrite(PIN_GPS_EN, LOW);
 #endif
         break;
 
@@ -877,9 +872,7 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
         writePinStandby(true);                                      // Standby (pin): asleep
         setPowerUBLOX(false, 0);                                    // Standby (UBLOX): asleep, indefinitely
 #ifdef GNSS_AIROHA
-        if (config.position.gps_update_interval * 1000 >= GPS_FIX_HOLD_TIME * 2) {
-            digitalWrite(PIN_GPS_EN, LOW);
-        }
+        digitalWrite(PIN_GPS_EN, LOW);
 #endif
         break;
     }
@@ -1126,10 +1119,9 @@ int32_t GPS::runOnce()
         LOG_DEBUG("hasValidLocation RISING EDGE");
         hasValidLocation = true;
         shouldPublish = true;
+        // Hold for 20secs after getting a lock to download ephemeris etc
         lastFixStartMsec = millis();
-        // Calculate hold duration: 10% of search time or 20s, whichever is smaller
-        uint32_t tenPercent = scheduling.elapsedSearchMs() / 10;
-        fixHoldEnds = lastFixStartMsec + ((tenPercent < 20000) ? tenPercent : 20000);
+        fixHoldEnds = lastFixStartMsec + 20000;
     }
 
     bool tooLong = scheduling.searchedTooLong();
@@ -1515,24 +1507,6 @@ static int32_t toDegInt(RawDegrees d)
  */
 bool GPS::lookForTime()
 {
-
-#ifdef GNSS_AIROHA
-    uint8_t fix = reader.fixQuality();
-    if (fix >= 1 && fix <= 5) {
-        if (lastFixStartMsec > 0) {
-            if (Throttle::isWithinTimespanMs(lastFixStartMsec, GPS_FIX_HOLD_TIME)) {
-                return false;
-            } else {
-                clearBuffer();
-            }
-        } else {
-            lastFixStartMsec = millis();
-            return false;
-        }
-    } else {
-        return false;
-    }
-#endif
     auto ti = reader.time;
     auto d = reader.date;
     if (ti.isValid() && d.isValid()) { // Note: we don't check for updated, because we'll only be called if needed
@@ -1570,25 +1544,6 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
  */
 bool GPS::lookForLocation()
 {
-#ifdef GNSS_AIROHA
-    if ((config.position.gps_update_interval * 1000) >= (GPS_FIX_HOLD_TIME * 2)) {
-        uint8_t fix = reader.fixQuality();
-        if (fix >= 1 && fix <= 5) {
-            if (lastFixStartMsec > 0) {
-                if (Throttle::isWithinTimespanMs(lastFixStartMsec, GPS_FIX_HOLD_TIME)) {
-                    return false;
-                } else {
-                    clearBuffer();
-                }
-            } else {
-                lastFixStartMsec = millis();
-                return false;
-            }
-        } else {
-            return false;
-        }
-    }
-#endif
     // By default, TinyGPS++ does not parse GPGSA lines, which give us
     //   the 2D/3D fixType (see NMEAGPS.h)
     // At a minimum, use the fixQuality indicator in GPGGA (FIXME?)
