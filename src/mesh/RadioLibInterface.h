@@ -50,8 +50,9 @@ class STM32WLx_ModuleWrapper : public STM32WLx_Module
 
 class RadioLibInterface : public RadioInterface, protected concurrency::NotifiedWorkerThread
 {
+  protected:
     /// Used as our notification from the ISR
-    enum PendingISR { ISR_NONE = 0, ISR_RX, ISR_TX, TRANSMIT_DELAY_COMPLETED };
+    enum PendingISR { ISR_NONE = 0, ISR_RX, ISR_TX, TRANSMIT_DELAY_COMPLETED, POLL_EVENT };
 
     /**
      * Raw ISR handler that just calls our polymorphic method
@@ -85,6 +86,12 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     /// are _trying_ to receive a packet currently (note - we might just be waiting for one)
     bool isReceiving = false;
+
+    /// If true, use timer-based polling in place of GPIO IRQs
+    bool usePolling = false;
+
+    /// Remember the configured IRQ pin for diagnostics
+    RADIOLIB_PIN_TYPE configuredIrqPin = RADIOLIB_NC;
 
   public:
     /** Our ISR code currently needs this to find our active instance
@@ -215,4 +222,12 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      * If the packet is not already in the late rebroadcast window, move it there
      */
     void clampToLateRebroadcastWindow(NodeNum from, PacketId id);
+    /**
+     * When polling is enabled, subclasses can check radio IRQ flags and
+     * return what event (if any) occurred. Default: none.
+     */
+    virtual PendingISR checkPendingInterrupt() { return ISR_NONE; }
+
+    /** Schedule the next poll tick if polling is enabled */
+    void schedulePoll(uint32_t delayMsec = 2);
 };

@@ -24,7 +24,9 @@
 #include <memory>
 #endif
 
+#ifndef MAX_MQTT_QUEUE
 #define MAX_MQTT_QUEUE 16
+#endif
 
 /**
  * Our wrapper/singleton for sending/receiving MQTT "udp" packets.  This object isolates the MQTT protocol implementation from
