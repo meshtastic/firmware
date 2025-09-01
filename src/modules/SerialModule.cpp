@@ -64,10 +64,10 @@ SerialModule *serialModule;
 SerialModuleRadio *serialModuleRadio;
 
 #if defined(TTGO_T_ECHO) || defined(CANARYONE) || defined(MESHLINK) || defined(ELECROW_ThinkNode_M1) ||                          \
-    defined(ELECROW_ThinkNode_M5) || defined(HELTEC_MESH_SOLAR) || defined(T_ECHO_LITE) || defined(RAK3172)
+    defined(ELECROW_ThinkNode_M5) || defined(HELTEC_MESH_SOLAR) || defined(T_ECHO_LITE)
 SerialModule::SerialModule() : StreamAPI(&Serial), concurrency::OSThread("Serial") {}
 static Print *serialPrint = &Serial;
-#elif defined(CONFIG_IDF_TARGET_ESP32C6)
+#elif defined(CONFIG_IDF_TARGET_ESP32C6) || defined(RAK3172)
 SerialModule::SerialModule() : StreamAPI(&Serial1), concurrency::OSThread("Serial") {}
 static Print *serialPrint = &Serial1;
 #else
@@ -175,9 +175,9 @@ int32_t SerialModule::runOnce()
             }
 #elif defined(ARCH_STM32WL)
 #ifndef RAK3172
-    HardwareSerial *serialInstance = &Serial2;
+            HardwareSerial *serialInstance = &Serial2;
 #else
-    HardwareSerial *serialInstance = &Serial1;
+            HardwareSerial *serialInstance = &Serial1;
 #endif
             if (moduleConfig.serial.rxd && moduleConfig.serial.txd) {
                 serialInstance->setTx(moduleConfig.serial.txd);
@@ -271,8 +271,13 @@ int32_t SerialModule::runOnce()
                 while (Serial1.available()) {
                     serialPayloadSize = Serial1.readBytes(serialBytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
 #else
-                while (Serial2.available()) {
-                    serialPayloadSize = Serial2.readBytes(serialBytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
+#ifndef RAK3172
+                HardwareSerial *serialInstance = &Serial2;
+#else
+                HardwareSerial *serialInstance = &Serial1;
+#endif
+                while (serialInstance->available()) {
+                    serialPayloadSize = serialInstance->readBytes(serialBytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
 #endif
                     serialModuleRadio->sendPayload();
                 }
