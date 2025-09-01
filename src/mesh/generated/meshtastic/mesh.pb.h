@@ -821,6 +821,8 @@ typedef struct _meshtastic_MeshPacket {
     meshtastic_MeshPacket_Delayed delayed;
     /* Describes whether this packet passed via MQTT somewhere along the path it currently took. */
     bool via_mqtt;
+    /* Describes whether this packet entered the radio via the serial packet link. Not sent over links */
+    bool via_slink;
     /* Hop limit with which the original packet started. Sent via LoRa using three bits in the unencrypted header.
  When receiving a packet, the difference between hop_start and hop_limit gives how many hops it traveled. */
     uint8_t hop_start;
