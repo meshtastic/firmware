@@ -14,6 +14,9 @@
 #if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
 #endif
+#if !MESHTASTIC_EXCLUDE_SERIALPACKET
+#include "modules/SerialPacketModule.h"
+#endif
 #include "Default.h"
 #if ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
@@ -292,6 +295,11 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
 #endif
         packetPool.release(p_decoded);
     }
+#if !MESHTASTIC_EXCLUDE_SERIALPACKET
+ if (serialPacketEnabled){
+    serialPacketModule->onSend(*p);
+ }
+#endif
 
 #if HAS_UDP_MULTICAST
     if (udpHandler && config.network.enabled_protocols & meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST) {

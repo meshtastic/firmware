@@ -98,6 +98,10 @@
 #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_SERIAL
 #include "modules/SerialModule.h"
 #endif
+
+#endif
+#if defined(ARCH_NRF52) && !MESHTASTIC_EXCLUDE_SERIALPACKET
+#include "modules/SerialPacketModule.h"
 #endif
 
 #if !MESHTASTIC_EXCLUDE_DROPZONE
@@ -253,6 +257,9 @@ void setupModules()
             new SerialModule();
         }
 #endif
+#endif
+#if defined(ARCH_NRF52) && !MESHTASTIC_EXCLUDE_SERIALPACKET
+        new SerialPacketModule();
 #endif
 #ifdef ARCH_ESP32
         // Only run on an esp32 based device.
