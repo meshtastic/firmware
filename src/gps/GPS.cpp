@@ -1116,7 +1116,7 @@ int32_t GPS::runOnce()
         shouldPublish = true;
     }
 
-    bool prev_fixQual = fixQual;
+    uint8_t prev_fixQual = fixQual;
     bool gotLoc = lookForLocation();
     if (gotLoc && !hasValidLocation) { // declare that we have location ASAP
         LOG_DEBUG("hasValidLocation RISING EDGE");
