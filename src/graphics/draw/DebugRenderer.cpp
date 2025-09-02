@@ -401,7 +401,7 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
 
     // === Third Row: Radio Preset ===
     auto mode = DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, config.lora.use_preset);
-  
+
     char regionradiopreset[25];
     const char *region = myRegion ? myRegion->name : NULL;
     if (region != nullptr) {
