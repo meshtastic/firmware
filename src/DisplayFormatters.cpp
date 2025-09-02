@@ -1,7 +1,14 @@
 #include "DisplayFormatters.h"
 
-const char *DisplayFormatters::getModemPresetDisplayName(meshtastic_Config_LoRaConfig_ModemPreset preset, bool useShortName)
+const char *DisplayFormatters::getModemPresetDisplayName(meshtastic_Config_LoRaConfig_ModemPreset preset, bool useShortName,
+                                                         bool usePreset)
 {
+
+    // If use_preset is false, always return "Custom"
+    if (!usePreset) {
+        return "Custom";
+    }
+
     switch (preset) {
     case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO:
         return useShortName ? "ShortT" : "ShortTurbo";
