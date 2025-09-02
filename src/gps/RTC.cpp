@@ -132,6 +132,10 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
     if (tv->tv_sec < BUILD_EPOCH) {
         LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
         return RTCSetResultInvalidTime;
+    } else if (tv->tv_sec > (BUILD_EPOCH + FORTY_YEARS)) {
+        LOG_WARN("Ignore time (%ld) too far in the future (build epoch: %ld, max allowed: %ld)!", printableEpoch, BUILD_EPOCH,
+                 BUILD_EPOCH + FORTY_YEARS);
+        return RTCSetResultInvalidTime;
     }
 #endif
 
@@ -249,6 +253,10 @@ RTCSetResult perhapsSetRTC(RTCQuality q, struct tm &t)
 #ifdef BUILD_EPOCH
     if (tv.tv_sec < BUILD_EPOCH) {
         LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
+        return RTCSetResultInvalidTime;
+    } else if (tv.tv_sec > (BUILD_EPOCH + FORTY_YEARS)) {
+        LOG_WARN("Ignore time (%ld) too far in the future (build epoch: %ld, max allowed: %ld)!", printableEpoch, BUILD_EPOCH,
+                 BUILD_EPOCH + FORTY_YEARS);
         return RTCSetResultInvalidTime;
     }
 #endif
