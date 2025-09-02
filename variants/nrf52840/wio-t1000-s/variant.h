@@ -123,7 +123,6 @@ extern "C" {
 #define GPS_RESETB_OUT (32 + 14) // P1.14, awlays input pull_up
 
 // #define GPS_THREAD_INTERVAL 50
-#define GPS_FIX_HOLD_TIME 15000 // ms
 
 #define BATTERY_PIN 2
 // #define ADC_CHANNEL ADC1_GPIO2_CHANNEL
