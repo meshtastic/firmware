@@ -111,8 +111,12 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
     uint32_t now = millis();
     uint32_t printableEpoch = tv->tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
 #ifdef BUILD_EPOCH
-    if (tv->tv_sec < BUILD_EPOCH || tv->tv_sec > (BUILD_EPOCH + FORTY_YEARS)) {
+    if (tv->tv_sec < BUILD_EPOCH) {
         LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
+        return RTCSetResultInvalidTime;
+    } else if (tv->tv_sec > (BUILD_EPOCH + FORTY_YEARS)) {
+        LOG_WARN("Ignore time (%ld) too far in the future (build epoch: %ld, max allowed: %ld)!", printableEpoch, BUILD_EPOCH,
+                 BUILD_EPOCH + FORTY_YEARS);
         return RTCSetResultInvalidTime;
     }
 #endif
@@ -229,7 +233,7 @@ RTCSetResult perhapsSetRTC(RTCQuality q, struct tm &t)
     tv.tv_usec = 0;                      // time.centisecond() * (10 / 1000);
     uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
 #ifdef BUILD_EPOCH
-    if (tv.tv_sec < BUILD_EPOCH || tv.tv_sec > (BUILD_EPOCH + FORTY_YEARS)) {
+    if (tv.tv_sec < BUILD_EPOCH) {
         LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
         return RTCSetResultInvalidTime;
     } else if (tv.tv_sec > (BUILD_EPOCH + FORTY_YEARS)) {
