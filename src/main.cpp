@@ -531,6 +531,7 @@ void setup()
     Wire.setSCL(I2C_SCL);
     Wire.begin();
 #elif defined(I2C_SDA) && !defined(ARCH_RP2040)
+    LOG_INFO("Starting Bus with (SDA) %d and (SCL) %d: ", I2C_SDA, I2C_SCL);
     Wire.begin(I2C_SDA, I2C_SCL);
 #elif defined(ARCH_PORTDUINO)
     if (settingsStrings[i2cdev] != "") {
