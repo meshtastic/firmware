@@ -1,9 +1,8 @@
 #pragma once
 
+#ifdef ARCH_STM32WL
 #include "SX126xInterface.h"
 #include "rfswitch.h"
-
-#ifdef ARCH_STM32WL
 
 /**
  * Our adapter for STM32WLE5JC radios
