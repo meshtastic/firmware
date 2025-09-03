@@ -233,14 +233,14 @@ IF NOT EXIST !SPIFFS_FILENAME! CALL :LOG_MESSAGE ERROR "File does not exist: "!S
 
 @REM Flashing operations.
 CALL :LOG_MESSAGE INFO "Trying to flash "!FILENAME!", but first erasing and writing system information..."
-CALL :RUN_ESPTOOL !ESPTOOL_BAUD! erase_flash || GOTO eof
-CALL :RUN_ESPTOOL !ESPTOOL_BAUD! write_flash 0x00 "!FILENAME!" || GOTO eof
+CALL :RUN_ESPTOOL !ESPTOOL_BAUD! erase-flash || GOTO eof
+CALL :RUN_ESPTOOL !ESPTOOL_BAUD! write-flash 0x00 "!FILENAME!" || GOTO eof
 
 CALL :LOG_MESSAGE INFO "Trying to flash BLEOTA "!OTA_FILENAME!" at OTA_OFFSET !OTA_OFFSET!..."
-CALL :RUN_ESPTOOL !ESPTOOL_BAUD! write_flash !OTA_OFFSET! "!OTA_FILENAME!" || GOTO eof
+CALL :RUN_ESPTOOL !ESPTOOL_BAUD! write-flash !OTA_OFFSET! "!OTA_FILENAME!" || GOTO eof
 
 CALL :LOG_MESSAGE INFO "Trying to flash SPIFFS "!SPIFFS_FILENAME!" at SPIFFS_OFFSET !SPIFFS_OFFSET!..."
-CALL :RUN_ESPTOOL !ESPTOOL_BAUD! write_flash !SPIFFS_OFFSET! "!SPIFFS_FILENAME!" || GOTO eof
+CALL :RUN_ESPTOOL !ESPTOOL_BAUD! write-flash !SPIFFS_OFFSET! "!SPIFFS_FILENAME!" || GOTO eof
 
 CALL :LOG_MESSAGE INFO "Script complete!."
 
@@ -252,9 +252,9 @@ EXIT /B %ERRORLEVEL%
 :RUN_ESPTOOL
 @REM Subroutine used to run ESPTOOL_CMD with arguments.
 @REM Also handles %ERRORLEVEL%.
-@REM CALL :RUN_ESPTOOL [Baud] [erase_flash|write_flash] [OFFSET] [Filename]
+@REM CALL :RUN_ESPTOOL [Baud] [erase_flash|write-flash] [OFFSET] [Filename]
 @REM.
-@REM Example:: CALL :RUN_ESPTOOL 115200 write_flash 0x10000 "firmwarefile.bin"
+@REM Example:: CALL :RUN_ESPTOOL 115200 write-flash 0x10000 "firmwarefile.bin"
 IF %DEBUG% EQU 1 CALL :LOG_MESSAGE DEBUG "About to run command: !ESPTOOL_CMD! --baud %~1 %~2 %~3 %~4"
 CALL :RESET_ERROR
 !ESPTOOL_CMD! --baud %~1 %~2 %~3 %~4
