@@ -13,11 +13,12 @@ void TrackballInterruptImpl1::init(uint8_t pinDown, uint8_t pinUp, uint8_t pinLe
     input_broker_event eventLeft = INPUT_BROKER_LEFT;
     input_broker_event eventRight = INPUT_BROKER_RIGHT;
     input_broker_event eventPressed = INPUT_BROKER_SELECT;
+    input_broker_event eventPressedLong = INPUT_BROKER_SELECT_LONG;
 
     TrackballInterruptBase::init(pinDown, pinUp, pinLeft, pinRight, pinPress, eventDown, eventUp, eventLeft, eventRight,
-                                 eventPressed, TrackballInterruptImpl1::handleIntDown, TrackballInterruptImpl1::handleIntUp,
-                                 TrackballInterruptImpl1::handleIntLeft, TrackballInterruptImpl1::handleIntRight,
-                                 TrackballInterruptImpl1::handleIntPressed);
+                                 eventPressed, eventPressedLong, TrackballInterruptImpl1::handleIntDown,
+                                 TrackballInterruptImpl1::handleIntUp, TrackballInterruptImpl1::handleIntLeft,
+                                 TrackballInterruptImpl1::handleIntRight, TrackballInterruptImpl1::handleIntPressed);
     inputBroker->registerSource(this);
 }
 
