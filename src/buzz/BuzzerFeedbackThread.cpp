@@ -28,6 +28,7 @@ int BuzzerFeedbackThread::handleInputEvent(const InputEvent *event)
     case INPUT_BROKER_USER_PRESS:
     case INPUT_BROKER_ALT_PRESS:
     case INPUT_BROKER_SELECT:
+    case INPUT_BROKER_SELECT_LONG:
         playBeep(); // Confirmation feedback
         break;
 

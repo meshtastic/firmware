@@ -38,6 +38,8 @@ bool NotificationRenderer::pauseBanner = false;
 notificationTypeEnum NotificationRenderer::current_notification_type = notificationTypeEnum::none;
 uint32_t NotificationRenderer::numDigits = 0;
 uint32_t NotificationRenderer::currentNumber = 0;
+VirtualKeyboard *NotificationRenderer::virtualKeyboard = nullptr;
+std::function<void(const std::string &)> NotificationRenderer::textInputCallback = nullptr;
 
 uint32_t pow_of_10(uint32_t n)
 {
@@ -89,13 +91,32 @@ void NotificationRenderer::resetBanner()
 
 void NotificationRenderer::drawBannercallback(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
-    if (!isOverlayBannerShowing() && alertBannerMessage[0] != '\0')
-        resetBanner();
-    if (!isOverlayBannerShowing() || pauseBanner)
+    // Handle text_input notifications first - they have their own timeout/banner logic
+    if (current_notification_type == notificationTypeEnum::text_input) {
+        // Check for timeout and reset if needed for text input
+        if (millis() > alertBannerUntil && alertBannerUntil > 0) {
+            resetBanner();
+            return;
+        }
+        drawTextInput(display, state);
         return;
+    }
+
+    if (millis() > alertBannerUntil && alertBannerUntil > 0) {
+        resetBanner();
+    }
+
+    // Exit if no banner is showing or banner is paused
+    if (!isOverlayBannerShowing() || pauseBanner) {
+        return;
+    }
+
     switch (current_notification_type) {
     case notificationTypeEnum::none:
         // Do nothing - no notification to display
+        break;
+    case notificationTypeEnum::text_input:
+        // Already handled above with dedicated logic (early return). Keep a case here to satisfy -Wswitch.
         break;
     case notificationTypeEnum::text_banner:
     case notificationTypeEnum::selection_picker:
@@ -383,7 +404,9 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
 
     uint8_t firstOptionToShow = 0;
     if (alertBannerOptions > 0) {
-        if (curSelected > 1 && alertBannerOptions > visibleTotalLines - lineCount) {
+        if (visibleTotalLines - lineCount == 1) {
+            firstOptionToShow = curSelected;
+        } else if (curSelected > 1 && alertBannerOptions > visibleTotalLines - lineCount) {
             if (curSelected > alertBannerOptions - visibleTotalLines + lineCount)
                 firstOptionToShow = alertBannerOptions - visibleTotalLines + lineCount;
             else
@@ -392,6 +415,9 @@ void NotificationRenderer::drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisp
             firstOptionToShow = 0;
         }
     }
+    // Useful log line for troubleshooting:
+    /* LOG_WARN("alertBannerOptions: %u, curSelected: %u, visibleTotalLines: %u, lineCount: %u, firstOptionToShow: %u",
+             alertBannerOptions, curSelected, visibleTotalLines, lineCount, firstOptionToShow); */
 
     for (int i = firstOptionToShow; i < alertBannerOptions && linesShown < visibleTotalLines; i++, linesShown++) {
         if (i == curSelected) {
@@ -568,6 +594,90 @@ void NotificationRenderer::drawFrameFirmware(OLEDDisplay *display, OLEDDisplayUi
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->drawStringMaxWidth(0 + x, 2 + y + FONT_HEIGHT_SMALL * 2, x + display->getWidth(),
                                 "Please be patient and do not power off.");
+}
+
+void NotificationRenderer::drawTextInput(OLEDDisplay *display, OLEDDisplayUiState *state)
+{
+    if (virtualKeyboard) {
+        // Check for timeout and auto-exit if needed
+        if (virtualKeyboard->isTimedOut()) {
+            LOG_INFO("Virtual keyboard timeout - auto-exiting");
+            // Cancel virtual keyboard - call callback with empty string to indicate timeout
+            auto callback = textInputCallback; // Store callback before clearing
+
+            // Clean up first to prevent re-entry
+            delete virtualKeyboard;
+            virtualKeyboard = nullptr;
+            textInputCallback = nullptr;
+            resetBanner();
+
+            // Call callback after cleanup
+            if (callback) {
+                callback("");
+            }
+
+            // Restore normal overlays
+            if (screen) {
+                screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
+            }
+            return;
+        }
+
+        // Handle input events for virtual keyboard navigation
+        if (inEvent.inputEvent != INPUT_BROKER_NONE) {
+            if (inEvent.inputEvent == INPUT_BROKER_UP) {
+                virtualKeyboard->moveCursorUp();
+            } else if (inEvent.inputEvent == INPUT_BROKER_DOWN) {
+                virtualKeyboard->moveCursorDown();
+            } else if (inEvent.inputEvent == INPUT_BROKER_LEFT) {
+                virtualKeyboard->moveCursorLeft();
+            } else if (inEvent.inputEvent == INPUT_BROKER_RIGHT) {
+                virtualKeyboard->moveCursorRight();
+            } else if (inEvent.inputEvent == INPUT_BROKER_ALT_PRESS) {
+                // Long press UP = move left
+                virtualKeyboard->moveCursorLeft();
+            } else if (inEvent.inputEvent == INPUT_BROKER_USER_PRESS) {
+                // Long press DOWN = move right
+                virtualKeyboard->moveCursorRight();
+            } else if (inEvent.inputEvent == INPUT_BROKER_SELECT) {
+                virtualKeyboard->handlePress();
+            } else if (inEvent.inputEvent == INPUT_BROKER_SELECT_LONG) {
+                virtualKeyboard->handleLongPress();
+            } else if (inEvent.inputEvent == INPUT_BROKER_CANCEL) {
+                // Cancel virtual keyboard - call callback with empty string
+                auto callback = textInputCallback; // Store callback before clearing
+
+                // Clean up first to prevent re-entry
+                delete virtualKeyboard;
+                virtualKeyboard = nullptr;
+                textInputCallback = nullptr;
+                resetBanner();
+
+                // Call callback after cleanup
+                if (callback) {
+                    callback("");
+                }
+
+                // Restore normal overlays
+                if (screen) {
+                    screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
+                }
+                return;
+            }
+
+            // Reset input event after processing
+            inEvent.inputEvent = INPUT_BROKER_NONE;
+        }
+
+        // Clear the display and draw virtual keyboard
+        display->setColor(BLACK);
+        display->fillRect(0, 0, display->getWidth(), display->getHeight());
+        display->setColor(WHITE);
+        virtualKeyboard->draw(display, 0, 0);
+    } else {
+        // If virtualKeyboard is null, reset the banner to avoid getting stuck
+        resetBanner();
+    }
 }
 
 bool NotificationRenderer::isOverlayBannerShowing()

@@ -667,15 +667,19 @@ static LGFX *tft = nullptr;
 static TFT_eSPI *tft = nullptr; // Invoke library, pins defined in User_Setup.h
 #elif ARCH_PORTDUINO
 #include <LovyanGFX.hpp> // Graphics and font library for ST7735 driver chip
+#if defined(LGFX_SDL)
+#include <lgfx/v1/platforms/sdl/Panel_sdl.hpp>
+#endif
 
 class LGFX : public lgfx::LGFX_Device
 {
-    lgfx::Panel_Device *_panel_instance;
     lgfx::Bus_SPI _bus_instance;
 
     lgfx::ITouch *_touch_instance;
 
   public:
+    lgfx::Panel_Device *_panel_instance;
+
     LGFX(void)
     {
         if (settingsMap[displayPanel] == st7789)
@@ -694,6 +698,11 @@ class LGFX : public lgfx::LGFX_Device
             _panel_instance = new lgfx::Panel_ILI9488;
         else if (settingsMap[displayPanel] == hx8357d)
             _panel_instance = new lgfx::Panel_HX8357D;
+#if defined(LGFX_SDL)
+        else if (settingsMap[displayPanel] == x11) {
+            _panel_instance = new lgfx::Panel_sdl;
+        }
+#endif
         else {
             _panel_instance = new lgfx::Panel_NULL;
             LOG_ERROR("Unknown display panel configured!");
@@ -754,7 +763,13 @@ class LGFX : public lgfx::LGFX_Device
             _touch_instance->config(touch_cfg);
             _panel_instance->setTouch(_touch_instance);
         }
-
+#if defined(LGFX_SDL)
+        if (settingsMap[displayPanel] == x11) {
+            lgfx::Panel_sdl *sdl_panel_ = (lgfx::Panel_sdl *)_panel_instance;
+            sdl_panel_->setup();
+            sdl_panel_->addKeyCodeMapping(SDLK_RETURN, SDL_SCANCODE_KP_ENTER);
+        }
+#endif
         setPanel(_panel_instance); // Sets the panel to use.
     }
 };
@@ -849,9 +864,29 @@ static LGFX *tft = nullptr;
 #include <lgfx/v1/platforms/esp32s3/Bus_RGB.hpp>
 #include <lgfx/v1/platforms/esp32s3/Panel_RGB.hpp>
 
+class PanelInit_ST7701 : public lgfx::Panel_ST7701
+{
+  public:
+    const uint8_t *getInitCommands(uint8_t listno) const override
+    {
+        // 180 degree hw rotation: vertical flip, horizontal flip
+        static constexpr const uint8_t list1[] = {0x36, 1,   0x10,                         // MADCTL for vertical flip
+                                                  0xFF, 5,   0x77, 0x01, 0x00, 0x00, 0x10, // Command2 BK0 SEL
+                                                  0xC7, 1,   0x04, // SDIR: X-direction Control (Horizontal Flip)
+                                                  0xFF, 5,   0x77, 0x01, 0x00, 0x00, 0x00, // Command2 BK0 DIS
+                                                  0xFF, 0xFF};
+        switch (listno) {
+        case 1:
+            return list1;
+        default:
+            return lgfx::Panel_ST7701::getInitCommands(listno);
+        }
+    }
+};
+
 class LGFX : public lgfx::LGFX_Device
 {
-    lgfx::Panel_ST7701 _panel_instance;
+    PanelInit_ST7701 _panel_instance;
     lgfx::Bus_RGB _bus_instance;
     lgfx::Light_PWM _light_instance;
     lgfx::Touch_FT5x06 _touch_instance;
@@ -1040,6 +1075,49 @@ void TFTDisplay::display(bool fromBlank)
     }
 }
 
+void TFTDisplay::sdlLoop()
+{
+#if defined(LGFX_SDL)
+    static int lastPressed = 0;
+    static int shuttingDown = false;
+    if (settingsMap[displayPanel] == x11) {
+        lgfx::Panel_sdl *sdl_panel_ = (lgfx::Panel_sdl *)tft->_panel_instance;
+        if (sdl_panel_->loop() && !shuttingDown) {
+            LOG_WARN("Window Closed!");
+            InputEvent event = {.inputEvent = (input_broker_event)INPUT_BROKER_SHUTDOWN, .kbchar = 0, .touchX = 0, .touchY = 0};
+            inputBroker->injectInputEvent(&event);
+        }
+
+        // debounce
+        if (lastPressed != 0 && !lgfx::v1::gpio_in(lastPressed))
+            return;
+        if (!lgfx::v1::gpio_in(37)) {
+            lastPressed = 37;
+            InputEvent event = {.inputEvent = (input_broker_event)INPUT_BROKER_RIGHT, .kbchar = 0, .touchX = 0, .touchY = 0};
+            inputBroker->injectInputEvent(&event);
+        } else if (!lgfx::v1::gpio_in(36)) {
+            lastPressed = 36;
+            InputEvent event = {.inputEvent = (input_broker_event)INPUT_BROKER_UP, .kbchar = 0, .touchX = 0, .touchY = 0};
+            inputBroker->injectInputEvent(&event);
+        } else if (!lgfx::v1::gpio_in(38)) {
+            lastPressed = 38;
+            InputEvent event = {.inputEvent = (input_broker_event)INPUT_BROKER_DOWN, .kbchar = 0, .touchX = 0, .touchY = 0};
+            inputBroker->injectInputEvent(&event);
+        } else if (!lgfx::v1::gpio_in(39)) {
+            lastPressed = 39;
+            InputEvent event = {.inputEvent = (input_broker_event)INPUT_BROKER_LEFT, .kbchar = 0, .touchX = 0, .touchY = 0};
+            inputBroker->injectInputEvent(&event);
+        } else if (!lgfx::v1::gpio_in(SDL_SCANCODE_KP_ENTER)) {
+            lastPressed = SDL_SCANCODE_KP_ENTER;
+            InputEvent event = {.inputEvent = (input_broker_event)INPUT_BROKER_SELECT, .kbchar = 0, .touchX = 0, .touchY = 0};
+            inputBroker->injectInputEvent(&event);
+        } else {
+            lastPressed = 0;
+        }
+    }
+#endif
+}
+
 // Send a command to the display (low level function)
 void TFTDisplay::sendCommand(uint8_t com)
 {
@@ -1184,9 +1262,9 @@ bool TFTDisplay::connect()
     attachInterrupt(digitalPinToInterrupt(SCREEN_TOUCH_INT), rak14014_tpIntHandle, FALLING);
 #elif defined(T_DECK) || defined(PICOMPUTER_S3) || defined(CHATTER_2)
     tft->setRotation(1); // T-Deck has the TFT in landscape
-#elif defined(T_WATCH_S3) || defined(SENSECAP_INDICATOR)
+#elif defined(T_WATCH_S3)
     tft->setRotation(2); // T-Watch S3 left-handed orientation
-#elif ARCH_PORTDUINO
+#elif ARCH_PORTDUINO || defined(SENSECAP_INDICATOR)
     tft->setRotation(0); // use config.yaml to set rotation
 #else
     tft->setRotation(3); // Orient horizontal and wide underneath the silkscreen name label
