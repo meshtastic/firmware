@@ -1,0 +1,13 @@
+{
+  "name": "KyberKEM",
+  "version": "1.0.0",
+  "description": "Post-quantum KEM crypto for ESP32",
+  "keywords": ["kyber", "crypto", "pq", "kem"],
+  "authors": [{ "name": "fsegatz" }],
+  "license": "MIT",
+  "frameworks": ["arduino", "espidf"],
+  "platforms": ["espressif32"],
+  "build": {
+    "includeDir": "include"
+  }
+}
