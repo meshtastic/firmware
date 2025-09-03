@@ -10,5 +10,5 @@
   "build": {
     "includeDir": "include"
   },
-  "srcFilter": ["+<*.c>"]
+  "srcFilter": ["+<*.c>", "+<*.cpp>"]
 }

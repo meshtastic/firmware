@@ -6,9 +6,7 @@
 #include "mesh-pb-constants.h"
 #include <Arduino.h>
 #if !(MESHTASTIC_EXCLUDE_PQ_CRYPTO)
-extern "C" {
-    #include "kem.h"
-}
+#include <KyberPQ.h>
 #endif
 
 extern concurrency::Lock *cryptLock;
@@ -51,6 +49,11 @@ public:
     virtual bool regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey);
     
 #if !(MESHTASTIC_EXCLUDE_PQ_CRYPTO)
+    PQCrypto::Kyber kyber; 
+    uint8_t pq_public_key[PQCrypto::Kyber::PublicKeySize] = {0};
+    uint8_t pq_private_key[PQCrypto::Kyber::PrivateKeySize] = {0};
+    bool pq_keys_valid = false;
+
     // Post-quantum key generation and management
     virtual bool generateKyberKeyPair(uint8_t *pubKey, uint8_t *privKey);
     virtual bool loadKyberKeys(const uint8_t *pubKey, const uint8_t *privKey);
@@ -116,13 +119,6 @@ protected:
 #if !(MESHTASTIC_EXCLUDE_PKI)
     uint8_t shared_key[32] = {0};
     uint8_t private_key[32] = {0};
-    
-#if !(MESHTASTIC_EXCLUDE_PQ_CRYPTO)
-    // Post-quantum Kyber keys
-    uint8_t pq_public_key[CRYPTO_PUBLICKEYBYTES] = {0};
-    uint8_t pq_private_key[CRYPTO_SECRETKEYBYTES] = {0};
-    bool pq_keys_valid = false;
-#endif
 #endif
 
     /**

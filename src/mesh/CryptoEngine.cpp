@@ -11,22 +11,8 @@
 #include <RNG.h>
 #include <SHA256.h>
 
-// Add Kyber support
 #if !(MESHTASTIC_EXCLUDE_PQ_CRYPTO)
-extern "C" {
-    #include <kem.h>
-    #include <indcpa.h>
-    #include <poly.h>
-    #include <polyvec.h>
-    #include <ntt.h>
-    #include <reduce.h>
-    #include <verify.h>
-    #include <randombytes.h>
-    #include <fips202.h>
-    #include <symmetric.h>
-    #include <cbd.h>
-    #include <aes256ctr.h>
-}
+#include <KyberPQ.h>
 #endif
 
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN)
@@ -65,22 +51,22 @@ void CryptoEngine::generateKeyPair(uint8_t *pubKey, uint8_t *privKey)
  */
 bool CryptoEngine::generateKyberKeyPair(uint8_t *pubKey, uint8_t *privKey)
 {
-    LOG_DEBUG("Generate Kyber keypair");
+    LOG_DEBUG("Generate Kyber keypair via PQCrypto wrapper");
 
-    int result = crypto_kem_keypair(pubKey, privKey);
-
-    if (result == 0) {
-        memcpy(pq_public_key, pubKey, CRYPTO_PUBLICKEYBYTES);
-        memcpy(pq_private_key, privKey, CRYPTO_SECRETKEYBYTES);
-        pq_keys_valid = true;
-        LOG_INFO("Kyber keypair generated successfully");
-        return true;
-    } else {
-        LOG_ERROR("Kyber keypair generation failed with result: %d", result);
+    if (!kyber.generateKeyPair(pubKey, privKey)) {
+        LOG_ERROR("Kyber keypair generation failed");
         pq_keys_valid = false;
         return false;
     }
+
+    memcpy(pq_public_key, pubKey, kyber.PublicKeySize);
+    memcpy(pq_private_key, privKey, kyber.PrivateKeySize);
+    pq_keys_valid = true;
+
+    LOG_INFO("Kyber keypair generated successfully");
+    return true;
 }
+
 
 
 /**
@@ -134,9 +120,9 @@ bool CryptoEngine::encryptKyber(uint32_t toNode, uint32_t fromNode, const uint8_
     uint8_t shared_secret[CRYPTO_BYTES];
     uint8_t ciphertext[CRYPTO_CIPHERTEXTBYTES];
 
-    int result = crypto_kem_enc(ciphertext, shared_secret, remotePubKey);
-    if (result != 0) {
-        LOG_ERROR("Kyber encapsulation failed with result: %d", result);
+
+    if (!kyber.encap(ciphertext, shared_secret, remotePubKey)) {
+        LOG_ERROR("Kyber encapsulation failed with result");
         return false;
     }
 
@@ -178,10 +164,9 @@ bool CryptoEngine::decryptKyber(uint32_t fromNode, uint64_t packetNum, size_t nu
     const uint8_t *ciphertext = auth + 12;
 
     uint8_t shared_secret[CRYPTO_BYTES];
-    int result = crypto_kem_dec(shared_secret, ciphertext, pq_private_key);
 
-    if (result != 0) {
-        LOG_ERROR("Kyber decapsulation failed with result: %d", result);
+    if (!kyber.decap(shared_secret,ciphertext, pq_private_key)) {
+        LOG_ERROR("Kyber decapsulation failed with result");
         return false;
     }
 
