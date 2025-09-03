@@ -51,7 +51,6 @@ public:
 #if !(MESHTASTIC_EXCLUDE_PQ_CRYPTO)
     PQCrypto::Kyber kyber; 
     uint8_t pq_public_key[PQCrypto::Kyber::PublicKeySize] = {0};
-    uint8_t pq_private_key[PQCrypto::Kyber::PrivateKeySize] = {0};
     bool pq_keys_valid = false;
 
     // Post-quantum key generation and management
@@ -119,6 +118,11 @@ protected:
 #if !(MESHTASTIC_EXCLUDE_PKI)
     uint8_t shared_key[32] = {0};
     uint8_t private_key[32] = {0};
+#endif
+
+
+#if !(MESHTASTIC_EXCLUDE_PQ_CRYPTO)
+    uint8_t pq_private_key[PQCrypto::Kyber::PrivateKeySize] = {0};
 #endif
 
     /**
