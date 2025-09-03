@@ -1440,7 +1440,7 @@ GPS *GPS::createGps()
         _en_gpio = PIN_GPS_EN;
 #endif
 #ifdef ARCH_PORTDUINO
-    if (!settingsMap[has_gps])
+    if (!portduino_config.has_gps)
         return nullptr;
 #endif
     if (!_rx_gpio || !_serial_gps) // Configured to have no GPS at all

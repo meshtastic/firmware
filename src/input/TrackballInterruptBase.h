@@ -6,7 +6,7 @@
 #ifndef TB_DIRECTION
 #if ARCH_PORTDUINO
 #include "PortduinoGlue.h"
-#define TB_DIRECTION (PinStatus) settingsMap[tbDirection]
+#define TB_DIRECTION (PinStatus) portduino_config.lora_usb_vid
 #else
 #define TB_DIRECTION RISING
 #endif

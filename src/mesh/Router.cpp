@@ -490,7 +490,7 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
 #if ENABLE_JSON_LOGGING
         LOG_TRACE("%s", MeshPacketSerializer::JsonSerialize(p, false).c_str());
 #elif ARCH_PORTDUINO
-        if (settingsStrings[traceFilename] != "" || settingsMap[logoutputlevel] == level_trace) {
+        if (portduino_config.traceFilename != "" || portduino_config.logoutputlevel == level_trace) {
             LOG_TRACE("%s", MeshPacketSerializer::JsonSerialize(p, false).c_str());
         }
 #endif
@@ -730,7 +730,7 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
     LOG_TRACE("%s", MeshPacketSerializer::JsonSerializeEncrypted(p).c_str());
 #elif ARCH_PORTDUINO
     // Even ignored packets get logged in the trace
-    if (settingsStrings[traceFilename] != "" || settingsMap[logoutputlevel] == level_trace) {
+    if (portduino_config.traceFilename != "" || portduino_config.logoutputlevel == level_trace) {
         p->rx_time = getValidTime(RTCQualityFromNet); // store the arrival timestamp for the phone
         LOG_TRACE("%s", MeshPacketSerializer::JsonSerializeEncrypted(p).c_str());
     }
