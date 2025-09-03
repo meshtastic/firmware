@@ -775,7 +775,9 @@ void NodeDB::installDefaultModuleConfig()
 
     moduleConfig.version = DEVICESTATE_CUR_VER;
     moduleConfig.has_mqtt = true;
+#if !MESHTASTIC_EXCLUDE_RANGETEST
     moduleConfig.has_range_test = true;
+#endif
     moduleConfig.has_serial = true;
     moduleConfig.has_store_forward = true;
     moduleConfig.has_telemetry = true;
@@ -841,6 +843,12 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.canned_message.inputbroker_event_press = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT;
 #endif
     moduleConfig.has_canned_message = true;
+#if !MESHTASTIC_EXCLUDE_AUDIO
+    moduleConfig.has_audio = true;
+#endif
+#if !MESHTASTIC_EXCLUDE_PAXCOUNTER
+    moduleConfig.has_paxcounter = true;
+#endif
 #if USERPREFS_MQTT_ENABLED && !MESHTASTIC_EXCLUDE_MQTT
     moduleConfig.mqtt.enabled = true;
 #endif
@@ -1428,15 +1436,21 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
         moduleConfig.has_canned_message = true;
         moduleConfig.has_external_notification = true;
         moduleConfig.has_mqtt = true;
+#if !MESHTASTIC_EXCLUDE_RANGETEST
         moduleConfig.has_range_test = true;
+#endif
         moduleConfig.has_serial = true;
         moduleConfig.has_store_forward = true;
         moduleConfig.has_telemetry = true;
         moduleConfig.has_neighbor_info = true;
         moduleConfig.has_detection_sensor = true;
         moduleConfig.has_ambient_lighting = true;
+#if !MESHTASTIC_EXCLUDE_AUDIO
         moduleConfig.has_audio = true;
+#endif
+#if !MESHTASTIC_EXCLUDE_PAXCOUNTER
         moduleConfig.has_paxcounter = true;
+#endif
 
         success &=
             saveProto(moduleConfigFileName, meshtastic_LocalModuleConfig_size, &meshtastic_LocalModuleConfig_msg, &moduleConfig);
