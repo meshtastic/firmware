@@ -41,7 +41,7 @@ int32_t RangeTestModule::runOnce()
     // moduleConfig.range_test.enabled = 1;
     // moduleConfig.range_test.sender = 30;
     // moduleConfig.range_test.save = 1;
-    // moduleConfig.range_test.clear = 1;
+    // moduleConfig.range_test.clear_on_reboot = 1;
 
     // Fixed position is useful when testing indoors.
     // config.position.fixed_position = 1;
