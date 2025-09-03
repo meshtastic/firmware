@@ -278,6 +278,16 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_PRIVATE_HW = 255
 } meshtastic_HardwareModel;
 
+/* Post-Quantum Key Exchange states */
+typedef enum _meshtastic_PQKeyExchangeState {
+    meshtastic_PQKeyExchangeState_PQ_KEY_IDLE = 0,
+    meshtastic_PQKeyExchangeState_PQ_KEY_CAPABILITY_ANNOUNCE = 1,
+    meshtastic_PQKeyExchangeState_PQ_KEY_EXCHANGE_REQUEST = 2,
+    meshtastic_PQKeyExchangeState_PQ_KEY_FRAGMENT_TRANSFER = 3,
+    meshtastic_PQKeyExchangeState_PQ_KEY_CONFIRM = 4,
+    meshtastic_PQKeyExchangeState_PQ_KEY_ESTABLISHED = 5
+} meshtastic_PQKeyExchangeState;
+
 /* Shared constants between device and phone */
 typedef enum _meshtastic_Constants {
     /* First enum must be zero, and we are just using this enum to
@@ -679,6 +689,15 @@ typedef struct _meshtastic_User {
     /* Whether or not the node can be messaged */
     bool has_is_unmessagable;
     bool is_unmessagable;
+    /* Post-quantum cryptography capabilities flags
+ Bit 0: Supports Kyber key exchange
+ Bit 1: Prefers PQ encryption when available
+ Bits 2-7: Reserved for future PQ algorithms */
+    bool has_pq_capabilities;
+    uint32_t pq_capabilities;
+    /* Hash of the current PQ public key (for capability announcement)
+ Full key exchanged via PQ_KEY_EXCHANGE_APP protocol */
+    pb_callback_t pq_key_hash;
 } meshtastic_User;
 
 /* A message used in a traceroute */
@@ -759,6 +778,26 @@ typedef struct _meshtastic_KeyVerification {
  sent from NodeB to NodeA in response to the initial message. */
     meshtastic_KeyVerification_hash2_t hash2;
 } meshtastic_KeyVerification;
+
+/* Post-Quantum Key Exchange message for Kyber key encapsulation */
+typedef struct _meshtastic_PQKeyExchange {
+    /* State of the key exchange process */
+    meshtastic_PQKeyExchangeState state;
+    /* Session ID to track multi-packet exchanges */
+    uint32_t session_id;
+    /* Sequence number for fragmented packets */
+    uint32_t sequence;
+    /* Total number of fragments expected */
+    uint32_t total_fragments;
+    /* Key material or ciphertext fragment */
+    pb_callback_t data;
+    /* Node capabilities flags */
+    uint32_t capabilities;
+    /* Hash of the complete key for verification */
+    pb_callback_t key_hash;
+    /* Error code if exchange fails */
+    uint32_t error_code;
+} meshtastic_PQKeyExchange;
 
 /* Waypoint message, used to share arbitrary locations across the mesh */
 typedef struct _meshtastic_Waypoint {
@@ -1256,6 +1295,10 @@ extern "C" {
 #define _meshtastic_HardwareModel_MAX meshtastic_HardwareModel_PRIVATE_HW
 #define _meshtastic_HardwareModel_ARRAYSIZE ((meshtastic_HardwareModel)(meshtastic_HardwareModel_PRIVATE_HW+1))
 
+#define _meshtastic_PQKeyExchangeState_MIN meshtastic_PQKeyExchangeState_PQ_KEY_IDLE
+#define _meshtastic_PQKeyExchangeState_MAX meshtastic_PQKeyExchangeState_PQ_KEY_ESTABLISHED
+#define _meshtastic_PQKeyExchangeState_ARRAYSIZE ((meshtastic_PQKeyExchangeState)(meshtastic_PQKeyExchangeState_PQ_KEY_ESTABLISHED+1))
+
 #define _meshtastic_Constants_MIN meshtastic_Constants_ZERO
 #define _meshtastic_Constants_MAX meshtastic_Constants_DATA_PAYLOAD_LEN
 #define _meshtastic_Constants_ARRAYSIZE ((meshtastic_Constants)(meshtastic_Constants_DATA_PAYLOAD_LEN+1))
@@ -1312,6 +1355,8 @@ extern "C" {
 #define meshtastic_Data_portnum_ENUMTYPE meshtastic_PortNum
 
 
+#define meshtastic_PQKeyExchange_state_ENUMTYPE meshtastic_PQKeyExchangeState
+
 
 
 #define meshtastic_MeshPacket_priority_ENUMTYPE meshtastic_MeshPacket_Priority
@@ -1349,11 +1394,12 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define meshtastic_Position_init_default         {false, 0, false, 0, false, 0, 0, _meshtastic_Position_LocSource_MIN, _meshtastic_Position_AltSource_MIN, 0, 0, false, 0, false, 0, 0, 0, 0, 0, false, 0, false, 0, 0, 0, 0, 0, 0, 0, 0}
-#define meshtastic_User_init_default             {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}, false, 0}
+#define meshtastic_User_init_default             {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}, false, 0, false, 0, {{NULL}, NULL}}
 #define meshtastic_RouteDiscovery_init_default   {0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define meshtastic_Routing_init_default          {0, {meshtastic_RouteDiscovery_init_default}}
 #define meshtastic_Data_init_default             {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0, false, 0}
 #define meshtastic_KeyVerification_init_default  {0, {0, {0}}, {0, {0}}}
+#define meshtastic_PQKeyExchange_init_default    {_meshtastic_PQKeyExchangeState_MIN, 0, 0, 0, {{NULL}, NULL}, 0, {{NULL}, NULL}, 0}
 #define meshtastic_Waypoint_init_default         {0, false, 0, false, 0, 0, 0, "", "", 0}
 #define meshtastic_MqttClientProxyMessage_init_default {"", 0, {{0, {0}}}, 0}
 #define meshtastic_MeshPacket_init_default       {0, 0, 0, 0, {meshtastic_Data_init_default}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN}
@@ -1380,11 +1426,12 @@ extern "C" {
 #define meshtastic_resend_chunks_init_default    {{{NULL}, NULL}}
 #define meshtastic_ChunkedPayloadResponse_init_default {0, 0, {0}}
 #define meshtastic_Position_init_zero            {false, 0, false, 0, false, 0, 0, _meshtastic_Position_LocSource_MIN, _meshtastic_Position_AltSource_MIN, 0, 0, false, 0, false, 0, 0, 0, 0, 0, false, 0, false, 0, 0, 0, 0, 0, 0, 0, 0}
-#define meshtastic_User_init_zero                {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}, false, 0}
+#define meshtastic_User_init_zero                {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}, false, 0, false, 0, {{NULL}, NULL}}
 #define meshtastic_RouteDiscovery_init_zero      {0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define meshtastic_Routing_init_zero             {0, {meshtastic_RouteDiscovery_init_zero}}
 #define meshtastic_Data_init_zero                {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0, false, 0}
 #define meshtastic_KeyVerification_init_zero     {0, {0, {0}}, {0, {0}}}
+#define meshtastic_PQKeyExchange_init_zero       {_meshtastic_PQKeyExchangeState_MIN, 0, 0, 0, {{NULL}, NULL}, 0, {{NULL}, NULL}, 0}
 #define meshtastic_Waypoint_init_zero            {0, false, 0, false, 0, 0, 0, "", "", 0}
 #define meshtastic_MqttClientProxyMessage_init_zero {"", 0, {{0, {0}}}, 0}
 #define meshtastic_MeshPacket_init_zero          {0, 0, 0, 0, {meshtastic_Data_init_zero}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0, 0, 0, 0, _meshtastic_MeshPacket_TransportMechanism_MIN}
@@ -1444,6 +1491,8 @@ extern "C" {
 #define meshtastic_User_role_tag                 7
 #define meshtastic_User_public_key_tag           8
 #define meshtastic_User_is_unmessagable_tag      9
+#define meshtastic_User_pq_capabilities_tag      10
+#define meshtastic_User_pq_key_hash_tag          11
 #define meshtastic_RouteDiscovery_route_tag      1
 #define meshtastic_RouteDiscovery_snr_towards_tag 2
 #define meshtastic_RouteDiscovery_route_back_tag 3
@@ -1463,6 +1512,14 @@ extern "C" {
 #define meshtastic_KeyVerification_nonce_tag     1
 #define meshtastic_KeyVerification_hash1_tag     2
 #define meshtastic_KeyVerification_hash2_tag     3
+#define meshtastic_PQKeyExchange_state_tag       1
+#define meshtastic_PQKeyExchange_session_id_tag  2
+#define meshtastic_PQKeyExchange_sequence_tag    3
+#define meshtastic_PQKeyExchange_total_fragments_tag 4
+#define meshtastic_PQKeyExchange_data_tag        5
+#define meshtastic_PQKeyExchange_capabilities_tag 6
+#define meshtastic_PQKeyExchange_key_hash_tag    7
+#define meshtastic_PQKeyExchange_error_code_tag  8
 #define meshtastic_Waypoint_id_tag               1
 #define meshtastic_Waypoint_latitude_i_tag       2
 #define meshtastic_Waypoint_longitude_i_tag      3
@@ -1638,8 +1695,10 @@ X(a, STATIC,   SINGULAR, UENUM,    hw_model,          5) \
 X(a, STATIC,   SINGULAR, BOOL,     is_licensed,       6) \
 X(a, STATIC,   SINGULAR, UENUM,    role,              7) \
 X(a, STATIC,   SINGULAR, BYTES,    public_key,        8) \
-X(a, STATIC,   OPTIONAL, BOOL,     is_unmessagable,   9)
-#define meshtastic_User_CALLBACK NULL
+X(a, STATIC,   OPTIONAL, BOOL,     is_unmessagable,   9) \
+X(a, STATIC,   OPTIONAL, UINT32,   pq_capabilities,  10) \
+X(a, CALLBACK, OPTIONAL, BYTES,    pq_key_hash,      11)
+#define meshtastic_User_CALLBACK pb_default_field_callback
 #define meshtastic_User_DEFAULT NULL
 
 #define meshtastic_RouteDiscovery_FIELDLIST(X, a) \
@@ -1678,6 +1737,18 @@ X(a, STATIC,   SINGULAR, BYTES,    hash1,             2) \
 X(a, STATIC,   SINGULAR, BYTES,    hash2,             3)
 #define meshtastic_KeyVerification_CALLBACK NULL
 #define meshtastic_KeyVerification_DEFAULT NULL
+
+#define meshtastic_PQKeyExchange_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UENUM,    state,             1) \
+X(a, STATIC,   SINGULAR, UINT32,   session_id,        2) \
+X(a, STATIC,   SINGULAR, UINT32,   sequence,          3) \
+X(a, STATIC,   SINGULAR, UINT32,   total_fragments,   4) \
+X(a, CALLBACK, SINGULAR, BYTES,    data,              5) \
+X(a, STATIC,   SINGULAR, UINT32,   capabilities,      6) \
+X(a, CALLBACK, SINGULAR, BYTES,    key_hash,          7) \
+X(a, STATIC,   SINGULAR, UINT32,   error_code,        8)
+#define meshtastic_PQKeyExchange_CALLBACK pb_default_field_callback
+#define meshtastic_PQKeyExchange_DEFAULT NULL
 
 #define meshtastic_Waypoint_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   id,                1) \
@@ -1954,6 +2025,7 @@ extern const pb_msgdesc_t meshtastic_RouteDiscovery_msg;
 extern const pb_msgdesc_t meshtastic_Routing_msg;
 extern const pb_msgdesc_t meshtastic_Data_msg;
 extern const pb_msgdesc_t meshtastic_KeyVerification_msg;
+extern const pb_msgdesc_t meshtastic_PQKeyExchange_msg;
 extern const pb_msgdesc_t meshtastic_Waypoint_msg;
 extern const pb_msgdesc_t meshtastic_MqttClientProxyMessage_msg;
 extern const pb_msgdesc_t meshtastic_MeshPacket_msg;
@@ -1987,6 +2059,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_Routing_fields &meshtastic_Routing_msg
 #define meshtastic_Data_fields &meshtastic_Data_msg
 #define meshtastic_KeyVerification_fields &meshtastic_KeyVerification_msg
+#define meshtastic_PQKeyExchange_fields &meshtastic_PQKeyExchange_msg
 #define meshtastic_Waypoint_fields &meshtastic_Waypoint_msg
 #define meshtastic_MqttClientProxyMessage_fields &meshtastic_MqttClientProxyMessage_msg
 #define meshtastic_MeshPacket_fields &meshtastic_MeshPacket_msg
@@ -2014,9 +2087,13 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_ChunkedPayloadResponse_fields &meshtastic_ChunkedPayloadResponse_msg
 
 /* Maximum encoded size of messages (where known) */
+/* meshtastic_User_size depends on runtime parameters */
+/* meshtastic_PQKeyExchange_size depends on runtime parameters */
+/* meshtastic_NodeInfo_size depends on runtime parameters */
+/* meshtastic_FromRadio_size depends on runtime parameters */
 /* meshtastic_resend_chunks_size depends on runtime parameters */
 /* meshtastic_ChunkedPayloadResponse_size depends on runtime parameters */
-#define MESHTASTIC_MESHTASTIC_MESH_PB_H_MAX_SIZE meshtastic_FromRadio_size
+#define MESHTASTIC_MESHTASTIC_MESH_PB_H_MAX_SIZE meshtastic_ToRadio_size
 #define meshtastic_ChunkedPayload_size           245
 #define meshtastic_ClientNotification_size       482
 #define meshtastic_Compressed_size               239
@@ -2024,7 +2101,6 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_DeviceMetadata_size           54
 #define meshtastic_DuplicatedPublicKey_size      0
 #define meshtastic_FileInfo_size                 236
-#define meshtastic_FromRadio_size                510
 #define meshtastic_Heartbeat_size                6
 #define meshtastic_KeyVerificationFinal_size     65
 #define meshtastic_KeyVerificationNumberInform_size 58
@@ -2037,14 +2113,12 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_MyNodeInfo_size               83
 #define meshtastic_NeighborInfo_size             258
 #define meshtastic_Neighbor_size                 22
-#define meshtastic_NodeInfo_size                 323
 #define meshtastic_NodeRemoteHardwarePin_size    29
 #define meshtastic_Position_size                 144
 #define meshtastic_QueueStatus_size              23
 #define meshtastic_RouteDiscovery_size           256
 #define meshtastic_Routing_size                  259
 #define meshtastic_ToRadio_size                  504
-#define meshtastic_User_size                     115
 #define meshtastic_Waypoint_size                 165
 
 #ifdef __cplusplus

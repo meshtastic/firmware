@@ -533,13 +533,20 @@ extern const pb_msgdesc_t meshtastic_KeyVerificationAdmin_msg;
 #define meshtastic_KeyVerificationAdmin_fields &meshtastic_KeyVerificationAdmin_msg
 
 /* Maximum encoded size of messages (where known) */
-#define MESHTASTIC_MESHTASTIC_ADMIN_PB_H_MAX_SIZE meshtastic_AdminMessage_size
+#if defined(meshtastic_User_size) && defined(meshtastic_User_size) && defined(meshtastic_User_size)
+union meshtastic_AdminMessage_payload_variant_size_union {char f4[(6 + meshtastic_User_size)]; char f32[(7 + meshtastic_User_size)]; char f66[(21 + meshtastic_User_size)]; char f0[500];};
+#endif
+#if defined(meshtastic_User_size) && defined(meshtastic_User_size) && defined(meshtastic_User_size)
+#define meshtastic_AdminMessage_size             (11 + sizeof(union meshtastic_AdminMessage_payload_variant_size_union))
+#endif
+#define MESHTASTIC_MESHTASTIC_ADMIN_PB_H_MAX_SIZE meshtastic_NodeRemoteHardwarePinsResponse_size
 #define meshtastic_AdminMessage_InputEvent_size  14
-#define meshtastic_AdminMessage_size             511
 #define meshtastic_HamParameters_size            31
 #define meshtastic_KeyVerificationAdmin_size     25
 #define meshtastic_NodeRemoteHardwarePinsResponse_size 496
-#define meshtastic_SharedContact_size            125
+#if defined(meshtastic_User_size)
+#define meshtastic_SharedContact_size            (14 + meshtastic_User_size)
+#endif
 
 #ifdef __cplusplus
 } /* extern "C" */

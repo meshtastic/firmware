@@ -76,6 +76,9 @@ typedef enum _meshtastic_PortNum {
     meshtastic_PortNum_ALERT_APP = 11,
     /* Module/port for handling key verification requests. */
     meshtastic_PortNum_KEY_VERIFICATION_APP = 12,
+    /* Module/port for handling post-quantum key exchange requests.
+ ENCODING: Protobuf */
+    meshtastic_PortNum_PQ_KEY_EXCHANGE_APP = 13,
     /* Provides a 'ping' service that replies to any packet it receives.
  Also serves as a small example module.
  ENCODING: ASCII Plaintext */
