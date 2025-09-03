@@ -9,5 +9,6 @@
   "platforms": ["espressif32"],
   "build": {
     "includeDir": "include"
-  }
+  },
+  "srcFilter": ["+<*.c>"]
 }

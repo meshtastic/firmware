@@ -10,6 +10,25 @@
 #include <Curve25519.h>
 #include <RNG.h>
 #include <SHA256.h>
+
+// Add Kyber support
+#if !(MESHTASTIC_EXCLUDE_PQ_CRYPTO)
+extern "C" {
+    #include <kem.h>
+    #include <indcpa.h>
+    #include <poly.h>
+    #include <polyvec.h>
+    #include <ntt.h>
+    #include <reduce.h>
+    #include <verify.h>
+    #include <randombytes.h>
+    #include <fips202.h>
+    #include <symmetric.h>
+    #include <cbd.h>
+    #include <aes256ctr.h>
+}
+#endif
+
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN)
 #if !defined(ARCH_STM32WL)
 #define CryptRNG RNG
@@ -37,6 +56,200 @@ void CryptoEngine::generateKeyPair(uint8_t *pubKey, uint8_t *privKey)
     memcpy(privKey, private_key, sizeof(private_key));
 }
 
+#if !(MESHTASTIC_EXCLUDE_PQ_CRYPTO)
+/**
+ * Generate a Kyber512 keypair for post-quantum encryption
+ * 
+ * @param pubKey Destination for public key (KYBER_PUBLICKEYBYTES)
+ * @param privKey Destination for private key (KYBER_SECRETKEYBYTES)  
+ */
+bool CryptoEngine::generateKyberKeyPair(uint8_t *pubKey, uint8_t *privKey)
+{
+    LOG_DEBUG("Generate Kyber keypair");
+
+    int result = crypto_kem_keypair(pubKey, privKey);
+
+    if (result == 0) {
+        memcpy(pq_public_key, pubKey, CRYPTO_PUBLICKEYBYTES);
+        memcpy(pq_private_key, privKey, CRYPTO_SECRETKEYBYTES);
+        pq_keys_valid = true;
+        LOG_INFO("Kyber keypair generated successfully");
+        return true;
+    } else {
+        LOG_ERROR("Kyber keypair generation failed with result: %d", result);
+        pq_keys_valid = false;
+        return false;
+    }
+}
+
+
+/**
+ * Load existing Kyber keys from storage
+ */
+bool CryptoEngine::loadKyberKeys(const uint8_t *pubKey, const uint8_t *privKey)
+{
+    if (!pubKey || !privKey) {
+        LOG_ERROR("Invalid Kyber keys provided");
+        return false;
+    }
+    
+    memcpy(pq_public_key, pubKey, KYBER_PUBLICKEYBYTES);
+    memcpy(pq_private_key, privKey, KYBER_SECRETKEYBYTES);
+    pq_keys_valid = true;
+    
+    LOG_INFO("Kyber keys loaded from storage");
+    return true;
+}
+
+/**
+ * Get current Kyber public key
+ */
+bool CryptoEngine::getKyberPublicKey(uint8_t *pubKey)
+{
+    if (!pq_keys_valid) {
+        LOG_ERROR("No valid Kyber keys available");
+        return false;
+    }
+    
+    memcpy(pubKey, pq_public_key, KYBER_PUBLICKEYBYTES);
+    return true;
+}
+
+/**
+ * Encrypt packet using Kyber KEM + AES
+ * This is called by the initiator (first sender)
+ */
+bool CryptoEngine::encryptKyber(uint32_t toNode, uint32_t fromNode, const uint8_t *remotePubKey,
+                               uint64_t packetNum, size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut)
+{
+    if (!pq_keys_valid) {
+        LOG_ERROR("No valid Kyber keys for encryption");
+        return false;
+    }
+    if (!remotePubKey) {
+        LOG_ERROR("No remote Kyber public key provided");
+        return false;
+    }
+
+    uint8_t shared_secret[CRYPTO_BYTES];
+    uint8_t ciphertext[CRYPTO_CIPHERTEXTBYTES];
+
+    int result = crypto_kem_enc(ciphertext, shared_secret, remotePubKey);
+    if (result != 0) {
+        LOG_ERROR("Kyber encapsulation failed with result: %d", result);
+        return false;
+    }
+
+    // Derive AES session key
+    uint8_t session_key[32];
+    deriveSessionKey(shared_secret, CRYPTO_BYTES, fromNode, toNode, session_key);
+
+    long extraNonceTmp = random();
+    initNonce(fromNode, packetNum, extraNonceTmp);
+
+    uint8_t *auth = bytesOut + numBytes;
+    aes_ccm_ae(session_key, 32, nonce, 8, bytes, numBytes, nullptr, 0, bytesOut, auth);
+
+    memcpy(auth + 8, &extraNonceTmp, sizeof(uint32_t));
+    memcpy(auth + 12, ciphertext, CRYPTO_CIPHERTEXTBYTES);
+
+    return true;
+}
+
+
+/**
+ * Decrypt packet using Kyber KEM + AES  
+ * This is called by the responder (receiver)
+ */
+bool CryptoEngine::decryptKyber(uint32_t fromNode, uint64_t packetNum, size_t numBytes, 
+                               const uint8_t *bytes, uint8_t *bytesOut)
+{
+    if (!pq_keys_valid) {
+        LOG_ERROR("No valid Kyber keys for decryption");
+        return false;
+    }
+
+    size_t payload_len = numBytes - 12 - CRYPTO_CIPHERTEXTBYTES;
+    const uint8_t *auth = bytes + payload_len;
+
+    uint32_t extraNonce;
+    memcpy(&extraNonce, auth + 8, sizeof(uint32_t));
+
+    const uint8_t *ciphertext = auth + 12;
+
+    uint8_t shared_secret[CRYPTO_BYTES];
+    int result = crypto_kem_dec(shared_secret, ciphertext, pq_private_key);
+
+    if (result != 0) {
+        LOG_ERROR("Kyber decapsulation failed with result: %d", result);
+        return false;
+    }
+
+    uint8_t session_key[32];
+    deriveSessionKey(shared_secret, CRYPTO_BYTES, fromNode, 0, session_key);
+
+    initNonce(fromNode, packetNum, extraNonce);
+
+    LOG_DEBUG("Kyber decrypt: payload_len=%d, extraNonce=%d", payload_len, extraNonce);
+    printBytes("Kyber session key: ", session_key, 8);
+
+    return aes_ccm_ad(session_key, 32, nonce, 8, bytes, payload_len, nullptr, 0, auth, bytesOut);
+}
+
+/**
+ * Derive session key from Kyber shared secret using HKDF-like construction
+ */
+void CryptoEngine::deriveSessionKey(const uint8_t *shared_secret, size_t secret_len, 
+                                  uint32_t fromNode, uint32_t toNode, uint8_t *session_key)
+{
+    SHA256 hash;
+    hash.reset();
+    
+    // Add shared secret
+    hash.update(shared_secret, secret_len);
+    
+    // Add node IDs for key domain separation
+    hash.update((uint8_t*)&fromNode, sizeof(fromNode));
+    hash.update((uint8_t*)&toNode, sizeof(toNode));
+    
+    // Add some fixed salt
+    const uint8_t salt[] = "MESHTASTIC_PQ_v1";
+    hash.update(salt, sizeof(salt) - 1);
+    
+    hash.finalize(session_key, 32);
+    
+    LOG_DEBUG("Derived session key from %d-byte shared secret", secret_len);
+}
+
+/**
+ * Clear all Kyber keys from memory
+ */
+void CryptoEngine::clearKyberKeys()
+{
+    memset(pq_public_key, 0, sizeof(pq_public_key));
+    memset(pq_private_key, 0, sizeof(pq_private_key)); 
+    pq_keys_valid = false;
+    LOG_DEBUG("Cleared Kyber keys from memory");
+}
+
+/**
+ * Check if we have valid Kyber keys
+ */
+bool CryptoEngine::hasValidKyberKeys() const
+{
+    return pq_keys_valid;
+}
+
+/**
+ * Get the size of encrypted packet with Kyber overhead
+ */
+size_t CryptoEngine::getKyberPacketOverhead()
+{
+    return 12 + CRYPTO_CIPHERTEXTBYTES; // auth(8) + extra_nonce(4) + Kyber ciphertext
+}
+
+#endif // not MESHTASTIC_EXCLUDE_PQ_CRYPTO
+
 /**
  * regenerate a public key with Curve25519.
  *
@@ -61,10 +274,14 @@ bool CryptoEngine::regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey)
     return true;
 }
 #endif
+
 void CryptoEngine::clearKeys()
 {
     memset(public_key, 0, sizeof(public_key));
     memset(private_key, 0, sizeof(private_key));
+#if !(MESHTASTIC_EXCLUDE_PQ_CRYPTO)
+    clearKyberKeys();
+#endif
 }
 
 /**
