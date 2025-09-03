@@ -319,7 +319,7 @@ typedef struct _meshtastic_ModuleConfig_RangeTestConfig {
     bool save;
     /* Bool indicating that the node should cleanup / destroy it's RangeTest.csv file.
  ESP32 Only */
-    bool clear;
+    bool clear_on_reboot;
 } meshtastic_ModuleConfig_RangeTestConfig;
 
 /* Configuration for both device and environment metrics */
@@ -613,7 +613,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_RangeTestConfig_enabled_tag 1
 #define meshtastic_ModuleConfig_RangeTestConfig_sender_tag 2
 #define meshtastic_ModuleConfig_RangeTestConfig_save_tag 3
-#define meshtastic_ModuleConfig_RangeTestConfig_clear_tag 4
+#define meshtastic_ModuleConfig_RangeTestConfig_clear_on_reboot_tag 4
 #define meshtastic_ModuleConfig_TelemetryConfig_device_update_interval_tag 1
 #define meshtastic_ModuleConfig_TelemetryConfig_environment_update_interval_tag 2
 #define meshtastic_ModuleConfig_TelemetryConfig_environment_measurement_enabled_tag 3
@@ -808,7 +808,7 @@ X(a, STATIC,   SINGULAR, BOOL,     is_server,         6)
 X(a, STATIC,   SINGULAR, BOOL,     enabled,           1) \
 X(a, STATIC,   SINGULAR, UINT32,   sender,            2) \
 X(a, STATIC,   SINGULAR, BOOL,     save,              3) \
-X(a, STATIC,   SINGULAR, BOOL,     clear,             4)
+X(a, STATIC,   SINGULAR, BOOL,     clear_on_reboot,   4)
 #define meshtastic_ModuleConfig_RangeTestConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_RangeTestConfig_DEFAULT NULL
 

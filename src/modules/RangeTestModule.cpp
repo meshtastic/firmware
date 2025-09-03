@@ -54,7 +54,7 @@ int32_t RangeTestModule::runOnce()
 
             firstTime = 0;
 
-            if (moduleConfig.range_test.clear) {
+            if (moduleConfig.range_test.clear_on_reboot) {
                 // User wants to delete previous range test(s)
                 LOG_INFO("Range Test Module - Clearing out previous test file");
                 rangeTestModuleRadio->removeFile();
