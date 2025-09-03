@@ -767,24 +767,24 @@ class LGFX : public lgfx::LGFX_Device
 
     LGFX(void)
     {
-        if (settingsMap[displayPanel] == st7789)
+        if (portduino_config.displayPanel == st7789)
             _panel_instance = new lgfx::Panel_ST7789;
-        else if (settingsMap[displayPanel] == st7735)
+        else if (portduino_config.displayPanel == st7735)
             _panel_instance = new lgfx::Panel_ST7735;
-        else if (settingsMap[displayPanel] == st7735s)
+        else if (portduino_config.displayPanel == st7735s)
             _panel_instance = new lgfx::Panel_ST7735S;
-        else if (settingsMap[displayPanel] == st7796)
+        else if (portduino_config.displayPanel == st7796)
             _panel_instance = new lgfx::Panel_ST7796;
-        else if (settingsMap[displayPanel] == ili9341)
+        else if (portduino_config.displayPanel == ili9341)
             _panel_instance = new lgfx::Panel_ILI9341;
-        else if (settingsMap[displayPanel] == ili9342)
+        else if (portduino_config.displayPanel == ili9342)
             _panel_instance = new lgfx::Panel_ILI9342;
-        else if (settingsMap[displayPanel] == ili9488)
+        else if (portduino_config.displayPanel == ili9488)
             _panel_instance = new lgfx::Panel_ILI9488;
-        else if (settingsMap[displayPanel] == hx8357d)
+        else if (portduino_config.displayPanel == hx8357d)
             _panel_instance = new lgfx::Panel_HX8357D;
 #if defined(LGFX_SDL)
-        else if (settingsMap[displayPanel] == x11) {
+        else if (portduino_config.displayPanel == x11) {
             _panel_instance = new lgfx::Panel_sdl;
         }
 #endif
@@ -795,61 +795,61 @@ class LGFX : public lgfx::LGFX_Device
 
         auto buscfg = _bus_instance.config();
         buscfg.spi_mode = 0;
-        buscfg.spi_host = settingsMap[displayspidev];
+        buscfg.spi_host = portduino_config.display_spi_dev_int;
 
-        buscfg.pin_dc = settingsMap[displayDC]; // Set SPI DC pin number (-1 = disable)
+        buscfg.pin_dc = portduino_config.displayDC.pin; // Set SPI DC pin number (-1 = disable)
 
         _bus_instance.config(buscfg);            // applies the set value to the bus.
         _panel_instance->setBus(&_bus_instance); // set the bus on the panel.
 
         auto cfg = _panel_instance->config(); // Gets a structure for display panel settings.
-        LOG_DEBUG("Width: %d, Height: %d", settingsMap[displayWidth], settingsMap[displayHeight]);
-        cfg.pin_cs = settingsMap[displayCS]; // Pin number where CS is connected (-1 = disable)
-        cfg.pin_rst = settingsMap[displayReset];
-        if (settingsMap[displayRotate]) {
-            cfg.panel_width = settingsMap[displayHeight]; // actual displayable width
-            cfg.panel_height = settingsMap[displayWidth]; // actual displayable height
+        LOG_DEBUG("Width: %d, Height: %d", portduino_config.displayWidth, portduino_config.displayHeight);
+        cfg.pin_cs = portduino_config.displayCS.pin; // Pin number where CS is connected (-1 = disable)
+        cfg.pin_rst = portduino_config.displayReset.pin;
+        if (portduino_config.displayRotate) {
+            cfg.panel_width = portduino_config.displayHeight; // actual displayable width
+            cfg.panel_height = portduino_config.displayWidth; // actual displayable height
         } else {
-            cfg.panel_width = settingsMap[displayWidth];   // actual displayable width
-            cfg.panel_height = settingsMap[displayHeight]; // actual displayable height
+            cfg.panel_width = portduino_config.displayWidth;   // actual displayable width
+            cfg.panel_height = portduino_config.displayHeight; // actual displayable height
         }
-        cfg.offset_x = settingsMap[displayOffsetX];             // Panel offset amount in X direction
-        cfg.offset_y = settingsMap[displayOffsetY];             // Panel offset amount in Y direction
-        cfg.offset_rotation = settingsMap[displayOffsetRotate]; // Rotation direction value offset 0~7 (4~7 is mirrored)
-        cfg.invert = settingsMap[displayInvert];                // Set to true if the light/darkness of the panel is reversed
+        cfg.offset_x = portduino_config.displayOffsetX;             // Panel offset amount in X direction
+        cfg.offset_y = portduino_config.displayOffsetY;             // Panel offset amount in Y direction
+        cfg.offset_rotation = portduino_config.displayOffsetRotate; // Rotation direction value offset 0~7 (4~7 is mirrored)
+        cfg.invert = portduino_config.displayInvert;                // Set to true if the light/darkness of the panel is reversed
 
         _panel_instance->config(cfg);
 
         // Configure settings for touch  control.
-        if (settingsMap[touchscreenModule]) {
-            if (settingsMap[touchscreenModule] == xpt2046) {
+        if (portduino_config.touchscreenModule) {
+            if (portduino_config.touchscreenModule == xpt2046) {
                 _touch_instance = new lgfx::Touch_XPT2046;
-            } else if (settingsMap[touchscreenModule] == stmpe610) {
+            } else if (portduino_config.touchscreenModule == stmpe610) {
                 _touch_instance = new lgfx::Touch_STMPE610;
-            } else if (settingsMap[touchscreenModule] == ft5x06) {
+            } else if (portduino_config.touchscreenModule == ft5x06) {
                 _touch_instance = new lgfx::Touch_FT5x06;
             }
             auto touch_cfg = _touch_instance->config();
 
-            touch_cfg.pin_cs = settingsMap[touchscreenCS];
+            touch_cfg.pin_cs = portduino_config.touchscreenCS.pin;
             touch_cfg.x_min = 0;
-            touch_cfg.x_max = settingsMap[displayHeight] - 1;
+            touch_cfg.x_max = portduino_config.displayHeight - 1;
             touch_cfg.y_min = 0;
-            touch_cfg.y_max = settingsMap[displayWidth] - 1;
-            touch_cfg.pin_int = settingsMap[touchscreenIRQ];
+            touch_cfg.y_max = portduino_config.displayWidth - 1;
+            touch_cfg.pin_int = portduino_config.touchscreenIRQ.pin;
             touch_cfg.bus_shared = true;
-            touch_cfg.offset_rotation = settingsMap[touchscreenRotate];
-            if (settingsMap[touchscreenI2CAddr] != -1) {
-                touch_cfg.i2c_addr = settingsMap[touchscreenI2CAddr];
+            touch_cfg.offset_rotation = portduino_config.touchscreenRotate;
+            if (portduino_config.touchscreenI2CAddr != -1) {
+                touch_cfg.i2c_addr = portduino_config.touchscreenI2CAddr;
             } else {
-                touch_cfg.spi_host = settingsMap[touchscreenspidev];
+                touch_cfg.spi_host = portduino_config.touchscreen_spi_dev_int;
             }
 
             _touch_instance->config(touch_cfg);
             _panel_instance->setTouch(_touch_instance);
         }
 #if defined(LGFX_SDL)
-        if (settingsMap[displayPanel] == x11) {
+        if (portduino_config.displayPanel == x11) {
             lgfx::Panel_sdl *sdl_panel_ = (lgfx::Panel_sdl *)_panel_instance;
             sdl_panel_->setup();
             sdl_panel_->addKeyCodeMapping(SDLK_RETURN, SDL_SCANCODE_KP_ENTER);
@@ -1115,10 +1115,10 @@ TFTDisplay::TFTDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY g
     backlightEnable = p;
 
 #if ARCH_PORTDUINO
-    if (settingsMap[displayRotate]) {
-        setGeometry(GEOMETRY_RAWMODE, settingsMap[configNames::displayWidth], settingsMap[configNames::displayHeight]);
+    if (portduino_config.displayRotate) {
+        setGeometry(GEOMETRY_RAWMODE, portduino_config.displayWidth, portduino_config.displayWidth);
     } else {
-        setGeometry(GEOMETRY_RAWMODE, settingsMap[configNames::displayHeight], settingsMap[configNames::displayWidth]);
+        setGeometry(GEOMETRY_RAWMODE, portduino_config.displayHeight, portduino_config.displayHeight);
     }
 
 #elif defined(SCREEN_ROTATE)
@@ -1240,7 +1240,7 @@ void TFTDisplay::sdlLoop()
 #if defined(LGFX_SDL)
     static int lastPressed = 0;
     static int shuttingDown = false;
-    if (settingsMap[displayPanel] == x11) {
+    if (portduino_config.displayPanel == x11) {
         lgfx::Panel_sdl *sdl_panel_ = (lgfx::Panel_sdl *)tft->_panel_instance;
         if (sdl_panel_->loop() && !shuttingDown) {
             LOG_WARN("Window Closed!");
@@ -1288,8 +1288,8 @@ void TFTDisplay::sendCommand(uint8_t com)
         backlightEnable->set(true);
 #if ARCH_PORTDUINO
         display(true);
-        if (settingsMap[displayBacklight] > 0)
-            digitalWrite(settingsMap[displayBacklight], TFT_BACKLIGHT_ON);
+        if (portduino_config.displayBacklight.pin > 0)
+            digitalWrite(portduino_config.displayBacklight.pin, TFT_BACKLIGHT_ON);
 #elif !defined(RAK14014) && !defined(M5STACK) && !defined(UNPHONE)
         tft->wakeup();
         tft->powerSaveOff();
@@ -1312,8 +1312,8 @@ void TFTDisplay::sendCommand(uint8_t com)
         backlightEnable->set(false);
 #if ARCH_PORTDUINO
         tft->clear();
-        if (settingsMap[displayBacklight] > 0)
-            digitalWrite(settingsMap[displayBacklight], !TFT_BACKLIGHT_ON);
+        if (portduino_config.displayBacklight.pin > 0)
+            digitalWrite(portduino_config.displayBacklight.pin, !TFT_BACKLIGHT_ON);
 #elif !defined(RAK14014) && !defined(M5STACK) && !defined(UNPHONE)
         tft->sleep();
         tft->powerSaveOn();

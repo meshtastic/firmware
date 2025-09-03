@@ -673,7 +673,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #endif
 #elif ARCH_PORTDUINO
     bool hasScreen = false;
-    if (settingsMap[displayPanel])
+    if (portduino_config.displayPanel)
         hasScreen = true;
     else
         hasScreen = screen_found.port != ScanI2C::I2CPort::NO_I2C;
@@ -1334,8 +1334,8 @@ void NodeDB::loadFromDisk()
     }
 #if ARCH_PORTDUINO
     // set any config overrides
-    if (settingsMap[has_configDisplayMode]) {
-        config.display.displaymode = (_meshtastic_Config_DisplayConfig_DisplayMode)settingsMap[configDisplayMode];
+    if (portduino_config.has_configDisplayMode) {
+        config.display.displaymode = (_meshtastic_Config_DisplayConfig_DisplayMode)portduino_config.configDisplayMode;
     }
 
 #endif
