@@ -434,10 +434,15 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             fromRadioScratch.moduleConfig.payload_variant.detection_sensor = moduleConfig.detection_sensor;
             break;
         case meshtastic_ModuleConfig_ambient_lighting_tag:
+#if !MESHTASTIC_EXCLUDE_AMBIENTLIGHTING
             LOG_DEBUG("Send module config: ambient lighting");
             fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_ambient_lighting_tag;
             fromRadioScratch.moduleConfig.payload_variant.ambient_lighting = moduleConfig.ambient_lighting;
             break;
+#else
+            LOG_DEBUG("Ambient Lighting module excluded from build, skipping");
+            return skipExcludedModuleConfig(buf);
+#endif
         case meshtastic_ModuleConfig_paxcounter_tag:
 #if !MESHTASTIC_EXCLUDE_PAXCOUNTER
             LOG_DEBUG("Send module config: paxcounter");

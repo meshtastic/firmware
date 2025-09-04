@@ -891,12 +891,14 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.detection_sensor.detection_trigger_type = meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_LOGIC_HIGH;
     moduleConfig.detection_sensor.minimum_broadcast_secs = 45;
 
+#if !MESHTASTIC_EXCLUDE_AMBIENTLIGHTING
     moduleConfig.has_ambient_lighting = true;
     moduleConfig.ambient_lighting.current = 10;
     // Default to a color based on our node number
     moduleConfig.ambient_lighting.red = (myNodeInfo.my_node_num & 0xFF0000) >> 16;
     moduleConfig.ambient_lighting.green = (myNodeInfo.my_node_num & 0x00FF00) >> 8;
     moduleConfig.ambient_lighting.blue = myNodeInfo.my_node_num & 0x0000FF;
+#endif
 
     initModuleConfigIntervals();
 }
@@ -1446,7 +1448,9 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
         moduleConfig.has_telemetry = true;
         moduleConfig.has_neighbor_info = true;
         moduleConfig.has_detection_sensor = true;
+#if !MESHTASTIC_EXCLUDE_AMBIENTLIGHTING
         moduleConfig.has_ambient_lighting = true;
+#endif
 #if !MESHTASTIC_EXCLUDE_AUDIO
         moduleConfig.has_audio = true;
 #endif

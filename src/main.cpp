@@ -1560,7 +1560,7 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 #if MESHTASTIC_EXCLUDE_NEIGHBORINFO
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_NEIGHBORINFO_CONFIG;
 #endif
-#if !defined(HAS_RGB_LED) && !RAK_4631
+#if (!defined(HAS_RGB_LED) && !defined(RAK_4631)) || defined(MESHTASTIC_EXCLUDE_AMBIENTLIGHTING)
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_AMBIENTLIGHTING_CONFIG;
 #endif
 

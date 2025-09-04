@@ -1106,12 +1106,12 @@ void AdminModule::handleGetModuleConfig(const meshtastic_MeshPacket &req, const 
 #endif
             break;
         case meshtastic_AdminMessage_ModuleConfigType_AMBIENTLIGHTING_CONFIG:
-#if !defined(HAS_RGB_LED) && !RAK_4631
-            LOG_DEBUG("Ambient Lighting module excluded from build, skipping config");
-#else
+#if !MESHTASTIC_EXCLUDE_AMBIENTLIGHTING
             LOG_INFO("Get module config: Ambient Lighting");
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_ambient_lighting_tag;
             res.get_module_config_response.payload_variant.ambient_lighting = moduleConfig.ambient_lighting;
+#else
+            LOG_DEBUG("Ambient Lighting module excluded from build, skipping config");
 #endif
             break;
         case meshtastic_AdminMessage_ModuleConfigType_PAXCOUNTER_CONFIG:
