@@ -2,13 +2,14 @@
 #define _VARIANT_TINYLORA_C3_
 
 // Board pins configuration for TinyLoRa-C3
+// https://github.com/Mymetu/TinyLora-C3
 
 // Button
 #define BUTTON_PIN 9
 
 // LED
 #define LED_PIN 2
-#define LED_STATE_ON 1  // Pulled high when LED is lit.
+#define LED_STATE_ON 1 // Pulled high when LED is lit.
 
 // Screen & GPS are not present.
 #define HAS_SCREEN 0
@@ -28,19 +29,19 @@
 #define LORA_CS 8
 
 // LoRa
-#define LORA_DIO0 RADIOLIB_NC   // NC
-#define LORA_DIO1 3             // IRQ
-#define LORA_DIO2 RADIOLIB_NC   // Attached internally to rfswitch.
-#define LORA_BUSY 4             
-#define LORA_RESET 5            
+#define LORA_DIO0 RADIOLIB_NC // NC
+#define LORA_DIO1 3           // IRQ
+#define LORA_DIO2 RADIOLIB_NC // Attached internally to rfswitch.
+#define LORA_BUSY 4
+#define LORA_RESET 5
 
-#define SX126X_CS       LORA_CS
-#define SX126X_DIO1     LORA_DIO1
-#define SX126X_BUSY     LORA_BUSY
-#define SX126X_RESET    LORA_RESET
+#define SX126X_CS LORA_CS
+#define SX126X_DIO1 LORA_DIO1
+#define SX126X_BUSY LORA_BUSY
+#define SX126X_RESET LORA_RESET
 #define SX126X_DIO2_AS_RF_SWITCH
 
-/* 
+/*
 
 Tested modules:
 | Mfr          | Module           | TCXO | RF Switch | Notes                                 |
@@ -56,6 +57,6 @@ Tested modules:
 */
 
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8 // reserved for HT-RA62
-#define TCXO_OPTIONAL // make it so that the firmware can try both TCXO and XTAL
+#define TCXO_OPTIONAL                // make it so that the firmware can try both TCXO and XTAL
 
 #endif
