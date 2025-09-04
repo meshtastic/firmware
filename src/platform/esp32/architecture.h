@@ -197,6 +197,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_T_DECK_PRO
 #elif defined(T_LORA_PAGER)
 #define HW_VENDOR meshtastic_HardwareModel_T_LORA_PAGER
+#elif defined(HELTEC_V4)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_V4
 #endif
 
 // -----------------------------------------------------------------------------
