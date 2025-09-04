@@ -1546,7 +1546,9 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 #if NO_EXT_GPIO && NO_GPS || MESHTASTIC_EXCLUDE_SERIAL
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_SERIAL_CONFIG;
 #endif
-#if MESHTASTIC_EXCLUDE_PAXCOUNTER
+#if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_PAXCOUNTER
+    // PAXCOUNTER is only supported on ESP32 due to memory constraints
+#else
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_PAXCOUNTER_CONFIG;
 #endif
 #if MESHTASTIC_EXCLUDE_STOREFORWARD

@@ -34,6 +34,21 @@
 // Flag to indicate a heartbeat was received and we should send queue status
 bool heartbeatReceived = false;
 
+// Helper function to skip excluded module configs and advance state
+size_t PhoneAPI::skipExcludedModuleConfig(uint8_t *buf)
+{
+    config_state++;
+    if (config_state > (_meshtastic_AdminMessage_ModuleConfigType_MAX + 1)) {
+        if (config_nonce == SPECIAL_NONCE_ONLY_CONFIG) {
+            state = STATE_SEND_FILEMANIFEST;
+        } else {
+            state = STATE_SEND_OTHER_NODEINFOS;
+        }
+        config_state = 0;
+    }
+    return getFromRadio(buf);
+}
+
 PhoneAPI::PhoneAPI()
 {
     lastContactMsec = millis();
@@ -361,16 +376,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             break;
 #else
             LOG_DEBUG("External Notification module excluded from build, skipping");
-            config_state++;
-            if (config_state > (_meshtastic_AdminMessage_ModuleConfigType_MAX + 1)) {
-                if (config_nonce == SPECIAL_NONCE_ONLY_CONFIG) {
-                    state = STATE_SEND_FILEMANIFEST;
-                } else {
-                    state = STATE_SEND_OTHER_NODEINFOS;
-                }
-                config_state = 0;
-            }
-            return getFromRadio(buf);
+            return skipExcludedModuleConfig(buf);
 #endif
         case meshtastic_ModuleConfig_store_forward_tag:
 #if !MESHTASTIC_EXCLUDE_STOREFORWARD
@@ -380,16 +386,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             break;
 #else
             LOG_DEBUG("Store & Forward module excluded from build, skipping");
-            config_state++;
-            if (config_state > (_meshtastic_AdminMessage_ModuleConfigType_MAX + 1)) {
-                if (config_nonce == SPECIAL_NONCE_ONLY_CONFIG) {
-                    state = STATE_SEND_FILEMANIFEST;
-                } else {
-                    state = STATE_SEND_OTHER_NODEINFOS;
-                }
-                config_state = 0;
-            }
-            return getFromRadio(buf);
+            return skipExcludedModuleConfig(buf);
 #endif
         case meshtastic_ModuleConfig_range_test_tag:
 #if !MESHTASTIC_EXCLUDE_RANGETEST
@@ -399,17 +396,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             break;
 #else
             LOG_DEBUG("Range Test module excluded from build, skipping");
-            // Skip this config completely - advance to next without sending
-            config_state++;
-            if (config_state > (_meshtastic_AdminMessage_ModuleConfigType_MAX + 1)) {
-                if (config_nonce == SPECIAL_NONCE_ONLY_CONFIG) {
-                    state = STATE_SEND_FILEMANIFEST;
-                } else {
-                    state = STATE_SEND_OTHER_NODEINFOS;
-                }
-                config_state = 0;
-            }
-            return getFromRadio(buf);
+            return skipExcludedModuleConfig(buf);
 #endif
         case meshtastic_ModuleConfig_telemetry_tag:
             LOG_DEBUG("Send module config: telemetry");
@@ -429,17 +416,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             break;
 #else
             LOG_DEBUG("Audio module excluded from build, skipping");
-            // Skip this config completely - advance to next without sending
-            config_state++;
-            if (config_state > (_meshtastic_AdminMessage_ModuleConfigType_MAX + 1)) {
-                if (config_nonce == SPECIAL_NONCE_ONLY_CONFIG) {
-                    state = STATE_SEND_FILEMANIFEST;
-                } else {
-                    state = STATE_SEND_OTHER_NODEINFOS;
-                }
-                config_state = 0;
-            }
-            return getFromRadio(buf);
+            return skipExcludedModuleConfig(buf);
 #endif
         case meshtastic_ModuleConfig_remote_hardware_tag:
             LOG_DEBUG("Send module config: remote hardware");
@@ -469,17 +446,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             break;
 #else
             LOG_DEBUG("Paxcounter module excluded from build, skipping");
-            // Skip this config completely - advance to next without sending
-            config_state++;
-            if (config_state > (_meshtastic_AdminMessage_ModuleConfigType_MAX + 1)) {
-                if (config_nonce == SPECIAL_NONCE_ONLY_CONFIG) {
-                    state = STATE_SEND_FILEMANIFEST;
-                } else {
-                    state = STATE_SEND_OTHER_NODEINFOS;
-                }
-                config_state = 0;
-            }
-            return getFromRadio(buf);
+            return skipExcludedModuleConfig(buf);
 #endif
         default:
             LOG_ERROR("Unknown module config type %d", config_state);

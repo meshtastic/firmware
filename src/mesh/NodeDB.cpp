@@ -1440,7 +1440,9 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
         moduleConfig.has_range_test = true;
 #endif
         moduleConfig.has_serial = true;
+#if !MESHTASTIC_EXCLUDE_STOREFORWARD
         moduleConfig.has_store_forward = true;
+#endif
         moduleConfig.has_telemetry = true;
         moduleConfig.has_neighbor_info = true;
         moduleConfig.has_detection_sensor = true;
