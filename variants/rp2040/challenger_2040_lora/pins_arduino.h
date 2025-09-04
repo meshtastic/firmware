@@ -1,51 +1,51 @@
 #pragma once
 
-#define PINS_COUNT          (25u)
-#define NUM_DIGITAL_PINS    (25u)
-#define NUM_ANALOG_INPUTS   (4u)
-#define NUM_ANALOG_OUTPUTS  (0u)
-#define ADC_RESOLUTION      (12u)
+#define PINS_COUNT (25u)
+#define NUM_DIGITAL_PINS (25u)
+#define NUM_ANALOG_INPUTS (4u)
+#define NUM_ANALOG_OUTPUTS (0u)
+#define ADC_RESOLUTION (12u)
 
 // LEDs
-#define PIN_LED             (24u)
+#define PIN_LED (24u)
 
 // Serial
-#define PIN_SERIAL1_TX      (16u)
-#define PIN_SERIAL1_RX      (17u)
+#define PIN_SERIAL1_TX (16u)
+#define PIN_SERIAL1_RX (17u)
 
 // SPI
-#define PIN_SPI0_MISO       (20u)
-#define PIN_SPI0_MOSI       (23u)
-#define PIN_SPI0_SCK        (22u)
-#define PIN_SPI0_SS         (21u)
+#define PIN_SPI0_MISO (20u)
+#define PIN_SPI0_MOSI (23u)
+#define PIN_SPI0_SCK (22u)
+#define PIN_SPI0_SS (21u)
 
 // Connected to LoRa module
-#define PIN_SPI1_MISO       (12u)
-#define PIN_SPI1_MOSI       (11u)
-#define PIN_SPI1_SCK        (10u)
-#define PIN_SPI1_SS         (9u)
-#define RFM95W_SS           (9u)
-#define RFM95W_DIO0         (14u)
-#define RFM95W_DIO1         (15u)
-#define RFM95W_DIO2         (18u)
-#define RFM95W_RST          (13u)
-#define RFM95W_SPI          SPI1
+#define PIN_SPI1_MISO (12u)
+#define PIN_SPI1_MOSI (11u)
+#define PIN_SPI1_SCK (10u)
+#define PIN_SPI1_SS (9u)
+#define RFM95W_SS (9u)
+#define RFM95W_DIO0 (14u)
+#define RFM95W_DIO1 (15u)
+#define RFM95W_DIO2 (18u)
+#define RFM95W_RST (13u)
+#define RFM95W_SPI SPI1
 
 // Wire
-#define PIN_WIRE0_SDA       (0u)
-#define PIN_WIRE0_SCL       (1u)
+#define PIN_WIRE0_SDA (0u)
+#define PIN_WIRE0_SCL (1u)
 
 // Not pinned out
-#define PIN_WIRE1_SDA       (31u)
-#define PIN_WIRE1_SCL       (31u)
-#define PIN_SERIAL2_RX      (31u)
-#define PIN_SERIAL2_TX      (31u)
+#define PIN_WIRE1_SDA (31u)
+#define PIN_WIRE1_SCL (31u)
+#define PIN_SERIAL2_RX (31u)
+#define PIN_SERIAL2_TX (31u)
 
-#define SERIAL_HOWMANY      (1u)
-#define SPI_HOWMANY         (2u)
-#define WIRE_HOWMANY        (1u)
+#define SERIAL_HOWMANY (1u)
+#define SPI_HOWMANY (2u)
+#define WIRE_HOWMANY (1u)
 
-#define LED_BUILTIN         PIN_LED
+#define LED_BUILTIN PIN_LED
 
 static const uint8_t D0 = (16u);
 static const uint8_t D1 = (17u);
