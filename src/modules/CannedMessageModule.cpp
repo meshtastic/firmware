@@ -632,10 +632,10 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
         // Normal canned message selection
         if (runState == CANNED_MESSAGE_RUN_STATE_INACTIVE || runState == CANNED_MESSAGE_RUN_STATE_DISABLED) {
         } else {
+#if CANNED_MESSAGE_ADD_CONFIRMATION
             // Show confirmation dialog before sending canned message
             NodeNum destNode = dest;
             ChannelIndex chan = channel;
-#if CANNED_MESSAGE_ADD_CONFIRMATION
             graphics::menuHandler::showConfirmationBanner("Send message?", [this, destNode, chan, current]() {
                 this->sendText(destNode, chan, current, false);
                 payload = runState;
@@ -991,7 +991,6 @@ int32_t CannedMessageModule::runOnce()
                 this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
             }
         }
-        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
         this->currentMessageIndex = -1;
         this->freetext = "";
         this->cursor = 0;

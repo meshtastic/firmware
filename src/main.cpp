@@ -419,7 +419,7 @@ void setup()
     struct timeval tv;
     tv.tv_sec = time(NULL);
     tv.tv_usec = 0;
-    perhapsSetRTC(RTCQualityNTP, &tv);
+    perhapsSetRTC(RTCQualityDevice, &tv);
 #endif
 
     powerMonInit();
@@ -741,6 +741,7 @@ void setup()
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::RAK12035, meshtastic_TelemetrySensorType_RAK12035);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::PCT2075, meshtastic_TelemetrySensorType_PCT2075);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::SCD4X, meshtastic_TelemetrySensorType_SCD4X);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::TSL2561, meshtastic_TelemetrySensorType_TSL2561);
 
     i2cScanner.reset();
 #endif
@@ -1525,7 +1526,7 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 #if ((!HAS_SCREEN || NO_EXT_GPIO) || MESHTASTIC_EXCLUDE_CANNEDMESSAGES) && !defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_CANNEDMSG_CONFIG;
 #endif
-#if NO_EXT_GPIO
+#if NO_EXT_GPIO || MESHTASTIC_EXCLUDE_EXTERNALNOTIFICATION
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_EXTNOTIF_CONFIG;
 #endif
 // Only edge case here is if we apply this a device with built in Accelerometer and want to detect interrupts
