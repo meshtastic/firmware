@@ -808,6 +808,14 @@ bool GPS::setup()
             } else {
                 LOG_INFO("GNSS module configuration saved!");
             }
+        } else if (gnssModel == GNSS_MODEL_CM121) {
+            // only ask for RMC and GGA
+            //enable GGA
+            _serial_gps->write("$CFGMSG,0,0,1,1*1B\r\n");
+            delay(250);
+            //enable RMC
+            _serial_gps->write("$CFGMSG,0,4,1,1*1F\r\n");
+            delay(250);
         }
         didSerialInit = true;
     }
@@ -1240,7 +1248,14 @@ GnssModel_t GPS::probe(int serialSpeed)
     _serial_gps->write("$PUBX,40,GSV,0,0,0,0,0,0*59\r\n");
     _serial_gps->write("$PUBX,40,VTG,0,0,0,0,0,0*5E\r\n");
     delay(20);
-
+    // Close NMEA sequences on CM121
+    _serial_gps->write("$CFGMSG,0,0,0,1*1A\r\n");
+    _serial_gps->write("$CFGMSG,0,1,0,1*1B\r\n");
+    _serial_gps->write("$CFGMSG,0,2,0,1*18\r\n");
+    _serial_gps->write("$CFGMSG,0,3,0,1*19\r\n");
+    _serial_gps->write("$CFGMSG,0,4,0,1*1E\r\n");
+    delay(20);
+    
     // Unicore UFirebirdII Series: UC6580, UM620, UM621, UM670A, UM680A, or UM681A
     std::vector<ChipInfo> unicore = {{"UC6580", "UC6580", GNSS_MODEL_UC6580}, {"UM600", "UM600", GNSS_MODEL_UC6580}};
     PROBE_FAMILY("Unicore Family", "$PDTINFO", unicore, 500);
@@ -1262,6 +1277,7 @@ GnssModel_t GPS::probe(int serialSpeed)
 
     PROBE_SIMPLE("LC86", "$PQTMVERNO*58", "$PQTMVERNO,LC86", GNSS_MODEL_AG3352, 500);
     PROBE_SIMPLE("L76K", "$PCAS06,0*1B", "$GPTXT,01,01,02,SW=", GNSS_MODEL_MTK, 500);
+    PROBE_SIMPLE("CM121", "$PDTINFO,*62", "$PDTINFO,CM121", GNSS_MODEL_CM121, 500);
 
     // Close all NMEA sentences, valid for MTK3333 and MTK3339 platforms
     _serial_gps->write("$PMTK514,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*2E\r\n");
