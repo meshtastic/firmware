@@ -175,6 +175,25 @@ WebServerThread::WebServerThread() : concurrency::OSThread("WebServer")
     if (!config.network.wifi_enabled && !config.network.eth_enabled) {
         disable();
     }
+    lastActivityTime = millis();
+}
+
+void WebServerThread::markActivity()
+{
+    lastActivityTime = millis();
+}
+
+int32_t WebServerThread::getAdaptiveInterval()
+{
+    uint32_t timeSinceActivity = millis() - lastActivityTime;
+
+    if (timeSinceActivity < 5000) {
+        return 50;
+    } else if (timeSinceActivity < 30000) {
+        return 200;
+    } else {
+        return 1000;
+    }
 }
 
 int32_t WebServerThread::runOnce()
@@ -189,8 +208,7 @@ int32_t WebServerThread::runOnce()
         ESP.restart();
     }
 
-    // Loop every 5ms.
-    return (5);
+    return getAdaptiveInterval();
 }
 
 void initWebServer()
