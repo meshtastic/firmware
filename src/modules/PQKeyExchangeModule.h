@@ -72,6 +72,23 @@ class PQKeyExchangeModule : public ProtobufModule<meshtastic_PQKeyExchange>
      */
     bool getPQKeyHash(uint8_t hash[32]);
 
+    /**
+     * Called when a new neighbor is discovered with PQ capabilities
+     * Automatically initiates PQ key exchange if appropriate
+     */
+    void onPQCapableNeighborDiscovered(NodeNum nodeNum, uint32_t capabilities);
+
+    /**
+     * Called before sending an encrypted message to check if PQ keys are available
+     * Initiates key exchange if needed
+     */
+    bool ensurePQKeysForNode(NodeNum nodeNum);
+
+    /**
+     * Check if we should attempt PQ exchange with a given node
+     */
+    bool shouldAttemptPQExchange(NodeNum nodeNum);
+
     virtual bool wantUIFrame() { return false; }
 
   protected:

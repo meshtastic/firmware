@@ -527,6 +527,91 @@ bool PQKeyExchangeModule::initiateKeyExchange(NodeNum remoteNode)
     return true;
 }
 
+void PQKeyExchangeModule::onPQCapableNeighborDiscovered(NodeNum nodeNum, uint32_t capabilities)
+{
+    LOG_INFO("PQ Key Exchange: Discovered PQ-capable neighbor 0x%x with capabilities 0x%x", nodeNum, capabilities);
+    
+    // Check if we should attempt automatic key exchange
+    if (!shouldAttemptPQExchange(nodeNum)) {
+        return;
+    }
+    
+    // Check if we already have valid PQ keys for this node
+    if (hasValidPQKeys(nodeNum)) {
+        LOG_DEBUG("PQ Key Exchange: Already have valid keys for 0x%x", nodeNum);
+        return;
+    }
+    
+    // Check if we already have an active session
+    for (auto& [sessionId, session] : activeSessions) {
+        if (session.remoteNode == nodeNum) {
+            LOG_DEBUG("PQ Key Exchange: Active session already exists for 0x%x", nodeNum);
+            return;
+        }
+    }
+    
+    // Initiate automatic key exchange with small delay to avoid collision
+    LOG_INFO("PQ Key Exchange: Initiating automatic exchange with neighbor 0x%x", nodeNum);
+    
+    // Add small random delay (100-500ms) to prevent simultaneous initiation
+    uint32_t delayMs = 100 + (random() % 400);
+    
+    // For now, initiate immediately. TODO: Add timer-based delayed initiation
+    if (!initiateKeyExchange(nodeNum)) {
+        LOG_WARN("PQ Key Exchange: Failed to initiate automatic exchange with 0x%x", nodeNum);
+    }
+}
+
+bool PQKeyExchangeModule::ensurePQKeysForNode(NodeNum nodeNum)
+{
+    // Check if we already have valid PQ keys
+    if (hasValidPQKeys(nodeNum)) {
+        return true;
+    }
+    
+    // Check if the remote node supports PQ
+    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeNum);
+    if (!node || !node->has_user || 
+        !node->user.has_pq_capabilities || 
+        !(node->user.pq_capabilities & PQ_CAP_KYBER_SUPPORT)) {
+        LOG_DEBUG("PQ Key Exchange: Node 0x%x does not support PQ", nodeNum);
+        return false;
+    }
+    
+    LOG_INFO("PQ Key Exchange: Need to establish PQ keys with 0x%x before encryption", nodeNum);
+    
+    // Initiate key exchange
+    return initiateKeyExchange(nodeNum);
+}
+
+bool PQKeyExchangeModule::shouldAttemptPQExchange(NodeNum nodeNum)
+{
+    // Don't exchange with ourselves
+    if (nodeNum == nodeDB->getNodeNum()) {
+        return false;
+    }
+    
+    // Check if we support PQ
+    if (!(getPQCapabilities() & PQ_CAP_KYBER_SUPPORT)) {
+        return false;
+    }
+    
+    // Check if remote node supports PQ
+    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeNum);
+    if (!node || !node->has_user || 
+        !node->user.has_pq_capabilities || 
+        !(node->user.pq_capabilities & PQ_CAP_KYBER_SUPPORT)) {
+        return false;
+    }
+    
+    // Check if both nodes prefer PQ (optional optimization)
+    bool wePreferPQ = getPQCapabilities() & PQ_CAP_PREFER_PQ;
+    bool theyPreferPQ = node->user.pq_capabilities & PQ_CAP_PREFER_PQ;
+    
+    // Attempt exchange if either node prefers PQ or if both support it
+    return (wePreferPQ || theyPreferPQ);
+}
+
 AdminMessageHandleResult PQKeyExchangeModule::handleAdminMessageForModule(const meshtastic_MeshPacket &mp,
                                                                         meshtastic_AdminMessage *request,
                                                                         meshtastic_AdminMessage *response)

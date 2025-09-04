@@ -30,6 +30,19 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     snprintf(p.id, sizeof(p.id), "!%08x", getFrom(&mp));
 
     bool hasChanged = nodeDB->updateUser(getFrom(&mp), p, mp.channel);
+    bool isNewNode = hasChanged; // Simple heuristic: if user changed, likely new or updated node
+
+#if !(MESHTASTIC_EXCLUDE_PQ_CRYPTO)
+    // Check for PQ capabilities and trigger automatic key exchange if appropriate
+    if (pqKeyExchangeModule && p.has_pq_capabilities && (p.pq_capabilities & PQ_CAP_KYBER_SUPPORT)) {
+        LOG_DEBUG("NodeInfo: Detected PQ capabilities (0x%x) from node 0x%x", p.pq_capabilities, getFrom(&mp));
+        
+        // If this is a new PQ-capable node or we don't have keys yet, consider automatic exchange
+        if (isNewNode || !pqKeyExchangeModule->hasValidPQKeys(getFrom(&mp))) {
+            pqKeyExchangeModule->onPQCapableNeighborDiscovered(getFrom(&mp), p.pq_capabilities);
+        }
+    }
+#endif
 
     bool wasBroadcast = isBroadcast(mp.to);
 
