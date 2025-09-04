@@ -417,7 +417,7 @@ void RadioLibInterface::handleReceiveInterrupt()
 
     int state = iface->readData((uint8_t *)&radioBuffer, length);
 #if ARCH_PORTDUINO
-    if (settingsMap[logoutputlevel] == level_trace) {
+    if (portduino_config.logoutputlevel == level_trace) {
         printBytes("Raw incoming packet: ", (uint8_t *)&radioBuffer, length);
     }
 #endif
