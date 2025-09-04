@@ -75,7 +75,7 @@ fi
 
 if [ -f "${FILENAME}" ] && [ -z "${FILENAME##*"update"*}" ]; then
     echo "Trying to flash update ${FILENAME}"
-    $ESPTOOL_CMD --baud 115200 write_flash 0x10000 "${FILENAME}"
+    $ESPTOOL_CMD --baud 115200 write-flash 0x10000 "${FILENAME}"
 else
     show_help
     echo "Invalid file: ${FILENAME}"

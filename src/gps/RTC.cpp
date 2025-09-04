@@ -55,9 +55,9 @@ RTCSetResult readFromRTC()
 
         LOG_DEBUG("Read RTC time from RV3028 getTime as %02d-%02d-%02d %02d:%02d:%02d (%ld)", t.tm_year + 1900, t.tm_mon + 1,
                   t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
-        timeStartMsec = now;
-        zeroOffsetSecs = tv.tv_sec;
         if (currentQuality == RTCQualityNone) {
+            timeStartMsec = now;
+            zeroOffsetSecs = tv.tv_sec;
             currentQuality = RTCQualityDevice;
         }
         return RTCSetResultSuccess;
@@ -94,9 +94,9 @@ RTCSetResult readFromRTC()
 
         LOG_DEBUG("Read RTC time from PCF8563 getDateTime as %02d-%02d-%02d %02d:%02d:%02d (%ld)", t.tm_year + 1900, t.tm_mon + 1,
                   t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
-        timeStartMsec = now;
-        zeroOffsetSecs = tv.tv_sec;
         if (currentQuality == RTCQualityNone) {
+            timeStartMsec = now;
+            zeroOffsetSecs = tv.tv_sec;
             currentQuality = RTCQualityDevice;
         }
         return RTCSetResultSuccess;
@@ -131,6 +131,10 @@ RTCSetResult perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpd
 #ifdef BUILD_EPOCH
     if (tv->tv_sec < BUILD_EPOCH) {
         LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
+        return RTCSetResultInvalidTime;
+    } else if (tv->tv_sec > (BUILD_EPOCH + FORTY_YEARS)) {
+        LOG_WARN("Ignore time (%ld) too far in the future (build epoch: %ld, max allowed: %ld)!", printableEpoch, BUILD_EPOCH,
+                 BUILD_EPOCH + FORTY_YEARS);
         return RTCSetResultInvalidTime;
     }
 #endif
@@ -249,6 +253,10 @@ RTCSetResult perhapsSetRTC(RTCQuality q, struct tm &t)
 #ifdef BUILD_EPOCH
     if (tv.tv_sec < BUILD_EPOCH) {
         LOG_WARN("Ignore time (%ld) before build epoch (%ld)!", printableEpoch, BUILD_EPOCH);
+        return RTCSetResultInvalidTime;
+    } else if (tv.tv_sec > (BUILD_EPOCH + FORTY_YEARS)) {
+        LOG_WARN("Ignore time (%ld) too far in the future (build epoch: %ld, max allowed: %ld)!", printableEpoch, BUILD_EPOCH,
+                 BUILD_EPOCH + FORTY_YEARS);
         return RTCSetResultInvalidTime;
     }
 #endif

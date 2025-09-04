@@ -192,6 +192,8 @@ ScanI2C::DeviceAddress cardkb_found = ScanI2C::ADDRESS_NONE;
 uint8_t kb_model;
 // global bool to record that a kb is present
 bool kb_found = false;
+// global bool to record that on-screen keyboard (OSK) is present
+bool osk_found = false;
 
 // The I2C address of the RTC Module (if found)
 ScanI2C::DeviceAddress rtc_found = ScanI2C::ADDRESS_NONE;
@@ -388,7 +390,7 @@ void setup()
 
     concurrency::hasBeenSetup = true;
 #if ARCH_PORTDUINO
-    SPISettings spiSettings(settingsMap[spiSpeed], MSBFIRST, SPI_MODE0);
+    SPISettings spiSettings(portduino_config.spiSpeed, MSBFIRST, SPI_MODE0);
 #else
     SPISettings spiSettings(4000000, MSBFIRST, SPI_MODE0);
 #endif
@@ -419,7 +421,7 @@ void setup()
     struct timeval tv;
     tv.tv_sec = time(NULL);
     tv.tv_usec = 0;
-    perhapsSetRTC(RTCQualityNTP, &tv);
+    perhapsSetRTC(RTCQualityDevice, &tv);
 #endif
 
     powerMonInit();
@@ -533,9 +535,9 @@ void setup()
 #elif defined(I2C_SDA) && !defined(ARCH_RP2040)
     Wire.begin(I2C_SDA, I2C_SCL);
 #elif defined(ARCH_PORTDUINO)
-    if (settingsStrings[i2cdev] != "") {
-        LOG_INFO("Use %s as I2C device", settingsStrings[i2cdev].c_str());
-        Wire.begin(settingsStrings[i2cdev].c_str());
+    if (portduino_config.i2cdev != "") {
+        LOG_INFO("Use %s as I2C device", portduino_config.i2cdev.c_str());
+        Wire.begin(portduino_config.i2cdev.c_str());
     } else {
         LOG_INFO("No I2C device configured, Skip");
     }
@@ -581,7 +583,7 @@ void setup()
 #if defined(I2C_SDA)
     i2cScanner->scanPort(ScanI2C::I2CPort::WIRE);
 #elif defined(ARCH_PORTDUINO)
-    if (settingsStrings[i2cdev] != "") {
+    if (portduino_config.i2cdev != "") {
         LOG_INFO("Scan for i2c devices");
         i2cScanner->scanPort(ScanI2C::I2CPort::WIRE);
     }
@@ -854,7 +856,7 @@ void setup()
     SPI.begin(false);
 #endif // HW_SPI1_DEVICE
 #elif ARCH_PORTDUINO
-    if (settingsStrings[spidev] != "ch341") {
+    if (portduino_config.lora_spi_dev != "ch341") {
         SPI.begin();
     }
 #elif !defined(ARCH_ESP32) // ARCH_RP2040
@@ -880,7 +882,7 @@ void setup()
     defined(ST7789_CS) || defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(ST7796_CS)
         screen = new graphics::Screen(screen_found, screen_model, screen_geometry);
 #elif defined(ARCH_PORTDUINO)
-        if ((screen_found.port != ScanI2C::I2CPort::NO_I2C || settingsMap[displayPanel]) &&
+        if ((screen_found.port != ScanI2C::I2CPort::NO_I2C || portduino_config.displayPanel) &&
             config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
             screen = new graphics::Screen(screen_found, screen_model, screen_geometry);
         }
@@ -981,13 +983,13 @@ void setup()
 #endif
 #if defined(ARCH_PORTDUINO)
 
-    if (settingsMap.count(userButtonPin) != 0 && settingsMap[userButtonPin] != RADIOLIB_NC) {
+    if (portduino_config.userButtonPin.enabled) {
 
-        LOG_DEBUG("Use GPIO%02d for button", settingsMap[userButtonPin]);
+        LOG_DEBUG("Use GPIO%02d for button", portduino_config.userButtonPin.pin);
         UserButtonThread = new ButtonThread("UserButton");
         if (screen) {
             ButtonConfig config;
-            config.pinNumber = (uint8_t)settingsMap[userButtonPin];
+            config.pinNumber = (uint8_t)portduino_config.userButtonPin.pin;
             config.activeLow = true;
             config.activePullup = true;
             config.pullupSense = INPUT_PULLUP;
@@ -1144,7 +1146,7 @@ void setup()
     if (screen)
         screen->setup();
 #elif defined(ARCH_PORTDUINO)
-    if ((screen_found.port != ScanI2C::I2CPort::NO_I2C || settingsMap[displayPanel]) &&
+    if ((screen_found.port != ScanI2C::I2CPort::NO_I2C || portduino_config.displayPanel) &&
         config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
         screen->setup();
     }
@@ -1160,15 +1162,10 @@ void setup()
 #endif
 
 #ifdef ARCH_PORTDUINO
-    const struct {
-        configNames cfgName;
-        std::string strName;
-    } loraModules[] = {{use_rf95, "RF95"},     {use_sx1262, "sx1262"}, {use_sx1268, "sx1268"}, {use_sx1280, "sx1280"},
-                       {use_lr1110, "lr1110"}, {use_lr1120, "lr1120"}, {use_lr1121, "lr1121"}, {use_llcc68, "LLCC68"}};
     // as one can't use a function pointer to the class constructor:
-    auto loraModuleInterface = [](configNames cfgName, LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq,
-                                  RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE busy) {
-        switch (cfgName) {
+    auto loraModuleInterface = [](LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
+                                  RADIOLIB_PIN_TYPE busy) {
+        switch (portduino_config.lora_module) {
         case use_rf95:
             return (RadioInterface *)new RF95Interface(hal, cs, irq, rst, busy);
         case use_sx1262:
@@ -1185,31 +1182,34 @@ void setup()
             return (RadioInterface *)new LR1121Interface(hal, cs, irq, rst, busy);
         case use_llcc68:
             return (RadioInterface *)new LLCC68Interface(hal, cs, irq, rst, busy);
+        case use_simradio:
+            return (RadioInterface *)new SimRadio;
         default:
             assert(0); // shouldn't happen
             return (RadioInterface *)nullptr;
         }
     };
-    for (auto &loraModule : loraModules) {
-        if (settingsMap[loraModule.cfgName] && !rIf) {
-            LOG_DEBUG("Activate %s radio on SPI port %s", loraModule.strName.c_str(), settingsStrings[spidev].c_str());
-            if (settingsStrings[spidev] == "ch341") {
-                RadioLibHAL = ch341Hal;
-            } else {
-                RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
-            }
-            rIf = loraModuleInterface(loraModule.cfgName, (LockingArduinoHal *)RadioLibHAL, settingsMap[cs_pin],
-                                      settingsMap[irq_pin], settingsMap[reset_pin], settingsMap[busy_pin]);
-            if (!rIf->init()) {
-                LOG_WARN("No %s radio", loraModule.strName.c_str());
-                delete rIf;
-                rIf = NULL;
-                exit(EXIT_FAILURE);
-            } else {
-                LOG_INFO("%s init success", loraModule.strName.c_str());
-            }
-        }
+
+    LOG_DEBUG("Activate %s radio on SPI port %s", portduino_config.loraModules[portduino_config.lora_module].c_str(),
+              portduino_config.lora_spi_dev.c_str());
+    if (portduino_config.lora_spi_dev == "ch341") {
+        RadioLibHAL = ch341Hal;
+    } else {
+        RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
     }
+    rIf =
+        loraModuleInterface((LockingArduinoHal *)RadioLibHAL, portduino_config.lora_cs_pin.pin, portduino_config.lora_irq_pin.pin,
+                            portduino_config.lora_reset_pin.pin, portduino_config.lora_busy_pin.pin);
+
+    if (!rIf->init()) {
+        LOG_WARN("No %s radio", portduino_config.loraModules[portduino_config.lora_module].c_str());
+        delete rIf;
+        rIf = NULL;
+        exit(EXIT_FAILURE);
+    } else {
+        LOG_INFO("%s init success", portduino_config.loraModules[portduino_config.lora_module].c_str());
+    }
+
 #elif defined(HW_SPI1_DEVICE)
     LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI1, spiSettings);
 #else // HW_SPI1_DEVICE
@@ -1227,20 +1227,6 @@ void setup()
         } else {
             LOG_INFO("STM32WL init success");
             radioType = STM32WLx_RADIO;
-        }
-    }
-#endif
-
-#if defined(ARCH_PORTDUINO)
-    if (!rIf) {
-        rIf = new SimRadio;
-        if (!rIf->init()) {
-            LOG_WARN("No simulated radio");
-            delete rIf;
-            rIf = NULL;
-        } else {
-            LOG_INFO("Use SIMULATED radio!");
-            radioType = SIM_RADIO;
         }
     }
 #endif
@@ -1448,6 +1434,10 @@ void setup()
 #endif
 #endif
 
+#if defined(HAS_TRACKBALL) || (defined(INPUTDRIVER_ENCODER_TYPE) && INPUTDRIVER_ENCODER_TYPE == 2)
+    osk_found = true;
+#endif
+
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WEBSERVER
     // Start web server thread.
     webServerThread = new WebServerThread();
@@ -1455,7 +1445,7 @@ void setup()
 
 #ifdef ARCH_PORTDUINO
 #if __has_include(<ulfius.h>)
-    if (settingsMap[webserverport] != -1) {
+    if (portduino_config.webserverport != -1) {
         piwebServerThread = new PiWebServerThread();
         std::atexit([] { delete piwebServerThread; });
     }
@@ -1526,7 +1516,7 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 #if ((!HAS_SCREEN || NO_EXT_GPIO) || MESHTASTIC_EXCLUDE_CANNEDMESSAGES) && !defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_CANNEDMSG_CONFIG;
 #endif
-#if NO_EXT_GPIO
+#if NO_EXT_GPIO || MESHTASTIC_EXCLUDE_EXTERNALNOTIFICATION
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_EXTNOTIF_CONFIG;
 #endif
 // Only edge case here is if we apply this a device with built in Accelerometer and want to detect interrupts
