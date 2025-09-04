@@ -357,15 +357,51 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
     bool decrypted = false;
     ChannelIndex chIndex = 0;
 #if !(MESHTASTIC_EXCLUDE_PKI)
-    // Attempt PKI decryption first
+    // Attempt PKI decryption first (PQ-primary, then classical fallback)
     if (p->channel == 0 && isToUs(p) && p->to > 0 && !isBroadcast(p->to) && nodeDB->getMeshNode(p->from) != nullptr &&
         nodeDB->getMeshNode(p->from)->user.public_key.size > 0 && nodeDB->getMeshNode(p->to)->user.public_key.size > 0 &&
         rawSize > MESHTASTIC_PKC_OVERHEAD) {
         LOG_DEBUG("Attempt PKI decryption");
 
-        if (crypto->decryptCurve25519(p->from, nodeDB->getMeshNode(p->from)->user.public_key, p->id, rawSize, p->encrypted.bytes,
+#if !(MESHTASTIC_EXCLUDE_PQ_CRYPTO)
+        // First try PQ-primary decryption if packet has PQ overhead
+        meshtastic_NodeInfoLite *senderNode = nodeDB->getMeshNode(p->from);
+        if (crypto->hasValidKyberKeys() && senderNode &&
+            (senderNode->user.has_pq_capabilities && senderNode->user.pq_capabilities & PQ_CAP_KYBER_SUPPORT) &&
+            rawSize > (MESHTASTIC_PKC_OVERHEAD + crypto->getKyberPacketOverhead())) {
+            
+            LOG_DEBUG("Attempting PQ-primary decryption from 0x%x", p->from);
+            
+            if (crypto->decryptKyber(p->from, p->id, rawSize, p->encrypted.bytes, bytes)) {
+                LOG_INFO("PQ-primary decryption worked!");
+                
+                meshtastic_Data decodedtmp;
+                memset(&decodedtmp, 0, sizeof(decodedtmp));
+                rawSize -= crypto->getKyberPacketOverhead();
+                if (pb_decode_from_bytes(bytes, rawSize, &meshtastic_Data_msg, &decodedtmp) &&
+                    decodedtmp.portnum != meshtastic_PortNum_UNKNOWN_APP) {
+                    decrypted = true;
+                    LOG_INFO("Packet decrypted using PQ-primary!");
+                    p->pki_encrypted = true;
+                    memcpy(&p->public_key.bytes, senderNode->user.public_key.bytes, 32);
+                    p->public_key.size = 32;
+                    p->decoded = decodedtmp;
+                    p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // change type to decoded
+                } else {
+                    LOG_ERROR("PQ decrypted, but pb_decode failed!");
+                    return DecodeState::DECODE_FAILURE;
+                }
+            } else {
+                LOG_WARN("PQ decryption attempted but failed, trying classical fallback");
+            }
+        }
+#endif
+        
+        // If PQ decryption failed or not available, try classical Curve25519
+        if (!decrypted &&
+            crypto->decryptCurve25519(p->from, nodeDB->getMeshNode(p->from)->user.public_key, p->id, rawSize, p->encrypted.bytes,
                                       bytes)) {
-            LOG_INFO("PKI Decryption worked!");
+            LOG_INFO("Classical PKI Decryption worked!");
 
             meshtastic_Data decodedtmp;
             memset(&decodedtmp, 0, sizeof(decodedtmp));
@@ -373,18 +409,18 @@ DecodeState perhapsDecode(meshtastic_MeshPacket *p)
             if (pb_decode_from_bytes(bytes, rawSize, &meshtastic_Data_msg, &decodedtmp) &&
                 decodedtmp.portnum != meshtastic_PortNum_UNKNOWN_APP) {
                 decrypted = true;
-                LOG_INFO("Packet decrypted using PKI!");
+                LOG_INFO("Packet decrypted using classical PKI!");
                 p->pki_encrypted = true;
                 memcpy(&p->public_key.bytes, nodeDB->getMeshNode(p->from)->user.public_key.bytes, 32);
                 p->public_key.size = 32;
                 p->decoded = decodedtmp;
                 p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // change type to decoded
             } else {
-                LOG_ERROR("PKC Decrypted, but pb_decode failed!");
+                LOG_ERROR("Classical PKI Decrypted, but pb_decode failed!");
                 return DecodeState::DECODE_FAILURE;
             }
-        } else {
-            LOG_WARN("PKC decrypt attempted but failed!");
+        } else if (!decrypted) {
+            LOG_WARN("All PKI decrypt attempts failed!");
         }
     }
 #endif
@@ -551,40 +587,39 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
                          *node->user.public_key.bytes);
                 return meshtastic_Routing_Error_PKI_FAILED;
             }
-            // Check if we should use hybrid PQ+classical encryption
+            // Check if we should use PQ-primary encryption
 #if !(MESHTASTIC_EXCLUDE_PQ_CRYPTO)
-            bool usePQHybrid = (pqKeyExchangeModule && 
-                               pqKeyExchangeModule->hasValidPQKeys(p->to) &&
-                               (node->user.has_pq_capabilities && 
-                                node->user.pq_capabilities & PQ_CAP_KYBER_SUPPORT) &&
-                               crypto->hasValidKyberKeys());
+            bool usePQPrimary = (pqKeyExchangeModule && 
+                                pqKeyExchangeModule->hasValidPQKeys(p->to) &&
+                                (node->user.has_pq_capabilities && 
+                                 node->user.pq_capabilities & PQ_CAP_KYBER_SUPPORT) &&
+                                crypto->hasValidKyberKeys());
             
-            if (usePQHybrid) {
-                LOG_INFO("Using Hybrid PQ+Classical encryption for node 0x%x", p->to);
+            if (usePQPrimary) {
+                LOG_INFO("Using PQ-primary (Kyber-only) encryption for node 0x%x", p->to);
                 
-                // Get the stored PQ public key for the destination using PQKeyExchangeModule
+                // Get the stored PQ public key for the destination
                 uint8_t pqPubKey[PQCrypto::Kyber::PublicKeySize];
                 
                 if (pqKeyExchangeModule->getPQPublicKey(p->to, pqPubKey, sizeof(pqPubKey))) {
                     
-                    // Use hybrid encryption
-                    if (crypto->encryptHybrid(p->to, getFrom(p), node->user.public_key.bytes, pqPubKey,
-                                            p->id, numbytes, bytes, p->encrypted.bytes)) {
+                    // Use PQ-only encryption (not hybrid)
+                    if (crypto->encryptKyber(p->to, getFrom(p), pqPubKey, p->id, numbytes, bytes, p->encrypted.bytes)) {
                         
-                        // Hybrid encryption adds both classical and PQ overhead
-                        numbytes += MESHTASTIC_PKC_OVERHEAD + crypto->getKyberPacketOverhead();
+                        // PQ encryption adds only Kyber overhead (no classical PKI overhead)
+                        numbytes += crypto->getKyberPacketOverhead();
                         p->channel = 0;
                         p->pki_encrypted = true;
                         
-                        LOG_INFO("Hybrid PQ+Classical encryption successful, size: %zu", numbytes);
+                        LOG_INFO("PQ-primary encryption successful, size: %zu", numbytes);
                     } else {
-                        LOG_ERROR("Hybrid encryption failed, falling back to classical PKI");
+                        LOG_ERROR("PQ encryption failed, falling back to classical PKI");
                         // Fall through to classical encryption
-                        usePQHybrid = false;
+                        usePQPrimary = false;
                     }
                 } else {
                     LOG_WARN("PQ public key not found for node 0x%x, falling back to classical", p->to);
-                    usePQHybrid = false;
+                    usePQPrimary = false;
                 }
             } else if (pqKeyExchangeModule && 
                       (node->user.has_pq_capabilities && node->user.pq_capabilities & PQ_CAP_KYBER_SUPPORT) &&
@@ -599,8 +634,8 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
                 // Continue with classical encryption for this packet
             }
             
-            // Only do classical encryption if hybrid wasn't successful
-            if (!usePQHybrid) {
+            // Only do classical encryption if PQ wasn't successful
+            if (!usePQPrimary) {
 #endif
                 LOG_DEBUG("Using classical Curve25519 PKI encryption");
                 crypto->encryptCurve25519(p->to, getFrom(p), node->user.public_key, p->id, numbytes, bytes, p->encrypted.bytes);
