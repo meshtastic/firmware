@@ -61,6 +61,13 @@ typedef struct _meshtastic_UserLite {
     /* Whether or not the node can be messaged */
     bool has_is_unmessagable;
     bool is_unmessagable;
+    /* Post-quantum public key for this node (Kyber key - 800 bytes)
+ Only stored locally, not transmitted in regular node broadcasts */
+    pb_callback_t pq_public_key;
+    /* Post-quantum capabilities flags for this node
+ Mirrors the pq_capabilities field from User message */
+    bool has_pq_capabilities;
+    uint32_t pq_capabilities;
 } meshtastic_UserLite;
 
 typedef struct _meshtastic_NodeInfoLite {
@@ -189,14 +196,14 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define meshtastic_PositionLite_init_default     {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN}
-#define meshtastic_UserLite_init_default         {{0}, "", "", _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}, false, 0}
+#define meshtastic_UserLite_init_default         {{0}, "", "", _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}, false, 0, {{NULL}, NULL}, false, 0}
 #define meshtastic_NodeInfoLite_init_default     {0, false, meshtastic_UserLite_init_default, false, meshtastic_PositionLite_init_default, 0, 0, false, meshtastic_DeviceMetrics_init_default, 0, 0, false, 0, 0, 0, 0, 0}
 #define meshtastic_DeviceState_init_default      {false, meshtastic_MyNodeInfo_init_default, false, meshtastic_User_init_default, 0, {meshtastic_MeshPacket_init_default}, false, meshtastic_MeshPacket_init_default, 0, 0, 0, false, meshtastic_MeshPacket_init_default, 0, {meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default}}
 #define meshtastic_NodeDatabase_init_default     {0, {0}}
 #define meshtastic_ChannelFile_init_default      {0, {meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default}, 0}
 #define meshtastic_BackupPreferences_init_default {0, 0, false, meshtastic_LocalConfig_init_default, false, meshtastic_LocalModuleConfig_init_default, false, meshtastic_ChannelFile_init_default, false, meshtastic_User_init_default}
 #define meshtastic_PositionLite_init_zero        {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN}
-#define meshtastic_UserLite_init_zero            {{0}, "", "", _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}, false, 0}
+#define meshtastic_UserLite_init_zero            {{0}, "", "", _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}, false, 0, {{NULL}, NULL}, false, 0}
 #define meshtastic_NodeInfoLite_init_zero        {0, false, meshtastic_UserLite_init_zero, false, meshtastic_PositionLite_init_zero, 0, 0, false, meshtastic_DeviceMetrics_init_zero, 0, 0, false, 0, 0, 0, 0, 0}
 #define meshtastic_DeviceState_init_zero         {false, meshtastic_MyNodeInfo_init_zero, false, meshtastic_User_init_zero, 0, {meshtastic_MeshPacket_init_zero}, false, meshtastic_MeshPacket_init_zero, 0, 0, 0, false, meshtastic_MeshPacket_init_zero, 0, {meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero}}
 #define meshtastic_NodeDatabase_init_zero        {0, {0}}
@@ -217,6 +224,8 @@ extern "C" {
 #define meshtastic_UserLite_role_tag             6
 #define meshtastic_UserLite_public_key_tag       7
 #define meshtastic_UserLite_is_unmessagable_tag  9
+#define meshtastic_UserLite_pq_public_key_tag    10
+#define meshtastic_UserLite_pq_capabilities_tag  11
 #define meshtastic_NodeInfoLite_num_tag          1
 #define meshtastic_NodeInfoLite_user_tag         2
 #define meshtastic_NodeInfoLite_position_tag     3
@@ -268,8 +277,10 @@ X(a, STATIC,   SINGULAR, UENUM,    hw_model,          4) \
 X(a, STATIC,   SINGULAR, BOOL,     is_licensed,       5) \
 X(a, STATIC,   SINGULAR, UENUM,    role,              6) \
 X(a, STATIC,   SINGULAR, BYTES,    public_key,        7) \
-X(a, STATIC,   OPTIONAL, BOOL,     is_unmessagable,   9)
-#define meshtastic_UserLite_CALLBACK NULL
+X(a, STATIC,   OPTIONAL, BOOL,     is_unmessagable,   9) \
+X(a, CALLBACK, OPTIONAL, BYTES,    pq_public_key,    10) \
+X(a, STATIC,   OPTIONAL, UINT32,   pq_capabilities,  11)
+#define meshtastic_UserLite_CALLBACK pb_default_field_callback
 #define meshtastic_UserLite_DEFAULT NULL
 
 #define meshtastic_NodeInfoLite_FIELDLIST(X, a) \
@@ -358,11 +369,11 @@ extern const pb_msgdesc_t meshtastic_BackupPreferences_msg;
 #define meshtastic_BackupPreferences_fields &meshtastic_BackupPreferences_msg
 
 /* Maximum encoded size of messages (where known) */
+/* meshtastic_UserLite_size depends on runtime parameters */
+/* meshtastic_NodeInfoLite_size depends on runtime parameters */
 /* meshtastic_NodeDatabase_size depends on runtime parameters */
 #define meshtastic_ChannelFile_size              718
-#define meshtastic_NodeInfoLite_size             196
 #define meshtastic_PositionLite_size             28
-#define meshtastic_UserLite_size                 98
 #if defined(meshtastic_User_size)
 #define MESHTASTIC_MESHTASTIC_DEVICEONLY_PB_H_MAX_SIZE meshtastic_BackupPreferences_size
 #define meshtastic_BackupPreferences_size        (2160 + meshtastic_User_size)
