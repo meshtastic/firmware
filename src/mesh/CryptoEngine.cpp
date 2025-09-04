@@ -233,6 +233,150 @@ size_t CryptoEngine::getKyberPacketOverhead()
     return 12 + CRYPTO_CIPHERTEXTBYTES; // auth(8) + extra_nonce(4) + Kyber ciphertext
 }
 
+/**
+ * Hybrid PQ+Classical encryption combining Kyber and Curve25519
+ * This provides quantum resistance while maintaining backward compatibility
+ */
+bool CryptoEngine::encryptHybrid(uint32_t toNode, uint32_t fromNode, 
+                                const uint8_t *classicalPubKey, const uint8_t *pqPubKey,
+                                uint64_t packetNum, size_t numBytes, 
+                                const uint8_t *bytes, uint8_t *bytesOut)
+{
+    LOG_DEBUG("Starting hybrid PQ+Classical encryption");
+    
+    if (!pq_keys_valid) {
+        LOG_ERROR("No valid Kyber keys for hybrid encryption");
+        return false;
+    }
+    
+    // Step 1: Perform KYBER KEM
+    uint8_t kyber_ciphertext[CRYPTO_CIPHERTEXTBYTES];
+    uint8_t kyber_shared_secret[CRYPTO_BYTES];
+    
+    if (!kyber.encap(kyber_ciphertext, kyber_shared_secret, pqPubKey)) {
+        LOG_ERROR("Kyber encapsulation failed in hybrid mode");
+        return false;
+    }
+    
+    // Step 2: Perform Classical Curve25519 ECDH 
+    uint8_t classical_shared_secret[32];
+    meshtastic_UserLite_public_key_t classical_key;
+    classical_key.size = 32;
+    memcpy(classical_key.bytes, classicalPubKey, 32);
+    
+    if (!setDHPublicKey(classical_key.bytes)) {
+        LOG_ERROR("Classical ECDH failed in hybrid mode");
+        return false;
+    }
+    hash(classical_shared_secret, 32);
+    
+    // Step 3: Combine both shared secrets using domain-separated hash
+    uint8_t combined_secret[96]; // 32 + 32 + 32 for domain separation
+    memcpy(combined_secret, kyber_shared_secret, CRYPTO_BYTES);
+    memcpy(combined_secret + CRYPTO_BYTES, classical_shared_secret, 32);
+    
+    // Add domain separation
+    const char *domain = "HYBRID_PQ_CLASSICAL_v1";
+    memcpy(combined_secret + 64, domain, 32);
+    
+    // Step 4: Derive AES session key from combined secret
+    uint8_t session_key[32];
+    SHA256 hash;
+    hash.update(combined_secret, sizeof(combined_secret));
+    hash.update((uint8_t*)&fromNode, sizeof(fromNode));
+    hash.update((uint8_t*)&toNode, sizeof(toNode));
+    hash.finalize(session_key, 32);
+    
+    // Step 5: Encrypt the message with AES-CCM
+    long extraNonceTmp = random();
+    initNonce(fromNode, packetNum, extraNonceTmp);
+    
+    uint8_t *auth = bytesOut + numBytes;
+    aes_ccm_ae(session_key, 32, nonce, 8, bytes, numBytes, nullptr, 0, bytesOut, auth);
+    
+    // Step 6: Append Kyber ciphertext and extra nonce
+    memcpy(auth + 8, &extraNonceTmp, sizeof(uint32_t));
+    memcpy(auth + 12, kyber_ciphertext, CRYPTO_CIPHERTEXTBYTES);
+    
+    LOG_INFO("Hybrid encryption completed: %zu bytes + %zu overhead", 
+             numBytes, 12 + CRYPTO_CIPHERTEXTBYTES);
+    
+    return true;
+}
+
+/**
+ * Hybrid PQ+Classical decryption
+ */
+bool CryptoEngine::decryptHybrid(uint32_t fromNode, uint64_t packetNum, 
+                                size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut)
+{
+    LOG_DEBUG("Starting hybrid PQ+Classical decryption");
+    
+    if (!pq_keys_valid) {
+        LOG_ERROR("No valid Kyber keys for hybrid decryption");
+        return false;
+    }
+    
+    size_t payload_len = numBytes - 12 - CRYPTO_CIPHERTEXTBYTES;
+    const uint8_t *auth = bytes + payload_len;
+    
+    uint32_t extraNonce;
+    memcpy(&extraNonce, auth + 8, sizeof(uint32_t));
+    
+    const uint8_t *kyber_ciphertext = auth + 12;
+    
+    // Step 1: Perform KYBER decapsulation
+    uint8_t kyber_shared_secret[CRYPTO_BYTES];
+    
+    if (!kyber.decap(kyber_shared_secret, kyber_ciphertext, pq_private_key)) {
+        LOG_ERROR("Kyber decapsulation failed in hybrid mode");
+        return false;
+    }
+    
+    // Step 2: Perform Classical Curve25519 ECDH with sender's stored public key
+    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(fromNode);
+    if (!node || node->user.public_key.size != 32) {
+        LOG_ERROR("No classical public key found for node 0x%x", fromNode);
+        return false;
+    }
+    
+    uint8_t classical_shared_secret[32];
+    if (!setDHPublicKey(node->user.public_key.bytes)) {
+        LOG_ERROR("Classical ECDH failed in hybrid decryption");
+        return false;
+    }
+    hash(classical_shared_secret, 32);
+    
+    // Step 3: Combine both shared secrets (same as encryption)
+    uint8_t combined_secret[96];
+    memcpy(combined_secret, kyber_shared_secret, CRYPTO_BYTES);
+    memcpy(combined_secret + CRYPTO_BYTES, classical_shared_secret, 32);
+    
+    const char *domain = "HYBRID_PQ_CLASSICAL_v1";
+    memcpy(combined_secret + 64, domain, 32);
+    
+    // Step 4: Derive AES session key
+    uint8_t session_key[32];
+    SHA256 hash;
+    hash.update(combined_secret, sizeof(combined_secret));
+    hash.update((uint8_t*)&fromNode, sizeof(fromNode));
+    hash.update((uint8_t*)&nodeDB->getNodeNum(), sizeof(uint32_t)); // our node as toNode
+    hash.finalize(session_key, 32);
+    
+    // Step 5: Decrypt with AES-CCM
+    initNonce(fromNode, packetNum, extraNonce);
+    
+    bool success = aes_ccm_ad(session_key, 32, nonce, 8, bytes, payload_len, nullptr, 0, auth, bytesOut);
+    
+    if (success) {
+        LOG_INFO("Hybrid decryption successful: %zu bytes", payload_len);
+    } else {
+        LOG_ERROR("Hybrid decryption failed");
+    }
+    
+    return success;
+}
+
 #endif // not MESHTASTIC_EXCLUDE_PQ_CRYPTO
 
 /**

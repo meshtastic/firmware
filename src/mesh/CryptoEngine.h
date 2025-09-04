@@ -70,6 +70,14 @@ public:
     virtual void deriveSessionKey(const uint8_t *shared_secret, size_t secret_len, 
                                  uint32_t fromNode, uint32_t toNode, uint8_t *session_key);
     virtual size_t getKyberPacketOverhead();
+    
+    // Hybrid PQ+Classical encryption
+    virtual bool encryptHybrid(uint32_t toNode, uint32_t fromNode, 
+                              const uint8_t *classicalPubKey, const uint8_t *pqPubKey,
+                              uint64_t packetNum, size_t numBytes, 
+                              const uint8_t *bytes, uint8_t *bytesOut);
+    virtual bool decryptHybrid(uint32_t fromNode, uint64_t packetNum, 
+                              size_t numBytes, const uint8_t *bytes, uint8_t *bytesOut);
 #endif
 #endif
 
