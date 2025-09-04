@@ -1194,7 +1194,9 @@ void NodeDB::loadFromDisk()
     meshNodes->resize(MAX_NUM_NODES);
 
     // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
-    state = loadProto(deviceStateFileName, meshtastic_DeviceState_size, sizeof(meshtastic_DeviceState),
+    size_t deviceStateSize;
+    pb_get_encoded_size(&deviceStateSize, meshtastic_DeviceState_fields, &devicestate);
+    state = loadProto(deviceStateFileName, deviceStateSize, sizeof(meshtastic_DeviceState),
                       &meshtastic_DeviceState_msg, &devicestate);
 
     // See https://github.com/meshtastic/firmware/issues/4184#issuecomment-2269390786
@@ -1388,7 +1390,9 @@ bool NodeDB::saveDeviceStateToDisk()
 #endif
     // Note: if MAX_NUM_NODES=100 and meshtastic_NodeInfoLite_size=166, so will be approximately 17KB
     // Because so huge we _must_ not use fullAtomic, because the filesystem is probably too small to hold two copies of this
-    return saveProto(deviceStateFileName, meshtastic_DeviceState_size, &meshtastic_DeviceState_msg, &devicestate, true);
+    size_t deviceStateSize;
+    pb_get_encoded_size(&deviceStateSize, meshtastic_DeviceState_fields, &devicestate);
+    return saveProto(deviceStateFileName, deviceStateSize, &meshtastic_DeviceState_msg, &devicestate, true);
 }
 
 bool NodeDB::saveNodeDatabaseToDisk()
@@ -1950,7 +1954,9 @@ bool NodeDB::restorePreferences(meshtastic_AdminMessage_BackupLocation location,
             spiLock->unlock();
         }
         meshtastic_BackupPreferences backup = meshtastic_BackupPreferences_init_zero;
-        success = loadProto(backupFileName, meshtastic_BackupPreferences_size, sizeof(meshtastic_BackupPreferences),
+        size_t backupSize;
+        pb_get_encoded_size(&backupSize, meshtastic_BackupPreferences_fields, &backup);
+        success = loadProto(backupFileName, backupSize, sizeof(meshtastic_BackupPreferences),
                             &meshtastic_BackupPreferences_msg, &backup);
         if (success) {
             if (restoreWhat & SEGMENT_CONFIG) {

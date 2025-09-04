@@ -133,7 +133,6 @@ bool PQKeyExchangeModule::handleKeyExchangeRequest(const meshtastic_MeshPacket &
     // Send our public key in fragments
     for (uint32_t i = 0; i < totalFragments; i++) {
         const size_t fragmentStart = i * PQ_KEY_FRAGMENT_SIZE;
-        const size_t fragmentSize = min(PQ_KEY_FRAGMENT_SIZE, keySize - fragmentStart);
         
         if (!sendKeyFragment(mp.from, session->sessionId, 
                            ourPublicKey + fragmentStart, keySize, i, totalFragments)) {
@@ -369,16 +368,31 @@ bool PQKeyExchangeModule::getPQKeyHash(uint8_t hash[32])
 
 bool PQKeyExchangeModule::hasValidPQKeys(NodeNum remoteNode)
 {
-    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(remoteNode);
-    if (!node || !node->has_user) {
+    // Check our internal storage for PQ keys
+    auto it = pqKeyStorage.find(remoteNode);
+    if (it != pqKeyStorage.end() && it->second.size() == PQCrypto::Kyber::PublicKeySize) {
+        return true;
+    }
+    
+    return false;
+}
+
+bool PQKeyExchangeModule::getPQPublicKey(NodeNum nodeNum, uint8_t* keyOut, size_t keySize)
+{
+    if (!keyOut || keySize < PQCrypto::Kyber::PublicKeySize) {
+        LOG_ERROR("PQ Key Exchange: Invalid buffer for getPQPublicKey");
         return false;
     }
     
-    // Check if we have a valid PQ public key stored
-    return (node->user.has_pq_public_key && 
-            node->user.pq_public_key.size == PQCrypto::Kyber::PublicKeySize &&
-            (node->user.has_pq_capabilities && 
-             node->user.pq_capabilities & PQ_CAP_KYBER_SUPPORT));
+    auto it = pqKeyStorage.find(nodeNum);
+    if (it == pqKeyStorage.end() || it->second.size() != PQCrypto::Kyber::PublicKeySize) {
+        LOG_DEBUG("PQ Key Exchange: No PQ key found for node 0x%x", nodeNum);
+        return false;
+    }
+    
+    memcpy(keyOut, it->second.data(), PQCrypto::Kyber::PublicKeySize);
+    LOG_DEBUG("PQ Key Exchange: Retrieved PQ key for node 0x%x", nodeNum);
+    return true;
 }
 
 bool PQKeyExchangeModule::storePQKeys(NodeNum remoteNode, const uint8_t* publicKey, size_t keySize)
@@ -388,27 +402,25 @@ bool PQKeyExchangeModule::storePQKeys(NodeNum remoteNode, const uint8_t* publicK
         return false;
     }
     
-    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(remoteNode);
-    if (!node) {
-        LOG_ERROR("PQ Key Exchange: Node 0x%x not found in NodeDB", remoteNode);
+    if (!publicKey) {
+        LOG_ERROR("PQ Key Exchange: Null public key for node 0x%x", remoteNode);
         return false;
     }
     
-    // Store the PQ public key
-    node->user.has_pq_public_key = true;
-    node->user.pq_public_key.size = keySize;
-    memcpy(node->user.pq_public_key.bytes, publicKey, keySize);
+    // Store in our internal map
+    std::vector<uint8_t> keyVector(publicKey, publicKey + keySize);
+    pqKeyStorage[remoteNode] = keyVector;
     
-    // Set PQ capabilities flag
-    node->user.has_pq_capabilities = true;
-    node->user.pq_capabilities |= PQ_CAP_KYBER_SUPPORT;
-    
-    // Trigger NodeDB save
-    nodeDB->updateGUI = true;
-    nodeDB->updateGUIforNode = node;
-    
-    // Force save to persistent storage
-    nodeDB->saveToDisk(SEGMENT_NODEDATABASE);
+    // Also update the node's PQ capabilities in NodeDB (but not the key itself due to callback complexity)
+    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(remoteNode);
+    if (node) {
+        node->user.has_pq_capabilities = true;
+        node->user.pq_capabilities |= PQ_CAP_KYBER_SUPPORT;
+        
+        // Trigger GUI update
+        nodeDB->updateGUI = true;
+        nodeDB->updateGUIforNode = node;
+    }
     
     LOG_INFO("PQ Key Exchange: Stored %zu byte PQ key for node 0x%x", keySize, remoteNode);
     return true;
@@ -430,7 +442,7 @@ bool PQKeyExchangeModule::sendKeyFragment(NodeNum remoteNode, uint32_t sessionId
     const size_t remainingBytes = totalSize - fragmentStart;
     const size_t fragmentSize = min((size_t)PQ_KEY_FRAGMENT_SIZE, remainingBytes);
     
-    // Copy fragment data
+    // Copy fragment data using pb_bytes_array_t
     if (fragmentSize > 0 && fragmentSize <= sizeof(fragment.data.bytes)) {
         fragment.data.size = fragmentSize;
         memcpy(fragment.data.bytes, keyData, fragmentSize);
@@ -474,7 +486,9 @@ bool PQKeyExchangeModule::initiateKeyExchange(NodeNum remoteNode)
     LOG_INFO("PQ Key Exchange: Initiating key exchange with 0x%x", remoteNode);
     
     // Check if we already have an active session with this node
-    for (auto& [sessionId, session] : activeSessions) {
+    for (auto it = activeSessions.begin(); it != activeSessions.end(); ++it) {
+        auto& sessionId = it->first;
+        auto& session = it->second;
         if (session.remoteNode == remoteNode) {
             LOG_WARN("PQ Key Exchange: Already have active session %u with 0x%x", sessionId, remoteNode);
             return false;
@@ -543,7 +557,8 @@ void PQKeyExchangeModule::onPQCapableNeighborDiscovered(NodeNum nodeNum, uint32_
     }
     
     // Check if we already have an active session
-    for (auto& [sessionId, session] : activeSessions) {
+    for (auto it = activeSessions.begin(); it != activeSessions.end(); ++it) {
+        auto& session = it->second;
         if (session.remoteNode == nodeNum) {
             LOG_DEBUG("PQ Key Exchange: Active session already exists for 0x%x", nodeNum);
             return;
@@ -553,10 +568,8 @@ void PQKeyExchangeModule::onPQCapableNeighborDiscovered(NodeNum nodeNum, uint32_
     // Initiate automatic key exchange with small delay to avoid collision
     LOG_INFO("PQ Key Exchange: Initiating automatic exchange with neighbor 0x%x", nodeNum);
     
-    // Add small random delay (100-500ms) to prevent simultaneous initiation
-    uint32_t delayMs = 100 + (random() % 400);
-    
-    // For now, initiate immediately. TODO: Add timer-based delayed initiation
+    // TODO: Add timer-based delayed initiation to prevent simultaneous initiation
+    // For now, initiate immediately
     if (!initiateKeyExchange(nodeNum)) {
         LOG_WARN("PQ Key Exchange: Failed to initiate automatic exchange with 0x%x", nodeNum);
     }

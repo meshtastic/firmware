@@ -198,7 +198,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         fromRadioScratch.which_payload_variant = meshtastic_FromRadio_queueStatus_tag;
         fromRadioScratch.queueStatus = router->getQueueStatus();
         heartbeatReceived = false;
-        size_t numbytes = pb_encode_to_bytes(buf, meshtastic_FromRadio_size, &meshtastic_FromRadio_msg, &fromRadioScratch);
+        size_t numbytes = pb_encode_to_bytes(buf, meshtastic_ToRadio_size, &meshtastic_FromRadio_msg, &fromRadioScratch);
         LOG_DEBUG("FromRadio=STATE_SEND_QUEUE_STATUS, numbytes=%u", numbytes);
         return numbytes;
     }
@@ -504,7 +504,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
     // Do we have a message from the mesh?
     if (fromRadioScratch.which_payload_variant != 0) {
         // Encapsulate as a FromRadio packet
-        size_t numbytes = pb_encode_to_bytes(buf, meshtastic_FromRadio_size, &meshtastic_FromRadio_msg, &fromRadioScratch);
+        size_t numbytes = pb_encode_to_bytes(buf, meshtastic_ToRadio_size, &meshtastic_FromRadio_msg, &fromRadioScratch);
 
         // VERY IMPORTANT to not print debug messages while writing to fromRadioScratch - because we use that same buffer
         // for logging (when we are encapsulating with protobufs)

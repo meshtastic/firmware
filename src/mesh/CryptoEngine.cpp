@@ -358,9 +358,10 @@ bool CryptoEngine::decryptHybrid(uint32_t fromNode, uint64_t packetNum,
     // Step 4: Derive AES session key
     uint8_t session_key[32];
     SHA256 hash;
+    uint32_t toNode = (uint32_t)nodeDB->getNodeNum();
     hash.update(combined_secret, sizeof(combined_secret));
     hash.update((uint8_t*)&fromNode, sizeof(fromNode));
-    hash.update((uint8_t*)&nodeDB->getNodeNum(), sizeof(uint32_t)); // our node as toNode
+    hash.update((uint8_t*)&toNode, sizeof(uint32_t));
     hash.finalize(session_key, 32);
     
     // Step 5: Decrypt with AES-CCM

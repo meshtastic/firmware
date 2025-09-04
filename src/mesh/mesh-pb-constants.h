@@ -20,7 +20,8 @@
 
 /// Verify baseline assumption of node size. If it increases, we need to reevaluate
 /// the impact of its memory footprint, notably on MAX_NUM_NODES.
-static_assert(sizeof(meshtastic_NodeInfoLite) <= 200, "NodeInfoLite size increased. Reconsider impact on MAX_NUM_NODES.");
+/// Increased limit to accommodate PQ public key fields (800 bytes + other fields)
+static_assert(sizeof(meshtastic_NodeInfoLite) <= 1200, "NodeInfoLite size increased. Reconsider impact on MAX_NUM_NODES.");
 
 /// max number of nodes allowed in the nodeDB
 #ifndef MAX_NUM_NODES

@@ -4,6 +4,7 @@
 #include "SinglePortModule.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
 #include <map>
+#include <vector>
 
 #if !(MESHTASTIC_EXCLUDE_PQ_CRYPTO)
 
@@ -89,6 +90,15 @@ class PQKeyExchangeModule : public ProtobufModule<meshtastic_PQKeyExchange>
      */
     bool shouldAttemptPQExchange(NodeNum nodeNum);
 
+    /**
+     * Get stored PQ public key for a node
+     * @param nodeNum Node to get key for
+     * @param keyOut Buffer to copy key to (must be at least PQCrypto::Kyber::PublicKeySize bytes)
+     * @param keySize Size of keyOut buffer
+     * @return true if key was retrieved successfully
+     */
+    bool getPQPublicKey(NodeNum nodeNum, uint8_t* keyOut, size_t keySize);
+
     virtual bool wantUIFrame() { return false; }
 
   protected:
@@ -112,6 +122,9 @@ class PQKeyExchangeModule : public ProtobufModule<meshtastic_PQKeyExchange>
   private:
     std::map<uint32_t, PQKeyExchangeSession> activeSessions;
     uint32_t nextSessionId;
+    
+    // Simple PQ key storage (NodeNum -> PQ public key)
+    std::map<NodeNum, std::vector<uint8_t>> pqKeyStorage;
 
     /**
      * Generate a new session ID

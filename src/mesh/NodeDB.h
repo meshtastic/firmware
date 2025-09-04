@@ -245,7 +245,7 @@ class NodeDB
         emptyNodeDatabase.version = DEVICESTATE_CUR_VER;
         size_t nodeDatabaseSize;
         pb_get_encoded_size(&nodeDatabaseSize, meshtastic_NodeDatabase_fields, &emptyNodeDatabase);
-        return nodeDatabaseSize + (MAX_NUM_NODES * meshtastic_NodeInfoLite_size);
+        return nodeDatabaseSize + (MAX_NUM_NODES * sizeof(meshtastic_NodeInfoLite));
     }
 
     // returns true if the maximum number of nodes is reached or we are running low on memory

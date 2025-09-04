@@ -556,19 +556,60 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             bool usePQHybrid = (pqKeyExchangeModule && 
                                pqKeyExchangeModule->hasValidPQKeys(p->to) &&
                                (node->user.has_pq_capabilities && 
-                                node->user.pq_capabilities & PQ_CAP_KYBER_SUPPORT));
+                                node->user.pq_capabilities & PQ_CAP_KYBER_SUPPORT) &&
+                               crypto->hasValidKyberKeys());
             
             if (usePQHybrid) {
-                LOG_DEBUG("Use Hybrid PQ+Classical encryption!");
-                // TODO: Implement hybrid encryption that combines both
-                // For now, fall back to classical PKI
-                LOG_WARN("Hybrid PQ encryption not fully implemented yet, using classical PKI");
+                LOG_INFO("Using Hybrid PQ+Classical encryption for node 0x%x", p->to);
+                
+                // Get the stored PQ public key for the destination using PQKeyExchangeModule
+                uint8_t pqPubKey[PQCrypto::Kyber::PublicKeySize];
+                
+                if (pqKeyExchangeModule->getPQPublicKey(p->to, pqPubKey, sizeof(pqPubKey))) {
+                    
+                    // Use hybrid encryption
+                    if (crypto->encryptHybrid(p->to, getFrom(p), node->user.public_key.bytes, pqPubKey,
+                                            p->id, numbytes, bytes, p->encrypted.bytes)) {
+                        
+                        // Hybrid encryption adds both classical and PQ overhead
+                        numbytes += MESHTASTIC_PKC_OVERHEAD + crypto->getKyberPacketOverhead();
+                        p->channel = 0;
+                        p->pki_encrypted = true;
+                        
+                        LOG_INFO("Hybrid PQ+Classical encryption successful, size: %zu", numbytes);
+                    } else {
+                        LOG_ERROR("Hybrid encryption failed, falling back to classical PKI");
+                        // Fall through to classical encryption
+                        usePQHybrid = false;
+                    }
+                } else {
+                    LOG_WARN("PQ public key not found for node 0x%x, falling back to classical", p->to);
+                    usePQHybrid = false;
+                }
+            } else if (pqKeyExchangeModule && 
+                      (node->user.has_pq_capabilities && node->user.pq_capabilities & PQ_CAP_KYBER_SUPPORT) &&
+                      !pqKeyExchangeModule->hasValidPQKeys(p->to)) {
+                
+                LOG_INFO("PQ-capable node detected, ensuring keys before encryption");
+                
+                // Try to initiate key exchange, but don't block sending
+                if (pqKeyExchangeModule->ensurePQKeysForNode(p->to)) {
+                    LOG_DEBUG("PQ key exchange initiated for future packets");
+                }
+                // Continue with classical encryption for this packet
+            }
+            
+            // Only do classical encryption if hybrid wasn't successful
+            if (!usePQHybrid) {
+#endif
+                LOG_DEBUG("Using classical Curve25519 PKI encryption");
+                crypto->encryptCurve25519(p->to, getFrom(p), node->user.public_key, p->id, numbytes, bytes, p->encrypted.bytes);
+                numbytes += MESHTASTIC_PKC_OVERHEAD;
+                p->channel = 0;
+                p->pki_encrypted = true;
+#if !(MESHTASTIC_EXCLUDE_PQ_CRYPTO)
             }
 #endif
-            crypto->encryptCurve25519(p->to, getFrom(p), node->user.public_key, p->id, numbytes, bytes, p->encrypted.bytes);
-            numbytes += MESHTASTIC_PKC_OVERHEAD;
-            p->channel = 0;
-            p->pki_encrypted = true;
         } else {
             if (p->pki_encrypted == true) {
                 // Client specifically requested PKI encryption
@@ -662,7 +703,7 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
                        meshtastic_PortNum_POSITION_APP, meshtastic_PortNum_NODEINFO_APP, meshtastic_PortNum_ROUTING_APP,
                        meshtastic_PortNum_TELEMETRY_APP, meshtastic_PortNum_ADMIN_APP, meshtastic_PortNum_ALERT_APP,
                        meshtastic_PortNum_KEY_VERIFICATION_APP, meshtastic_PortNum_PQ_KEY_EXCHANGE_APP, meshtastic_PortNum_WAYPOINT_APP,
-                       meshtastic_PortNum_STORE_FORWARD_APP, meshtastic_PortNum_TRACEROUTE_APP))
+                       meshtastic_PortNum_STORE_FORWARD_APP, meshtastic_PortNum_TRACEROUTE_APP)) {
             LOG_DEBUG("Ignore packet on non-standard portnum for CORE_PORTNUMS_ONLY");
             cancelSending(p->from, p->id);
             skipHandle = true;

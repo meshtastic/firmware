@@ -24,7 +24,7 @@ PB_BIND(meshtastic_Data, meshtastic_Data, 2)
 PB_BIND(meshtastic_KeyVerification, meshtastic_KeyVerification, AUTO)
 
 
-PB_BIND(meshtastic_PQKeyExchange, meshtastic_PQKeyExchange, AUTO)
+PB_BIND(meshtastic_PQKeyExchange, meshtastic_PQKeyExchange, 2)
 
 
 PB_BIND(meshtastic_Waypoint, meshtastic_Waypoint, AUTO)

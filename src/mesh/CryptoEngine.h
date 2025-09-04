@@ -18,14 +18,7 @@ struct CryptoKey {
     int8_t length;
 };
 
-// Kyber constants 
-#if !(MESHTASTIC_EXCLUDE_PQ_CRYPTO)
-#define KYBER_PUBLICKEYBYTES  800   // Kyber-512 public key size
-#define KYBER_SECRETKEYBYTES  1632  // Kyber-512 private key size  
-#define KYBER_CIPHERTEXTBYTES 768   // Kyber-512 ciphertext size
-#define KYBER_SSBYTES         32    // Shared secret size
-#define KYBER_SYMBYTES        32    // Seed/randomness size
-#endif
+// Kyber constants are defined in the kyberkem library
 
 /**
  * see docs/software/crypto.md for details.

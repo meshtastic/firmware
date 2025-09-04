@@ -372,13 +372,11 @@ extern const pb_msgdesc_t meshtastic_BackupPreferences_msg;
 /* meshtastic_UserLite_size depends on runtime parameters */
 /* meshtastic_NodeInfoLite_size depends on runtime parameters */
 /* meshtastic_NodeDatabase_size depends on runtime parameters */
-#define meshtastic_ChannelFile_size              718
-#define meshtastic_PositionLite_size             28
-#if defined(meshtastic_User_size)
 #define MESHTASTIC_MESHTASTIC_DEVICEONLY_PB_H_MAX_SIZE meshtastic_BackupPreferences_size
-#define meshtastic_BackupPreferences_size        (2160 + meshtastic_User_size)
-#define meshtastic_DeviceState_size              (1626 + meshtastic_User_size)
-#endif
+#define meshtastic_BackupPreferences_size        2312
+#define meshtastic_ChannelFile_size              718
+#define meshtastic_DeviceState_size              1778
+#define meshtastic_PositionLite_size             28
 
 #ifdef __cplusplus
 } /* extern "C" */
