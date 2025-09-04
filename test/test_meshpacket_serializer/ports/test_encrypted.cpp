@@ -1,30 +1,7 @@
 #include "../test_helpers.h"
 
-// test data initialization
-const int from = 0x11223344;
-const int to = 0x55667788;
-const int id = 0x9999;
-
-// Helper function to create a test encrypted packet
-meshtastic_MeshPacket create_test_encrypted_packet(uint32_t from, uint32_t to, uint32_t id, const char *data)
-{
-    meshtastic_MeshPacket packet = meshtastic_MeshPacket_init_zero;
-    packet.from = from;
-    packet.to = to;
-    packet.id = id;
-    packet.which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
-
-    if (data) {
-        packet.encrypted.size = strlen(data);
-        memcpy(packet.encrypted.bytes, data, packet.encrypted.size);
-    }
-
-    return packet;
-}
-
-// Comprehensive helper function for all encrypted packet assertions
-void assert_encrypted_packet(const std::string &json, uint32_t expected_from, uint32_t expected_to, uint32_t expected_id,
-                             size_t expected_size)
+// Helper function for all encrypted packet assertions
+void assert_encrypted_packet(const std::string &json, meshtastic_MeshPacket packet)
 {
     // Parse and validate JSON
     TEST_ASSERT_TRUE(json.length() > 0);
@@ -37,24 +14,24 @@ void assert_encrypted_packet(const std::string &json, uint32_t expected_from, ui
 
     // Assert basic packet fields
     TEST_ASSERT_TRUE(jsonObj.find("from") != jsonObj.end());
-    TEST_ASSERT_EQUAL(expected_from, (uint32_t)jsonObj.at("from")->AsNumber());
+    TEST_ASSERT_EQUAL(packet.from, (uint32_t)jsonObj.at("from")->AsNumber());
 
     TEST_ASSERT_TRUE(jsonObj.find("to") != jsonObj.end());
-    TEST_ASSERT_EQUAL(expected_to, (uint32_t)jsonObj.at("to")->AsNumber());
+    TEST_ASSERT_EQUAL(packet.to, (uint32_t)jsonObj.at("to")->AsNumber());
 
     TEST_ASSERT_TRUE(jsonObj.find("id") != jsonObj.end());
-    TEST_ASSERT_EQUAL(expected_id, (uint32_t)jsonObj.at("id")->AsNumber());
+    TEST_ASSERT_EQUAL(packet.id, (uint32_t)jsonObj.at("id")->AsNumber());
 
     // Assert encrypted data fields
     TEST_ASSERT_TRUE(jsonObj.find("bytes") != jsonObj.end());
     TEST_ASSERT_TRUE(jsonObj.at("bytes")->IsString());
 
     TEST_ASSERT_TRUE(jsonObj.find("size") != jsonObj.end());
-    TEST_ASSERT_EQUAL(expected_size, (int)jsonObj.at("size")->AsNumber());
+    TEST_ASSERT_EQUAL(packet.encrypted.size, (int)jsonObj.at("size")->AsNumber());
 
     // Assert hex encoding
     std::string encrypted_hex = jsonObj["bytes"]->AsString();
-    TEST_ASSERT_EQUAL(expected_size * 2, encrypted_hex.length());
+    TEST_ASSERT_EQUAL(packet.encrypted.size * 2, encrypted_hex.length());
 
     delete root;
 }
@@ -63,20 +40,20 @@ void assert_encrypted_packet(const std::string &json, uint32_t expected_from, ui
 void test_encrypted_packet_serialization()
 {
     const char *data = "encrypted_payload_data";
-
-    meshtastic_MeshPacket packet = create_test_encrypted_packet(from, to, id, data);
+    meshtastic_MeshPacket packet =
+        create_test_packet(meshtastic_PortNum_TEXT_MESSAGE_APP, reinterpret_cast<const uint8_t *>(data), strlen(data),
+                           meshtastic_MeshPacket_encrypted_tag);
     std::string json = MeshPacketSerializer::JsonSerializeEncrypted(&packet);
 
-    assert_encrypted_packet(json, from, to, id, strlen(data));
+    assert_encrypted_packet(json, packet);
 }
 
 // Test empty encrypted packet
 void test_empty_encrypted_packet()
 {
-    const char *data = "";
-
-    meshtastic_MeshPacket packet = create_test_encrypted_packet(from, to, id, data);
+    meshtastic_MeshPacket packet =
+        create_test_packet(meshtastic_PortNum_TEXT_MESSAGE_APP, nullptr, 0, meshtastic_MeshPacket_encrypted_tag);
     std::string json = MeshPacketSerializer::JsonSerializeEncrypted(&packet);
 
-    assert_encrypted_packet(json, from, to, id, strlen(data));
+    assert_encrypted_packet(json, packet);
 }
