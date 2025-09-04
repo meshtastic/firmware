@@ -7,6 +7,9 @@
 #include "configuration.h"
 #include "main.h"
 #include <Throttle.h>
+#if !(MESHTASTIC_EXCLUDE_PQ_CRYPTO)
+#include "PQKeyExchangeModule.h"
+#endif
 
 NodeInfoModule *nodeInfoModule;
 
@@ -96,6 +99,25 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
             u.has_is_unmessagable = true;
             u.is_unmessagable = true;
         }
+
+#if !(MESHTASTIC_EXCLUDE_PQ_CRYPTO)
+        // Add PQ capabilities to our broadcast
+        if (pqKeyExchangeModule) {
+            uint32_t pqCaps = pqKeyExchangeModule->getPQCapabilities();
+            if (pqCaps > 0) {
+                u.has_pq_capabilities = true;
+                u.pq_capabilities = pqCaps;
+                
+                // Add PQ key hash if we have valid keys
+                uint8_t keyHash[32];
+                if (pqKeyExchangeModule->getPQKeyHash(keyHash)) {
+                    u.has_pq_key_hash = true;
+                    u.pq_key_hash.size = 32;
+                    memcpy(u.pq_key_hash.bytes, keyHash, 32);
+                }
+            }
+        }
+#endif
 
         LOG_INFO("Send owner %s/%s/%s", u.id, u.long_name, u.short_name);
         lastSentToMesh = millis();

@@ -17,6 +17,9 @@
 #if !MESHTASTIC_EXCLUDE_PKI
 #include "KeyVerificationModule.h"
 #endif
+#if !(MESHTASTIC_EXCLUDE_PQ_CRYPTO)
+#include "PQKeyExchangeModule.h"
+#endif
 #if !MESHTASTIC_EXCLUDE_ADMIN
 #include "modules/AdminModule.h"
 #endif
@@ -145,6 +148,9 @@ void setupModules()
 #endif
 #if !MESHTASTIC_EXCLUDE_PKI
         keyVerificationModule = new KeyVerificationModule();
+#endif
+#if !(MESHTASTIC_EXCLUDE_PQ_CRYPTO)
+        pqKeyExchangeModule = new PQKeyExchangeModule();
 #endif
 #if !MESHTASTIC_EXCLUDE_DROPZONE
         dropzoneModule = new DropzoneModule();

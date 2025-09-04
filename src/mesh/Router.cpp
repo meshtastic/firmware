@@ -11,6 +11,9 @@
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
 #include "modules/RoutingModule.h"
+#if !(MESHTASTIC_EXCLUDE_PQ_CRYPTO)
+#include "modules/PQKeyExchangeModule.h"
+#endif
 #if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
 #endif
@@ -548,6 +551,20 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
                          *node->user.public_key.bytes);
                 return meshtastic_Routing_Error_PKI_FAILED;
             }
+            // Check if we should use hybrid PQ+classical encryption
+#if !(MESHTASTIC_EXCLUDE_PQ_CRYPTO)
+            bool usePQHybrid = (pqKeyExchangeModule && 
+                               pqKeyExchangeModule->hasValidPQKeys(p->to) &&
+                               (node->user.has_pq_capabilities && 
+                                node->user.pq_capabilities & PQ_CAP_KYBER_SUPPORT));
+            
+            if (usePQHybrid) {
+                LOG_DEBUG("Use Hybrid PQ+Classical encryption!");
+                // TODO: Implement hybrid encryption that combines both
+                // For now, fall back to classical PKI
+                LOG_WARN("Hybrid PQ encryption not fully implemented yet, using classical PKI");
+            }
+#endif
             crypto->encryptCurve25519(p->to, getFrom(p), node->user.public_key, p->id, numbytes, bytes, p->encrypted.bytes);
             numbytes += MESHTASTIC_PKC_OVERHEAD;
             p->channel = 0;
@@ -644,8 +661,8 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
             !IS_ONE_OF(p->decoded.portnum, meshtastic_PortNum_TEXT_MESSAGE_APP, meshtastic_PortNum_TEXT_MESSAGE_COMPRESSED_APP,
                        meshtastic_PortNum_POSITION_APP, meshtastic_PortNum_NODEINFO_APP, meshtastic_PortNum_ROUTING_APP,
                        meshtastic_PortNum_TELEMETRY_APP, meshtastic_PortNum_ADMIN_APP, meshtastic_PortNum_ALERT_APP,
-                       meshtastic_PortNum_KEY_VERIFICATION_APP, meshtastic_PortNum_WAYPOINT_APP,
-                       meshtastic_PortNum_STORE_FORWARD_APP, meshtastic_PortNum_TRACEROUTE_APP)) {
+                       meshtastic_PortNum_KEY_VERIFICATION_APP, meshtastic_PortNum_PQ_KEY_EXCHANGE_APP, meshtastic_PortNum_WAYPOINT_APP,
+                       meshtastic_PortNum_STORE_FORWARD_APP, meshtastic_PortNum_TRACEROUTE_APP))
             LOG_DEBUG("Ignore packet on non-standard portnum for CORE_PORTNUMS_ONLY");
             cancelSending(p->from, p->id);
             skipHandle = true;

@@ -369,31 +369,161 @@ bool PQKeyExchangeModule::getPQKeyHash(uint8_t hash[32])
 
 bool PQKeyExchangeModule::hasValidPQKeys(NodeNum remoteNode)
 {
-    // TODO: Check NodeDB for stored PQ keys
-    // For now, return false - this would be implemented when we
-    // extend NodeDB to store PQ keys
-    return false;
+    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(remoteNode);
+    if (!node || !node->has_user) {
+        return false;
+    }
+    
+    // Check if we have a valid PQ public key stored
+    return (node->user.has_pq_public_key && 
+            node->user.pq_public_key.size == PQCrypto::Kyber::PublicKeySize &&
+            (node->user.has_pq_capabilities && 
+             node->user.pq_capabilities & PQ_CAP_KYBER_SUPPORT));
 }
 
 bool PQKeyExchangeModule::storePQKeys(NodeNum remoteNode, const uint8_t* publicKey, size_t keySize)
 {
-    // TODO: Store PQ keys in NodeDB
-    // This requires extending the NodeDB structure to include PQ keys
-    LOG_INFO("PQ Key Exchange: Would store %zu byte key for node 0x%x", keySize, remoteNode);
-    return true; // Placeholder
+    if (keySize != PQCrypto::Kyber::PublicKeySize) {
+        LOG_ERROR("PQ Key Exchange: Invalid key size %zu for node 0x%x", keySize, remoteNode);
+        return false;
+    }
+    
+    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(remoteNode);
+    if (!node) {
+        LOG_ERROR("PQ Key Exchange: Node 0x%x not found in NodeDB", remoteNode);
+        return false;
+    }
+    
+    // Store the PQ public key
+    node->user.has_pq_public_key = true;
+    node->user.pq_public_key.size = keySize;
+    memcpy(node->user.pq_public_key.bytes, publicKey, keySize);
+    
+    // Set PQ capabilities flag
+    node->user.has_pq_capabilities = true;
+    node->user.pq_capabilities |= PQ_CAP_KYBER_SUPPORT;
+    
+    // Trigger NodeDB save
+    nodeDB->updateGUI = true;
+    nodeDB->updateGUIforNode = node;
+    
+    // Force save to persistent storage
+    nodeDB->saveToDisk(SEGMENT_NODEDATABASE);
+    
+    LOG_INFO("PQ Key Exchange: Stored %zu byte PQ key for node 0x%x", keySize, remoteNode);
+    return true;
 }
 
-// Stub implementations for methods we'll implement later
 bool PQKeyExchangeModule::sendKeyFragment(NodeNum remoteNode, uint32_t sessionId, const uint8_t* keyData, 
                                         size_t totalSize, uint32_t sequence, uint32_t totalFragments)
 {
-    // Implementation for sending fragments - we'll add this next
-    return true;
+    // Create the fragment packet
+    meshtastic_PQKeyExchange fragment = meshtastic_PQKeyExchange_init_zero;
+    
+    fragment.state = meshtastic_PQKeyExchangeState_PQ_KEY_FRAGMENT_TRANSFER;
+    fragment.session_id = sessionId;
+    fragment.sequence = sequence;
+    fragment.total_fragments = totalFragments;
+    
+    // Calculate fragment size
+    const size_t fragmentStart = sequence * PQ_KEY_FRAGMENT_SIZE;
+    const size_t remainingBytes = totalSize - fragmentStart;
+    const size_t fragmentSize = min((size_t)PQ_KEY_FRAGMENT_SIZE, remainingBytes);
+    
+    // Copy fragment data
+    if (fragmentSize > 0 && fragmentSize <= sizeof(fragment.data.bytes)) {
+        fragment.data.size = fragmentSize;
+        memcpy(fragment.data.bytes, keyData, fragmentSize);
+        
+        // Add key hash on first fragment
+        if (sequence == 0) {
+            SHA256 hash;
+            uint8_t keyHash[32];
+            hash.update(keyData - fragmentStart, totalSize); // Hash the complete key
+            hash.finalize(keyHash, 32);
+            
+            fragment.key_hash.size = 32;
+            memcpy(fragment.key_hash.bytes, keyHash, 32);
+        }
+        
+        // Create and send the packet
+        meshtastic_MeshPacket *packet = allocDataProtobuf(fragment);
+        if (!packet) {
+            LOG_ERROR("PQ Key Exchange: Failed to allocate fragment packet");
+            return false;
+        }
+        
+        packet->to = remoteNode;
+        packet->decoded.want_response = false;
+        packet->priority = meshtastic_MeshPacket_Priority_RELIABLE;
+        
+        LOG_DEBUG("PQ Key Exchange: Sending fragment %u/%u (%zu bytes) to 0x%x", 
+                  sequence + 1, totalFragments, fragmentSize, remoteNode);
+        
+        // Send via mesh service
+        service->sendToMesh(packet, RX_SRC_LOCAL);
+        return true;
+    }
+    
+    LOG_ERROR("PQ Key Exchange: Invalid fragment size %zu", fragmentSize);
+    return false;
 }
 
 bool PQKeyExchangeModule::initiateKeyExchange(NodeNum remoteNode)
 {
-    // Implementation for initiating exchange - we'll add this next
+    LOG_INFO("PQ Key Exchange: Initiating key exchange with 0x%x", remoteNode);
+    
+    // Check if we already have an active session with this node
+    for (auto& [sessionId, session] : activeSessions) {
+        if (session.remoteNode == remoteNode) {
+            LOG_WARN("PQ Key Exchange: Already have active session %u with 0x%x", sessionId, remoteNode);
+            return false;
+        }
+    }
+    
+    // Check our PQ capabilities
+    if (!(getPQCapabilities() & PQ_CAP_KYBER_SUPPORT)) {
+        LOG_ERROR("PQ Key Exchange: We don't support Kyber");
+        return false;
+    }
+    
+    // Create a new session (we're the initiator)
+    PQKeyExchangeSession* session = createSession(remoteNode, true);
+    if (!session) {
+        LOG_ERROR("PQ Key Exchange: Failed to create session");
+        return false;
+    }
+    
+    // Send initial exchange request
+    meshtastic_PQKeyExchange request = meshtastic_PQKeyExchange_init_zero;
+    request.state = meshtastic_PQKeyExchangeState_PQ_KEY_EXCHANGE_REQUEST;
+    request.session_id = session->sessionId;
+    request.capabilities = getPQCapabilities();
+    
+    // Add our key hash if we have valid keys
+    uint8_t ourKeyHash[32];
+    if (getPQKeyHash(ourKeyHash)) {
+        request.key_hash.size = 32;
+        memcpy(request.key_hash.bytes, ourKeyHash, 32);
+    }
+    
+    meshtastic_MeshPacket *packet = allocDataProtobuf(request);
+    if (!packet) {
+        LOG_ERROR("PQ Key Exchange: Failed to allocate request packet");
+        activeSessions.erase(session->sessionId);
+        return false;
+    }
+    
+    packet->to = remoteNode;
+    packet->decoded.want_response = true;
+    packet->priority = meshtastic_MeshPacket_Priority_RELIABLE;
+    
+    LOG_INFO("PQ Key Exchange: Sending exchange request to 0x%x, session_id=%u", 
+             remoteNode, session->sessionId);
+    
+    service->sendToMesh(packet, RX_SRC_LOCAL);
+    session->state = meshtastic_PQKeyExchangeState_PQ_KEY_EXCHANGE_REQUEST;
+    
     return true;
 }
 
