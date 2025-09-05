@@ -1770,6 +1770,20 @@ void NodeDB::set_favorite(bool is_favorite, uint32_t nodeId)
     }
 }
 
+bool NodeDB::isFavorite(uint32_t nodeId)
+{
+    meshtastic_NodeInfoLite *lite = getMeshNode(nodeId);
+    if (lite) {
+        return lite->is_favorite;
+    }
+    return false;
+}
+
+bool NodeDB::isFromOrToFavoritedNode(const meshtastic_MeshPacket &p)
+{
+    return isFavorite(p.from) || isFavorite(p.to);
+}
+
 void NodeDB::pause_sort(bool paused)
 {
     sortingIsPaused = paused;
