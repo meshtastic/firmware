@@ -529,8 +529,12 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         char datetimeStr[25];
         UIRenderer::formatDateTime(datetimeStr, sizeof(datetimeStr), rtc_sec, display, false);
         char fullLine[40];
-        snprintf(fullLine, sizeof(fullLine), "%s", datetimeStr);
-        display->drawString(display->getWidth() - 5 - display->getStringWidth(fullLine), getTextPositions(display)[line],
+        if (isHighResolution) {
+            snprintf(fullLine, sizeof(fullLine), "%s", datetimeStr);
+        } else {
+            snprintf(fullLine, sizeof(fullLine), "%s", &datetimeStr[2]);
+        }
+        display->drawString(display->getWidth() - 1 - display->getStringWidth(fullLine), getTextPositions(display)[line],
                             fullLine);
     }
 }
