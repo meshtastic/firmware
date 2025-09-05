@@ -314,6 +314,23 @@ uint32_t RadioInterface::getTxDelayMsecWeightedWorst(float snr)
     return (2 * CWmax * slotTimeMsec) + pow_of_2(CWsize) * slotTimeMsec;
 }
 
+/** Returns true if we should rebroadcast early like a ROUTER */
+bool RadioInterface::shouldRebroadcastEarlyLikeRouter(meshtastic_MeshPacket *p)
+{
+    // If we are a ROUTER or REPEATER, we always rebroadcast early
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
+        config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
+        return true;
+    }
+
+    // If we are a CLIENT_BASE and the packet is from or to a favorited node, we should rebroadcast early
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_CLIENT_BASE) {
+        return nodeDB->isFromOrToFavoritedNode(*p);
+    }
+
+    return false;
+}
+
 /** The delay to use when we want to flood a message */
 uint32_t RadioInterface::getTxDelayMsecWeighted(float snr, meshtastic_MeshPacket *p)
 {
@@ -322,8 +339,7 @@ uint32_t RadioInterface::getTxDelayMsecWeighted(float snr, meshtastic_MeshPacket
     uint32_t delay = 0;
     uint8_t CWsize = getCWsize(snr);
     // LOG_DEBUG("rx_snr of %f so setting CWsize to:%d", snr, CWsize);
-    if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
-        config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
+    if (shouldRebroadcastEarlyLikeRouter(p)) {
         delay = random(0, 2 * CWsize) * slotTimeMsec;
         LOG_DEBUG("rx_snr found in packet. Router: setting tx delay:%d", delay);
     } else {

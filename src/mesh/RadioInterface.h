@@ -180,6 +180,9 @@ class RadioInterface
     /** The worst-case SNR_based packet delay */
     uint32_t getTxDelayMsecWeightedWorst(float snr);
 
+    /** Returns true if we should rebroadcast early like a ROUTER */
+    bool shouldRebroadcastEarlyLikeRouter(meshtastic_MeshPacket *p);
+
     /** The delay to use when we want to flood a message. Use a weighted scale based on SNR */
     uint32_t getTxDelayMsecWeighted(float snr, meshtastic_MeshPacket *p);
 
