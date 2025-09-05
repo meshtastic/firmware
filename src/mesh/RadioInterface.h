@@ -181,7 +181,7 @@ class RadioInterface
     uint32_t getTxDelayMsecWeightedWorst(float snr);
 
     /** The delay to use when we want to flood a message. Use a weighted scale based on SNR */
-    uint32_t getTxDelayMsecWeighted(float snr);
+    uint32_t getTxDelayMsecWeighted(float snr, meshtastic_MeshPacket *p);
 
     /** If the packet is not already in the late rebroadcast window, move it there */
     virtual void clampToLateRebroadcastWindow(NodeNum from, PacketId id) { return; }
