@@ -34,8 +34,11 @@ bool NextHopRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
     bool weWereNextHop = false;
     if (wasSeenRecently(p, true, &wasFallback, &weWereNextHop)) { // Note: this will also add a recent packet record
         printPacket("Ignore dupe incoming msg", p);
-        rxDupe++;
-        stopRetransmission(p->from, p->id);
+
+        if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA) {
+            rxDupe++;
+            stopRetransmission(p->from, p->id);
+        }
 
         // If it was a fallback to flooding, try to relay again
         if (wasFallback) {
