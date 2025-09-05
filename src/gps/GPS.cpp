@@ -810,10 +810,10 @@ bool GPS::setup()
             }
         } else if (gnssModel == GNSS_MODEL_CM121) {
             // only ask for RMC and GGA
-            //enable GGA
+            // enable GGA
             _serial_gps->write("$CFGMSG,0,0,1,1*1B\r\n");
             delay(250);
-            //enable RMC
+            // enable RMC
             _serial_gps->write("$CFGMSG,0,4,1,1*1F\r\n");
             delay(250);
         }
@@ -1249,15 +1249,14 @@ GnssModel_t GPS::probe(int serialSpeed)
     _serial_gps->write("$PUBX,40,VTG,0,0,0,0,0,0*5E\r\n");
     delay(20);
     // Close NMEA sequences on CM121
-    _serial_gps->write("$CFGMSG,0,0,0,1*1A\r\n");
     _serial_gps->write("$CFGMSG,0,1,0,1*1B\r\n");
     _serial_gps->write("$CFGMSG,0,2,0,1*18\r\n");
     _serial_gps->write("$CFGMSG,0,3,0,1*19\r\n");
-    _serial_gps->write("$CFGMSG,0,4,0,1*1E\r\n");
     delay(20);
-    
+
     // Unicore UFirebirdII Series: UC6580, UM620, UM621, UM670A, UM680A, or UM681A,or CM121
-    std::vector<ChipInfo> unicore = {{"UC6580", "UC6580", GNSS_MODEL_UC6580}, {"UM600", "UM600", GNSS_MODEL_UC6580}, {"CM121", "CM121", GNSS_MODEL_CM121}};
+    std::vector<ChipInfo> unicore = {
+        {"UC6580", "UC6580", GNSS_MODEL_UC6580}, {"UM600", "UM600", GNSS_MODEL_UC6580}, {"CM121", "CM121", GNSS_MODEL_CM121}};
     PROBE_FAMILY("Unicore Family", "$PDTINFO", unicore, 500);
 
     std::vector<ChipInfo> atgm = {
