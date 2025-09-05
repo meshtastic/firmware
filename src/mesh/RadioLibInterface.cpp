@@ -323,7 +323,7 @@ void RadioLibInterface::setTransmitDelay()
     } else {
         // If there is a SNR, start a timer scaled based on that SNR.
         LOG_DEBUG("rx_snr found. hop_limit:%d rx_snr:%f", p->hop_limit, p->rx_snr);
-        startTransmitTimerSNR(p->rx_snr);
+        startTransmitTimerRebroadcast(p->rx_snr);
     }
 }
 
@@ -336,7 +336,7 @@ void RadioLibInterface::startTransmitTimer(bool withDelay)
     }
 }
 
-void RadioLibInterface::startTransmitTimerSNR(float snr)
+void RadioLibInterface::startTransmitTimerRebroadcast(float snr)
 {
     // If we have work to do and the timer wasn't already scheduled, schedule it now
     if (!txQueue.empty()) {

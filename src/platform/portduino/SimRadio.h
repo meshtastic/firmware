@@ -64,7 +64,7 @@ class SimRadio : public RadioInterface, protected concurrency::NotifiedWorkerThr
     void startTransmitTimer(bool withDelay = true);
 
     /** timer scaled to SNR of to be flooded packet */
-    void startTransmitTimerSNR(float snr);
+    void startTransmitTimerRebroadcast(float snr);
 
     void handleTransmitInterrupt();
     void handleReceiveInterrupt();
