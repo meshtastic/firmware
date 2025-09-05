@@ -1000,17 +1000,54 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
 
     // If GPS is off, no need to display these parts
     if (strcmp(displayLine, "GPS off") != 0 && strcmp(displayLine, "No GPS") != 0) {
-
-        // === Second Row: Date ===
-        uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true);
-        char datetimeStr[25];
-        bool showTime = false; // set to true for full datetime
-        UIRenderer::formatDateTime(datetimeStr, sizeof(datetimeStr), rtc_sec, display, showTime);
-        char fullLine[40];
-        snprintf(fullLine, sizeof(fullLine), " Date: %s", datetimeStr);
+        /* MUST BE MOVED TO CLOCK SCREEN
+            // === Second Row: Date ===
+            uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true);
+            char datetimeStr[25];
+            bool showTime = false; // set to true for full datetime
+            UIRenderer::formatDateTime(datetimeStr, sizeof(datetimeStr), rtc_sec, display, showTime);
+            char fullLine[40];
+            snprintf(fullLine, sizeof(fullLine), " Date: %s", datetimeStr);
 #if !defined(M5STACK_UNITC6L)
-        display->drawString(0, getTextPositions(display)[line++], fullLine);
+            display->drawString(0, getTextPositions(display)[line++], fullLine);
 #endif
+        */
+
+        // === Second Row: Last GPS Fix ===
+        if (gpsStatus->getLastFixMillis() > 0) {
+            uint32_t delta = (millis() - gpsStatus->getLastFixMillis()) / 1000; // seconds since last fix
+            uint32_t days = delta / 86400;
+            uint32_t hours = (delta % 86400) / 3600;
+            uint32_t mins = (delta % 3600) / 60;
+            uint32_t secs = delta % 60;
+
+            char buf[32];
+#if defined(USE_EINK)
+            // E-Ink: skip seconds, show only days/hours/mins
+            if (days > 0) {
+                snprintf(buf, sizeof(buf), " Last: %ud %uh", days, hours);
+            } else if (hours > 0) {
+                snprintf(buf, sizeof(buf), " Last: %uh %um", hours, mins);
+            } else {
+                snprintf(buf, sizeof(buf), " Last: %um", mins);
+            }
+#else
+            // Non E-Ink: include seconds where useful
+            if (days > 0) {
+                snprintf(buf, sizeof(buf), " Last: %ud %uh", days, hours);
+            } else if (hours > 0) {
+                snprintf(buf, sizeof(buf), " Last: %uh %um", hours, mins);
+            } else if (mins > 0) {
+                snprintf(buf, sizeof(buf), " Last: %um %us", mins, secs);
+            } else {
+                snprintf(buf, sizeof(buf), " Last: %us", secs);
+            }
+#endif
+
+            display->drawString(0, getTextPositions(display)[line++], buf);
+        } else {
+            display->drawString(0, getTextPositions(display)[line++], " Last: ?");
+        }
 
         // === Third Row: Latitude ===
         char latStr[32];
