@@ -315,7 +315,7 @@ uint32_t RadioInterface::getTxDelayMsecWeightedWorst(float snr)
 }
 
 /** The delay to use when we want to flood a message */
-uint32_t RadioInterface::getTxDelayMsecWeighted(float snr)
+uint32_t RadioInterface::getTxDelayMsecWeighted(float snr, meshtastic_MeshPacket *p)
 {
     //  high SNR = large CW size (Long Delay)
     //  low SNR = small CW size (Short Delay)
