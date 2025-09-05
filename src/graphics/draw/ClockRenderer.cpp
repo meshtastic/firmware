@@ -325,6 +325,7 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     const char *titleStr = "";
     // === Header ===
     graphics::drawCommonHeader(display, x, y, titleStr, true);
+    int line = 0;
 
 #ifdef T_WATCH_S3
     if (nimbleBluetooth && nimbleBluetooth->isConnected()) {
@@ -522,6 +523,15 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         // draw second hand
         display->drawLine(centerX, centerY, secondX, secondY);
 #endif
+
+        display->setFont(FONT_SMALL);
+        // Display GPS derived date
+        char datetimeStr[25];
+        UIRenderer::formatDateTime(datetimeStr, sizeof(datetimeStr), rtc_sec, display, false);
+        char fullLine[40];
+        snprintf(fullLine, sizeof(fullLine), "%s", datetimeStr);
+        display->drawString(display->getWidth() - 5 - display->getStringWidth(fullLine), getTextPositions(display)[line],
+                            fullLine);
     }
 }
 
