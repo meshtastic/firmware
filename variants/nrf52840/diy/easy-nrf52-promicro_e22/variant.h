@@ -70,9 +70,9 @@ E22/NRF52 PRO MICRO PIN ASSIGNMENT
 | P1.06 | SCL         |     | P0.09    | NSS          |
 |       |             |     |          |              |
 |       | Mid board   |     |          | Internal     |
-| P1.01 | GPS_TX      |     | 0.15     | LED          |
+| P1.01 | Free pin    |     | 0.15     | LED          |
 | P1.02 | GPS_RX      |     | 0.13     | 3V3_EN       |
-| P1.07 | GPS_EN      |     |          |              |
+| P1.07 | GPS_TX      |     |          |              |
 */
 
 // Number of pins defined in PinDescription array
@@ -82,7 +82,7 @@ E22/NRF52 PRO MICRO PIN ASSIGNMENT
 #define NUM_ANALOG_OUTPUTS (0)
 
 // Pin 13 enables 3.3V periphery.
-#define PIN_3V3_EN (0 + 13) // P0.13
+// #define PIN_3V3_EN (0 + 13) // P0.13
 
 // Battery
 #define BATTERY_PIN (0 + 31) // P0.31
@@ -121,10 +121,10 @@ E22/NRF52 PRO MICRO PIN ASSIGNMENT
 #define BUTTON_PIN (-1) // no button
 
 // GPS
-#define PIN_GPS_TX (32 + 1) // P1.01
+#define PIN_GPS_TX (32 + 7) // P1.07
 #define PIN_GPS_RX (32 + 2) // P1.02
 
-#define PIN_GPS_EN (32 + 7) // P1.07
+#define PIN_GPS_EN (0 + 13) // P0.13 3.3V enable
 #define GPS_POWER_TOGGLE
 #define GPS_UBLOX
 // define GPS_DEBUG
