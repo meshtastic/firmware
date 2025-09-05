@@ -30,7 +30,14 @@ class NotificationRenderer
 
     static bool pauseBanner;
 
+    static char keyboardPopupMessage[256];
+    static char keyboardPopupTitle[64];
+    static uint32_t keyboardPopupUntil;
+    static bool showKeyboardPopup;
+
     static void resetBanner();
+    static void showKeyboardMessagePopupWithTitle(const char *title, const char *content, uint32_t durationMs);
+    static void drawKeyboardMessagePopup(OLEDDisplay *display);
     static void drawBannercallback(OLEDDisplay *display, OLEDDisplayUiState *state);
     static void drawAlertBannerOverlay(OLEDDisplay *display, OLEDDisplayUiState *state);
     static void drawNumberPicker(OLEDDisplay *display, OLEDDisplayUiState *state);
@@ -38,6 +45,8 @@ class NotificationRenderer
     static void drawTextInput(OLEDDisplay *display, OLEDDisplayUiState *state);
     static void drawNotificationBox(OLEDDisplay *display, OLEDDisplayUiState *state, const char *lines[MAX_LINES + 1],
                                     uint16_t totalLines, uint8_t firstOptionToShow, uint16_t maxWidth = 0);
+    static void drawInvertedNotificationBox(OLEDDisplay *display, OLEDDisplayUiState *state, const char *lines[],
+                                            uint16_t totalLines, uint8_t firstOptionToShow, uint16_t maxWidth = 0);
 
     static void drawCriticalFaultFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
     static void drawSSLScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
