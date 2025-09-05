@@ -1378,9 +1378,11 @@ GnssModel_t GPS::getProbeResponse(unsigned long timeout, const std::vector<ChipI
             char c = _serial_gps->read();
 
             // Add char to buffer if there's space
-            if (responseLen < sizeof(response) - 1) {
-                response[responseLen++] = c;
                 response[responseLen] = '\0';
+            } else {
+#ifdef GPS_DEBUG
+                LOG_WARN("GPS response buffer overflow, dropping character '%c'", c);
+#endif
             }
 
             if (c == ',' || (responseLen >= 2 && response[responseLen - 2] == '\r' && response[responseLen - 1] == '\n')) {
