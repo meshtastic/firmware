@@ -185,6 +185,16 @@ class NodeDB
      */
     void set_favorite(bool is_favorite, uint32_t nodeId);
 
+    /*
+     * Returns true if the node is in the NodeDB and marked as favorite
+     */
+    bool isFavorite(uint32_t nodeId);
+
+    /*
+     * Returns true if p->from or p->to is a favorited node
+     */
+    bool isFromOrToFavoritedNode(const meshtastic_MeshPacket &p);
+
     /**
      * Other functions like the node picker can request a pause in the node sorting
      */
