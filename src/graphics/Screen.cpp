@@ -1438,7 +1438,7 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
             } else {
                 // Virtual keyboard is active - just mark that frames need regeneration when keyboard closes
                 // The devicestate and hasUnreadMessage are already set above, so message will appear later
-                LOG_INFO("Virtual keyboard active - deferring frame list update for new message");
+                LOG_DEBUG("Virtual keyboard active - deferring frame list update for new message");
             }
 
             // Show message alert - either as normal banner or as keyboard popup
