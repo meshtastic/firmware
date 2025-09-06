@@ -15,6 +15,8 @@
 #include "main.h"
 #include "meshUtils.h"
 
+#include <hal/nrf_lpcomp.h>
+
 #ifdef BQ25703A_ADDR
 #include "BQ25713.h"
 #endif
@@ -387,6 +389,29 @@ void cpuDeepSleep(uint32_t msecToWake)
         nrf_gpio_cfg_input(BUTTON_PIN, NRF_GPIO_PIN_PULLUP); // Enable internal pull-up on the button pin
         nrf_gpio_pin_sense_t sense = NRF_GPIO_PIN_SENSE_LOW; // Configure SENSE signal on low edge
         nrf_gpio_cfg_sense_set(BUTTON_PIN, sense);           // Apply SENSE to wake up the device from the deep sleep
+#endif
+
+#ifdef RAK4630
+        // Wake up if power rises again
+        nrf_lpcomp_config_t c;
+        /* We have AIN3 with a VBAT divider so AIN3 = VBAT * (1.5/2.5)
+         * We have the device going deep sleep under 3.1V, which is AIN3 = 1.86V
+         * So we can wake up when VBAT>=VDD is restored to 3.3V, where AIN3 = 1.98V
+         * 1.98/3.3 = 6/10, but that's close to the VBAT divider, so we
+         * pick 6/8VDD, which means VBAT=4.1V.
+         * Reference:
+         * VDD=3.3V AIN3=5/8*VDD=2.06V VBAT=1.66*AIN3=3.41V 
+         * VDD=3.3V AIN3=11/16*VDD=2.26V VBAT=1.66*AIN3=3.76V
+         * VDD=3.3V AIN3=6/8*VDD=2.47V VBAT=1.66*AIN3=4.1V
+         */
+        c.reference = NRF_LPCOMP_REF_SUPPLY_11_16;
+        c.detection = NRF_LPCOMP_DETECT_UP;
+        c.hyst = NRF_LPCOMP_HYST_NOHYST;
+        nrf_lpcomp_configure(NRF_LPCOMP, &c);
+        nrf_lpcomp_input_select(NRF_LPCOMP, NRF_LPCOMP_INPUT_3); // RAK4630 AIN0 = nrf52840 AIN3 = Pin 5
+        nrf_lpcomp_enable(NRF_LPCOMP);
+        nrf_lpcomp_task_trigger(NRF_LPCOMP, NRF_LPCOMP_TASK_START);
+        while(!nrf_lpcomp_event_check(NRF_LPCOMP, NRF_LPCOMP_EVENT_READY));
 #endif
 
         auto ok = sd_power_system_off();
