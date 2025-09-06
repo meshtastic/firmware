@@ -31,7 +31,8 @@ typedef enum {
     GNSS_MODEL_MTK_PA1616S,
     GNSS_MODEL_AG3335,
     GNSS_MODEL_AG3352,
-    GNSS_MODEL_LS20031
+    GNSS_MODEL_LS20031,
+    GNSS_MODEL_CM121
 } GnssModel_t;
 
 typedef enum {
