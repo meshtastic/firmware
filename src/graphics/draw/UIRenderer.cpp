@@ -922,17 +922,6 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
 
     // If GPS is off, no need to display these parts
     if (strcmp(displayLine, "GPS off") != 0 && strcmp(displayLine, "No GPS") != 0) {
-        /* MUST BE MOVED TO CLOCK SCREEN
-            // === Second Row: Date ===
-            uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true);
-            char datetimeStr[25];
-            bool showTime = false; // set to true for full datetime
-            UIRenderer::formatDateTime(datetimeStr, sizeof(datetimeStr), rtc_sec, display, showTime);
-            char fullLine[40];
-            snprintf(fullLine, sizeof(fullLine), " Date: %s", datetimeStr);
-            display->drawString(0, getTextPositions(display)[line++], fullLine);
-        */
-
         // === Second Row: Last GPS Fix ===
         if (gpsStatus->getLastFixMillis() > 0) {
             uint32_t delta = (millis() - gpsStatus->getLastFixMillis()) / 1000; // seconds since last fix
@@ -954,37 +943,37 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
 #else
             // Non E-Ink: include seconds where useful
             if (days > 0) {
-                snprintf(buf, sizeof(buf), " Last: %ud %uh", days, hours);
+                snprintf(buf, sizeof(buf), "Last: %ud %uh", days, hours);
             } else if (hours > 0) {
-                snprintf(buf, sizeof(buf), " Last: %uh %um", hours, mins);
+                snprintf(buf, sizeof(buf), "Last: %uh %um", hours, mins);
             } else if (mins > 0) {
-                snprintf(buf, sizeof(buf), " Last: %um %us", mins, secs);
+                snprintf(buf, sizeof(buf), "Last: %um %us", mins, secs);
             } else {
-                snprintf(buf, sizeof(buf), " Last: %us", secs);
+                snprintf(buf, sizeof(buf), "Last: %us", secs);
             }
 #endif
 
             display->drawString(0, getTextPositions(display)[line++], buf);
         } else {
-            display->drawString(0, getTextPositions(display)[line++], " Last: ?");
+            display->drawString(0, getTextPositions(display)[line++], "Last: ?");
         }
 
         // === Third Row: Latitude ===
         char latStr[32];
-        snprintf(latStr, sizeof(latStr), " Lat: %.5f", geoCoord.getLatitude() * 1e-7);
+        snprintf(latStr, sizeof(latStr), "Lat: %.5f", geoCoord.getLatitude() * 1e-7);
         display->drawString(x, getTextPositions(display)[line++], latStr);
 
         // === Fourth Row: Longitude ===
         char lonStr[32];
-        snprintf(lonStr, sizeof(lonStr), " Lon: %.5f", geoCoord.getLongitude() * 1e-7);
+        snprintf(lonStr, sizeof(lonStr), "Lon: %.5f", geoCoord.getLongitude() * 1e-7);
         display->drawString(x, getTextPositions(display)[line++], lonStr);
 
         // === Fifth Row: Altitude ===
         char DisplayLineTwo[32] = {0};
         if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
-            snprintf(DisplayLineTwo, sizeof(DisplayLineTwo), " Alt: %.0fft", geoCoord.getAltitude() * METERS_TO_FEET);
+            snprintf(DisplayLineTwo, sizeof(DisplayLineTwo), "Alt: %.0fft", geoCoord.getAltitude() * METERS_TO_FEET);
         } else {
-            snprintf(DisplayLineTwo, sizeof(DisplayLineTwo), " Alt: %.0im", geoCoord.getAltitude());
+            snprintf(DisplayLineTwo, sizeof(DisplayLineTwo), "Alt: %.0im", geoCoord.getAltitude());
         }
         display->drawString(x, getTextPositions(display)[line++], DisplayLineTwo);
     }

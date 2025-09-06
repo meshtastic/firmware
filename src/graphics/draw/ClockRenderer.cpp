@@ -191,6 +191,7 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
     const char *titleStr = "";
     // === Header ===
     graphics::drawCommonHeader(display, x, y, titleStr, true);
+    int line = 0;
 
 #ifdef T_WATCH_S3
     if (nimbleBluetooth && nimbleBluetooth->isConnected()) {
@@ -294,11 +295,21 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
         display->drawString(startingHourMinuteTextX + xOffset, (display->getHeight() - hourMinuteTextY) - yOffset - 2,
                             isPM ? "pm" : "am");
     }
+
 #ifndef USE_EINK
     xOffset = (isHighResolution) ? 18 : 10;
     display->drawString(startingHourMinuteTextX + timeStringWidth - xOffset, (display->getHeight() - hourMinuteTextY) - yOffset,
                         secondString);
 #endif
+
+    // Display GPS derived date
+    char datetimeStr[25];
+    UIRenderer::formatDateTime(datetimeStr, sizeof(datetimeStr), rtc_sec, display, false);
+    char fullLine[40];
+    snprintf(fullLine, sizeof(fullLine), "%s", datetimeStr);
+    yOffset = (isHighResolution) ? 12 : 1;
+    display->drawString(startingHourMinuteTextX + timeStringWidth - display->getStringWidth(fullLine),
+                        getTextPositions(display)[line] + yOffset, fullLine);
 }
 
 void drawBluetoothConnectedIcon(OLEDDisplay *display, int16_t x, int16_t y)
@@ -314,6 +325,7 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     const char *titleStr = "";
     // === Header ===
     graphics::drawCommonHeader(display, x, y, titleStr, true);
+    int line = 0;
 
 #ifdef T_WATCH_S3
     if (nimbleBluetooth && nimbleBluetooth->isConnected()) {
@@ -511,6 +523,19 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         // draw second hand
         display->drawLine(centerX, centerY, secondX, secondY);
 #endif
+
+        display->setFont(FONT_SMALL);
+        // Display GPS derived date
+        char datetimeStr[25];
+        UIRenderer::formatDateTime(datetimeStr, sizeof(datetimeStr), rtc_sec, display, false);
+        char fullLine[40];
+        if (isHighResolution) {
+            snprintf(fullLine, sizeof(fullLine), "%s", datetimeStr);
+        } else {
+            snprintf(fullLine, sizeof(fullLine), "%s", &datetimeStr[2]);
+        }
+        display->drawString(display->getWidth() - 1 - display->getStringWidth(fullLine), getTextPositions(display)[line],
+                            fullLine);
     }
 }
 
