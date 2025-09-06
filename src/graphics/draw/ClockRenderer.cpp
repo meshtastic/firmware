@@ -302,14 +302,28 @@ void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int1
                         secondString);
 #endif
 
+    display->setFont(FONT_SMALL);
     // Display GPS derived date
     char datetimeStr[25];
     UIRenderer::formatDateTime(datetimeStr, sizeof(datetimeStr), rtc_sec, display, false);
     char fullLine[40];
-    snprintf(fullLine, sizeof(fullLine), "%s", datetimeStr);
-    yOffset = (isHighResolution) ? 12 : 1;
-    display->drawString(startingHourMinuteTextX + timeStringWidth - display->getStringWidth(fullLine),
-                        getTextPositions(display)[line] + yOffset, fullLine);
+    xOffset = 1;
+    if (isHighResolution) {
+        snprintf(fullLine, sizeof(fullLine), "%s", datetimeStr);
+    } else {
+        snprintf(fullLine, sizeof(fullLine), "%s", &datetimeStr[2]);
+    }
+    if (hasUnreadMessage) {
+        if (isHighResolution) {
+            xOffset = 23;
+            snprintf(fullLine, sizeof(fullLine), "%s", &datetimeStr[2]);
+        } else {
+            xOffset = 15;
+            snprintf(fullLine, sizeof(fullLine), "%s", &datetimeStr[5]);
+        }
+    }
+    display->drawString(display->getWidth() - xOffset - display->getStringWidth(fullLine), getTextPositions(display)[line],
+                        fullLine);
 }
 
 void drawBluetoothConnectedIcon(OLEDDisplay *display, int16_t x, int16_t y)
@@ -529,12 +543,22 @@ void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         char datetimeStr[25];
         UIRenderer::formatDateTime(datetimeStr, sizeof(datetimeStr), rtc_sec, display, false);
         char fullLine[40];
+        int xOffset = 1;
         if (isHighResolution) {
             snprintf(fullLine, sizeof(fullLine), "%s", datetimeStr);
         } else {
             snprintf(fullLine, sizeof(fullLine), "%s", &datetimeStr[2]);
         }
-        display->drawString(display->getWidth() - 1 - display->getStringWidth(fullLine), getTextPositions(display)[line],
+        if (hasUnreadMessage) {
+            if (isHighResolution) {
+                xOffset = 23;
+                snprintf(fullLine, sizeof(fullLine), "%s", &datetimeStr[2]);
+            } else {
+                xOffset = 15;
+                snprintf(fullLine, sizeof(fullLine), "%s", &datetimeStr[5]);
+            }
+        }
+        display->drawString(display->getWidth() - xOffset - display->getStringWidth(fullLine), getTextPositions(display)[line],
                             fullLine);
     }
 }
