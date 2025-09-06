@@ -224,9 +224,10 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     if (!config.lora.override_duty_cycle && myRegion->dutyCycle < 100) {
         float hourlyTxPercent = airTime->utilizationTXPercent();
         if (hourlyTxPercent > myRegion->dutyCycle) {
-#ifdef DEBUG_PORT
             uint8_t silentMinutes = airTime->getSilentMinutes(hourlyTxPercent, myRegion->dutyCycle);
+
             LOG_WARN("Duty cycle limit exceeded. Aborting send for now, you can send again in %d mins", silentMinutes);
+
             meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
             cn->has_reply_id = true;
             cn->reply_id = p->id;
@@ -234,7 +235,7 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
             cn->time = getValidTime(RTCQualityFromNet);
             sprintf(cn->message, "Duty cycle limit exceeded. You can send again in %d mins", silentMinutes);
             service->sendClientNotification(cn);
-#endif
+
             meshtastic_Routing_Error err = meshtastic_Routing_Error_DUTY_CYCLE_LIMIT;
             if (isFromUs(p)) { // only send NAK to API, not to the mesh
                 abortSendAndNak(err, p);
@@ -522,12 +523,15 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
         // is not in the local nodedb
         // First, only PKC encrypt packets we are originating
         if (isFromUs(p) &&
-            // Don't use PKC with simulator
-            radioType != SIM_RADIO &&
+#if ARCH_PORTDUINO
+            // Sim radio via the cli flag skips PKC
+            !portduino_config.force_simradio &&
+#endif
             // Don't use PKC with Ham mode
             !owner.is_licensed &&
-            // Don't use PKC if it's not explicitly requested and a non-primary channel is requested
-            !(p->pki_encrypted != true && p->channel > 0) &&
+            // Don't use PKC on 'serial' or 'gpio' channels unless explicitly requested
+            !(p->pki_encrypted != true && (strcasecmp(channels.getName(chIndex), Channels::serialChannel) == 0 ||
+                                           strcasecmp(channels.getName(chIndex), Channels::gpioChannel) == 0)) &&
             // Check for valid keys and single node destination
             config.security.private_key.size == 32 && !isBroadcast(p->to) && node != nullptr &&
             // Check for a known public key for the destination
@@ -548,20 +552,6 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             numbytes += MESHTASTIC_PKC_OVERHEAD;
             p->channel = 0;
             p->pki_encrypted = true;
-
-            // warn the user about a low entropy key
-            if (nodeDB->keyIsLowEntropy) {
-                LOG_WARN(LOW_ENTROPY_WARNING);
-                if (!nodeDB->hasWarned) {
-                    meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
-                    cn->which_payload_variant = meshtastic_ClientNotification_low_entropy_key_tag;
-                    cn->level = meshtastic_LogRecord_Level_WARNING;
-                    cn->time = getValidTime(RTCQualityFromNet);
-                    sprintf(cn->message, LOW_ENTROPY_WARNING);
-                    service->sendClientNotification(cn);
-                    nodeDB->hasWarned = true;
-                }
-            }
         } else {
             if (p->pki_encrypted == true) {
                 // Client specifically requested PKI encryption
@@ -572,7 +562,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             // Now that we are encrypting the packet channel should be the hash (no longer the index)
             p->channel = hash;
             if (hash < 0) {
-                // No suitable channel could be found for sending
+                // No suitable channel could be found for
                 return meshtastic_Routing_Error_NO_CHANNEL;
             }
             crypto->encryptPacket(getFrom(p), p->id, numbytes, bytes);
@@ -588,7 +578,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
         // Now that we are encrypting the packet channel should be the hash (no longer the index)
         p->channel = hash;
         if (hash < 0) {
-            // No suitable channel could be found for sending
+            // No suitable channel could be found for
             return meshtastic_Routing_Error_NO_CHANNEL;
         }
         crypto->encryptPacket(getFrom(p), p->id, numbytes, bytes);
@@ -651,11 +641,12 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
         shouldIgnoreNonstandardPorts = true;
 #endif
         if (shouldIgnoreNonstandardPorts && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
-            IS_ONE_OF(p->decoded.portnum, meshtastic_PortNum_ATAK_FORWARDER, meshtastic_PortNum_ATAK_PLUGIN,
-                      meshtastic_PortNum_PAXCOUNTER_APP, meshtastic_PortNum_IP_TUNNEL_APP, meshtastic_PortNum_AUDIO_APP,
-                      meshtastic_PortNum_PRIVATE_APP, meshtastic_PortNum_DETECTION_SENSOR_APP, meshtastic_PortNum_RANGE_TEST_APP,
-                      meshtastic_PortNum_REMOTE_HARDWARE_APP)) {
-            LOG_DEBUG("Ignore packet on blacklisted portnum for CORE_PORTNUMS_ONLY");
+            !IS_ONE_OF(p->decoded.portnum, meshtastic_PortNum_TEXT_MESSAGE_APP, meshtastic_PortNum_TEXT_MESSAGE_COMPRESSED_APP,
+                       meshtastic_PortNum_POSITION_APP, meshtastic_PortNum_NODEINFO_APP, meshtastic_PortNum_ROUTING_APP,
+                       meshtastic_PortNum_TELEMETRY_APP, meshtastic_PortNum_ADMIN_APP, meshtastic_PortNum_ALERT_APP,
+                       meshtastic_PortNum_KEY_VERIFICATION_APP, meshtastic_PortNum_WAYPOINT_APP,
+                       meshtastic_PortNum_STORE_FORWARD_APP, meshtastic_PortNum_TRACEROUTE_APP)) {
+            LOG_DEBUG("Ignore packet on non-standard portnum for CORE_PORTNUMS_ONLY");
             cancelSending(p->from, p->id);
             skipHandle = true;
         }
@@ -664,7 +655,8 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
     }
 
     // call modules here
-    if (!skipHandle) {
+    // If this could be a spoofed packet, don't let the modules see it.
+    if (!skipHandle && p->from != nodeDB->getNodeNum()) {
         MeshModule::callModules(*p, src);
 
 #if !MESHTASTIC_EXCLUDE_MQTT
@@ -678,6 +670,8 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
             !isFromUs(p) && mqtt)
             mqtt->onSend(*p_encrypted, *p, p->channel);
 #endif
+    } else if (p->from == nodeDB->getNodeNum() && !skipHandle) {
+        MeshModule::callModules(*p, src);
     }
 
     packetPool.release(p_encrypted); // Release the encrypted packet

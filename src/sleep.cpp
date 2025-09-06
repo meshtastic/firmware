@@ -32,6 +32,16 @@ esp_sleep_source_t wakeCause; // the reason we booted this time
 #endif
 #include "Throttle.h"
 
+#ifdef USE_XL9555
+#include "ExtensionIOXL9555.hpp"
+extern ExtensionIOXL9555 io;
+#endif
+
+#ifdef HAS_PPM
+#include <XPowersLib.h>
+extern XPowersPPM *PPM;
+#endif
+
 #ifndef INCLUDE_vTaskSuspend
 #define INCLUDE_vTaskSuspend 0
 #endif
@@ -131,7 +141,7 @@ void initDeepSleep()
       support busted boards, assume button one was pressed wakeButtons = ((uint64_t)1) << buttons.gpios[0];
       */
 
-#ifdef DEBUG_PORT
+#if defined(DEBUG_PORT) && !defined(DEBUG_MUTE)
     // If we booted because our timer ran out or the user pressed reset, send those as fake events
     RESET_REASON hwReason = rtc_get_reset_reason(0);
 
@@ -297,6 +307,14 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false, bool skipSaveN
 #endif
 #endif
 
+#ifdef HAS_PPM
+    if (PPM) {
+        LOG_INFO("PMM shutdown");
+        console->flush();
+        PPM->shutdown();
+    }
+#endif
+
 #ifdef HAS_PMU
     if (pmu_found && PMU) {
         // Obsolete comment: from back when we we used to receive lora packets while CPU was in deep sleep.
@@ -412,6 +430,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     if (pmu_found)
         gpio_wakeup_enable((gpio_num_t)PMU_IRQ, GPIO_INTR_LOW_LEVEL); // pmu irq
 #endif
+
     auto res = esp_sleep_enable_gpio_wakeup();
     if (res != ESP_OK) {
         LOG_ERROR("esp_sleep_enable_gpio_wakeup result %d", res);

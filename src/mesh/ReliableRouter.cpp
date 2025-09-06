@@ -58,7 +58,10 @@ bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
             // marked as wantAck
             sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, old->packet->channel);
 
-            stopRetransmission(key);
+            // Only stop retransmissions if the rebroadcast came via LoRa
+            if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA) {
+                stopRetransmission(key);
+            }
         } else {
             LOG_DEBUG("Didn't find pending packet");
         }

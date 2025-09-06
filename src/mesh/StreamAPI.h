@@ -50,12 +50,15 @@ class StreamAPI : public PhoneAPI
      * phone.
      */
     virtual int32_t runOncePart();
+    virtual int32_t runOncePart(char *buf,uint16_t bufLen);
 
   private:
     /**
      * Read any rx chars from the link and call handleToRadio
      */
     int32_t readStream();
+    int32_t readStream(char *buf,uint16_t bufLen);
+    int32_t handleRecStream(char *buf,uint16_t bufLen);
 
     /**
      * call getFromRadio() and deliver encapsulated packets to the Stream

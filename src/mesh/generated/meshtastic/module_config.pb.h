@@ -82,7 +82,10 @@ typedef enum _meshtastic_ModuleConfig_SerialConfig_Serial_Mode {
     meshtastic_ModuleConfig_SerialConfig_Serial_Mode_WS85 = 6,
     /* VE.Direct is a serial protocol used by Victron Energy products
  https://beta.ivc.no/wiki/index.php/Victron_VE_Direct_DIY_Cable */
-    meshtastic_ModuleConfig_SerialConfig_Serial_Mode_VE_DIRECT = 7
+    meshtastic_ModuleConfig_SerialConfig_Serial_Mode_VE_DIRECT = 7,
+    /* Used to configure and view some parameters of MeshSolar.
+https://heltec.org/project/meshsolar/ */
+    meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MS_CONFIG = 8
 } meshtastic_ModuleConfig_SerialConfig_Serial_Mode;
 
 /* TODO: REPLACE */
@@ -314,6 +317,9 @@ typedef struct _meshtastic_ModuleConfig_RangeTestConfig {
     /* Bool value indicating that this node should save a RangeTest.csv file.
  ESP32 Only */
     bool save;
+    /* Bool indicating that the node should cleanup / destroy it's RangeTest.csv file.
+ ESP32 Only */
+    bool clear_on_reboot;
 } meshtastic_ModuleConfig_RangeTestConfig;
 
 /* Configuration for both device and environment metrics */
@@ -472,8 +478,8 @@ extern "C" {
 #define _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_ARRAYSIZE ((meshtastic_ModuleConfig_SerialConfig_Serial_Baud)(meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_921600+1))
 
 #define _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MIN meshtastic_ModuleConfig_SerialConfig_Serial_Mode_DEFAULT
-#define _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MAX meshtastic_ModuleConfig_SerialConfig_Serial_Mode_VE_DIRECT
-#define _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_ARRAYSIZE ((meshtastic_ModuleConfig_SerialConfig_Serial_Mode)(meshtastic_ModuleConfig_SerialConfig_Serial_Mode_VE_DIRECT+1))
+#define _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MAX meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MS_CONFIG
+#define _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_ARRAYSIZE ((meshtastic_ModuleConfig_SerialConfig_Serial_Mode)(meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MS_CONFIG+1))
 
 #define _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE
 #define _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MAX meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_BACK
@@ -516,7 +522,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_SerialConfig_init_default {0, 0, 0, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MIN, 0}
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StoreForwardConfig_init_default {0, 0, 0, 0, 0, 0}
-#define meshtastic_ModuleConfig_RangeTestConfig_init_default {0, 0, 0}
+#define meshtastic_ModuleConfig_RangeTestConfig_init_default {0, 0, 0, 0}
 #define meshtastic_ModuleConfig_TelemetryConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_CannedMessageConfig_init_default {0, 0, 0, 0, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, 0, 0, "", 0}
 #define meshtastic_ModuleConfig_AmbientLightingConfig_init_default {0, 0, 0, 0, 0}
@@ -532,7 +538,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_SerialConfig_init_zero {0, 0, 0, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MIN, 0}
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StoreForwardConfig_init_zero {0, 0, 0, 0, 0, 0}
-#define meshtastic_ModuleConfig_RangeTestConfig_init_zero {0, 0, 0}
+#define meshtastic_ModuleConfig_RangeTestConfig_init_zero {0, 0, 0, 0}
 #define meshtastic_ModuleConfig_TelemetryConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_CannedMessageConfig_init_zero {0, 0, 0, 0, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, 0, 0, "", 0}
 #define meshtastic_ModuleConfig_AmbientLightingConfig_init_zero {0, 0, 0, 0, 0}
@@ -607,6 +613,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_RangeTestConfig_enabled_tag 1
 #define meshtastic_ModuleConfig_RangeTestConfig_sender_tag 2
 #define meshtastic_ModuleConfig_RangeTestConfig_save_tag 3
+#define meshtastic_ModuleConfig_RangeTestConfig_clear_on_reboot_tag 4
 #define meshtastic_ModuleConfig_TelemetryConfig_device_update_interval_tag 1
 #define meshtastic_ModuleConfig_TelemetryConfig_environment_update_interval_tag 2
 #define meshtastic_ModuleConfig_TelemetryConfig_environment_measurement_enabled_tag 3
@@ -800,7 +807,8 @@ X(a, STATIC,   SINGULAR, BOOL,     is_server,         6)
 #define meshtastic_ModuleConfig_RangeTestConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, BOOL,     enabled,           1) \
 X(a, STATIC,   SINGULAR, UINT32,   sender,            2) \
-X(a, STATIC,   SINGULAR, BOOL,     save,              3)
+X(a, STATIC,   SINGULAR, BOOL,     save,              3) \
+X(a, STATIC,   SINGULAR, BOOL,     clear_on_reboot,   4)
 #define meshtastic_ModuleConfig_RangeTestConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_RangeTestConfig_DEFAULT NULL
 
@@ -898,7 +906,7 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_ModuleConfig_MapReportSettings_size 14
 #define meshtastic_ModuleConfig_NeighborInfoConfig_size 10
 #define meshtastic_ModuleConfig_PaxcounterConfig_size 30
-#define meshtastic_ModuleConfig_RangeTestConfig_size 10
+#define meshtastic_ModuleConfig_RangeTestConfig_size 12
 #define meshtastic_ModuleConfig_RemoteHardwareConfig_size 96
 #define meshtastic_ModuleConfig_SerialConfig_size 28
 #define meshtastic_ModuleConfig_StoreForwardConfig_size 24

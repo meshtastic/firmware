@@ -33,11 +33,14 @@
 #include "mesh/generated/meshtastic/config.pb.h"
 #include "meshUtils.h"
 #include "modules/Modules.h"
-#include "shutdown.h"
 #include "sleep.h"
 #include "target_specific.h"
 #include <memory>
 #include <utility>
+
+#ifdef ELECROW_ThinkNode_M5
+PCA9557 io(0x18, &Wire);
+#endif
 
 #ifdef ARCH_ESP32
 #include "freertosinc.h"
@@ -132,8 +135,9 @@ AccelerometerThread *accelerometerThread = nullptr;
 AudioThread *audioThread = nullptr;
 #endif
 
-#ifdef USE_PCA9557
-PCA9557 IOEXP;
+#ifdef USE_XL9555
+#include "ExtensionIOXL9555.hpp"
+ExtensionIOXL9555 io;
 #endif
 
 #if HAS_TFT
@@ -198,7 +202,7 @@ ScanI2C::FoundDevice rgb_found = ScanI2C::FoundDevice(ScanI2C::DeviceType::NONE,
 /// The I2C address of our Air Quality Indicator (if found)
 ScanI2C::DeviceAddress aqi_found = ScanI2C::ADDRESS_NONE;
 
-#ifdef T_WATCH_S3
+#if defined(T_WATCH_S3) || defined(T_LORA_PAGER)
 Adafruit_DRV2605 drv;
 #endif
 
@@ -297,6 +301,14 @@ void setup()
     digitalWrite(PIN_POWER_EN, HIGH);
 #endif
 
+#if defined(ELECROW_ThinkNode_M5)
+    Wire.begin(48, 47);
+    io.pinMode(PCA_PIN_EINK_EN, OUTPUT);
+    io.pinMode(PCA_PIN_POWER_EN, OUTPUT);
+    io.digitalWrite(PCA_PIN_POWER_EN, HIGH);
+    // io.pinMode(C2_PIN, OUTPUT);
+#endif
+
 #ifdef LED_POWER
     pinMode(LED_POWER, OUTPUT);
     digitalWrite(LED_POWER, LED_STATE_ON);
@@ -314,7 +326,11 @@ void setup()
 
 #ifdef BLE_LED
     pinMode(BLE_LED, OUTPUT);
+#ifdef BLE_LED_INVERTED
+    digitalWrite(BLE_LED, HIGH);
+#else
     digitalWrite(BLE_LED, LOW);
+#endif
 #endif
 
 #if defined(T_DECK)
@@ -335,6 +351,39 @@ void setup()
     pinMode(TFT_CS, OUTPUT);
     digitalWrite(TFT_CS, HIGH);
     delay(100);
+#elif defined(T_DECK_PRO)
+    pinMode(LORA_EN, OUTPUT);
+    digitalWrite(LORA_EN, HIGH);
+    pinMode(LORA_CS, OUTPUT);
+    digitalWrite(LORA_CS, HIGH);
+    pinMode(SDCARD_CS, OUTPUT);
+    digitalWrite(SDCARD_CS, HIGH);
+    pinMode(PIN_EINK_CS, OUTPUT);
+    digitalWrite(PIN_EINK_CS, HIGH);
+#elif defined(T_LORA_PAGER)
+    pinMode(LORA_CS, OUTPUT);
+    digitalWrite(LORA_CS, HIGH);
+    pinMode(SDCARD_CS, OUTPUT);
+    digitalWrite(SDCARD_CS, HIGH);
+    pinMode(TFT_CS, OUTPUT);
+    digitalWrite(TFT_CS, HIGH);
+    // io expander
+    io.begin(Wire, XL9555_SLAVE_ADDRESS0, SDA, SCL);
+    io.pinMode(EXPANDS_DRV_EN, OUTPUT);
+    io.digitalWrite(EXPANDS_DRV_EN, HIGH);
+    io.pinMode(EXPANDS_AMP_EN, OUTPUT);
+    io.digitalWrite(EXPANDS_AMP_EN, HIGH);
+    io.pinMode(EXPANDS_LORA_EN, OUTPUT);
+    io.digitalWrite(EXPANDS_LORA_EN, HIGH);
+    io.pinMode(EXPANDS_GPS_EN, OUTPUT);
+    io.digitalWrite(EXPANDS_GPS_EN, HIGH);
+    io.pinMode(EXPANDS_KB_EN, OUTPUT);
+    io.digitalWrite(EXPANDS_KB_EN, HIGH);
+    io.pinMode(EXPANDS_SD_EN, OUTPUT);
+    io.digitalWrite(EXPANDS_SD_EN, HIGH);
+    io.pinMode(EXPANDS_GPIO_EN, OUTPUT);
+    io.digitalWrite(EXPANDS_GPIO_EN, HIGH);
+    io.pinMode(EXPANDS_SD_PULLEN, INPUT);
 #endif
 
     concurrency::hasBeenSetup = true;
@@ -370,7 +419,7 @@ void setup()
     struct timeval tv;
     tv.tv_sec = time(NULL);
     tv.tv_usec = 0;
-    perhapsSetRTC(RTCQualityNTP, &tv);
+    perhapsSetRTC(RTCQualityDevice, &tv);
 #endif
 
     powerMonInit();
@@ -379,6 +428,16 @@ void setup()
     LOG_INFO("\n\n//\\ E S H T /\\ S T / C\n");
 
     initDeepSleep();
+
+#if defined(MODEM_POWER_EN)
+    pinMode(MODEM_POWER_EN, OUTPUT);
+    digitalWrite(MODEM_POWER_EN, LOW);
+#endif
+
+#if defined(MODEM_PWRKEY)
+    pinMode(MODEM_PWRKEY, OUTPUT);
+    digitalWrite(MODEM_PWRKEY, LOW);
+#endif
 
 #if defined(LORA_TCXO_GPIO)
     pinMode(LORA_TCXO_GPIO, OUTPUT);
@@ -515,25 +574,11 @@ void setup()
     LOG_INFO("Scan for i2c devices");
 #endif
 
-#if defined(I2C_SDA1) && defined(ARCH_RP2040)
-    Wire1.setSDA(I2C_SDA1);
-    Wire1.setSCL(I2C_SCL1);
-    Wire1.begin();
-    i2cScanner->scanPort(ScanI2C::I2CPort::WIRE1);
-#elif defined(I2C_SDA1) && !defined(ARCH_RP2040)
-    Wire1.begin(I2C_SDA1, I2C_SCL1);
-    i2cScanner->scanPort(ScanI2C::I2CPort::WIRE1);
-#elif defined(NRF52840_XXAA) && (WIRE_INTERFACES_COUNT == 2)
+#if defined(I2C_SDA1) || (defined(NRF52840_XXAA) && (WIRE_INTERFACES_COUNT == 2))
     i2cScanner->scanPort(ScanI2C::I2CPort::WIRE1);
 #endif
 
-#if defined(I2C_SDA) && defined(ARCH_RP2040)
-    Wire.setSDA(I2C_SDA);
-    Wire.setSCL(I2C_SCL);
-    Wire.begin();
-    i2cScanner->scanPort(ScanI2C::I2CPort::WIRE);
-#elif defined(I2C_SDA) && !defined(ARCH_RP2040)
-    Wire.begin(I2C_SDA, I2C_SCL);
+#if defined(I2C_SDA)
     i2cScanner->scanPort(ScanI2C::I2CPort::WIRE);
 #elif defined(ARCH_PORTDUINO)
     if (settingsStrings[i2cdev] != "") {
@@ -696,6 +741,7 @@ void setup()
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::RAK12035, meshtastic_TelemetrySensorType_RAK12035);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::PCT2075, meshtastic_TelemetrySensorType_PCT2075);
     scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::SCD4X, meshtastic_TelemetrySensorType_SCD4X);
+    scannerToSensorsMap(i2cScanner, ScanI2C::DeviceType::TSL2561, meshtastic_TelemetrySensorType_TSL2561);
 
     i2cScanner.reset();
 #endif
@@ -785,7 +831,7 @@ void setup()
 #endif
 #endif
 
-#ifdef T_WATCH_S3
+#if defined(T_WATCH_S3) || defined(T_LORA_PAGER)
     drv.begin();
     drv.selectLibrary(1);
     // I2C trigger by sending 'go' command
@@ -831,7 +877,7 @@ void setup()
     if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
 
 #if defined(ST7701_CS) || defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) ||       \
-    defined(ST7789_CS) || defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS)
+    defined(ST7789_CS) || defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(ST7796_CS)
         screen = new graphics::Screen(screen_found, screen_model, screen_geometry);
 #elif defined(ARCH_PORTDUINO)
         if ((screen_found.port != ScanI2C::I2CPort::NO_I2C || settingsMap[displayPanel]) &&
@@ -908,13 +954,19 @@ void setup()
     service = new MeshService();
     service->init();
 
-    if (nodeDB->keyIsLowEntropy) {
-        service->reloadConfig(SEGMENT_CONFIG);
-        rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
-    }
-
     // Now that the mesh service is created, create any modules
     setupModules();
+
+    // warn the user about a low entropy key
+    if (nodeDB->keyIsLowEntropy && !nodeDB->hasWarned) {
+        LOG_WARN(LOW_ENTROPY_WARNING);
+        meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+        cn->level = meshtastic_LogRecord_Level_WARNING;
+        cn->time = getValidTime(RTCQualityFromNet);
+        sprintf(cn->message, LOW_ENTROPY_WARNING);
+        service->sendClientNotification(cn);
+        nodeDB->hasWarned = true;
+    }
 
 // buttons are now inputBroker, so have to come after setupModules
 #if HAS_BUTTON
@@ -1056,8 +1108,9 @@ void setup()
             mainDelay.interruptFromISR(&higherWake);
         };
         userConfigNoScreen.singlePress = INPUT_BROKER_USER_PRESS;
-        userConfigNoScreen.longPress = INPUT_BROKER_SHUTDOWN;
-        userConfigNoScreen.longPressTime = 5000;
+        userConfigNoScreen.longPress = INPUT_BROKER_NONE;
+        userConfigNoScreen.longPressTime = 500;
+        userConfigNoScreen.longLongPress = INPUT_BROKER_SHUTDOWN;
         userConfigNoScreen.doublePress = INPUT_BROKER_SEND_PING;
         userConfigNoScreen.triplePress = INPUT_BROKER_GPS_TOGGLE;
         UserButtonThread->initButton(userConfigNoScreen);
@@ -1087,7 +1140,7 @@ void setup()
 // Don't call screen setup until after nodedb is setup (because we need
 // the current region name)
 #if defined(ST7701_CS) || defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) ||       \
-    defined(ST7789_CS) || defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS)
+    defined(ST7789_CS) || defined(HX8357_CS) || defined(USE_ST7789) || defined(ILI9488_CS) || defined(ST7796_CS)
     if (screen)
         screen->setup();
 #elif defined(ARCH_PORTDUINO)
@@ -1473,7 +1526,7 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 #if ((!HAS_SCREEN || NO_EXT_GPIO) || MESHTASTIC_EXCLUDE_CANNEDMESSAGES) && !defined(MESHTASTIC_INCLUDE_NICHE_GRAPHICS)
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_CANNEDMSG_CONFIG;
 #endif
-#if NO_EXT_GPIO
+#if NO_EXT_GPIO || MESHTASTIC_EXCLUDE_EXTERNALNOTIFICATION
     deviceMetadata.excluded_modules |= meshtastic_ExcludedModules_EXTNOTIF_CONFIG;
 #endif
 // Only edge case here is if we apply this a device with built in Accelerometer and want to detect interrupts
@@ -1534,7 +1587,7 @@ void loop()
 #ifdef ARCH_NRF52
     nrf52Loop();
 #endif
-    powerCommandsCheck();
+    power->powerCommandsCheck();
 
 #ifdef DEBUG_STACK
     static uint32_t lastPrint = 0;
@@ -1545,7 +1598,13 @@ void loop()
 #endif
 
     service->loop();
-
+#if defined(LGFX_SDL)
+    if (screen) {
+        auto dispdev = screen->getDisplayDevice();
+        if (dispdev)
+            static_cast<TFTDisplay *>(dispdev)->sdlLoop();
+    }
+#endif
     long delayMsec = mainController.runOrDelay();
 
     // We want to sleep as long as possible here - because it saves power

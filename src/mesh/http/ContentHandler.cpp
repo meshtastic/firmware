@@ -342,6 +342,11 @@ void handleFsBrowseStatic(HTTPRequest *req, HTTPResponse *res)
     res->print(value->Stringify().c_str());
 
     delete value;
+
+    // Clean up the fileList to prevent memory leak
+    for (auto *val : fileList) {
+        delete val;
+    }
 }
 
 void handleFsDeleteStatic(HTTPRequest *req, HTTPResponse *res)
@@ -610,33 +615,38 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
         res->println("<pre>");
     }
 
+    // Helper lambda to create JSON array and clean up memory properly
+    auto createJSONArrayFromLog = [](uint32_t *logArray, int count) -> JSONValue * {
+        JSONArray tempArray;
+        for (int i = 0; i < count; i++) {
+            tempArray.push_back(new JSONValue((int)logArray[i]));
+        }
+        JSONValue *result = new JSONValue(tempArray);
+        // Clean up original array to prevent memory leak
+        for (auto *val : tempArray) {
+            delete val;
+        }
+        return result;
+    };
+
     // data->airtime->tx_log
-    JSONArray txLogValues;
     uint32_t *logArray;
     logArray = airTime->airtimeReport(TX_LOG);
-    for (int i = 0; i < airTime->getPeriodsToLog(); i++) {
-        txLogValues.push_back(new JSONValue((int)logArray[i]));
-    }
+    JSONValue *txLogJsonValue = createJSONArrayFromLog(logArray, airTime->getPeriodsToLog());
 
     // data->airtime->rx_log
-    JSONArray rxLogValues;
     logArray = airTime->airtimeReport(RX_LOG);
-    for (int i = 0; i < airTime->getPeriodsToLog(); i++) {
-        rxLogValues.push_back(new JSONValue((int)logArray[i]));
-    }
+    JSONValue *rxLogJsonValue = createJSONArrayFromLog(logArray, airTime->getPeriodsToLog());
 
     // data->airtime->rx_all_log
-    JSONArray rxAllLogValues;
     logArray = airTime->airtimeReport(RX_ALL_LOG);
-    for (int i = 0; i < airTime->getPeriodsToLog(); i++) {
-        rxAllLogValues.push_back(new JSONValue((int)logArray[i]));
-    }
+    JSONValue *rxAllLogJsonValue = createJSONArrayFromLog(logArray, airTime->getPeriodsToLog());
 
     // data->airtime
     JSONObject jsonObjAirtime;
-    jsonObjAirtime["tx_log"] = new JSONValue(txLogValues);
-    jsonObjAirtime["rx_log"] = new JSONValue(rxLogValues);
-    jsonObjAirtime["rx_all_log"] = new JSONValue(rxAllLogValues);
+    jsonObjAirtime["tx_log"] = txLogJsonValue;
+    jsonObjAirtime["rx_log"] = rxLogJsonValue;
+    jsonObjAirtime["rx_all_log"] = rxAllLogJsonValue;
     jsonObjAirtime["channel_utilization"] = new JSONValue(airTime->channelUtilizationPercent());
     jsonObjAirtime["utilization_tx"] = new JSONValue(airTime->utilizationTXPercent());
     jsonObjAirtime["seconds_since_boot"] = new JSONValue(int(airTime->getSecondsSinceBoot()));
@@ -765,6 +775,11 @@ void handleNodes(HTTPRequest *req, HTTPResponse *res)
     JSONValue *value = new JSONValue(jsonObjOuter);
     res->print(value->Stringify().c_str());
     delete value;
+
+    // Clean up the nodesArray to prevent memory leak
+    for (auto *val : nodesArray) {
+        delete val;
+    }
 }
 
 /*
@@ -955,5 +970,10 @@ void handleScanNetworks(HTTPRequest *req, HTTPResponse *res)
     JSONValue *value = new JSONValue(jsonObjOuter);
     res->print(value->Stringify().c_str());
     delete value;
+
+    // Clean up the networkObjs to prevent memory leak
+    for (auto *val : networkObjs) {
+        delete val;
+    }
 }
 #endif

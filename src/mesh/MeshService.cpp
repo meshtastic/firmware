@@ -16,6 +16,7 @@
 #include "meshUtils.h"
 #include "modules/NodeInfoModule.h"
 #include "modules/PositionModule.h"
+#include "modules/RoutingModule.h"
 #include "power.h"
 #include <assert.h>
 #include <string>
@@ -331,6 +332,21 @@ void MeshService::sendMqttMessageToClientProxy(meshtastic_MqttClientProxyMessage
         abort();
     }
     fromNum++;
+}
+
+void MeshService::sendRoutingErrorResponse(meshtastic_Routing_Error error, const meshtastic_MeshPacket *mp)
+{
+    if (!mp) {
+        LOG_WARN("Cannot send routing error response: null packet");
+        return;
+    }
+
+    // Use the routing module to send the error response
+    if (routingModule) {
+        routingModule->sendAckNak(error, mp->from, mp->id, mp->channel);
+    } else {
+        LOG_ERROR("Cannot send routing error response: no routing module");
+    }
 }
 
 void MeshService::sendClientNotification(meshtastic_ClientNotification *n)

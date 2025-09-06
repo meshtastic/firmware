@@ -31,7 +31,7 @@ uint32_t packetSequence = 0;
 
 int32_t RangeTestModule::runOnce()
 {
-#if defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_PORTDUINO)
+#if defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_STM32WL) || defined(ARCH_PORTDUINO)
 
     /*
         Uncomment the preferences below if you want to use the module
@@ -130,7 +130,7 @@ void RangeTestModuleRadio::sendPayload(NodeNum dest, bool wantReplies)
 
 ProcessMessage RangeTestModuleRadio::handleReceived(const meshtastic_MeshPacket &mp)
 {
-#if defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_PORTDUINO)
+#if defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_STM32WL) || defined(ARCH_PORTDUINO)
 
     if (moduleConfig.range_test.enabled) {
 

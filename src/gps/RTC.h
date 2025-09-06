@@ -48,10 +48,13 @@ uint32_t getTime(bool local = false);
 /// Return time since 1970 in secs.  If quality is RTCQualityNone return zero
 uint32_t getValidTime(RTCQuality minQuality, bool local = false);
 
-void readFromRTC();
+RTCSetResult readFromRTC();
 
 time_t gm_mktime(struct tm *tm);
 
 #define SEC_PER_DAY 86400
 #define SEC_PER_HOUR 3600
 #define SEC_PER_MIN 60
+#ifdef BUILD_EPOCH
+#define FORTY_YEARS (40UL * 365 * SEC_PER_DAY) // probably time to update your firmware
+#endif

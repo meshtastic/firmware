@@ -1,15 +1,39 @@
 #pragma once
 #include "ProtobufModule.h"
+#include "concurrency/OSThread.h"
+#include "graphics/Screen.h"
+#include "graphics/SharedUIDisplay.h"
+#include "input/InputBroker.h"
+#if HAS_SCREEN
+#include "OLEDDisplayUi.h"
+#endif
 
 #define ROUTE_SIZE sizeof(((meshtastic_RouteDiscovery *)0)->route) / sizeof(((meshtastic_RouteDiscovery *)0)->route[0])
 
 /**
  * A module that traces the route to a certain destination node
  */
-class TraceRouteModule : public ProtobufModule<meshtastic_RouteDiscovery>
+enum TraceRouteRunState { TRACEROUTE_STATE_IDLE, TRACEROUTE_STATE_TRACKING, TRACEROUTE_STATE_RESULT, TRACEROUTE_STATE_COOLDOWN };
+
+class TraceRouteModule : public ProtobufModule<meshtastic_RouteDiscovery>,
+                         public Observable<const UIFrameEvent *>,
+                         private concurrency::OSThread
 {
   public:
     TraceRouteModule();
+
+    bool startTraceRoute(NodeNum node);
+    void launch(NodeNum node);
+    void handleTraceRouteResult(const String &result);
+    bool shouldDraw();
+#if HAS_SCREEN
+    virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) override;
+#endif
+
+    const char *getNodeName(NodeNum node);
+
+    virtual bool wantUIFrame() override { return shouldDraw(); }
+    virtual Observable<const UIFrameEvent *> *getUIFrameObservable() override { return this; }
 
   protected:
     bool handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_RouteDiscovery *r) override;
@@ -19,6 +43,8 @@ class TraceRouteModule : public ProtobufModule<meshtastic_RouteDiscovery>
     /* Called before rebroadcasting a RouteDiscovery payload in order to update
        the route array containing the IDs of nodes this packet went through */
     void alterReceivedProtobuf(meshtastic_MeshPacket &p, meshtastic_RouteDiscovery *r) override;
+
+    virtual int32_t runOnce() override;
 
   private:
     // Call to add unknown hops (e.g. when a node couldn't decrypt it) to the route based on hopStart and current hopLimit
@@ -31,6 +57,17 @@ class TraceRouteModule : public ProtobufModule<meshtastic_RouteDiscovery>
        Set origin to where the request came from.
        Set dest to the ID of its destination, or NODENUM_BROADCAST if it has not yet arrived there. */
     void printRoute(meshtastic_RouteDiscovery *r, uint32_t origin, uint32_t dest, bool isTowardsDestination);
+
+    TraceRouteRunState runState = TRACEROUTE_STATE_IDLE;
+    unsigned long lastTraceRouteTime = 0;
+    unsigned long resultShowTime = 0;
+    unsigned long cooldownMs = 30000;
+    unsigned long resultDisplayMs = 10000;
+    unsigned long trackingTimeoutMs = 10000;
+    String bannerText;
+    String resultText;
+    NodeNum tracingNode = 0;
+    bool initialized = false;
 };
 
 extern TraceRouteModule *traceRouteModule;
