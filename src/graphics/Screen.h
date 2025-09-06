@@ -671,6 +671,7 @@ class Screen : public concurrency::OSThread
             uint8_t nodelist_distance = 255;
             uint8_t nodelist_bearings = 255;
             uint8_t clock = 255;
+            uint8_t chirpy = 255;
             uint8_t firstFavorite = 255;
             uint8_t lastFavorite = 255;
             uint8_t lora = 255;
@@ -700,6 +701,7 @@ class Screen : public concurrency::OSThread
 #endif
         bool lora = false;
         bool show_favorites = false;
+        bool chirpy = true;
     } hiddenFrames;
 
     /// Try to start drawing ASAP

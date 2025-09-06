@@ -28,17 +28,19 @@ uint8_t test_count = 0;
 
 void menuHandler::loraMenu()
 {
-    static const char *optionsArray[] = {"Back", "Region Picker"};
-    enum optionsNumbers { Back = 0, lora_picker = 1 };
+    static const char *optionsArray[] = {"Back", "Region Picker", "Device Role"};
+    enum optionsNumbers { Back = 0, lora_picker = 1, device_role_picker = 2 };
     BannerOverlayOptions bannerOptions;
     bannerOptions.message = "LoRa Actions";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 2;
+    bannerOptions.optionsCount = 3;
     bannerOptions.bannerCallback = [](int selected) -> void {
         if (selected == Back) {
             // No action
         } else if (selected == lora_picker) {
             menuHandler::menuQueue = menuHandler::lora_picker;
+        } else if (selected == device_role_picker) {
+            menuHandler::menuQueue = menuHandler::device_role_picker;
         }
     };
     screen->showOverlayBanner(bannerOptions);
@@ -137,6 +139,40 @@ void menuHandler::LoraRegionPicker(uint32_t duration)
             service->reloadConfig(SEGMENT_CONFIG);
             rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
         }
+    };
+    screen->showOverlayBanner(bannerOptions);
+}
+
+void menuHandler::DeviceRolePicker()
+{
+    static const char *optionsArray[] = {"Back", "Client", "Client Mute", "Lost and Found", "Tracker"};
+    enum optionsNumbers {
+        Back = 0,
+        devicerole_client = 1,
+        devicerole_clientmute = 2,
+        devicerole_lostandfound = 3,
+        devicerole_tracker = 4
+    };
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Device Role";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 5;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Back) {
+            menuHandler::menuQueue = menuHandler::lora_Menu;
+            screen->runNow();
+            return;
+        } else if (selected == devicerole_client) {
+            config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+        } else if (selected == devicerole_clientmute) {
+            config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE;
+        } else if (selected == devicerole_lostandfound) {
+            config.device.role = meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND;
+        } else if (selected == devicerole_tracker) {
+            config.device.role = meshtastic_Config_DeviceConfig_Role_TRACKER;
+        }
+        service->reloadConfig(SEGMENT_CONFIG);
+        rebootAtMsec = (millis() + DEFAULT_REBOOT_SECONDS * 1000);
     };
     screen->showOverlayBanner(bannerOptions);
 }
@@ -1038,15 +1074,32 @@ void menuHandler::traceRouteMenu()
 void menuHandler::testMenu()
 {
 
-    static const char *optionsArray[] = {"Back", "Number Picker"};
+    enum optionsNumbers { Back, NumberPicker, ShowChirpy };
+    static const char *optionsArray[4] = {"Back"};
+    static int optionsEnumArray[4] = {Back};
+    int options = 1;
+
+    optionsArray[options] = "Number Picker";
+    optionsEnumArray[options++] = NumberPicker;
+
+    optionsArray[options] = screen->isFrameHidden("chirpy") ? "Show Chirpy" : "Hide Chirpy";
+    optionsEnumArray[options++] = ShowChirpy;
+
     BannerOverlayOptions bannerOptions;
-    std::string message = "Test to Run?\n";
-    bannerOptions.message = message.c_str();
+    bannerOptions.message = "Hidden Test Menu";
     bannerOptions.optionsArrayPtr = optionsArray;
-    bannerOptions.optionsCount = 2;
+    bannerOptions.optionsCount = options;
+    bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.bannerCallback = [](int selected) -> void {
-        if (selected == 1) {
+        if (selected == NumberPicker) {
             menuQueue = number_test;
+            screen->runNow();
+        } else if (selected == ShowChirpy) {
+            screen->toggleFrameVisibility("chirpy");
+            screen->setFrames(Screen::FOCUS_SYSTEM);
+
+        } else {
+            menuQueue = system_base_menu;
             screen->runNow();
         }
     };
@@ -1306,7 +1359,7 @@ void menuHandler::FrameToggles_menu()
     bannerOptions.optionsEnumPtr = optionsEnumArray;
     bannerOptions.InitialSelected = lastSelectedIndex; // Use index, not enum value
 
-    bannerOptions.bannerCallback = [optionsEnumArray, options](int selected) mutable -> void {
+    bannerOptions.bannerCallback = [options](int selected) mutable -> void {
         // Find the index of selected in optionsEnumArray
         int idx = 0;
         for (; idx < options; ++idx) {
@@ -1365,8 +1418,14 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
     switch (menuQueue) {
     case menu_none:
         break;
+    case lora_Menu:
+        loraMenu();
+        break;
     case lora_picker:
         LoraRegionPicker();
+        break;
+    case device_role_picker:
+        DeviceRolePicker();
         break;
     case no_timeout_lora_picker:
         LoraRegionPicker(0);
