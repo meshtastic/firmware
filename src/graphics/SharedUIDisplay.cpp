@@ -16,6 +16,10 @@ void determineResolution(int16_t screenheight, int16_t screenwidth)
         isHighResolution = true;
     }
 
+    if (screenwidth > 128 && screenheight <= 64) {
+        isHighResolution = false;
+    }
+
     // Special case for Heltec Wireless Tracker v1.1
     if (screenwidth == 160 && screenheight == 80) {
         isHighResolution = false;
