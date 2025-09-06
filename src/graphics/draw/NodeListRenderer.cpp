@@ -59,7 +59,6 @@ const char *getSafeNodeName(meshtastic_NodeInfoLite *node)
 #else
     static char nodeName[16] = "?";
     if (node->has_user && strlen(node->user.short_name) > 0) {
-        bool valid = true;
         const char *name = node->user.short_name;
 #endif
         bool valid = true;
