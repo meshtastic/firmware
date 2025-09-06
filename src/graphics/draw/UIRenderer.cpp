@@ -889,38 +889,32 @@ void UIRenderer::drawCompassAndLocationScreen(OLEDDisplay *display, OLEDDisplayU
         displayLine = "Phone GPS";
         int yOffset = (isHighResolution) ? 3 : 1;
         if (isHighResolution) {
-            NodeListRenderer::drawScaledXBitmap16x16(
-                x, getTextPositions(display)[line] + yOffset - 5,
-                imgSatellite_width, imgSatellite_height, imgSatellite, display);
+            NodeListRenderer::drawScaledXBitmap16x16(x, getTextPositions(display)[line] + yOffset - 5, imgSatellite_width,
+                                                     imgSatellite_height, imgSatellite, display);
         } else {
-            display->drawXbm(x + 1, getTextPositions(display)[line] + yOffset,
-                             imgSatellite_width, imgSatellite_height, imgSatellite);
+            display->drawXbm(x + 1, getTextPositions(display)[line] + yOffset, imgSatellite_width, imgSatellite_height,
+                             imgSatellite);
         }
         int xOffset = (isHighResolution) ? 6 : 0;
         display->drawString(x + 11 + xOffset, getTextPositions(display)[line++], displayLine);
-    }
-    else if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
+    } else if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
         // GPS disabled / not present
         if (config.position.fixed_position) {
             displayLine = "Fixed GPS";
         } else {
-            displayLine = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT
-                              ? "No GPS"
-                              : "GPS off";
+            displayLine = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "No GPS" : "GPS off";
         }
         int yOffset = (isHighResolution) ? 3 : 1;
         if (isHighResolution) {
-            NodeListRenderer::drawScaledXBitmap16x16(
-                x, getTextPositions(display)[line] + yOffset - 5,
-                imgSatellite_width, imgSatellite_height, imgSatellite, display);
+            NodeListRenderer::drawScaledXBitmap16x16(x, getTextPositions(display)[line] + yOffset - 5, imgSatellite_width,
+                                                     imgSatellite_height, imgSatellite, display);
         } else {
-            display->drawXbm(x + 1, getTextPositions(display)[line] + yOffset,
-                             imgSatellite_width, imgSatellite_height, imgSatellite);
+            display->drawXbm(x + 1, getTextPositions(display)[line] + yOffset, imgSatellite_width, imgSatellite_height,
+                             imgSatellite);
         }
         int xOffset = (isHighResolution) ? 6 : 0;
         display->drawString(x + 11 + xOffset, getTextPositions(display)[line++], displayLine);
-    }
-    else {
+    } else {
         // Onboard GPS
         UIRenderer::drawGps(display, 0, getTextPositions(display)[line++], gpsStatus);
     }
