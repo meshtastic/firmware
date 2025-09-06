@@ -33,6 +33,8 @@ typedef struct _meshtastic_PositionLite {
     uint32_t time;
     /* TODO: REPLACE */
     meshtastic_Position_LocSource location_source;
+    /* Indicates the bits of precision set by the sending node */
+    uint32_t precision_bits;
 } meshtastic_PositionLite;
 
 typedef PB_BYTES_ARRAY_T(32) meshtastic_UserLite_public_key_t;
