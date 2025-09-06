@@ -51,30 +51,33 @@ static int scrollIndex = 0;
 
 const char *getSafeNodeName(meshtastic_NodeInfoLite *node)
 {
-// This should probably be based on the screen size/type and not device specific
-#ifdef T_LORA_PAGER
+    const char *name = NULL;
     static char nodeName[16] = "?";
-    if (node->has_user && strlen(node->user.long_name) > 0) {
-        const char *name = node->user.long_name;
-#else
-    static char nodeName[16] = "?";
-    if (node->has_user && strlen(node->user.short_name) > 0) {
-        const char *name = node->user.short_name;
-#endif
-        bool valid = true;
-        for (size_t i = 0; i < strlen(name); i++) {
-            uint8_t c = (uint8_t)name[i];
-            if (c < 32 || c > 126) {
-                valid = false;
-                break;
-            }
-        }
-        if (valid) {
-            strncpy(nodeName, name, sizeof(nodeName) - 1);
-            nodeName[sizeof(nodeName) - 1] = '\0';
+    if (config.display.use_long_node_name == true) {
+        if (node->has_user && strlen(node->user.long_name) > 0) {
+            name = node->user.long_name;
         } else {
             snprintf(nodeName, sizeof(nodeName), "(%04X)", (uint16_t)(node->num & 0xFFFF));
         }
+    } else {
+        if (node->has_user && strlen(node->user.short_name) > 0) {
+            name = node->user.short_name;
+        } else {
+            snprintf(nodeName, sizeof(nodeName), "(%04X)", (uint16_t)(node->num & 0xFFFF));
+        }
+    }
+    
+    bool valid = true;
+    for (size_t i = 0; i < strlen(name); i++) {
+        uint8_t c = (uint8_t)name[i];
+        if (c < 32 || c > 126) {
+            valid = false;
+            break;
+        }
+    }
+    if (valid) {
+        strncpy(nodeName, name, sizeof(nodeName) - 1);
+        nodeName[sizeof(nodeName) - 1] = '\0';
     } else {
         snprintf(nodeName, sizeof(nodeName), "(%04X)", (uint16_t)(node->num & 0xFFFF));
     }

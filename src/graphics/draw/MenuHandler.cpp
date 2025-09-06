@@ -577,6 +577,32 @@ void menuHandler::nodeListMenu()
     screen->showOverlayBanner(bannerOptions);
 }
 
+void menuHandler::nodeNameLengthMenu()
+{
+    enum OptionsNumbers { Back, Long, Short };
+    static const char *optionsArray[] = {"Back", "Long", "Short"};
+    BannerOverlayOptions bannerOptions;
+    bannerOptions.message = "Node Name Length";
+    bannerOptions.optionsArrayPtr = optionsArray;
+    bannerOptions.optionsCount = 3;
+    bannerOptions.bannerCallback = [](int selected) -> void {
+        if (selected == Long) {
+            // Set names to long
+            LOG_INFO("Setting names to long");
+            config.display.use_long_node_name = true;
+        } else if (selected == Short) {
+            // Set names to short
+            LOG_INFO("Setting names to short");
+            config.display.use_long_node_name = false; 
+        } else if (selected == Back) {
+            menuQueue = screen_options_menu;
+            screen->runNow();
+        }
+    };
+    screen->showOverlayBanner(bannerOptions);
+    LOG_INFO("Menu option complete");
+}
+
 void menuHandler::resetNodeDBMenu()
 {
     static const char *optionsArray[] = {"Back", "Confirm"};
@@ -1033,10 +1059,15 @@ void menuHandler::screenOptionsMenu()
     hasSupportBrightness = false;
 #endif
 
-    enum optionsNumbers { Back, Brightness, ScreenColor };
-    static const char *optionsArray[4] = {"Back"};
-    static int optionsEnumArray[4] = {Back};
+    enum optionsNumbers { Back, NodeNameLength, Brightness, ScreenColor };
+    static const char *optionsArray[5] = {"Back"};
+    static int optionsEnumArray[5] = {Back};
     int options = 1;
+
+#if defined(T_LORA_PAGER)
+    optionsArray[options] = "Node Name Length";
+    optionsEnumArray[options++] = NodeNameLength;
+#endif
 
     // Only show brightness for B&W displays
     if (hasSupportBrightness) {
@@ -1061,6 +1092,9 @@ void menuHandler::screenOptionsMenu()
             screen->runNow();
         } else if (selected == ScreenColor) {
             menuHandler::menuQueue = menuHandler::tftcolormenupicker;
+            screen->runNow();
+        } else if (selected == NodeNameLength) {
+            menuHandler::menuQueue = menuHandler::node_name_length_menu;
             screen->runNow();
         } else {
             menuQueue = system_base_menu;
@@ -1196,6 +1230,9 @@ void menuHandler::handleMenuSwitch(OLEDDisplay *display)
         break;
     case brightness_picker:
         BrightnessPickerMenu();
+        break;
+    case node_name_length_menu:
+        nodeNameLengthMenu();
         break;
     case reboot_menu:
         rebootMenu();
