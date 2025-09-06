@@ -15,6 +15,8 @@
 #include "main.h"
 #include "meshUtils.h"
 
+#include <hal/nrf_lpcomp.h>
+
 #ifdef BQ25703A_ADDR
 #include "BQ25713.h"
 #endif
@@ -387,6 +389,17 @@ void cpuDeepSleep(uint32_t msecToWake)
         nrf_gpio_cfg_input(BUTTON_PIN, NRF_GPIO_PIN_PULLUP); // Enable internal pull-up on the button pin
         nrf_gpio_pin_sense_t sense = NRF_GPIO_PIN_SENSE_LOW; // Configure SENSE signal on low edge
         nrf_gpio_cfg_sense_set(BUTTON_PIN, sense);           // Apply SENSE to wake up the device from the deep sleep
+#endif
+
+#ifdef RAK4630
+        // Wake up if power rises again
+        nrf_lpcomp_config_t c;
+        c.reference = NRF_LPCOMP_REF_SUPPLY_7_8;
+        c.detection = NRF_LPCOMP_DETECT_UP;
+        c.hyst = NRF_LPCOMP_HYST_NOHYST;
+        nrf_lpcomp_configure(NRF_LPCOMP, &c);
+        nrf_lpcomp_input_select(NRF_LPCOMP, NRF_LPCOMP_INPUT_3);
+        nrf_lpcomp_enable(NRF_LPCOMP);
 #endif
 
         auto ok = sd_power_system_off();
