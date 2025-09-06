@@ -653,11 +653,12 @@ bool CannedMessageModule::handleMessageSelectorInput(const InputEvent *event, bo
                         runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
                         currentMessageIndex = -1;
 
-                        UIFrameEvent e;
-                        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
-                        this->notifyObservers(&e);
-                        screen->forceDisplay();
+                        // IMPORTANT: Don't delete virtual keyboard here - it's still executing!
+                        // Just clear the callback to prevent further input
+                        graphics::NotificationRenderer::textInputCallback = nullptr;
 
+                        // Schedule keyboard cleanup for next run cycle
+                        // This allows the current submitText() method to complete safely
                         setIntervalFromNow(500);
                         return;
                     } else {
@@ -1003,8 +1004,9 @@ int32_t CannedMessageModule::runOnce()
 
     // Normal module disable/idle handling
     if ((this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED) || (this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE)) {
-        // Clean up virtual keyboard if needed when going inactive
-        if (graphics::NotificationRenderer::virtualKeyboard && graphics::NotificationRenderer::textInputCallback == nullptr) {
+        // Clean up virtual keyboard if needed when going inactive, but only if virtual keyboard is not actively being used
+        if (graphics::NotificationRenderer::virtualKeyboard && graphics::NotificationRenderer::textInputCallback == nullptr &&
+            graphics::NotificationRenderer::current_notification_type != graphics::notificationTypeEnum::text_input) {
             LOG_INFO("Performing delayed virtual keyboard cleanup");
             delete graphics::NotificationRenderer::virtualKeyboard;
             graphics::NotificationRenderer::virtualKeyboard = nullptr;
@@ -1081,8 +1083,11 @@ int32_t CannedMessageModule::runOnce()
         this->cursor = 0;
         this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
 
-        // Clean up virtual keyboard if it exists during timeout
-        if (graphics::NotificationRenderer::virtualKeyboard) {
+        // Clean up virtual keyboard if it exists during timeout, but only if it's not actively being used by another process
+        if (graphics::NotificationRenderer::virtualKeyboard &&
+            graphics::NotificationRenderer::current_notification_type == graphics::notificationTypeEnum::text_input) {
+            LOG_INFO("Virtual keyboard is active - not cleaning up due to CannedMessage timeout");
+        } else if (graphics::NotificationRenderer::virtualKeyboard) {
             LOG_INFO("Cleaning up virtual keyboard due to module timeout");
             delete graphics::NotificationRenderer::virtualKeyboard;
             graphics::NotificationRenderer::virtualKeyboard = nullptr;
