@@ -1033,6 +1033,11 @@ void Screen::setFrames(FrameFocus focus)
         indicatorIcons.push_back(digital_icon_clock);
     }
 #endif
+    if (!hiddenFrames.chirpy) {
+        fsi.positions.chirpy = numframes;
+        normalFrames[numframes++] = graphics::DebugRenderer::drawChirpy;
+        indicatorIcons.push_back(small_chirpy);
+    }
 
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
     if (!hiddenFrames.wifi && isWifiAvailable()) {
@@ -1201,6 +1206,9 @@ void Screen::toggleFrameVisibility(const std::string &frameName)
     if (frameName == "show_favorites") {
         hiddenFrames.show_favorites = !hiddenFrames.show_favorites;
     }
+    if (frameName == "chirpy") {
+        hiddenFrames.chirpy = !hiddenFrames.chirpy;
+    }
 }
 
 bool Screen::isFrameHidden(const std::string &frameName) const
@@ -1229,6 +1237,8 @@ bool Screen::isFrameHidden(const std::string &frameName) const
         return hiddenFrames.clock;
     if (frameName == "show_favorites")
         return hiddenFrames.show_favorites;
+    if (frameName == "chirpy")
+        return hiddenFrames.chirpy;
 
     return false;
 }
