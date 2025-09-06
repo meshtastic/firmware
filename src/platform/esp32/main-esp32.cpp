@@ -173,7 +173,7 @@ void esp32Setup()
     esp_task_wdt_config_t *wdt_config = (esp_task_wdt_config_t *)malloc(sizeof(esp_task_wdt_config_t));
     wdt_config->timeout_ms = APP_WATCHDOG_SECS * 1000;
     wdt_config->trigger_panic = true;
-    res = esp_task_wdt_init(wdt_config);
+    res = esp_task_wdt_reconfigure(wdt_config);
     assert(res == ESP_OK);
 #else
     res = esp_task_wdt_init(APP_WATCHDOG_SECS, true);
