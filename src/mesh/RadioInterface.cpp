@@ -7,6 +7,9 @@
 #include "Router.h"
 #include "configuration.h"
 #include "main.h"
+#if !MESHTASTIC_EXCLUDE_REPLAY
+#include "modules/ReplayModule.h"
+#endif
 #include "sleep.h"
 #include <assert.h>
 #include <pb_decode.h>
@@ -355,6 +358,9 @@ void printPacket(const char *prefix, const meshtastic_MeshPacket *p)
     std::string out =
         DEBUG_PORT.mt_sprintf("%s (id=0x%08x fr=0x%08x to=0x%08x, transport = %u, WantAck=%d, HopLim=%d Ch=0x%x", prefix, p->id,
                               p->from, p->to, p->transport_mechanism, p->want_ack, p->hop_limit, p->channel);
+#if !MESHTASTIC_EXCLUDE_REPLAY
+    out += DEBUG_PORT.mt_sprintf(" hash=0x%04x", REPLAY_HASH(p->from, p->id));
+#endif
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         auto &s = p->decoded;
 
