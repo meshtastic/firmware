@@ -178,6 +178,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     meshtastic_QueueStatus getQueueStatus();
 
+    meshtastic_MeshPacket *getNextTXPacket(bool dequeue = false);
+
   protected:
     uint32_t activeReceiveStart = 0;
 
