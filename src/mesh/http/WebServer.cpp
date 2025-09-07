@@ -49,6 +49,12 @@ Preferences prefs;
 using namespace httpsserver;
 #include "mesh/http/ContentHandler.h"
 
+static const uint32_t ACTIVE_THRESHOLD_MS = 5000;
+static const uint32_t MEDIUM_THRESHOLD_MS = 30000;
+static const int32_t ACTIVE_INTERVAL_MS = 50;
+static const int32_t MEDIUM_INTERVAL_MS = 200;
+static const int32_t IDLE_INTERVAL_MS = 1000;
+
 static SSLCert *cert;
 static HTTPSServer *secureServer;
 static HTTPServer *insecureServer;
@@ -185,14 +191,21 @@ void WebServerThread::markActivity()
 
 int32_t WebServerThread::getAdaptiveInterval()
 {
-    uint32_t timeSinceActivity = millis() - lastActivityTime;
+    uint32_t currentTime = millis();
+    uint32_t timeSinceActivity;
 
-    if (timeSinceActivity < 5000) {
-        return 50;
-    } else if (timeSinceActivity < 30000) {
-        return 200;
+    if (currentTime >= lastActivityTime) {
+        timeSinceActivity = currentTime - lastActivityTime;
     } else {
-        return 1000;
+        timeSinceActivity = (UINT32_MAX - lastActivityTime) + currentTime + 1;
+    }
+
+    if (timeSinceActivity < ACTIVE_THRESHOLD_MS) {
+        return ACTIVE_INTERVAL_MS;
+    } else if (timeSinceActivity < MEDIUM_THRESHOLD_MS) {
+        return MEDIUM_INTERVAL_MS;
+    } else {
+        return IDLE_INTERVAL_MS;
     }
 }
 
