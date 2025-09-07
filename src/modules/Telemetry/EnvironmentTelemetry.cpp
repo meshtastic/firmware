@@ -30,7 +30,8 @@
 
 namespace graphics
 {
-extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *titleStr, bool battery_only);
+extern void drawCommonHeader(OLEDDisplay *display, int16_t x, int16_t y, const char *titleStr, bool force_no_invert,
+                             bool show_date);
 }
 #if __has_include(<Adafruit_AHTX0.h>)
 #include "Sensor/AHT10.h"
