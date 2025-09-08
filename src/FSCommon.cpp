@@ -105,10 +105,35 @@ bool renameFile(const char *pathFrom, const char *pathTo)
 #define MAX_PATH_LENGTH 200      // Maximum allowed path length to prevent overflow
 
 /**
+ * @brief Helper function to validate and get file path for current platform
+ *
+ * @param file The file object
+ * @return const char* Valid path or nullptr if invalid
+ */
+static const char *getValidFilePath(File &file)
+{
+#ifdef ARCH_ESP32
+    const char *filePath = file.path();
+    return (filePath && strlen(filePath) < MAX_PATH_LENGTH) ? filePath : nullptr;
+#else
+    const char *fileName = file.name();
+    return (fileName && strlen(fileName) < MAX_PATH_LENGTH) ? fileName : nullptr;
+#endif
+}
+
+/**
  * @brief Get the list of files in a directory (internal recursive helper).
  *
+ * This function recursively lists files in the specified directory, subject to safety constraints
+ * to protect memory and stack usage:
+ * - Limits the total number of files collected to MAX_FILES_IN_MANIFEST (currently 50) to prevent memory overflow.
+ * - Limits the maximum allowed path length to MAX_PATH_LENGTH (currently 200) to prevent buffer overflow.
+ * - Limits recursion depth via the 'levels' parameter to avoid stack exhaustion.
+ *
+ * If any of these limits are reached, the function will stop collecting further files or recursing into subdirectories.
+ *
  * @param dirname The name of the directory.
- * @param levels The number of levels of subdirectories to list.
+ * @param levels The number of levels of subdirectories to list (recursion depth).
  * @param filenames Reference to vector to populate with file info.
  */
 static void getFilesRecursive(const char *dirname, uint8_t levels, std::vector<meshtastic_FileInfo> &filenames)
@@ -137,16 +162,10 @@ static void getFilesRecursive(const char *dirname, uint8_t levels, std::vector<m
 
         if (file.isDirectory() && !String(fileName).endsWith(".")) {
             if (levels > 0) { // Limit recursion depth
-#ifdef ARCH_ESP32
-                const char *filePath = file.path();
-                if (filePath && strlen(filePath) < MAX_PATH_LENGTH) {
-                    getFilesRecursive(filePath, levels - 1, filenames);
+                const char *validPath = getValidFilePath(file);
+                if (validPath) {
+                    getFilesRecursive(validPath, levels - 1, filenames);
                 }
-#else
-                if (strlen(fileName) < MAX_PATH_LENGTH) {
-                    getFilesRecursive(fileName, levels - 1, filenames);
-                }
-#endif
             }
             file.close();
         } else {

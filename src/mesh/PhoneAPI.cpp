@@ -4,6 +4,7 @@
 #endif
 #ifdef ARCH_ESP32
 #include <esp_heap_caps.h>
+#define MIN_HEAP_FOR_FILE_MANIFEST 8192 // Minimum heap required before generating file manifest
 #endif
 
 #include "Channels.h"
@@ -76,7 +77,7 @@ void PhoneAPI::handleStartConfig()
     // Check available heap before getting files to prevent crash
 #ifdef ARCH_ESP32
     size_t freeHeap = ESP.getFreeHeap();
-    if (freeHeap < 8192) { // Require at least 8KB free heap
+    if (freeHeap < MIN_HEAP_FOR_FILE_MANIFEST) {
         LOG_WARN("Low memory (%d bytes), skipping file manifest", freeHeap);
         filesManifest.clear();
     } else {
