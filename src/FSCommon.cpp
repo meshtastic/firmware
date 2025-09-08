@@ -102,6 +102,7 @@ bool renameFile(const char *pathFrom, const char *pathTo)
 #include <vector>
 
 #define MAX_FILES_IN_MANIFEST 50 // Reduced to be more conservative with memory
+#define MAX_PATH_LENGTH 200      // Maximum allowed path length to prevent overflow
 
 /**
  * @brief Get the list of files in a directory (internal recursive helper).
@@ -138,11 +139,11 @@ static void getFilesRecursive(const char *dirname, uint8_t levels, std::vector<m
             if (levels > 0) { // Prevent infinite recursion
 #ifdef ARCH_ESP32
                 const char *filePath = file.path();
-                if (filePath && strlen(filePath) < 200) { // Prevent path overflow
+                if (filePath && strlen(filePath) < MAX_PATH_LENGTH) {
                     getFilesRecursive(filePath, levels - 1, filenames);
                 }
 #else
-                if (strlen(fileName) < 200) { // Prevent path overflow
+                if (strlen(fileName) < MAX_PATH_LENGTH) {
                     getFilesRecursive(fileName, levels - 1, filenames);
                 }
 #endif
