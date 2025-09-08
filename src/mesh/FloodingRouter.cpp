@@ -66,7 +66,7 @@ bool FloodingRouter::roleAllowsCancelingDupe(const meshtastic_MeshPacket *p)
 
 void FloodingRouter::perhapsCancelDupe(const meshtastic_MeshPacket *p)
 {
-    if (roleAllowsCancelingDupe(p) && p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA) {
+    if (p->transport_mechanism == meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA && roleAllowsCancelingDupe(p)) {
         // cancel rebroadcast of this message *if* there was already one, unless we're a router/repeater!
         // But only LoRa packets should be able to trigger this.
         if (Router::cancelSending(p->from, p->id))
