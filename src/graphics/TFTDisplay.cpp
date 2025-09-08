@@ -751,10 +751,8 @@ static LGFX *tft = nullptr;
 
 static TFT_eSPI *tft = nullptr; // Invoke library, pins defined in User_Setup.h
 #elif ARCH_PORTDUINO
+#include "Panel_sdl.hpp"
 #include <LovyanGFX.hpp> // Graphics and font library for ST7735 driver chip
-#if defined(LGFX_SDL)
-#include <lgfx/v1/platforms/sdl/Panel_sdl.hpp>
-#endif
 
 class LGFX : public lgfx::LGFX_Device
 {
@@ -783,10 +781,10 @@ class LGFX : public lgfx::LGFX_Device
             _panel_instance = new lgfx::Panel_ILI9488;
         else if (portduino_config.displayPanel == hx8357d)
             _panel_instance = new lgfx::Panel_HX8357D;
-#if defined(LGFX_SDL)
-        else if (portduino_config.displayPanel == x11) {
+#if defined(SDL_h_)
+
+        else if (portduino_config.displayPanel == x11)
             _panel_instance = new lgfx::Panel_sdl;
-        }
 #endif
         else {
             _panel_instance = new lgfx::Panel_NULL;
@@ -799,8 +797,9 @@ class LGFX : public lgfx::LGFX_Device
 
         buscfg.pin_dc = portduino_config.displayDC.pin; // Set SPI DC pin number (-1 = disable)
 
-        _bus_instance.config(buscfg);            // applies the set value to the bus.
-        _panel_instance->setBus(&_bus_instance); // set the bus on the panel.
+        _bus_instance.config(buscfg); // applies the set value to the bus.
+        if (portduino_config.displayPanel != x11)
+            _panel_instance->setBus(&_bus_instance); // set the bus on the panel.
 
         auto cfg = _panel_instance->config(); // Gets a structure for display panel settings.
         LOG_DEBUG("Width: %d, Height: %d", portduino_config.displayWidth, portduino_config.displayHeight);
@@ -848,7 +847,7 @@ class LGFX : public lgfx::LGFX_Device
             _touch_instance->config(touch_cfg);
             _panel_instance->setTouch(_touch_instance);
         }
-#if defined(LGFX_SDL)
+#if defined(SDL_h_)
         if (portduino_config.displayPanel == x11) {
             lgfx::Panel_sdl *sdl_panel_ = (lgfx::Panel_sdl *)_panel_instance;
             sdl_panel_->setup();
@@ -1237,7 +1236,7 @@ void TFTDisplay::display(bool fromBlank)
 
 void TFTDisplay::sdlLoop()
 {
-#if defined(LGFX_SDL)
+#if defined(SDL_h_)
     static int lastPressed = 0;
     static int shuttingDown = false;
     if (portduino_config.displayPanel == x11) {
@@ -1247,27 +1246,26 @@ void TFTDisplay::sdlLoop()
             InputEvent event = {.inputEvent = (input_broker_event)INPUT_BROKER_SHUTDOWN, .kbchar = 0, .touchX = 0, .touchY = 0};
             inputBroker->injectInputEvent(&event);
         }
-
         // debounce
-        if (lastPressed != 0 && !lgfx::v1::gpio_in(lastPressed))
+        if (lastPressed != 0 && !sdl_panel_->gpio_in(lastPressed))
             return;
-        if (!lgfx::v1::gpio_in(37)) {
+        if (!sdl_panel_->gpio_in(37)) {
             lastPressed = 37;
             InputEvent event = {.inputEvent = (input_broker_event)INPUT_BROKER_RIGHT, .kbchar = 0, .touchX = 0, .touchY = 0};
             inputBroker->injectInputEvent(&event);
-        } else if (!lgfx::v1::gpio_in(36)) {
+        } else if (!sdl_panel_->gpio_in(36)) {
             lastPressed = 36;
             InputEvent event = {.inputEvent = (input_broker_event)INPUT_BROKER_UP, .kbchar = 0, .touchX = 0, .touchY = 0};
             inputBroker->injectInputEvent(&event);
-        } else if (!lgfx::v1::gpio_in(38)) {
+        } else if (!sdl_panel_->gpio_in(38)) {
             lastPressed = 38;
             InputEvent event = {.inputEvent = (input_broker_event)INPUT_BROKER_DOWN, .kbchar = 0, .touchX = 0, .touchY = 0};
             inputBroker->injectInputEvent(&event);
-        } else if (!lgfx::v1::gpio_in(39)) {
+        } else if (!sdl_panel_->gpio_in(39)) {
             lastPressed = 39;
             InputEvent event = {.inputEvent = (input_broker_event)INPUT_BROKER_LEFT, .kbchar = 0, .touchX = 0, .touchY = 0};
             inputBroker->injectInputEvent(&event);
-        } else if (!lgfx::v1::gpio_in(SDL_SCANCODE_KP_ENTER)) {
+        } else if (!sdl_panel_->gpio_in(SDL_SCANCODE_KP_ENTER)) {
             lastPressed = SDL_SCANCODE_KP_ENTER;
             InputEvent event = {.inputEvent = (input_broker_event)INPUT_BROKER_SELECT, .kbchar = 0, .touchX = 0, .touchY = 0};
             inputBroker->injectInputEvent(&event);
