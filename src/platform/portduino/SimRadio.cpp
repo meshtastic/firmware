@@ -43,7 +43,7 @@ void SimRadio::setTransmitDelay()
     } else {
         // If there is a SNR, start a timer scaled based on that SNR.
         LOG_DEBUG("rx_snr found. hop_limit:%d rx_snr:%f", p->hop_limit, p->rx_snr);
-        startTransmitTimerRebroadcast(p->rx_snr, p);
+        startTransmitTimerRebroadcast(p);
     }
 }
 
@@ -57,11 +57,11 @@ void SimRadio::startTransmitTimer(bool withDelay)
     }
 }
 
-void SimRadio::startTransmitTimerRebroadcast(float snr, meshtastic_MeshPacket *p)
+void SimRadio::startTransmitTimerRebroadcast(meshtastic_MeshPacket *p)
 {
     // If we have work to do and the timer wasn't already scheduled, schedule it now
     if (!txQueue.empty()) {
-        uint32_t delayMsec = getTxDelayMsecWeighted(snr, p);
+        uint32_t delayMsec = getTxDelayMsecWeighted(p);
         // LOG_DEBUG("xmit timer %d", delay);
         notifyLater(delayMsec, TRANSMIT_DELAY_COMPLETED, false);
     }

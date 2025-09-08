@@ -184,7 +184,7 @@ class RadioInterface
     bool shouldRebroadcastEarlyLikeRouter(meshtastic_MeshPacket *p);
 
     /** The delay to use when we want to flood a message. Use a weighted scale based on SNR */
-    uint32_t getTxDelayMsecWeighted(float snr, meshtastic_MeshPacket *p);
+    uint32_t getTxDelayMsecWeighted(meshtastic_MeshPacket *p);
 
     /** If the packet is not already in the late rebroadcast window, move it there */
     virtual void clampToLateRebroadcastWindow(NodeNum from, PacketId id) { return; }
