@@ -61,8 +61,6 @@ Allocator<meshtastic_QueueStatus> &queueStatusPool = staticQueueStatusPool;
 #include "Router.h"
 
 MeshService::MeshService()
-    : toPhoneQueue(MAX_RX_TOPHONE), toPhoneQueueStatusQueue(MAX_RX_TOPHONE), toPhoneMqttProxyQueue(MAX_RX_TOPHONE),
-      toPhoneClientNotificationQueue(MAX_RX_TOPHONE / 2)
 {
     lastQueueStatus = {0, 0, 16, 0};
 }

@@ -9,7 +9,8 @@
 #include "MeshRadio.h"
 #include "MeshTypes.h"
 #include "Observer.h"
-#include "PointerQueue.h"
+#include "StaticPointerQueue.h"
+#include "mesh-pb-constants.h"
 #if defined(ARCH_PORTDUINO)
 #include "../platform/portduino/SimRadio.h"
 #endif
@@ -37,16 +38,16 @@ class MeshService
     /// FIXME, change to a DropOldestQueue and keep a count of the number of dropped packets to ensure
     /// we never hang because android hasn't been there in a while
     /// FIXME - save this to flash on deep sleep
-    PointerQueue<meshtastic_MeshPacket> toPhoneQueue;
+    StaticPointerQueue<meshtastic_MeshPacket, MAX_RX_TOPHONE> toPhoneQueue;
 
     // keep list of QueueStatus packets to be send to the phone
-    PointerQueue<meshtastic_QueueStatus> toPhoneQueueStatusQueue;
+    StaticPointerQueue<meshtastic_QueueStatus, MAX_RX_QUEUESTATUS_TOPHONE> toPhoneQueueStatusQueue;
 
     // keep list of MqttClientProxyMessages to be send to the client for delivery
-    PointerQueue<meshtastic_MqttClientProxyMessage> toPhoneMqttProxyQueue;
+    StaticPointerQueue<meshtastic_MqttClientProxyMessage, MAX_RX_MQTTPROXY_TOPHONE> toPhoneMqttProxyQueue;
 
     // keep list of ClientNotifications to be send to the client (phone)
-    PointerQueue<meshtastic_ClientNotification> toPhoneClientNotificationQueue;
+    StaticPointerQueue<meshtastic_ClientNotification, MAX_RX_NOTIFICATION_TOPHONE> toPhoneClientNotificationQueue;
 
     // This holds the last QueueStatus send
     meshtastic_QueueStatus lastQueueStatus;
