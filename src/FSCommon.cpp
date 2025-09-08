@@ -101,6 +101,78 @@ bool renameFile(const char *pathFrom, const char *pathTo)
 
 #include <vector>
 
+#define MAX_FILES_IN_MANIFEST 50 // Reduced to be more conservative with memory
+
+/**
+ * @brief Get the list of files in a directory (internal recursive helper).
+ *
+ * @param dirname The name of the directory.
+ * @param levels The number of levels of subdirectories to list.
+ * @param filenames Reference to vector to populate with file info.
+ */
+static void getFilesRecursive(const char *dirname, uint8_t levels, std::vector<meshtastic_FileInfo> &filenames)
+{
+#ifdef FSCom
+    if (filenames.size() >= MAX_FILES_IN_MANIFEST) {
+        return; // Prevent memory overflow
+    }
+
+    File root = FSCom.open(dirname, FILE_O_READ);
+    if (!root || !root.isDirectory()) {
+        if (root)
+            root.close();
+        return;
+    }
+
+    File file = root.openNextFile();
+    while (file && filenames.size() < MAX_FILES_IN_MANIFEST) {
+        // Check if file name is valid
+        const char *fileName = file.name();
+        if (!fileName || strlen(fileName) == 0) {
+            file.close();
+            file = root.openNextFile();
+            continue;
+        }
+
+        if (file.isDirectory() && !String(fileName).endsWith(".")) {
+            if (levels > 0) { // Prevent infinite recursion
+#ifdef ARCH_ESP32
+                const char *filePath = file.path();
+                if (filePath && strlen(filePath) < 200) { // Prevent path overflow
+                    getFilesRecursive(filePath, levels - 1, filenames);
+                }
+#else
+                if (strlen(fileName) < 200) { // Prevent path overflow
+                    getFilesRecursive(fileName, levels - 1, filenames);
+                }
+#endif
+            }
+            file.close();
+        } else {
+            meshtastic_FileInfo fileInfo = {"", static_cast<uint32_t>(file.size())};
+#ifdef ARCH_ESP32
+            const char *filePath = file.path();
+            if (filePath && strlen(filePath) < sizeof(fileInfo.file_name)) {
+                strncpy(fileInfo.file_name, filePath, sizeof(fileInfo.file_name) - 1);
+                fileInfo.file_name[sizeof(fileInfo.file_name) - 1] = '\0';
+            }
+#else
+            if (strlen(fileName) < sizeof(fileInfo.file_name)) {
+                strncpy(fileInfo.file_name, fileName, sizeof(fileInfo.file_name) - 1);
+                fileInfo.file_name[sizeof(fileInfo.file_name) - 1] = '\0';
+            }
+#endif
+            if (strlen(fileInfo.file_name) > 0 && !String(fileInfo.file_name).endsWith(".")) {
+                filenames.push_back(fileInfo);
+            }
+            file.close();
+        }
+        file = root.openNextFile();
+    }
+    root.close();
+#endif
+}
+
 /**
  * @brief Get the list of files in a directory.
  *
@@ -113,42 +185,9 @@ bool renameFile(const char *pathFrom, const char *pathTo)
  */
 std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels)
 {
-    std::vector<meshtastic_FileInfo> filenames = {};
-#ifdef FSCom
-    File root = FSCom.open(dirname, FILE_O_READ);
-    if (!root)
-        return filenames;
-    if (!root.isDirectory())
-        return filenames;
-
-    File file = root.openNextFile();
-    while (file) {
-        if (file.isDirectory() && !String(file.name()).endsWith(".")) {
-            if (levels) {
-#ifdef ARCH_ESP32
-                std::vector<meshtastic_FileInfo> subDirFilenames = getFiles(file.path(), levels - 1);
-#else
-                std::vector<meshtastic_FileInfo> subDirFilenames = getFiles(file.name(), levels - 1);
-#endif
-                filenames.insert(filenames.end(), subDirFilenames.begin(), subDirFilenames.end());
-                file.close();
-            }
-        } else {
-            meshtastic_FileInfo fileInfo = {"", static_cast<uint32_t>(file.size())};
-#ifdef ARCH_ESP32
-            strcpy(fileInfo.file_name, file.path());
-#else
-            strcpy(fileInfo.file_name, file.name());
-#endif
-            if (!String(fileInfo.file_name).endsWith(".")) {
-                filenames.push_back(fileInfo);
-            }
-            file.close();
-        }
-        file = root.openNextFile();
-    }
-    root.close();
-#endif
+    std::vector<meshtastic_FileInfo> filenames;
+    filenames.reserve(std::min(32, MAX_FILES_IN_MANIFEST)); // Reserve space to reduce reallocations
+    getFilesRecursive(dirname, levels, filenames);
     return filenames;
 }
 
