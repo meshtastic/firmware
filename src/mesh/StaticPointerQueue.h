@@ -20,7 +20,13 @@ template <class T, int MaxElements> class StaticPointerQueue
     concurrency::OSThread *reader = nullptr;
 
   public:
-    StaticPointerQueue() = default;
+    StaticPointerQueue()
+    {
+        // Initialize all buffer elements to nullptr to silence warnings and ensure clean state
+        for (int i = 0; i < MaxElements; i++) {
+            buffer[i] = nullptr;
+        }
+    }
 
     int numFree() const { return MaxElements - count; }
 
