@@ -92,7 +92,7 @@ class ButtonThread : public Observable<const InputEvent *>, public concurrency::
 
     voidFuncPtr _intRoutine = nullptr;
     uint16_t _longPressTime = 500;
-    uint16_t _longLongPressTime = 5000;
+    uint16_t _longLongPressTime = 3900;
     int _pinNum = 0;
     bool _activeLow = true;
     bool _touchQuirk = false;

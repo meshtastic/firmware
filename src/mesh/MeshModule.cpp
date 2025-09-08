@@ -100,6 +100,7 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
     // Was this message directed to us specifically?  Will be false if we are sniffing someone elses packets
     auto ourNodeNum = nodeDB->getNodeNum();
     bool toUs = isBroadcast(mp.to) || isToUs(&mp);
+    bool fromUs = mp.from == ourNodeNum;
 
     for (auto i = modules->begin(); i != modules->end(); ++i) {
         auto &pi = **i;

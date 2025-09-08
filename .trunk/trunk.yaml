@@ -1,31 +1,31 @@
 version: 0.1
 cli:
-  version: 1.24.0
+  version: 1.25.0
 plugins:
   sources:
     - id: trunk
-      ref: v1.7.1
+      ref: v1.7.2
       uri: https://github.com/trunk-io/plugins
 lint:
   enabled:
-    - checkov@3.2.451
-    - renovate@41.40.0
+    - checkov@3.2.469
+    - renovate@41.94.0
     - prettier@3.6.2
-    - trufflehog@3.90.1
+    - trufflehog@3.90.5
     - yamllint@1.37.1
     - bandit@1.8.6
-    - trivy@0.64.1
-    - taplo@0.9.3
-    - ruff@0.12.4
+    - trivy@0.66.0
+    - taplo@0.10.0
+    - ruff@0.12.11
     - isort@6.0.1
     - markdownlint@0.45.0
     - oxipng@9.1.5
     - svgo@4.0.0
     - actionlint@1.7.7
     - flake8@7.3.0
-    - hadolint@2.12.1-beta
+    - hadolint@2.13.1
     - shfmt@3.6.0
-    - shellcheck@0.10.0
+    - shellcheck@0.11.0
     - black@25.1.0
     - git-diff-check
     - gitleaks@8.28.0

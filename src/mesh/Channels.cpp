@@ -368,7 +368,7 @@ const char *Channels::getName(size_t chIndex)
         // Per mesh.proto spec, if bandwidth is specified we must ignore modemPreset enum, we assume that in that case
         // the app effed up and forgot to set channelSettings.name
         if (config.lora.use_preset) {
-            channelName = DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false);
+            channelName = DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, config.lora.use_preset);
         } else {
             channelName = "Custom";
         }
@@ -382,7 +382,8 @@ bool Channels::isDefaultChannel(ChannelIndex chIndex)
     const auto &ch = getByIndex(chIndex);
     if (ch.settings.psk.size == 1 && ch.settings.psk.bytes[0] == 1) {
         const char *name = getName(chIndex);
-        const char *presetName = DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false);
+        const char *presetName =
+            DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, config.lora.use_preset);
         // Check if the name is the default derived from the modem preset
         if (strcmp(name, presetName) == 0)
             return true;

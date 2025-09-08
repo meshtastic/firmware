@@ -270,6 +270,10 @@ typedef enum _meshtastic_HardwareModel {
     /* MeshSolar is an integrated power management and communication solution designed for outdoor low-power devices.
  https://heltec.org/project/meshsolar/ */
     meshtastic_HardwareModel_HELTEC_MESH_SOLAR = 108,
+    /* Lilygo T-Echo Lite */
+    meshtastic_HardwareModel_T_ECHO_LITE = 109,
+    /* New Heltec LoRA32 with ESP32-S3 CPU */
+    meshtastic_HardwareModel_HELTEC_V4 = 110,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */

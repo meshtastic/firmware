@@ -3,6 +3,7 @@
 #include "buzz/BuzzerFeedbackThread.h"
 #include "input/ExpressLRSFiveWay.h"
 #include "input/InputBroker.h"
+#include "input/RotaryEncoderImpl.h"
 #include "input/RotaryEncoderInterruptImpl1.h"
 #include "input/SerialKeyboardImpl.h"
 #include "input/TrackballInterruptImpl1.h"
@@ -87,7 +88,7 @@
 #include "modules/StoreForwardModule.h"
 #endif
 #endif
-#if defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040) || defined(ARCH_PORTDUINO)
+
 #if !MESHTASTIC_EXCLUDE_EXTERNALNOTIFICATION
 #include "modules/ExternalNotificationModule.h"
 #endif
@@ -96,7 +97,6 @@
 #endif
 #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_SERIAL
 #include "modules/SerialModule.h"
-#endif
 #endif
 
 #if !MESHTASTIC_EXCLUDE_DROPZONE
@@ -170,11 +170,20 @@ void setupModules()
                 delete rotaryEncoderInterruptImpl1;
                 rotaryEncoderInterruptImpl1 = nullptr;
             }
+#ifdef T_LORA_PAGER
+            // use a special FSM based rotary encoder version for T-LoRa Pager
+            rotaryEncoderImpl = new RotaryEncoderImpl();
+            if (!rotaryEncoderImpl->init()) {
+                delete rotaryEncoderImpl;
+                rotaryEncoderImpl = nullptr;
+            }
+#else
             upDownInterruptImpl1 = new UpDownInterruptImpl1();
             if (!upDownInterruptImpl1->init()) {
                 delete upDownInterruptImpl1;
                 upDownInterruptImpl1 = nullptr;
             }
+#endif
             cardKbI2cImpl = new CardKbI2cImpl();
             cardKbI2cImpl->init();
 #ifdef INPUTBROKER_MATRIX_TYPE
@@ -236,8 +245,8 @@ void setupModules()
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_POWER_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
         new PowerTelemetryModule();
 #endif
-#if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040)) && !defined(CONFIG_IDF_TARGET_ESP32S2) &&               \
-    !defined(CONFIG_IDF_TARGET_ESP32C3)
+#if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040) || defined(ARCH_STM32WL)) &&                             \
+    !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3)
 #if !MESHTASTIC_EXCLUDE_SERIAL
         if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_COLOR) {
             new SerialModule();
@@ -258,13 +267,11 @@ void setupModules()
         storeForwardModule = new StoreForwardModule();
 #endif
 #endif
-#if defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040) || defined(ARCH_PORTDUINO)
 #if !MESHTASTIC_EXCLUDE_EXTERNALNOTIFICATION
         externalNotificationModule = new ExternalNotificationModule();
 #endif
 #if !MESHTASTIC_EXCLUDE_RANGETEST && !MESHTASTIC_EXCLUDE_GPS
         new RangeTestModule();
-#endif
 #endif
     } else {
 #if !MESHTASTIC_EXCLUDE_ADMIN
