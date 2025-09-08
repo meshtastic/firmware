@@ -9,7 +9,9 @@ class menuHandler
   public:
     enum screenMenus {
         menu_none,
+        lora_Menu,
         lora_picker,
+        device_role_picker,
         no_timeout_lora_picker,
         TZ_picker,
         twelve_hour_picker,
@@ -39,12 +41,16 @@ class menuHandler
         key_verification_final_prompt,
         trace_route_menu,
         throttle_message,
+        nodelist_updates
         node_name_length_menu,
+        FrameToggles
     };
     static screenMenus menuQueue;
 
     static void OnboardMessage();
     static void LoraRegionPicker(uint32_t duration = 30000);
+    static void loraMenu();
+    static void DeviceRolePicker();
     static void handleMenuSwitch(OLEDDisplay *display);
     static void showConfirmationBanner(const char *message, std::function<void()> onConfirm);
     static void clockMenu();
@@ -78,6 +84,7 @@ class menuHandler
     static void screenOptionsMenu();
     static void powerMenu();
     static void nodeNameLengthMenu();
+    static void FrameToggles_menu();
 
   private:
     static void saveUIConfig();

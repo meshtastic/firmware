@@ -391,18 +391,27 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     int nameX = (SCREEN_WIDTH - textWidth);
     display->drawString(nameX, getTextPositions(display)[line++], shortnameble);
 
-    // === Second Row: Radio Preset ===
+    // === Second Row: Role ===
+    auto role = DisplayFormatters::getDeviceRole(config.device.role);
+    char device_role[25];
+    snprintf(device_role, sizeof(device_role), "Role: %s", role);
+    textWidth = display->getStringWidth(device_role);
+    nameX = (SCREEN_WIDTH - textWidth) / 2;
+    display->drawString(nameX, getTextPositions(display)[line++], device_role);
+
+    // === Third Row: Radio Preset ===
     auto mode = DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false, config.lora.use_preset);
+
     char regionradiopreset[25];
     const char *region = myRegion ? myRegion->name : NULL;
     if (region != nullptr) {
-        snprintf(regionradiopreset, sizeof(regionradiopreset), "%s/%s", region, mode);
+        snprintf(regionradiopreset, sizeof(regionradiopreset), "Reg: %s/%s", region, mode);
     }
     textWidth = display->getStringWidth(regionradiopreset);
     nameX = (SCREEN_WIDTH - textWidth) / 2;
     display->drawString(nameX, getTextPositions(display)[line++], regionradiopreset);
 
-    // === Third Row: Frequency / ChanNum ===
+    // === Fourth Row: Frequency / ChanNum ===
     char frequencyslot[35];
     char freqStr[16];
     float freq = RadioLibInterface::instance->getFreq();
@@ -420,7 +429,7 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     nameX = (SCREEN_WIDTH - textWidth) / 2;
     display->drawString(nameX, getTextPositions(display)[line++], frequencyslot);
 
-    // === Fourth Row: Channel Utilization ===
+    // === Fifth Row: Channel Utilization ===
     const char *chUtil = "ChUtil:";
     char chUtilPercentage[10];
     snprintf(chUtilPercentage, sizeof(chUtilPercentage), "%2.0f%%", airTime->channelUtilizationPercent());
@@ -437,7 +446,7 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
     int total_line_content_width = (chUtil_x + chutil_bar_width + display->getStringWidth(chUtilPercentage) + extraoffset) / 2;
     int starting_position = centerofscreen - total_line_content_width;
 
-    display->drawString(starting_position, getTextPositions(display)[line++], chUtil);
+    display->drawString(starting_position, getTextPositions(display)[line], chUtil);
 
     // Force 56% or higher to show a full 100% bar, text would still show related percent.
     if (chutil_percent >= 61) {
@@ -474,14 +483,14 @@ void drawLoRaFocused(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
         display->fillRect(starting_position + chUtil_x, chUtil_y, fillRight, chutil_bar_height);
     }
 
-    display->drawString(starting_position + chUtil_x + chutil_bar_width + extraoffset, getTextPositions(display)[4],
+    display->drawString(starting_position + chUtil_x + chutil_bar_width + extraoffset, getTextPositions(display)[line++],
                         chUtilPercentage);
 }
 
 // ****************************
 // *      System Screen       *
 // ****************************
-void drawMemoryUsage(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+void drawSystemScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     display->clear();
     display->setFont(FONT_SMALL);
@@ -624,6 +633,33 @@ void drawMemoryUsage(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x,
         nameX = (SCREEN_WIDTH - textWidth) / 2;
         display->drawString(nameX, getTextPositions(display)[line], uptimeStr);
     }
+}
+
+// ****************************
+// * Chirpy Screen      *
+// ****************************
+void drawChirpy(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    display->clear();
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
+    int line = 1;
+    int iconX = SCREEN_WIDTH - chirpy_width - (chirpy_width / 3);
+    int iconY = (SCREEN_HEIGHT - chirpy_height) / 2;
+    int textX_offset = 10;
+    if (isHighResolution) {
+        iconX = SCREEN_WIDTH - chirpy_width_hirez - (chirpy_width_hirez / 3);
+        iconY = (SCREEN_HEIGHT - chirpy_height_hirez) / 2;
+        textX_offset = textX_offset * 4;
+        display->drawXbm(iconX, iconY, chirpy_width_hirez, chirpy_height_hirez, chirpy_hirez);
+    } else {
+        display->drawXbm(iconX, iconY, chirpy_width, chirpy_height, chirpy);
+    }
+
+    int textX = (display->getWidth() / 2) - textX_offset - (display->getStringWidth("Hello") / 2);
+    display->drawString(textX, getTextPositions(display)[line++], "Hello");
+    textX = (display->getWidth() / 2) - textX_offset - (display->getStringWidth("World!") / 2);
+    display->drawString(textX, getTextPositions(display)[line++], "World!");
 }
 } // namespace DebugRenderer
 } // namespace graphics
