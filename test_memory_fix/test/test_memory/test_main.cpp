@@ -11,7 +11,7 @@ struct meshtastic_FileInfo {
 std::vector<meshtastic_FileInfo> mock_getFiles(const char *dirname, uint8_t levels, size_t max_files = 50)
 {
     std::vector<meshtastic_FileInfo> files;
-    files.reserve(std::min(32, (int)max_files));
+    files.reserve(std::min((size_t)32, max_files));
 
     if (strcmp(dirname, "/nonexistent") == 0) {
         return files;

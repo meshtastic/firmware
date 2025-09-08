@@ -136,7 +136,7 @@ static void getFilesRecursive(const char *dirname, uint8_t levels, std::vector<m
         }
 
         if (file.isDirectory() && !String(fileName).endsWith(".")) {
-            if (levels > 0) { // Prevent infinite recursion
+            if (levels > 0) { // Limit recursion depth
 #ifdef ARCH_ESP32
                 const char *filePath = file.path();
                 if (filePath && strlen(filePath) < MAX_PATH_LENGTH) {
@@ -187,7 +187,7 @@ static void getFilesRecursive(const char *dirname, uint8_t levels, std::vector<m
 std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels)
 {
     std::vector<meshtastic_FileInfo> filenames;
-    filenames.reserve(std::min(32, MAX_FILES_IN_MANIFEST)); // Reserve space to reduce reallocations
+    filenames.reserve(std::min((size_t)32, (size_t)MAX_FILES_IN_MANIFEST)); // Reserve space to reduce reallocations
     getFilesRecursive(dirname, levels, filenames);
     return filenames;
 }
