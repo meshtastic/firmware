@@ -41,7 +41,6 @@ class menuHandler
         key_verification_final_prompt,
         trace_route_menu,
         throttle_message,
-        nodelist_updates
         node_name_length_menu,
         FrameToggles
     };
