@@ -40,10 +40,7 @@ bool RotaryEncoderImpl::init()
 
 int32_t RotaryEncoderImpl::runOnce()
 {
-    InputEvent e;
-    e.inputEvent = INPUT_BROKER_NONE;
-    e.source = this->originName;
-
+    InputEvent e{originName, INPUT_BROKER_NONE, 0, 0, 0};
     static uint32_t lastPressed = millis();
     if (rotary->readButton() == RotaryEncoder::ButtonState::BUTTON_PRESSED) {
         if (lastPressed + 200 < millis()) {
