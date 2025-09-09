@@ -444,12 +444,16 @@ extern struct portduino_config_struct {
             switch (configDisplayMode) {
             case meshtastic_Config_DisplayConfig_DisplayMode_TWOCOLOR:
                 out << YAML::Key << "DisplayMode" << YAML::Value << "TWOCOLOR";
+                break;
             case meshtastic_Config_DisplayConfig_DisplayMode_INVERTED:
                 out << YAML::Key << "DisplayMode" << YAML::Value << "INVERTED";
+                break;
             case meshtastic_Config_DisplayConfig_DisplayMode_COLOR:
                 out << YAML::Key << "DisplayMode" << YAML::Value << "COLOR";
+                break;
             case meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT:
                 out << YAML::Key << "DisplayMode" << YAML::Value << "DEFAULT";
+                break;
             }
 
             out << YAML::EndMap; // Config
