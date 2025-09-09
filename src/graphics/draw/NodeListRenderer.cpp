@@ -66,21 +66,13 @@ const char *getSafeNodeName(meshtastic_NodeInfoLite *node)
             snprintf(nodeName, sizeof(nodeName), "(%04X)", (uint16_t)(node->num & 0xFFFF));
         }
     }
-    
-    bool valid = true;
-    for (size_t i = 0; i < strlen(name); i++) {
-        uint8_t c = (uint8_t)name[i];
-        if (c < 32 || c > 126) {
-            valid = false;
-            break;
-        }
-    }
-    if (valid) {
-        strncpy(nodeName, name, sizeof(nodeName) - 1);
-        nodeName[sizeof(nodeName) - 1] = '\0';
-    } else {
-        snprintf(nodeName, sizeof(nodeName), "(%04X)", (uint16_t)(node->num & 0xFFFF));
-    }
+
+    // Use global sanitizeString function and copy directly into nodeName
+    std::string sanitized_name = sanitizeString(name ? name : "");
+
+    strncpy(nodeName, sanitized_name.c_str(), sizeof(nodeName) - 1);
+    nodeName[sizeof(nodeName) - 1] = '\0';
+
     return nodeName;
 }
 

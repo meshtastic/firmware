@@ -1149,7 +1149,7 @@ void menuHandler::screenOptionsMenu()
     int options = 1;
 
 #if defined(T_LORA_PAGER)
-    optionsArray[options] = "Node Name Length";
+    optionsArray[options] = "Show Long/Short Name";
     optionsEnumArray[options++] = NodeNameLength;
 #endif
 
