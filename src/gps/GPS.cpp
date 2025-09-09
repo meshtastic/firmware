@@ -808,6 +808,14 @@ bool GPS::setup()
             } else {
                 LOG_INFO("GNSS module configuration saved!");
             }
+        } else if (gnssModel == GNSS_MODEL_CM121) {
+            // only ask for RMC and GGA
+            // enable GGA
+            _serial_gps->write("$CFGMSG,0,0,1,1*1B\r\n");
+            delay(250);
+            // enable RMC
+            _serial_gps->write("$CFGMSG,0,4,1,1*1F\r\n");
+            delay(250);
         }
         didSerialInit = true;
     }
@@ -1240,9 +1248,15 @@ GnssModel_t GPS::probe(int serialSpeed)
     _serial_gps->write("$PUBX,40,GSV,0,0,0,0,0,0*59\r\n");
     _serial_gps->write("$PUBX,40,VTG,0,0,0,0,0,0*5E\r\n");
     delay(20);
+    // Close NMEA sequences on CM121
+    _serial_gps->write("$CFGMSG,0,1,0,1*1B\r\n");
+    _serial_gps->write("$CFGMSG,0,2,0,1*18\r\n");
+    _serial_gps->write("$CFGMSG,0,3,0,1*19\r\n");
+    delay(20);
 
-    // Unicore UFirebirdII Series: UC6580, UM620, UM621, UM670A, UM680A, or UM681A
-    std::vector<ChipInfo> unicore = {{"UC6580", "UC6580", GNSS_MODEL_UC6580}, {"UM600", "UM600", GNSS_MODEL_UC6580}};
+    // Unicore UFirebirdII Series: UC6580, UM620, UM621, UM670A, UM680A, or UM681A,or CM121
+    std::vector<ChipInfo> unicore = {
+        {"UC6580", "UC6580", GNSS_MODEL_UC6580}, {"UM600", "UM600", GNSS_MODEL_UC6580}, {"CM121", "CM121", GNSS_MODEL_CM121}};
     PROBE_FAMILY("Unicore Family", "$PDTINFO", unicore, 500);
 
     std::vector<ChipInfo> atgm = {
@@ -1422,7 +1436,7 @@ GPS *GPS::createGps()
         _en_gpio = PIN_GPS_EN;
 #endif
 #ifdef ARCH_PORTDUINO
-    if (!settingsMap[has_gps])
+    if (!portduino_config.has_gps)
         return nullptr;
 #endif
     if (!_rx_gpio || !_serial_gps) // Configured to have no GPS at all
@@ -1532,10 +1546,9 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
         t.tm_year = d.year() - 1900;
         t.tm_isdst = false;
         if (t.tm_mon > -1) {
-            LOG_DEBUG("NMEA GPS time %02d-%02d-%02d %02d:%02d:%02d age %d", d.year(), d.month(), t.tm_mday, t.tm_hour, t.tm_min,
-                      t.tm_sec, ti.age());
             if (perhapsSetRTC(RTCQualityGPS, t) == RTCSetResultSuccess) {
-                LOG_DEBUG("Time set.");
+                LOG_DEBUG("NMEA GPS time set %02d-%02d-%02d %02d:%02d:%02d age %d", d.year(), d.month(), t.tm_mday, t.tm_hour,
+                          t.tm_min, t.tm_sec, ti.age());
                 return true;
             } else {
                 return false;

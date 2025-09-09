@@ -64,7 +64,12 @@ typedef enum _meshtastic_Config_DeviceConfig_Role {
     in areas not already covered by other routers, or to bridge around problematic terrain,
     but should not be given priority over other routers in order to avoid unnecessaraily
     consuming hops. */
-    meshtastic_Config_DeviceConfig_Role_ROUTER_LATE = 11
+    meshtastic_Config_DeviceConfig_Role_ROUTER_LATE = 11,
+    /* Description: Treats packets from or to favorited nodes as ROUTER, and all other packets as CLIENT.
+ Technical Details: Used for stronger attic/roof nodes to distribute messages more widely
+    from weaker, indoor, or less-well-positioned nodes. Recommended for users with multiple nodes
+    where one CLIENT_BASE acts as a more powerful base station, such as an attic/roof node. */
+    meshtastic_Config_DeviceConfig_Role_CLIENT_BASE = 12
 } meshtastic_Config_DeviceConfig_Role;
 
 /* Defines the device's behavior for how messages are rebroadcast */
@@ -646,8 +651,8 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _meshtastic_Config_DeviceConfig_Role_MIN meshtastic_Config_DeviceConfig_Role_CLIENT
-#define _meshtastic_Config_DeviceConfig_Role_MAX meshtastic_Config_DeviceConfig_Role_ROUTER_LATE
-#define _meshtastic_Config_DeviceConfig_Role_ARRAYSIZE ((meshtastic_Config_DeviceConfig_Role)(meshtastic_Config_DeviceConfig_Role_ROUTER_LATE+1))
+#define _meshtastic_Config_DeviceConfig_Role_MAX meshtastic_Config_DeviceConfig_Role_CLIENT_BASE
+#define _meshtastic_Config_DeviceConfig_Role_ARRAYSIZE ((meshtastic_Config_DeviceConfig_Role)(meshtastic_Config_DeviceConfig_Role_CLIENT_BASE+1))
 
 #define _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN meshtastic_Config_DeviceConfig_RebroadcastMode_ALL
 #define _meshtastic_Config_DeviceConfig_RebroadcastMode_MAX meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY
