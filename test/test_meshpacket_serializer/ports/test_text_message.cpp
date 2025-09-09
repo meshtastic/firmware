@@ -40,3 +40,15 @@ void test_text_message_serialization()
 
     delete root;
 }
+
+// Add test for malformed UTF-8 sequences
+void test_text_message_serialization_invalid_utf8()
+{
+    const uint8_t invalid_utf8[] = {0xFF, 0xFE, 0xFD, 0x00}; // Invalid UTF-8
+    meshtastic_MeshPacket packet =
+        create_test_packet(meshtastic_PortNum_TEXT_MESSAGE_APP, invalid_utf8, sizeof(invalid_utf8) - 1);
+
+    // Should not crash, may produce replacement characters
+    std::string json = MeshPacketSerializer::JsonSerialize(&packet, false);
+    TEST_ASSERT_TRUE(json.length() > 0);
+}
