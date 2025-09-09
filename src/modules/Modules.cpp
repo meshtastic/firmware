@@ -141,7 +141,10 @@ void setupModules()
         detectionSensorModule = new DetectionSensorModule();
 #endif
 #if !MESHTASTIC_EXCLUDE_ATAK
-        atakPluginModule = new AtakPluginModule();
+        if (IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_TAK,
+                      meshtastic_Config_DeviceConfig_Role_TAK_TRACKER)) {
+            atakPluginModule = new AtakPluginModule();
+        }
 #endif
 #if !MESHTASTIC_EXCLUDE_PKI
         keyVerificationModule = new KeyVerificationModule();
