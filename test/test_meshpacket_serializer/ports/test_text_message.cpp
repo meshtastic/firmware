@@ -41,6 +41,48 @@ void verify_text_message_packet_structure(const std::string &json, const char *e
 
     // No need for manual delete with smart pointer
 }
+#include <memory>
+
+// Helper function to test common packet fields and structure
+void verify_text_message_packet_structure(const std::string &json, const char *expected_text)
+{
+    TEST_ASSERT_TRUE(json.length() > 0);
+
+    // Use smart pointer for automatic memory management
+    std::unique_ptr<JSONValue> root(JSON::Parse(json.c_str()));
+    TEST_ASSERT_NOT_NULL(root.get());
+    TEST_ASSERT_TRUE(root->IsObject());
+
+    JSONObject jsonObj = root->AsObject();
+
+    // Check basic packet fields - use helper function to reduce duplication
+    auto check_field = [&](const char *field, uint32_t expected_value) {
+        auto it = jsonObj.find(field);
+        TEST_ASSERT_TRUE(it != jsonObj.end());
+        TEST_ASSERT_EQUAL(expected_value, (uint32_t)it->second->AsNumber());
+    };
+
+    check_field("from", 0x11223344);
+    check_field("to", 0x55667788);
+    check_field("id", 0x9999);
+
+    // Check message type
+    auto type_it = jsonObj.find("type");
+    TEST_ASSERT_TRUE(type_it != jsonObj.end());
+    TEST_ASSERT_EQUAL_STRING("text", type_it->second->AsString().c_str());
+
+    // Check payload
+    auto payload_it = jsonObj.find("payload");
+    TEST_ASSERT_TRUE(payload_it != jsonObj.end());
+    TEST_ASSERT_TRUE(payload_it->second->IsObject());
+
+    JSONObject payload = payload_it->second->AsObject();
+    auto text_it = payload.find("text");
+    TEST_ASSERT_TRUE(text_it != payload.end());
+    TEST_ASSERT_EQUAL_STRING(expected_text, text_it->second->AsString().c_str());
+
+    // No need for manual delete with smart pointer
+}
 
 // Test TEXT_MESSAGE_APP port
 void test_text_message_serialization()
