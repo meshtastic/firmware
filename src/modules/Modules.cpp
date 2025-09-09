@@ -138,7 +138,9 @@ void setupModules()
         neighborInfoModule = new NeighborInfoModule();
 #endif
 #if !MESHTASTIC_EXCLUDE_DETECTIONSENSOR
-        detectionSensorModule = new DetectionSensorModule();
+        if (moduleConfig.has_detection_sensor && moduleConfig.detection_sensor.enabled) {
+            detectionSensorModule = new DetectionSensorModule();
+        }
 #endif
 #if !MESHTASTIC_EXCLUDE_ATAK
         if (IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_TAK,
