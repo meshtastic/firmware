@@ -236,24 +236,10 @@ void Screen::showTextInput(const char *header, const char *initialText, uint32_t
 {
     LOG_INFO("showTextInput called with header='%s', durationMs=%d", header ? header : "NULL", durationMs);
 
-    if (NotificationRenderer::virtualKeyboard) {
-        delete NotificationRenderer::virtualKeyboard;
-        NotificationRenderer::virtualKeyboard = nullptr;
-    }
-
-    NotificationRenderer::textInputCallback = nullptr;
-
-    NotificationRenderer::virtualKeyboard = new VirtualKeyboard();
-    if (header) {
-        NotificationRenderer::virtualKeyboard->setHeader(header);
-    }
-    if (initialText) {
-        NotificationRenderer::virtualKeyboard->setInputText(initialText);
-    }
-
-    // Set up callback with safer cleanup mechanism
+    // Start OnScreenKeyboardModule session (non-touch variant)
+    OnScreenKeyboardModule::instance().start(header, initialText, durationMs, textCallback);
+    NotificationRenderer::virtualKeyboard = OnScreenKeyboardModule::instance().getKeyboard();
     NotificationRenderer::textInputCallback = textCallback;
-    NotificationRenderer::virtualKeyboard->setCallback([textCallback](const std::string &text) { textCallback(text); });
 
     // Store the message and set the expiration timestamp (use same pattern as other notifications)
     strncpy(NotificationRenderer::alertBannerMessage, header ? header : "Text Input", 255);

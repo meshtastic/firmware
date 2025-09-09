@@ -50,11 +50,6 @@ std::function<void(int)> NotificationRenderer::alertBannerCallback = NULL;
 bool NotificationRenderer::pauseBanner = false;
 notificationTypeEnum NotificationRenderer::current_notification_type = notificationTypeEnum::none;
 
-// Variables for message popup overlay on virtual keyboard
-char NotificationRenderer::keyboardPopupMessage[256] = {0};
-char NotificationRenderer::keyboardPopupTitle[64] = {0};
-uint32_t NotificationRenderer::keyboardPopupUntil = 0;
-bool NotificationRenderer::showKeyboardPopup = false;
 uint32_t NotificationRenderer::numDigits = 0;
 uint32_t NotificationRenderer::currentNumber = 0;
 VirtualKeyboard *NotificationRenderer::virtualKeyboard = nullptr;
@@ -96,11 +91,7 @@ void NotificationRenderer::resetBanner()
     alertBannerMessage[0] = '\0';
     current_notification_type = notificationTypeEnum::none;
 
-    // Reset keyboard popup message variables
-    keyboardPopupMessage[0] = '\0';
-    keyboardPopupTitle[0] = '\0';
-    keyboardPopupUntil = 0;
-    showKeyboardPopup = false;
+    OnScreenKeyboardModule::instance().clearPopup();
 
     inEvent.inputEvent = INPUT_BROKER_NONE;
     inEvent.kbchar = 0;
@@ -115,9 +106,10 @@ void NotificationRenderer::resetBanner()
 
     nodeDB->pause_sort(false);
 
-    // If we're exiting from text_input (virtual keyboard), trigger frame update
+    // If we're exiting from text_input (virtual keyboard), stop module and trigger frame update
     // to ensure any messages received during keyboard use are now displayed
     if (previousType == notificationTypeEnum::text_input && screen) {
+        OnScreenKeyboardModule::instance().stop(false);
         screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
     }
 }
@@ -629,97 +621,26 @@ void NotificationRenderer::drawFrameFirmware(OLEDDisplay *display, OLEDDisplayUi
 
 void NotificationRenderer::drawTextInput(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
-    if (virtualKeyboard) {
-        // Check for timeout and auto-exit if needed
-        if (virtualKeyboard->isTimedOut()) {
-            LOG_INFO("Virtual keyboard timeout - auto-exiting");
-            // Cancel virtual keyboard - call callback with empty string to indicate timeout
-            auto callback = textInputCallback; // Store callback before clearing
+    // Delegate session to OnScreenKeyboardModule
+    auto &osk = OnScreenKeyboardModule::instance();
 
-            // Clean up first to prevent re-entry
-            delete virtualKeyboard;
-            virtualKeyboard = nullptr;
-            textInputCallback = nullptr;
-            resetBanner();
-
-            // Call callback after cleanup
-            if (callback) {
-                callback("");
-            }
-
-            // Restore normal overlays
-            if (screen) {
-                screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
-            }
-            return;
-        }
-
-        if (inEvent.inputEvent != INPUT_BROKER_NONE) {
-            if (inEvent.inputEvent == INPUT_BROKER_UP) {
-                // high frequency for move cursor left/right than up/down with encoders
-                extern ::RotaryEncoderInterruptImpl1 *rotaryEncoderInterruptImpl1;
-                extern ::UpDownInterruptImpl1 *upDownInterruptImpl1;
-                if (::rotaryEncoderInterruptImpl1 || ::upDownInterruptImpl1) {
-                    virtualKeyboard->moveCursorLeft();
-                } else {
-                    virtualKeyboard->moveCursorUp();
-                }
-            } else if (inEvent.inputEvent == INPUT_BROKER_DOWN) {
-                extern ::RotaryEncoderInterruptImpl1 *rotaryEncoderInterruptImpl1;
-                extern ::UpDownInterruptImpl1 *upDownInterruptImpl1;
-                if (::rotaryEncoderInterruptImpl1 || ::upDownInterruptImpl1) {
-                    virtualKeyboard->moveCursorRight();
-                } else {
-                    virtualKeyboard->moveCursorDown();
-                }
-            } else if (inEvent.inputEvent == INPUT_BROKER_LEFT) {
-                virtualKeyboard->moveCursorLeft();
-            } else if (inEvent.inputEvent == INPUT_BROKER_RIGHT) {
-                virtualKeyboard->moveCursorRight();
-            } else if (inEvent.inputEvent == INPUT_BROKER_UP_LONG) {
-                virtualKeyboard->moveCursorUp();
-            } else if (inEvent.inputEvent == INPUT_BROKER_DOWN_LONG) {
-                virtualKeyboard->moveCursorDown();
-            } else if (inEvent.inputEvent == INPUT_BROKER_ALT_PRESS) {
-                virtualKeyboard->moveCursorLeft();
-            } else if (inEvent.inputEvent == INPUT_BROKER_USER_PRESS) {
-                virtualKeyboard->moveCursorRight();
-            } else if (inEvent.inputEvent == INPUT_BROKER_SELECT) {
-                virtualKeyboard->handlePress();
-            } else if (inEvent.inputEvent == INPUT_BROKER_SELECT_LONG) {
-                virtualKeyboard->handleLongPress();
-            } else if (inEvent.inputEvent == INPUT_BROKER_CANCEL) {
-                auto callback = textInputCallback;
-                delete virtualKeyboard;
-                virtualKeyboard = nullptr;
-                textInputCallback = nullptr;
-                resetBanner();
-                if (callback) {
-                    callback("");
-                }
-                if (screen) {
-                    screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
-                }
-                return;
-            }
-
-            // Consume the event after processing for virtual keyboard
-            inEvent.inputEvent = INPUT_BROKER_NONE;
-        }
-
-        // Clear the screen to avoid overlapping with underlying frames or overlays
-        display->setColor(BLACK);
-        display->fillRect(0, 0, display->getWidth(), display->getHeight());
-        display->setColor(WHITE);
-        // Draw the virtual keyboard
-        virtualKeyboard->draw(display, 0, 0);
-
-        // Draw message popup overlay if active
-        drawKeyboardMessagePopup(display);
-    } else {
-        // If virtualKeyboard is null, reset the banner to avoid getting stuck
-        LOG_INFO("Virtual keyboard is null - resetting banner");
+    if (!osk.isActive()) {
+        LOG_INFO("Virtual keyboard is not active - resetting banner");
         resetBanner();
+        return;
+    }
+
+    if (inEvent.inputEvent != INPUT_BROKER_NONE) {
+        osk.handleInput(inEvent);
+        inEvent.inputEvent = INPUT_BROKER_NONE; // consume
+    }
+
+    // Draw. If draw returns false, session ended (timeout or cancel)
+    if (!osk.draw(display)) {
+        // Session ended, ensure banner reset and restore frames
+        resetBanner();
+        if (screen)
+            screen->setFrames(graphics::Screen::FOCUS_PRESERVE);
     }
 }
 
@@ -730,135 +651,12 @@ bool NotificationRenderer::isOverlayBannerShowing()
 
 void NotificationRenderer::showKeyboardMessagePopupWithTitle(const char *title, const char *content, uint32_t durationMs)
 {
-    if (!title || !content || current_notification_type != notificationTypeEnum::text_input) {
+    if (!title || !content || current_notification_type != notificationTypeEnum::text_input)
         return;
-    }
-
-    strncpy(keyboardPopupTitle, title, 63);
-    keyboardPopupTitle[63] = '\0';
-    strncpy(keyboardPopupMessage, content, 255);
-    keyboardPopupMessage[255] = '\0';
-    keyboardPopupUntil = millis() + durationMs;
-    showKeyboardPopup = true;
+    OnScreenKeyboardModule::instance().showPopup(title, content, durationMs);
 }
 
-void NotificationRenderer::drawKeyboardMessagePopup(OLEDDisplay *display)
-{
-    // Check if popup should be dismissed
-    if (!showKeyboardPopup || millis() > keyboardPopupUntil || keyboardPopupMessage[0] == '\0') {
-        showKeyboardPopup = false;
-        return;
-    }
-
-    // === Use drawNotificationBox for true BannerOverlayOptions style ===
-    constexpr uint16_t maxContentLines = 3; // Maximum content lines
-    bool hasTitle = keyboardPopupTitle[0] != '\0';
-
-    display->setFont(FONT_SMALL);
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-
-    // Conservative wrap width to ensure we never exceed screen after padding
-    const uint16_t maxWrapWidth = display->width() - 40; // Leave room for padding and bell icons
-
-    // Prepare content for display - build lines array for drawNotificationBox
-    std::vector<std::string> allLines;
-
-    // Parse message content into lines with word wrapping
-    char contentBuffer[256];
-    strncpy(contentBuffer, keyboardPopupMessage, 255);
-    contentBuffer[255] = '\0';
-
-    // Helper function to wrap text to fit within available width
-    auto wrapText = [&](const char *text, uint16_t availableWidth) -> std::vector<std::string> {
-        std::vector<std::string> wrappedLines;
-        std::string currentLine;
-        std::string word;
-        const char *ptr = text;
-
-        while (*ptr && wrappedLines.size() < maxContentLines) {
-            // Skip whitespace and handle explicit newlines
-            while (*ptr && (*ptr == ' ' || *ptr == '\t' || *ptr == '\n' || *ptr == '\r')) {
-                if (*ptr == '\n') {
-                    if (!currentLine.empty()) {
-                        wrappedLines.push_back(currentLine);
-                        currentLine.clear();
-                        if (wrappedLines.size() >= maxContentLines)
-                            break;
-                    }
-                }
-                ++ptr;
-            }
-            if (!*ptr || wrappedLines.size() >= maxContentLines)
-                break;
-
-            // Collect next word
-            word.clear();
-            while (*ptr && *ptr != ' ' && *ptr != '\t' && *ptr != '\n' && *ptr != '\r') {
-                word += *ptr++;
-            }
-            if (word.empty())
-                continue;
-
-            // Try to append word
-            std::string testLine = currentLine.empty() ? word : (currentLine + " " + word);
-            uint16_t testWidth = display->getStringWidth(testLine.c_str(), testLine.length(), true);
-            if (testWidth <= availableWidth) {
-                currentLine = testLine;
-            } else {
-                if (!currentLine.empty()) {
-                    wrappedLines.push_back(currentLine);
-                    currentLine = word;
-                    if (wrappedLines.size() >= maxContentLines)
-                        break;
-                } else {
-                    // Single word longer than available width: hard cut down to fit
-                    currentLine = word;
-                    while (currentLine.size() > 1 &&
-                           display->getStringWidth(currentLine.c_str(), currentLine.length(), true) > availableWidth) {
-                        currentLine.pop_back();
-                    }
-                }
-            }
-        }
-        if (!currentLine.empty() && wrappedLines.size() < maxContentLines) {
-            wrappedLines.push_back(currentLine);
-        }
-        return wrappedLines;
-    };
-
-    // Add title if present
-    if (hasTitle) {
-        allLines.emplace_back(keyboardPopupTitle);
-    }
-
-    // Split content by newlines first, then wrap each paragraph
-    std::vector<std::string> contentLines;
-    char *paragraph = strtok(contentBuffer, "\n");
-    while (paragraph != nullptr && contentLines.size() < maxContentLines) {
-        auto wrapped = wrapText(paragraph, maxWrapWidth);
-        for (const auto &ln : wrapped) {
-            if (contentLines.size() >= maxContentLines)
-                break;
-            contentLines.push_back(ln);
-        }
-        paragraph = strtok(nullptr, "\n");
-    }
-
-    // Add content lines to allLines
-    for (const auto &ln : contentLines) {
-        allLines.push_back(ln);
-    }
-
-    // Convert to const char* array for drawNotificationBox
-    std::vector<const char *> linePointers;
-    for (const auto &line : allLines) {
-        linePointers.push_back(line.c_str());
-    }
-    linePointers.push_back(nullptr); // null terminate
-
-    // Use a custom inverted color version for keyboard popup
-    drawInvertedNotificationBox(display, nullptr, linePointers.data(), allLines.size(), 0, 0);
-}
+// drawKeyboardMessagePopup removed; OnScreenKeyboardModule handles popup drawing within draw()
 
 // Custom inverted color version for keyboard popup - black background with white text
 void NotificationRenderer::drawInvertedNotificationBox(OLEDDisplay *display, OLEDDisplayUiState *state, const char *lines[],
