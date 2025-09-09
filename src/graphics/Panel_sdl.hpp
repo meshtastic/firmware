@@ -21,6 +21,7 @@ Porting for SDL:
 #pragma once
 
 #define SDL_MAIN_HANDLED
+// cppcheck-suppress preprocessorErrorDirective
 #if __has_include(<SDL2/SDL.h>)
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_main.h>
