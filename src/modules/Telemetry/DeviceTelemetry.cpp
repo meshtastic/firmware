@@ -172,7 +172,12 @@ bool DeviceTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
              telemetry.variant.device_metrics.battery_level, telemetry.variant.device_metrics.voltage,
              telemetry.variant.device_metrics.uptime_seconds);
 
+    auto heapBefore = memGet.getFreeHeap();
     meshtastic_MeshPacket *p = allocDataProtobuf(telemetry);
+    auto heapAfter = memGet.getFreeHeap();
+    LOG_HEAP("Alloc in DeviceTelemetryModule::sendTelemetry() pointer 0x%x, size: %u, free: %u", p, heapBefore - heapAfter,
+             heapAfter);
+
     p->to = dest;
     p->decoded.want_response = false;
     p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;

@@ -23,6 +23,7 @@
 #define MESHTASTIC_LOG_LEVEL_ERROR "ERROR"
 #define MESHTASTIC_LOG_LEVEL_CRIT "CRIT "
 #define MESHTASTIC_LOG_LEVEL_TRACE "TRACE"
+#define MESHTASTIC_LOG_LEVEL_HEAP "HEAP"
 
 #include "SerialConsole.h"
 
@@ -60,6 +61,12 @@
 #define LOG_CRIT(...)
 #define LOG_TRACE(...)
 #endif
+#endif
+
+#if defined(DEBUG_HEAP)
+#define LOG_HEAP(...) DEBUG_PORT.log(MESHTASTIC_LOG_LEVEL_HEAP, __VA_ARGS__)
+#else
+#define LOG_HEAP(...)
 #endif
 
 /// A C wrapper for LOG_DEBUG that can be used from arduino C libs that don't know about C++ or meshtastic
