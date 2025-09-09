@@ -128,6 +128,7 @@ RAK9154Sensor rak9154Sensor;
 #ifdef HAS_PPM
 // note: XPOWERS_CHIP_XXX must be defined in variant.h
 #include <XPowersLib.h>
+XPowersPPM *PPM = NULL;
 #endif
 
 #ifdef HAS_BQ27220
@@ -681,7 +682,7 @@ bool Power::setup()
         found = true;
     } else if (lipoChargerInit()) {
         found = true;
-    }  else if (meshSolarInit()) {
+    } else if (meshSolarInit()) {
         found = true;
     } else if (analogInit()) {
         found = true;
@@ -745,7 +746,11 @@ void Power::shutdown()
 
 #if HAS_SCREEN
     if (screen) {
+#ifdef T_DECK_PRO
+        screen->showSimpleBanner("Device is powered off.\nConnect USB to start!", 0); // T-Deck Pro has no power button
+#else
         screen->showSimpleBanner("Shutting Down...", 0); // stays on screen
+#endif
     }
 #endif
 #if !defined(ARCH_STM32WL)
@@ -763,7 +768,7 @@ void Power::shutdown()
 #ifdef PIN_LED3
     ledOff(PIN_LED3);
 #endif
-    doDeepSleep(DELAY_FOREVER, false, true);
+    doDeepSleep(DELAY_FOREVER, true, true);
 #elif defined(ARCH_PORTDUINO)
     exit(EXIT_SUCCESS);
 #else
@@ -828,16 +833,25 @@ void Power::readPowerStatus()
     newStatus.notifyObservers(&powerStatus2);
 #ifdef DEBUG_HEAP
     if (lastheap != memGet.getFreeHeap()) {
-        std::string threadlist = "Threads running:";
+        // Use stack-allocated buffer to avoid heap allocations in monitoring code
+        char threadlist[256] = "Threads running:";
+        int threadlistLen = strlen(threadlist);
         int running = 0;
         for (int i = 0; i < MAX_THREADS; i++) {
             auto thread = concurrency::mainController.get(i);
             if ((thread != nullptr) && (thread->enabled)) {
-                threadlist += vformat(" %s", thread->ThreadName.c_str());
+                // Use snprintf to safely append to stack buffer without heap allocation
+                int remaining = sizeof(threadlist) - threadlistLen - 1;
+                if (remaining > 0) {
+                    int written = snprintf(threadlist + threadlistLen, remaining, " %s", thread->ThreadName.c_str());
+                    if (written > 0 && written < remaining) {
+                        threadlistLen += written;
+                    }
+                }
                 running++;
             }
         }
-        LOG_DEBUG(threadlist.c_str());
+        LOG_DEBUG(threadlist);
         LOG_DEBUG("Heap status: %d/%d bytes free (%d), running %d/%d threads", memGet.getFreeHeap(), memGet.getHeapSize(),
                   memGet.getFreeHeap() - lastheap, running, concurrency::mainController.size(false));
         lastheap = memGet.getFreeHeap();
@@ -851,15 +865,19 @@ void Power::readPowerStatus()
         sprintf(mac, "!%02x%02x%02x%02x", dmac[2], dmac[3], dmac[4], dmac[5]);
 
         auto newHeap = memGet.getFreeHeap();
-        std::string heapTopic =
-            (*moduleConfig.mqtt.root ? moduleConfig.mqtt.root : "msh") + std::string("/2/heap/") + std::string(mac);
-        std::string heapString = std::to_string(newHeap);
-        mqtt->pubSub.publish(heapTopic.c_str(), heapString.c_str(), false);
+        // Use stack-allocated buffers to avoid heap allocations in monitoring code
+        char heapTopic[128];
+        snprintf(heapTopic, sizeof(heapTopic), "%s/2/heap/%s", (*moduleConfig.mqtt.root ? moduleConfig.mqtt.root : "msh"), mac);
+        char heapString[16];
+        snprintf(heapString, sizeof(heapString), "%u", newHeap);
+        mqtt->pubSub.publish(heapTopic, heapString, false);
+
         auto wifiRSSI = WiFi.RSSI();
-        std::string wifiTopic =
-            (*moduleConfig.mqtt.root ? moduleConfig.mqtt.root : "msh") + std::string("/2/wifi/") + std::string(mac);
-        std::string wifiString = std::to_string(wifiRSSI);
-        mqtt->pubSub.publish(wifiTopic.c_str(), wifiString.c_str(), false);
+        char wifiTopic[128];
+        snprintf(wifiTopic, sizeof(wifiTopic), "%s/2/wifi/%s", (*moduleConfig.mqtt.root ? moduleConfig.mqtt.root : "msh"), mac);
+        char wifiString[16];
+        snprintf(wifiString, sizeof(wifiString), "%d", wifiRSSI);
+        mqtt->pubSub.publish(wifiTopic, wifiString, false);
     }
 #endif
 
@@ -1320,7 +1338,6 @@ bool Power::lipoInit()
 class LipoCharger : public HasBatteryLevel
 {
   private:
-    XPowersPPM *ppm = nullptr;
     BQ27220 *bq = nullptr;
 
   public:
@@ -1329,41 +1346,41 @@ class LipoCharger : public HasBatteryLevel
      */
     bool runOnce()
     {
-        if (ppm == nullptr) {
-            ppm = new XPowersPPM;
-            bool result = ppm->init(Wire, I2C_SDA, I2C_SCL, BQ25896_ADDR);
+        if (PPM == nullptr) {
+            PPM = new XPowersPPM;
+            bool result = PPM->init(Wire, I2C_SDA, I2C_SCL, BQ25896_ADDR);
             if (result) {
                 LOG_INFO("PPM BQ25896 init succeeded");
                 // Set the minimum operating voltage. Below this voltage, the PPM will protect
-                // ppm->setSysPowerDownVoltage(3100);
+                // PPM->setSysPowerDownVoltage(3100);
 
                 // Set input current limit, default is 500mA
-                // ppm->setInputCurrentLimit(800);
+                // PPM->setInputCurrentLimit(800);
 
                 // Disable current limit pin
-                // ppm->disableCurrentLimitPin();
+                // PPM->disableCurrentLimitPin();
 
                 // Set the charging target voltage, Range:3840 ~ 4608mV ,step:16 mV
-                ppm->setChargeTargetVoltage(4288);
+                PPM->setChargeTargetVoltage(4288);
 
                 // Set the precharge current , Range: 64mA ~ 1024mA ,step:64mA
-                // ppm->setPrechargeCurr(64);
+                // PPM->setPrechargeCurr(64);
 
                 // The premise is that limit pin is disabled, or it will
                 // only follow the maximum charging current set by limit pin.
                 // Set the charging current , Range:0~5056mA ,step:64mA
-                ppm->setChargerConstantCurr(1024);
+                PPM->setChargerConstantCurr(1024);
 
                 // To obtain voltage data, the ADC must be enabled first
-                ppm->enableMeasure();
+                PPM->enableMeasure();
 
                 // Turn on charging function
                 // If there is no battery connected, do not turn on the charging function
-                ppm->enableCharge();
+                PPM->enableCharge();
             } else {
                 LOG_WARN("PPM BQ25896 init failed");
-                delete ppm;
-                ppm = nullptr;
+                delete PPM;
+                PPM = nullptr;
                 return false;
             }
         }
@@ -1404,23 +1421,23 @@ class LipoCharger : public HasBatteryLevel
     /**
      * return true if there is a battery installed in this unit
      */
-    virtual bool isBatteryConnect() override { return ppm->getBattVoltage() > 0; }
+    virtual bool isBatteryConnect() override { return PPM->getBattVoltage() > 0; }
 
     /**
      * return true if there is an external power source detected
      */
-    virtual bool isVbusIn() override { return ppm->getVbusVoltage() > 0; }
+    virtual bool isVbusIn() override { return PPM->getVbusVoltage() > 0; }
 
     /**
      * return true if the battery is currently charging
      */
     virtual bool isCharging() override
     {
-        bool isCharging = ppm->isCharging();
+        bool isCharging = PPM->isCharging();
         if (isCharging) {
             LOG_DEBUG("BQ27220 time to full charge: %d min", bq->getTimeToFull());
         } else {
-            if (!ppm->isVbusIn()) {
+            if (!PPM->isVbusIn()) {
                 LOG_DEBUG("BQ27220 time to empty: %d min (%d mAh)", bq->getTimeToEmpty(), bq->getRemainingCapacity());
             }
         }
@@ -1452,8 +1469,6 @@ bool Power::lipoChargerInit()
     return false;
 }
 #endif
-
-
 
 #ifdef HELTEC_MESH_SOLAR
 #include "meshSolarApp.h"
@@ -1492,7 +1507,7 @@ class meshSolarBatteryLevel : public HasBatteryLevel
     /**
      * return true if there is an external power source detected
      */
-    virtual bool isVbusIn() override { return meshSolarIsVbusIn();}
+    virtual bool isVbusIn() override { return meshSolarIsVbusIn(); }
 
     /**
      * return true if the battery is currently charging
