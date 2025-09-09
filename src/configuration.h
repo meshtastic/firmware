@@ -26,10 +26,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <Arduino.h>
 
-#ifdef RV3028_RTC
+#if __has_include("Melopero_RV3028.h")
 #include "Melopero_RV3028.h"
 #endif
-#ifdef PCF8563_RTC
+#if __has_include("pcf8563.h")
 #include "pcf8563.h"
 #endif
 
@@ -135,7 +135,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 // OLED & Input
 // -----------------------------------------------------------------------------
-#if defined(SEEED_WIO_TRACKER_L1)
+#if defined(SEEED_WIO_TRACKER_L1) && !defined(SEEED_WIO_TRACKER_L1_EINK)
 #define SSD1306_ADDRESS 0x3D
 #define USE_SH1106
 #else

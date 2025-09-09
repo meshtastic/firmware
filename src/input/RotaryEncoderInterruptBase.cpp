@@ -18,14 +18,23 @@ void RotaryEncoderInterruptBase::init(
     this->_eventCcw = eventCcw;
     this->_eventPressed = eventPressed;
 
-    pinMode(pinPress, INPUT_PULLUP);
-    pinMode(this->_pinA, INPUT_PULLUP);
-    pinMode(this->_pinB, INPUT_PULLUP);
+    bool isRAK = false;
+#ifdef RAK_4631
+    isRAK = true;
+#endif
 
-    //    attachInterrupt(pinPress, onIntPress, RISING);
-    attachInterrupt(pinPress, onIntPress, RISING);
-    attachInterrupt(this->_pinA, onIntA, CHANGE);
-    attachInterrupt(this->_pinB, onIntB, CHANGE);
+    if (!isRAK || pinPress != 0) {
+        pinMode(pinPress, INPUT_PULLUP);
+        attachInterrupt(pinPress, onIntPress, RISING);
+    }
+    if (!isRAK || this->_pinA != 0) {
+        pinMode(this->_pinA, INPUT_PULLUP);
+        attachInterrupt(this->_pinA, onIntA, CHANGE);
+    }
+    if (!isRAK || this->_pinA != 0) {
+        pinMode(this->_pinB, INPUT_PULLUP);
+        attachInterrupt(this->_pinB, onIntB, CHANGE);
+    }
 
     this->rotaryLevelA = digitalRead(this->_pinA);
     this->rotaryLevelB = digitalRead(this->_pinB);
