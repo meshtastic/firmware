@@ -275,7 +275,12 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     // If the packet is not yet encrypted, do so now
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         ChannelIndex chIndex = p->channel; // keep as a local because we are about to change it
+
+        auto heapBefore = memGet.getFreeHeap();
         meshtastic_MeshPacket *p_decoded = packetPool.allocCopy(*p);
+        auto heapAfter = memGet.getFreeHeap();
+
+        LOG_HEAP("Alloc in Router::send pointer 0x%x, size: %u, free: %u", p_decoded, heapBefore - heapAfter, heapAfter);
 
         auto encodeResult = perhapsEncode(p);
         if (encodeResult != meshtastic_Routing_Error_NONE) {
@@ -608,7 +613,10 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
     // Also, we should set the time from the ISR and it should have msec level resolution
     p->rx_time = getValidTime(RTCQualityFromNet); // store the arrival timestamp for the phone
     // Store a copy of encrypted packet for MQTT
+    auto heapBefore = memGet.getFreeHeap();
     meshtastic_MeshPacket *p_encrypted = packetPool.allocCopy(*p);
+    auto heapAfter = memGet.getFreeHeap();
+    LOG_HEAP("Alloc in Router::handleReceived pointer 0x%x, size: %u, free: %u", p_encrypted, heapBefore - heapAfter, heapAfter);
 
     // Take those raw bytes and convert them back into a well structured protobuf we can understand
     auto decodedState = perhapsDecode(p);

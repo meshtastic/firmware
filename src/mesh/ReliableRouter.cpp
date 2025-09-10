@@ -2,6 +2,7 @@
 #include "Default.h"
 #include "MeshTypes.h"
 #include "configuration.h"
+#include "memGet.h"
 #include "mesh-pb-constants.h"
 #include "modules/NodeInfoModule.h"
 #include "modules/RoutingModule.h"
@@ -21,8 +22,11 @@ ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
         if (p->hop_limit == 0) {
             p->hop_limit = Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit);
         }
-
+        auto heapBefore = memGet.getFreeHeap();
         auto copy = packetPool.allocCopy(*p);
+        auto heapAfter = memGet.getFreeHeap();
+        LOG_HEAP("Alloc in ReliableRouter::send() pointer 0x%x, size: %u, free: %u", copy, heapBefore - heapAfter, heapAfter);
+
         startRetransmission(copy, NUM_RELIABLE_RETX);
     }
 
