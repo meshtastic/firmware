@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-sed -i 's/#-DBUILD_EPOCH=$UNIX_TIME/-DBUILD_EPOCH=$UNIX_TIME/' platformio.ini
-
 export PIP_BREAK_SYSTEM_PACKAGES=1
 
 if (echo $2 | grep -q "esp32"); then
